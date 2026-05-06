@@ -1,0 +1,20 @@
+packages:
+  # Python 应用，只为了让 turbo 能一起起后端（唯一的 dev 脚本，无 JS 依赖）
+  - "apps/api"
+  - "apps/web"
+  - "apps/desktop"
+  - "packages/*"
+
+allowBuilds:
+  esbuild: true
+  # electron 的 postinstall 负责下载 Electron 二进制，不放行就只剩 .d.ts，dev 与打包都跑不了
+  electron: true
+  # 只出 NSIS 安装包，用不到 Squirrel.Windows，它的构建脚本没必要跑
+  electron-winstaller: false
+
+minimumReleaseAgeExclude:
+  - '@tanstack/react-router'
+  - '@tanstack/router-core'
+  - '@tanstack/router-generator'
+  - '@tanstack/router-plugin'
+  - i18next@26.4.0

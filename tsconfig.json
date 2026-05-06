@@ -1,0 +1,15 @@
+{
+  // 只提供编辑器兜底 + 一个可用的 `tsc -b` 入口（转发到 apps/web）。
+  // `files: []` 与 `noEmit` 缺一不可 —— 少了它们，在仓库根跑一次 tsc
+  // 会把整棵源码树当成一个项目编译，把 .js 吐在 .tsx 旁边（实测 129 个文件）。
+  "files": [],
+  "references": [{ "path": "./apps/web" }],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true
+  }
+}

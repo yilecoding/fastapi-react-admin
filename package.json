@@ -1,0 +1,26 @@
+{
+  "name": "fastapi-react-admin",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "format": "turbo format",
+    "typecheck": "turbo typecheck",
+    "i18n:check": "pnpm --filter @admin/i18n check",
+    "i18n:fix": "pnpm --filter @admin/i18n check:fix",
+    "i18n:jsx": "pnpm --filter @admin/i18n jsx",
+    "test": "turbo test"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "turbo": "^2.10.11",
+    "typescript": "~6"
+  },
+  "packageManager": "pnpm@11.21.0",
+  "engines": {
+    "node": ">=20"
+  }
+}
