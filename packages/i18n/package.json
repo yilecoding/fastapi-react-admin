@@ -1,0 +1,20 @@
+{
+  "name": "@admin/i18n",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "check": "node src/scripts/check.mjs",
+    "check:fix": "node src/scripts/check.mjs --fix",
+    "lint": "node src/scripts/check.mjs",
+    "typecheck": "tsc --noEmit",
+    "jsx": "node src/scripts/jsx-text.mjs"
+  },
+  "dependencies": {
+    "i18next": "^26.4.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./locales/*": "./src/locales/*"
+  }
+}
