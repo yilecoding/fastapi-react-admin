@@ -1,0 +1,221 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * 滚动方式变体 —— 根节点上的 `data-scroll-mode` 由
+ * `platform/shell/use-apply-preferences.ts: applyScrollMode()` 写入。
+ *
+ * `content-scroll:` 外壳锁在视口内，只有 <main> 滚动（默认）
+ * `page-scroll:`    整份文档跟着滚，顶栏与标签条会滚出视口
+ *
+ * 做成变体而不是把偏好透传成 prop：`packages/ui` 里的 `SidebarInset`
+ * 也要按模式分叉，而 ui **永远不能** import platform（见 CLAUDE.md 的依赖方向）。
+ * 特异性上 `[data-scroll-mode="x"] .cls` 是 (0,2,0)，稳赢裸 utility 的 (0,1,0) ——
+ * 所以 `md:h-[…] content-scroll:md:h-full` 这种「两条都留下」的写法结果是确定的。
+ */
+@custom-variant content-scroll ([data-scroll-mode="content"] &);
+@custom-variant page-scroll ([data-scroll-mode="page"] &);
+/*
+ * Tailwind 内容扫描源。
+ *
+ * 本文件位于 packages/ui/src/styles/，所以仓库根是 ../../../../。
+ * 原来写的 ../../../apps 实际指向 packages/apps（不存在），
+ * 而 ../** 只覆盖 packages/ui/src —— 结果 packages/platform 从未被扫描，
+ * 只有恰好在别处也用到的类才被生成（表现为 md:w-72 之类的类静默失效、布局塌掉）。
+ */
+@source "../../../../apps/*/src/**/*.{ts,tsx}";
+@source "../../../../packages/*/src/**/*.{ts,tsx}";
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+    --font-sans: 'Inter Variable', sans-serif;
+    /* 仪表字级：标号、节点名、版本号、技术栈行走等宽，中文照样落回系统字族 */
+    --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.457 0.24 277.023);
+    --primary-foreground: oklch(0.962 0.018 272.314);
+    --secondary: oklch(0.967 0.001 286.375);
+    --secondary-foreground: oklch(0.21 0.006 285.885);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    /* 滚动条滑块。**不能直接用 `--border`** —— 亮色下它是 oklch(0.922)、
+       暗色下是 white/10%，都太淡，当滑块基本看不见（实测像没有滚动条）。
+       这里取 `--muted-foreground` 压到 40%：能看见，又不至于在长列表旁边
+       拉出一条抢眼的深色。它是独立 token 而不是写死值，将来要接进偏好设置
+       只改这一处 */
+    --scrollbar-thumb: oklch(0.556 0 0 / 40%);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    --chart-1: oklch(0.785 0.115 274.713);
+    --chart-2: oklch(0.585 0.233 277.117);
+    --chart-3: oklch(0.511 0.262 276.966);
+    --chart-4: oklch(0.457 0.24 277.023);
+    --chart-5: oklch(0.398 0.195 277.366);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.511 0.262 276.966);
+    --sidebar-primary-foreground: oklch(0.962 0.018 272.314);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.398 0.195 277.366);
+    --primary-foreground: oklch(0.962 0.018 272.314);
+    --secondary: oklch(0.274 0.006 286.033);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    /* 暗色下要比亮色更实一点：深底上低透明度的白会被背景吃掉 */
+    --scrollbar-thumb: oklch(1 0 0 / 22%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    --chart-1: oklch(0.785 0.115 274.713);
+    --chart-2: oklch(0.585 0.233 277.117);
+    --chart-3: oklch(0.511 0.262 276.966);
+    --chart-4: oklch(0.457 0.24 277.023);
+    --chart-5: oklch(0.398 0.195 277.366);
+    --sidebar: oklch(0.205 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.585 0.233 277.117);
+    --sidebar-primary-foreground: oklch(0.962 0.018 272.314);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+
+    /*
+     * 全站细滚动条。**只用标准属性**，不用 `::-webkit-scrollbar` 伪元素。
+     *
+     * 理由是平台差异：Windows / Linux 的 Chrome 原生滚动条约 15px、不透明、
+     * 带轨道（难看的就是这个）；而 macOS 是覆盖式、静止时自动隐藏。
+     * `::-webkit-scrollbar` 一旦出现，会**强制 macOS 退回经典常驻滚动条** ——
+     * 为了 Windows 好看，把 macOS 弄差了。标准属性只在滚动条显示时改外观，
+     * 不动「什么时候显示」，两个平台都不亏。代价是做不了圆角和 hover 变色。
+     *
+     * 支持度：Chrome / Edge 121+、Firefox 全版本（本机 Chromium 151 实测
+     * `CSS.supports` 三个属性都是 true）。
+     *
+     * 放 `@layer base` + `*` 选择器（特异性 0）是刻意的 —— `no-scrollbar`
+     * 这类 utility 在 `@layer utilities` 里，层级更高，永远盖得住这一条。
+     * 全站 69 个滚动容器一次覆盖，不用逐个改组件。
+     */
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+
+[data-slot="sidebar-container"] {
+  top: var(--announcement-offset, 0px);
+}
+
+/*
+ * 预留滚动条槽位，防止「内容从不满一屏变成超一屏」时宽度突变、整列横向抖一下。
+ *
+ * 🔴 关键是**放在真正会滚的那一层**，放错了不是没效果，是有害。
+ *
+ * 第一版加在 `[data-slot=content-scroll]`（外层内容列）上，实测是错的：
+ *
+ * | 内容区滚动模式 | 真在滚的是 | 外层列留 10px 的后果 |
+ * |---|---|---|
+ * | 表格页（用户/日志/菜单…） | **表格框自己**（`table-container` 是定高视区） | 外层列**根本不滚**，10px 纯白占，还让表格右边缘比页头短 10px |
+ * | 非表格页（个人中心/参数配置/监控） | 外层内容列 | 有意义，但这些页内容一向很长、几乎不会跨越「一屏」这条线 |
+ *
+ * 也就是说：它在**多数页面上白占并制造错位**，只在少数几乎不抖的页面上有用。
+ * 所以外层列这条去掉了。
+ *
+ * 想用 `:has()` 精确区分「这一页的内容列到底会不会滚」是行不通的 ——
+ * 多页签用 `<Activity>` 把**所有已开 tab** 都挂在同一个 `content-scroll` 里，
+ * `:has([data-slot=table-container])` 会被别的 tab 命中。
+ *
+ * 现在只留一条：page 模式下 `html` 自己滚，槽位给它。
+ * 那个模式的滚动条在窗口边缘、在内容列之外，所以不存在错位问题。
+ * （`data-scroll-mode` 落在根节点上，见 shell/use-apply-preferences.ts。
+ *  刻意不无脑给 `html` —— 内容区滚动模式下它 `h-svh overflow-hidden` 根本不滚，
+ *  留了会永久空出一条白边。）
+ */
+html[data-scroll-mode="page"] {
+  scrollbar-gutter: stable;
+}
