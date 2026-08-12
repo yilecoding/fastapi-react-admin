@@ -1,0 +1,520 @@
+{
+  "code": 200,
+  "msg": "请求成功",
+  "data": [
+    {
+      "id": "2049629108245233664",
+      "name": "Dashboard",
+      "path": "/dashboard",
+      "sort": 0,
+      "type": 0,
+      "perms": null,
+      "remark": null,
+      "parent_id": null,
+      "created_time": "2025-06-26T20:29:06Z",
+      "updated_time": "2026-08-21T16:17:47.717173+08:00",
+      "deleted": 0,
+      "deleted_time": null,
+      "meta": {
+        "title": "仪表盘",
+        "icon": "ant-design:dashboard-outlined",
+        "iframeSrc": "",
+        "link": "",
+        "hideInMenu": false,
+        "menuVisibleWithForbidden": false
+      }
+    },
+    {
+      "id": "2049629108245233667",
+      "name": "System",
+      "path": "/system",
+      "sort": 1,
+      "type": 0,
+      "perms": null,
+      "remark": null,
+      "parent_id": null,
+      "created_time": "2025-06-26T20:29:06Z",
+      "updated_time": null,
+      "deleted": 0,
+      "deleted_time": null,
+      "meta": {
+        "title": "系统管理",
+        "icon": "eos-icons:admin",
+        "iframeSrc": "",
+        "link": "",
+        "hideInMenu": false,
+        "menuVisibleWithForbidden": false
+      },
+      "children": [
+        {
+          "id": "2049629108245233668",
+          "name": "SysDept",
+          "path": "/system/dept",
+          "sort": 1,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108245233667",
+          "created_time": "2025-06-26T20:29:06Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "部门管理",
+            "icon": "mingcute:department-line",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108245233672",
+          "name": "SysUser",
+          "path": "/system/user",
+          "sort": 2,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108245233667",
+          "created_time": "2025-06-26T20:29:06Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "用户管理",
+            "icon": "ant-design:user-outlined",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108245233674",
+          "name": "SysRole",
+          "path": "/system/role",
+          "sort": 3,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108245233667",
+          "created_time": "2025-06-26T20:29:06Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "角色管理",
+            "icon": "carbon:user-role",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108245233680",
+          "name": "SysMenu",
+          "path": "/system/menu",
+          "sort": 4,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108245233667",
+          "created_time": "2025-06-26T20:29:06Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "菜单管理",
+            "icon": "ant-design:menu-outlined",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108249427969",
+          "name": "SysDataPermission",
+          "path": "/system/data-permission",
+          "sort": 5,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108245233667",
+          "created_time": "2025-06-26T20:29:06Z",
+          "updated_time": "2026-08-21T14:22:39.627187+08:00",
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "数据权限",
+            "icon": "icon-park-outline:permissions",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108253622300",
+          "name": "SysFile",
+          "path": "/system/file",
+          "sort": 6,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108245233667",
+          "created_time": "2026-08-21T12:06:46.149560Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "文件管理",
+            "icon": "lucide:files",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108253622283",
+          "name": "PluginConfig",
+          "path": "/plugins/config",
+          "sort": 7,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108245233667",
+          "created_time": "2026-08-21T01:16:35.640000Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "参数配置",
+            "icon": "codicon:symbol-parameter",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108253622287",
+          "name": "PluginDict",
+          "path": "/plugins/dict",
+          "sort": 8,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108245233667",
+          "created_time": "2026-08-21T01:16:35.666666Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "数据字典",
+            "icon": "fluent-mdl2:dictionary",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108249427979",
+          "name": "SysPlugin",
+          "path": "/system/plugin",
+          "sort": 8,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108245233667",
+          "created_time": "2025-06-26T20:29:06Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "插件管理",
+            "icon": "clarity:plugin-line",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108257816576",
+          "name": "PluginNotice",
+          "path": "/plugins/notice",
+          "sort": 9,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108245233667",
+          "created_time": "2026-08-21T01:16:35.650000Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "通知公告",
+            "icon": "fe:notice-push",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "2049629108249427983",
+      "name": "Log",
+      "path": "/log",
+      "sort": 3,
+      "type": 0,
+      "perms": null,
+      "remark": null,
+      "parent_id": null,
+      "created_time": "2025-06-26T20:29:06Z",
+      "updated_time": null,
+      "deleted": 0,
+      "deleted_time": null,
+      "meta": {
+        "title": "日志管理",
+        "icon": "carbon:cloud-logging",
+        "iframeSrc": "",
+        "link": "",
+        "hideInMenu": false,
+        "menuVisibleWithForbidden": false
+      },
+      "children": [
+        {
+          "id": "2049629108249427984",
+          "name": "LoginLog",
+          "path": "/log/login",
+          "sort": 1,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108249427983",
+          "created_time": "2025-06-26T20:29:06Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "登录日志",
+            "icon": "mdi:login",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108249427987",
+          "name": "OperaLog",
+          "path": "/log/opera",
+          "sort": 2,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108249427983",
+          "created_time": "2025-06-26T20:29:06Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "操作日志",
+            "icon": "carbon:operations-record",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "2049629108253622273",
+      "name": "Monitor",
+      "path": "/monitor",
+      "sort": 4,
+      "type": 0,
+      "perms": null,
+      "remark": null,
+      "parent_id": null,
+      "created_time": "2025-06-26T20:29:06Z",
+      "updated_time": null,
+      "deleted": 0,
+      "deleted_time": null,
+      "meta": {
+        "title": "系统监控",
+        "icon": "mdi:monitor-eye",
+        "iframeSrc": "",
+        "link": "",
+        "hideInMenu": false,
+        "menuVisibleWithForbidden": false
+      },
+      "children": [
+        {
+          "id": "2049629108253622274",
+          "name": "Online",
+          "path": "/log/online",
+          "sort": 1,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108253622273",
+          "created_time": "2025-06-26T20:29:06Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "在线用户",
+            "icon": "wpf:online",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108253622276",
+          "name": "Redis",
+          "path": "/monitor/redis",
+          "sort": 2,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108253622273",
+          "created_time": "2025-06-26T20:29:06Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "Redis 监控",
+            "icon": "devicon:redis",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2049629108253622277",
+          "name": "Server",
+          "path": "/monitor/server",
+          "sort": 3,
+          "type": 1,
+          "perms": null,
+          "remark": null,
+          "parent_id": "2049629108253622273",
+          "created_time": "2025-06-26T20:29:06Z",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "服务器监控",
+            "icon": "mdi:server-outline",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "2049629108253622282",
+      "name": "Profile",
+      "path": "/profile",
+      "sort": 6,
+      "type": 1,
+      "perms": null,
+      "remark": null,
+      "parent_id": null,
+      "created_time": "2025-06-26T20:29:06Z",
+      "updated_time": null,
+      "deleted": 0,
+      "deleted_time": null,
+      "meta": {
+        "title": "个人中心",
+        "icon": "ant-design:profile-outlined",
+        "iframeSrc": "",
+        "link": "",
+        "hideInMenu": true,
+        "menuVisibleWithForbidden": false
+      }
+    },
+    {
+      "id": "2202113486505512960",
+      "name": "Sandbox",
+      "path": "/sandbox",
+      "sort": 90,
+      "type": 0,
+      "perms": null,
+      "remark": "组件与能力的演示台，不接业务数据",
+      "parent_id": null,
+      "created_time": "2026-08-21T16:12:48.469408+08:00",
+      "updated_time": "2026-08-21T17:11:02.960726+08:00",
+      "deleted": 0,
+      "deleted_time": null,
+      "meta": {
+        "title": "开发工具",
+        "icon": "ant-design:experiment-outlined",
+        "iframeSrc": "",
+        "link": "",
+        "hideInMenu": false,
+        "menuVisibleWithForbidden": false
+      },
+      "children": [
+        {
+          "id": "2202113486786531328",
+          "name": "SandboxComponents",
+          "path": "/sandbox/components",
+          "sort": 1,
+          "type": 1,
+          "perms": null,
+          "remark": "packages/ui 的组件演示台",
+          "parent_id": "2202113486505512960",
+          "created_time": "2026-08-21T16:12:48.537501+08:00",
+          "updated_time": null,
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "组件沙箱",
+            "icon": "ph:puzzle-piece",
+            "iframeSrc": "",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        },
+        {
+          "id": "2202116031026171904",
+          "name": "SandboxApiDocs",
+          "path": "/sandbox/api-docs",
+          "sort": 8,
+          "type": 3,
+          "perms": null,
+          "remark": "内嵌 FastAPI 的 Swagger —— 顺带验证菜单类型 3",
+          "parent_id": "2202113486505512960",
+          "created_time": "2026-08-21T16:22:55.127265+08:00",
+          "updated_time": "2026-08-21T17:11:02.988396+08:00",
+          "deleted": 0,
+          "deleted_time": null,
+          "meta": {
+            "title": "接口文档",
+            "icon": "simple-icons:apifox",
+            "iframeSrc": "http://127.0.0.1:8000/docs",
+            "link": "",
+            "hideInMenu": false,
+            "menuVisibleWithForbidden": false
+          }
+        }
+      ]
+    }
+  ]
+}

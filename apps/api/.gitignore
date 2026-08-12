@@ -1,0 +1,17 @@
+.idea/
+.vscode/
+.cursor/
+.DS_Store
+venv/
+.venv/
+.python-version
+.ruff_cache/
+.pytest_cache/
+logs/
+.claude/
+.serena/
+.agents/
+.superpowers/
+superpowers/
+.codegraph/
+.pi/

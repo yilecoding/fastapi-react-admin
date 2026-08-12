@@ -1,0 +1,39 @@
+default_language_version:
+    python: '>= 3.10'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: check-json
+      - id: check-yaml
+      - id: check-toml
+
+  - repo: https://github.com/tombi-toml/tombi-pre-commit
+    rev: v1.3.0
+    hooks:
+      - id: tombi-lint
+        args: ["--offline"]
+      - id: tombi-format
+        args: ["--offline"]
+
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.16.4
+    hooks:
+      - id: ruff-check
+        args:
+          # https://github.com/astral-sh/ruff-pre-commit/issues/64
+          - '--fix'
+          - '--unsafe-fixes'
+      - id: ruff-format
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.12.3
+    hooks:
+      - id: uv-lock
+      - id: uv-export
+        args:
+          - '-o'
+          - 'requirements.txt'
+          - '--no-hashes'
