@@ -189,18 +189,20 @@ export function QueryBarDemo({ v }: { v: KnobValues }) {
 }
 
 /** 只展示真正会写出去的键（undefined 的是「清掉这个参数」，不进地址栏） */
-const urlPreview = (p: Record<string, string | undefined>) =>
+type UrlParams = Record<string, string | number | boolean | undefined>
+
+const urlPreview = (p: UrlParams) =>
   JSON.stringify(
     Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)),
     null,
     2
   )
 
-const queryString = (p: Record<string, string | undefined>) => {
+const queryString = (p: UrlParams) => {
   const parts = Object.entries(p)
     .filter(([, v]) => v !== undefined)
     // 和 apps/web 的 stringifySearch 同口径：: , ~ / 不编码
-    .map(([k, v]) => `${k}=${encodeURIComponent(v!).replace(/%3A/gi, ':').replace(/%2C/gi, ',').replace(/%7E/gi, '~')}`)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v)).replace(/%3A/gi, ':').replace(/%2C/gi, ',').replace(/%7E/gi, '~')}`)
   return parts.length ? `?${parts.join('&')}` : '(空)'
 }
 

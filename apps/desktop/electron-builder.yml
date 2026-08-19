@@ -1,0 +1,66 @@
+# electron-builder 配置。`pnpm --filter @admin/desktop package` 触发。
+# ⚠️ 发自己的包前改成你自己的反向域名 —— macOS 靠它认应用身份，
+#    Windows 靠它认「同一个应用的升级」。沿用别人的会和别人的安装冲突
+appId: io.github.yilecoding.admin-desktop
+productName: Admin Desktop
+# 不设的话 Linux 下可执行文件名会从包名推出来，变成 `@admindesktop`（实测）
+executableName: admin-desktop
+copyright: Copyright © ${author}
+
+directories:
+  output: release/${version}
+  buildResources: build
+
+# 只把主进程/preload 的产物和 package.json 打进 asar。
+# 渲染层与原生助手都走 extraResources（见下），**故意放在 asar 外面**。
+files:
+  - dist/**
+  - package.json
+
+extraResources:
+  # 渲染层 = apps/web 的构建产物。
+  # 放 asar 外面有两个实打实的理由：
+  #   1. `app://` 协议处理器用 net.fetch(file://…) 直接流式读盘，asar 里的路径 file:// 读不到；
+  #   2. @file-viewer 的静态资产有 13MB，asar 里逐个 fs.readFile 再包 Response 纯属自找麻烦。
+  - from: ../web/dist
+    to: renderer
+    filter: ["**/*"]
+  # 原生助手程序（如身份证读卡器的 ReadCard.exe 及其厂商 DLL）。
+  # ⚠️ 必须和它的 DLL 放在同一层目录 —— 助手启动时按工作目录去找同级的 DLL，
+  #    目录结构一乱，现场表现就是「设备打不开」，而不是一个能看懂的报错。
+  - from: resources
+    to: native
+    filter: ["**/*", "!.gitkeep"]
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  # 生产环境务必配代码签名：不签名的话杀软首次扫描新 exe 的开销会落在用户的第一次操作上
+  # （旧客户端实测：装完首次刷卡 20.4s，其中 17.9s 是杀软扫 ReadCard.exe）。
+  # signtoolOptions:
+  #   certificateFile: ...
+
+# 交付目标是 Windows。下面这两段只为了让开发机（Mac / Linux）能跑
+# `package:dir` 出一个能双击的产物做本地验证 —— 不要拿它们发布。
+mac:
+  target:
+    - target: dir
+  category: public.app-category.business
+  # 自助终端不需要 Mac 版，所以不配签名与公证；真要发 Mac 版得补 notarize
+linux:
+  target:
+    - target: dir
+
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+# 自动更新源。generic 就是一个能列目录的静态 HTTP 服务，用现成的 IIS 即可。
+# 打包时如果不需要发布，把整段注掉。
+# publish:
+#   provider: generic
+#   url: https://releases.example.com/desktop
