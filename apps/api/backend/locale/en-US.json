@@ -1,0 +1,213 @@
+{
+  "error": {
+    "captcha": {
+      "error": "Captcha error",
+      "invalid": "Captcha is invalid, please try again",
+      "expired": "Captcha has expired, please try again"
+    },
+    "language_not_found": "Current language pack is not initialized or does not exist"
+  },
+  "response": {
+    "error": "Request error",
+    "success": "Request success",
+    "server_error": "Internal server error"
+  },
+  "success": {
+    "login": {
+      "oauth2_success": "Login success (OAuth2)",
+      "success": "Login success"
+    }
+  },
+  "messages": {
+    "Casbin RBAC 插件用法导入失败，请联系系统管理员": "Failed to import Casbin RBAC plugin, please contact the administrator",
+    "Git 仓库地址不能为空": "Git repository URL cannot be empty",
+    "Git 仓库地址格式非法，仅支持 HTTP/HTTPS 协议": "Invalid Git repository URL, only HTTP/HTTPS is supported",
+    "OAuth2 插件用法导入失败，请联系系统管理员": "Failed to import OAuth2 plugin, please contact the administrator",
+    "OAuth2 状态信息无效": "Invalid OAuth2 state",
+    "OAuth2 状态信息无效或缺失": "OAuth2 state is invalid or missing",
+    "OAuth2 状态信息缺失": "OAuth2 state is missing",
+    "Refresh Token 已过期，请重新登录": "Refresh token has expired, please sign in again",
+    "SQL 脚本文件不存在": "SQL script file does not exist",
+    "Token 已失效": "Token is no longer valid",
+    "Token 已过期": "Token has expired",
+    "Token 无效": "Invalid token",
+    "ZIP 压缩包不能为空": "ZIP archive cannot be empty",
+    "上传文件失败": "File upload failed",
+    "两次密码输入不一致": "The two passwords do not match",
+    "前端插件仓库名称非法": "Invalid frontend plugin repository name",
+    "前端插件安装失败，请稍后重试": "Frontend plugin installation failed, please try again later",
+    "前端项目根路径不存在": "Frontend project root path does not exist",
+    "前端项目根路径不能为空": "Frontend project root path cannot be empty",
+    "前端项目根路径非法": "Invalid frontend project root path",
+    "原密码错误": "Current password is incorrect",
+    "参数配置不存在": "Config item does not exist",
+    "参数配置键名重复": "Duplicate config key",
+    "图片超出最大限制，请重新选择": "Image exceeds the size limit, please choose another one",
+    "字典数据不存在": "Dict item does not exist",
+    "字典数据已存在": "Dict item already exists",
+    "字典类型不存在": "Dict type does not exist",
+    "字典类型已存在": "Dict type already exists",
+    "密码不允许为空": "Password cannot be empty",
+    "密码已过期，请修改密码后重新登录": "Password has expired, please change it and sign in again",
+    "密码必须包含字母": "Password must contain a letter",
+    "密码必须包含数字": "Password must contain a digit",
+    "密码必须包含特殊字符（如：!@#$%）": "Password must contain a special character (e.g. !@#$%)",
+    "插件不存在": "Plugin does not exist",
+    "插件压缩包内容非法": "Invalid plugin archive content",
+    "插件压缩包内缺少必要文件": "Plugin archive is missing required files",
+    "插件压缩包文件名非法": "Invalid plugin archive filename",
+    "插件压缩包格式非法": "Invalid plugin archive format",
+    "插件安装失败，请稍后重试": "Plugin installation failed, please try again later",
+    "数据范围不存在": "Data scope does not exist",
+    "数据范围已存在": "Data scope already exists",
+    "数据规则不存在": "Data rule does not exist",
+    "数据规则可用模型不存在": "The model for this data rule does not exist",
+    "数据规则已存在": "Data rule already exists",
+    "无可用的雪花算法节点，节点已耗尽": "No snowflake node available, all nodes are exhausted",
+    "未找到可用角色，请联系系统管理员": "No available role found, please contact the administrator",
+    "未检测到前端插件目录，请确认路径下存在 apps/web-antdv-next/src/plugins": "Frontend plugin directory not found, expected apps/web-antdv-next/src/plugins under the given path",
+    "未知的文件类型": "Unknown file type",
+    "权限类型不存在": "Permission type does not exist",
+    "此插件已安装": "This plugin is already installed",
+    "此用户已在异地登录，请重新登录并及时修改密码": "This account signed in from another location, please sign in again and change your password",
+    "演示环境下禁止执行此操作": "This operation is disabled in the demo environment",
+    "父级菜单不存在": "Parent menu does not exist",
+    "父级部门不存在": "Parent department does not exist",
+    "用户不存在": "User does not exist",
+    "用户名已存在，请重试": "Username already exists, please try another one",
+    "用户名已注册": "Username is already registered",
+    "用户名或密码有误": "Incorrect username or password",
+    "用户已被禁止后台管理操作，请联系系统管理员": "This account is not allowed to perform admin operations, please contact the administrator",
+    "用户已被锁定, 请联系统管理员": "Account is locked, please contact the administrator",
+    "用户已被锁定，请联系系统管理员": "Account is locked, please contact the administrator",
+    "用户所属角色已被锁定，请联系系统管理员": "The role assigned to this account is disabled, please contact the administrator",
+    "用户所属部门不存在或已被删除，请联系系统管理员": "The department of this account does not exist or has been deleted, please contact the administrator",
+    "用户所属部门已被锁定，请联系系统管理员": "The department of this account is disabled, please contact the administrator",
+    "用户未分配菜单，请联系系统管理员": "No menu assigned to this account, please contact the administrator",
+    "用户缓存键构建失败": "Failed to build the user cache key",
+    "登录失败次数过多，账号已被锁定": "Too many failed sign-in attempts, the account has been locked",
+    "禁止修改自身权限": "You cannot change your own permissions",
+    "禁止关联自身为父级": "An item cannot be its own parent",
+    "禁止在非开发环境下卸载插件": "Uninstalling plugins is only allowed in the development environment",
+    "禁止在非开发环境下安装插件": "Installing plugins is only allowed in the development environment",
+    "缓存 key 和 key_builder 不能同时使用": "`key` and `key_builder` cannot be used together",
+    "缓存失效失败，数据可能不一致": "Cache invalidation failed, data may be inconsistent",
+    "缓存键构建失败：不支持从列表中提取字段，请使用 key_builder 处理列表参数": "Failed to build cache key: extracting a field from a list is not supported, use `key_builder` for list arguments",
+    "至少需要传入一个 Rate、bucket 或 limiter 实例": "At least one Rate, bucket or limiter instance is required",
+    "菜单下存在子菜单，无法删除": "This menu has sub-menus and cannot be deleted",
+    "菜单不存在": "Menu does not exist",
+    "菜单标题已存在": "Menu title already exists",
+    "视频超出最大限制，请重新选择": "Video exceeds the size limit, please choose another one",
+    "角色不存在": "Role does not exist",
+    "角色已存在": "Role already exists",
+    "请求过于频繁，请稍后重试": "Too many requests, please try again later",
+    "通知公告不存在": "Notice does not exist",
+    "邮箱已被绑定": "This email is already bound",
+    "部门下存在子部门，无法删除": "This department has sub-departments and cannot be deleted",
+    "部门下存在用户，无法删除": "This department has users and cannot be deleted",
+    "部门不存在": "Department does not exist",
+    "部门名称已存在": "Department name already exists",
+    "雪花 ID 生成失败，雪花算法未初始化": "Snowflake ID generation failed: the generator is not initialised",
+    "雪花算法工作机器配置失败，请联系系统管理员": "Invalid snowflake worker id, please contact the administrator",
+    "雪花算法数据中心配置失败，请联系系统管理员": "Invalid snowflake datacenter id, please contact the administrator",
+    "雪花算法配置失败，请联系系统管理员": "Invalid snowflake configuration, please contact the administrator",
+    "非法操作，OAuth2 状态信息无效": "Illegal operation: invalid OAuth2 state",
+    "非法的文件名": "Invalid filename",
+    "验证码已失效，请重新获取": "Captcha is no longer valid, please get a new one",
+    "，输入：{}": ", input: {}",
+    "Not authenticated": "Not authenticated",
+    "Method Not Allowed": "Method Not Allowed",
+    "Not Found": "Not Found",
+    "Internal Server Error": "Internal Server Error"
+  },
+  "message_templates": [
+    [
+      "SQL 脚本 {} 存在非法操作，仅允许：{}",
+      "SQL script {} contains an illegal operation, only allowed: {}"
+    ],
+    [
+      "{} 前端插件已安装",
+      "Frontend plugin {} is already installed"
+    ],
+    [
+      "{} 插件已安装",
+      "Plugin {} is already installed"
+    ],
+    [
+      "参数配置 {} 已存在",
+      "Config key {} already exists"
+    ],
+    [
+      "密码长度不能少于 {} 个字符",
+      "Password must be at least {} characters"
+    ],
+    [
+      "密码长度不能超过 {} 个字符",
+      "Password must be at most {} characters"
+    ],
+    [
+      "插件 {} 安装成功，请根据插件说明（README.md）进行相关配置并重启服务",
+      "Plugin {} installed. Follow its README.md to configure it, then restart the service"
+    ],
+    [
+      "插件 {} 为必需插件，禁止卸载",
+      "Plugin {} is required and cannot be uninstalled"
+    ],
+    [
+      "插件 {} 卸载成功，请根据插件说明（README.md）移除相关配置并重启服务",
+      "Plugin {} uninstalled. Follow its README.md to remove its configuration, then restart the service"
+    ],
+    [
+      "插件 {} 未启用，请联系系统管理员",
+      "Plugin {} is not enabled, please contact the administrator"
+    ],
+    [
+      "新密码不能与最近 {} 次使用的密码相同",
+      "The new password must differ from your last {} passwords"
+    ],
+    [
+      "暂不支持 {} OAuth2 登录",
+      "{} OAuth2 sign-in is not supported yet"
+    ],
+    [
+      "暂不支持 {} 绑定",
+      "Binding {} is not supported yet"
+    ],
+    [
+      "此文件格式 {} 暂不支持",
+      "File format {} is not supported"
+    ],
+    [
+      "用户已绑定 {} 账号",
+      "This account is already bound to {}"
+    ],
+    [
+      "用户未绑定 {} 账号",
+      "This account is not bound to {}"
+    ],
+    [
+      "缓存键构建失败，参数 \"{}\" 不存在",
+      "Failed to build cache key: argument \"{}\" does not exist"
+    ],
+    [
+      "缓存键构建失败，对象中不存在字段 \"{}\"",
+      "Failed to build cache key: field \"{}\" does not exist on the object"
+    ],
+    [
+      "该 {} 账号已被其他用户绑定",
+      "This {} account is already bound to another user"
+    ],
+    [
+      "账号已被锁定，请在 {} 分钟后重试",
+      "Account is locked, try again in {} minutes"
+    ],
+    [
+      "雪花 ID 生成失败，时钟回拨超过 {} ms，请立即联系系统管理员",
+      "Snowflake ID generation failed: clock moved backwards by more than {} ms, contact the administrator immediately"
+    ],
+    [
+      "请求参数非法: {}",
+      "Invalid request parameter: {}"
+    ]
+  ]
+}
