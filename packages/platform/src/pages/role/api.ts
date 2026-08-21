@@ -5,6 +5,8 @@ import type { User } from '../user/api'
 
 export type Role = {
   id: string
+  /** 稳定引用键。给配置和外部系统用 —— 创建后不可改（后端 UpdateRoleParam 里没有它） */
+  code: string
   name: string
   status: number
   is_filter_scopes: boolean
@@ -33,7 +35,7 @@ export type MenuNode = {
   children?: MenuNode[] | null
 }
 
-export type RoleListParams = { page: number; size: number; name?: string; status?: number }
+export type RoleListParams = { page: number; size: number; name?: string; code?: string; status?: number }
 
 export const roleKeys = {
   all: ['sys', 'role'] as const,
@@ -48,6 +50,7 @@ function qs(p: RoleListParams) {
   s.set('page', String(p.page))
   s.set('size', String(p.size))
   if (p.name) s.set('name', p.name)
+  if (p.code) s.set('code', p.code)
   if (p.status !== undefined) s.set('status', String(p.status))
   return s.toString()
 }
@@ -89,6 +92,7 @@ export const roleMenusQuery = (id: string) =>
     enabled: Boolean(id),
   })
 
+/** 更新用的载荷 —— **不含 `code`**，后端 `UpdateRoleParam` 也没有这个字段 */
 export type RoleBody = {
   name: string
   status: number
@@ -96,10 +100,13 @@ export type RoleBody = {
   remark?: string | null
 }
 
+/** 创建时才带 code —— 编码只在这一刻能定 */
+export type CreateRoleBody = RoleBody & { code: string }
+
 export function useCreateRole() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: RoleBody) => api.POST('/api/v1/sys/roles', { body }),
+    mutationFn: (body: CreateRoleBody) => api.POST('/api/v1/sys/roles', { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: roleKeys.all }),
   })
 }

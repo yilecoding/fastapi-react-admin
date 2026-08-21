@@ -42,6 +42,7 @@ import { DeptFormSheet } from './form'
  */
 export type DeptPageSearch = {
   name?: string
+  code?: string
   status?: number
   /** 'all' = 默认全折叠（细粒度展开状态见 useTreeFold） */
   fold?: 'all'
@@ -55,7 +56,7 @@ export function DeptPage({
   onSearchChange?: (n: DeptPageSearch) => void
 }) {
   const { t } = useTranslation()
-  const filters = { name: search.name || undefined, status: search.status }
+  const filters = { name: search.name || undefined, code: search.code || undefined, status: search.status }
   const { data: tree = [], isPending, isFetching } = useQuery(deptTreeQuery(filters))
 
   const patch = (n: Partial<DeptPageSearch>) => onSearchChange?.({ ...search, ...n })
@@ -80,7 +81,7 @@ export function DeptPage({
     setSheetOpen(true)
   }
 
-  const hasFilter = Boolean(search.name || search.status !== undefined)
+  const hasFilter = Boolean(search.name || search.code || search.status !== undefined)
   const total = React.useMemo(() => countNodes(tree), [tree])
 
   return (
@@ -99,8 +100,17 @@ export function DeptPage({
               testId="filter-name"
               onCommit={(v) => patch({ name: v || undefined })}
             />
+            <TextFilter
+              value={search.code ?? ''}
+              placeholder={t("搜索编码…")}
+              testId="filter-code"
+              width="w-40"
+              onCommit={(v) => patch({ code: v || undefined })}
+            />
             <StatusFilter value={search.status} onChange={(v) => patch({ status: v })} />
-            {hasFilter && <ResetButton onClick={() => patch({ name: undefined, status: undefined })} />}
+            {hasFilter && (
+              <ResetButton onClick={() => patch({ name: undefined, code: undefined, status: undefined })} />
+            )}
             <Button
               variant="outline" size="sm" className="h-8"
               data-testid="toggle-fold"
@@ -137,6 +147,7 @@ export function DeptPage({
               <TableHeader className="sticky top-0 z-10 bg-muted shadow-[inset_0_-1px_0_var(--border)]">
                 <TableRow>
                   <TableHead>{t('部门名称')}</TableHead>
+                  <TableHead>{t('编码')}</TableHead>
                   <TableHead>{t('负责人')}</TableHead>
                   <TableHead>{t('联系电话')}</TableHead>
                   <TableHead>{t('排序')}</TableHead>
@@ -146,10 +157,10 @@ export function DeptPage({
               </TableHeader>
               <TableBody>
                 {isPending ? (
-                  <DataTableSkeletonRows rows={5} columns={6} />
+                  <DataTableSkeletonRows rows={5} columns={7} />
                 ) : tree.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                       {t('没有匹配的部门')}
                     </TableCell>
                   </TableRow>
@@ -225,6 +236,9 @@ function DeptRows({
             )}
             <span className="text-sm font-medium">{node.name}</span>
           </div>
+        </TableCell>
+        <TableCell>
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">{node.code}</code>
         </TableCell>
         <TableCell className="text-sm">{node.leader || <span className="text-muted-foreground">—</span>}</TableCell>
         <TableCell className="text-sm tabular-nums">{node.phone || <span className="text-muted-foreground">—</span>}</TableCell>

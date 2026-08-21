@@ -75,10 +75,13 @@ values
 (4, '全模型本部门数据权限', 1, now(), null),
 (5, '排除超级管理员数据权限', 1, now(), null);
 
+-- 注意：'父部门 ID 等于测试部门 ID' 的 value 是**这套种子里**测试部门的字面量 id，
+-- 换一批种子数据就要跟着改。规则值没有「按编码引用」的形态（parent_id 是 id 列），
+-- 所以这里只能写 id —— 而按名称匹配的规则一律改成按 code（名字管理员能改，编码不能）。
 insert into sys_data_rule (id, name, model, `column`, operator, expression, `value`, created_time, updated_time)
 values
 (1, '部门 ID 等于当前用户部门', 'Dept', '__dept_id__', 0, 0, '${dept_id}', now(), null),
-(2, '部门名称等于测试', 'Dept', 'name', 1, 0, '测试', now(), null),
+(2, '部门编码等于 TEST', 'Dept', 'code', 1, 0, 'TEST', now(), null),
 (3, '父部门 ID 等于测试部门 ID', 'Dept', 'parent_id', 0, 0, '1', now(), null),
 (4, '创建者等于当前用户', '__ALL__', '__created_by__', 0, 0, '${user_id}', now(), null),
 (5, '全模型部门 ID 等于当前用户部门', '__ALL__', '__dept_id__', 0, 0, '${dept_id}', now(), null),
