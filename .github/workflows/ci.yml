@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 同一分支的新 push 取消上一次未跑完的，省 runner 也让状态徽章反映最新提交
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 只跑**零外部依赖**的检查。刻意不含 pytest： 它要一个真实 SQL Server 实例 + 建库灌种子
+  # （见 CLAUDE.md「跑测试」），CI 里要挂 service container 并等它 healthy。
+  # 值得补，但不该让「装 ODBC 驱动 / 等实例」的不稳定拖垮每次 PR 的红绿信号。
+  # 补的时候单独加 job，别塞进这个。
+  static:
+    name: typecheck · build · i18n
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          # 必须放在 pnpm/action-setup 之后 —— 缓存要先知道 pnpm 在哪
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: typecheck
+        run: pnpm typecheck
+
+      # 前端没有自动化测试（已知缺口），所以 build 是目前唯一的
+      # 「整个前端还能不能装起来」的信号，别省掉
+      - name: build
+        run: pnpm --filter web build
+
+      # 两个脚本缺一个都会漏：check 管 t('…') 的 key 有没有进语言包，
+      # jsx 管压根没进 t() 的裸中文
+      - name: i18n
+        run: pnpm i18n:check && pnpm i18n:jsx
+
+  lint-backend:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # ⚠️ 版本钉死。用 `ruff@latest` 的话，ruff 一发新版、新增一条规则，
+      # CI 就会在没人改代码的情况下变红 —— 升级应该是一次显式的提交。
+      #
+      # ⚠️ 必须带 --no-fix。仓库的 pyproject 里是 `fix = true` + `unsafe-fixes = true`，
+      # 裸 `ruff check` 会**直接改文件**然后报告「已修复」并以 0 退出 ——
+      # CI 里那等于静默放过所有可自动修的问题
+      - name: ruff check
+        working-directory: apps/api
+        run: uvx ruff@0.16.4 check --config pyproject.toml --no-fix backend/

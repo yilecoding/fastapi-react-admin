@@ -1,0 +1,65 @@
+# 开发依赖：SQL Server + Redis
+#
+#     docker compose -f docker-compose.dev.yml up -d
+#
+# 只起「后端跑起来最少需要的两个东西」，不含应用本身 —— 应用用 `pnpm dev` 起，
+# 这样改代码有热重载。要整套容器化部署看 apps/api/docker-compose.yml（那份是上游的，
+# 主库是 PostgreSQL，与本仓库的 SQL Server 主线不一致，仅作参考）。
+#
+# ⚠️ 宿主机还要装 **Microsoft ODBC Driver 18**（后端走 aioodbc，容器里那份驱动不算）。
+# 装法见仓库根 README 的「起服务」一节 —— 这是 SQL Server + Python 最常见的
+# 「容器起来了但连不上库」的原因。
+
+name: fastapi-react-admin-dev
+
+services:
+  mssql:
+    # 2022-latest 是本仓库唯一实测过的版本。2016 以下 T-SQL 有差异
+    #（`OFFSET FETCH`、筛选唯一索引都要重新验），换版本前先看 CLAUDE.md 的后端约定
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: fba_mssql
+    environment:
+      ACCEPT_EULA: "Y"
+      # Developer 版免费、功能等同 Enterprise，仅限开发/测试用途
+      MSSQL_PID: Developer
+      # ⚠️ 必须满足 SQL Server 的密码复杂度（长度 ≥ 8 且含大小写/数字/符号），
+      # 否则容器会启动后立刻退出，日志里只有一句 password validation failed
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-YourStrong!Passw0rd}"
+    ports:
+      - "${MSSQL_PORT:-1433}:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    healthcheck:
+      # 用 sqlcmd 探活而不是探端口 —— SQL Server 端口先开、实例还没起完，
+      # 那段窗口里后端连上去会拿到 "Login failed"
+      test:
+        - CMD-SHELL
+        - >-
+          /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa
+          -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: fba_redis
+    # 端口刻意用 6380 而不是默认的 6379：开发机上常常已经跑着一个本地 Redis，
+    # 撞端口时 compose 只会报 bind 失败，不会告诉你是哪个进程占的
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  mssql_data:
+  redis_data:

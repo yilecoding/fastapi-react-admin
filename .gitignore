@@ -1,0 +1,60 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# env files (can opt-in for committing if needed)
+.env*
+# 但 .env.example 要提交：它既是 `fba init` 消费的模板，
+# 也是「需要配哪些变量」的唯一清单，不带上别人 clone 下来无从下手
+!apps/api/backend/.env.example
+# 插件各自的模板同理 —— 漏掉的话 email / oauth2 插件在新环境里没有可抄的样板
+!apps/api/backend/plugin/*/.env.example
+
+# turbo
+.turbo
+
+# TanStack Router 插件的临时目录（UUID 命名的中间产物）。
+# 注意：src/routeTree.gen.ts 是**要提交**的生成物，别一起忽略掉 ——
+# 它是编译期路由表，缺了它 CI 上第一次构建会找不到路由。
+.tanstack/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# typescript
+*.tsbuildinfo
+
+# 上传文件（运行时数据，不进仓库）
+apps/api/backend/upload/
+
+# @file-viewer 开发期拷贝的 wasm/worker 资产（由 vite 插件生成）
+apps/web/public/file-viewer/
+
+# Electron 打包产物
+apps/desktop/release/
+
+# 原生助手程序及其厂商 DLL（体积大、且多数有授权限制，不进仓库；
+# 由 Build 流程或人工放进去，见 apps/desktop/README.md）
+apps/desktop/resources/*
+!apps/desktop/resources/.gitkeep
+
+# 公开上传子树（运行时数据，被 /uploads 静态挂出去）
+apps/api/backend/upload-public/

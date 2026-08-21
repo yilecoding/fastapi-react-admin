@@ -1,0 +1,61 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "lint": {
+      "dependsOn": [
+        "^lint"
+      ]
+    },
+    "format": {
+      "dependsOn": [
+        "^format"
+      ]
+    },
+    "typecheck": {
+      "dependsOn": [
+        "^typecheck"
+      ]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "test": {
+      "dependsOn": [
+        "^test"
+      ],
+      "cache": false
+    },
+    "@admin/desktop#build": {
+      "dependsOn": [
+        "^build",
+        "web#build"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    },
+    "@admin/desktop#package": {
+      "dependsOn": [
+        "@admin/desktop#build"
+      ],
+      "outputs": [
+        "release/**"
+      ],
+      "cache": false
+    }
+  }
+}
