@@ -1,0 +1,48 @@
+{
+  "name": "web",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint",
+    "typecheck": "tsc -b",
+    "preview": "vite preview",
+    "i18n:check": "pnpm --filter @admin/i18n check"
+  },
+  "dependencies": {
+    "@admin/i18n": "workspace:*",
+    "@admin/ui": "workspace:*",
+    "@tabler/icons-react": "^3.46.0",
+    "@tanstack/react-query": "^5",
+    "@tanstack/react-router": "^1.170.27",
+    "@tanstack/react-table": "^9.1.2",
+    "@tanstack/router-devtools": "^1.167.1",
+    "i18next": "^26.3.6",
+    "lucide-react": "^1.31.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-i18next": "^17.0.11",
+    "zod": "^4.4.3",
+    "zustand": "^5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10",
+    "@file-viewer/vite-plugin": "^2.3.0",
+    "@tailwindcss/vite": "^4",
+    "@tanstack/router-plugin": "^1.168.30",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6",
+    "eslint": "^10",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17",
+    "i18next-parser": "^9.4.0",
+    "typescript": "~6",
+    "typescript-eslint": "^8.67.0",
+    "vite": "^8"
+  }
+}
