@@ -1,0 +1,43 @@
+{
+  "name": "@admin/platform",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "gen:api": "openapi-typescript http://127.0.0.1:8000/openapi -o src/api-client/schema.d.ts",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5",
+    "@tabler/icons-react": "^3.46.0",
+    "@tanstack/react-query": "^5",
+    "@tanstack/react-router": "^1.170.27",
+    "@tanstack/react-table": "^9.1.2",
+    "@admin/i18n": "workspace:*",
+    "@admin/ui": "workspace:*",
+    "i18next": "^26.3.6",
+    "openapi-fetch": "^0.15.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-hook-form": "^7",
+    "react-i18next": "^17.0.11",
+    "socket.io-client": "^4.8.3",
+    "zod": "^4.4.3",
+    "zustand": "^5"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "openapi-typescript": "^7",
+    "typescript": "~6"
+  },
+  "exports": {
+    "./api-client/*": "./src/api-client/*.ts",
+    "./auth/*": "./src/auth/*.tsx",
+    "./shell/*": "./src/shell/*.tsx",
+    "./desktop": "./src/desktop/index.ts",
+    "./desktop/*": "./src/desktop/*.ts",
+    "./pages/*": "./src/pages/*/index.tsx"
+  }
+}
