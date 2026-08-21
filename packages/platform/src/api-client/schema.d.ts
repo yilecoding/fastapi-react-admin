@@ -1660,6 +1660,11 @@ export interface components {
             email?: string | null;
             /** @description 状态 */
             status: components["schemas"]["StatusType"];
+            /**
+             * Code
+             * @description 部门编码
+             */
+            code: string;
         };
         /**
          * CreateDictDataParam
@@ -1842,6 +1847,11 @@ export interface components {
              * @description 备注
              */
             remark?: string | null;
+            /**
+             * Code
+             * @description 角色编码
+             */
+            code: string;
         };
         /**
          * DeleteDataRuleParam
@@ -2361,6 +2371,11 @@ export interface components {
              */
             id: string | number;
             /**
+             * Code
+             * @description 部门编码
+             */
+            code: string;
+            /**
              * Deleted
              * @description 是否已删除（0：否；id：是）
              */
@@ -2425,6 +2440,11 @@ export interface components {
              * @description 部门 ID
              */
             id: string | number;
+            /**
+             * Code
+             * @description 部门编码
+             */
+            code: string;
             /**
              * Deleted
              * @description 是否已删除（0：否；id：是）
@@ -3141,6 +3161,11 @@ export interface components {
              */
             id: string | number;
             /**
+             * Code
+             * @description 角色编码
+             */
+            code: string;
+            /**
              * Created Time
              * Format: date-time
              * @description 创建时间
@@ -3180,6 +3205,11 @@ export interface components {
              * @description 角色 ID
              */
             id: string | number;
+            /**
+             * Code
+             * @description 角色编码
+             */
+            code: string;
             /**
              * Created Time
              * Format: date-time
@@ -5011,6 +5041,10 @@ export interface components {
         /**
          * UpdateDeptParam
          * @description 更新部门参数
+         *
+         *     刻意**不含** `code` —— 编码是给配置、数据权限规则和外部系统用的稳定引用键，
+         *     改掉它会让所有引用静默指向空（不报错，只是查不到）。要换编码就删了重建。
+         *     `update` 走 model_dump(exclude_unset=True)，字段不在这里就不会被写。
          */
         UpdateDeptParam: {
             /**
@@ -5198,6 +5232,9 @@ export interface components {
         /**
          * UpdateRoleParam
          * @description 更新角色参数
+         *
+         *     刻意**不含** `code`，理由同 `UpdateDeptParam`：编码是稳定引用键，
+         *     改掉它会让引用方静默失效。
          */
         UpdateRoleParam: {
             /**
@@ -5597,6 +5634,8 @@ export interface operations {
             query?: {
                 /** @description 部门名称 */
                 name?: string | null;
+                /** @description 部门编码 */
+                code?: string | null;
                 /** @description 部门负责人 */
                 leader?: string | null;
                 /** @description 联系电话 */
@@ -6079,6 +6118,8 @@ export interface operations {
             query?: {
                 /** @description 角色名称 */
                 name?: string | null;
+                /** @description 角色编码 */
+                code?: string | null;
                 /** @description 状态 */
                 status?: number | null;
                 /** @description 页码 */

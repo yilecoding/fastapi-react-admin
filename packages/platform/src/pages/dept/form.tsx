@@ -21,6 +21,9 @@ import { parentOptions, useCreateDept, useUpdateDept, type Dept } from './api'
 
 const schema = z.object({
   name: z.string().min(1, '请输入部门名称').max(50),
+  // 与后端 CustomCode 同一条规则。写在两边是刻意的：这里为了当场报错，
+  // 后端那份才是权威（前端绕过了也存不进去）。
+  code: z.string().regex(/^[A-Z][A-Z0-9_]{1,31}$/, '编码为 2–32 位大写字母、数字或下划线，且以字母开头'),
   parent_id: z.string().optional(),
   sort: z.coerce.number().int().min(0, '排序不能为负'),
   leader: z.string().max(20).optional(),
@@ -65,7 +68,7 @@ export function DeptFormSheet({
 
   const form = useForm<Values>({
     resolver: zodResolver(schema) as never,
-    defaultValues: { name: '', parent_id: ROOT, sort: 0, leader: '', phone: '', email: '', status: 1 },
+    defaultValues: { name: '', code: '', parent_id: ROOT, sort: 0, leader: '', phone: '', email: '', status: 1 },
   })
 
   React.useEffect(() => {
@@ -75,6 +78,7 @@ export function DeptFormSheet({
       editing
         ? {
             name: editing.name,
+            code: editing.code,
             parent_id: editing.parent_id ?? ROOT,
             sort: editing.sort,
             leader: editing.leader ?? '',
@@ -82,7 +86,7 @@ export function DeptFormSheet({
             email: editing.email ?? '',
             status: editing.status,
           }
-        : { name: '', parent_id: presetParentId ?? ROOT, sort: 0, leader: '', phone: '', email: '', status: 1 }
+        : { name: '', code: '', parent_id: presetParentId ?? ROOT, sort: 0, leader: '', phone: '', email: '', status: 1 }
     )
   }, [open, editing, presetParentId, form])
 
@@ -100,8 +104,9 @@ export function DeptFormSheet({
       status: v.status,
     }
     try {
+      // 编辑时**不带 code** —— 后端 UpdateDeptParam 里没有这个字段，带了也只是被丢掉
       if (isEdit && editing) await update.mutateAsync({ id: editing.id, body })
-      else await create.mutateAsync(body)
+      else await create.mutateAsync({ ...body, code: v.code.trim().toUpperCase() })
       onOpenChange(false)
     } catch (e) {
       setServerError(e instanceof ApiError ? e.message : t('保存失败，请稍后重试'))
@@ -124,6 +129,26 @@ export function DeptFormSheet({
           <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-2">
             <FormField label={t("部门名称")} error={fe(errs.name?.message)} required>
               <Input {...form.register('name')} data-testid="d-name" autoComplete="off" />
+            </FormField>
+
+            <FormField
+              label={t("部门编码")}
+              error={fe(errs.code?.message)}
+              required={!isEdit}
+              hint={
+                isEdit
+                  ? t('编码创建后不可修改 —— 配置、数据权限规则和外部系统都按它引用这个部门。')
+                  : t('给代码和外部系统用的稳定标识，如 FIN、TECH_DEV。大写字母开头。')
+              }
+            >
+              <Input
+                {...form.register('code')}
+                data-testid="d-code"
+                autoComplete="off"
+                disabled={isEdit}
+                placeholder={isEdit ? undefined : 'FIN'}
+                className="font-mono uppercase"
+              />
             </FormField>
 
             <FormField label={t("上级部门")} error={fe(errs.parent_id?.message)}>

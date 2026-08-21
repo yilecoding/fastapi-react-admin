@@ -160,9 +160,12 @@ function RoleItem({
         />
         <span className="min-w-0 flex-1">
           <span className={cn('block truncate text-sm', active && 'font-medium')}>{role.name}</span>
-          {role.remark && (
-            <span className="block truncate text-xs text-muted-foreground">{role.remark}</span>
-          )}
+          {/* 编码常驻显示而不是塞进 tooltip —— 它是「在配置里怎么写这个角色」的答案，
+              要能直接读出来抄走 */}
+          <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+            <code className="shrink-0 font-mono">{role.code}</code>
+            {role.remark && <span className="truncate">· {role.remark}</span>}
+          </span>
         </span>
         {!role.is_filter_scopes && (
           <span className={cn('shrink-0 rounded px-1 text-[10px] ring-1', TONE_CLASS.info)} title={t("不受数据范围限制")}>

@@ -24,6 +24,8 @@ import { useCreateRole, useUpdateRole, type Role } from './api'
 
 const schema = z.object({
   name: z.string().min(1, '请输入角色名称').max(20),
+  // 与后端 CustomCode 同一条规则；后端那份才是权威，这里只为当场报错
+  code: z.string().regex(/^[A-Z][A-Z0-9_]{1,31}$/, '编码为 2–32 位大写字母、数字或下划线，且以字母开头'),
   status: z.coerce.number().int(),
   is_filter_scopes: z.boolean(),
   remark: z.string().max(200).optional(),
@@ -53,7 +55,7 @@ export function RoleFormSheet({
 
   const form = useForm<Values>({
     resolver: zodResolver(schema) as never,
-    defaultValues: { name: '', status: 1, is_filter_scopes: true, remark: '' },
+    defaultValues: { name: '', code: '', status: 1, is_filter_scopes: true, remark: '' },
   })
 
   React.useEffect(() => {
@@ -63,11 +65,12 @@ export function RoleFormSheet({
       editing
         ? {
             name: editing.name,
+            code: editing.code,
             status: editing.status,
             is_filter_scopes: editing.is_filter_scopes,
             remark: editing.remark ?? '',
           }
-        : { name: '', status: 1, is_filter_scopes: true, remark: '' }
+        : { name: '', code: '', status: 1, is_filter_scopes: true, remark: '' }
     )
   }, [open, editing, form])
 
@@ -82,8 +85,9 @@ export function RoleFormSheet({
       remark: v.remark?.trim() || null,
     }
     try {
+      // 编辑时**不带 code** —— 后端 UpdateRoleParam 里没有这个字段
       if (isEdit && editing) await update.mutateAsync({ id: editing.id, body })
-      else await create.mutateAsync(body)
+      else await create.mutateAsync({ ...body, code: v.code.trim().toUpperCase() })
       onOpenChange(false)
     } catch (e) {
       setServerError(e instanceof ApiError ? e.message : t('保存失败，请稍后重试'))
@@ -108,6 +112,30 @@ export function RoleFormSheet({
               <Label>{t('角色名称')}<span className="ms-0.5 text-destructive">*</span></Label>
               <Input {...form.register('name')} data-testid="r-name" autoComplete="off" />
               {errs.name && <span className="text-xs text-destructive">{fe(errs.name.message)}</span>}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label>
+                {t('角色编码')}
+                {!isEdit && <span className="ms-0.5 text-destructive">*</span>}
+              </Label>
+              <Input
+                {...form.register('code')}
+                data-testid="r-code"
+                autoComplete="off"
+                disabled={isEdit}
+                placeholder={isEdit ? undefined : 'AUDITOR'}
+                className="font-mono uppercase"
+              />
+              {errs.code ? (
+                <span className="text-xs text-destructive">{fe(errs.code.message)}</span>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  {isEdit
+                    ? t('编码创建后不可修改 —— 配置和外部系统都按它引用这个角色。')
+                    : t('给代码和外部系统用的稳定标识，如 AUDITOR。大写字母开头。')}
+                </span>
+              )}
             </div>
 
             <div className="flex flex-col gap-2">

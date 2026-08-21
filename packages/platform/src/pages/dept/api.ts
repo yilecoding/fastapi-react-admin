@@ -4,6 +4,8 @@ import { api } from '../../api-client/client'
 
 export type Dept = {
   id: string
+  /** 稳定引用键。给配置、数据权限规则和外部系统用 —— 创建后不可改（后端 UpdateDeptParam 里没有它） */
+  code: string
   name: string
   parent_id: string | null
   sort: number
@@ -15,7 +17,7 @@ export type Dept = {
   children: Dept[] | null
 }
 
-export type DeptFilters = { name?: string; leader?: string; status?: number }
+export type DeptFilters = { name?: string; code?: string; leader?: string; status?: number }
 
 export const deptKeys = {
   all: ['sys', 'dept'] as const,
@@ -25,6 +27,7 @@ export const deptKeys = {
 function qs(f: DeptFilters) {
   const s = new URLSearchParams()
   if (f.name) s.set('name', f.name)
+  if (f.code) s.set('code', f.code)
   if (f.leader) s.set('leader', f.leader)
   if (f.status !== undefined) s.set('status', String(f.status))
   const q = s.toString()
@@ -38,6 +41,7 @@ export const deptTreeQuery = (f: DeptFilters = {}) =>
     placeholderData: (prev) => prev,
   })
 
+/** 更新用的载荷 —— **不含 `code`**，后端 `UpdateDeptParam` 也没有这个字段 */
 export type DeptBody = {
   name: string
   parent_id?: string | null
@@ -48,10 +52,13 @@ export type DeptBody = {
   status: number
 }
 
+/** 创建时才带 code —— 编码只在这一刻能定 */
+export type CreateDeptBody = DeptBody & { code: string }
+
 export function useCreateDept() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: DeptBody) => api.POST('/api/v1/sys/depts', { body }),
+    mutationFn: (body: CreateDeptBody) => api.POST('/api/v1/sys/depts', { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: deptKeys.all }),
   })
 }

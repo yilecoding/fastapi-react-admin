@@ -75,11 +75,14 @@ VALUES
 (2048601263968485378, N'全模型本部门数据权限', 1, GETDATE(), NULL),
 (2048601263968485379, N'排除超级管理员数据权限', 1, GETDATE(), NULL);
 
+-- 注意：'父部门 ID 等于测试部门 ID' 的 value 是**这套种子里**测试部门的字面量 id，
+-- 换一批种子数据就要跟着改。规则值没有「按编码引用」的形态（parent_id 是 id 列），
+-- 所以这里只能写 id —— 而按名称匹配的规则一律改成按 code（名字管理员能改，编码不能）。
 INSERT INTO sys_data_rule (id, name, model, [column], operator, expression, [value], created_time, updated_time)
 VALUES
 (2048601264035594240, N'部门 ID 等于当前用户部门', 'Dept', '__dept_id__', 0, 0, '${dept_id}', GETDATE(), NULL),
-(2048601264102703104, N'部门名称等于测试', 'Dept', 'name', 1, 0, N'测试', GETDATE(), NULL),
-(2048601264102703105, N'父部门 ID 等于测试部门 ID', 'Dept', 'parent_id', 0, 0, '1', GETDATE(), NULL),
+(2048601264102703104, N'部门编码等于 TEST', 'Dept', 'code', 1, 0, 'TEST', GETDATE(), NULL),
+(2048601264102703105, N'父部门 ID 等于测试部门 ID', 'Dept', 'parent_id', 0, 0, '2048601258595581952', GETDATE(), NULL),
 (2048601264102703106, N'创建者等于当前用户', '__ALL__', '__created_by__', 0, 0, '${user_id}', GETDATE(), NULL),
 (2048601264102703107, N'全模型部门 ID 等于当前用户部门', '__ALL__', '__dept_id__', 0, 0, '${dept_id}', GETDATE(), NULL),
 (2048601264102703109, N'用户非超级管理员', 'User', 'is_superuser', 0, 1, '1', GETDATE(), NULL);

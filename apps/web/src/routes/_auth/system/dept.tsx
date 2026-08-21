@@ -5,6 +5,7 @@ import { requirePerm } from "@admin/platform/auth/guards"
 
 const searchSchema = z.object({
   name: z.string().optional(),
+  code: z.string().optional(),
   status: z.coerce.number().int().optional(),
   /** 'all' = 树默认全折叠 */
   fold: z.literal("all").optional(),
