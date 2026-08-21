@@ -177,7 +177,15 @@ const RANGE_SEP = "~"
 /** 多值用 `,` —— 所以选项 value 里不能有逗号（都是 id / 枚举，实际不会有） */
 const MULTI_SEP = ","
 
-function encodeValue(cond: Condition, field: FilterField): string | undefined {
+/**
+ * 值按**自然类型**写出去（数字就是数字、布尔就是布尔），不是一律转字符串。
+ *
+ * `apps/web` 的 `stringifySearch` 会给「不加引号就会被解析成别的类型」的字符串
+ * 加引号保类型 —— 所以 `String(1)` 出去是 `?status=%221%22`，
+ * 而 `1` 出去才是 `?status=1`。`select` 的选项 value 声明成什么类型就发什么类型
+ * （和 `toQueryParams` 的 `rawOption` 同一条规矩）。
+ */
+function encodeValue(cond: Condition, field: FilterField): string | number | boolean | undefined {
   const shape = valueShape(field, cond.op)
   if (shape === "none") return undefined
 
@@ -199,7 +207,14 @@ function encodeValue(cond: Condition, field: FilterField): string | undefined {
   }
 
   const v = cond.value
-  return v === undefined || v === null || v === "" ? undefined : String(v)
+  if (v === undefined || v === null || v === "") return undefined
+  if (typeof v === "boolean") return v
+  if (field.type === "number") return Number(v)
+  if (field.type === "select") {
+    const raw = rawOption(field, v)
+    return typeof raw === "number" ? raw : String(raw)
+  }
+  return String(v)
 }
 
 function decodeValue(raw: string, field: FilterField, op: Operator): unknown {
@@ -247,8 +262,13 @@ function decodeValue(raw: string, field: FilterField, op: Operator): unknown {
  */
 export const LAYOUT_PARAM = "f"
 
-/** 整份查询（高级模式的条件树）—— 平铺参数表达不了嵌套的 AND/OR */
-export const TREE_PARAM = "q"
+/**
+ * 整份查询（高级模式的条件树）—— 平铺参数表达不了嵌套的 AND/OR。
+ *
+ * 刻意**不叫 `q`**：`q` 是页面自己最容易用的关键词参数名（在线用户页和字典页
+ * 都已经在用），撞上之后表现是「搜索框一填，高级模式的树被覆盖掉」。
+ */
+export const TREE_PARAM = "adv"
 
 /**
  * 查询值 → URL search params。
@@ -258,9 +278,9 @@ export const TREE_PARAM = "q"
 export function toUrlParams(
   value: QueryValue,
   fields: readonly FilterField[]
-): Record<string, string | undefined> {
+): Record<string, string | number | boolean | undefined> {
   const byKey = indexFields(fields)
-  const out: Record<string, string | undefined> = {}
+  const out: Record<string, string | number | boolean | undefined> = {}
 
   if (value.mode === "advanced") {
     out[TREE_PARAM] = packQuery(value)

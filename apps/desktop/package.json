@@ -1,0 +1,27 @@
+{
+  "name": "@admin/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "中后台桌面外壳模板：静默打印 · 可插拔硬件设备 · 主进程托管认证 · 运行期服务器地址",
+  "author": "fastapi-react-admin",
+  "main": "dist/main/index.cjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts",
+    "package": "pnpm build && electron-builder --config electron-builder.yml",
+    "package:dir": "pnpm build && electron-builder --config electron-builder.yml --dir",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "devDependencies": {
+    "@admin/platform": "workspace:*",
+    "@types/node": "^24",
+    "electron": "^42.1.0",
+    "electron-builder": "^26.8.1",
+    "typescript": "~6",
+    "vite": "^8"
+  }
+}
