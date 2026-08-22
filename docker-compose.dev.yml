@@ -84,7 +84,29 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # RabbitMQ —— **默认不起**。celery 的 broker 默认走 Redis（.env 的 CELERY_BROKER），
+  # 这里只是把「换成 RabbitMQ」这条路做成可跑可验的，而不是一句没人试过的承诺。
+  #
+  #     docker compose -f docker-compose.dev.yml --profile rabbitmq up -d
+  #     # 再把 .env 的 CELERY_BROKER 改成 'rabbitmq'
+  #
+  # 管理界面 http://127.0.0.1:15672（guest/guest）。
+  rabbitmq:
+    profiles: ["rabbitmq"]
+    image: rabbitmq:3.13.7-management
+    container_name: fba_rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_UI_PORT:-15672}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+
 volumes:
   mssql_data:
   redis_data:
   postgres_data:
+  rabbitmq_data:
