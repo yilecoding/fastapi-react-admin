@@ -111,7 +111,11 @@ export function TabItem({
       data-style={styleName}
       data-dragging={dragging || undefined}
       data-drop={dropSide}
-      data-testid={`tab-${tab.routeId}`}
+      // 用 tab.key（= routeId + JSON(params)）不用 routeId：内嵌页路由
+      // `/_auth/embedded/$name` 这类带参数的路由，routeId 对不同参数是同一个值，
+      // 两个不同的内嵌 tab 会渲染出完全相同的 testid。tab-outlet.tsx 对页面内容
+      // 那层用的也是 tabKey（= tab.key），这里要跟它同口径。
+      data-testid={`tab-${tab.key}`}
       draggable={draggable}
       onDragStart={(e) => {
         // 必须写点东西进 dataTransfer，否则 Firefox 不认这是一次有效拖拽
@@ -171,7 +175,7 @@ export function TabItem({
         <button
           type="button"
           aria-label={t('关闭 {{name}}', { name: tabLabel })}
-          data-testid={`close-${tab.routeId}`}
+          data-testid={`close-${tab.key}`}
           onClick={(e) => {
             e.stopPropagation()
             onClose()

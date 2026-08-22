@@ -123,7 +123,7 @@ export function LogOnlinePage({
 
   const columns = React.useMemo(
     () => buildColumns({ page: safePage, size, now, currentUuid, onKick: setPendingKick, t }),
-    [safePage, size, now, currentUuid]
+    [safePage, size, now, currentUuid, t]
   )
 
   const table = useTable({
@@ -249,7 +249,7 @@ export function LogOnlinePage({
                 pageCount: totalPages,
                 pageSize: size,
                 totalCount: total,
-                onPageChange: (i) => patch({ page: i + 1 }),
+                onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
                 onPageSizeChange: (s) => patch({ size: s, page: undefined }),
               }}
             />

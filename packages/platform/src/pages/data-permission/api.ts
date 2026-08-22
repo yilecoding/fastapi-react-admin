@@ -34,6 +34,7 @@ export type ScopeListParams = { page: number; size: number; name?: string; statu
 export const scopeKeys = {
   all: ['sys', 'data-scope'] as const,
   list: (p: ScopeListParams) => [...scopeKeys.all, 'list', p] as const,
+  detail: (id: string) => [...scopeKeys.all, id, 'detail'] as const,
   rules: (id: string) => [...scopeKeys.all, id, 'rules'] as const,
 }
 
@@ -47,6 +48,21 @@ export const dataScopesQuery = (p: ScopeListParams) =>
       return api.GET<PageData<DataScope>>(`/api/v1/sys/data-scopes?${s}`)
     },
     placeholderData: (prev) => prev,
+  })
+
+/**
+ * 按 id 取单个数据范围。
+ *
+ * 存在的理由和 `role/api.ts` 的 `roleDetailQuery` 一样：范围列表是**分页**的，
+ * `?scope=<id>` 深链指向的范围可能不在当前页。只在当前页里 find 会静默落回第一条 ——
+ * 那意味着「你以为在给范围 X 配规则，实际改的是列表第一条」。
+ */
+export const scopeDetailQuery = (id: string) =>
+  queryOptions({
+    queryKey: scopeKeys.detail(id),
+    queryFn: () => api.GET<DataScope>(`/api/v1/sys/data-scopes/${id}`),
+    enabled: Boolean(id),
+    retry: false,
   })
 
 /**
