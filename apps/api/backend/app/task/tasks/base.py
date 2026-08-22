@@ -19,6 +19,12 @@ class TaskBase(Task):
     ⚠️ 提示是**推送**，不是记录：socket.io 那条 toast 转瞬即逝，刷新就没。
     真要查「上次几点跑的、失败在哪一行」永远看 `task_result` 表和执行记录页。
     上游的 taskiq 插件只推不存，那是它的问题，别学。
+
+    ⚠️ 下面三条 `task_notification` 的文案不过 `tm()`，永远是中文，
+    不受 `Accept-Language` 影响——这是范围内的决定，不是漏翻：
+    socket.io 推送在业务代码里直接拼串发出去，没有走 HTTP 响应出口
+    （`exception_handler.py` / `response_schema.py`），`i18n.current_language`
+    在这条路径上无意义。要让它也支持英文，得在推送前显式调 `tm()`。
     """
 
     autoretry_for = (SQLAlchemyError,)
