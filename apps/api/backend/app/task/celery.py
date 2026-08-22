@@ -117,7 +117,11 @@ def init_celery() -> celery.Celery:
         result_backend=get_result_backend(),
         result_extended=True,
         database_engine_options={'echo': settings.DATABASE_ECHO},
+        # beat 从 task_scheduler 表读调度（界面上能改）。
+        # beat_schedule 里的静态项仍然生效 —— 它现在的角色是「代码自带的兜底调度」，
+        # 库里那份为准，两边同名时库里的会覆盖它。
         beat_schedule=get_local_beat_schedule(),
+        beat_scheduler='backend.app.task.utils.schedulers:DatabaseScheduler',
         task_cls='backend.app.task.tasks.base:TaskBase',
         task_track_started=True,
         enable_utc=False,
