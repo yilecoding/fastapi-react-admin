@@ -88,6 +88,22 @@ const ALLOW = new Map(Object.entries({
   'settings-layout.tsx': '已被 settings-shell.tsx 取代，文档在讲换掉它的理由',
 }))
 
+/** 章节标题 → 所在上下文文件。用来判「见「XXX」」指的那一节还在不在、在不在同一份 */
+const sectionOwner = new Map()
+for (const f of ctxFiles) {
+  for (const m of readFileSync(join(ROOT, f), 'utf8').matchAll(/^#{1,4} (.+)$/gm)) {
+    const title = m[1].trim()
+    if (!sectionOwner.has(title)) sectionOwner.set(title, [])
+    sectionOwner.get(title).push(f)
+  }
+}
+/** 「见「主从页」」这种引用是子串匹配的 —— 标题常带补充说明（「查询区（QueryBar · …）」） */
+function ownersOf(ref) {
+  const out = new Set()
+  for (const [title, fs] of sectionOwner) if (title.includes(ref)) for (const f of fs) out.add(f)
+  return [...out]
+}
+
 const problems = []
 const add = (level, file, line, rule, msg) => problems.push({ level, file, line, rule, msg })
 
@@ -171,7 +187,21 @@ for (const file of ctxFiles) {
       }
     }
 
-    // 6) data-testid
+    // 6) 章节交叉引用：「见「XXX」」必须能在**同一份**文件里找到那一节。
+    //    拆分册最容易留下的债就是这个 —— 原来同文件的引用，拆完变成了指向别处，
+    //    读的人翻遍手上这一份也找不到，而路径校验一个字都看不出来。
+    for (const m of line.matchAll(/见「([^」]{2,60})」/g)) {
+      const ref = m[1]
+      const owners = ownersOf(ref)
+      if (owners.length === 0) {
+        add('error', file, ln, 'dead-anchor', `「${ref}」—— 全仓没有这个章节`)
+      } else if (!owners.includes(file)) {
+        add('error', file, ln, 'cross-file-anchor',
+          `「${ref}」在 ${owners[0]}，不在本册 —— 改成 markdown 相对链接`)
+      }
+    }
+
+    // 7) data-testid
     for (const m of line.matchAll(/data-testid[=:]"?([\w-]+)"?/g)) {
       const id = m[1]
       if (!srcBlob.includes(id)) {

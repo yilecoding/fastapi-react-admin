@@ -60,6 +60,31 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # 可选的 PostgreSQL 验证环境：代码层已支持（DataBaseType.postgresql），
+  # 但从未实测跑过。不进默认 `up -d`（会跟 mssql 一起起、误导成"两个都要"），
+  # 需要时显式 `docker compose -f docker-compose.dev.yml --profile postgresql up -d postgres`。
+  # 验证完想换回 SQL Server 主线，把 apps/api/.env 的 DATABASE_TYPE 改回 sqlserver 即可，
+  # 这个容器留着不影响默认流程。
+  postgres:
+    image: postgres:16-alpine
+    container_name: fba_postgres
+    profiles: ["postgresql"]
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
 volumes:
   mssql_data:
   redis_data:
+  postgres_data:

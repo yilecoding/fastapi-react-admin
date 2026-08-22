@@ -14,8 +14,8 @@
 | Select 显示标签 | 必须传 `items={{value: label}}`，否则关闭态显示原始 value |
 | **下拉选哪个** | **按选项数量分**：≤ 8 项（状态/类型/是否）用 `Select`，点开一眼看全，多个输入框是噪音；长列表用 `Combobox`（菜单管理的「上级菜单」28 项、「路由地址」23 项都是它）。过滤走 `Intl.Collator`，中文与大小写都对 |
 | **选多个** | `ui/components/multi-select`。关闭态刻意**不铺 chips**（筛选栏一行 32px，铺三个就换行）—— 1 项显示 label、多项显示「label +n」，完整清单靠下拉里的勾选态。下拉底部有「全选 / 清空」 |
-| 时间筛选 | `ui/components/datetime-picker` 的 `DateTimeValuePicker` / `DateTimeRangePicker`。值是**本地时间串**不是 `Date`（理由见「查询区」），区间自带快捷区间（今天/昨天/近 7 天/近 30 天/本月/上月） |
-| 列表页筛选栏 | `ui/components/query-bar` + `_shared/use-query-search`。**不要**在页面里手拼筛选控件和入参映射，详见「查询区（QueryBar）」 |
+| 时间筛选 | `ui/components/datetime-picker` 的 `DateTimeValuePicker` / `DateTimeRangePicker`。值是**本地时间串**不是 `Date`（理由见 [查询区分册](./src/components/query-bar/AGENTS.md)），区间自带快捷区间（今天/昨天/近 7 天/近 30 天/本月/上月） |
+| 列表页筛选栏 | `ui/components/query-bar` + `_shared/use-query-search`。**不要**在页面里手拼筛选控件和入参映射，详见 [查询区分册](./src/components/query-bar/AGENTS.md) |
 | 可搜索下拉 | 走 `Combobox`（Base UI 底座，和其余组件同源）。**不要引 cmdk** —— 曾经有个零调用方的 cmdk 封装，已删除 |
 | 滚动条外观 | 已在 `ui/styles/globals.css` 全站统一（`scrollbar-width: thin` + `--scrollbar-thumb`），**不要逐个容器改**，也**别用 `scroll-area.tsx`**（零调用方，理由见那个文件的头注释）。刻意不用 `::-webkit-scrollbar` —— 它会强制 macOS 退回常驻滚动条 |
 | 隐藏滚动条 | 一律 `no-scrollbar`（shadcn 上游的 `@utility`），别手写 `[scrollbar-width:none] [&::-webkit-scrollbar]:hidden`。用在**操作区**（标签条、侧边栏），内容区不要藏 |
@@ -24,7 +24,7 @@
 | DropdownMenuLabel | 必须包在 `DropdownMenuGroup` 内，否则 Base UI 抛 `MenuGroupContext is missing` |
 | 表格容器 | `overflow-x-auto`，**不要** `overflow-hidden`（会把最右侧操作列裁掉，点不到） |
 | 二次确认 | `platform/shell/confirm-dialog`（支持 async + pending），渲染成触发器的兄弟节点，不能放进 `DropdownMenuContent` |
-| 树形多选 | `packages/ui/components/tree`（三态 + 级联 + 过滤）。**角色授权不用它**，见「主从页」 |
+| 树形多选 | `packages/ui/components/tree`（三态 + 级联 + 过滤）。**角色授权不用它**，见 [pages 分册](../platform/src/pages/AGENTS.md) 的「主从页」 |
 | 状态色 | 只在 `pages/_shared/status.tsx` 定义，用 `<StatusBadge>` / `<StatusPill tone>`；页面里手抄那串 emerald/destructive class 是禁止的 |
 | 行选中 | 要么配 `buildSelectColumn` + `BulkBar`，要么 `enableRowSelection: false`（只读列表）；开着却没有复选框列，分页条上的「已选 N 项」永远是 0 |
 | 半选复选框 | Base UI 是独立的 `indeterminate` prop，**不是** `checked="indeterminate"` |
@@ -43,9 +43,9 @@
 | 说明文字贴住它解释的东西 | 包一层 `flex flex-col gap-2` 做**结构化分组**，不要给说明加 `-mt-2` 往上拽 —— 负 margin 会变成「说明上方 8px、下方 24px」，同一条缝两个数 |
 | 禁用态选择器 | Base UI 的 Checkbox/Select 渲染成 `<span role="checkbox">`，禁用是 `data-disabled` / `aria-disabled`，**不是** HTML 的 `disabled` 属性 —— `:not([disabled])` 选不掉它，要写 `:not([data-disabled])` |
 | 批量操作条 | `BulkBar` 的文案可以换（`label` / `icon`），别为「批量下线」这种再抄一个组件 |
-| 文件预览 | `ui/components/file-viewer` + `pages/file/preview-dialog`。喂 `buffer`（带鉴权取回的字节）不喂 url；只在 Dialog 里挂，别常驻页面。详见「文件管理与附件预览」 |
+| 文件预览 | `ui/components/file-viewer` + `pages/file/preview-dialog`。喂 `buffer`（带鉴权取回的字节）不喂 url；只在 Dialog 里挂，别常驻页面。详见 [file 分册](../platform/src/pages/file/AGENTS.md) |
 | 业务对象附件 | `pages/file/attachments` 的 `<FileAttachments targetType targetId />`，别另写一套。`targetType` 走常量 |
-| 富文本 | `ui/components/rich-text`。图片能力由 `platform` 注入（`useRichTextImages()`），不传 `images` 就整块关掉。详见「富文本里的图片」 |
+| 富文本 | `ui/components/rich-text`。图片能力由 `platform` 注入（`useRichTextImages()`），不传 `images` 就整块关掉。详见 [rich-text 分册](./src/components/rich-text/AGENTS.md) |
 | 带鉴权的下载 | 不能用 `<a href download>`（带不上 Authorization 头，会把 401 的 JSON 存成文件）。走 `fetchBytes` → Blob → 临时 `<a>` → `revokeObjectURL` |
 
 ### 🔴 tooltip 的锚点不能是 `display:contents` 的包装元素
