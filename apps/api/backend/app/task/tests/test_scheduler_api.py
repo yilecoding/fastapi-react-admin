@@ -464,3 +464,54 @@ def test_every_schedule_in_db_points_at_a_registered_task(client: TestClient, to
         + '\n  '.join(broken)
         + f'\n可用的任务：{sorted(registered)}'
     )
+
+
+def test_fresh_install_has_every_index_the_models_declare(client: TestClient, token_headers):
+    """🔴 模型声明的索引，在库里必须真的存在。
+
+    这几轮加索引的路子是「改模型 + 手工 CREATE INDEX」（没有 alembic）——
+    两步之间**没有任何东西对账**。少做一步的后果：
+    - 只改模型 → 现有环境上没有索引，清理任务全表扫、锁表
+    - 只手工建 → 全新安装（`create_all`）没有这个索引，同上
+
+    而两种都**不报错**：功能全对，只是慢，而且要到日志表长起来才显形。
+
+    这条测试是唯一的对账：拿模型里声明的索引名去库里查。
+    ⚠️ 它查的是 **fba_test**（conftest 指过去的那个库），所以
+    「改完模型忘了在测试库建索引」也会被它抓到。
+    """
+    from sqlalchemy import create_engine, text
+
+    from backend.app.task.celery import get_result_backend
+    from backend.common.model import MappedBase
+    from backend.core.conf import settings
+
+    watched = ['task_result', 'task_scheduler', 'sys_login_log', 'sys_opera_log']
+    want: set[tuple[str, str]] = set()
+    for name in watched:
+        table = MappedBase.metadata.tables[name]
+        for idx in table.indexes:
+            want.add((name, idx.name))
+
+    url = get_result_backend().removeprefix('db+').replace(
+        f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?'
+    )
+    engine = create_engine(url, future=True)
+    try:
+        with engine.connect() as conn:
+            have = {
+                (r[0], r[1])
+                for r in conn.execute(text(
+                    'SELECT t.name, i.name FROM sys.indexes i '
+                    'JOIN sys.tables t ON t.object_id = i.object_id '
+                    'WHERE i.name IS NOT NULL'
+                ))
+            }
+    finally:
+        engine.dispose()
+
+    missing = sorted(f'{t}.{i}' for t, i in want - have)
+    assert not missing, (
+        '模型里声明了这些索引，库里却没有 —— 改了模型但没在库上建（没有 alembic，'
+        f'这两步靠人对账）：\n  ' + '\n  '.join(missing)
+    )
