@@ -22,7 +22,8 @@
 | 我要… | 读 |
 |---|---|
 | **第一次上手** | 本文件的「结构」·「本地起服务」·「硬纪律」（必读） |
-| 加列表页 / CRUD 页 · 设置屏 · 主从页 · 监控页 | [`packages/platform/src/pages/AGENTS.md`](packages/platform/src/pages/AGENTS.md) |
+| 加列表页 / CRUD 页 · 主从页 · 监控页 | [`packages/platform/src/pages/AGENTS.md`](packages/platform/src/pages/AGENTS.md) |
+| 加设置屏 —— 骨架本身 / 参数配置那种 | [`_shared` 分册](packages/platform/src/pages/_shared/AGENTS.md) / [`config` 分册](packages/platform/src/pages/config/AGENTS.md) |
 | 动多页签 / 标签条 / 偏好设置 / 侧边栏 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
 | 动文件上传 / 预览 / 附件 | [`packages/platform/src/pages/file/AGENTS.md`](packages/platform/src/pages/file/AGENTS.md) |
 | 动查询区 / 筛选条件 | [`packages/ui/src/components/query-bar/AGENTS.md`](packages/ui/src/components/query-bar/AGENTS.md) |
@@ -33,7 +34,7 @@
 | 动后端模型 / 接口 / SQL · 跑 pytest | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
 | 动定时任务 / Celery / 调度 | [`apps/api/backend/app/task/AGENTS.md`](apps/api/backend/app/task/AGENTS.md) |
 | 写或跑前端 E2E | [`apps/web/e2e/AGENTS.md`](apps/web/e2e/AGENTS.md) |
-| 动菜单 / 权限 / 死链判定 | 硬纪律 6 + `pages/AGENTS.md` 的「死链判定」 |
+| 动菜单 / 权限 / 死链判定 | 硬纪律 6 + [`pages/menu/AGENTS.md`](packages/platform/src/pages/menu/AGENTS.md) |
 
 每个目录下有一对 `AGENTS.md`（真身）+ `CLAUDE.md`（指向它的符号链接）：
 Claude Code 只认 `CLAUDE.md`，其余 agent 工具认 `AGENTS.md`，一份内容两边都读得到。
