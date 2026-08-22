@@ -1,7 +1,10 @@
 import * as React from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { IconAlertTriangle, IconPlus, IconRestore, IconSearch } from '@tabler/icons-react'
+import {
+  IconAdjustments, IconAlertTriangle, IconClock, IconCode, IconKey, IconLock,
+  IconLockAccess, IconLogin, IconPlus, IconRestore, IconSearch, IconServer,
+} from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import {
@@ -20,12 +23,29 @@ import {
   useDeleteConfigs, useSaveConfigs, type ConfigItem,
 } from './api'
 import { ConfigSheet } from './form'
-import { ConfigNav, navDesc } from './nav'
+import { ConfigNav, navDesc, railIcon } from './nav'
 import {
   UNMANAGED_SECTION, metaOf, railIdOf, railItem,
   sectionRank, sectionSummary, validateCross, validateOne,
 } from './registry'
 import { SettingRow } from './setting-row'
+
+/**
+ * 小节图标——和个人中心 `Block` 的图标徽标同一个视觉语言
+ * （`bg-primary/10 text-primary` 的圆角方块）。放在这里而不是 `registry.ts`：
+ * 注册表刻意保持纯数据，不 import React，图标这种渲染层的东西留在页面文件里查表。
+ * 兜底给 `IconAdjustments`——新增小节或落进「未纳管的键」都不会漏成一个空位。
+ */
+const SECTION_ICONS: Record<string, React.ReactNode> = {
+  '开发工具': <IconCode />,
+  '登录校验': <IconLogin />,
+  '口令强度': <IconLock />,
+  '有效期与提醒': <IconClock />,
+  '账号锁定': <IconLockAccess />,
+  '服务器': <IconServer />,
+  '认证': <IconKey />,
+}
+const sectionIcon = (title: string): React.ReactNode => SECTION_ICONS[title] ?? <IconAdjustments />
 
 /**
  * 参数配置 —— **左右结构的设置屏**，不是键值对表格。
@@ -330,15 +350,22 @@ export function ConfigPage({
             </p>
           )}
 
-          {/* 分类头：标题 + 说明 + 组总开关 */}
+          {/* 分类头：图标 + 标题 + 说明 + 组总开关。
+              图标徽标和下面每个小节、以及个人中心 Block 同一套视觉——
+              一屏扫下来「这是哪个分类」不用读字 */}
           {!isPending && !searching && (
             <div className="flex flex-col gap-3 pb-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex min-w-0 flex-col gap-1">
-                  <h2 className="text-base font-semibold" data-testid="panel-title">
-                    {t(railItem(group)?.label ?? group)}
-                  </h2>
-                  {desc && <p className="text-xs text-muted-foreground">{t(desc)}</p>}
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <span className="mt-0.5 grid size-7 shrink-0 place-content-center rounded-md bg-primary/10 text-primary [&>svg]:size-4">
+                    {railIcon(group)}
+                  </span>
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <h2 className="text-base font-semibold" data-testid="panel-title">
+                      {t(railItem(group)?.label ?? group)}
+                    </h2>
+                    {desc && <p className="text-xs text-muted-foreground">{t(desc)}</p>}
+                  </div>
                 </div>
                 {groupSwitch && (
                   <div className="flex shrink-0 items-center gap-2.5 rounded-md border border-border px-3 py-2">
@@ -384,29 +411,44 @@ export function ConfigPage({
             </p>
           )}
 
+          {/* 小节：图标徽标 + 标题，和个人中心 Block 同一套版式 ——
+              不套卡片框，块与块的分隔交给一根 border-b。原来每个小节自己是一张
+              `rounded-lg border` 卡片、标题栏还带 `bg-muted/30` 底色，
+              一屏堆 5～6 个小节看着比个人中心「重」不少，而这里并不需要
+              这层框：内容列已经封顶 max-w-4xl、左边还有条导航，
+              「这一块到哪为止」本来就看得出来 */}
           <div className={cn('flex flex-col gap-5', groupOff && 'opacity-60')}>
             {sections.map(([title, items]) => {
               const summary = sectionSummary(title, getValue)
               return (
-                <div
+                <section
                   key={title}
-                  className="rounded-lg border border-border"
+                  className="flex flex-col gap-3 border-b border-border/60 pb-5 last:border-0 last:pb-0"
                   data-testid={`section-${title}`}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-2.5">
-                    <h3 className="text-sm font-medium">{t(title)}</h3>
-                    {/* 参照产品在控件右上角回显当前值；策略型参数单个值回显没意义，
-                        组合起来的**效果**才是人要确认的 */}
-                    {summary && (
-                      <span className="text-xs text-muted-foreground" data-testid={`summary-${title}`}>
-                        {summary}
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5">
+                      <span className="mt-0.5 grid size-7 shrink-0 place-content-center rounded-md bg-primary/10 text-primary [&>svg]:size-4">
+                        {sectionIcon(title)}
                       </span>
-                    )}
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <h3 className="text-sm font-semibold">{t(title)}</h3>
+                        {/* 参照产品在控件右上角回显当前值；策略型参数单个值回显没意义，
+                            组合起来的**效果**才是人要确认的 */}
+                        {summary && (
+                          <p className="text-xs leading-relaxed text-muted-foreground" data-testid={`summary-${title}`}>
+                            {summary}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                     {title === UNMANAGED_SECTION && (
                       <StatusPill tone="muted">{t('控件按值推断')}</StatusPill>
                     )}
                   </div>
-                  <div className="flex flex-col">
+                  {/* 内容缩进到和标题文字对齐（图标 28px + gap 10px = 2.375rem），
+                      和个人中心 Block 同一条规则 —— 窄屏不缩进，那时是可用宽度 */}
+                  <div className="flex flex-col overflow-hidden rounded-lg border border-border/60 sm:ms-[2.375rem]">
                     {items.map((c) => (
                       <SettingRow
                         key={c.id}
@@ -425,7 +467,7 @@ export function ConfigPage({
                       />
                     ))}
                   </div>
-                </div>
+                </section>
               )
             })}
           </div>
