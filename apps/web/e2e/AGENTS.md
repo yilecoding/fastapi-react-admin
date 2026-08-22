@@ -134,10 +134,52 @@ await expect(page.locator('[data-visible="true"] table tbody tr').first()).toBeV
 
 （顺带：`[data-visible="true"]` 前缀是必须的，理由见根 `CLAUDE.md` 硬纪律 5。）
 
+### 数据权限：整批账号建在 `beforeAll`，且**前后端两套测试各看各的**
+
+`data-permission.spec.ts` 是目前最大的一条（25 条用例 / 19 个账号）。
+后端有一份同名矩阵（`apps/api/backend/app/admin/tests/api_v1/test_data_permission.py`），
+两边**不是复制关系**，分工写在两个文件的头注释里：
+
+| | pytest | E2E |
+|---|---|---|
+| 断言 | `GET /sys/depts` 的**编码集合** | 部门页**渲染出来的行** |
+| 只有它能看见 | WHERE 条件的每种表达式/组合 | 树被过滤后**塌成什么形状**、空态长什么样、界面上那三条语义告警在不在、配完之后到底生不生效 |
+
+前端这份存在的理由很具体：数据权限最容易出的不是「算错」而是「配错」，
+而「配错了看不出来」只能由界面兜住 —— `rule-mixed-warn`（一条 OR 抬掉全部 AND）、
+`scope-inert`（角色关了过滤开关，绑了也白绑）、`scope-disabled`（范围停用）
+这三条提示是替人看的那一层，**它们本身必须有测试**，否则哪天被误删也没人知道。
+
+三条踩出来的：
+
+- 🔴 **`sys_role.name` 只有 `UniversalStr(32)`。** 拼名字时前缀留短一点 ——
+  超了 SQL Server 报的是 `String or binary data would be truncated`，
+  一句不说是哪张表哪一列的 500。实测踩过（`E2E角色-DPE_XXXXXXXXXXXX-UNFILTERED` = 34 字符）
+- 🔴 **测试角色必须绑「部门管理」那几个菜单。** `/system/dept` 的守卫是
+  `requirePerm('sys:dept:add')`，权限码来自角色菜单。不绑的话每个账号打开部门页
+  都被重定向到 `/403`，而断言「看不到任何部门」照样**通过** —— 它压根没进那一页。
+  菜单 id 按 `path`/`perms` 现查，不要硬编码种子里的雪花 ID
+- 🔴 **断言顺序：先断言「应该看见的」，再断言「不该看见的」。** 反过来就是假绿 ——
+  骨架屏阶段所有行都不存在，`toHaveCount(0)` 立刻通过，等于在页面加载完之前
+  就判它「过滤生效了」。正向断言自带重试，它一过才说明数据已经渲染完
+
+前置数据（19 账号 + 20 角色 + 19 范围 + 17 规则 + 6 部门）整批建在 `beforeAll`，
+每条测试重建一遍要 20 秒以上。代价是那个 describe 必须
+`test.describe.configure({ mode: "serial" })` —— 并行 worker 会各跑一次 `beforeAll`，
+撞上编码/角色名/用户名的唯一约束。`afterAll` 按「用户 → 角色/范围/规则 → 子部门 → 父部门」
+的顺序拆干净（用户挡着部门删不掉，子部门挡着父部门删不掉）。
+
+`fixtures/base.ts` 为此多了两个导出：`createApiClient()`（脱离 fixture 生命周期，
+`beforeAll`/`afterAll` 里能用）和 `loginPageAs(page, username, password)`
+（`authedPage` 写死了 admin，而这份测试要的正是「换个账号看见的不一样」）。
+
 ### 现在测了什么 / 没测什么
 
-三条种子用例：登录（表单校验 + 验证码关闭路径）、部门 CRUD 闭环（含 409 冲突
+种子用例：登录（表单校验 + 验证码关闭路径）、部门 CRUD 闭环（含 409 冲突
 可见、编辑禁改编码、删除二次确认、同级重名 vs 跨级同名的回归）、多页签保活
-（折叠状态 + `data-visible` 属性）。**没有**做视觉回归、没有覆盖其余列表页的
-筛选组合——那些页面共用同一套模板，测一次模板 + 抽样几页就够，不是每页都要
-单独写一条。
+（折叠状态 + `data-visible` 属性）、任务调度闭环。
+
+加上 **`data-permission.spec.ts`（25 条 / 19 个账号）**——见上一节。
+
+**没有**做视觉回归、没有覆盖其余列表页的筛选组合——那些页面共用同一套模板，
+测一次模板 + 抽样几页就够，不是每页都要单独写一条。

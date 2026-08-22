@@ -4,9 +4,9 @@ import type { APIRequestContext, Page } from "@playwright/test"
 
 export const API_BASE = process.env.E2E_API_BASE ?? "http://127.0.0.1:8001"
 
-async function loginToken(ctx: APIRequestContext) {
+export async function loginToken(ctx: APIRequestContext, username = "admin", password = "123456") {
   const res = await ctx.post("/api/v1/auth/login/swagger", {
-    params: { username: "admin", password: "123456" },
+    params: { username, password },
   })
   if (!res.ok()) throw new Error(`登录失败（HTTP ${res.status()}）：${await res.text()}`)
   const body = (await res.json()) as { access_token: string; session_uuid: string }
@@ -38,6 +38,36 @@ function makeClient(ctx: APIRequestContext, token: string): ApiClient {
     put: (p, data) => unwrap(ctx.put(`${API_BASE}${p}`, { headers, data })),
     del: (p, data) => unwrap(ctx.delete(`${API_BASE}${p}`, { headers, data })),
   }
+}
+
+/**
+ * 脱离 fixture 生命周期的 admin 接口客户端。
+ *
+ * `api` fixture 是**每条测试**一份，`beforeAll` / `afterAll` 里拿不到它 ——
+ * 而「一次建好一整套账号、跑完一批测试再拆掉」这种前置数据（data-permission.spec.ts）
+ * 只能建在 beforeAll 里，否则每条测试重建一遍 20 多个账号，慢到没法用。
+ */
+export async function createApiClient(): Promise<{ api: ApiClient; dispose: () => Promise<void> }> {
+  const ctx = await request.newContext({ baseURL: API_BASE })
+  const { token } = await loginToken(ctx)
+  return { api: makeClient(ctx, token), dispose: () => ctx.dispose() }
+}
+
+/**
+ * 把**指定账号**的登录态注入到一个干净的 page 上。
+ *
+ * `authedPage` 写死了 admin；测数据权限要的正是「换个账号看见的不一样」，
+ * 所以需要一个能指定用户名的版本。注入方式同 `authedPage`（addInitScript +
+ * sessionStorage），理由见本文件 `authedPage` 上的注释。
+ */
+export async function loginPageAs(page: Page, username: string, password: string): Promise<void> {
+  const ctx = await request.newContext({ baseURL: API_BASE })
+  const { token, sessionUuid } = await loginToken(ctx, username, password)
+  await ctx.dispose()
+  await page.addInitScript(([t, u]) => {
+    sessionStorage.setItem("admin:access-token", t as string)
+    sessionStorage.setItem("admin:session-uuid", u as string)
+  }, [token, sessionUuid])
 }
 
 export const test = base.extend<{ authedPage: Page; api: ApiClient }>({
