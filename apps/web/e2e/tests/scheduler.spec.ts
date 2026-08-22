@@ -240,3 +240,48 @@ test.describe("cron 预览", () => {
     await page.getByRole("button", { name: "取消" }).click()
   })
 })
+
+test.describe("任务参数", () => {
+  test("位置参数与关键字参数都能存，且非法 JSON 当场拦住", async ({ authedPage: page }) => {
+    /**
+     * 后端一直收 `args`，此前界面上**没有入口** —— 「schema 里有、界面上没有」
+     * 是这个仓库明确反对的形态：那个字段只有读源码的人知道它存在。
+     *
+     * 校验必须在写入口拦住：参数错了任务照样被派发，失败发生在 worker 里，
+     * 而用户是在界面上填的 —— 中间隔着一次调度周期才看得到红字。
+     */
+    const name = `E2E参数${uniqueCode("S")}`
+
+    await page.goto("/scheduler/manage")
+    await page.getByTestId("add-scheduler").click()
+    await page.getByTestId("s-name").fill(name)
+    await page.getByTestId("s-task").click()
+    await page.getByRole("option", { name: "maintenance.prune_logs" }).click()
+
+    // args 必须是 JSON 数组，不能是对象
+    await page.getByTestId("s-args").fill('{"a": 1}')
+    await page.getByTestId("s-submit").click()
+    await expect(page.getByText('位置参数必须是 JSON 数组，例如 [1, "a"]')).toBeVisible()
+
+    // kwargs 必须是 JSON 对象，不能是数组（两条规则方向相反，容易写反）
+    await page.getByTestId("s-args").fill("[]")
+    await page.getByTestId("s-kwargs").fill("[1]")
+    await page.getByTestId("s-submit").click()
+    await expect(page.getByText('参数必须是 JSON 对象，例如 {"days": 30}')).toBeVisible()
+
+    // 都合法就能存，并且**存进去的值要能读回来**（编辑抽屉里核对）
+    await page.getByTestId("s-args").fill('[7]')
+    await page.getByTestId("s-kwargs").fill('{"days": 60}')
+    await page.getByTestId("s-submit").click()
+
+    const row = page.locator("tbody tr", { hasText: name })
+    await expect(row).toBeVisible()
+    await row.locator('[data-testid^="edit-scheduler-"]').click()
+    await expect(page.getByTestId("s-args")).toHaveValue("[7]")
+    await expect(page.getByTestId("s-kwargs")).toHaveValue('{"days": 60}')
+    await page.getByRole("button", { name: "取消" }).click()
+
+    await page.locator("tbody tr", { hasText: name }).locator('[data-testid^="del-scheduler-"]').click()
+    await page.getByTestId("confirm-ok").click()
+  })
+})
