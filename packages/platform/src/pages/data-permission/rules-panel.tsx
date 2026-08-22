@@ -56,8 +56,8 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
   const mixed = hasAnd && hasOr
 
   return (
-    <div className="flex flex-col gap-3" data-testid="rules-panel">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-3 content-scroll:lg:min-h-0 content-scroll:lg:flex-1" data-testid="rules-panel">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Can perm="data:rule:add">
           <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true) }} data-testid="rule-add">
             <IconPlus className="size-4" />{t('新建规则')}
@@ -94,9 +94,14 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-lg border" data-testid="rules-table">
+      <div
+        className="overflow-x-auto rounded-lg border content-scroll:lg:flex content-scroll:lg:min-h-0 content-scroll:lg:flex-1 content-scroll:lg:flex-col"
+        data-testid="rules-table"
+      >
         <Table>
-          <TableHeader>
+          {/* 吸顶表头：bg-muted 不能省（透明的话滚上来的行会透出来），
+              inset 阴影补分隔线 —— collapse 表格里 thead 的 border 会跟着滚走 */}
+          <TableHeader className="sticky top-0 z-10 bg-muted shadow-[inset_0_-1px_0_var(--border)]">
             <TableRow>
               <TableHead className="min-w-48">{t('规则名称')}</TableHead>
               <TableHead>{t('作用模型')}</TableHead>
