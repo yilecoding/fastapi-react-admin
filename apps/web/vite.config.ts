@@ -42,8 +42,11 @@ export default defineConfig({
   // 端口固定在 1125。`strictPort` 是关键：不写它 Vite 会在端口被占时自己 +1 漂到
   // 1126，而后端 CORS 白名单和 oauth2 回跳地址都是写死 1125 的 —— 漂走之后表现是
   // 「页面能开，但所有接口 CORS 失败」，比直接起不来难查得多。
+  //
+  // `E2E_WEB_PORT` 是唯一的例外口子：E2E 起的是完全隔离的第二个实例（连 fba_test，
+  // 不是 fba），不设置这个变量时行为和以前完全一样，还是 1125。
   server: {
-    port: 1125,
+    port: Number(process.env.E2E_WEB_PORT) || 1125,
     strictPort: true,
     proxy: {
       // 富文本正文里的内联图走这里。后端把它挂成静态资源

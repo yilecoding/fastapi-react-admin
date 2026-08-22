@@ -17,6 +17,8 @@
 import asyncio
 import sys
 
+import cappa
+
 # 注册所有模型 —— 不 import 的话 metadata 是空的，drop/create 都成了空操作。
 # 少 import 一个插件，它的表就会被漏掉，且不报错
 import backend.app.admin.model  # ruff: ignore[unused-import]
@@ -61,6 +63,14 @@ async def main() -> None:
 if __name__ == '__main__':
     try:
         asyncio.run(main())
+    except cappa.Exit as e:
+        # execute_sql_scripts 用 cappa.Exit 包报错（它继承 SystemExit，不是 Exception，
+        # 下面那个 except 接不住）。它的 message 存在 e.message 上、不传给 SystemExit
+        # 的 args —— 裸跑（不经过 cappa 的 CLI 入口）时默认异常处理只看得到 int 退出码，
+        # 表现是「exit 1，一个字都不打印」，看着像挂了但完全不知道挂在哪。
+        # 实测踩过：种子 SQL 里混进一行不合法语句，报错被这样吞得干干净净。
+        print(f'重建失败：{e.message}', file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         # 最常见的两种：库不存在（先手工 CREATE DATABASE）、容器没起来
         print(f'重建失败：{e}', file=sys.stderr)

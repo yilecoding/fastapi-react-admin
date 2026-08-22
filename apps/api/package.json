@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "uv run python -m uvicorn backend.main:app --port 8000 --reload --reload-dir backend",
     "test": "uv run --no-sync pytest",
-    "test:db": "uv run --no-sync python -m backend.scripts.reset_test_db"
+    "test:db": "uv run --no-sync python -m backend.scripts.reset_test_db",
+    "e2e": "ENV_FILE=.env.e2e uv run --no-sync python -m uvicorn backend.main:app --port 8001"
   }
 }

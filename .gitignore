@@ -19,6 +19,8 @@ dist-ssr
 !apps/api/backend/.env.example
 # 插件各自的模板同理 —— 漏掉的话 email / oauth2 插件在新环境里没有可抄的样板
 !apps/api/backend/plugin/*/.env.example
+# E2E 隔离环境同理，见 apps/web/e2e/ 和 CLAUDE.md「E2E 测试」
+!apps/api/backend/.env.e2e.example
 
 # turbo
 .turbo
@@ -58,3 +60,12 @@ apps/desktop/resources/*
 
 # 公开上传子树（运行时数据，被 /uploads 静态挂出去）
 apps/api/backend/upload-public/
+
+# Playwright（E2E）。⚠️ 路径不是 apps/web/e2e/test-results —— config 在
+# apps/web/e2e/playwright.config.ts，但 `pnpm --filter web e2e` 是从 apps/web/
+# 起（cwd=apps/web），Playwright 的默认 outputDir 跟着 cwd 走，实测落在
+# apps/web/test-results/。这条写错过一次：目录名对得上直觉，但没匹配到
+# 真实产物路径，1.4MB 的 trace/截图/zip 差点被 git add 进去
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/blob-report/

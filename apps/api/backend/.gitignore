@@ -1,5 +1,6 @@
 __pycache__/
 .env
+.env.e2e
 alembic/versions/
 static/media/
 *.log

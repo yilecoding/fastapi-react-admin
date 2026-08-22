@@ -1,10 +1,13 @@
+import os
+
 from pathlib import Path
 
 # 项目根目录
 BASE_PATH = Path(__file__).resolve().parent.parent
 
-# 环境变量文件
-ENV_FILE_PATH = BASE_PATH / '.env'
+# 环境变量文件 —— 文件名可用 ENV_FILE 环境变量覆盖（E2E 用它指向 .env.e2e，
+# 跑一套连 fba_test、关验证码的隔离实例）。不设置这个变量时行为和以前完全一样。
+ENV_FILE_PATH = BASE_PATH / os.environ.get('ENV_FILE', '.env')
 
 # 环境变量示例文件
 ENV_EXAMPLE_FILE_PATH = BASE_PATH / '.env.example'
