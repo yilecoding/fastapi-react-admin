@@ -1,6 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { api, type PageData } from '../../api-client/client'
+import { describeCron } from './cron-presets'
 
 /**
  * 任务调度。
@@ -47,7 +48,7 @@ export type SchedulerListParams = {
 export const schedulerKeys = {
   all: ['task', 'scheduler'] as const,
   list: (p: SchedulerListParams) => [...schedulerKeys.all, 'list', p] as const,
-  registered: () => [...schedulerKeys.all, 'registered'] as const,
+  meta: () => [...schedulerKeys.all, 'meta'] as const,
 }
 
 function qs(p: SchedulerListParams): string {
@@ -68,18 +69,24 @@ export const schedulersQuery = (p: SchedulerListParams) =>
   })
 
 /**
- * 已注册的 Celery 任务，给表单的「任务」下拉用。
+ * 调度运行时元信息：能选哪些任务 + beat 的时区。
  *
  * 🔴 **任务名不能让人手敲。** 打错一个字（`maintenance.prune_log` 少个 s）
  * 就是「调度按时触发、worker 收到一个不认识的名字」—— celery 只记一条
  * `Received unregistered task`，而界面上这条调度的「累计触发次数」照涨，
  * 看起来一切正常。后端保存时也会拦，这个下拉是让人根本不产生那个错。
  */
-export const registeredTasksQuery = () =>
+export type SchedulerMeta = {
+  tasks: string[]
+  /** beat 解释 crontab 用的时区（IANA）。算执行时间预览必须用它，不能用浏览器时区 */
+  timezone: string
+}
+
+export const schedulerMetaQuery = () =>
   queryOptions({
-    queryKey: schedulerKeys.registered(),
-    queryFn: () => api.GET<string[]>('/api/v1/tasks/schedulers/registered'),
-    // 任务集合只随发版变，会话内不会变
+    queryKey: schedulerKeys.meta(),
+    queryFn: () => api.GET<SchedulerMeta>('/api/v1/tasks/schedulers/meta'),
+    // 任务集合和服务端时区都只随发版/部署变，会话内不会变
     staleTime: Infinity,
   })
 
@@ -168,12 +175,24 @@ export const INTERVAL_PERIOD_ITEMS: Record<string, string> = {
 /**
  * 把一条调度说成人话，用在列表的「触发策略」列。
  *
- * 不直接显示 `crontab` 原文：`15 3 * * *` 对大多数人不是可读的，
- * 而这一列的作用就是让人一眼确认「它是不是按我想的时间跑」。
+ * **混合**：常见的四种形态自己说，其余交给 cronstrue。两边各有各的短板：
+ *
+ * | 表达式 | 自己写 | cronstrue（zh_CN） |
+ * |---|---|---|
+ * | `15 3 * * *` | 每天 03:15 | 在03:15 ← **丢了「每天」** |
+ * | `0 9,18 * * 1-5` | ❌ 认不出 | 在 09:00 和 18:00, 星期一至星期五 |
+ *
+ * 单用任何一边都会退步：只用手写的，复杂表达式那一格是空的；
+ * 只用 cronstrue，最常见的「每天几点」反而读不出周期。
+ * 这个取舍是 E2E 跑出来的 —— 换成纯 cronstrue 之后
+ * 「列表说人话」那条断言立刻红了（期望「每天 03:15」，实际「在03:15」）。
+ *
+ * 解析不了时退回显示原文，不显示空白。
  */
 export function describeSchedule(
   s: Pick<TaskScheduler, 'type' | 'crontab' | 'interval_every' | 'interval_period'>,
-  t: (k: string, vars?: Record<string, unknown>) => string
+  t: (k: string, vars?: Record<string, unknown>) => string,
+  lang: string
 ): string {
   if (s.type === 0) {
     return t('每 {{n}} {{unit}}', {
@@ -181,13 +200,19 @@ export function describeSchedule(
       unit: t(INTERVAL_PERIOD_ITEMS[s.interval_period ?? 'seconds'] ?? '秒'),
     })
   }
-  const parts = (s.crontab ?? '').split(/\s+/)
-  if (parts.length !== 5) return s.crontab ?? ''
-  const [min, hour, dom, mon, dow] = parts
-  if (dom === '*' && mon === '*' && dow === '*') {
-    if (hour === '*' && min === '*') return t('每分钟')
-    if (hour === '*') return t('每小时第 {{min}} 分', { min })
-    return t('每天 {{time}}', { time: `${hour.padStart(2, '0')}:${min.padStart(2, '0')}` })
+
+  const expr = s.crontab ?? ''
+  const parts = expr.trim().split(/\s+/)
+  if (parts.length === 5) {
+    const [min, hour, dom, mon, dow] = parts
+    const plain = (v: string) => /^\d+$/.test(v)
+    const at = () => `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`
+    if (dom === '*' && mon === '*' && dow === '*') {
+      if (min === '*' && hour === '*') return t('每分钟')
+      if (hour === '*' && plain(min)) return t('每小时第 {{min}} 分', { min })
+      if (plain(min) && plain(hour)) return t('每天 {{time}}', { time: at() })
+    }
   }
-  return s.crontab
+
+  return describeCron(expr, lang) ?? expr
 }

@@ -41,13 +41,34 @@ def created(client: TestClient, token_headers: dict[str, str], uniq: str):
 # ── 注册表 ──────────────────────────────────────────────────────────────────
 
 
-def test_registered_tasks_excludes_celery_internals(client: TestClient, token_headers):
+def test_meta_lists_only_our_tasks(client: TestClient, token_headers):
     """下拉里只该出现我们自己的任务，不该出现 celery.backend_cleanup 那些。"""
-    r = client.get(f'{BASE}/registered', headers=token_headers)
-    assert r.status_code == 200
-    names = r.json()['data']
+    r = client.get(f'{BASE}/meta', headers=token_headers)
+    assert r.status_code == 200, r.text
+    names = r.json()['data']['tasks']
     assert 'maintenance.prune_logs' in names
     assert not any(n.startswith('celery.') for n in names)
+
+
+def test_meta_exposes_beat_timezone(client: TestClient, token_headers):
+    """🔴 beat 的时区必须下发给前端。
+
+    前端算「近五次执行时间」预览要按 **beat 解释 crontab 的那个时区**算。
+    用浏览器时区去算，在运维和服务器不同区时会得到一个看着像模像样、
+    实际和真正触发时刻差好几小时的预览 —— 而这个预览存在的全部意义
+    就是让人确认「是不是按我想的时间跑」。
+
+    ⚠️ 它和 `sys_user.timezone` 是两回事：后者是每个人的**显示**偏好，
+    不参与任何服务端计算（见 `model/user.py` 那一列的注释）。
+    """
+    from zoneinfo import ZoneInfo
+
+    from backend.core.conf import settings
+
+    tz = client.get(f'{BASE}/meta', headers=token_headers).json()['data']['timezone']
+    assert tz == settings.DATETIME_TIMEZONE
+    # 必须是浏览器 Intl 认得的 IANA 名字，不能是 '+08:00' 这种偏移量
+    ZoneInfo(tz)
 
 
 # ── 创建 ────────────────────────────────────────────────────────────────────
@@ -250,3 +271,37 @@ def test_result_fields_are_extended(client: TestClient, token_headers):
         with factory() as db:
             db.execute(delete(TaskExtended.__table__).where(TaskExtended.task_id == task_id))
             db.commit()
+
+
+@pytest.mark.parametrize(
+    ('expr', 'why'),
+    [
+        ('0 0 0 * * ? *', 'Quartz 七段（秒 分 时 日 月 周 年）'),
+        ('* * * * * ?', 'Quartz 六段'),
+        ('0 0 * * ?', 'Quartz 的 ?（该字段不指定）'),
+        ('0 0 L * *', 'Quartz 的 L（每月最后一天）'),
+        ('0 0 * * 1#2', 'Quartz 的 #（第 N 个星期几）'),
+        ('0 0 15W * *', 'Quartz 的 W（最近的工作日）'),
+    ],
+)
+def test_quartz_syntax_is_rejected(client: TestClient, token_headers, uniq, expr, why):
+    """🔴 Quartz 语法必须被拦在门外。
+
+    网上绝大多数「Cron 表达式生成器」产出的是 **Quartz**（7 段、`?`、`L`、`W`、`#`），
+    而 celery 用的是 **Unix 5 段**。实测 celery 的反应：
+
+        0 0 0 * * ? *  → 只接受 5 段，收到 7 段
+        0 0 * * ?      → Invalid weekday literal '?'
+        0 0 L * *      → Invalid weekday literal 'L'
+
+    如果放进来，后果是**静默的**：`all_as_schedule` 只能跳过这一条（否则整个
+    beat 起不来），于是界面上它启用着、实际永远不触发，没有任何地方说明为什么。
+
+    这条同时是一道产品约束的护栏：**「每月最后一天」这类预设不能提供**，
+    Unix cron 表达不了它，给个 `0 0 28-31 * *` 的近似值等于偷换承诺。
+    """
+    r = client.post(
+        BASE, headers=token_headers,
+        json={'name': uniq, 'task': 'maintenance.prune_logs', 'type': 1, 'crontab': expr},
+    )
+    assert r.status_code == 422, f'{why} 没被拦住：{r.text[:200]}'

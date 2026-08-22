@@ -23,7 +23,7 @@ import { FormField, FormSection } from '../_shared/form-fields'
 import { CronBuilder } from './cron-builder'
 import {
   INTERVAL_PERIOD_ITEMS, SCHEDULER_TYPE_FORM_ITEMS,
-  registeredTasksQuery, useCreateScheduler, useUpdateScheduler, type TaskScheduler,
+  schedulerMetaQuery, useCreateScheduler, useUpdateScheduler, type TaskScheduler,
 } from './api'
 
 /**
@@ -91,7 +91,8 @@ export function SchedulerFormSheet({
   const update = useUpdateScheduler()
   const [serverError, setServerError] = React.useState<string | null>(null)
 
-  const { data: tasks = [] } = useQuery(registeredTasksQuery())
+  const { data: meta } = useQuery(schedulerMetaQuery())
+  const tasks = meta?.tasks ?? []
 
   const typeItems = React.useMemo(
     () => Object.fromEntries(Object.entries(SCHEDULER_TYPE_FORM_ITEMS).map(([v, l]) => [v, t(l)])),
@@ -218,6 +219,7 @@ export function SchedulerFormSheet({
                     value={form.watch('crontab') ?? ''}
                     onChange={(v) => form.setValue('crontab', v, { shouldDirty: true })}
                     invalid={Boolean(errs.crontab)}
+                    timeZone={meta?.timezone ?? 'UTC'}
                   />
                 </FormField>
               ) : (

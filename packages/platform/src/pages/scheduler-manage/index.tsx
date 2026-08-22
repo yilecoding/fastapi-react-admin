@@ -62,7 +62,7 @@ export function SchedulerManagePage({
   search?: SchedulerManageSearch
   onSearchChange?: (n: SchedulerManageSearch) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const page = search.page ?? 1
   const size = search.size ?? DEFAULT_PAGE_SIZE
   const patch = React.useCallback(
@@ -118,7 +118,7 @@ export function SchedulerManagePage({
         header: t('策略类型'),
         cell: ({ getValue }) => <span className="text-sm">{t(getValue())}</span>,
       }),
-      col.accessor((r) => describeSchedule(r, t), {
+      col.accessor((r) => describeSchedule(r, t, i18n.language), {
         id: 'schedule',
         header: t('触发策略'),
         // 说人话而不是显示 crontab 原文：`15 3 * * *` 对多数人不可读，
@@ -198,7 +198,7 @@ export function SchedulerManagePage({
         ),
       }),
     ],
-    [t, toggle, run]
+    [t, i18n.language, toggle, run]
   )
 
   const table = useTable({

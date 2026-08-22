@@ -152,3 +152,10 @@ class DeleteTaskResultParam(SchemaBase):
     """删除任务执行记录参数"""
 
     pks: list[int] = Field(description='记录 ID 列表')
+
+
+class TaskSchedulerMeta(SchemaBase):
+    """调度运行时元信息"""
+
+    tasks: list[str] = Field(description='已注册的 Celery 任务名')
+    timezone: str = Field(description='beat 解释 crontab 用的时区（IANA），前端算执行时间预览要用它')
