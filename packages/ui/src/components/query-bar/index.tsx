@@ -46,7 +46,18 @@ export type QueryBarProps = {
   views?: readonly QueryView[]
   onViewsChange?: (next: QueryView[]) => void
 
-  /** 右侧额外动作（新增按钮之类） */
+  /**
+   * 动作行**左侧**那一组（调用方的动作：新增 / 导出 / 清空 / 列显隐…）。
+   *
+   * 靠左是刻意的：这些是**页面级动作**，位置应该固定，不随条件多少上下漂移；
+   * 右边留给查询区自己的「视图 / 搜索 / 重置」。两组之间由状态行的
+   * `me-auto` 撑开，不用画分隔线。
+   *
+   * 页面同时有 `DataTable` 时**把表格那一行也并到这里**（`DataTable` 传
+   * `showColumnVisibility={false}`，它的工具行就整行消失）——
+   * 不并的话是两条右对齐、左半边全空的按钮行叠在一起，白占 40px
+   * （用户截图指出过）。查询区自己的那一组（视图 / 搜索 / 重置）在它右边。
+   */
   actions?: React.ReactNode
   loading?: boolean
   className?: string
@@ -201,12 +212,19 @@ export function QueryBar({
         />
       )}
 
+      {/*
+        动作行分两组，中间靠 `me-auto` 撑开：
+        **左边是调用方的**（新增 / 导出 / 清空 / 列 —— 页面级的动作，位置固定，
+        不随条件多少漂移），**右边是查询区自己的**（视图 / 搜索 / 重置）。
+        原来 `actions` 挤在右边和搜索并排，六个按钮连成一片，
+        「哪个是主动作」得逐个认。
+      */}
       <div className="flex flex-wrap items-center gap-2">
-        {/*
-          状态行放在动作行**左侧**而不是再占一整行：
-          「改了没搜」这句话最该出现在「搜索」按钮旁边，而动作行左半边本来是空的。
-          三者互斥，一次只说最要紧的那一句。
-        */}
+        {actions}
+
+        {/* 状态行跟在左组后面，靠 `me-auto` 把右组顶到最右。
+            放左边而不是紧挨「搜索」：它出现/消失时右组的位置不会跳。
+            三者互斥，一次只说最要紧的那一句。 */}
         <div className="me-auto min-w-0">
           {errorCount > 0 ? (
             <span className="flex items-center gap-1.5 text-xs text-destructive" data-testid="qb-status">
@@ -228,8 +246,6 @@ export function QueryBar({
             </span>
           ) : null}
         </div>
-
-        {actions}
 
         {advanced && (
           <ToggleGroup
@@ -255,6 +271,7 @@ export function QueryBar({
             current={value}
             activeId={activeView}
             dirty={dirty}
+            local={!controlledViews}
             onApply={applyView}
             onChange={setViews}
           />

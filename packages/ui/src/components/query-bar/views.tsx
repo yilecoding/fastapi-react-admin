@@ -77,6 +77,7 @@ export function QueryViews({
   current,
   activeId,
   dirty,
+  local,
   onApply,
   onChange,
 }: {
@@ -85,6 +86,13 @@ export function QueryViews({
   activeId?: string
   /** 当前条件和选中视图不一致 —— 决定要不要提示「覆盖」 */
   dirty?: boolean
+  /**
+   * 视图只存在这台机器上（走 localStorage，没有受控接管）。
+   *
+   * 这一条**必须在界面上说出来**：不说的话它看起来就是跟着账号走的，
+   * 换台电脑发现视图没了才反应过来 —— 那时人已经存了十几个。
+   */
+  local?: boolean
   onApply: (v: QueryView) => void
   onChange: (next: QueryView[]) => void
 }) {
@@ -236,6 +244,15 @@ export function QueryViews({
         </div>
         {Boolean(name.trim()) && dup(name.trim()) && (
           <p className="px-2 pb-1 text-xs text-destructive">{t("已有同名视图")}</p>
+        )}
+
+        {local && (
+          <>
+            <Separator className="my-1" />
+            <p className="px-2 pb-1 text-xs text-muted-foreground">
+              {t("视图只存在这台电脑上，换设备或清缓存会丢失")}
+            </p>
+          </>
         )}
       </PopoverContent>
     </Popover>

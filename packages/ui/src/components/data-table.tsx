@@ -44,6 +44,7 @@ import {
 } from "@admin/ui/components/popover"
 import { Separator } from "@admin/ui/components/separator"
 import { Skeleton } from "@admin/ui/components/skeleton"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@admin/ui/components/tooltip"
 import {
   Select,
   SelectContent,
@@ -84,6 +85,14 @@ export interface DataTableColumnVisibilityProps<
   table: Table<TFeatures, TData>
   /** Override display labels for column ids. Falls back to `col.id`. */
   columnLabels?: ColumnLabelMap
+  /**
+   * 只留图标（配 tooltip）。
+   *
+   * 给**查询区那条动作行**用：那一行已经有六个控件了，
+   * 「导出 / 清空 / 列」是次要的工具动作，留文字会把主动作（搜索）挤没。
+   * 表格自己的工具行还是宽松的，保持默认带文字。
+   */
+  iconOnly?: boolean
 }
 
 export function DataTableColumnVisibility<
@@ -92,6 +101,7 @@ export function DataTableColumnVisibility<
 >({
   table: tableProp,
   columnLabels = {},
+  iconOnly,
 }: DataTableColumnVisibilityProps<TFeatures, TData>) {
   const { t } = useTranslation()
   const table = tableProp as AnyTable
@@ -99,15 +109,38 @@ export function DataTableColumnVisibility<
     .getAllColumns()
     .filter((col) => typeof col.accessorFn !== "undefined" && col.getCanHide())
 
+  const trigger = (
+    <DropdownMenuTrigger
+      render={
+        <Button
+          variant="outline"
+          size="sm"
+          className={iconOnly ? "size-8 p-0" : "h-8"}
+          aria-label={t("列")}
+        />
+      }
+    >
+      <IconLayoutColumns className="size-4" />
+      {!iconOnly && (
+        <>
+          <span className="hidden lg:inline">{t("列")}</span>
+          <IconChevronDown className="size-3.5" />
+        </>
+      )}
+    </DropdownMenuTrigger>
+  )
+
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger
-        render={<Button variant="outline" size="sm" className="h-8" />}
-      >
-        <IconLayoutColumns className="size-4" />
-        <span className="hidden lg:inline">{t("列")}</span>
-        <IconChevronDown className="size-3.5" />
-      </DropdownMenuTrigger>
+      {/* 只剩图标时必须配 tooltip —— 图标按钮一律 tooltip + aria-label */}
+      {iconOnly ? (
+        <Tooltip>
+          <TooltipTrigger render={trigger} />
+          <TooltipContent>{t("列")}</TooltipContent>
+        </Tooltip>
+      ) : (
+        trigger
+      )}
       <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuGroup>
           {hidableColumns.map((col) => (

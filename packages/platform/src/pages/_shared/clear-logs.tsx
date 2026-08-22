@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { IconTrash } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 
 import { api } from '../../api-client/client'
 import { ApiError } from '../../api-client/errors'
@@ -26,6 +27,7 @@ export function ClearLogsButton({
   kind,
   filtered,
   total,
+  iconOnly,
 }: {
   /** 'login' | 'opera' —— 同时决定接口路径、权限码和文案 */
   kind: 'login' | 'opera'
@@ -33,6 +35,8 @@ export function ClearLogsButton({
   filtered: boolean
   /** 当前筛选下的条数，仅用于文案对比 */
   total: number
+  /** 只留图标（放在查询区那条密集动作行里时用） */
+  iconOnly?: boolean
 }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
@@ -50,21 +54,42 @@ export function ClearLogsButton({
     },
   })
 
+  /**
+   * 只剩图标时必须配 tooltip + `aria-label`。
+   * 这是**破坏性动作**，图标化的前提是后面还有 `ConfirmDialog` 兜着 ——
+   * 误点一下只会开一个确认框，不会真删。
+   */
+  const trigger = (
+    <Button
+      size="sm"
+      variant="outline"
+      aria-label={t('清空{{what}}', { what: label })}
+      className={
+        iconOnly
+          ? 'size-8 p-0 text-destructive hover:text-destructive'
+          : 'text-destructive hover:text-destructive'
+      }
+      data-testid={`clear-${kind}-logs`}
+      onClick={() => {
+        setError(null)
+        setOpen(true)
+      }}
+    >
+      <IconTrash className="size-4" />
+      {!iconOnly && t('清空')}
+    </Button>
+  )
+
   return (
     <Can perm={`log:${kind}:clear`}>
-      <Button
-        size="sm"
-        variant="outline"
-        className="text-destructive hover:text-destructive"
-        data-testid={`clear-${kind}-logs`}
-        onClick={() => {
-          setError(null)
-          setOpen(true)
-        }}
-      >
-        <IconTrash className="size-4" />
-        {t('清空')}
-      </Button>
+      {iconOnly ? (
+        <Tooltip>
+          <TooltipTrigger render={trigger} />
+          <TooltipContent>{t('清空{{what}}', { what: label })}</TooltipContent>
+        </Tooltip>
+      ) : (
+        trigger
+      )}
 
       <ConfirmDialog
         open={open}

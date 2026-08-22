@@ -11,6 +11,7 @@
     "i18n:check": "pnpm --filter @admin/i18n check",
     "i18n:fix": "pnpm --filter @admin/i18n check:fix",
     "i18n:jsx": "pnpm --filter @admin/i18n jsx",
+    "ctx:check": "node scripts/ctx-check.mjs",
     "test": "turbo test",
     "e2e": "turbo e2e"
   },
