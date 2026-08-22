@@ -72,6 +72,25 @@
   新增接口时反过来核对一遍：前端每一个 `<Can perm="xxx">` 包着的动作，
   对应接口是不是也真的挂了同一个权限码的 `RequestPermission` + `DependsRBAC`
 
+## 数据库结构改动一律走 alembic
+
+**改了模型就要生成迁移，没有例外。** 手写 `ALTER` / `drop_all` 重建那条路已经关了
+（2026-08-22 起）。命令、三条纪律和守卫写在根 `CLAUDE.md`
+的「数据库结构改动一律走 alembic」一节，这里只补后端侧要记的：
+
+- 迁移在 `backend/alembic/versions/`，命令要在 `backend/` 下跑
+  （`alembic.ini` 的 `script_location` 是相对它的）。走 `pnpm db:upgrade` / `pnpm db:revision` 就不用管
+- `env.py` 里那句 `import backend.main` **不能删**。它不是多余的 import ——
+  `MappedBase.metadata` 靠它才有内容，删了 autogenerate 会生成一份
+  「drop 掉全部 23 张表」的迁移，而且不会问你
+- `pnpm --filter api test:db` 重建测试库之后会**自动 stamp 到 head**
+  （`reset_test_db.py: _stamp_head`）。不 stamp 的话
+  `test_model_matches_migrations` 会红 —— 它比对的就是 fba_test
+- 🔴 `_stamp_head()` 必须在 `asyncio.run()` **之外**调用：alembic 的
+  `command.stamp` 会执行 `env.py`，而那份 env 里是 `asyncio.run(...)`，
+  在已经跑着的循环里再调直接
+  `asyncio.run() cannot be called from a running event loop`
+
 ## 后端国际化（i18n）
 
 语言包在 `backend/locale/{zh-CN,en-US}.yml`，**统一用 YAML**（2026-08-22 前

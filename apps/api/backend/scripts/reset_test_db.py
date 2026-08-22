@@ -15,6 +15,7 @@
 """
 
 import asyncio
+import os
 import sys
 
 import cappa
@@ -57,12 +58,43 @@ async def main() -> None:
             await execute_sql_scripts(db, script, is_init=True)
 
     await engine.dispose()
+
     print('完成。现在可以 `pnpm test`')
+
+
+def _stamp_head() -> None:
+    """把测试库标记到迁移 head。
+
+    🔴 **必须在 `asyncio.run()` 之外调用。** alembic 的 `command.stamp` 会执行
+    `env.py`，而那份 env 里是 `asyncio.run(...)` —— 在已经跑着的事件循环里再调
+    直接 `asyncio.run() cannot be called from a running event loop`。
+
+    为什么要 stamp：重建之后 `alembic_version` 是空的，
+    `test_model_matches_migrations` 那条守卫比对的就是这个库，不 stamp 会红。
+
+    用 stamp 而不是 upgrade：表是 `create_all` 从**当前模型**建的，已经是最新
+    结构，再跑一遍迁移是重复劳动（「补齐历史遗留」类的迁移在新库上本来就无事可做）。
+    stamp 只写一行版本号。
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    from backend.core.path_conf import BASE_PATH
+
+    # env.py 从 settings 读连接串，这里要让它指向测试库
+    os.environ['DATABASE_SCHEMA'] = f"{settings.DATABASE_SCHEMA.removesuffix('_test')}_test"
+
+    cfg = Config(str(BASE_PATH / 'alembic.ini'))
+    cfg.set_main_option('script_location', str(BASE_PATH / 'alembic'))
+    command.stamp(cfg, 'head')
+    print('已把测试库标记到迁移 head')
 
 
 if __name__ == '__main__':
     try:
         asyncio.run(main())
+        # 见 `_stamp_head` 的注释：它内部还会再起一个事件循环，只能在这里调
+        _stamp_head()
     except cappa.Exit as e:
         # execute_sql_scripts 用 cappa.Exit 包报错（它继承 SystemExit，不是 Exception，
         # 下面那个 except 接不住）。它的 message 存在 e.message 上、不传给 SystemExit
