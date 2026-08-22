@@ -3,7 +3,7 @@ VALUES (2048601258595581952, N'TEST', N'测试', 0, NULL, NULL, NULL, 1, 0, NULL
 
 INSERT INTO sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
 VALUES
-(2049629108245233664, N'仪表盘', 'Dashboard', '/dashboard', 0, 'ant-design:dashboard-outlined', 0, NULL, 1, 1, '', NULL, NULL, '2025-06-26 20:29:06', NULL),
+(2049629108245233664, N'仪表盘', 'Dashboard', '/dashboard', 0, 'ant-design:dashboard-outlined', 1, NULL, 1, 1, '', NULL, NULL, '2025-06-26 20:29:06', NULL),
 (2049629108245233667, N'系统管理', 'System', '/system', 1, 'eos-icons:admin', 0, NULL, 1, 1, '', NULL, NULL, '2025-06-26 20:29:06', NULL),
 (2049629108245233668, N'部门管理', 'SysDept', '/system/dept', 1, 'mingcute:department-line', 1, NULL, 1, 1, '', NULL, 2049629108245233667, '2025-06-26 20:29:06', NULL),
 (2049629108245233669, N'新增', 'AddSysDept', NULL, 0, NULL, 2, 'sys:dept:add', 1, 0, '', NULL, 2049629108245233668, '2025-06-26 20:29:06', NULL),
@@ -21,17 +21,15 @@ VALUES
 (2049629108245233681, N'新增', 'AddSysMenu', NULL, 0, NULL, 2, 'sys:menu:add', 1, 0, '', NULL, 2049629108245233680, '2025-06-26 20:29:06', NULL),
 (2049629108245233682, N'修改', 'EditSysMenu', NULL, 0, NULL, 2, 'sys:menu:edit', 1, 0, '', NULL, 2049629108245233680, '2025-06-26 20:29:06', NULL),
 (2049629108249427968, N'删除', 'DeleteSysMenu', NULL, 0, NULL, 2, 'sys:menu:del', 1, 0, '', NULL, 2049629108245233680, '2025-06-26 20:29:06', NULL),
-(2049629108249427969, N'数据权限', 'SysDataPermission', '/system/data-permission', 5, 'icon-park-outline:permissions', 0, NULL, 1, 1, '', NULL, 2049629108245233667, '2025-06-26 20:29:06', NULL),
-(2049629108249427970, N'数据范围', 'SysDataScope', '/system/data-scope', 6, 'cuida:scope-outline', 1, NULL, 1, 1, '', NULL, 2049629108249427969, '2025-06-26 20:29:06', '2025-06-26 20:37:26'),
-(2049629108249427971, N'新增', 'AddSysDataScope', NULL, 0, NULL, 2, 'data:scope:add', 1, 0, '', NULL, 2049629108249427970, '2025-06-26 20:29:06', NULL),
-(2049629108249427972, N'修改', 'EditSysDataScope', NULL, 0, NULL, 2, 'data:scope:edit', 1, 0, '', NULL, 2049629108249427970, '2025-06-26 20:29:06', NULL),
-(2049629108249427973, N'修改数据范围规则', 'EditDataScopeRule', NULL, 0, NULL, 2, 'data:scope:rule:edit', 1, 0, '', NULL, 2049629108249427970, '2025-06-26 20:29:06', NULL),
-(2049629108249427974, N'删除', 'DeleteSysDataScope', NULL, 0, NULL, 2, 'data:scope:del', 1, 0, '', NULL, 2049629108249427970, '2025-06-26 20:29:06', NULL),
-(2049629108249427975, N'数据规则', 'SysDataRule', '/system/data-rule', 7, 'material-symbols:rule', 1, NULL, 1, 1, '', NULL, 2049629108249427969, '2025-06-26 20:29:06', '2025-06-26 20:37:40'),
-(2049629108249427976, N'新增', 'AddSysDataRule', NULL, 0, NULL, 2, 'data:rule:add', 1, 0, '', NULL, 2049629108249427975, '2025-06-26 20:29:06', NULL),
-(2049629108249427977, N'修改', 'EditSysDataRule', NULL, 0, NULL, 2, 'data:rule:edit', 1, 0, '', NULL, 2049629108249427975, '2025-06-26 20:29:06', NULL),
-(2049629108249427978, N'删除', 'DeleteSysDataRule', NULL, 0, NULL, 2, 'data:rule:del', 1, 0, '', NULL, 2049629108249427975, '2025-06-26 20:29:06', NULL),
-(2049629108249427979, N'插件管理', 'SysPlugin', '/system/plugin', 8, 'clarity:plugin-line', 1, NULL, 1, 1, '', NULL, 2049629108245233667, '2025-06-26 20:29:06', NULL),
+(2049629108249427969, N'数据权限', 'SysDataPermission', '/system/data-permission', 5, 'icon-park-outline:permissions', 1, NULL, 1, 1, '', NULL, 2049629108245233667, '2025-06-26 20:29:06', NULL),
+(2049629108249427971, N'新增范围', 'AddSysDataScope', NULL, 0, NULL, 2, 'data:scope:add', 1, 0, '', NULL, 2049629108249427969, '2025-06-26 20:29:06', NULL),
+(2049629108249427972, N'修改范围', 'EditSysDataScope', NULL, 0, NULL, 2, 'data:scope:edit', 1, 0, '', NULL, 2049629108249427969, '2025-06-26 20:29:06', NULL),
+(2049629108249427973, N'修改范围规则', 'EditDataScopeRule', NULL, 0, NULL, 2, 'data:scope:rule:edit', 1, 0, '', NULL, 2049629108249427969, '2025-06-26 20:29:06', NULL),
+(2049629108249427974, N'删除范围', 'DeleteSysDataScope', NULL, 0, NULL, 2, 'data:scope:del', 1, 0, '', NULL, 2049629108249427969, '2025-06-26 20:29:06', NULL),
+(2049629108249427976, N'新增规则', 'AddSysDataRule', NULL, 0, NULL, 2, 'data:rule:add', 1, 0, '', NULL, 2049629108249427969, '2025-06-26 20:29:06', NULL),
+(2049629108249427977, N'修改规则', 'EditSysDataRule', NULL, 0, NULL, 2, 'data:rule:edit', 1, 0, '', NULL, 2049629108249427969, '2025-06-26 20:29:06', NULL),
+(2049629108249427978, N'删除规则', 'DeleteSysDataRule', NULL, 0, NULL, 2, 'data:rule:del', 1, 0, '', NULL, 2049629108249427969, '2025-06-26 20:29:06', NULL),
+(2049629108249427979, N'插件管理', 'SysPlugin', '/system/plugin', 10, 'clarity:plugin-line', 1, NULL, 1, 1, '', NULL, 2049629108245233667, '2025-06-26 20:29:06', NULL),
 (2049629108249427983, N'日志管理', 'Log', '/log', 3, 'carbon:cloud-logging', 0, NULL, 1, 1, '', NULL, NULL, '2025-06-26 20:29:06', NULL),
 (2049629108249427984, N'登录日志', 'LoginLog', '/log/login', 1, 'mdi:login', 1, NULL, 1, 1, '', NULL, 2049629108249427983, '2025-06-26 20:29:06', NULL),
 (2049629108249427985, N'删除', 'DeleteLoginLog', NULL, 0, NULL, 2, 'log:login:del', 1, 0, '', NULL, 2049629108249427984, '2025-06-26 20:29:06', NULL),
@@ -40,7 +38,7 @@ VALUES
 (2049629108249427988, N'删除', 'DeleteOperaLog', NULL, 0, NULL, 2, 'log:opera:del', 1, 0, '', NULL, 2049629108249427987, '2025-06-26 20:29:06', NULL),
 (2049629108253622272, N'清空', 'EmptyOperaLog', NULL, 0, NULL, 2, 'log:opera:clear', 1, 0, '', NULL, 2049629108249427987, '2025-06-26 20:29:06', NULL),
 (2049629108253622273, N'系统监控', 'Monitor', '/monitor', 4, 'mdi:monitor-eye', 0, NULL, 1, 1, '', NULL, NULL, '2025-06-26 20:29:06', NULL),
-(2049629108253622274, N'在线用户', 'Online', '/log/online', 1, 'wpf:online', 1, NULL, 1, 1, '', NULL, 2049629108253622273, '2025-06-26 20:29:06', NULL),
+(2049629108253622274, N'在线用户', 'Online', '/monitor/online', 1, 'wpf:online', 1, NULL, 1, 1, '', NULL, 2049629108253622273, '2025-06-26 20:29:06', NULL),
 (2049629108253622276, N'Redis 监控', 'Redis', '/monitor/redis', 2, 'devicon:redis', 1, NULL, 1, 1, '', NULL, 2049629108253622273, '2025-06-26 20:29:06', NULL),
 (2049629108253622277, N'服务器监控', 'Server', '/monitor/server', 3, 'mdi:server-outline', 1, NULL, 1, 1, '', NULL, 2049629108253622273, '2025-06-26 20:29:06', NULL),
 (2049629108253622282, N'个人中心', 'Profile', '/profile', 6, 'ant-design:profile-outlined', 1, NULL, 1, 0, '', NULL, NULL, '2025-06-26 20:29:06', NULL),
@@ -51,7 +49,7 @@ VALUES
 
 INSERT INTO sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
 VALUES
-(2049629108253622310, N'定时任务', 'Scheduler', '/scheduler', 4, 'ix:scheduler', 0, NULL, 1, 1, '', NULL, NULL, '2026-08-22 17:00:00', NULL),
+(2049629108253622310, N'定时任务', 'Scheduler', '/scheduler', 5, 'ix:scheduler', 0, NULL, 1, 1, '', NULL, NULL, '2026-08-22 17:00:00', NULL),
 (2049629108253622311, N'任务调度', 'SchedulerManage', '/scheduler/manage', 1, 'mdi:clock-outline', 1, NULL, 1, 1, '', NULL, 2049629108253622310, '2026-08-22 17:00:00', NULL),
 (2049629108253622312, N'执行记录', 'SchedulerRecord', '/scheduler/record', 2, 'mdi:history', 1, NULL, 1, 1, '', NULL, 2049629108253622310, '2026-08-22 17:00:00', NULL),
 (2049629108253622313, N'新增', 'AddTaskScheduler', NULL, 0, NULL, 2, 'task:scheduler:add', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),

@@ -31,8 +31,10 @@ export function isBrokenMenu(m: Menu, isValidPath: (p: string) => boolean): bool
  * 有没有「进得了侧边栏」的子项 —— 与 `toNavTree` 的过滤口径一致：
  * 按钮不算、`display=0`（不在菜单显示）不算、自己也是死链的不算。
  *
- * 必须**递归**：`/scheduler` 的两个子项自己就是死链，
- * 所以它其实没有可见子项 → 会降级成链接 → 而它的 path 也无效 → 它是**真**死链。
+ * 必须**递归**：子项自己也可能是死链（比如指向一个已经被合并/下线的旧页面），
+ * 这种子项不算「可见」——一个目录如果所有子项都这样，它自己也没有可导航的
+ * path，才会被判成**真**死链。（历史上 `/scheduler` 短暂踩过这条：子项的
+ * 页面还没上线时，两个子项自己都是死链，父目录也跟着被判死——页面补上之后就不再是了。）
  */
 export function hasVisibleChild(m: Menu, isValidPath: (p: string) => boolean): boolean {
   return (m.children ?? []).some((c) => {

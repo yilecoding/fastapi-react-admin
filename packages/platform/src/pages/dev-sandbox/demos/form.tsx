@@ -597,7 +597,7 @@ function ComboboxDemo({ v }: { v: import('../kit').KnobValues }) {
         ['/system/data-permission', '数据权限'],
         ['/log/login', '登录日志'],
         ['/log/opera', '操作日志'],
-        ['/log/online', '在线用户'],
+        ['/monitor/online', '在线用户'],
         ['/monitor/server', '服务器监控'],
         ['/monitor/redis', 'Redis 监控'],
         ['/sandbox/components', '组件沙箱'],
