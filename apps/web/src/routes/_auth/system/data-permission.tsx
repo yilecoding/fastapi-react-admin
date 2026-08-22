@@ -4,8 +4,7 @@ import { z } from "zod"
 import { requirePerm } from "@admin/platform/auth/guards"
 
 const searchSchema = z.object({
-  page: z.coerce.number().int().min(1).optional(),
-  size: z.coerce.number().int().min(1).max(100).optional(),
+  // 左栏范围列表走**滚动加载**，所以这里没有 page/size（与角色页同一套）
   name: z.string().optional(),
   status: z.coerce.number().int().optional(),
   // 选中的数据范围 —— 主从页的选中项也要能刷新恢复

@@ -1,17 +1,22 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { IconSearch, IconTrash, IconX } from '@tabler/icons-react'
+import { IconFilter, IconSearch, IconTrash, IconX } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import {
-  InputGroup, InputGroupAddon, InputGroupInput,
+  InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput,
 } from '@admin/ui/components/input-group'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@admin/ui/components/dropdown-menu'
+import { cn } from '@admin/ui/lib/utils'
 import { Combobox } from '@admin/ui/components/combobox'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@admin/ui/components/select'
 
-import { STATUS_FILTER_ITEMS } from './status'
+import { STATUS_FILTER_ITEMS, STATUS_META, TONE_CLASS } from './status'
 
 /**
  * 列表页工具栏的公共件。
@@ -27,6 +32,19 @@ import { STATUS_FILTER_ITEMS } from './status'
  * 8 是「点开一屏看得完」的上限 —— 再多就得靠打字（见组件约定表）。
  */
 const SEARCHABLE_FROM = 8
+
+/**
+ * 把 `all` 提到第一位。
+ *
+ * `STATUS_FILTER_ITEMS` 这类常量源码里写的是 `{ all, '1', '0' }`，但
+ * **JS 对象的整数样 key 永远排在字符串 key 前面**（'0' → '1' → 'all'），
+ * 直接 `Object.entries` 会把「全部状态」渲染成最后一项。
+ */
+function orderedEntries(items: Record<string, string>): [string, string][] {
+  const all = items['all']
+  const rest = Object.entries(items).filter(([k]) => k !== 'all')
+  return all === undefined ? rest : [['all', all], ...rest]
+}
 
 export function TextFilter({
   value,
@@ -62,6 +80,112 @@ export function TextFilter({
         onKeyDown={(e) => e.key === 'Enter' && onCommit(local)}
         onBlur={() => local !== value && onCommit(local)}
       />
+    </InputGroup>
+  )
+}
+
+/**
+ * 搜索框 **+ 内嵌状态筛选**。给主从页左栏那种窄栏用。
+ *
+ * 为什么不并排放两个控件：左栏只有 288px 宽，`StatusFilter` 单独占一行 =
+ * 用 40px 的垂直高度换一个三选一，而那 40px 本来能多显示一个角色。
+ * 列表行里本来就有状态点，所以「按状态筛」是低频操作，收进搜索框尾部正合适。
+ *
+ * 两种态：
+ * - 没筛状态 → 只显示一个漏斗图标（不占字宽，也不喊）
+ * - 筛了     → 显示带色的「正常 / 停用」，**不用 tooltip** ——
+ *              筛选态必须一眼看得见，否则会出现「列表怎么少了一半」的困惑
+ *
+ * 清除按钮同样收在尾部，只在真的有筛选时出现 —— 于是整个左栏筛选区
+ * 从两行压成一行，且行数不会随筛选状态跳动（清除按钮是原地出现，不换行）。
+ */
+export function SearchWithStatus({
+  value,
+  placeholder,
+  status,
+  onCommit,
+  onStatus,
+  onReset,
+  testId,
+  statusTestId = 'filter-status',
+  resetTestId = 'clear-filter',
+}: {
+  value: string
+  placeholder: string
+  status: number | undefined
+  onCommit: (v: string) => void
+  onStatus: (v: number | undefined) => void
+  /** 有筛选时才给 —— 不传就不渲染清除按钮 */
+  onReset?: () => void
+  testId?: string
+  statusTestId?: string
+  resetTestId?: string
+}) {
+  const { t } = useTranslation()
+  const [local, setLocal] = React.useState(value)
+  React.useEffect(() => setLocal(value), [value])
+
+  const meta = status === undefined ? null : STATUS_META[status]
+  const hasFilter = status !== undefined || Boolean(value)
+
+  return (
+    <InputGroup className="h-8 w-full">
+      <InputGroupAddon align="inline-start">
+        <IconSearch className="size-4 text-muted-foreground" />
+      </InputGroupAddon>
+      <InputGroupInput
+        value={local}
+        data-testid={testId}
+        placeholder={t(placeholder)}
+        onChange={(e) => setLocal(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && onCommit(local)}
+        onBlur={() => local !== value && onCommit(local)}
+      />
+      {/*
+        ⚠️ 这一层的 onClick 会把焦点丢回 input，但它对 `closest('button')`
+        的点击直接 return（见 ui/input-group.tsx）—— 所以尾部只能放**按钮**，
+        放裸的 Select trigger 会点一下就被抢焦点。
+      */}
+      <InputGroupAddon align="inline-end">
+        {hasFilter && onReset && (
+          <InputGroupButton
+            size="icon-xs"
+            aria-label={t('重置')}
+            data-testid={resetTestId}
+            onClick={() => { setLocal(''); onReset() }}
+          >
+            <IconX className="size-3.5" />
+          </InputGroupButton>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <InputGroupButton
+                size={meta ? 'xs' : 'icon-xs'}
+                aria-label={t('按状态筛选')}
+                data-testid={statusTestId}
+                className={cn(meta && ['ring-1', TONE_CLASS[meta.tone]])}
+              />
+            }
+          >
+            {meta ? t(meta.label) : <IconFilter className="size-3.5" />}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-32">
+            <DropdownMenuRadioGroup
+              value={status === undefined ? 'all' : String(status)}
+              onValueChange={(v) => onStatus(v === 'all' ? undefined : Number(v))}
+            >
+              {/* ⚠️ 不能直接 Object.entries：JS 对象的**整数样 key**（'0'/'1'）
+                  永远排在字符串 key（'all'）前面，于是「全部状态」会掉到最后一项 */}
+              {orderedEntries(STATUS_FILTER_ITEMS).map(([v, label]) => (
+                // closeOnClick：Base UI 的 RadioItem 默认**不关**菜单（closeOnClick = false）。
+                // 不加的话选完状态菜单还开着，它的 inert 遮罩会挡住旁边的清除按钮 —— 实测点不动
+                <DropdownMenuRadioItem key={v} value={v} closeOnClick>{t(label)}</DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </InputGroupAddon>
     </InputGroup>
   )
 }
@@ -102,7 +226,8 @@ export function SelectFilter({
    * 状态/启用/时间区间这类三五项的，给它们加搜索框反而是噪音。
    * 按数量自动切，调用点一个都不用改，以后长出来的长列表也自动受益。
    */
-  const entries = Object.entries(labels)
+  // 同上：'all' 会被 JS 的 key 排序甩到最后，手动提前
+  const entries = orderedEntries(labels)
   if (entries.length > SEARCHABLE_FROM) {
     return (
       <Combobox
@@ -136,7 +261,7 @@ export function SelectFilter({
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {Object.entries(labels).map(([v, label]) => (
+        {entries.map(([v, label]) => (
           <SelectItem key={v} value={v}>{label}</SelectItem>
         ))}
       </SelectContent>

@@ -1,22 +1,25 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconPencil, IconPlus, IconTrash, IconUserShield } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
 
 import { Can } from '../../auth/can'
+import { cn } from '@admin/ui/lib/utils'
+import {
+  DropdownMenuItem, DropdownMenuSeparator,
+} from '@admin/ui/components/dropdown-menu'
+import { MasterList, type MasterListItem } from '../_shared/master-list'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
-import { StatusBadge, YesNoBadge } from '../_shared/status'
-import { roleDetailQuery, roleKeys, rolesQuery, useDeleteRoles, type Role } from './api'
+import { StatusBadge, TONE_CLASS, YesNoBadge } from '../_shared/status'
+import { roleDetailQuery, roleKeys, rolesInfiniteQuery, useDeleteRoles, type Role } from './api'
 import { RoleFormSheet } from './form'
 import { PermMatrix } from './perm-matrix'
-import { RoleList } from './role-list'
 import { RoleScopes } from './role-scopes'
 import { RoleUsers } from './role-users'
-import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 
 /**
  * 角色管理 —— 左角色列表 / 右授权面板的主从结构。
@@ -34,8 +37,8 @@ import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
  * - ID 一律当字符串，不 Number()
  */
 export type RolePageSearch = {
-  page?: number
-  size?: number
+  // 左栏走滚动加载，所以**没有** page/size —— 加回来就必须同时加分页条
+  // （CLAUDE.md 组件约定：schema 里有 page 界面上就得有分页条，否则第 2 页不可达）
   name?: string
   status?: number
   /** 选中的角色 id */
@@ -61,23 +64,44 @@ export function RolePage({
   onSearchChange?: (n: RolePageSearch) => void
 }) {
   const { t } = useTranslation()
-  const page = search.page ?? 1
-  const size = search.size ?? DEFAULT_PAGE_SIZE
   const tab: RoleTab = search.tab ?? 'perms'
   const upage = search.upage ?? 1
 
   const patch = (n: Partial<RolePageSearch>) => onSearchChange?.({ ...search, ...n })
 
   const qc = useQueryClient()
-  const { data, isPending, isFetching } = useQuery(
-    rolesQuery({ page, size, name: search.name || undefined, status: search.status })
+  const {
+    data, isPending, isFetching, hasNextPage, isFetchingNextPage, fetchNextPage,
+  } = useInfiniteQuery(
+    rolesInfiniteQuery({ name: search.name || undefined, status: search.status })
   )
-  const roles = data?.items ?? []
+  // 已取回的所有页拍平 —— 「当前页」这个概念在滚动加载里不存在了
+  const roles = React.useMemo(() => data?.pages.flatMap((pg) => pg.items) ?? [], [data])
+  const total = data?.pages[0]?.total ?? 0
+
+  // 领域对象 → 选择器行。「全量」徽标是角色独有的：不按数据范围过滤 = 看得到所有数据
+  const roleItems = React.useMemo<MasterListItem[]>(
+    () => roles.map((r) => ({
+      id: r.id,
+      title: r.name,
+      code: r.code,
+      description: r.remark || undefined,
+      status: r.status,
+      badge: r.is_filter_scopes ? undefined : (
+        <span className={cn('shrink-0 rounded px-1 text-[10px] ring-1', TONE_CLASS.info)} title={t('不受数据范围限制')}>
+          {t('全量')}
+        </span>
+      ),
+    })),
+    [roles, t]
+  )
 
   // URL 里的角色可能**不在当前页**（角色分页，30+ 个时深链常落到第 2 页之后）。
   // 只在当前页 find 会静默落回第一条 —— 那是「你以为在给角色 X 配权限、
   // 实际写的是列表第一个角色」，所以页内找不到时按 id 单独取。
   // 真的被删了（404）才落回第一条；不回写 URL，免得和导航打架。
+  // 深链指向的角色可能还没滚到（滚动加载只取回了前几页）—— 找不到就按 id 单独取，
+  // 这条比分页时代更重要：那时至少还能翻页找到，现在只能靠这次单取
   const inPage = roles.find((r) => r.id === search.role) ?? null
   const needLookup = Boolean(search.role) && !inPage
   const detail = useQuery({ ...roleDetailQuery(search.role ?? ''), enabled: needLookup })
@@ -131,25 +155,49 @@ export function RolePage({
             现在它自己就是定高的一栏，钉不钉由骨架决定。
           */}
           <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6 content-scroll:lg:min-h-0">
-            <RoleList
-              roles={roles}
-              total={data?.total ?? 0}
-              page={page}
-              size={size}
-              loading={isPending}
-              busy={isFetching && !isPending}
+            {/* 左栏走 `_shared/master-list` —— 角色 / 数据范围 / 字典类型同一个件 */}
+            <MasterList
+              idPrefix="role"
+              title={t('角色列表')}
+              items={roleItems}
+              total={total}
               selectedId={selected?.id ?? null}
-              keyword={search.name ?? ''}
-              status={search.status}
-              onKeyword={(v) => patch({ name: v || undefined, page: undefined, role: undefined })}
-              onStatus={(v) => patch({ status: v, page: undefined, role: undefined })}
-              onReset={() => patch({ name: undefined, status: undefined, page: undefined, role: undefined })}
-              onPage={(p) => patch({ page: p, role: undefined })}
               onSelect={selectRole}
+              keyword={search.name ?? ''}
+              searchPlaceholder="搜索角色名称…"
+              onKeyword={(v) => patch({ name: v || undefined, role: undefined })}
+              status={search.status}
+              onStatus={(v) => patch({ status: v, role: undefined })}
+              onReset={() => patch({ name: undefined, status: undefined, role: undefined })}
+              hasMore={hasNextPage}
+              loadingMore={isFetchingNextPage}
+              loading={isPending}
+              busy={isFetching && !isPending && !isFetchingNextPage}
+              onLoadMore={() => void fetchNextPage()}
               onAdd={() => { setEditing(null); setSheetOpen(true) }}
-              onEdit={(r) => { setEditing(r); setSheetOpen(true) }}
-              onDelete={setPendingDelete}
-              onRefresh={() => qc.invalidateQueries({ queryKey: roleKeys.all })}
+              addLabel={t('新增角色')}
+              addPerm="sys:role:add"
+              onRefresh={() => void qc.invalidateQueries({ queryKey: roleKeys.all })}
+              emptyText={t('没有匹配的角色')}
+              renderActions={(item) => {
+                const role = roles.find((r) => r.id === item.id)
+                if (!role) return null
+                return (
+                  <>
+                    <Can perm="sys:role:edit">
+                      <DropdownMenuItem onClick={() => { setEditing(role); setSheetOpen(true) }}>
+                        <IconPencil className="size-4" />{t('编辑')}
+                      </DropdownMenuItem>
+                    </Can>
+                    <Can perm="sys:role:del">
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" onClick={() => setPendingDelete(role)}>
+                        <IconTrash className="size-4" />{t('删除')}
+                      </DropdownMenuItem>
+                    </Can>
+                  </>
+                )
+              }}
             />
 
             <div className="flex min-w-0 flex-1 flex-col gap-4 content-scroll:lg:min-h-0">

@@ -1,19 +1,21 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconDatabaseCog, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 
 import { Can } from '../../auth/can'
+import {
+  DropdownMenuItem, DropdownMenuSeparator,
+} from '@admin/ui/components/dropdown-menu'
+import { MasterList, type MasterListItem } from '../_shared/master-list'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { StatusBadge } from '../_shared/status'
-import { dataScopesQuery, scopeDetailQuery, scopeKeys, useDeleteDataScopes, type DataScope } from './api'
+import { dataScopesInfiniteQuery, scopeDetailQuery, scopeKeys, useDeleteDataScopes, type DataScope } from './api'
 import { RulesPanel } from './rules-panel'
 import { ScopeFormSheet } from './scope-form'
-import { ScopeList } from './scope-list'
-import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 
 /**
  * 数据权限 —— 由原来的「数据范围」+「数据规则」两个菜单合并而来。
@@ -30,8 +32,7 @@ import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
  * 现在没人复用不代表以后不会，合并 UI 免费且可逆，改表不是。
  */
 export type DataPermissionPageSearch = {
-  page?: number
-  size?: number
+  // 左栏走滚动加载，所以**没有** page/size —— 加回来就必须同时加分页条
   name?: string
   status?: number
   /** 选中的数据范围 id */
@@ -46,16 +47,23 @@ export function DataPermissionPage({
   onSearchChange?: (n: DataPermissionPageSearch) => void
 }) {
   const { t } = useTranslation()
-  const page = search.page ?? 1
-  const size = search.size ?? DEFAULT_PAGE_SIZE
 
   const patch = (n: Partial<DataPermissionPageSearch>) => onSearchChange?.({ ...search, ...n })
 
   const qc = useQueryClient()
-  const { data, isPending, isFetching } = useQuery(
-    dataScopesQuery({ page, size, name: search.name || undefined, status: search.status })
+  const {
+    data, isPending, isFetching, hasNextPage, isFetchingNextPage, fetchNextPage,
+  } = useInfiniteQuery(
+    dataScopesInfiniteQuery({ name: search.name || undefined, status: search.status })
   )
-  const scopes = data?.items ?? []
+  // 已取回的所有页拍平 —— 滚动加载里没有「当前页」
+  const scopes = React.useMemo(() => data?.pages.flatMap((pg) => pg.items) ?? [], [data])
+  const total = data?.pages[0]?.total ?? 0
+
+  const scopeItems = React.useMemo<MasterListItem[]>(
+    () => scopes.map((x) => ({ id: x.id, title: x.name, status: x.status })),
+    [scopes]
+  )
 
   // URL 里的范围可能**不在当前页**（范围分页，深链常落到第 2 页之后）。
   // 只在当前页 find 会静默落回第一条 —— 那是「你以为在给范围 X 配规则、
@@ -83,25 +91,49 @@ export function DataPermissionPage({
           />
 
           <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6 content-scroll:lg:min-h-0">
-            <ScopeList
-              scopes={scopes}
-              total={data?.total ?? 0}
-              page={page}
-              size={size}
-              loading={isPending}
-              busy={isFetching && !isPending}
+            {/* 与角色页同一个左栏件 */}
+            <MasterList
+              idPrefix="scope"
+              title={t('数据范围')}
+              items={scopeItems}
+              total={total}
               selectedId={selected?.id ?? null}
-              keyword={search.name ?? ''}
-              status={search.status}
-              onKeyword={(v) => patch({ name: v || undefined, page: undefined, scope: undefined })}
-              onStatus={(v) => patch({ status: v, page: undefined, scope: undefined })}
-              onReset={() => patch({ name: undefined, status: undefined, page: undefined, scope: undefined })}
-              onPage={(p) => patch({ page: p, scope: undefined })}
               onSelect={(id) => patch({ scope: id })}
+              keyword={search.name ?? ''}
+              searchPlaceholder="搜索范围名称…"
+              onKeyword={(v) => patch({ name: v || undefined, scope: undefined })}
+              status={search.status}
+              onStatus={(v) => patch({ status: v, scope: undefined })}
+              onReset={() => patch({ name: undefined, status: undefined, scope: undefined })}
+              hasMore={hasNextPage}
+              loadingMore={isFetchingNextPage}
+              loading={isPending}
+              busy={isFetching && !isPending && !isFetchingNextPage}
+              onLoadMore={() => void fetchNextPage()}
               onAdd={() => { setEditing(null); setSheetOpen(true) }}
-              onEdit={(s) => { setEditing(s); setSheetOpen(true) }}
-              onDelete={setPendingDelete}
-            onRefresh={() => qc.invalidateQueries({ queryKey: scopeKeys.all })}
+              addLabel={t('新增数据范围')}
+              addPerm="data:scope:add"
+              onRefresh={() => void qc.invalidateQueries({ queryKey: scopeKeys.all })}
+              emptyText={t('没有匹配的数据范围')}
+              renderActions={(item) => {
+                const scope = scopes.find((x) => x.id === item.id)
+                if (!scope) return null
+                return (
+                  <>
+                    <Can perm="data:scope:edit">
+                      <DropdownMenuItem onClick={() => { setEditing(scope); setSheetOpen(true) }}>
+                        <IconPencil className="size-4" />{t('编辑')}
+                      </DropdownMenuItem>
+                    </Can>
+                    <Can perm="data:scope:del">
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" onClick={() => setPendingDelete(scope)}>
+                        <IconTrash className="size-4" />{t('删除')}
+                      </DropdownMenuItem>
+                    </Can>
+                  </>
+                )
+              }}
             />
 
             <div className="flex min-w-0 flex-1 flex-col gap-4 content-scroll:lg:min-h-0">

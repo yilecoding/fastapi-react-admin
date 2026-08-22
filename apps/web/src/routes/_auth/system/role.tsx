@@ -4,8 +4,9 @@ import { z } from "zod"
 import { requirePerm } from "@admin/platform/auth/guards"
 
 const searchSchema = z.object({
-  page: z.coerce.number().int().min(1).optional(),
-  size: z.coerce.number().int().min(1).max(100).optional(),
+  // 左栏角色列表走**滚动加载**，所以这里没有 page/size。
+  // 要加回来就必须同时把分页条加回界面 —— schema 里有 page 而界面上没有入口，
+  // 等于第 2 页永远不可达（CLAUDE.md 组件约定表里那条）。
   name: z.string().optional(),
   status: z.coerce.number().int().optional(),
   // 选中的角色 / 右侧 tab / 「角色用户」子表页码 —— 主从页的视图状态也要能刷新恢复

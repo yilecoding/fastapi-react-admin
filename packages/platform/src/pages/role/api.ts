@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { api, type PageData } from '../../api-client/client'
 import type { User } from '../user/api'
@@ -59,6 +59,30 @@ export const rolesQuery = (p: RoleListParams) =>
   queryOptions({
     queryKey: roleKeys.list(p),
     queryFn: () => api.GET<PageData<Role>>(`/api/v1/sys/roles?${qs(p)}`),
+    placeholderData: (prev) => prev,
+  })
+
+/** 左栏选择器一次取多少 —— 一屏放得下约 12 个，取 30 让首屏基本不用滚就够选 */
+export const ROLE_SCROLL_SIZE = 30
+
+/**
+ * 左栏用的**滚动加载**版本。
+ *
+ * 为什么不复用 `rolesQuery` + 页码：左栏是个「快速跳到某个角色」的选择器，
+ * 分页条在 288px 宽的栏里意味着「滚到底 → 点下一页 → 再滚回顶部找」，
+ * 而滚动加载让这件事退化成「一直滚」。
+ *
+ * ⚠️ queryKey 要和 `rolesQuery` 区分开（多一个 'infinite' 段）——
+ * 两者的数据形状不同（`InfiniteData` vs `PageData`），共用 key 会在
+ * 两个组件同时挂载时互相覆盖缓存。
+ */
+export const rolesInfiniteQuery = (p: Omit<RoleListParams, 'page' | 'size'>) =>
+  infiniteQueryOptions({
+    queryKey: [...roleKeys.all, 'list', 'infinite', p] as const,
+    queryFn: ({ pageParam }) =>
+      api.GET<PageData<Role>>(`/api/v1/sys/roles?${qs({ ...p, page: pageParam, size: ROLE_SCROLL_SIZE })}`),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.page < last.total_pages ? last.page + 1 : undefined),
     placeholderData: (prev) => prev,
   })
 

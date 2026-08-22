@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
+import { infiniteQueryOptions, queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { api, type PageData } from '../../api-client/client'
 
@@ -38,15 +38,32 @@ export const scopeKeys = {
   rules: (id: string) => [...scopeKeys.all, id, 'rules'] as const,
 }
 
+function scopeQs(p: ScopeListParams) {
+  const s = new URLSearchParams({ page: String(p.page), size: String(p.size) })
+  if (p.name) s.set('name', p.name)
+  if (p.status !== undefined) s.set('status', String(p.status))
+  return s.toString()
+}
+
 export const dataScopesQuery = (p: ScopeListParams) =>
   queryOptions({
     queryKey: scopeKeys.list(p),
-    queryFn: () => {
-      const s = new URLSearchParams({ page: String(p.page), size: String(p.size) })
-      if (p.name) s.set('name', p.name)
-      if (p.status !== undefined) s.set('status', String(p.status))
-      return api.GET<PageData<DataScope>>(`/api/v1/sys/data-scopes?${s}`)
-    },
+    queryFn: () => api.GET<PageData<DataScope>>(`/api/v1/sys/data-scopes?${scopeQs(p)}`),
+    placeholderData: (prev) => prev,
+  })
+
+/** 与角色页同一套：左栏选择器走滚动加载，不放分页条 */
+export const SCOPE_SCROLL_SIZE = 30
+
+export const dataScopesInfiniteQuery = (p: Omit<ScopeListParams, 'page' | 'size'>) =>
+  infiniteQueryOptions({
+    queryKey: [...scopeKeys.all, 'list', 'infinite', p] as const,
+    queryFn: ({ pageParam }) =>
+      api.GET<PageData<DataScope>>(
+        `/api/v1/sys/data-scopes?${scopeQs({ ...p, page: pageParam, size: SCOPE_SCROLL_SIZE })}`
+      ),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.page < last.total_pages ? last.page + 1 : undefined),
     placeholderData: (prev) => prev,
   })
 
