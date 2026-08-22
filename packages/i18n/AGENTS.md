@@ -148,6 +148,14 @@ const fe = useFieldError()
 | `formatDate` / `formatTime` | 只要日期或只要时刻，这两个**跟 locale** |
 | `setDisplayTimeZone` | 切显示时区；不调就跟浏览器 |
 
+**显示时区从哪来**：`sys_user.timezone`（每人一份，存服务端），由
+`platform/src/auth/queries.ts` 的 `meQuery` 在 **queryFn 里**调
+`setDisplayTimeZone(me.timezone)`。放 queryFn 不放 `useEffect` 是刻意的 ——
+`formatDateTime` 读模块级变量、**不是响应式的**，effect 里设的话已经渲染完的
+表格不会重渲染、会一直用旧时区；在 queryFn 里设则保证 `me` 被任何组件读到之前
+时区已经对了，也没有「先按浏览器时区闪一下再跳」。
+（后端那一侧、以及为什么服务端仍是单时区，见 [api 分册](../../apps/api/AGENTS.md) 的「时区」。）
+
 `formatDateTime` **刻意不跟 locale**（和 `formatNumber` 取向相反）：它渲染的是
 日志/审计类机器时间，几乎总在表格里配 `font-mono tabular-nums`，跟 locale 走会得到
 `8/22/2026, 11:59:47 AM` —— 宽度不定列对不齐，而且 `M/D/Y` 对中文用户是歧义的。
