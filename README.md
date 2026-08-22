@@ -261,9 +261,8 @@ pnpm 版本由 `package.json` 的 `packageManager` 精确锁定（corepack 会�
 # 1. 起依赖（SQL Server 2022 + Redis）
 docker compose -f docker-compose.dev.yml up -d
 
-# 2. 装依赖
-pnpm install
-cd apps/api && uv sync --group dev && cd ../..
+# 2. 装依赖（JS workspace、后端 Python 开发依赖、Playwright Chromium）
+pnpm install:all
 
 # 3. 配后端环境变量。模板的默认值已经和上面那份 compose 对齐
 #    （sqlserver:1433 / sa / redis:6380 / 雪花主键），直接复制就能连上
