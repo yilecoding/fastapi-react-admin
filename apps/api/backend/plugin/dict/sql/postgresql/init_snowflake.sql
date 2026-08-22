@@ -1,5 +1,5 @@
 insert into sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
-values (2049629108253622287, 'dict.menu', 'PluginDict', '/plugins/dict', 8, 'fluent-mdl2:dictionary', 1, null, 1, 1, '', null, 2049629108245233667, now(), null);
+values (2049629108253622287, '数据字典', 'PluginDict', '/plugins/dict', 8, 'fluent-mdl2:dictionary', 1, null, 1, 1, '', null, 2049629108245233667, now(), null);
 
 insert into sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
 values

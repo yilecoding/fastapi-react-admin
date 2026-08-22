@@ -57,8 +57,6 @@
   "menu:/scheduler/record": "任务记录",
   "menu:/system": "系统管理",
   "menu:/system/data-permission": "数据权限",
-  "menu:/system/data-rule": "/system/data-rule",
-  "menu:/system/data-scope": "/system/data-scope",
   "menu:/system/dept": "部门管理",
   "menu:/system/menu": "菜单管理",
   "menu:/system/plugin": "插件管理",
