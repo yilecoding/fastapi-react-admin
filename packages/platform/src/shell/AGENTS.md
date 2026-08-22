@@ -147,6 +147,27 @@ inset（SidebarInset）       content-scroll:min-h-0
 preferences 存「长什么样」（跨会话，localStorage）。
 将来要落库（`sys_frontend_config` 字典类型已经在），只在这一层加一次同步即可。
 
+#### 例外：时区存服务端，**不进** `preferences.ts`
+
+同一个面板里的「时区」那一节走的是 `sys_user.timezone` +
+`PUT /sys/users/me/timezone`，没有经过 `usePreferences()`。这是刻意的，
+判据是**这个设置该跟浏览器走还是跟人走**：
+
+| | 存哪 | 为什么 |
+|---|---|---|
+| 主题 / 圆角 / 标签条外观 / 滚动方式 | localStorage | 「这块屏幕上我想看到什么」——换台机器重新挑一次很正常，公用机器上更不该带过去 |
+| **时区** | **服务端** | 「我人在哪个时区」——换台机器还得再选一次是缺陷，不是特性 |
+
+所以判断新设置项该放哪，别看「它长在哪个面板里」，看它描述的是**设备**还是**人**。
+
+交互上仍然和其他项一致：选完立刻存，没有保存按钮。
+
+⚠️ 已知限制：`formatDateTime` 读的是模块级变量、**不是响应式的**，
+所以换时区后**其他已经渲染好的标签页**（多页签用 `<Activity>` 保活、
+不会重新取数）里的时间要等那一页下次取数才更新。换时区是一年一次的动作，
+没为它加订阅式重渲染 —— 真要加的话，加在 `datetime.ts` 里
+（照 `onLanguageChange` 的形状做个订阅），不要在每个显示时间的组件里加 hook。
+
 已接好的开关：`showTabs`（整条不渲染，页面照常挂载）、`tabShowIcon`、
 `tabMiddleClickClose`、`tabDraggable`，以及外壳级的 `scrollMode`（见「滚动方式」）。
 
