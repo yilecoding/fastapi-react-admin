@@ -32,7 +32,7 @@ pages/xxx/
 | `_shared/settings-shell.tsx` | 设置屏骨架：左侧竖导航 + 右侧切换面板（见「设置屏骨架」） |
 | `_shared/settings-rows.tsx` | `SettingRow`（`inline` / `stacked`）· `SwitchRow` · `SegmentedControl` · `ColorSwatches` |
 | `_shared/login-log.ts` | `LoginLog` 类型 + `formatLocation`（内网 IP 后端返 `Reserved`）。两个调用方：登录日志页、个人中心的「最近登录」 |
-| `_shared/use-query-search.ts` | `QueryBar` ↔ URL 的胶水：从地址栏恢复条件 · 本地编辑 · 搜索时写回 URL + 拼接口入参 + **跳回第一页**。两个日志页在用，见「查询区」 |
+| `_shared/use-query-search.ts` | `QueryBar` ↔ URL 的胶水：从地址栏恢复条件 · 本地编辑 · 搜索时写回 URL + 拼接口入参 + **跳回第一页**。两个日志页在用，见 [查询区分册](../../../ui/src/components/query-bar/AGENTS.md) |
 
 `pages/_shared/list-page.tsx` 是只读列表的工厂，**目前没有调用方**
 （两个日志页长出了统计条/导出/详情抽屉后已搬出去手写）。
@@ -246,7 +246,7 @@ pages/xxx/
 
 面板内部（`perm-matrix` / `role-scopes` / `role-users` / `rules-panel` / 字典项表）各自再走一遍
 「根 `min-h-0 flex-1` → 工具条 `shrink-0` → 表格框变视区」，和列表页同一套
-（见「列表页：只滚表格行」）。工具条原来的 `sticky top-0` **保留**，只在定高情形下
+（见 [shell 分册](../shell/AGENTS.md) 的「列表页：只滚表格行」）。工具条原来的 `sticky top-0` **保留**，只在定高情形下
 `content-scroll:lg:static` —— 它那时已经在滚动区外面了，留着 sticky 只是白占一个层叠上下文。
 
 同理左栏列表的 `max-h-[calc(100svh-20rem)]` 是**兜底**（堆叠/整页滚动时父级高度是

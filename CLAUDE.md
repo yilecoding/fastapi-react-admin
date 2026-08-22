@@ -58,6 +58,8 @@ pnpm ctx:check          # 死引用 / 死链接 / 死脚本 / 死 testid / 行�
 | `dead-link` | 错误 | markdown 相对链接指向不存在的文件 |
 | `dead-script` | 错误 | 反引号里的 pnpm 脚本没有任何 package.json 声明 |
 | `dead-testid` | 错误 | 提到的 `data-testid` 源码里不存在 |
+| `dead-anchor` | 错误 | 正文里的章节交叉引用指向一个全仓都不存在的章节 |
+| `cross-file-anchor` | 错误 | 那一节在**别的分册**里 —— 拆分册最容易留下的债，改成相对链接 |
 | `empty-scope` | 错误 | `AGENTS.md` 所在目录下没有源码（模块被搬走了） |
 | `budget` | 警告 | 根文件 > 400 行 / 分册 > 500 行 —— 该拆了 |
 
