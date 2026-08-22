@@ -8,6 +8,8 @@ const searchSchema = z.object({
   name: z.string().optional(),
   status: z.string().optional(),
   task_id: z.string().optional(),
+  /** `2026-08-16~2026-08-22`，两端都可省 */
+  time: z.string().optional(),
   /** 摆开但还没填值的格子 */
   f: z.string().optional(),
   /** 被隐藏的列 id，逗号分隔 */

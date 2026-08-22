@@ -305,3 +305,132 @@ def test_quartz_syntax_is_rejected(client: TestClient, token_headers, uniq, expr
         json={'name': uniq, 'task': 'maintenance.prune_logs', 'type': 1, 'crontab': expr},
     )
     assert r.status_code == 422, f'{why} 没被拦住：{r.text[:200]}'
+
+
+# ── 执行记录的时间范围筛选 ──────────────────────────────────────────────────
+
+
+@pytest.fixture
+def seeded_results():
+    """造四条 date_done 已知的执行记录，用完删掉。
+
+    ⚠️ 一律 `microsecond=0`。`date_done` 是 `datetimeoffset`，带微秒，
+    而查询参数按 `%H:%M:%S` 格式化会把微秒截掉 —— 边界那条用例
+    「起止都卡在记录自己的时刻上」就会因为 `.789 > .000` 而落空。
+    第一版没置零，红的是测试不是代码。
+    """
+    import uuid as _uuid
+
+    from datetime import timedelta
+
+    from sqlalchemy import create_engine, delete, insert
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.app.task.celery import get_result_backend
+    from backend.app.task.model import TaskExtended
+    from backend.core.conf import settings
+    from backend.utils.timezone import timezone
+
+    url = get_result_backend().removeprefix('db+').replace(
+        f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?'
+    )
+    factory = sessionmaker(create_engine(url, future=True), expire_on_commit=False)
+
+    tag = f'pytest-range-{_uuid.uuid4().hex[:8]}'
+    now = timezone.now().replace(microsecond=0)
+    # 'h1' 落在**今天**，专门给「只给日期会丢掉最后一天」那条用例
+    marks = {'h1': now - timedelta(hours=1), 'd1': now - timedelta(days=1),
+             'd5': now - timedelta(days=5), 'd10': now - timedelta(days=10)}
+    with factory() as db:
+        for key, at in marks.items():
+            db.execute(insert(TaskExtended.__table__).values(
+                task_id=f'{tag}-{key}', status='SUCCESS', name=tag, date_done=at,
+            ))
+        db.commit()
+
+    yield {'tag': tag, 'now': now, 'marks': marks}
+
+    with factory() as db:
+        db.execute(delete(TaskExtended.__table__).where(TaskExtended.name == tag))
+        db.commit()
+
+
+FMT = '%Y-%m-%d %H:%M:%S'
+
+
+def _query(client: TestClient, token_headers, tag: str, **params) -> list[dict]:
+    r = client.get(
+        '/tasks/results', headers=token_headers,
+        params={'name': tag, 'page': 1, 'size': 20, **params},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()['data']['items']
+
+
+def _keys(items: list[dict]) -> set[str]:
+    return {i['task_id'].rsplit('-', 1)[-1] for i in items}
+
+
+def test_result_time_range_filters(client: TestClient, token_headers, seeded_results):
+    """时间范围要真的起作用 —— 四条记录按范围切出来。"""
+    from datetime import timedelta
+
+    tag, now = seeded_results['tag'], seeded_results['now']
+    assert _keys(_query(client, token_headers, tag)) == {'h1', 'd1', 'd5', 'd10'}
+
+    got = _query(client, token_headers, tag, start_time=(now - timedelta(days=7)).strftime(FMT))
+    assert _keys(got) == {'h1', 'd1', 'd5'}, got
+
+    got = _query(client, token_headers, tag, end_time=(now - timedelta(days=7)).strftime(FMT))
+    assert _keys(got) == {'d10'}, got
+
+    got = _query(
+        client, token_headers, tag,
+        start_time=(now - timedelta(days=7)).strftime(FMT),
+        end_time=(now - timedelta(days=3)).strftime(FMT),
+    )
+    assert _keys(got) == {'d5'}, got
+
+
+def test_range_is_inclusive_on_both_ends(client: TestClient, token_headers, seeded_results):
+    """🔴 两端都是闭区间。
+
+    写成开区间（`>` / `<`）的话，「查 8/22 00:00:00 ~ 8/22 23:59:59」会漏掉
+    正好落在这两个时刻上的记录 —— 一天里最早和最晚那几条查不到，
+    而列表看起来完全正常，只是少了两行。
+    """
+    tag = seeded_results['tag']
+    exact = seeded_results['marks']['d5'].strftime(FMT)
+    got = _query(client, token_headers, tag, start_time=exact, end_time=exact)
+    assert _keys(got) == {'d5'}, f'闭区间没命中边界上的那条：{got}'
+
+
+def test_end_time_without_clock_silently_drops_the_last_day(
+    client: TestClient, token_headers, seeded_results
+):
+    """🔴 这条把「只传日期」的后果钉住，防的是前端偷懒。
+
+    `end_time=2026-08-22`（不带时分秒）会被 pydantic 解析成当天 **00:00:00**，
+    于是 `date_done <= 00:00:00` **静默丢掉 22 号一整天**。用户选了「到今天」，
+    今天的记录一条都不显示，而界面上没有任何异常。
+
+    前端必须补成 `… 23:59:59` 再发（`query-bar` 的 `toQueryParams` 负责，
+    URL 上才压缩成 `time=a~b`）。这条断言的是**后端的行为确实如此**——
+    是在提醒「别把补时分秒那一步省掉」，不是在要求后端去猜。
+
+    ⚠️ 用 `h1`（一小时前，落在今天）来演示。第一版拿 `d1`（一天前 = 昨天）
+    演示，而昨天本来就在「今天 00:00」之前，什么也证明不了 —— 又是测试写错。
+    """
+    tag, now = seeded_results['tag'], seeded_results['now']
+    today = now.strftime('%Y-%m-%d')
+
+    with_clock = _keys(_query(client, token_headers, tag, end_time=f'{today} 23:59:59'))
+    date_only = _keys(_query(client, token_headers, tag, end_time=today))
+
+    assert 'h1' in with_clock, f'补了时分秒也没查到今天的记录：{with_clock}'
+    # 刚过午夜时 h1 会落到昨天，那时这条演示不成立，跳过
+    if now.hour >= 1:
+        assert 'h1' not in date_only, (
+            f'只给日期居然命中了今天的记录 —— pydantic 的解析口径变了？{date_only}'
+        )
+        assert with_clock > date_only, '只给日期没有丢掉任何东西，这条用例失去意义'

@@ -31,6 +31,9 @@ export type ResultListParams = {
   name?: string
   task_id?: string
   status?: string
+  /** 结束时间起 / 止（含）。必须是完整时刻 —— 只给日期会静默丢掉最后一天 */
+  start_time?: string
+  end_time?: string
 }
 
 export const resultKeys = {
@@ -46,6 +49,8 @@ function qs(p: ResultListParams): string {
   if (p.name) s.set('name', p.name)
   if (p.task_id) s.set('task_id', p.task_id)
   if (p.status) s.set('status', p.status)
+  if (p.start_time) s.set('start_time', p.start_time)
+  if (p.end_time) s.set('end_time', p.end_time)
   return s.toString()
 }
 

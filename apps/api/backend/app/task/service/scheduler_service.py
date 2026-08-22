@@ -1,5 +1,7 @@
 import json
 
+from datetime import datetime
+
 from typing import Any
 
 from sqlalchemy import Select
@@ -147,8 +149,15 @@ class TaskResultService:
         return obj
 
     @staticmethod
-    async def get_select(*, name: str | None, task_id: str | None, status: str | None) -> Select:
-        return await task_result_dao.get_select(name, task_id, status)
+    async def get_select(
+        *,
+        name: str | None,
+        task_id: str | None,
+        status: str | None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+    ) -> Select:
+        return await task_result_dao.get_select(name, task_id, status, start_time, end_time)
 
     @staticmethod
     async def delete(*, db: AsyncSession, obj: DeleteTaskResultParam) -> int:

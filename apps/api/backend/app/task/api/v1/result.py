@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Path, Query
@@ -20,8 +21,12 @@ async def get_task_results_paginated(
     name: Annotated[str | None, Query(description='任务名')] = None,
     task_id: Annotated[str | None, Query(description='任务 UUID')] = None,
     status: Annotated[str | None, Query(description='状态（SUCCESS/FAILURE/…）')] = None,
+    start_time: Annotated[datetime | None, Query(description='结束时间起（含）')] = None,
+    end_time: Annotated[datetime | None, Query(description='结束时间止（含）')] = None,
 ) -> ResponseSchemaModel[PageData[GetTaskResultDetail]]:
-    stmt = await task_result_service.get_select(name=name, task_id=task_id, status=status)
+    stmt = await task_result_service.get_select(
+        name=name, task_id=task_id, status=status, start_time=start_time, end_time=end_time
+    )
     return response_base.success(data=await paging_data(db, stmt))
 
 

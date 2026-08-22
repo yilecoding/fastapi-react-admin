@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import datetime
 
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,7 +78,24 @@ class CRUDTaskResult(CRUDPlus[TaskExtended]):
     async def get(self, db: AsyncSession, pk: int) -> TaskExtended | None:
         return await self.select_model(db, pk)
 
-    async def get_select(self, name: str | None, task_id: str | None, status: str | None) -> Select:
+    async def get_select(
+        self,
+        name: str | None,
+        task_id: str | None,
+        status: str | None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+    ) -> Select:
+        """执行记录列表的查询表达式。
+
+        时间范围打在 `date_done` 上（那也是列表里显示的那一列，以及
+        `maintenance.prune_task_results` 清理时用的那一列，三处一致）。
+
+        ⚠️ 两端都是**闭区间**（`>=` / `<=`）。前端传的 `end_time` 一定是
+        `… 23:59:59` 这种带时分秒的完整时刻 —— 只传日期的话 pydantic 会解析成
+        当天 00:00:00，`<=` 就**静默丢掉最后一整天**。压缩发生在 URL 上，
+        解码时立刻补回规范形式（`ui/components/query-bar` 那节）。
+        """
         stmt = select(self.model)
         if name:
             stmt = stmt.where(self.model.name.like(f'%{name}%'))
@@ -85,6 +103,10 @@ class CRUDTaskResult(CRUDPlus[TaskExtended]):
             stmt = stmt.where(self.model.task_id == task_id)
         if status:
             stmt = stmt.where(self.model.status == status)
+        if start_time is not None:
+            stmt = stmt.where(self.model.date_done >= start_time)
+        if end_time is not None:
+            stmt = stmt.where(self.model.date_done <= end_time)
         # 🔴 SQL Server 的 OFFSET FETCH 强制要求 ORDER BY，分页查询不能省
         return stmt.order_by(self.model.id.desc())
 
