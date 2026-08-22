@@ -128,7 +128,35 @@ class ModelEntry(ScheduleEntry):
         # 不置这个标记，每触发一次就会打一次 last_update，beat 每跑一个任务
         # 就全量重载一次调度表
         self.model.no_changes = True
+        self._persist()
         return self.__class__(self.model, app=self.app)
+
+    def _persist(self) -> None:
+        """🔴 触发计数必须**立刻**落库，不能只等 `sync()`。
+
+        `is_due()` 里 one_off 的判断读的是 `total_run_count`，而
+        `DatabaseScheduler.schedule` 一检测到变更就**重载**，把这个计数
+        清回库里的值。于是：一次性任务触发之后、`sync()` 回写之前，
+        只要有人改了**任何一条**调度（增删改都会打变更标记 → 触发重载），
+        它就会再跑一次 —— 一次性任务跑两遍。
+
+        发现方式是集成测试**间歇性**失败（同一批用例三跑两绿一红），
+        红的那次报「one_off 触发了第二次」。单跑永远是绿的，因为没有
+        别的用例在同一个会话里改调度。**这条如果只手工验，几乎不可能撞到。**
+
+        代价是每次真触发多一条 UPDATE —— 只在到点时发生，不是每个 tick。
+        用 core update 而不是 ORM：core update 不触发 `after_update` 事件，
+        否则这次写入自己又会打一次变更标记，变成「触发一次就重载一次」。
+        """
+        try:
+            with sync_session() as db:
+                db.query(TaskScheduler).filter(TaskScheduler.id == self.model.id).update(
+                    {'last_run_time': self.model.last_run_time, 'total_run_count': self.model.total_run_count},
+                    synchronize_session=False,
+                )
+        except Exception as e:  # noqa: BLE001
+            # 写失败不能让调度停摆 —— 最坏是这一条的计数偏小、one_off 可能多跑一次
+            logger.warning('回写任务调度触发计数失败 %s：%s', self.model.name, e)
 
     next = __next__  # celery 内部两种写法都用
 
