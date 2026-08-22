@@ -19,7 +19,11 @@ export default defineConfig({
   // 本地调试时并行会让失败截图/trace 交错着打印，调试单条用例时更想要顺序执行。
   // CI 里要速度，交给 Playwright 按 CPU 数自己定。
   workers: process.env.CI ? undefined : 1,
-  reporter: process.env.CI ? [["html", { open: "never" }]] : "list",
+  // 终端一直要有（跑起来时能看进度、失败立刻看到错误堆栈），HTML 报告**本地也留一份**——
+  // 不是 CI 独有：`pnpm exec playwright show-report` 能直接在浏览器里点开每条用例的
+  // 截图/trace，比在终端里翻堆栈方便得多。`open: "never"` 只是不自动弹浏览器，
+  // 报告文件（`apps/web/playwright-report/`）照样生成。
+  reporter: [["list"], ["html", { open: "never" }]],
 
   // 一次性环境准备：把 fba_test 里的登录验证码关掉。不放进每条测试的 fixture——
   // 它是环境准备，不是测试本身的一部分。见 global-setup.ts 头注释。
