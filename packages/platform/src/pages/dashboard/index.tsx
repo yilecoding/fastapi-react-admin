@@ -142,7 +142,7 @@ export function DashboardPage() {
                 label={t("在线会话")} value={online.data} loading={online.isPending}
                 testId="metric-online"
                 hint={t("Redis 中未过期的 token 数")}
-                to={{ path: '/log/online', search: {} }}
+                to={{ path: '/monitor/online', search: {} }}
               />
             ) : (
               <div
@@ -259,7 +259,7 @@ function Metric({
   loading: boolean
   tone?: 'success' | 'warning'
   testId: string
-  to?: { path: '/log/login' | '/log/opera' | '/log/online'; search: Record<string, unknown> }
+  to?: { path: '/log/login' | '/log/opera' | '/monitor/online'; search: Record<string, unknown> }
 }) {
   const body = (
     <>

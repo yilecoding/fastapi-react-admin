@@ -18,8 +18,8 @@ import { Route as AuthProfileRouteImport } from './routes/_auth/profile'
 import { Route as GuestSignInRouteImport } from './routes/_guest/sign-in'
 import { Route as AuthEmbeddedNameRouteImport } from './routes/_auth/embedded/$name'
 import { Route as AuthLogLoginRouteImport } from './routes/_auth/log/login'
-import { Route as AuthLogOnlineRouteImport } from './routes/_auth/log/online'
 import { Route as AuthLogOperaRouteImport } from './routes/_auth/log/opera'
+import { Route as AuthMonitorOnlineRouteImport } from './routes/_auth/monitor/online'
 import { Route as AuthMonitorRedisRouteImport } from './routes/_auth/monitor/redis'
 import { Route as AuthMonitorServerRouteImport } from './routes/_auth/monitor/server'
 import { Route as AuthPluginsConfigRouteImport } from './routes/_auth/plugins/config'
@@ -81,14 +81,14 @@ const AuthLogLoginRoute = AuthLogLoginRouteImport.update({
   path: '/log/login',
   getParentRoute: () => AuthRoute,
 } as any)
-const AuthLogOnlineRoute = AuthLogOnlineRouteImport.update({
-  id: '/log/online',
-  path: '/log/online',
-  getParentRoute: () => AuthRoute,
-} as any)
 const AuthLogOperaRoute = AuthLogOperaRouteImport.update({
   id: '/log/opera',
   path: '/log/opera',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthMonitorOnlineRoute = AuthMonitorOnlineRouteImport.update({
+  id: '/monitor/online',
+  path: '/monitor/online',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthMonitorRedisRoute = AuthMonitorRedisRouteImport.update({
@@ -186,8 +186,8 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof GuestSignInRoute
   '/embedded/$name': typeof AuthEmbeddedNameRoute
   '/log/login': typeof AuthLogLoginRoute
-  '/log/online': typeof AuthLogOnlineRoute
   '/log/opera': typeof AuthLogOperaRoute
+  '/monitor/online': typeof AuthMonitorOnlineRoute
   '/monitor/redis': typeof AuthMonitorRedisRoute
   '/monitor/server': typeof AuthMonitorServerRoute
   '/plugins/config': typeof AuthPluginsConfigRoute
@@ -214,8 +214,8 @@ export interface FileRoutesByTo {
   '/sign-in': typeof GuestSignInRoute
   '/embedded/$name': typeof AuthEmbeddedNameRoute
   '/log/login': typeof AuthLogLoginRoute
-  '/log/online': typeof AuthLogOnlineRoute
   '/log/opera': typeof AuthLogOperaRoute
+  '/monitor/online': typeof AuthMonitorOnlineRoute
   '/monitor/redis': typeof AuthMonitorRedisRoute
   '/monitor/server': typeof AuthMonitorServerRoute
   '/plugins/config': typeof AuthPluginsConfigRoute
@@ -245,8 +245,8 @@ export interface FileRoutesById {
   '/_guest/sign-in': typeof GuestSignInRoute
   '/_auth/embedded/$name': typeof AuthEmbeddedNameRoute
   '/_auth/log/login': typeof AuthLogLoginRoute
-  '/_auth/log/online': typeof AuthLogOnlineRoute
   '/_auth/log/opera': typeof AuthLogOperaRoute
+  '/_auth/monitor/online': typeof AuthMonitorOnlineRoute
   '/_auth/monitor/redis': typeof AuthMonitorRedisRoute
   '/_auth/monitor/server': typeof AuthMonitorServerRoute
   '/_auth/plugins/config': typeof AuthPluginsConfigRoute
@@ -275,8 +275,8 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/embedded/$name'
     | '/log/login'
-    | '/log/online'
     | '/log/opera'
+    | '/monitor/online'
     | '/monitor/redis'
     | '/monitor/server'
     | '/plugins/config'
@@ -303,8 +303,8 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/embedded/$name'
     | '/log/login'
-    | '/log/online'
     | '/log/opera'
+    | '/monitor/online'
     | '/monitor/redis'
     | '/monitor/server'
     | '/plugins/config'
@@ -333,8 +333,8 @@ export interface FileRouteTypes {
     | '/_guest/sign-in'
     | '/_auth/embedded/$name'
     | '/_auth/log/login'
-    | '/_auth/log/online'
     | '/_auth/log/opera'
+    | '/_auth/monitor/online'
     | '/_auth/monitor/redis'
     | '/_auth/monitor/server'
     | '/_auth/plugins/config'
@@ -425,18 +425,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthLogLoginRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/_auth/log/online': {
-      id: '/_auth/log/online'
-      path: '/log/online'
-      fullPath: '/log/online'
-      preLoaderRoute: typeof AuthLogOnlineRouteImport
-      parentRoute: typeof AuthRoute
-    }
     '/_auth/log/opera': {
       id: '/_auth/log/opera'
       path: '/log/opera'
       fullPath: '/log/opera'
       preLoaderRoute: typeof AuthLogOperaRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/monitor/online': {
+      id: '/_auth/monitor/online'
+      path: '/monitor/online'
+      fullPath: '/monitor/online'
+      preLoaderRoute: typeof AuthMonitorOnlineRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/monitor/redis': {
@@ -567,8 +567,8 @@ interface AuthRouteChildren {
   AuthProfileRoute: typeof AuthProfileRoute
   AuthEmbeddedNameRoute: typeof AuthEmbeddedNameRoute
   AuthLogLoginRoute: typeof AuthLogLoginRoute
-  AuthLogOnlineRoute: typeof AuthLogOnlineRoute
   AuthLogOperaRoute: typeof AuthLogOperaRoute
+  AuthMonitorOnlineRoute: typeof AuthMonitorOnlineRoute
   AuthMonitorRedisRoute: typeof AuthMonitorRedisRoute
   AuthMonitorServerRoute: typeof AuthMonitorServerRoute
   AuthPluginsConfigRoute: typeof AuthPluginsConfigRoute
@@ -594,8 +594,8 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthProfileRoute: AuthProfileRoute,
   AuthEmbeddedNameRoute: AuthEmbeddedNameRoute,
   AuthLogLoginRoute: AuthLogLoginRoute,
-  AuthLogOnlineRoute: AuthLogOnlineRoute,
   AuthLogOperaRoute: AuthLogOperaRoute,
+  AuthMonitorOnlineRoute: AuthMonitorOnlineRoute,
   AuthMonitorRedisRoute: AuthMonitorRedisRoute,
   AuthMonitorServerRoute: AuthMonitorServerRoute,
   AuthPluginsConfigRoute: AuthPluginsConfigRoute,
