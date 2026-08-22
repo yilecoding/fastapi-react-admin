@@ -32,7 +32,7 @@ pages/xxx/
 | `_shared/settings-shell.tsx` | 设置屏骨架：左侧竖导航 + 右侧切换面板（见「设置屏骨架」） |
 | `_shared/settings-rows.tsx` | `SettingRow`（`inline` / `stacked`）· `SwitchRow` · `SegmentedControl` · `ColorSwatches` |
 | `_shared/login-log.ts` | `LoginLog` 类型 + `formatLocation`（内网 IP 后端返 `Reserved`）。两个调用方：登录日志页、个人中心的「最近登录」 |
-| `_shared/use-query-search.ts` | `QueryBar` ↔ URL 的胶水：从地址栏恢复条件 · 本地编辑 · 搜索时写回 URL + 拼接口入参 + **跳回第一页**。两个日志页在用，见 [查询区分册](../../../ui/src/components/query-bar/AGENTS.md) |
+| `_shared/use-query-search.ts` | `QueryBar` ↔ URL 的胶水：从地址栏恢复条件 · 本地编辑 · 搜索时写回 URL + 拼接口入参 + **跳回第一页**。两个日志页 + 用户管理页在用，见 [查询区分册](../../../ui/src/components/query-bar/AGENTS.md) |
 
 `pages/_shared/list-page.tsx` 是只读列表的工厂，**目前没有调用方**
 （两个日志页长出了统计条/导出/详情抽屉后已搬出去手写）。
@@ -69,6 +69,44 @@ pages/xxx/
 |---|---|
 | 次要工具动作（导出 / 清空 / 列） | 图标 + tooltip |
 | 主动作（搜索 / 重置 / 筛选视图） | 带文字 |
+
+### 🔴 有行选中的页面，`onSearch` / `onReset` 里必须清掉 `rowSelection`
+
+**症状**：在用户管理页勾几行 → 改筛选条件 → 点批量删除 →
+**删掉的是当前看不见的用户**。界面上没有任何异常，确认框里的条数还是对的。
+
+**根因**：分页和筛选都在服务端，选中态是按 `getRowId` 存的一组 id。
+换了筛选之后这些 id 已经不在返回的行里了，但 `rowSelection` 还留着。
+
+原来这件事是 `patch()` 顺手做的（每个筛选回调都走它）。换成 `QueryBar` 之后
+筛选走的是 `q.submit`，**没人再做这件事** —— 得显式包一层：
+
+```tsx
+const submitQuery = React.useCallback((v) => { setRowSelection({}); q.submit(v) }, [q])
+<QueryBar onSearch={submitQuery} onReset={clearFilters} … />   // clearFilters 里也要清
+```
+
+⚠️ **批量条（`BulkBar`）放动作行的左组末尾**，不要放右组。
+它随选中行出现/消失，放右组的话每选一次行，「搜索 / 重置」就横向位移一次。
+左组是往右长进空白里的，右组不动。
+
+### 迁一个列表页到 `QueryBar`
+
+已迁：`log-login` · `log-opera` · `user`。照用户管理页抄，六步：
+
+1. **声明 `FIELDS`** —— `key` 是**地址栏参数名**，`param` / `rangeParams` 才是接口
+   入参名。选项要从接口取的（部门 / 角色）就在组件里 `useMemo`，配 `optionsLoading`
+2. `const q = useQuerySearch({ fields, search, onSearchChange, keep: ['hide'] })`
+3. 取数入参 `{ page, size, ...q.params }`；`hasFilter` 换成
+   `countActive(q.applied, fields) > 0`
+4. 🔴 **删掉 `DataTable` 的 `toolbar` / `actions`**，传 `showColumnVisibility={false}`，
+   把「新增 / 导出 / 列 / 批量条」搬进 `QueryBar` 的 `actions`（理由见上）
+5. 🔴 查询区和表格**包一层** `flex flex-col gap-4 content-scroll:min-h-0
+   content-scroll:flex-1` —— 少了 `gap-4` 是 24px 断档（查询区内部才 8px）；
+   少了后两个类，「只滚表格行」那条链就断在这一层（表现是「设置生效了，
+   但还是整块在滚」）
+6. route schema：筛选键换成 `FIELDS` 的 `key`，补 `f`，**不留 `adv`**
+   （没开 `advanced` 的话它是个休眠字段）
 
 ⚠️ **图标按钮一律 tooltip + `aria-label`**，少了就没人知道那个图标是干什么的。
 `清空` 是破坏性动作，敢图标化的前提是后面还有 `ConfirmDialog` 兜着 ——

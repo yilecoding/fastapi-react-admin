@@ -2,9 +2,7 @@
 
 import * as React from "react"
 import { useTranslation } from "react-i18next"
-import {
-  IconChevronDown, IconChevronUp, IconPlus, IconSearch, IconSelector, IconX,
-} from "@tabler/icons-react"
+import { IconPlus, IconSearch, IconSelector, IconX } from "@tabler/icons-react"
 
 import { Button } from "@admin/ui/components/button"
 import { Checkbox } from "@admin/ui/components/checkbox"
@@ -41,6 +39,10 @@ import { indexFields, withOperator } from "./value"
  *    十四个条件铺出来**没有两格是一样宽的**，也没有一条对齐的竖边
  *    （用户截图指出过：「样式设计需要优化」那张）。
  *    网格让右边界天然对齐，列数跟着容器走，长内容用 `span: 2` 跨两格。
+ *
+ * 「添加条件」和折叠按钮**不在这个网格里** —— 它们由 `index.tsx` 放进动作行。
+ * 放网格里的话，条件数恰好等于列数时（用户管理页 5 个条件撞上 5 列）
+ * 它会独占第二行的一格，白搭 40px；而且行数会随条件数忽多忽少。
  */
 
 /** 一行几列：跟着**容器**宽度走，不是视口 —— 查询区可能在页面主区，也可能在抽屉里 */
@@ -49,30 +51,32 @@ const GRID = "grid grid-cols-1 gap-2 @lg/qb:grid-cols-2 @3xl/qb:grid-cols-3 @5xl
 export function BasicFilter({
   fields,
   conditions,
+  visibleCount,
   onChange,
   onSubmit,
   errors,
-  /** 超过这个条数就折叠 —— 十几格铺三行会把表格顶下去 */
-  collapseAfter = 8,
 }: {
   fields: readonly FilterField[]
   conditions: readonly Condition[]
+  /**
+   * 渲染前几格（折叠用）。**收到的仍是完整的 `conditions`** ——
+   * 只传裁剪过的数组会让「移除」把折叠掉的那几条一起丢掉，
+   * 因为增删改都是在传进来的这个数组上做的。
+   */
+  visibleCount?: number
   onChange: (next: Condition[]) => void
   onSubmit?: () => void
   errors?: QueryErrors
-  collapseAfter?: number
 }) {
   const { t } = useTranslation()
   const byKey = React.useMemo(() => indexFields(fields), [fields])
-  const [expanded, setExpanded] = React.useState(false)
 
   const patch = (id: string, next: Condition) =>
     onChange(conditions.map((c) => (c.id === id ? next : c)))
 
   const remove = (id: string) => onChange(conditions.filter((c) => c.id !== id))
 
-  const hidden = Math.max(0, conditions.length - collapseAfter)
-  const shown = expanded || hidden === 0 ? conditions : conditions.slice(0, collapseAfter)
+  const shown = visibleCount === undefined ? conditions : conditions.slice(0, visibleCount)
 
   return (
     <div className={GRID}>
@@ -183,24 +187,6 @@ export function BasicFilter({
         )
       })}
 
-      {/*
-        「添加条件」跟在最后一格后面（网格的下一格），而不是另起一行：
-        它是「再挑一个字段」，位置紧跟已有条件才符合直觉。
-        `justify-self-start` 让它保持按钮的自然宽度，不被拉成一整格。
-      */}
-      <div className="flex items-center gap-2 justify-self-start">
-        {hidden > 0 && (
-          <Button
-            variant="ghost" size="sm" className="h-8 text-muted-foreground"
-            data-testid="qb-collapse"
-            onClick={() => setExpanded((v) => !v)}
-          >
-            {expanded ? <IconChevronUp className="size-4" /> : <IconChevronDown className="size-4" />}
-            {expanded ? t("收起") : t("展开 {{n}} 项", { n: hidden })}
-          </Button>
-        )}
-        <FieldPicker fields={fields} conditions={conditions} onChange={onChange} />
-      </div>
     </div>
   )
 }
@@ -268,7 +254,7 @@ function OperatorPicker({
  * 搜索框、按 `group` 分组、以及「清空全部」。少了搜索框就是在一长条里瞎滚，
  * 少了分组就分不出「基本信息」和「时间」。
  */
-function FieldPicker({
+export function FieldPicker({
   fields, conditions, onChange,
 }: {
   fields: readonly FilterField[]

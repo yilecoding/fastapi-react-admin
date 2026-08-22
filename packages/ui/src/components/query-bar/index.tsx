@@ -8,8 +8,10 @@ import { Button } from "@admin/ui/components/button"
 import { ToggleGroup, ToggleGroupItem } from "@admin/ui/components/toggle-group"
 import { cn } from "@admin/ui/lib/utils"
 
+import { IconChevronDown, IconChevronUp } from "@tabler/icons-react"
+
 import { AdvancedFilter } from "./advanced"
-import { BasicFilter } from "./basic"
+import { BasicFilter, FieldPicker } from "./basic"
 import { packQuery } from "./params"
 import {
   emptyGroup, emptyQuery,
@@ -18,6 +20,9 @@ import {
 import { validateQuery, type QueryError, type ValidateContext } from "./validate"
 import { countActive } from "./value"
 import { QueryViews, useQueryViews, type QueryView } from "./views"
+
+/** 超过这么多个条件格就折叠 —— 十几格铺三行会把表格顶下去 */
+const DEFAULT_COLLAPSE_AFTER = 8
 
 export type QueryBarProps = {
   /** 可筛字段的声明。加一个筛选项 = 这里加一项，组件自己管 UI */
@@ -62,7 +67,7 @@ export type QueryBarProps = {
   loading?: boolean
   className?: string
 
-  /** 基础模式超过这么多条就折叠 */
+  /** 基础模式超过这么多条就折叠，默认 8 */
   collapseAfter?: number
   /** 业务侧补充校验（「时间跨度不能超过 90 天」这类），返回 `undefined` 表示没问题 */
   validate?: (ctx: ValidateContext) => QueryError | undefined
@@ -109,6 +114,11 @@ export function QueryBar({
   const setViews = onViewsChange ?? setStoredViews
   const viewsOn = Boolean(viewsStorageKey || controlledViews)
   const [activeView, setActiveView] = React.useState<string | undefined>()
+  const [expanded, setExpanded] = React.useState(false)
+
+  /** 超过 `collapseAfter` 的条件格先不渲染 —— 十几格铺三行会把表格顶下去 */
+  const hiddenCount = Math.max(0, value.basic.length - (collapseAfter ?? DEFAULT_COLLAPSE_AFTER))
+  const visibleCount = expanded || hiddenCount === 0 ? undefined : (collapseAfter ?? DEFAULT_COLLAPSE_AFTER)
 
   /**
    * 「已经搜过的那一份」的指纹。用 `packQuery` 而不是 `JSON.stringify(value)` ——
@@ -197,10 +207,10 @@ export function QueryBar({
         <BasicFilter
           fields={fields}
           conditions={value.basic}
+          visibleCount={visibleCount}
           onChange={(basic) => onChange({ ...value, basic })}
           onSubmit={submit}
           errors={errors}
-          collapseAfter={collapseAfter}
         />
       ) : (
         <AdvancedFilter
@@ -246,6 +256,29 @@ export function QueryBar({
             </span>
           ) : null}
         </div>
+
+        {/*
+          「添加条件」和折叠按钮属于**查询区自己的**控件，所以排在右组开头。
+          放条件网格里的话，条件数恰好等于列数时（用户管理页 5 个条件撞上 5 列）
+          它会独占第二行的一格，而且网格行数随条件数忽多忽少 —— 现在永远两行。
+        */}
+        {value.mode === "basic" && hiddenCount > 0 && (
+          <Button
+            variant="ghost" size="sm" className="h-8 text-muted-foreground"
+            data-testid="qb-collapse"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? <IconChevronUp className="size-4" /> : <IconChevronDown className="size-4" />}
+            {expanded ? t("收起") : t("展开 {{n}} 项", { n: hiddenCount })}
+          </Button>
+        )}
+        {value.mode === "basic" && (
+          <FieldPicker
+            fields={fields}
+            conditions={value.basic}
+            onChange={(basic) => onChange({ ...value, basic })}
+          />
+        )}
 
         {advanced && (
           <ToggleGroup
