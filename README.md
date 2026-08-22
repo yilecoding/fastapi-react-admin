@@ -1,7 +1,7 @@
 # fastapi-react-admin
 
 **FastAPI + React 19 + shadcn/ui 中后台底座** —— 权限细到按钮和数据行，
-多页签切走真的保状态，原生跑 SQL Server。
+多页签切走真的保状态，原生跑 SQL Server。**164 条自动化测试全打真实依赖，不 mock。**
 
 <!-- 前端 -->
 [![React](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)](https://react.dev)
@@ -39,7 +39,8 @@
 ## English
 
 An admin foundation on **FastAPI + React 19 + shadcn/ui** — permissions down to buttons
-*and data rows*, multi-tab navigation that actually keeps state, and first-class **SQL Server**.
+*and data rows*, multi-tab navigation that actually keeps state, first-class **SQL Server**,
+and **164 automated tests that run against real dependencies, with no mocks**.
 
 Backend derived from **[fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)**
 (FBA): its three-layer structure, plugin system, and RBAC / data-scope model. This repo is
@@ -56,15 +57,22 @@ code goes next to `packages/platform/src/pages/user/` and follows the same shape
 | **Permission grain**  | menus + buttons                                                            | menus + buttons + **data scopes** — a role decides which *rows* it sees, via rules bound to model columns |
 | **Multi-tab**         | free in Vue via `keep-alive`; usually absent in React, or loses state       | React 19 **`<Activity>`** — every open tab stays mounted; hidden ones drop effects but keep DOM and state |
 | **Database**          | MySQL / PostgreSQL                                                         | **native SQL Server** (`aioodbc`, NVARCHAR, filtered unique indexes, `OFFSET FETCH`); MySQL and PostgreSQL also supported |
+| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **164 tests against real dependencies, zero mocks** — 124 pytest against a real SQL Server, 40 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, not just documented |
 
 **Status: 0.0.1, never released.** No production instance, no data to preserve — so the
 schema is still free to change. The backend is a **permanent fork** of
 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)
 (upstream declined to merge SQL Server support), tracking only its security patches.
 
-**Known gaps, stated up front:** there are no frontend automated tests, and the backend
-suite is 24 cases in total — 23 for the file module plus one upstream auth test. See
-[SECURITY.md](./SECURITY.md) for unfixed security caveats you must handle before deploying.
+**Tests:** 124 pytest cases (real SQL Server) + 40 Playwright cases (isolated second
+stack: web :1126 → api :8001 → `fba_test`). Data permissions are covered on both sides —
+22 accounts through the API, 19 through the browser. Neither suite runs in CI, because
+both need a live SQL Server instance; run them locally with `pnpm test` and `pnpm e2e`.
+
+**Known gaps, stated up front:** no visual-regression tests, and data-permission filtering
+is currently wired to a single endpoint (`GET /sys/depts`) — the test suite pins that
+number so it fails the moment it changes. See [SECURITY.md](./SECURITY.md) for unfixed
+security caveats you must handle before deploying.
 
 ### Stack
 
@@ -110,6 +118,7 @@ language-independent.
 | **权限粒度** | 菜单 + 按钮 | 菜单 + 按钮 + **数据范围** —— 角色决定他能看到哪些**行**，规则挂在模型的列上 |
 | **多页签** | Vue 靠 `keep-alive` 白送；React 侧大多没有，或者切走就丢状态 | React 19 的 **`<Activity>`**：所有已开页签同时挂载，隐藏时销毁 effects 但保留 DOM 与 state |
 | **数据库** | MySQL / PostgreSQL | **原生 SQL Server**（`aioodbc` + NVARCHAR / 筛选唯一索引 / `OFFSET FETCH` 适配），MySQL 与 PostgreSQL 也在 |
+| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **164 条打真实依赖、零 mock** —— pytest 124 条对真实 SQL Server，Playwright 40 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的，不是写在文档里的 |
 
 它不是「拿来改改就交付」的模板，是**底座**：上面那三件事和下面几条纪律是它替你解决掉的部分，
 业务代码照 `packages/platform/src/pages/user/` 抄就行。
@@ -139,7 +148,7 @@ language-independent.
 | | |
 |---|---|
 | **框架** | FastAPI · Pydantic **2** + pydantic-settings · msgspec（响应编码）· Python ≥ **3.10** |
-| **ORM / 数据层** | SQLAlchemy **2**（asyncio）· `sqlalchemy-crud-plus` · `fastapi-pagination` · Alembic 装着但**没有迁移历史**（`versions/` 是空的，schema 由 `create_all()` 从模型生成 —— 0.0.1 还没发版，改表就直接改模型） |
+| **ORM / 数据层** | SQLAlchemy **2**（asyncio）· `sqlalchemy-crud-plus` · `fastapi-pagination` · **Alembic**（表结构改动一律走迁移，空基线 + 三条 pytest 守卫：改了模型没生成迁移 / 多 head 分叉 / 断链，见下节） |
 | **ASGI 服务** | 开发 **uvicorn**（`--reload`，只监听 `backend/`）· `fba run` 走 **Granian** |
 | **数据库驱动** | **aioodbc**（SQL Server，主线）· asyncmy + PyMySQL（MySQL）· asyncpg + psycopg（PostgreSQL） |
 | **缓存 / 队列** | Redis **8** + hiredis · cachebox（进程内）· Celery **5** + `celery-aio-pool` + Flower |
@@ -157,7 +166,7 @@ language-independent.
 | **主键** | 雪花 ID（≈2^61，**全链路当字符串**：后端 `stringify_unsafe_ints` 下发，前端连 search params 的 `JSON.parse` 都拦过） |
 | **单仓** | pnpm workspace + **turbo 2**（`apps/api` 也是 workspace 成员，`turbo dev` 一条命令起前后端） |
 | **Python 工具链** | **uv**（依赖与虚拟环境）· **ruff 0.16**（CI 里钉死版本 + `--no-fix`）· prek（pre-commit） |
-| **CI** | GitHub Actions：typecheck · web build · i18n 双校验 · ruff。**刻意不含 pytest** —— 它要真实 SQL Server 实例 |
+| **CI** | GitHub Actions：typecheck · web build · i18n 双校验 · ruff。**刻意不含 pytest / Playwright** —— 两套都要真实 SQL Server 实例，跑在本地或自建 runner 上 |
 | **桌面端**（可选） | Electron **42** + electron-builder **26** + electron-updater **6**，零业务代码 |
 
 后端 fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)
@@ -177,6 +186,64 @@ language-independent.
 - **开发工具**：组件沙箱（26 个组件，铺开对比 + 旋钮 + 可抄的代码）、内嵌 iframe 宿主页、调色盘（读真实 token 值）
 - **国际化**：中文原文即 key，`zh-CN` 是恒等映射，漏条目只会回落到中文而不是露出 raw key
 - **偏好**：深浅色 / 主题色 / 圆角 / 页签外观，改完即时生效（无「保存」按钮）。⚠️ 登录页不在 `PlatformProvider` 下，**目前不跟随主题**
+
+## 测试：打真实依赖，不打 mock
+
+**164 条自动化测试**，两边都不 mock 依赖 —— 后端对真实 SQL Server，
+前端对真实浏览器 + 真实接口 + 真实数据库。
+
+| | 跑在哪 | 条数 | 覆盖 |
+|---|---|---|---|
+| **pytest** | 真实 SQL Server（`fba_test` 库，不碰开发库） | **124** | 数据权限 26 · 定时任务 69 · 文件模块 23 · 迁移守卫 3 · i18n 对称性 2 · 登录 1 |
+| **Playwright** | 完全隔离的第二套实例：web :1126 → api :8001 → `fba_test` | **40** | 数据权限 25 · 定时任务 9 · 部门 CRUD 2 · 登录 2 · 多页签保活 2 |
+
+> Playwright 那 40 条里有 1 条会按条件跳过（执行记录页要求库里真跑过一次 worker）。
+
+```bash
+pnpm test          # 后端 pytest（124 条，需要 fba_test 库）
+pnpm e2e           # 前端 Playwright（40 条，自动拉起隔离的 web+api 实例）
+```
+
+**为什么不 mock**：中后台的 bug 几乎都长在边界上 —— SQL Server 的 NVARCHAR 截断、
+`OFFSET FETCH` 强制 `ORDER BY`、雪花 ID 过 `JSON.parse` 掉精度、Redis 里的用户缓存
+没清干净。这些东西 mock 掉之后就不存在了，测的只剩「我以为它会这样」。
+
+三件值得单独说的：
+
+**① 数据权限是拿真账号跑出来的，不是写在文档里的。**
+「角色决定他能看到哪些**行**」这条写在功能列表里很容易，难的是**证明它真的成立** ——
+要覆盖一遍，得建出整套部门树 / 数据范围 / 数据规则 / 角色，再逐个账号登录去看。
+这里两套测试各自建一整张这样的图，
+**pytest 22 个账号 · Playwright 19 个账号**，每人一种配置，登录进去看各自能看见什么：
+表达式矩阵（`==` / `!=` / `in` / `not_in` / 大小比较）、AND 与 OR 的组合语义、
+模板变量（`${user_id}` / `${dept_id}` / `${now}`）、角色与范围停用、多角色叠加、
+规则配错时的兜底方向。
+
+**② 前后端两套不是复制关系，各看各的。**
+
+| | pytest | Playwright |
+|---|---|---|
+| 断言对象 | 接口返回的**编码集合** | 页面上**真正渲染出来的行** |
+| 只有它能看见 | WHERE 条件的每一种表达式 / 组合 | 树被过滤后**塌成什么形状**（父级被滤掉，子节点被提到顶层）、空态长什么样、界面上那几条语义告警在不在、在界面上配完之后到底生不生效 |
+
+数据权限最容易出的不是「算错」而是「配错」，而「配错了看不出来」只能由界面兜住 ——
+所以 `rule-mixed-warn`（一条 OR 规则会抬掉全部 AND）、`scope-inert`（角色关了过滤开关，
+绑了范围也白绑）这类提示**本身**就有测试，删掉会红。
+
+**③ 它们抓到过真 bug，不是摆设。** 前四条是**测试第一次跑就红**、修完才绿的；
+最后一行是给两个真出现过的 bug 补的回归测试，做过变异验证（把修复打回去，用例会重新失败）：
+
+| 抓到 / 钉住的 | 表现 |
+|---|---|
+| `UniversalStr` / `UniversalText` 没有 `python_type` | `TypeDecorator` 不转发给 impl，基类直接 `raise NotImplementedError` —— **任何打在字符串列上的数据权限规则都让接口 500** |
+| `${now}` 存的是函数对象而不是调用结果 | TypeError 被 `except` 吞掉，`'${now}'` 字面量被拼进 SQL |
+| 用户没有部门时 `${dept_id}` 解析成 None | 同样被吞，SQL Server 报 `converting varchar to bigint` → 500 |
+| `<Activity>` 切回可见时会把 effect 整个销毁重建 | 一条 `useEffect(..., [foldAll])` 每次切回来都误判成「值变了」，把用户手动折叠的节点清空 |
+| 去重上传丢文件名 / 文件列表缺 `download_url` | 两个真出现过的回归 |
+
+**已知边界**：没有做视觉回归；两套都不在 CI 里跑（都需要真实 SQL Server 实例）。
+测试库要先建，见 [CLAUDE.md](./CLAUDE.md) 的「跑测试」与
+[`apps/web/e2e/AGENTS.md`](./apps/web/e2e/AGENTS.md)。
 
 ## 起服务
 
@@ -210,8 +277,8 @@ cd apps/api && uv run fba init && cd ../..
 pnpm dev                                                # api :8000 · web :1125
 ```
 
-`apps/api` 也是 workspace 成员（`package.json` 里只有 `dev` / `test` / `test:db` 三个脚本，零 JS 依赖），所以 `turbo dev`
-会把前后端一起拉起来。单起一边用 `pnpm --filter api dev` / `pnpm --filter web dev`。
+`apps/api` 也是 workspace 成员（`package.json` 里只有 `dev` / `test` / `db:*` / `celery:*`
+这些薄封装，零 JS 依赖），所以 `turbo dev` 会把前后端一起拉起来。单起一边用 `pnpm --filter api dev` / `pnpm --filter web dev`。
 
 > ⚠️ `.env.example` 默认 `DATABASE_PK_MODE='snowflake'`，别改成 `autoincrement` ——
 > `backend/sql/sqlserver/` 下只提供了雪花版种子（`init_snowflake_test_data.sql`），
@@ -229,18 +296,20 @@ docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 
 ```bash
 pnpm typecheck                                          # 全仓库 tsc
-pnpm test                                               # 后端 pytest（24 条）
+pnpm test                                               # 后端 pytest（124 条）
+pnpm e2e                                                # 前端 Playwright（40 条）
 pnpm i18n:check && pnpm i18n:jsx                        # 语言包校验 + 裸中文扫描
+pnpm ctx:check                                          # 工程文档里的死引用 / 死链接
 ```
 
-> ⚠️ **测试跑在独立的 `fba_test` 库上**，第一次要先建库：见 [CLAUDE.md](./CLAUDE.md) 的「跑测试」。
-> 模型改过之后用 `pnpm --filter api test:db` 重建 —— `create_all` 只建不改，
-> 不重建就会撞一片 `Invalid column name`。
->
-> **前端目前没有自动化测试**，这是已知缺口。
+> ⚠️ **两套测试都跑在独立的 `fba_test` 库上**（E2E 连的也是它，只是走另一套端口和
+> 另一个 Redis db），第一次要先建库：见 [CLAUDE.md](./CLAUDE.md) 的「跑测试」。
+> 模型改过之后用 `pnpm --filter api test:db` 重建，再 `pnpm --filter api db:upgrade`
+> 升到 head —— `create_all` 只建不改，不重建就会撞一片 `Invalid column name`。
 
 > ⚠️ 后端开了 `--reload`（只监听 `backend/`），改 Python 代码会自动重启。
-> 但**改模型不等于改表** —— 新增或删除列仍要手写 `ALTER` 或重建库，reload 帮不上。
+> 但**改模型不等于改表** —— 表结构改动一律走 alembic（`pnpm db:revision '...'` +
+> `pnpm db:upgrade`），reload 只是重新 import 模型，不会去动库。
 
 > ⚠️ 前端端口固定在 1125（`strictPort`，被占时直接报错而不是漂到 1126）。
 > 换端口要同时改 `vite.config.ts`、后端 `CORS_ALLOWED_ORIGINS`、
@@ -280,6 +349,7 @@ packages/i18n/     语言包 + i18next 实例 + 校验脚本（最底层，不�
 `row-level-security` · `data-permission` · `multi-tab` · `sqlalchemy` · `sql-server` ·
 `mssql` · `mysql` · `postgresql` · `redis` · `celery` · `socket-io` · `opentelemetry` ·
 `jwt` · `i18n` · `monorepo` · `pnpm-workspace` · `turborepo` · `uv` · `ruff` · `electron` ·
+`playwright` · `pytest` · `e2e-testing` · `end-to-end-tests` · `alembic` ·
 `fastapi-best-architecture`
 
 ## 许可
