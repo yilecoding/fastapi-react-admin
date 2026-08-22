@@ -10,6 +10,7 @@ from backend.app.admin.model import File
 from backend.app.admin.schema.file import CreateFileRelationParam, DeleteFileRelationParam
 from backend.common.enums import FileType
 from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.log import log
 from backend.common.pagination import paging_data
 from backend.utils.file_ops import delete_file, upload_file, upload_file_verify, upload_root
@@ -29,7 +30,7 @@ class FileService:
         """
         file = await file_dao.get(db, pk)
         if not file:
-            raise errors.NotFoundError(msg='文件不存在')
+            raise errors.NotFoundError(msg=t('error.file.not_found'))
         return file
 
     @staticmethod
@@ -76,7 +77,7 @@ class FileService:
         :return:
         """
         if file_type != FileType.image:
-            raise errors.RequestError(msg='公开直链只支持图片，其他类型请走普通上传')
+            raise errors.RequestError(msg=t('error.file.public_link_images_only'))
 
     @staticmethod
     async def upload(*, db: AsyncSession, file: UploadFile, user_id: int, public: bool = False) -> File:
@@ -152,7 +153,7 @@ class FileService:
         """
         file = await file_dao.get(db, pk)
         if not file:
-            raise errors.NotFoundError(msg='文件不存在')
+            raise errors.NotFoundError(msg=t('error.file.not_found'))
 
         # 根目录跟着 is_public 走 —— 两棵树里的相对路径长得一模一样，
         # 写死 UPLOAD_DIR 的话公开子树里的文件在这个接口上一律 404
@@ -163,13 +164,13 @@ class FileService:
         # 这个接口就成了任意文件读取
         if not target.resolve().is_relative_to(root.resolve()):
             log.error(f'拒绝越界的读取路径：{file.path!r} → {target}')
-            raise errors.NotFoundError(msg='文件不存在')
+            raise errors.NotFoundError(msg=t('error.file.not_found'))
 
         if not target.is_file():
             # 库里有记录、盘上没文件：多半是手工清理过 static/upload。
             # 报「文件不存在」而不是 500 —— 这是数据状态问题，不是程序崩了
             log.warning(f'文件记录 {file.id} 指向的磁盘文件缺失：{target}')
-            raise errors.NotFoundError(msg='文件已丢失，请重新上传')
+            raise errors.NotFoundError(msg=t('error.file.missing'))
 
         return file, target
 
@@ -254,7 +255,7 @@ class FileService:
         """
         files = await file_dao.get_by_ids(db, obj.file_ids)
         if len(files) != len(set(obj.file_ids)):
-            raise errors.NotFoundError(msg='部分文件不存在')
+            raise errors.NotFoundError(msg=t('error.file.some_not_found'))
 
         existing = set(await file_relation_dao.get_existing_file_ids(db, obj.target_type, obj.target_id, obj.file_ids))
         # 幂等：已经挂上的跳过而不是报错。附件面板重复提交是常态

@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.pagination import paging_data
 from backend.plugin.notice.crud.crud_notice import notice_dao
 from backend.plugin.notice.model import Notice
@@ -25,7 +26,7 @@ class NoticeService:
 
         notice = await notice_dao.get(db, pk)
         if not notice:
-            raise errors.NotFoundError(msg='通知公告不存在')
+            raise errors.NotFoundError(msg=t('error.notice.not_found'))
         return notice
 
     @staticmethod
@@ -79,7 +80,7 @@ class NoticeService:
 
         notice = await notice_dao.get(db, pk)
         if not notice:
-            raise errors.NotFoundError(msg='通知公告不存在')
+            raise errors.NotFoundError(msg=t('error.notice.not_found'))
         count = await notice_dao.update(db, pk, obj)
         return count
 

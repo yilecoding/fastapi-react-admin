@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.common.cache.decorator import cache_invalidate, cached
 from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.pagination import paging_data
 from backend.core.conf import settings
 from backend.plugin.config.crud.crud_config import config_dao
@@ -31,7 +32,7 @@ class ConfigService:
         """
         config = await config_dao.get(db, pk)
         if not config:
-            raise errors.NotFoundError(msg='参数配置不存在')
+            raise errors.NotFoundError(msg=t('error.config.not_found'))
         return config
 
     @staticmethod
@@ -71,7 +72,7 @@ class ConfigService:
         """
         config = await config_dao.get_by_key(db, obj.key)
         if config:
-            raise errors.ConflictError(msg=f'参数配置 {obj.key} 已存在')
+            raise errors.ConflictError(msg=t('error.config.key_exists', key=obj.key))
         await config_dao.create(db, obj)
 
     @staticmethod
@@ -87,11 +88,11 @@ class ConfigService:
         """
         config = await config_dao.get(db, pk)
         if not config:
-            raise errors.NotFoundError(msg='参数配置不存在')
+            raise errors.NotFoundError(msg=t('error.config.not_found'))
         if config.key != obj.key:
             config = await config_dao.get_by_key(db, obj.key)
             if config:
-                raise errors.ConflictError(msg=f'参数配置 {obj.key} 已存在')
+                raise errors.ConflictError(msg=t('error.config.key_exists', key=obj.key))
         count = await config_dao.update(db, pk, obj)
         return count
 
@@ -109,17 +110,17 @@ class ConfigService:
         config_map = {config.id: config for config in configs}
         for obj in objs:
             if obj.id not in config_map:
-                raise errors.NotFoundError(msg='参数配置不存在')
+                raise errors.NotFoundError(msg=t('error.config.not_found'))
 
         changed_keys = [obj.key for obj in objs if config_map[obj.id].key != obj.key]
         if len(changed_keys) != len(set(changed_keys)):
-            raise errors.ConflictError(msg='参数配置键名重复')
+            raise errors.ConflictError(msg=t('error.config.duplicate_key'))
 
         key_configs = await config_dao.get_all_by_keys(db, list(set(changed_keys)))
         key_owner = {config.key: config.id for config in key_configs}
         for obj in objs:
             if config_map[obj.id].key != obj.key and obj.key in key_owner and key_owner[obj.key] != obj.id:
-                raise errors.ConflictError(msg=f'参数配置 {obj.key} 已存在')
+                raise errors.ConflictError(msg=t('error.config.key_exists', key=obj.key))
 
         count = await config_dao.bulk_update(db, objs)
         return count
