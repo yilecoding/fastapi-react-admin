@@ -17,7 +17,9 @@
     "db:revision": "pnpm --filter api db:revision",
     "db:current": "pnpm --filter api db:current",
     "test": "turbo test",
-    "e2e": "turbo e2e"
+    "e2e": "turbo e2e",
+    "e2e:install": "pnpm --filter web exec playwright install chromium",
+    "install:all": "pnpm install && pnpm --filter api exec uv sync --group dev && pnpm e2e:install"
   },
   "devDependencies": {
     "prettier": "^3.9.6",
