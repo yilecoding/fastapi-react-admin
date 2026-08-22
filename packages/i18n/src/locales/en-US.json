@@ -57,8 +57,6 @@
   "menu:/scheduler/record": "Task history",
   "menu:/system": "System",
   "menu:/system/data-permission": "Data permissions",
-  "menu:/system/data-rule": "Data rules",
-  "menu:/system/data-scope": "Data scopes",
   "menu:/system/dept": "Departments",
   "menu:/system/menu": "Menus",
   "menu:/system/plugin": "Plugins",

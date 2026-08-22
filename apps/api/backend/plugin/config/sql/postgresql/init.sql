@@ -3,7 +3,7 @@ declare
     config_menu_id bigint;
 begin
     insert into sys_menu (title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
-    values ('config.menu', 'PluginConfig', '/plugins/config', 7, 'codicon:symbol-parameter', 1, null, 1, 1, '', null, (select id from sys_menu where name = 'System'), now(), null);
+    values ('参数配置', 'PluginConfig', '/plugins/config', 7, 'codicon:symbol-parameter', 1, null, 1, 1, '', null, (select id from sys_menu where name = 'System'), now(), null);
 
     insert into sys_menu (title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
     values

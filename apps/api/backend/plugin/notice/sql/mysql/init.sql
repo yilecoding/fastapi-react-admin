@@ -1,7 +1,7 @@
 set @system_menu_id = (select id from sys_menu where name = 'System');
 
 insert into sys_menu (title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
-values ('notice.menu', 'PluginNotice', '/plugins/notice', 9, 'fe:notice-push', 1, null, 1, 1, '', null, @system_menu_id, now(), null);
+values ('通知公告', 'PluginNotice', '/plugins/notice', 9, 'fe:notice-push', 1, null, 1, 1, '', null, @system_menu_id, now(), null);
 
 set @notice_menu_id = LAST_INSERT_ID();
 

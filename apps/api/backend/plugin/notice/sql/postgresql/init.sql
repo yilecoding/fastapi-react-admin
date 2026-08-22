@@ -3,7 +3,7 @@ declare
     notice_menu_id bigint;
 begin
     insert into sys_menu (title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
-    values ('notice.menu', 'PluginNotice', '/plugins/notice', 9, 'fe:notice-push', 1, null, 1, 1, '', null, (select id from sys_menu where name = 'System'), now(), null);
+    values ('通知公告', 'PluginNotice', '/plugins/notice', 9, 'fe:notice-push', 1, null, 1, 1, '', null, (select id from sys_menu where name = 'System'), now(), null);
 
     insert into sys_menu (title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
     values
