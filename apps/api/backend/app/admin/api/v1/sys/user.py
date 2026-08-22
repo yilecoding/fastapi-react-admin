@@ -14,6 +14,7 @@ from backend.app.admin.schema.user import (
 from backend.app.admin.service.user_service import user_service
 from backend.common.enums import UserPermissionType
 from backend.common.pagination import DependsPagination, PageData
+from backend.common.schema import IanaTimeZone
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
 from backend.common.security.jwt import DependsJwtAuth, DependsSuperUser
 from backend.common.security.permission import RequestPermission
@@ -149,6 +150,24 @@ async def update_user_avatar(
     avatar: Annotated[HttpUrl | None, Body(embed=True, description='头像地址，null 表示清空')] = None,
 ) -> ResponseModel:
     count = await user_service.update_avatar(db=db, user_id=request.user.id, avatar=avatar)
+    if count > 0:
+        return response_base.success()
+    return response_base.fail()
+
+
+@router.put('/me/timezone', summary='更新当前用户显示时区', dependencies=[DependsJwtAuth])
+async def update_user_timezone(
+    db: CurrentSessionTransaction,
+    request: Request,
+    # 只挂 DependsJwtAuth，不挂权限码：这是**个人偏好**，和头像/邮箱同一类，
+    # 每个登录用户都该能改自己的，不需要管理员授权。
+    #
+    # 入参类型是 `IanaTimeZone` 而不是裸 str —— 校验必须在写入侧做，
+    # 理由见 `common/schema.py` 里那个校验函数的注释（存进一个拼错的时区名，
+    # 那个用户所有带时间的页面都会白屏，而且自己改不回来）。
+    timezone: Annotated[IanaTimeZone, Body(embed=True, description='IANA 时区标识，如 Asia/Shanghai')],
+) -> ResponseModel:
+    count = await user_service.update_timezone(db=db, user_id=request.user.id, tz=timezone)
     if count > 0:
         return response_base.success()
     return response_base.fail()

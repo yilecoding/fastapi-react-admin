@@ -55,6 +55,14 @@ const EMPTY = '—'
 let legacyTimeZone = 'Asia/Shanghai'
 
 /**
+ * 兜底时区，同时也是 `sys_user.timezone` 的默认值。
+ *
+ * 用在两处：解析不出时区的串按它解释；浏览器老到没有
+ * `Intl.supportedValuesOf` 时，时区选择器至少还能列出这一个。
+ */
+export const BASE_TIME_ZONE = 'Asia/Shanghai'
+
+/**
  * 显示时区。默认跟随浏览器/操作系统。
  *
  * 之所以做成可设置而不是每次读浏览器：将来支持「用户自己选时区」时，

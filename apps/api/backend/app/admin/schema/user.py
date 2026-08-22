@@ -7,7 +7,8 @@ from typing_extensions import Self
 from backend.app.admin.schema.dept import GetDeptDetail
 from backend.app.admin.schema.role import GetRoleWithRelationDetail
 from backend.common.enums import StatusType
-from backend.common.schema import CustomEmailStr, CustomPhoneNumber, SchemaBase, ser_string
+from backend.common.schema import CustomEmailStr, CustomPhoneNumber, IanaTimeZone, SchemaBase, ser_string
+from backend.core.conf import settings
 
 
 class AuthSchemaBase(SchemaBase):
@@ -89,6 +90,13 @@ class GetUserInfoDetail(UserInfoSchemaBase):
     is_multi_login: bool = Field(description='是否允许多端登录')
     join_time: datetime = Field(description='加入时间')
     last_login_time: datetime | None = Field(None, description='最后登录时间')
+    # 🔴 **必须带默认值，不能写成必填。** 这个 DTO 的子类
+    # `GetUserInfoWithRelationDetail` 整份序列化后存在 `fba:user:<id>`，
+    # 而旧缓存里没有这个字段 —— 写成必填的话每个已登录用户的每个请求都会
+    # `ValidationError: timezone Field required` → **全站 500**，而代码和数据库
+    # 都是对的（见 apps/api/AGENTS.md 里 dept.code 那次的实测记录）。
+    # 带默认值时旧缓存能过校验，值先回落到默认时区，缓存自然过期后就对了。
+    timezone: str = Field(settings.DATETIME_TIMEZONE, description='显示时区(IANA 标识)')
 
 
 class GetUserInfoWithRelationDetail(GetUserInfoDetail):

@@ -206,6 +206,7 @@ export function t(key: string, vars?: Record<string, unknown>): string {
  * 不要拿字符串比大小 —— 那三种写法只在「后端和用户都在东八区」时才对。
  */
 export {
+  BASE_TIME_ZONE,
   dateKey,
   formatDateTime,
   formatDateTimeShort,

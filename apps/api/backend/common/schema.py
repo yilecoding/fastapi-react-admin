@@ -1,6 +1,8 @@
+import zoneinfo
+
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, validate_email
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, validate_email
 
 from backend.common.enums import PrimaryKeyType
 from backend.core.conf import settings
@@ -13,6 +15,27 @@ CustomPhoneNumber = Annotated[str, Field(pattern=r'^1[3-9]\d{9}$')]
 # 哪个是「名字」。首字符限字母是为了留出「纯数字」这个形态 —— 否则 '123' 这种编码
 # 在任何一处被 Number() 掉都不会被发现（同硬纪律 6 的雪花 ID 坑）。
 CustomCode = Annotated[str, Field(min_length=2, max_length=32, pattern=r'^[A-Z][A-Z0-9_]*$')]
+
+
+def _validate_iana_timezone(v: str) -> str:
+    """
+    校验 IANA 时区标识（`Asia/Shanghai` 这种）。
+
+    **必须校验，不能收裸 str。** 这个值会被前端直接交给
+    `Intl.DateTimeFormat(..., { timeZone })`，而那个 API 对不认识的时区是**抛异常**
+    （`RangeError: Invalid time zone specified`）—— 存进去一个拼错的名字，
+    受害者是那个用户自己：他每次打开任何带时间的页面都白屏，而且改不回来
+    （偏好设置页自己也要渲染时间）。写入侧拦住是唯一的时机。
+    """
+    if v not in zoneinfo.available_timezones():
+        raise ValueError(f'无效的时区标识：{v}')
+    return v
+
+
+# 校验放在写入侧。取值范围就是本机 tzdata 的全集，不自己维护白名单 ——
+# 前端的选项来自浏览器的 `Intl.supportedValuesOf('timeZone')`，两边都跟着
+# 各自的 tzdata 走，不会因为我们漏更新一张表而对不上。
+IanaTimeZone = Annotated[str, Field(max_length=64), AfterValidator(_validate_iana_timezone)]
 
 
 class CustomEmailStr(EmailStr):
