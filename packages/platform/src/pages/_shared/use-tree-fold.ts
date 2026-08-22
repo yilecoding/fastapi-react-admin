@@ -13,14 +13,27 @@ import * as React from 'react'
  */
 export function useTreeFold(foldAll: boolean) {
   // 存的是「与默认态相反」的节点 —— 这样切换默认态时只要清空它
-  const [flipped, setFlipped] = React.useState<Set<string>>(() => {
-    // eslint-disable-next-line no-console
-    console.log('[E2E_PROBE] useTreeFold 初始化/重新 mount，foldAll=', foldAll)
-    return new Set()
-  })
+  const [flipped, setFlipped] = React.useState<Set<string>>(new Set())
 
-  // 默认态一变（点了展开/折叠全部），逐个覆盖就该失效
-  React.useEffect(() => setFlipped(new Set()), [foldAll])
+  // 默认态一变（点了展开/折叠全部），逐个覆盖就该失效。
+  //
+  // 🔴 不能只靠依赖数组判断「变了没有」——`<Activity mode="hidden">` 切回可见时会把
+  // effect 整个销毁重建（`tab-outlet.tsx` 那条注释写的「销毁 effects」），
+  // 一个新建的 effect 无论依赖数组内容是什么，**首次挂载都会跑一次**。
+  // 于是切一次 tab 出去再回来，这里就会误判成「foldAll 变了」，把用户手动展开/折叠的
+  // 节点全部清空——`flipped` 这个 state 本身好好地被 Activity 保活着，
+  // 是这个 effect 自己把它清空的。E2E 测试实测踩到过（部门管理，折叠一个节点、
+  // 切到角色管理、切回来，折叠状态丢了）。
+  //
+  // 用 ref 记住「上一次真正生效的 foldAll」，effect 重跑时先比对，值没变就什么都不做——
+  // ref 和 state 一样是 Activity 保活的（只有 effect 本身被摘掉重建），这条比对才成立。
+  const lastFoldAll = React.useRef(foldAll)
+  React.useEffect(() => {
+    if (lastFoldAll.current !== foldAll) {
+      lastFoldAll.current = foldAll
+      setFlipped(new Set())
+    }
+  }, [foldAll])
 
   const isOpen = React.useCallback(
     (id: string) => (flipped.has(id) ? foldAll : !foldAll),
@@ -32,14 +45,9 @@ export function useTreeFold(foldAll: boolean) {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
-      // eslint-disable-next-line no-console
-      console.log('[E2E_PROBE] toggle', id, '-> flipped now:', [...next])
       return next
     })
   }, [])
-
-  // eslint-disable-next-line no-console
-  if (flipped.size > 0) console.log('[E2E_PROBE] render，flipped=', [...flipped], 'foldAll=', foldAll)
 
   return { isOpen, toggle, dirty: flipped.size > 0 }
 }
