@@ -7,6 +7,7 @@ import { Button } from '@admin/ui/components/button'
 import {
   Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from '@admin/ui/components/sheet'
+import { Separator } from '@admin/ui/components/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
 import { cn } from '@admin/ui/lib/utils'
 
@@ -179,8 +180,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section className="flex flex-col gap-2">
       <h3 className="flex items-center gap-2 text-sm font-semibold">
-        <span className="h-3.5 w-0.5 rounded-full bg-primary" />
-        {title}
+        <span className="h-3.5 w-[3px] shrink-0 rounded-full bg-primary" aria-hidden />
+        <span className="shrink-0">{title}</span>
+        <Separator className="ms-1 min-w-0 flex-1" />
       </h3>
       {children}
     </section>
