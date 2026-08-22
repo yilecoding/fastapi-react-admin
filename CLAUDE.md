@@ -633,7 +633,9 @@ pages/xxx/
 
 角色管理是这一类的样板（`pages/role/`）：左边是**选择器**不是表格，
 右边按 Tab 分面板。配一份权限不该是「开抽屉 → 存 → 关抽屉 → 换角色再来一遍」。
-数据权限（`pages/data-permission/`）是同一套：左范围 / 右规则。
+另外两个同构：数据权限（`pages/data-permission/`，左范围 / 右规则）、
+数据字典（`pages/dict/`，左类型 / 右字典项）。**三个页的滚动骨架必须一致**——
+它们长得一样，行为不一样的话就是「同一个东西有三种脾气」。
 
 - 选中项、当前 Tab、子表页码**全进 URL** —— 主从页的 search schema 比列表页长
 - 面板用 `TabsContent keepMounted`：切走再切回来，没保存的草稿还在
@@ -665,7 +667,10 @@ pages/xxx/
 无条件写会把三个面板**一起显示出来**。要写成
 `content-scroll:lg:[&:not([hidden])]:flex`。
 
-面板内部（`perm-matrix` / `role-scopes` / `role-users`）各自再走一遍
+三个页的断点都用 **`lg`**（不是 `md`）：`md`（768px）下右栏只剩约 170px，
+字典项 / 规则表根本塞不下 —— 断点要按「右栏还够不够用」定，不是按左栏宽度定。
+
+面板内部（`perm-matrix` / `role-scopes` / `role-users` / `rules-panel` / 字典项表）各自再走一遍
 「根 `min-h-0 flex-1` → 工具条 `shrink-0` → 表格框变视区」，和列表页同一套
 （见「列表页：只滚表格行」）。工具条原来的 `sticky top-0` **保留**，只在定高情形下
 `content-scroll:lg:static` —— 它那时已经在滚动区外面了，留着 sticky 只是白占一个层叠上下文。
