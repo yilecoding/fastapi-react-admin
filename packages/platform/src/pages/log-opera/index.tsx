@@ -2,12 +2,13 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
-import { IconDownload } from '@tabler/icons-react'
+import { IconDownload, IconLoader2 } from '@tabler/icons-react'
 
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
-import { DataTable } from '@admin/ui/components/data-table'
+import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 import { cn } from '@admin/ui/lib/utils'
 
 import { api, type PageData } from '../../api-client/client'
@@ -58,22 +59,55 @@ const METHOD_CLASS: Record<string, string> = {
 /** 和登录日志同一套写法：`key` 是地址栏参数名，`rangeParams` 才是接口入参名 */
 const FIELDS: FilterField[] = [
   {
-    key: 'username', label: '操作人', type: 'text', group: '账号',
-    defaultVisible: true, placeholder: '模糊匹配',
+    key: 'username',
+    label: '操作人',
+    type: 'text',
+    group: '账号',
+    defaultVisible: true,
+    placeholder: '模糊匹配',
   },
-  { key: 'ip', label: '操作 IP', type: 'text', group: '账号', defaultVisible: true },
   {
-    key: 'status', label: '结果', type: 'select', group: '结果', defaultVisible: true,
+    key: 'ip',
+    label: '操作 IP',
+    type: 'text',
+    group: '账号',
+    defaultVisible: true,
+  },
+  {
+    key: 'status',
+    label: '结果',
+    type: 'select',
+    group: '结果',
+    defaultVisible: true,
     options: [
       { value: 1, label: '成功' },
       { value: 0, label: '异常' },
     ],
   },
   {
-    key: 'time', label: '操作时间', type: 'dateTimeRange', group: '时间',
-    defaultVisible: true, rangeParams: ['start_time', 'end_time'],
+    key: 'time',
+    label: '操作时间',
+    type: 'dateTimeRange',
+    group: '时间',
+    defaultVisible: true,
+    rangeParams: ['start_time', 'end_time'],
   },
 ]
+
+const COLUMN_LABELS = {
+  seq: '序号',
+  opera_time: '操作时间',
+  username: '操作人',
+  title: '操作内容',
+  method: '方法',
+  path: '接口',
+  status: '状态',
+  ip: '操作 IP',
+  location: '操作地点',
+  cost_time: '耗时',
+  browser: '浏览器',
+  os: '终端系统',
+}
 
 export type OperaLogSearch = {
   page?: number
@@ -124,7 +158,12 @@ export function LogOperaPage({
     [onSearchChange, search]
   )
 
-  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, keep: ['hide'] })
+  const q = useQuerySearch({
+    fields: FIELDS,
+    search,
+    onSearchChange,
+    keep: ['hide'],
+  })
 
   const qs = buildQuery(q.params, search.page, search.size)
   const { data, isPending, isFetching } = useQuery({
@@ -147,7 +186,7 @@ export function LogOperaPage({
         id: 'seq',
         header: t('序号'),
         cell: ({ row }) => (
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+          <span className="font-mono text-xs text-muted-foreground tabular-nums">
             {(page - 1) * size + row.index + 1}
           </span>
         ),
@@ -160,7 +199,7 @@ export function LogOperaPage({
             type="button"
             data-testid={`open-detail-${row.original.id}`}
             onClick={() => setDetail(row.original)}
-            className="font-mono text-xs tabular-nums text-primary underline-offset-2 hover:underline"
+            className="font-mono text-xs text-primary tabular-nums underline-offset-2 hover:underline"
           >
             {getValue()}
           </button>
@@ -176,13 +215,20 @@ export function LogOperaPage({
         // title 是后端接口的 summary（中文），库里存的就是中文原文 ——
         // 而「中文原文即 key」，所以在渲染处 t() 就能翻，历史记录也一样能翻
         cell: ({ getValue }) => (
-          <span className="block max-w-44 truncate text-sm font-medium" title={t(getValue())}>{t(getValue())}</span>
+          <span className="block max-w-44 truncate text-sm font-medium" title={t(getValue())}>
+            {t(getValue())}
+          </span>
         ),
       }),
       col.accessor('method', {
         header: t('方法'),
         cell: ({ getValue }) => (
-          <span className={cn('inline-flex rounded px-1.5 py-0.5 font-mono text-[11px] ring-1', METHOD_CLASS[getValue()] ?? 'bg-muted ring-border')}>
+          <span
+            className={cn(
+              'inline-flex rounded px-1.5 py-0.5 font-mono text-[11px] ring-1',
+              METHOD_CLASS[getValue()] ?? 'bg-muted ring-border'
+            )}
+          >
             {getValue()}
           </span>
         ),
@@ -190,7 +236,9 @@ export function LogOperaPage({
       col.accessor('path', {
         header: t('接口'),
         cell: ({ getValue }) => (
-          <span className="block max-w-52 truncate font-mono text-xs text-muted-foreground" title={getValue()}>{getValue()}</span>
+          <span className="block max-w-52 truncate font-mono text-xs text-muted-foreground" title={getValue()}>
+            {getValue()}
+          </span>
         ),
       }),
       col.accessor('status', {
@@ -203,7 +251,9 @@ export function LogOperaPage({
                 <span className={cn('size-1.5 rounded-full', ok ? 'bg-emerald-500' : 'bg-destructive')} />
                 {ok ? t('成功') : t('异常')}
               </StatusPill>
-              <Badge variant="outline" className="font-mono font-normal">{row.original.code}</Badge>
+              <Badge variant="outline" className="font-mono font-normal">
+                {row.original.code}
+              </Badge>
             </div>
           )
         },
@@ -222,7 +272,12 @@ export function LogOperaPage({
         cell: ({ getValue }) => {
           const ms = getValue()
           return (
-            <span className={cn('font-mono text-xs tabular-nums', ms > 500 ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
+            <span
+              className={cn(
+                'font-mono text-xs tabular-nums',
+                ms > 500 ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
+              )}
+            >
               {ms.toFixed(1)} ms
             </span>
           )
@@ -232,7 +287,9 @@ export function LogOperaPage({
         id: 'browser',
         header: t('浏览器'),
         cell: ({ getValue }) => (
-          <span className="block max-w-28 truncate text-sm text-muted-foreground" title={getValue()}>{getValue()}</span>
+          <span className="block max-w-28 truncate text-sm text-muted-foreground" title={getValue()}>
+            {getValue()}
+          </span>
         ),
       }),
       col.accessor((r) => r.os ?? '—', {
@@ -264,6 +321,7 @@ export function LogOperaPage({
   const [exporting, setExporting] = React.useState(false)
   const [exportError, setExportError] = React.useState<string | null>(null)
   async function handleExport() {
+    if (exporting) return // 按钮不再 disabled（见下方 tooltip 处注释），重入守卫挪到这里
     setExporting(true)
     setExportError(null)
     try {
@@ -271,29 +329,55 @@ export function LogOperaPage({
       let p = 1
       // 上限 20 页 ×200 = 4000 条，避免误点导出把几十万条日志拉下来
       for (; p <= 20; p += 1) {
-        const chunk = await api.GET<PageData<OperaLog>>(
-          `/api/v1/logs/opera?${buildQuery(q.params, p, 200)}`
-        )
+        const chunk = await api.GET<PageData<OperaLog>>(`/api/v1/logs/opera?${buildQuery(q.params, p, 200)}`)
         all.push(...chunk.items)
         if (p >= chunk.total_pages) break
       }
       // ⚠️ 逐条写字面量而不是 `[...].map(t)` —— `t(变量)` 校验器看不见（硬规则 2）
       const head = [
-        t('序号'), t('操作时间'), t('操作人'), t('操作内容'), t('方法'), t('接口'),
-        t('状态'), t('状态码'), t('操作 IP'), t('操作地点'), t('耗时(ms)'),
-        t('浏览器'), t('终端系统'), 'Trace ID',
+        t('序号'),
+        t('操作时间'),
+        t('操作人'),
+        t('操作内容'),
+        t('方法'),
+        t('接口'),
+        t('状态'),
+        t('状态码'),
+        t('操作 IP'),
+        t('操作地点'),
+        t('耗时(ms)'),
+        t('浏览器'),
+        t('终端系统'),
+        'Trace ID',
       ]
       const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`
       const lines = [head.join(',')]
       all.forEach((r, i) => {
-        lines.push([
-          i + 1, r.opera_time, r.username ?? t('匿名'), t(r.title), r.method, r.path,
-          r.status === 1 ? t('成功') : t('异常'), r.code, r.ip, formatLocation(r),
-          r.cost_time.toFixed(1), r.browser ?? '', r.os ?? '', r.trace_id,
-        ].map(esc).join(','))
+        lines.push(
+          [
+            i + 1,
+            r.opera_time,
+            r.username ?? t('匿名'),
+            t(r.title),
+            r.method,
+            r.path,
+            r.status === 1 ? t('成功') : t('异常'),
+            r.code,
+            r.ip,
+            formatLocation(r),
+            r.cost_time.toFixed(1),
+            r.browser ?? '',
+            r.os ?? '',
+            r.trace_id,
+          ]
+            .map(esc)
+            .join(',')
+        )
       })
       // ﻿ 是 BOM —— 没有它 Excel 打开中文会乱码
-      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+      const blob = new Blob(['﻿' + lines.join('\n')], {
+        type: 'text/csv;charset=utf-8',
+      })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -316,77 +400,118 @@ export function LogOperaPage({
               于是里面的表格框变成定高视区：筛选栏 / 表头 / 分页条钉住，只有行滚。
               整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
         <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          <PageHeader title={t("操作日志")} description={t("记录后台每一次接口调用的请求、响应与耗时。点操作时间看完整详情。")} />
-
-          {/* 查询区是页面级块，不塞进 DataTable 的 toolbar 槽（那是一行） */}
-          <QueryBar
-            fields={FIELDS}
-            value={q.value}
-            onChange={q.setValue}
-            onSearch={q.submit}
-            onReset={q.reset}
-            applied={q.applied}
-            loading={isFetching}
-            viewsStorageKey="qb:log-opera"
+          <PageHeader
+            title={t('操作日志')}
+            description={t('记录后台每一次接口调用的请求、响应与耗时。点操作时间看完整详情。')}
           />
 
-          {exportError && (
-            <p
-              role="alert"
-              data-testid="export-error"
-              className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-            >
-              {exportError}
-            </p>
-          )}
+          {/*
+            🔴 查询区和表格是**同一个块的两半**（筛选 → 结果），所以包一层、
+            用 `gap-4`（16px）而不是页面级块之间的 `gap-4 md:gap-6`（24px）：
+            查询区内部两行只隔 8px，紧接着就跳 24px 到表格，节奏是断的。
 
-          {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
-              也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
-          <div
-            data-testid="opera-table"
-            data-fetching={isFetching}
-            className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-          >
-            <DataTable
-              table={table}
-              rows={table.getRowModel().rows}
-              columnCount={columns.length}
-              emptyMessage={t("没有匹配的操作记录")}
-              emptyAction={
-                hasFilter ? (
-                  <ResetButton
-                    variant="outline" testId="empty-clear-filter" label={t("清除筛选")}
-                    onClick={q.reset}
-                  />
-                ) : undefined
-              }
-              loading={isPending}
-              busy={isFetching && !isPending}
-              skeletonRows={8}
+            ⚠️ 这一层也必须能收缩 —— 「只滚表格行」那条链断一层就整条失效。
+          */}
+          <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+            {/* 查询区不塞进 DataTable 的 toolbar 槽（那是一行） */}
+            <QueryBar
+              fields={FIELDS}
+              value={q.value}
+              onChange={q.setValue}
+              onSearch={q.submit}
+              onReset={q.reset}
+              applied={q.applied}
+              loading={isFetching}
               actions={
                 <>
-                  <Button size="sm" variant="outline" disabled={exporting} data-testid="export-csv" onClick={handleExport}>
-                    <IconDownload className="size-4" />
-                    {exporting ? t('导出中…') : t('导出 CSV')}
-                  </Button>
+                  {/*
+                  这三个是**次要的工具动作**，只留图标：这一行已经有六个控件，
+                  留着文字会把主动作（搜索）挤到边上。图标按钮一律配
+                  tooltip + aria-label。
+                */}
+                  <Tooltip>
+                    {/*
+                    ⚠️ 不能用 disabled 挡重复点击：buttonVariants 基础类带
+                    disabled:pointer-events-none，hover 打不开 tooltip —— 图标按钮
+                    一旦禁用就只剩一个转圈图标、任何地方都没有文字。改成
+                    aria-busy + handleExport 里的重入守卫。
+                  */}
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="size-8 p-0"
+                          aria-busy={exporting}
+                          data-testid="export-csv"
+                          aria-label={exporting ? t('导出中…') : t('导出 CSV')}
+                          onClick={handleExport}
+                        />
+                      }
+                    >
+                      {exporting ? (
+                        <IconLoader2 className="size-4 animate-spin" />
+                      ) : (
+                        <IconDownload className="size-4" />
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>{exporting ? t('导出中…') : t('导出 CSV')}</TooltipContent>
+                  </Tooltip>
                   {/* 日志只增不减，之前界面上没有任何清理入口 —— 权限码 log:opera:clear 一直闲置 */}
-                  <ClearLogsButton kind="opera" filtered={hasFilter} total={data?.total ?? 0} />
+                  <ClearLogsButton kind="opera" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
+                  {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
+                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} iconOnly />
                 </>
               }
-              columnLabels={{
-                seq: '序号', opera_time: '操作时间', username: '操作人', title: '操作内容',
-                method: '方法', path: '接口', status: '状态', ip: '操作 IP',
-                location: '操作地点', cost_time: '耗时', browser: '浏览器', os: '终端系统',
-              }}
-              pagination={{
-                pageIndex: page - 1,
-                pageCount: data?.total_pages ?? 1,
-                pageSize: size,
-                totalCount: data?.total ?? 0,
-                onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-              }}
+              viewsStorageKey="qb:log-opera"
             />
+
+            {exportError && (
+              <p
+                role="alert"
+                data-testid="export-error"
+                className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+              >
+                {exportError}
+              </p>
+            )}
+
+            {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
+              也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
+            <div
+              data-testid="opera-table"
+              data-fetching={isFetching}
+              className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+            >
+              <DataTable
+                table={table}
+                showColumnVisibility={false}
+                rows={table.getRowModel().rows}
+                columnCount={columns.length}
+                emptyMessage={t('没有匹配的操作记录')}
+                emptyAction={
+                  hasFilter ? (
+                    <ResetButton
+                      variant="outline"
+                      testId="empty-clear-filter"
+                      label={t('清除筛选')}
+                      onClick={q.reset}
+                    />
+                  ) : undefined
+                }
+                loading={isPending}
+                busy={isFetching && !isPending}
+                skeletonRows={8}
+                pagination={{
+                  pageIndex: page - 1,
+                  pageCount: data?.total_pages ?? 1,
+                  pageSize: size,
+                  totalCount: data?.total ?? 0,
+                  onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+                  onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>

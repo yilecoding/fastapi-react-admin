@@ -160,6 +160,12 @@ export function BasicFilter({
                 的时候，「换个值」和「删掉这一条」看起来是同一组控件 ——
                 用户截图特写过这一处。
                 locked 的条件不给这个入口：藏起来比给个点了没反应的 × 好。
+
+                ⚠️ `inline-flex items-center py-1.5 ps-2` 这一串是为了**和左边那条
+                分隔线长得一样**：左边的 border 长在 addon 上（`py-1.5` 撑到 26px），
+                这里的 border 长在按钮上，不给同样的垂直内边距的话只有图标那 14px 高
+                —— 一长一短，看着像 × 没对齐（3× 放大才看得出来，用户截图指出过）。
+                水平也对称：两侧各 8px（`ps-2` + addon 自带的 `pe-2`）。
               */}
               {!f.locked && (
                 <button
@@ -167,7 +173,7 @@ export function BasicFilter({
                   aria-label={t("移除筛选条件 {{name}}", { name: t(f.label) })}
                   data-testid={`qb-remove-${c.field}`}
                   onClick={() => remove(c.id)}
-                  className="ms-0.5 border-s border-border/60 ps-1.5 text-muted-foreground opacity-0 transition-opacity group-hover/cond:opacity-100 focus-visible:opacity-100 hover:text-foreground"
+                  className="inline-flex items-center border-s border-border/60 py-1.5 ps-2 text-muted-foreground opacity-0 transition-opacity group-hover/cond:opacity-100 focus-visible:opacity-100 hover:text-foreground"
                 >
                   <IconX className="size-3.5" />
                 </button>

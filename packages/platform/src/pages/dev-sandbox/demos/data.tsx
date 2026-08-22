@@ -51,7 +51,7 @@ export const DATA_DEMOS: Demo[] = [
       },
       advanced: { kind: 'bool', label: '允许高级模式', default: true, hint: '后端没有过滤 DSL 时别开' },
       views: { kind: 'bool', label: '筛选视图', default: true, hint: '另存为 / 覆盖 / 重命名 / 设默认，存 localStorage' },
-      actions: { kind: 'bool', label: '右侧主操作', default: true, hint: '「新增」这类按钮塞在 actions 槽' },
+      actions: { kind: 'bool', label: '左侧页面动作', default: true, hint: '「新增 / 导出 / 列」这类按钮塞在 actions 槽' },
     },
     rows: [
       {
