@@ -35,10 +35,15 @@ export type SchedulerRecordSearch = {
 /**
  * 筛选字段。
  *
- * 刻意**不做时间范围筛选**：后端 `get_select` 目前只收 name/task_id/status，
- * 摆一个查询区认得、后端不认的字段出来，用户会以为筛了、实际没筛
- * （硬纪律 9 的同一类问题：静默不生效比明说没有更糟）。
- * 要加得先给 `crud_scheduler.py: CRUDTaskResult.get_select` 加 date_done 区间。
+ * ⚠️ `key` 是**地址栏里的参数名**，`rangeParams` 才是接口入参名 —— 两者刻意分开：
+ * URL 上是 `time=2026-08-16~2026-08-22`（一个参数、无编码噪音），
+ * 发出去是 `start_time=… 00:00:00&end_time=… 23:59:59`。
+ *
+ * 🔴 **补时分秒那一步不能省。** 后端是 `date_done <= end_time`，
+ * 只给日期会被 pydantic 解析成当天 00:00:00，**静默丢掉最后一整天**——
+ * 用户选了「到今天」，今天的记录一条都不显示，界面上没有任何异常。
+ * 压缩只发生在 URL 上，解码时立刻补回规范形式。
+ * （后端那条边界有专门的回归：`test_end_time_without_clock_silently_drops_the_last_day`）
  */
 const FIELDS: readonly FilterField[] = [
   { key: 'name', label: '任务名', type: 'text', param: 'name', defaultVisible: true },
@@ -51,6 +56,14 @@ const FIELDS: readonly FilterField[] = [
     options: Object.entries(RESULT_STATUS_FILTER_ITEMS)
       .filter(([v]) => v !== 'all')
       .map(([value, label]) => ({ value, label })),
+  },
+  {
+    key: 'time',
+    label: '结束时间',
+    type: 'dateTimeRange',
+    group: '时间',
+    defaultVisible: true,
+    rangeParams: ['start_time', 'end_time'],
   },
   { key: 'task_id', label: '任务 UUID', type: 'text', param: 'task_id' },
 ]
