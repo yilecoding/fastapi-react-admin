@@ -91,6 +91,34 @@
   在已经跑着的循环里再调直接
   `asyncio.run() cannot be called from a running event loop`
 
+### 🔴 alembic 引进来**之前**手写 ALTER 加的列，守卫测试抓不到
+
+`test_model_matches_migrations` 比对的是**模型 vs fba_test**。如果一列是手写
+`ALTER` 加进去的（alembic 之前的做法），那两边本来就一致 —— 测试全绿，
+而迁移链里**没有任何一条创建这一列**。`sys_user.timezone` 就是这样漏的。
+
+漏了之后的失败是双重静默的：
+
+1. `c0000000comments` 那种「补齐历史遗留」的迁移里每一步都包着
+   `contextlib.suppress(ProgrammingError)`，在缺列的库上 `alter_column`
+   抛错被吞掉，`db:upgrade` 一路绿到 head，**列还是不存在**
+2. 要等下一次读那张表的请求才炸，报 `Invalid column name 'xxx'`
+
+所以：**凡是 alembic 之前手工改过结构的列，逐个回头补一条迁移。**
+补的时候两件事：
+
+- **必须幂等**（先 `sa.inspect(bind).get_columns()` 查在不在）——
+  新建的库是 `create_all` 从模型建的，天然就有那一列，无条件 `add_column`
+  会报 `Column names in each table must be unique`
+- **加完要 `alter_column(server_default=None)`**。回填存量行要
+  `server_default`，但模型侧的默认值是 Python 级的（`default=`）——
+  库上留着 DEFAULT 约束的话，`create_all` 建的新库和迁移升上来的旧库不一致，
+  `test_model_matches_migrations` 会报一条 server_default 差异
+
+⚠️ **验证不能只跑 `upgrade head`**（在已经有那一列的库上它就是个 no-op，
+证明不了任何事）。要 `downgrade -1` → 确认列真的消失 → `upgrade head` →
+确认列回来**且存量行被回填**。`d0000000usertz` 是这么验的。
+
 ## 后端国际化（i18n）
 
 语言包在 `backend/locale/{zh-CN,en-US}.yml`，**统一用 YAML**（2026-08-22 前

@@ -2,15 +2,16 @@ import * as React from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAlertTriangle, IconAt, IconCheck, IconExternalLink, IconIdBadge2,
+  IconAlertTriangle, IconAt, IconCheck, IconClock, IconExternalLink, IconIdBadge2,
   IconInfoCircle, IconKey, IconLoader2, IconMail, IconPhoto, IconPlugConnected,
   IconShieldLock, IconSignature, IconUpload, IconUser,
 } from '@tabler/icons-react'
 
-import { formatDateTime } from '@admin/i18n'
+import { BASE_TIME_ZONE, formatDateTime } from '@admin/i18n'
 import { Avatar, AvatarFallback, AvatarImage } from '@admin/ui/components/avatar'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
+import { Combobox, type ComboboxOption } from '@admin/ui/components/combobox'
 import { Input } from '@admin/ui/components/input'
 import { Label } from '@admin/ui/components/label'
 import { Skeleton } from '@admin/ui/components/skeleton'
@@ -27,8 +28,8 @@ import { PasswordStrength } from './password-strength'
 import { RecentLogins } from './recent-logins'
 import {
   AVATAR_MAX_BYTES, SOCIAL_SOURCES, socialBindingsQuery, useSendEmailCaptcha,
-  useSocialBindingUrl, useUnbindSocial, useUpdateAvatar, useUpdateEmail, useUpdateNickname,
-  useUpdatePassword, useUploadAvatar, type SocialSource,
+  useSaveTimeZone, useSocialBindingUrl, useUnbindSocial, useUpdateAvatar, useUpdateEmail,
+  useUpdateNickname, useUpdatePassword, useUploadAvatar, type SocialSource,
 } from './api'
 
 /**
@@ -310,9 +311,106 @@ function BasicPanel({ me, loading }: { me?: CurrentUser; loading: boolean }) {
       <NicknameBlock me={me} />
       <AvatarBlock me={me} />
       <EmailBlock me={me} />
+      <TimeZoneBlock me={me} />
       <ReadOnlyBlock me={me} loading={loading} />
     </>
   )
+}
+
+/**
+ * 显示时区。
+ *
+ * 放在**资料**面板而不是「外观」那一组下自成一节 —— 它只有一个控件，
+ * 单独占一条竖导航项，点进去一眼看完就得退出来。而且它和下面「其他信息」里的
+ * 注册时间/上次登录是同一件事：那两行的渲染就依赖这个值，挨着放能当场看到效果。
+ *
+ * ⚠️ 它和同面板其他块的**存储位置不同**：昵称/头像/邮箱和它一样都存服务端，
+ * 但「外观」那一组（主题/圆角/标签条）存 localStorage。判据是这个设置描述的是
+ * **人**还是**设备** —— 见 [shell 分册](../../shell/AGENTS.md) 的「例外：时区存服务端」。
+ */
+function TimeZoneBlock({ me }: { me?: CurrentUser }) {
+  const { t } = useTranslation()
+  const save = useSaveTimeZone()
+  const [state, setState] = React.useState<CardState>(IDLE)
+
+  // 400+ 项，只在挂载时算一次。`hint` 放该时区**此刻**的偏移和钟点 ——
+  // 光看 `America/Argentina/Salta` 是不知道自己该不该选它的。
+  const options = React.useMemo<ComboboxOption[]>(() => {
+    const zones =
+      typeof Intl.supportedValuesOf === 'function'
+        ? Intl.supportedValuesOf('timeZone')
+        : [BASE_TIME_ZONE]
+    const now = Date.now()
+    return zones.map((z) => ({ value: z, label: z, hint: zoneOffsetHint(now, z) }))
+  }, [])
+
+  const browserZone = React.useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone
+    } catch {
+      return null
+    }
+  }, [])
+
+  async function pick(v: string | null) {
+    if (!v || v === me?.timezone) return
+    setState(IDLE)
+    try {
+      await save.mutateAsync(v)
+      setState({ kind: 'ok' })
+    } catch (err) {
+      setState({ kind: 'error', msg: errMsg(err, t('时区更新失败')) })
+    }
+  }
+
+  return (
+    <Block
+      title={t('时区')}
+      description={t('只影响界面上时间怎么显示。日志记的时刻、定时任务什么时候跑都不受它影响')}
+      icon={<IconClock />}
+      testId="profile-timezone"
+    >
+      <div className="flex flex-col gap-2">
+        <Combobox
+          value={me?.timezone ?? null}
+          onValueChange={(v) => void pick(v)}
+          options={options}
+          disabled={!me || save.isPending}
+          data-testid="p-timezone"
+          placeholder={t('选择时区')}
+          searchPlaceholder={t('搜索时区，如 Tokyo')}
+          className="w-full max-w-md"
+        />
+        {browserZone && me?.timezone && browserZone !== me.timezone && (
+          <p className="text-xs text-muted-foreground" data-testid="p-timezone-mismatch">
+            {t('这台设备的系统时区是 {{zone}}，和上面选的不一致 —— 界面按上面选的显示。', {
+              zone: browserZone,
+            })}
+          </p>
+        )}
+        <StatusLine state={state} okText={t('时区已更新')} />
+      </div>
+    </Block>
+  )
+}
+
+/** 该时区此刻的偏移 + 钟点，如 `GMT+9 · 18:20` */
+function zoneOffsetHint(now: number, zone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      timeZoneName: 'shortOffset',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(now))
+    const at = (k: string) => parts.find((p) => p.type === k)?.value ?? ''
+    return `${at('timeZoneName')} · ${at('hour')}:${at('minute')}`
+  } catch {
+    // 浏览器不认这个时区就不给提示，但**仍然把它列出来**（列表本来就来自
+    // supportedValuesOf，理论上走不到这里）
+    return ''
+  }
 }
 
 /**
