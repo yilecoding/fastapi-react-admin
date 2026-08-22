@@ -30,3 +30,17 @@ export function Can({ perm, any = false, fallback = null, children }: CanProps) 
   const ok = any ? canAny(...list) : can(...list)
   return <>{ok ? children : fallback}</>
 }
+
+/**
+ * 超管专属门禁 —— 给那些后端挂的是 `DependsSuperUser` 而不是权限码校验的
+ * 接口用（用户的新增/编辑/权限与安全/重置密码、插件管理…）。
+ *
+ * 🔴 别在这类按钮上改用 `<Can perm="...">`：权限码校验的是 `sys_menu.perms`，
+ * 而这些接口从头到尾没查过 perms，随便编一个权限码（哪怕种子里凑巧没有、
+ * 现在看起来效果一样）都是假的门禁——一旦有人在菜单管理页手工挂了那个
+ * 权限码给某个角色，按钮会出现、点了却稳定 403。
+ */
+export function SuperOnly({ children, fallback = null }: { children: ReactNode; fallback?: ReactNode }) {
+  const { isSuperuser } = usePerm()
+  return <>{isSuperuser ? children : fallback}</>
+}

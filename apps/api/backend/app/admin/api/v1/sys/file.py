@@ -166,7 +166,17 @@ async def delete_files(db: CurrentSessionTransaction, obj: DeleteFileParam) -> R
     return response_base.fail()
 
 
-@router.post('/relations', summary='挂载附件到业务对象', dependencies=[DependsJwtAuth])
+@router.post(
+    '/relations',
+    summary='挂载附件到业务对象',
+    # 🔴 曾经只挂 DependsJwtAuth（仅要求登录）：前端靠 <Can perm="sys:file:upload">
+    # 隐藏按钮，但任何登录用户直接调接口都能把任意 file_id 挂到任意
+    # target_type/target_id 上 —— 前端隐藏按钮不是安全边界，见 AGENTS.md
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
 async def attach_files(request: Request, db: CurrentSessionTransaction, obj: CreateFileRelationParam) -> ResponseModel:
     # 全部已挂载时 attach 返回 0，那是**幂等成功**而不是失败 ——
     # 这里不能照抄别处的 `if count > 0 else fail()`
@@ -174,7 +184,16 @@ async def attach_files(request: Request, db: CurrentSessionTransaction, obj: Cre
     return response_base.success()
 
 
-@router.delete('/relations', summary='从业务对象卸载附件', dependencies=[DependsJwtAuth])
+@router.delete(
+    '/relations',
+    summary='从业务对象卸载附件',
+    # 同上，复用 sys:file:upload —— 卸载只解关联不删文件，没有独立的破坏性
+    # 到需要单开一个权限码；和「附件面板」前端的 <Can perm="sys:file:upload"> 对齐
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
 async def detach_files(db: CurrentSessionTransaction, obj: DeleteFileRelationParam) -> ResponseModel:
     await file_service.detach(db=db, obj=obj)
     return response_base.success()

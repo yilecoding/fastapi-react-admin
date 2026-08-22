@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/to
 import { cn } from '@admin/ui/lib/utils'
 
 import { api, type PageData } from '../../api-client/client'
+import { Can } from '../../auth/can'
 import { PageHeader } from '../../shell/page-header'
 import { ClearLogsButton } from '../_shared/clear-logs'
 import { ResetButton } from '../_shared/filters'
@@ -369,34 +370,39 @@ export function LogLoginPage({
                   留着文字会把主动作（搜索）挤到边上。图标按钮一律配
                   tooltip + aria-label。
                 */}
-                  <Tooltip>
-                    {/*
-                    ⚠️ 不能用 disabled 挡重复点击：buttonVariants 基础类带
-                    disabled:pointer-events-none，hover 打不开 tooltip —— 图标按钮
-                    一旦禁用就只剩一个转圈图标、任何地方都没有文字。改成
-                    aria-busy + handleExport 里的重入守卫。
-                  */}
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="size-8 p-0"
-                          aria-busy={exporting}
-                          data-testid="export-csv"
-                          aria-label={exporting ? t('导出中…') : t('导出 CSV')}
-                          onClick={handleExport}
-                        />
-                      }
-                    >
-                      {exporting ? (
-                        <IconLoader2 className="size-4 animate-spin" />
-                      ) : (
-                        <IconDownload className="size-4" />
-                      )}
-                    </TooltipTrigger>
-                    <TooltipContent>{exporting ? t('导出中…') : t('导出 CSV')}</TooltipContent>
-                  </Tooltip>
+                  {/* 种子里没有独立的导出权限码，复用 log:login:del ——
+                      之前完全没包，只靠页面路由的 requirePerm('log:login:del') 兜底：
+                      以后谁把路由权限放宽，导出这个数据外泄面会跟着无声放宽 */}
+                  <Can perm="log:login:del">
+                    <Tooltip>
+                      {/*
+                      ⚠️ 不能用 disabled 挡重复点击：buttonVariants 基础类带
+                      disabled:pointer-events-none，hover 打不开 tooltip —— 图标按钮
+                      一旦禁用就只剩一个转圈图标、任何地方都没有文字。改成
+                      aria-busy + handleExport 里的重入守卫。
+                    */}
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="size-8 p-0"
+                            aria-busy={exporting}
+                            data-testid="export-csv"
+                            aria-label={exporting ? t('导出中…') : t('导出 CSV')}
+                            onClick={handleExport}
+                          />
+                        }
+                      >
+                        {exporting ? (
+                          <IconLoader2 className="size-4 animate-spin" />
+                        ) : (
+                          <IconDownload className="size-4" />
+                        )}
+                      </TooltipTrigger>
+                      <TooltipContent>{exporting ? t('导出中…') : t('导出 CSV')}</TooltipContent>
+                    </Tooltip>
+                  </Can>
                   {/* 日志只增不减，之前界面上没有任何清理入口 —— 权限码 log:login:clear 一直闲置 */}
                   <ClearLogsButton kind="login" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
                   {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}

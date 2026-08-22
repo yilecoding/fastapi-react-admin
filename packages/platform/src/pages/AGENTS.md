@@ -382,11 +382,15 @@ auto，只能这么算），定高情形下要 `content-scroll:lg:max-h-none` �
 > 验证码、改密码这些路径上把 `sys_config` 的值 `setattr` 到 `settings` 上，
 > **覆盖 `.env`**。改 `LOGIN_CAPTCHA_ENABLED` 就是真的关掉登录验证码。
 
-接口有两个坑：前缀是 `/api/v1/sys/configs`（插件 `extend = "admin"`，
-落在 admin 的 sys 下），**不是** plugin.toml 里写的 `/configs`；
-批量更新 `PUT /sys/configs` 的权限码在上游写成了 `sys.config.edits`（**点号**，
-其余全是冒号），菜单种子里也没有这一条 —— 只有超管能调，
-所以批量保存走并发的单条 `PUT /{pk}` 绕开它。
+接口有一个坑：前缀是 `/api/v1/sys/configs`（插件 `extend = "admin"`，
+落在 admin 的 sys 下），**不是** plugin.toml 里写的 `/configs`。
+
+> 批量更新 `PUT /sys/configs` 的权限码曾经写成 `sys.config.edits`（点号+复数，
+> 菜单种子里没这一条，对所有非超管角色恒 403）——**已修复**，改成复用
+> `sys:config:edit`（`config.py:69`）。前端**仍然**走并发的单条 `PUT /{pk}`，
+> 不是因为权限绕不过去了，是批量接口整批一次校验（一行冲突整批回滚），
+> 而这里要的是逐行独立的失败反馈（`useSaveConfigs` 的 `allSettled`），
+> 两种失败语义不同，见 `pages/config/api.ts` 里的注释。
 
 ### 🔴 开发库会攒下没接线的 `sys_config` 垫子，还可能带真实数据（实测踩过）
 
