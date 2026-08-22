@@ -4,6 +4,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.core.conf import settings
 from backend.database.redis import redis_client
 from backend.plugin.oauth2.crud.crud_user_social import user_social_dao
@@ -42,10 +43,10 @@ class UserSocialService:
         :return:
         """
         if await user_social_dao.check_binding(db, user_id, source.value):
-            raise errors.RequestError(msg=f'用户已绑定 {source.value} 账号')
+            raise errors.RequestError(msg=t('error.oauth2.account_bound', source=source.value))
 
         if await user_social_dao.get_by_sid(db, sid, source.value):
-            raise errors.RequestError(msg=f'该 {source.value} 账号已被其他用户绑定')
+            raise errors.RequestError(msg=t('error.oauth2.account_bound_to_other', source=source.value))
 
         new_user_social = CreateUserSocialParam(sid=sid, source=source.value, user_id=user_id)
         await user_social_dao.create(db, new_user_social)
@@ -62,7 +63,7 @@ class UserSocialService:
         """
         bind = await user_social_dao.check_binding(db, user_id, source.value)
         if not bind:
-            raise errors.NotFoundError(msg=f'用户未绑定 {source.value} 账号')
+            raise errors.NotFoundError(msg=t('error.oauth2.account_not_bound', source=source.value))
         return await user_social_dao.delete(db, user_id, source.value)
 
     @staticmethod
@@ -91,7 +92,7 @@ class UserSocialService:
                     state=state,
                 )
             case _:
-                raise errors.ForbiddenError(msg=f'暂不支持 {source} 绑定')
+                raise errors.ForbiddenError(msg=t('error.oauth2.binding_unsupported', source=source))
 
         return auth_url
 

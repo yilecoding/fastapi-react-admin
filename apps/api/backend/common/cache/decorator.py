@@ -10,6 +10,7 @@ from backend.common.cache.local import local_cache_manager
 from backend.common.cache.pubsub import cache_pubsub_manager
 from backend.common.context import ctx
 from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.log import log
 from backend.core.conf import settings
 from backend.database.redis import redis_client
@@ -33,21 +34,21 @@ async def _build_cache_key(
             param, field = key.split('.', 1)
             value = kwargs.get(param, _MISSING)
             if value is _MISSING:
-                raise errors.ServerError(msg=f'缓存键构建失败，参数 "{param}" 不存在')
+                raise errors.ServerError(msg=t('error.cache.arg_not_found', name=param))
 
             if isinstance(value, list):
-                raise errors.ServerError(msg='缓存键构建失败：不支持从列表中提取字段，请使用 key_builder 处理列表参数')
+                raise errors.ServerError(msg=t('error.cache.list_extraction_unsupported'))
 
             if hasattr(value, field):
                 value = getattr(value, field)
             elif isinstance(value, dict) and field in value:
                 value = value[field]
             else:
-                raise errors.ServerError(msg=f'缓存键构建失败，对象中不存在字段 "{field}"')
+                raise errors.ServerError(msg=t('error.cache.field_not_found', field=field))
         else:
             value = kwargs.get(key, _MISSING)
             if value is _MISSING:
-                raise errors.ServerError(msg=f'缓存键构建失败，参数 "{key}" 不存在')
+                raise errors.ServerError(msg=t('error.cache.arg_not_found', name=key))
 
         return f'{namespace}:{value if value is not None else "none"}'
 
@@ -101,7 +102,7 @@ def user_key_builder() -> str:
     """基于当前用户 ID 生成缓存 Key"""
     user_id = ctx.user_id
     if user_id is None:
-        raise errors.ServerError(msg='用户缓存键构建失败')
+        raise errors.ServerError(msg=t('error.user.cache_key_build_failed'))
     return str(user_id)
 
 
@@ -120,7 +121,7 @@ def cached(  # ruff:ignore[complex-structure]
     :return:
     """
     if key is not None and key_builder is not None:
-        raise errors.ServerError(msg='缓存 key 和 key_builder 不能同时使用')
+        raise errors.ServerError(msg=t('error.cache.key_and_key_builder_conflict'))
 
     def decorator(func: Callable[P, T]) -> Callable[P, T]:  # ruff:ignore[complex-structure]
         @functools.wraps(func)
@@ -189,7 +190,7 @@ def cache_invalidate(  # ruff:ignore[complex-structure]
     :return:
     """
     if key is not None and key_builder is not None:
-        raise errors.ServerError(msg='缓存 key 和 key_builder 不能同时使用')
+        raise errors.ServerError(msg=t('error.cache.key_and_key_builder_conflict'))
 
     def decorator(func: Callable[P, T]) -> Callable[P, T]:
         @functools.wraps(func)
@@ -231,7 +232,7 @@ def cache_invalidate(  # ruff:ignore[complex-structure]
 
             # 原子性检查
             if atomic and not invalidate_success:
-                raise errors.ServerError(msg='缓存失效失败，数据可能不一致', data=invalidate_error)
+                raise errors.ServerError(msg=t('error.cache.invalidation_failed'), data=invalidate_error)
 
             return result
 

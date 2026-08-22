@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { IconDownload, IconEye } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import {
@@ -81,7 +82,7 @@ export function FileDetailSheet({
                 <Row label={t('存储路径')} value={file.path} mono wrap />
                 <Row label={t('MIME 类型')} value={file.content_type ?? '—'} mono />
                 <Row label={t('字节数')} value={String(file.size)} mono />
-                <Row label={t('上传时间')} value={file.created_time} mono />
+                <Row label={t('上传时间')} value={formatDateTime(file.created_time)} mono />
                 <Row label={t('上传人 ID')} value={file.created_by} mono />
                 {/* 64 个 hex 必须能换行，否则会把抽屉横向撑破 */}
                 <Row label={t('校验和')} value={file.sha256 ?? '—'} mono wrap />

@@ -77,7 +77,7 @@ class OAuth2Service:
                     None,
                 )
                 if username is None:
-                    raise errors.ConflictError(msg='用户名已存在，请重试')
+                    raise errors.ConflictError(msg=t('error.oauth2.username_exists'))
                 new_sys_user = AddOAuth2UserParam(
                     username=username,
                     password=None,
@@ -100,7 +100,7 @@ class OAuth2Service:
             # extra info
             username=sys_user.username,
             nickname=sys_user.nickname,
-            last_login_time=timezone.to_str(timezone.now()),
+            last_login_time=timezone.to_iso(timezone.now()),
             ip=ctx.ip,
             os=ctx.os,
             browser=ctx.browser,
@@ -176,14 +176,14 @@ class OAuth2Service:
                 nickname = user.get('given_name')
                 avatar = user.get('picture')
             case _:
-                raise errors.ForbiddenError(msg=f'暂不支持 {social} OAuth2 登录')
+                raise errors.ForbiddenError(msg=t('error.oauth2.social_login_unsupported', social=social))
 
         if not state:
-            raise errors.ForbiddenError(msg='OAuth2 状态信息缺失')
+            raise errors.ForbiddenError(msg=t('error.oauth2.state_missing'))
 
         state_data = await redis_client.get(f'{settings.OAUTH2_STATE_REDIS_PREFIX}:{state}')
         if not state_data:
-            raise errors.ForbiddenError(msg='OAuth2 状态信息无效或缺失')
+            raise errors.ForbiddenError(msg=t('error.oauth2.state_invalid_or_missing'))
 
         state_info = json.loads(state_data)
         await redis_client.delete(f'{settings.OAUTH2_STATE_REDIS_PREFIX}:{state}')
@@ -192,7 +192,7 @@ class OAuth2Service:
         if state_info.get('type') == UserSocialAuthType.binding.value:
             user_id = state_info.get('user_id')
             if not user_id:
-                raise errors.ForbiddenError(msg='非法操作，OAuth2 状态信息无效')
+                raise errors.ForbiddenError(msg=t('error.oauth2.illegal_state_operation'))
             await user_social_service.binding_with_oauth2(
                 db=db,
                 user_id=user_id,
@@ -203,7 +203,7 @@ class OAuth2Service:
 
         # 登录流程
         if state_info.get('type') != UserSocialAuthType.login.value:
-            raise errors.ForbiddenError(msg='OAuth2 状态信息无效')
+            raise errors.ForbiddenError(msg=t('error.oauth2.state_invalid'))
 
         return await self.login(
             db=db,

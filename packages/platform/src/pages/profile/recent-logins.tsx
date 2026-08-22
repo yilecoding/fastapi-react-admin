@@ -2,6 +2,7 @@ import { IconAlertTriangle, IconHistory, IconRefresh } from '@tabler/icons-react
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
+import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
 import { Skeleton } from '@admin/ui/components/skeleton'
 
@@ -84,11 +85,11 @@ export function RecentLogins({ username }: { username?: string }) {
               className="flex items-center justify-between gap-3 border-b border-border/60 py-2 text-sm last:border-0"
             >
               <div className="flex min-w-0 flex-col">
-                {/* 直接显示后端给的字符串，和登录日志页一致。
-                    不走 formatTime/formatDate：`login_time` 是不带时区标记的
-                    "2026-08-21 09:16:35"，交给 `new Date()` 解析是按本地时区猜的，
-                    对不对取决于浏览器 —— 安全信息上不该有这种不确定性 */}
-                <span className="font-mono text-xs tabular-nums">{r.login_time}</span>
+                {/* 这里原来刻意**不做**任何解析、直接摊后端字符串 —— 因为那时下发的是
+                    不带时区标记的 "2026-08-21 09:16:35"，交给 `new Date()` 是按浏览器
+                    时区猜的，而登录记录是安全信息，不该有这种不确定性。
+                    后端改成下发带偏移的 ISO 8601 之后就没有猜的余地了，正常格式化。 */}
+                <span className="font-mono text-xs tabular-nums">{formatDateTime(r.login_time)}</span>
                 <span className="truncate text-xs text-muted-foreground">
                   {/* IP 与归属地对「是不是我」最有判断力，浏览器/系统次之 */}
                   <span className="font-mono">{r.ip}</span>

@@ -1,3 +1,4 @@
+import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { RichTextViewer } from '@admin/ui/components/rich-text'
 import { useTranslation } from 'react-i18next'
@@ -42,8 +43,8 @@ export function NoticeDetailSheet({
                   <StatusPill tone="muted">{t('隐藏')}</StatusPill>
                 )}
                 <span className="font-mono text-xs tabular-nums">
-                  {t('创建 {{at}}', { at: notice.created_time })}
-                  {notice.updated_time ? t(' · 更新 {{at}}', { at: notice.updated_time }) : ''}
+                  {t('创建 {{at}}', { at: formatDateTime(notice.created_time) })}
+                  {notice.updated_time ? t(' · 更新 {{at}}', { at: formatDateTime(notice.updated_time) }) : ''}
                 </span>
               </SheetDescription>
             </SheetHeader>

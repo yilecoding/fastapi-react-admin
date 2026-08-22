@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { formatNumber } from '@admin/i18n'
+import { formatDateTime, formatDateTimeShort, formatNumber } from '@admin/i18n'
 import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
@@ -72,7 +72,9 @@ export function DashboardPage() {
                 {t('你好，{{name}}', { name: me?.nickname ?? '…' })}
               </span>
               <span className="text-sm text-muted-foreground">
-                {me?.last_login_time ? t('上次登录 {{at}}', { at: me.last_login_time }) : t('欢迎回来')}
+                {me?.last_login_time
+                  ? t('上次登录 {{at}}', { at: formatDateTime(me.last_login_time) })
+                  : t('欢迎回来')}
                 {me?.dept ? ` · ${me.dept}` : ''}
               </span>
             </div>
@@ -192,7 +194,7 @@ export function DashboardPage() {
                       <span className="min-w-0 flex-1 truncate">{l.username}</span>
                       <span className="hidden font-mono text-xs text-muted-foreground @xl/main:inline">{l.ip}</span>
                       <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                        {l.login_time.slice(5, 16)}
+                        {formatDateTimeShort(l.login_time)}
                       </span>
                     </li>
                   ))}
@@ -226,7 +228,7 @@ export function DashboardPage() {
                         {o.username ?? '—'}
                       </span>
                       <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                        {o.opera_time.slice(5, 16)}
+                        {formatDateTimeShort(o.opera_time)}
                       </span>
                     </li>
                   ))}

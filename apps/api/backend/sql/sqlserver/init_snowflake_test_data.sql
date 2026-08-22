@@ -49,6 +49,22 @@ VALUES
 (2049629108253622302, N'上传', 'UploadSysFile', NULL, 0, NULL, 2, 'sys:file:upload', 1, 0, '', NULL, 2049629108253622300, '2025-06-26 20:29:06', NULL),
 (2049629108253622303, N'删除', 'DeleteSysFile', NULL, 0, NULL, 2, 'sys:file:del', 1, 0, '', NULL, 2049629108253622300, '2025-06-26 20:29:06', NULL);
 
+INSERT INTO sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
+VALUES
+(2049629108253622310, N'定时任务', 'Scheduler', '/scheduler', 4, 'ix:scheduler', 0, NULL, 1, 1, '', NULL, NULL, '2026-08-22 17:00:00', NULL),
+(2049629108253622311, N'任务调度', 'SchedulerManage', '/scheduler/manage', 1, 'mdi:clock-outline', 1, NULL, 1, 1, '', NULL, 2049629108253622310, '2026-08-22 17:00:00', NULL),
+(2049629108253622312, N'执行记录', 'SchedulerRecord', '/scheduler/record', 2, 'mdi:history', 1, NULL, 1, 1, '', NULL, 2049629108253622310, '2026-08-22 17:00:00', NULL),
+(2049629108253622313, N'新增', 'AddTaskScheduler', NULL, 0, NULL, 2, 'task:scheduler:add', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
+(2049629108253622314, N'修改', 'EditTaskScheduler', NULL, 1, NULL, 2, 'task:scheduler:edit', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
+(2049629108253622315, N'删除', 'DeleteTaskScheduler', NULL, 2, NULL, 2, 'task:scheduler:del', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
+(2049629108253622316, N'执行', 'RunTaskScheduler', NULL, 3, NULL, 2, 'task:scheduler:run', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
+(2049629108253622317, N'删除', 'DeleteTaskResult', NULL, 0, NULL, 2, 'task:result:del', 1, 0, '', NULL, 2049629108253622312, '2026-08-22 17:00:00', NULL);
+
+INSERT INTO task_scheduler (id, name, task, args, kwargs, queue, exchange, routing_key, start_time, expire_time, expire_seconds, type, interval_every, interval_period, crontab, one_off, enabled, total_run_count, last_run_time, remark, created_time, updated_time, deleted, deleted_time)
+VALUES
+(2049629108253622320, N'清理历史日志', 'maintenance.prune_logs', NULL, N'{"days": 30}', NULL, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, '15 3 * * *', 0, 1, 0, NULL, N'保留 30 天。日志表是全库长得最快的表，不清理会一直涨', '2026-08-22 17:00:00', NULL, 0, NULL),
+(2049629108253622321, N'清理任务执行记录', 'maintenance.prune_task_results', NULL, N'{"days": 30}', NULL, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, '30 3 * * *', 0, 1, 0, NULL, N'保留 30 天。celery 自带的 backend_cleanup 不会被装上（DatabaseScheduler 重写了 setup_schedule），必须自己排', '2026-08-22 17:00:00', NULL, 0, NULL);
+
 INSERT INTO sys_role (id, code, name, status, is_filter_scopes, remark, created_time, updated_time)
 VALUES (2048601263515500544, N'TEST', N'测试', 1, 1, NULL, GETDATE(), NULL);
 
@@ -57,10 +73,10 @@ VALUES
 (2048601263578415104, 2048601263515500544, 2049629108245233664),
 (2048601263775547392, 2048601263515500544, 2049629108253622282);
 
-INSERT INTO sys_user (id, uuid, username, nickname, password, salt, email, status, is_superuser, is_staff, is_multi_login, avatar, phone, join_time, last_login_time, last_password_changed_time, dept_id, created_time, updated_time)
+INSERT INTO sys_user (id, uuid, username, nickname, password, salt, email, status, is_superuser, is_staff, is_multi_login, avatar, timezone, phone, join_time, last_login_time, last_password_changed_time, dept_id, created_time, updated_time)
 VALUES
-(2048601263834267648, CONVERT(varchar(36), NEWID()), 'admin', N'用户88888', '$2b$12$8y2eNucX19VjmZ3tYhBLcOsBwy9w1IjBQE4SSqwMDL5bGQVp2wqS.', 0x24326224313224387932654E7563583139566A6D5A33745968424C634F, 'admin@example.com', 1, 1, 1, 1, NULL, NULL, GETDATE(), GETDATE(), GETDATE(), 2048601258595581952, GETDATE(), NULL),
-(2049946297615646720, CONVERT(varchar(36), NEWID()), 'test', N'用户66666', '$2b$12$BMiXsNQAgTx7aNc7kVgnwedXGyUxPEHRnJMFbiikbqHgVoT3y14Za', 0x24326224313224424D6958734E514167547837614E63376B56676E7765, 'test@example.com', 1, 0, 0, 0, NULL, NULL, GETDATE(), GETDATE(), GETDATE(), 2048601258595581952, GETDATE(), NULL);
+(2048601263834267648, CONVERT(varchar(36), NEWID()), 'admin', N'用户88888', '$2b$12$8y2eNucX19VjmZ3tYhBLcOsBwy9w1IjBQE4SSqwMDL5bGQVp2wqS.', 0x24326224313224387932654E7563583139566A6D5A33745968424C634F, 'admin@example.com', 1, 1, 1, 1, NULL, 'Asia/Shanghai', NULL, GETDATE(), GETDATE(), GETDATE(), 2048601258595581952, GETDATE(), NULL),
+(2049946297615646720, CONVERT(varchar(36), NEWID()), 'test', N'用户66666', '$2b$12$BMiXsNQAgTx7aNc7kVgnwedXGyUxPEHRnJMFbiikbqHgVoT3y14Za', 0x24326224313224424D6958734E514167547837614E63376B56676E7765, 'test@example.com', 1, 0, 0, 0, NULL, 'Asia/Shanghai', NULL, GETDATE(), GETDATE(), GETDATE(), 2048601258595581952, GETDATE(), NULL);
 
 INSERT INTO sys_user_role (id, user_id, role_id)
 VALUES

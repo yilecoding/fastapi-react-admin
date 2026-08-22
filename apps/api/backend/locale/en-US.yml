@@ -1,0 +1,184 @@
+# 2026-08-22 治理三期：业务错误消息从「中文原文当 key」（`tm()` 查表）
+# 迁到了「稳定点分键」（`t()` 查表）。详情见 zh-CN.yml 顶部注释和
+# `apps/api/AGENTS.md`「后端国际化」一节。
+error:
+  auth:
+    account_locked: Account is locked, please contact the administrator
+    admin_forbidden: This account is not allowed to perform admin operations, please contact the administrator
+    dept_locked: The department of this account is disabled, please contact the administrator
+    dept_not_found: The department of this account does not exist or has been deleted, please contact the administrator
+    duplicate_login: This account signed in from another location, please sign in again and change your password
+    invalid_credentials: Incorrect username or password
+    menu_not_assigned: No menu assigned to this account, please contact the administrator
+    password_expired: Password has expired, please change it and sign in again
+    refresh_token_expired: Refresh token has expired, please sign in again
+    role_locked: The role assigned to this account is disabled, please contact the administrator
+    temporarily_locked: Account is locked, try again in {minutes} minutes
+    too_many_failed_attempts: Too many failed sign-in attempts, the account has been locked
+  cache:
+    arg_not_found: 'Failed to build cache key: argument "{name}" does not exist'
+    field_not_found: 'Failed to build cache key: field "{field}" does not exist on the object'
+    invalidation_failed: Cache invalidation failed, data may be inconsistent
+    key_and_key_builder_conflict: '`key` and `key_builder` cannot be used together'
+    list_extraction_unsupported: 'Failed to build cache key: extracting a field from a list is not supported, use `key_builder` for list arguments'
+  captcha:
+    error: Captcha error
+    invalid: Captcha is invalid, please try again
+    expired: Captcha has expired, please try again
+  config:
+    duplicate_key: Duplicate config key
+    key_exists: Config key {key} already exists
+    not_found: Config item does not exist
+  data_rule:
+    already_exists: Data rule already exists
+    model_not_found: The model for this data rule does not exist
+    not_found: Data rule does not exist
+  data_scope:
+    already_exists: Data scope already exists
+    not_found: Data scope does not exist
+  demo:
+    forbidden: This operation is disabled in the demo environment
+  dept:
+    cannot_be_own_parent: An item cannot be its own parent
+    code_exists: Department code already exists
+    duplicate_name_in_level: A department with the same name already exists at this level
+    has_children: This department has sub-departments and cannot be deleted
+    has_users: This department has users and cannot be deleted
+    not_found: Department does not exist
+    parent_not_found: Parent department does not exist
+  dict:
+    data_exists: Dict item already exists
+    data_not_found: Dict item does not exist
+    type_exists: Dict type already exists
+    type_not_found: Dict type does not exist
+  file:
+    invalid_filename: Invalid filename
+    missing: File is missing, please upload it again
+    not_found: File does not exist
+    public_link_images_only: Public direct links only support images, use regular upload for other file types
+    size_exceeded: '{label} exceeds the size limit of {size_mb} MB, please choose another one'
+    some_not_found: Some files do not exist
+    unknown_type: Unknown file type
+    unsupported_format: File format {file_ext} is not supported
+    upload_failed: File upload failed
+  language_not_found: Current language pack is not initialized or does not exist
+  menu:
+    has_children: This menu has sub-menus and cannot be deleted
+    not_found: Menu does not exist
+    parent_not_found: Parent menu does not exist
+    title_exists: Menu title already exists
+  notice:
+    not_found: Notice does not exist
+  oauth2:
+    account_bound: This account is already bound to {source}
+    account_bound_to_other: This {source} account is already bound to another user
+    account_not_bound: This account is not bound to {source}
+    binding_unsupported: Binding {source} is not supported yet
+    illegal_state_operation: 'Illegal operation: invalid OAuth2 state'
+    social_login_unsupported: '{social} OAuth2 sign-in is not supported yet'
+    state_invalid: Invalid OAuth2 state
+    state_invalid_or_missing: OAuth2 state is invalid or missing
+    state_missing: OAuth2 state is missing
+    username_exists: Username already exists, please try another one
+  password:
+    max_length: Password must be at most {max_length} characters
+    min_length: Password must be at least {min_length} characters
+    needs_digit: Password must contain a digit
+    needs_letter: Password must contain a letter
+    needs_special_char: Password must contain a special character (e.g. !@#$%)
+    reused: The new password must differ from your last {count} passwords
+  plugin:
+    already_installed: This plugin is already installed
+    archive_invalid_content: Invalid plugin archive content
+    archive_invalid_filename: Invalid plugin archive filename
+    archive_invalid_format: Invalid plugin archive format
+    archive_missing_files: Plugin archive is missing required files
+    dev_only_install: Installing plugins is only allowed in the development environment
+    dev_only_uninstall: Uninstalling plugins is only allowed in the development environment
+    frontend_dir_not_found: Frontend plugin directory not found, expected apps/web-antdv-next/src/plugins under the given path
+    frontend_install_failed: Frontend plugin installation failed, please try again later
+    frontend_repo_already_installed: Frontend plugin {plugin_name} is already installed
+    frontend_repo_name_invalid: Invalid frontend plugin repository name
+    frontend_root_invalid: Invalid frontend project root path
+    frontend_root_not_found: Frontend project root path does not exist
+    frontend_root_required: Frontend project root path cannot be empty
+    git_repo_invalid: Invalid Git repository URL, only HTTP/HTTPS is supported
+    git_repo_required: Git repository URL cannot be empty
+    install_failed: Plugin installation failed, please try again later
+    not_enabled: Plugin {plugin} is not enabled, please contact the administrator
+    not_found: Plugin does not exist
+    oauth2_import_failed: Failed to import OAuth2 plugin, please contact the administrator
+    repo_already_installed: Plugin {repo_name} is already installed
+    required_cannot_uninstall: Plugin {plugin} is required and cannot be uninstalled
+    zip_required: ZIP archive cannot be empty
+  rate_limit:
+    invalid_config: At least one Rate, bucket or limiter instance is required
+    too_many_requests: Too many requests, please try again later
+  rbac:
+    casbin_import_failed: Failed to import Casbin RBAC plugin, please contact the administrator
+  request:
+    debug_input_suffix: ', input: {input}'
+    invalid_parameter: 'Invalid request parameter: {message}'
+    json_invalid: Failed to parse JSON
+  role:
+    already_exists: Role already exists
+    code_exists: Role code already exists
+    none_available: No available role found, please contact the administrator
+    not_found: Role does not exist
+  snowflake:
+    clock_moved_backwards: 'Snowflake ID generation failed: clock moved backwards by more than {ms} ms, contact the administrator immediately'
+    config_failed: Invalid snowflake configuration, please contact the administrator
+    datacenter_config_failed: Invalid snowflake datacenter id, please contact the administrator
+    generation_failed: 'Snowflake ID generation failed: the generator is not initialised'
+    no_node_available: No snowflake node available, all nodes are exhausted
+    worker_config_failed: Invalid snowflake worker id, please contact the administrator
+  sql:
+    illegal_operation: 'SQL script {filepath} contains an illegal operation, only allowed: {allowed}'
+    script_not_found: SQL script file does not exist
+  task:
+    deadline_conflict: Only one of deadline and countdown seconds can be set
+    not_registered: 'Task {task} is not registered; available: {available}'
+    result_not_found: Task result not found
+    scheduler_name_exists: Task scheduler name already exists
+    scheduler_not_found: Task scheduler not found
+  token:
+    expired: Token has expired
+    invalid: Invalid token
+    no_longer_valid: Token is no longer valid
+  user:
+    cache_key_build_failed: Failed to build the user cache key
+    captcha_expired: Captcha is no longer valid, please get a new one
+    email_bound: This email is already bound
+    not_found: User does not exist
+    password_mismatch: The two passwords do not match
+    password_required: Password cannot be empty
+    permission_type_not_found: Permission type does not exist
+    self_permission_forbidden: You cannot change your own permissions
+    username_registered: Username is already registered
+    wrong_old_password: Current password is incorrect
+
+file_type:
+  archive: Archive
+  audio: Audio
+  document: Document
+  image: Image
+  video: Video
+
+# ⚠️ 故意没有 `pydantic` 段（对比 zh-CN.yml 有 100 条）。
+# pydantic-core 原生报错本身就是英文，`exception_handler.py` 里
+# `if i18n.current_language != 'en-US':` 已经把英文请求短路掉了，
+# 根本不会来查这张表。别看着 zh-CN.yml 有就照着补一份对称的过来。
+
+response:
+  error: Request error
+  success: Request success
+  server_error: Internal server error
+
+success:
+  login:
+    oauth2_success: Login success (OAuth2)
+    success: Login success
+
+# `messages`/`message_templates`（按中文原文查表那一套）已经在这次治理里
+# 撤掉了——en-US 不需要「反向翻译」（那是 zh-CN.yml 独有的场景，见那边
+# 顶部注释），业务消息全部搬进了上面的 `error.*`。别再往这加东西。

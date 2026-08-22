@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 
 import { api, type PageData } from '../../api-client/client'
+import { dateKey } from '@admin/i18n'
 import { presetRange } from '@admin/ui/components/datetime-picker'
 
 /**
@@ -124,15 +125,20 @@ const FAIL_SAMPLE_CAP = 200
 export const loginTrendQuery = queryOptions({
   queryKey: dashKeys.trend(),
   queryFn: async (): Promise<TrendResult> => {
-    const p = (n: number) => String(n).padStart(2, '0')
+    // 「哪一天」一律按**显示时区**算，和下面 `dateKey()` 的分组键同一个时区框架。
+    //
+    // 原来这里用 `new Date().getFullYear()/getMonth()/getDate()` —— 那是**浏览器**
+    // 时区的今天，而分组键是切后端字符串得到的**服务端**时区的日期。两者只在
+    // 「浏览器和服务端都在东八区」时才吻合，不吻合时柱子会整体错位一天。
     const days: Array<{ date: string; label: string; start: string; end: string }> = []
-    const now = new Date()
+    const todayKey = dateKey(Date.now()) ?? new Date().toISOString().slice(0, 10)
+    const [ty, tm, td] = todayKey.split('-').map(Number)
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
-      const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+      // 纯日历算术：UTC 只是个不带夏令时的载体，跟展示时区无关
+      const date = new Date(Date.UTC(ty!, tm! - 1, td! - i)).toISOString().slice(0, 10)
       days.push({
         date,
-        label: `${p(d.getMonth() + 1)}-${p(d.getDate())}`,
+        label: date.slice(5),
         start: `${date} 00:00:00`,
         end: `${date} 23:59:59`,
       })
@@ -150,11 +156,14 @@ export const loginTrendQuery = queryOptions({
       ),
     ])
 
-    // 后端下发的时间是 'YYYY-MM-DD HH:mm:ss'，取前 10 位就是日期键
+    // 🔴 **不要**切字符串取日期键。后端现在下发的是带时区偏移的 ISO 8601，
+    // `.slice(0, 10)` 拿到的是 **UTC 的**年月日：东八区 8 月 22 日早上 7 点的
+    // 登录，ISO 是 `2026-08-21T23:00:00+00:00`，切出来是 8 月 21 日 ——
+    // 柱状图把它算进前一天，不报错、不空白，只是数字悄悄对不上。
     const failByDay = new Map<string, number>()
     for (const item of failPage.items ?? []) {
-      const key = (item.login_time ?? '').slice(0, 10)
-      failByDay.set(key, (failByDay.get(key) ?? 0) + 1)
+      const key = dateKey(item.login_time)
+      if (key) failByDay.set(key, (failByDay.get(key) ?? 0) + 1)
     }
 
     const failTotal = failPage.total ?? 0

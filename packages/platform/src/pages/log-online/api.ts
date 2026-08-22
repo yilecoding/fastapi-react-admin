@@ -2,7 +2,7 @@ import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query
 
 import { api } from '../../api-client/client'
 import { tokenStore } from '../../api-client/token-store'
-import { formatDuration, t } from '@admin/i18n'
+import { formatDuration, t, toEpochMs } from '@admin/i18n'
 
 /**
  * 在线用户（会话监控）。数据源 `GET /api/v1/monitors/sessions`（**仅超管**）。
@@ -91,19 +91,17 @@ export function currentSessionUuid(): string | null {
 }
 
 /**
- * 后端下发的时间是 `'2026-08-22 11:59:47'`（本地时区，Asia/Shanghai），
- * 不是 ISO 8601。Safari 对空格分隔的格式解析不一致，统一换成 'T' 再 parse。
+ * 距离过期还有多久，用于「剩余有效期」列。
+ *
+ * 这里原来有个自己写的 `parseServerTime()`：后端那时下发的是
+ * `'2026-08-22 11:59:47'`（无时区标记），空格分隔的格式各浏览器解析不一致
+ * （Safari 直接 Invalid Date），只能自己换成 `T` 再 parse。
+ * 后端改成下发带偏移的 ISO 8601 之后这个 hack 没有存在意义了 ——
+ * 解析统一走 `@admin/i18n` 的 `toEpochMs()`。
  */
-export function parseServerTime(v: string): number {
-  // ⚠️ 不要把这个变量叫 `t` —— 本模块顶部 import 了翻译函数 t，会被遮蔽
-  const at = Date.parse(v.replace(' ', 'T'))
-  return Number.isNaN(at) ? Number.NaN : at
-}
-
-/** 距离过期还有多久，用于「剩余有效期」列 */
 export function remainingText(expireTime: string, now: number): { text: string; hours: number } {
-  const at = parseServerTime(expireTime)
-  if (Number.isNaN(at)) return { text: '—', hours: Number.NaN }
+  const at = toEpochMs(expireTime)
+  if (at === null) return { text: '—', hours: Number.NaN }
   const ms = at - now
   if (ms <= 0) return { text: t('已过期'), hours: 0 }
   const hours = ms / 3_600_000

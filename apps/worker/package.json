@@ -1,0 +1,8 @@
+{
+  "name": "worker",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "cd ../api && CELERY_CUSTOM_WORKER_POOL=celery_aio_pool.pool:AsyncIOPool uv run --no-sync celery -A backend.app.task.celery worker -B -l info --pool=custom"
+  }
+}

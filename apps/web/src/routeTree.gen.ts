@@ -28,6 +28,8 @@ import { Route as AuthPluginsNoticeRouteImport } from './routes/_auth/plugins/no
 import { Route as AuthSandboxComponentsRouteImport } from './routes/_auth/sandbox/components'
 import { Route as AuthSandboxQueryRouteImport } from './routes/_auth/sandbox/query'
 import { Route as AuthSandboxTableRouteImport } from './routes/_auth/sandbox/table'
+import { Route as AuthSchedulerManageRouteImport } from './routes/_auth/scheduler/manage'
+import { Route as AuthSchedulerRecordRouteImport } from './routes/_auth/scheduler/record'
 import { Route as AuthSystemDataPermissionRouteImport } from './routes/_auth/system/data-permission'
 import { Route as AuthSystemDeptRouteImport } from './routes/_auth/system/dept'
 import { Route as AuthSystemFileRouteImport } from './routes/_auth/system/file'
@@ -129,6 +131,16 @@ const AuthSandboxTableRoute = AuthSandboxTableRouteImport.update({
   path: '/sandbox/table',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthSchedulerManageRoute = AuthSchedulerManageRouteImport.update({
+  id: '/scheduler/manage',
+  path: '/scheduler/manage',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthSchedulerRecordRoute = AuthSchedulerRecordRouteImport.update({
+  id: '/scheduler/record',
+  path: '/scheduler/record',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthSystemDataPermissionRoute =
   AuthSystemDataPermissionRouteImport.update({
     id: '/system/data-permission',
@@ -184,6 +196,8 @@ export interface FileRoutesByFullPath {
   '/sandbox/components': typeof AuthSandboxComponentsRoute
   '/sandbox/query': typeof AuthSandboxQueryRoute
   '/sandbox/table': typeof AuthSandboxTableRoute
+  '/scheduler/manage': typeof AuthSchedulerManageRoute
+  '/scheduler/record': typeof AuthSchedulerRecordRoute
   '/system/data-permission': typeof AuthSystemDataPermissionRoute
   '/system/dept': typeof AuthSystemDeptRoute
   '/system/file': typeof AuthSystemFileRoute
@@ -210,6 +224,8 @@ export interface FileRoutesByTo {
   '/sandbox/components': typeof AuthSandboxComponentsRoute
   '/sandbox/query': typeof AuthSandboxQueryRoute
   '/sandbox/table': typeof AuthSandboxTableRoute
+  '/scheduler/manage': typeof AuthSchedulerManageRoute
+  '/scheduler/record': typeof AuthSchedulerRecordRoute
   '/system/data-permission': typeof AuthSystemDataPermissionRoute
   '/system/dept': typeof AuthSystemDeptRoute
   '/system/file': typeof AuthSystemFileRoute
@@ -239,6 +255,8 @@ export interface FileRoutesById {
   '/_auth/sandbox/components': typeof AuthSandboxComponentsRoute
   '/_auth/sandbox/query': typeof AuthSandboxQueryRoute
   '/_auth/sandbox/table': typeof AuthSandboxTableRoute
+  '/_auth/scheduler/manage': typeof AuthSchedulerManageRoute
+  '/_auth/scheduler/record': typeof AuthSchedulerRecordRoute
   '/_auth/system/data-permission': typeof AuthSystemDataPermissionRoute
   '/_auth/system/dept': typeof AuthSystemDeptRoute
   '/_auth/system/file': typeof AuthSystemFileRoute
@@ -267,6 +285,8 @@ export interface FileRouteTypes {
     | '/sandbox/components'
     | '/sandbox/query'
     | '/sandbox/table'
+    | '/scheduler/manage'
+    | '/scheduler/record'
     | '/system/data-permission'
     | '/system/dept'
     | '/system/file'
@@ -293,6 +313,8 @@ export interface FileRouteTypes {
     | '/sandbox/components'
     | '/sandbox/query'
     | '/sandbox/table'
+    | '/scheduler/manage'
+    | '/scheduler/record'
     | '/system/data-permission'
     | '/system/dept'
     | '/system/file'
@@ -321,6 +343,8 @@ export interface FileRouteTypes {
     | '/_auth/sandbox/components'
     | '/_auth/sandbox/query'
     | '/_auth/sandbox/table'
+    | '/_auth/scheduler/manage'
+    | '/_auth/scheduler/record'
     | '/_auth/system/data-permission'
     | '/_auth/system/dept'
     | '/_auth/system/file'
@@ -471,6 +495,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSandboxTableRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/scheduler/manage': {
+      id: '/_auth/scheduler/manage'
+      path: '/scheduler/manage'
+      fullPath: '/scheduler/manage'
+      preLoaderRoute: typeof AuthSchedulerManageRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/scheduler/record': {
+      id: '/_auth/scheduler/record'
+      path: '/scheduler/record'
+      fullPath: '/scheduler/record'
+      preLoaderRoute: typeof AuthSchedulerRecordRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/system/data-permission': {
       id: '/_auth/system/data-permission'
       path: '/system/data-permission'
@@ -539,6 +577,8 @@ interface AuthRouteChildren {
   AuthSandboxComponentsRoute: typeof AuthSandboxComponentsRoute
   AuthSandboxQueryRoute: typeof AuthSandboxQueryRoute
   AuthSandboxTableRoute: typeof AuthSandboxTableRoute
+  AuthSchedulerManageRoute: typeof AuthSchedulerManageRoute
+  AuthSchedulerRecordRoute: typeof AuthSchedulerRecordRoute
   AuthSystemDataPermissionRoute: typeof AuthSystemDataPermissionRoute
   AuthSystemDeptRoute: typeof AuthSystemDeptRoute
   AuthSystemFileRoute: typeof AuthSystemFileRoute
@@ -564,6 +604,8 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthSandboxComponentsRoute: AuthSandboxComponentsRoute,
   AuthSandboxQueryRoute: AuthSandboxQueryRoute,
   AuthSandboxTableRoute: AuthSandboxTableRoute,
+  AuthSchedulerManageRoute: AuthSchedulerManageRoute,
+  AuthSchedulerRecordRoute: AuthSchedulerRecordRoute,
   AuthSystemDataPermissionRoute: AuthSystemDataPermissionRoute,
   AuthSystemDeptRoute: AuthSystemDeptRoute,
   AuthSystemFileRoute: AuthSystemFileRoute,

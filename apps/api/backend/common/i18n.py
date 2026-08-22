@@ -1,6 +1,5 @@
 import glob
 import json
-import re
 
 from pathlib import Path
 from typing import Any
@@ -19,7 +18,6 @@ class I18n:
 
     def __init__(self) -> None:
         self.locales: dict[str, dict[str, Any]] = {}
-        self._template_cache: dict[str, list[tuple[re.Pattern[str], str]]] = {}
         self.load_locales()
 
     @property
@@ -90,25 +88,21 @@ class I18n:
 
     def tm(self, text: str) -> str:
         """
-        业务消息翻译。
+        框架异常反向翻译。
 
-        与 `t()` 不同：`t()` 走点分隔的**键**（`response.success`），
-        而业务代码里的 `raise errors.XxxError(msg='用户不存在')` 是**中文字面量**，
-        全仓库 189 处、28 个文件。逐个改成 `t('error.user.not_found')`
-        会在 fork 里铺开 28 个文件的冲突面，而这是个纯增量特性 ——
-        所以改成**在响应出口按中文原文查表**，调用点一行都不动。
+        与 `t()` 的关系：业务代码现在统一走 `t('error.xxx.yyy', **kwargs)`——
+        稳定键 + `.format(**kwargs)`，2026-08-22 前是反过来（`tm()` 按中文
+        原文查表），改掉的原因和踩过的坑记在 `apps/api/AGENTS.md`「后端
+        国际化」一节。`tm()` 现在只留给**我们不控制抛出点**的那一类文案：
+        FastAPI/Starlette 自己抛出来的英文原文（`HTTPBearer` 的
+        'Not authenticated'、starlette 的 'Method Not Allowed' 之类）——
+        这种情况下我们拿不到一个可以传参数的调用点，只能反过来拿原文当 key。
 
-        两级查找：
+        `exception_handler.py` 在 `exc.msg`/`exc.detail` 上无差别地调用它：
+        业务异常这时已经是 `t()` 产出的最终文案，查不到表就原样返回，
+        对已翻译文本是幂等的；框架异常则是这张表唯一还需要处理的东西。
 
-        1. `messages` 精确匹配（95 条静态文案）
-        2. `message_templates` 模板匹配（22 条带变量的，如
-           `此文件格式 {file_ext} 暂不支持` —— 插值之后没法精确匹配，
-           所以按 `{}` 占位符生成正则去套，捕获组按顺序填进目标语言模板）
-
-        查不到就原样返回 —— **降级成原文，而不是丢失信息**。
-        默认语言在没有 `messages` 表时直接短路，不付任何代价（见下方注释）。
-
-        :param text: 中文原文
+        :param text: 原文（通常是框架抛出的英文文案）
         :return:
         """
         lang = self.current_language
@@ -119,47 +113,12 @@ class I18n:
         exact = locale.get('messages') or {}
 
         # 默认语言（zh-CN）通常不需要翻 —— 原文就是中文，短路掉不付任何代价。
-        # 但**框架抛的文案是英文的**（HTTPBearer 的 'Not authenticated'、
-        # starlette 的 'Method Not Allowed'），中文界面下反而需要翻。
-        # 所以短路条件是「默认语言 **且** 这个语言没有 messages 表」，
-        # 而不是「默认语言」—— zh-CN 补了 messages 段之后就照常查表。
+        # 但**框架抛的文案是英文的**，中文界面下反而需要翻，所以短路条件是
+        # 「默认语言 **且** 这个语言没有 messages 表」，而不是「默认语言」。
         if lang == settings.I18N_DEFAULT_LANGUAGE and not exact:
             return text
-        hit = exact.get(text)
-        if hit:
-            return hit
 
-        for zh_tpl, target_tpl in self._templates(lang):
-            m = zh_tpl.fullmatch(text)
-            if m:
-                try:
-                    return target_tpl.format(*m.groups())
-                except (IndexError, KeyError):
-                    return text
-
-        return text
-
-    def _templates(self, lang: str) -> list[tuple[re.Pattern[str], str]]:
-        """把 `message_templates` 编译成正则，按语言缓存"""
-        cached = self._template_cache.get(lang)
-        if cached is not None:
-            return cached
-
-        compiled: list[tuple[re.Pattern[str], str]] = []
-        for pair in (self.locales.get(lang) or {}).get('message_templates') or []:
-            if not isinstance(pair, list) or len(pair) != 2:
-                continue
-            zh, target = pair
-            # 中文模板里的 `{}` 是占位符，其余部分按字面量转义
-            pattern = ''.join(
-                '(.+?)' if part == '{}' else re.escape(part)
-                for part in re.split(r'(\{\})', zh)
-                if part
-            )
-            compiled.append((re.compile(pattern, re.DOTALL), target))
-
-        self._template_cache[lang] = compiled
-        return compiled
+        return exact.get(text) or text
 
 
 # 创建 i18n 单例

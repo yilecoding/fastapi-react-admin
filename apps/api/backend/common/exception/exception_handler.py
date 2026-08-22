@@ -58,17 +58,16 @@ async def _validation_exception_handler(exc: RequestValidationError | Validation
         errors.append(error)
     error = errors[0]
     if error.get('type') == 'json_invalid':
-        message = 'json解析失败'
+        message = t('error.request.json_invalid')
     else:
         error_input = error.get('input')
         field = str(error.get('loc')[-1])
         error_msg = error.get('msg')
         # 「，输入：」这段是 dev 专属的调试后缀，也得跟着语言走。
-        # 先翻模板再 format —— tm() 翻的是**静态键**，插值后的字符串查不到表
-        suffix = tm('，输入：{}').format(error_input)
+        suffix = t('error.request.debug_input_suffix', input=error_input)
         message = f'{field} {error_msg}{suffix}' if settings.ENVIRONMENT == 'dev' else error_msg
     # 外壳也要翻 —— 原来 en-US 下是「请求参数非法: Input should be a valid string」
-    msg = tm(f'请求参数非法: {message}')
+    msg = t('error.request.invalid_parameter', message=message)
     data = {'errors': errors} if settings.ENVIRONMENT == 'dev' else None
     content = {
         'code': StandardResponseCode.HTTP_422,

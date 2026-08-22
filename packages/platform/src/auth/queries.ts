@@ -1,5 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 
+import { setDisplayTimeZone } from '@admin/i18n'
+
 import { api } from '../api-client/client'
 import type { CodesResponse, SidebarNode } from '../api-client/sidebar-types'
 
@@ -33,6 +35,8 @@ export type CurrentUser = {
   roles: string[]
   join_time: string
   last_login_time: string | null
+  /** 显示时区（IANA 标识）。只影响前端怎么显示时间，服务端计算不看它 */
+  timezone: string
 }
 
 export const authKeys = {
@@ -51,7 +55,20 @@ export const authKeys = {
  */
 export const meQuery = queryOptions({
   queryKey: authKeys.me(),
-  queryFn: () => api.GET<CurrentUser>('/api/v1/sys/users/me'),
+  // 时区在 queryFn 里就设好，**不要**改成组件里的 useEffect：
+  //
+  // 1. `formatDateTime` 读的是模块级变量、**不是响应式的** —— effect 里设，
+  //    已经渲染完的表格不会重渲染，会一直用旧时区显示，直到那个页面自己重取数据
+  // 2. 在这里设的话，`me` 的数据被任何组件读到之前时区就已经是对的了，
+  //    没有「先按浏览器时区闪一下再跳」的过程
+  //
+  // 代价是 queryFn 带了副作用。可接受：它是幂等的纯赋值，且 `me` 是全 app
+  // 只有一份的查询（`staleTime: Infinity`），不会被并发的多个调用者搅乱。
+  queryFn: async () => {
+    const me = await api.GET<CurrentUser>('/api/v1/sys/users/me')
+    setDisplayTimeZone(me.timezone)
+    return me
+  },
   staleTime: Infinity,
   retry: false,
 })
