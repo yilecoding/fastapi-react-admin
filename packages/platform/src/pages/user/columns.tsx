@@ -1,4 +1,3 @@
-import * as React from 'react'
 import { createColumnHelper } from '@tanstack/react-table'
 import { IconDotsVertical, IconPencil, IconShieldLock, IconTrash } from '@tabler/icons-react'
 
@@ -13,8 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@admin/ui/components/dropdown-menu'
 
-import { Can } from '../../auth/can'
-import { usePerm } from '../../auth/use-perm'
+import { Can, SuperOnly } from '../../auth/can'
 import { buildSelectColumn } from '../_shared/select-column'
 import { StatusBadge } from '../_shared/status'
 import type { User } from './api'
@@ -106,13 +104,15 @@ export function buildColumns(
               <IconDotsVertical className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-36">
-              <Can perm="sys:user:add" fallback={null}>
+              {/* 新增/编辑用户后端都是 DependsSuperUser（user.py:71,80），不是权限码校验，
+                  按 isSuperuser 直判，别用 <Can perm="..."> 编一个假权限码 */}
+              <SuperOnly>
                 <DropdownMenuItem onClick={() => onEdit(u)} data-testid={`edit-${u.username}`}>
                   <IconPencil className="size-4" />
                   {t('编辑')}
                 </DropdownMenuItem>
-              </Can>
-              {/* 权限开关与重置密码都挂 DependsSuperUser（不是权限码），所以按 isSuperuser 判 */}
+              </SuperOnly>
+              {/* 权限开关与重置密码同样是 DependsSuperUser */}
               <SuperOnly>
                 <DropdownMenuItem onClick={() => onSecurity(u)} data-testid={`security-${u.username}`}>
                   <IconShieldLock className="size-4" />
@@ -147,10 +147,4 @@ export const COLUMN_LABELS: Record<string, string> = {
   roles: '角色',
   status: '状态',
   join_time: '注册时间',
-}
-
-/** 超管专属入口。这两个接口挂的是 DependsSuperUser，权限码判不出来。 */
-function SuperOnly({ children }: { children: React.ReactNode }) {
-  const { isSuperuser } = usePerm()
-  return isSuperuser ? <>{children}</> : null
 }

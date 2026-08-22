@@ -66,7 +66,14 @@ async def create_config(db: CurrentSessionTransaction, obj: CreateConfigParam) -
     return response_base.success()
 
 
-@router.put('', summary='批量更新参数配置', dependencies=[Depends(RequestPermission('sys.config.edits')), DependsRBAC])
+@router.put(
+    '',
+    summary='批量更新参数配置',
+    # 曾经写成 'sys.config.edits'（点号+复数），种子表里没有这个权限码，
+    # 对所有非超管角色恒 403。改成复用 sys:config:edit —— 语义就是同一件事，
+    # 单条/批量只是接口形态不同
+    dependencies=[Depends(RequestPermission('sys:config:edit')), DependsRBAC],
+)
 async def bulk_update_config(db: CurrentSessionTransaction, objs: list[UpdateConfigsParam]) -> ResponseModel:
     count = await config_service.bulk_update(db=db, objs=objs)
     if count > 0:

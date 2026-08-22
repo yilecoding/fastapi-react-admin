@@ -78,12 +78,13 @@ export function useUpdateConfig() {
 /**
  * 批量保存 —— 逐条 `PUT /{pk}` 并发，**不用**后端的批量接口。
  *
- * 因为 `PUT /sys/configs`（批量）的权限码在上游写成了 `sys.config.edits`
- * ——**点号**，而其余全是冒号（`sys:config:add` / `edit` / `del`），
- * 菜单种子里也没有这一条。结果是它只有超管能调，给了 `sys:config:edit`
- * 的角色反而调不通。走单条接口就绕开了这个坑。
- *
- * `allSettled` 而不是 `all`：一条失败不该让已经存进去的那些无声无息。
+ * `PUT /sys/configs`（批量）的权限码曾经写成 `sys.config.edits`（点号+复数，
+ * 菜单种子里没这一条，对所有非超管角色恒 403）——**这个 bug 已经修好**
+ * （改成复用 `sys:config:edit`，见 `config.py:69`），但仍然刻意走单条接口：
+ * 批量接口是整批一次校验（`config_service.bulk_update`，任一行冲突就整批
+ * 回滚），而这里要的是**逐行独立的失败反馈**（`allSettled` 而不是 `all`：
+ * 一条失败不该让已经存进去的那些无声无息）——这是两种不同的失败语义，
+ * 不是权限问题绕不绕过的事。
  */
 export function useSaveConfigs() {
   const qc = useQueryClient()
