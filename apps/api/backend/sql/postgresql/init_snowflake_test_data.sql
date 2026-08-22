@@ -38,7 +38,7 @@ values
 (2049629108249427988, '删除', 'DeleteOperaLog', null, 0, null, 2, 'log:opera:del', 1, 0, '', null, 2049629108249427987, '2025-06-26 20:29:06', null),
 (2049629108253622272, '清空', 'EmptyOperaLog', null, 0, null, 2, 'log:opera:clear', 1, 0, '', null, 2049629108249427987, '2025-06-26 20:29:06', null),
 (2049629108253622273, '系统监控', 'Monitor', '/monitor', 4, 'mdi:monitor-eye', 0, null, 1, 1, '', null, null, '2025-06-26 20:29:06', null),
-(2049629108253622274, '在线用户', 'Online', '/log/online', 1, 'wpf:online', 1, null, 1, 1, '', null, 2049629108253622273, '2025-06-26 20:29:06', null),
+(2049629108253622274, '在线用户', 'Online', '/monitor/online', 1, 'wpf:online', 1, null, 1, 1, '', null, 2049629108253622273, '2025-06-26 20:29:06', null),
 (2049629108253622276, 'Redis 监控', 'Redis', '/monitor/redis', 2, 'devicon:redis', 1, null, 1, 1, '', null, 2049629108253622273, '2025-06-26 20:29:06', null),
 (2049629108253622277, '服务器监控', 'Server', '/monitor/server', 3, 'mdi:server-outline', 1, null, 1, 1, '', null, 2049629108253622273, '2025-06-26 20:29:06', null),
 (2049629108253622282, '个人中心', 'Profile', '/profile', 6, 'ant-design:profile-outlined', 1, null, 1, 0, '', null, null, '2025-06-26 20:29:06', null),

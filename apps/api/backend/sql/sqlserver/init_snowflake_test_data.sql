@@ -38,7 +38,7 @@ VALUES
 (2049629108249427988, N'删除', 'DeleteOperaLog', NULL, 0, NULL, 2, 'log:opera:del', 1, 0, '', NULL, 2049629108249427987, '2025-06-26 20:29:06', NULL),
 (2049629108253622272, N'清空', 'EmptyOperaLog', NULL, 0, NULL, 2, 'log:opera:clear', 1, 0, '', NULL, 2049629108249427987, '2025-06-26 20:29:06', NULL),
 (2049629108253622273, N'系统监控', 'Monitor', '/monitor', 4, 'mdi:monitor-eye', 0, NULL, 1, 1, '', NULL, NULL, '2025-06-26 20:29:06', NULL),
-(2049629108253622274, N'在线用户', 'Online', '/log/online', 1, 'wpf:online', 1, NULL, 1, 1, '', NULL, 2049629108253622273, '2025-06-26 20:29:06', NULL),
+(2049629108253622274, N'在线用户', 'Online', '/monitor/online', 1, 'wpf:online', 1, NULL, 1, 1, '', NULL, 2049629108253622273, '2025-06-26 20:29:06', NULL),
 (2049629108253622276, N'Redis 监控', 'Redis', '/monitor/redis', 2, 'devicon:redis', 1, NULL, 1, 1, '', NULL, 2049629108253622273, '2025-06-26 20:29:06', NULL),
 (2049629108253622277, N'服务器监控', 'Server', '/monitor/server', 3, 'mdi:server-outline', 1, NULL, 1, 1, '', NULL, 2049629108253622273, '2025-06-26 20:29:06', NULL),
 (2049629108253622282, N'个人中心', 'Profile', '/profile', 6, 'ant-design:profile-outlined', 1, NULL, 1, 0, '', NULL, NULL, '2025-06-26 20:29:06', NULL),

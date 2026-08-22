@@ -361,7 +361,7 @@
         {
           "id": "2049629108253622274",
           "name": "Online",
-          "path": "/log/online",
+          "path": "/monitor/online",
           "sort": 1,
           "type": 1,
           "perms": null,

@@ -51,7 +51,7 @@ export const pageRegistry: PageRegistry = {
   "/_auth/sandbox/components": DevSandboxPage,
   "/_auth/embedded/$name": EmbeddedPage,
   "/_auth/plugins/config": ConfigPage,
-  "/_auth/log/online": LogOnlinePage,
+  "/_auth/monitor/online": LogOnlinePage,
   "/_auth/monitor/redis": MonitorRedisPage,
   "/_auth/monitor/server": MonitorServerPage,
   "/_auth/profile": ProfilePage,
