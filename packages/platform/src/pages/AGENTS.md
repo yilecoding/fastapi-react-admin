@@ -273,8 +273,18 @@ auto，只能这么算），定高情形下要 `content-scroll:lg:max-h-none` �
 `perms` 是**空串** —— 用 `requirePerm()` 检查不到任何东西，等于没设防。
 这类路由的守卫要用 `requireSuperUser()`。
 
-在线用户页还有两个坑：
+在线用户页还有三个坑：
 
+- 🔴 **接口遍历全站所有会话的 token，一个人的过期能炸所有人的请求。**
+  `GET /monitors/sessions` 逐个 `jwt_decode()` Redis 里 SCAN 出的每一个 `fba:token:*`，
+  过期的 token 解码会抛异常——原来没有 try/except，任意一个**跟当前查看者无关**的
+  会话在扫描窗口里到期，整个接口就 401。默认每 10 秒刷新一次、且是唯一会一次性
+  解密全站所有会话 token 的接口，所以概率会随在线人数和刷新频率上升。
+  现象是「自己的登录明明没过期，这个页面却时不时报 Token 已过期」——因为前端全局
+  401 自动刷新用的是**当前用户自己**的 refresh token，刷新会成功，但重放请求撞见的
+  还是那把陌生的过期 key，第二次不再重试，后端原始错误文案就直接进了页面的
+  `MonitorError` 卡片。修法：`jwt_decode()` 外包 `except errors.TokenError: continue`——
+  过期会话本来就不该出现在在线列表里，跳过即可，不该让它拖垮整个请求
 - **`id` 是用户 ID，会重复**（同一个人多端登录）。表格 `getRowId` 必须用
   `session_uuid`，用 `id` 会让多行共享同一个选中态
 - 排序键用 **`expire_time`** 而不是 `last_login_time`：后者是「用户」的最后登录时间，

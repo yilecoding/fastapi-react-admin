@@ -6,6 +6,8 @@ from fastapi import APIRouter, Path, Query
 
 from backend.app.admin.schema.token import GetTokenDetail
 from backend.common.enums import StatusType
+from backend.common.exception import errors
+from backend.common.log import log
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
 from backend.common.security.jwt import DependsSuperUser, jwt_decode, revoke_token
 from backend.core.conf import settings
@@ -45,7 +47,15 @@ async def get_sessions(
     for token in token_values:
         if not token:
             continue
-        token_payload = jwt_decode(token)
+        try:
+            token_payload = jwt_decode(token)
+        except errors.TokenError:
+            # 这里在遍历全站所有在线会话，不是校验"当前这一次请求"的 token——
+            # 任意一个人、任意一台设备的会话在 SCAN 到 decode 之间的这几毫秒里过期，
+            # 都不该让整个「在线用户」接口跟着 401。跳过这一条即可：过期的会话
+            # 本来就不该出现在在线列表里，Redis 那把 key 也会很快自然过期清掉。
+            log.warning('在线用户列表遇到一个已过期/无效的会话 token，已跳过')
+            continue
         user_id = token_payload.user_id
         session_uuid = token_payload.session_uuid
         token_detail = GetTokenDetail(
