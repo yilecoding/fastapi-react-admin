@@ -198,54 +198,62 @@ export function SchedulerRecordPage({
   })
 
   return (
-    <div className="@container/main flex flex-1 flex-col gap-4 content-scroll:min-h-0 md:gap-6">
-      <PageHeader title={t('执行记录')} description={t('定时任务每一次执行的结果与异常栈')} />
+    // 三件套模板的外层骨架（照 pages/user/ 抄，见 pages/AGENTS.md）——
+    // 之前这一页把 py-4 md:py-6 那层拆掉、gap 直接摆在 @container/main 上，
+    // 于是「页头 → 查询区」少了一层竖向留白，跟别的列表页对不上
+    <div className="flex flex-1 flex-col content-scroll:min-h-0">
+      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
+        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
+          <PageHeader title={t('执行记录')} description={t('定时任务每一次执行的结果与异常栈')} />
 
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-        {/* 查询区与表格工具行合并成一行 —— 不合并是两条右对齐、左半边全空的按钮行 */}
-        <QueryBar
-          fields={FIELDS}
-          value={q.value}
-          onChange={q.setValue}
-          onSearch={q.submit}
-          onReset={q.reset}
-          applied={q.applied}
-          loading={isFetching}
-          actions={<DataTableColumnVisibility table={table} />}
-        />
+          {/* 查询区和表格是同一个块的两半，gap-4 而不是页面级的 24px */}
+          <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+            {/* 查询区与表格工具行合并成一行 —— 不合并是两条右对齐、左半边全空的按钮行 */}
+            <QueryBar
+              fields={FIELDS}
+              value={q.value}
+              onChange={q.setValue}
+              onSearch={q.submit}
+              onReset={q.reset}
+              applied={q.applied}
+              loading={isFetching}
+              actions={<DataTableColumnVisibility table={table} />}
+            />
 
-        <div
-          data-testid="scheduler-record-table"
-          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-        >
-          <DataTable
-            table={table}
-            showColumnVisibility={false}
-            rows={table.getRowModel().rows}
-            columnCount={columns.length}
-            loading={isPending}
-            busy={isFetching && !isPending}
-            skeletonRows={8}
-            emptyMessage={t('暂无执行记录')}
-            emptyAction={
-              hasFilter ? (
-                <ResetButton
-                  variant="outline"
-                  testId="empty-clear-filter"
-                  label={t('清除筛选')}
-                  onClick={q.reset}
-                />
-              ) : undefined
-            }
-            pagination={{
-              pageIndex: page - 1,
-              pageCount: data?.total_pages ?? 1,
-              pageSize: size,
-              totalCount: data?.total ?? 0,
-              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-            }}
-          />
+            <div
+              data-testid="scheduler-record-table"
+              className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+            >
+              <DataTable
+                table={table}
+                showColumnVisibility={false}
+                rows={table.getRowModel().rows}
+                columnCount={columns.length}
+                loading={isPending}
+                busy={isFetching && !isPending}
+                skeletonRows={8}
+                emptyMessage={t('暂无执行记录')}
+                emptyAction={
+                  hasFilter ? (
+                    <ResetButton
+                      variant="outline"
+                      testId="empty-clear-filter"
+                      label={t('清除筛选')}
+                      onClick={q.reset}
+                    />
+                  ) : undefined
+                }
+                pagination={{
+                  pageIndex: page - 1,
+                  pageCount: data?.total_pages ?? 1,
+                  pageSize: size,
+                  totalCount: data?.total ?? 0,
+                  onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+                  onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+                }}
+              />
+            </div>
+          </div>
         </div>
       </div>
 

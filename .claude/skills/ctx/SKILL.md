@@ -23,7 +23,10 @@ description: 把一条刚踩出来的坑写进项目上下文文档（分册 AGE
 | 查询区字段 / 运算符 / 出参映射 | `packages/ui/src/components/query-bar/AGENTS.md` |
 | 富文本、内联图、公开子树 | `packages/ui/src/components/rich-text/AGENTS.md` |
 | 多页签、偏好、侧边栏、外壳滚动 | `packages/platform/src/shell/AGENTS.md` |
-| 页面模板、四种页型、页面滚动骨架 | `packages/platform/src/pages/AGENTS.md` |
+| 页面模板、主从页/监控页滚动骨架 | `packages/platform/src/pages/AGENTS.md` |
+| 设置屏骨架本身 | `packages/platform/src/pages/_shared/AGENTS.md` |
+| 参数配置那种设置屏 | `packages/platform/src/pages/config/AGENTS.md` |
+| 菜单管理、死链判定 | `packages/platform/src/pages/menu/AGENTS.md` |
 | 文件上传 / 预览 / 附件 | `packages/platform/src/pages/file/AGENTS.md` |
 | 文案、语言包、两个校验脚本 | `packages/i18n/AGENTS.md` |
 | 后端模型 / 接口 / SQL / pytest | `apps/api/AGENTS.md` |

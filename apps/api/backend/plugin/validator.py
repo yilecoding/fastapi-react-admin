@@ -12,7 +12,23 @@ from backend.utils.pattern_validate import match_string
 _VALID_TAGS: Final = frozenset({'ai', 'mcp', 'agent', 'auth', 'storage', 'notification', 'task', 'payment', 'other'})
 
 # 支持的数据库类型
-_VALID_DATABASES: Final = frozenset({'mysql', 'postgresql'})
+_VALID_DATABASES: Final = frozenset({'mysql', 'postgresql', 'sqlserver'})
+
+# 每种数据库类型必需的 SQL 脚本。mysql/postgresql 保留自增主键（init/destroy）
+# 和雪花主键（init_snowflake/destroy_snowflake）两套；sqlserver 只走雪花主键
+# ——这个 fork 从未给 sqlserver 配过自增主键的初始化脚本（`.env.example` 里
+# `DATABASE_PK_MODE` 默认就是 snowflake），要求它凭空生成 init.sql/destroy.sql
+# 只是在校验一个不存在的使用场景。未来出现新的数据库类型时，缺省仍然按最严格
+# 的四件套要求，不要偷偷放过。
+_REQUIRED_SQL_FILES_BY_DB: Final[dict[str, tuple[str, ...]]] = {
+    'sqlserver': ('init_snowflake.sql', 'destroy_snowflake.sql'),
+}
+_DEFAULT_REQUIRED_SQL_FILES: Final[tuple[str, ...]] = (
+    'init.sql',
+    'destroy.sql',
+    'init_snowflake.sql',
+    'destroy_snowflake.sql',
+)
 
 
 def _validate_settings(v: dict[str, Any]) -> dict[str, Any]:
@@ -240,14 +256,12 @@ def validate_plugin_config(plugin_name: str, config: dict[str, Any]) -> PluginLe
         supported_db_types = []
         missing_details = []
 
-        for db_type in ('mysql', 'postgresql'):
+        # 只校验插件自己声明支持的数据库类型，不是写死的 (mysql, postgresql)——
+        # 那样会让 sqlserver 永远校验不到：这个仓库实际部署的方言反而没受这层保护。
+        for db_type in config['plugin']['database']:
             db_sql_dir = sql_dir / db_type
-            required_sql_files = (
-                db_sql_dir / 'init.sql',
-                db_sql_dir / 'destroy.sql',
-                db_sql_dir / 'init_snowflake.sql',
-                db_sql_dir / 'destroy_snowflake.sql',
-            )
+            required_files = _REQUIRED_SQL_FILES_BY_DB.get(db_type, _DEFAULT_REQUIRED_SQL_FILES)
+            required_sql_files = tuple(db_sql_dir / name for name in required_files)
             missing_files = [
                 str(sql_file.relative_to(plugin_dir)) for sql_file in required_sql_files if not sql_file.is_file()
             ]

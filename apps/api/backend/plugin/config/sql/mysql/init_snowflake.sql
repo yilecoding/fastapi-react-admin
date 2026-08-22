@@ -1,5 +1,5 @@
 insert into sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
-values (2049629108253622283, 'config.menu', 'PluginConfig', '/plugins/config', 7, 'codicon:symbol-parameter', 1, null, 1, 1, '', null, 2049629108245233667, now(), null);
+values (2049629108253622283, '参数配置', 'PluginConfig', '/plugins/config', 7, 'codicon:symbol-parameter', 1, null, 1, 1, '', null, 2049629108245233667, now(), null);
 
 insert into sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
 values
