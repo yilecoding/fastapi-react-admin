@@ -61,7 +61,9 @@ export function TabListMenu({
           return (
             <DropdownMenuItem
               key={tab.key}
-              data-testid={`tab-list-item-${tab.routeId}`}
+              // 同 tab-item.tsx：用 tab.key 不用 routeId，避免同 routeId 不同
+              // 参数的内嵌 tab（/_auth/embedded/$name）在下拉里撞出重复 testid
+              data-testid={`tab-list-item-${tab.key}`}
               className={cn('group/row gap-2', active && 'bg-muted')}
               onClick={() => onSelect(tab)}
             >
@@ -73,7 +75,7 @@ export function TabListMenu({
                 <button
                   type="button"
                   aria-label={t('关闭 {{name}}', { name: label })}
-                  data-testid={`tab-list-close-${tab.routeId}`}
+                  data-testid={`tab-list-close-${tab.key}`}
                   // 阻止冒泡，否则关闭同时还会把这个 tab 激活一次
                   onClick={(e) => {
                     e.stopPropagation()

@@ -111,7 +111,10 @@ export function TabBar() {
     ro.observe(el)
     for (const child of Array.from(el.children)) ro.observe(child)
     return () => ro.disconnect()
-  }, [measure, tabs.length])
+    // showTabs 必须在依赖里：偏好关掉多标签页时下面 `return null`，listRef 拿到的是
+    // null，effect 空手退出；只靠 tabs.length 触发不会补跑（关闭再打开标签条时
+    // tabs.length 通常没变）。同一个坑见下面滚轮监听那条注释。
+  }, [measure, showTabs, tabs.length])
 
   // 滚轮横滚：鼠标在标签条上滚，意图是左右翻 tab 而不是滚页面。
   // 必须手动注册非 passive 监听 —— React 的 onWheel 是 passive 的，
@@ -128,7 +131,12 @@ export function TabBar() {
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-  }, [])
+    // 依赖不能是 []：TabBar 本身不会因为 showTabs 变化而重新挂载（下面只是
+    // `return null`，函数组件实例还在），[] 意味着这个 effect 只在**首次**
+    // commit 时跑一次。如果那一刻 showTabs 恰好是 false，listRef.current 是
+    // null，监听器永远绑不上；之后把 showTabs 切回 true，标签条重新出现，
+    // 但滚轮横滚已经废了（组件没有重新 mount，effect 不会重跑）。实测踩过。
+  }, [showTabs, tabs.length])
 
   // 活动 tab 滚入可见区（切页、或活动 tab 因关闭而变化时）
   React.useEffect(() => {

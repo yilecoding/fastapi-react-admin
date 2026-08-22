@@ -9,7 +9,7 @@ import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { StatusBadge } from '../_shared/status'
-import { dataScopesQuery, scopeKeys, useDeleteDataScopes, type DataScope } from './api'
+import { dataScopesQuery, scopeDetailQuery, scopeKeys, useDeleteDataScopes, type DataScope } from './api'
 import { RulesPanel } from './rules-panel'
 import { ScopeFormSheet } from './scope-form'
 import { ScopeList } from './scope-list'
@@ -57,8 +57,15 @@ export function DataPermissionPage({
   )
   const scopes = data?.items ?? []
 
-  // URL 里的范围被筛掉/删掉就落回第一条。不回写 URL —— 免得和导航打架
-  const selected = scopes.find((s) => s.id === search.scope) ?? scopes[0] ?? null
+  // URL 里的范围可能**不在当前页**（范围分页，深链常落到第 2 页之后）。
+  // 只在当前页 find 会静默落回第一条 —— 那是「你以为在给范围 X 配规则、
+  // 实际写的是列表第一个范围」，所以页内找不到时按 id 单独取（同 role/index.tsx）。
+  // 真的被删了（404）才落回第一条；不回写 URL，免得和导航打架。
+  const inPage = scopes.find((s) => s.id === search.scope) ?? null
+  const needLookup = Boolean(search.scope) && !inPage
+  const detail = useQuery({ ...scopeDetailQuery(search.scope ?? ''), enabled: needLookup })
+  const selected =
+    inPage ?? detail.data ?? (needLookup && detail.isPending ? null : (scopes[0] ?? null))
 
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<DataScope | null>(null)
@@ -68,42 +75,41 @@ export function DataPermissionPage({
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
+        {/* 主从页的滚动骨架，三种情形三套行为 —— 见 CLAUDE.md「主从页」一节 */}
+        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:lg:min-h-0 content-scroll:lg:flex-1">
           <PageHeader
             title={t("数据权限")}
             description={t("左边是数据范围（一捆规则的名字，角色绑的就是它），右边是这个范围下的具体条件。")}
           />
 
-          <div className="flex flex-1 items-start gap-6">
-            <div className="sticky top-4 shrink-0 self-start">
-              <ScopeList
-                scopes={scopes}
-                total={data?.total ?? 0}
-                page={page}
-                size={size}
-                loading={isPending}
-                busy={isFetching && !isPending}
-                selectedId={selected?.id ?? null}
-                keyword={search.name ?? ''}
-                status={search.status}
-                onKeyword={(v) => patch({ name: v || undefined, page: undefined, scope: undefined })}
-                onStatus={(v) => patch({ status: v, page: undefined, scope: undefined })}
-                onReset={() => patch({ name: undefined, status: undefined, page: undefined, scope: undefined })}
-                onPage={(p) => patch({ page: p, scope: undefined })}
-                onSelect={(id) => patch({ scope: id })}
-                onAdd={() => { setEditing(null); setSheetOpen(true) }}
-                onEdit={(s) => { setEditing(s); setSheetOpen(true) }}
-                onDelete={setPendingDelete}
-                onRefresh={() => qc.invalidateQueries({ queryKey: scopeKeys.all })}
-              />
-            </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6 content-scroll:lg:min-h-0">
+            <ScopeList
+              scopes={scopes}
+              total={data?.total ?? 0}
+              page={page}
+              size={size}
+              loading={isPending}
+              busy={isFetching && !isPending}
+              selectedId={selected?.id ?? null}
+              keyword={search.name ?? ''}
+              status={search.status}
+              onKeyword={(v) => patch({ name: v || undefined, page: undefined, scope: undefined })}
+              onStatus={(v) => patch({ status: v, page: undefined, scope: undefined })}
+              onReset={() => patch({ name: undefined, status: undefined, page: undefined, scope: undefined })}
+              onPage={(p) => patch({ page: p, scope: undefined })}
+              onSelect={(id) => patch({ scope: id })}
+              onAdd={() => { setEditing(null); setSheetOpen(true) }}
+              onEdit={(s) => { setEditing(s); setSheetOpen(true) }}
+              onDelete={setPendingDelete}
+            onRefresh={() => qc.invalidateQueries({ queryKey: scopeKeys.all })}
+            />
 
-            <div className="flex min-w-0 flex-1 flex-col gap-4">
+            <div className="flex min-w-0 flex-1 flex-col gap-4 content-scroll:lg:min-h-0">
               {!selected ? (
                 <EmptyDetail loading={isPending} onAdd={() => { setEditing(null); setSheetOpen(true) }} />
               ) : (
                 <>
-                  <div className="flex flex-wrap items-start justify-between gap-3" data-testid="scope-detail">
+                  <div className="flex shrink-0 flex-wrap items-start justify-between gap-3" data-testid="scope-detail">
                     <div className="flex flex-col gap-1">
                       <span className="flex flex-wrap items-center gap-2">
                         <h2 className="text-lg font-semibold" data-testid="scope-detail-name">{selected.name}</h2>
