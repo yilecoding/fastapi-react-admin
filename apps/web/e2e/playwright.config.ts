@@ -38,7 +38,12 @@ export default defineConfig({
   // Playwright 会误以为是自己起的服务，看见的行为会很怪，先排除端口冲突再排查测试本身。
   webServer: [
     {
-      command: "pnpm --filter api e2e",
+      // 🔴 脚本名不能叫 `e2e` —— `apps/api/package.json` 里那个脚本刻意叫
+      // `e2e:server`。`turbo e2e`（= `pnpm e2e`）按脚本名把两个包的 `e2e`
+      // 任务都跑起来，如果 api 那边也叫 `e2e`，turbo 会独立起一份，
+      // Playwright 这里的 webServer 又会再起一份 —— 两个进程抢同一个 8001 端口
+      // （实测踩过：`address already in use`，凑巧没影响到测试结果，但是巧合不是保证）。
+      command: "pnpm --filter api e2e:server",
       cwd: REPO_ROOT,
       url: `http://127.0.0.1:${API_PORT}/openapi`,
       reuseExistingServer: !process.env.CI,
