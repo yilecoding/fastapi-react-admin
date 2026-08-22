@@ -21,6 +21,7 @@ import { ProfilePage } from "@admin/platform/pages/profile"
 import { NoticePage } from "@admin/platform/pages/notice"
 import { PluginPage } from "@admin/platform/pages/plugin"
 import { DashboardPage } from "@admin/platform/pages/dashboard"
+import { SchedulerManagePage } from "@admin/platform/pages/scheduler-manage"
 import { SchedulerRecordPage } from "@admin/platform/pages/scheduler-record"
 
 /**
@@ -34,6 +35,7 @@ import { SchedulerRecordPage } from "@admin/platform/pages/scheduler-record"
 export const pageRegistry: PageRegistry = {
   "/_auth/403": ForbiddenPage,
   "/_auth/dashboard": DashboardPage,
+  "/_auth/scheduler/manage": SchedulerManagePage,
   "/_auth/scheduler/record": SchedulerRecordPage,
   "/_auth/system/user": UserPage,
   "/_auth/system/role": RolePage,
