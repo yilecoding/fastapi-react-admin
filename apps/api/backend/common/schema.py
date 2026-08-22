@@ -1,11 +1,9 @@
-from datetime import datetime
 from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, validate_email
 
 from backend.common.enums import PrimaryKeyType
 from backend.core.conf import settings
-from backend.utils.timezone import timezone
 
 CustomPhoneNumber = Annotated[str, Field(pattern=r'^1[3-9]\d{9}$')]
 
@@ -28,16 +26,23 @@ class CustomEmailStr(EmailStr):
 class SchemaBase(BaseModel):
     """基础模型配置"""
 
-    model_config = ConfigDict(
-        use_enum_values=True,
-        json_encoders={
-            datetime: lambda x: (
-                timezone.to_str(timezone.from_datetime(x))
-                if x.tzinfo is not None and x.tzinfo != timezone.tz_info
-                else timezone.to_str(x)
-            ),
-        },
-    )
+    # 🔴 **不要**再给 datetime 加自定义 `json_encoders`。
+    #
+    # 这里原来把所有时间格式化成 `'%Y-%m-%d %H:%M:%S'` 下发 —— 那个格式
+    # **丢掉了时区**，于是浏览器只能靠猜：ES 规范对无时区标记的串，`T` 分隔的
+    # 按浏览器本地时区解释、空格分隔的干脆没定义（Safari 历史上直接
+    # Invalid Date）。后果是服务端和用户不在同一个时区时，界面上所有时间
+    # 整体偏移几小时，而且不报错。前端为此长出过两处 hack：
+    # `log-online/api.ts` 自己写解析器，`profile/recent-logins.tsx` 干脆
+    # 放弃解析、原样摊字符串。
+    #
+    # pydantic v2 的**默认**行为正好是我们要的：aware datetime 序列化成
+    # 带偏移的 ISO 8601（`2026-08-22T11:59:47+08:00`），无歧义。
+    # 顺带这个 `json_encoders` 本身也是 pydantic v2 已废弃的 API。
+    #
+    # 以后把存储切成 UTC 时，这里同样**一行都不用改** —— 默认序列化会
+    # 自动变成 `2026-08-22T03:59:47Z`，因为格式跟着 tzinfo 走。
+    model_config = ConfigDict(use_enum_values=True)
 
     if PrimaryKeyType.snowflake == settings.DATABASE_PK_MODE:
         from pydantic import field_serializer

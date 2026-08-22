@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
 import { IconDownload, IconLoader2 } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
@@ -184,7 +185,7 @@ export function LogLoginPage({
             onClick={() => setDetail(row.original)}
             className="font-mono text-xs text-primary tabular-nums underline-offset-2 hover:underline"
           >
-            {getValue()}
+            {formatDateTime(getValue())}
           </button>
         ),
       }),
@@ -301,7 +302,7 @@ export function LogLoginPage({
         lines.push(
           [
             i + 1,
-            r.login_time,
+            formatDateTime(r.login_time),
             r.username,
             r.status === 1 ? t('成功') : t('失败'),
             t(r.msg),

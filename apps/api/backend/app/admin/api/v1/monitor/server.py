@@ -120,7 +120,7 @@ async def get_server_info() -> ResponseSchemaModel[ServerMonitorInfo]:  # ruff:i
             name='Python3',
             version=platform.python_version(),
             home=sys.executable,
-            startup=timezone.to_str(start_time),
+            startup=timezone.to_iso(start_time),
             elapsed_seconds=elapsed_seconds,
             cpu_usage=f'{process.cpu_percent(interval=0.1):.2f}%',
             mem_vms=fmt_bytes(proc_mem.vms),

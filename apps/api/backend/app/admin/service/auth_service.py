@@ -119,7 +119,7 @@ class AuthService:
                 # extra info
                 username=user.username,
                 nickname=user.nickname,
-                last_login_time=timezone.to_str(user.last_login_time),
+                last_login_time=timezone.to_iso(user.last_login_time),
                 ip=ctx.ip,
                 os=ctx.os,
                 browser=ctx.browser,
@@ -236,7 +236,7 @@ class AuthService:
             # extra info
             username=user.username,
             nickname=user.nickname,
-            last_login_time=timezone.to_str(user.last_login_time),
+            last_login_time=timezone.to_iso(user.last_login_time),
             ip=ctx.ip,
             os=ctx.os,
             browser=ctx.browser,

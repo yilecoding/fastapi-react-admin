@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { IconDotsVertical } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { Checkbox } from '@admin/ui/components/checkbox'
@@ -83,7 +84,7 @@ export function FileList({
                 {formatBytes(file.size)}
               </span>
               <span className="hidden w-36 shrink-0 text-end text-xs tabular-nums text-muted-foreground md:inline">
-                {file.created_time}
+                {formatDateTime(file.created_time)}
               </span>
 
               <span onClick={(e) => e.stopPropagation()}>

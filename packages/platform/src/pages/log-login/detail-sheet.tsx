@@ -1,6 +1,7 @@
 import { IconAlertTriangle } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 
+import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { Separator } from '@admin/ui/components/separator'
@@ -62,7 +63,7 @@ export function LoginLogDetailSheet({
             </div>
             <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
               <Row label={t("登录账号")} value={log.username} />
-              <Row label={t("登录时间")} value={log.login_time} mono />
+              <Row label={t("登录时间")} value={formatDateTime(log.login_time)} mono />
               <Row label={t("登录 IP")} value={log.ip} mono copy />
               <Row label={t("登录地点")} value={formatLocation(log)} />
               <Row label={t("浏览器")} value={log.browser ?? '—'} />

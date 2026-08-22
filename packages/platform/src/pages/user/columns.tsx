@@ -1,6 +1,7 @@
 import { createColumnHelper } from '@tanstack/react-table'
 import { IconDotsVertical, IconPencil, IconShieldLock, IconTrash } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Avatar, AvatarFallback, AvatarImage } from '@admin/ui/components/avatar'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
@@ -88,7 +89,9 @@ export function buildColumns(
     }),
     col.accessor('join_time', {
       header: t('注册时间'),
-      cell: ({ getValue }) => <span className="text-sm tabular-nums text-muted-foreground">{getValue()}</span>,
+      cell: ({ getValue }) => (
+        <span className="text-sm tabular-nums text-muted-foreground">{formatDateTime(getValue())}</span>
+      ),
     }),
     col.display({
       id: 'actions',
