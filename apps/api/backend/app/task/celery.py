@@ -21,7 +21,6 @@ import celery_aio_pool
 
 from celery.signals import worker_process_init
 
-from backend.app.task.tasks.beat import get_local_beat_schedule
 
 from backend.common.enums import DataBaseType
 from backend.core.conf import settings
@@ -117,10 +116,12 @@ def init_celery() -> celery.Celery:
         result_backend=get_result_backend(),
         result_extended=True,
         database_engine_options={'echo': settings.DATABASE_ECHO},
-        # beat 从 task_scheduler 表读调度（界面上能改）。
-        # beat_schedule 里的静态项仍然生效 —— 它现在的角色是「代码自带的兜底调度」，
-        # 库里那份为准，两边同名时库里的会覆盖它。
-        beat_schedule=get_local_beat_schedule(),
+        # 🔴 **调度只有一个来源：`task_scheduler` 表。**
+        # 刻意不配 `beat_schedule` —— `DatabaseScheduler.setup_schedule()` 只
+        # SELECT 那张表，从不合并 `app.conf.beat_schedule`。曾经两边都配着，
+        # 注释还写「静态项仍然生效」，实测是**死代码**：celery.conf 里躺着一条
+        # 谁也不会执行的调度。新库的初始调度走种子 SQL（和菜单同一个路子），
+        # 这样「在界面上删掉一条调度」不会被代码里的副本复活。
         beat_scheduler='backend.app.task.utils.schedulers:DatabaseScheduler',
         task_cls='backend.app.task.tasks.base:TaskBase',
         task_track_started=True,

@@ -54,7 +54,11 @@ class Task(MappedBase):
     task_id = sa.Column(UniversalStr(155), comment='任务 UUID')
     status = sa.Column(UniversalStr(64), default=states.PENDING, comment='任务状态')
     result = sa.Column(PickleType, nullable=True, comment='任务返回值')
-    date_done = sa.Column(TimeZone, default=timezone.now, onupdate=timezone.now, nullable=True, comment='结束时间')
+    # index：`maintenance.prune_task_results` 按它做范围删除，而这张表是
+    # 每执行一次任务就长一行的表 —— 没索引就是全表扫（同两个日志表那条）
+    date_done = sa.Column(
+        TimeZone, default=timezone.now, onupdate=timezone.now, nullable=True, index=True, comment='结束时间'
+    )
     traceback = sa.Column(UniversalText, nullable=True, comment='异常栈')
 
     def __init__(self, task_id: str) -> None:

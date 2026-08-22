@@ -218,3 +218,40 @@ def test_touch_last_update_works_without_event_loop(monkeypatch):
     TaskScheduler.touch_last_update()  # 此处没有运行中的事件循环
     assert len(written) == 1
     assert next(iter(written)).endswith(':last_update')
+
+
+# ── 调度只有一个来源 ────────────────────────────────────────────────────────
+
+
+def test_beat_schedule_config_is_empty():
+    """🔴 调度只能来自 `task_scheduler` 表，`app.conf.beat_schedule` 必须是空的。
+
+    `DatabaseScheduler.setup_schedule()` 只 SELECT 那张表，**从不合并**
+    `app.conf.beat_schedule`。曾经两边都配着，`celery.py` 里的注释还写
+    「静态项仍然生效」—— 实测是死代码：celery.conf 里躺着一条谁也不会执行的调度，
+    而下一个人读到那句注释会以为它是兜底。
+
+    往 `beat_schedule` 里加东西的**唯一**正确做法是：要么改成在
+    `setup_schedule()` 里显式合并（那要先想清楚「界面上删掉一条，
+    代码里的副本会不会把它复活」），要么走种子 SQL。这条挡住第三条路——
+    「加了但不生效」。
+    """
+    from backend.app.task.celery import celery_app
+
+    assert not celery_app.conf.beat_schedule, (
+        f'beat_schedule 非空但不会生效：{list(celery_app.conf.beat_schedule)}'
+    )
+
+
+def test_setup_schedule_reads_only_the_database(monkeypatch):
+    """setup_schedule 拿到的条目必须**只**来自库，不掺 celery 的默认条目。
+
+    celery 的 `Scheduler.setup_schedule()` 会 `install_default_entries()`，
+    塞一条 `celery.backend_cleanup`。我们重写掉了它 —— 所以那条不会自己出现，
+    执行记录的清理必须由 `maintenance.prune_task_results` 自己排（见种子 SQL）。
+    这条把「重写」这个事实钉住：哪天有人调回 super()，它会红。
+    """
+    _patch_session(monkeypatch, [make_row(id=1, name='只有我', crontab='15 3 * * *')])
+    s = DatabaseScheduler.__new__(DatabaseScheduler)
+    s.app = None
+    assert set(DatabaseScheduler.all_as_schedule(s)) == {'只有我'}

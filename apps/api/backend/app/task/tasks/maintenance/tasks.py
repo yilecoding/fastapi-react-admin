@@ -78,3 +78,33 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
     msg = f'清理 {days} 天前的日志：登录日志 {login} 条、操作日志 {opera} 条'
     log.info(msg)
     return msg
+
+
+@celery_app.task(name='maintenance.prune_task_results')
+async def prune_task_results(days: int = 30, batch: int = PRUNE_BATCH) -> str:
+    """清理 N 天前的**任务执行记录**（`task_result`）。
+
+    🔴 **不加这个任务，执行记录会无限长。** 三条原因叠在一起：
+
+    1. celery 自带的 `celery.backend_cleanup` 是由 `Scheduler.install_default_entries()`
+       装上的，而 `DatabaseScheduler.setup_schedule()` **完全重写了**那一步 ——
+       它只 SELECT `task_scheduler`，默认条目一条都不装
+    2. `get_registered_tasks()` 把 `celery.*` 过滤掉了（下拉里不该出现内部任务），
+       所以也没法在界面上手动排它
+    3. `result_expires` 没配，配了也只有 backend_cleanup 会去用它
+
+    于是每执行一次任务就多一行，一个每分钟跑的调度一年写 52 万行 ——
+    而这张表正是「执行记录」页分页翻的那张。
+
+    ⚠️ 这个任务**自己也会往 task_result 里写一行**（celery 给每个任务都记结果）。
+    这不是问题：它每天跑一次，写入量远小于清理量。但别把它配成每分钟跑。
+    """
+    from backend.app.task.model import Task
+
+    cutoff = timezone.now() - timedelta(days=days)
+    async with async_db_session() as db:
+        n = await _prune_table(db, Task, Task.date_done, cutoff, batch)
+
+    msg = f'清理 {days} 天前的任务执行记录：{n} 条'
+    log.info(msg)
+    return msg
