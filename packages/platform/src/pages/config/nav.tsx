@@ -1,9 +1,31 @@
-import { IconCircleFilled, IconPlugConnectedX } from '@tabler/icons-react'
+import type * as React from 'react'
+import {
+  IconAdjustments, IconCircleFilled, IconCode, IconLogin, IconMail,
+  IconPlugConnectedX, IconShieldLock, IconSparkles,
+} from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 
 import { cn } from '@admin/ui/lib/utils'
 
 import { RAIL, railItem } from './registry'
+
+/**
+ * 左栏图标，按 `RailItem.id`（= `sys_config.type`）查。
+ *
+ * 不放进 `registry.ts` 的 `RailItem` 类型里 —— 那份注册表刻意保持纯数据
+ * （不 import React），图标这种渲染层的东西留在这个文件里查表，和
+ * `_shared/settings-shell.tsx` 的 `SettingsPanel.icon` 是同一个分工。
+ * 兜底给 `IconAdjustments`：新增分类忘了配图标，也不会漏成一个空位。
+ */
+const RAIL_ICONS: Record<string, React.ReactNode> = {
+  LOGIN: <IconLogin />,
+  USER_SECURITY: <IconShieldLock />,
+  EMAIL: <IconMail />,
+  AI: <IconSparkles />,
+  DEV: <IconCode />,
+  other: <IconAdjustments />,
+}
+export const railIcon = (id: string): React.ReactNode => RAIL_ICONS[id] ?? <IconAdjustments />
 
 /**
  * 左栏。分类归属和文案来自 `registry.ts: RAIL`，**不是**从 `sys_config.type`
@@ -12,6 +34,10 @@ import { RAIL, railItem } from './registry'
  * 每项带三个状态：条数、有未保存改动（琥珀点）、整组被总开关关掉（插头图标）。
  * 后两个是这一页最容易被忽略的信息 —— 改了别组忘了存、或者改了一整组
  * 但那组的总开关是关的（后端整组不加载，改了等于没改）。
+ *
+ * 选中态和图标照 `_shared/settings-shell.tsx` 的口径：主色淡底 + 主色文字
+ * （不是灰底 —— 灰底选中项和 hover 态几乎分不出来），纯文字竖导航配图标
+ * 让「登录策略」「邮件服务」这些项在余光里就能认出来。
  */
 export function ConfigNav({
   active,
@@ -51,10 +77,13 @@ export function ConfigNav({
                   onClick={() => onSelect(i.id)}
                   className={cn(
                     'flex items-center gap-2 rounded-md px-3 py-2 text-start text-sm transition-colors',
-                    on ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:bg-muted/60'
+                    on
+                      ? 'bg-primary/10 font-medium text-primary'
+                      : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
                   )}
                 >
-                  <span className="flex-1 truncate">{t(i.label)}</span>
+                  <span className="shrink-0 [&>svg]:size-4">{railIcon(i.id)}</span>
+                  <span className="min-w-0 flex-1 truncate">{t(i.label)}</span>
                   {disabledIds.has(i.id) && (
                     <IconPlugConnectedX
                       className="size-3.5 shrink-0 text-muted-foreground"

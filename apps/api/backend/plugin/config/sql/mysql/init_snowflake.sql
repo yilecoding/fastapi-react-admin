@@ -25,4 +25,6 @@ values
 (2069061886627938317, '密码最大长度', 'USER_SECURITY', 'USER_PASSWORD_MAX_LENGTH', '32', false, null, now(), null),
 (2069061886627938318, '密码必须包含特殊字符', 'USER_SECURITY', 'USER_PASSWORD_REQUIRE_SPECIAL_CHAR', 'false', false, null, now(), null),
 (2069061886627938319, '状态', 'LOGIN', 'LOGIN_CONFIG_STATUS', '1', false, null, now(), null),
-(2069061886627938320, '验证码开关', 'LOGIN', 'LOGIN_CAPTCHA_ENABLED', 'true', false, null, now(), null);
+(2069061886627938320, '验证码开关', 'LOGIN', 'LOGIN_CAPTCHA_ENABLED', 'true', false, null, now(), null),
+(2202113487143047168, '开发配置总开关', 'DEV', 'DEV_CONFIG_STATUS', '1', true, null, now(), null),
+(2202113487403094016, '组件沙箱', 'DEV', 'DEV_SANDBOX_ENABLED', 'true', true, null, now(), null);
