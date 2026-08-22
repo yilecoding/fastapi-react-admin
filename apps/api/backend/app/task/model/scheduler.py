@@ -24,6 +24,7 @@ from sqlalchemy import event
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.model import Base, TimeZone, UniversalStr, UniversalText, id_key
 
 
@@ -64,7 +65,7 @@ class TaskScheduler(Base):
     @staticmethod
     def before_insert_or_update(mapper, connection, target) -> None:  # ruff:ignore[missing-type-function-argument]
         if target.expire_seconds is not None and target.expire_time:
-            raise errors.ConflictError(msg='截止时间与截止秒数只能设置一个')
+            raise errors.ConflictError(msg=t('error.task.deadline_conflict'))
 
     @classmethod
     def changed(cls, mapper, connection, target) -> None:  # ruff:ignore[missing-type-function-argument]
