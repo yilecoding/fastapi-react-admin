@@ -200,7 +200,7 @@ export function NoticePage({
                 pageSize: size,
                 selectedCount: selectedIds.length,
                 totalCount: total,
-                onPageChange: (i) => patch({ page: i + 1 }),
+                onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
                 onPageSizeChange: (s) => patch({ size: s, page: undefined }),
               }}
             />

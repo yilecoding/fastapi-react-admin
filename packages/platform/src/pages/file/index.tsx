@@ -336,7 +336,7 @@ export function FilePage({
               selectedCount={selectedIds.length}
               totalCount={total}
               pageSizeOptions={[24, 48, 96]}
-              onPageChange={(i) => patch({ page: i + 1 })}
+              onPageChange={(i) => patch({ page: i === 0 ? undefined : i + 1 })}
               onPageSizeChange={(s) => patch({ size: s, page: undefined })}
             />
           </div>

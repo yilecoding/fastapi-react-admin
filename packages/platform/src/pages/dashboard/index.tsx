@@ -17,7 +17,7 @@ import { PageHeader } from '../../shell/page-header'
 import { StatusPill } from '../_shared/status'
 import {
   loginTrendQuery, onlineCountQuery, recentLoginsQuery, recentOperasQuery,
-  scaleStatsQuery, todayRange, todayStatsQuery,
+  scaleStatsQuery, todayRangeParam, todayStatsQuery,
   type DayPoint,
 } from './api'
 
@@ -44,7 +44,8 @@ export function DashboardPage() {
   // 在线会话是超管专属接口，非超管直接不发请求（发了就是一条必然 403 的噪音）
   const online = useQuery({ ...onlineCountQuery, enabled: isSuperuser })
 
-  const range = React.useMemo(() => todayRange(), [])
+  /** 跳日志页用的时间参数：一个 `time=起~止`，不是 start_time + end_time */
+  const timeParam = React.useMemo(() => todayRangeParam(), [])
   // 日志页的路由守卫要 log:*:del，没这个权限点过去只会落到 /403 —— 那就别给链接
   const canLoginLog = can('log:login:del')
   const canOperaLog = can('log:opera:del')
@@ -103,7 +104,7 @@ export function DashboardPage() {
               {canLoginLog && (
                 <Link
                   to="/log/login"
-                  search={{ status: 0, start_time: range.start, end_time: range.end }}
+                  search={{ status: 0, time: timeParam }}
                   className="inline-flex items-center gap-1 underline underline-offset-2"
                   data-testid="dash-fail-link"
                 >
@@ -120,14 +121,14 @@ export function DashboardPage() {
               testId="metric-logins"
               hint={fails > 0 ? t('其中 {{n}} 次失败', { n: fails }) : t('全部成功')}
               tone={fails > 0 ? 'warning' : 'success'}
-              to={canLoginLog ? { path: '/log/login', search: { start_time: range.start, end_time: range.end } } : undefined}
+              to={canLoginLog ? { path: '/log/login', search: { time: timeParam } } : undefined}
             />
             <Metric
               label={t("今日操作")} value={today.data?.operations} loading={today.isPending}
               testId="metric-operations"
               hint={today.data?.operaFails ? t('其中 {{n}} 次异常', { n: today.data.operaFails }) : t('无异常')}
               tone={today.data?.operaFails ? 'warning' : 'success'}
-              to={canOperaLog ? { path: '/log/opera', search: { start_time: range.start, end_time: range.end } } : undefined}
+              to={canOperaLog ? { path: '/log/opera', search: { time: timeParam } } : undefined}
             />
             <Metric
               label={t("用户总数")} value={scale.data?.users} loading={scale.isPending}

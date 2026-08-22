@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 
 import { api, type PageData } from '../../api-client/client'
-import { presetRange } from '../_shared/date-quick-pick'
+import { presetRange } from '@admin/ui/components/datetime-picker'
 
 /**
  * 仪表盘的数据源。
@@ -48,7 +48,9 @@ export type TodayStats = {
 export const todayStatsQuery = queryOptions({
   queryKey: dashKeys.today(),
   queryFn: async (): Promise<TodayStats> => {
-    const { start, end } = presetRange('today')
+    // 带时分秒：接口收的是 datetime，`end_time` 只给日期会被解析成当天 00:00:00，
+    // 静默丢掉今天一整天（见 query-bar/params.ts 里那段）
+    const [start, end] = presetRange('today', true)
     const [logins, loginFails, operations, operaFails] = await Promise.all([
       countOf('/api/v1/logs/login', { start_time: start, end_time: end }),
       countOf('/api/v1/logs/login', { start_time: start, end_time: end, status: '0' }),
@@ -214,7 +216,15 @@ export const recentOperasQuery = queryOptions({
   staleTime: 30_000,
 })
 
-/** 「今日」区间，给卡片上的下钻链接复用，保证口径与统计一致 */
-export function todayRange() {
-  return presetRange('today')
+/**
+ * 「今天」在**日志页地址栏**里的写法，给卡片上的下钻链接用。
+ *
+ * 日志页的时间筛选在 URL 里是一个参数（`time=起~止`，整天边界不写时分秒），
+ * 接口那两个 `start_time` / `end_time` 由查询区在发请求时拼 ——
+ * 所以跳过去只能给这一份，不能给 `presetRange()` 的完整串。
+ * 口径仍然是同一个 `presetRange('today')`，卡片数字和点进去的列表不会对不上。
+ */
+export function todayRangeParam(): string {
+  const [start, end] = presetRange('today')
+  return `${start ?? ''}~${end ?? ''}`
 }

@@ -7,14 +7,14 @@ import { IconDownload } from '@tabler/icons-react'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { DataTable } from '@admin/ui/components/data-table'
-import { DateRangePicker } from '@admin/ui/components/date-range-picker'
+import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 import { cn } from '@admin/ui/lib/utils'
 
 import { api, type PageData } from '../../api-client/client'
 import { PageHeader } from '../../shell/page-header'
 import { ClearLogsButton } from '../_shared/clear-logs'
-import { DateQuickPick } from '../_shared/date-quick-pick'
-import { ResetButton, SelectFilter, TextFilter } from '../_shared/filters'
+import { ResetButton } from '../_shared/filters'
+import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import { logFeatures as features } from '../_shared/log-features'
 import { StatusPill } from '../_shared/status'
@@ -25,30 +25,67 @@ import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 export type { LoginLog }
 
 const col = createColumnHelper<typeof features, LoginLog>()
-const STATUS_ITEMS = { all: '全部状态', '1': '成功', '0': '失败' }
+
+/**
+ * 可筛字段的声明。
+ *
+ * `key` 是**地址栏里的参数名**，`rangeParams` 才是接口入参名 —— 两者刻意分开：
+ * 一个「登录时间」在 URL 里是一个参数、发给后端是两个。
+ *
+ * ```
+ * URL   /log/login?time=2026-08-16~2026-08-22
+ * 请求  ?start_time=2026-08-16 00:00:00&end_time=2026-08-22 23:59:59
+ * ```
+ *
+ * 换掉的老写法是 `start_time` / `end_time` 直接当 URL 参数用，地址栏长这样
+ * （74 个字符，用户指出过「很乱」）：
+ * `?start_time=2026-08-16+00%3A00%3A00&end_time=2026-08-22+23%3A59%3A59&page=1`
+ */
+const FIELDS: FilterField[] = [
+  {
+    key: 'username', label: '登录账号', type: 'text', group: '账号',
+    defaultVisible: true, placeholder: '模糊匹配',
+  },
+  { key: 'ip', label: '登录 IP', type: 'text', group: '账号', defaultVisible: true },
+  {
+    key: 'status', label: '结果', type: 'select', group: '结果', defaultVisible: true,
+    options: [
+      { value: 1, label: '成功' },
+      { value: 0, label: '失败' },
+    ],
+  },
+  {
+    key: 'time', label: '登录时间', type: 'dateTimeRange', group: '时间',
+    defaultVisible: true, rangeParams: ['start_time', 'end_time'],
+  },
+]
 
 export type LoginLogSearch = {
   page?: number
   size?: number
+  /** 以下由 QueryBar 管，键 = FIELDS 里的 key */
   username?: string
   ip?: string
   status?: number
-  start_time?: string
-  end_time?: string
+  time?: string
+  /** 摆开但没填值的格子（`_shared/use-query-search`） */
+  f?: string
   /** 被隐藏的列 id，逗号分隔 */
   hide?: string
 }
 
-function buildQuery(s: LoginLogSearch, override: Partial<LoginLogSearch> = {}): string {
-  const m = { ...s, ...override }
+/** 接口入参 —— 名字和精度由后端定，和地址栏那一份没关系 */
+function buildQuery(
+  params: Record<string, unknown>,
+  page: number | undefined,
+  size: number | undefined
+): string {
   const q = new URLSearchParams()
-  q.set('page', String(m.page ?? 1))
-  q.set('size', String(m.size ?? DEFAULT_PAGE_SIZE))
-  if (m.username) q.set('username', m.username)
-  if (m.ip) q.set('ip', m.ip)
-  if (m.status !== undefined) q.set('status', String(m.status))
-  if (m.start_time) q.set('start_time', m.start_time)
-  if (m.end_time) q.set('end_time', m.end_time)
+  q.set('page', String(page ?? 1))
+  q.set('size', String(size ?? DEFAULT_PAGE_SIZE))
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') q.set(k, String(v))
+  }
   return q.toString()
 }
 
@@ -72,7 +109,10 @@ export function LogLoginPage({
     [onSearchChange, search]
   )
 
-  const qs = buildQuery(search)
+  /** URL ↔ QueryBar 的胶水：恢复条件、写回地址栏、拼接口入参、搜索时跳回第一页 */
+  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, keep: ['hide'] })
+
+  const qs = buildQuery(q.params, search.page, search.size)
   const { data, isPending, isFetching } = useQuery({
     queryKey: ['logs', 'login', qs],
     queryFn: () => api.GET<PageData<LoginLog>>(`/api/v1/logs/login?${qs}`),
@@ -162,7 +202,7 @@ export function LogLoginPage({
         ),
       }),
     ],
-    [page, size]
+    [page, size, t]
   )
 
   const table = useTable({
@@ -179,17 +219,17 @@ export function LogLoginPage({
     onColumnVisibilityChange: setColumnVisibility,
   })
 
-  const hasFilter = Boolean(
-    search.username || search.ip || search.status !== undefined || search.start_time || search.end_time
-  )
+  const hasFilter = countActive(q.applied, FIELDS) > 0
 
   const [exporting, setExporting] = React.useState(false)
+  const [exportError, setExportError] = React.useState<string | null>(null)
   async function handleExport() {
     setExporting(true)
+    setExportError(null)
     try {
       const all: LoginLog[] = []
       for (let p = 1; p <= 20; p += 1) {
-        const chunk = await api.GET<PageData<LoginLog>>(`/api/v1/logs/login?${buildQuery(search, { page: p, size: 200 })}`)
+        const chunk = await api.GET<PageData<LoginLog>>(`/api/v1/logs/login?${buildQuery(q.params, p, 200)}`)
         all.push(...chunk.items)
         if (p >= chunk.total_pages) break
       }
@@ -214,6 +254,10 @@ export function LogLoginPage({
       a.download = `${t('登录日志')}_${iso(new Date())}.csv`
       a.click()
       URL.revokeObjectURL(url)
+    } catch (e) {
+      // 硬纪律 9：请求失败必须是可见状态。原来这里没有 catch，失败时按钮
+      // 复位但界面上什么都不说，和「导出功能不存在」长得一样
+      setExportError(e instanceof Error ? e.message : t('导出失败'))
     } finally {
       setExporting(false)
     }
@@ -227,6 +271,29 @@ export function LogLoginPage({
               整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
         <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
           <PageHeader title={t("登录日志")} description={t("安全审计入口。失败尝试比成功登录更值得看。")} />
+
+          {/* 查询区是**页面级块**，不塞进 DataTable 的 toolbar 槽 ——
+              toolbar 是一行（和「列」下拉、导出按钮同排），条件网格铺不进去 */}
+          <QueryBar
+            fields={FIELDS}
+            value={q.value}
+            onChange={q.setValue}
+            onSearch={q.submit}
+            onReset={q.reset}
+            applied={q.applied}
+            loading={isFetching}
+            viewsStorageKey="qb:log-login"
+          />
+
+          {exportError && (
+            <p
+              role="alert"
+              data-testid="export-error"
+              className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            >
+              {exportError}
+            </p>
+          )}
 
           {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
               也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
@@ -244,12 +311,7 @@ export function LogLoginPage({
                 hasFilter ? (
                   <ResetButton
                     variant="outline" testId="empty-clear-filter" label={t("清除筛选")}
-                    onClick={() =>
-                      patch({
-                        username: undefined, ip: undefined, status: undefined,
-                        start_time: undefined, end_time: undefined, page: undefined,
-                      })
-                    }
+                    onClick={q.reset}
                   />
                 ) : undefined
               }
@@ -270,66 +332,12 @@ export function LogLoginPage({
                 seq: '序号', login_time: '登录时间', username: '登录账号', status: '结果',
                 msg: '说明', ip: '登录 IP', location: '登录地点', browser: '浏览器', os: '终端系统',
               }}
-              toolbar={
-                <>
-                  <TextFilter
-                    value={search.username ?? ''}
-                    placeholder={t("搜索登录账号…")}
-                    testId="filter-username"
-                    width="w-40"
-                    onCommit={(v) => patch({ username: v || undefined, page: undefined })}
-                  />
-                  <TextFilter
-                    value={search.ip ?? ''}
-                    placeholder={t("搜索 IP…")}
-                    testId="filter-ip"
-                    width="w-36"
-                    onCommit={(v) => patch({ ip: v || undefined, page: undefined })}
-                  />
-                  <DateQuickPick
-                    value={{ start: search.start_time, end: search.end_time }}
-                    onChange={(r) => patch({ start_time: r.start, end_time: r.end, page: undefined })}
-                  />
-                  <DateRangePicker
-                    className="h-8"
-                    label={t("登录时间范围")}
-                    date={
-                      search.start_time
-                        ? { from: new Date(search.start_time), to: search.end_time ? new Date(search.end_time) : undefined }
-                        : undefined
-                    }
-                    onSelect={(r) =>
-                      patch({
-                        start_time: r?.from ? `${iso(r.from)} 00:00:00` : undefined,
-                        end_time: r?.to ? `${iso(r.to)} 23:59:59` : undefined,
-                        page: undefined,
-                      })
-                    }
-                  />
-                  <SelectFilter
-                    value={search.status}
-                    items={STATUS_ITEMS}
-                    testId="filter-status"
-                    onChange={(v) => patch({ status: v === undefined ? undefined : Number(v), page: undefined })}
-                  />
-                  {hasFilter && (
-                    <ResetButton
-                      onClick={() =>
-                        patch({
-                          username: undefined, ip: undefined, status: undefined,
-                          start_time: undefined, end_time: undefined, page: undefined,
-                        })
-                      }
-                    />
-                  )}
-                </>
-              }
               pagination={{
                 pageIndex: page - 1,
                 pageCount: data?.total_pages ?? 1,
                 pageSize: size,
                 totalCount: data?.total ?? 0,
-                onPageChange: (i) => patch({ page: i + 1 }),
+                onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
                 onPageSizeChange: (s) => patch({ size: s, page: undefined }),
               }}
             />
