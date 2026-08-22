@@ -37,7 +37,9 @@ class OperaLog(DataClassBase):
     code: Mapped[str] = mapped_column(UniversalStr(32), insert_default='200', comment='操作状态码')
     msg: Mapped[str | None] = mapped_column(UniversalText, comment='提示消息')
     cost_time: Mapped[float] = mapped_column(insert_default=0.0, comment='请求耗时（ms）')
-    opera_time: Mapped[datetime] = mapped_column(TimeZone, comment='操作时间')
+    # index：清理任务按它做范围删除（`app/task/tasks/maintenance`），
+    # 而日志表是全库长得最快的表 —— 没索引就是全表扫 + 锁升级 + 阻塞所有写日志的请求
+    opera_time: Mapped[datetime] = mapped_column(TimeZone, index=True, comment='操作时间')
     created_time: Mapped[datetime] = mapped_column(
         TimeZone, init=False, default_factory=timezone.now, comment='创建时间'
     )
