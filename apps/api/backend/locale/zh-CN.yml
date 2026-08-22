@@ -138,6 +138,10 @@ error:
     script_not_found: SQL 脚本文件不存在
   task:
     deadline_conflict: 截止时间与截止秒数只能设置一个
+    not_registered: 任务 {task} 未注册；可用的有：{available}
+    result_not_found: 执行记录不存在
+    scheduler_name_exists: 任务调度名称已存在
+    scheduler_not_found: 任务调度不存在
   token:
     expired: Token 已过期
     invalid: Token 无效

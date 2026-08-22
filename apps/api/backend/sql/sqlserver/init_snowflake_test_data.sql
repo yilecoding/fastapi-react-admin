@@ -49,6 +49,17 @@ VALUES
 (2049629108253622302, N'上传', 'UploadSysFile', NULL, 0, NULL, 2, 'sys:file:upload', 1, 0, '', NULL, 2049629108253622300, '2025-06-26 20:29:06', NULL),
 (2049629108253622303, N'删除', 'DeleteSysFile', NULL, 0, NULL, 2, 'sys:file:del', 1, 0, '', NULL, 2049629108253622300, '2025-06-26 20:29:06', NULL);
 
+INSERT INTO sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
+VALUES
+(2049629108253622310, N'定时任务', 'Scheduler', '/scheduler', 4, 'ix:scheduler', 0, NULL, 1, 1, '', NULL, NULL, '2026-08-22 17:00:00', NULL),
+(2049629108253622311, N'任务调度', 'SchedulerManage', '/scheduler/manage', 1, 'mdi:clock-outline', 1, NULL, 1, 1, '', NULL, 2049629108253622310, '2026-08-22 17:00:00', NULL),
+(2049629108253622312, N'执行记录', 'SchedulerRecord', '/scheduler/record', 2, 'mdi:history', 1, NULL, 1, 1, '', NULL, 2049629108253622310, '2026-08-22 17:00:00', NULL),
+(2049629108253622313, N'新增', 'AddTaskScheduler', NULL, 0, NULL, 2, 'task:scheduler:add', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
+(2049629108253622314, N'修改', 'EditTaskScheduler', NULL, 1, NULL, 2, 'task:scheduler:edit', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
+(2049629108253622315, N'删除', 'DeleteTaskScheduler', NULL, 2, NULL, 2, 'task:scheduler:del', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
+(2049629108253622316, N'执行', 'RunTaskScheduler', NULL, 3, NULL, 2, 'task:scheduler:run', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
+(2049629108253622317, N'删除', 'DeleteTaskResult', NULL, 0, NULL, 2, 'task:result:del', 1, 0, '', NULL, 2049629108253622312, '2026-08-22 17:00:00', NULL);
+
 INSERT INTO sys_role (id, code, name, status, is_filter_scopes, remark, created_time, updated_time)
 VALUES (2048601263515500544, N'TEST', N'测试', 1, 1, NULL, GETDATE(), NULL);
 

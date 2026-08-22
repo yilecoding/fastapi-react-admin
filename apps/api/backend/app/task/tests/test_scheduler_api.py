@@ -197,3 +197,56 @@ def test_results_paginated(client: TestClient, token_headers):
     r = client.get('/tasks/results', headers=token_headers, params={'page': 1, 'size': 10})
     assert r.status_code == 200, r.text
     assert 'items' in r.json()['data']
+
+
+def test_result_fields_are_extended(client: TestClient, token_headers):
+    """🔴 执行记录必须带上 name / worker / retries / queue 四列。
+
+    `Task` 和 `TaskExtended` 是**同一张表**（`extend_existing=True`），但这四列
+    只声明在后者上 —— CRUD 绑 `Task` 的话它们在响应里全是 null。
+
+    症状极骗人：接口 200、条数对、时间和状态都对，只有「任务名」「执行节点」
+    显示 `—`，看起来像 celery 没写进去，实际是我们没查出来。
+    **是在浏览器里打开页面才发现的** —— 原来那条列表用例只断言了
+    `'items' in body`，太弱。这条补上真正的断言。
+    """
+    import uuid as _uuid
+
+    from sqlalchemy import create_engine, delete, insert
+    from sqlalchemy.orm import sessionmaker
+
+    from backend.app.task.celery import get_result_backend
+    from backend.app.task.model import TaskExtended
+    from backend.core.conf import settings
+
+    # 用同步引擎直插 —— 这张表由 celery 写，没有创建接口；
+    # conftest 那套 override_get_db 是异步生成器，同步用例里用不了
+    url = get_result_backend().removeprefix('db+').replace(
+        f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?'
+    )
+    factory = sessionmaker(create_engine(url, future=True), expire_on_commit=False)
+
+    task_id = f'pytest-{_uuid.uuid4()}'
+    with factory() as db:
+        db.execute(
+            insert(TaskExtended.__table__).values(
+                task_id=task_id, status='SUCCESS', name='pytest.demo_task',
+                worker='pytest-worker', retries=2, queue='celery',
+            )
+        )
+        db.commit()
+
+    try:
+        r = client.get('/tasks/results', headers=token_headers, params={'task_id': task_id, 'page': 1, 'size': 5})
+        assert r.status_code == 200, r.text
+        items = r.json()['data']['items']
+        assert len(items) == 1, f'按 task_id 没查到刚插的那条：{items}'
+        row = items[0]
+        assert row['name'] == 'pytest.demo_task', f'name 丢了（CRUD 可能绑成了 Task）：{row}'
+        assert row['worker'] == 'pytest-worker', f'worker 丢了：{row}'
+        assert row['retries'] == 2, f'retries 丢了：{row}'
+        assert row['queue'] == 'celery', f'queue 丢了：{row}'
+    finally:
+        with factory() as db:
+            db.execute(delete(TaskExtended.__table__).where(TaskExtended.task_id == task_id))
+            db.commit()
