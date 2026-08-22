@@ -209,3 +209,88 @@ def test_batches_until_drained(db):
     msg = run_prune(days=30, batch=2)
     assert count(db, LoginLog) == 0, '没删干净 —— 分批循环可能只跑了一轮'
     assert '登录日志 5 条' in msg, msg
+
+
+# ── 任务执行记录的清理 ──────────────────────────────────────────────────────
+
+
+def seed_result(factory, *, days_ago: float, n: int = 1) -> None:
+    from backend.app.task.model import TaskExtended
+
+    at = timezone.now() - timedelta(days=days_ago)
+    with factory() as s:
+        for i in range(n):
+            s.execute(TaskExtended.__table__.insert().values(
+                task_id=f'{MARK}-{days_ago}-{i}', status='SUCCESS',
+                name=MARK, date_done=at,
+            ))
+        s.commit()
+
+
+def count_results(factory) -> int:
+    from backend.app.task.model import TaskExtended
+
+    with factory() as s:
+        return s.execute(
+            select(func.count()).select_from(TaskExtended).where(TaskExtended.name == MARK)
+        ).scalar_one()
+
+
+@pytest.fixture
+def results_db(factory):
+    from backend.app.task.model import TaskExtended
+
+    def purge() -> None:
+        with factory() as s:
+            s.execute(delete(TaskExtended.__table__).where(TaskExtended.name == MARK))
+            s.commit()
+
+    purge()
+    yield factory
+    purge()
+
+
+def run_prune_results(**kw) -> str:
+    import backend.app.task.tasks.maintenance.tasks as mod
+
+    from backend.app.task.tasks.maintenance.tasks import prune_task_results
+    from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+
+    engine = create_database_async_engine(get_database_url(unittest=True))
+    original = mod.async_db_session
+    mod.async_db_session = create_database_async_session(engine)
+
+    async def go() -> str:
+        try:
+            return await prune_task_results(**kw)
+        finally:
+            await engine.dispose()
+
+    try:
+        return asyncio.run(go())
+    finally:
+        mod.async_db_session = original
+
+
+def test_prunes_old_task_results(results_db):
+    """🔴 执行记录不清理会无限长。
+
+    celery 自带的 `backend_cleanup` 装不上（`DatabaseScheduler.setup_schedule()`
+    重写掉了 `install_default_entries()`），而 `get_registered_tasks()` 又把
+    `celery.*` 过滤掉了 —— 界面上也排不了它。于是每执行一次任务多一行，
+    一个每分钟跑的调度一年写 52 万行，而这张表正是「执行记录」页翻的那张。
+    """
+    seed_result(results_db, days_ago=40, n=3)
+    seed_result(results_db, days_ago=1)
+    assert count_results(results_db) == 4
+
+    msg = run_prune_results(days=30)
+    assert count_results(results_db) == 1, '旧记录没删掉，或者把新的一起删了'
+    assert '3 条' in msg, msg
+
+
+def test_prune_results_batches_until_drained(results_db):
+    """同 prune_logs：分批要删干净，不能只跑一轮。"""
+    seed_result(results_db, days_ago=40, n=5)
+    run_prune_results(days=30, batch=2)
+    assert count_results(results_db) == 0

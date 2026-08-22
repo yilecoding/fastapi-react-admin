@@ -60,6 +60,11 @@ VALUES
 (2049629108253622316, N'执行', 'RunTaskScheduler', NULL, 3, NULL, 2, 'task:scheduler:run', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
 (2049629108253622317, N'删除', 'DeleteTaskResult', NULL, 0, NULL, 2, 'task:result:del', 1, 0, '', NULL, 2049629108253622312, '2026-08-22 17:00:00', NULL);
 
+INSERT INTO task_scheduler (id, name, task, args, kwargs, queue, exchange, routing_key, start_time, expire_time, expire_seconds, type, interval_every, interval_period, crontab, one_off, enabled, total_run_count, last_run_time, remark, created_time, updated_time, deleted, deleted_time)
+VALUES
+(2049629108253622320, N'清理历史日志', 'maintenance.prune_logs', NULL, N'{"days": 30}', NULL, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, '15 3 * * *', 0, 1, 0, NULL, N'保留 30 天。日志表是全库长得最快的表，不清理会一直涨', '2026-08-22 17:00:00', NULL, 0, NULL),
+(2049629108253622321, N'清理任务执行记录', 'maintenance.prune_task_results', NULL, N'{"days": 30}', NULL, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, '30 3 * * *', 0, 1, 0, NULL, N'保留 30 天。celery 自带的 backend_cleanup 不会被装上（DatabaseScheduler 重写了 setup_schedule），必须自己排', '2026-08-22 17:00:00', NULL, 0, NULL);
+
 INSERT INTO sys_role (id, code, name, status, is_filter_scopes, remark, created_time, updated_time)
 VALUES (2048601263515500544, N'TEST', N'测试', 1, 1, NULL, GETDATE(), NULL);
 
