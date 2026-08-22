@@ -137,6 +137,10 @@ error:
     script_not_found: SQL script file does not exist
   task:
     deadline_conflict: Only one of deadline and countdown seconds can be set
+    not_registered: 'Task {task} is not registered; available: {available}'
+    result_not_found: Task result not found
+    scheduler_name_exists: Task scheduler name already exists
+    scheduler_not_found: Task scheduler not found
   token:
     expired: Token has expired
     invalid: Invalid token

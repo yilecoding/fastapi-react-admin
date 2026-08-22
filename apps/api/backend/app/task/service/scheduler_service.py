@@ -14,6 +14,7 @@ from backend.app.task.schema.scheduler import (
     UpdateTaskSchedulerParam,
 )
 from backend.common.exception import errors
+from backend.common.i18n import t
 
 
 class TaskSchedulerService:
@@ -23,7 +24,7 @@ class TaskSchedulerService:
     async def get(*, db: AsyncSession, pk: int) -> TaskScheduler:
         obj = await task_scheduler_dao.get(db, pk)
         if not obj:
-            raise errors.NotFoundError(msg='任务调度不存在')
+            raise errors.NotFoundError(msg=t('error.task.scheduler_not_found'))
         return obj
 
     @staticmethod
@@ -63,7 +64,7 @@ class TaskSchedulerService:
     @staticmethod
     async def create(*, db: AsyncSession, obj: CreateTaskSchedulerParam) -> TaskScheduler:
         if await task_scheduler_dao.get_by_name(db, obj.name):
-            raise errors.ConflictError(msg='任务调度名称已存在')
+            raise errors.ConflictError(msg=t('error.task.scheduler_name_exists'))
         TaskSchedulerService._assert_task_registered(obj.task)
         return await task_scheduler_dao.create(db, obj)
 
@@ -71,16 +72,16 @@ class TaskSchedulerService:
     async def update(*, db: AsyncSession, pk: int, obj: UpdateTaskSchedulerParam) -> int:
         current = await task_scheduler_dao.get(db, pk)
         if not current:
-            raise errors.NotFoundError(msg='任务调度不存在')
+            raise errors.NotFoundError(msg=t('error.task.scheduler_not_found'))
         if obj.name != current.name and await task_scheduler_dao.get_by_name(db, obj.name):
-            raise errors.ConflictError(msg='任务调度名称已存在')
+            raise errors.ConflictError(msg=t('error.task.scheduler_name_exists'))
         TaskSchedulerService._assert_task_registered(obj.task)
         return await task_scheduler_dao.update(db, pk, obj)
 
     @staticmethod
     async def set_enabled(*, db: AsyncSession, pk: int, enabled: bool) -> int:
         if not await task_scheduler_dao.get(db, pk):
-            raise errors.NotFoundError(msg='任务调度不存在')
+            raise errors.NotFoundError(msg=t('error.task.scheduler_not_found'))
         return await task_scheduler_dao.set_enabled(db, pk, enabled)
 
     @staticmethod
@@ -94,7 +95,7 @@ class TaskSchedulerService:
 
         obj = await task_scheduler_dao.get(db, pk)
         if not obj:
-            raise errors.NotFoundError(msg='任务调度不存在')
+            raise errors.NotFoundError(msg=t('error.task.scheduler_not_found'))
 
         args = json.loads(obj.args) if obj.args else []
         kwargs = json.loads(obj.kwargs) if obj.kwargs else {}
@@ -111,7 +112,9 @@ class TaskSchedulerService:
         """
         registered = TaskSchedulerService.get_registered_tasks()
         if task not in registered:
-            raise errors.NotFoundError(msg=f'任务 {task} 未注册；可用的有：{", ".join(registered) or "（无）"}')
+            raise errors.NotFoundError(
+                msg=t('error.task.not_registered', task=task, available=', '.join(registered) or '-')
+            )
 
 
 class TaskResultService:
@@ -121,7 +124,7 @@ class TaskResultService:
     async def get(*, db: AsyncSession, pk: int) -> Any:
         obj = await task_result_dao.get(db, pk)
         if not obj:
-            raise errors.NotFoundError(msg='执行记录不存在')
+            raise errors.NotFoundError(msg=t('error.task.result_not_found'))
         return obj
 
     @staticmethod

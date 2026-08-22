@@ -4,7 +4,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy_crud_plus import CRUDPlus
 
-from backend.app.task.model import Task, TaskScheduler
+from backend.app.task.model import TaskExtended, TaskScheduler
 from backend.app.task.schema.scheduler import CreateTaskSchedulerParam, UpdateTaskSchedulerParam
 from backend.utils.timezone import timezone
 
@@ -57,14 +57,24 @@ class CRUDTaskScheduler(CRUDPlus[TaskScheduler]):
         )
 
 
-class CRUDTaskResult(CRUDPlus[Task]):
+class CRUDTaskResult(CRUDPlus[TaskExtended]):
     """任务执行记录数据库操作类。
 
     ⚠️ 这张表由 **celery 自己**写（`database.py` 的 DatabaseBackend），
     这里只读和删 —— 没有 create/update，故意的。
+
+    🔴 **必须绑 `TaskExtended` 而不是 `Task`。** 两者是**同一张表**
+    （`extend_existing=True`），但 `name` / `worker` / `retries` / `queue` /
+    `args` / `kwargs` 六列只声明在 `TaskExtended` 上 —— 查 `Task` 只 select
+    得到基础列，那六列在响应里**全是 null**。
+
+    症状很骗人：接口 200、条数对、时间和状态都对，只有「任务名」和
+    「执行节点」两列显示 `—`，像是 celery 没写进去。实际是我们没查出来。
+    是在浏览器里打开执行记录页才发现的 —— 接口测试当时只断言了
+    `'items' in body`，太弱，抓不到（已补 `test_result_fields_are_extended`）。
     """
 
-    async def get(self, db: AsyncSession, pk: int) -> Task | None:
+    async def get(self, db: AsyncSession, pk: int) -> TaskExtended | None:
         return await self.select_model(db, pk)
 
     async def get_select(self, name: str | None, task_id: str | None, status: str | None) -> Select:
@@ -84,4 +94,4 @@ class CRUDTaskResult(CRUDPlus[Task]):
 
 
 task_scheduler_dao: CRUDTaskScheduler = CRUDTaskScheduler(TaskScheduler)
-task_result_dao: CRUDTaskResult = CRUDTaskResult(Task)
+task_result_dao: CRUDTaskResult = CRUDTaskResult(TaskExtended)
