@@ -7,14 +7,14 @@ import { IconDownload } from '@tabler/icons-react'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { DataTable } from '@admin/ui/components/data-table'
-import { DateRangePicker } from '@admin/ui/components/date-range-picker'
+import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 import { cn } from '@admin/ui/lib/utils'
 
 import { api, type PageData } from '../../api-client/client'
 import { PageHeader } from '../../shell/page-header'
 import { ClearLogsButton } from '../_shared/clear-logs'
-import { DateQuickPick } from '../_shared/date-quick-pick'
-import { ResetButton, SelectFilter, TextFilter } from '../_shared/filters'
+import { ResetButton } from '../_shared/filters'
+import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import { logFeatures as features } from '../_shared/log-features'
 import { StatusPill } from '../_shared/status'
@@ -48,7 +48,6 @@ export type OperaLog = {
 }
 
 const col = createColumnHelper<typeof features, OperaLog>()
-const STATUS_ITEMS = { all: '全部状态', '1': '成功', '0': '异常' }
 const METHOD_CLASS: Record<string, string> = {
   GET: 'text-sky-700 dark:text-sky-300 bg-sky-500/10 ring-sky-500/25',
   POST: 'text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 ring-emerald-500/25',
@@ -56,27 +55,52 @@ const METHOD_CLASS: Record<string, string> = {
   DELETE: 'text-destructive bg-destructive/10 ring-destructive/25',
 }
 
+/** 和登录日志同一套写法：`key` 是地址栏参数名，`rangeParams` 才是接口入参名 */
+const FIELDS: FilterField[] = [
+  {
+    key: 'username', label: '操作人', type: 'text', group: '账号',
+    defaultVisible: true, placeholder: '模糊匹配',
+  },
+  { key: 'ip', label: '操作 IP', type: 'text', group: '账号', defaultVisible: true },
+  {
+    key: 'status', label: '结果', type: 'select', group: '结果', defaultVisible: true,
+    options: [
+      { value: 1, label: '成功' },
+      { value: 0, label: '异常' },
+    ],
+  },
+  {
+    key: 'time', label: '操作时间', type: 'dateTimeRange', group: '时间',
+    defaultVisible: true, rangeParams: ['start_time', 'end_time'],
+  },
+]
+
 export type OperaLogSearch = {
   page?: number
   size?: number
+  /** 以下由 QueryBar 管，键 = FIELDS 里的 key */
   username?: string
   ip?: string
   status?: number
-  start_time?: string
-  end_time?: string
+  time?: string
+  /** 摆开但没填值的格子 */
+  f?: string
   /** 被隐藏的列 id，逗号分隔 */
   hide?: string
 }
 
-function buildQuery(s: OperaLogSearch): string {
+/** 接口入参 —— 名字和精度由后端定，和地址栏那一份没关系 */
+function buildQuery(
+  params: Record<string, unknown>,
+  page: number | undefined,
+  size: number | undefined
+): string {
   const q = new URLSearchParams()
-  q.set('page', String(s.page ?? 1))
-  q.set('size', String(s.size ?? DEFAULT_PAGE_SIZE))
-  if (s.username) q.set('username', s.username)
-  if (s.ip) q.set('ip', s.ip)
-  if (s.status !== undefined) q.set('status', String(s.status))
-  if (s.start_time) q.set('start_time', s.start_time)
-  if (s.end_time) q.set('end_time', s.end_time)
+  q.set('page', String(page ?? 1))
+  q.set('size', String(size ?? DEFAULT_PAGE_SIZE))
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') q.set(k, String(v))
+  }
   return q.toString()
 }
 
@@ -100,7 +124,9 @@ export function LogOperaPage({
     [onSearchChange, search]
   )
 
-  const qs = buildQuery(search)
+  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, keep: ['hide'] })
+
+  const qs = buildQuery(q.params, search.page, search.size)
   const { data, isPending, isFetching } = useQuery({
     queryKey: ['logs', 'opera', qs],
     queryFn: () => api.GET<PageData<OperaLog>>(`/api/v1/logs/opera?${qs}`),
@@ -215,7 +241,7 @@ export function LogOperaPage({
         cell: ({ getValue }) => <span className="text-sm text-muted-foreground">{getValue()}</span>,
       }),
     ],
-    [page, size]
+    [page, size, t]
   )
 
   const table = useTable({
@@ -232,21 +258,21 @@ export function LogOperaPage({
     onColumnVisibilityChange: setColumnVisibility,
   })
 
-  const hasFilter = Boolean(
-    search.username || search.ip || search.status !== undefined || search.start_time || search.end_time
-  )
+  const hasFilter = countActive(q.applied, FIELDS) > 0
 
   /** 导出当前筛选条件下的全部记录为 CSV（后端没有导出接口，前端按分页拉全量） */
   const [exporting, setExporting] = React.useState(false)
+  const [exportError, setExportError] = React.useState<string | null>(null)
   async function handleExport() {
     setExporting(true)
+    setExportError(null)
     try {
       const all: OperaLog[] = []
       let p = 1
       // 上限 20 页 ×200 = 4000 条，避免误点导出把几十万条日志拉下来
       for (; p <= 20; p += 1) {
         const chunk = await api.GET<PageData<OperaLog>>(
-          `/api/v1/logs/opera?${buildQuery({ ...search, page: p, size: 200 })}`
+          `/api/v1/logs/opera?${buildQuery(q.params, p, 200)}`
         )
         all.push(...chunk.items)
         if (p >= chunk.total_pages) break
@@ -274,6 +300,10 @@ export function LogOperaPage({
       a.download = `${t('操作日志')}_${iso(new Date())}.csv`
       a.click()
       URL.revokeObjectURL(url)
+    } catch (e) {
+      // 硬纪律 9：请求失败必须是可见状态。原来这里没有 catch，失败时按钮
+      // 复位但界面上什么都不说，和「导出功能不存在」长得一样
+      setExportError(e instanceof Error ? e.message : t('导出失败'))
     } finally {
       setExporting(false)
     }
@@ -287,6 +317,28 @@ export function LogOperaPage({
               整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
         <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
           <PageHeader title={t("操作日志")} description={t("记录后台每一次接口调用的请求、响应与耗时。点操作时间看完整详情。")} />
+
+          {/* 查询区是页面级块，不塞进 DataTable 的 toolbar 槽（那是一行） */}
+          <QueryBar
+            fields={FIELDS}
+            value={q.value}
+            onChange={q.setValue}
+            onSearch={q.submit}
+            onReset={q.reset}
+            applied={q.applied}
+            loading={isFetching}
+            viewsStorageKey="qb:log-opera"
+          />
+
+          {exportError && (
+            <p
+              role="alert"
+              data-testid="export-error"
+              className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            >
+              {exportError}
+            </p>
+          )}
 
           {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
               也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
@@ -304,12 +356,7 @@ export function LogOperaPage({
                 hasFilter ? (
                   <ResetButton
                     variant="outline" testId="empty-clear-filter" label={t("清除筛选")}
-                    onClick={() =>
-                      patch({
-                        username: undefined, ip: undefined, status: undefined,
-                        start_time: undefined, end_time: undefined, page: undefined,
-                      })
-                    }
+                    onClick={q.reset}
                   />
                 ) : undefined
               }
@@ -331,66 +378,12 @@ export function LogOperaPage({
                 method: '方法', path: '接口', status: '状态', ip: '操作 IP',
                 location: '操作地点', cost_time: '耗时', browser: '浏览器', os: '终端系统',
               }}
-              toolbar={
-                <>
-                  <TextFilter
-                    value={search.username ?? ''}
-                    placeholder={t("搜索操作人…")}
-                    testId="filter-username"
-                    width="w-40"
-                    onCommit={(v) => patch({ username: v || undefined, page: undefined })}
-                  />
-                  <TextFilter
-                    value={search.ip ?? ''}
-                    placeholder={t("搜索 IP…")}
-                    testId="filter-ip"
-                    width="w-36"
-                    onCommit={(v) => patch({ ip: v || undefined, page: undefined })}
-                  />
-                  <DateQuickPick
-                    value={{ start: search.start_time, end: search.end_time }}
-                    onChange={(r) => patch({ start_time: r.start, end_time: r.end, page: undefined })}
-                  />
-                  <DateRangePicker
-                    className="h-8"
-                    label={t("操作时间范围")}
-                    date={
-                      search.start_time
-                        ? { from: new Date(search.start_time), to: search.end_time ? new Date(search.end_time) : undefined }
-                        : undefined
-                    }
-                    onSelect={(r) =>
-                      patch({
-                        start_time: r?.from ? `${iso(r.from)} 00:00:00` : undefined,
-                        end_time: r?.to ? `${iso(r.to)} 23:59:59` : undefined,
-                        page: undefined,
-                      })
-                    }
-                  />
-                  <SelectFilter
-                    value={search.status}
-                    items={STATUS_ITEMS}
-                    testId="filter-status"
-                    onChange={(v) => patch({ status: v === undefined ? undefined : Number(v), page: undefined })}
-                  />
-                  {hasFilter && (
-                    <ResetButton
-                      onClick={() =>
-                        patch({
-                          username: undefined, ip: undefined, status: undefined,
-                          start_time: undefined, end_time: undefined, page: undefined,
-                        })
-                      }
-                    />
-                  )}
-                </>
-              }
               pagination={{
                 pageIndex: page - 1,
                 pageCount: data?.total_pages ?? 1,
                 pageSize: size,
                 totalCount: data?.total ?? 0,
-                onPageChange: (i) => patch({ page: i + 1 }),
+                onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
                 onPageSizeChange: (s) => patch({ size: s, page: undefined }),
               }}
             />

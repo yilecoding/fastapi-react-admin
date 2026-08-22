@@ -15,7 +15,7 @@
 
 ## 按任务导航
 
-1824 行不用读完。按你要改什么，只读对应几节：
+1895 行不用读完。按你要改什么，只读对应几节：
 
 | 我要… | 先读 |
 |---|---|
@@ -33,6 +33,7 @@
 | 写或跑测试 | 「跑测试」 |
 | 动监控页 | 「监控页（无历史、只有此刻）」 |
 | 改主题 / 偏好 | 「偏好设置」 |
+| 动 URL 参数 / 分页 | 「查询区」的「URL 参数 ≠ 接口入参」+ 硬纪律 2 |
 | cherry-pick 上游补丁 | 「fork 管理」 |
 
 > 面向使用者的说明在 [README.md](./README.md)，参与贡献看
@@ -179,6 +180,19 @@ React StrictMode 开发期把 effect 跑两遍。命中限流的接口（如 `/a
 ### 11. 不要在仓库根裸跑 `npx tsc -b`
 
 根目录没配 `noEmit`，会往 `src` 里吐编译产物（git 未跟踪，容易漏）。统一 `pnpm typecheck`。
+
+### 12. `pnpm typecheck` 的结论要配 `--force` 才可信
+
+turbo 会缓存 typecheck 的结果，而缓存命中时**打印的是上一次的日志**。
+两种翻车方式都实际发生过：
+
+- **报了一个假错**：`icon-registry.tsx` 说 `IconApi` unused，照着删掉之后
+  浏览器立刻 `IconApi is not defined` —— 它在第 48 行用着，那条错是旧的
+- **漏报真错**：改完 URL 参数之后 `Tasks: 5 successful`，`--force` 一跑
+  才冒出来 `dashboard` 里一个未使用的变量
+
+所以**判断「类型过了」一律 `pnpm typecheck --force`**。日常开发跑不带 force
+的没问题（快），但凡要据此删代码或收工，必须 force 一遍。
 
 ---
 
@@ -458,12 +472,11 @@ pages/xxx/
 | `_shared/select-column.tsx` | `buildSelectColumn(col, { canSelect })` —— 表格首列的复选框（含半选态） |
 | `_shared/log-features.ts` | 除用户页外共用的 `tableFeatures()` |
 | `_shared/use-tree-fold.ts` | 树形表格的展开/折叠：URL 只放粗粒度 `fold=all`，逐个节点的展开留组件 state |
-| `_shared/date-quick-pick.tsx` | 时间范围快捷区间（今天 / 近 7 天 / 近 30 天），与 `DateRangePicker` 并用；下拉回显真实状态 |
 | `_shared/monitor.tsx` | 监控页公共件：`MetricCard` · `InfoCard`/`InfoRow` · `UsageBar` · `Sparkline` · `BarList` · `RefreshBar` · `useSamples` · `usageTone`（阈值 75/90）· `MonitorError` · `MonitorSkeleton` |
 | `_shared/settings-shell.tsx` | 设置屏骨架：左侧竖导航 + 右侧切换面板（见「设置屏骨架」） |
 | `_shared/settings-rows.tsx` | `SettingRow`（`inline` / `stacked`）· `SwitchRow` · `SegmentedControl` · `ColorSwatches` |
 | `_shared/login-log.ts` | `LoginLog` 类型 + `formatLocation`（内网 IP 后端返 `Reserved`）。两个调用方：登录日志页、个人中心的「最近登录」 |
-| `_shared/use-query-search.ts` | `QueryBar` ↔ URL 的胶水：从 `q` 恢复条件 · 本地编辑 · 搜索时写回 URL + 拼接口入参 + **跳回第一页**。见「查询区」 |
+| `_shared/use-query-search.ts` | `QueryBar` ↔ URL 的胶水：从地址栏恢复条件 · 本地编辑 · 搜索时写回 URL + 拼接口入参 + **跳回第一页**。两个日志页在用，见「查询区」 |
 
 `pages/_shared/list-page.tsx` 是只读列表的工厂，**目前没有调用方**
 （两个日志页长出了统计条/导出/详情抽屉后已搬出去手写）。
@@ -1084,9 +1097,72 @@ query-bar/
 | `packQuery` / `unpackQuery` | **整份查询**（压缩 JSON） | URL 里的 `q` |
 | `toFilterTree` | 条件树 | 高级模式，**后端得先支持过滤语法** |
 
-**URL 里两份都要存。** 平铺参数管「能读、能手改、能直接贴给后端」；`q` 管
-「摆了哪几格 + 高级模式的树」—— 值为空的条件不出参，只靠平铺参数的话
-用户从「添加条件」挑出来的那几格刷新之后就消失了。
+### 🔴 URL 参数 ≠ 接口入参
+
+这两件事**必须分开**。一开始它们是同一份（页面把接口参数名直接当 URL 参数名写），
+代价是地址栏被接口签名绑死，实测长这样（74 个字符，用户指出「很乱」）：
+
+```
+/log/login?start_time=2026-08-16+00%3A00%3A00&end_time=2026-08-22+23%3A59%3A59&page=1
+```
+
+里面没几个是用户真选的东西：
+
+| 段 | 问题 |
+|---|---|
+| `00:00:00` / `23:59:59` | **派生值** —— 用户选的是两个日期，整天边界是必然结果 |
+| `+` `%3A` | 编码噪音（值里有空格和冒号才会有） |
+| 两个参数 | 一个「时间范围」被拆成两个 |
+| `page=1` | 默认值（见 `_shared/pagination.ts`） |
+
+现在：
+
+```
+URL   /log/login?time=2026-08-16~2026-08-22
+请求  ?start_time=2026-08-16 00:00:00&end_time=2026-08-22 23:59:59
+```
+
+- **URL 侧**（`toUrlParams` / `fromUrlParams`）：一个字段一个参数、**按字段 `key`
+  命名**、值压到最短（区间 `a~b`、多值 `a,b`、整天边界不写时分秒）
+- **接口侧**（`toQueryParams`）：名字走 `param` / `rangeParams`，精度不变
+
+⚠️ **补时分秒不能省。** 后端是 `login_time <= end_time`，`end_time=2026-08-22`
+会被 pydantic 解析成当天 00:00:00，**静默丢掉 22 号一整天**。
+所以压缩只发生在 URL 上，解码时立刻补回规范形式 ——
+条件值本身永远是完整的，`matchRangePreset` 才认得出「近 7 天」。
+
+### `f` 记布局，`adv` 记条件树
+
+值参数还原不出两件事，所以另有两个参数：
+
+| 参数 | 记什么 | 什么时候出现 |
+|---|---|---|
+| `f` | 摆开了哪几格（`key` 或 `key:op`） | **只在布局和默认不一样时** |
+| `adv` | 高级模式的条件树（压缩 JSON） | 只在高级模式 |
+
+`f` 一个参数同时表达两个方向，不用 `+a,-b` 语法：
+
+```
+什么都没动        →  不写（?time=… 就够了）
+加了「城市」      →  f=username,ip,status,time,city
+删掉了「IP」      →  f=username,status,time
+「额度」切成大于  →  f=…,amount:gt
+```
+
+🔴 **两个方向都得记。** 只记「摆开但没填值的格子」的话：默认布局那几格会被全列进
+`f`（刚进页面地址栏就是 `?f=username,ip,status,time`，纯噪音），而用户**删掉**一个
+默认格子之后又无从表达 —— 刷新它自己回来了。反过来，`f` 缺席时必须回落到
+**默认布局**而不是空数组，否则第一次进页面是个空筛选栏（`defaultVisible` 白声明了）。
+
+`adv` 刻意**不叫 `q`**：`q` 是页面自己最容易用的关键词参数名（在线用户页和字典页
+都在用），撞上之后表现是「搜索框一填，高级模式的树被覆盖掉」。
+没开 `advanced` 的页面**不要**在 schema 里留 `adv`（休眠字段会骗下一个人）。
+
+### 写回时要先清掉查询区管的键
+
+只做 `{...search, ...next}` 的话，被移除的条件会永远留在地址栏 ——
+界面上没有那一格、请求里也没有它，但复制出去的链接还带着，别人打开就多一个筛选。
+`useQuerySearch` 用 `urlParamKeys(fields)` 把它们先全部置 `undefined`。
 
 ⚠️ 运算符**默认不带出去**（带了后端也不认）。所以基础模式里
 `姓名 开头是 张` 发出去仍然是 `name=张` —— 要真按运算符查，得先给后端加过滤语法。
@@ -1229,6 +1305,7 @@ Select / 日期按钮这些触发器全漏在外面。
 | 行选中 | 要么配 `buildSelectColumn` + `BulkBar`，要么 `enableRowSelection: false`（只读列表）；开着却没有复选框列，分页条上的「已选 N 项」永远是 0 |
 | 半选复选框 | Base UI 是独立的 `indeterminate` prop，**不是** `checked="indeterminate"` |
 | 分页 | 有 `page`/`size` 在 search schema 里，界面上就必须有分页条 —— 否则第 2 页不可达。默认每页走 `_shared/pagination.ts` 的 `DEFAULT_PAGE_SIZE`（宫格用 `DEFAULT_GRID_PAGE_SIZE`），**不要各页写 `search.size ?? 20`** —— 原来那个 `?? 10` 散在 8 处，改默认值必漏一处，而漏了只表现为「某一页跟别人不一样」。默认值刻意**不写进 URL**：写了就分不出「用户显式选了 20」和「没选、恰好是默认」 |
+| 「回第一页」 | 写 `page: undefined`，**不是 `page: 1`**。改筛选必须跳回第一页（第 5 页改条件、结果只剩 3 条 → 空页，看着像「什么都没查到」），但写字面量 1 会让 `?page=1` 出现在每个列表页的地址栏 —— 全仓踩了 59 处 + 8 处 `page: i + 1`（从第 2 页点回第 1 页）。见 `_shared/pagination.ts` |
 | 列显隐 | 用 `_shared/use-column-visibility`，URL 里存**被隐藏**的列 id（`hide=browser,os`）。默认全显示所以通常为空，加列也不会让老链接错位 |
 | 空列表 | `DataTable` 的 `emptyAction` 放「清除筛选」—— 空态最常见的成因就是筛选太窄，别逼用户回工具栏找 |
 | 树形展开状态 | 用 `useTreeFold`：65 个 19 位雪花 id 塞进 URL 不现实，所以粗粒度（全展开/全折叠）进 URL，细粒度靠 `<Activity>` 保会话 |
@@ -1773,15 +1850,9 @@ docker exec fba_mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$PW" 
 命中 `FIN`。部门页有独立的编码筛选框；角色页没有（一共几条，编码在每行里都显示着），
 这是**取舍不是遗漏**。
 
-种子里那两条数据权限规则也跟着改了：`部门名称等于测试` → `部门编码等于 TEST`
-（按 `Dept.code` 匹配）。`父部门 ID 等于测试部门 ID` 的 value 在雪花种子里原来写着
-`'1'` —— 那是非雪花种子的 id，指向一条不存在的行，规则静默匹配不到任何东西，
-现在改成各自种子里测试部门的真实 id。**规则值没有「按编码引用」的形态**
-（`parent_id` 是 id 列），所以这一条只能是环境绑定的字面量。
-
 > 存量行的编码推不出来（中文名推不出真实编码），开发库和 `fba_test` 是按 id 序
-> 回填的占位码（`DEPT_0001` / `ROLE_0001`，种子那两行已对齐成 `TEST`）。
-> 这批占位码要换只能删了重建 —— 见上面「不可改」那条。
+> 回填的占位码（`DEPT_0001` / `ROLE_0001`）。真要用的话得人工改一遍 —— 但改不动，
+> 见上面那条。这批占位码要换只能删了重建。
 
 ## 还没发版 —— 可以自由重构
 

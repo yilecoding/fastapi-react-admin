@@ -249,16 +249,27 @@ function decodeValue(raw: string, field: FilterField, op: Operator): unknown {
 }
 
 /**
- * 布局记录参数 `f` 里的一项：`key` 或 `key:op`。
+ * 布局记录参数 `f`：**摆开了哪几格**，一项是 `key` 或 `key:op`。
  *
- * 它只记**光看值参数还原不出来的那部分**：
- * 摆开了但还没填值的格子（不记就会在刷新后消失），
- * 以及运算符和字段默认值不一样的（`amount:gt`）。
- * 有值又用默认运算符的字段不进 `f` —— 它自己的参数已经说明了一切。
+ * 只在布局**和默认不一样**时才写。默认布局 = 声明里 `defaultVisible`（或 `locked`）
+ * 的那些字段、各用自己的默认运算符 —— 这也是「一进页面」的样子。
  *
- * 顺序不记：基础模式的条件**一律按字段声明顺序**渲染（见 `sortByFields`），
- * 所以「我把某一格加在了哪个位置」这件事不需要持久化，
- * 而且每个筛选项的位置在页面上是固定的，扫起来更快。
+ * 一个参数同时表达两个方向，不用 `+a,-b` 那种语法：
+ *
+ * | 用户干了什么 | `f` |
+ * |---|---|
+ * | 什么都没动 | **不写**（默认布局，`?time=…` 就够了） |
+ * | 加了「城市」 | `f=username,ip,status,time,city` |
+ * | 删掉了「IP」 | `f=username,status,time` |
+ * | 把「额度」切成「大于」 | `f=…,amount:gt` |
+ *
+ * 🔴 **两个方向都得记。** 只记「摆开但没填值的格子」的话：默认布局那几格
+ * 会被全列进 `f`（刚进页面地址栏就是 `?f=username,ip,status,time`，纯噪音），
+ * 而用户**删掉**一个默认格子之后又无从表达 —— 刷新它自己回来了。
+ *
+ * 顺序不记：基础模式的条件**一律按字段声明顺序**渲染（`basic.tsx` 里加条件时
+ * 也按声明顺序插入），所以「我把某一格加在哪」不需要持久化，
+ * 而且每个筛选项在页面上位置固定，扫起来更快。
  */
 export const LAYOUT_PARAM = "f"
 
@@ -293,13 +304,16 @@ export function toUrlParams(
     if (!f) continue
     const encoded = encodeValue(c, f)
     if (encoded !== undefined) out[f.key] = encoded
-    // 默认运算符 + 有值 → 不用记；否则得留个痕
-    if (encoded === undefined || c.op !== defaultOperatorOf(f)) {
-      layout.push(c.op === defaultOperatorOf(f) ? f.key : `${f.key}:${c.op}`)
-    }
+    layout.push(c.op === defaultOperatorOf(f) ? f.key : `${f.key}:${c.op}`)
   }
-  out[LAYOUT_PARAM] = layout.length ? layout.join(MULTI_SEP) : undefined
+  const current = layout.join(MULTI_SEP)
+  out[LAYOUT_PARAM] = current === defaultLayout(fields).join(MULTI_SEP) ? undefined : current
   return out
+}
+
+/** 一进页面的布局：`defaultVisible` / `locked` 的字段，各用默认运算符 */
+function defaultLayout(fields: readonly FilterField[]): string[] {
+  return fields.filter((f) => f.defaultVisible || f.locked).map((f) => f.key)
 }
 
 /**
@@ -318,17 +332,24 @@ export function fromUrlParams(
     return unpackQuery(tree, fields, nextId) ?? { mode: "advanced", basic: [], advanced: { id: nextId(), logic: "and", children: [] } }
   }
 
-  /** `f` 里记的运算符覆盖 */
   const ops = new Map<string, Operator>()
-  const listed = new Set<string>()
   const rawLayout = search[LAYOUT_PARAM]
-  if (typeof rawLayout === "string") {
-    for (const item of rawLayout.split(MULTI_SEP)) {
+  const hasLayout = typeof rawLayout === "string" && rawLayout !== ""
+
+  /**
+   * `f` 在就照它来；不在就用**默认布局** —— 不能给空数组。
+   * 给空的话第一次进页面是个空筛选栏（`defaultVisible` 白声明了），实测踩到。
+   */
+  const listed = new Set<string>()
+  if (hasLayout) {
+    for (const item of (rawLayout as string).split(MULTI_SEP)) {
       const [key, op] = item.split(":")
       if (!key) continue
       listed.add(key)
       if (op) ops.set(key, op as Operator)
     }
+  } else {
+    for (const k of defaultLayout(fields)) listed.add(k)
   }
 
   const basic: Condition[] = []
@@ -336,6 +357,7 @@ export function fromUrlParams(
   for (const f of fields) {
     const raw = search[f.key]
     const present = raw !== undefined && raw !== null && raw !== ""
+    // 手改的 URL 可能给了一个不在布局里的字段的值 —— 那就把它摆出来
     if (!present && !listed.has(f.key)) continue
     const op = ops.get(f.key) ?? defaultOperatorOf(f)
     basic.push({

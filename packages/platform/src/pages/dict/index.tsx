@@ -219,13 +219,23 @@ export function DictPage({
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+        {/* content-scroll:lg:* —— 内容区滚动 + 宽屏时整块撑满，两栏各自成定高视区
+            （左栏只滚类型、右栏只滚字典项）。窄屏是上下堆叠的，那时照旧整块滚 */}
+        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:lg:min-h-0 content-scroll:lg:flex-1">
           <PageHeader title={t("数据字典")} description={t("集中管理业务枚举。状态、类型、单位这类下拉选项都放这里。")} />
 
-          <div className="flex flex-col gap-4 md:flex-row md:items-start">
+          {/* 断点用 lg 不用 md：左栏是 w-72 硬宽，768px 下右栏只剩约 176px，
+              字典项表格塞不下（角色页踩过同一条，见 CLAUDE.md 主从页一节）。
+              不要 items-start —— 定高情形下两栏要等高，sticky 由下面按模式给 */}
+          <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6 content-scroll:lg:min-h-0">
             {/* ── 左：字典类型 ── */}
-            <div className="flex w-full shrink-0 flex-col gap-2 md:sticky md:top-4 md:max-h-[calc(100dvh-13rem)] md:w-72">
-              <div className="flex items-center gap-2">
+            {/*
+              lg 以下      整宽一栏（堆叠），用视口算式限高，免得类型列表把右侧表格顶到屏外
+              lg+ 内容区滚 定高一栏，max-h 要显式取消，否则硬上限会让它在更高的栏里只用一半
+              lg+ 整页滚   整块跟着页面滚，所以吸顶；self-start 不能省，被拉伸到整行高的元素粘不住
+            */}
+            <div className="flex w-full shrink-0 flex-col gap-2 max-h-[calc(100dvh-13rem)] lg:w-72 content-scroll:lg:max-h-none content-scroll:lg:min-h-0 page-scroll:lg:sticky page-scroll:lg:top-4 page-scroll:lg:self-start">
+              <div className="flex shrink-0 items-center gap-2">
                 <InputGroup className="h-8 flex-1">
                   <InputGroupAddon align="inline-start">
                     <IconSearch className="size-4 text-muted-foreground" />
@@ -254,7 +264,7 @@ export function DictPage({
                 </Can>
               </div>
 
-              <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border" data-testid="type-list">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border" data-testid="type-list">
                 {loadingTypes ? (
                   <div className="flex flex-col gap-1 p-2">
                     {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
@@ -314,7 +324,7 @@ export function DictPage({
                 )}
                 {/* 一次只取 TYPE_PAGE_SIZE 条 —— 超出时说清楚，别让人以为就这么多 */}
                 {typeTotal > types.length && (
-                  <p className="border-t px-2 py-1.5 text-[11px] text-muted-foreground" data-testid="type-truncated">
+                  <p className="shrink-0 border-t px-2 py-1.5 text-[11px] text-muted-foreground" data-testid="type-truncated">
                     {t('共 {{total}} 个类型，仅加载前 {{n}} 个', { total: typeTotal, n: types.length })}
                   </p>
                 )}
@@ -322,8 +332,8 @@ export function DictPage({
             </div>
 
             {/* ── 右：字典项 ── */}
-            <div className="flex min-w-0 flex-1 flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-3 content-scroll:lg:min-h-0">
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <div className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-medium" data-testid="selected-type">
                     {selected?.name ?? t('未选择字典类型')}
@@ -342,13 +352,13 @@ export function DictPage({
                 </div>
               </div>
 
-              {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
-              也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
-          <div
-            data-testid="data-table"
-            data-fetching={isFetching}
-            className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-          >
+              {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 定高情形下
+                  也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
+              <div
+                data-testid="data-table"
+                data-fetching={isFetching}
+                className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+              >
                 <DataTable
                   table={table}
                   rows={table.getRowModel().rows}
@@ -396,7 +406,7 @@ export function DictPage({
                     pageSize: size,
                     selectedCount: selectedIds.length,
                     totalCount: datasPage?.total ?? 0,
-                    onPageChange: (i) => patch({ page: i + 1 }),
+                    onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
                     onPageSizeChange: (s) => patch({ size: s, page: undefined }),
                   }}
                 />

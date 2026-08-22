@@ -88,6 +88,15 @@ export function FieldControl({
   // 「为空 / 不为空」不吃值，渲染出来只会让人以为要填
   if (shape === "none") return null
 
+  /**
+   * 🔴 `field.placeholder` 是**中文原文**，必须在渲染处过一次 `t()`。
+   *
+   * 直接透传的话英文界面上那一格永远是中文 —— 和「`Select` 的 `items=` 是
+   * 关闭态的标签源」是同一个坑（组件约定表里那条）。字段声明是模块级常量，
+   * 拿不到 hook，所以翻译只能落在这里。
+   */
+  const ph = field.placeholder ? t(field.placeholder) : undefined
+
   if (field.render) {
     return (
       <>
@@ -113,7 +122,7 @@ export function FieldControl({
     ? cn(INLINE, "min-w-0 flex-1")
     : cn(heights[size], "min-w-0 flex-1 basis-48", invalid && INVALID)
 
-  const common = { field, value, onChange, onSubmit, size, invalid, inline, testId, box, className }
+  const common = { field, value, onChange, onSubmit, size, invalid, inline, testId, box, className, ph }
 
   if (shape === "range") return <RangeControl {...common} />
   if (shape === "multi") return <MultiControl {...common} />
@@ -132,7 +141,7 @@ export function FieldControl({
             { value: "true", label: t("是") },
             { value: "false", label: t("否") },
           ]}
-          placeholder={field.placeholder ?? t("请选择")}
+          placeholder={ph ?? t("请选择")}
           onChange={(v) => onChange(v === ALL || v == null ? undefined : v === "true")}
         />
       )
@@ -144,7 +153,7 @@ export function FieldControl({
           value={value as string | undefined}
           onChange={onChange}
           withTime={field.type === "dateTime" || field.withTime}
-          placeholder={field.placeholder}
+          placeholder={ph}
           size={size}
           disabled={field.disabled}
           className={cn(box, className)}
@@ -174,7 +183,7 @@ export function FieldControl({
           className={cn(box, NO_SPIN, className)}
           value={(value as string) ?? ""}
           min={field.min} max={field.max} step={field.step}
-          placeholder={field.placeholder ?? t("请输入")}
+          placeholder={ph ?? t("请输入")}
           disabled={field.disabled}
           aria-label={t(field.label)}
           data-testid={testId}
@@ -188,7 +197,7 @@ export function FieldControl({
         <Input
           className={cn(box, className)}
           value={(value as string) ?? ""}
-          placeholder={field.placeholder ?? t("请输入")}
+          placeholder={ph ?? t("请输入")}
           disabled={field.disabled}
           aria-label={t(field.label)}
           data-testid={testId}
@@ -225,12 +234,14 @@ type SubProps = {
   /** 已经算好的外观类（含 inline 去边框 / 非 inline 的高度与错误态） */
   box: string
   className?: string
+  /** 已经翻译过的 placeholder（`field.placeholder` 是中文原文，不能直接透传） */
+  ph?: string
 }
 
 /* ------------------------------------------------------------ 两端（介于 / 区间） */
 
 function RangeControl({
-  field, value, onChange, onSubmit, size, invalid, inline, testId, box, className,
+  field, value, onChange, onSubmit, size, invalid, inline, testId, box, className, ph,
 }: SubProps) {
   const { t } = useTranslation()
   const [a, b] = (Array.isArray(value) ? value : []) as [unknown, unknown]
@@ -245,7 +256,7 @@ function RangeControl({
         onChange={(r) => onChange(r === undefined ? undefined : [r[0], r[1]])}
         withTime={isDateTime || field.withTime}
         presets={field.presets ?? true}
-        placeholder={field.placeholder}
+        placeholder={ph}
         size={size}
         disabled={field.disabled}
         className={cn(box, className)}
@@ -313,7 +324,7 @@ function RangeControl({
 /* ------------------------------------------------------------ 多个（属于 / 标签） */
 
 function MultiControl({
-  field, value, onChange, onSubmit, size, inline, testId, box, className,
+  field, value, onChange, onSubmit, size, inline, testId, box, className, ph,
 }: SubProps) {
   const { t } = useTranslation()
   const arr = React.useMemo(
@@ -338,7 +349,7 @@ function MultiControl({
         value={arr}
         onValueChange={(v) => onChange(v.length ? v : undefined)}
         options={options}
-        placeholder={field.optionsLoading ? t("加载中…") : (field.placeholder ?? t("请选择"))}
+        placeholder={field.optionsLoading ? t("加载中…") : (ph ?? t("请选择"))}
         size={size}
         searchable={field.searchable}
         disabled={field.disabled || field.optionsLoading}
@@ -354,7 +365,7 @@ function MultiControl({
       value={arr}
       onChange={(v) => onChange(v.length ? v : undefined)}
       onSubmit={onSubmit}
-      placeholder={field.placeholder}
+      placeholder={ph}
       size={size}
       disabled={field.disabled}
       compact={inline}
@@ -484,7 +495,7 @@ export function TagsInput({
 /* ------------------------------------------------------------ 单值下拉 */
 
 function SelectControl(props: SubProps) {
-  const { field, value, onChange, size, testId, box, className } = props
+  const { field, value, onChange, size, testId, box, className, ph } = props
   const { t } = useTranslation()
   const items = React.useMemo(
     () => [
@@ -500,7 +511,7 @@ function SelectControl(props: SubProps) {
   // placeholder 一次都不会露脸，「请选择」和「不限」看着像两种不同的状态
   const current = value === undefined || value === null || value === "" ? null : String(value)
   const commit = (v: string | null) => onChange(v === ALL || v == null ? undefined : v)
-  const placeholder = field.optionsLoading ? t("加载中…") : (field.placeholder ?? t("请选择"))
+  const placeholder = field.optionsLoading ? t("加载中…") : (ph ?? t("请选择"))
 
   const searchable = field.searchable ?? (field.options ?? []).length > SEARCHABLE_FROM
 
