@@ -15,3 +15,8 @@ logs/
 superpowers/
 .codegraph/
 .pi/
+
+# celery beat 的本地调度快照（--pool 起 beat 时生成，不进版本库）
+celerybeat-schedule
+celerybeat-schedule-*
+celerybeat.pid

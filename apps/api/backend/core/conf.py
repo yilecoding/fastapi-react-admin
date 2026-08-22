@@ -331,6 +331,13 @@ class Settings(BaseSettings):
     CELERY_RABBITMQ_PASSWORD: str = 'guest'
 
     # 基础配置
+    #
+    # 🔴 CELERY_BROKER 是决定 broker 的**唯一**地方，任何环境都以 .env 为准。
+    # 上游在 check_env() 里有一行 prod 无条件改成 'rabbitmq'，已经删掉 ——
+    # 那行不看 .env，失败方式是「本地跑得好好的，一上生产 worker 连一个
+    # 5672 端口上根本不存在的服务」，而你的 .env 里明明写着 redis。
+    # 要用 RabbitMQ 就在 .env 里写，并起服务：
+    #   docker compose -f docker-compose.dev.yml --profile rabbitmq up -d
     CELERY_BROKER: Literal['rabbitmq', 'redis'] = 'redis'
     CELERY_RABBITMQ_VHOST: str = ''
     CELERY_REDIS_PREFIX: str = 'fba:celery'
@@ -375,9 +382,6 @@ class Settings(BaseSettings):
             # FastAPI
             values['FASTAPI_OPENAPI_URL'] = None
             values['FASTAPI_STATIC_FILES'] = False
-
-            # task
-            values['CELERY_BROKER'] = 'rabbitmq'
 
             # Grafana
             values['GRAFANA_METRICS_ENABLE'] = True
