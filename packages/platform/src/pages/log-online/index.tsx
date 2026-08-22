@@ -107,14 +107,33 @@ export function LogOnlinePage({
    * ⚠️ 搜索/重置要清选中行：这一页的「批量下线」同理会打到看不见的会话上。
    */
   const qb = useQuerySearch({ fields: FIELDS, search, onSearchChange, keep: ['refresh'] })
+
+  /**
+   * 「连接」在用户还没碰过筛选栏之前，按 `online=1`（只看真正在线的）处理——
+   * 见下面 `filtered` 里的用法。「在线用户」页面默认还带着一堆早就断开、只是
+   * token 还没过期的旧会话，没什么意义（这批旧会话也正是之前那个"token 已过期"
+   * 报错的重灾区，见 `api.ts` 里 `get_sessions` 的说明）。
+   *
+   * 🔴 默认值**不能**直接塞进 `useQuerySearch` 的 `search` 入参——试过，会把
+   * 「不限」这个选项彻底废掉：选完提交，地址栏回到没有 `online` 参数，和
+   * "用户压根没碰过这个筛选"长得一模一样，默认值下一次渲染立刻把它摁回去，
+   * 「不限」永远选不生效（实测：两个真实会话，切到不限点搜索，表格纹丝不动
+   * 还是只显示在线那一条）。所以默认值只在**从没提交过**时生效，一旦真的
+   * 提交过一次（哪怕提交的就是「不限」＝清空这个筛选），就必须原样尊重。
+   */
+  const onlineTouchedRef = React.useRef(false)
   const submitQuery = React.useCallback(
     (v: Parameters<typeof qb.submit>[0]) => {
+      onlineTouchedRef.current = true
       setRowSelection({})
       qb.submit(v)
     },
     [qb]
   )
   const clearFilters = React.useCallback(() => {
+    // 「重置」和别的列表页一样，回到的是「不限」（全部），不是这里的智能默认——
+    // 重置的语义本来就是「清空全部条件」
+    onlineTouchedRef.current = true
     setRowSelection({})
     qb.reset()
   }, [qb])
@@ -140,7 +159,9 @@ export function LogOnlinePage({
           s.ip.toLowerCase().includes(kw)
       )
     }
-    const online = qb.params.online
+    // 用户还没提交过任何一次搜索/重置时，undefined 按「只看在线」处理；
+    // 之后就原样尊重用户的选择（哪怕就是「不限」也是 undefined，不能再套默认）
+    const online = qb.params.online ?? (onlineTouchedRef.current ? undefined : 1)
     if (online !== undefined) list = list.filter((s) => s.status === Number(online))
     /**
      * 接口给的是 Redis SCAN 顺序（等于随机），必须自己排。
