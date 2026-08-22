@@ -268,6 +268,17 @@ class CRUDUser(CRUDPlus[User]):
         """
         return await self.update_model_by_column(db, {'avatar': avatar}, id=user_id, deleted=0)
 
+    async def update_timezone(self, db: AsyncSession, user_id: int, tz: str) -> int:
+        """
+        更新用户显示时区
+
+        :param db: 数据库会话
+        :param user_id: 用户 ID
+        :param tz: IANA 时区标识
+        :return:
+        """
+        return await self.update_model_by_column(db, {'timezone': tz}, id=user_id, deleted=0)
+
     async def update_email(self, db: AsyncSession, user_id: int, email: str) -> int:
         """
         更新用户邮箱

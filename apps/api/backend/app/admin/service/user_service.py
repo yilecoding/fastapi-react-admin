@@ -260,6 +260,24 @@ class UserService:
         return count
 
     @staticmethod
+    async def update_timezone(*, db: AsyncSession, user_id: int, tz: str) -> int:
+        """
+        更新当前用户显示时区
+
+        清用户缓存这一步**不能省**：`/users/me` 读的是 `fba:user:<id>` 里那份
+        序列化好的 DTO，不清的话前端存完立刻重取，拿回来还是旧时区，
+        表现是「点了保存但没生效」，刷新也一样，要等 token 过期。
+
+        :param db: 数据库会话
+        :param user_id: 用户 ID
+        :param tz: IANA 时区标识（已由 schema 校验过）
+        :return:
+        """
+        count = await user_dao.update_timezone(db, user_id, tz)
+        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+        return count
+
+    @staticmethod
     async def update_email(*, db: AsyncSession, user_id: int, captcha: str, email: str) -> int:
         """
         更新当前用户邮箱

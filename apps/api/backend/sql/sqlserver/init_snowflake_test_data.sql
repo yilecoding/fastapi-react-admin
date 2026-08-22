@@ -68,10 +68,10 @@ VALUES
 (2048601263578415104, 2048601263515500544, 2049629108245233664),
 (2048601263775547392, 2048601263515500544, 2049629108253622282);
 
-INSERT INTO sys_user (id, uuid, username, nickname, password, salt, email, status, is_superuser, is_staff, is_multi_login, avatar, phone, join_time, last_login_time, last_password_changed_time, dept_id, created_time, updated_time)
+INSERT INTO sys_user (id, uuid, username, nickname, password, salt, email, status, is_superuser, is_staff, is_multi_login, avatar, timezone, phone, join_time, last_login_time, last_password_changed_time, dept_id, created_time, updated_time)
 VALUES
-(2048601263834267648, CONVERT(varchar(36), NEWID()), 'admin', N'用户88888', '$2b$12$8y2eNucX19VjmZ3tYhBLcOsBwy9w1IjBQE4SSqwMDL5bGQVp2wqS.', 0x24326224313224387932654E7563583139566A6D5A33745968424C634F, 'admin@example.com', 1, 1, 1, 1, NULL, NULL, GETDATE(), GETDATE(), GETDATE(), 2048601258595581952, GETDATE(), NULL),
-(2049946297615646720, CONVERT(varchar(36), NEWID()), 'test', N'用户66666', '$2b$12$BMiXsNQAgTx7aNc7kVgnwedXGyUxPEHRnJMFbiikbqHgVoT3y14Za', 0x24326224313224424D6958734E514167547837614E63376B56676E7765, 'test@example.com', 1, 0, 0, 0, NULL, NULL, GETDATE(), GETDATE(), GETDATE(), 2048601258595581952, GETDATE(), NULL);
+(2048601263834267648, CONVERT(varchar(36), NEWID()), 'admin', N'用户88888', '$2b$12$8y2eNucX19VjmZ3tYhBLcOsBwy9w1IjBQE4SSqwMDL5bGQVp2wqS.', 0x24326224313224387932654E7563583139566A6D5A33745968424C634F, 'admin@example.com', 1, 1, 1, 1, NULL, 'Asia/Shanghai', NULL, GETDATE(), GETDATE(), GETDATE(), 2048601258595581952, GETDATE(), NULL),
+(2049946297615646720, CONVERT(varchar(36), NEWID()), 'test', N'用户66666', '$2b$12$BMiXsNQAgTx7aNc7kVgnwedXGyUxPEHRnJMFbiikbqHgVoT3y14Za', 0x24326224313224424D6958734E514167547837614E63376B56676E7765, 'test@example.com', 1, 0, 0, 0, NULL, 'Asia/Shanghai', NULL, GETDATE(), GETDATE(), GETDATE(), 2048601258595581952, GETDATE(), NULL);
 
 INSERT INTO sys_user_role (id, user_id, role_id)
 VALUES

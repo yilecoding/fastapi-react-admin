@@ -120,14 +120,37 @@
 
 ## 时区：单时区系统，但**下发的时间必须带时区标记**
 
-`DATETIME_TIMEZONE`（默认 `Asia/Shanghai`）是**进程级单例**（`utils/timezone.py`
-的 `timezone` 就一个实例），Celery 也用同一个值（`enable_utc=False`）。
-`sys_user` 没有时区字段，前端也没有时区选择器 —— **这是单时区系统**，
-`timezone.py` 这个文件名容易让人以为支持按用户切时区，不支持。
+分两件事，别混：
 
-存储仍是本地时区（`common/model.py` 的 `TimeZone` TypeDecorator），
-**但下发格式已经改成带偏移的 ISO 8601**，所以「服务端和用户不在同一时区」
-这件事在前端是能正确显示的：
+| | 谁决定 | 影响什么 |
+|---|---|---|
+| **服务端时区** | `DATETIME_TIMEZONE`（默认 `Asia/Shanghai`），**进程级单例**（`utils/timezone.py` 的 `timezone` 就一个实例），Celery 同一个值（`enable_utc=False`） | 落库时怎么算、定时任务什么时候跑、日志时间戳 |
+| **显示时区** | `sys_user.timezone`（IANA 标识，每人一份，`PUT /sys/users/me/timezone`） | **只影响前端怎么显示**，不参与任何服务端计算 |
+
+所以服务端仍然是单时区的（一个进程一个时区，没有「按请求切时区」的机制），
+而**展示是多时区的**。`timezone.py` 这个文件名容易让人以为前者也能按用户切，不能。
+
+- 🔴 **`sys_user.timezone` 这个列名会遮蔽同文件的 `timezone` 导入。**
+  `model/user.py` 里必须把导入起别名（现在是 `tz_helper`）——不起的话类体里
+  后面的 `default_factory=timezone.now` 拿到的是那个 `MappedColumn`，
+  直接 `AttributeError: 'MappedColumn' object has no attribute 'now'`。
+  好在它是 import 期就炸、不是静默的。（和前端 `shadowed-t` 同一个物种。）
+- 🔴 **给 `GetUserInfoDetail` 加字段必须带默认值。** 它的子类
+  `GetUserInfoWithRelationDetail` 整份序列化后存在 `fba:user:<id>`，
+  旧缓存里没有新字段 —— 写成必填就是每个已登录用户的每个请求都
+  `ValidationError` → 全站 500（同 `dept.code` 那次）。带默认值时旧缓存能过校验、
+  先回落默认值。改完照样把 `fba:user:*` 清一遍拿到真值
+- **写入侧必须校验是合法 IANA 标识**（`common/schema.py: IanaTimeZone`，
+  拿 `zoneinfo.available_timezones()` 对）。这个值会被前端直接交给
+  `Intl.DateTimeFormat(..., { timeZone })`，而那个 API 对不认识的时区是**抛异常** ——
+  存进一个拼错的名字，那个用户所有带时间的页面都白屏，**而且自己改不回来**
+  （偏好设置页本身也要渲染时间）。不维护白名单：前端选项来自浏览器的
+  `Intl.supportedValuesOf('timeZone')`，两边各自跟着自己的 tzdata 走
+- **改完要清 `fba:user:<id>`**（`user_service.update_timezone` 里做了）。
+  `/users/me` 读的是缓存里那份 DTO，不清的话前端存完立刻重取还是旧值，
+  表现成「点了保存没生效」
+
+下发格式方面：
 
 - 🔴 **不要给 `SchemaBase` 加回 datetime 的 `json_encoders`。**
   原来那个 encoder 把所有时间格式化成 `'%Y-%m-%d %H:%M:%S'` —— **丢掉了时区**。
@@ -149,11 +172,22 @@
 - **输入方向不用管**：pydantic 对 `'2026-08-22 17:00:00'` / 带 `Z` / 带 `+08:00`
   全都收，改下发格式不会让任何表单提交失败
 
-> 存储改成 UTC 是**还没做**的一步（要重建开发库 + 改种子 SQL 的时间字面量）。
-> 做了之后 `SchemaBase` 一行都不用改 —— 默认序列化跟着 tzinfo 走，会自动变成
-> `...Z`。现在不做的理由是：存本地 + 显式下发偏移，**在 API 契约上已经无歧义**，
-> 而存 UTC 解决的是另一个问题（SQL Server 的 `DATETIME2` 不存偏移，
-> 时区靠一个配置值隐式决定，改配置会让全部历史数据静默重新解释）。
+> **存储不需要改成 UTC** —— 一开始以为要，实测之后发现前提就不成立。
+>
+> `TimeZone` 的 `impl = DateTime(timezone=True)` 在 SQL Server 下落成
+> **`datetimeoffset`**（不是 `datetime2`），这个类型**每行自己存着偏移**。
+> 实测同一张 `sys_user` 里两种偏移并存且都正确：种子 SQL 用 `GETDATE()` 插的
+> `admin` 行是 `+00:00`（容器时区是 UTC），应用自己写的行是 `+08:00`
+> （`timezone.now()`）。两者是同样自描述的瞬间，读出来 tzinfo 就是当初存进去的那个。
+>
+> 所以「改了 `DATETIME_TIMEZONE` 配置会让历史数据静默重新解释」这个担心
+> **在这套 schema 上不存在**（那是 `datetime2` 才有的问题：不存偏移、
+> 靠一个配置值隐式决定）。`process_result_value` 里那个
+> `if value.tzinfo is None` 分支是给不存偏移的方言兜底的，SQL Server 走不到。
+>
+> 留下的只是「不齐」——同一列里有 `+00:00` 也有 `+08:00`。不影响正确性
+> （前端拿到的都是无歧义的 ISO），要归一的话直接 `UPDATE` 一遍就行，
+> 不用重建库、也不必改模型。
 
 ## 部门与角色的编码（稳定引用键）
 
