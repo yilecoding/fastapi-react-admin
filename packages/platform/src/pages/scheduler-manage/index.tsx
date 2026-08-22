@@ -2,13 +2,14 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
-import { IconPlayerPlay, IconPlus } from '@tabler/icons-react'
+import { IconAlertTriangle, IconPlayerPlay, IconPlus } from '@tabler/icons-react'
 
 import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 import { Switch } from '@admin/ui/components/switch'
+import { cn } from '@admin/ui/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 
 import { Can } from '../../auth/can'
@@ -22,7 +23,7 @@ import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import {
   SCHEDULER_TYPE_LABEL,
-  describeSchedule, schedulersQuery,
+  describeSchedule, schedulerMetaQuery, schedulersQuery,
   useDeleteSchedulers, useRunScheduler, useToggleScheduler,
   type TaskScheduler,
 } from './api'
@@ -76,6 +77,21 @@ export function SchedulerManagePage({
   )
   const rows = data?.items ?? []
 
+  /**
+   * 🔴 指向未注册任务的调度必须在界面上**看得出来**。
+   *
+   * 创建时 service 层校验过任务名，但那只挡住「打错字」——任务名住在**代码**里，
+   * 改个名或删掉一个任务，库里已有的调度就指向了空，而没有任何一次写操作
+   * 会经过校验。之后：beat 照常派发 →「累计触发」照涨 → worker 收到一个
+   * 不认识的名字只记一条 `Received unregistered task`，**不产生执行记录**。
+   * 界面上这条看着在正常运行，执行记录里一条都没有 —— 而没人会去比对这两个数。
+   *
+   * 判断放在前端而不是让后端多下发一个字段：`/meta` 本来就要拉（表单的任务
+   * 下拉用它），两份数据在同一次渲染里比对，不会出现「后端算过但过期了」。
+   */
+  const { data: meta } = useQuery(schedulerMetaQuery())
+  const registered = React.useMemo(() => new Set(meta?.tasks ?? []), [meta])
+
   const [formOpen, setFormOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<TaskScheduler | null>(null)
   const [removing, setRemoving] = React.useState<TaskScheduler | null>(null)
@@ -107,11 +123,35 @@ export function SchedulerManagePage({
       }),
       col.accessor('task', {
         header: t('Celery 任务'),
-        cell: ({ getValue }) => (
-          <span className="block max-w-52 truncate font-mono text-xs text-muted-foreground" title={getValue()}>
-            {getValue()}
-          </span>
-        ),
+        cell: ({ getValue }) => {
+          const task = getValue()
+          // meta 还没回来时不判 —— 否则首帧会把所有行都标成红的
+          const missing = registered.size > 0 && !registered.has(task)
+          return (
+            <span className="flex items-center gap-1.5">
+              {missing && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={<IconAlertTriangle className="size-4 shrink-0 text-destructive" />}
+                  />
+                  <TooltipContent>
+                    {t('这个任务没有注册 —— 调度会按时触发，但什么都不会执行')}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              <span
+                data-testid={missing ? `unregistered-task-${task}` : undefined}
+                className={cn(
+                  'block max-w-52 truncate font-mono text-xs',
+                  missing ? 'text-destructive line-through' : 'text-muted-foreground'
+                )}
+                title={task}
+              >
+                {task}
+              </span>
+            </span>
+          )
+        },
       }),
       col.accessor((r) => SCHEDULER_TYPE_LABEL[r.type] ?? '—', {
         id: 'type',
@@ -198,7 +238,7 @@ export function SchedulerManagePage({
         ),
       }),
     ],
-    [t, i18n.language, toggle, run]
+    [t, i18n.language, toggle, run, registered]
   )
 
   const table = useTable({

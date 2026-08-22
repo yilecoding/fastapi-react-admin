@@ -434,3 +434,33 @@ def test_end_time_without_clock_silently_drops_the_last_day(
             f'只给日期居然命中了今天的记录 —— pydantic 的解析口径变了？{date_only}'
         )
         assert with_clock > date_only, '只给日期没有丢掉任何东西，这条用例失去意义'
+
+
+def test_every_schedule_in_db_points_at_a_registered_task(client: TestClient, token_headers):
+    """🔴 库里每一条启用的调度，任务名都必须真的注册过。
+
+    创建时 service 层校验过，但那只挡住「打错字」—— 任务名住在**代码**里，
+    改个名或删掉一个任务，库里已有的调度就指向了空，而**没有任何一次写操作
+    会经过校验**。这条测试是唯一能在 CI 里发现它的地方。
+
+    它同时守住两件事：
+    - **种子 SQL 里的任务名拼错**（种子是手写的，没有任何东西校验它）
+    - **重命名任务后忘了改调度**
+
+    失败的样子有多不可见：beat 照常派发 →「累计触发」照涨 → worker 收到
+    一个不认识的名字只记一条 `Received unregistered task`，**不产生执行记录**。
+    界面上这条看着在正常运行，执行记录里一条都没有。
+    """
+    registered = set(client.get(f'{BASE}/meta', headers=token_headers).json()['data']['tasks'])
+    rows = client.get(f'{BASE}/all', headers=token_headers).json()['data']
+
+    broken = [
+        f"「{r['name']}」→ {r['task']}"
+        for r in rows
+        if r['enabled'] and r['task'] not in registered
+    ]
+    assert not broken, (
+        '这些调度指向未注册的任务，会按时触发但什么都不执行：\n  '
+        + '\n  '.join(broken)
+        + f'\n可用的任务：{sorted(registered)}'
+    )
