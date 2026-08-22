@@ -7,6 +7,7 @@ from backend.app.admin.crud.crud_dept import dept_dao
 from backend.app.admin.model import Dept
 from backend.app.admin.schema.dept import CreateDeptParam, UpdateDeptParam
 from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.utils.build_tree import get_tree_data
 
 
@@ -25,7 +26,7 @@ class DeptService:
 
         dept = await dept_dao.get(db, pk)
         if not dept:
-            raise errors.NotFoundError(msg='部门不存在')
+            raise errors.NotFoundError(msg=t('error.dept.not_found'))
         return dept
 
     @staticmethod
@@ -65,14 +66,14 @@ class DeptService:
         :return:
         """
         if await dept_dao.get_by_code(db, obj.code):
-            raise errors.ConflictError(msg='部门编码已存在')
+            raise errors.ConflictError(msg=t('error.dept.code_exists'))
         if obj.parent_id is not None:
             parent_dept = await dept_dao.get(db, obj.parent_id)
             if not parent_dept:
-                raise errors.NotFoundError(msg='父级部门不存在')
+                raise errors.NotFoundError(msg=t('error.dept.parent_not_found'))
         # 名称只在同级里唯一 —— 不同上级下的同名部门是合法的
         if await dept_dao.get_sibling_by_name(db, obj.name, obj.parent_id):
-            raise errors.ConflictError(msg='同级下已存在同名部门')
+            raise errors.ConflictError(msg=t('error.dept.duplicate_name_in_level'))
         await dept_dao.create(db, obj)
 
     @staticmethod
@@ -87,18 +88,18 @@ class DeptService:
         """
         dept = await dept_dao.get(db, pk)
         if not dept:
-            raise errors.NotFoundError(msg='部门不存在')
+            raise errors.NotFoundError(msg=t('error.dept.not_found'))
         if obj.parent_id:
             parent_dept = await dept_dao.get(db, obj.parent_id)
             if not parent_dept:
-                raise errors.NotFoundError(msg='父级部门不存在')
+                raise errors.NotFoundError(msg=t('error.dept.parent_not_found'))
         if obj.parent_id == dept.id:
-            raise errors.ForbiddenError(msg='禁止关联自身为父级')
+            raise errors.ForbiddenError(msg=t('error.dept.cannot_be_own_parent'))
         # 同级重名要按**目标**父级判：只挪了上级、名字没动，一样可能撞到新兄弟
         if dept.name != obj.name or dept.parent_id != obj.parent_id:
             sibling = await dept_dao.get_sibling_by_name(db, obj.name, obj.parent_id)
             if sibling and sibling.id != dept.id:
-                raise errors.ConflictError(msg='同级下已存在同名部门')
+                raise errors.ConflictError(msg=t('error.dept.duplicate_name_in_level'))
         count = await dept_dao.update(db, pk, obj)
         return count
 
@@ -113,12 +114,12 @@ class DeptService:
         """
         dept = await dept_dao.get_join(db, pk)
         if not dept:
-            raise errors.NotFoundError(msg='部门不存在')
+            raise errors.NotFoundError(msg=t('error.dept.not_found'))
         if dept.users:
-            raise errors.ConflictError(msg='部门下存在用户，无法删除')
+            raise errors.ConflictError(msg=t('error.dept.has_users'))
         children = await dept_dao.get_children(db, pk)
         if children:
-            raise errors.ConflictError(msg='部门下存在子部门，无法删除')
+            raise errors.ConflictError(msg=t('error.dept.has_children'))
         count = await dept_dao.delete(db, pk)
         return count
 

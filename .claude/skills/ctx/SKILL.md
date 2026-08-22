@@ -27,6 +27,7 @@ description: 把一条刚踩出来的坑写进项目上下文文档（分册 AGE
 | 文件上传 / 预览 / 附件 | `packages/platform/src/pages/file/AGENTS.md` |
 | 文案、语言包、两个校验脚本 | `packages/i18n/AGENTS.md` |
 | 后端模型 / 接口 / SQL / pytest | `apps/api/AGENTS.md` |
+| 定时任务、Celery、调度、删除类任务 | `apps/api/backend/app/task/AGENTS.md` |
 | Playwright E2E | `apps/web/e2e/AGENTS.md` |
 | **跨模块**、任何一层都可能违反的 | 根 `CLAUDE.md` 的「硬纪律」，并给个编号 |
 

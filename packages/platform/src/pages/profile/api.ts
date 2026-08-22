@@ -46,6 +46,29 @@ export function useUpdateAvatar() {
 }
 
 /**
+ * 显示时区：`PUT /sys/users/me/timezone`。
+ *
+ * 存服务端而不是 localStorage —— 「我在哪个时区」是跟人走的，换台机器不该重选。
+ *
+ * ⚠️ `invalidateQueries(authKeys.me())` 这一步是**必须**的，而且它做的不只是
+ * 刷新界面上那两个时间：`meQuery` 的 queryFn 里会调 `setDisplayTimeZone()`
+ * （见 `auth/queries.ts` 的注释），所以「让新时区在全站生效」这件事是靠重取
+ * `me` 触发的。不 invalidate 的话数据库里已经改了，但界面还按旧时区显示。
+ *
+ * 已知限制：`formatDateTime` 读模块级变量、不是响应式的，所以**其他已经渲染好的
+ * 标签页**（多页签用 `<Activity>` 保活，不会重新取数）里的时间要等那个页面
+ * 自己下次取数才更新。换时区是个一年一次的动作，没为它加一套订阅式重渲染。
+ */
+export function useSaveTimeZone() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (timezone: string) =>
+      api.PUT<null>('/api/v1/sys/users/me/timezone', { body: { timezone } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: authKeys.me() }),
+  })
+}
+
+/**
  * 发邮箱验证码：`POST /emails/captcha`（email 插件，`extend = "admin"` 之外的独立前缀）。
  *
  * ⚠️ 这个接口会**真的发一封邮件**，SMTP 没配就会失败。失败必须显示出来 ——

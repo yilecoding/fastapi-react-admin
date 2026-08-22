@@ -119,6 +119,21 @@ effect **整个销毁重建**（`tab-outlet.tsx` 那条注释：「销毁 effect
 测试要验证的是**那一步**，不是把所有路径都走一遍 UI。`dept-crud.spec.ts` 第二条、
 `tabs.spec.ts` 都是这么造数据的。
 
+### 🔴 不要用 `waitForLoadState('networkidle')` —— 它永远不会触发
+
+这个应用有**常驻 socket.io 连接**（在线用户靠它维护 `fba:token_online`），
+所以「网络空闲」这个条件在这里不成立：`networkidle` 会一直挂到 30 秒超时，
+报的还是下一行的 `locator.innerText: Test timeout exceeded` ——
+看起来像元素找不到，其实是等待条件本身错了。实测踩过。
+
+等具体的东西，不要等「网络安静下来」：
+
+```ts
+await expect(page.locator('[data-visible="true"] table tbody tr').first()).toBeVisible()
+```
+
+（顺带：`[data-visible="true"]` 前缀是必须的，理由见根 `CLAUDE.md` 硬纪律 5。）
+
 ### 现在测了什么 / 没测什么
 
 三条种子用例：登录（表单校验 + 验证码关闭路径）、部门 CRUD 闭环（含 409 冲突

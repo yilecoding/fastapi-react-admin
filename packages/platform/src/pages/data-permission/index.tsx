@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconDatabaseCog, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
 
 import { Can } from '../../auth/can'
@@ -148,7 +149,7 @@ export function DataPermissionPage({
                         <StatusBadge value={selected.status} />
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {t('创建于 {{at}}', { at: selected.created_time })}
+                        {t('创建于 {{at}}', { at: formatDateTime(selected.created_time) })}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">

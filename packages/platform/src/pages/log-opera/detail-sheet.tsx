@@ -1,7 +1,7 @@
 import * as React from 'react'
-import { t as tr } from '@admin/i18n'
 import { Trans, useTranslation } from 'react-i18next'
 
+import { formatDateTime, t as tr } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import {
@@ -72,7 +72,7 @@ export function OperaLogDetailSheet({
             </div>
             <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
               <Row label={t("操作人")} value={log.username ?? t('匿名')} />
-              <Row label={t("操作时间")} value={log.opera_time} mono />
+              <Row label={t("操作时间")} value={formatDateTime(log.opera_time)} mono />
               <Row label={t("操作内容")} value={t(log.title)} />
               <Row label={t("请求方法")} value={log.method} mono />
               <Row label={t("操作 IP")} value={log.ip} mono copy />

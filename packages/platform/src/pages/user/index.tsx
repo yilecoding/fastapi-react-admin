@@ -257,7 +257,7 @@ export function UserPage({
                     </Button>
                   </SuperOnly>
                   {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} iconOnly />
+                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
                   {/*
                   批量条放**左组末尾**：选中行时它才出现，左组往右长进空白里，
                   右边的「搜索 / 重置」不会跟着跳。放右组的话每选一次行按钮就位移一次。

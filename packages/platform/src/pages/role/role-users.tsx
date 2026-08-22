@@ -5,6 +5,7 @@ import {
   IconChevronLeft, IconChevronRight, IconInfoCircle, IconUserMinus, IconUserPlus,
 } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
 import { Checkbox } from '@admin/ui/components/checkbox'
 import { DataTableSkeletonRows } from '@admin/ui/components/data-table'
@@ -155,7 +156,7 @@ export function RoleUsers({
                     <TableCell className="text-sm text-muted-foreground">{u.dept?.name ?? '—'}</TableCell>
                     <TableCell><StatusBadge value={u.status} /></TableCell>
                     <TableCell className="text-sm tabular-nums text-muted-foreground">
-                      {u.last_login_time ?? '—'}
+                      {formatDateTime(u.last_login_time)}
                     </TableCell>
                     <TableCell>
                       <Can perm="sys:role:edit">

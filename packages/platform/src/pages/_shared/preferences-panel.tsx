@@ -1,18 +1,23 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import {
-  IconArrowsVertical, IconBrowser, IconDeviceDesktop, IconLayout, IconLayoutNavbarCollapse,
-  IconMoon, IconPalette, IconRotate2, IconSun,
+  IconArrowsVertical, IconBrowser, IconClock, IconDeviceDesktop, IconLayout,
+  IconLayoutNavbarCollapse, IconMoon, IconPalette, IconRotate2, IconSun,
 } from '@tabler/icons-react'
 
+import { BASE_TIME_ZONE } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
+import { Combobox, type ComboboxOption } from '@admin/ui/components/combobox'
 import { Input } from '@admin/ui/components/input'
 
+import { meQuery } from '../../auth/queries'
 import {
   RADIUS_PRESETS, SCROLL_MODE_LABELS, TAB_STYLE_LABELS, THEME_COLORS, THEME_MODE_LABELS,
   usePreferences,
   type RadiusPreset, type ScrollMode, type TabStyle, type ThemeColor, type ThemeMode,
 } from '../../shell/preferences'
+import { useSaveTimeZone } from '../profile/api'
 import type { SettingsPanel } from './settings-shell'
 import { ColorSwatches, SegmentedControl, SettingRow, SwitchRow } from './settings-rows'
 
@@ -47,6 +52,98 @@ const SCROLL_ICON: Record<ScrollMode, React.ReactNode> = {
 const SCROLL_CAPTION: Record<ScrollMode, string> = {
   content: '顶栏固定',
   page: '顶栏跟着滚',
+}
+
+/**
+ * 时区选择。
+ *
+ * ⚠️ 这一节和同一个面板里其他项**不是一类**：别的偏好存 localStorage
+ * （`admin:prefs`，跟浏览器走），时区存在**服务端**（`sys_user.timezone`）——
+ * 「我在哪个时区」是跟人走的，换台机器不该重新选一次。
+ * 交互仍然保持一致：选完立刻存，没有保存按钮。
+ *
+ * 选项来自 `Intl.supportedValuesOf('timeZone')`（400+ 项，所以用可搜索的
+ * Combobox 而不是 Select）。**不自己维护时区列表** —— 浏览器和后端各自跟着
+ * 自己的 tzdata 走，我们维护一张表只会带来「表过期了但没人发现」。
+ */
+function TimeZoneSection(): React.ReactElement {
+  const { t } = useTranslation()
+  const me = useQuery(meQuery)
+  const save = useSaveTimeZone()
+
+  // 400+ 项，只在挂载时算一次。`hint` 放该时区**此刻**的 UTC 偏移和本地时刻，
+  // 因为光看 `America/Argentina/Salta` 是不知道自己该不该选它的。
+  const options = React.useMemo<ComboboxOption[]>(() => {
+    const zones =
+      typeof Intl.supportedValuesOf === 'function'
+        ? Intl.supportedValuesOf('timeZone')
+        : [BASE_TIME_ZONE]
+    const now = Date.now()
+    return zones.map((z) => ({
+      value: z,
+      label: z,
+      hint: zoneHint(now, z),
+    }))
+  }, [])
+
+  const current = me.data?.timezone
+  const browserZone = React.useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone
+    } catch {
+      return null
+    }
+  }, [])
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SettingRow
+        label={t('显示时区')}
+        description={t('只影响界面上时间怎么显示。日志记的时刻、定时任务什么时候跑都不受它影响')}
+      >
+        <div className="flex flex-col gap-2">
+          <Combobox
+            value={current ?? null}
+            onValueChange={(v) => v && save.mutate(v)}
+            options={options}
+            disabled={me.isPending || save.isPending}
+            data-testid="pref-timezone"
+            placeholder={t('选择时区')}
+            searchPlaceholder={t('搜索时区，如 Tokyo')}
+            className="w-full max-w-md"
+          />
+          {browserZone && current && browserZone !== current && (
+            <p className="text-xs text-muted-foreground" data-testid="pref-timezone-mismatch">
+              {t('这台设备的系统时区是 {{zone}}，和上面选的不一致 —— 界面按上面选的显示。', {
+                zone: browserZone,
+              })}
+            </p>
+          )}
+        </div>
+      </SettingRow>
+    </div>
+  )
+}
+
+/** 该时区此刻的偏移 + 本地时刻，如 `UTC+9 · 18:20` */
+function zoneHint(now: number, zone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      timeZoneName: 'shortOffset',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(now))
+    const offset = parts.find((p) => p.type === 'timeZoneName')?.value ?? ''
+    const hh = parts.find((p) => p.type === 'hour')?.value ?? ''
+    const mm = parts.find((p) => p.type === 'minute')?.value ?? ''
+    return `${offset} · ${hh}:${mm}`
+  } catch {
+    // 浏览器不认这个时区就不给提示，但**仍然把它列出来** ——
+    // 列表来自 supportedValuesOf，理论上不会走到这里
+    return ''
+  }
 }
 
 /**
@@ -170,6 +267,13 @@ export function usePreferencePanels(): SettingsPanel[] {
             </SettingRow>
           </div>
         ),
+      },
+      {
+        id: 'region',
+        group: t('外观'),
+        label: t('时区'),
+        icon: <IconClock />,
+        content: <TimeZoneSection />,
       },
       {
         id: 'tabs',

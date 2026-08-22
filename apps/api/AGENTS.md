@@ -72,6 +72,123 @@
   新增接口时反过来核对一遍：前端每一个 `<Can perm="xxx">` 包着的动作，
   对应接口是不是也真的挂了同一个权限码的 `RequestPermission` + `DependsRBAC`
 
+## 后端国际化（i18n）
+
+语言包在 `backend/locale/{zh-CN,en-US}.yml`，**统一用 YAML**（2026-08-22 前
+`en-US` 还是 `.json`，已合并）。识别语言靠标准 `Accept-Language` 请求头
+（`middleware/i18n_middleware.py`），不是自定义 header/query 参数。
+
+- **不要以为 YAML 性能更好**——实测反过来：同一份内容 `yaml.safe_load`
+  比 `json.loads` 慢两个数量级（本机 4.7ms vs 0.02ms/次）。选 YAML 纯粹是
+  为了能写注释。反正 `I18n.load_locales()` 只在进程启动时跑一次，这点
+  耗时不影响任何请求延迟
+- 🔴 **业务错误消息统一走 `t('error.模块.slug', **kwargs)`，不要再用中文原文
+  当 key。** 2026-08-22 之前是反过来——`raise errors.XxxError(msg='用户不存在')`
+  写中文字面量，响应出口按原文查表翻译（`I18n.tm()`）。这套「中文当 key」
+  查出过一整轮真问题（治理记录见下），根子是：中文原文一改字（哪怕改错字）
+  翻译就跟着断，两个语言包永远没有机器能查的「对不对齐」标准。现在改法：
+  - 键定义在两个语言包的 `error.*`（按模块分：`error.user.*`/`error.dept.*`/…）
+    和 `file_type.*`（上传报错要用到的「图片/文档/…」标签，因为标签本身
+    也是要翻译的中文词，不能直接拼进英文句子）
+  - `t()` 自带 `.format(**kwargs)`，带变量的消息直接 `t('error.file.unsupported_format',
+    file_ext=file_ext)`，不再需要正则模板去匹配插值后的字符串
+    （`tm()` 的 `_templates()`/`message_templates` 机制已删除）
+  - `tm()` 现在只剩一个用途：**反向翻译我们不控制抛出点的框架异常**
+    （FastAPI/Starlette 自己抛的 `Not authenticated`/`Method Not Allowed`，
+    这类拿不到一个能传参数的调用点，只能反过来拿英文原文当 key）。
+    `exception_handler.py`/`response_schema.py` 在 `exc.msg`/`res.msg` 上
+    无差别调 `tm()`：业务异常这时已经是 `t()` 的最终产物，查不到表就原样
+    返回，对已翻译文本是幂等的
+  - **两个语言包在 `error.*`/`file_type.*` 下的键集合必须完全相同**——
+    `t()` 查不到键会把键名字符串原样吐出来（比如响应里出现
+    `"msg": "error.dept.something"`），这比旧机制的「静默显示中文」更容易
+    被发现，但仍然只能靠人看。`backend/tests/test_i18n.py` 机器化了这条：
+    一条断言两个语言包键集合对称，一条断言源码里每处 `t('error.xxx')`
+    引用的键在语言包里真实存在（两条都做过变异验证，打回问题会红）
+  - `pydantic.*` 段是**唯一还保留的不对称**：只在 `zh-CN.yml` 有 100 条
+    （pydantic-core 报错原生是英文，中文界面才需要翻），`exception_handler.py`
+    里 `if i18n.current_language != 'en-US':` 把英文请求短路掉了，根本不查，
+    `en-US.yml` 没有这一段是对的，不要照着补一份对称的过来
+- **这次治理连带修了一个更隐蔽的 bug**：`jwt_auth_middleware.py` 的
+  `auth_exception_handler`（Starlette `AuthenticationMiddleware` 的
+  `on_error` 钩子）直接读 `exc.msg`/`exc.detail` 拼响应，**从来没调用过
+  `tm()`**——所有 JWT 鉴权失败（token 无效/过期、账号锁定、部门/角色被禁用…）
+  不管 `Accept-Language` 传什么，永远是中文。旧机制下这个旁路必须每加一个
+  异常序列化路径就记得手动翻一次，漏了不报错；新机制下翻译在 `raise` 那一刻
+  就已经发生（`msg=t(...)`），不管后面被哪条路径读到 `.msg` 都已经是对的
+  语言——这类「序列化出口忘了翻」的问题整类消失了，不是又堵上一个洞
+
+## 时区：单时区系统，但**下发的时间必须带时区标记**
+
+分两件事，别混：
+
+| | 谁决定 | 影响什么 |
+|---|---|---|
+| **服务端时区** | `DATETIME_TIMEZONE`（默认 `Asia/Shanghai`），**进程级单例**（`utils/timezone.py` 的 `timezone` 就一个实例），Celery 同一个值（`enable_utc=False`） | 落库时怎么算、定时任务什么时候跑、日志时间戳 |
+| **显示时区** | `sys_user.timezone`（IANA 标识，每人一份，`PUT /sys/users/me/timezone`） | **只影响前端怎么显示**，不参与任何服务端计算 |
+
+所以服务端仍然是单时区的（一个进程一个时区，没有「按请求切时区」的机制），
+而**展示是多时区的**。`timezone.py` 这个文件名容易让人以为前者也能按用户切，不能。
+
+- 🔴 **`sys_user.timezone` 这个列名会遮蔽同文件的 `timezone` 导入。**
+  `model/user.py` 里必须把导入起别名（现在是 `tz_helper`）——不起的话类体里
+  后面的 `default_factory=timezone.now` 拿到的是那个 `MappedColumn`，
+  直接 `AttributeError: 'MappedColumn' object has no attribute 'now'`。
+  好在它是 import 期就炸、不是静默的。（和前端 `shadowed-t` 同一个物种。）
+- 🔴 **给 `GetUserInfoDetail` 加字段必须带默认值。** 它的子类
+  `GetUserInfoWithRelationDetail` 整份序列化后存在 `fba:user:<id>`，
+  旧缓存里没有新字段 —— 写成必填就是每个已登录用户的每个请求都
+  `ValidationError` → 全站 500（同 `dept.code` 那次）。带默认值时旧缓存能过校验、
+  先回落默认值。改完照样把 `fba:user:*` 清一遍拿到真值
+- **写入侧必须校验是合法 IANA 标识**（`common/schema.py: IanaTimeZone`，
+  拿 `zoneinfo.available_timezones()` 对）。这个值会被前端直接交给
+  `Intl.DateTimeFormat(..., { timeZone })`，而那个 API 对不认识的时区是**抛异常** ——
+  存进一个拼错的名字，那个用户所有带时间的页面都白屏，**而且自己改不回来**
+  （偏好设置页本身也要渲染时间）。不维护白名单：前端选项来自浏览器的
+  `Intl.supportedValuesOf('timeZone')`，两边各自跟着自己的 tzdata 走
+- **改完要清 `fba:user:<id>`**（`user_service.update_timezone` 里做了）。
+  `/users/me` 读的是缓存里那份 DTO，不清的话前端存完立刻重取还是旧值，
+  表现成「点了保存没生效」
+
+下发格式方面：
+
+- 🔴 **不要给 `SchemaBase` 加回 datetime 的 `json_encoders`。**
+  原来那个 encoder 把所有时间格式化成 `'%Y-%m-%d %H:%M:%S'` —— **丢掉了时区**。
+  ES 规范对无时区标记的串，`T` 分隔的按**浏览器**时区解释、空格分隔的干脆没定义
+  （Safari 历史上直接 Invalid Date），于是前端只能靠猜，猜错不报错、只是偏几小时。
+  前端为此长出过两处 hack（`log-online/api.ts` 自己写解析器、
+  `profile/recent-logins.tsx` 干脆放弃解析原样摊字符串），现在都删了。
+  pydantic v2 的**默认**行为正好是要的（`2026-08-22T11:59:47+08:00`），
+  而且那个 `json_encoders` 本身是 pydantic v2 已废弃的 API
+- **`to_str()` 不出网，出网用 `to_iso()`。** `to_str()` 输出不带时区标记，
+  只能用在日志前缀、和 `from_str()` 成对的 Redis 读写（用户锁定到期时间）、
+  以及靠字符串等值比较的地方（celery 的 `last_update`）。
+  绕过了 pydantic 自己拼字符串下发给前端的那几处（token 里的 `last_login_time`、
+  监控页 `startup`）必须用 `to_iso()`
+- ⚠️ **改格式后旧 token 里还存着旧格式**：`last_login_time` 是签发时写进
+  token payload 的，实测切换后在线会话里 200+ 条旧格式和新登录的 ISO 并存，
+  要等 token 过期才换完。前端的解析对无标记串保留了按 `Asia/Shanghai` 的兜底，
+  就是为了这段过渡期（见 [i18n 分册](../../packages/i18n/AGENTS.md)）
+- **输入方向不用管**：pydantic 对 `'2026-08-22 17:00:00'` / 带 `Z` / 带 `+08:00`
+  全都收，改下发格式不会让任何表单提交失败
+
+> **存储不需要改成 UTC** —— 一开始以为要，实测之后发现前提就不成立。
+>
+> `TimeZone` 的 `impl = DateTime(timezone=True)` 在 SQL Server 下落成
+> **`datetimeoffset`**（不是 `datetime2`），这个类型**每行自己存着偏移**。
+> 实测同一张 `sys_user` 里两种偏移并存且都正确：种子 SQL 用 `GETDATE()` 插的
+> `admin` 行是 `+00:00`（容器时区是 UTC），应用自己写的行是 `+08:00`
+> （`timezone.now()`）。两者是同样自描述的瞬间，读出来 tzinfo 就是当初存进去的那个。
+>
+> 所以「改了 `DATETIME_TIMEZONE` 配置会让历史数据静默重新解释」这个担心
+> **在这套 schema 上不存在**（那是 `datetime2` 才有的问题：不存偏移、
+> 靠一个配置值隐式决定）。`process_result_value` 里那个
+> `if value.tzinfo is None` 分支是给不存偏移的方言兜底的，SQL Server 走不到。
+>
+> 留下的只是「不齐」——同一列里有 `+00:00` 也有 `+08:00`。不影响正确性
+> （前端拿到的都是无歧义的 ISO），要归一的话直接 `UPDATE` 一遍就行，
+> 不用重建库、也不必改模型。
+
 ## 部门与角色的编码（稳定引用键）
 
 `sys_dept.code` / `sys_role.code` 是 2026-08-22 加的。**加它的理由不是「别人都有」**，

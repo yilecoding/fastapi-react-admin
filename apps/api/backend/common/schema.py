@@ -1,11 +1,11 @@
-from datetime import datetime
+import zoneinfo
+
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, validate_email
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, validate_email
 
 from backend.common.enums import PrimaryKeyType
 from backend.core.conf import settings
-from backend.utils.timezone import timezone
 
 CustomPhoneNumber = Annotated[str, Field(pattern=r'^1[3-9]\d{9}$')]
 
@@ -15,6 +15,27 @@ CustomPhoneNumber = Annotated[str, Field(pattern=r'^1[3-9]\d{9}$')]
 # 哪个是「名字」。首字符限字母是为了留出「纯数字」这个形态 —— 否则 '123' 这种编码
 # 在任何一处被 Number() 掉都不会被发现（同硬纪律 6 的雪花 ID 坑）。
 CustomCode = Annotated[str, Field(min_length=2, max_length=32, pattern=r'^[A-Z][A-Z0-9_]*$')]
+
+
+def _validate_iana_timezone(v: str) -> str:
+    """
+    校验 IANA 时区标识（`Asia/Shanghai` 这种）。
+
+    **必须校验，不能收裸 str。** 这个值会被前端直接交给
+    `Intl.DateTimeFormat(..., { timeZone })`，而那个 API 对不认识的时区是**抛异常**
+    （`RangeError: Invalid time zone specified`）—— 存进去一个拼错的名字，
+    受害者是那个用户自己：他每次打开任何带时间的页面都白屏，而且改不回来
+    （偏好设置页自己也要渲染时间）。写入侧拦住是唯一的时机。
+    """
+    if v not in zoneinfo.available_timezones():
+        raise ValueError(f'无效的时区标识：{v}')
+    return v
+
+
+# 校验放在写入侧。取值范围就是本机 tzdata 的全集，不自己维护白名单 ——
+# 前端的选项来自浏览器的 `Intl.supportedValuesOf('timeZone')`，两边都跟着
+# 各自的 tzdata 走，不会因为我们漏更新一张表而对不上。
+IanaTimeZone = Annotated[str, Field(max_length=64), AfterValidator(_validate_iana_timezone)]
 
 
 class CustomEmailStr(EmailStr):
@@ -28,16 +49,23 @@ class CustomEmailStr(EmailStr):
 class SchemaBase(BaseModel):
     """基础模型配置"""
 
-    model_config = ConfigDict(
-        use_enum_values=True,
-        json_encoders={
-            datetime: lambda x: (
-                timezone.to_str(timezone.from_datetime(x))
-                if x.tzinfo is not None and x.tzinfo != timezone.tz_info
-                else timezone.to_str(x)
-            ),
-        },
-    )
+    # 🔴 **不要**再给 datetime 加自定义 `json_encoders`。
+    #
+    # 这里原来把所有时间格式化成 `'%Y-%m-%d %H:%M:%S'` 下发 —— 那个格式
+    # **丢掉了时区**，于是浏览器只能靠猜：ES 规范对无时区标记的串，`T` 分隔的
+    # 按浏览器本地时区解释、空格分隔的干脆没定义（Safari 历史上直接
+    # Invalid Date）。后果是服务端和用户不在同一个时区时，界面上所有时间
+    # 整体偏移几小时，而且不报错。前端为此长出过两处 hack：
+    # `log-online/api.ts` 自己写解析器，`profile/recent-logins.tsx` 干脆
+    # 放弃解析、原样摊字符串。
+    #
+    # pydantic v2 的**默认**行为正好是我们要的：aware datetime 序列化成
+    # 带偏移的 ISO 8601（`2026-08-22T11:59:47+08:00`），无歧义。
+    # 顺带这个 `json_encoders` 本身也是 pydantic v2 已废弃的 API。
+    #
+    # 以后把存储切成 UTC 时，这里同样**一行都不用改** —— 默认序列化会
+    # 自动变成 `2026-08-22T03:59:47Z`，因为格式跟着 tzinfo 走。
+    model_config = ConfigDict(use_enum_values=True)
 
     if PrimaryKeyType.snowflake == settings.DATABASE_PK_MODE:
         from pydantic import field_serializer

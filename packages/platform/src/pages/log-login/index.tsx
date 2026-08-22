@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
 import { IconDownload, IconLoader2 } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
@@ -184,7 +185,7 @@ export function LogLoginPage({
             onClick={() => setDetail(row.original)}
             className="font-mono text-xs text-primary tabular-nums underline-offset-2 hover:underline"
           >
-            {getValue()}
+            {formatDateTime(getValue())}
           </button>
         ),
       }),
@@ -301,7 +302,7 @@ export function LogLoginPage({
         lines.push(
           [
             i + 1,
-            r.login_time,
+            formatDateTime(r.login_time),
             r.username,
             r.status === 1 ? t('成功') : t('失败'),
             t(r.msg),
@@ -406,7 +407,7 @@ export function LogLoginPage({
                   {/* 日志只增不减，之前界面上没有任何清理入口 —— 权限码 log:login:clear 一直闲置 */}
                   <ClearLogsButton kind="login" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
                   {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} iconOnly />
+                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
                 </>
               }
               viewsStorageKey="qb:log-login"

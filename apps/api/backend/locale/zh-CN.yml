@@ -1,9 +1,173 @@
+# 2026-08-22 治理三期：业务错误消息从「中文原文当 key」（`tm()` 查表）
+# 迁到了「稳定点分键」（`t()` 查表）。原因和踩过的坑记在 `apps/api/AGENTS.md`
+# 「后端国际化」一节，这里只提一句：`error.*` 下面的键名才是稳定标识，
+# 中文原文只是这个键在 zh-CN 下的取值，改文案不会再把翻译打断。
 error:
+  auth:
+    account_locked: 用户已被锁定，请联系系统管理员
+    admin_forbidden: 用户已被禁止后台管理操作，请联系系统管理员
+    dept_locked: 用户所属部门已被锁定，请联系系统管理员
+    dept_not_found: 用户所属部门不存在或已被删除，请联系系统管理员
+    duplicate_login: 此用户已在异地登录，请重新登录并及时修改密码
+    invalid_credentials: 用户名或密码有误
+    menu_not_assigned: 用户未分配菜单，请联系系统管理员
+    password_expired: 密码已过期，请修改密码后重新登录
+    refresh_token_expired: Refresh Token 已过期，请重新登录
+    role_locked: 用户所属角色已被锁定，请联系系统管理员
+    temporarily_locked: 账号已被锁定，请在 {minutes} 分钟后重试
+    too_many_failed_attempts: 登录失败次数过多，账号已被锁定
+  cache:
+    arg_not_found: 缓存键构建失败，参数 "{name}" 不存在
+    field_not_found: 缓存键构建失败，对象中不存在字段 "{field}"
+    invalidation_failed: 缓存失效失败，数据可能不一致
+    key_and_key_builder_conflict: 缓存 key 和 key_builder 不能同时使用
+    list_extraction_unsupported: 缓存键构建失败：不支持从列表中提取字段，请使用 key_builder 处理列表参数
   captcha:
     error: 验证码错误
     invalid: 验证码无效，请重新获取
     expired: 验证码已过期，请重新获取
+  config:
+    duplicate_key: 参数配置键名重复
+    key_exists: 参数配置 {key} 已存在
+    not_found: 参数配置不存在
+  data_rule:
+    already_exists: 数据规则已存在
+    model_not_found: 数据规则可用模型不存在
+    not_found: 数据规则不存在
+  data_scope:
+    already_exists: 数据范围已存在
+    not_found: 数据范围不存在
+  demo:
+    forbidden: 演示环境下禁止执行此操作
+  dept:
+    cannot_be_own_parent: 禁止关联自身为父级
+    code_exists: 部门编码已存在
+    duplicate_name_in_level: 同级下已存在同名部门
+    has_children: 部门下存在子部门，无法删除
+    has_users: 部门下存在用户，无法删除
+    not_found: 部门不存在
+    parent_not_found: 父级部门不存在
+  dict:
+    data_exists: 字典数据已存在
+    data_not_found: 字典数据不存在
+    type_exists: 字典类型已存在
+    type_not_found: 字典类型不存在
+  file:
+    invalid_filename: 非法的文件名
+    missing: 文件已丢失，请重新上传
+    not_found: 文件不存在
+    public_link_images_only: 公开直链只支持图片，其他类型请走普通上传
+    size_exceeded: '{label}超出最大限制 {size_mb} MB，请重新选择'
+    some_not_found: 部分文件不存在
+    unknown_type: 未知的文件类型
+    unsupported_format: 此文件格式 {file_ext} 暂不支持
+    upload_failed: 上传文件失败
   language_not_found: 当前语言包未初始化或不存在
+  menu:
+    has_children: 菜单下存在子菜单，无法删除
+    not_found: 菜单不存在
+    parent_not_found: 父级菜单不存在
+    title_exists: 菜单标题已存在
+  notice:
+    not_found: 通知公告不存在
+  oauth2:
+    account_bound: 用户已绑定 {source} 账号
+    account_bound_to_other: 该 {source} 账号已被其他用户绑定
+    account_not_bound: 用户未绑定 {source} 账号
+    binding_unsupported: 暂不支持 {source} 绑定
+    illegal_state_operation: 非法操作，OAuth2 状态信息无效
+    social_login_unsupported: 暂不支持 {social} OAuth2 登录
+    state_invalid: OAuth2 状态信息无效
+    state_invalid_or_missing: OAuth2 状态信息无效或缺失
+    state_missing: OAuth2 状态信息缺失
+    username_exists: 用户名已存在，请重试
+  password:
+    max_length: 密码长度不能超过 {max_length} 个字符
+    min_length: 密码长度不能少于 {min_length} 个字符
+    needs_digit: 密码必须包含数字
+    needs_letter: 密码必须包含字母
+    needs_special_char: 密码必须包含特殊字符（如：!@#$%）
+    reused: 新密码不能与最近 {count} 次使用的密码相同
+  plugin:
+    already_installed: 此插件已安装
+    archive_invalid_content: 插件压缩包内容非法
+    archive_invalid_filename: 插件压缩包文件名非法
+    archive_invalid_format: 插件压缩包格式非法
+    archive_missing_files: 插件压缩包内缺少必要文件
+    dev_only_install: 禁止在非开发环境下安装插件
+    dev_only_uninstall: 禁止在非开发环境下卸载插件
+    frontend_dir_not_found: 未检测到前端插件目录，请确认路径下存在 apps/web-antdv-next/src/plugins
+    frontend_install_failed: 前端插件安装失败，请稍后重试
+    frontend_repo_already_installed: '{plugin_name} 前端插件已安装'
+    frontend_repo_name_invalid: 前端插件仓库名称非法
+    frontend_root_invalid: 前端项目根路径非法
+    frontend_root_not_found: 前端项目根路径不存在
+    frontend_root_required: 前端项目根路径不能为空
+    git_repo_invalid: Git 仓库地址格式非法，仅支持 HTTP/HTTPS 协议
+    git_repo_required: Git 仓库地址不能为空
+    install_failed: 插件安装失败，请稍后重试
+    not_enabled: 插件 {plugin} 未启用，请联系系统管理员
+    not_found: 插件不存在
+    oauth2_import_failed: OAuth2 插件用法导入失败，请联系系统管理员
+    repo_already_installed: '{repo_name} 插件已安装'
+    required_cannot_uninstall: 插件 {plugin} 为必需插件，禁止卸载
+    zip_required: ZIP 压缩包不能为空
+  rate_limit:
+    invalid_config: 至少需要传入一个 Rate、bucket 或 limiter 实例
+    too_many_requests: 请求过于频繁，请稍后重试
+  rbac:
+    casbin_import_failed: Casbin RBAC 插件用法导入失败，请联系系统管理员
+  request:
+    debug_input_suffix: '，输入：{input}'
+    invalid_parameter: '请求参数非法: {message}'
+    json_invalid: json解析失败
+  role:
+    already_exists: 角色已存在
+    code_exists: 角色编码已存在
+    none_available: 未找到可用角色，请联系系统管理员
+    not_found: 角色不存在
+  snowflake:
+    clock_moved_backwards: 雪花 ID 生成失败，时钟回拨超过 {ms} ms，请立即联系系统管理员
+    config_failed: 雪花算法配置失败，请联系系统管理员
+    datacenter_config_failed: 雪花算法数据中心配置失败，请联系系统管理员
+    generation_failed: 雪花 ID 生成失败，雪花算法未初始化
+    no_node_available: 无可用的雪花算法节点，节点已耗尽
+    worker_config_failed: 雪花算法工作机器配置失败，请联系系统管理员
+  sql:
+    illegal_operation: SQL 脚本 {filepath} 存在非法操作，仅允许：{allowed}
+    script_not_found: SQL 脚本文件不存在
+  task:
+    deadline_conflict: 截止时间与截止秒数只能设置一个
+    not_registered: 任务 {task} 未注册；可用的有：{available}
+    result_not_found: 执行记录不存在
+    scheduler_name_exists: 任务调度名称已存在
+    scheduler_not_found: 任务调度不存在
+  token:
+    expired: Token 已过期
+    invalid: Token 无效
+    no_longer_valid: Token 已失效
+  user:
+    cache_key_build_failed: 用户缓存键构建失败
+    captcha_expired: 验证码已失效，请重新获取
+    email_bound: 邮箱已被绑定
+    not_found: 用户不存在
+    password_mismatch: 两次密码输入不一致
+    password_required: 密码不允许为空
+    permission_type_not_found: 权限类型不存在
+    self_permission_forbidden: 禁止修改自身权限
+    username_registered: 用户名已注册
+    wrong_old_password: 原密码错误
+
+# 上传校验报错要拼「人话名字」（图片/文档/…），标识用 FileType.value，
+# 文案查这张表——新增文件分类时两边（这里 + `common/enums.py` 的 FileType）
+# 一起加，漏一个 `file_ops.py` 会在 `t()` 查不到时原样吐出 'file_type.xxx'。
+file_type:
+  archive: 压缩包
+  audio: 音频
+  document: 文档
+  image: 图片
+  video: 视频
+
 pydantic:
   # 自定义验证错误信息，参考：
   # https://github.com/pydantic/pydantic-core/blob/a5cb7382643415b716b1a7a5392914e50f726528/tests/test_errors.py#L266

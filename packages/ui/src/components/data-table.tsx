@@ -15,7 +15,6 @@
  */
 import * as React from "react"
 import {
-  IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
   IconChevronsLeft,
@@ -85,14 +84,6 @@ export interface DataTableColumnVisibilityProps<
   table: Table<TFeatures, TData>
   /** Override display labels for column ids. Falls back to `col.id`. */
   columnLabels?: ColumnLabelMap
-  /**
-   * 只留图标（配 tooltip）。
-   *
-   * 给**查询区那条动作行**用：那一行已经有六个控件了，
-   * 「导出 / 清空 / 列」是次要的工具动作，留文字会把主动作（搜索）挤没。
-   * 表格自己的工具行还是宽松的，保持默认带文字。
-   */
-  iconOnly?: boolean
 }
 
 export function DataTableColumnVisibility<
@@ -101,7 +92,6 @@ export function DataTableColumnVisibility<
 >({
   table: tableProp,
   columnLabels = {},
-  iconOnly,
 }: DataTableColumnVisibilityProps<TFeatures, TData>) {
   const { t } = useTranslation()
   const table = tableProp as AnyTable
@@ -109,38 +99,32 @@ export function DataTableColumnVisibility<
     .getAllColumns()
     .filter((col) => typeof col.accessorFn !== "undefined" && col.getCanHide())
 
+  /**
+   * **只留图标**，全站一致。
+   *
+   * 「列」是次要的工具动作（一天点不了一次），和它同排的却是「新增 / 导出」
+   * 这类主动作 —— 带文字之后每一页的工具行都被它多占一块。而且原来写的是
+   * `hidden lg:inline`：小屏本来就只剩图标，等于同一个控件有两种样子。
+   *
+   * ⚠️ tooltip 的 `render` 必须**直接指向 trigger**，不能套一层
+   * `<span className="contents">` —— `display:contents` 不生成布局盒，
+   * `getBoundingClientRect()` 全 0，而 Base UI 拿它当定位参照，气泡会飞到
+   * 视口左上角（见 `packages/ui/AGENTS.md`）。
+   */
   const trigger = (
     <DropdownMenuTrigger
-      render={
-        <Button
-          variant="outline"
-          size="sm"
-          className={iconOnly ? "size-8 p-0" : "h-8"}
-          aria-label={t("列")}
-        />
-      }
+      render={<Button variant="outline" size="sm" className="size-8 p-0" aria-label={t("列")} />}
     >
       <IconLayoutColumns className="size-4" />
-      {!iconOnly && (
-        <>
-          <span className="hidden lg:inline">{t("列")}</span>
-          <IconChevronDown className="size-3.5" />
-        </>
-      )}
     </DropdownMenuTrigger>
   )
 
   return (
     <DropdownMenu>
-      {/* 只剩图标时必须配 tooltip —— 图标按钮一律 tooltip + aria-label */}
-      {iconOnly ? (
-        <Tooltip>
-          <TooltipTrigger render={trigger} />
-          <TooltipContent>{t("列")}</TooltipContent>
-        </Tooltip>
-      ) : (
-        trigger
-      )}
+      <Tooltip>
+        <TooltipTrigger render={trigger} />
+        <TooltipContent>{t("列")}</TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuGroup>
           {hidableColumns.map((col) => (

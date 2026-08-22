@@ -1,6 +1,7 @@
 import { createColumnHelper } from '@tanstack/react-table'
 import { IconDotsVertical, IconLogout, IconWifi, IconWifiOff } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import {
@@ -106,7 +107,9 @@ export function buildColumns({
     col.accessor('last_login_time', {
       header: t('登录时间'),
       cell: ({ getValue }) => (
-        <span className="font-mono text-xs tabular-nums text-muted-foreground">{getValue()}</span>
+        <span className="font-mono text-xs tabular-nums text-muted-foreground">
+          {formatDateTime(getValue())}
+        </span>
       ),
     }),
     col.accessor((s) => s.expire_time, {
@@ -116,7 +119,7 @@ export function buildColumns({
         const { text, hours } = remainingText(row.original.expire_time, now)
         return (
           <span
-            title={t('过期于 {{at}}', { at: row.original.expire_time })}
+            title={t('过期于 {{at}}', { at: formatDateTime(row.original.expire_time) })}
             className={cn(
               'font-mono text-xs tabular-nums',
               hours <= 0 ? 'text-destructive' : hours < 2 ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'

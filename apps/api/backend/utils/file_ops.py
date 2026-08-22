@@ -10,6 +10,7 @@ from fastapi import UploadFile
 
 from backend.common.enums import FileType
 from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.log import log
 from backend.core.conf import settings
 from backend.core.path_conf import PUBLIC_UPLOAD_DIR, UPLOAD_DIR
@@ -112,7 +113,7 @@ def get_file_ext(file: UploadFile) -> str:
     # 原来这里写的是 `if not file_ext`，而 `'x'.split('.')[-1]` 永远非空 ——
     # 那条分支是死代码，没有扩展名的文件会一路走到「此文件格式 x 暂不支持」
     if '.' not in name.strip('.'):
-        raise errors.RequestError(msg='未知的文件类型')
+        raise errors.RequestError(msg=t('error.file.unknown_type'))
     return name.rsplit('.', 1)[-1].lower()
 
 
@@ -137,19 +138,23 @@ def build_filename(file: UploadFile) -> str:
     return f'{stem}_{uuid.uuid4().hex[:_RANDOM_LEN]}.{ext}'
 
 
-def _upload_rules() -> tuple[tuple[FileType, list[str], int, str], ...]:
+def _upload_rules() -> tuple[tuple[FileType, list[str], int], ...]:
     """
-    上传规则表：(分类, 扩展名白名单, 大小上限, 报错时的人话名字)
+    上传规则表：(分类, 扩展名白名单, 大小上限)
 
     做成函数而不是模块级常量 —— `settings` 会被 `sys_config` 的动态配置在运行时
     `setattr` 覆盖（见 utils/dynamic_config.py），模块级常量会把启动那一刻的值冻住。
+
+    报错时给用户看的人话名字不在这张表里存——`FileType.value` 本身就是稳定
+    标识（'image'/'document'/...），报错文案要用哪种语言的名字，现查
+    `t(f'file_type.{file_type.value}')` 就是，不用在这张表里存一份中文重复。
     """
     return (
-        (FileType.image, settings.UPLOAD_IMAGE_EXT_INCLUDE, settings.UPLOAD_IMAGE_SIZE_MAX, '图片'),
-        (FileType.document, settings.UPLOAD_DOCUMENT_EXT_INCLUDE, settings.UPLOAD_DOCUMENT_SIZE_MAX, '文档'),
-        (FileType.video, settings.UPLOAD_VIDEO_EXT_INCLUDE, settings.UPLOAD_VIDEO_SIZE_MAX, '视频'),
-        (FileType.audio, settings.UPLOAD_AUDIO_EXT_INCLUDE, settings.UPLOAD_AUDIO_SIZE_MAX, '音频'),
-        (FileType.archive, settings.UPLOAD_ARCHIVE_EXT_INCLUDE, settings.UPLOAD_ARCHIVE_SIZE_MAX, '压缩包'),
+        (FileType.image, settings.UPLOAD_IMAGE_EXT_INCLUDE, settings.UPLOAD_IMAGE_SIZE_MAX),
+        (FileType.document, settings.UPLOAD_DOCUMENT_EXT_INCLUDE, settings.UPLOAD_DOCUMENT_SIZE_MAX),
+        (FileType.video, settings.UPLOAD_VIDEO_EXT_INCLUDE, settings.UPLOAD_VIDEO_SIZE_MAX),
+        (FileType.audio, settings.UPLOAD_AUDIO_EXT_INCLUDE, settings.UPLOAD_AUDIO_SIZE_MAX),
+        (FileType.archive, settings.UPLOAD_ARCHIVE_EXT_INCLUDE, settings.UPLOAD_ARCHIVE_SIZE_MAX),
     )
 
 
@@ -160,7 +165,7 @@ def classify_file_ext(file_ext: str) -> FileType:
     :param file_ext: 小写扩展名，不带点
     :return:
     """
-    for file_type, includes, _, _ in _upload_rules():
+    for file_type, includes, _ in _upload_rules():
         if file_ext in includes:
             return file_type
     return FileType.other
@@ -179,16 +184,22 @@ def upload_file_verify(file: UploadFile) -> FileType:
     """
     file_ext = get_file_ext(file)
 
-    for file_type, includes, size_max, label in _upload_rules():
+    for file_type, includes, size_max in _upload_rules():
         if file_ext not in includes:
             continue
         # file.size 在极少数客户端下会缺失（没送 Content-Length），
         # 那种情况放过大小校验而不是拿 None 去比较
         if file.size is not None and file.size > size_max:
-            raise errors.RequestError(msg=f'{label}超出最大限制 {size_max // 1024 // 1024} MB，请重新选择')
+            raise errors.RequestError(
+                msg=t(
+                    'error.file.size_exceeded',
+                    label=t(f'file_type.{file_type.value}'),
+                    size_mb=size_max // 1024 // 1024,
+                )
+            )
         return file_type
 
-    raise errors.RequestError(msg=f'此文件格式 {file_ext} 暂不支持')
+    raise errors.RequestError(msg=t('error.file.unsupported_format', file_ext=file_ext))
 
 
 async def upload_file(file: UploadFile, *, public: bool = False) -> SavedFile:
@@ -213,7 +224,7 @@ async def upload_file(file: UploadFile, *, public: bool = False) -> SavedFile:
     # 两道防线是刻意的 —— 这一条挡的是「将来有人改了 build_filename」
     if not target.resolve().is_relative_to(root.resolve()):
         log.error(f'拒绝越界的上传路径：{file.filename!r} → {target}')
-        raise errors.RequestError(msg='非法的文件名')
+        raise errors.RequestError(msg=t('error.file.invalid_filename'))
 
     # 日期目录按需创建。`parents=True` 是必须的 —— 每月/每年第一次上传时
     # 上两级也不存在
@@ -234,7 +245,7 @@ async def upload_file(file: UploadFile, *, public: bool = False) -> SavedFile:
         log.error(f'上传文件 {filename} 失败：{e!s}')
         # 写失败会留下一个半截文件，不清掉就成了永远没人引用的垃圾
         target.unlink(missing_ok=True)
-        raise errors.RequestError(msg='上传文件失败')
+        raise errors.RequestError(msg=t('error.file.upload_failed'))
     await file.close()
 
     return SavedFile(

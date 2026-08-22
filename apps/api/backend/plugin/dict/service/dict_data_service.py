@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.common.cache.decorator import cache_invalidate, cached
 from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.pagination import paging_data
 from backend.core.conf import settings
 from backend.plugin.dict.crud.crud_dict_data import dict_data_dao
@@ -28,7 +29,7 @@ class DictDataService:
         """
         dict_data = await dict_data_dao.get(db, pk)
         if not dict_data:
-            raise errors.NotFoundError(msg='字典数据不存在')
+            raise errors.NotFoundError(msg=t('error.dict.data_not_found'))
         return dict_data
 
     @staticmethod
@@ -46,7 +47,7 @@ class DictDataService:
         """
         dict_datas = await dict_data_dao.get_by_type_code(db, code)
         if not dict_datas:
-            raise errors.NotFoundError(msg='字典数据不存在')
+            raise errors.NotFoundError(msg=t('error.dict.data_not_found'))
         return dict_datas
 
     @staticmethod
@@ -102,10 +103,10 @@ class DictDataService:
         """
         dict_type = await dict_type_dao.get(db, obj.type_id)
         if not dict_type:
-            raise errors.NotFoundError(msg='字典类型不存在')
+            raise errors.NotFoundError(msg=t('error.dict.type_not_found'))
         dict_data = await dict_data_dao.get_by_label_and_type_code(db, obj.label, dict_type.code)
         if dict_data:
-            raise errors.ConflictError(msg='字典数据已存在')
+            raise errors.ConflictError(msg=t('error.dict.data_exists'))
         await dict_data_dao.create(db, obj, dict_type.code)
 
     @staticmethod
@@ -121,14 +122,14 @@ class DictDataService:
         """
         dict_data = await dict_data_dao.get(db, pk)
         if not dict_data:
-            raise errors.NotFoundError(msg='字典数据不存在')
+            raise errors.NotFoundError(msg=t('error.dict.data_not_found'))
         dict_type = await dict_type_dao.get(db, obj.type_id)
         if not dict_type:
-            raise errors.NotFoundError(msg='字典类型不存在')
+            raise errors.NotFoundError(msg=t('error.dict.type_not_found'))
         if dict_data.label != obj.label or dict_data.type_code != dict_type.code:
             new_dict_data = await dict_data_dao.get_by_label_and_type_code(db, obj.label, dict_type.code)
             if new_dict_data and new_dict_data.id != pk:
-                raise errors.ConflictError(msg='字典数据已存在')
+                raise errors.ConflictError(msg=t('error.dict.data_exists'))
         count = await dict_data_dao.update(db, pk, obj, dict_type.code)
         return count
 

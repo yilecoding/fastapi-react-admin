@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
 import { IconDownload, IconLoader2 } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
@@ -202,7 +203,7 @@ export function LogOperaPage({
             onClick={() => setDetail(row.original)}
             className="font-mono text-xs text-primary tabular-nums underline-offset-2 hover:underline"
           >
-            {getValue()}
+            {formatDateTime(getValue())}
           </button>
         ),
       }),
@@ -357,7 +358,7 @@ export function LogOperaPage({
         lines.push(
           [
             i + 1,
-            r.opera_time,
+            formatDateTime(r.opera_time),
             r.username ?? t('匿名'),
             t(r.title),
             r.method,
@@ -466,7 +467,7 @@ export function LogOperaPage({
                   {/* 日志只增不减，之前界面上没有任何清理入口 —— 权限码 log:opera:clear 一直闲置 */}
                   <ClearLogsButton kind="opera" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
                   {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} iconOnly />
+                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
                 </>
               }
               viewsStorageKey="qb:log-opera"
