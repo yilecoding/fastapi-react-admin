@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc -b",
     "preview": "vite preview",
-    "i18n:check": "pnpm --filter @admin/i18n check"
+    "i18n:check": "pnpm --filter @admin/i18n check",
+    "e2e": "playwright test --config=e2e/playwright.config.ts"
   },
   "dependencies": {
     "@admin/i18n": "workspace:*",
@@ -30,6 +31,7 @@
   "devDependencies": {
     "@eslint/js": "^10",
     "@file-viewer/vite-plugin": "^2.3.0",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4",
     "@tanstack/router-plugin": "^1.168.30",
     "@types/node": "^24",

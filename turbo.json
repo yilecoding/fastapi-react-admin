@@ -39,6 +39,9 @@
       ],
       "cache": false
     },
+    "e2e": {
+      "cache": false
+    },
     "@admin/desktop#build": {
       "dependsOn": [
         "^build",
