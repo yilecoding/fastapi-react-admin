@@ -1306,6 +1306,7 @@
   "这一类还没有参数": "No parameters in this category yet",
   "这一组的总开关是关的 —— 后端整组不加载，下面的值改了也不会生效，实际用的是 <c>.env</c> 里的默认值。": "This group’s master switch is off — the backend does not load the group at all, so editing the values below has no effect; the defaults in <c>.env</c> are what actually apply.",
   "这两组操作都只有超级管理员能做，且<b>不能作用于自己</b>。": "Both groups of actions are superuser-only, and <b>cannot be applied to yourself</b>.",
+  "这个任务没有注册 —— 调度会按时触发，但什么都不会执行": "This task is not registered — the schedule will fire but nothing will run",
   "这个地址是由内嵌类型的菜单生成的。对应的菜单可能已被删除、停用，或者名称被改过。": "This URL comes from an embedded menu. That menu may have been deleted, disabled, or renamed.",
   "这个文件有 {{size}}": "This file is {{size}}",
   "这个格式没有对应的预览器，可以下载后用本地软件打开。": "No preview renderer handles this format. Download it and open it locally.",

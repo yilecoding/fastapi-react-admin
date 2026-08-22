@@ -180,6 +180,8 @@ class DatabaseScheduler(Scheduler):
     def all_as_schedule(self) -> dict[str, ModelEntry]:
         """全量读一次调度表。单条坏数据只跳过它自己，不能让整个 beat 起不来。"""
         entries: dict[str, ModelEntry] = {}
+        registered = set(self.app.tasks) if self.app is not None else set()
+
         with sync_session() as db:
             rows = db.query(TaskScheduler).filter(TaskScheduler.deleted == 0).all()
             for row in rows:
@@ -187,6 +189,29 @@ class DatabaseScheduler(Scheduler):
                     entries[row.name] = self.Entry(row, app=self.app)
                 except Exception as e:  # noqa: BLE001
                     logger.warning('跳过配置有误的任务调度 %s：%s', row.name, e)
+                    continue
+
+                # 🔴 指向一个不存在的任务是**完全不可见**的失败。
+                #
+                # 创建时 service 层校验过任务名，但那只挡住「打错字」——
+                # 任务名住在**代码**里，改个名或删掉一个任务，库里已有的调度
+                # 就指向了空，而没有任何一次写操作会经过校验。
+                #
+                # 之后发生的事：beat 照常派发 → `total_run_count` 照涨 →
+                # worker 收到一个不认识的名字，只在自己的日志里记一条
+                # `Received unregistered task`，**不会产生执行记录**。
+                # 于是界面上这条调度看着在正常运行（触发次数还在加），
+                # 执行记录里却一条都没有 —— 而没人会去比对这两个数。
+                #
+                # 这里喊出来只是最后一道；主要那道在界面上（列表里把这种行标红）。
+                if registered and row.task not in registered:
+                    logger.error(
+                        '任务调度「%s」指向未注册的任务 %s —— 它会按时触发但什么都不会执行。'
+                        '任务名住在代码里，八成是改名或删任务之后忘了改这条调度。',
+                        row.name,
+                        row.task,
+                    )
+
         logger.info('已从数据库载入 %d 条任务调度', len(entries))
         return entries
 

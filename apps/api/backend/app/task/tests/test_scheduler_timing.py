@@ -69,17 +69,21 @@ def db(test_factory, monkeypatch):
     monkeypatch.setattr(sched_mod, 'sync_session', fake_session)
 
     def purge() -> None:
-        """🔴 清**整张表**，不是只清 `timing-%`。
+        """只删自己造的行（`timing-%`）。
 
-        beat 的调度器读的是整张调度表，所以「别的用例留下的行」会直接影响
-        这里的断言。实测踩过：连跑 8 次全量有 1 次红，报
-        `刚创建就触发了：['pytest-2a74439c']` —— 那是接口测试造的调度，
-        跟这条用例毫无关系。只清自己那批前缀等于没有隔离。
+        ⚠️ 曾经改成「清整张表」来解决串扰：连跑 8 次全量有 1 次红，报
+        `刚创建就触发了：['pytest-2a74439c']` —— 那是接口测试造的调度。
+        但清整张表**把种子调度也删了**，于是
+        `test_every_schedule_in_db_points_at_a_registered_task` 变成空跑通过
+        （库里一条启用的调度都没有，它当然找不到问题）。
+        用「把别人的数据删掉」来隔离，代价是破坏别人的前提。
 
-        顺带把软删的历史行也清掉，否则 fba_test 里会越积越多。
+        正确的隔离方式是**收窄断言**而不是扩大清理：beat 读的是整张表，
+        那就允许别人的行被载入，只断言 `timing-%` 那些有没有按预期触发
+        （见 `fired_ours()`）。
         """
         with test_factory() as s:
-            s.execute(delete(TaskScheduler))
+            s.execute(delete(TaskScheduler).where(TaskScheduler.name.like('timing-%')))
             s.commit()
 
     purge()
@@ -141,6 +145,14 @@ class CapturingScheduler(DatabaseScheduler):
         # 计数和 last_run_time 此时已经推进并落库
         self.fired.append(entry.name)
 
+    def fired_ours(self) -> list[str]:
+        """只看这组用例自己造的调度。
+
+        beat 读的是**整张表**，库里还有种子调度和别的用例留下的行 ——
+        断言 `fired == []` 会被它们打断。收窄断言比清空别人的数据安全。
+        """
+        return [n for n in self.fired if n.startswith('timing-')]
+
 
 # ── 到点会不会触发 ──────────────────────────────────────────────────────────
 
@@ -150,7 +162,7 @@ def test_overdue_schedule_fires(db):
     insert(db, name='timing-已到点', last_run='overdue')
     s = CapturingScheduler(app=celery_app)
     s.tick()
-    assert s.fired == ['timing-已到点'], '过了间隔却没有触发'
+    assert s.fired_ours() == ['timing-已到点'], '过了间隔却没有触发'
 
 
 def test_fresh_schedule_does_not_fire_immediately(db):
@@ -162,7 +174,7 @@ def test_fresh_schedule_does_not_fire_immediately(db):
     insert(db, name='timing-刚建的', last_run='never')
     s = CapturingScheduler(app=celery_app)
     s.tick()
-    assert s.fired == [], f'刚创建就触发了：{s.fired}'
+    assert s.fired_ours() == [], f'刚创建就触发了：{s.fired_ours()}'
 
 
 def test_disabled_schedule_never_fires(db):
@@ -170,7 +182,7 @@ def test_disabled_schedule_never_fires(db):
     insert(db, name='timing-停用的', enabled=False, last_run='overdue')
     s = CapturingScheduler(app=celery_app)
     s.tick()
-    assert s.fired == [], f'停用的调度触发了：{s.fired}'
+    assert s.fired_ours() == [], f'停用的调度触发了：{s.fired_ours()}'
 
 
 def test_expired_schedule_does_not_fire(db):
@@ -181,7 +193,7 @@ def test_expired_schedule_does_not_fire(db):
     )
     s = CapturingScheduler(app=celery_app)
     s.tick()
-    assert s.fired == [], f'过期的调度触发了：{s.fired}'
+    assert s.fired_ours() == [], f'过期的调度触发了：{s.fired_ours()}'
 
 
 def test_not_started_yet_does_not_fire(db):
@@ -192,7 +204,7 @@ def test_not_started_yet_does_not_fire(db):
     )
     s = CapturingScheduler(app=celery_app)
     s.tick()
-    assert s.fired == [], f'未到开始时间就触发了：{s.fired}'
+    assert s.fired_ours() == [], f'未到开始时间就触发了：{s.fired_ours()}'
 
 
 def test_one_off_fires_only_once(db):
@@ -200,7 +212,7 @@ def test_one_off_fires_only_once(db):
     pk = insert(db, name='timing-只跑一次', one_off=True, last_run='overdue')
     s = CapturingScheduler(app=celery_app)
     s.tick()
-    assert s.fired == ['timing-只跑一次']
+    assert s.fired_ours() == ['timing-只跑一次']
 
     # 把「上次触发」再拨回两分钟前 —— 时间上又到点了，只剩计数能拦住它
     with db() as sess:
@@ -211,7 +223,7 @@ def test_one_off_fires_only_once(db):
         )
         sess.commit()
     s.tick()
-    assert s.fired == ['timing-只跑一次'], 'one_off 触发了第二次'
+    assert s.fired_ours() == ['timing-只跑一次'], 'one_off 触发了第二次'
 
 
 def test_soft_deleted_row_is_not_scheduled(db):
@@ -227,7 +239,7 @@ def test_soft_deleted_row_is_not_scheduled(db):
 
     s = CapturingScheduler(app=celery_app)
     s.tick()
-    assert s.fired == [], f'软删的调度触发了：{s.fired}；调度表={list(s.schedule)}'
+    assert s.fired_ours() == [], f'软删的调度触发了：{s.fired_ours()}'
 
 
 # ── 触发之后的回写 ──────────────────────────────────────────────────────────
@@ -266,7 +278,7 @@ def test_one_off_survives_a_reload(db, monkeypatch):
     pk = insert(db, name='timing-一次性抗重载', one_off=True, last_run='overdue')
     s = CapturingScheduler(app=celery_app)
     s.tick()
-    assert s.fired == ['timing-一次性抗重载']
+    assert s.fired_ours() == ['timing-一次性抗重载']
 
     # 时间上重新到点，但触发计数应该已经落库了
     with db() as sess:
