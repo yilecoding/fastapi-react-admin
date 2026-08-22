@@ -263,6 +263,94 @@
 > 另外记住 `update` 走 `model_dump(exclude_unset=True)`：前端不传的字段不会被写 ——
 > 这条在「前端删字段」时是好事（不会静默重置老数据），但要归一老值就得显式传一次。
 
+## 数据权限（data scope / data rule）
+
+一条链：**角色 → 数据范围（`sys_data_scope`）→ 数据规则（`sys_data_rule`）→ 一个 WHERE 条件**，
+拼装在 `common/security/permission.py: filter_data_permission()`。
+用例在 `backend/app/admin/tests/api_v1/test_data_permission.py`（22 个真实账号，
+每个账号一种配置，全部走 `/auth/login/swagger` + `GET /sys/depts` 断言可见集合）。
+
+### 🔴 它是 fail-open 的：规则「落不到列上」= 完全不过滤
+
+`filter_data_permission()` 遍历规则时，遇到下面任一情况就 `continue`，
+一条条跳完之后 `where_list` 是空的 —— 返回的是 **`or_(1 == 1)`**，也就是**放行全部**：
+
+| 情况 | 例子 |
+|---|---|
+| 字段在目标模型上不存在 | 种子里的「本部门数据权限」= `Dept.__dept_id__`，而 `__dept_id__` 解析成 `dept_id`，`sys_dept` **没有这一列** |
+| 字段名拼错 | 建规则时后端**不校验** model/column 是否存在（`CreateDataRuleParam` 只有 `str`），前端那个框还允许手填 |
+| 字段在 `DATA_PERMISSION_COLUMN_EXCLUDE` 里 | `id` / `created_time` / `sort` / `deleted…` |
+| 规则打在别的模型上 | 规则是 `User.xxx`，而接口 `DataPermissionFilter(Dept)` |
+
+对比之下，「开了过滤但一个数据范围都没配」返回的是 `or_(1 != 1)`（**一条都看不见**）。
+同一个函数里两种相反的兜底，而**配错的那一种恰好是放行的那一种**：
+一个名字叫「本部门数据权限」的范围，实际效果是「全部部门」，界面上没有任何提示。
+
+要收紧的话改 `filter_data_permission()` 里那三处 `continue` —— 但那是产品决定
+（现有配置会立刻从"能看"变成"看不见"），不是 bug 修复，所以**没有动**，只用
+`test_rule_on_missing_column_fails_open` 等四条钉住了当前行为。
+
+### 🔴 AND 组和 OR 组在**顶层是 OR** —— 一条 OR 规则能抬掉所有 AND 规则
+
+```python
+return or_(and_(*where_and_list), or_(*where_or_list))
+```
+
+配「`parent_id == RA`（AND，想收紧）」+「`status == 1`（OR）」，结果是**并集**不是交集，
+那条 OR 规则把限制整个抬掉了。界面上这两个下拉都叫「运算符」，看不出会有这个后果。
+实测：`test_or_rule_defeats_and_rule`。
+
+### 多角色取**最宽**，不是取交集
+
+`for role in request.user.roles: if role.status and not role.is_filter_scopes: return or_(1 == 1)`
+—— 只要有一个启用角色勾了「不过滤数据权限」，其它角色配的限制**一条都不看**。
+给人加角色是「加能力」，这里同时也在「减限制」。实测：`test_one_unfiltered_role_defeats_all_restrictive_roles`。
+
+### 🔴 覆盖面：整个后端只有**一个**接口挂了 `DataPermissionFilter`
+
+`GET /sys/depts`。其余全部裸奔，包括：
+
+- `GET /sys/depts/{pk}` —— 列表里看不到 B 部门的账号，**按 ID 直接读得到**
+- `GET /sys/users` —— 既没数据权限也没 `DependsRBAC`，任何登录用户翻得到全部用户
+- `PUT/DELETE /sys/depts/{pk}`、文件、日志、任务执行记录 …… 全部无过滤
+
+所以配「仅本人数据权限」`__ALL__ + __created_by__` 时不要以为它作用于所有模型 ——
+`__ALL__` 说的是「规则匹配哪些模型」，不是「过滤器挂在哪些接口上」。
+`test_data_permission_filter_is_wired_to_exactly_one_endpoint` 把这个数字钉成了 1，
+接上新接口时它会红一次，提醒同步补用例。
+
+### 已修：三个让接口直接 500 的坑
+
+- 🔴 **`UniversalStr` / `UniversalText` 必须显式写 `python_type`。**
+  `TypeDecorator` **不会**把 `python_type` 转发给 `impl`，基类实现直接
+  `raise NotImplementedError`。而 `filter_data_permission()` 要靠
+  `table.columns[c].type.python_type` 做值类型转换 —— 于是**任何打在字符串列上的
+  数据规则都让接口 500**（`Dept.code`、`Dept.name`、`User.username`…，
+  也就是这个 fork 里几乎所有能写规则的文本列）。种子里的「部门编码等于 TEST」就是一条。
+  实测：修之前 `test_eq` 等 5 条直接 `NotImplementedError` → 500。
+  （`TimeZone` 早就显式写了一份，是同一个原因 —— 加新 `TypeDecorator` 时记得跟上）
+- 🔴 **`${now}` 要放调用结果，不是函数对象。** 原来是 `'${now}': timezone.now`，
+  `datetime(<function now>)` 抛 TypeError 被 `except` 吞掉，
+  于是 `'${now}'` 这个**字面量**被拼进 SQL —— 规则不是不生效，是让接口 500
+- 🔴 **模板变量解析不出值时要 fail-closed，不能把字面量塞进 SQL。**
+  用户没有部门时 `${dept_id}` 是 None，`int(None)` 同样被吞，
+  `WHERE parent_id = '${dept_id}'` 实测报
+  `Error converting data type varchar to bigint (8114)` → 500。
+  现在解析失败的规则编译成 `false()`（看不见），不是放行、也不是崩
+
+### ⚠️ 写数据权限测试：JWT 用户解析**不走**依赖注入
+
+`jwt.get_jwt_user()` 里直接用了 `backend.database.db.async_db_session`（**开发库
+`fba`**），而 `conftest.py` 只重载了接口层的 `get_db`（→ `fba_test`）。
+现有用例从没暴露这条，是因为它们只用 admin，而 `fba` 和 `fba_test` 是同一份种子
+建出来的、admin 的雪花 ID 完全相同。**只存在于测试库里的用户会登录成功、
+第一个请求就 `TokenError`** —— 必须把 `jwt_module.async_db_session` 也换掉
+（见 `test_data_permission.py` 的 `dp` fixture）。
+
+另外那份 fixture 是**自己建图自己拆**（5 个部门 / 16 条规则 / 17 个范围 /
+19 个角色 / 22 个用户，每次跑带一个随机后缀），不依赖种子数据，
+teardown 里按 id 硬删干净 —— 因为 `fba_test` 同时也是 Playwright E2E 的库。
+
 ## 跑测试
 
 ```bash
@@ -319,6 +407,7 @@ docker exec fba_mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$PW" 
 | | 状态 |
 |---|---|
 | 文件模块接口（上传 · 去重 · 穿越 · 日期目录 · 列表 · 统计 · 下载 · 附件 · 删除） | `test_file.py` 23 条 |
+| 数据权限（表达式矩阵 · 组合语义 · fail-open · 模板变量 · 覆盖面 · 缓存失效） | `test_data_permission.py` 26 条 / 22 个账号 |
 | `/auth/logout` | 上游留下的 1 条 |
 | **其余所有模块** | **没有测试** |
 | **前端** | Playwright E2E 3 条种子用例（登录 · 部门 CRUD · 多页签保活），见下节 |
