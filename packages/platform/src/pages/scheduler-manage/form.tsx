@@ -41,6 +41,7 @@ const schema = z
     crontab: z.string().default('* * * * *'),
     interval_every: z.coerce.number().int().positive().nullable().optional(),
     interval_period: z.string().nullable().optional(),
+    args: z.string().nullable().optional(),
     kwargs: z.string().nullable().optional(),
     one_off: z.boolean().default(false),
     enabled: z.boolean().default(true),
@@ -56,6 +57,15 @@ const schema = z
       }
     } else if (!v.interval_every || !v.interval_period) {
       ctx.addIssue({ code: 'custom', path: ['interval_every'], message: '间隔调度要填间隔数与单位' })
+    }
+    if (v.args) {
+      try {
+        if (!Array.isArray(JSON.parse(v.args))) {
+          ctx.addIssue({ code: 'custom', path: ['args'], message: '位置参数必须是 JSON 数组，例如 [1, "a"]' })
+        }
+      } catch {
+        ctx.addIssue({ code: 'custom', path: ['args'], message: '位置参数不是合法 JSON' })
+      }
     }
     if (v.kwargs) {
       try {
@@ -74,7 +84,7 @@ type Values = z.infer<typeof schema>
 const EMPTY: Values = {
   name: '', task: '', type: 1, crontab: '* * * * *',
   interval_every: null, interval_period: 'minutes',
-  kwargs: '', one_off: false, enabled: true, remark: '',
+  args: '', kwargs: '', one_off: false, enabled: true, remark: '',
 }
 
 export function SchedulerFormSheet({
@@ -121,6 +131,7 @@ export function SchedulerFormSheet({
             crontab: editing.crontab || '* * * * *',
             interval_every: editing.interval_every,
             interval_period: editing.interval_period ?? 'minutes',
+            args: editing.args ?? '',
             kwargs: editing.kwargs ?? '',
             one_off: editing.one_off,
             enabled: editing.enabled,
@@ -145,6 +156,7 @@ export function SchedulerFormSheet({
       crontab: v.type === 1 ? v.crontab.trim() : '* * * * *',
       interval_every: v.type === 0 ? (v.interval_every ?? null) : null,
       interval_period: v.type === 0 ? (v.interval_period ?? null) : null,
+      args: v.args?.trim() || null,
       kwargs: v.kwargs?.trim() || null,
       one_off: v.one_off,
       enabled: v.enabled,
@@ -271,6 +283,22 @@ export function SchedulerFormSheet({
             </FormSection>
 
             <FormSection title={t('高级')}>
+              {/* 后端一直收 args，此前界面上没有入口 —— 「schema 里有、界面上没有」
+                  是这个仓库明确反对的形态（等于那个字段只有读源码的人知道） */}
+              <FormField
+                label={t('位置参数')}
+                error={fe(errs.args?.message)}
+                hint={t('JSON 数组，例如 [1, "a"]。多数任务用关键字参数就够了。')}
+              >
+                <Textarea
+                  {...form.register('args')}
+                  data-testid="s-args"
+                  rows={2}
+                  className="font-mono text-xs"
+                  placeholder='[]'
+                />
+              </FormField>
+
               <FormField
                 label={t('关键字参数')}
                 error={fe(errs.kwargs?.message)}

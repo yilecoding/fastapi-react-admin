@@ -97,15 +97,29 @@ packages/platform/ 平台能力：api-client · auth · shell · pages
 
 ```bash
 docker start fba_mssql fba_redis          # SQL Server :1433 / Redis :6380
-pnpm dev                                  # 前后端一起：api :8000 · web :1125
+pnpm dev                                  # api :8000 · web :1125 · celery worker（含内嵌 beat）
 ```
 
-`apps/api` 是 pnpm workspace 成员（`package.json` 里只有一个 `dev` 脚本、零 JS 依赖），
-所以 `turbo dev` 会同时起两个进程，TUI 里各一个日志窗格。单起某一边：
+`apps/api` 和 `apps/worker` 都是 pnpm workspace 成员（`package.json` 里只有一个
+`dev` 脚本、零 JS 依赖），所以 `turbo dev` 会同时起**三个**进程，TUI 里各一个日志窗格。
+单起某一个：
 
 ```bash
 pnpm --filter api dev                     # 等价于 cd apps/api && uv run python -m uvicorn ...
 pnpm --filter web dev
+pnpm --filter worker dev                  # celery worker -B（worker + 内嵌 beat）
+```
+
+`apps/worker` 里**没有代码**，只有那一个脚本 —— 存在的理由是让 worker 的日志有
+自己的窗格。写进 `apps/api` 的 `dev` 里（`uvicorn & celery & wait`）也能跑，
+但两份日志会挤在一个窗格里交替刷，而 worker 的日志很密。
+
+🔴 **`-B`（内嵌 beat）只用于开发。** 多副本部署时每个副本都会跑一个 beat，
+同一条调度被触发 N 次。生产要分开，且 beat **只起一个**：
+
+```bash
+pnpm --filter api celery:worker           # 可以多副本
+pnpm --filter api celery:beat             # 只能一个
 ```
 
 ⚠️ 前端端口固定在 **1125**（`vite.config.ts` 的 `server.port` + `strictPort: true`）。

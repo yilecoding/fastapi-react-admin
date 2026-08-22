@@ -1,6 +1,8 @@
 packages:
   # Python 应用，只为了让 turbo 能一起起后端（唯一的 dev 脚本，无 JS 依赖）
   - "apps/api"
+  # 同上：只有 dev 脚本，让 turbo dev 把 celery worker 也拉起来（见 apps/worker/README.md）
+  - "apps/worker"
   - "apps/web"
   - "apps/desktop"
   - "packages/*"
