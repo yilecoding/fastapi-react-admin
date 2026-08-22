@@ -1,5 +1,6 @@
 import i18next from 'i18next'
 
+import { getDisplayTimeZone, toEpochMs, type ServerTime } from './datetime'
 import enUS from './locales/en-US.json'
 import zhCN from './locales/zh-CN.json'
 
@@ -142,10 +143,20 @@ export function formatNumber(n: number | null | undefined): string {
   return n.toLocaleString(currentLanguage())
 }
 
-/** 时刻（不含日期）。24 小时制在中文下是习惯，英文下交给 locale 自己决定 */
-export function formatTime(at: number | Date): string {
+/**
+ * 时刻（不含日期）。24 小时制在中文下是习惯，英文下交给 locale 自己决定。
+ *
+ * 时区跟 `getDisplayTimeZone()`（默认浏览器时区）—— 不传 `timeZone` 的话
+ * `toLocaleTimeString` 只会用浏览器时区，将来切「用户自选时区」时这里会漏。
+ */
+export function formatTime(at: ServerTime): string {
+  const ms = toEpochMs(at)
+  if (ms === null) return '—'
   const lang = currentLanguage()
-  return new Date(at).toLocaleTimeString(lang, lang === 'zh-CN' ? { hour12: false } : undefined)
+  return new Date(ms).toLocaleTimeString(lang, {
+    timeZone: getDisplayTimeZone(),
+    ...(lang === 'zh-CN' ? { hour12: false } : {}),
+  })
 }
 
 /**
@@ -170,9 +181,11 @@ export function formatDuration(seconds: number | null | undefined): string {
   return parts.length ? parts.join(' ') : (i18next.t('{{n}} 秒', { n: s }) as string)
 }
 
-/** 日期（不含时刻） */
-export function formatDate(at: number | Date): string {
-  return new Date(at).toLocaleDateString(currentLanguage())
+/** 日期（不含时刻）。时区同 `formatTime` */
+export function formatDate(at: ServerTime): string {
+  const ms = toEpochMs(at)
+  if (ms === null) return '—'
+  return new Date(ms).toLocaleDateString(currentLanguage(), { timeZone: getDisplayTimeZone() })
 }
 
 /**
@@ -185,5 +198,22 @@ export function formatDate(at: number | Date): string {
 export function t(key: string, vars?: Record<string, unknown>): string {
   return i18next.t(key, vars ?? {}) as string
 }
+
+/**
+ * 服务端时间的解析与格式化，见 `./datetime`。
+ *
+ * **所有来自接口的时间字段都要经过这里**，不要裸打印、不要 `.slice()`、
+ * 不要拿字符串比大小 —— 那三种写法只在「后端和用户都在东八区」时才对。
+ */
+export {
+  dateKey,
+  formatDateTime,
+  formatDateTimeShort,
+  getDisplayTimeZone,
+  setDisplayTimeZone,
+  setLegacyTimeZone,
+  toEpochMs,
+  type ServerTime,
+} from './datetime'
 
 export { i18next }

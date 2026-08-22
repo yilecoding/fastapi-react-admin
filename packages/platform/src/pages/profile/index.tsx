@@ -7,6 +7,7 @@ import {
   IconShieldLock, IconSignature, IconUpload, IconUser,
 } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Avatar, AvatarFallback, AvatarImage } from '@admin/ui/components/avatar'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
@@ -338,10 +339,10 @@ function ReadOnlyBlock({ me, loading }: { me?: CurrentUser; loading: boolean }) 
             {me.phone || <span className="text-muted-foreground">—</span>}
           </InfoRow>
           <InfoRow label={t('注册时间')}>
-            <span className="font-mono text-xs tabular-nums">{me.join_time || '—'}</span>
+            <span className="font-mono text-xs tabular-nums">{formatDateTime(me.join_time)}</span>
           </InfoRow>
           <InfoRow label={t('上次登录')}>
-            <span className="font-mono text-xs tabular-nums">{me.last_login_time || '—'}</span>
+            <span className="font-mono text-xs tabular-nums">{formatDateTime(me.last_login_time)}</span>
           </InfoRow>
         </div>
       )}

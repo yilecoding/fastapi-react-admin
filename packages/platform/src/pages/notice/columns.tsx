@@ -1,6 +1,7 @@
 import { createColumnHelper } from '@tanstack/react-table'
 import { IconDotsVertical, IconEye, IconPencil, IconTrash } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { richTextToPlain } from '@admin/ui/components/rich-text'
@@ -86,15 +87,14 @@ export function buildColumns(
     col.accessor('created_time', {
       header: t('创建时间'),
       cell: ({ getValue }) => (
-        <span className="text-sm tabular-nums text-muted-foreground">{getValue()}</span>
+        <span className="text-sm tabular-nums text-muted-foreground">{formatDateTime(getValue())}</span>
       ),
     }),
     col.accessor('updated_time', {
       header: t('更新时间'),
       cell: ({ getValue }) => (
-        <span className="text-sm tabular-nums text-muted-foreground">
-          {getValue() || <span className="text-muted-foreground/60">—</span>}
-        </span>
+        // 空值由 formatDateTime 统一给 '—'，不用再判一次
+        <span className="text-sm tabular-nums text-muted-foreground">{formatDateTime(getValue())}</span>
       ),
     }),
     col.display({

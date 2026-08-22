@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { formatDuration } from '@admin/i18n'
+import { formatDateTime, formatDuration } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -108,7 +108,7 @@ export function MonitorServerPage({
                   testId="metric-elapsed"
                   value={<span className="text-xl">{formatDuration(data.service.elapsed_seconds)}</span>}
                   tone="info"
-                  hint={t('启动于 {{at}}', { at: data.service.startup })}
+                  hint={t('启动于 {{at}}', { at: formatDateTime(data.service.startup) })}
                 />
               </div>
 
@@ -187,7 +187,7 @@ export function MonitorServerPage({
               >
                 <div className="grid grid-cols-1 gap-x-8 @2xl/main:grid-cols-2 @4xl/main:grid-cols-3">
                   <InfoRow label={t("名称")} value={`${data.service.name} ${data.service.version}`} />
-                  <InfoRow label={t("启动时间")} value={data.service.startup} />
+                  <InfoRow label={t("启动时间")} value={formatDateTime(data.service.startup)} />
                   <InfoRow label={t("运行时长")} value={formatDuration(data.service.elapsed_seconds)} />
                   <InfoRow label={t("进程 CPU")} value={data.service.cpu_usage} />
                   <InfoRow label={t("物理内存 RSS")} value={data.service.mem_rss} />

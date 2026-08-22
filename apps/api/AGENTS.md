@@ -118,6 +118,43 @@
   就已经发生（`msg=t(...)`），不管后面被哪条路径读到 `.msg` 都已经是对的
   语言——这类「序列化出口忘了翻」的问题整类消失了，不是又堵上一个洞
 
+## 时区：单时区系统，但**下发的时间必须带时区标记**
+
+`DATETIME_TIMEZONE`（默认 `Asia/Shanghai`）是**进程级单例**（`utils/timezone.py`
+的 `timezone` 就一个实例），Celery 也用同一个值（`enable_utc=False`）。
+`sys_user` 没有时区字段，前端也没有时区选择器 —— **这是单时区系统**，
+`timezone.py` 这个文件名容易让人以为支持按用户切时区，不支持。
+
+存储仍是本地时区（`common/model.py` 的 `TimeZone` TypeDecorator），
+**但下发格式已经改成带偏移的 ISO 8601**，所以「服务端和用户不在同一时区」
+这件事在前端是能正确显示的：
+
+- 🔴 **不要给 `SchemaBase` 加回 datetime 的 `json_encoders`。**
+  原来那个 encoder 把所有时间格式化成 `'%Y-%m-%d %H:%M:%S'` —— **丢掉了时区**。
+  ES 规范对无时区标记的串，`T` 分隔的按**浏览器**时区解释、空格分隔的干脆没定义
+  （Safari 历史上直接 Invalid Date），于是前端只能靠猜，猜错不报错、只是偏几小时。
+  前端为此长出过两处 hack（`log-online/api.ts` 自己写解析器、
+  `profile/recent-logins.tsx` 干脆放弃解析原样摊字符串），现在都删了。
+  pydantic v2 的**默认**行为正好是要的（`2026-08-22T11:59:47+08:00`），
+  而且那个 `json_encoders` 本身是 pydantic v2 已废弃的 API
+- **`to_str()` 不出网，出网用 `to_iso()`。** `to_str()` 输出不带时区标记，
+  只能用在日志前缀、和 `from_str()` 成对的 Redis 读写（用户锁定到期时间）、
+  以及靠字符串等值比较的地方（celery 的 `last_update`）。
+  绕过了 pydantic 自己拼字符串下发给前端的那几处（token 里的 `last_login_time`、
+  监控页 `startup`）必须用 `to_iso()`
+- ⚠️ **改格式后旧 token 里还存着旧格式**：`last_login_time` 是签发时写进
+  token payload 的，实测切换后在线会话里 200+ 条旧格式和新登录的 ISO 并存，
+  要等 token 过期才换完。前端的解析对无标记串保留了按 `Asia/Shanghai` 的兜底，
+  就是为了这段过渡期（见 [i18n 分册](../../packages/i18n/AGENTS.md)）
+- **输入方向不用管**：pydantic 对 `'2026-08-22 17:00:00'` / 带 `Z` / 带 `+08:00`
+  全都收，改下发格式不会让任何表单提交失败
+
+> 存储改成 UTC 是**还没做**的一步（要重建开发库 + 改种子 SQL 的时间字面量）。
+> 做了之后 `SchemaBase` 一行都不用改 —— 默认序列化跟着 tzinfo 走，会自动变成
+> `...Z`。现在不做的理由是：存本地 + 显式下发偏移，**在 API 契约上已经无歧义**，
+> 而存 UTC 解决的是另一个问题（SQL Server 的 `DATETIME2` 不存偏移，
+> 时区靠一个配置值隐式决定，改配置会让全部历史数据静默重新解释）。
+
 ## 部门与角色的编码（稳定引用键）
 
 `sys_dept.code` / `sys_role.code` 是 2026-08-22 加的。**加它的理由不是「别人都有」**，

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconPencil, IconPlus, IconTrash, IconUserShield } from '@tabler/icons-react'
 
+import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
 
@@ -317,7 +318,7 @@ function RoleDetailHeader({
           <YesNoBadge value={role.is_filter_scopes} yes={t('按数据范围过滤')} no={t('不过滤（全量数据）')} />
         </span>
         <span className="text-xs text-muted-foreground">
-          {role.remark || t('没有备注')} · {t('创建于 {{at}}', { at: role.created_time })}
+          {role.remark || t('没有备注')} · {t('创建于 {{at}}', { at: formatDateTime(role.created_time) })}
         </span>
       </div>
       <div className="flex items-center gap-2">

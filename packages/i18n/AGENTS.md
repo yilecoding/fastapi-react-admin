@@ -128,6 +128,41 @@ const fe = useFieldError()
 `elapsed_seconds`），成句交给 `packages/i18n` 的 `formatDuration()`。
 **新增任何「时长」字段都照这个来 —— 后端只发数值。**
 
+### 🔴 服务端时间一律过 `src/datetime.ts`，不许裸打印 / 切片 / 字典序比较
+
+后端下发的时间**不是给人看的字符串，是一个瞬间**。原来前端到处直接当字符串使：
+`{file.created_time}` 裸渲染、`.slice(5, 16)` 截短、`.slice(0, 10)` 当分组键、
+`.localeCompare()` 排序。这些能跑是因为凑巧同时满足两个前提 ——
+后端下发 `'2026-08-22 11:59:47'`（Asia/Shanghai 墙上时间），**且看的人也在东八区**。
+任一前提不成立，界面上的时间就是错的，而且**不报错**。
+
+后端已改成下发带偏移的 ISO 8601（见 [api 分册](../../apps/api/AGENTS.md) 的
+「后端国际化」邻节），时区在**显示时**才出现。工具包 `packages/i18n/src/datetime.ts`：
+
+| 函数 | 给谁用 |
+|---|---|
+| `formatDateTime` | 默认选择。`2026-08-22 11:59:47`，**固定格式不跟 locale** |
+| `formatDateTimeShort` | 宽度紧张处。`08-22 11:59`（原 `.slice(5, 16)` 想做的事） |
+| `dateKey` | 按天分组统计（原 `.slice(0, 10)` 想做的事） |
+| `toEpochMs` | 排序、比较、算差 |
+| `formatDate` / `formatTime` | 只要日期或只要时刻，这两个**跟 locale** |
+| `setDisplayTimeZone` | 切显示时区；不调就跟浏览器 |
+
+`formatDateTime` **刻意不跟 locale**（和 `formatNumber` 取向相反）：它渲染的是
+日志/审计类机器时间，几乎总在表格里配 `font-mono tabular-nums`，跟 locale 走会得到
+`8/22/2026, 11:59:47 AM` —— 宽度不定列对不齐，而且 `M/D/Y` 对中文用户是歧义的。
+
+🔴 **最危险的是 `.slice(0, 10)` 当日期键**：切 ISO 串拿到的是 **UTC 的**年月日，
+东八区早上 8 点之前的记录会被算进前一天。仪表盘的「近 7 天登录趋势」踩过 ——
+柱子少一天多一天，不报错、不空白，只是数字悄悄对不上。同一个文件里 `days[]`
+还是用 `new Date().getDate()`（**浏览器**时区）生成的，两套时区框架混用。
+现在两边都走 `dateKey()`。
+
+⚠️ 解析对**无时区标记**的串保留了兜底（按 `Asia/Shanghai` 解释）。这不是洁癖，
+是因为「改动前签发的 token」里还存着旧格式：实测切换后在线会话里 200+ 条旧格式
+和新登录的 ISO 并存，要等 token 过期才换完。没有兜底的话这些旧值会被
+`new Date()` 按浏览器时区解释 —— 非东八区的机器上整体偏移几小时。
+
 ### 校验器（`pnpm i18n:check`，`pnpm i18n:fix` 自动修）
 
 规则挑自 Rocket.Chat 的 `check.mts`：
@@ -309,9 +344,11 @@ FastAPI 的 `HTTPBearer` 抛 `Not authenticated`、starlette 抛 `Method Not All
 - **默认参数值里不能调 hook**（`placeholder = '选择日期范围'`、
   `title = t('管理平台')`）—— 默认值在 hook 之前求值。改成 `placeholder?: string`
   + 渲染处 `?? t('…')`
-- **数字/时间格式化走 `formatNumber` / `formatTime` / `formatDate`**（`packages/i18n`），
-  不要写死 `toLocaleString('zh-CN')`。中英分组符号一样，所以写死了也看不出来 ——
-  等加了德语（`1.234.567`）才会发现漏了哪几处
+- **数字/时间格式化走 `packages/i18n`**（`formatNumber` · `formatDateTime` ·
+  `formatDate` / `formatTime` · `dateKey`，见上面「服务端时间一律过 `src/datetime.ts`」），
+  不要写死 `toLocaleString('zh-CN')`、也不要裸打印接口给的时间串。
+  中英数字分组符号一样，所以写死了也看不出来 —— 等加了德语（`1.234.567`）
+  才会发现漏了哪几处；时间那边则是换个时区的人来看才会发现
 
 ### 边界：**业务数据不翻**
 
