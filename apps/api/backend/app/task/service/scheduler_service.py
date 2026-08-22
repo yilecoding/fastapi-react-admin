@@ -62,6 +62,25 @@ class TaskSchedulerService:
         )
 
     @staticmethod
+    def get_meta() -> dict[str, object]:
+        """调度运行时的元信息：能选哪些任务、beat 按哪个时区解释 crontab。
+
+        🔴 **时区必须由后端下发。** 前端算「近五次执行时间」预览时，要按
+        **beat 解释 crontab 的那个时区**去算，而不是浏览器时区 ——
+        两者不同时（运维在国外、或用户改了显示时区），预览出来的时间
+        看着像模像样，实际和真正触发的时刻差好几个小时。
+
+        beat 用的是**进程级**的 `settings.DATETIME_TIMEZONE`，
+        和 `sys_user.timezone`（那是每个人的**显示**偏好）是两回事。
+        """
+        from backend.core.conf import settings
+
+        return {
+            'tasks': TaskSchedulerService.get_registered_tasks(),
+            'timezone': settings.DATETIME_TIMEZONE,
+        }
+
+    @staticmethod
     async def create(*, db: AsyncSession, obj: CreateTaskSchedulerParam) -> TaskScheduler:
         if await task_scheduler_dao.get_by_name(db, obj.name):
             raise errors.ConflictError(msg=t('error.task.scheduler_name_exists'))

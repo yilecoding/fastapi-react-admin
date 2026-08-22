@@ -6,6 +6,7 @@ from backend.app.task.schema.scheduler import (
     CreateTaskSchedulerParam,
     DeleteTaskSchedulerParam,
     GetTaskSchedulerDetail,
+    TaskSchedulerMeta,
     UpdateTaskSchedulerParam,
 )
 from backend.app.task.service import task_scheduler_service
@@ -19,14 +20,17 @@ from backend.database.db import CurrentSession, CurrentSessionTransaction
 router = APIRouter()
 
 
-@router.get('/registered', summary='获取已注册的 Celery 任务', dependencies=[DependsJwtAuth])
-async def get_registered_tasks() -> ResponseSchemaModel[list[str]]:
-    """给调度表单的「任务」下拉用。
+@router.get('/meta', summary='获取调度运行时元信息', dependencies=[DependsJwtAuth])
+async def get_scheduler_meta() -> ResponseSchemaModel[TaskSchedulerMeta]:
+    """给调度表单用：能选哪些任务 + beat 按哪个时区解释 crontab。
 
-    任务名手敲一个错字就是「调度按时触发、worker 收到不认识的名字」——
-    celery 只记一条 Received unregistered task，而界面上触发次数照涨。
+    - **tasks**：任务名手敲一个错字就是「调度按时触发、worker 收到不认识的
+      名字」—— celery 只记一条 Received unregistered task，而界面上触发次数照涨。
+      所以下拉里只给注册过的
+    - **timezone**：前端算「近五次执行时间」预览要用它。用浏览器时区去算，
+      在运维和服务器不同区时会得到一个看着对、实际差几小时的预览
     """
-    return response_base.success(data=task_scheduler_service.get_registered_tasks())
+    return response_base.success(data=task_scheduler_service.get_meta())
 
 
 @router.get('/all', summary='获取所有任务调度', dependencies=[DependsJwtAuth])

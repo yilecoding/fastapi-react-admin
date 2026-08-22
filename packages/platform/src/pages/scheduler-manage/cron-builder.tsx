@@ -1,11 +1,14 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { formatDateTime } from '@admin/i18n'
 import { Input } from '@admin/ui/components/input'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@admin/ui/components/select'
 import { cn } from '@admin/ui/lib/utils'
+
+import { CRON_PRESETS, describeCron, nextRuns } from './cron-presets'
 
 /**
  * Crontab 可视化构建器。
@@ -61,12 +64,15 @@ export function CronBuilder({
   value,
   onChange,
   invalid,
+  timeZone,
 }: {
   value: string
   onChange: (next: string) => void
   invalid?: boolean
+  /** beat 解释 crontab 的时区，来自 `/tasks/schedulers/meta`。见 cron-presets.ts */
+  timeZone: string
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const parsed = React.useMemo(() => parse(value), [value])
   const [preset, setPreset] = React.useState<Preset>(parsed.preset)
   const [minute, setMinute] = React.useState(parsed.minute)
@@ -99,6 +105,10 @@ export function CronBuilder({
     const expr = build(p, m, h, d)
     if (expr) onChange(expr)
   }
+
+  const human = React.useMemo(() => describeCron(value, i18n.language), [value, i18n.language])
+  /** 时区变了也要重算 —— 换服务器时区之后旧预览是错的 */
+  const upcoming = React.useMemo(() => nextRuns(value, timeZone), [value, timeZone])
 
   const presetItems = React.useMemo(
     () => ({
@@ -180,6 +190,51 @@ export function CronBuilder({
         placeholder="* * * * *"
         className={cn('font-mono', invalid && 'border-destructive')}
       />
+
+      {/* 常用预设：覆盖绝大多数场景，点一下就好，不用理解五段语法。
+          ⚠️ 清单里刻意**没有**「每月最后一天」—— Unix cron 表达不了它
+          （那是 Quartz 的 `L`），给个 `0 0 28-31 * *` 的近似值等于偷换承诺 */}
+      <div className="flex flex-wrap gap-1.5">
+        {CRON_PRESETS.map((p) => (
+          <button
+            key={p.expr}
+            type="button"
+            data-testid={`cron-preset-${p.expr.replace(/[^a-zA-Z0-9]/g, '_')}`}
+            onClick={() => onChange(p.expr)}
+            className={cn(
+              'rounded-full px-2.5 py-1 text-xs ring-1 transition-colors',
+              value === p.expr
+                ? 'bg-primary/10 text-primary ring-primary/30'
+                : 'bg-muted/50 text-muted-foreground ring-border hover:bg-muted'
+            )}
+          >
+            {t(p.label)}
+          </button>
+        ))}
+      </div>
+
+      {/* 🔴 这两行是这个控件真正的价值：说人话 + 说清楚接下来什么时候跑。
+          配错的调度不会当场报错，只会在某个凌晨该跑没跑 —— 预览是唯一能
+          在保存前发现「我以为是每天，其实写成了每分钟」的地方 */}
+      {human ? (
+        <p className="text-sm" data-testid="cron-human">{human}</p>
+      ) : (
+        <p className="text-sm text-destructive" data-testid="cron-human">
+          {t('表达式无法解析，请检查')}
+        </p>
+      )}
+
+      {upcoming.length > 0 && (
+        <div className="flex flex-col gap-1 rounded-md bg-muted/40 p-2" data-testid="cron-next-runs">
+          <span className="text-xs text-muted-foreground">
+            {t('接下来 5 次（服务端时区 {{tz}}）', { tz: timeZone })}
+          </span>
+          {upcoming.map((d, i) => (
+            <span key={i} className="font-mono text-xs tabular-nums">{formatDateTime(d)}</span>
+          ))}
+        </div>
+      )}
+
       <p className="text-xs text-muted-foreground">
         {t('五段：分 时 日 月 周。支持 */5、1-5、1,15 这类写法，构建器覆盖不到的直接改这里。')}
       </p>

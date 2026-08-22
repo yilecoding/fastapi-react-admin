@@ -16,3 +16,6 @@ from backend.app.task.schema.scheduler import (
 from backend.app.task.schema.scheduler import (
     UpdateTaskSchedulerParam as UpdateTaskSchedulerParam,
 )
+from backend.app.task.schema.scheduler import (
+    TaskSchedulerMeta as TaskSchedulerMeta,
+)
