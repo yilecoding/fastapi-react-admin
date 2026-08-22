@@ -24,7 +24,9 @@ class LoginLog(DataClassBase):
     browser: Mapped[str | None] = mapped_column(UniversalStr(64), comment='浏览器')
     device: Mapped[str | None] = mapped_column(UniversalStr(64), comment='设备')
     msg: Mapped[str] = mapped_column(UniversalText, comment='提示消息')
-    login_time: Mapped[datetime] = mapped_column(TimeZone, comment='登录时间')
+    # index：清理任务按它做范围删除（`app/task/tasks/maintenance`），
+    # 而日志表是全库长得最快的表 —— 没索引就是全表扫 + 锁升级 + 阻塞所有写日志的请求
+    login_time: Mapped[datetime] = mapped_column(TimeZone, index=True, comment='登录时间')
     created_time: Mapped[datetime] = mapped_column(
         TimeZone,
         init=False,
