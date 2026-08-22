@@ -251,14 +251,59 @@ turbo 会缓存 typecheck 的结果，而缓存命中时**打印的是上一次�
 
 ---
 
+## 数据库结构改动一律走 alembic
+
+**改了模型就要生成迁移，没有例外。** 手写 `ALTER` / `drop_all` 重建那条路已经关了。
+
+```bash
+pnpm db:current                        # 现在在哪个版本
+pnpm db:revision '加 xxx 列'            # 改完模型，生成迁移（--autogenerate）
+                                       # ⚠️ 生成的文件**要读一遍再提交**
+pnpm db:upgrade                        # 升到 head
+pnpm db:history                        # 看链条
+```
+
+### 为什么改这条
+
+之前是「改模型 + 手工 ALTER」，两步之间**没有任何东西对账**。少做一步的后果
+都是静默的：本机开发库手工改过（能跑），全新环境按模型建出来缺那一列，
+要到部署时才炸；或者反过来，模型声明了索引、库上没建，功能全对只是全表扫。
+
+已有环境**不需要重建**：`alembic stamp b0000000baseline` 认领起点，再 `db:upgrade`。
+
+### 三条纪律
+
+- 🔴 **基线（`b0000000baseline`）刻意是空的。** 它只标记「起点」，不含建表 DDL——
+  把 23 张表的 DDL 写进去就有了两份真相，改模型忘了改它就静默偏离。
+  唯一一份真相仍然在模型里，基线之后每次改动一份增量
+- 🔴 **`env.py` 必须 `import backend.main`。** `MappedBase.metadata` 只有在模型
+  被 import 之后才有内容。原来只 import 了 `MappedBase` 本身 —— metadata 是空的，
+  autogenerate 拿「空 metadata」和「有 23 张表的库」做 diff，会安静地写出一份
+  **「drop 掉全部 23 张表」**的迁移，而它不会问你
+- ⚠️ **「补齐历史遗留」类的迁移必须幂等。** 新建的库天然就是目标状态：
+  `c0000000comments` 在老库上要改注释，在刚 `create_all` 出来的库上再执行会报
+  `Property 'MS_Description' already exists` —— alembic 在 mssql 上把
+  `alter_column(comment=)` 编译成 add 而不是 update。写这类迁移先问
+  「新库跑这一步会怎样」
+
+### 守卫（`app/task/tests/test_migrations.py`）
+
+| 测试 | 挡什么 |
+|---|---|
+| `test_model_matches_migrations` | **改了模型但没生成迁移** —— 这条是整套约定的支点 |
+| `test_single_head` | 两个人各自 revision 导致分叉，`upgrade head` 谁都升不了 |
+| `test_every_revision_is_reachable_from_base` | 断链的迁移永远不会执行 |
+
+⚠️ 前两条比对的是 **fba_test**，所以本地跑测试前它要在 head 上
+（`pnpm --filter api db:upgrade`；`test:db` 重建之后要重新 stamp + upgrade）。
+
 ## 还没发版 —— 可以自由重构
 
 **0.0.1 还没发布，没有线上实例、没有要保的数据、没有外部调用方。**
 所以不要为「兼容」让设计将就：
 
-- **表结构直接改模型**。没有 alembic 迁移历史（`versions/` 是空的），schema 由
-  `MappedBase.metadata.create_all()` 从模型生成。开发库上要么手写一条 `ALTER`，
-  要么用 `cli.py` 的 drop_all + create_all 重建
+- ⚠️ **表结构改动例外 —— 从 2026-08-22 起一律走 alembic 迁移**，见下一节。
+  这一条以前写的是「直接改模型、手写 ALTER 或 drop_all 重建」，已经作废
 - **删字段就真删**，不要留「休眠字段」。留着的下一个人会以为它有用（`sys_menu.cache`
   就骗过一轮：字段在、界面上没有、行为不变）
 - **改接口不用留旧字段**。`schema.d.ts` 是 `pnpm gen:api` 生成的，跟着后端走

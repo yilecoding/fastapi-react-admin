@@ -1,7 +1,11 @@
 __pycache__/
 .env
 .env.e2e
-alembic/versions/
+# 🔴 alembic/versions/ **必须进版本库**（2026-08-22 起）。
+# 这里原来是 `alembic/versions/` —— 那时还没有迁移历史（schema 靠 create_all），
+# 忽略它没影响。现在改成迁移优先之后，忽略掉等于「别人 clone 下来一条迁移都没有」，
+# 整套约定归零。只忽略字节码。
+alembic/versions/__pycache__/
 static/media/
 *.log
 celerybeat-schedule.*

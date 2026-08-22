@@ -12,6 +12,9 @@
     "i18n:fix": "pnpm --filter @admin/i18n check:fix",
     "i18n:jsx": "pnpm --filter @admin/i18n jsx",
     "ctx:check": "node scripts/ctx-check.mjs",
+    "db:upgrade": "pnpm --filter api db:upgrade",
+    "db:revision": "pnpm --filter api db:revision",
+    "db:current": "pnpm --filter api db:current",
     "test": "turbo test",
     "e2e": "turbo e2e"
   },
