@@ -1,12 +1,12 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createColumnHelper, useTable,
   type ColumnVisibilityState, type RowSelectionState,
 } from '@tanstack/react-table'
 import {
-  IconDotsVertical, IconPencil, IconPlus, IconSearch, IconTrash,
+  IconDotsVertical, IconPencil, IconPlus, IconTrash,
 } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
@@ -14,22 +14,18 @@ import { DataTable } from '@admin/ui/components/data-table'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@admin/ui/components/dropdown-menu'
-import {
-  InputGroup, InputGroupAddon, InputGroupInput,
-} from '@admin/ui/components/input-group'
-import { Skeleton } from '@admin/ui/components/skeleton'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 import { cn } from '@admin/ui/lib/utils'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
+import { MasterList, type MasterListItem } from '../_shared/master-list'
 import { BulkBar, ResetButton, TextFilter } from '../_shared/filters'
 import { logFeatures as features } from '../_shared/log-features'
 import { buildSelectColumn } from '../_shared/select-column'
 import { StatusBadge } from '../_shared/status'
 import {
-  COLOR_CLASS, dictDatasQuery, dictTypesQuery,
+  COLOR_CLASS, dictKeys, dictDatasQuery, dictTypesQuery,
   useDeleteDictDatas, useDeleteDictTypes, type DictData, type DictType,
 } from './api'
 import { DictDataSheet, DictTypeSheet } from './forms'
@@ -82,6 +78,8 @@ export function DictPage({
     [onSearchChange, search]
   )
 
+  const qc = useQueryClient()
+
   // ── 左：类型（一次取全，前端过滤） ──
   const { data: typesPage, isPending: loadingTypes } = useQuery(
     dictTypesQuery({ page: 1, size: TYPE_PAGE_SIZE })
@@ -99,10 +97,12 @@ export function DictPage({
     return () => clearTimeout(timer)
   }, [typeQ, search.tq, patch])
 
-  const shownTypes = React.useMemo(() => {
+  // 前端过滤：类型一次取全，所以搜索能同时命中**名称和编码**，且是即时的
+  //（角色 / 数据范围那两栏是服务端按名称搜 —— 它们的量会长，取不全）
+  const typeItems = React.useMemo<MasterListItem[]>(() => {
     const q = typeQ.trim().toLowerCase()
-    if (!q) return types
-    return types.filter((ty) => `${ty.name} ${ty.code}`.toLowerCase().includes(q))
+    const hit = q ? types.filter((ty) => `${ty.name} ${ty.code}`.toLowerCase().includes(q)) : types
+    return hit.map((ty) => ({ id: ty.id, title: ty.name, code: ty.code }))
   }, [types, typeQ])
 
   // 选中项从**全量**列表里找 —— 与左侧搜索无关，搜索不会换掉右侧的数据
@@ -228,109 +228,49 @@ export function DictPage({
               字典项表格塞不下（角色页踩过同一条，见 CLAUDE.md 主从页一节）。
               不要 items-start —— 定高情形下两栏要等高，sticky 由下面按模式给 */}
           <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6 content-scroll:lg:min-h-0">
-            {/* ── 左：字典类型 ── */}
-            {/*
-              lg 以下      整宽一栏（堆叠），用视口算式限高，免得类型列表把右侧表格顶到屏外
-              lg+ 内容区滚 定高一栏，max-h 要显式取消，否则硬上限会让它在更高的栏里只用一半
-              lg+ 整页滚   整块跟着页面滚，所以吸顶；self-start 不能省，被拉伸到整行高的元素粘不住
-            */}
-            <div className="flex w-full shrink-0 flex-col gap-2 max-h-[calc(100dvh-13rem)] lg:w-72 content-scroll:lg:max-h-none content-scroll:lg:min-h-0 page-scroll:lg:sticky page-scroll:lg:top-4 page-scroll:lg:self-start">
-              <div className="flex shrink-0 items-center gap-2">
-                <InputGroup className="h-8 flex-1">
-                  <InputGroupAddon align="inline-start">
-                    <IconSearch className="size-4 text-muted-foreground" />
-                  </InputGroupAddon>
-                  <InputGroupInput
-                    value={typeQ} data-testid="filter-type"
-                    placeholder={t("搜索字典类型…")}
-                    onChange={(e) => setTypeQ(e.target.value)}
-                  />
-                </InputGroup>
-                <Can perm="dict:type:add">
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          size="icon" className="size-8 shrink-0"
-                          aria-label={t("新增字典类型")} data-testid="add-type"
-                          onClick={() => { setEditingType(null); setTypeSheet(true) }}
-                        />
-                      }
-                    >
-                      <IconPlus className="size-4" />
-                    </TooltipTrigger>
-                    <TooltipContent>{t('新增字典类型')}</TooltipContent>
-                  </Tooltip>
-                </Can>
-              </div>
-
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border" data-testid="type-list">
-                {loadingTypes ? (
-                  <div className="flex flex-col gap-1 p-2">
-                    {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
-                  </div>
-                ) : shownTypes.length === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">{t('没有匹配的类型')}</p>
-                ) : (
-                  <div className="min-h-0 flex-1 overflow-y-auto p-1">
-                    {shownTypes.map((ty) => (
-                      <div
-                        key={ty.id}
-                        role="button"
-                        tabIndex={0}
-                        data-testid={`type-${ty.code}`}
-                        aria-pressed={ty.id === selectedId}
-                        onClick={() => patch({ type: ty.id, page: undefined, q: undefined })}
-                        onKeyDown={(e) =>
-                          (e.key === 'Enter' || e.key === ' ') && patch({ type: ty.id, page: undefined, q: undefined })
-                        }
-                        className={cn(
-                          'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm',
-                          ty.id === selectedId
-                            ? 'bg-muted font-medium ring-1 ring-border'
-                            : 'hover:bg-muted/60'
-                        )}
-                      >
-                        <div className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate">{ty.name}</span>
-                          <code className="truncate text-[11px] text-muted-foreground">{ty.code}</code>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={<Button variant="ghost" size="icon" className="size-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" aria-label={t('操作 {{name}}', { name: ty.name })} />}
-                            data-testid={`type-actions-${ty.code}`}
-                          >
-                            <IconDotsVertical className="size-3.5" />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-32">
-                            <Can perm="dict:type:edit">
-                              <DropdownMenuItem onClick={() => { setEditingType(ty); setTypeSheet(true) }}
-                                                data-testid={`type-edit-${ty.code}`}>
-                                <IconPencil className="size-4" />{t('编辑')}
-                              </DropdownMenuItem>
-                            </Can>
-                            <Can perm="dict:type:del">
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem variant="destructive" onClick={() => setDelType(ty)}
-                                                data-testid={`type-delete-${ty.code}`}>
-                                <IconTrash className="size-4" />{t('删除')}
-                              </DropdownMenuItem>
-                            </Can>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {/* 一次只取 TYPE_PAGE_SIZE 条 —— 超出时说清楚，别让人以为就这么多 */}
-                {typeTotal > types.length && (
-                  <p className="shrink-0 border-t px-2 py-1.5 text-[11px] text-muted-foreground" data-testid="type-truncated">
-                    {t('共 {{total}} 个类型，仅加载前 {{n}} 个', { total: typeTotal, n: types.length })}
-                  </p>
-                )}
-              </div>
-            </div>
-
+            {/* ── 左：字典类型 ── 与角色 / 数据范围同一个左栏件 */}
+            <MasterList
+              idPrefix="type"
+              title={t('字典类型')}
+              items={typeItems}
+              total={typeTotal}
+              selectedId={selectedId ?? null}
+              onSelect={(id) => patch({ type: id, page: undefined, q: undefined })}
+              keyword={typeQ}
+              searchPlaceholder="搜索字典类型…"
+              onKeyword={setTypeQ}
+              loading={loadingTypes}
+              onRefresh={() => void qc.invalidateQueries({ queryKey: dictKeys.all })}
+              onAdd={() => { setEditingType(null); setTypeSheet(true) }}
+              addLabel={t('新增字典类型')}
+              addPerm="dict:type:add"
+              emptyText={t('没有匹配的类型')}
+              // 一次只取 TYPE_PAGE_SIZE 条 —— 超出时说清楚，别让人以为就这么多
+              footerNote={
+                typeTotal > types.length
+                  ? t('共 {{total}} 个类型，仅加载前 {{n}} 个', { total: typeTotal, n: types.length })
+                  : undefined
+              }
+              renderActions={(item) => {
+                const ty = types.find((x) => x.id === item.id)
+                if (!ty) return null
+                return (
+                  <>
+                    <Can perm="dict:type:edit">
+                      <DropdownMenuItem onClick={() => { setEditingType(ty); setTypeSheet(true) }}>
+                        <IconPencil className="size-4" />{t('编辑')}
+                      </DropdownMenuItem>
+                    </Can>
+                    <Can perm="dict:type:del">
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" onClick={() => setDelType(ty)}>
+                        <IconTrash className="size-4" />{t('删除')}
+                      </DropdownMenuItem>
+                    </Can>
+                  </>
+                )
+              }}
+            />
             {/* ── 右：字典项 ── */}
             <div className="flex min-w-0 flex-1 flex-col gap-3 content-scroll:lg:min-h-0">
               <div className="flex shrink-0 flex-wrap items-center gap-2">

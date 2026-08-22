@@ -13,7 +13,11 @@ import * as React from 'react'
  */
 export function useTreeFold(foldAll: boolean) {
   // 存的是「与默认态相反」的节点 —— 这样切换默认态时只要清空它
-  const [flipped, setFlipped] = React.useState<Set<string>>(new Set())
+  const [flipped, setFlipped] = React.useState<Set<string>>(() => {
+    // eslint-disable-next-line no-console
+    console.log('[E2E_PROBE] useTreeFold 初始化/重新 mount，foldAll=', foldAll)
+    return new Set()
+  })
 
   // 默认态一变（点了展开/折叠全部），逐个覆盖就该失效
   React.useEffect(() => setFlipped(new Set()), [foldAll])
@@ -28,9 +32,14 @@ export function useTreeFold(foldAll: boolean) {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
       else next.add(id)
+      // eslint-disable-next-line no-console
+      console.log('[E2E_PROBE] toggle', id, '-> flipped now:', [...next])
       return next
     })
   }, [])
+
+  // eslint-disable-next-line no-console
+  if (flipped.size > 0) console.log('[E2E_PROBE] render，flipped=', [...flipped], 'foldAll=', foldAll)
 
   return { isOpen, toggle, dirty: flipped.size > 0 }
 }
