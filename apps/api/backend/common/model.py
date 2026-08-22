@@ -49,6 +49,14 @@ class UniversalText(TypeDecorator[str]):
     impl = LONGTEXT if DataBaseType.mysql == settings.DATABASE_TYPE else Text
     cache_ok = True
 
+    # 🔴 `TypeDecorator` **不会**把 `python_type` 转发给 impl，基类实现直接
+    # `raise NotImplementedError`。数据权限的 `filter_data_permission()` 拿它做值转换
+    # （`table.columns[c].type.python_type`），不写这个属性 = 任何打在文本列上的
+    # 数据规则都让接口 500（同 `TimeZone` 早就显式写了一份的原因）。
+    @property
+    def python_type(self) -> type[str]:
+        return str
+
     def load_dialect_impl(self, dialect: Dialect) -> TypeEngine:
         # SQL Server 用 NVARCHAR(MAX)。
         # 注意不能用 UnicodeText —— 它在 mssql 下映射到 NTEXT，
@@ -74,6 +82,12 @@ class UniversalStr(TypeDecorator[str]):
 
     impl = String
     cache_ok = True
+
+    # 见 `UniversalText.python_type` 的注释：不写就是数据权限规则打在
+    # 任意字符串列（`code` / `name` / `username` …）上直接 500
+    @property
+    def python_type(self) -> type[str]:
+        return str
 
     def load_dialect_impl(self, dialect: Dialect) -> TypeEngine:
         if dialect.name == 'mssql':

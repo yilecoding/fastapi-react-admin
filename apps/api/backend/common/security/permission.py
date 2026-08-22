@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
-from sqlalchemy import Alias, ColumnElement, Table, and_, or_
+from sqlalchemy import Alias, ColumnElement, Table, and_, false, or_
 from sqlalchemy.orm.util import AliasedClass
 from sqlalchemy_crud_plus.types import Model
 
@@ -14,6 +14,10 @@ from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
     from backend.app.admin.model import DataRule
+
+
+# 模板变量解析失败的哨兵（`None` 本身可能是合法值，不能拿它当哨兵）
+_UNRESOLVED = object()
 
 
 class RequestPermission:
@@ -104,7 +108,10 @@ def filter_data_permission(  # ruff:ignore[complex-structure]
     template_resolvers = {
         '${user_id}': request.user.id,
         '${dept_id}': request.user.dept_id,
-        '${now}': timezone.now,
+        # 🔴 必须是**调用结果**。原来这里放的是 `timezone.now` 这个函数对象，
+        # `datetime(<function now>)` 抛 TypeError 被下面的 except 吞掉，
+        # 于是 `'${now}'` 这个字面量被原样拼进 SQL —— 规则不是不生效，是让接口 500
+        '${now}': timezone.now(),
     }
 
     where_and_list = []
@@ -134,34 +141,54 @@ def filter_data_permission(  # ruff:ignore[complex-structure]
             column_type = table.columns[rule_column].type.python_type
 
             def cast_value(value: Any, _column_type: type = column_type) -> Any:
-                """类型转换"""
+                """类型转换；模板变量解析不出值时返回 `_UNRESOLVED`"""
+                if value in template_variable_keys:
+                    resolved = template_resolvers[value]
+                    # 解析不出来（例如用户没有部门，`${dept_id}` 是 None）。
+                    # 绝不能把 `'${dept_id}'` 这个字面量继续往下传 ——
+                    # 它会被拼进 SQL，SQL Server 直接
+                    # `Error converting data type varchar to bigint` → 500
+                    if resolved is None:
+                        return _UNRESOLVED
+                    value = resolved
+                if isinstance(value, _column_type):
+                    return value
                 try:
-                    if value in template_variable_keys:
-                        return _column_type(template_resolvers[value])
                     return _column_type(value) if _column_type is not str else value
                 except (ValueError, TypeError):
                     return value
 
+            # 先把值解析出来，解析不了的规则一律**收紧**成「匹配不到任何行」。
+            # 不能退化成「不加条件」—— 那是 fail-open，一条配错的规则会把整张表放出去
+            if data_rule.expression in (RoleDataRuleExpressionType.in_, RoleDataRuleExpressionType.not_in):
+                cast_values = [cast_value(v.strip()) for v in data_rule.value.split(',')]
+                values = [v for v in cast_values if v is not _UNRESOLVED]
+                single_value: Any = _UNRESOLVED if not values else None
+            else:
+                values = []
+                single_value = cast_value(data_rule.value)
+
             condition = None
-            match data_rule.expression:
-                case RoleDataRuleExpressionType.eq:
-                    condition = column_obj == cast_value(data_rule.value)
-                case RoleDataRuleExpressionType.ne:
-                    condition = column_obj != cast_value(data_rule.value)
-                case RoleDataRuleExpressionType.gt:
-                    condition = column_obj > cast_value(data_rule.value)
-                case RoleDataRuleExpressionType.ge:
-                    condition = column_obj >= cast_value(data_rule.value)
-                case RoleDataRuleExpressionType.lt:
-                    condition = column_obj < cast_value(data_rule.value)
-                case RoleDataRuleExpressionType.le:
-                    condition = column_obj <= cast_value(data_rule.value)
-                case RoleDataRuleExpressionType.in_:
-                    values = [cast_value(v.strip()) for v in data_rule.value.split(',')]
-                    condition = column_obj.in_(values)
-                case RoleDataRuleExpressionType.not_in:
-                    values = [cast_value(v.strip()) for v in data_rule.value.split(',')]
-                    condition = column_obj.not_in(values)
+            if single_value is _UNRESOLVED:
+                condition = false()
+            else:
+                match data_rule.expression:
+                    case RoleDataRuleExpressionType.eq:
+                        condition = column_obj == single_value
+                    case RoleDataRuleExpressionType.ne:
+                        condition = column_obj != single_value
+                    case RoleDataRuleExpressionType.gt:
+                        condition = column_obj > single_value
+                    case RoleDataRuleExpressionType.ge:
+                        condition = column_obj >= single_value
+                    case RoleDataRuleExpressionType.lt:
+                        condition = column_obj < single_value
+                    case RoleDataRuleExpressionType.le:
+                        condition = column_obj <= single_value
+                    case RoleDataRuleExpressionType.in_:
+                        condition = column_obj.in_(values)
+                    case RoleDataRuleExpressionType.not_in:
+                        condition = column_obj.not_in(values)
 
             # 根据运算符添加到对应列表
             if condition is not None:
