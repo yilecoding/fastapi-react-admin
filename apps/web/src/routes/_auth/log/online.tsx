@@ -17,6 +17,9 @@ const searchSchema = z.object({
   /** 1 = 只看在线，0 = 只看离线 */
   online: z.coerce.number().int().min(0).max(1).optional(),
   refresh: z.coerce.number().int().min(0).max(3600).optional(),
+  /** 摆开但还没填值的格子，逗号分隔；运算符不是默认值时写成 `key:op` */
+  f: z.string().optional(),
+  // 没有 `adv`：这一页的筛选全在前端做，用不上条件树
 })
 
 export const Route = createFileRoute("/_auth/log/online")({

@@ -11,6 +11,9 @@ const searchSchema = z.object({
   type: z.coerce.number().int().optional(),
   /** 0 隐藏 · 1 显示 */
   status: z.coerce.number().int().optional(),
+  /** 摆开但还没填值的格子，逗号分隔；运算符不是默认值时写成 `key:op` */
+  f: z.string().optional(),
+  // 没有 `adv`：这一页没开 `advanced`（后端没有过滤 DSL）
 })
 
 /** 页面由 TabOutlet 挂载；这里只声明 search schema / staticData / 权限 */

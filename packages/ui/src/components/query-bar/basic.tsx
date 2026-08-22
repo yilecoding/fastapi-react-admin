@@ -142,7 +142,22 @@ export function BasicFilter({
               testId={`qb-input-${c.field}`}
             />
 
-            <InputGroupAddon align="inline-end" className="gap-1 ps-0">
+            {/*
+              🔴 `me-0` 不能省。`InputGroupAddon` 的 `inline-end` 基础类里有
+              `has-[>button]:-me-1`（-4px）—— 它假设塞进来的按钮**自带右内边距**
+              （工具栏里那种 icon button 确实有）。我们这个 × 只有 `ps-2`，
+              于是左边 9px、右边只剩 4px，**× 贴着右边缘**。
+              实测（3× 截图 + `getBoundingClientRect`）：分隔线到图标左 9px、
+              图标右到格子内边 4px。垂直方向一直是居中的（偏移 0px），
+              所以光看「居不居中」查不到这里 —— 得两个轴都量。
+
+              ⚠️ 覆盖**必须带同样的变体前缀**（`has-[>button]:me-0`）。
+              写裸 `me-0` 是无效的：变体前缀不同就不算冲突，twMerge 两条都留下，
+              然后带属性选择器的基础类 (0,2,0) 压过纯 utility (0,1,0) ——
+              实测改完 `marginRight` 还是 `-4px`。见 `packages/ui/AGENTS.md`
+              「为什么有些覆盖有效、有些无声失效」。
+            */}
+            <InputGroupAddon align="inline-end" className="gap-1 ps-0 has-[>button]:me-0">
               {err && (
                 <Tooltip>
                   <TooltipTrigger

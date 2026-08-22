@@ -102,7 +102,16 @@ cn('data-[side=right]:sm:max-w-sm', 'data-[side=right]:sm:max-w-lg')  // → 只
 - `SheetContent className="sm:max-w-lg"` **无效**（基础类 `data-[side=right]:sm:max-w-sm`）
   → 写 `data-[side=right]:sm:max-w-lg`
 
-这个坑在本仓库已经踩到三次（抽屉宽度 8 处 · Select 高度 2 处 · 加上表里那条）。
+这个坑在本仓库已经踩到**四次**（抽屉宽度 8 处 · Select 高度 2 处 · 表里那条 ·
+查询区移除按钮的外边距）。最后那次的现场值得记一下，因为症状完全不像样式冲突：
+
+> 筛选格里的 `×` 看着没居中。`InputGroupAddon` 的 `inline-end` 基础类里有
+> `has-[>button]:-me-1`（-4px，它假设塞进来的按钮自带右内边距），于是
+> **左 9px、右 4px**。写 `className="me-0"` 覆盖 —— `marginRight` 实测仍是 `-4px`，
+> 因为变体前缀不同就不算冲突。改成 `has-[>button]:me-0` 才生效（右 4px → 8px）。
+>
+> ⚠️ 顺带一条查法：这一处**垂直方向一直是居中的**（`getBoundingClientRect` 偏移
+> 0px），只量一个轴会得出「已经居中了」的错误结论。两个轴都量。
 改尺寸前先去 `packages/ui/src/components/<组件>.tsx` 看基础类**有没有变体前缀**：
 
 ```bash
