@@ -26,14 +26,14 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           # 必须放在 pnpm/action-setup 之后 —— 缓存要先知道 pnpm 在哪
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
 
       - name: typecheck
-        run: pnpm typecheck
+        run: pnpm typecheck --force
 
       # 前端没有自动化测试（已知缺口），所以 build 是目前唯一的
       # 「整个前端还能不能装起来」的信号，别省掉
