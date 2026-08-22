@@ -473,6 +473,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/users/me/timezone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 更新当前用户显示时区 */
+        put: operations["update_user_timezone_api_v1_sys_users_me_timezone_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/users/me/email": {
         parameters: {
             query?: never;
@@ -1236,6 +1253,161 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/schedulers/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取调度运行时元信息
+         * @description 给调度表单用：能选哪些任务 + beat 按哪个时区解释 crontab。
+         *
+         *     - **tasks**：任务名手敲一个错字就是「调度按时触发、worker 收到不认识的
+         *       名字」—— celery 只记一条 Received unregistered task，而界面上触发次数照涨。
+         *       所以下拉里只给注册过的
+         *     - **timezone**：前端算「近五次执行时间」预览要用它。用浏览器时区去算，
+         *       在运维和服务器不同区时会得到一个看着对、实际差几小时的预览
+         */
+        get: operations["get_scheduler_meta_api_v1_tasks_schedulers_meta_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/schedulers/all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取所有任务调度 */
+        get: operations["get_all_task_schedulers_api_v1_tasks_schedulers_all_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/schedulers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页获取任务调度 */
+        get: operations["get_task_schedulers_paginated_api_v1_tasks_schedulers_get"];
+        put?: never;
+        /** 创建任务调度 */
+        post: operations["create_task_scheduler_api_v1_tasks_schedulers_post"];
+        /** 批量删除任务调度 */
+        delete: operations["delete_task_schedulers_api_v1_tasks_schedulers_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/schedulers/{pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取任务调度详情 */
+        get: operations["get_task_scheduler_api_v1_tasks_schedulers__pk__get"];
+        /** 更新任务调度 */
+        put: operations["update_task_scheduler_api_v1_tasks_schedulers__pk__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/schedulers/{pk}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 启用/停用任务调度 */
+        put: operations["update_task_scheduler_status_api_v1_tasks_schedulers__pk__status_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/schedulers/{pk}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 立即执行一次
+         * @description 返回 celery 的 task_id，前端拿它到执行记录里查这一次的结果。
+         */
+        post: operations["run_task_scheduler_now_api_v1_tasks_schedulers__pk__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页获取任务执行记录 */
+        get: operations["get_task_results_paginated_api_v1_tasks_results_get"];
+        put?: never;
+        post?: never;
+        /** 批量删除任务执行记录 */
+        delete: operations["delete_task_results_api_v1_tasks_results_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/results/{pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取任务执行记录详情
+         * @description 详情比列表多的那两列（result / traceback）是长文本，界面上走详情抽屉。
+         */
+        get: operations["get_task_result_api_v1_tasks_results__pk__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/emails/captcha": {
         parameters: {
             query?: never;
@@ -1498,6 +1670,14 @@ export interface components {
              * @description 用户昵称
              */
             nickname: string;
+        };
+        /** Body_update_user_timezone_api_v1_sys_users_me_timezone_put */
+        Body_update_user_timezone_api_v1_sys_users_me_timezone_put: {
+            /**
+             * Timezone
+             * @description IANA 时区标识，如 Asia/Shanghai
+             */
+            timezone: string;
         };
         /** Body_upload_file_api_v1_sys_files_upload_post */
         Body_upload_file_api_v1_sys_files_upload_post: {
@@ -1854,6 +2034,97 @@ export interface components {
             code: string;
         };
         /**
+         * CreateTaskSchedulerParam
+         * @description 创建任务调度参数
+         */
+        CreateTaskSchedulerParam: {
+            /**
+             * Name
+             * @description 任务名称
+             */
+            name: string;
+            /**
+             * Task
+             * @description 要运行的 Celery 任务（注册名）
+             */
+            task: string;
+            /**
+             * @description 调度类型（0：间隔、1：定时）
+             * @default 1
+             */
+            type: components["schemas"]["TaskSchedulerType"];
+            /**
+             * Crontab
+             * @description Crontab 表达式（type=1 时用）
+             * @default * * * * *
+             */
+            crontab: string;
+            /**
+             * Interval Every
+             * @description 间隔数（type=0 时用）
+             */
+            interval_every?: number | null;
+            /** @description 间隔单位（type=0 时用） */
+            interval_period?: components["schemas"]["TaskIntervalPeriod"] | null;
+            /**
+             * Args
+             * @description 位置参数（JSON 数组）
+             */
+            args?: string | null;
+            /**
+             * Kwargs
+             * @description 关键字参数（JSON 对象）
+             */
+            kwargs?: string | null;
+            /**
+             * Queue
+             * @description 队列
+             */
+            queue?: string | null;
+            /**
+             * Exchange
+             * @description AMQP 交换机
+             */
+            exchange?: string | null;
+            /**
+             * Routing Key
+             * @description AMQP 路由键
+             */
+            routing_key?: string | null;
+            /**
+             * Start Time
+             * @description 开始触发时间
+             */
+            start_time?: string | null;
+            /**
+             * Expire Time
+             * @description 截止触发时间
+             */
+            expire_time?: string | null;
+            /**
+             * Expire Seconds
+             * @description 相对截止秒数
+             */
+            expire_seconds?: number | null;
+            /**
+             * One Off
+             * @description 是否只运行一次
+             * @default false
+             */
+            one_off: boolean;
+            /**
+             * Enabled
+             * @description 是否启用
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
+        };
+        /**
          * DeleteDataRuleParam
          * @description 删除数据规则参数
          */
@@ -1970,6 +2241,28 @@ export interface components {
             /**
              * Pks
              * @description 角色 ID 列表
+             */
+            pks: number[];
+        };
+        /**
+         * DeleteTaskResultParam
+         * @description 删除任务执行记录参数
+         */
+        DeleteTaskResultParam: {
+            /**
+             * Pks
+             * @description 记录 ID 列表
+             */
+            pks: number[];
+        };
+        /**
+         * DeleteTaskSchedulerParam
+         * @description 删除任务调度参数
+         */
+        DeleteTaskSchedulerParam: {
+            /**
+             * Pks
+             * @description 任务调度 ID 列表
              */
             pks: number[];
         };
@@ -2174,6 +2467,12 @@ export interface components {
              * @description 最后登录时间
              */
             last_login_time?: string | null;
+            /**
+             * Timezone
+             * @description 显示时区(IANA 标识)
+             * @default Asia/Shanghai
+             */
+            timezone: string;
             /**
              * Dept
              * @description 部门名称
@@ -3254,6 +3553,180 @@ export interface components {
             user: components["schemas"]["GetUserInfoDetail"];
         };
         /**
+         * GetTaskResultDetail
+         * @description 任务执行记录详情
+         */
+        GetTaskResultDetail: {
+            /**
+             * Id
+             * @description 记录 ID
+             */
+            id: string | number;
+            /**
+             * Task Id
+             * @description 任务 UUID
+             */
+            task_id?: string | null;
+            /**
+             * Name
+             * @description 任务名
+             */
+            name?: string | null;
+            /**
+             * Status
+             * @description 状态
+             */
+            status?: string | null;
+            /**
+             * Result
+             * @description 返回值
+             */
+            result?: string | null;
+            /**
+             * Traceback
+             * @description 异常栈
+             */
+            traceback?: string | null;
+            /**
+             * Retries
+             * @description 重试次数
+             */
+            retries?: number | null;
+            /**
+             * Worker
+             * @description 执行的 worker
+             */
+            worker?: string | null;
+            /**
+             * Queue
+             * @description 队列
+             */
+            queue?: string | null;
+            /**
+             * Date Done
+             * @description 结束时间
+             */
+            date_done?: string | null;
+        };
+        /**
+         * GetTaskSchedulerDetail
+         * @description 任务调度详情
+         */
+        GetTaskSchedulerDetail: {
+            /**
+             * Name
+             * @description 任务名称
+             */
+            name: string;
+            /**
+             * Task
+             * @description 要运行的 Celery 任务（注册名）
+             */
+            task: string;
+            /**
+             * @description 调度类型（0：间隔、1：定时）
+             * @default 1
+             */
+            type: components["schemas"]["TaskSchedulerType"];
+            /**
+             * Crontab
+             * @description Crontab 表达式（type=1 时用）
+             * @default * * * * *
+             */
+            crontab: string;
+            /**
+             * Interval Every
+             * @description 间隔数（type=0 时用）
+             */
+            interval_every?: number | null;
+            /** @description 间隔单位（type=0 时用） */
+            interval_period?: components["schemas"]["TaskIntervalPeriod"] | null;
+            /**
+             * Args
+             * @description 位置参数（JSON 数组）
+             */
+            args?: string | null;
+            /**
+             * Kwargs
+             * @description 关键字参数（JSON 对象）
+             */
+            kwargs?: string | null;
+            /**
+             * Queue
+             * @description 队列
+             */
+            queue?: string | null;
+            /**
+             * Exchange
+             * @description AMQP 交换机
+             */
+            exchange?: string | null;
+            /**
+             * Routing Key
+             * @description AMQP 路由键
+             */
+            routing_key?: string | null;
+            /**
+             * Start Time
+             * @description 开始触发时间
+             */
+            start_time?: string | null;
+            /**
+             * Expire Time
+             * @description 截止触发时间
+             */
+            expire_time?: string | null;
+            /**
+             * Expire Seconds
+             * @description 相对截止秒数
+             */
+            expire_seconds?: number | null;
+            /**
+             * One Off
+             * @description 是否只运行一次
+             * @default false
+             */
+            one_off: boolean;
+            /**
+             * Enabled
+             * @description 是否启用
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
+            /**
+             * Id
+             * @description 任务调度 ID
+             */
+            id: string | number;
+            /**
+             * Total Run Count
+             * @description 累计触发次数
+             * @default 0
+             */
+            total_run_count: number;
+            /**
+             * Last Run Time
+             * @description 最近触发时间
+             */
+            last_run_time?: string | null;
+            /**
+             * Created Time
+             * Format: date-time
+             * @description 创建时间
+             */
+            created_time: string;
+            /**
+             * Updated Time
+             * @description 更新时间
+             */
+            updated_time?: string | null;
+        };
+        /**
          * GetTokenDetail
          * @description 令牌详情
          */
@@ -3385,6 +3858,12 @@ export interface components {
              * @description 最后登录时间
              */
             last_login_time?: string | null;
+            /**
+             * Timezone
+             * @description 显示时区(IANA 标识)
+             * @default Asia/Shanghai
+             */
+            timezone: string;
         };
         /**
          * GetUserInfoWithRelationDetail
@@ -3459,6 +3938,12 @@ export interface components {
              * @description 最后登录时间
              */
             last_login_time?: string | null;
+            /**
+             * Timezone
+             * @description 显示时区(IANA 标识)
+             * @default Asia/Shanghai
+             */
+            timezone: string;
             /** @description 部门信息 */
             dept?: components["schemas"]["GetDeptDetail"] | null;
             /**
@@ -3748,6 +4233,58 @@ export interface components {
         PageData_GetRoleDetail_: {
             /** Items */
             items: components["schemas"]["GetRoleDetail"][];
+            /**
+             * Total
+             * @description 数据总条数
+             */
+            total: number;
+            /**
+             * Page
+             * @description 当前页码
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页数量
+             */
+            size: number;
+            /**
+             * Total Pages
+             * @description 总页数
+             */
+            total_pages: number;
+            links: components["schemas"]["_Links"];
+        };
+        /** PageData[GetTaskResultDetail] */
+        PageData_GetTaskResultDetail_: {
+            /** Items */
+            items: components["schemas"]["GetTaskResultDetail"][];
+            /**
+             * Total
+             * @description 数据总条数
+             */
+            total: number;
+            /**
+             * Page
+             * @description 当前页码
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页数量
+             */
+            size: number;
+            /**
+             * Total Pages
+             * @description 总页数
+             */
+            total_pages: number;
+            links: components["schemas"]["_Links"];
+        };
+        /** PageData[GetTaskSchedulerDetail] */
+        PageData_GetTaskSchedulerDetail_: {
+            /** Items */
+            items: components["schemas"]["GetTaskSchedulerDetail"][];
             /**
              * Total
              * @description 数据总条数
@@ -4229,6 +4766,38 @@ export interface components {
             msg: string;
             data: components["schemas"]["GetRoleWithRelationDetail"];
         };
+        /** ResponseSchemaModel[GetTaskResultDetail] */
+        ResponseSchemaModel_GetTaskResultDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetTaskResultDetail"];
+        };
+        /** ResponseSchemaModel[GetTaskSchedulerDetail] */
+        ResponseSchemaModel_GetTaskSchedulerDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetTaskSchedulerDetail"];
+        };
         /** ResponseSchemaModel[GetUserInfoWithRelationDetail] */
         ResponseSchemaModel_GetUserInfoWithRelationDetail_: {
             /**
@@ -4405,6 +4974,38 @@ export interface components {
             msg: string;
             data: components["schemas"]["PageData_GetRoleDetail_"];
         };
+        /** ResponseSchemaModel[PageData[GetTaskResultDetail]] */
+        ResponseSchemaModel_PageData_GetTaskResultDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["PageData_GetTaskResultDetail_"];
+        };
+        /** ResponseSchemaModel[PageData[GetTaskSchedulerDetail]] */
+        ResponseSchemaModel_PageData_GetTaskSchedulerDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["PageData_GetTaskSchedulerDetail_"];
+        };
         /** ResponseSchemaModel[PageData[GetUserInfoWithRelationDetail]] */
         ResponseSchemaModel_PageData_GetUserInfoWithRelationDetail__: {
             /**
@@ -4452,6 +5053,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["ServerMonitorInfo"];
+        };
+        /** ResponseSchemaModel[TaskSchedulerMeta] */
+        ResponseSchemaModel_TaskSchedulerMeta_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["TaskSchedulerMeta"];
         };
         /** ResponseSchemaModel[Union[GetFileDetail, NoneType]] */
         ResponseSchemaModel_Union_GetFileDetail__NoneType__: {
@@ -4690,6 +5307,23 @@ export interface components {
             /** Data */
             data: components["schemas"]["GetRoleDetail"][];
         };
+        /** ResponseSchemaModel[list[GetTaskSchedulerDetail]] */
+        ResponseSchemaModel_list_GetTaskSchedulerDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["GetTaskSchedulerDetail"][];
+        };
         /** ResponseSchemaModel[list[GetTokenDetail]] */
         ResponseSchemaModel_list_GetTokenDetail__: {
             /**
@@ -4907,6 +5541,38 @@ export interface components {
              */
             arch: string;
         };
+        /**
+         * TaskIntervalPeriod
+         * @description 间隔单位。
+         *
+         *     取值必须和 `timedelta` 的关键字一致 —— `utils/schedulers.py` 直接把它
+         *     当 kwargs 展开（`timedelta(**{period: every})`）。加档位时对着
+         *     `datetime.timedelta` 的签名加，别自己造词。
+         * @enum {string}
+         */
+        TaskIntervalPeriod: "days" | "hours" | "minutes" | "seconds" | "microseconds";
+        /**
+         * TaskSchedulerMeta
+         * @description 调度运行时元信息
+         */
+        TaskSchedulerMeta: {
+            /**
+             * Tasks
+             * @description 已注册的 Celery 任务名
+             */
+            tasks: string[];
+            /**
+             * Timezone
+             * @description beat 解释 crontab 用的时区（IANA），前端算执行时间预览要用它
+             */
+            timezone: string;
+        };
+        /**
+         * TaskSchedulerType
+         * @description 任务调度类型
+         * @enum {integer}
+         */
+        TaskSchedulerType: 0 | 1;
         /**
          * UpdateConfigParam
          * @description 更新参数配置参数
@@ -5277,6 +5943,97 @@ export interface components {
              * @description 用户 ID 列表
              */
             users: number[];
+        };
+        /**
+         * UpdateTaskSchedulerParam
+         * @description 更新任务调度参数
+         */
+        UpdateTaskSchedulerParam: {
+            /**
+             * Name
+             * @description 任务名称
+             */
+            name: string;
+            /**
+             * Task
+             * @description 要运行的 Celery 任务（注册名）
+             */
+            task: string;
+            /**
+             * @description 调度类型（0：间隔、1：定时）
+             * @default 1
+             */
+            type: components["schemas"]["TaskSchedulerType"];
+            /**
+             * Crontab
+             * @description Crontab 表达式（type=1 时用）
+             * @default * * * * *
+             */
+            crontab: string;
+            /**
+             * Interval Every
+             * @description 间隔数（type=0 时用）
+             */
+            interval_every?: number | null;
+            /** @description 间隔单位（type=0 时用） */
+            interval_period?: components["schemas"]["TaskIntervalPeriod"] | null;
+            /**
+             * Args
+             * @description 位置参数（JSON 数组）
+             */
+            args?: string | null;
+            /**
+             * Kwargs
+             * @description 关键字参数（JSON 对象）
+             */
+            kwargs?: string | null;
+            /**
+             * Queue
+             * @description 队列
+             */
+            queue?: string | null;
+            /**
+             * Exchange
+             * @description AMQP 交换机
+             */
+            exchange?: string | null;
+            /**
+             * Routing Key
+             * @description AMQP 路由键
+             */
+            routing_key?: string | null;
+            /**
+             * Start Time
+             * @description 开始触发时间
+             */
+            start_time?: string | null;
+            /**
+             * Expire Time
+             * @description 截止触发时间
+             */
+            expire_time?: string | null;
+            /**
+             * Expire Seconds
+             * @description 相对截止秒数
+             */
+            expire_seconds?: number | null;
+            /**
+             * One Off
+             * @description 是否只运行一次
+             * @default false
+             */
+            one_off: boolean;
+            /**
+             * Enabled
+             * @description 是否启用
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
         };
         /**
          * UpdateUserParam
@@ -6667,6 +7424,39 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": components["schemas"]["Body_update_user_avatar_api_v1_sys_users_me_avatar_put"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_timezone_api_v1_sys_users_me_timezone_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_update_user_timezone_api_v1_sys_users_me_timezone_put"];
             };
         };
         responses: {
@@ -8876,6 +9666,396 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_scheduler_meta_api_v1_tasks_schedulers_meta_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_TaskSchedulerMeta_"];
+                };
+            };
+        };
+    };
+    get_all_task_schedulers_api_v1_tasks_schedulers_all_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_GetTaskSchedulerDetail__"];
+                };
+            };
+        };
+    };
+    get_task_schedulers_paginated_api_v1_tasks_schedulers_get: {
+        parameters: {
+            query?: {
+                /** @description 任务名称 */
+                name?: string | null;
+                /** @description Celery 任务 */
+                task?: string | null;
+                /** @description 是否启用 */
+                enabled?: boolean | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_PageData_GetTaskSchedulerDetail__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_task_scheduler_api_v1_tasks_schedulers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaskSchedulerParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetTaskSchedulerDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_task_schedulers_api_v1_tasks_schedulers_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteTaskSchedulerParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_task_scheduler_api_v1_tasks_schedulers__pk__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 任务调度 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetTaskSchedulerDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_task_scheduler_api_v1_tasks_schedulers__pk__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 任务调度 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTaskSchedulerParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_task_scheduler_status_api_v1_tasks_schedulers__pk__status_put: {
+        parameters: {
+            query: {
+                /** @description 是否启用 */
+                enabled: boolean;
+            };
+            header?: never;
+            path: {
+                /** @description 任务调度 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_task_scheduler_now_api_v1_tasks_schedulers__pk__run_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 任务调度 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_str_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_task_results_paginated_api_v1_tasks_results_get: {
+        parameters: {
+            query?: {
+                /** @description 任务名 */
+                name?: string | null;
+                /** @description 任务 UUID */
+                task_id?: string | null;
+                /** @description 状态（SUCCESS/FAILURE/…） */
+                status?: string | null;
+                /** @description 结束时间起（含） */
+                start_time?: string | null;
+                /** @description 结束时间止（含） */
+                end_time?: string | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_PageData_GetTaskResultDetail__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_task_results_api_v1_tasks_results_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteTaskResultParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_task_result_api_v1_tasks_results__pk__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 记录 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetTaskResultDetail_"];
                 };
             };
             /** @description Validation Error */
