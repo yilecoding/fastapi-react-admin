@@ -43,7 +43,12 @@ export function ScopeList({
   const hasFilter = Boolean(keyword || status !== undefined)
 
   return (
-    <div className="flex w-72 shrink-0 flex-col gap-3" data-testid="scope-list">
+    // 三种情形：lg 以下整宽一栏 / lg+ 内容区滚动是定高一栏 / lg+ 整页滚动要吸顶
+    // （self-start 不能省 —— 被拉伸到整行高的元素粘不住）
+    <div
+      className="flex w-full shrink-0 flex-col gap-3 lg:w-72 content-scroll:lg:min-h-0 page-scroll:lg:sticky page-scroll:lg:top-4 page-scroll:lg:self-start"
+      data-testid="scope-list"
+    >
       <div className="flex items-center justify-between px-1">
         <h2 className="text-sm font-semibold">{t('数据范围')}</h2>
         <div className="flex items-center gap-1">
@@ -74,7 +79,12 @@ export function ScopeList({
         </div>
       </div>
 
-      <div className="flex max-h-[calc(100svh-20rem)] flex-col gap-1 overflow-y-auto" data-testid="scope-items">
+      {/* 视口算式是兜底（堆叠/整页滚动时父级高度 auto）；定高情形下换成撑满，
+          max-h 必须显式取消，否则硬上限会让它在更高的栏里只用一半 */}
+      <div
+        className="flex max-h-[calc(100svh-20rem)] flex-col gap-1 overflow-y-auto content-scroll:lg:max-h-none content-scroll:lg:min-h-0 content-scroll:lg:flex-1"
+        data-testid="scope-items"
+      >
         {loading ? (
           Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)
         ) : scopes.length === 0 ? (
