@@ -15,6 +15,7 @@ from redis.asyncio import Redis
 from starlette.concurrency import run_in_threadpool
 
 from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.response.response_code import StandardResponseCode
 from backend.core.conf import settings
 from backend.database.redis import redis_client
@@ -216,7 +217,7 @@ def default_callback(request: Request, response: Response, retry_after: int) -> 
     """
     raise errors.HTTPError(
         code=StandardResponseCode.HTTP_429,
-        msg='请求过于频繁，请稍后重试',
+        msg=t('error.rate_limit.too_many_requests'),
         headers={'Retry-After': str(retry_after)},
     )
 
@@ -243,7 +244,7 @@ class RateLimiter:
         :return:
         """
         if limiter is None and not rates and bucket is None:
-            raise errors.ServerError(msg='至少需要传入一个 Rate、bucket 或 limiter 实例')
+            raise errors.ServerError(msg=t('error.rate_limit.invalid_config'))
         self.rates = list(rates)
         self.identifier = identifier
         self.bucket = bucket

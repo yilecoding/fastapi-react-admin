@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.pagination import paging_data
 from backend.plugin.dict.crud.crud_dict_type import dict_type_dao
 from backend.plugin.dict.model import DictType
@@ -25,7 +26,7 @@ class DictTypeService:
 
         dict_type = await dict_type_dao.get(db, pk)
         if not dict_type:
-            raise errors.NotFoundError(msg='字典类型不存在')
+            raise errors.NotFoundError(msg=t('error.dict.type_not_found'))
         return dict_type
 
     @staticmethod
@@ -64,7 +65,7 @@ class DictTypeService:
 
         dict_type = await dict_type_dao.get_by_code(db, obj.code)
         if dict_type:
-            raise errors.ConflictError(msg='字典类型已存在')
+            raise errors.ConflictError(msg=t('error.dict.type_exists'))
         await dict_type_dao.create(db, obj)
 
     @staticmethod
@@ -80,9 +81,9 @@ class DictTypeService:
 
         dict_type = await dict_type_dao.get(db, pk)
         if not dict_type:
-            raise errors.NotFoundError(msg='字典类型不存在')
+            raise errors.NotFoundError(msg=t('error.dict.type_not_found'))
         if dict_type.code != obj.code and await dict_type_dao.get_by_code(db, obj.code):
-            raise errors.ConflictError(msg='字典类型已存在')
+            raise errors.ConflictError(msg=t('error.dict.type_exists'))
         count = await dict_type_dao.update(db, pk, obj)
         return count
 

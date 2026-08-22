@@ -72,6 +72,52 @@
   新增接口时反过来核对一遍：前端每一个 `<Can perm="xxx">` 包着的动作，
   对应接口是不是也真的挂了同一个权限码的 `RequestPermission` + `DependsRBAC`
 
+## 后端国际化（i18n）
+
+语言包在 `backend/locale/{zh-CN,en-US}.yml`，**统一用 YAML**（2026-08-22 前
+`en-US` 还是 `.json`，已合并）。识别语言靠标准 `Accept-Language` 请求头
+（`middleware/i18n_middleware.py`），不是自定义 header/query 参数。
+
+- **不要以为 YAML 性能更好**——实测反过来：同一份内容 `yaml.safe_load`
+  比 `json.loads` 慢两个数量级（本机 4.7ms vs 0.02ms/次）。选 YAML 纯粹是
+  为了能写注释。反正 `I18n.load_locales()` 只在进程启动时跑一次，这点
+  耗时不影响任何请求延迟
+- 🔴 **业务错误消息统一走 `t('error.模块.slug', **kwargs)`，不要再用中文原文
+  当 key。** 2026-08-22 之前是反过来——`raise errors.XxxError(msg='用户不存在')`
+  写中文字面量，响应出口按原文查表翻译（`I18n.tm()`）。这套「中文当 key」
+  查出过一整轮真问题（治理记录见下），根子是：中文原文一改字（哪怕改错字）
+  翻译就跟着断，两个语言包永远没有机器能查的「对不对齐」标准。现在改法：
+  - 键定义在两个语言包的 `error.*`（按模块分：`error.user.*`/`error.dept.*`/…）
+    和 `file_type.*`（上传报错要用到的「图片/文档/…」标签，因为标签本身
+    也是要翻译的中文词，不能直接拼进英文句子）
+  - `t()` 自带 `.format(**kwargs)`，带变量的消息直接 `t('error.file.unsupported_format',
+    file_ext=file_ext)`，不再需要正则模板去匹配插值后的字符串
+    （`tm()` 的 `_templates()`/`message_templates` 机制已删除）
+  - `tm()` 现在只剩一个用途：**反向翻译我们不控制抛出点的框架异常**
+    （FastAPI/Starlette 自己抛的 `Not authenticated`/`Method Not Allowed`，
+    这类拿不到一个能传参数的调用点，只能反过来拿英文原文当 key）。
+    `exception_handler.py`/`response_schema.py` 在 `exc.msg`/`res.msg` 上
+    无差别调 `tm()`：业务异常这时已经是 `t()` 的最终产物，查不到表就原样
+    返回，对已翻译文本是幂等的
+  - **两个语言包在 `error.*`/`file_type.*` 下的键集合必须完全相同**——
+    `t()` 查不到键会把键名字符串原样吐出来（比如响应里出现
+    `"msg": "error.dept.something"`），这比旧机制的「静默显示中文」更容易
+    被发现，但仍然只能靠人看。`backend/tests/test_i18n.py` 机器化了这条：
+    一条断言两个语言包键集合对称，一条断言源码里每处 `t('error.xxx')`
+    引用的键在语言包里真实存在（两条都做过变异验证，打回问题会红）
+  - `pydantic.*` 段是**唯一还保留的不对称**：只在 `zh-CN.yml` 有 100 条
+    （pydantic-core 报错原生是英文，中文界面才需要翻），`exception_handler.py`
+    里 `if i18n.current_language != 'en-US':` 把英文请求短路掉了，根本不查，
+    `en-US.yml` 没有这一段是对的，不要照着补一份对称的过来
+- **这次治理连带修了一个更隐蔽的 bug**：`jwt_auth_middleware.py` 的
+  `auth_exception_handler`（Starlette `AuthenticationMiddleware` 的
+  `on_error` 钩子）直接读 `exc.msg`/`exc.detail` 拼响应，**从来没调用过
+  `tm()`**——所有 JWT 鉴权失败（token 无效/过期、账号锁定、部门/角色被禁用…）
+  不管 `Accept-Language` 传什么，永远是中文。旧机制下这个旁路必须每加一个
+  异常序列化路径就记得手动翻一次，漏了不报错；新机制下翻译在 `raise` 那一刻
+  就已经发生（`msg=t(...)`），不管后面被哪条路径读到 `.msg` 都已经是对的
+  语言——这类「序列化出口忘了翻」的问题整类消失了，不是又堵上一个洞
+
 ## 部门与角色的编码（稳定引用键）
 
 `sys_dept.code` / `sys_role.code` 是 2026-08-22 加的。**加它的理由不是「别人都有」**，
