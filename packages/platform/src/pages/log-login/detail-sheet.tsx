@@ -76,11 +76,11 @@ export function LoginLogDetailSheet({
           <Section title="User-Agent">
             <div className="relative rounded-md border border-border bg-muted/30 p-3 pe-12">
               <CopyButton text={log.user_agent ?? ''} className="absolute end-2 top-2" />
-              <p className="break-all font-mono text-[11.5px] leading-relaxed" data-testid="d-ua">
+              <p className="break-all font-mono text-xs leading-relaxed" data-testid="d-ua">
                 {log.user_agent || '—'}
               </p>
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t('浏览器 / 终端系统 / 设备类型都是从这串原文解析出来的，对不上时以原文为准。')}
             </p>
           </Section>
@@ -112,7 +112,7 @@ function IdRow({ label, value, testId }: { label: string; value: string; testId?
   return (
     <div className="flex items-center gap-2">
       <span className="w-20 shrink-0 text-xs text-muted-foreground">{label}</span>
-      <code className="min-w-0 flex-1 truncate font-mono text-[12px] tabular-nums" title={value} data-testid={testId}>
+      <code className="min-w-0 flex-1 truncate font-mono text-xs tabular-nums" title={value} data-testid={testId}>
         {value}
       </code>
       <CopyButton text={value} label={t('复制{{what}}', { what: label })} />
@@ -135,7 +135,7 @@ function Row({
       <dt className="w-16 shrink-0 text-xs text-muted-foreground">{label}</dt>
       <dd className="flex min-w-0 flex-1 items-center gap-1">
         {node ?? (
-          <span className={cn('min-w-0 text-sm', mono ? 'font-mono text-[12px] break-all tabular-nums' : 'truncate')} title={String(value ?? '')}>
+          <span className={cn('min-w-0 text-sm', mono ? 'font-mono text-xs break-all tabular-nums' : 'truncate')} title={String(value ?? '')}>
             {value || '—'}
           </span>
         )}

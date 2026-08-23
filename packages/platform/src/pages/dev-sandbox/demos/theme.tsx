@@ -93,7 +93,7 @@ function ColorGrid({ showValue }: { showValue: boolean }) {
     <div className="flex w-full flex-col gap-6">
       {SECTIONS.map((sec) => (
         <div key={sec.title} className="flex flex-col gap-2.5">
-          <span className="font-mono text-[10.5px] tracking-[0.2em] text-muted-foreground">
+          <span className="font-mono text-2xs tracking-[0.2em] text-muted-foreground">
             {sec.title}
           </span>
           <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
@@ -109,10 +109,10 @@ function ColorGrid({ showValue }: { showValue: boolean }) {
                   )}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-mono text-[11.5px]">{sw.token}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">{sw.label}</p>
+                  <p className="truncate font-mono text-xs">{sw.token}</p>
+                  <p className="truncate text-xs text-muted-foreground">{sw.label}</p>
                   {showValue && (
-                    <p className="truncate font-mono text-[10px] text-muted-foreground/80">
+                    <p className="truncate font-mono text-2xs text-muted-foreground/80">
                       {values[sw.token] || '—'}
                     </p>
                   )}
@@ -131,7 +131,7 @@ function RadiusGrid({ showValue }: { showValue: boolean }) {
   return (
     <div className="flex w-full flex-col gap-3">
       {showValue && (
-        <p className="font-mono text-[11px] text-muted-foreground">
+        <p className="font-mono text-xs text-muted-foreground">
           --radius: {values['--radius'] || '—'} —— 其余档位都是它的倍数（见 globals.css 的 @theme）
         </p>
       )}
@@ -139,7 +139,7 @@ function RadiusGrid({ showValue }: { showValue: boolean }) {
         {RADII.map((r) => (
           <div key={r.name} className="flex flex-col items-center gap-1.5">
             <span className={cn('size-14 border border-border bg-muted', r.cls)} />
-            <span className="font-mono text-[10.5px] text-muted-foreground">{r.name}</span>
+            <span className="font-mono text-2xs text-muted-foreground">{r.name}</span>
           </div>
         ))}
       </div>
@@ -151,9 +151,9 @@ const TYPE_SCALE = [
   { cls: 'text-2xl font-semibold', label: 'text-2xl · 页内大标题' },
   { cls: 'text-base font-medium', label: 'text-base · 小节标题' },
   { cls: 'text-sm', label: 'text-sm · 正文（后台默认）' },
-  { cls: 'text-[13px]', label: 'text-[13px] · 表单标签' },
+  { cls: 'text-sm', label: 'text-sm · 表单标签' },
   { cls: 'text-xs text-muted-foreground', label: 'text-xs · 辅助说明' },
-  { cls: 'font-mono text-[10.5px] tracking-[0.2em] text-muted-foreground', label: 'font-mono · 标号与版本' },
+  { cls: 'font-mono text-2xs tracking-[0.2em] text-muted-foreground', label: 'font-mono · 标号与版本' },
 ] as const
 
 export const THEME_DEMOS: Demo[] = [
@@ -179,7 +179,7 @@ export const THEME_DEMOS: Demo[] = [
             {TYPE_SCALE.map((t) => (
               <div key={t.label} className="flex flex-col gap-0.5">
                 <span className={t.cls}>一个入口，管好权限与数据 · Aa 0123</span>
-                <span className="font-mono text-[10.5px] text-muted-foreground">{t.label}</span>
+                <span className="font-mono text-2xs text-muted-foreground">{t.label}</span>
               </div>
             ))}
           </div>

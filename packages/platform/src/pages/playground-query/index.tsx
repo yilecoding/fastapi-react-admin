@@ -180,7 +180,7 @@ export function PlaygroundQueryPage() {
                   <span className="text-xs text-muted-foreground">
                     发给后端的参数（<code>toQueryParams</code>）
                   </span>
-                  <pre className="max-h-40 overflow-auto rounded-md bg-muted p-2 text-[11px]"
+                  <pre className="max-h-40 overflow-auto rounded-md bg-muted p-2 text-xs"
                        data-testid="pgq-params">
                     {JSON.stringify(params, null, 2)}
                   </pre>
@@ -190,13 +190,13 @@ export function PlaygroundQueryPage() {
                   <span className="text-xs text-muted-foreground">
                     条件树（<code>toFilterTree</code>，高级模式用）
                   </span>
-                  <pre className="max-h-56 overflow-auto rounded-md bg-muted p-2 text-[11px]"
+                  <pre className="max-h-56 overflow-auto rounded-md bg-muted p-2 text-xs"
                        data-testid="pgq-tree">
                     {JSON.stringify(toFilterTree(submitted, FIELDS), null, 2)}
                   </pre>
                 </div>
 
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   高级模式的条件树后端目前吃不下（各列表接口只收平铺入参），
                   这里只演示出参形状。真要用得先给后端加过滤语法。
                 </p>

@@ -320,7 +320,7 @@ function MenuRows({
         </TableCell>
         <TableCell>
           {node.perms
-            ? <code className="rounded bg-muted px-1 text-[11px]">{node.perms}</code>
+            ? <code className="rounded bg-muted px-1 text-xs">{node.perms}</code>
             : <span className="text-muted-foreground">—</span>}
         </TableCell>
         <TableCell className="text-sm tabular-nums text-muted-foreground">{node.sort}</TableCell>

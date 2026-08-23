@@ -124,12 +124,12 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
                 <TableRow key={r.id} data-testid={`rule-row-${r.id}`}>
                   <TableCell className="text-sm font-medium">{r.name}</TableCell>
                   <TableCell>
-                    <code className="rounded bg-muted px-1 text-[11px]">
+                    <code className="rounded bg-muted px-1 text-xs">
                       {r.model === '__ALL__' ? t('全部模型') : r.model}
                     </code>
                   </TableCell>
                   <TableCell className="text-sm">
-                    <code className="text-[11px]">
+                    <code className="text-xs">
                       {r.column} {expressionSymbol(r.expression)} {r.value}
                     </code>
                   </TableCell>

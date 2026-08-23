@@ -40,7 +40,7 @@ export function LanguageMenu({ className }: { className?: string }) {
         }
       >
         <IconLanguage className="size-4" />
-        <span className="text-[13px]">{label}</span>
+        <span className="text-sm">{label}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-36">
         <DropdownMenuGroup>

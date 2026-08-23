@@ -167,7 +167,7 @@ function ComboboxItems({
                 <>
                   <span className="truncate">{opt.label}</span>
                   {opt.hint && (
-                    <span className="ms-auto truncate font-mono text-[11px] text-muted-foreground">
+                    <span className="ms-auto truncate font-mono text-xs text-muted-foreground">
                       {opt.hint}
                     </span>
                   )}

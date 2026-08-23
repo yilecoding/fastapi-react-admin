@@ -97,7 +97,7 @@ export function IconPicker({
               </p>
             )}
           </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
+          <p className="mt-2 text-xs text-muted-foreground">
             <Trans
               t={t}
               i18nKey="只列出 <c>icon-registry.tsx</c> 里已注册的 {{n}} 个图标。需要新图标请先在注册表补一条映射。"

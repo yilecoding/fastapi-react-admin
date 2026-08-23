@@ -163,7 +163,7 @@ export function BasicFilter({
                   <TooltipTrigger
                     render={
                       <span
-                        className="grid size-4 place-content-center rounded-full bg-destructive text-[10px] font-bold text-white"
+                        className="grid size-4 place-content-center rounded-full bg-destructive text-2xs font-bold text-white"
                         data-testid={`qb-err-${c.field}`}
                       />
                     }
@@ -384,7 +384,7 @@ export function FieldPicker({
                     />
                     <span className="min-w-0 flex-1 truncate">{t(f.label)}</span>
                     {f.hint && (
-                      <span className="shrink-0 truncate text-[11px] text-muted-foreground">
+                      <span className="shrink-0 truncate text-xs text-muted-foreground">
                         {t(f.hint)}
                       </span>
                     )}

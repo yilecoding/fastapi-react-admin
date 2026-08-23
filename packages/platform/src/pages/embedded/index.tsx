@@ -47,7 +47,7 @@ function Notice({ title, detail, action }: { title: string; detail: string; acti
       <IconAlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
       <div className="flex flex-col items-start gap-1.5">
         <p className="text-sm font-medium">{title}</p>
-        <p className="text-[13px] leading-relaxed text-muted-foreground">{detail}</p>
+        <p className="text-sm leading-relaxed text-muted-foreground">{detail}</p>
         {action}
       </div>
     </div>
@@ -109,7 +109,7 @@ export function EmbeddedPage({ params }: { params?: { name?: string } }) {
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
         {/* 地址要看得见：内嵌页最容易让人分不清自己在看谁的东西 */}
-        <span className="truncate font-mono text-[11px] text-muted-foreground" title={src}>
+        <span className="truncate font-mono text-xs text-muted-foreground" title={src}>
           {src}
         </span>
         <Button
