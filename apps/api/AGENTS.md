@@ -61,16 +61,31 @@
   就是任意文件写入（`filename=../../../../../x.png` 实测写到了仓库根，接口还返回 200）。
   一律先过 `utils/file_ops.py: strip_path()`，落盘名走 `build_filename()`
   （随机后缀，不复用原名做唯一性）。
-  ⚠️ `/static/upload` 是**无鉴权**静态挂载 —— 上传物对任何人可读，
-  只靠文件名不可猜兜着。要真正的访问控制得改成带鉴权的下载接口
+  ⚠️ 落盘分**两棵树，别把它们当成一回事**：私有件在 `UPLOAD_DIR`
+  （`core/path_conf.py`，= `BASE_PATH / 'upload'`），**不挂静态**，只能走带 JWT 的
+  `GET /api/v1/sys/files/{pk}/download`；公开件在 `PUBLIC_UPLOAD_DIR`，由
+  `core/registrar.py: register_static_file` 挂在 `/uploads`，**设计上就不鉴权** ——
+  富文本正文里的 `<img src>` 带不上 Authorization 头，只能有这么一条。
+  进那棵树要显式 `?public=true`，且服务端强制只收图片
+  （`app/admin/service/file_service.py: verify_public`）。
+  历史上还有一条 `app.mount('/static/upload', …)`，那才是真漏洞（整棵上传目录对
+  任何人可读），**已经删了**，回归守在 `test_file.py: test_static_upload_mount_is_gone`。
+  🔴 光删 mount 不够：`UPLOAD_DIR` 原来是 `STATIC_DIR / 'upload'`，而 `/static`
+  那条挂载会把它连带公开（实测删了 mount 还是 200）—— 所以它搬去了 `BASE_PATH`。
+  **别把上传目录挪回 `backend/static/` 下面**，挪回去等于把这个漏洞原样装回来
 - 🔴 **前端 `<Can>` 隐藏了按钮，不代表接口有权限校验** —— 这两件事是分开写的，
   加接口时漏挂 `Depends(RequestPermission('...'))` + `DependsRBAC` 不会在任何地方
   报错，只会在"前端按钮权限审计"里被翻出来。`POST/DELETE /sys/files/relations`
   （挂载/卸载附件）踩过：只挂了 `DependsJwtAuth`，前端却用
   `<Can perm="sys:file:upload">` 隐藏了对应按钮 —— 任何登录用户直接调接口，
   就能把任意文件挂到任意业务对象上，跟自己有没有这个权限完全无关。
-  新增接口时反过来核对一遍：前端每一个 `<Can perm="xxx">` 包着的动作，
-  对应接口是不是也真的挂了同一个权限码的 `RequestPermission` + `DependsRBAC`
+  这条**已经修了**（`api/v1/sys/file.py` 里那两条 relations 路由都挂上了
+  `RequestPermission('sys:file:upload')` + `DependsRBAC`），留着是因为这类漏挂
+  还会再发生。
+  现在有机器在核对：`app/admin/tests/security/test_permission_codes.py` 把
+  后端 `RequestPermission` / 前端 `<Can perm>` / 种子菜单 `sys_menu.perms`
+  三份清单做差集，任一方向漂移都会红。**新增接口时照样自己核一遍**，
+  但漏了不再只能靠人翻出来
 
 ## 数据库结构改动一律走 alembic
 
@@ -379,6 +394,41 @@ return or_(and_(*where_and_list), or_(*where_or_list))
 19 个角色 / 22 个用户，每次跑带一个随机后缀），不依赖种子数据，
 teardown 里按 id 硬删干净 —— 因为 `fba_test` 同时也是 Playwright E2E 的库。
 
+## 请求 IP 只在可信代理后面才作数
+
+🔴 `utils/request_parse.py: get_request_ip()` 原来**无条件信任** `X-Real-IP`，
+其次取 `X-Forwarded-For` 的第一段。而它的返回值决定了限流的 key
+（`utils/limiter.py: default_identifier` = `{IP}:{path}`）、登录日志的来源和 IP 属地。
+
+**症状**：限流形同虚设 —— 每个请求换一个 `X-Real-IP` 就是一份全新配额，
+登录爆破和验证码刷取无损通过。**这个失败完全静默**：限流看起来在工作，
+日志里的 IP 看起来也很正常，只是全都是攻击者填的。
+
+**修法**：`conf.py: TRUSTED_PROXIES`（IP / CIDR 列表，**默认空 = 谁都不信**）。
+只有直连对端落在白名单里才采信转发头，且从**右往左**取第一个非可信地址 ——
+XFF 是追加的，左侧可以被客户端预填。
+
+⚠️ 两层要配一致：uvicorn 的 `--forwarded-allow-ips` 写 `*` 等于在更底一层
+把「谁都信」重新打开，上面的白名单就白配了（`Dockerfile.prod` 里限到了容器网段）。
+
+## 依赖注入覆盖不到直接 import 了 `async_db_session` 的模块
+
+🔴 `conftest.py` 重载 `get_db` 只换得掉 `Depends(get_db)` 那条路。请求路径上
+还有三处是在模块顶层 `from backend.database.db import async_db_session` 拿会话的，
+它们连的始终是**开发库**：`common/security/jwt.py`（JWT 用户解析）、
+`app/admin/service/login_log_service.py`、`middleware/opera_log_middleware.py`。
+
+**两个后果都是静默的**：跑一次 pytest 会往开发库写登录日志和操作日志
+（实测本机 `fba.sys_login_log` 积了 880 行，全是历次测试留下的）；
+全新环境里开发库是空的，任何带 token 的请求都在 `get_jwt_user()` 里 `TokenError` ——
+本机从没暴露过，是因为两个库里**恰好都有同 ID 的 admin**（种子雪花 ID 是写死的常量）。
+
+**修法**：`conftest.py` 里一个 session 级 autouse fixture 把三处一并指到测试库。
+**新增「不走依赖注入直接拿会话」的代码时，记得加进那份清单。**
+
+⚠️ 相关：限流在测试里默认关闭（`REQUEST_LIMITER_ENABLED`，同一个 IP 反复登录
+会互相打成 429）。要验 429 的用例用 `rate_limiter` fixture 显式打开。
+
 ## 跑测试
 
 ```bash
@@ -386,7 +436,8 @@ pnpm test                     # = turbo test → apps/api 的 pytest
 cd apps/api && uv run pytest backend/app/admin/tests/api_v1/test_file.py -q
 ```
 
-**测试跑在独立的 `fba_test` 库上**（`backend/conftest.py` 覆盖了 `get_db`），
+**测试跑在独立的 `fba_test` 库上**（`backend/conftest.py` 覆盖了 `get_db`，
+另有一个 autouse fixture 补上三处不走依赖注入的会话，见上一节），
 不是开发库。第一次要手工准备，否则报的是一句看不出原因的 sqlalchemy 连接错误：
 
 ```bash

@@ -270,7 +270,21 @@ pnpm db:history                        # 看链条
 都是静默的：本机开发库手工改过（能跑），全新环境按模型建出来缺那一列，
 要到部署时才炸；或者反过来，模型声明了索引、库上没建，功能全对只是全表扫。
 
-已有环境**不需要重建**：`alembic stamp b0000000baseline` 认领起点，再 `db:upgrade`。
+**已有环境**不需要重建：`alembic stamp b0000000baseline` 认领起点，再 `db:upgrade`。
+
+**全新环境**走 `fba init`（`drop_all` + `create_all` + 灌种子），它建完表会
+**自动 `alembic stamp head`** —— 表是从当前模型建的，本来就是最新结构，
+stamp 只是把这件事声明出来。
+
+> 🔴 **`create_all` 建的库不自带 `alembic_version`** —— 那张表不在
+> `MappedBase.metadata` 里。漏掉 stamp 的失败是**延迟且静默**的：库照常能用，
+> 直到第 4 条迁移出现，`db:upgrade` 从 base 把前 3 条重跑一遍。
+> 现在这 3 条碰巧无害（基线是空的、`c0000000comments` 全程 suppress、
+> `d0000000usertz` 有 `_has_column()` 早退），所以这个坑到目前为止**看不出来** ——
+> 下一条普通的 `add_column` 就会在部署时炸。
+>
+> ⚠️ prod 下应用**不再自己建表**：`core/registrar.py` 的 lifespan 改成校验
+> `alembic_version` 在不在 head，不在就拒绝启动。开发环境保留 `create_all` 的便利。
 
 ### 三条纪律
 
@@ -294,9 +308,17 @@ pnpm db:history                        # 看链条
 | `test_model_matches_migrations` | **改了模型但没生成迁移** —— 这条是整套约定的支点 |
 | `test_single_head` | 两个人各自 revision 导致分叉，`upgrade head` 谁都升不了 |
 | `test_every_revision_is_reachable_from_base` | 断链的迁移永远不会执行 |
+| `test_fresh_database_is_stamped_at_head` | **新建的库没 stamp** —— 将来 `upgrade head` 会把已有迁移重跑一遍 |
 
-⚠️ 前两条比对的是 **fba_test**，所以本地跑测试前它要在 head 上
-（`pnpm --filter api db:upgrade`；`test:db` 重建之后要重新 stamp + upgrade）。
+⚠️ 这些比对的是 **fba_test**，所以本地跑测试前它要在 head 上
+（`pnpm --filter api test:db` 会重建并自动 stamp）。
+
+> 🔴 第 4 条上线时当场抓到一个已经存在很久的 bug：`reset_test_db._stamp_head`
+> 一直在 stamp **开发库**而不是测试库。它靠设 `os.environ['DATABASE_SCHEMA']` 切库，
+> 但 `settings` 是模块级缓存单例、import 期就构造好了，进程内改 environ 影响不到它；
+> 就算改对了也没用，因为 `alembic/env.py` 会**无条件覆盖** `sqlalchemy.url`。
+> 两个库都有 `alembic_version` 表、看起来都正常，所以没有任何现象。
+> 现在 env.py 改成「调用方设过就不覆盖」，`_stamp_head` 显式写目标库。
 
 ## 还没发版 —— 可以自由重构
 
