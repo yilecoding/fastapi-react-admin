@@ -1,0 +1,159 @@
+# 生产编排（SQL Server 主线）。
+#
+#     cp apps/api/deploy/backend/docker-compose/.env.server.example \
+#        apps/api/deploy/backend/docker-compose/.env.server
+#     # 改完里面的 CHANGE_ME，然后：
+#     docker compose -f docker-compose.prod.yml build
+#     docker compose -f docker-compose.prod.yml up -d
+#
+# 与 apps/api/docker-compose.yml 的关系：那份是**上游的**（主库 PostgreSQL、
+# broker RabbitMQ、挂的还是已废弃的 static/upload 路径），照它起不来。
+#
+# 🔴 **SQL Server 不进这份编排**，三个理由：
+#   1. `docker compose down -v` 一条命令就能把生产数据抹掉
+#   2. 官方镜像默认 sa 账号，Developer 版授权只允许开发/测试用途
+#   3. 应用容器无状态才能滚动重启；有状态服务混进来会逼着每次发版都碰数据库
+# Redis 留着是因为它只存 token / 验证码 / 缓存，丢了最多全员重登。
+
+name: fastapi-react-admin
+
+x-api-base: &api-base
+  image: fba-api:${TAG:-latest}
+  build:
+    context: ./apps/api
+    dockerfile: Dockerfile.prod
+  restart: unless-stopped
+  environment:
+    TZ: Asia/Shanghai
+  # 挂成容器里的 backend/.env。⚠️ 缺这个文件时应用会**拒绝启动**而不是
+  # 自动拷示例（conf.py: _ensure_env_file 检测到 /.dockerenv 即视为生产形态）
+  volumes:
+    - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
+    - fba_upload:/app/backend/upload
+    - fba_upload_public:/app/backend/upload-public
+  depends_on:
+    redis:
+      condition: service_healthy
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "5"
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    <<: *api-base
+    volumes:
+      - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
+      - fba_upload:/app/backend/upload
+      - fba_upload_public:/app/backend/upload-public
+      - fba_log_api:/app/backend/log
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      # prod 启动时要校验 alembic 版本 + 扫种子密码，给足时间
+      start_period: 90s
+
+  worker:
+    <<: *api-base
+    # 可以多副本：`docker compose up -d --scale worker=3`，所以刻意不设 container_name
+    command:
+      - celery
+      - -A
+      - backend.app.task.celery
+      - worker
+      - -l
+      - info
+      - --pool=custom
+    environment:
+      TZ: Asia/Shanghai
+      CELERY_CUSTOM_WORKER_POOL: celery_aio_pool.pool:AsyncIOPool
+    volumes:
+      - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
+      - fba_upload:/app/backend/upload
+      - fba_upload_public:/app/backend/upload-public
+      - fba_log_worker:/app/backend/log
+    healthcheck:
+      test: ["CMD", "celery", "-A", "backend.app.task.celery", "inspect", "ping", "-d", "celery@$${HOSTNAME}"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+
+  beat:
+    <<: *api-base
+    # 🔴 **只能一个副本。** 多个 beat = 同一条调度被触发 N 次（根 CLAUDE.md）。
+    # container_name 在这里是**故意**写的 —— 它会让 `--scale beat=2` 直接失败，
+    # 而不是安静地起两个
+    container_name: fba_beat
+    command:
+      - celery
+      - -A
+      - backend.app.task.celery
+      - beat
+      - -l
+      - info
+    depends_on:
+      redis:
+        condition: service_healthy
+      # 等 api 把 task_scheduler 表准备好
+      api:
+        condition: service_healthy
+    volumes:
+      - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
+      - fba_log_beat:/app/backend/log
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery.*beat' > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  web:
+    image: fba-web:${TAG:-latest}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # 空串 = 同源相对路径，由 nginx 反代到 api。见 apps/web/Dockerfile 的说明
+        VITE_API_BASE: ""
+    restart: unless-stopped
+    ports:
+      # TLS 建议交给上游 LB / Caddy，这里只出 80
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  redis_data:
+  # 私有附件 —— 只能经 /api/v1/sys/files/{pk}/download 读
+  fba_upload:
+  # 富文本内联图 —— 经 /uploads 无鉴权读，两棵树不能合并
+  fba_upload_public:
+  fba_log_api:
+  fba_log_worker:
+  fba_log_beat:
