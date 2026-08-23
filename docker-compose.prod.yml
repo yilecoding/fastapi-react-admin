@@ -9,6 +9,20 @@
 # 与 apps/api/docker-compose.yml 的关系：那份是**上游的**（主库 PostgreSQL、
 # broker RabbitMQ、挂的还是已废弃的 static/upload 路径），照它起不来。
 #
+# ⚠️ 构建前先确认 **docker daemon 自己**够得着镜像仓库。它不读 shell 的
+# http_proxy —— 本机实测：curl 拿得到 ghcr.io，`docker build` 却 i/o timeout，
+# 报错指向 Dockerfile 的 FROM 行，看起来像镜像名写错了。要在 WSL / 代理环境里构建，
+# 给 daemon 单独配一次：
+#
+#     sudo mkdir -p /etc/systemd/system/docker.service.d
+#     sudo tee /etc/systemd/system/docker.service.d/http-proxy.conf <<'EOF'
+#     [Service]
+#     Environment="HTTP_PROXY=http://<代理>:<端口>"
+#     Environment="HTTPS_PROXY=http://<代理>:<端口>"
+#     Environment="NO_PROXY=localhost,127.0.0.1"
+#     EOF
+#     sudo systemctl daemon-reload && sudo systemctl restart docker
+#
 # 🔴 **SQL Server 不进这份编排**，三个理由：
 #   1. `docker compose down -v` 一条命令就能把生产数据抹掉
 #   2. 官方镜像默认 sa 账号，Developer 版授权只允许开发/测试用途

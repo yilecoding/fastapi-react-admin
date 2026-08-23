@@ -1,4 +1,7 @@
-# syntax=docker/dockerfile:1.7
+# ⚠️ 刻意**不写** `# syntax=docker/dockerfile:N`：那行会让每次构建都去 docker.io
+# 拉一个 frontend 镜像，在拿不到 docker.io 的网络里直接卡死（实测 i/o timeout，
+# 而且报错指向 Dockerfile 第 2 行，看起来像语法问题）。
+# 这里用到的 `--mount=type=cache|bind` 由 BuildKit 内置 frontend 支持，不需要它。
 #
 # 本仓库的后端生产镜像（SQL Server 主线）。
 #

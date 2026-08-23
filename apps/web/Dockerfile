@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# ⚠️ 同 apps/api/Dockerfile.prod：不写 `# syntax=`，避免每次构建都要够得着 docker.io。
 #
 # 前端生产镜像。**构建上下文是仓库根**，不是 apps/web：
 #
