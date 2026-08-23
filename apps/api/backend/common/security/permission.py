@@ -17,7 +17,15 @@ if TYPE_CHECKING:
 
 
 # 模板变量解析失败的哨兵（`None` 本身可能是合法值，不能拿它当哨兵）
+#
+# 两个哨兵要分开，因为它们代表的是**完全不同性质**的失败：
+#   _UNRESOLVED —— 模板变量在这一次请求里没有值（例如用户没有部门，`${dept_id}` 为 None）。
+#                  这是合法的运行时状态，规则本身没问题，收紧到「匹配不到行」即可。
+#   _UNCASTABLE —— 值转不成列的类型（例如给 bigint 列配了 'abc'）。这是**配置错误**，
+#                  说明这条规则从来就没能表达管理员想要的意思 —— 整个过滤器必须
+#                  fail-closed，不能只当这一条不存在
 _UNRESOLVED = object()
+_UNCASTABLE = object()
 
 
 class RequestPermission:
@@ -117,19 +125,44 @@ def filter_data_permission(  # ruff:ignore[complex-structure]
     where_and_list = []
     where_or_list = []
 
+    # 🔴 只要有**一条规则无法解释**，整个过滤器就收紧成「看不到任何行」。
+    #
+    # 为什么是整体收紧而不是「跳过这一条」：一条读不懂的规则意味着这份策略
+    # 没有被完整执行，我们无法保证剩下的条件还表达着管理员的本意。
+    # 而且收紧之后失败是**可见的**（用户看不到数据会来报），
+    # 跳过则是静默放行 —— 一条「仅本部门」配错字段，实际效果是「全部可见」，
+    # 界面上没有任何提示。
+    has_broken_rule = False
+
+    # 全量模型表，用来区分「模型名拼错了」和「这条规则不适用于本次查询的模型」
+    all_model_names = set(get_data_permission_models())
+
     for data_rule in data_rules:
         if data_rule.model == '__ALL__':
             target_models = list(target_model_map.values())
+            # `__ALL__` 天然只命中「有这一列」的表，缺列是正常的，不算配错
+            strict_column = False
         else:
+            if data_rule.model not in all_model_names:
+                # 模型名在全量模型里都找不到 = 拼错了。区别于下面那种
+                # 「模型存在但本次查询不涉及它」—— 后者跳过是对的
+                has_broken_rule = True
+                continue
             target_model = target_model_map.get(data_rule.model)
             target_models = [target_model] if target_model is not None else []
+            strict_column = True
 
         for target_model in target_models:
             table = target_model if isinstance(target_model, Table) else target_model.__table__
             rule_column = column_template_resolvers.get(data_rule.column, data_rule.column)
             if rule_column not in table.columns.keys():
+                if strict_column:
+                    # 显式指定了模型，却配了一个该模型没有的字段 —— 规则配错了
+                    has_broken_rule = True
                 continue
             if rule_column in settings.DATA_PERMISSION_COLUMN_EXCLUDE:
+                # 引用了被明令排除的字段，同样是配置错误
+                has_broken_rule = True
                 continue
 
             # 构建过滤条件
@@ -156,20 +189,27 @@ def filter_data_permission(  # ruff:ignore[complex-structure]
                 try:
                     return _column_type(value) if _column_type is not str else value
                 except (ValueError, TypeError):
-                    return value
+                    # 🔴 原来这里 `return value`，把转不动的原始字符串继续拼进 SQL，
+                    # SQL Server 端 `Error converting data type varchar to bigint` → 500。
+                    # 既不是放行也不是拦截，是让接口挂掉。现在判定为配置错误
+                    return _UNCASTABLE
 
             # 先把值解析出来，解析不了的规则一律**收紧**成「匹配不到任何行」。
             # 不能退化成「不加条件」—— 那是 fail-open，一条配错的规则会把整张表放出去
             if data_rule.expression in (RoleDataRuleExpressionType.in_, RoleDataRuleExpressionType.not_in):
                 cast_values = [cast_value(v.strip()) for v in data_rule.value.split(',')]
-                values = [v for v in cast_values if v is not _UNRESOLVED]
+                if any(v is _UNCASTABLE for v in cast_values):
+                    has_broken_rule = True
+                values = [v for v in cast_values if v is not _UNRESOLVED and v is not _UNCASTABLE]
                 single_value: Any = _UNRESOLVED if not values else None
             else:
                 values = []
                 single_value = cast_value(data_rule.value)
+                if single_value is _UNCASTABLE:
+                    has_broken_rule = True
 
             condition = None
-            if single_value is _UNRESOLVED:
+            if single_value is _UNRESOLVED or single_value is _UNCASTABLE:
                 condition = false()
             else:
                 match data_rule.expression:
@@ -198,6 +238,10 @@ def filter_data_permission(  # ruff:ignore[complex-structure]
                     case RoleDataRuleOperatorType.OR:
                         where_or_list.append(condition)
 
+    # 🔴 有读不懂的规则 → 一行都不给。见上面 has_broken_rule 的说明
+    if has_broken_rule:
+        return false()
+
     # 组合所有条件
     where_list = []
     if where_and_list:
@@ -205,6 +249,9 @@ def filter_data_permission(  # ruff:ignore[complex-structure]
     if where_or_list:
         where_list.append(or_(*where_or_list))
 
+    # 到这里 where_list 为空，只剩一种情况：规则都是好的，但没有一条适用于
+    # 本次查询的模型（例如规则配在 Dept 上，这次查的是 User）。
+    # 那属于「本模型不受限」，放行是对的 —— 上面几个分支已经把「配错」摘出去了
     return or_(*where_list) if where_list else or_(1 == 1)
 
 

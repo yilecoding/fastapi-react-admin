@@ -460,24 +460,35 @@ def test_or_rule_defeats_and_rule(client: TestClient, dp: Graph) -> None:
 # --------------------------------------------------------------------------
 
 
-def test_rule_on_missing_column_fails_open(client: TestClient, dp: Graph) -> None:
-    """🔴 规则字段在目标模型上不存在时，`continue` 跳过 → 没有任何条件 → `1 == 1` → **看见全部**。
+def test_rule_on_missing_column_sees_nothing(client: TestClient, dp: Graph) -> None:
+    """🔴 规则显式指定了模型，却配了该模型没有的字段 → **一行都看不到**。
 
-    这不是假想：种子数据里的「本部门数据权限」就是 `Dept.__dept_id__`，
+    这条以前叫 `..._fails_open`，断言的是「看见全部」—— 那才是当时的真实行为：
+    字段不存在就 `continue`，所有规则跳完之后没有任何条件，最后
+    `return or_(1 == 1)` 把整张表放出去。一条名字叫「仅本部门」的规则，
+    配错字段之后的实际效果是「全部可见」，而界面上没有任何提示。
+
+    这不是假想：种子数据里的「本部门数据权限」原本就是 `Dept.__dept_id__`，
     而 `__dept_id__` 解析成 `dept_id`，`sys_dept` 上**没有这一列**。
-    一个名字叫「本部门」的数据范围，实际效果是「全部部门」。
+    那条种子规则已经改成 `__ALL__`（见 `backend/sql/*/init_snowflake_test_data.sql`），
+    这里保留一条**故意配错**的规则来守住 fail-closed 本身。
     """
-    assert dp_codes(client, dp, 'dept_id_tpl') == {dp.code(k) for k in ALL_DP}
+    assert dp_codes(client, dp, 'dept_id_tpl') == set()
 
 
-def test_rule_on_nonexistent_column_fails_open(client: TestClient, dp: Graph) -> None:
-    """字段名拼错同理 —— 后端建规则时不校验 model/column 是否存在"""
-    assert dp_codes(client, dp, 'ghost') == {dp.code(k) for k in ALL_DP}
+def test_rule_on_nonexistent_column_sees_nothing(client: TestClient, dp: Graph) -> None:
+    """字段名拼错同理 —— 收紧而不是放行"""
+    assert dp_codes(client, dp, 'ghost') == set()
 
 
-def test_rule_on_excluded_column_fails_open(client: TestClient, dp: Graph) -> None:
-    """`DATA_PERMISSION_COLUMN_EXCLUDE` 里的列（id/created_time/…）被跳过，同样退化成不过滤"""
-    assert dp_codes(client, dp, 'excluded') == {dp.code(k) for k in ALL_DP}
+def test_rule_on_excluded_column_sees_nothing(client: TestClient, dp: Graph) -> None:
+    """引用 `DATA_PERMISSION_COLUMN_EXCLUDE` 里的列（id/created_time/…）也算配置错误
+
+    那份排除清单是刻意的（按主键、时间戳过滤是脚枪，而且它们在每张表上都有，
+    `__ALL__` 规则打上去后果严重）。规则引用了被排除的列 = 它表达不出管理员的本意，
+    和字段拼错是同一类问题，一样收紧。
+    """
+    assert dp_codes(client, dp, 'excluded') == set()
 
 
 def test_rule_on_other_model_fails_open(client: TestClient, dp: Graph) -> None:
@@ -514,13 +525,17 @@ def test_dept_id_template_with_null_dept_is_fail_closed(client: TestClient, dp: 
     assert visible_codes(client, dp, 'null_dept') == set()
 
 
-def test_now_template_resolves(client: TestClient, dp: Graph) -> None:
-    """`${now}` 要是**调用结果**。规则是 `created_time < ${now}`，所有部门都是过去建的 → 全可见。
+def test_now_template_on_excluded_column_sees_nothing(client: TestClient, dp: Graph) -> None:
+    """`created_time` 在排除清单里，所以这条规则同样是配置错误 → 看不到任何行。
 
-    修之前 `template_resolvers` 里放的是 `timezone.now` 函数对象，
-    `datetime(<function now>)` 抛 TypeError 被吞掉，`'${now}'` 字面量进 SQL → 500。
+    ⚠️ 这条**以前叫 `test_now_template_resolves`，而它从来没有验证过 `${now}`**：
+    `created_time` 被排除 → 规则被跳过 → fail-open → 全可见，
+    断言「全可见」于是通过了，但通过的原因和 `${now}` 无关。
+    `${now}` 真正的回归测试挪到了
+    `backend/app/admin/tests/security/test_data_permission_failclosed.py`
+    （那里用 `User.join_time` —— 一个**没被排除**的时间列）。
     """
-    assert dp_codes(client, dp, 'now_tpl') == {dp.code(k) for k in ALL_DP}
+    assert dp_codes(client, dp, 'now_tpl') == set()
 
 
 # --------------------------------------------------------------------------
