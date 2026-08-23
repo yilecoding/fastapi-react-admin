@@ -1,15 +1,17 @@
-import * as React from 'react'
+import * as React from "react"
 
 import {
+  DENSITY_PRESETS,
   RADIUS_PRESETS,
   THEME_COLORS,
   usePreferences,
   type Preferences,
+  type DensityPreset,
   type RadiusPreset,
   type ScrollMode,
   type ThemeColor,
   type ThemeMode,
-} from './preferences'
+} from "./preferences"
 
 /**
  * 把偏好写到 `document.documentElement` 上。
@@ -29,26 +31,37 @@ import {
 /** 深浅色。`system` 时按当前系统偏好判定 */
 export function applyThemeMode(mode: ThemeMode): void {
   const root = document.documentElement
-  const dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  root.classList.toggle('dark', dark)
-  root.style.colorScheme = dark ? 'dark' : 'light'
+  const dark =
+    mode === "dark" ||
+    (mode === "system" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches)
+  root.classList.toggle("dark", dark)
+  root.style.colorScheme = dark ? "dark" : "light"
 }
 
 export function applyThemeColor(color: ThemeColor): void {
   const c = THEME_COLORS[color]
   if (!c) return
   const root = document.documentElement
-  root.style.setProperty('--primary', c.primary)
-  root.style.setProperty('--primary-foreground', c.foreground)
+  root.style.setProperty("--primary", c.primary)
+  root.style.setProperty("--primary-foreground", c.foreground)
   // 侧边栏的主色单独一套变量，不同步的话选中项会跟主色对不上
-  root.style.setProperty('--sidebar-primary', c.primary)
-  root.style.setProperty('--sidebar-primary-foreground', c.foreground)
+  root.style.setProperty("--sidebar-primary", c.primary)
+  root.style.setProperty("--sidebar-primary-foreground", c.foreground)
 }
 
 export function applyRadius(radius: RadiusPreset): void {
   const r = RADIUS_PRESETS[radius]
   if (!r) return
-  document.documentElement.style.setProperty('--radius', r.value)
+  document.documentElement.style.setProperty("--radius", r.value)
+}
+
+export function applyDensity(density: DensityPreset): void {
+  const preset = DENSITY_PRESETS[density]
+  if (!preset) return
+  const root = document.documentElement
+  root.dataset.density = density
+  root.style.setProperty("--density-row-height", `${preset.value}px`)
 }
 
 /**
@@ -68,27 +81,31 @@ export function applyPreferencesNow(p: Preferences): void {
   applyThemeMode(p.themeMode)
   applyThemeColor(p.themeColor)
   applyRadius(p.radius)
+  applyDensity(p.density)
   applyScrollMode(p.scrollMode)
 }
 export function useApplyPreferences() {
   const themeMode = usePreferences((s) => s.themeMode)
   const themeColor = usePreferences((s) => s.themeColor)
   const radius = usePreferences((s) => s.radius)
+  const density = usePreferences((s) => s.density)
   const scrollMode = usePreferences((s) => s.scrollMode)
 
   // 深浅色：`system` 要跟着系统偏好实时变，所以留一个 media query 监听
   React.useEffect(() => {
     applyThemeMode(themeMode)
-    if (themeMode !== 'system') return
-    const mql = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => applyThemeMode('system')
-    mql.addEventListener('change', onChange)
-    return () => mql.removeEventListener('change', onChange)
+    if (themeMode !== "system") return
+    const mql = window.matchMedia("(prefers-color-scheme: dark)")
+    const onChange = () => applyThemeMode("system")
+    mql.addEventListener("change", onChange)
+    return () => mql.removeEventListener("change", onChange)
   }, [themeMode])
 
   React.useEffect(() => applyThemeColor(themeColor), [themeColor])
 
   React.useEffect(() => applyRadius(radius), [radius])
+
+  React.useEffect(() => applyDensity(density), [density])
 
   React.useEffect(() => applyScrollMode(scrollMode), [scrollMode])
 }
