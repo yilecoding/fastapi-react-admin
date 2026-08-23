@@ -11,6 +11,15 @@ authors = [
   { name = "yilecoding" },
 ]
 dependencies = [
+  # 🔴 随仓库自带的插件依赖必须锁在这里，不能只留在
+  # `backend/plugin/*/requirements.txt` 里。`backend/main.py` 在 **import 期**
+  # 就跑 `_prepare_plugins()` → `uv pip install`，缺了它们的环境会在
+  # 「import backend.main」这一步现场联网装包（默认还走国内镜像源）——
+  # pytest 收集阶段联网、容器启动联网，两个都是静默的偶发失败。
+  # 装上之后 `_requirements_installed()` 命中即跳过，那段逻辑变成空转。
+  # requirements.txt 保留不动：那是插件自己的清单，`fba add` 装第三方插件时要用。
+  "aiosmtplib>=5.1.2",       # plugin/email
+  "fastapi-oauth20>=0.0.3",  # plugin/oauth2
   "alembic>=1.19.1",
   "asgiref>=3.12.1",
   "asyncmy>=0.2.13",
@@ -86,12 +95,6 @@ server = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.alembic]
-script_location = "%(here)s/backend/alembic"
-file_template = "%%(year)d-%%(month).2d-%%(day).2d-%%(hour).2d_%%(minute).2d_%%(second).2d-%%(rev)s_%%(slug)s"
-prepend_sys_path = ["."]
-version_locations = ["%(here)s/backend/alembic/versions"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend"]

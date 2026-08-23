@@ -23,7 +23,7 @@ from backend.database.db import get_database_url
 # 不逐个 import 模型模块（那份清单一定会漏 —— 新增 app / 插件时没人记得来改）：
 # `backend.main` 会把路由 → service → crud → model 整条链拉进来，
 # 和 `create_all()` 看到的表**完全一致**（这一点有测试对账：
-# `test_alembic_metadata_matches_create_all`）。
+# `test_model_matches_migrations`）。
 #
 # noqa: F401 —— 它就是为副作用而 import 的。
 import backend.main  # noqa: F401, E402

@@ -709,9 +709,18 @@ async def generate(*, preview: bool = False) -> None:
 
 
 def run_alembic(*args: str) -> None:
-    """执行 alembic 命令"""
+    """执行 alembic 命令
+
+    🔴 cwd 必须是 `BASE_PATH`（= backend/），让它落到 `backend/alembic.ini` 上 ——
+    和 `pnpm db:*`（脚本里 `cd backend`）用**同一份**配置。
+    从 `BASE_PATH.parent` 跑也能工作，但那样命中的是 `pyproject.toml` 的
+    `[tool.alembic]`，那份的 `file_template` 和 `timezone` 与 ini 不一致：
+    同一条迁移，`fba alembic revision` 生成 `2026-08-22-...`（UTC），
+    `pnpm db:revision` 生成 `20260822_1830-...`（Asia/Shanghai），
+    文件名对不上、时间戳差 8 小时。已删掉 pyproject 那份，只留 ini。
+    """
     try:
-        subprocess.run(['alembic', *args], cwd=BASE_PATH.parent, check=True)
+        subprocess.run(['alembic', *args], cwd=BASE_PATH, check=True)
     except subprocess.CalledProcessError as e:
         raise cappa.Exit('Alembic 命令执行失败', code=e.returncode)
 

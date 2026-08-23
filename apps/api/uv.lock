@@ -90,6 +90,15 @@ wheels = [
 ]
 
 [[package]]
+name = "aiosmtplib"
+version = "5.1.2"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/b9/25/d36d056e62a1dc3dd51ce76e7647c62966702193dc91eafa7fd4e1006a91/aiosmtplib-5.1.2.tar.gz", hash = "sha256:04a0ea3c678f5b719f998f290dce010ca512e1385836d3944206299df03b060f" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/d5/ec/c5a415cd1309eaac28ad3c599458194d25ba07189bb07a1bac2c6713c17e/aiosmtplib-5.1.2-py3-none-any.whl", hash = "sha256:070d467cc329dafd0af59108ba5d217d973cba10309910fed359a2a7bfb52d7a" },
+]
+
+[[package]]
 name = "alembic"
 version = "1.19.1"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
@@ -946,6 +955,18 @@ standard-no-fastapi-cloud-cli = [
 ]
 
 [[package]]
+name = "fastapi-oauth20"
+version = "0.0.3"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
+dependencies = [
+    { name = "httpx" },
+]
+sdist = { url = "https://mirrors.aliyun.com/pypi/packages/f6/e0/d020c615d824a56dbd7d5f8cc41b406cc23362099dfe7ba2759294a70712/fastapi_oauth20-0.0.3.tar.gz", hash = "sha256:a56c7e455c322e3e8ce06d8d536af2bdd5a72f8ede836fd5c3b823b704a612f9" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/18/6f/94301d0e43744813a870e350fbff1640063fa1120c7c2dabb7a8ddb8ef2c/fastapi_oauth20-0.0.3-py3-none-any.whl", hash = "sha256:aa2561044684c742d4eafdca5751beff04a35d80e9e13470cff57237129c054a" },
+]
+
+[[package]]
 name = "fastapi-pagination"
 version = "0.15.16"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
@@ -970,6 +991,7 @@ name = "fastapi-react-admin-api"
 source = { editable = "." }
 dependencies = [
     { name = "aioodbc" },
+    { name = "aiosmtplib" },
     { name = "alembic" },
     { name = "asgiref" },
     { name = "asyncmy" },
@@ -983,6 +1005,7 @@ dependencies = [
     { name = "dulwich" },
     { name = "fast-captcha" },
     { name = "fastapi", extra = ["standard-no-fastapi-cloud-cli"] },
+    { name = "fastapi-oauth20" },
     { name = "fastapi-pagination", extra = ["sqlalchemy"] },
     { name = "flower" },
     { name = "gevent" },
@@ -1037,6 +1060,7 @@ server = [
 [package.metadata]
 requires-dist = [
     { name = "aioodbc", specifier = ">=0.5.0" },
+    { name = "aiosmtplib", specifier = ">=5.1.2" },
     { name = "alembic", specifier = ">=1.19.1" },
     { name = "asgiref", specifier = ">=3.12.1" },
     { name = "asyncmy", specifier = ">=0.2.13" },
@@ -1050,6 +1074,7 @@ requires-dist = [
     { name = "dulwich", specifier = ">=1.2.12" },
     { name = "fast-captcha", specifier = ">=0.3.2" },
     { name = "fastapi", extras = ["standard-no-fastapi-cloud-cli"], specifier = ">=0.141.1" },
+    { name = "fastapi-oauth20", specifier = ">=0.0.3" },
     { name = "fastapi-pagination", extras = ["sqlalchemy"], specifier = ">=0.15.16" },
     { name = "flower", specifier = ">=2.0.1" },
     { name = "gevent", specifier = ">=26.8.0" },
