@@ -76,7 +76,7 @@ export function FileGrid({
               >
                 {file.original_name}
               </p>
-              <p className="text-[11px] tabular-nums text-muted-foreground">{formatBytes(file.size)}</p>
+              <p className="text-xs tabular-nums text-muted-foreground">{formatBytes(file.size)}</p>
 
               <span
                 className={cn(

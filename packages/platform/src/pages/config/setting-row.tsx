@@ -69,15 +69,15 @@ export function SettingRow({
             </Badge>
           )}
           {dirty && (
-            <span className="text-[11px] text-amber-700 dark:text-amber-300" data-testid={`dirty-${item.key}`}>
+            <span className="text-xs text-amber-700 dark:text-amber-300" data-testid={`dirty-${item.key}`}>
               {t('已修改')}
             </span>
           )}
         </span>
         {hintText && <span className="text-xs leading-snug text-muted-foreground">{hintText}</span>}
-        <code className="text-[11px] leading-snug text-muted-foreground/70">{item.key}</code>
+        <code className="text-xs leading-snug text-muted-foreground/70">{item.key}</code>
         {disabledReason && (
-          <span className="text-[11px] text-muted-foreground" data-testid={`disabled-${item.key}`}>
+          <span className="text-xs text-muted-foreground" data-testid={`disabled-${item.key}`}>
             {disabledReason}
           </span>
         )}

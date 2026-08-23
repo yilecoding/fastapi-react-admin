@@ -395,7 +395,7 @@ export function PlaygroundTablePage() {
                         >
                           <span className="flex min-w-0 flex-col">
                             <span className="text-sm">{item.label}</span>
-                            <span className="text-[11px] text-muted-foreground">{item.hint}</span>
+                            <span className="text-xs text-muted-foreground">{item.hint}</span>
                           </span>
                           <Switch
                             checked={caps[item.key]}
@@ -578,7 +578,7 @@ function ColDetail({ row, kind }: { row: any; kind: 'name' | 'team' }) {
       <div className="grid gap-x-8 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
         {items.map(([k, v]) => (
           <span key={k} className="flex flex-col gap-0.5">
-            <span className="text-[11px] text-muted-foreground">{k}</span>
+            <span className="text-xs text-muted-foreground">{k}</span>
             <span className="text-sm">{v}</span>
           </span>
         ))}
@@ -603,7 +603,7 @@ function SubRow({ row }: { row: any }) {
     <div className={cn('grid gap-x-8 gap-y-2 p-4 sm:grid-cols-2 lg:grid-cols-4')}>
       {items.map(([k, v]) => (
         <span key={k} className="flex flex-col gap-0.5">
-          <span className="text-[11px] text-muted-foreground">{k}</span>
+          <span className="text-xs text-muted-foreground">{k}</span>
           <span className="text-sm">{v}</span>
         </span>
       ))}

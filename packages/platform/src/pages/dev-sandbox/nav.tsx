@@ -54,7 +54,7 @@ export function SandboxNav({
       </InputGroup>
 
       {matched.length === 0 ? (
-        <p className="px-1 text-[13px] text-muted-foreground">
+        <p className="px-1 text-sm text-muted-foreground">
           没有匹配「{query}」的组件。
         </p>
       ) : (
@@ -63,7 +63,7 @@ export function SandboxNav({
           if (!items.length) return null
           return (
             <div key={group.id} className="flex flex-col gap-0.5">
-              <span className="px-2 pb-1 text-[11px] font-medium tracking-wide text-muted-foreground">
+              <span className="px-2 pb-1 text-xs font-medium tracking-wide text-muted-foreground">
                 {group.label}
               </span>
               {items.map((d) => {
@@ -82,8 +82,8 @@ export function SandboxNav({
                         : 'text-muted-foreground hover:bg-muted/60'
                     )}
                   >
-                    <span className="truncate text-[13px]">{d.name}</span>
-                    <span className="truncate text-[11px] text-muted-foreground/70">{d.zh}</span>
+                    <span className="truncate text-sm">{d.name}</span>
+                    <span className="truncate text-xs text-muted-foreground/70">{d.zh}</span>
                   </button>
                 )
               })}

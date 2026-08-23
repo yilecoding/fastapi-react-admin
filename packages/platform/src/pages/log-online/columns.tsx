@@ -133,7 +133,7 @@ export function buildColumns({
     col.accessor('session_uuid', {
       header: t('会话 UUID'),
       cell: ({ getValue }) => (
-        <span className="font-mono text-[11px] text-muted-foreground" title={getValue()}>
+        <span className="font-mono text-xs text-muted-foreground" title={getValue()}>
           {getValue().slice(0, 8)}…
         </span>
       ),

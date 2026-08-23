@@ -110,7 +110,7 @@ export function FileRail({
           </div>
         )}
 
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {t('共 {{n}} 个文件', { n: total })}
         </p>
       </div>

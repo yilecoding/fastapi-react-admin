@@ -220,7 +220,7 @@ export function DashboardPage() {
                 <ul className="flex flex-col divide-y divide-border/60">
                   {operas.data.map((o) => (
                     <li key={o.id} className="flex items-center gap-2 py-1.5 text-sm">
-                      <Badge variant="outline" className="shrink-0 font-mono text-[10px] font-normal">
+                      <Badge variant="outline" className="shrink-0 font-mono text-2xs font-normal">
                         {o.method}
                       </Badge>
                       <span className="min-w-0 flex-1 truncate" title={o.path}>{o.title ? t(o.title) : o.path}</span>
@@ -352,7 +352,7 @@ function TrendBars({ points }: { points: DayPoint[] }) {
                 style={{ height: `${okH}%` }}
               />
             </div>
-            <span className="truncate text-[10px] tabular-nums text-muted-foreground">{p.label}</span>
+            <span className="truncate text-2xs tabular-nums text-muted-foreground">{p.label}</span>
           </div>
         )
       })}

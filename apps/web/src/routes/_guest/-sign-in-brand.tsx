@@ -209,9 +209,9 @@ export function SignInBrandPanel() {
             <span className="flex items-center gap-3">
               <TenonMark className="size-[26px]" />
               {/* 19 个字符，字距不能再拉 0.42em —— 那是给短 wordmark 的 */}
-              <span className="font-mono text-[13px] tracking-[0.06em]">{BRAND.wordmark}</span>
+              <span className="font-mono text-sm tracking-[0.06em]">{BRAND.wordmark}</span>
             </span>
-            <span className="font-mono text-[10.5px] tracking-[0.2em] text-[var(--tenon-faint)]">
+            <span className="font-mono text-2xs tracking-[0.2em] text-[var(--tenon-faint)]">
               {t(BRAND.nameZh)}
             </span>
           </div>
@@ -221,7 +221,7 @@ export function SignInBrandPanel() {
           <div className="flex flex-1 flex-col justify-center gap-12 py-6">
             <header>
               <p
-                className="tenon-in font-mono text-[10.5px] tracking-[0.32em] text-[var(--tenon-accent)]"
+                className="tenon-in font-mono text-2xs tracking-[0.32em] text-[var(--tenon-accent)]"
                 style={{ animationDelay: "60ms" }}
               >
                 {t("权限与数据的承重层")}
@@ -233,7 +233,7 @@ export function SignInBrandPanel() {
                 {t("一个入口，管好权限与数据")}
               </h2>
               <p
-                className="tenon-in mt-4 max-w-md text-[14.5px] leading-relaxed text-[var(--tenon-dim)]"
+                className="tenon-in mt-4 max-w-md text-sm leading-relaxed text-[var(--tenon-dim)]"
                 style={{ animationDelay: "160ms" }}
               >
                 {t("组织、角色和数据范围各自成件，靠结构咬合：改一处授权，落到每一个菜单、按钮和数据行。")}
@@ -245,7 +245,7 @@ export function SignInBrandPanel() {
 
           <div className="h-px bg-[var(--tenon-line)]" />
           <div
-            className="tenon-in mt-5 flex items-center justify-between gap-4 font-mono text-[10px] tracking-[0.2em] text-[var(--tenon-faint)]"
+            className="tenon-in mt-5 flex items-center justify-between gap-4 font-mono text-2xs tracking-[0.2em] text-[var(--tenon-faint)]"
             style={{ animationDelay: "300ms" }}
           >
             <span>{BRAND.stack.join("  ·  ")}</span>
@@ -265,9 +265,9 @@ export function SignInBrandStrip() {
       <PanelStyles />
       <span className="flex items-center gap-2.5">
         <TenonMark className="size-5" />
-        <span className="font-mono text-[11px] tracking-[0.04em]">{BRAND.wordmark}</span>
+        <span className="font-mono text-xs tracking-[0.04em]">{BRAND.wordmark}</span>
       </span>
-      <span className="font-mono text-[9.5px] tracking-[0.2em] text-[var(--tenon-faint)]">{t(BRAND.nameZh)}</span>
+      <span className="font-mono text-2xs tracking-[0.2em] text-[var(--tenon-faint)]">{t(BRAND.nameZh)}</span>
     </div>
   )
 }

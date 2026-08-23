@@ -52,7 +52,7 @@ export function OperaLogDetailSheet({
       <SheetContent side="right" className="data-[side=right]:sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            <span className={cn('inline-flex rounded px-1.5 py-0.5 font-mono text-[11px] ring-1', METHOD_CLASS[log.method] ?? 'bg-muted ring-border')}>
+            <span className={cn('inline-flex rounded px-1.5 py-0.5 font-mono text-xs ring-1', METHOD_CLASS[log.method] ?? 'bg-muted ring-border')}>
               {log.method}
             </span>
             {t(log.title)}
@@ -148,7 +148,7 @@ export function OperaLogDetailSheet({
                   empty={t('无请求参数（GET 且无查询串）')}
                   data-testid="v-req-args"
                 />
-                <p className="mt-1.5 text-[11px] text-muted-foreground">
+                <p className="mt-1.5 text-xs text-muted-foreground">
                   <Trans
                     t={t}
                     i18nKey="含查询参数 / 路径参数 / 请求体，密码类字段已脱敏为 <c>[REDACTED]</c>。"
@@ -159,7 +159,7 @@ export function OperaLogDetailSheet({
               <TabsContent value="req-ua" className="mt-2">
                 <div className="relative rounded-md border border-border bg-muted/30 p-3 pe-12">
                   <CopyButton text={log.user_agent ?? ''} className="absolute end-2 top-2" />
-                  <p className="break-all font-mono text-[11.5px] leading-relaxed" data-testid="v-req-ua">
+                  <p className="break-all font-mono text-xs leading-relaxed" data-testid="v-req-ua">
                     {log.user_agent || '—'}
                   </p>
                 </div>
@@ -194,7 +194,7 @@ function IdRow({ label, value, testId }: { label: string; value: string; testId?
   return (
     <div className="flex items-center gap-2">
       <span className="w-16 shrink-0 text-xs text-muted-foreground">{label}</span>
-      <code className="min-w-0 flex-1 truncate font-mono text-[12px] tabular-nums" title={value} data-testid={testId}>
+      <code className="min-w-0 flex-1 truncate font-mono text-xs tabular-nums" title={value} data-testid={testId}>
         {value}
       </code>
       <CopyButton text={value} label={t('复制{{what}}', { what: label })} />
@@ -223,7 +223,7 @@ function Row({
               'min-w-0 text-sm',
               // ID / trace 这类定长值必须完整可见 —— 截断了等于没显示，
               // 所以允许折行而不是 truncate
-              mono ? 'font-mono text-[12px] break-all tabular-nums' : 'truncate'
+              mono ? 'font-mono text-xs break-all tabular-nums' : 'truncate'
             )}
             title={String(value ?? '')}
             data-testid={testId}

@@ -63,7 +63,7 @@ export function ConfigNav({
         if (!items.length) return null
         return (
           <div key={group.title} className="flex flex-col gap-1">
-            <span className="px-3 text-[11px] font-medium tracking-wide text-muted-foreground">
+            <span className="px-3 text-xs font-medium tracking-wide text-muted-foreground">
               {t(group.title)}
             </span>
             {items.map((i) => {

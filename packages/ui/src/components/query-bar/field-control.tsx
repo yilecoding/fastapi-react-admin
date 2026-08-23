@@ -578,7 +578,7 @@ function PlainSelect({
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <span className={cn("truncate", i.value === ALL && "text-muted-foreground")}>{i.label}</span>
               {i.hint && (
-                <span className="ms-auto shrink-0 font-mono text-[11px] text-muted-foreground">{i.hint}</span>
+                <span className="ms-auto shrink-0 font-mono text-xs text-muted-foreground">{i.hint}</span>
               )}
             </span>
           </SelectItem>
