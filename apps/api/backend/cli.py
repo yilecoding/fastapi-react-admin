@@ -318,6 +318,20 @@ async def _set_admin_password(db: AsyncSession) -> None:
     await user_dao.reset_password(db, admin.id, password)
     console.note('已重置 admin 密码')
 
+    # 🔴 种子里还有一个 `test` 账号，密码同样是 123456。
+    #
+    # 只改 admin 是不够的 —— `core/registrar.py: _verify_production_database()`
+    # 扫的是**所有**账号的密码 hash，留着 test 的话，`fba init` 建出来的库
+    # 会被自己的启动检查挡住（实测过：init 成功，prod 起不来）。
+    #
+    # 给它一个随机密码而不是删掉：种子数据里它还挂着角色 / 部门关联，
+    # 删了那些外键要一起处理；停用 + 随机密码已经让它登不进来。
+    demo = await user_dao.get_by_username(db, 'test')
+    if demo is not None:
+        await user_dao.reset_password(db, demo.id, secrets.token_urlsafe(24))
+        await user_dao.set_status(db, demo.id, 0)
+        console.note('已停用示例账号 test 并重置其密码')
+
 
 async def init(db: AsyncSession, redis: RedisCli) -> bool:
     """交互式初始化数据库表结构和数据

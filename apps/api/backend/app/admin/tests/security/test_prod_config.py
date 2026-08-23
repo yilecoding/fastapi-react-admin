@@ -152,3 +152,49 @@ def test_current_settings_object_is_a_real_settings() -> None:
     assert isinstance(settings, Settings)
     for attr in vars(fake):
         assert hasattr(settings, attr), f'Settings 上没有 {attr}，校验函数会 AttributeError'
+
+
+def test_seeded_password_hashes_cover_every_seeded_account() -> None:
+    """🔴 `SEEDED_PASSWORD_HASHES` 必须覆盖种子 SQL 里**每一个**带密码的账号。
+
+    prod 启动时 `_verify_production_database()` 拿这份清单扫全库。漏一个账号，
+    那个账号就能带着默认密码 123456 活到生产上，而启动检查一声不吭地放行。
+
+    反过来漏在另一侧也踩过：`fba init` 原来只重置 admin，`test` 还留着种子密码 ——
+    于是 init 成功、prod 却起不来（被自己的检查挡住）。两边都要对得上，
+    所以这里同时断言「清单覆盖种子」和「init 会处理掉它们」。
+    """
+    import re
+
+    from backend.app.admin.utils.password_security import SEEDED_PASSWORD_HASHES
+    from backend.core.path_conf import BASE_PATH
+
+    hashes_in_seed: set[str] = set()
+    for path in (BASE_PATH / 'sql').rglob('init_*.sql'):
+        body = path.read_text(encoding='utf-8', errors='ignore')
+        hashes_in_seed.update(re.findall(r"'(\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53})'", body))
+
+    assert hashes_in_seed, '种子 SQL 里一个 bcrypt hash 都没扫到，正则大概率坏了'
+    missing = sorted(hashes_in_seed - SEEDED_PASSWORD_HASHES)
+    assert not missing, (
+        f'种子 SQL 里有 {len(missing)} 个密码 hash 不在 SEEDED_PASSWORD_HASHES 里：{missing}\n'
+        '这些账号能带着默认密码活到生产，而 prod 启动检查扫不到它们。\n'
+        '修法：把 hash 补进 backend/app/admin/utils/password_security.py，'
+        '并确认 backend/cli.py 的 _set_admin_password 会处理对应账号。'
+    )
+
+
+def test_init_handles_every_seeded_account() -> None:
+    """`fba init` 收尾必须处理掉所有带种子密码的账号，否则建出来的库自己起不来
+
+    实测过：原来只 `reset_password(admin)`，`test` 留着 123456 —— init 报「成功」，
+    prod 启动时被 `_verify_production_database()` 挡住。两层配合才完整，
+    这条把它们钉在一起。
+    """
+    import inspect
+
+    from backend import cli
+
+    src = inspect.getsource(cli._set_admin_password)
+    for username in ('admin', 'test'):
+        assert f"'{username}'" in src, f'_set_admin_password 没有处理种子账号 {username}'
