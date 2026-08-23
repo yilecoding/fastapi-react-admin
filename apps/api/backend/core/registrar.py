@@ -10,8 +10,10 @@ from alembic.config import Config as AlembicConfig
 from fastapi import Depends, FastAPI
 from fastapi_pagination import add_pagination
 from prometheus_client import make_asgi_app
+from sqlalchemy import text
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.cors import CORSMiddleware
+from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
 from starlette_context.middleware import ContextMiddleware
 from starlette_context.plugins import RequestIdPlugin
@@ -174,6 +176,7 @@ def register_app() -> FastAPI:
     # 注册组件
     register_logger()
     register_socket_app(app)
+    register_health(app)
     register_static_file(app)
     register_middleware(app)
     register_router(app)
@@ -193,6 +196,59 @@ def register_logger() -> None:
     """注册日志"""
     setup_logging()
     set_custom_logfile()
+
+
+def register_health(app: FastAPI) -> None:
+    """注册健康检查端点
+
+    🔴 **路径必须在 `FASTAPI_API_V1_PATH` 之外。** `OperaLogMiddleware` 和
+    `AccessMiddleware` 都按 `path.startswith(settings.FASTAPI_API_V1_PATH)` 决定
+    要不要记录 —— 挂进 /api/v1 的话，每 15 秒一次的探针会把 sys_opera_log 刷爆。
+
+    另外两条豁免是「不做什么」换来的：直接注册在 app 上（不走 `build_final_router`）
+    就不带 `DependsJwtAuth` / `demo_site`；不加 `Depends(RateLimiter(...))` 就不受限流。
+    两者都是 per-route 依赖，不挂就没有。
+
+    :param app: FastAPI 应用实例
+    :return:
+    """
+
+    @app.get('/health/live', include_in_schema=False)
+    async def liveness() -> JSONResponse:
+        """存活探针 —— 刻意不碰任何外部依赖
+
+        探 DB 的话，数据库抖一下会让编排把**所有**副本一起 kill，
+        把一次短暂的依赖故障放大成全站雪崩。存活只回答「进程还在不在」。
+        """
+        return JSONResponse({'status': 'alive'})
+
+    @app.get('/health/ready', include_in_schema=False)
+    async def readiness() -> JSONResponse:
+        """就绪探针 —— 探 DB + Redis，决定能不能进流量"""
+        checks: dict[str, str] = {}
+
+        try:
+            async with asyncio.timeout(5), async_db_session() as db:
+                await db.execute(text('SELECT 1'))
+            checks['database'] = 'ok'
+        except Exception as e:
+            checks['database'] = f'error: {type(e).__name__}'
+
+        try:
+            async with asyncio.timeout(3):
+                await redis_client.ping()
+            checks['redis'] = 'ok'
+        except Exception as e:
+            checks['redis'] = f'error: {type(e).__name__}'
+
+        ready = all(v == 'ok' for v in checks.values())
+        # 🔴 不能用 ResponseModel 那层信封 —— 它永远是 HTTP 200，
+        # 而探针只看状态码，会把「DB 挂了」读成健康。
+        # 这正是硬纪律 9 说的「请求失败必须是可见状态，不是缺失状态」。
+        return JSONResponse(
+            {'status': 'ready' if ready else 'degraded', 'checks': checks},
+            status_code=200 if ready else 503,
+        )
 
 
 def register_static_file(app: FastAPI) -> None:

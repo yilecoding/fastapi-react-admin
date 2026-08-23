@@ -1,0 +1,81 @@
+# syntax=docker/dockerfile:1.7
+#
+# 本仓库的后端生产镜像（SQL Server 主线）。
+#
+# 与同目录 `Dockerfile` 的关系：那份是**上游 fastapi-best-architecture 的**，
+# 主库是 PostgreSQL、不装 ODBC 驱动，照它构建出来的镜像连不上 SQL Server。
+# 保留它是为了对照上游，不要拿它部署。
+#
+#     docker build -f apps/api/Dockerfile.prod -t fba-api apps/api
+#
+ARG PY=3.13
+
+# ── 构建期：uv 按 lock 装依赖 ──────────────────────────────────────
+FROM ghcr.io/astral-sh/uv:python${PY}-bookworm-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc g++ make python3-dev unixodbc-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/usr/local
+
+WORKDIR /app
+
+# 只拷清单，让依赖层能被缓存住
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-default-groups --group server --no-install-project
+
+# ── 运行期 ─────────────────────────────────────────────────────────
+FROM ghcr.io/astral-sh/uv:python${PY}-bookworm-slim AS runtime
+
+# 🔴 msodbcsql18 是必须的，上游那份 Dockerfile 没有这一段。
+# 应用走 `mssql+aioodbc`，celery 的 result backend 走 `mssql+pyodbc`，
+# 两者都要它 —— 所以 **worker / beat 镜像也是这一份**，不能省。
+# 缺了的表现是容器正常起来，第一次查库时 "Can't open lib 'ODBC Driver 18 for SQL Server'"。
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl ca-certificates gnupg tzdata unixodbc \
+    && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+        | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/microsoft-prod.gpg] \
+https://packages.microsoft.com/debian/12/prod bookworm main" \
+        > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV TZ=Asia/Shanghai \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH=/usr/local/bin:$PATH \
+    CONTAINER=1
+
+COPY --from=builder /usr/local /usr/local
+
+RUN groupadd -g 1000 fba && useradd -u 1000 -g 1000 -m -s /bin/bash fba
+WORKDIR /app
+COPY --chown=fba:fba . /app
+
+# 三个可写目录（backend/core/path_conf.py）。
+# ⚠️ upload 与 upload-public 是**刻意分开**的两棵树 —— 前者不挂静态、只能走带鉴权的
+# 下载接口，后者挂在 /uploads 供富文本内联图直读。合并等于把私有件公开出去。
+RUN mkdir -p /app/backend/log /app/backend/upload /app/backend/upload-public \
+    && chown -R fba:fba /app/backend/log /app/backend/upload /app/backend/upload-public
+
+USER fba
+EXPOSE 8000
+
+# 存活探针刻意只用 /health/live（不碰 DB）—— 用 ready 的话数据库抖一下
+# 会让编排把所有副本一起 kill
+HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=4 \
+    CMD curl -fsS http://127.0.0.1:8000/health/live || exit 1
+
+# ⚠️ --forwarded-allow-ips 不要写 `*`。它和 conf.py 的 TRUSTED_PROXIES 是同一件事的
+# 两层，写 `*` 等于在更底一层把「谁都信 X-Forwarded-For」重新打开，
+# 上层的白名单就白配了。这里限定到 compose 网络的网段。
+CMD ["python", "-m", "uvicorn", "backend.main:app", \
+     "--host", "0.0.0.0", "--port", "8000", "--workers", "2", \
+     "--proxy-headers", "--forwarded-allow-ips", "172.16.0.0/12"]

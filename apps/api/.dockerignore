@@ -11,3 +11,11 @@ venv/
 .claude/
 .serena/
 .logs/
+
+# 运行期产物与本地配置 —— 不能烤进镜像
+backend/log/
+backend/upload/
+backend/upload-public/
+backend/.env
+backend/.env.e2e
+deploy/backend/docker-compose/.env.server

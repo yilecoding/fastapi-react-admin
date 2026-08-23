@@ -1,0 +1,23 @@
+# 前端镜像的构建上下文是**仓库根**（monorepo 的 workspace 布局不能拍平，见
+# apps/web/Dockerfile 里的说明），所以这份 ignore 要挡住整仓的重物。
+**/node_modules
+**/dist
+**/.venv
+**/.turbo
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+.git
+.github
+.idea
+.vscode
+.claude
+.serena
+.logs
+apps/web/playwright-report
+apps/web/test-results
+apps/api/backend/log
+apps/api/backend/upload
+apps/api/backend/upload-public
+**/.env
+!**/.env.example
