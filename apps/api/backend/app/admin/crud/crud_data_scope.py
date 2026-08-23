@@ -3,7 +3,7 @@ from typing import Any
 
 from sqlalchemy import Select, and_, delete, insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus, JoinConfig
+from sqlalchemy_crud_plus import JoinConfig
 
 from backend.app.admin.model import DataRule, DataScope, data_scope_rule
 from backend.app.admin.schema.data_scope import (
@@ -12,11 +12,15 @@ from backend.app.admin.schema.data_scope import (
     UpdateDataScopeParam,
     UpdateDataScopeRuleParam,
 )
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.utils.serializers import select_join_serialize
 from backend.utils.timezone import timezone
 
 
-class CRUDDataScope(CRUDPlus[DataScope]):
+class CRUDDataScope(DataScopedCRUD[DataScope]):
+    #: 显式豁免数据权限 —— 同 DataRule，会自锁
+    data_scope_enabled = False
+
     """数据范围数据库操作类"""
 
     async def get(self, db: AsyncSession, pk: int) -> DataScope | None:

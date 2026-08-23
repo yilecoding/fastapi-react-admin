@@ -2,15 +2,18 @@ from collections.abc import Sequence
 
 from sqlalchemy import Select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus
 
 from backend.common.enums import StatusType
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.plugin.dict.model import DictData
 from backend.plugin.dict.schema.dict_data import CreateDictDataParam, UpdateDictDataParam
 from backend.utils.timezone import timezone
 
 
-class CRUDDictData(CRUDPlus[DictData]):
+class CRUDDictData(DataScopedCRUD[DictData]):
+    #: 显式豁免数据权限 —— 同 DictType
+    data_scope_enabled = False
+
     """字典数据数据库操作类"""
 
     async def get(self, db: AsyncSession, pk: int) -> DictData | None:

@@ -2,15 +2,18 @@ from collections.abc import Sequence
 
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus
 
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.plugin.dict.crud.crud_dict_data import dict_data_dao
 from backend.plugin.dict.model import DictType
 from backend.plugin.dict.schema.dict_type import CreateDictTypeParam, UpdateDictTypeParam
 from backend.utils.timezone import timezone
 
 
-class CRUDDictType(CRUDPlus[DictType]):
+class CRUDDictType(DataScopedCRUD[DictType]):
+    #: 显式豁免数据权限 —— 全局配置字典，前端下拉直接依赖它。滤掉某一项等于表单选项凭空消失
+    data_scope_enabled = False
+
     """字典类型数据库操作类"""
 
     async def get(self, db: AsyncSession, pk: int) -> DictType | None:

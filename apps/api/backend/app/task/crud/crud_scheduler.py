@@ -3,14 +3,14 @@ from datetime import datetime
 
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus
 
 from backend.app.task.model import TaskExtended, TaskScheduler
 from backend.app.task.schema.scheduler import CreateTaskSchedulerParam, UpdateTaskSchedulerParam
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.utils.timezone import timezone
 
 
-class CRUDTaskScheduler(CRUDPlus[TaskScheduler]):
+class CRUDTaskScheduler(DataScopedCRUD[TaskScheduler]):
     """任务调度数据库操作类"""
 
     async def get(self, db: AsyncSession, pk: int) -> TaskScheduler | None:
@@ -62,7 +62,7 @@ class CRUDTaskScheduler(CRUDPlus[TaskScheduler]):
         )
 
 
-class CRUDTaskResult(CRUDPlus[TaskExtended]):
+class CRUDTaskResult(DataScopedCRUD[TaskExtended]):
     """任务执行记录数据库操作类。
 
     ⚠️ 这张表由 **celery 自己**写（`database.py` 的 DatabaseBackend），

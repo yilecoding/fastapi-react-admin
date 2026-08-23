@@ -5,7 +5,7 @@ import bcrypt
 
 from sqlalchemy import Select, and_, delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus, JoinConfig
+from sqlalchemy_crud_plus import JoinConfig
 
 from backend.app.admin.model import (
     DataRule,
@@ -29,12 +29,13 @@ from backend.app.admin.utils.password_security import get_hash_password
 from backend.common.enums import StatusType
 from backend.common.exception import errors
 from backend.common.i18n import t
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.plugin.core import check_plugin_installed
 from backend.utils.serializers import select_join_serialize
 from backend.utils.timezone import timezone
 
 
-class CRUDUser(CRUDPlus[User]):
+class CRUDUser(DataScopedCRUD[User]):
     """用户数据库操作类"""
 
     async def get(self, db: AsyncSession, user_id: int) -> User | None:

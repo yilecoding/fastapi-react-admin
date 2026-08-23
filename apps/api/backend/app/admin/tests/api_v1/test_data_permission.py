@@ -536,52 +536,77 @@ def test_now_template_on_excluded_column_sees_nothing(client: TestClient, dp: Gr
 
 
 # --------------------------------------------------------------------------
-# 7. 🔴 覆盖面：数据权限只挂在一个接口上
+# 7. 覆盖面：过滤接在 DAO 层，列表和详情都算数
 # --------------------------------------------------------------------------
 
 
-def test_dept_detail_endpoint_has_no_data_filter(client: TestClient, dp: Graph) -> None:
-    """🔴 `GET /sys/depts/{pk}` 没有 `DataPermissionFilter`：
-    只能看见 A1 的账号，直接按 ID 就能读到 B1 的详情。
-    列表页看不到 ≠ 拿不到。
+def test_dept_detail_endpoint_is_filtered(client: TestClient, dp: Graph) -> None:
+    """按主键取详情也要过滤 —— 「列表页看不到」不等于「拿不到」
+
+    这条以前叫 `..._has_no_data_filter`，断言的是「直接按 ID 就能读到 B1」——
+    那是当时的真实行为：过滤器只挂在 `GET /sys/depts`（部门树）上，
+    同一个文件里的 `GET /sys/depts/{pk}` 什么都没有。
+
+    🔴 修法不是给这个接口补一个 `Depends` —— 那样**下一个新接口还会漏**。
+    过滤接在 `CRUDPlus` 的读方法上（`common/security/data_scope.py`），
+    其中 `select_model`（按主键）必须单独覆盖：它**不走** `select()`。
     """
     headers = login(client, dp, 'code_a1')
     resp = client.get(f'/sys/depts/{dp.dept["B1"]}', headers=headers)
-    assert resp.status_code == 200
-    assert resp.json()['data']['code'] == dp.code('B1')
+    assert resp.status_code == 404, f'按 ID 还能读到不可见的部门：{resp.text}'
 
 
-def test_user_list_endpoint_has_no_data_filter(client: TestClient, dp: Graph) -> None:
-    """🔴 `GET /sys/users` 既没挂数据权限、也没挂 RBAC —— 任何登录用户都能翻到全部用户。
+def test_dept_detail_of_visible_row_still_works(client: TestClient, dp: Graph) -> None:
+    """反向对照：可见的那条必须照常读得到，否则就是把详情接口整个滤死了"""
+    headers = login(client, dp, 'code_a1')
+    resp = client.get(f'/sys/depts/{dp.dept["A1"]}', headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()['data']['code'] == dp.code('A1')
 
-    连配了 `__ALL__ + __dept_id__`（本意是「只看本部门的一切」）的账号也一样，
-    因为那个过滤器**根本没接到这个接口上**。
+
+def test_user_list_endpoint_is_filtered(client: TestClient, dp: Graph) -> None:
+    """`__ALL__ + __dept_id__`（「只看本部门的一切」）现在真的作用到用户列表上
+
+    以前这个过滤器**根本没接到这个接口**，配了这条规则的账号照样翻得到全公司。
     """
     headers = login(client, dp, 'all_dept_id')
     resp = client.get('/sys/users', headers=headers, params={'page': 1, 'size': 50})
     assert resp.status_code == 200, resp.text
     items = resp.json()['data']['items']
     dept_ids = {str(i.get('dept_id')) for i in items}
-    assert len(dept_ids) > 1, '看到的用户应当跨多个部门，证明没有按部门过滤'
+    assert len(dept_ids) <= 1, f'用户列表跨了多个部门，说明按部门过滤没生效：{dept_ids}'
 
 
-def test_data_permission_filter_is_wired_to_exactly_one_endpoint() -> None:
-    """🔴 守卫：全仓只有一个接口挂了 `DataPermissionFilter`。
+def test_every_crud_class_declares_its_data_scope_stance() -> None:
+    """🔴 守卫：每个 CRUD 类都要对数据权限**表态**。
 
-    这条断言故意写成「等于」而不是「大于」—— 它的作用是在**接上新接口时红一次**，
-    提醒同步更新这份用例；也在**有人手滑摘掉唯一那一处时红**。
+    这条替换了原来的 `test_data_permission_filter_is_wired_to_exactly_one_endpoint`
+    ——那条断言「全仓只有一个接口挂了 DataPermissionFilter」，是一条主动记录缺口的
+    守卫，覆盖面补上之后它必然红。
+
+    换成现在这条之后守的东西更强：新写一个 DAO 时，要么继承 `DataScopedCRUD`
+    （默认过滤），要么显式写 `data_scope_enabled = False` 并说明理由。
+    **忘了想这件事**会红 —— 而忘了想正是原来那个洞的成因。
     """
     import pathlib
+    import re
 
     api_root = pathlib.Path(__file__).resolve().parents[4]
-    hits = sorted(
-        p.relative_to(api_root).as_posix()
-        for p in api_root.rglob('*.py')
-        if 'DataPermissionFilter(' in p.read_text(encoding='utf-8')
-        and 'security/permission.py' not in p.as_posix()
-        and '/tests/' not in p.as_posix()
+    offenders = []
+    for path in api_root.rglob('crud_*.py'):
+        if '/tests/' in path.as_posix():
+            continue
+        body = path.read_text(encoding='utf-8')
+        rel = path.relative_to(api_root).as_posix()
+        offenders.extend(
+            f'{rel}::{cls}' for cls in re.findall(r'^class (\w+)\(CRUDPlus\[', body, flags=re.MULTILINE)
+        )
+
+    assert not offenders, (
+        '这些 CRUD 类还在直接继承 CRUDPlus，没有对数据权限表态：\n'
+        + '\n'.join(f'  - {o}' for o in offenders)
+        + '\n改成继承 DataScopedCRUD；确实不该过滤的，显式写 data_scope_enabled = False 并注明理由。'
     )
-    assert hits == ['app/admin/api/v1/sys/dept.py'], hits
 
 
 # --------------------------------------------------------------------------

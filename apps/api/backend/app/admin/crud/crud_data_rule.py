@@ -2,14 +2,18 @@ from collections.abc import Sequence
 
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus
 
 from backend.app.admin.model import DataRule
 from backend.app.admin.schema.data_rule import CreateDataRuleParam, UpdateDataRuleParam
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.utils.timezone import timezone
 
 
-class CRUDDataRule(CRUDPlus[DataRule]):
+class CRUDDataRule(DataScopedCRUD[DataRule]):
+    #: 显式豁免数据权限 —— 规则表自身。过滤它会自锁：管理规则的界面被规则滤掉，就改不回来了
+    #: （`conf.py: DATA_PERMISSION_MODEL_EXCLUDE` 也已经排除了它）
+    data_scope_enabled = False
+
     """数据规则数据库操作类"""
 
     async def get(self, db: AsyncSession, pk: int) -> DataRule | None:

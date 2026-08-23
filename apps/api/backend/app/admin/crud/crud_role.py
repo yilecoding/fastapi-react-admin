@@ -3,7 +3,7 @@ from typing import Any
 
 from sqlalchemy import Select, and_, delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus, JoinConfig
+from sqlalchemy_crud_plus import JoinConfig
 
 from backend.app.admin.model import DataScope, Menu, Role, User, role_data_scope, role_menu, user_role
 from backend.app.admin.schema.role import (
@@ -14,11 +14,12 @@ from backend.app.admin.schema.role import (
     UpdateRoleParam,
     UpdateRoleScopeParam,
 )
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.utils.serializers import select_join_serialize
 from backend.utils.timezone import timezone
 
 
-class CRUDRole(CRUDPlus[Role]):
+class CRUDRole(DataScopedCRUD[Role]):
     """角色数据库操作类"""
 
     async def get(self, db: AsyncSession, role_id: int) -> Role | None:
