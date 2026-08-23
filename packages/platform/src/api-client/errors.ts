@@ -34,6 +34,11 @@ export class ApiError extends Error {
   get isValidation() {
     return this.httpStatus === 422 || this.bizCode === 422
   }
+
+  /** 命中限流（429） */
+  get isRateLimited() {
+    return this.httpStatus === 429
+  }
 }
 
 /** FBA 统一响应包封 */

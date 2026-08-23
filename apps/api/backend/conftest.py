@@ -62,6 +62,34 @@ PYTEST_PASSWORD = '123456'
 PYTEST_BASE_URL = f'http://testserver{settings.FASTAPI_API_V1_PATH}'
 
 
+@pytest.fixture(scope='session', autouse=True)
+def _disable_rate_limiter() -> Generator[None, None, None]:
+    """测试期默认关掉限流
+
+    同一个 TestClient 的 IP 恒为 127.0.0.1，而限流 key 是 `{IP}:{path}`。
+    `test_data_permission.py` 一个模块就要登录十几次，`/auth/login/swagger` 的
+    5次/分钟会把它们全打成 429 —— 那是测试相互干扰，不是被测行为。
+    要验限流本身的用例用下面的 `rate_limiter` fixture 显式打开。
+    """
+    original = settings.REQUEST_LIMITER_ENABLED
+    settings.REQUEST_LIMITER_ENABLED = False
+    try:
+        yield
+    finally:
+        settings.REQUEST_LIMITER_ENABLED = original
+
+
+@pytest.fixture
+def rate_limiter() -> Generator[None, None, None]:
+    """给「要验 429」的用例临时打开限流"""
+    original = settings.REQUEST_LIMITER_ENABLED
+    settings.REQUEST_LIMITER_ENABLED = True
+    try:
+        yield
+    finally:
+        settings.REQUEST_LIMITER_ENABLED = original
+
+
 @pytest.fixture(scope='session')
 def client() -> Generator:
     with TestClient(app, base_url=PYTEST_BASE_URL) as c:

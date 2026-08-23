@@ -10,18 +10,41 @@ from backend.app.admin.schema.user import AuthLoginParam
 from backend.app.admin.service.auth_service import auth_service
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
 from backend.common.security.jwt import DependsJwtAuth
+from backend.core.conf import settings
 from backend.database.db import CurrentSession, CurrentSessionTransaction
 from backend.utils.limiter import RateLimiter
 
 router = APIRouter()
 
 
-@router.post('/login/swagger', summary='swagger 调试专用', description='用于快捷获取 token 进行 swagger 认证')
-async def login_swagger(
-    db: CurrentSessionTransaction, obj: Annotated[HTTPBasicCredentials, Depends()]
-) -> GetSwaggerToken:
-    token, user = await auth_service.swagger_login(db=db, obj=obj)
-    return GetSwaggerToken(access_token=token, user=user)  # type: ignore
+# 🔴 **swagger 调试口只在非 prod 注册。**
+#
+# 它和 /auth/login 的差距不是「少了个验证码」那么简单，四条叠在一起是一条完整的
+# 静默持久化通道：
+#   - 无验证码、（原来）无限流
+#   - **不写登录日志** —— 成功失败都不写，事后查不到
+#   - `create_access_token(swagger=True)` 打的标记被 monitor/online.py 用来把这类
+#     会话**排除出「在线用户」列表** —— 管理员既看不见，也无法强制下线
+#   - 收 HTTP Basic / query param，凭据会进 nginx access log 和浏览器历史
+#
+# prod 下 `check_env()` 已经把 FASTAPI_OPENAPI_URL 置 None，Swagger UI 本就打不开，
+# 这个口在 prod 没有任何存在意义。
+#
+# 用「不注册」而不是「handler 里返回 403」：路由不存在 → 依赖不解析 → 攻击面为零，
+# 且 404 与「这个 API 不存在」一致，不确认功能存在。
+if settings.ENVIRONMENT != 'prod':
+
+    @router.post(
+        '/login/swagger',
+        summary='swagger 调试专用',
+        description='用于快捷获取 token 进行 swagger 认证（仅非生产环境注册）',
+        dependencies=[Depends(RateLimiter(Rate(5, Duration.MINUTE)))],
+    )
+    async def login_swagger(
+        db: CurrentSessionTransaction, obj: Annotated[HTTPBasicCredentials, Depends()]
+    ) -> GetSwaggerToken:
+        token, user = await auth_service.swagger_login(db=db, obj=obj)
+        return GetSwaggerToken(access_token=token, user=user)  # type: ignore
 
 
 @router.post(

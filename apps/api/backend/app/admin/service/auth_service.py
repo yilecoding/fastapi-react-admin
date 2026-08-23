@@ -2,6 +2,7 @@ from fastapi import Request, Response
 from fastapi.security import HTTPBasicCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask, BackgroundTasks
+from starlette.concurrency import run_in_threadpool
 
 from backend.app.admin.crud.crud_menu import menu_dao
 from backend.app.admin.crud.crud_user import user_dao
@@ -10,7 +11,7 @@ from backend.app.admin.schema.token import GetLoginToken, GetNewToken
 from backend.app.admin.schema.user import AuthLoginParam
 from backend.app.admin.service.login_log_service import login_log_service
 from backend.app.admin.service.user_password_history_service import password_security_service
-from backend.app.admin.utils.password_security import password_verify
+from backend.app.admin.utils.password_security import get_hash_password, password_verify
 from backend.common.context import ctx
 from backend.common.enums import LoginLogStatusType, StatusType
 from backend.common.exception import errors
@@ -30,6 +31,15 @@ from backend.database.redis import redis_client
 from backend.utils.dynamic_config import load_login_config
 from backend.utils.timezone import timezone
 
+# 用户不存在时拿它跑一次等价的 bcrypt 校验，把时间侧信道抹平。
+#
+# 实测（bcrypt cost=12）：密码错要走完整 verify ≈ **190ms**，用户不存在只有一次
+# SELECT ≈ **5ms**。40 倍差距，不需要任何统计手段就能区分 —— 状态码和文案统一之后，
+# 时间差就成了剩下的那条枚举通道，所以这一步是必须的，不是加固。
+#
+# 🔴 导入期算一次。放进请求路径就是每次多付 190ms，而且那正是它要抹掉的那个数。
+_DUMMY_PASSWORD_HASH = get_hash_password('fba::dummy::never-matches', None)
+
 
 class AuthService:
     """认证服务类"""
@@ -44,21 +54,49 @@ class AuthService:
         :param password: 密码
         :return:
         """
+        ip = ctx.ip
+
+        # 跨账号密码喷洒的第一道闸，进门就看
+        await password_security_service.check_ip_lock(ip)
+
         user = await user_dao.get_by_username(db, username)
         if not user:
-            raise errors.NotFoundError(msg=t('error.auth.invalid_credentials'))
-
-        await password_security_service.check_status(user.id, user.status)
-
-        if user.password is None or not password_verify(password, user.password):
-            await password_security_service.handle_login_failure(db, user.id)
+            # 🔴 必须跑一次等价的 bcrypt，否则「用户不存在」5ms、「密码错」190ms，
+            # 状态码和文案统一了也白搭 —— 时间就是答案
+            await run_in_threadpool(password_verify, password, _DUMMY_PASSWORD_HASH)
+            await password_security_service.handle_ip_login_failure(ip)
+            # 🔴 和密码错误返回**同一个** AuthorizationError（403）。
+            # 原来这里是 NotFoundError（404），文案虽然早就统一成「用户名或密码有误」，
+            # 但状态码的差异让用户名枚举照样成立
             raise errors.AuthorizationError(msg=t('error.auth.invalid_credentials'))
+
+        # 🔴 只取原因、先不抛 —— 抛在密码校验之前会让攻击者无需凭据即可
+        # 区分「账号存在且被锁」和「账号不存在」，并且能用错误密码锁死任意账号
+        lock_reason = await password_security_service.peek_lock_reason(user.id, user.status)
+
+        # OAuth2 创建的用户 password 为 NULL。原来 `user.password is None` 会短路掉
+        # bcrypt，于是这类账号同样能被时间侧信道认出来 —— 让它也走一次哑校验
+        hashed = user.password if user.password is not None else _DUMMY_PASSWORD_HASH
+        # ⚠️ 190ms 的同步 bcrypt 会阻塞事件循环，必须进线程池
+        verified = await run_in_threadpool(password_verify, password, hashed)
+        if user.password is None or not verified:
+            # 锁定期内不再累加，避免攻击者靠持续尝试无限延长他人的锁定时间
+            if lock_reason is None:
+                await password_security_service.handle_login_failure(db, user.id)
+            await password_security_service.handle_ip_login_failure(ip)
+            raise errors.AuthorizationError(msg=t('error.auth.invalid_credentials'))
+
+        # 密码正确 —— 到这里才可以如实告知状态。此时告知已无枚举价值，
+        # 而用户确实需要这句话才知道该去找管理员
+        if lock_reason is not None:
+            raise errors.AuthorizationError(msg=lock_reason)
 
         days_remaining = await password_security_service.check_password_expiry_status(
             db, user.last_password_changed_time
         )
 
         await password_security_service.handle_login_success(user.id)
+        await password_security_service.handle_ip_login_success(ip)
 
         return user, days_remaining
 

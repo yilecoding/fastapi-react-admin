@@ -168,7 +168,14 @@ function SignInPage() {
       await navigate({ to: search.redirect ?? "/dashboard" })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("登录失败，请稍后重试"))
-      void loadCaptcha()
+      // 🔴 命中登录限流（429）时**不要**重拉验证码。
+      // /auth/captcha 自己也有配额（5 次 / 30 秒），而这里原来是「任何失败都重拉」——
+      // 用户被登录限流挡住后连点几下，验证码接口也跟着被打满，于是拿到一个
+      // 「验证码加载失败 + 登录也进不去」的双重死锁，且两条提示都不说明真正原因。
+      // 验证码本身没被消费掉，继续用旧的即可。
+      if (!(err instanceof ApiError && err.isRateLimited)) {
+        void loadCaptcha()
+      }
     } finally {
       setPending(false)
     }
