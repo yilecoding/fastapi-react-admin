@@ -12,10 +12,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 只跑**零外部依赖**的检查。刻意不含 pytest： 它要一个真实 SQL Server 实例 + 建库灌种子
-  # （见 CLAUDE.md「跑测试」），CI 里要挂 service container 并等它 healthy。
-  # 值得补，但不该让「装 ODBC 驱动 / 等实例」的不稳定拖垮每次 PR 的红绿信号。
-  # 补的时候单独加 job，别塞进这个。
+  # 零外部依赖的检查。要 SQL Server 的那部分在下面的 test-backend job 里，
+  # 两者并行 —— 拆开是为了让「装 ODBC 驱动 / 等实例」的抖动不污染这条的红绿信号。
   static:
     name: typecheck · build · i18n
     runs-on: ubuntu-latest
@@ -64,3 +62,138 @@ jobs:
       - name: ruff check
         working-directory: apps/api
         run: uvx ruff@0.16.4 check --config pyproject.toml --no-fix backend/
+
+  test-backend:
+    name: pytest · SQL Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # 真实环境变量的优先级高于 backend/.env（pydantic-settings 里 env_settings
+    # 排在 dotenv_settings 前面），所以这里只覆盖与本地开发不同的那几项
+    env:
+      DATABASE_TYPE: sqlserver
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: "1433"
+      DATABASE_USER: sa
+      DATABASE_PASSWORD: "YourStrong!Passw0rd"
+      # 开发库名。测试库由 get_database_url(unittest=True) 推成 <schema>_test
+      DATABASE_SCHEMA: fba
+      # 🔴 sqlserver 只有 init_snowflake_test_data.sql 这一份种子。改成 autoincrement
+      # 会静默跳过灌数据，库建好了却没有 admin，表现是所有登录 401
+      DATABASE_PK_MODE: snowflake
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6380"
+      TOKEN_SECRET_KEY: ci-only-not-a-real-secret-Ku3Jd9wQpZ2vLxR7
+      # runner 在境外，插件依赖万一真要现装也别走国内镜像
+      PLUGIN_PIP_CHINA: "false"
+
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          # ⚠️ 必须是字符串 'Y'。裸 Y 会被 YAML 解析成布尔 true，
+          # 容器起来后立刻退出，日志里只有一句 EULA 未接受
+          ACCEPT_EULA: "Y"
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+        ports:
+          - 1433:1433
+        # ⚠️ sqlcmd 在 /opt/mssql-tools18/bin —— 老的 /opt/mssql-tools 在 2022 镜像里
+        # **不存在**（实测 docker exec 确认）。18 版默认强制加密，不带 -C 会因自签证书连不上。
+        # 用 sqlcmd 探活而不是探端口：端口先开、实例没起完那段窗口连上去是 Login failed
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrong!Passw0rd' -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+          --health-start-period 20s
+
+      redis:
+        image: redis:7-alpine
+        # 6380 是为了和 .env.example / docker-compose.dev.yml 对齐。
+        # 改端口要同步改那两处，否则表现是 Redis 连不上而不是端口问题
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          # pyproject 里 python-downloads = "manual"，不显式指定 uv 不会自己下 Python
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      # runner 镜像多数版本自带 Driver 18，但不保证。驱动名必须和 DATABASE_DRIVER
+      # （默认 'ODBC Driver 18 for SQL Server'）逐字一致，所以装完打印一遍核对
+      - name: ODBC Driver 18
+        run: |
+          if ! command -v odbcinst >/dev/null || ! odbcinst -q -d | grep -q 'ODBC Driver 18 for SQL Server'; then
+            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+              | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
+            curl -fsSL "https://packages.microsoft.com/config/ubuntu/$(. /etc/os-release && echo "$VERSION_ID")/prod.list" \
+              | sudo tee /etc/apt/sources.list.d/mssql-release.list > /dev/null
+            sudo apt-get update -qq
+            sudo ACCEPT_EULA=Y apt-get install -y -qq msodbcsql18 unixodbc-dev
+          fi
+          odbcinst -q -d
+
+      # 插件依赖（aiosmtplib / fastapi-oauth20）已经锁进 uv.lock，这里一并装上。
+      # 不装的话 `import backend.main` 顶层的 _prepare_plugins() 会在 pytest 收集阶段
+      # 现场联网 uv pip install —— 一次隐式安装，是这类 job 最典型的偶发红
+      - name: uv sync
+        working-directory: apps/api
+        run: uv sync --locked --no-group lint
+
+      # backend/.env 是 gitignore 的。get_settings() 在缺失时会自动 copy 一份，
+      # 但那是隐式副作用，显式做掉；与本地不同的项已由 job 级 env 覆盖
+      - name: .env
+        working-directory: apps/api
+        run: cp backend/.env.example backend/.env
+
+      # service 的 healthcheck 已保证实例可登录，这里再补一层带上限的轮询 ——
+      # healthy 到「能建库」之间偶尔还有几秒窗口。不用定长 sleep：慢了照挂、快了白等，
+      # 而且失败时看不出原因（超时会把容器日志打出来，起不来 90% 是密码复杂度或内存）
+      - name: 建库（fba + fba_test）
+        env:
+          MSSQL_CID: ${{ job.services.mssql.id }}
+        run: |
+          SQLCMD="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P $DATABASE_PASSWORD -C -l 5"
+          for i in $(seq 1 40); do
+            if docker exec "$MSSQL_CID" $SQLCMD -Q "SELECT 1" > /dev/null 2>&1; then
+              echo "SQL Server 就绪（第 $i 次探测）"; break
+            fi
+            if [ "$i" -eq 40 ]; then
+              echo "SQL Server 120s 内没起来，容器日志："; docker logs --tail 80 "$MSSQL_CID"; exit 1
+            fi
+            sleep 3
+          done
+          # fba 建成**空库**即可，不灌种子：应用 lifespan 的 create_tables() 会建表，
+          # 而所有测试数据都在 fba_test 里（backend/conftest.py 把三处不走依赖注入的
+          # 会话也切到了测试库）。fba 仍必须存在，否则 lifespan 连不上
+          docker exec "$MSSQL_CID" $SQLCMD -Q \
+            "IF DB_ID('fba') IS NULL CREATE DATABASE [fba]; IF DB_ID('fba_test') IS NULL CREATE DATABASE [fba_test];"
+
+      # drop_all → create_all → 灌种子 → alembic stamp head（stamp 是脚本内建的）
+      - name: 重建测试库
+        working-directory: apps/api
+        run: uv run --no-sync python -m backend.scripts.reset_test_db
+
+      # 🔴 顺序不能调：建库 → test:db → upgrade → pytest。
+      # test_model_matches_migrations 拿模型和 fba_test 做 compare_metadata，
+      # 顺序错一步会拿到一个和代码无关的假红
+      - name: 测试库升到 head
+        working-directory: apps/api/backend
+        env:
+          DATABASE_SCHEMA: fba_test
+        run: uv run --no-sync alembic upgrade head
+
+      - name: pytest
+        working-directory: apps/api
+        run: uv run --no-sync pytest
