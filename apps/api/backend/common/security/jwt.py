@@ -18,6 +18,7 @@ from backend.common.context import ctx
 from backend.common.dataclasses import AccessToken, NewToken, RefreshToken, TokenPayload
 from backend.common.exception import errors
 from backend.common.i18n import t
+from backend.common.security.data_scope import bypass_data_scope
 from backend.core.conf import settings
 from backend.database.db import async_db_session
 from backend.database.redis import redis_client
@@ -225,8 +226,13 @@ async def get_jwt_user(user_id: int) -> GetUserInfoWithRelationDetail:
     """
     cache_user = await redis_client.get(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
     if not cache_user:
-        async with async_db_session() as db:
-            current_user = await get_current_user(db, user_id)
+        # 🔴 认证链路自己查用户必须豁免数据权限。这次读的目的不是「把数据展示给用户」，
+        # 而是「弄清楚来的是谁」—— 按可见范围过滤会自锁：查不到自己 → 认证失败。
+        # 多数时候这里 ContextVar 还是空的（用户还没解析出来），豁免是为了挡住
+        # 「缓存恰好在一个已经设过用户的请求里过期并重建」这种时序。
+        with bypass_data_scope():
+            async with async_db_session() as db:
+                current_user = await get_current_user(db, user_id)
             user = GetUserInfoWithRelationDetail.model_validate(current_user)
             await redis_client.set(
                 f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}',

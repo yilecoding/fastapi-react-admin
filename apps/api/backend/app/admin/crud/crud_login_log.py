@@ -3,13 +3,13 @@ from datetime import datetime
 from sqlalchemy import Select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus
 
 from backend.app.admin.model import LoginLog
 from backend.app.admin.schema.login_log import CreateLoginLogParam
+from backend.common.security.data_scope import DataScopedCRUD
 
 
-class CRUDLoginLog(CRUDPlus[LoginLog]):
+class CRUDLoginLog(DataScopedCRUD[LoginLog]):
     """登录日志数据库操作类"""
 
     async def get_select(

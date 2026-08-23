@@ -10,6 +10,7 @@ from backend.app.admin.schema.user import GetUserInfoWithRelationDetail
 from backend.common.context import ctx
 from backend.common.exception.errors import TokenError
 from backend.common.log import log
+from backend.common.security.data_scope import set_current_user
 from backend.common.security.jwt import jwt_authentication
 from backend.core.conf import settings
 from backend.utils.serializers import MsgSpecJSONResponse
@@ -100,6 +101,11 @@ class JwtAuthMiddleware(AuthenticationBackend):
         except Exception as e:
             log.exception(f'JWT 授权异常：{e}')
             raise AuthenticationError(code=getattr(e, 'code', 500), msg=getattr(e, 'msg', 'Internal Server Error'))
+
+        # 🔴 把用户放进 ContextVar，DAO 层的数据权限过滤靠它
+        # （`common/security/data_scope.py`）。必须在**用户已经解析出来之后**才设 ——
+        # 解析过程本身要查用户表，提前设了就会自己过滤掉自己。
+        set_current_user(user)
 
         # 请注意，此返回使用非标准模式，所以在认证通过时，将丢失某些标准特性
         # 标准返回模式请查看：https://www.starlette.io/authentication/

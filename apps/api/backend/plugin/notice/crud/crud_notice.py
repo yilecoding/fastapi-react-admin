@@ -2,14 +2,14 @@ from collections.abc import Sequence
 
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus
 
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.plugin.notice.model import Notice
 from backend.plugin.notice.schema.notice import CreateNoticeParam, UpdateNoticeParam
 from backend.utils.timezone import timezone
 
 
-class CRUDNotice(CRUDPlus[Notice]):
+class CRUDNotice(DataScopedCRUD[Notice]):
     """通知公告数据库操作类"""
 
     async def get(self, db: AsyncSession, pk: int) -> Notice | None:

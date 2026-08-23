@@ -1,14 +1,17 @@
 from collections.abc import Sequence
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus
 
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.plugin.oauth2.model import UserSocial
 from backend.plugin.oauth2.schema.user_social import CreateUserSocialParam
 from backend.utils.timezone import timezone
 
 
-class CRUDUserSocial(CRUDPlus[UserSocial]):
+class CRUDUserSocial(DataScopedCRUD[UserSocial]):
+    #: 显式豁免数据权限 —— OAuth2 绑定关系在**登录链路**上读，那时还没有「当前用户」
+    data_scope_enabled = False
+
     """用户社交账号数据库操作类"""
 
     async def check_binding(self, db: AsyncSession, user_id: int, source: str) -> UserSocial | None:

@@ -3,15 +3,16 @@ from typing import Any
 
 from sqlalchemy import ColumnElement, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus, JoinConfig
+from sqlalchemy_crud_plus import JoinConfig
 
 from backend.app.admin.model import Dept, User
 from backend.app.admin.schema.dept import CreateDeptParam, UpdateDeptParam
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.utils.serializers import select_join_serialize
 from backend.utils.timezone import timezone
 
 
-class CRUDDept(CRUDPlus[Dept]):
+class CRUDDept(DataScopedCRUD[Dept]):
     """部门数据库操作类"""
 
     async def get(self, db: AsyncSession, dept_id: int) -> Dept | None:

@@ -4,13 +4,13 @@ import sqlalchemy as sa
 
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus
 
 from backend.app.admin.model import File, FileRelation
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.utils.timezone import timezone
 
 
-class CRUDFile(CRUDPlus[File]):
+class CRUDFile(DataScopedCRUD[File]):
     """文件数据库操作类"""
 
     async def get(self, db: AsyncSession, pk: int) -> File | None:
@@ -168,7 +168,7 @@ class CRUDFile(CRUDPlus[File]):
         return result.all()
 
 
-class CRUDFileRelation(CRUDPlus[FileRelation]):
+class CRUDFileRelation(DataScopedCRUD[FileRelation]):
     """文件关联数据库操作类"""
 
     async def get_file_ids_by_target(self, db: AsyncSession, target_type: str, target_id: int) -> Sequence[int]:

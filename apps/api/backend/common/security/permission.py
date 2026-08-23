@@ -66,8 +66,35 @@ def get_data_permission_models() -> dict[str, object]:
     return {getattr(model, '__name__', str(model)): model for model in get_all_models()}
 
 
-def filter_data_permission(  # ruff:ignore[complex-structure]
+class _UserOnly:
+    """只为了让下面那段沿用 `request.user` 的写法 —— 避免大面积改动引入笔误"""
+
+    __slots__ = ('user',)
+
+    def __init__(self, user: Any) -> None:
+        self.user = user
+
+
+def filter_data_permission(
     request: Request, *models: type[Model] | AliasedClass | Alias | Table
+) -> ColumnElement[bool]:
+    """
+    过滤数据权限，控制用户可见数据范围（按请求取用户）
+
+    保留这个签名是为了 `DataPermissionFilter` 那条显式接线方式还能用。
+    真正的实现在 `filter_data_permission_for_user` —— DAO 层
+    （`common/security/data_scope.py: DataScopedCRUD`）拿不到 `Request`，
+    只能拿到从 ContextVar 里取出来的用户对象。
+
+    :param request: FastAPI 请求对象
+    :param models: 需要应用数据权限的模型类
+    :return:
+    """
+    return filter_data_permission_for_user(request.user, *models)
+
+
+def filter_data_permission_for_user(  # ruff:ignore[complex-structure]
+    current_user: Any, *models: type[Model] | AliasedClass | Alias | Table
 ) -> ColumnElement[bool]:
     """
     过滤数据权限，控制用户可见数据范围
@@ -75,10 +102,12 @@ def filter_data_permission(  # ruff:ignore[complex-structure]
     使用场景：
         - 控制用户能看到哪些数据
 
-    :param request: FastAPI 请求对象
+    :param current_user: 当前用户（含 roles → scopes → rules）
     :param models: 需要应用数据权限的模型类
     :return:
     """
+    request = _UserOnly(current_user)
+
     # 超级管理员不过滤
     if request.user.is_superuser:
         return or_(1 == 1)

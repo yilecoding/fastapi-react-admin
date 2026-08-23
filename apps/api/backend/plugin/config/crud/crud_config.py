@@ -2,14 +2,18 @@ from collections.abc import Sequence
 
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus
 
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.plugin.config.model import Config
 from backend.plugin.config.schema.config import CreateConfigParam, UpdateConfigParam
 from backend.utils.timezone import timezone
 
 
-class CRUDConfig(CRUDPlus[Config]):
+class CRUDConfig(DataScopedCRUD[Config]):
+    #: 显式豁免数据权限 —— 系统参数配置，同字典 —— 而且 `load_login_config` 这类启动/登录期读取
+    #: 本来就不在请求上下文里
+    data_scope_enabled = False
+
     """系统参数参数配置数据库操作类"""
 
     async def get(self, db: AsyncSession, pk: int) -> Config | None:

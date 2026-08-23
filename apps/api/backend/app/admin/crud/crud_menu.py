@@ -2,14 +2,18 @@ from collections.abc import Sequence
 
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy_crud_plus import CRUDPlus
 
 from backend.app.admin.model import Menu, role_menu
 from backend.app.admin.schema.menu import CreateMenuParam, UpdateMenuParam
+from backend.common.security.data_scope import DataScopedCRUD
 from backend.utils.timezone import timezone
 
 
-class CRUDMenu(CRUDPlus[Menu]):
+class CRUDMenu(DataScopedCRUD[Menu]):
+    #: 显式豁免数据权限 —— 菜单是权限的**定义**，不是业务数据。按数据权限过滤会把用户自己的
+    #: 侧边栏滤掉 —— 表现是登录后一片空白，而不是「少看见几条数据」
+    data_scope_enabled = False
+
     """菜单数据库操作类"""
 
     async def get(self, db: AsyncSession, menu_id: int) -> Menu | None:
