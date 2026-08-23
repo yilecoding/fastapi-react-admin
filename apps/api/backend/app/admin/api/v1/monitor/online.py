@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.get('', summary='获取在线用户', dependencies=[DependsSuperUser])
-async def get_sessions(
+async def get_sessions(  # ruff:ignore[complex-structure]
     username: Annotated[str | None, Query(description='用户名')] = None,
 ) -> ResponseSchemaModel[list[GetTokenDetail]]:
     token_keys = await redis_client.get_by_prefix(settings.TOKEN_REDIS_PREFIX)

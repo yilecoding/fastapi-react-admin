@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 import socketio
 
+from alembic.config import Config as AlembicConfig
 from fastapi import Depends, FastAPI
 from fastapi_pagination import add_pagination
 from prometheus_client import make_asgi_app
@@ -24,7 +25,7 @@ from backend.common.observability.otel import init_otel
 from backend.common.response.response_code import StandardResponseCode
 from backend.core.conf import settings
 from backend.core.path_conf import PUBLIC_UPLOAD_DIR, STATIC_DIR, UPLOAD_DIR
-from backend.database.db import create_tables, dispose_database
+from backend.database.db import async_db_session, create_tables, dispose_database
 from backend.database.redis import redis_client
 from backend.middleware.access_middleware import AccessMiddleware
 from backend.middleware.i18n_middleware import I18nMiddleware
@@ -40,6 +41,68 @@ from backend.utils.snowflake import snowflake
 from backend.utils.trace_id import OtelTraceIdPlugin
 
 
+async def _verify_production_database() -> None:
+    """prod 启动前对数据库做两项检查，任一不过就拒绝启动
+
+    **1. 迁移版本必须在 head。**
+
+    prod 下**不建表**（见下面 `register_init` 里的分支）。`create_tables()`
+    走的是 `metadata.create_all`，它只建不改：模型加了一列，已存在的表不会跟着变，
+    表现是运行时一片 `Invalid column name`。更麻烦的是它会让「忘了跑迁移」
+    伪装成「服务正常启动」，直到某个接口碰到那一列才炸。
+    改成校验之后，同一个场景变成启动即失败 —— 硬纪律 9 说的「失败必须是可见状态」。
+
+    **2. 不能有账号还在用种子密码。**
+
+    `fba init` 收尾会强制改密，但那条路绕得开：直接拿 `backend/sql/**` 灌库、
+    或者从测试环境 dump 一份过来，都不经过 init。这里按 hash 字面量比对兜底，
+    无论库是怎么来的都拦得住（种子 hash 是固定盐，三个方言里同一个常量）。
+
+    :return:
+    """
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import inspect, select, text
+
+    from backend.app.admin.model import User
+    from backend.app.admin.utils.password_security import SEEDED_PASSWORD_HASHES
+    from backend.core.path_conf import BASE_PATH
+
+    problems: list[str] = []
+
+    async with async_db_session() as db:
+        conn = await db.connection()
+        has_version_table = await conn.run_sync(lambda c: inspect(c).has_table('alembic_version'))
+        if not has_version_table:
+            problems.append(
+                '数据库里没有 alembic_version 表 —— 这个库是 create_all 建的但没 stamp。'
+                '跑 `fba init`（会自动 stamp head），或对已有库 `alembic stamp <当前版本>` 后 `alembic upgrade head`'
+            )
+        else:
+            stamped = {row[0] for row in (await conn.execute(text('SELECT version_num FROM alembic_version')))}
+            config = AlembicConfig(str(BASE_PATH / 'alembic.ini'))
+            config.set_main_option('script_location', str(BASE_PATH / 'alembic'))
+            heads = set(ScriptDirectory.from_config(config).get_heads())
+            if stamped != heads:
+                problems.append(
+                    f'数据库迁移版本 {sorted(stamped) or "（空）"} 不等于 head {sorted(heads)}'
+                    ' —— 先跑 `alembic upgrade head`'
+                )
+
+        seeded = (
+            await db.execute(
+                select(User.username).where(User.password.in_(SEEDED_PASSWORD_HASHES), User.deleted == 0)
+            )
+        ).scalars().all()
+        if seeded:
+            problems.append(
+                f'这些账号仍在使用种子数据里的默认密码（123456）：{sorted(seeded)} —— 改掉之后再启动'
+            )
+
+    if problems:
+        lines = '\n'.join(f'  {i}. {p}' for i, p in enumerate(problems, 1))
+        raise RuntimeError(f'\n\n🔴 ENVIRONMENT=prod，数据库检查未通过，拒绝启动：\n{lines}\n')
+
+
 @lifespan_manager.register
 @asynccontextmanager
 async def register_init(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -49,8 +112,12 @@ async def register_init(app: FastAPI) -> AsyncGenerator[None, None]:
     :param app: FastAPI 应用实例
     :return:
     """
-    # 创建数据库表
-    await create_tables()
+    # 🔴 prod **不建表**。开发环境保留 create_all 的便利（改个模型重启就有表），
+    # 生产环境唯一合法的建表途径是 alembic —— 见 _verify_production_database 的说明
+    if settings.ENVIRONMENT == 'prod':
+        await _verify_production_database()
+    else:
+        await create_tables()
 
     # 初始化 redis
     await redis_client.init()

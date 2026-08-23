@@ -1,7 +1,7 @@
 import json
 
+from collections.abc import Sequence
 from datetime import datetime
-
 from typing import Any
 
 from sqlalchemy import Select
@@ -34,7 +34,7 @@ class TaskSchedulerService:
         return await task_scheduler_dao.get_select(name, task, enabled)
 
     @staticmethod
-    async def get_all(*, db: AsyncSession):  # ruff:ignore[missing-return-type-undocumented-public-function]
+    async def get_all(*, db: AsyncSession) -> Sequence[TaskScheduler]:
         return await task_scheduler_dao.get_all(db)
 
     @staticmethod

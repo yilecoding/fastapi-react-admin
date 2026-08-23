@@ -19,7 +19,7 @@ def alembic_cfg():
     return cfg
 
 
-def test_single_head(alembic_cfg):
+def test_single_head(alembic_cfg) -> None:
     """🔴 只能有一条 head。
 
     两个人各自 `alembic revision` 就会分叉成两条 head，而 `upgrade head`
@@ -32,7 +32,7 @@ def test_single_head(alembic_cfg):
     assert len(heads) == 1, f'迁移历史分叉了，有 {len(heads)} 条 head：{heads}，需要 alembic merge'
 
 
-def test_every_revision_is_reachable_from_base(alembic_cfg):
+def test_every_revision_is_reachable_from_base(alembic_cfg) -> None:
     """每个迁移都要能从 base 走到 —— 断链的那些永远不会被执行。"""
     from alembic.script import ScriptDirectory
 
@@ -43,7 +43,7 @@ def test_every_revision_is_reachable_from_base(alembic_cfg):
     assert not orphans, f'这些迁移不在 base→head 的链上，永远不会执行：{sorted(orphans)}'
 
 
-def test_model_matches_migrations(alembic_cfg):
+def test_model_matches_migrations(alembic_cfg) -> None:
     """🔴 **改了模型就必须生成迁移。** 这条是「以后靠 alembic」能不能立住的分水岭。
 
     做法：让 alembic 拿**当前模型**和**已升级到 head 的测试库**做 diff，
@@ -60,7 +60,7 @@ def test_model_matches_migrations(alembic_cfg):
     from alembic.migration import MigrationContext
     from sqlalchemy import create_engine
 
-    import backend.main  # noqa: F401 —— 为副作用：把全部模型拉进 metadata
+    import backend.main  # ruff: ignore[unused-import] —— 为副作用：把全部模型拉进 metadata
 
     from backend.common.model import MappedBase
     from backend.database.db import get_database_url
@@ -81,7 +81,7 @@ def test_model_matches_migrations(alembic_cfg):
     assert not structural, (
         '模型和迁移对不上 —— 改了模型但没生成迁移。跑：\n'
         "  pnpm db:revision '说清楚改了什么'\n"
-        f'差异：\n  ' + '\n  '.join(repr(d) for d in structural)
+        '差异：\n  ' + '\n  '.join(repr(d) for d in structural)
     )
 
 
@@ -92,3 +92,57 @@ def _is_comment_only(diff) -> bool:
     if isinstance(diff, list):
         return all(_is_comment_only(d) for d in diff)
     return False
+
+
+def test_fresh_database_is_stamped_at_head(alembic_cfg) -> None:
+    """🔴 **`create_all` 建出来的库必须被 stamp 到 head。**
+
+    症状：全新环境跑 `fba init`（drop_all + create_all + 灌种子）建库，
+    库里**没有 `alembic_version` 表** —— 那张表不在 `MappedBase.metadata` 里，
+    `create_all` 不会建它。将来 `db:upgrade` 会从 base 把**全部**迁移重跑一遍。
+
+    为什么至今没炸：现有 3 条迁移在新库上碰巧都无害 —— `b0000000baseline`
+    是空的，`c0000000comments` 每一步都包在 `suppress(ProgrammingError)` 里，
+    `d0000000usertz` 有 `_has_column()` 早退。**第 4 条只要是普通的
+    `add_column` / `create_index`，在 create_all 已经建好的新库上就会炸**
+    （`Column names in each table must be unique`），而且是在部署时炸。
+
+    另外三条守卫都抓不到这个：
+      - `test_single_head` / `test_every_revision_is_reachable_from_base`
+        只读 `alembic/versions/` 目录，**不连库**
+      - `test_model_matches_migrations` 连库，但比的是表结构和模型，
+        `MigrationContext` 从不读 `alembic_version` 的内容
+
+    这条比对的是 **fba_test**，它和 `fba init` 走同一条建库路径
+    （`reset_test_db.py`：drop_all + create_all + `_stamp_head`）。
+    所以只要任何一侧漏了 stamp、或者加了迁移却没重建测试库，这条就红。
+    """
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import create_engine, inspect, text
+
+    from backend.database.db import get_database_url
+
+    url = get_database_url(unittest=True).render_as_string(hide_password=False)
+    sync_url = (
+        url.replace('+aioodbc', '+pyodbc').replace('+asyncpg', '+psycopg').replace('+asyncmy', '+pymysql')
+    )
+
+    engine = create_engine(sync_url, future=True)
+    try:
+        with engine.connect() as conn:
+            assert inspect(conn).has_table('alembic_version'), (
+                '库里没有 alembic_version 表 —— 说明它是 create_all 建的但没 stamp。\n'
+                '跑 `pnpm --filter api test:db`（会自动 stamp），'
+                '或检查 backend/cli.py 的 init 建完表后有没有 stamp 到 head'
+            )
+            stamped = {row[0] for row in conn.execute(text('SELECT version_num FROM alembic_version'))}
+    finally:
+        engine.dispose()
+
+    heads = set(ScriptDirectory.from_config(alembic_cfg).get_heads())
+    assert stamped == heads, (
+        f'库的迁移版本 {sorted(stamped) or "（空）"} 不等于 head {sorted(heads)} —— '
+        '要么新库没 stamp，要么加了迁移之后没升级。\n'
+        '  新建库：fba init 会自动 stamp head\n'
+        '  已有库：pnpm db:upgrade'
+    )

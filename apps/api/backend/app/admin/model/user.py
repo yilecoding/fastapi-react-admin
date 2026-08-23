@@ -8,6 +8,7 @@ from backend.common.enums import DataBaseType
 from backend.common.model import Base, TimeZone, UniversalStr, id_key
 from backend.core.conf import settings
 from backend.database.db import uuid4_str
+
 # 🔴 必须起别名：本模型有一列**就叫** `timezone`，而类体里的赋值会遮蔽
 # 同名的模块导入 —— 不起别名时后面 `default_factory=tz_helper.now` 拿到的是
 # 那个 MappedColumn，报 `'MappedColumn' object has no attribute 'now'`。

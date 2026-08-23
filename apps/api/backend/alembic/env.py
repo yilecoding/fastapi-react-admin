@@ -8,11 +8,6 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from backend.common.model import MappedBase
-from backend.core import path_conf
-from backend.core.path_conf import BASE_PATH
-from backend.database.db import get_database_url
-
 # 🔴 **必须 import 应用入口，否则 autogenerate 会生成一份「删掉所有表」的迁移。**
 #
 # `MappedBase.metadata` 只有在模型模块被 import 之后才有内容，而这个文件原来只
@@ -25,8 +20,12 @@ from backend.database.db import get_database_url
 # 和 `create_all()` 看到的表**完全一致**（这一点有测试对账：
 # `test_model_matches_migrations`）。
 #
-# noqa: F401 —— 它就是为副作用而 import 的。
-import backend.main  # noqa: F401, E402
+import backend.main  # ruff: ignore[unused-import]
+
+from backend.common.model import MappedBase
+from backend.core import path_conf
+from backend.core.path_conf import BASE_PATH
+from backend.database.db import get_database_url
 
 if not os.path.exists(path_conf.ALEMBIC_VERSION_DIR):
     os.makedirs(path_conf.ALEMBIC_VERSION_DIR)
@@ -48,10 +47,19 @@ target_metadata = MappedBase.metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
-config.set_main_option(
-    'sqlalchemy.url',
-    get_database_url().render_as_string(hide_password=False).replace('%', '%%'),
-)
+# 🔴 调用方（`backend/scripts/reset_test_db.py`）可能已经把目标库写进 `sqlalchemy.url` 了，
+# 那种情况下**不能覆盖**。原来这里是无条件 set —— 于是「stamp 测试库」实际 stamp 的是
+# 开发库，而且没有任何提示：两个库都有 alembic_version 表，两边看起来都很正常，
+# 只有 `test_fresh_database_is_stamped_at_head` 比对版本号时才暴露出来。
+#
+# 靠环境变量（`DATABASE_SCHEMA`）也顶不住：`settings` 是模块级缓存的单例，
+# 进程里改 `os.environ` 对它没有任何影响。跨进程调用（CI 里的
+# `DATABASE_SCHEMA=fba_test alembic upgrade head`）才有效，那条路不受这里影响。
+if not config.get_main_option('sqlalchemy.url', None):
+    config.set_main_option(
+        'sqlalchemy.url',
+        get_database_url().render_as_string(hide_password=False).replace('%', '%%'),
+    )
 
 
 def run_migrations_offline() -> None:

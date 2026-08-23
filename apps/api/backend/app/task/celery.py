@@ -11,16 +11,14 @@
    rabbitmq，已删；broker 一律以 `.env` 的 `CELERY_BROKER` 为准。
 """
 
+import asyncio
 import os
 import urllib.parse
-
-import asyncio
 
 import celery
 import celery_aio_pool
 
 from celery.signals import worker_process_init
-
 
 from backend.common.enums import DataBaseType
 from backend.core.conf import settings
@@ -90,14 +88,14 @@ def get_result_backend() -> str:
     pwd = urllib.parse.quote_plus(settings.DATABASE_PASSWORD)
     host, port, db = settings.DATABASE_HOST, settings.DATABASE_PORT, settings.DATABASE_SCHEMA
 
-    if settings.DATABASE_TYPE == DataBaseType.sqlserver:
+    if DataBaseType.sqlserver == settings.DATABASE_TYPE:
         # driver 名里的空格必须编码，否则 SQLAlchemy 解析 query string 时会截断
         query = urllib.parse.urlencode({
             'driver': 'ODBC Driver 18 for SQL Server',
             'TrustServerCertificate': 'yes',
         })
         return f'db+mssql+pyodbc://{user}:{pwd}@{host}:{port}/{db}?{query}'
-    if settings.DATABASE_TYPE == DataBaseType.mysql:
+    if DataBaseType.mysql == settings.DATABASE_TYPE:
         return f'db+mysql+pymysql://{user}:{pwd}@{host}:{port}/{db}'
     return f'db+postgresql+psycopg://{user}:{pwd}@{host}:{port}/{db}'
 

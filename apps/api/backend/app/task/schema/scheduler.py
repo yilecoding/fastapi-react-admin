@@ -54,7 +54,8 @@ class TaskSchedulerSchemaBase(SchemaBase):
         except (TypeError, ValueError) as e:
             raise ValueError(f'位置参数不是合法 JSON：{e}') from e
         if not isinstance(parsed, list):
-            raise ValueError('位置参数必须是 JSON 数组，例如 [1, "a"]')
+            # pydantic 只把 ValueError 转成校验错误，TypeError 会原样冒出去变成 500
+            raise ValueError('位置参数必须是 JSON 数组，例如 [1, "a"]')  # ruff:ignore[type-check-without-type-error]
         return v
 
     @field_validator('kwargs')
@@ -68,7 +69,8 @@ class TaskSchedulerSchemaBase(SchemaBase):
         except (TypeError, ValueError) as e:
             raise ValueError(f'关键字参数不是合法 JSON：{e}') from e
         if not isinstance(parsed, dict):
-            raise ValueError('关键字参数必须是 JSON 对象，例如 {"days": 30}')
+            # 同上：这里必须是 ValueError
+            raise ValueError('关键字参数必须是 JSON 对象，例如 {"days": 30}')  # ruff:ignore[type-check-without-type-error]
         return v
 
     @model_validator(mode='after')
@@ -88,7 +90,7 @@ class TaskSchedulerSchemaBase(SchemaBase):
                     minute=parts[0], hour=parts[1], day_of_month=parts[2],
                     month_of_year=parts[3], day_of_week=parts[4],
                 )
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 raise ValueError(f'Crontab 表达式无效：{e}') from e
         else:
             if not self.interval_every or not self.interval_period:

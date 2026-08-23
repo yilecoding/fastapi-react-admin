@@ -11,6 +11,20 @@ from backend.utils.pattern_validate import is_has_letter, is_has_number, is_has_
 
 password_hash = PasswordHash((BcryptHasher(),))
 
+# 🔴 种子 SQL 里 admin / test 两个账号的密码 hash（明文都是 123456）。
+#
+# 能拿它做一次**字符串比较**是因为 bcrypt 在这里用的是固定盐，
+# 三个方言的种子文件里是同一个字面量常量 —— 所以「这个库还在用默认密码吗」
+# 是零假阴性的判断，不用跑 bcrypt、不用猜。
+#
+# 用它而不是「改种子 SQL 把密码去掉」：种子被 conftest 和整套 E2E 依赖着
+# （`PYTEST_PASSWORD = '123456'`），改掉代价远大于收益。
+# 真正要挡的是「生产库还在用默认密码」，那件事在 prod 启动时查一次就够了。
+SEEDED_PASSWORD_HASHES: frozenset[str] = frozenset({
+    '$2b$12$8y2eNucX19VjmZ3tYhBLcOsBwy9w1IjBQE4SSqwMDL5bGQVp2wqS.',  # admin
+    '$2b$12$BMiXsNQAgTx7aNc7kVgnwedXGyUxPEHRnJMFbiikbqHgVoT3y14Za',  # test
+})
+
 
 def get_hash_password(password: str, salt: bytes | None) -> str:
     """

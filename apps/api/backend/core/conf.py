@@ -1,6 +1,10 @@
+import math
+import os
 import shutil
 
+from collections import Counter
 from functools import cache
+from pathlib import Path
 from re import Pattern
 from typing import Any, Literal
 
@@ -418,12 +422,192 @@ class Settings(BaseSettings):
         return values
 
 
+class ProductionConfigError(RuntimeError):
+    """prod 环境配置不合格 —— 启动阻断，不降级也不只是告警"""
+
+
+# 已知的占位 / 示例值。全部来自本仓库的 .env*.example、cli.py 的交互默认值、
+# 以及 deploy 目录里那份编排配置。任何一个原样出现在 prod 都是「没改配置」，
+# 而不是「就想这么设」。
+_KNOWN_PLACEHOLDERS: frozenset[str] = frozenset({
+    'CHANGE_ME__secrets.token_urlsafe(32)',
+    'e2e-only-not-a-real-secret-CHANGE-ME',
+    'ci-only-not-a-real-secret-Ku3Jd9wQpZ2vLxR7',
+    'YourStrong!Passw0rd',
+    '123456',
+    '12345678',
+    'password',
+    'passw0rd',
+    'admin',
+    'root',
+    'sa',
+    'test',
+    'guest',
+    'secret',
+    'changeme',
+    'fba',
+})
+
+# 子串命中即判占位（大小写不敏感）。挡的是「只删了后缀」这种改法，
+# 例如把 `CHANGE_ME__secrets.token_urlsafe(32)` 改成 `CHANGE_ME__prod`。
+_PLACEHOLDER_MARKERS: tuple[str, ...] = (
+    'change_me',
+    'changeme',
+    'change-me',
+    'your',
+    'example',
+    'placeholder',
+    'todo',
+    'fixme',
+    'xxxx',
+    'dummy',
+    'sample',
+    'not-a-real',
+)
+
+
+def _entropy_bits(value: str) -> float:
+    """整串的 Shannon 熵（bit）
+
+    `'123'` ≈ 4.75，`'aaaaaaaaaaaaaaaa'` = 0，`secrets.token_urlsafe(32)` ≈ 230。
+    """
+    if not value:
+        return 0.0
+    counts = Counter(value)
+    n = len(value)
+    return -sum((c / n) * math.log2(c / n) for c in counts.values()) * n
+
+
+def _check_secret(
+    name: str, value: str | None, *, min_len: int, min_bits: float, min_distinct: int
+) -> str | None:
+    """判定一个密钥 / 密码是不是「还是占位符或者太弱」，返回不合格的原因
+
+    🔴 **光查黑名单挡不住伪修复。** 有人把 `CHANGE_ME__...` 改成 `123` 也算「改过了」，
+    而那比占位符还糟 —— 占位符至少还能被识别出来。真正兜底的是后两道闸：
+    去重字符数和熵。`'123'` 只有 3 个字符 4.75 bit，`'abcabcabc...'` 哪怕 36 个字符
+    也只有 57 bit，都过不去。
+    """
+    if value is None or not value.strip():
+        return f'{name} 为空'
+    v = value.strip()
+    if v.lower() in {p.lower() for p in _KNOWN_PLACEHOLDERS}:
+        return f'{name} 仍是仓库里的示例值（{v[:12]}…）'
+    lower = v.lower()
+    for marker in _PLACEHOLDER_MARKERS:
+        if marker in lower:
+            return f'{name} 含占位标记 “{marker}”'
+    if len(v) < min_len:
+        return f'{name} 长度 {len(v)} < 最小要求 {min_len}'
+    distinct = len(set(v))
+    if distinct < min_distinct:
+        return f'{name} 只用了 {distinct} 种字符（要求 ≥ {min_distinct}）'
+    bits = _entropy_bits(v)
+    if bits < min_bits:
+        return f'{name} 强度不足：{bits:.0f} bit（要求 ≥ {min_bits:.0f} bit）'
+    return None
+
+
+def check_production_settings(s: Settings) -> None:
+    """prod 启动前置校验 —— 一次性收集**全部**问题后 fail-fast
+
+    🔴 为什么是一次列全而不是逐条 raise：运维改一条重启一次、再撞下一条，
+    是最招人绕过的体验 —— 最后的解法往往变成「先把 ENVIRONMENT 设成 dev 跑起来再说」。
+
+    🔴 为什么是抛异常而不是 log.warning：`settings` 在模块导入期就实例化，
+    异常会让 uvicorn / celery / alembic **全部**在第一秒退出，编排立刻看到 CrashLoop。
+    警告会被日志淹没，而这类问题的特征恰恰是「一切正常，直到出事」。
+
+    :param s: 待校验的配置实例
+    :return:
+    """
+    if s.ENVIRONMENT != 'prod':
+        return
+
+    problems: list[str | None] = []
+
+    problems.extend([
+        # 签名密钥 —— 泄漏等于任何人都能签发管理员 token，标准最高
+        _check_secret('TOKEN_SECRET_KEY', s.TOKEN_SECRET_KEY, min_len=32, min_bits=128, min_distinct=16),
+        _check_secret('DATABASE_PASSWORD', s.DATABASE_PASSWORD, min_len=12, min_bits=48, min_distinct=8),
+        # Redis 里放着全部 token 和用户缓存，而默认密码是空串
+        _check_secret('REDIS_PASSWORD', s.REDIS_PASSWORD, min_len=12, min_bits=48, min_distinct=8),
+    ])
+
+    # 只在真用 rabbitmq 当 broker 时才要求它的口令
+    if s.CELERY_BROKER == 'rabbitmq':
+        problems.append(
+            _check_secret(
+                'CELERY_RABBITMQ_PASSWORD', s.CELERY_RABBITMQ_PASSWORD, min_len=12, min_bits=48, min_distinct=8
+            )
+        )
+
+    # 非密钥类的 prod 硬约束
+    if s.DEMO_MODE:
+        problems.append('DEMO_MODE 在 prod 必须为 false')
+    if not s.LOGIN_CAPTCHA_ENABLED:
+        problems.append('LOGIN_CAPTCHA_ENABLED 在 prod 必须为 true')
+    if not s.REQUEST_LIMITER_ENABLED:
+        problems.append('REQUEST_LIMITER_ENABLED 在 prod 必须为 true —— 它是登录爆破的唯一一道闸')
+    if s.USER_PASSWORD_MIN_LENGTH < 8:
+        problems.append(f'USER_PASSWORD_MIN_LENGTH={s.USER_PASSWORD_MIN_LENGTH}，prod 最低 8')
+    bad_origins = [o for o in s.CORS_ALLOWED_ORIGINS if o == '*' or 'localhost' in o or '127.0.0.1' in o]
+    if bad_origins:
+        problems.append(f'CORS_ALLOWED_ORIGINS 含本地 / 通配来源：{bad_origins}')
+    if s.DATABASE_USER in {'sa', 'root', 'postgres'}:
+        problems.append(f'DATABASE_USER={s.DATABASE_USER} 是数据库超级用户，prod 请用最小权限账号')
+
+    found = [p for p in problems if p]
+    if found:
+        lines = '\n'.join(f'  {i}. {p}' for i, p in enumerate(found, 1))
+        raise ProductionConfigError(
+            f'\n\n🔴 ENVIRONMENT=prod，但有 {len(found)} 项配置不合格，拒绝启动：\n{lines}\n\n'
+            f'配置文件：{ENV_FILE_PATH}\n'
+            f'生成一个合格的签名密钥：python -c "import secrets;print(secrets.token_urlsafe(32))"\n'
+        )
+
+
+def _ensure_env_file() -> None:
+    """`.env` 缺失时：dev 拷示例、prod 拒绝启动
+
+    🔴 判据只能用**进程环境变量** `ENVIRONMENT` —— `.env` 还不存在，读不到里面的值。
+    这在本类里是自洽的：`settings_customise_sources` 把 `env_settings` 排在
+    `dotenv_settings` **前面**，进程环境变量本来就优先。
+
+    容器内（`/.dockerenv`）无条件视为生产形态：镜像里缺 `.env` 是编排配错了，
+    悄悄拷一份带公开密钥的示例进去，是这里最坏的失败方式 ——
+    服务正常起来，JWT 用一个 GitHub 上人人可见的常量签名。
+    """
+    if ENV_FILE_PATH.exists():
+        return
+
+    env_hint = os.environ.get('ENVIRONMENT', '').strip().lower()
+    in_container = Path('/.dockerenv').exists() or bool(os.environ.get('CONTAINER'))
+    if env_hint == 'prod' or in_container:
+        raise ProductionConfigError(
+            f'\n\n🔴 配置文件不存在：{ENV_FILE_PATH}\n'
+            f'   （ENVIRONMENT={env_hint or "未设置"}，容器={in_container}）\n'
+            '   生产环境不会自动复制 .env.example —— 那份示例里的密钥是公开的。\n'
+            '   请挂载真实的 .env，或用环境变量注入全部必填项。\n'
+        )
+
+    if not ENV_EXAMPLE_FILE_PATH.exists():
+        raise ProductionConfigError(f'配置文件与示例文件都不存在：{ENV_FILE_PATH}')
+
+    shutil.copy(ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH)
+    print(
+        f'⚠️  已从 .env.example 生成 {ENV_FILE_PATH}（仅开发环境）。'
+        'TOKEN_SECRET_KEY 仍是占位符，请尽快 `uv run fba init --auto` 或手工替换。'
+    )
+
+
 @cache
 def get_settings() -> Settings:
     """获取全局配置单例"""
-    if not ENV_FILE_PATH.exists():
-        shutil.copy(ENV_EXAMPLE_FILE_PATH, ENV_FILE_PATH)
-    return Settings()
+    _ensure_env_file()
+    s = Settings()
+    check_production_settings(s)
+    return s
 
 
 # 创建全局配置实例

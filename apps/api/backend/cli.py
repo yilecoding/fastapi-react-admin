@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 import secrets
 import subprocess
@@ -236,11 +237,93 @@ async def auto_init() -> None:
     )
     await redis_init_client.init()
     async with async_init_db_session.begin() as db:
-        await init(db, redis_init_client)
+        created = await init(db, redis_init_client)
+    if created:
+        await run_in_threadpool(_stamp_alembic_head)
+        console.note('已把新库标记到迁移 head')
 
 
-async def init(db: AsyncSession, redis: RedisCli) -> None:
-    """交互式初始化数据库表结构和数据"""
+def _stamp_alembic_head() -> None:
+    """把刚 `create_all` 出来的库标记到迁移 head
+
+    🔴 **这个函数是同步的，且必须在事件循环之外执行**（用 `run_in_threadpool` 包）。
+    `command.stamp` 会加载 `backend/alembic/env.py`，而那份 env 的
+    `run_migrations_online()` 是 `asyncio.run(...)` —— 在跑着的循环里直接调是
+    `RuntimeError: asyncio.run() cannot be called from a running event loop`。
+    同一条坑 `backend/scripts/reset_test_db.py: _stamp_head` 里已经踩过一次，
+    那边靠「在 asyncio.run() 之外调」绕开，CLI 里没有「之外」——
+    推到新线程即可（新线程没有运行中的循环）。
+
+    ⚠️ 还必须在 `async with … begin()` **退出之后**调：stamp 走的是另一条连接，
+    在未提交的 DDL 事务里会抢锁。
+
+    用 stamp 而不是 upgrade：表是 `create_all` 从**当前模型**建的，本来就是最新
+    结构；「补齐历史遗留」类的迁移在新库上重跑还会撞「已经是目标状态」。
+
+    不复用 `run_alembic()`：那个走 subprocess，这里在进程内调更直接。
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(BASE_PATH / 'alembic.ini'))
+    cfg.set_main_option('script_location', str(BASE_PATH / 'alembic'))
+    command.stamp(cfg, 'head')
+
+
+async def _set_admin_password(db: AsyncSession) -> None:
+    """初始化收尾：把种子里的默认密码换掉
+
+    🔴 **init 不允许在「库里还是 admin/123456」的状态下宣告成功。**
+
+    种子 SQL 一行不改（`conftest.py` 和整套 E2E 都依赖 `123456`），
+    改的是「建完库这一刻」：交互式会问，非交互（`--auto` / CI / 无 TTY）
+    读环境变量 `FBA_INIT_ADMIN_PASSWORD`。两者都拿不到就直接失败 ——
+    比起「建好了但留着弱口令」，让人多打一条命令是划算的。
+
+    ⚠️ 这一条挡不住「绕过 init 直接灌种子 SQL」。那条路由
+    `core/registrar.py` 在 prod 启动时扫库兜底（比对
+    `SEEDED_PASSWORD_HASHES`），两层配合才完整。
+
+    :param db: 数据库会话（此时种子已灌完，尚未提交）
+    :return:
+    """
+    from backend.app.admin.crud.crud_user import user_dao
+
+    env_password = os.environ.get('FBA_INIT_ADMIN_PASSWORD', '').strip()
+
+    if env_password:
+        password = env_password
+    elif sys.stdin.isatty():
+        console.print()
+        console.warning('种子数据里的管理员密码是 123456，现在必须改掉')
+        while True:
+            password = Prompt.ask('设置 admin 的新密码', password=True).strip()
+            if len(password) < settings.USER_PASSWORD_MIN_LENGTH:
+                console.warning(f'至少 {settings.USER_PASSWORD_MIN_LENGTH} 位，重来')
+                continue
+            if password == Prompt.ask('再输一次确认', password=True).strip():
+                break
+            console.warning('两次输入不一致，重来')
+    else:
+        raise cappa.Exit(
+            '非交互环境下必须用环境变量提供管理员密码：\n'
+            '    FBA_INIT_ADMIN_PASSWORD=<强口令> fba init\n'
+            '（种子里的 admin/123456 不允许留到初始化完成）',
+            code=1,
+        )
+
+    admin = await user_dao.get_by_username(db, 'admin')
+    if admin is None:
+        raise cappa.Exit('种子数据里没有 admin 账号，初始化流程可能已经变了', code=1)
+    await user_dao.reset_password(db, admin.id, password)
+    console.note('已重置 admin 密码')
+
+
+async def init(db: AsyncSession, redis: RedisCli) -> bool:
+    """交互式初始化数据库表结构和数据
+
+    :return: 是否真的执行了初始化（用户可能选 n）
+    """
     panel_content = _build_db_config_panel_content()
     pk_details = panel_content.from_markup(
         '[link=https://docs.fba.wu-clan.cc/fastapi_best_architecture_docs/backend/reference/pk.html]（了解详情）[/]'
@@ -286,12 +369,19 @@ async def init(db: AsyncSession, redis: RedisCli) -> None:
                 console.note(f'正在执行：{sql_script}')
                 await execute_sql_scripts(db, sql_script, is_init=True)
 
+            await _set_admin_password(db)
+
             console.tip('初始化成功')
             console.print('\n快试试 [bold cyan]fba run[/bold cyan] 启动服务吧~')
+        except cappa.Exit:
+            raise
         except Exception as e:
             raise cappa.Exit(f'初始化失败：{e}', code=1)
+        else:
+            return True
     else:
         console.warning('已取消初始化操作')
+        return False
 
 
 def run(host: str, port: int, reload: bool, workers: int) -> None:  # ruff:ignore[boolean-type-hint-positional-argument]
@@ -360,7 +450,19 @@ def run_celery_beat(log_level: Literal['info', 'debug']) -> None:
 
 
 def run_celery_flower(port: int, basic_auth: str) -> None:
-    """启动 Celery flower 监控服务"""
+    """启动 Celery flower 监控服务
+
+    :param port: 服务端口
+    :param basic_auth: 页面登录凭据，形如 `user:password`
+    :return:
+    """
+    if not basic_auth or ':' not in basic_auth:
+        raise cappa.Exit(
+            'flower 必须显式提供 --basic-auth user:password。\n'
+            'flower 能看到全部任务参数（可能含业务数据），还能远程终止 worker，'
+            '不该有默认口令。',
+            code=1,
+        )
     try:
         subprocess.run([
             'celery',
@@ -738,7 +840,10 @@ class Init:
             await auto_init()
         else:
             async with async_db_session.begin() as db:
-                await init(db, redis_client)
+                created = await init(db, redis_client)
+            if created:
+                await run_in_threadpool(_stamp_alembic_head)
+                console.note('已把新库标记到迁移 head')
 
 
 @cappa.command(help='运行 API 服务', default_long=True)
@@ -882,7 +987,10 @@ class Flower:
     ]
     basic_auth: Annotated[
         str,
-        cappa.Arg(default='admin:123456', help='页面登录的用户名和密码'),
+        # 🔴 没有默认值。原来是 'admin:123456' —— flower 能看到全部任务参数
+        # （里面可能有业务数据），还能远程终止 worker。一个「不传就用弱口令」的
+        # 默认值，最后一定会变成线上那把口令
+        cappa.Arg(default='', help='页面登录的用户名和密码，形如 user:password（必填）'),
     ]
 
     def __call__(self) -> None:

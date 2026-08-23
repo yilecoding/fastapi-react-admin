@@ -15,8 +15,9 @@ Revises:
 Create Date: 2026-08-22 18:30:00
 """
 
-from alembic import op  # noqa: F401
-import sqlalchemy as sa  # noqa: F401
+import sqlalchemy as sa  # ruff: ignore[unused-import]
+
+from alembic import op  # ruff: ignore[unused-import]
 
 revision = 'b0000000baseline'
 down_revision = None
@@ -24,9 +25,9 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade() -> None:
     """空 —— 见模块注释。"""
 
 
-def downgrade():
+def downgrade() -> None:
     """空。"""

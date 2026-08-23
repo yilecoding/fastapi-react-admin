@@ -21,7 +21,9 @@ class CRUDTaskScheduler(CRUDPlus[TaskScheduler]):
         不先查的话用户拿到的是一句数据库层面的 IntegrityError。"""
         return await self.select_model_by_column(db, name=name, deleted=0)
 
-    async def get_select(self, name: str | None, task: str | None, enabled: bool | None) -> Select:
+    async def get_select(
+        self, name: str | None, task: str | None, enabled: bool | None  # ruff:ignore[boolean-type-hint-positional-argument]
+    ) -> Select:
         filters: dict = {'deleted': 0}
         if name:
             filters['name__like'] = f'%{name}%'
@@ -41,7 +43,9 @@ class CRUDTaskScheduler(CRUDPlus[TaskScheduler]):
     async def update(self, db: AsyncSession, pk: int, obj: UpdateTaskSchedulerParam) -> int:
         return await self.update_model_by_column(db, obj, id=pk, deleted=0)
 
-    async def set_enabled(self, db: AsyncSession, pk: int, enabled: bool) -> int:
+    async def set_enabled(
+        self, db: AsyncSession, pk: int, enabled: bool  # ruff:ignore[boolean-type-hint-positional-argument]
+    ) -> int:
         return await self.update_model_by_column(db, {'enabled': enabled}, id=pk, deleted=0)
 
     async def delete(self, db: AsyncSession, pks: list[int]) -> int:
