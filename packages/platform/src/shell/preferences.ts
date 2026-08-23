@@ -1,5 +1,5 @@
-import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { create } from "zustand"
+import { persist, createJSONStorage } from "zustand/middleware"
 
 /**
  * 外壳偏好设置。
@@ -16,12 +16,12 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 
 // ─── 主题 ────────────────────────────────────────────────────────────────────
 
-export type ThemeMode = 'light' | 'dark' | 'system'
+export type ThemeMode = "light" | "dark" | "system"
 
 export const THEME_MODE_LABELS: Record<ThemeMode, string> = {
-  light: '浅色',
-  dark: '深色',
-  system: '系统',
+  light: "浅色",
+  dark: "深色",
+  system: "系统",
 }
 
 /**
@@ -31,28 +31,86 @@ export const THEME_MODE_LABELS: Record<ThemeMode, string> = {
  * 其余色板（muted / destructive / chart-*）保持不动，换色不会牵动整套语义色。
  * 亮度都落在 0.49~0.56 之间，配近白前景在浅色与深色下都够对比度。
  */
-export type ThemeColor = 'indigo' | 'blue' | 'teal' | 'emerald' | 'amber' | 'rose' | 'violet'
+export type ThemeColor =
+  "indigo" | "blue" | "teal" | "emerald" | "amber" | "rose" | "violet"
 
-export const THEME_COLORS: Record<ThemeColor, { label: string; primary: string; foreground: string }> = {
-  indigo: { label: '靛蓝', primary: 'oklch(0.457 0.24 277.023)', foreground: 'oklch(0.962 0.018 272.314)' },
-  blue: { label: '蓝色', primary: 'oklch(0.546 0.215 262.881)', foreground: 'oklch(0.985 0 0)' },
-  teal: { label: '青色', primary: 'oklch(0.511 0.096 186.391)', foreground: 'oklch(0.985 0 0)' },
-  emerald: { label: '绿色', primary: 'oklch(0.508 0.118 165.612)', foreground: 'oklch(0.985 0 0)' },
-  amber: { label: '琥珀', primary: 'oklch(0.555 0.163 48.998)', foreground: 'oklch(0.985 0 0)' },
-  rose: { label: '玫红', primary: 'oklch(0.551 0.222 17.585)', foreground: 'oklch(0.985 0 0)' },
-  violet: { label: '紫色', primary: 'oklch(0.491 0.27 292.581)', foreground: 'oklch(0.985 0 0)' },
+export const THEME_COLORS: Record<
+  ThemeColor,
+  { label: string; primary: string; foreground: string }
+> = {
+  indigo: {
+    label: "靛蓝",
+    primary: "oklch(0.457 0.24 277.023)",
+    foreground: "oklch(0.962 0.018 272.314)",
+  },
+  blue: {
+    label: "蓝色",
+    primary: "oklch(0.546 0.215 262.881)",
+    foreground: "oklch(0.985 0 0)",
+  },
+  teal: {
+    label: "青色",
+    primary: "oklch(0.511 0.096 186.391)",
+    foreground: "oklch(0.985 0 0)",
+  },
+  emerald: {
+    label: "绿色",
+    primary: "oklch(0.508 0.118 165.612)",
+    foreground: "oklch(0.985 0 0)",
+  },
+  amber: {
+    label: "琥珀",
+    primary: "oklch(0.555 0.163 48.998)",
+    foreground: "oklch(0.985 0 0)",
+  },
+  rose: {
+    label: "玫红",
+    primary: "oklch(0.551 0.222 17.585)",
+    foreground: "oklch(0.985 0 0)",
+  },
+  violet: {
+    label: "紫色",
+    primary: "oklch(0.491 0.27 292.581)",
+    foreground: "oklch(0.985 0 0)",
+  },
 }
 
 /** 圆角。`--radius` 是所有 radius-* 的基准，改它一处全站生效 */
-export type RadiusPreset = 'sharp' | 'restrained' | 'balanced' | 'soft' | 'modern' | 'round'
+export type RadiusPreset =
+  "sharp" | "restrained" | "balanced" | "soft" | "modern" | "round"
 
-export const RADIUS_PRESETS: Record<RadiusPreset, { label: string; value: string }> = {
-  sharp: { label: '利落', value: '0rem' },
-  restrained: { label: '克制', value: '0.35rem' },
-  balanced: { label: '平衡', value: '0.5rem' },
-  soft: { label: '柔和', value: '0.625rem' },
-  modern: { label: '现代', value: '0.875rem' },
-  round: { label: '圆润', value: '1.25rem' },
+export const RADIUS_PRESETS: Record<
+  RadiusPreset,
+  { label: string; value: string }
+> = {
+  sharp: { label: "利落", value: "0rem" },
+  restrained: { label: "克制", value: "0.35rem" },
+  balanced: { label: "平衡", value: "0.5rem" },
+  soft: { label: "柔和", value: "0.625rem" },
+  modern: { label: "现代", value: "0.875rem" },
+  round: { label: "圆润", value: "1.25rem" },
+}
+
+/**
+ * 全局界面密度。`value` 是控件/行的目标基准高度，`fontSize` 是对应的正文目标值：
+ * 24/12、26/13、28/14、32/16、36/18。密度是唯一入口，字号随之变化。
+ */
+export type DensityPreset =
+  "ultraCompact" | "compact" | "standard" | "comfortable" | "spacious"
+
+export const DENSITY_PRESETS: Record<
+  DensityPreset,
+  { label: string; value: number; fontSize: { value: number } }
+> = {
+  ultraCompact: {
+    label: "极紧凑",
+    value: 24,
+    fontSize: { value: 12 },
+  },
+  compact: { label: "紧凑", value: 26, fontSize: { value: 13 } },
+  standard: { label: "标准", value: 28, fontSize: { value: 14 } },
+  comfortable: { label: "舒展", value: 32, fontSize: { value: 16 } },
+  spacious: { label: "宽松", value: 36, fontSize: { value: 18 } },
 }
 
 /**
@@ -71,21 +129,21 @@ export const RADIUS_PRESETS: Record<RadiusPreset, { label: string; value: string
  * （原来还有一处：`settings-layout` 的右栏得按模式算高度。个人中心改成切换式面板
  *  后那个自造滚动容器整根拿掉了，这条耦合随之消失。）
  */
-export type ScrollMode = 'content' | 'page'
+export type ScrollMode = "content" | "page"
 
 export const SCROLL_MODE_LABELS: Record<ScrollMode, string> = {
-  content: '内容区域',
-  page: '整页',
+  content: "内容区域",
+  page: "整页",
 }
 
 /** 多标签页外观。对齐参考实现的四种：按钮 / 卡片 / 柔和 / 下划线 */
-export type TabStyle = 'button' | 'card' | 'soft' | 'underline'
+export type TabStyle = "button" | "card" | "soft" | "underline"
 
 export const TAB_STYLE_LABELS: Record<TabStyle, string> = {
-  button: '按钮',
-  card: '卡片',
-  soft: '柔和',
-  underline: '下划线',
+  button: "按钮",
+  card: "卡片",
+  soft: "柔和",
+  underline: "下划线",
 }
 
 export type Preferences = {
@@ -95,6 +153,8 @@ export type Preferences = {
   themeColor: ThemeColor
   /** 圆角预设 */
   radius: RadiusPreset
+  /** 全局界面密度 */
+  density: DensityPreset
   /** 滚动方式：只滚内容区 / 整页跟着滚 */
   scrollMode: ScrollMode
   /** 顶部是否显示多标签页 */
@@ -110,14 +170,15 @@ export type Preferences = {
 }
 
 export const PREF_DEFAULTS: Preferences = {
-  themeMode: 'light',
+  themeMode: "light",
   // 与 globals.css 里 :root 的默认值一致 —— 不改任何变量时视觉零变化
-  themeColor: 'indigo',
-  radius: 'soft',
+  themeColor: "indigo",
+  radius: "soft",
+  density: "standard",
   // 默认只滚内容区：顶栏与标签条不该被滚走 —— 多页签外壳里那是导航，不是内容
-  scrollMode: 'content',
+  scrollMode: "content",
   showTabs: true,
-  tabStyle: 'card',
+  tabStyle: "card",
   tabMiddleClickClose: true,
   tabShowIcon: true,
   tabDraggable: true,
@@ -137,10 +198,16 @@ export const usePreferences = create<PrefState>()(
       reset: () => set(PREF_DEFAULTS),
     }),
     {
-      name: 'admin:prefs',
+      name: "admin:prefs",
       storage: createJSONStorage(() => localStorage),
-      // 新增字段时老用户的本地记录里没有它 —— 用默认值补齐，别让 undefined 漏进 UI
-      merge: (persisted, current) => ({ ...current, ...(persisted as Partial<PrefState>) }),
+      // 新增字段时老用户的本地记录里没有它 —— 用默认值补齐，别让 undefined 漏进 UI。
+      // `fontSize` 是旧版独立偏好，密度合并后已统一负责字号，读取时顺便丢弃旧字段。
+      merge: (persisted, current) => {
+        const { fontSize: _legacyFontSize, ...rest } = persisted as Partial<PrefState> & {
+          fontSize?: unknown
+        }
+        return { ...current, ...rest }
+      },
     }
   )
 )
