@@ -10,6 +10,7 @@ from backend.app.admin.crud.crud_user import user_dao
 from backend.app.admin.schema.token import GetLoginToken
 from backend.app.admin.schema.user import AddOAuth2UserParam
 from backend.app.admin.service.login_log_service import login_log_service
+from backend.app.admin.service.user_password_history_service import password_security_service
 from backend.common.context import ctx
 from backend.common.enums import LoginLogStatusType
 from backend.common.exception import errors
@@ -92,6 +93,16 @@ class OAuth2Service:
             # 绑定社交账号
             new_user_social = CreateUserSocialParam(sid=sid, source=source.value, user_id=sys_user.id)
             await user_social_dao.create(db, new_user_social)
+
+        # 🔴 **OAuth2 这条路原来完全不检查账号状态。**
+        # 被停用（status=0）或被临时锁定的账号，只要绑过 GitHub / Google 就能照常
+        # 拿到 token —— 管理员在后台把人停用了，对方换个入口照样进得来，
+        # 而后台界面上看不出任何异常。表单登录那条路一直有这个检查，这条没有。
+        #
+        # 这里可以直接把原因告诉用户：身份已经由第三方证明过了，不存在枚举问题。
+        lock_reason = await password_security_service.peek_lock_reason(sys_user.id, sys_user.status)
+        if lock_reason is not None:
+            raise errors.AuthorizationError(msg=lock_reason)
 
         # 创建 token
         access_token_data = await jwt.create_access_token(

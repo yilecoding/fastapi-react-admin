@@ -260,6 +260,9 @@ class RateLimiter:
         :param response: FastAPI 响应对象
         :return:
         """
+        if not settings.REQUEST_LIMITER_ENABLED:
+            return
+
         if self.limiter is None:
             if self.bucket is None:
                 self.bucket_factory = RedisBucketFactory(

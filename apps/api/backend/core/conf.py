@@ -127,6 +127,14 @@ class Settings(BaseSettings):
     LOGIN_CAPTCHA_EXPIRE_SECONDS: int = 60 * 5  # 5 分钟
     LOGIN_FAILURE_PREFIX: str = 'fba:login:failure'
 
+    # 🔴 按 **IP** 的跨账号登录失败计数 —— 上面那条按 user_id 计数挡不住密码喷洒。
+    # 「200 个用户名各试 4 次」在阈值 5 之下，一次账号锁定都不会触发，
+    # 而单账号锁定恰恰是攻击者要绕开的东西。这一层按来源 IP 补齐。
+    # ⚠️ 依赖 `TRUSTED_PROXIES` 配对 —— IP 取错了这层计数一样会被绕过。
+    LOGIN_IP_FAILURE_PREFIX: str = 'fba:login:failure:ip'
+    LOGIN_IP_LOCK_THRESHOLD: int = 30  # 单 IP 跨账号失败阈值，0 表示禁用
+    LOGIN_IP_LOCK_SECONDS: int = 60 * 15
+
     # JWT
     JWT_USER_REDIS_PREFIX: str = 'fba:user'
 
@@ -185,6 +193,27 @@ class Settings(BaseSettings):
 
     # 请求限制配置
     REQUEST_LIMITER_REDIS_PREFIX: str = 'fba:limiter'
+
+    # 限流总开关。**只给测试用** —— pytest 里同一个 IP 会在几秒内反复登录，
+    # 不关掉的话 `/auth/login/swagger` 的 5次/分钟会把整套测试打成 429。
+    # 🔴 prod 下置 false 会被 `check_production_settings()` 拒绝启动：
+    # 关掉它等于同时废掉登录爆破和验证码刷取的**唯一**一道闸。
+    REQUEST_LIMITER_ENABLED: bool = True
+
+    # 🔴 可信反向代理白名单（IP 或 CIDR），**默认空 = 谁都不信**。
+    #
+    # 为空时 `get_request_ip()` 只认 `request.client.host`，完全忽略
+    # `X-Real-IP` / `X-Forwarded-For`。这对直连场景是正确的，也是唯一安全的默认值：
+    # 这两个头是**客户端可以随便填的**，而它们决定了限流的 key
+    # （`utils/limiter.py: default_identifier` = `{IP}:{path}`）、登录日志里的来源
+    # 和 IP 属地。信任未经验证的头 = 每个请求换一个 X-Real-IP 就是全新的限流配额，
+    # 登录爆破、验证码刷取全部无损通过，而日志里的 IP 全是攻击者自己填的。
+    #
+    # 部署在 nginx / LB 后面时，填上代理自己的地址或网段才会开始采信：
+    #     TRUSTED_PROXIES=["172.18.0.0/16"]
+    # ⚠️ 同时要让 uvicorn 的 --forwarded-allow-ips 收到同样的范围。
+    # 写 `*` 等于在更底一层把「谁都信」重新打开，这里的白名单就白配了。
+    TRUSTED_PROXIES: list[str] = []
 
     # 时间配置
     DATETIME_TIMEZONE: str = 'Asia/Shanghai'
