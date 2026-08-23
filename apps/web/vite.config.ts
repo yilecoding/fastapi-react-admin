@@ -46,6 +46,8 @@ export default defineConfig({
   // `E2E_WEB_PORT` 是唯一的例外口子：E2E 起的是完全隔离的第二个实例（连 fba_test，
   // 不是 fba），不设置这个变量时行为和以前完全一样，还是 1125。
   server: {
+    // Playwright 的 E2E webServer 用 127.0.0.1 探活；macOS 上 Vite 默认可能只绑定 ::1。
+    host: "127.0.0.1",
     port: Number(process.env.E2E_WEB_PORT) || 1125,
     strictPort: true,
     proxy: {
