@@ -192,25 +192,17 @@ const SCENARIOS: Scenario[] = [
     visible: "all",
   },
 
-  // ---- 🔴 fail-open：规则落不到列上 = 完全不过滤 --------------------------
-  {
-    key: "ghostcol",
-    desc: "🔴 字段名不存在（后端建规则时不校验）→ 放行全部",
-    rules: [{ model: "Dept", column: "no_such_column", value: "x" }],
-    visible: "all",
-  },
-  {
-    key: "deptidtpl",
-    desc: "🔴 种子里的「本部门数据权限」（Dept.__dept_id__）—— sys_dept 没这一列，实际放行全部",
-    rules: [{ model: "Dept", column: "__dept_id__", value: "${dept_id}" }],
-    visible: "all",
-  },
+  // ---- 规则不适用于本次查询的模型 = 放行（这条边界要守住） -----------------
   {
     key: "othermodel",
-    desc: "🔴 规则只打在 User 上 → 部门接口拿不到匹配模型 → 放行全部",
+    desc: "规则只打在 User 上 → 部门接口不受它约束 → 放行全部",
     rules: [{ model: "User", column: "is_superuser", expression: NE, value: "1" }],
     visible: "all",
   },
+  // ⚠️ 这里原来还有 ghostcol（字段名不存在）和 deptidtpl（Dept.__dept_id__）两条，
+  // 断言的都是「放行全部」—— 那是当时真实的 fail-open 行为。
+  // 现在这两种规则**在保存时就会被 400 拒掉**，连建都建不出来，
+  // 所以它们从可见性矩阵挪到了下面的「保存时就拦住配错的规则」。
 
   // ---- 值模板变量 -------------------------------------------------------
   {
@@ -227,12 +219,12 @@ const SCENARIOS: Scenario[] = [
     dept: null,
     visible: "none",
   },
-  {
-    key: "nowtpl",
-    desc: "${now} 要是调用结果（created_time < ${now}，全部都是过去建的）",
-    rules: [{ model: "Dept", column: "created_time", expression: LT, value: "${now}" }],
-    visible: "all",
-  },
+  // ⚠️ 原来这里有 nowtpl（created_time < ${now}，断言「放行全部」）。
+  // 它**从来没有验证过 `${now}`**：created_time 在 DATA_PERMISSION_COLUMN_EXCLUDE 里，
+  // 规则被跳过 → fail-open → 断言「全可见」通过，但和模板解析没有关系。
+  // 真正的 `${now}` 回归在
+  // apps/api/backend/app/admin/tests/security/test_data_permission_failclosed.py，
+  // 那里用的是 User.join_time（一个没被排除的时间列）。
 
   // ---- 由专门的用例驱动，不进矩阵循环 ------------------------------------
   {
@@ -505,6 +497,76 @@ test.describe("数据权限 · 多账号可见性", () => {
       await expectVisibleDepts(page, s.visible)
     })
   }
+})
+
+// --------------------------------------------------------------------------
+// 1b. 配错的规则在保存时就被拦住
+// --------------------------------------------------------------------------
+
+test.describe("数据权限 · 保存时就拦住配错的规则", () => {
+  // 运行时的 fail-closed 只能把配错的规则收紧成「看不到数据」。那是对的兜底，
+  // 但对管理员信息量很低 —— 他看到的是「某个用户说什么都看不见」，
+  // 不会想到是三天前建的某条规则字段名拼错了。主防线在保存这一刻。
+  //
+  // 这三种以前都能存进去，而且存进去之后的效果是**放行全部**：
+  // 一条名叫「仅本部门」的规则配错字段，实际是「全部可见」，界面上没有任何提示。
+  const REJECTED = [
+    {
+      desc: "字段名不存在",
+      rule: { model: "Dept", column: "no_such_column", value: "x" },
+      msg: "所选模型上不存在该字段",
+    },
+    {
+      desc: "🔴 种子里那条「本部门数据权限」的原始写法 —— sys_dept 根本没有 dept_id 这一列",
+      rule: { model: "Dept", column: "__dept_id__", value: "${dept_id}" },
+      msg: "所选模型上不存在该字段",
+    },
+    {
+      desc: "引用了被排除的列（created_time / id 这类不允许拿来过滤）",
+      rule: { model: "Dept", column: "created_time", expression: LT, value: "${now}" },
+      msg: "该字段不允许用于数据过滤",
+    },
+    {
+      desc: "模型名拼错",
+      rule: { model: "Depts", column: "status", value: "1" },
+      msg: "数据规则可用模型不存在",
+    },
+    {
+      desc: "值与字段类型对不上（bigint 列配 abc）—— 以前是运行时 500",
+      rule: { model: "Dept", column: "parent_id", value: "abc" },
+      msg: "值与字段类型不匹配",
+    },
+    {
+      desc: "🔴 __ALL__ 配裸字段名 = 「碰巧有这列的表才过滤，其余全放行」",
+      rule: { model: "__ALL__", column: "dept_id", value: "1" },
+      msg: "模型为「所有模型」时，字段必须使用模板变量",
+    },
+  ]
+
+  for (const [i, c] of REJECTED.entries()) {
+    test(`${c.desc}`, async ({ api }) => {
+      await expect(
+        api.post("/api/v1/sys/data-rules", {
+          name: `E2E拒绝-${SFX}-${i}`,
+          operator: AND,
+          expression: EQ,
+          ...c.rule,
+        }),
+      ).rejects.toThrow(new RegExp(c.msg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+    })
+  }
+
+  test("正常规则不能被误杀", async ({ api }) => {
+    const created = (await api.post("/api/v1/sys/data-rules", {
+      name: `E2E正常-${SFX}`,
+      model: "Dept",
+      column: "status",
+      operator: AND,
+      expression: EQ,
+      value: "1",
+    })) as { id: string }
+    await api.del("/api/v1/sys/data-rules", { pks: [created.id] })
+  })
 })
 
 // --------------------------------------------------------------------------
