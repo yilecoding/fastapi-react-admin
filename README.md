@@ -57,14 +57,14 @@ code goes next to `packages/platform/src/pages/user/` and follows the same shape
 | **Permission grain**  | menus + buttons                                                            | menus + buttons + **data scopes** — a role decides which *rows* it sees, via rules bound to model columns |
 | **Multi-tab**         | free in Vue via `keep-alive`; usually absent in React, or loses state       | React 19 **`<Activity>`** — every open tab stays mounted; hidden ones drop effects but keep DOM and state |
 | **Database**          | MySQL / PostgreSQL                                                         | **native SQL Server** (`aioodbc`, NVARCHAR, filtered unique indexes, `OFFSET FETCH`); MySQL and PostgreSQL also supported |
-| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **164 tests against real dependencies, zero mocks** — 124 pytest against a real SQL Server, 40 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, not just documented |
+| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **223 tests against real dependencies, zero mocks** — 183 pytest against a real SQL Server, 40 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 52 dedicated security tests |
 
 **Status: 0.0.1, never released.** No production instance, no data to preserve — so the
 schema is still free to change. The backend is a **permanent fork** of
 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)
 (upstream declined to merge SQL Server support), tracking only its security patches.
 
-**Tests:** 124 pytest cases (real SQL Server) + 40 Playwright cases (isolated second
+**Tests:** 183 pytest cases (real SQL Server) + 40 Playwright cases (isolated second
 stack: web :1126 → api :8001 → `fba_test`). Data permissions are covered on both sides —
 22 accounts through the API, 19 through the browser. Neither suite runs in CI, because
 both need a live SQL Server instance; run them locally with `pnpm test` and `pnpm e2e`.
@@ -118,7 +118,7 @@ language-independent.
 | **权限粒度** | 菜单 + 按钮 | 菜单 + 按钮 + **数据范围** —— 角色决定他能看到哪些**行**，规则挂在模型的列上 |
 | **多页签** | Vue 靠 `keep-alive` 白送；React 侧大多没有，或者切走就丢状态 | React 19 的 **`<Activity>`**：所有已开页签同时挂载，隐藏时销毁 effects 但保留 DOM 与 state |
 | **数据库** | MySQL / PostgreSQL | **原生 SQL Server**（`aioodbc` + NVARCHAR / 筛选唯一索引 / `OFFSET FETCH` 适配），MySQL 与 PostgreSQL 也在 |
-| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **164 条打真实依赖、零 mock** —— pytest 124 条对真实 SQL Server，Playwright 40 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的，不是写在文档里的 |
+| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **223 条打真实依赖、零 mock** —— pytest 183 条对真实 SQL Server，Playwright 40 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 52 条安全测试兜底 |
 
 它不是「拿来改改就交付」的模板，是**底座**：上面那三件事和下面几条纪律是它替你解决掉的部分，
 业务代码照 `packages/platform/src/pages/user/` 抄就行。
@@ -148,7 +148,7 @@ language-independent.
 | | |
 |---|---|
 | **框架** | FastAPI · Pydantic **2** + pydantic-settings · msgspec（响应编码）· Python ≥ **3.10** |
-| **ORM / 数据层** | SQLAlchemy **2**（asyncio）· `sqlalchemy-crud-plus` · `fastapi-pagination` · **Alembic**（表结构改动一律走迁移，空基线 + 三条 pytest 守卫：改了模型没生成迁移 / 多 head 分叉 / 断链，见下节） |
+| **ORM / 数据层** | SQLAlchemy **2**（asyncio）· `sqlalchemy-crud-plus` · `fastapi-pagination` · **Alembic**（表结构改动一律走迁移，空基线 + 四条 pytest 守卫：改了模型没生成迁移 / 多 head 分叉 / 断链 / 新库没 stamp，见下节） |
 | **ASGI 服务** | 开发 **uvicorn**（`--reload`，只监听 `backend/`）· `fba run` 走 **Granian** |
 | **数据库驱动** | **aioodbc**（SQL Server，主线）· asyncmy + PyMySQL（MySQL）· asyncpg + psycopg（PostgreSQL） |
 | **缓存 / 队列** | Redis **8** + hiredis · cachebox（进程内）· Celery **5** + `celery-aio-pool` + Flower |
@@ -194,13 +194,13 @@ language-independent.
 
 | | 跑在哪 | 条数 | 覆盖 |
 |---|---|---|---|
-| **pytest** | 真实 SQL Server（`fba_test` 库，不碰开发库） | **124** | 数据权限 26 · 定时任务 69 · 文件模块 23 · 迁移守卫 3 · i18n 对称性 2 · 登录 1 |
+| **pytest** | 真实 SQL Server（`fba_test` 库，不碰开发库） | **183** | 安全（RBAC 门禁 / 权限码对账 / 数据权限 fail-closed / 规则校验 / 生产配置 / 健康检查）52 · 数据权限端到端 26 · 定时任务 69 · 文件模块 23 · 迁移守卫 4 · 认证 7 · i18n 对称性 2 |
 | **Playwright** | 完全隔离的第二套实例：web :1126 → api :8001 → `fba_test` | **40** | 数据权限 25 · 定时任务 9 · 部门 CRUD 2 · 登录 2 · 多页签保活 2 |
 
 > Playwright 那 40 条里有 1 条会按条件跳过（执行记录页要求库里真跑过一次 worker）。
 
 ```bash
-pnpm test          # 后端 pytest（124 条，需要 fba_test 库）
+pnpm test          # 后端 pytest（183 条，需要 fba_test 库）
 pnpm e2e           # 前端 Playwright（40 条，自动拉起隔离的 web+api 实例）
 ```
 
@@ -295,7 +295,7 @@ docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 
 ```bash
 pnpm typecheck                                          # 全仓库 tsc
-pnpm test                                               # 后端 pytest（124 条）
+pnpm test                                               # 后端 pytest（183 条）
 pnpm e2e                                                # 前端 Playwright（40 条）
 pnpm i18n:check && pnpm i18n:jsx                        # 语言包校验 + 裸中文扫描
 pnpm ctx:check                                          # 工程文档里的死引用 / 死链接
