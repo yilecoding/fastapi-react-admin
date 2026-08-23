@@ -31,8 +31,13 @@ error:
     not_found: Config item does not exist
   data_rule:
     already_exists: Data rule already exists
+    column_matches_no_model: No model has this column; this rule would never take effect
+    column_not_allowed: This column is not allowed for data filtering
+    column_not_found: The selected model has no such column
     model_not_found: The model for this data rule does not exist
     not_found: Data rule does not exist
+    template_column_required: When the model is "all models", the column must be a template variable
+    value_type_mismatch: Value does not match the column type
   data_scope:
     already_exists: Data scope already exists
     not_found: Data scope does not exist

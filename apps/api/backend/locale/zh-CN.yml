@@ -32,8 +32,13 @@ error:
     not_found: 参数配置不存在
   data_rule:
     already_exists: 数据规则已存在
+    column_matches_no_model: 该字段在任何模型上都不存在，这条规则永远不会生效
+    column_not_allowed: 该字段不允许用于数据过滤
+    column_not_found: 所选模型上不存在该字段
     model_not_found: 数据规则可用模型不存在
     not_found: 数据规则不存在
+    template_column_required: 模型为「所有模型」时，字段必须使用模板变量
+    value_type_mismatch: 值与字段类型不匹配
   data_scope:
     already_exists: 数据范围已存在
     not_found: 数据范围不存在

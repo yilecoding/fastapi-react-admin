@@ -91,7 +91,7 @@ VALUES
 
 INSERT INTO sys_data_rule (id, name, model, [column], operator, expression, [value], created_time, updated_time)
 VALUES
-(2048601264035594240, N'部门 ID 等于当前用户部门', 'Dept', '__dept_id__', 0, 0, '${dept_id}', GETDATE(), NULL),
+(2048601264035594240, N'部门 ID 等于当前用户部门', '__ALL__', '__dept_id__', 0, 0, '${dept_id}', GETDATE(), NULL),
 (2048601264102703104, N'部门编码等于 TEST', 'Dept', 'code', 1, 0, 'TEST', GETDATE(), NULL),
 (2048601264102703105, N'父部门 ID 等于测试部门 ID', 'Dept', 'parent_id', 0, 0, '2048601258595581952', GETDATE(), NULL),
 (2048601264102703106, N'创建者等于当前用户', '__ALL__', '__created_by__', 0, 0, '${user_id}', GETDATE(), NULL),
