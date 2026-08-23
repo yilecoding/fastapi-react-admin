@@ -68,6 +68,15 @@ const FIELDS: readonly FilterField[] = [
   { key: 'task_id', label: '任务 UUID', type: 'text', param: 'task_id' },
 ]
 
+const COLUMN_LABELS: Record<string, string> = {
+  date_done: '结束时间',
+  name: '任务名',
+  status: '状态',
+  retries: '重试次数',
+  worker: '执行节点',
+  task_id: '任务 UUID',
+}
+
 const col = createColumnHelper<typeof features, TaskResult>()
 
 export function SchedulerRecordPage({
@@ -217,7 +226,7 @@ export function SchedulerRecordPage({
               onReset={q.reset}
               applied={q.applied}
               loading={isFetching}
-              actions={<DataTableColumnVisibility table={table} />}
+              actions={<DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />}
             />
 
             <div

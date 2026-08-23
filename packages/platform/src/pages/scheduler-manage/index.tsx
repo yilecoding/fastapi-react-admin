@@ -54,6 +54,16 @@ const FIELDS: readonly FilterField[] = [
   { key: 'task', label: 'Celery 任务', type: 'text', param: 'task' },
 ]
 
+const COLUMN_LABELS: Record<string, string> = {
+  name: '任务名称',
+  task: 'Celery 任务',
+  type: '策略类型',
+  schedule: '触发策略',
+  enabled: '状态',
+  total_run_count: '累计触发',
+  last_run_time: '最近触发',
+}
+
 const col = createColumnHelper<typeof features, TaskScheduler>()
 
 export function SchedulerManagePage({
@@ -286,7 +296,7 @@ export function SchedulerManagePage({
                       {t('新增')}
                     </Button>
                   </Can>
-                  <DataTableColumnVisibility table={table} />
+                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
                 </>
               }
             />
