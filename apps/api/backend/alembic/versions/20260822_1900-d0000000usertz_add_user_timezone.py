@@ -29,7 +29,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-import backend.common.model  # noqa: F401  # 让 UniversalStr 等自定义类型可解析
+import backend.common.model  # 让 UniversalStr 等自定义类型可解析
 
 # revision identifiers, used by Alembic.
 revision = 'd0000000usertz'
@@ -47,7 +47,7 @@ def _has_column() -> bool:
     return _COLUMN in {c['name'] for c in sa.inspect(bind).get_columns(_TABLE)}
 
 
-def upgrade():
+def upgrade() -> None:
     if _has_column():
         return
     # 已有行要有值：列是 NOT NULL，`server_default` 负责回填存量行。
@@ -71,7 +71,7 @@ def upgrade():
     op.alter_column(_TABLE, _COLUMN, server_default=None)
 
 
-def downgrade():
+def downgrade() -> None:
     if not _has_column():
         return
     op.drop_column(_TABLE, _COLUMN)

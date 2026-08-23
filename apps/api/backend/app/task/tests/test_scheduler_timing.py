@@ -136,11 +136,11 @@ class CapturingScheduler(DatabaseScheduler):
         super().__init__(*a, **kw)
 
     @property
-    def producer(self):  # noqa: ANN201
+    def producer(self):
         # tick() 里会取它；返回 None 免得去连 broker
         return None
 
-    def apply_entry(self, entry, producer=None) -> None:  # ruff:ignore[missing-type-function-argument]
+    def apply_entry(self, entry, producer=None) -> None:
         # celery 真判到点了才会走到这里。reserve() 已经在 tick 里调过 __next__，
         # 计数和 last_run_time 此时已经推进并落库
         self.fired.append(entry.name)

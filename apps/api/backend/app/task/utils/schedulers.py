@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from celery import current_app
@@ -154,7 +154,7 @@ class ModelEntry(ScheduleEntry):
                     {'last_run_time': self.model.last_run_time, 'total_run_count': self.model.total_run_count},
                     synchronize_session=False,
                 )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             # 写失败不能让调度停摆 —— 最坏是这一条的计数偏小、one_off 可能多跑一次
             logger.warning('回写任务调度触发计数失败 %s：%s', self.model.name, e)
 
@@ -169,7 +169,7 @@ class DatabaseScheduler(Scheduler):
     #: 没有变更信号时，最多多久强制重读一次（秒）
     max_interval = 60
 
-    def __init__(self, *args, **kwargs) -> None:  # ruff:ignore[missing-type-function-argument]
+    def __init__(self, *args, **kwargs) -> None:
         self._schedule: dict[str, ModelEntry] = {}
         self._last_seen_update: str | None = None
         self._dirty: set[str] = set()
@@ -187,7 +187,7 @@ class DatabaseScheduler(Scheduler):
             for row in rows:
                 try:
                     entries[row.name] = self.Entry(row, app=self.app)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.warning('跳过配置有误的任务调度 %s：%s', row.name, e)
                     continue
 
@@ -229,7 +229,7 @@ class DatabaseScheduler(Scheduler):
             )
             value = client.get(f'{settings.CELERY_REDIS_PREFIX}:last_update')
             return value.decode() if value else None
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             # Redis 挂了不该让 beat 停摆 —— 只是失去「改完立刻生效」的能力，
             # max_interval 到点仍会重读
             logger.warning('读取调度变更标记失败，本轮不重载：%s', e)
@@ -273,7 +273,7 @@ class DatabaseScheduler(Scheduler):
                         {'last_run_time': m.last_run_time, 'total_run_count': m.total_run_count},
                         synchronize_session=False,
                     )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning('回写任务调度统计失败：%s', e)
 
 

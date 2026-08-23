@@ -490,8 +490,7 @@ def test_fresh_install_has_every_index_the_models_declare(client: TestClient, to
     want: set[tuple[str, str]] = set()
     for name in watched:
         table = MappedBase.metadata.tables[name]
-        for idx in table.indexes:
-            want.add((name, idx.name))
+        want.update((name, idx.name) for idx in table.indexes)
 
     url = get_result_backend().removeprefix('db+').replace(
         f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?'
@@ -513,5 +512,5 @@ def test_fresh_install_has_every_index_the_models_declare(client: TestClient, to
     missing = sorted(f'{t}.{i}' for t, i in want - have)
     assert not missing, (
         '模型里声明了这些索引，库里却没有 —— 改了模型但没在库上建（没有 alembic，'
-        f'这两步靠人对账）：\n  ' + '\n  '.join(missing)
+        '这两步靠人对账）：\n  ' + '\n  '.join(missing)
     )

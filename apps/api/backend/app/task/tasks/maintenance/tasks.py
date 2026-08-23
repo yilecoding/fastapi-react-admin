@@ -6,9 +6,11 @@
 """
 
 from datetime import datetime, timedelta
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 
 from backend.app.task.celery import celery_app
 from backend.common.log import log
@@ -19,7 +21,9 @@ from backend.utils.timezone import timezone
 PRUNE_BATCH = 2000
 
 
-async def _prune_table(db: AsyncSession, model, time_col, cutoff: datetime, batch: int) -> int:
+async def _prune_table(
+    db: AsyncSession, model: type[Any], time_col: InstrumentedAttribute, cutoff: datetime, batch: int
+) -> int:
     """分批删除 `time_col < cutoff` 的行，返回删掉几行。
 
     🔴 **必须分批，不能一条 DELETE 删到底。** 日志表是全库长得最快的表，

@@ -63,7 +63,7 @@ class Graph:
         return f'dp{RUN}_{key}'.lower()
 
 
-async def _build(graph: Graph) -> None:  # noqa: PLR0915
+async def _build(graph: Graph) -> None:
     """把整张 部门 / 角色 / 数据范围 / 数据规则 / 用户 图灌进测试库"""
     engine = create_database_async_engine(get_database_url(unittest=True))
     now = timezone.now()
@@ -127,8 +127,7 @@ async def _build(graph: Graph) -> None:  # noqa: PLR0915
             'created_time': now,
             'updated_time': None,
         })
-        for rk in rule_keys:
-            s2r.append({'id': _sid(), 'data_scope_id': pk, 'data_rule_id': graph.rule[rk]})
+        s2r.extend({'id': _sid(), 'data_scope_id': pk, 'data_rule_id': graph.rule[rk]} for rk in rule_keys)
 
     def add_role(key: str, scope_keys: list[str], *, is_filter: bool = True, status: int = 1) -> None:
         pk = _sid()
@@ -145,8 +144,7 @@ async def _build(graph: Graph) -> None:  # noqa: PLR0915
             'created_time': now,
             'updated_time': None,
         })
-        for sk in scope_keys:
-            r2s.append({'id': _sid(), 'role_id': pk, 'data_scope_id': graph.scope[sk]})
+        r2s.extend({'id': _sid(), 'role_id': pk, 'data_scope_id': graph.scope[sk]} for sk in scope_keys)
 
     def add_user(key: str, role_keys: list[str], *, dept: str | None = 'A1', superuser: bool = False) -> None:
         pk = _sid()
@@ -175,8 +173,7 @@ async def _build(graph: Graph) -> None:  # noqa: PLR0915
             'created_time': now,
             'updated_time': None,
         })
-        for rk in role_keys:
-            u2r.append({'id': _sid(), 'user_id': pk, 'role_id': graph.role[rk]})
+        u2r.extend({'id': _sid(), 'user_id': pk, 'role_id': graph.role[rk]} for rk in role_keys)
 
     # ---- 部门树 ----------------------------------------------------------
     #   RA ── A1
@@ -207,7 +204,7 @@ async def _build(graph: Graph) -> None:  # noqa: PLR0915
     add_rule('all_status', '__ALL__', 'status', Op.AND, Expr.eq, '1')
     # 值模板变量
     add_rule('parent_tpl', 'Dept', 'parent_id', Op.AND, Expr.eq, '${dept_id}')
-    add_rule('now_tpl', 'Dept', 'created_time', Op.AND, Expr.lt, '${now}')
+    add_rule('now_tpl', 'Dept', 'created_time', Op.AND, Expr.lt, f'${now}')
     # 被排除的列（DATA_PERMISSION_COLUMN_EXCLUDE）
     add_rule('excluded_col', 'Dept', 'id', Op.AND, Expr.eq, str(graph.dept['A1']))
     # 压根不存在的列
@@ -592,7 +589,9 @@ def test_data_permission_filter_is_wired_to_exactly_one_endpoint() -> None:
 # --------------------------------------------------------------------------
 
 
-def test_scope_change_takes_effect_without_relogin(client: TestClient, dp: Graph, token_headers: dict[str, str]) -> None:
+def test_scope_change_takes_effect_without_relogin(
+    client: TestClient, dp: Graph, token_headers: dict[str, str]
+) -> None:
     """改数据范围后，已登录用户下一个请求就该看到新结果（`fba:user:<id>` 被清掉）。
 
     走真实接口改（`PUT /sys/data-scopes/{pk}/rules`），因为清缓存是写在 service 里的。

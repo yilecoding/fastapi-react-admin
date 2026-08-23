@@ -136,7 +136,7 @@ def test_start_time_wins_over_now_for_last_run_at():
 
 
 class _FakeQuery:
-    def __init__(self, rows):
+    def __init__(self, rows) -> None:
         self._rows = rows
 
     def filter(self, *a, **k):
@@ -147,7 +147,7 @@ class _FakeQuery:
 
 
 class _FakeSession:
-    def __init__(self, rows):
+    def __init__(self, rows) -> None:
         self._rows = rows
 
     def query(self, *a, **k):

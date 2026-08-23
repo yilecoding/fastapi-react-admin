@@ -21,6 +21,9 @@ dist-ssr
 !apps/api/backend/plugin/*/.env.example
 # E2E 隔离环境同理，见 apps/web/e2e/ 和 CLAUDE.md「E2E 测试」
 !apps/api/backend/.env.e2e.example
+# 部署编排的模板同理 —— docker-compose.yml 有四处挂载 .env.server，
+# 而它是 gitignore 的：不提交一份模板，别人 clone 下来那四处挂载全是空的
+!apps/api/deploy/backend/docker-compose/.env.server.example
 
 # turbo
 .turbo

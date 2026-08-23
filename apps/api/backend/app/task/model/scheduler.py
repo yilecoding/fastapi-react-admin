@@ -1,4 +1,4 @@
-"""任务调度表 —— beat 从这里读要跑什么、什么时候跑。
+r"""任务调度表 —— beat 从这里读要跑什么、什么时候跑。
 
 有了它，调度才是**界面上能改的数据**，而不是写死在 `tasks/beat.py` 里、
 改一次要发一次版的常量。
@@ -73,7 +73,7 @@ class TaskScheduler(Base):
             cls.touch_last_update()
 
     @classmethod
-    def touch_last_update(cls, *args, **kwargs) -> None:  # ruff:ignore[missing-type-function-argument]
+    def touch_last_update(cls, *args, **kwargs) -> None:
         """打一个「调度变了」的时间戳，beat 靠轮询它决定要不要重载。
 
         🔴 这里**不能**用 `asyncio.create_task`（上游是那么写的）：

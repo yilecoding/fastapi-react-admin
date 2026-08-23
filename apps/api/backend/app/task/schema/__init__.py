@@ -14,8 +14,8 @@ from backend.app.task.schema.scheduler import (
     GetTaskSchedulerDetail as GetTaskSchedulerDetail,
 )
 from backend.app.task.schema.scheduler import (
-    UpdateTaskSchedulerParam as UpdateTaskSchedulerParam,
+    TaskSchedulerMeta as TaskSchedulerMeta,
 )
 from backend.app.task.schema.scheduler import (
-    TaskSchedulerMeta as TaskSchedulerMeta,
+    UpdateTaskSchedulerParam as UpdateTaskSchedulerParam,
 )

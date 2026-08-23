@@ -15,7 +15,6 @@
 """
 
 import asyncio
-import os
 import sys
 
 import cappa
@@ -81,13 +80,20 @@ def _stamp_head() -> None:
 
     from backend.core.path_conf import BASE_PATH
 
-    # env.py 从 settings 读连接串，这里要让它指向测试库
-    os.environ['DATABASE_SCHEMA'] = f"{settings.DATABASE_SCHEMA.removesuffix('_test')}_test"
-
+    # 🔴 必须把目标库**显式写进 sqlalchemy.url**。
+    # 原来是设 `os.environ['DATABASE_SCHEMA']` —— 那没用：`settings` 是模块级
+    # 缓存的单例，早在 import 期就按 .env 构造好了，进程内改 environ 影响不到它。
+    # 结果是这个函数一直在 stamp **开发库**，测试库的 alembic_version 停在旧版本，
+    # 而两个库都有那张表、看起来都正常，没有任何现象。
+    # （对应地，`alembic/env.py` 改成「调用方设过就不覆盖」。）
     cfg = Config(str(BASE_PATH / 'alembic.ini'))
     cfg.set_main_option('script_location', str(BASE_PATH / 'alembic'))
+    cfg.set_main_option(
+        'sqlalchemy.url',
+        get_database_url(unittest=True).render_as_string(hide_password=False).replace('%', '%%'),
+    )
     command.stamp(cfg, 'head')
-    print('已把测试库标记到迁移 head')
+    print(f'已把 {get_database_url(unittest=True).database} 标记到迁移 head')
 
 
 if __name__ == '__main__':

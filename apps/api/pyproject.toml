@@ -263,6 +263,23 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "**/model/*.py" = ["typing-only-standard-library-import"]
+# 测试文件不强制类型标注。
+#
+# pytest 的 fixture 参数和用例函数签名带不带标注对可读性几乎没有影响
+# （`def test_x(client: TestClient, dp: Graph) -> None` 里真正有信息量的是名字），
+# 而不放开的话 `ruff check backend/` 会因为**测试文件**报 160+ 个
+# missing-type-* —— CI 的 lint 任务因此长期是红的，红久了就没人看了。
+# 放开这两条之后，同一条命令重新变成一个可信的信号。
+"**/tests/**/*.py" = [
+  "missing-type-function-argument",
+  "missing-return-type-undocumented-public-function",
+  "missing-return-type-private-function",
+]
+"**/conftest.py" = ["missing-type-function-argument", "missing-return-type-undocumented-public-function"]
+# 这两个文件的模块 docstring 里是 markdown 对照表（「上游怎么写 / 为什么在 mssql 上不行 /
+# 改成什么」），一行一条。按 120 列硬拆会把表格拆散，反而读不成表
+"backend/app/task/model/result.py" = ["line-too-long"]
+"backend/app/task/model/scheduler.py" = ["line-too-long"]
 "backend/common/socketio/server.py" = ["missing-type-function-argument"]
 "backend/common/exception/exception_handler.py" = [
   "missing-return-type-private-function",
