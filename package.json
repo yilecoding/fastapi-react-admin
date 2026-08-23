@@ -16,6 +16,7 @@
     "db:upgrade": "pnpm --filter api db:upgrade",
     "db:revision": "pnpm --filter api db:revision",
     "db:current": "pnpm --filter api db:current",
+    "db:history": "pnpm --filter api db:history",
     "test": "turbo test",
     "e2e": "turbo e2e"
   },
