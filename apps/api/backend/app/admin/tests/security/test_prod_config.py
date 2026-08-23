@@ -33,6 +33,7 @@ class _FakeSettings:
     def __init__(self, **overrides: object) -> None:
         self.ENVIRONMENT = 'prod'
         self.TOKEN_SECRET_KEY = 'S7xK2mQ9vR4tW8yZ1aB6cD3eF5gH0jLnP'
+        self.DATABASE_HOST = 'sqlserver.internal'
         self.DATABASE_PASSWORD = 'Xk92mQvR4tW8yZ1a'
         self.REDIS_PASSWORD = 'Pq73nZvT6yU2wX9b'
         self.CELERY_BROKER = 'redis'
@@ -115,6 +116,13 @@ def test_local_cors_origin_is_rejected() -> None:
 
 def test_superuser_database_account_is_rejected() -> None:
     assert 'DATABASE_USER' in _expect_rejected(DATABASE_USER='sa')
+
+
+def test_placeholder_database_target_is_rejected() -> None:
+    msg = _expect_rejected(DATABASE_HOST='CHANGE_ME__sqlserver.example.internal')
+    assert 'DATABASE_HOST' in msg
+    msg = _expect_rejected(DATABASE_USER='CHANGE_ME__fba_app')
+    assert 'DATABASE_USER' in msg
 
 
 def test_all_problems_are_reported_at_once() -> None:
