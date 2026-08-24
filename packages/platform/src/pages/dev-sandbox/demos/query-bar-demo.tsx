@@ -210,8 +210,8 @@ function Out({ title, hint, body, testId }: { title: string; hint: string; body:
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <span className="text-xs font-medium">{title}</span>
-      <span className="text-[11px] text-muted-foreground">{hint}</span>
-      <pre className="max-h-44 overflow-auto rounded-md bg-muted p-2 text-[11px]" data-testid={testId}>
+      <span className="text-xs text-muted-foreground">{hint}</span>
+      <pre className="max-h-44 overflow-auto rounded-md bg-muted p-2 text-xs" data-testid={testId}>
         {body}
       </pre>
     </div>

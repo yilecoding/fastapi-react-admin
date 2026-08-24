@@ -200,14 +200,14 @@ export function DataRuleSheet({ open, onOpenChange, editing, onCreated }: {
                     type="button"
                     data-testid={`dr-var-${v.key.replace(/[${}]/g, '')}`}
                     onClick={() => form.setValue('value', v.key, { shouldValidate: true })}
-                    className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted"
+                    className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs hover:bg-muted"
                     title={t(v.comment)}
                   >
                     {v.key}
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
+              <p className="mt-2 text-xs text-muted-foreground">
                 <Trans
                   t={t}
                   i18nKey="按组织隔离的典型写法：模型选业务表、字段选 <c>dept_id</c>、运算选「等于」、值用 <d>{{tpl}}</d>。"

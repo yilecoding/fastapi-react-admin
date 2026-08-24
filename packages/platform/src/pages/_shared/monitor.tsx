@@ -93,7 +93,7 @@ export function MetricCard({
         {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
       </span>
       {pct !== undefined && <UsageBar pct={pct} tone={tn} />}
-      {hint && <span className="text-[11px] leading-tight text-muted-foreground">{hint}</span>}
+      {hint && <span className="text-xs leading-tight text-muted-foreground">{hint}</span>}
       {children}
     </div>
   )
@@ -202,7 +202,7 @@ export function Sparkline({
   if (points.length < 2) {
     return (
       <div
-        className="flex items-center justify-center rounded-md bg-muted/40 text-[11px] text-muted-foreground"
+        className="flex items-center justify-center rounded-md bg-muted/40 text-xs text-muted-foreground"
         style={{ height }}
         data-testid={testId}
       >

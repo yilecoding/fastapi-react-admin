@@ -227,7 +227,7 @@ export function LogOperaPage({
         cell: ({ getValue }) => (
           <span
             className={cn(
-              'inline-flex rounded px-1.5 py-0.5 font-mono text-[11px] ring-1',
+              'inline-flex rounded px-1.5 py-0.5 font-mono text-xs ring-1',
               METHOD_CLASS[getValue()] ?? 'bg-muted ring-border'
             )}
           >

@@ -89,7 +89,7 @@ export function RolePage({
       description: r.remark || undefined,
       status: r.status,
       badge: r.is_filter_scopes ? undefined : (
-        <span className={cn('shrink-0 rounded px-1 text-[10px] ring-1', TONE_CLASS.info)} title={t('不受数据范围限制')}>
+        <span className={cn('shrink-0 rounded px-1 text-2xs ring-1', TONE_CLASS.info)} title={t('不受数据范围限制')}>
           {t('全量')}
         </span>
       ),

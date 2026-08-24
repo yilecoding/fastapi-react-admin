@@ -195,8 +195,8 @@ function SignInPage() {
           <div className="w-full max-w-[400px]">
             <SignInBrandStrip />
 
-            <p className="font-mono text-[10.5px] tracking-[0.32em] text-muted-foreground">SIGN IN</p>
-            <h1 className="mt-3 text-[27px] leading-tight font-semibold tracking-[-0.02em]">{t("欢迎回来")}</h1>
+            <p className="font-mono text-2xs tracking-[0.32em] text-muted-foreground">SIGN IN</p>
+            <h1 className="mt-3 text-2xl leading-tight font-semibold tracking-[-0.02em]">{t("欢迎回来")}</h1>
             <p className="mt-2 text-sm text-muted-foreground">{t("用管理员账号登录，进入你的工作台。")}</p>
 
             {/* 三个面板给同一个 min-h：切登录方式时「欢迎回来」不会上下跳 */}
@@ -209,7 +209,7 @@ function SignInPage() {
                     value={m.value}
                     data-testid={`method-${m.value}`}
                     // 基础类带 group-data-horizontal 变体，覆盖必须带同样的前缀，否则选择器优先级不够
-                    className="flex-none rounded-none px-0 pb-3 text-[13.5px] group-data-horizontal/tabs:after:bottom-[-1px]"
+                    className="flex-none rounded-none px-0 pb-3 text-sm group-data-horizontal/tabs:after:bottom-[-1px]"
                   >
                     <m.icon />
                     {t(m.label)}
@@ -220,7 +220,7 @@ function SignInPage() {
               <TabsContent value="password" className="min-h-[22.5rem]">
                 <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="username" className="text-[13px]">{t("账号")}</Label>
+                    <Label htmlFor="username" className="text-sm">{t("账号")}</Label>
                     <InputGroup className="h-11">
                       <InputGroupAddon align="inline-start">
                         <IconUser />
@@ -239,7 +239,7 @@ function SignInPage() {
 
                   <div className="grid gap-2">
                     <div className="flex items-baseline justify-between gap-2">
-                      <Label htmlFor="password" className="text-[13px]">{t("密码")}</Label>
+                      <Label htmlFor="password" className="text-sm">{t("密码")}</Label>
                       {/* 后端没有自助重置（PUT /users/{pk}/password 要超管），所以这里不放假链接 */}
                       <span className="text-xs text-muted-foreground">{t("忘记密码找管理员重置")}</span>
                     </div>
@@ -273,7 +273,7 @@ function SignInPage() {
 
                   {captchaState !== "off" && (
                     <div className="grid gap-2">
-                      <Label htmlFor="captcha" className="text-[13px]">{t("验证码")}</Label>
+                      <Label htmlFor="captcha" className="text-sm">{t("验证码")}</Label>
                       <div className="flex items-center gap-2">
                         <InputGroup className="h-11 flex-1">
                           <InputGroupAddon align="inline-start">
@@ -329,7 +329,7 @@ function SignInPage() {
                   <Button
                     type="submit"
                     size="lg"
-                    className="mt-2 h-11 w-full text-[15px]"
+                    className="mt-2 h-11 w-full text-base"
                     disabled={pending || captchaState === "loading" || captchaState === "error"}
                     data-testid="submit"
                   >
@@ -372,7 +372,7 @@ function SignInPage() {
 
         <footer className="shrink-0">
           <div className="h-px bg-border/70" />
-          <div className="flex items-center justify-between gap-3 pt-3.5 pb-1 font-mono text-[10px] tracking-[0.18em] text-muted-foreground">
+          <div className="flex items-center justify-between gap-3 pt-3.5 pb-1 font-mono text-2xs tracking-[0.18em] text-muted-foreground">
             <span>
               {BRAND.wordmark} · {t(BRAND.nameZh)}
             </span>
@@ -404,7 +404,7 @@ function NotWired({
     <div className="mt-6 rounded-xl border border-dashed border-border bg-muted/30 px-6 py-9 text-center">
       <Icon className="mx-auto size-5 text-muted-foreground" />
       <p className="mt-3 text-sm font-medium">{title}</p>
-      <p className="mx-auto mt-1.5 max-w-[17rem] text-[13px] leading-relaxed text-muted-foreground">{hint}</p>
+      <p className="mx-auto mt-1.5 max-w-[17rem] text-sm leading-relaxed text-muted-foreground">{hint}</p>
       <Button variant="outline" size="sm" className="mt-5" onClick={onUsePassword}>
         {t("改用密码登录")}
       </Button>

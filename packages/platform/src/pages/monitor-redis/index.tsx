@@ -134,12 +134,12 @@ export function MonitorRedisPage({
                 title={t("每秒操作数趋势")}
                 testId="trend-qps"
                 icon={<IconBolt className="size-4 text-muted-foreground" />}
-                action={<span className="text-[11px] text-muted-foreground">{t('{{n}} 个采样点', { n: qpsHistory.length })}</span>}
+                action={<span className="text-xs text-muted-foreground">{t('{{n}} 个采样点', { n: qpsHistory.length })}</span>}
               >
                 <div className="py-3">
                   <Sparkline points={qpsHistory} tone="info" height={64} testId="spark-qps" />
                 </div>
-                <p className="pb-2 text-[11px] text-muted-foreground">
+                <p className="pb-2 text-xs text-muted-foreground">
                   <Trans
                     t={t}
                     i18nKey="<code>instantaneous_ops_per_sec</code> 是 Redis 自己的滑动窗口瞬时值，只在本次会话内累积成曲线。"
@@ -172,7 +172,7 @@ export function MonitorRedisPage({
                   <InfoRow label={t("RSS 常驻")} value={info.used_memory_rss_human} />
                   <InfoRow label={t("上限")} value={noLimit ? t('未限制') : info.maxmemory_human} />
                   <InfoRow label={t("碎片率")} value={frag.toFixed(2)} tone={fragMeta.tone} />
-                  <div className="py-2 text-[11px] leading-snug text-muted-foreground">{fragMeta.text}</div>
+                  <div className="py-2 text-xs leading-snug text-muted-foreground">{fragMeta.text}</div>
                 </InfoCard>
 
                 <InfoCard
@@ -240,7 +240,7 @@ export function MonitorRedisPage({
                     <BarList items={visible} testId="cmd-bars" />
                   )}
                 </div>
-                <p className="pb-2 text-[11px] text-muted-foreground">
+                <p className="pb-2 text-xs text-muted-foreground">
                   <Trans
                     t={t}
                     i18nKey="数据来自 <a>INFO commandstats</a>，是实例启动以来的累计值，<b>CONFIG RESETSTAT</b> 会清零。"

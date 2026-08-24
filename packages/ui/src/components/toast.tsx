@@ -114,9 +114,9 @@ function ToastItem({ toast: item }: { toast: ToastPrimitive.Root.ToastObject }) 
       <Icon className={cn("mt-px size-4 shrink-0", TONE_CLASS[tone], spinning && "animate-spin")} />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <ToastPrimitive.Title className="text-sm leading-snug font-medium" />
-        <ToastPrimitive.Description className="text-[13px] leading-relaxed text-muted-foreground" />
+        <ToastPrimitive.Description className="text-sm leading-relaxed text-muted-foreground" />
         {item.actionProps && (
-          <ToastPrimitive.Action className="mt-1.5 w-fit rounded-md text-[13px] font-medium text-primary underline-offset-4 hover:underline" />
+          <ToastPrimitive.Action className="mt-1.5 w-fit rounded-md text-sm font-medium text-primary underline-offset-4 hover:underline" />
         )}
       </div>
       <ToastPrimitive.Close

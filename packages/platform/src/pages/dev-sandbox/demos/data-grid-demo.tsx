@@ -234,7 +234,7 @@ function SubRow({ row }: { row: any }) {
          ['角色', r.role], ['额度', r.amount.toLocaleString()], ['创建时间', r.createdAt]] as const).map(
         ([k, val]) => (
           <span key={k} className="flex flex-col gap-0.5">
-            <span className="text-[11px] text-muted-foreground">{k}</span>
+            <span className="text-xs text-muted-foreground">{k}</span>
             <span className="text-sm">{val}</span>
           </span>
         )

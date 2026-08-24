@@ -241,7 +241,7 @@ export function MenuFormSheet({
                   renderItem={(o) => <code className="truncate text-xs">{o.label}</code>}
                 />
                 {pathMissing && dirPathUnused && (
-                  <p className="text-[11px] text-muted-foreground" data-testid="m-path-unused">
+                  <p className="text-xs text-muted-foreground" data-testid="m-path-unused">
                     <Trans
                       t={t}
                       i18nKey="这个目录有子项，侧边栏会把它当可展开分组 —— 地址不会被用到，填的 <c>{{path}}</c> 在前端不存在也没关系。"
@@ -266,7 +266,7 @@ export function MenuFormSheet({
                     </span>
                   </p>
                 )}
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t('只列出前端真实存在的 {{n}} 个路由 —— 从根上杜绝死链。', { n: validPaths.length })}
                 </p>
               </FormField>
@@ -285,7 +285,7 @@ export function MenuFormSheet({
             >
               <Input {...form.register('perms')} data-testid="m-perms" autoComplete="off"
                      placeholder={t("如 order:record:add")} />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 <Trans
                   t={t}
                   i18nKey="前端 <c>&lt;Can&gt;</c> 与后端 <d>rbac_verify</d> 都读这个值。"

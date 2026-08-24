@@ -33,10 +33,10 @@ function Field({
     return (
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <label htmlFor={`knob-${id}`} className="text-[13px] font-medium">
+          <label htmlFor={`knob-${id}`} className="text-sm font-medium">
             {knob.label}
           </label>
-          {knob.hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{knob.hint}</p>}
+          {knob.hint && <p className="mt-0.5 text-xs text-muted-foreground">{knob.hint}</p>}
         </div>
         <Switch
           id={`knob-${id}`}
@@ -53,8 +53,8 @@ function Field({
     const items = Object.fromEntries(knob.options.map((o) => [o, o]))
     return (
       <div className="flex flex-col gap-2">
-        <span className="text-[13px] font-medium">{knob.label}</span>
-        {knob.hint && <p className="-mt-1 text-[11px] text-muted-foreground">{knob.hint}</p>}
+        <span className="text-sm font-medium">{knob.label}</span>
+        {knob.hint && <p className="-mt-1 text-xs text-muted-foreground">{knob.hint}</p>}
         {knob.options.length <= RADIO_MAX ? (
           <RadioGroup
             value={current}
@@ -65,7 +65,7 @@ function Field({
             {knob.options.map((opt) => (
               <label
                 key={opt}
-                className="flex cursor-pointer items-center gap-2 font-mono text-[12px] text-muted-foreground has-data-checked:text-foreground"
+                className="flex cursor-pointer items-center gap-2 font-mono text-xs text-muted-foreground has-data-checked:text-foreground"
               >
                 <RadioGroupItem value={opt} />
                 {opt}
@@ -75,12 +75,12 @@ function Field({
         ) : (
           // Select 必须传 items，否则关闭态显示原始 value（组件约定）
           <Select value={current} items={items} onValueChange={(v) => onChange(String(v))}>
-            <SelectTrigger size="sm" className="font-mono text-[12px]" data-testid={`knob-${id}`}>
+            <SelectTrigger size="sm" className="font-mono text-xs" data-testid={`knob-${id}`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {knob.options.map((opt) => (
-                <SelectItem key={opt} value={opt} className="font-mono text-[12px]">
+                <SelectItem key={opt} value={opt} className="font-mono text-xs">
                   {opt}
                 </SelectItem>
               ))}
@@ -95,17 +95,17 @@ function Field({
     return (
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-2">
-          <label htmlFor={`knob-${id}`} className="text-[13px] font-medium">
+          <label htmlFor={`knob-${id}`} className="text-sm font-medium">
             {knob.label}
           </label>
-          <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+          <span className="font-mono text-xs text-muted-foreground tabular-nums">
             {knob.min}–{knob.max}
           </span>
         </div>
         <Input
           id={`knob-${id}`}
           type="number"
-          className="h-8 font-mono text-[12px]"
+          className="h-8 font-mono text-xs"
           value={String(value)}
           min={knob.min}
           max={knob.max}
@@ -117,24 +117,24 @@ function Field({
             onChange(Math.min(knob.max, Math.max(knob.min, raw)))
           }}
         />
-        {knob.hint && <p className="text-[11px] text-muted-foreground">{knob.hint}</p>}
+        {knob.hint && <p className="text-xs text-muted-foreground">{knob.hint}</p>}
       </div>
     )
   }
 
   return (
     <div className="flex flex-col gap-2">
-      <label htmlFor={`knob-${id}`} className="text-[13px] font-medium">
+      <label htmlFor={`knob-${id}`} className="text-sm font-medium">
         {knob.label}
       </label>
       <Input
         id={`knob-${id}`}
-        className="h-8 text-[13px]"
+        className="h-8 text-sm"
         value={String(value)}
         data-testid={`knob-${id}`}
         onChange={(e) => onChange(e.target.value)}
       />
-      {knob.hint && <p className="text-[11px] text-muted-foreground">{knob.hint}</p>}
+      {knob.hint && <p className="text-xs text-muted-foreground">{knob.hint}</p>}
     </div>
   )
 }
@@ -161,7 +161,7 @@ export function KnobPanel({
   return (
     <div className={cn('flex flex-col gap-4', className)} data-testid="knob-panel">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[10.5px] tracking-[0.2em] text-muted-foreground">KNOBS</span>
+        <span className="font-mono text-2xs tracking-[0.2em] text-muted-foreground">KNOBS</span>
         <Button
           variant="ghost"
           size="xs"
@@ -176,7 +176,7 @@ export function KnobPanel({
       </div>
 
       {entries.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">这个组件没有可调的参数。</p>
+        <p className="text-sm text-muted-foreground">这个组件没有可调的参数。</p>
       ) : (
         <div className="flex flex-col gap-5">
           {entries.map(([key, knob]) => (

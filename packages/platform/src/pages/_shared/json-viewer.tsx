@@ -49,7 +49,7 @@ export function JsonViewer({
       <CopyButton text={text} className="absolute end-2 top-2" />
       <pre
         data-testid={testId}
-        className="max-h-72 overflow-auto p-3 pe-12 font-mono text-[11.5px] leading-relaxed"
+        className="max-h-72 overflow-auto p-3 pe-12 font-mono text-xs leading-relaxed"
       >
         <code>{highlight(text)}</code>
       </pre>
