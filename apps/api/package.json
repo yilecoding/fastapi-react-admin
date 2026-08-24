@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "uv run python -m uvicorn backend.main:app --port 8000 --reload --reload-dir backend",
+    "dev": "uv run python -m uvicorn backend.main:app --port 8088 --reload --reload-dir backend",
     "test": "uv run --no-sync pytest",
     "test:db": "uv run --no-sync python -m backend.scripts.reset_test_db",
     "db:upgrade": "cd backend && uv run --no-sync alembic upgrade head",

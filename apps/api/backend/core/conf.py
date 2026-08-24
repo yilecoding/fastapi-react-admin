@@ -185,8 +185,8 @@ class Settings(BaseSettings):
     CORS_ALLOWED_ORIGINS: list[str] = [  # 末尾不带斜杠
         'http://127.0.0.1',
         # 本项目前端 dev server（端口固定在 vite.config.ts 的 server.port）
-        'http://127.0.0.1:1125',
-        'http://localhost:1125',
+        'http://127.0.0.1:8888',
+        'http://localhost:8888',
     ]
     CORS_EXPOSE_HEADERS: list[str] = [
         'X-Request-ID',
