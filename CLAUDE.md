@@ -95,6 +95,25 @@ packages/platform/ 平台能力：api-client · auth · shell · pages
 **`ui` 永远不 import `platform`；`i18n` 不 import 任何 workspace 包**（连
 `react-i18next` 都不依赖 —— 它要保持框架无关，React 绑定在 app 层注入）。
 
+🔴 **这个箭头必须同时体现在 `package.json` 的 `dependencies` 里，不能只体现在
+`vite.config.ts` 的 `resolve.alias` / `tsconfig.app.json` 的路径映射上。**
+`apps/web` 曾经就漏了这一步：代码确实按箭头方向 import `@admin/platform`，
+`vite.config.ts` 也确实配了 alias 让它能跑，但 `apps/web/package.json` 的
+`dependencies` 里只有 `@admin/i18n` / `@admin/ui`，没有 `@admin/platform`。
+pnpm 的依赖图完全看不到这层——`platform` 自己的依赖（react/zustand/
+socket.io-client/`@tanstack/react-query`…）能不能装上，全靠**别人**顺带
+把它们装了。这个洞被日常的整仓 `pnpm install`（本地开发、CI 的
+`typecheck · build · i18n` job）**完全盖住**：不带 `--filter` 的全量安装，
+不管声没声明反正都会把所有工作区包的依赖一起装上。第一个真正做 scoped
+install 的是 `apps/web/Dockerfile` 那条 `pnpm install --filter web...
+--filter .`（生产镜像构建，见 `docker-compose.prod.yml`）——GHCR 构建 job
+第一次在干净环境里跑这条命令就当场炸了：`pnpm -r list --filter 'web...'`
+只列出 `web`/`i18n`/`ui` 三个包，`platform` 完全不在裁剪范围内，`tsc -b`
+一走到 `packages/platform/src` 就成片 `Cannot find module 'react'`。
+**结论：新增一个 workspace 内的 alias/路径映射时，同时问一句「这个依赖关系
+在 `package.json` 里写了吗」**——两处不同步，会一直是绿的，直到某个地方
+第一次做 scoped install。
+
 ## 本地起服务
 
 ```bash
