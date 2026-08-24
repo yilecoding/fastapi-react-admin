@@ -92,7 +92,7 @@ function Out({ title, body, testId }: { title: string; body: string; testId: str
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <span className="text-xs font-medium">{title}</span>
-      <pre className="max-h-40 overflow-auto rounded-md bg-muted p-2 text-[11px] whitespace-pre-wrap break-all"
+      <pre className="max-h-40 overflow-auto rounded-md bg-muted p-2 text-xs whitespace-pre-wrap break-all"
            data-testid={testId}>
         {body}
       </pre>

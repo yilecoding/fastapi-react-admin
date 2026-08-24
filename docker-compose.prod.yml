@@ -58,22 +58,44 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # Redis stores tokens and user permission caches. The production env file
+    # supplies the password; keep the server and application auth settings in sync.
+    env_file:
+      - ./apps/api/deploy/backend/docker-compose/.env.server
     command:
-      - redis-server
-      - --appendonly
-      - "yes"
-      - --maxmemory-policy
-      - noeviction
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass "$${REDIS_PASSWORD}"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
       interval: 10s
       timeout: 3s
       retries: 5
 
+  # Run schema migrations once before the API is allowed to receive traffic.
+  # Back up the external SQL Server before deploying; Alembic has no automatic rollback.
+  migrate:
+    <<: *api-base
+    restart: "no"
+    command:
+      - sh
+      - -c
+      - cd /app/backend && alembic upgrade head
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
+
   api:
     <<: *api-base
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
       - fba_upload:/app/backend/upload

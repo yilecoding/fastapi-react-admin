@@ -137,7 +137,7 @@ export function RulePicker({
                       onClick={() => !already && toggle(r.id)}
                     >
                       <span className="truncate text-sm">{r.name}</span>
-                      <code className="truncate text-[11px] text-muted-foreground">
+                      <code className="truncate text-xs text-muted-foreground">
                         {r.model === '__ALL__' ? t('全部模型') : r.model}.{r.column}{' '}
                         {expressionSymbol(r.expression)} {r.value}
                       </code>

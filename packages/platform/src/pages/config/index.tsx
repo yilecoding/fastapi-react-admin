@@ -371,7 +371,7 @@ export function ConfigPage({
                   <div className="flex shrink-0 items-center gap-2.5 rounded-md border border-border px-3 py-2">
                     <div className="flex flex-col items-end">
                       <span className="text-xs font-medium">{t('本组配置生效')}</span>
-                      <code className="text-[10px] text-muted-foreground">{groupSwitch.key}</code>
+                      <code className="text-2xs text-muted-foreground">{groupSwitch.key}</code>
                     </div>
                     <Switch
                       checked={valueOf(groupSwitch) === '1'}

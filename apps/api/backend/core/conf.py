@@ -508,6 +508,16 @@ def _check_secret(
     return None
 
 
+def _check_connection_target(name: str, value: str | None) -> str | None:
+    """拒绝生产数据库连接目标上的空值和模板占位符。"""
+    normalized = (value or '').strip().lower()
+    if not normalized:
+        return f'{name} 不能为空'
+    if any(marker in normalized for marker in _PLACEHOLDER_MARKERS):
+        return f'{name} 仍是占位值，请填写生产实际配置'
+    return None
+
+
 def check_production_settings(s: Settings) -> None:
     """prod 启动前置校验 —— 一次性收集**全部**问题后 fail-fast
 
@@ -543,6 +553,10 @@ def check_production_settings(s: Settings) -> None:
         )
 
     # 非密钥类的 prod 硬约束
+    problems.extend([
+        _check_connection_target('DATABASE_HOST', s.DATABASE_HOST),
+        _check_connection_target('DATABASE_USER', s.DATABASE_USER),
+    ])
     if s.DEMO_MODE:
         problems.append('DEMO_MODE 在 prod 必须为 false')
     if not s.LOGIN_CAPTCHA_ENABLED:

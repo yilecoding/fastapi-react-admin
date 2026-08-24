@@ -1,8 +1,8 @@
-import * as React from 'react'
-import { IconCheck } from '@tabler/icons-react'
+import * as React from "react"
+import { IconCheck } from "@tabler/icons-react"
 
-import { Switch } from '@admin/ui/components/switch'
-import { cn } from '@admin/ui/lib/utils'
+import { Switch } from "@admin/ui/components/switch"
+import { cn } from "@admin/ui/lib/utils"
 
 /**
  * 设置项的行式排版件。
@@ -25,7 +25,7 @@ export function SettingRow({
   label,
   description,
   children,
-  layout = 'stacked',
+  layout = "stacked",
   htmlFor,
   testId,
 }: {
@@ -33,24 +33,26 @@ export function SettingRow({
   description?: React.ReactNode
   children?: React.ReactNode
   /** `inline` 只给开关和单按钮用，见上表 */
-  layout?: 'inline' | 'stacked'
+  layout?: "inline" | "stacked"
   /** 有真实表单控件时传，让标签可点 */
   htmlFor?: string
   testId?: string
 }) {
-  const Label = htmlFor ? 'label' : 'span'
+  const Label = htmlFor ? "label" : "span"
   const text = (
     <div className="flex min-w-0 flex-col gap-0.5">
       <Label className="text-sm font-medium" htmlFor={htmlFor}>
         {label}
       </Label>
       {description && (
-        <span className="text-xs leading-relaxed text-muted-foreground">{description}</span>
+        <span className="text-xs leading-relaxed text-muted-foreground">
+          {description}
+        </span>
       )}
     </div>
   )
 
-  if (layout === 'inline') {
+  if (layout === "inline") {
     return (
       <div
         className="flex items-center justify-between gap-6 border-b border-border/60 pb-4 last:border-0 last:pb-0"
@@ -79,15 +81,29 @@ export function SegmentedControl<T extends string>({
   options,
   onChange,
   testId,
+  className,
+  optionClassName,
+  iconPlacement = "inline",
 }: {
   value: T
-  options: Array<{ value: T; label: string; caption?: string; icon?: React.ReactNode }>
+  options: Array<{
+    value: T
+    label: string
+    caption?: string
+    icon?: React.ReactNode
+  }>
   onChange: (v: T) => void
   testId?: string
+  className?: string
+  optionClassName?: string
+  iconPlacement?: "inline" | "above"
 }) {
   return (
     <div
-      className="flex w-fit max-w-full flex-wrap items-stretch gap-1 rounded-md bg-muted/60 p-1"
+      className={cn(
+        "flex w-fit max-w-full flex-wrap items-stretch gap-1 rounded-md bg-muted/60 p-1",
+        className
+      )}
       role="radiogroup"
       data-testid={testId}
     >
@@ -101,18 +117,23 @@ export function SegmentedControl<T extends string>({
             aria-checked={on}
             data-testid={testId ? `${testId}-${o.value}` : undefined}
             onClick={() => onChange(o.value)}
+            style={{ minHeight: "var(--density-row-height)" }}
             className={cn(
-              'flex min-w-16 flex-col items-center justify-center gap-0.5 rounded-[calc(var(--radius)*0.6)] px-2.5 py-1 text-xs transition-colors',
+              "flex min-w-16 flex-col items-center justify-center gap-0.5 rounded-[calc(var(--radius)*0.6)] px-2.5 py-1 text-xs transition-colors",
+              optionClassName,
               on
-                ? 'bg-background font-medium text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
+                ? "bg-background font-medium text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
             )}
           >
+            {iconPlacement === "above" && o.icon}
             <span className="flex items-center gap-1 whitespace-nowrap">
-              {o.icon}
+              {iconPlacement === "inline" && o.icon}
               {o.label}
             </span>
-            {o.caption && <span className="text-[10px] opacity-70">{o.caption}</span>}
+            {o.caption && (
+              <span className="text-2xs opacity-70">{o.caption}</span>
+            )}
           </button>
         )
       })}
@@ -138,7 +159,11 @@ export function ColorSwatches<T extends string>({
   testId?: string
 }) {
   return (
-    <div className="flex flex-wrap gap-2" role="radiogroup" data-testid={testId}>
+    <div
+      className="flex flex-wrap gap-2"
+      role="radiogroup"
+      data-testid={testId}
+    >
       {options.map((o) => {
         const on = o.value === value
         return (
@@ -155,17 +180,19 @@ export function ColorSwatches<T extends string>({
             <span
               style={{ backgroundColor: o.color }}
               className={cn(
-                'grid size-6 place-content-center rounded-full text-white transition-transform',
+                "grid size-6 place-content-center rounded-full text-white transition-transform",
                 // 选中态用外圈而不是描边 —— 描边会把色块本身的颜色改掉
-                on ? 'ring-2 ring-offset-2 ring-offset-background' : 'hover:scale-110'
+                on
+                  ? "ring-2 ring-offset-2 ring-offset-background"
+                  : "hover:scale-110"
               )}
             >
               {on && <IconCheck className="size-3.5" />}
             </span>
             <span
               className={cn(
-                'w-full truncate text-center text-[10px]',
-                on ? 'font-medium text-foreground' : 'text-muted-foreground'
+                "w-full truncate text-center text-2xs",
+                on ? "font-medium text-foreground" : "text-muted-foreground"
               )}
             >
               {o.label}

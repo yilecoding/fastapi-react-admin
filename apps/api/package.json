@@ -6,6 +6,8 @@
     "dev": "uv run python -m uvicorn backend.main:app --port 8088 --reload --reload-dir backend",
     "test": "uv run --no-sync pytest",
     "test:db": "uv run --no-sync python -m backend.scripts.reset_test_db",
+    "db:init": "uv run fba init",
+    "db:reset": "uv run fba init --auto",
     "db:upgrade": "cd backend && uv run --no-sync alembic upgrade head",
     "db:revision": "cd backend && uv run --no-sync alembic revision --autogenerate -m",
     "db:current": "cd backend && uv run --no-sync alembic current",

@@ -122,7 +122,7 @@ export function MonitorServerPage({
                   title={t("CPU 使用率趋势")}
                   testId="trend-cpu"
                   icon={<IconCpu className="size-4 text-muted-foreground" />}
-                  action={<span className="text-[11px] text-muted-foreground">{t('{{n}} 个采样点', { n: cpuHistory.length })}</span>}
+                  action={<span className="text-xs text-muted-foreground">{t('{{n}} 个采样点', { n: cpuHistory.length })}</span>}
                 >
                   <div className="py-3">
                     <Sparkline points={cpuHistory} max={100} tone={usageTone(data.cpu.usage)} testId="spark-cpu" />
@@ -132,14 +132,14 @@ export function MonitorServerPage({
                   title={t("内存使用率趋势")}
                   testId="trend-mem"
                   icon={<IconDatabase className="size-4 text-muted-foreground" />}
-                  action={<span className="text-[11px] text-muted-foreground">{t('{{n}} 个采样点', { n: memHistory.length })}</span>}
+                  action={<span className="text-xs text-muted-foreground">{t('{{n}} 个采样点', { n: memHistory.length })}</span>}
                 >
                   <div className="py-3">
                     <Sparkline points={memHistory} max={100} tone={usageTone(data.mem.usage)} testId="spark-mem" />
                   </div>
                 </InfoCard>
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t('趋势只统计本次会话内的采样 —— 页面刷新即清零；切到别的页签期间不采样（隐藏页签的定时器会被停掉）。')}
               </p>
               </div>
@@ -201,7 +201,7 @@ export function MonitorServerPage({
                 title={t("磁盘分区")}
                 testId="card-disk"
                 icon={<IconServer2 className="size-4 text-muted-foreground" />}
-                action={<span className="text-[11px] text-muted-foreground">{t('已排除 overlay / tmpfs 等虚拟文件系统')}</span>}
+                action={<span className="text-xs text-muted-foreground">{t('已排除 overlay / tmpfs 等虚拟文件系统')}</span>}
               >
                 {/* overflow-x-auto 而不是 hidden：窄屏下最右列不能被裁掉 */}
                 <div className="overflow-x-auto py-2">

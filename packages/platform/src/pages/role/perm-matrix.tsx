@@ -436,7 +436,7 @@ function ButtonPerm({
       >
         <span className="truncate text-sm">{label}</span>
         {btn.perms && (
-          <code className="truncate text-[11px] text-muted-foreground" title={btn.perms}>{btn.perms}</code>
+          <code className="truncate text-xs text-muted-foreground" title={btn.perms}>{btn.perms}</code>
         )}
       </span>
     </span>

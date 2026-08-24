@@ -86,10 +86,10 @@ export function DevSandboxPage({
           <IconAlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="flex flex-col gap-1.5">
             <p className="text-sm font-medium">组件沙箱当前是关闭的</p>
-            <p className="text-[13px] leading-relaxed text-muted-foreground">
+            <p className="text-sm leading-relaxed text-muted-foreground">
               原因：{gate.reason}
             </p>
-            <p className="text-[13px] leading-relaxed text-muted-foreground">
+            <p className="text-sm leading-relaxed text-muted-foreground">
               在「参数配置 › 开发」里把 <code className="font-mono text-xs">DEV_SANDBOX_ENABLED</code>{' '}
               设为 <code className="font-mono text-xs">true</code> 就能打开（那一组的总开关
               <code className="font-mono text-xs"> DEV_CONFIG_STATUS</code> 也要是 1）。
@@ -126,11 +126,11 @@ export function DevSandboxPage({
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               <h2 className="font-mono text-lg font-semibold tracking-tight">{active.name}</h2>
               <span className="text-sm text-muted-foreground">{active.zh}</span>
-              <span className="ms-auto font-mono text-[11px] text-muted-foreground/70">
+              <span className="ms-auto font-mono text-xs text-muted-foreground/70">
                 {active.source}
               </span>
             </div>
-            <p className="max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {active.summary}
             </p>
           </header>
@@ -144,7 +144,7 @@ export function DevSandboxPage({
             <section key={row.title} className="flex flex-col gap-3">
               <div>
                 <h3 className="text-sm font-medium">{row.title}</h3>
-                <p className="mt-0.5 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+                <p className="mt-0.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
                   {row.hint}
                 </p>
               </div>
@@ -171,7 +171,7 @@ export function DevSandboxPage({
                       )}
                     </span>
                     {item.caption && (
-                      <span className="font-mono text-[10.5px] text-muted-foreground">
+                      <span className="font-mono text-2xs text-muted-foreground">
                         {item.caption}
                       </span>
                     )}
@@ -185,7 +185,7 @@ export function DevSandboxPage({
           <div className="flex flex-col gap-3">
             <div>
               <h3 className="text-sm font-medium">试一个</h3>
-              <p className="mt-0.5 text-[13px] text-muted-foreground">
+              <p className="mt-0.5 text-sm text-muted-foreground">
                 右栏拨旋钮，下面的代码跟着变，只留和默认值不同的 prop。
               </p>
             </div>
@@ -233,14 +233,14 @@ function CodeBlock({ code }: { code: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-mono text-[10.5px] tracking-[0.2em] text-muted-foreground">CODE</span>
+        <span className="font-mono text-2xs tracking-[0.2em] text-muted-foreground">CODE</span>
         <Button variant="ghost" size="xs" onClick={() => void copy()} data-testid="sandbox-copy">
           {copied ? <IconCheck /> : <IconCopy />}
           {copied ? '已复制' : '复制'}
         </Button>
       </div>
       {/* overflow-x-auto 而不是换行：JSX 折行会把缩进读乱 */}
-      <pre className="overflow-x-auto rounded-xl border border-border bg-muted/40 p-4 font-mono text-[12px] leading-relaxed">
+      <pre className="overflow-x-auto rounded-xl border border-border bg-muted/40 p-4 font-mono text-xs leading-relaxed">
         <code>{code}</code>
       </pre>
     </div>
