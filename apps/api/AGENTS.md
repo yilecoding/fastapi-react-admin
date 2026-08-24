@@ -496,6 +496,20 @@ docker exec fba_mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$PW" 
 （`utils.file_ops` 和 `service.file_service` 各一份，见 `test_file.py` 的
 `isolated_upload_dir`）。漏掉哪个，那条路径就会读写开发环境真实的 `backend/upload/`。
 
+### 🔴 手搓的 ZIP/docx 测试夹具，逐字节比较前先固定 `date_time`
+
+`test_file.py: _docx_bytes()` 用 `zipfile.ZipFile.writestr(name, data)` 传纯
+字符串文件名——内部会拿 `time.localtime()` 把**当前时刻**的 DOS 时间戳
+（2 秒精度）写进 local file header。`test_download_inline_and_attachment`
+拿它生成两次（一次上传、一次比对）做 `inline.content == _docx_bytes()`
+逐字节比较，两次调用只要跨过这个 2 秒边界，固定字节位置就会错开一位——
+偶发红，CI 上实测抓到过一次：`At index 10 diff: b'#' != b'$'`，正是那个
+mod-time 字段。本地几乎复现不了（两次调用间隔通常远小于 2 秒），只有 CI
+偶尔卡在边界上才会红，看起来像随机抽风。
+修法：改传 `zipfile.ZipInfo(name, date_time=固定值)`，与调用时刻无关。
+同类坑：任何拿标准库时间戳字段做逐字节/逐值比较的测试夹具（ZIP、tar、
+某些序列化格式），生成两次要么固定时间戳，要么比较时排除掉那个字段。
+
 ### 有测试的部分 / 没测试的部分
 
 | | 状态 |
