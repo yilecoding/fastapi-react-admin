@@ -112,7 +112,15 @@ class TimeZone(TypeDecorator[datetime]):
         return datetime
 
     def process_bind_param(self, value: datetime | None, dialect) -> datetime | None:  # ruff:ignore[missing-type-function-argument]
-        if value is not None and value.utcoffset() != timezone.now().utcoffset():
+        if value is not None and value.tzinfo is None:
+            # 🔴 naive datetime 不能走 `timezone.from_datetime()`（= `astimezone()`）。
+            # Python 对 naive 值调 astimezone 是按**操作系统本地时区**重新解释，
+            # 不是按应用配置的 DATETIME_TIMEZONE —— 本机系统时区恰好也是 UTC+8
+            # 时看不出问题，CI runner 系统时区是 UTC，同一个 naive 值会被当成 UTC
+            # 时刻再转成 +08:00，静静地被加了 8 小时。naive 值本来就该被理解成
+            # 「已经是应用时区的墙钟时间」，只需要补时区标记，不需要换算。
+            value = value.replace(tzinfo=timezone.tz_info)
+        elif value is not None and value.utcoffset() != timezone.now().utcoffset():
             # TODO 处理夏令时偏移
             value = timezone.from_datetime(value)
         return value

@@ -62,6 +62,42 @@ token，再 `PUT /sys/configs/{pk}` 把这条配置在 `fba_test` 里也改成 `
 这样`login.spec.ts`（驱动**真实**登录表单）看到的验证码也是关的，不用在测试代码里
 解验证码图片。
 
+### 🔴 CI 里的环境变量优先级会覆盖 `.env.e2e` 文件
+
+`.github/workflows/ci.yml` 那个叫 `.env.e2e` 的准备步骤曾经实际写的是
+`cp backend/.env.example backend/.env`——而这个 job 全程 `ENV_FILE: .env.e2e`，
+没有任何进程会去读 `.env`。`backend/.env.e2e` 在 CI 里因此从来没被真正创建过：
+`core/conf.py: _ensure_env_file()` 发现它缺失，会静默地从 `.env.example`
+自动生成一份空白替身（这是给本地开发用的兜底，触发在 CI 里纯属意外），
+日志里只有一行不起眼的警告，不会让任何一步失败。
+
+更致命的是第二层：**job 级 `env:` 里的 OS 环境变量优先级高于 dotenv 文件**
+（pydantic-settings 里 `env_settings` 排在 `dotenv_settings` 前面）。就算把
+`.env.e2e` 文件本身修对了，job 级 `DATABASE_SCHEMA: fba` 依然会覆盖文件里写的
+`DATABASE_SCHEMA='fba_test'`——E2E 真正跑起来的 `api:e2e` uvicorn 进程会连到
+只 `CREATE DATABASE`、从没跑过 alembic 也没灌过种子的开发库 `fba`。dev 模式
+启动会自动 `create_all` 建表（几秒内完成），所以连接看起来完全正常，就是没有
+`admin` 账号——`global-setup.ts` 登录直接 403「用户名或密码有误」，看着像
+环境没配好，其实是两层配置各自独立地指错了地方。
+
+`DATABASE_SCHEMA: fba`（不是 `fba_test`）这条本身没错——**别的**步骤要靠它：
+「重建测试库」调用 `get_database_url(unittest=True)`，自己在这个值后面拼
+`_test` 后缀，看的是「基准库叫什么」不是「这个值该指向哪」。但 E2E 真正跑起来
+的 api 服务器是脱离那层推导的独立进程，需要的是**结果**（`fba_test`）本身。
+
+实测复现：本地起一个刚 `CREATE DATABASE`、没有任何表和种子的空库，
+指给 `api:e2e:server`，dev 模式 `create_all` 建表后连接正常、返回准确是
+`403`（不是 500）——和 CI 上观察到的现象完全一致。
+
+修法两处都要改：
+
+- `.env.e2e` 准备步骤改成 `cp backend/.env.e2e.example backend/.env.e2e`——
+  照抄本地开发的路子，这份 example 里的 DB/Redis host/port/密码本来就是照
+  CI 的 service 配置写的，不用替换任何字段
+- 「E2E test」这一步单独覆盖 `env: DATABASE_SCHEMA: fba_test`，把 job 级的
+  `fba` 盖回来——**加新的 CI 环境变量覆盖前，先想清楚它会不会连带影响到
+  同一个 job 里另一个不该受它影响的步骤**
+
 ### 🔴 `storageState` 在这个应用上走不通，登录态靠 `addInitScript` 注入
 
 Playwright 常规的「登一次、存 `storageState.json`、后面测试全复用」这条路，在这个
