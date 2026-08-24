@@ -53,6 +53,9 @@ importers:
       '@admin/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@admin/platform':
+        specifier: workspace:*
+        version: link:../../packages/platform
       '@admin/ui':
         specifier: workspace:*
         version: link:../../packages/ui
