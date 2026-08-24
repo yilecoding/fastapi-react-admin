@@ -23,11 +23,24 @@
 #     EOF
 #     sudo systemctl daemon-reload && sudo systemctl restart docker
 #
-# 🔴 **SQL Server 不进这份编排**，三个理由：
-#   1. `docker compose down -v` 一条命令就能把生产数据抹掉
-#   2. 官方镜像默认 sa 账号，Developer 版授权只允许开发/测试用途
-#   3. 应用容器无状态才能滚动重启；有状态服务混进来会逼着每次发版都碰数据库
-# Redis 留着是因为它只存 token / 验证码 / 缓存，丢了最多全员重登。
+# 🔴 **SQL Server 和 Redis 都不进这份编排**，各自独立部署、独立运维：
+#   1. `docker compose down -v` 一条命令就能把生产数据（DB + 缓存）一起抹掉
+#   2. SQL Server 官方镜像默认 sa 账号，Developer 版授权只允许开发/测试用途；
+#      Redis 同理——测试用的 `redis:7-alpine` 直接进生产编排没有密码轮换、
+#      持久化策略、内存上限这些运维手段，跟着应用容器一起被 `down` 掉更不划算
+#   3. 应用容器无状态才能滚动重启；有状态服务混进来会逼着每次发版都碰数据库/缓存
+# 这份编排只剩**无状态**的应用容器：api / worker / beat / web，外加一次性的
+# migrate。`.env.server` 里的 `DATABASE_*` / `REDIS_*` 指向哪，它们就连哪 ——
+# 跟这份文件在不在同一台机器、用不用容器，这份编排完全不关心。
+#
+# ⚠️ 如果 SQL Server / Redis 就跑在**这台宿主机**上、但不在 Docker 里（比如宝塔
+# 面板自带的 Redis/MySQL 管理），容器默认桥接网络连不到宿主机的 `127.0.0.1` ——
+# 那是容器自己的回环地址，不是宿主机的。`.env.server` 里的 `DATABASE_HOST` /
+# `REDIS_HOST` 要填宿主机在 docker 网桥上的地址（一般是 `172.17.0.1`，
+# `ip addr show docker0` 能查到），或者给下面的服务加
+# `extra_hosts: ["host.docker.internal:host-gateway"]` 再填
+# `host.docker.internal`。直接填 `127.0.0.1`/`localhost` 是最常见的踩坑，
+# 表现是 API 容器起来了、健康检查却一直连不上数据库/Redis。
 
 name: fastapi-react-admin
 
@@ -45,9 +58,6 @@ x-api-base: &api-base
     - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
     - fba_upload:/app/backend/upload
     - fba_upload_public:/app/backend/upload-public
-  depends_on:
-    redis:
-      condition: service_healthy
   logging:
     driver: json-file
     options:
@@ -55,27 +65,8 @@ x-api-base: &api-base
       max-file: "5"
 
 services:
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    # Redis stores tokens and user permission caches. The production env file
-    # supplies the password; keep the server and application auth settings in sync.
-    env_file:
-      - ./apps/api/deploy/backend/docker-compose/.env.server
-    command:
-      - sh
-      - -c
-      - exec redis-server --appendonly yes --maxmemory-policy noeviction --requirepass "$${REDIS_PASSWORD}"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-
-  # Run schema migrations once before the API is allowed to receive traffic.
-  # Back up the external SQL Server before deploying; Alembic has no automatic rollback.
+  # 跑一次性的 schema 迁移，跑完才允许 API 接流量。
+  # 部署前先备份外部 SQL Server；Alembic 没有自动回滚。
   migrate:
     <<: *api-base
     restart: "no"
@@ -83,17 +74,12 @@ services:
       - sh
       - -c
       - cd /app/backend && alembic upgrade head
-    depends_on:
-      redis:
-        condition: service_healthy
     volumes:
       - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
 
   api:
     <<: *api-base
     depends_on:
-      redis:
-        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     volumes:
@@ -123,6 +109,12 @@ services:
     environment:
       TZ: Asia/Shanghai
       CELERY_CUSTOM_WORKER_POOL: celery_aio_pool.pool:AsyncIOPool
+    # 🔴 之前漏挂了这条——worker 没等 migrate 跑完就可能先起来，
+    # 拿旧表结构处理任务。api 已经在挡这个坑（depends_on migrate），
+    # worker 会碰数据库的路径和 api 一样多，没道理不用同一条闸门。
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
       - fba_upload:/app/backend/upload
@@ -149,8 +141,6 @@ services:
       - -l
       - info
     depends_on:
-      redis:
-        condition: service_healthy
       # 等 api 把 task_scheduler 表准备好
       api:
         condition: service_healthy
@@ -173,7 +163,7 @@ services:
         VITE_API_BASE: ""
     restart: unless-stopped
     ports:
-      # TLS 建议交给上游 LB / Caddy，这里只出 80
+      # TLS 建议交给上游 LB / Caddy / 宝塔的反代，这里只出 80
       - "80:80"
     depends_on:
       api:
@@ -185,7 +175,6 @@ services:
         max-file: "3"
 
 volumes:
-  redis_data:
   # 私有附件 —— 只能经 /api/v1/sys/files/{pk}/download 读
   fba_upload:
   # 富文本内联图 —— 经 /uploads 无鉴权读，两棵树不能合并
