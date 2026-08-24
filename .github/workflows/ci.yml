@@ -43,6 +43,24 @@ jobs:
       - name: i18n
         run: pnpm i18n:check && pnpm i18n:jsx
 
+  lint-frontend:
+    name: eslint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: eslint
+        run: pnpm --filter web lint
+
   lint-backend:
     name: ruff
     runs-on: ubuntu-latest
@@ -198,10 +216,142 @@ jobs:
         working-directory: apps/api
         run: uv run --no-sync pytest
 
+  test-e2e:
+    name: playwright · E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      DATABASE_TYPE: sqlserver
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: "1433"
+      DATABASE_USER: sa
+      DATABASE_PASSWORD: "YourStrong!Passw0rd"
+      DATABASE_SCHEMA: fba
+      DATABASE_PK_MODE: snowflake
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6380"
+      REDIS_DATABASE: "2"
+      TOKEN_SECRET_KEY: ci-only-not-a-real-secret-Ku3Jd9wQpZ2vLxR7
+      PLUGIN_PIP_CHINA: "false"
+      # E2E 专用配置
+      LOGIN_CAPTCHA_ENABLED: "false"
+      ENV_FILE: .env.e2e
+
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrong!Passw0rd' -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+          --health-start-period 20s
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: ODBC Driver 18
+        run: |
+          if ! command -v odbcinst >/dev/null || ! odbcinst -q -d | grep -q 'ODBC Driver 18 for SQL Server'; then
+            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+              | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
+            curl -fsSL "https://packages.microsoft.com/config/ubuntu/$(. /etc/os-release && echo "$VERSION_ID")/prod.list" \
+              | sudo tee /etc/apt/sources.list.d/mssql-release.list > /dev/null
+            sudo apt-get update -qq
+            sudo ACCEPT_EULA=Y apt-get install -y -qq msodbcsql18 unixodbc-dev
+          fi
+          odbcinst -q -d
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: uv sync
+        working-directory: apps/api
+        run: uv sync --locked --no-group lint
+
+      - name: .env.e2e
+        working-directory: apps/api
+        run: |
+          cp backend/.env.example backend/.env
+          echo "DATABASE_SCHEMA=fba" >> backend/.env
+          echo "REDIS_DATABASE=2" >> backend/.env
+          echo "LOGIN_CAPTCHA_ENABLED=false" >> backend/.env
+
+      - name: 建库（fba + fba_test）
+        env:
+          MSSQL_CID: ${{ job.services.mssql.id }}
+        run: |
+          SQLCMD="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P $DATABASE_PASSWORD -C -l 5"
+          for i in $(seq 1 40); do
+            if docker exec "$MSSQL_CID" $SQLCMD -Q "SELECT 1" > /dev/null 2>&1; then
+              echo "SQL Server 就绪（第 $i 次探测）"; break
+            fi
+            if [ "$i" -eq 40 ]; then
+              echo "SQL Server 120s 内没起来，容器日志："; docker logs --tail 80 "$MSSQL_CID"; exit 1
+            fi
+            sleep 3
+          done
+          docker exec "$MSSQL_CID" $SQLCMD -Q \
+            "IF DB_ID('fba') IS NULL CREATE DATABASE [fba]; IF DB_ID('fba_test') IS NULL CREATE DATABASE [fba_test];"
+
+      - name: 重建测试库
+        working-directory: apps/api
+        run: uv run --no-sync python -m backend.scripts.reset_test_db
+
+      - name: 测试库升到 head
+        working-directory: apps/api/backend
+        env:
+          DATABASE_SCHEMA: fba_test
+        run: uv run --no-sync alembic upgrade head
+
+      - name: Install Playwright browsers
+        run: pnpm --filter web exec playwright install chromium
+
+      - name: E2E test
+        run: pnpm e2e
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7
+
   # 如果任何测试失败，自动创建 issue
   create-issue-on-failure:
     name: Report Failures
-    needs: [static, lint-backend, test-backend]
+    needs: [static, lint-frontend, lint-backend, test-backend, test-e2e]
     runs-on: ubuntu-latest
     if: failure()
     permissions:
