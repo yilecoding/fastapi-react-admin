@@ -2,17 +2,37 @@
 #
 #     cp apps/api/deploy/backend/docker-compose/.env.server.example \
 #        apps/api/deploy/backend/docker-compose/.env.server
-#     # 改完里面的 CHANGE_ME，然后：
+#     # 改完里面的 CHANGE_ME，然后二选一：
+#
+# 【日常部署】CI 已经把镜像 build 好推到 GHCR 了，服务器只管拉：
+#
+#     docker compose -f docker-compose.prod.yml pull
+#     docker compose -f docker-compose.prod.yml up -d
+#
+#   镜像名固定用 `ghcr.io/<owner>/fba-api` / `fba-web`，标签有 `latest` 和
+#   `sha-<短 SHA>` 两种——回滚就是把 `TAG` 环境变量设成某个短 SHA 再重新
+#   `pull` + `up -d`，不用等一次新的构建：
+#
+#     TAG=sha-abc1234 docker compose -f docker-compose.prod.yml pull
+#     TAG=sha-abc1234 docker compose -f docker-compose.prod.yml up -d
+#
+#   ⚠️ CI 用 GITHUB_TOKEN 发布到 GHCR 的包**默认是 private**，第一次跑完后
+#   要去 GitHub 网页上把这两个 package 的可见性改成 public（仓库本来就是
+#   public 的，没有理由把编译产物设成私有），否则这里的 `pull` 会因为没
+#   登录而失败。也可以反过来在服务器上 `docker login ghcr.io` 一次，看你选哪条。
+#
+# 【本地 / 离线场景】不想依赖 GHCR，直接在当前机器上从源码构建：
+#
 #     docker compose -f docker-compose.prod.yml build
 #     docker compose -f docker-compose.prod.yml up -d
 #
 # 与 apps/api/docker-compose.yml 的关系：那份是**上游的**（主库 PostgreSQL、
 # broker RabbitMQ、挂的还是已废弃的 static/upload 路径），照它起不来。
 #
-# ⚠️ 构建前先确认 **docker daemon 自己**够得着镜像仓库。它不读 shell 的
-# http_proxy —— 本机实测：curl 拿得到 ghcr.io，`docker build` 却 i/o timeout，
-# 报错指向 Dockerfile 的 FROM 行，看起来像镜像名写错了。要在 WSL / 代理环境里构建，
-# 给 daemon 单独配一次：
+# ⚠️ 走本地构建这条路时，先确认 **docker daemon 自己**够得着镜像仓库。它不读
+# shell 的 http_proxy —— 本机实测：curl 拿得到 ghcr.io，`docker build` 却
+# i/o timeout，报错指向 Dockerfile 的 FROM 行，看起来像镜像名写错了。要在
+# WSL / 代理环境里构建，给 daemon 单独配一次：
 #
 #     sudo mkdir -p /etc/systemd/system/docker.service.d
 #     sudo tee /etc/systemd/system/docker.service.d/http-proxy.conf <<'EOF'
@@ -45,7 +65,9 @@
 name: fastapi-react-admin
 
 x-api-base: &api-base
-  image: fba-api:${TAG:-latest}
+  # IMAGE_OWNER 默认是这个仓库自己（fork 出去部署时改一下就行，不用碰别的地方）；
+  # TAG 默认 latest，回滚时设成某个 sha-<短 SHA>，见文件顶部注释。
+  image: ghcr.io/${IMAGE_OWNER:-yilecoding}/fba-api:${TAG:-latest}
   build:
     context: ./apps/api
     dockerfile: Dockerfile.prod
@@ -154,7 +176,7 @@ services:
       retries: 3
 
   web:
-    image: fba-web:${TAG:-latest}
+    image: ghcr.io/${IMAGE_OWNER:-yilecoding}/fba-web:${TAG:-latest}
     build:
       context: .
       dockerfile: apps/web/Dockerfile

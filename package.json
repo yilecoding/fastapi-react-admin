@@ -17,6 +17,7 @@
     "deploy:test:down": "docker compose -f docker-compose.dev.yml down",
     "deploy:prod:config": "node scripts/deploy-prod.mjs config",
     "deploy:prod:build": "node scripts/deploy-prod.mjs build",
+    "deploy:prod:pull": "node scripts/deploy-prod.mjs pull",
     "deploy:prod": "node scripts/deploy-prod.mjs up",
     "deploy:prod:down": "node scripts/deploy-prod.mjs down",
     "deploy:prod:logs": "node scripts/deploy-prod.mjs logs",

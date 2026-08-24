@@ -394,6 +394,61 @@ jobs:
         id: deployment
         uses: actions/deploy-pages@v4
 
+  # 构建生产镜像，推到 GHCR（GitHub Container Registry）。
+  # 只在全部质量闸门都过了、且是 main 上的 push 时才跑——镜像是要真的拿去发生产的,
+  # 测试没过不能有一个新 tag 出现在 registry 里,哪怕只是躺着没人拉取。
+  # 用 GITHUB_TOKEN 登录 ghcr.io：job 级 `packages: write` 权限已经够,不用额外
+  # 建 PAT。**第一次跑完之后**要去 GitHub 网页上把这两个 package 的可见性改成
+  # public——workflow 用 GITHUB_TOKEN 发布的包默认是 private,服务器上 `docker
+  # compose pull` 要么公开、要么在服务器上 `docker login ghcr.io` 一次,选一样。
+  build-images:
+    name: 构建镜像并推到 GHCR
+    needs: [static, lint-frontend, lint-backend, test-backend, test-e2e]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 两个标签都推：`latest` 给日常部署用，短 SHA 给回滚用——出问题时服务器上
+      # 把 .env.server 同目录的 TAG 环境变量设成某个短 SHA 再 `deploy:prod:pull`，
+      # 不用等一次新的构建。
+      - name: Build & push api image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/api
+          file: ./apps/api/Dockerfile.prod
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/fba-api:latest
+            ghcr.io/${{ github.repository_owner }}/fba-api:sha-${{ github.sha }}
+          cache-from: type=gha,scope=fba-api
+          cache-to: type=gha,mode=max,scope=fba-api
+
+      - name: Build & push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/web/Dockerfile
+          build-args: |
+            VITE_API_BASE=
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/fba-web:latest
+            ghcr.io/${{ github.repository_owner }}/fba-web:sha-${{ github.sha }}
+          cache-from: type=gha,scope=fba-web
+          cache-to: type=gha,mode=max,scope=fba-web
+
   # 如果任何测试失败，自动创建 issue
   create-issue-on-failure:
     name: Report Failures
