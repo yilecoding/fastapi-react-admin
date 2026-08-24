@@ -13,7 +13,10 @@ const ENV_FILE = resolve(
 )
 
 const command = process.argv[2] ?? "up"
-const allowedCommands = new Set(["config", "build", "up", "down", "logs"])
+// `pull` 是给 CI 发布到 GHCR 之后的日常部署用的：不在这台机器上构建，直接拉
+// CI 已经推好的镜像。跟 `build` 是互斥的两条路，不是谁取代谁——见
+// docker-compose.prod.yml 顶部注释里「日常部署」/「本地构建」那两段。
+const allowedCommands = new Set(["config", "build", "pull", "up", "down", "logs"])
 
 function fail(message) {
   console.error(`生产部署前置检查失败：${message}`)
