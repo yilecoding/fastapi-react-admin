@@ -17,6 +17,8 @@
     "db:revision": "pnpm --filter api db:revision",
     "db:current": "pnpm --filter api db:current",
     "db:history": "pnpm --filter api db:history",
+    "db:init": "pnpm --filter api db:init",
+    "db:reset": "pnpm --filter api db:reset",
     "test": "turbo test",
     "e2e": "turbo e2e",
     "e2e:install": "pnpm --filter web exec playwright install chromium",
