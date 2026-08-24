@@ -48,7 +48,7 @@ export default defineConfig({
   server: {
     // Playwright 的 E2E webServer 用 127.0.0.1 探活；macOS 上 Vite 默认可能只绑定 ::1。
     host: "127.0.0.1",
-    port: Number(process.env.E2E_WEB_PORT) || 1125,
+    port: Number(process.env.E2E_WEB_PORT) || 8888,
     strictPort: true,
     proxy: {
       // 富文本正文里的内联图走这里。后端把它挂成静态资源
@@ -62,7 +62,7 @@ export default defineConfig({
       //
       // 生产环境前后端同域，相对地址天然可用，这条代理只在 dev 需要。
       "/uploads": {
-        target: process.env.VITE_API_BASE ?? "http://127.0.0.1:8000",
+        target: process.env.VITE_API_BASE ?? "http://127.0.0.1:8088",
       },
     },
   },
