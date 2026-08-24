@@ -18,7 +18,7 @@
     "db:current": "pnpm --filter api db:current",
     "db:history": "pnpm --filter api db:history",
     "db:init": "pnpm --filter api db:init",
-    "db:init:auto": "pnpm --filter api db:init -- --auto",
+    "db:init:auto": "pnpm --filter api db:init:auto",
     "db:reset": "pnpm --filter api db:reset",
     "test": "turbo test",
     "e2e": "turbo e2e",
