@@ -363,6 +363,37 @@ jobs:
           path: apps/web/playwright-report/
           retention-days: 7
 
+  # 把 E2E 报告发到 GitHub Pages，给一个每次跑完都刷新、不用手动下载 zip 的固定链接。
+  # 🔴 只在 main 上跑（`pull_request` 事件的 `github.ref` 是 `refs/pull/N/merge`，
+  # 天然被这条 if 挡掉）—— fork 来的 PR 拿不到 pages 写权限，硬跑会直接失败；
+  # 就算是本仓库自己的 PR，也不该让报告链接被一次性的分支覆盖掉。
+  # `if: always()` 是因为最想看报告的时候往往就是 E2E 挂了的那一次。
+  pages-report:
+    name: 发布 E2E 报告到 Pages
+    needs: [test-e2e]
+    if: always() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download playwright report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: playwright-report
+          path: report
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: report
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
   # 如果任何测试失败，自动创建 issue
   create-issue-on-failure:
     name: Report Failures
