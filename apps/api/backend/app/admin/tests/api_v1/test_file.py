@@ -45,12 +45,27 @@ def _png_bytes(color: tuple[int, int, int] = (200, 30, 30)) -> bytes:
     return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
 
 
+def _zip_entry(name: str) -> zipfile.ZipInfo:
+    """固定 mtime 的 `ZipInfo`。
+
+    🔴 `ZipFile.writestr(name, data)` 传纯字符串时，内部拿 `time.localtime()`
+    盖当前时刻的 DOS 时间戳写进 local file header —— `test_download_inline_and_
+    attachment` 拿 `_docx_bytes()` 生成两次（一次上传、一次比对）做逐字节比较，
+    两次调用跨过 DOS 时间戳 2 秒精度的边界就会在固定字节位置错开一位，
+    偶发性地把测试打红（实测：`At index 10 diff: b'#' != b'$'`，正是 local file
+    header 里 mod-time 那个字段）。固定成同一个 `date_time` 就与调用时刻无关。
+    """
+    info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+    info.compress_type = zipfile.ZIP_DEFLATED
+    return info
+
+
 def _docx_bytes(text: str = 'hello') -> bytes:
     """最小可用的 docx（zip + 两个 XML 部件）"""
     buf = BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
         z.writestr(
-            '[Content_Types].xml',
+            _zip_entry('[Content_Types].xml'),
             '<?xml version="1.0" encoding="UTF-8"?>'
             '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
             '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
@@ -59,14 +74,14 @@ def _docx_bytes(text: str = 'hello') -> bytes:
             'officedocument.wordprocessingml.document.main+xml"/></Types>',
         )
         z.writestr(
-            '_rels/.rels',
+            _zip_entry('_rels/.rels'),
             '<?xml version="1.0" encoding="UTF-8"?>'
             '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
             '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/'
             'relationships/officeDocument" Target="word/document.xml"/></Relationships>',
         )
         z.writestr(
-            'word/document.xml',
+            _zip_entry('word/document.xml'),
             '<?xml version="1.0" encoding="UTF-8"?>'
             '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
             f'<w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>',
