@@ -72,7 +72,7 @@
 5. 反代层限 `Content-Length`（见上表第一条）—— 应用层拦不住。
    `apps/web/nginx.conf` 里已经按 100MB 配好
 
-6. 收紧 `CORS_ALLOWED_ORIGINS`（默认放行的是本地开发端口 1125），
+6. 收紧 `CORS_ALLOWED_ORIGINS`（默认放行的是本地开发端口 8888），
    并同步 `backend/plugin/oauth2/plugin.toml` 的四条回调 URI
 
 7. **配上 `TRUSTED_PROXIES`。** 默认是空的（= 只认直连对端地址，直连场景正确）。
