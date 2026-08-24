@@ -364,7 +364,7 @@ jobs:
         with:
           script: |
             const { repo, payload } = context;
-            const runUrl = `https://github.com/$${repo.owner}/$${repo.repo}/actions/runs/$${context.runId}`;
+            const runUrl = `https://github.com/${repo.owner}/${repo.repo}/actions/runs/${context.runId}`;
 
             // 查找已有的失败 issue，避免重复
             const openIssues = await github.rest.issues.listForRepo({
@@ -375,17 +375,17 @@ jobs:
             });
 
             const existingIssue = openIssues.data.find(
-              issue => issue.body.includes(`Run: $${context.runId}`)
+              issue => issue.body.includes(`[#${context.runId}]`)
             );
 
             if (existingIssue) {
-              console.log(`Issue #$${existingIssue.number} already exists`);
+              console.log(`Issue #${existingIssue.number} already exists`);
               return;
             }
 
             // 创建新 issue
-            const title = `🔴 CI Failed: $${context.workflow} on $${context.ref}`;
-            const body = `## CI 检查失败\n\n- **分支**: $${context.ref}\n- **提交**: $${context.sha.substring(0, 7)}\n- **Run**: [#$${context.runId}]($${runUrl})\n- **触发**: $${context.eventName}\n\n[查看详情]($${runUrl})`;
+            const title = `🔴 CI Failed: ${context.workflow} on ${context.ref}`;
+            const body = `## CI 检查失败\n\n- **分支**: ${context.ref}\n- **提交**: ${context.sha.substring(0, 7)}\n- **Run**: [#${context.runId}](${runUrl})\n- **触发**: ${context.eventName}\n\n[查看详情](${runUrl})`;
 
             const issue = await github.rest.issues.create({
               owner: repo.owner,
@@ -395,5 +395,5 @@ jobs:
               labels: ['ci-failure', 'bug']
             });
 
-            console.log(`Created issue #$${issue.data.number}`);
+            console.log(`Created issue #${issue.data.number}`);
 
