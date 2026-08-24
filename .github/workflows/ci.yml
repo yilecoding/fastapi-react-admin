@@ -15,7 +15,7 @@ jobs:
   # 零外部依赖的检查。要 SQL Server 的那部分在下面的 test-backend job 里，
   # 两者并行 —— 拆开是为了让「装 ODBC 驱动 / 等实例」的抖动不污染这条的红绿信号。
   static:
-    name: typecheck · build · i18n
+    name: test:web-static
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +44,7 @@ jobs:
         run: pnpm i18n:check && pnpm i18n:jsx
 
   lint-backend:
-    name: ruff
+    name: test:api-lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,7 +64,7 @@ jobs:
         run: uvx ruff@0.16.4 check --config pyproject.toml --no-fix backend/
 
   test-backend:
-    name: pytest · SQL Server
+    name: test:api-pytest
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
