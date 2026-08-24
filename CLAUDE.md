@@ -99,7 +99,7 @@ packages/platform/ 平台能力：api-client · auth · shell · pages
 
 ```bash
 docker start fba_mssql fba_redis          # SQL Server :1433 / Redis :6380
-pnpm dev                                  # api :8000 · web :1125 · celery worker（含内嵌 beat）
+pnpm dev                                  # api :8088 · web :8888 · celery worker（含内嵌 beat）
 ```
 
 `apps/api` 和 `apps/worker` 都是 pnpm workspace 成员（`package.json` 里只有一个
@@ -124,7 +124,7 @@ pnpm --filter api celery:worker           # 可以多副本
 pnpm --filter api celery:beat             # 只能一个
 ```
 
-⚠️ 前端端口固定在 **1125**（`vite.config.ts` 的 `server.port` + `strictPort: true`）。
+⚠️ 前端端口固定在 **8888**（`vite.config.ts` 的 `server.port` + `strictPort: true`）。
 **换端口要同时改三处**，只改一处的失败方式都不长得像端口问题：
 
 | 改哪里 | 漏了的表现 |

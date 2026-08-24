@@ -273,7 +273,7 @@ cp apps/api/backend/.env.example apps/api/backend/.env
 cd apps/api && uv run fba init && cd ../..
 
 # 5. 起服务
-pnpm dev                                                # api :8000 · web :1125
+pnpm dev                                                # api :8088 · web :8888
 ```
 
 `apps/api` 也是 workspace 成员（`package.json` 里只有 `dev` / `test` / `db:*` / `celery:*`
