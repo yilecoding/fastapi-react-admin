@@ -202,6 +202,21 @@
   旧缓存里没有新字段 —— 写成必填就是每个已登录用户的每个请求都
   `ValidationError` → 全站 500（同 `dept.code` 那次）。带默认值时旧缓存能过校验、
   先回落默认值。改完照样把 `fba:user:*` 清一遍拿到真值
+- 🔴 **`TimeZone.process_bind_param` 不能对 naive datetime 调 `astimezone()`。**
+  查询参数（如 `/tasks/results?start_time=2026-08-19 18:24:29`）经 pydantic 解析出来
+  是没有 tzinfo 的 naive datetime，原来的判断是「偏移不等于当前时区偏移就转换」——
+  naive 值的 `.utcoffset()` 是 `None`，恒不等，于是一律走
+  `timezone.from_datetime(value)`（= `value.astimezone(self.tz_info)`）。
+  Python 对 **naive** datetime 调 `astimezone()` 是按**操作系统本地时区**重新解释，
+  不是按应用配置的 `DATETIME_TIMEZONE`——本机系统时区恰好也是 UTC+8
+  （`Asia/Taipei`）时两次转换抵消，看不出问题；GitHub Actions runner 系统时区是
+  UTC，同一个 naive 查询参数被当成 UTC 时刻再转成 `+08:00`，静静地被加了 8
+  小时。实测：`test_range_is_inclusive_on_both_ends`（起止都是记录自己的精确
+  时刻的闭区间查询）本地绿、`TZ=UTC` 下红，`assert set() == {'d5'}`——边界查询
+  直接查空。修法是分两支：naive 值只 `value.replace(tzinfo=timezone.tz_info)`
+  补时区标记，不做时区换算；只有**真带时区但偏移不同**的值才继续走
+  `astimezone()` 转换。验证不能只跑默认时区：`TZ=UTC uv run --no-sync pytest`
+  复现，`git stash` 掉修复后同一条测试在 `TZ=UTC` 下应该会红，反过来才是真的修对了。
 - **写入侧必须校验是合法 IANA 标识**（`common/schema.py: IanaTimeZone`，
   拿 `zoneinfo.available_timezones()` 对）。这个值会被前端直接交给
   `Intl.DateTimeFormat(..., { timeZone })`，而那个 API 对不认识的时区是**抛异常** ——

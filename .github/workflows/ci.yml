@@ -299,13 +299,18 @@ jobs:
         working-directory: apps/api
         run: uv sync --locked --no-group lint
 
+      # 🔴 这一步以前写的是 `cp backend/.env.example backend/.env` —— 而这个 job 的
+      # `ENV_FILE` 是 `.env.e2e`，没有任何一个进程会去读 `.env`。`backend/.env.e2e`
+      # 因此在 CI 里从来没被真正创建过：`_ensure_env_file()` 发现它缺失，会静默地
+      # 从 `.env.example` 自动生成一份空白替身（这是给本地开发用的兜底，触发在 CI
+      # 里纯属意外），日志里只有一行不起眼的警告。表现：E2E 的 REQUEST_LIMITER_ENABLED
+      # 拿不到 e2e 专用的 false，退回类定义的默认值 true。
+      #
+      # 现在照本地开发的路子来：直接复用 `.env.e2e.example`，它的 DB/Redis 主机、
+      # 端口、密码本来就是照这个 job 的 service 配置写的，不用再替换任何字段。
       - name: .env.e2e
         working-directory: apps/api
-        run: |
-          cp backend/.env.example backend/.env
-          echo "DATABASE_SCHEMA=fba" >> backend/.env
-          echo "REDIS_DATABASE=2" >> backend/.env
-          echo "LOGIN_CAPTCHA_ENABLED=false" >> backend/.env
+        run: cp backend/.env.e2e.example backend/.env.e2e
 
       - name: 建库（fba + fba_test）
         env:
@@ -337,7 +342,17 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter web exec playwright install chromium
 
+      # 🔴 job 级 DATABASE_SCHEMA=fba 是给「重建测试库」用的（它靠 unittest=True
+      # 自己推导出 fba_test，不看这个值本身指向哪）。但 E2E 真正跑起来的 api:e2e
+      # 是一个独立的 uvicorn 进程，没有那层推导 —— 环境变量的优先级又高于
+      # backend/.env.e2e 里写的 DATABASE_SCHEMA='fba_test'（pydantic-settings
+      # 里 env_settings 排在 dotenv_settings 前面），不在这里覆盖回 fba_test 的话，
+      # 这个进程会连到建库步骤里那个只 CREATE DATABASE、从没灌过种子的开发库 fba：
+      # dev 模式启动会自动 create_all 建表，所以连接看起来正常，就是没有 admin
+      # 账号，登录 403，`global-setup.ts` 报的就是这个。
       - name: E2E test
+        env:
+          DATABASE_SCHEMA: fba_test
         run: pnpm e2e
 
       - name: Upload Playwright report
