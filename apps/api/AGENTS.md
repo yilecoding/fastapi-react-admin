@@ -545,7 +545,7 @@ test_init_handles_every_seeded_account` 硬编码断言 `cli.py: _set_admin_pass
 | | 状态 |
 |---|---|
 | 文件模块接口（上传 · 去重 · 穿越 · 日期目录 · 列表 · 统计 · 下载 · 附件 · 删除） | `test_file.py` 23 条 |
-| 数据权限（表达式矩阵 · 组合语义 · fail-open · 模板变量 · 覆盖面 · 缓存失效） | `test_data_permission.py` 26 条 / 22 个账号 |
+| 数据权限（表达式矩阵 · 组合语义 · fail-open · 模板变量 · 覆盖面 · 缓存失效） | `test_data_permission.py` 27 条 / 22 个账号 |
 | `/auth/logout` | 上游留下的 1 条 |
 | **其余所有模块** | **没有测试** |
 | **前端** | Playwright E2E 3 条种子用例（登录 · 部门 CRUD · 多页签保活），见下节 |
