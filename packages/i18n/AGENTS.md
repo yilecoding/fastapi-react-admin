@@ -69,6 +69,18 @@ t(menuKey(node.path), { defaultValue: node.title })
 `defaultValue` 回落库里的中文标题 —— 管理员新建的菜单**永远不会露 raw key**。
 `tab-item.tsx` 用 `href` 的 pathname 同理。
 
+### ⚠️ `menu:` 开头的 key，值必须是**标题**，不能是路径本身
+
+`zh-CN.json` 里曾经有一条 `"menu:/403": "/403"`（en-US 那条是 `"Access denied"`，
+是对的）。于是「无权访问」这个页面进标签条时，**中文界面上显示的是 `/403`**，
+英文界面正常 —— 而路由那边 `staticData.title` 明明写着「无权访问」。
+
+链路：标签条渲染的是 `t(menuKey(pathname), { defaultValue: t(tab.title) })`。
+key 存在就用 key 的值，`defaultValue` 根本轮不到 —— 所以「值写错成路径」这件事
+**不会**被 `i18n:check` 抓到（key 在、译文非空、占位符也一致），只能靠人看见。
+
+写 `menu:*` 条目时对着菜单标题写，别把回落用的那个字符串顺手填进去。
+
 ### 五条硬规则
 
 1. **`keySeparator: false` + `nsSeparator: false`**。删了会**静默出错**：
