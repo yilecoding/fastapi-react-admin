@@ -17,6 +17,7 @@ import { Can } from '../../auth/can'
 import { PageHeader } from '../../shell/page-header'
 import { ClearLogsButton } from '../_shared/clear-logs'
 import { ResetButton } from '../_shared/filters'
+import { listState } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import { logFeatures as features } from '../_shared/log-features'
@@ -168,11 +169,13 @@ export function LogOperaPage({
   })
 
   const qs = buildQuery(q.params, search.page, search.size)
-  const { data, isPending, isFetching } = useQuery({
+  const listQuery = useQuery({
     queryKey: ['logs', 'opera', qs],
     queryFn: () => api.GET<PageData<OperaLog>>(`/api/v1/logs/opera?${qs}`),
     placeholderData: (prev) => prev,
   })
+  const { data, isFetching } = listQuery
+  const list = listState(listQuery)
   const rows = data?.items ?? []
 
   const [detail, setDetail] = React.useState<OperaLog | null>(null)
@@ -506,8 +509,7 @@ export function LogOperaPage({
                     />
                   ) : undefined
                 }
-                loading={isPending}
-                busy={isFetching && !isPending}
+                {...list}
                 skeletonRows={8}
                 pagination={{
                   pageIndex: page - 1,

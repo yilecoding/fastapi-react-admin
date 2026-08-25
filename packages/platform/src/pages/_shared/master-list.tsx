@@ -6,6 +6,7 @@ import { Button } from '@admin/ui/components/button'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from '@admin/ui/components/dropdown-menu'
+import { QueryError } from '@admin/ui/components/query-error'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { cn } from '@admin/ui/lib/utils'
 
@@ -56,6 +57,8 @@ export function MasterList({
   loadingMore = false,
   loading = false,
   busy = false,
+  error,
+  onRetry,
   onLoadMore,
   onAdd,
   addLabel,
@@ -86,6 +89,13 @@ export function MasterList({
   loading?: boolean
   /** 后台重取中 —— 只让刷新图标转，不换骨架（换了会整栏闪一下） */
   busy?: boolean
+  /**
+   * 取数失败（硬纪律 9）。左栏空着和「接口挂了」必须能分开 ——
+   * 一栏选择器什么都没有时，用户会以为「这个系统里就没有角色」。
+   */
+  error?: unknown
+  /** 错误块上的「重试」 */
+  onRetry?: () => void
   onLoadMore?: () => void
 
   onAdd?: () => void
@@ -170,6 +180,16 @@ export function MasterList({
         />
       )}
 
+      {/* 已经有加载好的项时（翻下一页失败那种）不抽走列表，错误挂成横幅 */}
+      {Boolean(error) && items.length > 0 && (
+        <QueryError
+          error={error}
+          onRetry={onRetry}
+          testId={`${idPrefix}-error`}
+          className="shrink-0"
+        />
+      )}
+
       <div
         ref={scrollRef}
         className="flex max-h-[calc(100svh-20rem)] flex-col gap-1 overflow-y-auto content-scroll:lg:max-h-none content-scroll:lg:min-h-0 content-scroll:lg:flex-1"
@@ -177,6 +197,9 @@ export function MasterList({
       >
         {loading ? (
           Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-11 w-full" />)
+        ) : error && items.length === 0 ? (
+          /* 🔴 排在空态**前面** —— 否则失败会渲染成「没有匹配的 xxx」 */
+          <QueryError error={error} onRetry={onRetry} testId={`${idPrefix}-error`} />
         ) : items.length === 0 ? (
           <p className="px-1 py-8 text-center text-sm text-muted-foreground">{emptyText}</p>
         ) : (

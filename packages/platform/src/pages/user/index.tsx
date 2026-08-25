@@ -12,6 +12,7 @@ import { Can, SuperOnly } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { BulkBar, ResetButton } from '../_shared/filters'
+import { listState } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import {
@@ -169,7 +170,9 @@ export function UserPage({
 
   // 接口入参由查询区出（`param` / `rangeParams` 都应用过），页面只补分页
   const params = { page, size, ...q.params } as UserListParams
-  const { data, isPending, isFetching } = useQuery(usersQuery(params))
+  const listQuery = useQuery(usersQuery(params))
+  const { data, isFetching } = listQuery
+  const list = listState(listQuery)
   const rows = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 1
@@ -300,8 +303,7 @@ export function UserPage({
                     />
                   ) : undefined
                 }
-                loading={isPending}
-                busy={isFetching && !isPending}
+                {...list}
                 pagination={{
                   pageIndex: page - 1,
                   pageCount: totalPages,

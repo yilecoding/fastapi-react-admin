@@ -29,6 +29,7 @@ import {
   useDeleteDictDatas, useDeleteDictTypes, type DictData, type DictType,
 } from './api'
 import { DictDataSheet, DictTypeSheet } from './forms'
+import { listState } from '../_shared/list-query'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 
 /**
@@ -81,9 +82,9 @@ export function DictPage({
   const qc = useQueryClient()
 
   // ── 左：类型（一次取全，前端过滤） ──
-  const { data: typesPage, isPending: loadingTypes } = useQuery(
-    dictTypesQuery({ page: 1, size: TYPE_PAGE_SIZE })
-  )
+  const typesQuery = useQuery(dictTypesQuery({ page: 1, size: TYPE_PAGE_SIZE }))
+  const { data: typesPage, isPending: loadingTypes } = typesQuery
+  const typesState = listState(typesQuery)
   const types = typesPage?.items ?? []
   const typeTotal = typesPage?.total ?? 0
 
@@ -112,9 +113,13 @@ export function DictPage({
   // ── 右：字典项 ──
   const page = search.page ?? 1
   const size = search.size ?? DEFAULT_PAGE_SIZE
-  const { data: datasPage, isPending: loadingDatas, isFetching } = useQuery(
+  const datasQuery = useQuery(
     dictDatasQuery({ page, size, type_id: selectedId, label: search.q || undefined })
   )
+  const { data: datasPage, isFetching } = datasQuery
+  // 没选类型时这个 query 是 disabled 的（状态一直停在 pending）——
+  // `enabled` 一定要传，否则骨架屏会一直转
+  const dataList = listState(datasQuery, { enabled: Boolean(selectedId) })
   const datas = datasPage?.items ?? []
 
   const [typeSheet, setTypeSheet] = React.useState(false)
@@ -240,6 +245,8 @@ export function DictPage({
               searchPlaceholder="搜索字典类型…"
               onKeyword={setTypeQ}
               loading={loadingTypes}
+              error={typesState.error}
+              onRetry={typesState.onRetry}
               onRefresh={() => void qc.invalidateQueries({ queryKey: dictKeys.all })}
               onAdd={() => { setEditingType(null); setTypeSheet(true) }}
               addLabel={t('新增字典类型')}
@@ -318,10 +325,7 @@ export function DictPage({
                       />
                     ) : undefined
                   }
-                  // 没选类型时 query 是 disabled 的（状态一直是 pending），
-                  // 不加这个判断骨架屏会一直转
-                  loading={Boolean(selectedId) && loadingDatas}
-                  busy={isFetching && !loadingDatas}
+                  {...dataList}
                   toolbar={
                     <>
                       <TextFilter

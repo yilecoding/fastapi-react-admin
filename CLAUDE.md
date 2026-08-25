@@ -252,6 +252,10 @@ const search = Route.useSearch()
 拉取型 UI 用 `loading | ready | off | error` 状态机：
 `off` 只留给服务端明确关闭的情况，失败一律显示错误 + 重试入口。
 
+列表页照抄一遍这三行状态位就漏了 12 次 `error` —— 现在走
+`pages/_shared/list-query.ts` 的 `listState()` 把它们一次摊开，
+错误块是 `ui/components/query-error.tsx` 的 `QueryError`（见 [pages 分册](packages/platform/src/pages/AGENTS.md)）。
+
 ### 10. 有限流的接口必须做单飞
 
 React StrictMode 开发期把 effect 跑两遍。命中限流的接口（如 `/auth/captcha` 的 5次/30秒）

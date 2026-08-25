@@ -12,6 +12,7 @@ import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { BulkBar, ResetButton } from '../_shared/filters'
+import { listState } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { noticesQuery, useDeleteNotices, type Notice, type NoticeListParams } from './api'
 import { COLUMN_LABELS, buildColumns } from './columns'
@@ -118,7 +119,9 @@ export function NoticePage({
   )
 
   const params = { page, size, ...q.params } as NoticeListParams
-  const { data, isPending, isFetching } = useQuery(noticesQuery(params))
+  const listQuery = useQuery(noticesQuery(params))
+  const { data, isFetching } = listQuery
+  const list = listState(listQuery)
   const rows = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 1
@@ -237,8 +240,7 @@ export function NoticePage({
                     />
                   ) : undefined
                 }
-                loading={isPending}
-                busy={isFetching && !isPending}
+                {...list}
                 pagination={{
                   pageIndex: page - 1,
                   pageCount: totalPages,

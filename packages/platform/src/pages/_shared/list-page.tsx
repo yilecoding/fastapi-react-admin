@@ -8,6 +8,7 @@ import { DataTable } from '@admin/ui/components/data-table'
 import { api, type PageData } from '../../api-client/client'
 import { PageHeader } from '../../shell/page-header'
 import { ResetButton, SelectFilter, TextFilter } from './filters'
+import { listState } from './list-query'
 import { DEFAULT_PAGE_SIZE } from './pagination'
 
 /**
@@ -72,11 +73,13 @@ export function createListPage<T extends { id: string }>(cfg: ListPageConfig<T>)
       return s.toString()
     }, [page, size, search])
 
-    const { data, isPending, isFetching } = useQuery({
+    const listQuery = useQuery({
       queryKey: [...cfg.queryKey, qs],
       queryFn: () => api.GET<PageData<T>>(`${cfg.endpoint}?${qs}`),
       placeholderData: (prev) => prev,
     })
+    const { data, isFetching } = listQuery
+    const list = listState(listQuery)
 
     const rows = data?.items ?? []
     const [columnVisibility, setColumnVisibility] = React.useState<ColumnVisibilityState>({})
@@ -114,8 +117,7 @@ export function createListPage<T extends { id: string }>(cfg: ListPageConfig<T>)
                 columnCount={columns.length}
                 columnLabels={cfg.columnLabels}
                 emptyMessage={cfg.emptyMessage ? t(cfg.emptyMessage) : undefined}
-                loading={isPending}
-                busy={isFetching && !isPending}
+                {...list}
                 toolbar={
                   <>
                     {cfg.filters.map((f) =>

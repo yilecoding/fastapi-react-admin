@@ -4,6 +4,7 @@ import { formatNumber, formatTime } from '@admin/i18n'
 import { IconRefresh } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
+import { QueryError } from '@admin/ui/components/query-error'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@admin/ui/components/select'
@@ -332,22 +333,31 @@ export function RefreshBar({
  * 监控接口失败要说清楚是什么失败了 —— 这三个接口一半是超管专属，
  * 权限不足时后端返回 403，不提示的话页面就是一片空白。
  */
-export function MonitorError({ error, testId = 'monitor-error' }: { error: unknown; testId?: string }) {
+/**
+ * 监控页的错误块 —— 只是给 `QueryError` 换一套文案（监控页的失败原因通常是
+ * 「不是超管」，通用文案说不清）。样式和列表页那份**共用一份实现**，
+ * 别在这里另画一个框：同一件事两个长相，改一处就漂移一处。
+ */
+export function MonitorError({
+  error,
+  onRetry,
+  testId = 'monitor-error',
+}: {
+  error: unknown
+  onRetry?: () => void
+  testId?: string
+}) {
   const { t } = useTranslation()
   const e = error as { httpStatus?: number; message?: string } | null
   const forbidden = e?.httpStatus === 403
   return (
-    <div
-      className="flex flex-col gap-1 rounded-md bg-destructive/10 px-4 py-3 ring-1 ring-destructive/25"
-      data-testid={testId}
-    >
-      <p className="text-sm font-medium text-destructive">
-        {forbidden ? t('没有权限读取监控数据') : t('监控数据获取失败')}
-      </p>
-      <p className="text-xs text-destructive/80">
-        {forbidden ? t('该接口仅超级管理员可用。') : (e?.message ?? t('未知错误'))}
-      </p>
-    </div>
+    <QueryError
+      error={error}
+      onRetry={onRetry}
+      testId={testId}
+      title={forbidden ? t('没有权限读取监控数据') : t('监控数据获取失败')}
+      detail={forbidden ? t('该接口仅超级管理员可用。') : (e?.message ?? t('未知错误'))}
+    />
   )
 }
 

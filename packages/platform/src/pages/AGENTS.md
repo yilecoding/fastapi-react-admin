@@ -43,6 +43,58 @@ pages/xxx/
 `busy`（后台取数时整表降透明 + `aria-busy`）。**不要**再在页面里写
 「`isPending ? <Skeleton…> : <DataTable/>`」—— 那会让筛选栏在加载完成时凭空出现。
 
+### 🔴 取数状态一律走 `_shared/list-query.ts` 的 `listState()`，别手写那两行
+
+**症状**：`GET /sys/users` 挂了（500 / 网络抖动 / 鉴权过期），页面显示的是
+**「暂无数据」**—— 和「筛选条件太窄、真的没查到」一模一样。用户会反复调筛选，
+不知道接口挂了。违反硬纪律 9，而且是全站最高频的那批页面。
+
+**根因**是这段样板抄了 12 遍，每一遍都只解构了两个状态位：
+
+```ts
+const { data, isPending, isFetching } = useQuery(usersQuery(params))   // ❌ error 没人接
+const rows = data?.items ?? []                                        // 失败 → [] → 空态
+<DataTable loading={isPending} busy={isFetching && !isPending} />
+```
+
+`error` 不解构不会有任何警告，`?? []` 又把失败和空数据抹平成同一个渲染结果 ——
+**静默**得很彻底。`DataTable` 当时也确实没有 `error` 这个口子。
+
+**修法**：状态位从 `listState(query)` 一次性摊开，页面只管 rows：
+
+```ts
+const listQuery = useQuery(usersQuery(params))
+const { data, isFetching } = listQuery          // isFetching 给 QueryBar 的 loading
+const list = listState(listQuery)               // loading / busy / error / onRetry
+<DataTable {...list} … />                        // ✅ 少写一个就是类型错误
+```
+
+- 分页 / 树 / 无限滚动三种查询都能进 `listState` —— 它只认 `isPending` /
+  `isFetching` / `error` / `refetch`，`useInfiniteQuery` 的结果也满足
+  （有 `isFetchingNextPage` 时自动不算 busy）
+- `enabled: false` 的 query 状态一直停在 `pending`，要传 `listState(q, { enabled })`，
+  否则骨架屏一直转（字典页没选类型时踩过，那个判断原来手写在页面里）
+- **手写 `<TableBody>` 的树形表**（部门 / 菜单）`DataTable` 管不到，要自己插一行
+  `DataTableErrorRow`，位置在空态分支**之前** —— 顺序反了就又回到「失败长成空态」
+- 判 `tree` 不判过滤后的 `shown`（菜单页）：前端筛没了不是失败
+- 已经有上一次成功的行时（`placeholderData` 保着的），错误挂成**横幅**、行留着 ——
+  别把用户正在看的数据抽走
+
+错误块本身是 `ui/components/query-error.tsx` 的 `QueryError`（全站唯一一份，
+`MonitorError` 只是给它换了套文案）。它认 `ApiError.httpStatus`：403 显示
+「没有权限查看这些数据」而不是把后端那句原文糊上去。
+
+**实测证据**：`apps/web/e2e/tests/list-error.spec.ts` 用 `page.route` 把
+`/sys/users`、`/sys/depts` 打成 502 —— 修之前两页显示的分别是「暂无数据」和
+「没有匹配的部门」；修之后是错误块 + 重试，点重试当场取回数据。
+这类问题**只能这样验**：接口正常时对错两种写法看不出任何区别。
+
+⚠️ 卡片式页面（仪表盘）同一个坑换个样子：六个查询各自失败，数字卡全退化成
+`—`，「今日登录 —」和「今天真的零次登录」分不出来 —— 也要把 `QueryError` 顶到
+页头下面。开关型页面（`dev-sandbox` 读 DEV 组配置）更隐蔽：读配置失败会落进
+「沙箱是关闭的」那个分支，理由写着「参数配置里还没有 DEV 组」，而那是**接口挂了**。
+硬纪律 9 那句「`off` 只留给服务端明确关闭的情况」说的就是这个。
+
 **页面里不要有可见的大标题。** 页名已经写在 tab 上（`staticData.title`），
 `PageHeader` 现在只把 `<h1>` + 描述渲染成 `sr-only`（读屏与 `page-title` testid 都还在），
 可见部分只剩动作区，没有动作时整块不渲染。
