@@ -245,8 +245,8 @@ export function SignInBrandPanel() {
             className="tenon-in mt-5 flex items-center justify-between gap-4 font-mono text-2xs tracking-[0.2em] text-[var(--tenon-faint)]"
             style={{ animationDelay: "300ms" }}
           >
-            <span>{BRAND.stack.join("  ·  ")}</span>
-            <span>{BRAND.version}</span>
+            <span className="min-w-0 truncate">{BRAND.stack.join("  ·  ")}</span>
+            <span className="shrink-0">{BRAND.version}</span>
           </div>
         </div>
       </div>
