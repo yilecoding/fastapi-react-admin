@@ -202,3 +202,37 @@ drag 事件、插入位置用 `inset` 阴影画 2px 竖线（不占布局，整�
 
 同一个坑还会以别的面目出现：宽表格、图表、`whitespace-nowrap` 的长文本。
 新增页面时如果发现整页能左右拖动，先查这条链上有没有漏掉 `min-w-0`。
+
+## 命令面板（⌘/Ctrl+K）与快捷键帮助（?）
+
+| 文件 | 职责 |
+|---|---|
+| `ui/components/command-palette.tsx` | 展示层：输入框 + 分组列表 + 键盘导航，零业务 |
+| `shell/command-menu.tsx` | 业务组装：条目从哪来、选中做什么；顶栏那个 `CommandTrigger` 也在这里 |
+| `shell/command-store.ts` | 开合状态（zustand，**不持久化**） |
+| `shell/shortcuts-dialog.tsx` | `?` 呼出的快捷键清单（**手工维护**） |
+| `shell/hotkeys.ts` | `MOD_LABEL`（mac 显示 ⌘，其余 Ctrl）+ `isEditableTarget()` |
+
+条目的三个数据源**全是现成的**，不新增接口：`tab-store`（已打开的标签页）·
+`use-sidebar` 的导航树（页面，和侧边栏同一个 query 缓存）· `use-tab-actions`
+（操作，和右键菜单同一套动作）。已经开着的页面**不在「页面」组里重复出现** ——
+两行点下去行为完全一样。
+
+四条容易踩的：
+
+- 🔴 **单键快捷键（`?`）必须先过 `isEditableTarget()`。** 不过的话在任意输入框里
+  打一个问号就弹帮助面板，而那个字符**还被 `preventDefault()` 吞掉了** ——
+  表现是「输入框里打不出问号」，没人会往快捷键上想。带修饰键的组合
+  （⌘K / ⌘B）不需要这层判断。回归测试：`e2e/tests/command-palette.spec.ts` 第二条
+- 🔴 **`⌘K` 要 `preventDefault()`** —— Firefox 把它占给了搜索栏
+- 🔴 **加新快捷键要同时写进 `shortcuts-dialog.tsx`。** 快捷键分散在
+  `ui/components/sidebar.tsx`（⌘B）、`command-menu.tsx`（⌘K / ?）、
+  `tab-item.tsx`（中键关闭）三处，**没有统一注册表**，那一屏是唯一的清单。
+  ⌘B 折叠侧边栏在这个仓库里存在很久，界面上从来没写过它 —— 只有作者知道，
+  这就是这一屏（和顶栏那个印着 `⌘K` 的按钮）存在的全部理由
+- ⚠️ **面板里不用 `Combobox`**（同是 Base UI 底座）：它是「触发器 + 浮层」的选值控件，
+  浮层自己管开合与定位，套进 Dialog 会变成两层焦点管理互相抢。也**不要**为它
+  重新引 cmdk —— `command.tsx` 已经连着那条依赖链删掉了（见 [ui 分册](../../../ui/AGENTS.md)）
+
+`Kbd` / `KbdGroup`（`ui/components/kbd.tsx`）终于有调用方了：面板底部提示条、
+顶栏按钮上的 `⌘K`、快捷键清单三处。
