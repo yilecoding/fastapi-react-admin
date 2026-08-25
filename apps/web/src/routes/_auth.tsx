@@ -1,6 +1,5 @@
 import * as React from "react"
 import { createFileRoute, useRouter, useRouterState } from "@tanstack/react-router"
-import { useTranslation } from "react-i18next"
 
 import { requireAuth } from "@admin/platform/auth/guards"
 import { AppSidebar } from "@admin/platform/shell/app-sidebar"
@@ -31,7 +30,6 @@ export const Route = createFileRoute("/_auth")({
 })
 
 function AuthLayout() {
-  const { t } = useTranslation()
   const router = useRouter()
   // isValidPath 由 app 注入 —— platform 不知道 apps/web 的 routeTree
   const options = React.useMemo(() => ({ isValidPath: makeIsValidPath(router) }), [router])
@@ -90,7 +88,7 @@ function AuthLayout() {
     <SidebarProvider className="content-scroll:h-svh content-scroll:overflow-hidden">
       <AppSidebar
         options={options}
-        title={t(BRAND.nameZh)}
+        title={BRAND.wordmark}
         mark={<TenonMark className="size-4" />}
       />
       <SidebarInset className="content-scroll:min-h-0">

@@ -373,9 +373,7 @@ function SignInPage() {
         <footer className="shrink-0">
           <div className="h-px bg-border/70" />
           <div className="flex items-center justify-between gap-3 pt-3.5 pb-1 font-mono text-2xs tracking-[0.18em] text-muted-foreground">
-            <span>
-              {BRAND.wordmark} · {t(BRAND.nameZh)}
-            </span>
+            <span>{BRAND.wordmark}</span>
             <span>
               © {new Date().getFullYear()} · {BRAND.version}
             </span>
