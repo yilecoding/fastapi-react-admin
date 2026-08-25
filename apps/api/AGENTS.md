@@ -429,17 +429,28 @@ XFF 是追加的，左侧可以被客户端预填。
 ## 依赖注入覆盖不到直接 import 了 `async_db_session` 的模块
 
 🔴 `conftest.py` 重载 `get_db` 只换得掉 `Depends(get_db)` 那条路。请求路径上
-还有三处是在模块顶层 `from backend.database.db import async_db_session` 拿会话的，
+还有几处是在模块顶层 `from backend.database.db import async_db_session` 拿会话的，
 它们连的始终是**开发库**：`common/security/jwt.py`（JWT 用户解析）、
-`app/admin/service/login_log_service.py`、`middleware/opera_log_middleware.py`。
+`app/admin/service/login_log_service.py`、`middleware/opera_log_middleware.py`、
+`app/task/tasks/maintenance/tasks.py`（定时清理任务）。
 
-**两个后果都是静默的**：跑一次 pytest 会往开发库写登录日志和操作日志
+**前三处的后果都是静默写错库**：跑一次 pytest 会往开发库写登录日志和操作日志
 （实测本机 `fba.sys_login_log` 积了 880 行，全是历次测试留下的）；
 全新环境里开发库是空的，任何带 token 的请求都在 `get_jwt_user()` 里 `TokenError` ——
 本机从没暴露过，是因为两个库里**恰好都有同 ID 的 admin**（种子雪花 ID 是写死的常量）。
 
-**修法**：`conftest.py` 里一个 session 级 autouse fixture 把三处一并指到测试库。
-**新增「不走依赖注入直接拿会话」的代码时，记得加进那份清单。**
+🔴 **第四处的后果不是写错库，是删错库。** `maintenance/tasks.py` 是全仓唯一会
+`DELETE` 数据的定时任务，之前只靠它自己测试文件（`test_prune_logs.py`）里
+`run_prune()` 手工 monkeypatch 才连得到测试库——那只保护了"经过 `run_prune()`
+调用"这一条路径，换个新测试直接 import `prune_logs` 跑，退回去连的就是开发库
+`fba`，真的会删掉真实数据。这类代码新增时容易被漏掉，是因为它不在"请求路径"上
+（前三处都是 HTTP 中间件/依赖），review 时按"这条路会不会被请求打到"筛查会跳过它。
+
+**修法**：`conftest.py` 里一个 session 级 autouse fixture 把这几处一并指到测试库。
+**新增「不走依赖注入直接拿会话」的代码时，记得加进那份清单**——判断标准不是
+"会不会被 HTTP 请求打到"，而是"模块顶层有没有 `from backend.database.db import
+async_db_session`"，定时任务/脚本/CLI 命令这类不经过 FastAPI 依赖注入的代码
+一样要算。
 
 ⚠️ 相关：限流在测试里默认关闭（`REQUEST_LIMITER_ENABLED`，同一个 IP 反复登录
 会互相打成 429）。要验 429 的用例用 `rate_limiter` fixture 显式打开。
