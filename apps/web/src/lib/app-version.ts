@@ -101,7 +101,6 @@ async function fetchBuildId(): Promise<string | null> {
  */
 export function installVersionWatch(): () => void {
   let lastCheck = 0
-  let timer: number | undefined
 
   const check = async () => {
     if (notified) return
@@ -125,14 +124,14 @@ export function installVersionWatch(): () => void {
   }
 
   void check()
-  timer = window.setInterval(() => void check(), POLL_MS)
+  const timer = window.setInterval(() => void check(), POLL_MS)
   document.addEventListener("visibilitychange", onWake)
   window.addEventListener("focus", onWake)
   window.addEventListener("unhandledrejection", onRejection)
   window.addEventListener("error", onError)
 
   return () => {
-    if (timer !== undefined) window.clearInterval(timer)
+    window.clearInterval(timer)
     document.removeEventListener("visibilitychange", onWake)
     window.removeEventListener("focus", onWake)
     window.removeEventListener("unhandledrejection", onRejection)
