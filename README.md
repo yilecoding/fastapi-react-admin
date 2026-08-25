@@ -143,45 +143,17 @@ language-independent.
 
 ## 组件库：跑在 Base UI 上，不锁死在 Radix 里
 
-shadcn/ui 2026 年 7 月把默认底座从 Radix 换成了 **Base UI**（原 Radix / Floating UI /
-MUI 团队做的无样式组件库）——这里走的是同一条路，`packages/ui` 全部 28+ 个组件原语
-已经迁完，仓库里 **`@radix-ui` 零引用**，可以验证：
+shadcn/ui 2026 年 7 月把默认底座从 Radix 换成了 **Base UI**——这里走的是同一条路，
+`packages/ui` 全部 28+ 个组件原语已经迁完，仓库里 **`@radix-ui` 零引用**（自己验证：
+`grep -r "@radix-ui" packages/ apps/web/`）。三层单向依赖 `i18n ← ui ← platform ← web`，
+`ui` 架构上不能 import `platform`——这是当前 190+ 页面还没有互相缠死的原因。
 
-```bash
-grep -r "@radix-ui" packages/ apps/web/  # 空
-```
-
-这不只是换个依赖名字。`packages/ui` 是**零业务**的纯原语层，架构上强制
-`ui` 不能 import `platform`（业务层）——想在组件里夹带一个业务 hook，import 就直接编译不过，
-不是靠 code review 记住这条规矩。三层单向依赖 `i18n ← ui ← platform ← web`，每一层
-只暴露形状（组件 / 契约 / 页面），这是当前 190+ 页面还没有互相缠死的原因。
-
-**用过 shadcn 的人都踩过的一个坑，这里有实测答案。** `className` 覆盖不生效，
-表现完全不像样式冲突——`cn()` 就是 `twMerge(clsx(...))`，而 tailwind-merge
-**只在同一个变体作用域内**消解冲突：
-
-```js
-cn('h-9', 'h-8')                                          // → 'h-8'                 ✅ 覆盖成功
-cn('data-[size=default]:h-9 data-[size=sm]:h-8', 'h-8')   // → 三条全留下             ❌ 没生效
-```
-
-`Select` 的基础类是后一种写法（`data-[size=default]:h-9`），传 `className="h-8"`
-看着没报错、实际高度纹丝不动，因为两条类都进了 `class` 属性、由 CSS 特异性说了算——
-带属性选择器的基础类 `(0,2,0)` 必胜纯 utility `(0,1,0)`。这个坑在这个仓库里
-**实测踩到过四次**（抽屉宽度 8 处、Select 高度 2 处、表格里一处、查询区按钮外边距一处），
-每一次的现场（具体像素偏移、修法）都记在
-[`packages/ui/AGENTS.md`](./packages/ui/AGENTS.md) 里，不是只告诉你「有这个问题」。
-
-改尺寸前先看基础类有没有变体前缀，一条命令：
-
-```bash
-grep -oE '(data-\[[^]]+\]|has-\[[^]]+\]):(sm:)?(max-w|min-w|h|w|size)-[^ "]+' \
-  packages/ui/src/components/select.tsx
-```
+用过 shadcn 的人常踩的一个坑（`className` 覆盖不生效，`cn()`/`tailwind-merge` 只在
+同一变体作用域内消解冲突）这里**实测踩到过四次**，具体现场和修法记在
+[`packages/ui/AGENTS.md`](./packages/ui/AGENTS.md)。
 
 **想先看组件长什么样，不用起后端。** 内置的组件沙箱（`packages/platform/src/pages/dev-sandbox`）
-把 28 个组件铺开对比，每个都带可调旋钮和能直接复制的代码——挑组件、试变体、
-确认尺寸表现，登录后台就能看，不用现读源码猜 prop。
+把 28 个组件铺开对比，每个都带可调旋钮和能直接复制的代码，登录后台就能看。
 
 ## 技术栈
 
