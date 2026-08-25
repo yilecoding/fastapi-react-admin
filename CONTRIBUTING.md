@@ -21,9 +21,25 @@
 2. **[SECURITY.md](./SECURITY.md)** —— 「已知的、尚未修复的问题」那张表。
    安全问题请走私密报告，不要开公开 issue
 
+## 分支模型：GitHub Flow
+
+`main` 上有分支保护（ruleset，2026-08-25 起生效），直接 push 会被拒绝——包括仓库
+owner 自己，没有旁路。流程是标准 GitHub Flow：
+
+```
+main（受保护，只能通过 PR 合入）
+ └─ feat/xxx · fix/xxx · docs/xxx · chore/xxx   从 main 切出来，改完开 PR
+```
+
+- 分支名前缀对齐 commit 前缀（Conventional Commits 风格，`feat:`/`fix:`/`docs:`/`chore:`）
+- 合并前必须：CI 五个 job 全绿（见下）。**不要求人工 review**——单人维护，
+  要求别人批准会直接把自己锁死；门槛全靠 CI
+- 三种合并方式（merge / squash / rebase）都开着，没有强制线性历史，看改动大小自己选
+
 ## 提 PR 之前
 
-这几道门必须全绿（CI 跑前三道；pytest / e2e 都要真实 SQL Server，本地跑，不在 CI 里）：
+这几道门必须全绿，CI 五个都跑（`static` / `eslint` / `ruff` / `pytest · SQL Server` /
+`playwright · E2E`，后两个要真实 SQL Server，CI 里会自建库，不再是「本地才跑」）：
 
 ```bash
 pnpm typecheck                 # 全仓库 tsc（结论要 --force 才可信，见 CLAUDE.md 硬纪律 12）
