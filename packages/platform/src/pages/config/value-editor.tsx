@@ -54,7 +54,7 @@ export function ValueEditor({
       <div className="flex items-center gap-2.5">
         <span
           className={cn(
-            'w-8 text-right text-xs tabular-nums',
+            'w-12 text-right text-xs tabular-nums whitespace-nowrap',
             checked ? 'text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground'
           )}
         >
