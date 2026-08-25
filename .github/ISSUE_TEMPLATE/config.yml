@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全问题 / Security vulnerability
+    url: https://github.com/yilecoding/fastapi-react-admin/security/advisories/new
+    about: 安全漏洞请走私密报告，不要开公开 issue——见 SECURITY.md

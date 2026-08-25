@@ -1,7 +1,18 @@
 # fastapi-react-admin
 
 **FastAPI + React 19 + shadcn/ui 中后台底座** —— 权限细到按钮和数据行，
-多页签切走真的保状态，原生跑 SQL Server。**164 条自动化测试全打真实依赖，不 mock。**
+多页签切走真的保状态，原生跑 SQL Server。**238 条自动化测试全打真实依赖，不 mock。**
+
+<table>
+<tr>
+<td width="50%"><img src="./docs/screenshots/dashboard.png" alt="仪表盘"></td>
+<td width="50%"><img src="./docs/screenshots/dept.png" alt="部门管理：两级组织架构"></td>
+</tr>
+<tr>
+<td width="50%"><img src="./docs/screenshots/role.png" alt="角色管理：功能权限矩阵"></td>
+<td width="50%"><img src="./docs/screenshots/data-permission.png" alt="数据权限：行级过滤规则"></td>
+</tr>
+</table>
 
 <!-- 前端 -->
 [![React](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)](https://react.dev)
@@ -40,7 +51,7 @@
 
 An admin foundation on **FastAPI + React 19 + shadcn/ui** — permissions down to buttons
 *and data rows*, multi-tab navigation that actually keeps state, first-class **SQL Server**,
-and **164 automated tests that run against real dependencies, with no mocks**.
+and **238 automated tests that run against real dependencies, with no mocks**.
 
 Backend derived from **[fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)**
 (FBA): its three-layer structure, plugin system, and RBAC / data-scope model. This repo is
@@ -56,15 +67,16 @@ code goes next to `packages/platform/src/pages/user/` and follows the same shape
 | --------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | **Permission grain**  | menus + buttons                                                            | menus + buttons + **data scopes** — a role decides which *rows* it sees, via rules bound to model columns |
 | **Multi-tab**         | free in Vue via `keep-alive`; usually absent in React, or loses state       | React 19 **`<Activity>`** — every open tab stays mounted; hidden ones drop effects but keep DOM and state |
+| **Component base**    | shadcn's own docs default to Radix                                         | **shadcn fully ported to Base UI** — zero `@radix-ui` imports, plus an in-app sandbox with copy-paste code for all 28+ components |
 | **Database**          | MySQL / PostgreSQL                                                         | **native SQL Server** (`aioodbc`, NVARCHAR, filtered unique indexes, `OFFSET FETCH`); MySQL and PostgreSQL also supported |
-| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **223 tests against real dependencies, zero mocks** — 183 pytest against a real SQL Server, 40 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 52 dedicated security tests |
+| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **238 tests against real dependencies, zero mocks** — 194 pytest against a real SQL Server, 44 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 62 dedicated security tests |
 
 **Status: 0.0.1, never released.** No production instance, no data to preserve — so the
 schema is still free to change. The backend is a **permanent fork** of
 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)
 (upstream declined to merge SQL Server support), tracking only its security patches.
 
-**Tests:** 183 pytest cases (real SQL Server) + 40 Playwright cases (isolated second
+**Tests:** 194 pytest cases (real SQL Server) + 44 Playwright cases (isolated second
 stack: web :1126 → api :8001 → `fba_test`). Data permissions are covered on both sides —
 22 accounts through the API, 19 through the browser. Neither suite runs in CI, because
 both need a live SQL Server instance; run them locally with `pnpm test` and `pnpm e2e`.
@@ -117,11 +129,54 @@ language-independent.
 |---|---|---|
 | **权限粒度** | 菜单 + 按钮 | 菜单 + 按钮 + **数据范围** —— 角色决定他能看到哪些**行**，规则挂在模型的列上 |
 | **多页签** | Vue 靠 `keep-alive` 白送；React 侧大多没有，或者切走就丢状态 | React 19 的 **`<Activity>`**：所有已开页签同时挂载，隐藏时销毁 effects 但保留 DOM 与 state |
+| **组件基座** | shadcn 官方文档默认 Radix | **shadcn 全量迁到 Base UI**（`@radix-ui` 零引用），配一个能直接抄代码的组件沙箱 |
 | **数据库** | MySQL / PostgreSQL | **原生 SQL Server**（`aioodbc` + NVARCHAR / 筛选唯一索引 / `OFFSET FETCH` 适配），MySQL 与 PostgreSQL 也在 |
-| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **223 条打真实依赖、零 mock** —— pytest 183 条对真实 SQL Server，Playwright 40 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 52 条安全测试兜底 |
+| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **238 条打真实依赖、零 mock** —— pytest 194 条对真实 SQL Server，Playwright 44 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 62 条安全测试兜底 |
 
 它不是「拿来改改就交付」的模板，是**底座**：上面那三件事和下面几条纪律是它替你解决掉的部分，
 业务代码照 `packages/platform/src/pages/user/` 抄就行。
+
+## 组件库：跑在 Base UI 上，不锁死在 Radix 里
+
+shadcn/ui 的官方文档默认你在用 Radix——大部分基于它的模板也确实是。这里不是：
+`packages/ui` 把全部 28+ 个组件原语从 Radix 迁到了 **Base UI**（MUI 团队做的无样式组件库，
+shadcn 后来也官方支持了这条底座），仓库里 **`@radix-ui` 零引用**，可以验证：
+
+```bash
+grep -r "@radix-ui" packages/ apps/web/  # 空
+```
+
+这不只是换个依赖名字。`packages/ui` 是**零业务**的纯原语层，架构上强制
+`ui` 不能 import `platform`（业务层）——想在组件里夹带一个业务 hook，import 就直接编译不过，
+不是靠 code review 记住这条规矩。三层单向依赖 `i18n ← ui ← platform ← web`，每一层
+只暴露形状（组件 / 契约 / 页面），这是当前 190+ 页面还没有互相缠死的原因。
+
+**用过 shadcn 的人都踩过的一个坑，这里有实测答案。** `className` 覆盖不生效，
+表现完全不像样式冲突——`cn()` 就是 `twMerge(clsx(...))`，而 tailwind-merge
+**只在同一个变体作用域内**消解冲突：
+
+```js
+cn('h-9', 'h-8')                                          // → 'h-8'                 ✅ 覆盖成功
+cn('data-[size=default]:h-9 data-[size=sm]:h-8', 'h-8')   // → 三条全留下             ❌ 没生效
+```
+
+`Select` 的基础类是后一种写法（`data-[size=default]:h-9`），传 `className="h-8"`
+看着没报错、实际高度纹丝不动，因为两条类都进了 `class` 属性、由 CSS 特异性说了算——
+带属性选择器的基础类 `(0,2,0)` 必胜纯 utility `(0,1,0)`。这个坑在这个仓库里
+**实测踩到过四次**（抽屉宽度 8 处、Select 高度 2 处、表格里一处、查询区按钮外边距一处），
+每一次的现场（具体像素偏移、修法）都记在
+[`packages/ui/AGENTS.md`](./packages/ui/AGENTS.md) 里，不是只告诉你「有这个问题」。
+
+改尺寸前先看基础类有没有变体前缀，一条命令：
+
+```bash
+grep -oE '(data-\[[^]]+\]|has-\[[^]]+\]):(sm:)?(max-w|min-w|h|w|size)-[^ "]+' \
+  packages/ui/src/components/select.tsx
+```
+
+**想先看组件长什么样，不用起后端。** 内置的组件沙箱（`packages/platform/src/pages/dev-sandbox`）
+把 28 个组件铺开对比，每个都带可调旋钮和能直接复制的代码——挑组件、试变体、
+确认尺寸表现，登录后台就能看，不用现读源码猜 prop。
 
 ## 技术栈
 
@@ -189,19 +244,19 @@ language-independent.
 
 ## 测试：打真实依赖，不打 mock
 
-**164 条自动化测试**，两边都不 mock 依赖 —— 后端对真实 SQL Server，
+**238 条自动化测试**，两边都不 mock 依赖 —— 后端对真实 SQL Server，
 前端对真实浏览器 + 真实接口 + 真实数据库。
 
 | | 跑在哪 | 条数 | 覆盖 |
 |---|---|---|---|
-| **pytest** | 真实 SQL Server（`fba_test` 库，不碰开发库） | **183** | 安全（RBAC 门禁 / 权限码对账 / 数据权限 fail-closed / 规则校验 / 生产配置 / 健康检查）52 · 数据权限端到端 26 · 定时任务 69 · 文件模块 23 · 迁移守卫 4 · 认证 7 · i18n 对称性 2 |
-| **Playwright** | 完全隔离的第二套实例：web :1126 → api :8001 → `fba_test` | **40** | 数据权限 25 · 定时任务 9 · 部门 CRUD 2 · 登录 2 · 多页签保活 2 |
+| **pytest** | 真实 SQL Server（`fba_test` 库，不碰开发库） | **194** | 安全（RBAC 门禁 / 权限码对账 / 数据权限 fail-closed / 规则校验 / 生产配置 / 健康检查）62 · 数据权限端到端 27 · 定时任务 69 · 文件模块 23 · 迁移守卫 4 · 认证 7 · i18n 对称性 2 |
+| **Playwright** | 完全隔离的第二套实例：web :1126 → api :8001 → `fba_test` | **44** | 数据权限 29 · 定时任务 9 · 部门 CRUD 2 · 登录 2 · 多页签保活 2 |
 
-> Playwright 那 40 条里有 1 条会按条件跳过（执行记录页要求库里真跑过一次 worker）。
+> Playwright 那 44 条里有 1 条会按条件跳过（执行记录页要求库里真跑过一次 worker）。
 
 ```bash
-pnpm test          # 后端 pytest（183 条，需要 fba_test 库）
-pnpm e2e           # 前端 Playwright（40 条，自动拉起隔离的 web+api 实例）
+pnpm test          # 后端 pytest（194 条，需要 fba_test 库）
+pnpm e2e           # 前端 Playwright（44 条，自动拉起隔离的 web+api 实例）
 ```
 
 **为什么不 mock**：中后台的 bug 几乎都长在边界上 —— SQL Server 的 NVARCHAR 截断、
@@ -240,6 +295,15 @@ pnpm e2e           # 前端 Playwright（40 条，自动拉起隔离的 web+api 
 | 用户没有部门时 `${dept_id}` 解析成 None | 同样被吞，SQL Server 报 `converting varchar to bigint` → 500 |
 | `<Activity>` 切回可见时会把 effect 整个销毁重建 | 一条 `useEffect(..., [foldAll])` 每次切回来都误判成「值变了」，把用户手动折叠的节点清空 |
 | 去重上传丢文件名 / 文件列表缺 `download_url` | 两个真出现过的回归 |
+
+`<Activity>` 那条值得多说一句：React 19 才刚把它转正，社区里能验证它真实行为的
+生产代码几乎没有。`tabs.spec.ts` 第一条用例（折叠一棵树、切 tab、切回来）**第一次跑就红**——
+不是测试写错，是 `<Activity mode="hidden">` 切回可见时会把子树的 effect **整个销毁重建**，
+一条 `useEffect(() => setFlipped(new Set()), [foldAll])` 每次都把这次重建误判成
+「依赖值变了」，用户手动折叠的状态被清空。单测 mock 掉 `<Activity>` 是测不出这个的——
+只有真实浏览器、真实切 tab、真实等 React 调度完，这个坑才会自己冒出来。
+修法和更细的时序数据（应用内切 tab ~18ms、整页加载后 ~300ms 那个窗口）记在
+[`apps/web/e2e/AGENTS.md`](./apps/web/e2e/AGENTS.md)。
 
 **已知边界**：没有做视觉回归；两套都不在 CI 里跑（都需要真实 SQL Server 实例）。
 测试库要先建，见 [CLAUDE.md](./CLAUDE.md) 的「跑测试」与
