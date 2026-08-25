@@ -36,6 +36,21 @@ main（受保护，只能通过 PR 合入）
   要求别人批准会直接把自己锁死；门槛全靠 CI
 - 三种合并方式（merge / squash / rebase）都开着，没有强制线性历史，看改动大小自己选
 
+### CI 红了会怎样
+
+- **push 到 main 失败** → 开一条带 `ci-failure` 标签的 issue，标题
+  `🔴 CI Failed: CI on refs/heads/main`。同一个 ref 再失败**覆盖那一条**
+  （正文换成最新一次运行 + 「连续失败 N 次」），不新开、也不追评论；
+  main 恢复绿色时那条 issue **自动关闭**
+- **PR 上失败** → **不开 issue**。PR 自己的 checks 已经很显眼，而 PR 分支用完就删、
+  issue 却留着，谁都不知道该不该关
+
+> 🔴 这套去重是补出来的。原来的 job 也写了「查找已有的失败 issue，避免重复」，
+> 但判据是「正文里包含 `[#<runId>]`」—— `runId` 每次运行都不一样，条件**永远
+> 不可能命中**，于是每次失败都新开一条。实测：一个下午攒了 8 条，其中 5 条是
+> main 上同一个问题、2 条是同一个 PR 的同一个 flake。
+> 现在按正文里的 `<!-- ci-failure-key: 工作流@ref -->` 标记找那一条。
+
 ## 提 PR 之前
 
 这几道门必须全绿，CI 五个都跑（`static` / `eslint` / `ruff` / `pytest · SQL Server` /
