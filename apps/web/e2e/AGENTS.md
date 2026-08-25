@@ -209,6 +209,28 @@ await expect(page.locator('[data-visible="true"] table tbody tr').first()).toBeV
 `beforeAll`/`afterAll` 里能用）和 `loginPageAs(page, username, password)`
 （`authedPage` 写死了 admin，而这份测试要的正是「换个账号看见的不一样」）。
 
+### 🔴 跨文件并行会污染默认分页假设——`serial` 只护得住同一个 describe
+
+`data-permission.spec.ts` 的 `beforeAll`/`afterAll` 之间会有 19 个临时账号常驻
+`fba_test`（见上一节）。`test.describe.configure({ mode: "serial" })` 只保证
+**这个 describe 内部**的用例不并行、不撞唯一约束——**挡不住别的 spec 文件**
+在同一个时间窗口被分到另一个 worker 并行跑（`playwright.config.ts` 是
+`fullyParallel: true`），而两者共用同一个 `fba_test`。
+
+`list-error.spec.ts` 原来断言「502 重试后表里能看到 `admin@example.com`」，
+默认没有筛选、看的是第一页。这个断言隐含了「用户总数不多，admin 一定在
+第一页」——本地单独跑这一个文件时成立，但在 CI 上和 `data-permission.spec.ts`
+撞到同一个并行窗口就会破：总数从种子的 10 涨到 29，admin 被挤到第二页，
+断言失败，而失败信息看起来和这条测试本身毫无关系（一串陌生的
+`dp_d_xxx@e2e.example.com` 账号）。**实测复现**：2026-08-25 给 `main` 上线分支
+保护、E2E 第一次被设成必过的 required check 时当场撞见。
+
+修法是断言改成不依赖总数/分页/具体某个用户——`table.locator('[data-slot=
+"table-body"] [data-slot="table-row"]').first()` 只要表体真的渲出行就算数。
+**教训**：任何断言默认视图（不筛选、不指定页）里「某条具体数据看不看得见」的写法，
+在共享数据库 + 全并行的 E2E 里都是定时炸弹——数据会被同一时间窗口里跑的
+别的 spec 文件影响，且它们之间没有任何协作关系。
+
 ### 现在测了什么 / 没测什么
 
 种子用例：登录（表单校验 + 验证码关闭路径）、部门 CRUD 闭环（含 409 冲突
