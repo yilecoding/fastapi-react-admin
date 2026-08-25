@@ -33,7 +33,7 @@
   "ZIP 压缩包": "ZIP 压缩包",
   "[图片]": "[图片]",
   "google 授权自动重定向": "google 授权自动重定向",
-  "menu:/403": "/403",
+  "menu:/403": "无权访问",
   "menu:/analytics": "分析页",
   "menu:/dashboard": "仪表盘",
   "menu:/embedded": "/embedded",

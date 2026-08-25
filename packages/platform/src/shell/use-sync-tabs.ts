@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useRouterState } from '@tanstack/react-router'
 
+import { isAuthenticated } from '../auth/session'
 import { makeTabKey, useTabStore } from './tab-store'
 
 /**
@@ -48,6 +49,19 @@ export function useSyncTabs(resolveTitle?: (path: string) => string | undefined)
     const { idle, routeId, params, search, staticData, href, pathname } = snap
     // 导航未完成时 matches 与地址可能不一致，等 idle 再同步
     if (!idle) return
+    /*
+     * 🔴 没有登录态就不往标签条里加东西。
+     *
+     * 退出登录时 `logout()` 会清空标签页（`tab-store.reset()`），但**这个 effect
+     * 会在那之后再跑一次**，把当前页原样加回去 —— 于是「退出后标签条清空了」
+     * 只成立半秒：`qc.clear()` 让侧边栏 query 变空 → `resolveTitle` 的身份变了
+     * → 依赖数组里它变了 → effect 重跑 → `open()`。
+     *
+     * 实测（issue #29 的修复过程）：退出后 sessionStorage 里从
+     * 「仪表盘/参数配置」变成「参数配置」—— 被清掉的只是「不是当前页」的那些，
+     * 而当前页恰恰是最要紧的那一个：它就是下次恢复出来的 activeKey。
+     */
+    if (!isAuthenticated()) return
     if (!routeId || routeId.endsWith('/_auth') || routeId === '__root__') return
     const sd = staticData ?? {}
     const title = sd.title ?? resolveTitle?.(pathname) ?? routeId
