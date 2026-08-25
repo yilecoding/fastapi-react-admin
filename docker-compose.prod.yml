@@ -172,17 +172,22 @@ services:
       - fba_upload:/app/backend/upload
       - fba_upload_public:/app/backend/upload-public
       - fba_log_worker:/app/backend/log
-    # 🔴 `inspect` 默认超时 1s，实测这个 AsyncIOPool 走一趟 broker 往返要 ~2s——
-    # docker 的 timeout: 15s 管的是「命令跑多久算超时」，挡不住 celery 自己
-    # 内部先喊出 `No nodes replied within time constraint`（exit 69）退出。
-    # 手动加 `--timeout=10` 之后单次 ping 稳定在 2s 左右通过。生产上部署过一次
-    # 才发现——worker 一直在正常处理任务，健康检查却一直报 unhealthy。
+    # 🔴 `celery inspect ping` 会整个另起一个 Python 进程去连 broker 一趟——
+    # 单独手动跑很快（实测稳定 2s 内），但作为**每 30s 跑一次的健康检查**，
+    # 在内存吃紧、swap 跑满的机器上（这台生产机常年如此）反复冷启动一个新进程
+    # 本身就会跟其它容器抢内存，实测加了 --timeout=10 之后自动检查依然
+    # 大概率超时（单次耗时涨到 ~12s，`docker inspect` 的健康检查历史里连续
+    # 好几条 `No nodes replied within time constraint`），换成更宽的超时只是
+    # 把这台机器的资源问题伪装成「等久一点就好」。
+    # 改成跟 beat 同一套思路：只证明进程没死，不去证明它真的响应了一次完整的
+    # broker 往返——worker 是容器 PID 1，没有 shell 包一层，直接读
+    # /proc/1/cmdline，零额外进程、零额外内存
     healthcheck:
-      test: ["CMD", "celery", "-A", "backend.app.task.celery", "inspect", "ping", "-d", "celery@$${HOSTNAME}", "--timeout=10"]
+      test: ["CMD-SHELL", "grep -q worker /proc/1/cmdline"]
       interval: 30s
-      timeout: 15s
+      timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 30s
 
   beat:
     <<: *api-base
