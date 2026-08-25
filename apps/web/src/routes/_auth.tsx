@@ -60,6 +60,11 @@ function AuthLayout() {
   // 向后端上报「这个会话还开着」——「在线用户」页的实时连接列靠它才有真值
   usePresence(true)
 
+  // 顶栏面包屑：活动 tab 的 URL 决定链路,tab 自己的标题兜底
+  // hideInMenu 的页面（个人中心那类)不进 nav 树,链路查不到时用它
+  const activePath = useRouterState({ select: (s) => s.location.pathname })
+  const activeTabTitle = useTabStore((s) => s.tabs.find((tb) => tb.key === s.activeKey)?.title)
+
   return (
     <PlatformProvider value={platform}>
     {/*
@@ -92,7 +97,7 @@ function AuthLayout() {
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
           <SidebarTrigger className="-ms-1" />
           <Separator orientation="vertical" className="me-2 data-[orientation=vertical]:h-4" />
-          <span className="text-sm font-medium">{t(BRAND.tagline)}</span>
+          <NavBreadcrumb nav={nav} activePath={activePath} fallbackTitle={activeTabTitle} />
           <div className="ms-auto">
             <UserMenu />
           </div>
