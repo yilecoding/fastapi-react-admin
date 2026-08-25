@@ -205,14 +205,11 @@ export function SignInBrandPanel() {
         <div aria-hidden className="pointer-events-none absolute inset-0" style={noise} />
 
         <div className="relative flex flex-1 flex-col px-10 py-9 xl:px-14 xl:py-11">
-          <div className="tenon-in flex items-center justify-between gap-4">
+          <div className="tenon-in flex items-center gap-4">
             <span className="flex items-center gap-3">
               <TenonMark className="size-[26px]" />
               {/* 19 个字符，字距不能再拉 0.42em —— 那是给短 wordmark 的 */}
               <span className="font-mono text-sm tracking-[0.06em]">{BRAND.wordmark}</span>
-            </span>
-            <span className="font-mono text-2xs tracking-[0.2em] text-[var(--tenon-faint)]">
-              {t(BRAND.nameZh)}
             </span>
           </div>
 
@@ -259,15 +256,13 @@ export function SignInBrandPanel() {
 
 /** 窄屏没有左栏，用一条同色的面板条把标识带过去 */
 export function SignInBrandStrip() {
-  const { t } = useTranslation()
   return (
-    <div className="tenon-panel mb-8 flex items-center justify-between gap-3 rounded-2xl bg-[var(--tenon-panel)] px-4 py-3.5 text-[var(--tenon-ink)] ring-1 ring-[var(--tenon-ring)] ring-inset lg:hidden">
+    <div className="tenon-panel mb-8 flex items-center gap-3 rounded-2xl bg-[var(--tenon-panel)] px-4 py-3.5 text-[var(--tenon-ink)] ring-1 ring-[var(--tenon-ring)] ring-inset lg:hidden">
       <PanelStyles />
       <span className="flex items-center gap-2.5">
         <TenonMark className="size-5" />
         <span className="font-mono text-xs tracking-[0.04em]">{BRAND.wordmark}</span>
       </span>
-      <span className="font-mono text-2xs tracking-[0.2em] text-[var(--tenon-faint)]">{t(BRAND.nameZh)}</span>
     </div>
   )
 }
