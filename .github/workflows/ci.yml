@@ -449,52 +449,114 @@ jobs:
           cache-from: type=gha,scope=fba-web
           cache-to: type=gha,mode=max,scope=fba-web
 
-  # 如果任何测试失败，自动创建 issue
-  create-issue-on-failure:
+  # ── CI 红了报一条 issue，但**一个 ref 只留一条** ──
+  #
+  # 🔴 原来的写法每失败一次就新开一条。它确实写了「查找已有的失败 issue，
+  # 避免重复」，但判据是 `issue.body.includes('[#' + runId + ']')` —— runId
+  # 每次运行都不一样，这个条件**永远不可能命中**，去重形同虚设。实测：一个
+  # 下午攒了 8 条 `🔴 CI Failed`，其中 5 条是 main 上同一个问题、2 条是同一个
+  # PR 的同一个 flake。
+  #
+  # 现在的机制是**覆盖**：body 里埋一个 `<!-- ci-failure-key: 工作流@ref -->`
+  # 标记，同一个 ref 再失败就把那一条的正文改成最新一次运行（带「连续失败 N 次」），
+  # 不新开、也不追评论。绿了由下面的 clear-failure-report 自动关掉。
+  report-failure:
     name: Report Failures
     needs: [static, lint-frontend, lint-backend, test-backend, test-e2e]
+    # 只报 push（main）的失败。PR 上的失败在 PR 自己的 checks 里已经很显眼，
+    # 再开一条 issue 是纯噪音 —— 而且 PR 分支用完就删，issue 却留着，
+    # 谁都不知道该不该关
+    if: failure() && github.event_name == 'push'
     runs-on: ubuntu-latest
-    if: failure()
     permissions:
       issues: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Upsert CI failure issue
+        uses: actions/github-script@v7
+        env:
+          # 哪几个 job 红的 —— 一条 issue 要能直接回答这个问题，
+          # 否则每次都得点进 Actions 看
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            const key = `${context.workflow}@${context.ref}`;
+            const marker = `<!-- ci-failure-key: ${key} -->`;
 
-      - name: Create issue for CI failure
+            const needs = JSON.parse(process.env.NEEDS_JSON || '{}');
+            const failed = Object.entries(needs)
+              .filter(([, v]) => v.result !== 'success')
+              .map(([k, v]) => `\`${k}\` (${v.result})`);
+
+            // 按 marker 找那一条，不是按 runId（原来的 bug 就在这）
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', labels: 'ci-failure', per_page: 100,
+            });
+            const existing = open.find((i) => (i.body || '').includes(marker));
+
+            // 「连续失败 N 次」从上一版正文里读回来 —— 不另存状态，
+            // issue 自己就是那份状态
+            const prev = existing ? Number((existing.body.match(/连续失败\*\*: (\d+) 次/) || [])[1]) || 1 : 0;
+            const streak = prev + 1;
+
+            const title = `🔴 CI Failed: ${context.workflow} on ${context.ref}`;
+            const body = [
+              marker,
+              '## CI 检查失败',
+              '',
+              `- **分支**: \`${context.ref}\``,
+              `- **提交**: ${context.sha.substring(0, 7)}`,
+              `- **失败的 job**: ${failed.length ? failed.join(' · ') : '（未知）'}`,
+              `- **连续失败**: ${streak} 次`,
+              `- **最近一次运行**: [#${context.runId}](${runUrl})`,
+              `- **触发**: ${context.eventName}`,
+              '',
+              '这条 issue 由 CI 维护：同一个 ref 再失败会**覆盖**这里的内容，',
+              '恢复绿色时自动关闭。要手工关的话也行 —— 下次失败会重新开一条。',
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.update({
+                owner, repo, issue_number: existing.number, title, body,
+              });
+              console.log(`Updated issue #${existing.number}（连续失败 ${streak} 次）`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner, repo, title, body, labels: ['ci-failure', 'bug'],
+              });
+              console.log(`Created issue #${created.data.number}`);
+            }
+
+  # 绿了就把那条失败 issue 关掉。没有这一半，上面那条永远留在列表里 ——
+  # 「CI 现在是红的还是绿的」就只能靠人去 Actions 里对，而没人会去对
+  clear-failure-report:
+    name: Clear Failure Report
+    needs: [static, lint-frontend, lint-backend, test-backend, test-e2e]
+    if: success() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Close CI failure issue
         uses: actions/github-script@v7
         with:
           script: |
-            const { repo, payload } = context;
-            const runUrl = `https://github.com/${repo.owner}/${repo.repo}/actions/runs/${context.runId}`;
+            const { owner, repo } = context.repo;
+            const runUrl = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            const marker = `<!-- ci-failure-key: ${context.workflow}@${context.ref} -->`;
 
-            // 查找已有的失败 issue，避免重复
-            const openIssues = await github.rest.issues.listForRepo({
-              owner: repo.owner,
-              repo: repo.repo,
-              state: 'open',
-              labels: ['ci-failure']
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', labels: 'ci-failure', per_page: 100,
             });
-
-            const existingIssue = openIssues.data.find(
-              issue => issue.body.includes(`[#${context.runId}]`)
-            );
-
-            if (existingIssue) {
-              console.log(`Issue #${existingIssue.number} already exists`);
-              return;
+            for (const issue of open.filter((i) => (i.body || '').includes(marker))) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: `✅ CI 在 ${context.sha.substring(0, 7)} 恢复绿色（[run](${runUrl})），自动关闭。`,
+              });
+              await github.rest.issues.update({
+                owner, repo, issue_number: issue.number,
+                state: 'closed', state_reason: 'completed',
+              });
+              console.log(`Closed issue #${issue.number}`);
             }
-
-            // 创建新 issue
-            const title = `🔴 CI Failed: ${context.workflow} on ${context.ref}`;
-            const body = `## CI 检查失败\n\n- **分支**: ${context.ref}\n- **提交**: ${context.sha.substring(0, 7)}\n- **Run**: [#${context.runId}](${runUrl})\n- **触发**: ${context.eventName}\n\n[查看详情](${runUrl})`;
-
-            const issue = await github.rest.issues.create({
-              owner: repo.owner,
-              repo: repo.repo,
-              title: title,
-              body: body,
-              labels: ['ci-failure', 'bug']
-            });
-
-            console.log(`Created issue #${issue.data.number}`);
-
