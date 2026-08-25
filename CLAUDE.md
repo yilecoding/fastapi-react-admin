@@ -38,6 +38,8 @@
 | **显示时间 / 动时区** | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) 的「服务端时间一律过 `src/datetime.ts`」 |
 | 动后端模型 / 接口 / SQL · 跑 pytest | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
 | 动定时任务 / Celery / 调度 | [`apps/api/backend/app/task/AGENTS.md`](apps/api/backend/app/task/AGENTS.md) |
+| 动命令面板 / 快捷键 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
+| 动构建注入 / 发版提示 / 错误页 | [`apps/web/AGENTS.md`](apps/web/AGENTS.md) |
 | 写或跑前端 E2E | [`apps/web/e2e/AGENTS.md`](apps/web/e2e/AGENTS.md) |
 | 动菜单 / 权限 / 死链判定 | 硬纪律 6 + [`pages/menu/AGENTS.md`](packages/platform/src/pages/menu/AGENTS.md) |
 

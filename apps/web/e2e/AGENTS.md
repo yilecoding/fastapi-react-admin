@@ -237,7 +237,12 @@ await expect(page.locator('[data-visible="true"] table tbody tr').first()).toBeV
 可见、编辑禁改编码、删除二次确认、同级重名 vs 跨级同名的回归）、多页签保活
 （折叠状态 + `data-visible` 属性）、任务调度闭环。
 
-**`list-error.spec.ts`：唯一一条靠 `page.route` 造假响应的测试**，而这里是刻意破例。
+`command-palette.spec.ts`：⌘K 呼出 → 搜页面 → 回车跳过去（顺带断言跳完标签条上多了一个 tab），
+以及 `?` 的那条回归 —— **焦点在输入框里时 `?` 只能是一个字符**，不能触发帮助面板。
+条目 testid 里带雪花 ID（`command-palette-item-page:2049…`），所以一律按可见文本定位，
+别把种子数据的 ID 写进断言。
+
+**`list-error.spec.ts` / `new-version.spec.ts`：两条靠 `page.route` 造假响应的测试**，这里是刻意破例。
 上面那条「不 mock、打真实接口」的原则挡不住这一类 bug —— 要验的正是
 「接口 502 时页面显示的是错误块还是『暂无数据』」，而真实接口不会按需 502。
 两种写法（接了 `error` / 没接）在接口正常时**渲染结果完全相同**，所以不造失败就等于没测。
@@ -249,6 +254,11 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 ⚠️ 拦截**只拦那一个列表端点**（正则带 `?`），别拦成 `**/sys/**` —— 用户页的
 筛选栏还要拉部门树和角色列表，一起打挂就分不清错误块是哪个查询触发的。
 放行改用 `route.fallback()`（试重试按钮时要让第二次请求真的打到后端）。
+
+`new-version.spec.ts` 同理：「服务端发新版了」这件事在一条测试里没法真的发生，
+只能给 `/version.json` 换一个 `buildId`。它还顺带验了一条**真实的开发期行为** ——
+开发服务器上根本没有 `version.json`（那是构建产物），拿不到**不能**被当成发新版，
+所以第二条断言是「不弹提示」。
 
 加上 **`data-permission.spec.ts`（29 条 / 19 个账号）**——见上一节。
 
