@@ -16,7 +16,11 @@ from backend.app.admin.schema.user import (
 )
 from backend.app.admin.schema.user_password_history import CreateUserPasswordHistoryParam
 from backend.app.admin.service.user_password_history_service import password_security_service
-from backend.app.admin.utils.password_security import password_verify, validate_new_password
+from backend.app.admin.utils.password_security import (
+    password_verify,
+    validate_new_password,
+    validate_password_strength,
+)
 from backend.common.context import ctx
 from backend.common.enums import UserPermissionType
 from backend.common.exception import errors
@@ -99,6 +103,7 @@ class UserService:
             raise errors.ConflictError(msg=t('error.user.email_bound'))
         if not obj.password:
             raise errors.RequestError(msg=t('error.user.password_required'))
+        await validate_password_strength(db, obj.password)
         if not await dept_dao.get(db, obj.dept_id):
             raise errors.NotFoundError(msg=t('error.dept.not_found'))
         if obj.roles:
