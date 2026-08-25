@@ -7,7 +7,9 @@
 - **后端是 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) 的永久分叉**。
   上游明确拒绝合并 SQL Server 支持，所以我们只 cherry-pick 上游安全补丁，功能更新不跟。
   改 `apps/api/` 时不必考虑「怎么合回上游」
-- **前端没有自动化测试**，这是已知缺口。改前端只能靠 `pnpm typecheck` + 手动点
+- **前后端都有自动化测试，且都打真实依赖不 mock**：后端 194 条 pytest 对真实 SQL Server，
+  前端 44 条 Playwright 对真实浏览器 + 真实接口 + 真实库。改动涉及的模块**有对应测试的必须跑绿**，
+  没测试覆盖到的部分才退回 `pnpm typecheck` + 手动点
 
 ## 提 issue 之前
 
@@ -21,14 +23,18 @@
 
 ## 提 PR 之前
 
-四道门必须全绿（CI 只跑前三道，pytest 要数据库）：
+这几道门必须全绿（CI 跑前三道；pytest / e2e 都要真实 SQL Server，本地跑，不在 CI 里）：
 
 ```bash
-pnpm typecheck                 # 全仓库 tsc
+pnpm typecheck                 # 全仓库 tsc（结论要 --force 才可信，见 CLAUDE.md 硬纪律 12）
 pnpm --filter web build         # 前端唯一的「整体还装得起来」信号
 pnpm i18n:check && pnpm i18n:jsx
-pnpm test                       # 后端 pytest；要先备好 fba_test 库
+pnpm test                       # 后端 pytest（194 条）；要先备好 fba_test 库
+pnpm e2e                        # 前端 Playwright（44 条）；自动拉起隔离的 web+api 实例
 ```
+
+改了前端页面/组件、后端接口/数据权限逻辑，对应的测试文件找不到就自己补一条——
+这两套测试的价值就在于打真实依赖，不接受用 mock 绕过去的版本。
 
 ### 几条会让 PR 被打回的硬规则
 
@@ -53,9 +59,10 @@ SQL Server 的适配约定（用错了在 PostgreSQL 上跑得通、在主线数
 - 分页查询必须带 `ORDER BY`（`select_order`）—— `OFFSET FETCH` 强制要求
 - 含可空列的唯一约束要改用筛选唯一索引
 
-⚠️ **改模型不等于改表。** 没有 alembic 迁移历史，schema 由 `create_all()` 从模型生成，
-而它**只建不改** —— 加删列要手写 `ALTER` 或重建库。测试库用
-`pnpm --filter api test:db` 一键重建。
+⚠️ **改模型不等于改表。** 表结构改动一律走 alembic（`pnpm db:revision '说明'` +
+`pnpm db:upgrade`），生成的迁移文件**要读一遍再提交**——没有例外，手写 `ALTER` 或
+`drop_all` 重建那条路已经关了，详见 [CLAUDE.md](./CLAUDE.md)「数据库结构改动一律走 alembic」。
+测试库用 `pnpm --filter api test:db` 一键重建（内部会自动 stamp 到 head）。
 
 ### 前端
 

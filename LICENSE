@@ -19,13 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-This repository contains code derived from third-party projects:
-
-* `apps/api/` is a fork of fastapi-best-architecture
-  (https://github.com/fastapi-practices/fastapi_best_architecture),
-  Copyright (c) 2022 xiaowu, MIT License.
-  The original license text is preserved at `apps/api/LICENSE`.
-  Fork baseline commit is recorded in `apps/api/.upstream-baseline`.
