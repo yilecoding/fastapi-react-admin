@@ -15,6 +15,8 @@ import asyncio
 import os
 import urllib.parse
 
+from pathlib import Path
+
 import celery
 import celery_aio_pool
 
@@ -54,13 +56,28 @@ def init_worker_runtime(*args, **kwargs) -> None:
 
 
 def find_task_packages() -> list[str]:
-    """扫出所有含 tasks.py 的包，交给 autodiscover"""
+    """扫出所有含 tasks.py 的包，交给 autodiscover
+
+    🔴 **不能用字符串 `str.replace(prefix, '')` 去掉前缀** —— 它是全局替换，不是
+    "剥前缀"。容器里 `BASE_PATH.parent` 是 `/app`（`Dockerfile.prod` 的
+    `WORKDIR /app`），而业务代码本身有一层目录也叫 `app`（`backend/app/task/...`）。
+    于是 `/app/backend/app/task/tasks/maintenance` 里 `/app/` 这个子串出现了
+    **两次**——一次是路径开头要剥掉的前缀，另一次恰好是 `backend/app/task` 中间那段。
+    全局替换把两处都吃掉，`backend` 和 `task` 中间的点被吞掉，autodiscover 收到的
+    是 `backendtask.tasks.maintenance`，celery worker/beat 启动时
+    `ModuleNotFoundError: No module named 'backendtask'`，整个进程崩溃重启。
+    本机 `pnpm dev` 跑的是 uvicorn 直连源码（`BASE_PATH.parent` 是仓库路径，
+    不叫 `app`），CI 的 pytest 同理，两边都摸不到这条路径——只有真的用
+    Dockerfile.prod 构建的镜像跑 `celery worker` 才会炸，第一次是在生产环境
+    的容器里实测踩到的。
+    改用 `Path.relative_to()` 就是纯路径运算，不会误伤同名子串。
+    """
     packages = []
     task_dir = BASE_PATH / 'app' / 'task' / 'tasks'
     for root, _dirs, files in os.walk(task_dir):
         if 'tasks.py' in files:
-            package = root.replace(str(BASE_PATH.parent) + os.path.sep, '').replace(os.path.sep, '.')
-            packages.append(package)
+            relative = Path(root).relative_to(BASE_PATH.parent)
+            packages.append('.'.join(relative.parts))
     return packages
 
 
