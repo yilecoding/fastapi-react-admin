@@ -4,6 +4,19 @@
 #        apps/api/deploy/backend/docker-compose/.env.server
 #     # 改完里面的 CHANGE_ME，然后二选一：
 #
+#   🔴 **这份文件的属主必须是 uid:gid 1000:1000，不能是 root。**
+#   `apps/api/Dockerfile.prod` 里容器进程是 `USER fba`（`useradd -u 1000 -g 1000`），
+#   而 `scripts/deploy-prod.mjs` 的前置检查又要求这份文件权限严格是 `600`
+#   （不能有 group/other 位）——如果只满足"600"但 owner 是 root，宿主机上看着
+#   权限没问题，容器里的 fba 用户却读不到它：pydantic-settings 加载配置那一步
+#   直接 `PermissionError: [Errno 13] Permission denied`，报错点在依赖库内部，
+#   不会提示"权限"两个字，容易当成配置本身写错了去排查。实测：`chmod 600`
+#   但 owner 仍是 root 时必现；改成 `chown 1000:1000 && chmod 600` 后两边
+#   （deploy 脚本的安全检查 + 容器内非 root 用户可读）同时满足：
+#
+#     chown 1000:1000 apps/api/deploy/backend/docker-compose/.env.server
+#     chmod 600       apps/api/deploy/backend/docker-compose/.env.server
+#
 # 【日常部署】CI 已经把镜像 build 好推到 GHCR 了，服务器只管拉：
 #
 #     docker compose -f docker-compose.prod.yml pull
@@ -20,6 +33,23 @@
 #   要去 GitHub 网页上把这两个 package 的可见性改成 public（仓库本来就是
 #   public 的，没有理由把编译产物设成私有），否则这里的 `pull` 会因为没
 #   登录而失败。也可以反过来在服务器上 `docker login ghcr.io` 一次，看你选哪条。
+#
+#   🔴 **国内服务器直连 `ghcr.io` 可能被限速到几十 KB/s**，不是断连、也不报错，
+#   `docker compose pull` 会挂着不动，看着像卡住了其实是在以「一层镜像下载
+#   几个小时」的速度爬。实测（腾讯云国内节点）：`curl` 探测 `ghcr.io` 能通、
+#   `docker pull` 却常年卡在 ~30KB/s；换成镜像加速器 `ghcr.nju.edu.cn` 同一层
+#   几秒钟拉完。判断卡没卡看 `docker compose pull` 的层进度是否在涨，几分钟
+#   完全不动就该换加速器，不要傻等。加速器不能直接替换 compose 里的镜像名
+#   （它们只是同步了内容、路径前缀不一样），要拉完再重新打标签：
+#
+#     docker pull ghcr.nju.edu.cn/<owner>/fba-api:latest
+#     docker pull ghcr.nju.edu.cn/<owner>/fba-web:latest
+#     docker tag  ghcr.nju.edu.cn/<owner>/fba-api:latest ghcr.io/<owner>/fba-api:latest
+#     docker tag  ghcr.nju.edu.cn/<owner>/fba-web:latest ghcr.io/<owner>/fba-web:latest
+#     docker compose -f docker-compose.prod.yml up -d   # 本地已有同名镜像，不会再去拉
+#
+#   这类加速器不是官方服务，可用性会变化，卡住时换一个镜像加速域名重试即可，
+#   原理都一样（对外暴露一份 `ghcr.io` 内容的镜像）。
 #
 # 【本地 / 离线场景】不想依赖 GHCR，直接在当前机器上从源码构建：
 #

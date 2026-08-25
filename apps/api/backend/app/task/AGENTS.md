@@ -75,6 +75,31 @@ AttributeError，真因要往上翻十几行。
 DatabaseScheduler 都是同步代码，`aioodbc` 喂不进去。
 `pyodbc` 不是新依赖，它本来就是 `aioodbc` 的依赖。
 
+## 🔴 `find_task_packages()` 在生产镜像里会把 worker/beat 直接搞崩——跟数据库无关
+
+`celery.py: find_task_packages()` 原来用 `root.replace(str(BASE_PATH.parent) + os.path.sep, '')`
+剥路径前缀——这是**全局字符串替换**，不是"剥前缀"。`Dockerfile.prod` 的
+`WORKDIR /app`，业务代码自己又有一层目录也叫 `app`（`backend/app/task/...`），
+于是 `/app/backend/app/task/tasks/maintenance` 这条路径里 `/app/` 这个子串
+出现了**两次**：一次是开头要剥的前缀，另一次恰好是 `backend/app/task` 中间
+那段。全局替换把两处都吃掉，`backend` 和 `task` 中间的点被吞掉，
+autodiscover 拿到的包名是 `backendtask.tasks.maintenance`，worker/beat
+启动时 `ModuleNotFoundError: No module named 'backendtask'`，进程崩溃后
+被 `restart: unless-stopped` 拉起来再崩，无限重启。
+
+**本机 `pnpm dev` 和 CI 的 pytest 都摸不到这条路径**——两边跑的都是源码直连
+（`uvicorn`/`pytest` 直接 import，`BASE_PATH.parent` 是仓库里的真实路径，
+不叫 `app`），只有真的拿 `Dockerfile.prod` 构建出镜像、在容器里跑
+`celery -A backend.app.task.celery worker` 才会撞上这个巧合的同名碰撞。
+第一次是在生产环境实测踩到的：`docker logs` 除了那句 `ModuleNotFoundError`
+什么线索都没有，容器 `Up 2 seconds` 后立刻变 `Restarting`。
+
+修法：改用 `Path(root).relative_to(BASE_PATH.parent)` 做纯路径运算再
+`'.'.join(parts)`，不会误伤路径中间恰好同名的子串。验证：
+`docker run --rm <api镜像> python -c "from backend.app.task.celery import find_task_packages; print(find_task_packages())"`
+应该打印 `['backend.app.task.tasks.maintenance']`（点分完整，不是
+`backendtask...`）。
+
 ## 调度只有一个来源：`task_scheduler` 表
 
 🔴 **刻意不配 `beat_schedule`。** `DatabaseScheduler.setup_schedule()` 只 SELECT
