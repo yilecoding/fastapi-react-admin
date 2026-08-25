@@ -172,8 +172,13 @@ services:
       - fba_upload:/app/backend/upload
       - fba_upload_public:/app/backend/upload-public
       - fba_log_worker:/app/backend/log
+    # 🔴 `inspect` 默认超时 1s，实测这个 AsyncIOPool 走一趟 broker 往返要 ~2s——
+    # docker 的 timeout: 15s 管的是「命令跑多久算超时」，挡不住 celery 自己
+    # 内部先喊出 `No nodes replied within time constraint`（exit 69）退出。
+    # 手动加 `--timeout=10` 之后单次 ping 稳定在 2s 左右通过。生产上部署过一次
+    # 才发现——worker 一直在正常处理任务，健康检查却一直报 unhealthy。
     healthcheck:
-      test: ["CMD", "celery", "-A", "backend.app.task.celery", "inspect", "ping", "-d", "celery@$${HOSTNAME}"]
+      test: ["CMD", "celery", "-A", "backend.app.task.celery", "inspect", "ping", "-d", "celery@$${HOSTNAME}", "--timeout=10"]
       interval: 30s
       timeout: 15s
       retries: 3
@@ -199,8 +204,12 @@ services:
     volumes:
       - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
       - fba_log_beat:/app/backend/log
+    # 🔴 镜像基于 Debian slim，没装 procps——`pgrep` 是「命令不存在」（exit 127），
+    # 不是「没找到进程」，健康检查因此永远失败，即便 beat 跑得好好的。
+    # beat 进程就是容器的 PID 1（没有 shell 包一层），直接读 /proc/1/cmdline，
+    # 不用依赖额外装的工具
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'celery.*beat' > /dev/null || exit 1"]
+      test: ["CMD-SHELL", "grep -q beat /proc/1/cmdline"]
       interval: 30s
       timeout: 5s
       retries: 3
