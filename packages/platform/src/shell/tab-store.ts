@@ -35,6 +35,8 @@ type TabState = {
   closeLeft: (key: string) => void
   closeRight: (key: string) => void
   closeAll: () => string | null
+  /** 清空（换身份时用）—— 连固定的一起清，见下面实现处的注释 */
+  reset: () => void
   togglePin: (key: string) => void
   reload: (key: string) => void
   /** 拖拽排序：把 from 挪到 to 的位置。跨固定/非固定分区的拖拽会被拒绝 */
@@ -124,6 +126,17 @@ export const useTabStore = create<TabState>()(
         set({ tabs: keep, activeKey: nextActive })
         return nextActive
       },
+
+      /**
+       * 清空全部标签页。
+       *
+       * 🔴 和 `closeAll` 不是一件事：`closeAll` 保留固定的（用户的意图是
+       * 「收拾桌面」），这个是**换身份**用的 —— 上一个账号固定的页面，
+       * 对下一个账号可能连权限都没有，一条都不能留。
+       *
+       * 调用方在 `auth/session.ts` 的 `login()` / `logout()`（理由见那里）。
+       */
+      reset: () => set({ tabs: [], activeKey: null }),
 
       togglePin: (key) => {
         const { tabs } = get()
