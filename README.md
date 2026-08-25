@@ -67,7 +67,7 @@ code goes next to `packages/platform/src/pages/user/` and follows the same shape
 | --------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | **Permission grain**  | menus + buttons                                                            | menus + buttons + **data scopes** — a role decides which *rows* it sees, via rules bound to model columns |
 | **Multi-tab**         | free in Vue via `keep-alive`; usually absent in React, or loses state       | React 19 **`<Activity>`** — every open tab stays mounted; hidden ones drop effects but keep DOM and state |
-| **Component base**    | shadcn's own docs default to Radix                                         | **shadcn fully ported to Base UI** — zero `@radix-ui` imports, plus an in-app sandbox with copy-paste code for all 28+ components |
+| **Component base**    | most templates still on the pre-migration shadcn/Radix combo               | already tracks shadcn's current default, **Base UI** — zero `@radix-ui` imports, plus an in-app sandbox with copy-paste code for all 28+ components |
 | **Database**          | MySQL / PostgreSQL                                                         | **native SQL Server** (`aioodbc`, NVARCHAR, filtered unique indexes, `OFFSET FETCH`); MySQL and PostgreSQL also supported |
 | **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **238 tests against real dependencies, zero mocks** — 194 pytest against a real SQL Server, 44 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 62 dedicated security tests |
 
@@ -129,7 +129,7 @@ language-independent.
 |---|---|---|
 | **权限粒度** | 菜单 + 按钮 | 菜单 + 按钮 + **数据范围** —— 角色决定他能看到哪些**行**，规则挂在模型的列上 |
 | **多页签** | Vue 靠 `keep-alive` 白送；React 侧大多没有，或者切走就丢状态 | React 19 的 **`<Activity>`**：所有已开页签同时挂载，隐藏时销毁 effects 但保留 DOM 与 state |
-| **组件基座** | shadcn 官方文档默认 Radix | **shadcn 全量迁到 Base UI**（`@radix-ui` 零引用），配一个能直接抄代码的组件沙箱 |
+| **组件基座** | 多数模板还在用 shadcn 迁移前的 Radix 版本 | 已跟进 shadcn 现在的默认底座 **Base UI**（`@radix-ui` 零引用），配一个能直接抄代码的组件沙箱 |
 | **数据库** | MySQL / PostgreSQL | **原生 SQL Server**（`aioodbc` + NVARCHAR / 筛选唯一索引 / `OFFSET FETCH` 适配），MySQL 与 PostgreSQL 也在 |
 | **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **238 条打真实依赖、零 mock** —— pytest 194 条对真实 SQL Server，Playwright 44 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 62 条安全测试兜底 |
 
@@ -138,9 +138,9 @@ language-independent.
 
 ## 组件库：跑在 Base UI 上，不锁死在 Radix 里
 
-shadcn/ui 的官方文档默认你在用 Radix——大部分基于它的模板也确实是。这里不是：
-`packages/ui` 把全部 28+ 个组件原语从 Radix 迁到了 **Base UI**（MUI 团队做的无样式组件库，
-shadcn 后来也官方支持了这条底座），仓库里 **`@radix-ui` 零引用**，可以验证：
+shadcn/ui 2026 年 7 月把默认底座从 Radix 换成了 **Base UI**（原 Radix / Floating UI /
+MUI 团队做的无样式组件库）——这里走的是同一条路，`packages/ui` 全部 28+ 个组件原语
+已经迁完，仓库里 **`@radix-ui` 零引用**，可以验证：
 
 ```bash
 grep -r "@radix-ui" packages/ apps/web/  # 空
