@@ -23,6 +23,18 @@ password_hash = PasswordHash((BcryptHasher(),))
 SEEDED_PASSWORD_HASHES: frozenset[str] = frozenset({
     '$2b$12$8y2eNucX19VjmZ3tYhBLcOsBwy9w1IjBQE4SSqwMDL5bGQVp2wqS.',  # admin
     '$2b$12$BMiXsNQAgTx7aNc7kVgnwedXGyUxPEHRnJMFbiikbqHgVoT3y14Za',  # test
+    # 组织架构演示账号（种子 SQL 里补的部门经理/员工/财务/访客几个角色对应的
+    # 账号），密码同样是 123456，故意保留不重置——公开演示要的就是"随便一个
+    # 账号都能直接登录切换视角"。`fba init` 不处理这批账号，见 cli.py 里
+    # `_set_admin_password` 只认 admin/test 两个名字。
+    '$2b$12$Pnvhzs0e1pJ8qyvB9Kkv1em/IpT.46XKEfPqoIoLR2ly8RVCVEcLS',  # zhangwei
+    '$2b$12$7xeTTK8azV4xXUGpZY7kBef7pfDj6ilVE1Pkt6VReNH5xd8kCgVEi',  # lina
+    '$2b$12$rCfJ7pCZp/CsGhfbBcU9YuXzfYb8xl8Xm7AqSG5u0fiyoetNGInQ.',  # wangfang
+    '$2b$12$z958muAw9wAclhvxw6tzROV8vIR2COsPdakXXv4d7QF7litw1Wdl6',  # liuyang
+    '$2b$12$wqmNVS86davwAaQWMA/kL.P1nU4CV3HAeLcq0XdMBRSbsY5N/KIoa',  # chenjing
+    '$2b$12$aQ0gVSkO.pJi7iWXvx1UBujb9vnumYbTjhmoYlPgau/eo.t9oD0Pi',  # zhaolei
+    '$2b$12$T06KtP5UZLuKbgEccyCBa.9bW9nIysTPn0WyX5Bc/B3cxwLvxW62W',  # sunqiang
+    '$2b$12$PUJ3wLeG0VSqQoKdvu/NKuYcnyF4AgfZDES2UoktE3uAdTeergGB.',  # zhoumin
 })
 
 

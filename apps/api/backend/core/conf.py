@@ -259,7 +259,9 @@ class Settings(BaseSettings):
     UPLOAD_ARCHIVE_EXT_INCLUDE: list[str] = ['zip', 'rar', '7z', 'tar', 'gz']
     UPLOAD_ARCHIVE_SIZE_MAX: int = 100 * 1024 * 1024  # 100 MB
 
-    # 演示模式配置
+    # 演示模式配置（上游 FBA 自带：只读锁定，非 GET 请求一律 403）。
+    # 🔴 与 ENVIRONMENT=prod 互斥（见 check_production_settings），只适合
+    # ENVIRONMENT=dev 的「看不能动」式静态演示。
     DEMO_MODE: bool = False
     DEMO_MODE_EXCLUDE: set[tuple[str, str]] = {
         ('POST', f'{FASTAPI_API_V1_PATH}/auth/login'),
