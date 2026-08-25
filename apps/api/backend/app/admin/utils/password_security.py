@@ -60,12 +60,20 @@ def password_verify(plain_password: str, hashed_password: str) -> bool:
     return password_hash.verify(plain_password, hashed_password)
 
 
-async def validate_new_password(db: AsyncSession, user_id: int, new_password: str) -> None:
+async def validate_password_strength(db: AsyncSession, new_password: str) -> None:
     """
-    验证新密码
+    只验证密码强度（长度/数字/字母/特殊字符），不查历史复用。
+
+    🔴 **拆出这个函数是因为「新建用户」和「改密/重置密码」不是同一件事**：
+    改密/重置密码时目标用户已经存在，能查 `sys_user_password_history`；
+    新建用户时雪花 ID 要等 `db.flush()` 之后才有，压根没有 `user_id` 可传，
+    历史复用检查这时候无意义（新用户没有历史）。以前 `create()` 完全没调用
+    密码强度校验（只有 `reset_password`/`update_password` 两条路径挂了
+    `validate_new_password()`），意味着建号接口对密码强度是不设防的——
+    前端 `user/form.tsx` 的 `z.string().min(6)` 只是前端自己的一厢情愿，
+    直接打接口（比如批量导入）完全绕得过去。
 
     :param db: 数据库会话
-    :param user_id: 用户ID
     :param new_password: 新密码
     :return:
     """
@@ -85,6 +93,19 @@ async def validate_new_password(db: AsyncSession, user_id: int, new_password: st
 
     if settings.USER_PASSWORD_REQUIRE_SPECIAL_CHAR and not is_has_special_char(new_password):
         raise errors.RequestError(msg=t('error.password.needs_special_char'))
+
+
+async def validate_new_password(db: AsyncSession, user_id: int, new_password: str) -> None:
+    """
+    验证新密码：强度 + 历史复用，给「用户已存在」的改密/重置密码场景用。
+    新建用户场景（没有 `user_id`）请直接调 `validate_password_strength()`。
+
+    :param db: 数据库会话
+    :param user_id: 用户ID
+    :param new_password: 新密码
+    :return:
+    """
+    await validate_password_strength(db, new_password)
 
     password_history = await user_password_history_dao.get_by_user_id(db, user_id)
 
