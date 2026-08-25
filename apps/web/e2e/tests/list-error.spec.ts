@@ -38,8 +38,13 @@ test.describe("列表页取数失败", () => {
     fail = false
     await table.getByTestId("query-error-retry").click()
     await expect(error).toBeHidden()
-    // 用户表没挂行级 testid，用「表里出现了真实数据」来断言重取成功
-    await expect(table).toContainText("admin@example.com")
+    // 用户表没挂行级 testid，用「表体真的渲出行」断言重取成功。
+    // ⚠️ 不能断言具体某个用户（曾经断言 admin@example.com 在默认第一页）——
+    // data-permission.spec.ts 的 beforeAll/afterAll 之间会有 19 个临时账号
+    // 并发存在于 fba_test，`fullyParallel` 下这条测试和它同时跑，总数一多
+    // admin 就被挤到第二页，断言变成随并行调度抖动的假失败（实测复现，见
+    // e2e/CLAUDE.md「跨文件并行会污染默认分页假设」）
+    await expect(table.locator('[data-slot="table-body"] [data-slot="table-row"]').first()).toBeVisible()
   })
 
   test("部门管理：502 显示错误块，不是「没有匹配的部门」", async ({ authedPage: page }) => {
