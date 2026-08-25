@@ -36,6 +36,6 @@ export const BRAND = {
   /** 一句话定位，含品类词。站点标题读它，登录页对比表旁边也会引用 */
   tagline: "FastAPI + React 19 中后台底座",
   version: "v0.0.1",
-  /** 底座里真正承重的那几样，登录页会把它列出来 */
-  stack: ["REACT 19", "TANSTACK", "FASTAPI", "SQL SERVER"],
+  /** 底座里真正承重的那几样，登录页会把它列出来。不摆 SQL SERVER——数据库是可换的实现细节，不是卖点 */
+  stack: ["REACT 19", "TANSTACK", "SHADCN", "TAILWIND", "FASTAPI"],
 } as const

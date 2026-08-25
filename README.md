@@ -3,6 +3,11 @@
 **FastAPI + React 19 + shadcn/ui 中后台底座** —— 权限细到按钮和数据行，
 多页签切走真的保状态，原生跑 SQL Server。**238 条自动化测试全打真实依赖，不 mock。**
 
+> 🚀 **在线演示 / Live demo：** https://fra.wubunan.com/sign-in
+> 账号 `admin` / 密码 `123456` —— 公开演示实例，任何人都能登录，数据会被访客改动/清空，
+> 请勿存放真实信息。/ Public demo instance, anyone can log in; data may be altered or wiped
+> by other visitors — do not store real information here.
+
 <table>
 <tr>
 <td width="50%"><img src="./docs/screenshots/dashboard.png" alt="仪表盘"></td>
