@@ -3,6 +3,7 @@ import { createFileRoute, useRouter, useRouterState } from "@tanstack/react-rout
 
 import { requireAuth } from "@admin/platform/auth/guards"
 import { AppSidebar } from "@admin/platform/shell/app-sidebar"
+import { CommandMenu, CommandTrigger } from "@admin/platform/shell/command-menu"
 import { TenonMark } from "@/components/tenon-mark"
 import { BRAND } from "@/lib/brand"
 import { NavBreadcrumb } from "@admin/platform/shell/nav-breadcrumb"
@@ -96,7 +97,9 @@ function AuthLayout() {
           <SidebarTrigger className="-ms-1" />
           <Separator orientation="vertical" className="me-2 data-[orientation=vertical]:h-4" />
           <NavBreadcrumb nav={nav} activePath={activePath} fallbackTitle={activeTabTitle} />
-          <div className="ms-auto">
+          {/* 命令面板入口：⌘K 也能开，但快捷键不摆出来就等于只有作者知道 */}
+          <div className="ms-auto flex items-center gap-2">
+            <CommandTrigger />
             <UserMenu />
           </div>
         </header>
@@ -115,6 +118,9 @@ function AuthLayout() {
         >
           <TabOutlet registry={pageRegistry} />
         </div>
+
+        {/* 命令面板 + 快捷键帮助。挂在外壳里（不是页面里）—— 它要在任何 tab 上都能呼出 */}
+        <CommandMenu options={options} />
       </SidebarInset>
     </SidebarProvider>
     </PlatformProvider>

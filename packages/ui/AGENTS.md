@@ -16,6 +16,8 @@
 | **选多个** | `ui/components/multi-select`。关闭态刻意**不铺 chips**（筛选栏一行 32px，铺三个就换行）—— 1 项显示 label、多项显示「label +n」，完整清单靠下拉里的勾选态。下拉底部有「全选 / 清空」 |
 | 时间筛选 | `ui/components/datetime-picker` 的 `DateTimeValuePicker` / `DateTimeRangePicker`。值是**本地时间串**不是 `Date`（理由见 [查询区分册](./src/components/query-bar/AGENTS.md)），区间自带快捷区间（今天/昨天/近 7 天/近 30 天/本月/上月） |
 | 列表页筛选栏 | `ui/components/query-bar` + `_shared/use-query-search`。**不要**在页面里手拼筛选控件和入参映射，详见 [查询区分册](./src/components/query-bar/AGENTS.md) |
+| 命令面板 / 全局搜索 | `ui/components/command-palette.tsx`（Dialog + 受控列表 + 子序列打分，手写）。**不要**为它重新引 cmdk，也**不要**用 `Combobox` 套进 Dialog —— 后者是「触发器 + 浮层」的选值控件，两层焦点管理会互相抢。业务组装在 `platform/shell/command-menu.tsx` |
+| 快捷键提示 | `Kbd` / `KbdGroup`。图标按钮的 tooltip 里也能放（`in-data-[slot=tooltip-content]` 的配色已经在基础类里） |
 | 可搜索下拉 | 走 `Combobox`（Base UI 底座，和其余组件同源）。**不要引 cmdk** —— 曾经有个零调用方的 cmdk 封装，已删除 |
 | 滚动条外观 | 已在 `ui/styles/globals.css` 全站统一（`scrollbar-width: thin` + `--scrollbar-thumb`），**不要逐个容器改**，也**别用 `scroll-area.tsx`**（零调用方，理由见那个文件的头注释）。刻意不用 `::-webkit-scrollbar` —— 它会强制 macOS 退回常驻滚动条 |
 | 隐藏滚动条 | 一律 `no-scrollbar`（shadcn 上游的 `@utility`），别手写 `[scrollbar-width:none] [&::-webkit-scrollbar]:hidden`。用在**操作区**（标签条、侧边栏），内容区不要藏 |

@@ -86,6 +86,8 @@ const ALLOW = new Map(Object.entries({
   'backend/upload-public/': '同上，公开子树',
   'storageState.json': 'Playwright 的概念，文档说的就是「这条路走不通」',
   'settings-layout.tsx': '已被 settings-shell.tsx 取代，文档在讲换掉它的理由',
+  'command.tsx': 'cmdk 封装，零调用方已连依赖链一起删除；文档在讲「不要把它引回来」',
+  'version.json': '构建产物（vite 发到 dist 根目录），不进 git',
 }))
 
 /** 章节标题 → 所在上下文文件。用来判「见「XXX」」指的那一节还在不在、在不在同一份 */

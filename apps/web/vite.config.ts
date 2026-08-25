@@ -1,13 +1,56 @@
+import { execSync } from "node:child_process"
 import path from "node:path"
 import tailwindcss from "@tailwindcss/vite"
 import { fileViewerRenderers } from "@file-viewer/vite-plugin"
 import { tanstackRouter } from "@tanstack/router-plugin/vite"
 import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
+import { defineConfig, type Plugin } from "vite"
+
+/**
+ * 构建标识：注入 `import.meta.env.VITE_BUILD_ID`，同时往 dist 根目录发一份
+ * `version.json`。前端拿「自己编译进去的那个值」和「服务器现在给的那个值」
+ * 比对，不相等就是「服务端发新版了」（见 `src/lib/app-version.ts`）。
+ *
+ * ⚠️ 生产镜像里**没有 .git**（Dockerfile 只 COPY 源码），所以 git sha 只是
+ * 本地构建的锦上添花，真正兜底的是时间戳 —— 每次构建必然不同，这就够了。
+ * 不用 vite 自己的产物 hash：那要等 bundle 生成完才知道，而
+ * `import.meta.env` 的替换发生在更早的转换阶段。
+ */
+function buildIdPlugin(): Plugin {
+  let buildId = process.env.BUILD_ID ?? ""
+  if (!buildId) {
+    let sha = ""
+    try {
+      sha = execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+        .toString()
+        .trim()
+    } catch {
+      // 没有 .git（生产镜像里就是这样）—— 时间戳单独也能用
+    }
+    buildId = [sha, Date.now().toString(36)].filter(Boolean).join("-")
+  }
+  return {
+    name: "admin:build-id",
+    // 只在构建时注入。开发期留空，app-version.ts 回落成 "dev"，
+    // 于是本地 `/version.json` 404 → 静默跳过检测（dev 没有发版这件事）
+    apply: "build",
+    config: () => ({
+      define: { "import.meta.env.VITE_BUILD_ID": JSON.stringify(buildId) },
+    }),
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "version.json",
+        source: JSON.stringify({ buildId, builtAt: new Date().toISOString() }),
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
+    buildIdPlugin(),
     tanstackRouter({ target: "react" }),
     react(),
     tailwindcss(),

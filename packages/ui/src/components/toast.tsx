@@ -99,6 +99,10 @@ function ToastItem({ toast: item }: { toast: ToastPrimitive.Root.ToastObject }) 
   return (
     <ToastPrimitive.Root
       toast={item}
+      // E2E 要能定位一条 toast，且不能靠文案里的按钮名 —— 页面上常有同名按钮
+      // （「刷新」在仪表盘和监控页都有一个）
+      data-testid="toast"
+      data-tone={tone}
       swipeDirection={["right", "down"]}
       className={cn(
         "group/toast relative flex w-full items-start gap-3 rounded-lg border border-border bg-popover p-3.5 pe-9 text-popover-foreground shadow-lg",
