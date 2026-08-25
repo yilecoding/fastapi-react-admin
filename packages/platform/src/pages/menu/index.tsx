@@ -9,7 +9,8 @@ import {
 
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
-import { DataTableSkeletonRows } from '@admin/ui/components/data-table'
+import { DataTableErrorRow, DataTableSkeletonRows } from '@admin/ui/components/data-table'
+import { QueryError } from '@admin/ui/components/query-error'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@admin/ui/components/dropdown-menu'
@@ -25,6 +26,7 @@ import { MenuIcon } from '../../shell/icon-registry'
 import { PageHeader } from '../../shell/page-header'
 import { usePlatform } from '../../shell/platform-context'
 import { ResetButton, SelectFilter, StatusFilter, TextFilter } from '../_shared/filters'
+import { listState } from '../_shared/list-query'
 import { StatusBadge, TONE_CLASS } from '../_shared/status'
 import { useTreeFold } from '../_shared/use-tree-fold'
 import {
@@ -70,9 +72,11 @@ export function MenuPage({
   const patch = (n: Partial<MenuPageSearch>) => onSearchChange?.({ ...search, ...n })
   const { isValidPath } = usePlatform()
 
-  const { data: tree = [], isPending, isFetching } = useQuery(
+  const listQuery = useQuery(
     menuTreeQuery({ title: search.title || undefined, status: search.status })
   )
+  const { data: tree = [], isPending, isFetching } = listQuery
+  const list = listState(listQuery)
 
   const [sheet, setSheet] = React.useState(false)
   const [editing, setEditing] = React.useState<Menu | null>(null)
@@ -185,6 +189,11 @@ export function MenuPage({
             </Can>
           </div>
 
+          {/* 有旧数据可看时（重取失败那种）不抽走表格，错误挂成横幅 */}
+          {Boolean(list.error) && tree.length > 0 && (
+            <QueryError error={list.error} onRetry={list.onRetry} className="shrink-0" />
+          )}
+
           {/* 加载中也保留表头与工具栏 —— 整块换骨架屏会让筛选栏在加载完成时凭空出现 */}
           <div
             className={cn(
@@ -215,6 +224,10 @@ export function MenuPage({
               <TableBody>
                 {isPending ? (
                   <DataTableSkeletonRows rows={8} columns={7} />
+                ) : list.error && tree.length === 0 ? (
+                  /* 🔴 排在空态前面 —— 否则接口挂了会显示成「没有匹配的菜单」（硬纪律 9）。
+                     判的是 `tree` 不是 `shown`：前端过滤把结果筛空了不是失败 */
+                  <DataTableErrorRow columnCount={7} error={list.error} onRetry={list.onRetry} />
                 ) : shown.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">

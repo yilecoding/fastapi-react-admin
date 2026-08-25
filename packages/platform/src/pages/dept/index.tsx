@@ -12,7 +12,8 @@ import {
 } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
-import { DataTableSkeletonRows } from '@admin/ui/components/data-table'
+import { DataTableErrorRow, DataTableSkeletonRows } from '@admin/ui/components/data-table'
+import { QueryError } from '@admin/ui/components/query-error'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@admin/ui/components/dropdown-menu'
@@ -25,6 +26,7 @@ import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { ResetButton, StatusFilter, TextFilter } from '../_shared/filters'
+import { listState } from '../_shared/list-query'
 import { StatusBadge } from '../_shared/status'
 import { useTreeFold } from '../_shared/use-tree-fold'
 import { deptTreeQuery, useDeleteDept, type Dept } from './api'
@@ -57,7 +59,9 @@ export function DeptPage({
 }) {
   const { t } = useTranslation()
   const filters = { name: search.name || undefined, code: search.code || undefined, status: search.status }
-  const { data: tree = [], isPending, isFetching } = useQuery(deptTreeQuery(filters))
+  const listQuery = useQuery(deptTreeQuery(filters))
+  const { data: tree = [], isPending, isFetching } = listQuery
+  const list = listState(listQuery)
 
   const patch = (n: Partial<DeptPageSearch>) => onSearchChange?.({ ...search, ...n })
 
@@ -128,6 +132,11 @@ export function DeptPage({
             </Can>
           </div>
 
+          {/* 有旧数据可看时（重取失败那种）不抽走表格，错误挂成横幅 */}
+          {Boolean(list.error) && tree.length > 0 && (
+            <QueryError error={list.error} onRetry={list.onRetry} className="shrink-0" />
+          )}
+
           {/* 加载中也保留表头与工具栏 —— 整块换骨架屏会让筛选栏在加载完成时凭空出现 */}
           <div
             className={cn(
@@ -158,6 +167,9 @@ export function DeptPage({
               <TableBody>
                 {isPending ? (
                   <DataTableSkeletonRows rows={5} columns={7} />
+                ) : list.error && tree.length === 0 ? (
+                  /* 🔴 排在空态前面 —— 否则接口挂了会显示成「没有匹配的部门」（硬纪律 9） */
+                  <DataTableErrorRow columnCount={7} error={list.error} onRetry={list.onRetry} />
                 ) : tree.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">

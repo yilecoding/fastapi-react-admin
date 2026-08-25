@@ -12,6 +12,7 @@ import { cn } from '@admin/ui/lib/utils'
 import {
   DropdownMenuItem, DropdownMenuSeparator,
 } from '@admin/ui/components/dropdown-menu'
+import { listState } from '../_shared/list-query'
 import { MasterList, type MasterListItem } from '../_shared/master-list'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
@@ -71,11 +72,14 @@ export function RolePage({
   const patch = (n: Partial<RolePageSearch>) => onSearchChange?.({ ...search, ...n })
 
   const qc = useQueryClient()
-  const {
-    data, isPending, isFetching, hasNextPage, isFetchingNextPage, fetchNextPage,
-  } = useInfiniteQuery(
+  const listQuery = useInfiniteQuery(
     rolesInfiniteQuery({ name: search.name || undefined, status: search.status })
   )
+  const {
+    data, isPending, hasNextPage, isFetchingNextPage, fetchNextPage,
+  } = listQuery
+  // 取数状态位统一从这里出 —— 少解构一个 `error` 就是把失败画成空态（硬纪律 9）
+  const list = listState(listQuery)
   // 已取回的所有页拍平 —— 「当前页」这个概念在滚动加载里不存在了
   const roles = React.useMemo(() => data?.pages.flatMap((pg) => pg.items) ?? [], [data])
   const total = data?.pages[0]?.total ?? 0
@@ -172,8 +176,7 @@ export function RolePage({
               onReset={() => patch({ name: undefined, status: undefined, role: undefined })}
               hasMore={hasNextPage}
               loadingMore={isFetchingNextPage}
-              loading={isPending}
-              busy={isFetching && !isPending && !isFetchingNextPage}
+              {...list}
               onLoadMore={() => void fetchNextPage()}
               onAdd={() => { setEditing(null); setSheetOpen(true) }}
               addLabel={t('新增角色')}

@@ -10,6 +10,7 @@ import { Can } from '../../auth/can'
 import {
   DropdownMenuItem, DropdownMenuSeparator,
 } from '@admin/ui/components/dropdown-menu'
+import { listState } from '../_shared/list-query'
 import { MasterList, type MasterListItem } from '../_shared/master-list'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
@@ -52,11 +53,14 @@ export function DataPermissionPage({
   const patch = (n: Partial<DataPermissionPageSearch>) => onSearchChange?.({ ...search, ...n })
 
   const qc = useQueryClient()
-  const {
-    data, isPending, isFetching, hasNextPage, isFetchingNextPage, fetchNextPage,
-  } = useInfiniteQuery(
+  const listQuery = useInfiniteQuery(
     dataScopesInfiniteQuery({ name: search.name || undefined, status: search.status })
   )
+  const {
+    data, isPending, hasNextPage, isFetchingNextPage, fetchNextPage,
+  } = listQuery
+  // 取数状态位统一从这里出 —— 少解构一个 `error` 就是把失败画成空态（硬纪律 9）
+  const list = listState(listQuery)
   // 已取回的所有页拍平 —— 滚动加载里没有「当前页」
   const scopes = React.useMemo(() => data?.pages.flatMap((pg) => pg.items) ?? [], [data])
   const total = data?.pages[0]?.total ?? 0
@@ -108,8 +112,7 @@ export function DataPermissionPage({
               onReset={() => patch({ name: undefined, status: undefined, scope: undefined })}
               hasMore={hasNextPage}
               loadingMore={isFetchingNextPage}
-              loading={isPending}
-              busy={isFetching && !isPending && !isFetchingNextPage}
+              {...list}
               onLoadMore={() => void fetchNextPage()}
               onAdd={() => { setEditing(null); setSheetOpen(true) }}
               addLabel={t('新增数据范围')}

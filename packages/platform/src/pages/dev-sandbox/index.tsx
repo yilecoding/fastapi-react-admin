@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { IconAlertTriangle, IconCheck, IconCopy } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
+import { QueryError } from '@admin/ui/components/query-error'
 import { cn } from '@admin/ui/lib/utils'
 
 import { PageHeader } from '../../shell/page-header'
@@ -41,7 +42,7 @@ export function DevSandboxPage({
   search?: DevSandboxSearch
   onSearchChange?: (next: DevSandboxSearch) => void
 }) {
-  const { data: devRows, isPending } = useQuery(devConfigQuery)
+  const { data: devRows, isPending, error, refetch } = useQuery(devConfigQuery)
   const gate = readSandboxGate(devRows, import.meta.env?.DEV ?? false)
 
   const active = demoById(search.c) ?? FIRST_DEMO
@@ -71,6 +72,23 @@ export function DevSandboxPage({
       <div className="flex flex-col gap-4">
         <PageHeader title="组件沙箱" description="packages/ui 的组件演示台。" />
         <p className="text-sm text-muted-foreground">正在读取开发配置…</p>
+      </div>
+    )
+  }
+
+  // 🔴 读配置失败**不能**落进下面那个「沙箱是关闭的」分支（硬纪律 9）：
+  // `readSandboxGate` 在 rows 为 undefined 时给的理由是「参数配置里还没有 DEV 组」——
+  // 接口挂了会被说成「服务端没配这一组」，是两件完全不同的事
+  if (error) {
+    return (
+      <div className="flex flex-col gap-4">
+        <PageHeader title="组件沙箱" description="packages/ui 的组件演示台。" />
+        <QueryError
+          error={error}
+          onRetry={() => void refetch()}
+          testId="sandbox-error"
+          className="max-w-xl"
+        />
       </div>
     )
   }

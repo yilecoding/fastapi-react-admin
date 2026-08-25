@@ -17,6 +17,7 @@ import { Can } from '../../auth/can'
 import { PageHeader } from '../../shell/page-header'
 import { ClearLogsButton } from '../_shared/clear-logs'
 import { ResetButton } from '../_shared/filters'
+import { listState } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import { logFeatures as features } from '../_shared/log-features'
@@ -151,11 +152,13 @@ export function LogLoginPage({
   })
 
   const qs = buildQuery(q.params, search.page, search.size)
-  const { data, isPending, isFetching } = useQuery({
+  const listQuery = useQuery({
     queryKey: ['logs', 'login', qs],
     queryFn: () => api.GET<PageData<LoginLog>>(`/api/v1/logs/login?${qs}`),
     placeholderData: (prev) => prev,
   })
+  const { data, isFetching } = listQuery
+  const list = listState(listQuery)
   const rows = data?.items ?? []
 
   const [detail, setDetail] = React.useState<LoginLog | null>(null)
@@ -446,8 +449,7 @@ export function LogLoginPage({
                     />
                   ) : undefined
                 }
-                loading={isPending}
-                busy={isFetching && !isPending}
+                {...list}
                 skeletonRows={8}
                 pagination={{
                   pageIndex: page - 1,

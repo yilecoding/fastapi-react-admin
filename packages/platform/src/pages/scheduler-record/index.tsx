@@ -12,6 +12,7 @@ import { ResetButton } from '../_shared/filters'
 import { logFeatures as features } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { StatusPill } from '../_shared/status'
+import { listState } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import {
@@ -96,9 +97,11 @@ export function SchedulerRecordPage({
 
   const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, keep: ['hide'] })
 
-  const { data, isPending, isFetching } = useQuery(
+  const listQuery = useQuery(
     resultsQuery({ page, size, ...(q.params as Record<string, string>) })
   )
+  const { data, isFetching } = listQuery
+  const list = listState(listQuery)
   const rows = data?.items ?? []
 
   const [detailId, setDetailId] = React.useState<number | null>(null)
@@ -238,8 +241,7 @@ export function SchedulerRecordPage({
                 showColumnVisibility={false}
                 rows={table.getRowModel().rows}
                 columnCount={columns.length}
-                loading={isPending}
-                busy={isFetching && !isPending}
+                {...list}
                 skeletonRows={8}
                 emptyMessage={t('暂无执行记录')}
                 emptyAction={

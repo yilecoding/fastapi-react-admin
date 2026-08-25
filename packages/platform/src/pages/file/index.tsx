@@ -5,6 +5,7 @@ import { IconLayoutGrid, IconLayoutList, IconTrash, IconUpload, IconX } from '@t
 
 import { Button } from '@admin/ui/components/button'
 import { DataTablePagination } from '@admin/ui/components/data-table'
+import { QueryError } from '@admin/ui/components/query-error'
 import { Separator } from '@admin/ui/components/separator'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@admin/ui/components/toggle-group'
@@ -15,6 +16,7 @@ import { fetchBytes } from '../../api-client/client'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { ResetButton, TextFilter } from '../_shared/filters'
+import { listState } from '../_shared/list-query'
 import {
   filesQuery,
   formatBytes,
@@ -87,7 +89,9 @@ export function FilePage({
     name: search.name || undefined,
     type: search.type,
   }
-  const { data, isPending, isFetching } = useQuery(filesQuery(params))
+  const listQuery = useQuery(filesQuery(params))
+  const { data, isPending, isFetching } = listQuery
+  const list = listState(listQuery)
   const files = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 1
@@ -307,6 +311,9 @@ export function FilePage({
             >
               {isPending ? (
                 <GridSkeleton view={view} />
+              ) : list.error ? (
+                /* 🔴 排在空态前面 —— 否则接口挂了会显示成「还没有文件」（硬纪律 9） */
+                <QueryError error={list.error} onRetry={list.onRetry} testId="file-error" />
               ) : files.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed py-16">
                   <p className="text-sm text-muted-foreground">

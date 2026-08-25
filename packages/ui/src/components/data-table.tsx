@@ -12,6 +12,8 @@
  *   DataTablePagination        – rows-per-page select + page nav buttons
  *   DataTable                  – full shell: toolbar slot + table + pagination
  *   DataTableSkeletonRows      – 骨架行，供手写 <TableBody> 的树形表格复用
+ *   DataTableErrorRow          – 取数失败的错误块占满一整行，供手写 <TableBody> 复用
+ *                                （错误块本身在 components/query-error.tsx）
  */
 import * as React from "react"
 import {
@@ -41,6 +43,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@admin/ui/components/popover"
+import { QueryError, type QueryErrorProps } from "@admin/ui/components/query-error"
 import { Separator } from "@admin/ui/components/separator"
 import { Skeleton } from "@admin/ui/components/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@admin/ui/components/tooltip"
@@ -408,6 +411,27 @@ export function DataTableSkeletonRows({
   )
 }
 
+// ─── DataTableErrorRow ────────────────────────────────────────────────────────
+
+export interface DataTableErrorRowProps extends QueryErrorProps {
+  /** 表格列数 —— 错误块横跨整行 */
+  columnCount: number
+}
+
+/**
+ * 取数失败的错误块占满一整行。手写 `<TableBody>` 的树形表格（部门 / 菜单）用它，
+ * 位置在原来那个「没有匹配的 xxx」空态分支**之前** —— 顺序反了就又把失败画成空态。
+ */
+export function DataTableErrorRow({ columnCount, ...rest }: DataTableErrorRowProps) {
+  return (
+    <TableRow>
+      <TableCell colSpan={columnCount} className="p-3">
+        <QueryError {...rest} />
+      </TableCell>
+    </TableRow>
+  )
+}
+
 // ─── DataTable (full shell) ───────────────────────────────────────────────────
 
 export interface DataTableProps<
@@ -460,6 +484,17 @@ export interface DataTableProps<
    * 只做整体降透明 + aria-busy，**不拦点击** —— 后台静默 refetch 时行操作仍应可用。
    */
   busy?: boolean
+  /**
+   * 主查询的错误（`useQuery` 的 `error` 原样传进来，没错就是 `null`/`undefined`）。
+   *
+   * 🔴 传了它才不会把失败伪装成空态（硬纪律 9）。两种渲染：
+   * - 没有可显示的行 → 错误块**替换**表体，不再出现「暂无数据」
+   * - 还有上一次成功的行（`placeholderData` 保留的）→ 行照常显示，
+   *   错误块作为横幅挂在表格上方，别把用户正在看的数据抽走
+   */
+  error?: unknown
+  /** 错误块上的「重试」（通常是 `refetch`）。不传就只显示错误，不给入口 */
+  onRetry?: () => void
 }
 
 export function DataTable<
@@ -482,9 +517,13 @@ export function DataTable<
   loading = false,
   skeletonRows = 6,
   busy = false,
+  error,
+  onRetry,
 }: DataTableProps<TFeatures, TData>) {
   const { t } = useTranslation()
   const table = tableProp as AnyTable
+  // 有错但上一次的行还在（翻页失败那种）→ 行留着，错误挂成横幅
+  const errorBanner = Boolean(error) && rows.length > 0
   return (
     /*
      * `content-scroll:` 那几条 = 「内容区滚动」模式下把自己变成**定高的表格视区**：
@@ -514,6 +553,11 @@ export function DataTable<
         </div>
       )}
 
+      {/* ── 错误横幅 ── 还有旧数据可看时用这一条，不动表体 */}
+      {errorBanner && (
+        <QueryError error={error} onRetry={onRetry} className="shrink-0" />
+      )}
+
       {/* ── Table ── */}
       {/* 宽表要横向滚动，不能 overflow-hidden —— 那会把最右侧的操作列裁掉，用户点不到行操作 */}
       <div
@@ -541,6 +585,9 @@ export function DataTable<
           <TableBody className={tableBodyClassName}>
             {loading ? (
               <DataTableSkeletonRows rows={skeletonRows} columns={columnCount} />
+            ) : error && !rows.length ? (
+              /* 🔴 这一支必须排在空态**前面** —— 否则失败会渲染成「暂无数据」 */
+              <DataTableErrorRow columnCount={columnCount} error={error} onRetry={onRetry} />
             ) : rows.length ? (
               rows.map((row) =>
                 renderRow ? (

@@ -32,6 +32,7 @@
 | 「回第一页」 | 写 `page: undefined`，**不是 `page: 1`**。改筛选必须跳回第一页（第 5 页改条件、结果只剩 3 条 → 空页，看着像「什么都没查到」），但写字面量 1 会让 `?page=1` 出现在每个列表页的地址栏 —— 全仓踩了 59 处 + 8 处 `page: i + 1`（从第 2 页点回第 1 页）。见 `_shared/pagination.ts` |
 | 列显隐 | 用 `_shared/use-column-visibility`，URL 里存**被隐藏**的列 id（`hide=browser,os`）。默认全显示所以通常为空，加列也不会让老链接错位 |
 | 空列表 | `DataTable` 的 `emptyAction` 放「清除筛选」—— 空态最常见的成因就是筛选太窄，别逼用户回工具栏找 |
+| **取数失败** | 传 `DataTable` 的 `error` + `onRetry`（错误块横跨表体，还有旧行时改挂横幅），**不要**让它落进 `emptyMessage` —— 失败和空数据是两件事（硬纪律 9）。错误块本身是 `components/query-error.tsx` 的 `QueryError`，全站唯一一份；它认 `ApiError.httpStatus`，403 有专门文案。手写 `<TableBody>` 的表用 `DataTableErrorRow`，插在空态分支**之前** |
 | 树形展开状态 | 用 `useTreeFold`：65 个 19 位雪花 id 塞进 URL 不现实，所以粗粒度（全展开/全折叠）进 URL，细粒度靠 `<Activity>` 保会话 |
 | 后端已支持的筛选要暴露 | 例：`GET /sys/users` 一直支持 `phone`/`dept`/`role`，页面上却只有用户名 + 状态。加筛选前先看一眼接口签名 |
 | 覆盖带变体的基础类 | 必须带**同样的变体前缀**，或改用组件自己的 `size` prop。详见下方「为什么有些覆盖有效、有些无声失效」 |

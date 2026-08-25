@@ -9,6 +9,7 @@ import {
 
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
+import { QueryError } from '@admin/ui/components/query-error'
 import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { meQuery } from '../../auth/queries'
@@ -60,6 +61,14 @@ export function DashboardPage() {
 
   const fails = today.data?.loginFails ?? 0
 
+  /**
+   * 🔴 这一页的每个数字都取自独立的一个查询，失败时全都退化成「—」（硬纪律 9）：
+   * 「今日登录 —」和「今日真的一次登录都没有」在界面上分不出来。
+   * 所以只要有一个查询挂了就把它顶到页头下面，重试复用「刷新」那条链。
+   * `online` 对非超管是 disabled 的（永远不会有 error），不用单独排除。
+   */
+  const firstError = [today, scale, trend, logins, operas, online].find((q) => q.error)?.error
+
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
@@ -86,6 +95,10 @@ export function DashboardPage() {
               {t('刷新')}
             </Button>
           </div>
+
+          {Boolean(firstError) && (
+            <QueryError error={firstError} onRetry={refetchAll} testId="dash-error" />
+          )}
 
           {/* 今日有登录失败就顶上去 —— 这是这一页最该被看见的一条 */}
           {fails > 0 && (
