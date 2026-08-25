@@ -42,7 +42,7 @@
 | **上传大小限制在解析之后才生效** | Starlette 会先把整个请求体收完（> 1 MB 落临时文件）才轮到应用层判 `file.size`，所以 `UPLOAD_*_SIZE_MAX` **拦不住**有人往上传接口灌超大请求。**必须在反代层限 `Content-Length`**（nginx `client_max_body_size`）。 |
 | **公开上传子树无鉴权** | `PUBLIC_UPLOAD_DIR` 被挂在 `/uploads`，**设计上就是不鉴权**（供富文本正文的 `<img src>` 直接加载）。落到那棵树是上传时的显式选择（`?public=true`），且服务端强制只允许图片。私有文件走带鉴权的 `GET /sys/files/{pk}/download`。 |
 | **`/static` 静态挂载** | `FASTAPI_STATIC_FILES=True` 时 `backend/static/` 整个目录公开可读（里面有 11 MB 的 `ip2region_v4.xdb`）。设 `ENVIRONMENT='prod'` 会自动把它关掉；开发默认是开的。 |
-| **按钮级权限无端到端覆盖** | 数据权限的界面语义已由 `apps/web/e2e/tests/data-permission.spec.ts`（25 条）覆盖，但 `<Can>` 门控和路由守卫这一路前端仍无 e2e。服务端侧已经有底：`rbac_verify` 的四道闸有门禁矩阵测试，权限码三份清单（后端 `RequestPermission` / 前端 `<Can perm>` / 种子 `sys_menu.perms`）有静态对账。**服务端始终独立校验权限**，前端门控只是体验层。 |
+| **按钮级权限无端到端覆盖** | 数据权限的界面语义已由 `apps/web/e2e/tests/data-permission.spec.ts`（29 条）覆盖，但 `<Can>` 门控和路由守卫这一路前端仍无 e2e。服务端侧已经有底：`rbac_verify` 的四道闸有门禁矩阵测试，权限码三份清单（后端 `RequestPermission` / 前端 `<Can perm>` / 种子 `sys_menu.perms`）有静态对账。**服务端始终独立校验权限**，前端门控只是体验层。 |
 
 ## 部署前必做 / Before you deploy
 

@@ -172,7 +172,7 @@ await expect(page.locator('[data-visible="true"] table tbody tr').first()).toBeV
 
 ### 数据权限：整批账号建在 `beforeAll`，且**前后端两套测试各看各的**
 
-`data-permission.spec.ts` 是目前最大的一条（25 条用例 / 19 个账号）。
+`data-permission.spec.ts` 是目前最大的一条（29 条用例 / 19 个账号）。
 后端有一份同名矩阵（`apps/api/backend/app/admin/tests/api_v1/test_data_permission.py`），
 两边**不是复制关系**，分工写在两个文件的头注释里：
 
@@ -215,7 +215,7 @@ await expect(page.locator('[data-visible="true"] table tbody tr').first()).toBeV
 可见、编辑禁改编码、删除二次确认、同级重名 vs 跨级同名的回归）、多页签保活
 （折叠状态 + `data-visible` 属性）、任务调度闭环。
 
-加上 **`data-permission.spec.ts`（25 条 / 19 个账号）**——见上一节。
+加上 **`data-permission.spec.ts`（29 条 / 19 个账号）**——见上一节。
 
 **没有**做视觉回归、没有覆盖其余列表页的筛选组合——那些页面共用同一套模板，
 测一次模板 + 抽样几页就够，不是每页都要单独写一条。
