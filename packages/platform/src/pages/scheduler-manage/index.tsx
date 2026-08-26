@@ -289,7 +289,6 @@ export function SchedulerManagePage({
               loading={isFetching}
               actions={
                 <>
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <Can perm="task:scheduler:add">
                     <Button
                       size="sm"
@@ -300,6 +299,7 @@ export function SchedulerManagePage({
                       {t('新增')}
                     </Button>
                   </Can>
+                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
                 </>
               }

@@ -246,7 +246,6 @@ export function UserPage({
               viewsStorageKey="qb:user"
               actions={
                 <>
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   {/* 新增用户后端是 DependsSuperUser（user.py:71），不是权限码校验，
                       按 isSuperuser 直判，别用 <Can perm="..."> 编一个假权限码 */}
                   <SuperOnly>
@@ -263,6 +262,7 @@ export function UserPage({
                     </Button>
                   </SuperOnly>
                   {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
+                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
                   {/*
                   批量条放**左组末尾**：选中行时它才出现，左组往右长进空白里，
