@@ -86,11 +86,15 @@ jobs:
             if (!m) { console.error('brand.ts 里找不到 version 字段'); process.exit(2) }
             const brand = m[1]
             const tag = process.argv[1]
-            if (brand !== tag) {
+            // 允许预发布后缀：brand.ts 是 0.0.1 时，v0.0.1 与 v0.0.1-rc.1 都算一致。
+            // 不允许的话「发到 Release 那一步」就只能拿正式版去试 —— 而那一步恰恰是
+            // 整条流水线里唯一没法本地验证的（要真的往仓库写一个 release）
+            const ok = brand === tag || tag.startsWith(brand + '-')
+            if (!ok) {
               console.error(\`不一致：brand.ts 是 v\${brand}，tag 是 v\${tag}。先改 brand.ts 再重新打 tag。\`)
               process.exit(1)
             }
-            console.log(\`一致：v\${brand}\`)
+            console.log(\`一致：brand.ts v\${brand} ← tag v\${tag}\`)
           " "${{ steps.ver.outputs.value }}"
 
       # 渲染层。⚠️ `VITE_API_BASE` 必须是空：桌面端的后端地址是**运行期配置**
@@ -117,5 +121,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: admin-desktop-${{ steps.ver.outputs.value }}
-          path: apps/desktop/release/**/*.exe
+          # 只要安装包本体 + blockmap（差量更新用）。写 `**/*.exe` 会把
+          # win-unpacked 里的 admin-desktop.exe / elevate.exe 一起卷进来 ——
+          # 实测 artifact 从 ~90MB 涨到 195MB，而那些文件下载下来没用
+          path: |
+            apps/desktop/release/*/*setup.exe
+            apps/desktop/release/*/*setup.exe.blockmap
           if-no-files-found: error
