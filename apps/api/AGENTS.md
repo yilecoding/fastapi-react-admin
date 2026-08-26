@@ -550,6 +550,21 @@ test_init_handles_every_seeded_account` 硬编码断言 `cli.py: _set_admin_pass
 - 种子 SQL 文件里**不能加解释性的独立注释块**（`--` 开头的裸注释会被
   `sql_parser.py` 的白名单校验直接判成非法语句，见「跑测试」一节踩过的坑），
   上面这些"为什么"只能写在这里，不能写进 SQL 文件本身
+- 🔴 **三个方言各自一份文件，靠人工保持同步——没有任何机器校验三份内容对得上。**
+  这批"公开演示"数据最早只加进了 `sql/sqlserver/`，`mysql/`、`postgresql/`
+  两份原地放了半年多还是最初那个 1 部门 + 1 角色 + 2 账号的最小种子，没人发现，
+  因为两条守卫（`test_seeded_password_hashes_cover_every_seeded_account` /
+  `test_model_matches_migrations`）都不比较"三份种子内容是否一致"，只比较
+  "种子里出现的 hash 在不在白名单里"——三份缺两份一样能全绿。
+  这台生产机跑的是 PostgreSQL，公开演示上线之后组织架构一直是那个最小种子，
+  直到有人发现"看着不像回事"才补的。2026-08-26 已把 `mysql`/`postgresql`
+  两份补齐到跟 `sqlserver` 同样的内容（部门/角色/账号语义一致，
+  ID 各方言自己独立一套——`mysql` 恰好和 `sqlserver` 本来就共用同一批 ID，
+  直接照抄；`postgresql` 的基础种子（admin/test/部门/角色）本来就是另一套 ID，
+  改名复用 + 新增部分另起一段 `4000000000000000xxx` 区间）。
+  **以后改这批演示数据，三份 `init_snowflake_test_data.sql` 一起改，
+  改完跑一遍 `test_seeded_password_hashes_cover_every_seeded_account`
+  只能保证 hash 有登记，保证不了三份"部门/角色长得一样"，这条得靠人记。**
 
 ### 有测试的部分 / 没测试的部分
 
