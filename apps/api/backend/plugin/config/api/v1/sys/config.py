@@ -4,7 +4,6 @@ from fastapi import APIRouter, Body, Depends, Path, Query
 
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -19,7 +18,14 @@ from backend.plugin.config.service.config_service import config_service
 router = APIRouter()
 
 
-@router.get('/all', summary='获取所有参数配置', dependencies=[DependsJwtAuth])
+@router.get(
+    '/all',
+    summary='获取所有参数配置',
+    dependencies=[
+        Depends(RequestPermission('sys:config:list')),
+        DependsRBAC,
+    ],
+)
 async def get_all_configs(
     db: CurrentSession,
     type: Annotated[str | None, Query(description='参数配置类型')] = None,
@@ -28,7 +34,14 @@ async def get_all_configs(
     return response_base.success(data=configs)
 
 
-@router.get('/{pk}', summary='获取参数配置详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取参数配置详情',
+    dependencies=[
+        Depends(RequestPermission('sys:config:list')),
+        DependsRBAC,
+    ],
+)
 async def get_config(
     db: CurrentSession, pk: Annotated[int, Path(description='参数配置 ID')]
 ) -> ResponseSchemaModel[GetConfigDetail]:
@@ -40,7 +53,8 @@ async def get_config(
     '',
     summary='分页获取所有参数配置',
     dependencies=[
-        DependsJwtAuth,
+        Depends(RequestPermission('sys:config:list')),
+        DependsRBAC,
         DependsPagination,
     ],
 )

@@ -19,7 +19,14 @@ async def get_user_sidebar(db: CurrentSession, request: Request) -> ResponseSche
     return response_base.success(data=menu)
 
 
-@router.get('/{pk}', summary='获取菜单详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取菜单详情',
+    dependencies=[
+        Depends(RequestPermission('sys:menu:list')),
+        DependsRBAC,
+    ],
+)
 async def get_menu(
     db: CurrentSession, pk: Annotated[int, Path(description='菜单 ID')]
 ) -> ResponseSchemaModel[GetMenuDetail]:
@@ -27,7 +34,14 @@ async def get_menu(
     return response_base.success(data=data)
 
 
-@router.get('', summary='获取菜单树', dependencies=[DependsJwtAuth])
+@router.get(
+    '',
+    summary='获取菜单树',
+    dependencies=[
+        Depends(RequestPermission('sys:menu:list')),
+        DependsRBAC,
+    ],
+)
 async def get_menu_tree(
     db: CurrentSession,
     title: Annotated[str | None, Query(description='菜单标题')] = None,

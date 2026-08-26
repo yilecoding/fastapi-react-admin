@@ -27,7 +27,17 @@ import pytest
 from sqlalchemy import delete, insert
 from starlette.testclient import TestClient
 
-from backend.app.admin.model import DataRule, DataScope, Dept, Role, User, data_scope_rule, role_data_scope, user_role
+from backend.app.admin.model import (
+    DataRule,
+    DataScope,
+    Dept,
+    Role,
+    User,
+    data_scope_rule,
+    role_data_scope,
+    role_menu,
+    user_role,
+)
 from backend.app.admin.utils.password_security import get_hash_password
 from backend.common.enums import RoleDataRuleExpressionType as Expr
 from backend.common.enums import RoleDataRuleOperatorType as Op
@@ -36,6 +46,10 @@ from backend.utils.snowflake import snowflake
 from backend.utils.timezone import timezone
 
 PASSWORD = 'Dp!123456'
+
+# 种子菜单里的「查询」权限锚点（perms='sys:user:list'），不是这次建图新加的资源，
+# 只是借用来满足 rbac_verify 的"至少挂一个菜单"门槛——见 add_role()
+QUERY_SYS_USER_MENU_ID = 2049629108253622330
 
 # 每次跑用一个新后缀，避免和上一次残留的行撞唯一约束 / 撞断言
 RUN = uuid.uuid4().hex[:6].upper()
@@ -78,6 +92,7 @@ async def _build(graph: Graph) -> None:
     r2s: list[dict[str, Any]] = []
     s2r: list[dict[str, Any]] = []
     u2r: list[dict[str, Any]] = []
+    r2m: list[dict[str, Any]] = []
 
     def add_dept(key: str, parent: str | None = None, status: int = 1) -> None:
         pk = _sid()
@@ -145,6 +160,12 @@ async def _build(graph: Graph) -> None:
             'updated_time': None,
         })
         r2s.extend({'id': _sid(), 'role_id': pk, 'data_scope_id': graph.scope[sk]} for sk in scope_keys)
+        # `GET /sys/users` 现在挂了 RBAC（issue #30），没有任何菜单的角色连
+        # rbac_verify 的"用户未分配菜单"这道闸都过不去。种子里的 QuerySysUser
+        # 菜单（perms='sys:user:list'）就是给这类只测数据权限、不关心 RBAC 的
+        # 角色垫底用的——所有这张图里建出来的角色都挂一份，不然每加一个新角色
+        # 都要记得单独补，迟早漏
+        r2m.append({'id': _sid(), 'role_id': pk, 'menu_id': QUERY_SYS_USER_MENU_ID})
 
     def add_user(key: str, role_keys: list[str], *, dept: str | None = 'A1', superuser: bool = False) -> None:
         pk = _sid()
@@ -284,9 +305,11 @@ async def _build(graph: Graph) -> None:
         await conn.execute(insert(data_scope_rule), s2r)
         await conn.execute(insert(role_data_scope), r2s)
         await conn.execute(insert(user_role), u2r)
+        await conn.execute(insert(role_menu), r2m)
 
     graph.rows = {
         user_role: [r['id'] for r in u2r],
+        role_menu: [r['id'] for r in r2m],
         role_data_scope: [r['id'] for r in r2s],
         data_scope_rule: [r['id'] for r in s2r],
         User.__table__: list(graph.user.values()),

@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router"
 import { z } from "zod"
 
-import { requireAuth } from "@admin/platform/auth/guards"
+import { requireSuperUser } from "@admin/platform/auth/guards"
 
 /**
- * Redis 监控。后端 `GET /monitors/redis` 只要 `DependsJwtAuth`（不限超管），
- * 所以这里只做登录校验。
+ * Redis 监控。后端 `GET /monitors/redis` 是 `DependsSuperUser`——之前误配成
+ * `DependsJwtAuth`，跟同组的 `/monitors/server`、`/monitors/sessions` 门槛不一致
+ * （任何登录用户都能读到 Redis 实例信息），2026-08-26 对齐（见 issue #30）。
  */
 const searchSchema = z.object({
   refresh: z.coerce.number().int().min(0).max(3600).optional(),
@@ -17,7 +18,7 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/_auth/monitor/redis")({
   validateSearch: searchSchema,
-  beforeLoad: requireAuth,
+  beforeLoad: requireSuperUser(),
   staticData: { title: "Redis 监控" },
   component: () => null,
 })

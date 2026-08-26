@@ -364,18 +364,52 @@ return or_(and_(*where_and_list), or_(*where_or_list))
 —— 只要有一个启用角色勾了「不过滤数据权限」，其它角色配的限制**一条都不看**。
 给人加角色是「加能力」，这里同时也在「减限制」。实测：`test_one_unfiltered_role_defeats_all_restrictive_roles`。
 
-### 🔴 覆盖面：整个后端只有**一个**接口挂了 `DataPermissionFilter`
+### 🔴 覆盖面：不是每个接口都挂了 `DataPermissionFilter`
 
-`GET /sys/depts`。其余全部裸奔，包括：
+`GET /sys/depts` 是最早接上的一个，后来 `GET /sys/users` 也接了
+（`test_user_list_endpoint_is_filtered`）。**但覆盖面不是靠数一个固定数字来钉的**——
+旧版本这里有一条 `test_data_permission_filter_is_wired_to_exactly_one_endpoint`
+断言"全仓只有一个接口挂了 `DataPermissionFilter`"，覆盖面一扩大它就必然红，
+本身是在记录缺口而不是校验行为。现在换成了
+`test_every_crud_class_declares_its_data_scope_stance`：每个 DAO 类要么继承
+`DataScopedCRUD`（默认过滤），要么显式写 `data_scope_enabled = False` 并说明理由，
+"忘了想这件事"会红——这才是原来那个洞真正的成因。
 
-- `GET /sys/depts/{pk}` —— 列表里看不到 B 部门的账号，**按 ID 直接读得到**
-- `GET /sys/users` —— 既没数据权限也没 `DependsRBAC`，任何登录用户翻得到全部用户
-- `PUT/DELETE /sys/depts/{pk}`、文件、日志、任务执行记录 …… 全部无过滤
-
+`PUT/DELETE /sys/depts/{pk}`、文件、任务执行记录……这类写接口目前仍然全部无过滤，
 所以配「仅本人数据权限」`__ALL__ + __created_by__` 时不要以为它作用于所有模型 ——
 `__ALL__` 说的是「规则匹配哪些模型」，不是「过滤器挂在哪些接口上」。
-`test_data_permission_filter_is_wired_to_exactly_one_endpoint` 把这个数字钉成了 1，
-接上新接口时它会红一次，提醒同步补用例。
+
+### 🔴 GET 也要 RBAC——只挂 `DependsJwtAuth` 等于这条路由退出了鉴权（issue #30）
+
+行级数据权限和接口级 RBAC 是两道**独立**的闸，`filter_data_permission` fail-open
+不代表 `DependsRBAC` 也可以不挂。2026-08-26 之前，`GET /sys/users`、
+`/sys/configs`（+`/all`）、`/sys/data-rules`（+`/all`）、`GET /sys/menus`、
+`GET /monitors/redis`、`/logs/login`、`/logs/opera` 这批读接口**只有
+`DependsJwtAuth`**，没有 `RequestPermission(...)`，也没有 `DependsRBAC`——
+`rbac.py: rbac_verify` 对没声明权限标识的路由是直接 `return`（放行），
+所以这不是漏配一个字符串，是这条路由整个退出了鉴权。实测：一个只绑「仪表盘」
+菜单的账号，直接打 `GET /sys/users` 能拿到全量用户列表（含 email/phone/dept_id），
+打 `GET /logs/opera` 能拿到全量操作日志（含别人的 trace_id/username/IP）。
+`GET` 还额外免了 `is_staff` 校验（`method not in {GET, OPTIONS}` 那个判断），
+读接口比写接口更容易被这类漏配放过。
+
+`/monitors/redis` 那条更离谱：同一个 `/monitors` 前缀下 `/server`、`/sessions`
+都是 `DependsSuperUser`，就它一条是 `DependsJwtAuth`——三条本来就该同一套门槛。
+
+修法是给这批读接口补 `RequestPermission('xxx:list')` + `DependsRBAC`
+（新权限码统一用 `:list` 后缀，跟现成的 `sys:file:list` 对齐，不是随手起的名字），
+**同时必须在种子菜单里补上对应的权限锚点菜单、并挂到需要保留访问的角色上**——
+光加校验不加种子授权，会把当前能用的页面全锁死，这正是 #30 的建议里特别提醒的坑。
+补的时候顺带发现：`test_data_permission.py` 那张自建图（`dp` fixture）里的角色
+一个菜单都没挂——以前用不上，因为它打的接口都没有 `DependsRBAC`；这次给
+`/sys/users` 补上之后必须给每个建出来的角色都挂一份权限锚点菜单（`add_role()`
+里统一处理），不然 `rbac_verify` 里"用户未分配菜单"那道更早的闸就先炸了。
+
+🔴 **`test_permission_codes.py` 那三条三方对账测试抓不住"接口压根没声明权限码"
+这类洞**——它们做的是"后端声明的权限码 vs 前端 vs 种子菜单"三边 diff，一条路由
+如果从来没调用过 `RequestPermission(...)`，根本不会进入被比较的集合，不会有
+任何差集，测试照样全绿。这类洞目前只能靠人工审计接口清单发现，同 `sys/depts`
+那批写接口的裸奔状态一样——不是这次的范围，留作已知缺口。
 
 ### 已修：三个让接口直接 500 的坑
 
