@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 
 import { isRemovable, useTabStore, type Tab } from './tab-store'
@@ -12,6 +13,7 @@ import { isRemovable, useTabStore, type Tab } from './tab-store'
  */
 export function useTabActions() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
 
   const go = React.useCallback((href: string) => void navigate({ to: href }), [navigate])
 
@@ -44,8 +46,24 @@ export function useTabActions() {
       },
       closeAll: () => goKey(s().closeAll()),
       togglePin: (key: string) => s().togglePin(key),
-      /** 重新加载：revision +1，TabOutlet 靠它换 key 重挂页面 */
-      reload: (key: string) => s().reload(key),
+      /**
+       * 重新加载：revision +1，TabOutlet 靠它换 key 重挂页面。
+       *
+       * 🔴 **必须同时把缓存作废**，光重挂是不够的：全局 `staleTime: 30_000`
+       * 让 react-query 认为数据还新鲜，`refetchOnMount` 于是不发请求 ——
+       * 实测「重新加载当前页」在 30 秒内是**空操作**（0 次请求），30 秒后才
+       * 真的重取。一个动作的行为取决于「你上次看它是几秒前」，是最反直觉的
+       * 那种坏（issue #36）。
+       *
+       * `refetchType: 'active'` —— 只有当前可见页面的 query 立刻重取；隐藏 tab
+       * 的 query 没有观察者（`<Activity>` 销毁了 effects），只标记为过期，
+       * 等它被切回来时再取。刻意不改全局 `staleTime`：30 秒是为了「多页签切来
+       * 切去不打后端」，那个理由仍然成立。
+       */
+      reload: (key: string) => {
+        void qc.invalidateQueries({ refetchType: 'active' })
+        s().reload(key)
+      },
       openInNewWindow: (tab: Tab) => window.open(tab.href, '_blank', 'noopener,noreferrer'),
     }
   }, [go, goKey])

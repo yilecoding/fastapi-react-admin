@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { IconFilter, IconSearch, IconTrash, IconX } from '@tabler/icons-react'
+import { IconFilter, IconRefresh, IconSearch, IconTrash, IconX } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import {
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@admin/ui/components/dropdown-menu'
 import { cn } from '@admin/ui/lib/utils'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 import { Combobox } from '@admin/ui/components/combobox'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -286,6 +287,53 @@ export function StatusFilter({
       testId={testId}
       onChange={(v) => onChange(v === undefined ? undefined : Number(v))}
     />
+  )
+}
+
+/**
+ * 列表页的「刷新」——**只重取当前这一页数据**，筛选 / 分页 / 展开 / 滚动全保留。
+ *
+ * 🔴 和标签页右键菜单里的「重新加载」不是一件事：那个是卸载重挂（页面内状态全丢）。
+ * 界面上必须两个都有、且名字不同 —— 想看最新数据的人要的是这个，
+ * 而以前**列表页一个都没有**，只能去标签条上按那个更重的动作（issue #36）。
+ *
+ * ⚠️ 图标按钮，配 tooltip（`packages/ui/AGENTS.md` 那条纪律：
+ * 次要工具动作只留图标，但少了 tooltip 就没人知道它是干什么的）。
+ * **不要用 `disabled` 挡重复点击** —— `buttonVariants` 带
+ * `disabled:pointer-events-none`，一禁用 hover 就打不开 tooltip，
+ * 「进行中」这个状态就没有任何地方读得到了。转圈 + `aria-busy` 表达在途。
+ */
+export function RefreshButton({
+  onClick,
+  busy,
+  testId = 'list-refresh',
+}: {
+  onClick: () => void
+  /** 在途中 —— 图标转圈 */
+  busy?: boolean
+  testId?: string
+}) {
+  const { t } = useTranslation()
+  const trigger = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="size-8 p-0"
+      aria-label={t('刷新')}
+      aria-busy={busy}
+      data-testid={testId}
+      onClick={onClick}
+    />
+  )
+  return (
+    <Tooltip>
+      {/* render 必须直接指向按钮 —— 套一层 display:contents 的包装元素会让气泡
+          飞到视口左上角（见 packages/ui/AGENTS.md） */}
+      <TooltipTrigger render={trigger}>
+        <IconRefresh className={cn('size-4', busy && 'animate-spin')} />
+      </TooltipTrigger>
+      <TooltipContent>{t('刷新')}</TooltipContent>
+    </Tooltip>
   )
 }
 

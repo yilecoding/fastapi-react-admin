@@ -25,7 +25,7 @@ import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { MenuIcon } from '../../shell/icon-registry'
 import { PageHeader } from '../../shell/page-header'
 import { usePlatform } from '../../shell/platform-context'
-import { ResetButton, SelectFilter, StatusFilter, TextFilter } from '../_shared/filters'
+import { RefreshButton, ResetButton, SelectFilter, StatusFilter, TextFilter } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import { StatusBadge, TONE_CLASS } from '../_shared/status'
 import { useTreeFold } from '../_shared/use-tree-fold'
@@ -181,6 +181,7 @@ export function MenuPage({
                 </Tooltip>
               )}
             </span>
+            <RefreshButton busy={isFetching} onClick={list.onRetry} />
             <Can perm="sys:menu:add">
               <Button size="sm" data-testid="add-menu"
                       onClick={() => { setEditing(null); setPresetParent(null); setSheet(true) }}>

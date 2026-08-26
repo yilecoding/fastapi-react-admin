@@ -16,7 +16,7 @@ import { api, type PageData } from '../../api-client/client'
 import { Can } from '../../auth/can'
 import { PageHeader } from '../../shell/page-header'
 import { ClearLogsButton } from '../_shared/clear-logs'
-import { ResetButton } from '../_shared/filters'
+import { RefreshButton, ResetButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
@@ -24,6 +24,10 @@ import { logFeatures as features } from '../_shared/log-features'
 import { StatusPill } from '../_shared/status'
 import { OperaLogDetailSheet, formatLocation } from './detail-sheet'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
+
+/** 这一页列表 query 的 key 前缀。`useQuerySearch` 的 `refreshKey` 也用它 ——
+ *  「点搜索必须真的重取」靠让这个前缀失效实现（见 use-query-search.ts） */
+const LOG_KEY = ['logs', 'opera'] as const
 
 export type OperaLog = {
   id: string
@@ -165,12 +169,13 @@ export function LogOperaPage({
     fields: FIELDS,
     search,
     onSearchChange,
+    refreshKey: LOG_KEY,
     keep: ['hide'],
   })
 
   const qs = buildQuery(q.params, search.page, search.size)
   const listQuery = useQuery({
-    queryKey: ['logs', 'opera', qs],
+    queryKey: [...LOG_KEY, qs],
     queryFn: () => api.GET<PageData<OperaLog>>(`/api/v1/logs/opera?${qs}`),
     placeholderData: (prev) => prev,
   })
@@ -429,6 +434,7 @@ export function LogOperaPage({
               loading={isFetching}
               actions={
                 <>
+                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   {/*
                   这三个是**次要的工具动作**，只留图标：这一行已经有六个控件，
                   留着文字会把主动作（搜索）挤到边上。图标按钮一律配

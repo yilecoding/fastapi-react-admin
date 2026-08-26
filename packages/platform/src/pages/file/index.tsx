@@ -15,7 +15,7 @@ import { Can } from '../../auth/can'
 import { fetchBytes } from '../../api-client/client'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
-import { ResetButton, TextFilter } from '../_shared/filters'
+import { RefreshButton, ResetButton, TextFilter } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import {
   filesQuery,
@@ -91,7 +91,8 @@ export function FilePage({
   }
   const listQuery = useQuery(filesQuery(params))
   const { data, isPending, isFetching } = listQuery
-  const list = listState(listQuery)
+  // 刷新/重试前清掉选中：重取回来可能已经少了几个文件（见 list-query.ts）
+  const list = listState(listQuery, { onBeforeRefetch: () => setSelected(new Set()) })
   const files = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 1
@@ -202,6 +203,7 @@ export function FilePage({
           <div className="flex min-w-0 flex-1 flex-col gap-3 content-scroll:min-h-0">
             {/* 工具栏 */}
             <div className="flex flex-wrap items-center gap-2">
+              <RefreshButton busy={isFetching && !isPending} onClick={list.onRetry} />
               <TextFilter
                 value={search.name ?? ''}
                 placeholder={t('搜索文件名…')}
