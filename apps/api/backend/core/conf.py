@@ -187,6 +187,11 @@ class Settings(BaseSettings):
         # 本项目前端 dev server（端口固定在 vite.config.ts 的 server.port）
         'http://127.0.0.1:8888',
         'http://localhost:8888',
+        # 🔴 桌面端（apps/desktop）的渲染层跑在自定义协议 `app://local` 上，
+        # 对后端就是跨源。漏了这条的表现是「桌面端装好了、页面也出来了，
+        # 但所有接口 CORS 失败」—— 和后端挂了长得一样。
+        # 它不含 localhost / 127.0.0.1，所以不会被 conf.py 末尾那条生产环境检查判成本地来源。
+        'app://local',
     ]
     CORS_EXPOSE_HEADERS: list[str] = [
         'X-Request-ID',

@@ -1,0 +1,121 @@
+# 打 tag 发桌面端安装包。
+#
+# 为什么单独一个 workflow 而不是塞进 ci.yml：这条只在 tag 上跑、要 Windows runner、
+# 要 `contents: write`，和「每次 push 都跑的红绿信号」是两种东西。
+#
+#   git tag v0.0.1 && git push origin v0.0.1
+#
+# 跑完会在 GitHub 上留一个**草稿** release（`electron-builder.yml` 里
+# `releaseType: draft`）—— 安装包能不能装、能不能连上后端，都得人先试一遍再发布。
+#
+# 不打 tag 也能试这条流水线：Actions 里手动触发（workflow_dispatch），
+# 出的包作为 workflow artifact 上传，**不碰 release**。
+# 一条从没跑过的发布流水线，第一次跑一定是在最不该出错的时候。
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '试跑用的版本号（不发布，只出包）'
+        required: false
+        default: '0.0.0-dev'
+
+# 同一个 tag 重复推（删了重打）时，取消上一次未跑完的
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: 桌面端安装包（Windows）
+    # 必须 Windows：NSIS 安装包从 Mac/Linux 交叉打包要 Wine，不做（见 apps/desktop/README.md）
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        # windows runner 默认是 pwsh，而下面用了 `${VAR#v}` 这类 POSIX 展开
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          # 必须放在 pnpm/action-setup 之后 —— 缓存要先知道 pnpm 在哪
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # 版本号的单一来源是 tag。electron-builder 读的是 apps/desktop/package.json，
+      # 所以这里把 tag 写进去（**不提交**，只在这次构建的工作区里生效）。
+      - name: 定版本号
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VER="${GITHUB_REF_NAME#v}"
+          else
+            VER="${{ inputs.version }}"
+          fi
+          echo "value=$VER" >> "$GITHUB_OUTPUT"
+          node -e "
+            const fs = require('fs')
+            const f = 'apps/desktop/package.json'
+            const p = JSON.parse(fs.readFileSync(f, 'utf8'))
+            p.version = process.argv[1]
+            fs.writeFileSync(f, JSON.stringify(p, null, 2) + '\n')
+          " "$VER"
+          echo "桌面端版本号 → $VER"
+
+      # 🔴 tag 和界面上显示的版本必须一致。不校验的话会出现「安装包 0.0.2、
+      # 关于页面写着 v0.0.1」——而这两个数字对不上时，用户报的 bug 属于哪一版
+      # 就没人说得清了。版本的唯一真相是 brand.ts（见根 CLAUDE.md）。
+      - name: 校验 tag 与 brand.ts 一致
+        if: github.event_name == 'push'
+        run: |
+          node -e "
+            const fs = require('fs')
+            const s = fs.readFileSync('apps/web/src/lib/brand.ts', 'utf8')
+            const m = s.match(/version:\s*['\"]v?([^'\"]+)['\"]/)
+            if (!m) { console.error('brand.ts 里找不到 version 字段'); process.exit(2) }
+            const brand = m[1]
+            const tag = process.argv[1]
+            if (brand !== tag) {
+              console.error(\`不一致：brand.ts 是 v\${brand}，tag 是 v\${tag}。先改 brand.ts 再重新打 tag。\`)
+              process.exit(1)
+            }
+            console.log(\`一致：v\${brand}\`)
+          " "${{ steps.ver.outputs.value }}"
+
+      # 渲染层。⚠️ `VITE_API_BASE` 必须是空：桌面端的后端地址是**运行期配置**
+      # （userData/config.json 的 serverUrl），编译期写死会让同一个包只能连一个环境。
+      - name: 构建渲染层
+        env:
+          VITE_API_BASE: ''
+        run: pnpm --filter web build
+
+      - name: 出安装包并发到 Release（草稿）
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm --filter @admin/desktop release
+
+      - name: 只出安装包（手动试跑，不碰 release）
+        if: github.event_name == 'workflow_dispatch'
+        # 显式 `--publish never`：electron-builder 的默认发布策略是 onTagOrDraft，
+        # 不写清楚的话「手动试跑」哪天会突然把包发出去
+        run: pnpm --filter @admin/desktop package:ci
+
+      - name: 上传安装包（试跑时留个下载入口）
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-desktop-${{ steps.ver.outputs.value }}
+          path: apps/desktop/release/**/*.exe
+          if-no-files-found: error

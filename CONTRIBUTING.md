@@ -59,6 +59,27 @@ main（受保护，只能通过 PR 合入）
 > flake 也不例外：它会让一次 PR 的 CI 变红，重跑就过，不需要留档；
 > 真的反复出现，那就是一条值得**人**去写的 bug issue。
 
+## 发版
+
+版本号的唯一真相是 `apps/web/src/lib/brand.ts` 的 `version`（改名字、改版本只动那一处）。
+
+```bash
+# 1. 改 brand.ts 的 version，正常走 PR 合进 main
+# 2. 在 main 上打 tag
+git tag v0.0.1 && git push origin v0.0.1
+```
+
+tag 推上去之后：
+
+| 谁 | 做什么 |
+|---|---|
+| `.github/workflows/release.yml` | Windows runner 出桌面端 NSIS 安装包 → 传成 GitHub Release **草稿** |
+| `.github/workflows/ci.yml` 的 `build-images` | 只在 **push 到 main** 时跑，推 `latest` + `sha-<短 SHA>` 两个镜像标签；**不跟 tag** |
+
+- 🔴 **tag 和 `brand.ts` 不一致时 release 会直接失败**（故意的，见 `apps/desktop/README.md`）
+- 草稿 release 要人工确认后再发布：安装包能不能装、能不能连上后端，机器判不了
+- 想试这条流水线又不想留 tag：Actions → Release → Run workflow，出的包只作为 artifact
+
 ## 提 PR 之前
 
 这几道门必须全绿，CI 五个都跑（`static` / `eslint` / `ruff` / `pytest · SQL Server` /

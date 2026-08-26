@@ -110,6 +110,41 @@ pnpm --filter @admin/desktop package        # 出 NSIS 安装包（在 Windows �
 
 > `apps/web` 一行都不用为桌面端改。浏览器版继续能单独构建、单独跑。
 
+### 发布（打 tag 走 CI）
+
+```bash
+# 1. 版本号的唯一真相是 apps/web/src/lib/brand.ts，先改它
+# 2. 打 tag 推上去
+git tag v0.0.1 && git push origin v0.0.1
+```
+
+`.github/workflows/release.yml` 会在 **windows-latest** 上出 NSIS 安装包，
+传到 GitHub Release 并留成**草稿**（`electron-builder.yml` 的 `releaseType: draft`）——
+安装包能不能装、能不能连上后端，得人先试一遍再点发布。
+
+三条要知道的：
+
+- 🔴 **tag 必须和 `brand.ts` 的 `version` 一致**，不一致 CI 直接失败。不校验的话会
+  出现「安装包 0.0.2、关于页面写着 v0.0.1」，而这两个数字对不上时，用户报的 bug
+  属于哪一版就没人说得清了。`apps/desktop/package.json` 的 `version` 由 CI 从 tag
+  写入（**不提交**）—— 它只是 electron-builder 的输入，不是第二个真相
+- **CI 出的包是未签名的、且读卡器是桩模式**（`resources/` 里没有厂商的
+  `ReadCard.exe`，那是客户现场的东西，不进仓库）。内测够用；正式交付要在能访问
+  证书的机器上打，见上面「部署时要记得的三件事」
+- **不打 tag 也能试这条流水线**：Actions → Release → Run workflow，出的包作为
+  workflow artifact 上传，**不碰 release**。一条从没跑过的发布流水线，
+  第一次跑一定是在最不该出错的时候
+
+自动更新有两个源，优先级从上到下（`src/main/updater.ts`）：
+
+| 源 | 什么时候用 | 怎么配 |
+|---|---|---|
+| generic（静态 HTTP） | 交付给内网客户 —— 他们出不去公网 | 客户机 `userData/config.json` 里填 `updateUrl` |
+| GitHub Release | 自己内测 / 开源分发 | 什么都不用配，打包时已经写进 `app-update.yml` |
+
+⚠️ 一份包同时支持两种源，不用为内网单独打一版。以前只支持第一种：没配 `updateUrl`
+就直接不检查更新，而界面显示「已是最新版本」—— 一个看不出来的假阴性。
+
 ## 渲染层怎么用
 
 ```ts
@@ -207,6 +242,13 @@ await desktop().devices.start("card-reader")
    只传 pageSize → 60.367 × 40.217mm（偏大 0.61%）；`preferCSSPageSize` + `@page` →
    59.944 × 39.878mm（偏差 0.09%）；两个都给且有 `@page` → 取准的那个。
    （Chromium 把页面尺寸量化到 1/300 英寸 = 0.24pt，做不到零误差，但能少叠一层换算误差。）
+
+**仍未验证**：
+
+- ⚠️ **发布流水线（`.github/workflows/release.yml`）没有在真 Windows runner 上跑过。**
+  它只在本地做过 YAML 解析与脚本推演；NSIS 打包、图标转换（`build/icon.png`
+  1024×1024 → ico）、上传 Release 这三步第一次真跑就是第一次打 tag。
+  想提前排掉风险就先用 workflow_dispatch 空跑一次
 
 **仍未验证（必须真硬件）**：
 

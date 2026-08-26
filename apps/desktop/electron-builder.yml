@@ -11,6 +11,10 @@ directories:
   output: release/${version}
   buildResources: build
 
+# 默认名字是 `Admin Desktop Setup 0.0.1.exe` —— 带空格的文件名进 GitHub Release
+# 下载链接会变成一串 `%20`，也不好写进部署脚本。显式压平：
+artifactName: admin-desktop-${version}-setup.${ext}
+
 # 只把主进程/preload 的产物和 package.json 打进 asar。
 # 渲染层与原生助手都走 extraResources（见下），**故意放在 asar 外面**。
 files:
@@ -59,8 +63,19 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
 
-# 自动更新源。generic 就是一个能列目录的静态 HTTP 服务，用现成的 IIS 即可。
-# 打包时如果不需要发布，把整段注掉。
-# publish:
-#   provider: generic
-#   url: https://releases.example.com/desktop
+# ── 发布源 ──
+#
+# 这里配的是**打包时写进 `app-update.yml` 的那个源**，也就是 electron-updater
+# 默认会去问的地方。CI 打 tag 出包时 `--publish always` 会把安装包 + `latest.yml`
+# 一起传到 GitHub Release（默认建**草稿**，人工确认后再发布）。
+#
+# ⚠️ 交付给客户时通常不能用 GitHub：客户内网出不去。那时**不改这里**，
+# 在客户机的 `userData/config.json` 里填 `updateUrl` 指向内网静态服务即可 ——
+# `src/main/updater.ts` 优先用它，没填才回落到这份 app-update.yml。
+# 一份包同时支持两种升级源，不用为内网单独打一版。
+publish:
+  provider: github
+  owner: yilecoding
+  repo: fastapi-react-admin
+  # 先发草稿：安装包能不能装、能不能连上后端，都得人先试一遍
+  releaseType: draft
