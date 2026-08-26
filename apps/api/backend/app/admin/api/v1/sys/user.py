@@ -30,7 +30,14 @@ async def get_current_user(request: Request) -> ResponseSchemaModel[GetCurrentUs
     return response_base.success(data=data)
 
 
-@router.get('/{pk}', summary='获取用户信息', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取用户信息',
+    dependencies=[
+        Depends(RequestPermission('sys:user:list')),
+        DependsRBAC,
+    ],
+)
 async def get_userinfo(
     db: CurrentSession,
     pk: Annotated[int, Path(description='用户 ID')],
@@ -51,7 +58,8 @@ async def get_user_roles(
     '',
     summary='分页获取所有用户',
     dependencies=[
-        DependsJwtAuth,
+        Depends(RequestPermission('sys:user:list')),
+        DependsRBAC,
         DependsPagination,
     ],
 )
