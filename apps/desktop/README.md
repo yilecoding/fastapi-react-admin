@@ -131,9 +131,11 @@ git tag v0.0.1 && git push origin v0.0.1
 - **CI 出的包是未签名的、且读卡器是桩模式**（`resources/` 里没有厂商的
   `ReadCard.exe`，那是客户现场的东西，不进仓库）。内测够用；正式交付要在能访问
   证书的机器上打，见上面「部署时要记得的三件事」
-- **不打 tag 也能试这条流水线**：Actions → Release → Run workflow，出的包作为
-  workflow artifact 上传，**不碰 release**。一条从没跑过的发布流水线，
-  第一次跑一定是在最不该出错的时候
+- **两种试跑方式**（一条从没跑过的发布流水线，第一次跑一定是在最不该出错的时候）：
+  - Actions → Release → Run workflow：只出包 + 上传成 workflow artifact，**不碰 release**
+  - 打个预发布 tag（`v0.0.1-rc.1`）：**把「发到 Release」那一步也走一遍** ——
+    这是整条流水线里唯一没法本地验证的部分。版本校验允许预发布后缀，
+    `brand.ts` 是 0.0.1 时 `v0.0.1-rc.1` 算一致
 
 自动更新有两个源，优先级从上到下（`src/main/updater.ts`）：
 
