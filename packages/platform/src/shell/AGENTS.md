@@ -120,6 +120,13 @@ inset（SidebarInset）       content-scroll:min-h-0
   透传到 `Popup` 是无效的（`ui/dropdown-menu.tsx` 已补透传）。锚到鼠标坐标用零尺寸虚拟矩形
 - **「重新加载」= `revision + 1`**，`TabOutlet` 把它拼进页面组件的 key → 卸载重挂。
   `<Activity>` 保活的页面不换 key 是刷不掉的（state 和已取数据都会留着）
+- 🔴 **但光重挂不够，必须同时 `invalidateQueries`。** 全局 `staleTime: 30_000` 让
+  react-query 认为数据还新鲜，`refetchOnMount` 于是不发请求 —— 实测「重新加载当前页」
+  在 30 秒内是**空操作**（0 次请求），30 秒后才真的重取。一个动作的行为取决于
+  「你上次看它是几秒前」，是最反直觉的那种坏（issue #36）。
+  用 `refetchType: 'active'`：只有当前可见页面立刻重取，隐藏 tab 的 query 没有观察者
+  （`<Activity>` 销毁了 effects），只标记过期、等切回来再取。
+  **刻意不改全局 `staleTime`** —— 30 秒是为了「多页签切来切去不打后端」，那条理由仍然成立
 - 活动 tab 自动滚入视区时，`querySelector` **必须从标签条自己的 ref 往下找** ——
   隐藏 tab 的页面 DOM 还在文档树里（见硬纪律 5）
 - 滚轮横滚要**手动注册非 passive 监听**：React 的 `onWheel` 是 passive 的，

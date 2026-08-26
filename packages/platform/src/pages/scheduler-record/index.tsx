@@ -8,7 +8,7 @@ import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 
 import { PageHeader } from '../../shell/page-header'
-import { ResetButton } from '../_shared/filters'
+import { RefreshButton, ResetButton } from '../_shared/filters'
 import { logFeatures as features } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { StatusPill } from '../_shared/status'
@@ -19,6 +19,7 @@ import {
   RESULT_STATUS_FILTER_ITEMS,
   RESULT_STATUS_LABEL,
   RESULT_STATUS_TONE,
+  resultKeys,
   resultsQuery,
   type TaskResult,
 } from './api'
@@ -95,7 +96,7 @@ export function SchedulerRecordPage({
     [onSearchChange, search]
   )
 
-  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, keep: ['hide'] })
+  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, keep: ['hide'], refreshKey: resultKeys.all })
 
   const listQuery = useQuery(
     resultsQuery({ page, size, ...(q.params as Record<string, string>) })
@@ -229,7 +230,12 @@ export function SchedulerRecordPage({
               onReset={q.reset}
               applied={q.applied}
               loading={isFetching}
-              actions={<DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />}
+              actions={
+                <>
+                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
+                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+                </>
+              }
             />
 
             <div

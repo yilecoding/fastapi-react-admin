@@ -32,7 +32,13 @@ export type ListStateProps = {
   busy: boolean
   /** 取数失败 —— 传给 `DataTable` / `MasterList` 渲染错误块，不是空态 */
   error: unknown
-  /** 错误块上的「重试」 */
+  /**
+   * 重新取一次。
+   *
+   * 两个调用方共用它：错误块上的「重试」，以及工具行的「刷新」按钮
+   * （`_shared/filters.tsx` 的 `RefreshButton`）—— 两者要做的事完全一样，
+   * 不该有两条路径。
+   */
   onRetry: () => void
 }
 
@@ -52,14 +58,27 @@ export function listState(
      * 照搬会让骨架屏一直转（字典页没选类型时踩过）。
      */
     enabled?: boolean
+    /**
+     * 重取之前先做一件事。**有行选中的页面必须传 `() => setRowSelection({})`**：
+     *
+     * 🔴 重取回来的行可能已经不在了（别人删了 / 状态改了），而选中态是按
+     * `getRowId` 存的一组 id —— 留着它，接下来的批量删除会打到**用户看不见的
+     * 记录**上，而界面上没有任何异常（同硬纪律「改筛选要清 rowSelection」那条，
+     * 只是触发方式从「换条件」变成了「点刷新」）。
+     */
+    onBeforeRefetch?: () => void
   }
 ): ListStateProps {
   const enabled = options?.enabled ?? true
   const loading = enabled && query.isPending
+  const before = options?.onBeforeRefetch
   return {
     loading,
     busy: query.isFetching && !loading && !query.isFetchingNextPage,
     error: query.error ?? undefined,
-    onRetry: () => void query.refetch(),
+    onRetry: () => {
+      before?.()
+      void query.refetch()
+    },
   }
 }

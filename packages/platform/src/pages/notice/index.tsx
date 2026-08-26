@@ -11,10 +11,10 @@ import { QueryBar, countActive, type FilterField } from '@admin/ui/components/qu
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
-import { BulkBar, ResetButton } from '../_shared/filters'
+import { BulkBar, RefreshButton, ResetButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
-import { noticesQuery, useDeleteNotices, type Notice, type NoticeListParams } from './api'
+import { noticeKeys, noticesQuery, useDeleteNotices, type Notice, type NoticeListParams } from './api'
 import { COLUMN_LABELS, buildColumns } from './columns'
 import { NoticeDetailSheet } from './detail-sheet'
 import { features } from './table-features'
@@ -109,7 +109,7 @@ export function NoticePage({
    * 可见行里，批量删除会打到看不见的记录上（原来 `patch` 顺手做的那件事）。
    */
   // 这一页的列显隐是组件内 state（没进 URL），所以 keep 里没有 'hide'
-  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange })
+  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, refreshKey: noticeKeys.all })
   const submitQuery = React.useCallback(
     (v: Parameters<typeof q.submit>[0]) => {
       setRowSelection({})
@@ -121,7 +121,7 @@ export function NoticePage({
   const params = { page, size, ...q.params } as NoticeListParams
   const listQuery = useQuery(noticesQuery(params))
   const { data, isFetching } = listQuery
-  const list = listState(listQuery)
+  const list = listState(listQuery, { onBeforeRefetch: () => setRowSelection({}) })
   const rows = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 1
@@ -187,6 +187,7 @@ export function NoticePage({
               viewsStorageKey="qb:notice"
               actions={
                 <>
+                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <Can perm="sys:notice:add">
                     <Button
                       size="sm"

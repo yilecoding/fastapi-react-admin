@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
 import {
   emptyQuery, fromUrlParams, nextId, toQueryParams, toUrlParams, urlParamKeys,
@@ -62,12 +63,29 @@ export function useQuerySearch<S extends QuerySearch>({
   onSearchChange,
   /** 写回 URL 时要保留的键（`hide`、`section` 这种和筛选无关的视图状态） */
   keep,
+  /**
+   * 这一页列表 query 的 key 前缀（如 `userKeys.all`）。
+   *
+   * 🔴 传了它，「搜索」才是**幂等**的：条件一个字都没改时再点一次，也会真的
+   * 重新取一次数据。不传的话点搜索**什么都不会发生** —— `submit` 只写 URL，
+   * 条件没变 → URL 不变 → queryKey 不变 → 全局 `staleTime: 30_000` 让
+   * react-query 直接给缓存，连 spinner 都不闪（实测 0 次请求，issue #36）。
+   *
+   * 用户点搜索的心智模型是「照这些条件再查一次」，不是「如果条件变了才查」。
+   *
+   * ⚠️ 为什么是 key 前缀而不是直接收一个 `refetch`：`refetch` 来自
+   * `useQuery`，而 `useQuery` 的入参又来自这个 hook 返回的 `params` ——
+   * 顺序上拿不到。key 工厂是模块级常量，没有这个问题。
+   */
+  refreshKey,
 }: {
   fields: readonly FilterField[]
   search: S
   onSearchChange?: (next: S) => void
   keep?: readonly (keyof S)[]
+  refreshKey?: readonly unknown[]
 }) {
+  const qc = useQueryClient()
   /**
    * URL 里那一份 = **已经生效的那一份**。
    *
@@ -119,8 +137,10 @@ export function useQuerySearch<S extends QuerySearch>({
       Object.assign(out, toUrlParams(next, fields))
       onSearchChange?.(out as S)
       setValue(next)
+      // 条件没变时 URL 不变、queryKey 不变，只能靠这一下把缓存作废（见 refreshKey 的注释）
+      if (refreshKey) void qc.invalidateQueries({ queryKey: refreshKey })
     },
-    [fields, keep, managed, onSearchChange, search]
+    [fields, keep, managed, onSearchChange, qc, refreshKey, search]
   )
 
   const reset = React.useCallback(() => write(emptyQuery(fields)), [write, fields])

@@ -26,7 +26,7 @@ pages/xxx/
 | 文件 | 提供 |
 |---|---|
 | `_shared/status.tsx` | `TONE_CLASS` 色板 · `StatusPill` · `StatusBadge`（正常/停用）· `STATUS_FILTER_ITEMS` / `STATUS_FORM_ITEMS` · `YesNoBadge` |
-| `_shared/filters.tsx` | `TextFilter`（回车/失焦才写 URL）· `SelectFilter` · `StatusFilter` · `ResetButton` · `BulkBar` |
+| `_shared/filters.tsx` | `TextFilter`（回车/失焦才写 URL）· `SelectFilter` · `StatusFilter` · `ResetButton` · `BulkBar` · `RefreshButton`（见下「刷新」一节） |
 | `_shared/select-column.tsx` | `buildSelectColumn(col, { canSelect })` —— 表格首列的复选框（含半选态） |
 | `_shared/log-features.ts` | 除用户页外共用的 `tableFeatures()` |
 | `_shared/use-tree-fold.ts` | 树形表格的展开/折叠：URL 只放粗粒度 `fold=all`，逐个节点的展开留组件 state |
@@ -123,6 +123,37 @@ const list = listState(listQuery)               // loading / busy / error / onRe
 |---|---|
 | 次要工具动作（导出 / 清空 / 列） | 图标 + tooltip |
 | 主动作（搜索 / 重置 / 筛选视图） | 带文字 |
+
+### 🔴 「刷新」有三种语义，列表页要暴露的是最轻的那个
+
+| 语义 | 怎么做 | 界面上是谁 |
+|---|---|---|
+| **重取**：只重新请求，筛选 / 分页 / 展开 / 滚动 / 草稿全留着 | `refetch()` / `invalidateQueries` | 工具行的 `RefreshButton`（`_shared/filters.tsx`），接 `listState().onRetry` |
+| **重挂**：组件卸载重建，页面内状态全丢 | tab `revision + 1` **且**让缓存失效 | 标签条 / 右键菜单 / 命令面板的「重新加载当前页」 |
+| **整页**：F5 | 浏览器 | —— |
+
+以前列表页**一个都没有**（只有 plugin 页自己写了一个、主从页左栏有、监控页有），
+想看最新数据只能去标签条上按那个更重的动作，而它在 30 秒内还是空操作。issue #36。
+
+三条实测出来的纪律：
+
+- 🔴 **「搜索」必须是幂等的「照这些条件再查一次」。** `useQuerySearch` 的 `submit`
+  只写 URL —— 条件一个字都没改时 URL 不变、queryKey 不变，全局
+  `staleTime: 30_000` 让 react-query 直接给缓存：**实测 0 次请求**，连 spinner 都不闪，
+  和「刷新过了、数据恰好没变」完全无法区分。所以每个用 `QueryBar` 的页面都要给
+  `useQuerySearch` 传 `refreshKey`（这一页列表 query 的 key 前缀，如 `userKeys.all`），
+  submit / reset 时会顺手把它失效掉
+- 🔴 **刷新要清掉行选中**：`listState(query, { onBeforeRefetch: () => setRowSelection({}) })`。
+  重取回来的行可能已经不在了（别人删了），而选中态是按 `getRowId` 存的一组 id ——
+  留着它，接下来的批量删除会打到**用户看不见的记录**上。这和「改筛选要清 rowSelection」
+  是同一个坑，只是触发方式从「换条件」变成了「点刷新」
+- ⚠️ **刷新按钮不要用 `disabled` 挡重复点击。** `buttonVariants` 带
+  `disabled:pointer-events-none`，一禁用 hover 就打不开 tooltip，而它是个纯图标按钮 ——
+  「进行中」这个状态就没有任何地方读得到了。转圈 + `aria-busy` 表达在途
+
+「最后更新 hh:mm:ss」这一条**还没做**（监控页的 `RefreshBar` 已经有这个口径，
+列表页照抄即可）。自动刷新也没做，也不打算全站开 —— 中后台大多是编辑场景，
+表格自己跳会打断操作；真要给日志/任务记录开，复用监控页「间隔进 URL、0 = 手动」那套。
 
 ### 🔴 时间字段一律过 `formatDateTime`，不许裸渲染
 

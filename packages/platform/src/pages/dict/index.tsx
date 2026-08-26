@@ -20,7 +20,7 @@ import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { MasterList, type MasterListItem } from '../_shared/master-list'
-import { BulkBar, ResetButton, TextFilter } from '../_shared/filters'
+import { BulkBar, RefreshButton, ResetButton, TextFilter } from '../_shared/filters'
 import { logFeatures as features } from '../_shared/log-features'
 import { buildSelectColumn } from '../_shared/select-column'
 import { StatusBadge } from '../_shared/status'
@@ -119,7 +119,10 @@ export function DictPage({
   const { data: datasPage, isFetching } = datasQuery
   // 没选类型时这个 query 是 disabled 的（状态一直停在 pending）——
   // `enabled` 一定要传，否则骨架屏会一直转
-  const dataList = listState(datasQuery, { enabled: Boolean(selectedId) })
+  const dataList = listState(datasQuery, {
+    enabled: Boolean(selectedId),
+    onBeforeRefetch: () => setRowSelection({}),
+  })
   const datas = datasPage?.items ?? []
 
   const [typeSheet, setTypeSheet] = React.useState(false)
@@ -328,6 +331,7 @@ export function DictPage({
                   {...dataList}
                   toolbar={
                     <>
+                      <RefreshButton busy={isFetching} onClick={dataList.onRetry} />
                       <TextFilter
                         value={search.q ?? ''}
                         placeholder={t("搜索字典项…")}
