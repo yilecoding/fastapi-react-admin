@@ -374,7 +374,6 @@ export function LogLoginPage({
               loading={isFetching}
               actions={
                 <>
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   {/*
                   这三个是**次要的工具动作**，只留图标：这一行已经有六个控件，
                   留着文字会把主动作（搜索）挤到边上。图标按钮一律配
@@ -416,6 +415,7 @@ export function LogLoginPage({
                   {/* 日志只增不减，之前界面上没有任何清理入口 —— 权限码 log:login:clear 一直闲置 */}
                   <ClearLogsButton kind="login" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
                   {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
+                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
                 </>
               }

@@ -203,7 +203,6 @@ export function FilePage({
           <div className="flex min-w-0 flex-1 flex-col gap-3 content-scroll:min-h-0">
             {/* 工具栏 */}
             <div className="flex flex-wrap items-center gap-2">
-              <RefreshButton busy={isFetching && !isPending} onClick={list.onRetry} />
               <TextFilter
                 value={search.name ?? ''}
                 placeholder={t('搜索文件名…')}
@@ -247,6 +246,7 @@ export function FilePage({
                   </>
                 )}
 
+                <RefreshButton busy={isFetching && !isPending} onClick={list.onRetry} />
                 <ToggleGroup
                   value={[view]}
                   onValueChange={(v) => {

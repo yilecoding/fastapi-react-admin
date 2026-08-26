@@ -1,6 +1,13 @@
 import { expect, test } from "../fixtures/base"
 
 /**
+ * ⚠️ 定位一律按 **routeId** 收窄（`[data-tab="/_auth/system/user"]`）：
+ * 隐藏 tab 的 DOM 也在文档树里，多开一个列表页就有第二个
+ * `data-testid="list-refresh"`，strict mode 会当场撞两个（见根 CLAUDE.md 硬纪律 5）。
+ */
+const PAGE = '[data-tab="/_auth/system/user"]'
+
+/**
  * 列表页的「取最新」三条路径（issue #36 的回归）。
  *
  * 🔴 这一组**只能靠数请求**来验：这三个动作在界面上都长得像「有反应」
@@ -23,13 +30,13 @@ test.describe("列表页刷新", () => {
 
     // ① 条件一个字都没改，再点一次搜索 —— 用户的心智模型是「照这些条件再查一次」
     const afterLoad = hits.length
-    await page.getByRole("button", { name: "搜索" }).click()
+    await page.locator(`${PAGE} button`).filter({ hasText: "搜索" }).first().click()
     await expect.poll(() => hits.length, { timeout: 5000 }).toBeGreaterThan(afterLoad)
 
     // ② 工具行的刷新按钮：只重取，筛选/分页都留着
     const beforeRefresh = hits.length
     const url = page.url()
-    await page.getByTestId("list-refresh").click()
+    await page.locator(`${PAGE} [data-testid="list-refresh"]`).click()
     await expect.poll(() => hits.length, { timeout: 5000 }).toBeGreaterThan(beforeRefresh)
     expect(page.url()).toBe(url)
 
@@ -50,7 +57,7 @@ test.describe("列表页刷新", () => {
 
     // 🔴 刷新要把选中清掉：重取回来的行可能已经不在了，而选中态是按 id 存的 ——
     // 留着它，接下来的批量删除会打到用户看不见的记录上
-    await page.getByTestId("list-refresh").click()
+    await page.locator(`${PAGE} [data-testid="list-refresh"]`).click()
     await expect(page.getByTestId("bulk-count")).toBeHidden()
   })
 })

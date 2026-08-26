@@ -187,7 +187,6 @@ export function NoticePage({
               viewsStorageKey="qb:notice"
               actions={
                 <>
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <Can perm="sys:notice:add">
                     <Button
                       size="sm"
@@ -201,6 +200,7 @@ export function NoticePage({
                       {t('新增公告')}
                     </Button>
                   </Can>
+                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
                   {/* 批量条放左组末尾：它随选中行出现/消失，放右组会让「搜索/重置」横向位移 */}
                   <Can perm="sys:notice:del">

@@ -329,9 +329,11 @@ export function DictPage({
                     ) : undefined
                   }
                   {...dataList}
+                  // 「刷新」和「列」是一组次要图标工具，聚在右端；
+                  // 左边的 toolbar 留给筛选与批量条
+                  actions={<RefreshButton busy={isFetching} onClick={dataList.onRetry} />}
                   toolbar={
                     <>
-                      <RefreshButton busy={isFetching} onClick={dataList.onRetry} />
                       <TextFilter
                         value={search.q ?? ''}
                         placeholder={t("搜索字典项…")}

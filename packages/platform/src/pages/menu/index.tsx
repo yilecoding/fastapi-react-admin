@@ -181,13 +181,13 @@ export function MenuPage({
                 </Tooltip>
               )}
             </span>
-            <RefreshButton busy={isFetching} onClick={list.onRetry} />
             <Can perm="sys:menu:add">
               <Button size="sm" data-testid="add-menu"
                       onClick={() => { setEditing(null); setPresetParent(null); setSheet(true) }}>
                 <IconPlus className="size-4" />{t('新增菜单')}
               </Button>
             </Can>
+            <RefreshButton busy={isFetching} onClick={list.onRetry} />
           </div>
 
           {/* 有旧数据可看时（重取失败那种）不抽走表格，错误挂成横幅 */}
