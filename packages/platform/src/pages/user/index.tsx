@@ -11,7 +11,7 @@ import { QueryBar, countActive, type FilterField } from '@admin/ui/components/qu
 import { Can, SuperOnly } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
-import { BulkBar, ResetButton } from '../_shared/filters'
+import { BulkBar, RefreshButton, ResetButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
@@ -19,6 +19,7 @@ import {
   allRolesQuery,
   deptTreeQuery,
   flattenDepts,
+  userKeys,
   usersQuery,
   useDeleteUser,
   useDeleteUsers,
@@ -159,7 +160,7 @@ export function UserPage({
    * ⚠️ 搜索/重置时要**清掉选中行**：分页在服务端，换了筛选条件之后留着的选中项
    * 已经不在可见行里了，批量删除会打到用户看不见的记录上（原来 `patch` 里做的那件事）。
    */
-  const q = useQuerySearch({ fields, search, onSearchChange, keep: ['hide'] })
+  const q = useQuerySearch({ fields, search, onSearchChange, keep: ['hide'], refreshKey: userKeys.all })
   const submitQuery = React.useCallback(
     (v: Parameters<typeof q.submit>[0]) => {
       setRowSelection({})
@@ -172,7 +173,8 @@ export function UserPage({
   const params = { page, size, ...q.params } as UserListParams
   const listQuery = useQuery(usersQuery(params))
   const { data, isFetching } = listQuery
-  const list = listState(listQuery)
+  // 刷新/重试前清掉选中：重取回来的行可能已经不在了（见 list-query.ts 的注释）
+  const list = listState(listQuery, { onBeforeRefetch: () => setRowSelection({}) })
   const rows = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 1
@@ -244,6 +246,7 @@ export function UserPage({
               viewsStorageKey="qb:user"
               actions={
                 <>
+                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   {/* 新增用户后端是 DependsSuperUser（user.py:71），不是权限码校验，
                       按 isSuperuser 直判，别用 <Can perm="..."> 编一个假权限码 */}
                   <SuperOnly>

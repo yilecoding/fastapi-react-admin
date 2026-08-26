@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/to
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
-import { ResetButton } from '../_shared/filters'
+import { RefreshButton, ResetButton } from '../_shared/filters'
 import { logFeatures as features } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { StatusPill } from '../_shared/status'
@@ -24,7 +24,7 @@ import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import {
   SCHEDULER_TYPE_LABEL,
-  describeSchedule, schedulerMetaQuery, schedulersQuery,
+  describeSchedule, schedulerKeys, schedulerMetaQuery, schedulersQuery,
   useDeleteSchedulers, useRunScheduler, useToggleScheduler,
   type TaskScheduler,
 } from './api'
@@ -82,7 +82,7 @@ export function SchedulerManagePage({
     [onSearchChange, search]
   )
 
-  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, keep: ['hide'] })
+  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, keep: ['hide'], refreshKey: schedulerKeys.all })
   const listQuery = useQuery(
     schedulersQuery({ page, size, ...(q.params as Record<string, string>) })
   )
@@ -289,6 +289,7 @@ export function SchedulerManagePage({
               loading={isFetching}
               actions={
                 <>
+                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <Can perm="task:scheduler:add">
                     <Button
                       size="sm"
