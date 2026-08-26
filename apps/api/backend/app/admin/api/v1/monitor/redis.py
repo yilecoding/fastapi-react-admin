@@ -2,13 +2,16 @@ from fastapi import APIRouter
 
 from backend.app.admin.schema.monitor import RedisCommandStat, RedisMonitorInfo, RedisServerInfo
 from backend.common.response.response_schema import ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth
+from backend.common.security.jwt import DependsSuperUser
 from backend.database.redis import redis_client
 
 router = APIRouter()
 
 
-@router.get('', summary='Redis 监控', dependencies=[DependsJwtAuth])
+# 🔴 之前是 DependsJwtAuth——同组的 /monitors/server、/monitors/sessions 都是
+# DependsSuperUser，这条独漏了，任何登录用户都能读到 Redis 实例信息（见 issue #30）。
+# 三条本来就该同一套门槛，这里补齐，不是新加限制。
+@router.get('', summary='Redis 监控', dependencies=[DependsSuperUser])
 async def get_redis_info() -> ResponseSchemaModel[RedisMonitorInfo]:
     info = await redis_client.info()
     db_size = await redis_client.dbsize()

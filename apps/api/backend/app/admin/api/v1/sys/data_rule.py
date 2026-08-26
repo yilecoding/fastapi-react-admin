@@ -41,13 +41,27 @@ async def get_data_rule_value_template_variables() -> ResponseSchemaModel[list[G
     return response_base.success(data=variables)
 
 
-@router.get('/all', summary='获取所有数据规则', dependencies=[DependsJwtAuth])
+@router.get(
+    '/all',
+    summary='获取所有数据规则',
+    dependencies=[
+        Depends(RequestPermission('data:rule:list')),
+        DependsRBAC,
+    ],
+)
 async def get_all_data_rules(db: CurrentSession) -> ResponseSchemaModel[list[GetDataRuleDetail]]:
     data = await data_rule_service.get_all(db=db)
     return response_base.success(data=data)
 
 
-@router.get('/{pk}', summary='获取数据规则详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取数据规则详情',
+    dependencies=[
+        Depends(RequestPermission('data:rule:list')),
+        DependsRBAC,
+    ],
+)
 async def get_data_rule(
     db: CurrentSession,
     pk: Annotated[int, Path(description='数据规则 ID')],
@@ -60,7 +74,8 @@ async def get_data_rule(
     '',
     summary='分页获取所有数据规则',
     dependencies=[
-        DependsJwtAuth,
+        Depends(RequestPermission('data:rule:list')),
+        DependsRBAC,
         DependsPagination,
     ],
 )
