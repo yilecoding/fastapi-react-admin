@@ -123,7 +123,6 @@ export function DeptPage({
               {foldAll ? <IconChevronsDown className="size-4" /> : <IconChevronsUp className="size-4" />}
               {foldAll ? t('展开全部') : t('折叠全部')}
             </Button>
-            <RefreshButton busy={isFetching} onClick={list.onRetry} />
             <span className="ms-auto text-sm text-muted-foreground">{t('共 {{n}} 个部门', { n: total })}</span>
             <Can perm="sys:dept:add">
               <Button size="sm" data-testid="add-dept" onClick={() => openCreate(null)}>
@@ -131,6 +130,7 @@ export function DeptPage({
                 {t('新增部门')}
               </Button>
             </Can>
+            <RefreshButton busy={isFetching} onClick={list.onRetry} />
           </div>
 
           {/* 有旧数据可看时（重取失败那种）不抽走表格，错误挂成横幅 */}

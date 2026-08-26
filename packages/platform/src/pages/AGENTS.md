@@ -135,7 +135,12 @@ const list = listState(listQuery)               // loading / busy / error / onRe
 以前列表页**一个都没有**（只有 plugin 页自己写了一个、主从页左栏有、监控页有），
 想看最新数据只能去标签条上按那个更重的动作，而它在 30 秒内还是空操作。issue #36。
 
-三条实测出来的纪律：
+**摆放位置固定**：主动作（新增 / 导出，带文字的）在前，次要图标工具聚在最右 ——
+`… [新增] [刷新] [列]`。刷新**贴着「列」**，两个都是纯图标的一天点不了一次的工具，
+分开摆会让人以为它们是两类东西。没有「列」的页面（树形页 / 文件页）就放在那一行最右端
+（文件页贴着视图切换那组图标）。
+
+四条实测出来的纪律：
 
 - 🔴 **「搜索」必须是幂等的「照这些条件再查一次」。** `useQuerySearch` 的 `submit`
   只写 URL —— 条件一个字都没改时 URL 不变、queryKey 不变，全局
@@ -147,6 +152,9 @@ const list = listState(listQuery)               // loading / busy / error / onRe
   重取回来的行可能已经不在了（别人删了），而选中态是按 `getRowId` 存的一组 id ——
   留着它，接下来的批量删除会打到**用户看不见的记录**上。这和「改筛选要清 rowSelection」
   是同一个坑，只是触发方式从「换条件」变成了「点刷新」
+- ⚠️ **E2E 定位刷新按钮要按 routeId 收窄**（`[data-tab="/_auth/system/user"] [data-testid="list-refresh"]`）：
+  隐藏 tab 的 DOM 也在文档树里，多开一个列表页就有第二个同名 testid，
+  strict mode 当场撞两个（硬纪律 5）
 - ⚠️ **刷新按钮不要用 `disabled` 挡重复点击。** `buttonVariants` 带
   `disabled:pointer-events-none`，一禁用 hover 就打不开 tooltip，而它是个纯图标按钮 ——
   「进行中」这个状态就没有任何地方读得到了。转圈 + `aria-busy` 表达在途
