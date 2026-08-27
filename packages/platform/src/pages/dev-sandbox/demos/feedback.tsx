@@ -2,11 +2,26 @@ import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { Progress, ProgressLabel, ProgressValue } from '@admin/ui/components/progress'
 import { Skeleton } from '@admin/ui/components/skeleton'
-import { toast, type ToastTone } from '@admin/ui/components/toast'
+import {
+  setToastPosition,
+  toast,
+  TOAST_POSITIONS,
+  type ToastPosition,
+  type ToastTone,
+} from '@admin/ui/components/toast'
 
 import { action, b, jsx, lines, n, preview, s, type Demo } from '../kit'
 
 const TONES: ToastTone[] = ['message', 'success', 'info', 'warning', 'error', 'loading']
+
+const POSITION_LABEL: Record<ToastPosition, string> = {
+  'top-start': '左上',
+  'top-center': '顶部居中',
+  'top-end': '右上（默认）',
+  'bottom-start': '左下',
+  'bottom-center': '底部居中',
+  'bottom-end': '右下',
+}
 
 /** 假装一个会成功/失败的请求，给 promise 那一行用 */
 const fakeRequest = (ms: number, ok: boolean) =>
@@ -29,8 +44,25 @@ export const FEEDBACK_DEMOS: Demo[] = [
       description: { kind: 'text', label: '描述', default: '' },
       action: { kind: 'bool', label: '带操作按钮', default: false },
       sticky: { kind: 'bool', label: '不自动消失', default: false, hint: '等价于 timeout: 0' },
+      position: {
+        kind: 'select',
+        label: 'position',
+        options: TOAST_POSITIONS,
+        default: 'top-end',
+        hint: '视口是全局单例（app.tsx 只挂一次），切换会立刻影响整个应用当前弹出的位置',
+      },
     },
     rows: [
+      {
+        title: '位置',
+        hint: '六个方位都是 CSS 定位，不是库自带的 —— Base UI 的 Toast 本身不提供 position。点一下就切走全局视口，其余组件示例不受影响。',
+        items: TOAST_POSITIONS.map((position) =>
+          action(POSITION_LABEL[position], () => {
+            setToastPosition(position)
+            toast.message(`已切到「${POSITION_LABEL[position]}」`)
+          })
+        ),
+      },
       {
         title: '类型',
         hint: 'message 是中性通知（无语气色）；loading 转圈且不自动消失，要靠 update 收尾。',
@@ -127,10 +159,14 @@ export const FEEDBACK_DEMOS: Demo[] = [
     ],
     render: (v) => {
       const tone = s(v, 'tone') as ToastTone
+      const position = s(v, 'position') as ToastPosition
       return (
         <div className="flex flex-col items-center gap-3">
           <Button
-            onClick={() =>
+            onClick={() => {
+              // position 是 <Toaster> 级别的配置，不属于这一条 toast() 调用，
+              // 所以点「弹一条」时先切视口，再弹这条
+              setToastPosition(position)
               toast[tone](s(v, 'title'), {
                 description: s(v, 'description') || undefined,
                 ...(b(v, 'sticky') ? { timeout: 0 } : {}),
@@ -138,7 +174,7 @@ export const FEEDBACK_DEMOS: Demo[] = [
                   ? { action: { label: '撤销', onClick: () => toast.success('已撤销') } }
                   : {}),
               })
-            }
+            }}
           >
             弹一条 {tone}
           </Button>
@@ -155,7 +191,12 @@ export const FEEDBACK_DEMOS: Demo[] = [
         b(v, 'action') && "  action: { label: '撤销', onClick: undo },"
       )
       const call = `toast.${s(v, 'tone')}('${s(v, 'title')}'`
-      return opts ? `${call}, {\n${opts}\n})` : `${call})`
+      const toastCall = opts ? `${call}, {\n${opts}\n})` : `${call})`
+      // position 不是这次调用的参数 —— 它挂在全局唯一的 <Toaster>，
+      // 通常在 app.tsx 设一次，或用 setToastPosition() 运行时切换
+      return s(v, 'position') === 'top-end'
+        ? toastCall
+        : `setToastPosition('${s(v, 'position')}')  // <Toaster> 是全局单例，这里等价于设置默认方位\n${toastCall}`
     },
   },
 
