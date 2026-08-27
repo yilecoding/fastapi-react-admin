@@ -54,7 +54,7 @@ export const TOAST_POSITIONS: readonly ToastPosition[] = [
   "bottom-end",
 ]
 
-const DEFAULT_POSITION: ToastPosition = "bottom-end"
+const DEFAULT_POSITION: ToastPosition = "top-end"
 
 /**
  * 位置是运行时可变的模块级状态，不是 `<Toaster>` 的一次性 prop ——
@@ -209,7 +209,7 @@ function ToastList() {
  * `--toast-index` / `--toast-offset-y` 手算位移，多一层出错面，
  * 而这套后台需要的是「看清楚写了什么」，不是炫。
  *
- * `position` 不传就跟着运行时状态走（默认 `bottom-end`，可用 `setToastPosition`
+ * `position` 不传就跟着运行时状态走（默认 `top-end`，可用 `setToastPosition`
  * 在任何地方切换）；传了就固定成那个值，不再响应 `setToastPosition`。
  */
 export function Toaster({

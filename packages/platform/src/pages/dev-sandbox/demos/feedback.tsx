@@ -17,10 +17,10 @@ const TONES: ToastTone[] = ['message', 'success', 'info', 'warning', 'error', 'l
 const POSITION_LABEL: Record<ToastPosition, string> = {
   'top-start': '左上',
   'top-center': '顶部居中',
-  'top-end': '右上',
+  'top-end': '右上（默认）',
   'bottom-start': '左下',
   'bottom-center': '底部居中',
-  'bottom-end': '右下（默认）',
+  'bottom-end': '右下',
 }
 
 /** 假装一个会成功/失败的请求，给 promise 那一行用 */
@@ -48,7 +48,7 @@ export const FEEDBACK_DEMOS: Demo[] = [
         kind: 'select',
         label: 'position',
         options: TOAST_POSITIONS,
-        default: 'bottom-end',
+        default: 'top-end',
         hint: '视口是全局单例（app.tsx 只挂一次），切换会立刻影响整个应用当前弹出的位置',
       },
     },
@@ -194,7 +194,7 @@ export const FEEDBACK_DEMOS: Demo[] = [
       const toastCall = opts ? `${call}, {\n${opts}\n})` : `${call})`
       // position 不是这次调用的参数 —— 它挂在全局唯一的 <Toaster>，
       // 通常在 app.tsx 设一次，或用 setToastPosition() 运行时切换
-      return s(v, 'position') === 'bottom-end'
+      return s(v, 'position') === 'top-end'
         ? toastCall
         : `setToastPosition('${s(v, 'position')}')  // <Toaster> 是全局单例，这里等价于设置默认方位\n${toastCall}`
     },
