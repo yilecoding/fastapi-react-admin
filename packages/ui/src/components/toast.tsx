@@ -33,6 +33,64 @@ const manager = ToastPrimitive.createToastManager()
  */
 export type ToastTone = "message" | "info" | "success" | "warning" | "error" | "loading"
 
+/**
+ * 视口出现的方位。用 `start`/`end` 而不是 `left`/`right`（组件约定的逻辑属性习惯）——
+ * RTL 下 `start` 自动变左。`center` 是真正的水平居中，跟方向无关。
+ */
+export type ToastPosition =
+  | "top-start"
+  | "top-center"
+  | "top-end"
+  | "bottom-start"
+  | "bottom-center"
+  | "bottom-end"
+
+export const TOAST_POSITIONS: readonly ToastPosition[] = [
+  "top-start",
+  "top-center",
+  "top-end",
+  "bottom-start",
+  "bottom-center",
+  "bottom-end",
+]
+
+const DEFAULT_POSITION: ToastPosition = "bottom-end"
+
+/**
+ * 位置是运行时可变的模块级状态，不是 `<Toaster>` 的一次性 prop ——
+ * 原因和 `manager` 一样：`<Toaster>` 全局只在 `app.tsx` 挂一次，
+ * 之后任何地方（包括组件沙箱的旋钮）想切换位置，都只能靠 React 外的 setter，
+ * 没有谁能重新往挂载点传 prop。
+ */
+let currentPosition: ToastPosition = DEFAULT_POSITION
+const positionListeners = new Set<() => void>()
+
+export function setToastPosition(position: ToastPosition) {
+  currentPosition = position
+  for (const listen of positionListeners) listen()
+}
+
+function subscribeToPosition(onChange: () => void) {
+  positionListeners.add(onChange)
+  return () => positionListeners.delete(onChange)
+}
+
+function getPositionSnapshot() {
+  return currentPosition
+}
+
+const ToastPositionContext = React.createContext<ToastPosition>(DEFAULT_POSITION)
+
+/** 居中用物理属性（`left-1/2` + `-translate-x-1/2`）—— 居中是唯一和方向无关的取值 */
+const VIEWPORT_POSITION_CLASS: Record<ToastPosition, string> = {
+  "top-start": "top-4 start-4",
+  "top-center": "top-4 left-1/2 -translate-x-1/2",
+  "top-end": "top-4 end-4",
+  "bottom-start": "bottom-4 start-4",
+  "bottom-center": "bottom-4 left-1/2 -translate-x-1/2",
+  "bottom-end": "bottom-4 end-4",
+}
+
 type Options = {
   description?: React.ReactNode
   /** 0 = 不自动消失（错误类默认就是 0，见下） */
@@ -91,10 +149,14 @@ const TONE_CLASS: Record<ToastTone, string> = {
 
 function ToastItem({ toast: item }: { toast: ToastPrimitive.Root.ToastObject }) {
   const { t } = useTranslation()
+  const position = React.useContext(ToastPositionContext)
   // promise() 的 loading 阶段不带 type，按 loading 处理（转圈比信息图标准）
   const tone = (item.type as ToastTone | undefined) ?? "loading"
   const Icon = TONE_ICON[tone] ?? IconInfoCircle
   const spinning = tone === "loading"
+  // 顶部方位从上方落下，底部方位从下方浮起 —— 位置能切换后，
+  // 进场动画方向也要跟着方位走，否则顶部的 toast 会「先往下缩一截再定住」
+  const fromTop = position.startsWith("top")
 
   return (
     <ToastPrimitive.Root
@@ -107,8 +169,10 @@ function ToastItem({ toast: item }: { toast: ToastPrimitive.Root.ToastObject }) 
       className={cn(
         "group/toast relative flex w-full items-start gap-3 rounded-lg border border-border bg-popover p-3.5 pe-9 text-popover-foreground shadow-lg",
         "translate-x-[var(--toast-swipe-movement-x)] translate-y-[var(--toast-swipe-movement-y)] transition-all duration-200",
-        // 进场从下方浮起，离场缩一点淡出；被 limit 顶掉的直接淡出
-        "data-[starting-style]:translate-y-3 data-[starting-style]:opacity-0",
+        // 进场从锚定边浮起，离场缩一点淡出；被 limit 顶掉的直接淡出
+        fromTop
+          ? "data-[starting-style]:-translate-y-3 data-[starting-style]:opacity-0"
+          : "data-[starting-style]:translate-y-3 data-[starting-style]:opacity-0",
         "data-[ending-style]:scale-[0.97] data-[ending-style]:opacity-0",
         "data-[limited]:opacity-0",
         // 拖动过程中不要再叠一层过渡，否则跟手会有橡皮筋感
@@ -144,21 +208,40 @@ function ToastList() {
  * 视口是普通的纵向流式布局（不是绝对定位的叠卡）—— 叠卡要靠
  * `--toast-index` / `--toast-offset-y` 手算位移，多一层出错面，
  * 而这套后台需要的是「看清楚写了什么」，不是炫。
+ *
+ * `position` 不传就跟着运行时状态走（默认 `bottom-end`，可用 `setToastPosition`
+ * 在任何地方切换）；传了就固定成那个值，不再响应 `setToastPosition`。
  */
 export function Toaster({
   children,
   limit = 4,
+  position,
 }: {
   children?: React.ReactNode
   limit?: number
+  position?: ToastPosition
 }) {
+  const livePosition = React.useSyncExternalStore(
+    subscribeToPosition,
+    getPositionSnapshot,
+    getPositionSnapshot
+  )
+  const effectivePosition = position ?? livePosition
+
   return (
     <ToastPrimitive.Provider toastManager={manager} limit={limit}>
       {children}
       <ToastPrimitive.Portal>
-        <ToastPrimitive.Viewport className="fixed end-4 bottom-4 z-100 flex w-[min(calc(100vw-2rem),23rem)] flex-col gap-2.5 outline-none">
-          <ToastList />
-        </ToastPrimitive.Viewport>
+        <ToastPositionContext.Provider value={effectivePosition}>
+          <ToastPrimitive.Viewport
+            className={cn(
+              "fixed z-100 flex w-[min(calc(100vw-2rem),23rem)] flex-col gap-2.5 outline-none",
+              VIEWPORT_POSITION_CLASS[effectivePosition]
+            )}
+          >
+            <ToastList />
+          </ToastPrimitive.Viewport>
+        </ToastPositionContext.Provider>
       </ToastPrimitive.Portal>
     </ToastPrimitive.Provider>
   )
