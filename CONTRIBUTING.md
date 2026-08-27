@@ -79,6 +79,7 @@ tag 推上去之后：
 - 🔴 **tag 和 `brand.ts` 不一致时 release 会直接失败**（故意的，见 `apps/desktop/README.md`）
 - 草稿 release 要人工确认后再发布：安装包能不能装、能不能连上后端，机器判不了
 - 想试这条流水线又不想留 tag：Actions → Release → Run workflow，出的包只作为 artifact
+- 桌面端出包 / 分发 / 自动更新的坑收在 [`apps/desktop/AGENTS.md`](apps/desktop/AGENTS.md)
 
 ## 提 PR 之前
 

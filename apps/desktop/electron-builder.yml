@@ -1,6 +1,12 @@
 # electron-builder 配置。`pnpm --filter @admin/desktop package` 触发。
 # ⚠️ 发自己的包前改成你自己的反向域名 —— macOS 靠它认应用身份，
 #    Windows 靠它认「同一个应用的升级」。沿用别人的会和别人的安装冲突
+# 🔴 这三个值一起决定「装出来叫什么」，而且**发版之后就不能再改**：
+#   productName 同时是 `%APPDATA%\<它>\config.json` 的目录名（服务器地址、
+#     打印机名、更新源都在里面）—— 改名 = 老机器上的配置成孤儿，
+#     表现为「更新完之后又要重填一遍」，而不是一个报错；
+#   appId 是 Windows 认「同一个应用的升级」的依据，改了会装出两份并存；
+#   executableName 会出现在路径、任务管理器和脚本里，保持 ASCII 小写。
 appId: io.github.yilecoding.admin-desktop
 productName: Admin Desktop
 # 不设的话 Linux 下可执行文件名会从包名推出来，变成 `@admindesktop`（实测）
@@ -58,7 +64,20 @@ linux:
 
 nsis:
   oneClick: false
-  perMachine: true
+  # 🔴 **per-user 安装（装进 %LOCALAPPDATA%\Programs），不是 per-machine。**
+  #
+  # 这一条是为**自动更新**选的：per-machine 装进 Program Files，每次更新都要 UAC 提权，
+  # 而终端机的操作员通常不是管理员 —— 静默更新会卡在提权对话框上，
+  # 而那台机器的窗口往往是无边框全屏的，对话框未必看得见。
+  # VS Code 的 User Setup 走的就是这条路。
+  #
+  # ⚠️ 代价：**每个 Windows 账号各装一份**。单账号长期登录的终端机代价是零；
+  # 多账号轮用的场景要回头重新评估。
+  # ⚠️ 改这一项等于改安装位置，发版之后再改会留下两份并存 —— 趁没发出去定死。
+  # ⚠️ 更阴的一条：机器上如果**还留着**早先 per-machine 装的那一份（同一个 appId），
+  # 注册表 HKLM 的卸载项会让安装器仍然去更新旧位置 → 又要提权 → 静默更新失败。
+  # 判据：卸载项里那条的 `UninstallString` 带 `/allusers`，先卸掉再装新包。
+  perMachine: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
