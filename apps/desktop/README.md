@@ -118,34 +118,18 @@ pnpm --filter @admin/desktop package        # 出 NSIS 安装包（在 Windows �
 git tag v0.0.1 && git push origin v0.0.1
 ```
 
-`.github/workflows/release.yml` 会在 **windows-latest** 上出 NSIS 安装包，
-传到 GitHub Release 并留成**草稿**（`electron-builder.yml` 的 `releaseType: draft`）——
-安装包能不能装、能不能连上后端，得人先试一遍再点发布。
+`.github/workflows/release.yml` 在 **windows-latest** 上出 NSIS 安装包，传到 GitHub
+Release 并留成**草稿** —— 安装包能不能装、能不能连上后端，得人先试一遍再点发布。
 
-三条要知道的：
+- 🔴 **tag 必须和 `brand.ts` 的 `version` 一致**，不一致 CI 直接失败（允许预发布后缀：
+  `brand.ts` 是 0.0.1 时 `v0.0.1-rc.1` 也算一致，专门留给「试一次发布」用）。
+  `apps/desktop/package.json` 的 `version` 由 CI 从 tag 写入（**不提交**）——
+  它只是 electron-builder 的输入，不是第二个真相
+- **不打 tag 也能试**：Actions → Release → Run workflow，只出包 + 上传 artifact，不碰 release
 
-- 🔴 **tag 必须和 `brand.ts` 的 `version` 一致**，不一致 CI 直接失败。不校验的话会
-  出现「安装包 0.0.2、关于页面写着 v0.0.1」，而这两个数字对不上时，用户报的 bug
-  属于哪一版就没人说得清了。`apps/desktop/package.json` 的 `version` 由 CI 从 tag
-  写入（**不提交**）—— 它只是 electron-builder 的输入，不是第二个真相
-- **CI 出的包是未签名的、且读卡器是桩模式**（`resources/` 里没有厂商的
-  `ReadCard.exe`，那是客户现场的东西，不进仓库）。内测够用；正式交付要在能访问
-  证书的机器上打，见上面「部署时要记得的三件事」
-- **两种试跑方式**（一条从没跑过的发布流水线，第一次跑一定是在最不该出错的时候）：
-  - Actions → Release → Run workflow：只出包 + 上传成 workflow artifact，**不碰 release**
-  - 打个预发布 tag（`v0.0.1-rc.1`）：**把「发到 Release」那一步也走一遍** ——
-    这是整条流水线里唯一没法本地验证的部分。版本校验允许预发布后缀，
-    `brand.ts` 是 0.0.1 时 `v0.0.1-rc.1` 算一致
-
-自动更新有两个源，优先级从上到下（`src/main/updater.ts`）：
-
-| 源 | 什么时候用 | 怎么配 |
-|---|---|---|
-| generic（静态 HTTP） | 交付给内网客户 —— 他们出不去公网 | 客户机 `userData/config.json` 里填 `updateUrl` |
-| GitHub Release | 自己内测 / 开源分发 | 什么都不用配，打包时已经写进 `app-update.yml` |
-
-⚠️ 一份包同时支持两种源，不用为内网单独打一版。以前只支持第一种：没配 `updateUrl`
-就直接不检查更新，而界面显示「已是最新版本」—— 一个看不出来的假阴性。
+🔴 **打包顺序、两条分发路线（GitHub Release / 内网静态目录）、自动更新那四个
+「只在正式包里才撞得到」的坑、以及杀软导致的 EPERM，全部收在
+[`AGENTS.md`](./AGENTS.md)。** 出包或发版之前先读那一份 —— 这里列的命令只是入口。
 
 ## 渲染层怎么用
 
