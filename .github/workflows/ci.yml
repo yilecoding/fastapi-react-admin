@@ -362,6 +362,10 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report/
           retention-days: 7
+          # 只重跑这一个 job 时同一个 run_id 会再传一份同名 artifact——默认不覆盖，
+          # 会撞出 2 份同名（download-artifact 这次凑巧没炸，但 pages-report 那边
+          # 同类的 github-pages 重复已经实测炸过一次），显式覆盖更稳。
+          overwrite: true
 
   # 把 E2E 报告发到 GitHub Pages，给一个每次跑完都刷新、不用手动下载 zip 的固定链接。
   # 🔴 只在 main 上跑（`pull_request` 事件的 `github.ref` 是 `refs/pull/N/merge`，
@@ -376,10 +380,29 @@ jobs:
     permissions:
       pages: write
       id-token: write
+      actions: write # 下面清理旧 artifact 要用到（删除 artifact 需要这个权限）
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # 🔴 「重跑失败的 job」会让这个 job 在同一个 run_id 下再跑一次 attempt，而
+      # upload-pages-artifact 每次都无条件建一个新的 "github-pages" artifact，
+      # 不会覆盖上一次 attempt 留下的那份——deploy-pages 一读到同名的有 2 份就直接
+      # 报错退出（实测踩过：`Multiple artifacts named "github-pages" were
+      # unexpectedly found for this workflow run. Artifact count is 2.`）。
+      # 这一步在自己上传之前先把这次 run 里同名的旧 artifact 全删掉，
+      # 不管这是第几次 attempt，传之前永远先清干净。
+      - name: 清理本次 run 里重跑遗留的旧 github-pages artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name == "github-pages") | .id' |
+          while read -r id; do
+            echo "删除残留 artifact: github-pages (id=$id)"
+            gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id"
+          done
+
       - name: Download playwright report artifact
         uses: actions/download-artifact@v4
         with:

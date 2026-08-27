@@ -1,7 +1,7 @@
 # fastapi-react-admin
 
 **FastAPI + React 19 + shadcn/ui 中后台底座** —— 权限细到按钮和数据行，
-多页签切走真的保状态，原生跑 SQL Server。**238 条自动化测试全打真实依赖，不 mock。**
+多页签切走真的保状态，原生跑 SQL Server。**248 条自动化测试全打真实依赖，不 mock。**
 
 > 🚀 **在线演示 / Live demo：** https://fra.wubunan.com/sign-in
 > 账号 `admin` / 密码 `123456` —— 公开演示实例，任何人都能登录，数据会被访客改动/清空，
@@ -38,6 +38,7 @@
 <!-- 状态与出处 -->
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](./LICENSE)
 [![CI](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml/badge.svg)](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml)
+[![E2E 报告](https://img.shields.io/badge/E2E_报告-Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://yilecoding.github.io/fastapi-react-admin/)
 [![Built on FBA](https://img.shields.io/badge/built_on-fastapi--best--architecture-6B5B95?style=flat-square)](https://github.com/fastapi-practices/fastapi_best_architecture)
 
 > **后端出自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)（FBA）。**
@@ -56,7 +57,7 @@
 
 An admin foundation on **FastAPI + React 19 + shadcn/ui** — permissions down to buttons
 *and data rows*, multi-tab navigation that actually keeps state, first-class **SQL Server**,
-and **238 automated tests that run against real dependencies, with no mocks**.
+and **248 automated tests that run against real dependencies, with no mocks**.
 
 Backend derived from **[fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)**
 (FBA): its three-layer structure, plugin system, and RBAC / data-scope model. This repo is
@@ -74,14 +75,14 @@ code goes next to `packages/platform/src/pages/user/` and follows the same shape
 | **Multi-tab**         | free in Vue via `keep-alive`; usually absent in React, or loses state       | React 19 **`<Activity>`** — every open tab stays mounted; hidden ones drop effects but keep DOM and state |
 | **Component base**    | most templates still on the pre-migration shadcn/Radix combo               | already tracks shadcn's current default, **Base UI** — zero `@radix-ui` imports, plus an in-app sandbox with copy-paste code for all 28+ components |
 | **Database**          | MySQL / PostgreSQL                                                         | **native SQL Server** (`aioodbc`, NVARCHAR, filtered unique indexes, `OFFSET FETCH`); MySQL and PostgreSQL also supported |
-| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **238 tests against real dependencies, zero mocks** — 194 pytest against a real SQL Server, 44 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 62 dedicated security tests |
+| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **248 tests against real dependencies, zero mocks** — 194 pytest against a real SQL Server, 54 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 62 dedicated security tests |
 
 **Status: 0.0.1, never released.** No production instance, no data to preserve — so the
 schema is still free to change. The backend is a **permanent fork** of
 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)
 (upstream declined to merge SQL Server support), tracking only its security patches.
 
-**Tests:** 194 pytest cases (real SQL Server) + 44 Playwright cases (isolated second
+**Tests:** 194 pytest cases (real SQL Server) + 54 Playwright cases (isolated second
 stack: web :1126 → api :8001 → `fba_test`). Data permissions are covered on both sides —
 22 accounts through the API, 19 through the browser. Neither suite runs in CI, because
 both need a live SQL Server instance; run them locally with `pnpm test` and `pnpm e2e`.
@@ -136,7 +137,7 @@ language-independent.
 | **多页签** | Vue 靠 `keep-alive` 白送；React 侧大多没有，或者切走就丢状态 | React 19 的 **`<Activity>`**：所有已开页签同时挂载，隐藏时销毁 effects 但保留 DOM 与 state |
 | **组件基座** | 多数模板还在用 shadcn 迁移前的 Radix 版本 | 已跟进 shadcn 现在的默认底座 **Base UI**（`@radix-ui` 零引用），配一个能直接抄代码的组件沙箱 |
 | **数据库** | MySQL / PostgreSQL | **原生 SQL Server**（`aioodbc` + NVARCHAR / 筛选唯一索引 / `OFFSET FETCH` 适配），MySQL 与 PostgreSQL 也在 |
-| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **238 条打真实依赖、零 mock** —— pytest 194 条对真实 SQL Server，Playwright 44 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 62 条安全测试兜底 |
+| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **248 条打真实依赖、零 mock** —— pytest 194 条对真实 SQL Server，Playwright 54 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 62 条安全测试兜底 |
 
 它不是「拿来改改就交付」的模板，是**底座**：上面那三件事和下面几条纪律是它替你解决掉的部分，
 业务代码照 `packages/platform/src/pages/user/` 抄就行。
@@ -221,19 +222,19 @@ shadcn/ui 2026 年 7 月把默认底座从 Radix 换成了 **Base UI**——这�
 
 ## 测试：打真实依赖，不打 mock
 
-**238 条自动化测试**，两边都不 mock 依赖 —— 后端对真实 SQL Server，
+**248 条自动化测试**，两边都不 mock 依赖 —— 后端对真实 SQL Server，
 前端对真实浏览器 + 真实接口 + 真实数据库。
 
 | | 跑在哪 | 条数 | 覆盖 |
 |---|---|---|---|
 | **pytest** | 真实 SQL Server（`fba_test` 库，不碰开发库） | **194** | 安全（RBAC 门禁 / 权限码对账 / 数据权限 fail-closed / 规则校验 / 生产配置 / 健康检查）62 · 数据权限端到端 27 · 定时任务 69 · 文件模块 23 · 迁移守卫 4 · 认证 7 · i18n 对称性 2 |
-| **Playwright** | 完全隔离的第二套实例：web :1126 → api :8001 → `fba_test` | **44** | 数据权限 29 · 定时任务 9 · 部门 CRUD 2 · 登录 2 · 多页签保活 2 |
+| **Playwright** | 完全隔离的第二套实例：web :1126 → api :8001 → `fba_test` | **54** | 数据权限 29 · 定时任务（调度 + 执行记录 + cron 预览）9 · 部门 CRUD 2 · 登录 2 · 多页签保活 2 · 换身份 2 · 命令面板 2 · 列表刷新 2 · 列表报错 2 · 发新版提示 2 |
 
-> Playwright 那 44 条里有 1 条会按条件跳过（执行记录页要求库里真跑过一次 worker）。
+> Playwright 那 54 条里有 1 条会按条件跳过（执行记录页要求库里真跑过一次 worker）。
 
 ```bash
 pnpm test          # 后端 pytest（194 条，需要 fba_test 库）
-pnpm e2e           # 前端 Playwright（44 条，自动拉起隔离的 web+api 实例）
+pnpm e2e           # 前端 Playwright（54 条，自动拉起隔离的 web+api 实例）
 ```
 
 **为什么不 mock**：中后台的 bug 几乎都长在边界上 —— SQL Server 的 NVARCHAR 截断、
@@ -336,8 +337,8 @@ docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 
 ```bash
 pnpm typecheck                                          # 全仓库 tsc
-pnpm test                                               # 后端 pytest（183 条）
-pnpm e2e                                                # 前端 Playwright（40 条）
+pnpm test                                               # 后端 pytest（194 条）
+pnpm e2e                                                # 前端 Playwright（54 条）
 pnpm i18n:check && pnpm i18n:jsx                        # 语言包校验 + 裸中文扫描
 pnpm ctx:check                                          # 工程文档里的死引用 / 死链接
 ```
@@ -346,6 +347,10 @@ pnpm ctx:check                                          # 工程文档里的死�
 > 另一个 Redis db），第一次要先建库：见 [CLAUDE.md](./CLAUDE.md) 的「跑测试」。
 > 模型改过之后用 `pnpm --filter api test:db` 重建，再 `pnpm --filter api db:upgrade`
 > 升到 head —— `create_all` 只建不改，不重建就会撞一片 `Invalid column name`。
+
+> 📊 **`main` 上每次 CI 跑完，E2E 报告会自动发到 [GitHub Pages](https://yilecoding.github.io/fastapi-react-admin/)**——
+> 失败用例带截图 / trace / 视频回放，不用等着下载 zip。链接始终是最新一次跑的结果，
+> 不是某次快照；顶部徽章点的也是它。
 
 > ⚠️ 后端开了 `--reload`（只监听 `backend/`），改 Python 代码会自动重启。
 > 但**改模型不等于改表** —— 表结构改动一律走 alembic（`pnpm db:revision '...'` +
