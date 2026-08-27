@@ -15,7 +15,7 @@ export interface paths {
         put?: never;
         /**
          * swagger 调试专用
-         * @description 用于快捷获取 token 进行 swagger 认证
+         * @description 用于快捷获取 token 进行 swagger 认证（仅非生产环境注册）
          */
         post: operations["login_swagger_api_v1_auth_login_swagger_post"];
         delete?: never;
@@ -907,6 +907,26 @@ export interface paths {
         };
         /** 获取所有参数配置 */
         get: operations["get_all_configs_api_v1_sys_configs_all_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/configs/dev-sandbox-gate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取组件沙箱开关
+         * @description 给「组件沙箱」页面判断露不露出来用——只读 DEV 组那两个开关，不是参数配置的通用读接口，type 写死不接受入参，所以能只挂 DependsJwtAuth。真正的参数配置读写仍然要 sys:config:list（issue #30）
+         */
+        get: operations["get_dev_sandbox_gate_api_v1_sys_configs_dev_sandbox_gate_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8573,6 +8593,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dev_sandbox_gate_api_v1_sys_configs_dev_sandbox_gate_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_GetConfigDetail__"];
                 };
             };
         };

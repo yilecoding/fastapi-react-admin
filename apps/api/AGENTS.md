@@ -411,6 +411,25 @@ return or_(and_(*where_and_list), or_(*where_or_list))
 任何差集，测试照样全绿。这类洞目前只能靠人工审计接口清单发现，同 `sys/depts`
 那批写接口的裸奔状态一样——不是这次的范围，留作已知缺口。
 
+🔴 **给一个通用读接口补权限码之前，先搜一遍谁在拿它当"只要登录就行"的旁路用。**
+这条修完当场炸了一个：`packages/platform/src/pages/dev-sandbox/api.ts` 一直在打
+`GET /sys/configs/all?type=DEV`，代码注释原话是"只要 `DependsJwtAuth`，所以任何
+登录用户都读得到"——组件沙箱故意不挂业务权限码（`sandbox/components.tsx`：
+"只要登录就能进，不挂业务权限码"），是因为它假设了这条读接口的旧门槛。
+`/sys/configs/all` 补上 `sys:config:list` 之后，没有这个权限码的账号（这次新加的
+8 个演示账号一个都没有）打组件沙箱直接吃 403——不是显示"沙箱已关闭"那条降级
+文案（那条走的是 `readSandboxGate` 的正常分支），是 `useQuery` 的 `error` 分支，
+`QueryError` 报接口出错。硬纪律 9 在这起事故里表现是"失败确实可见"，但可见
+不等于对：用户看到的是一个跟真实原因（RBAC）毫不相关的报错页。
+修法不是把 `sys:config:list` 加进 `RBAC_ROLE_MENU_EXCLUDE`——那会把整张参数
+配置表（含邮件服务器地址这类真敏感字段）重新对所有登录用户开放，等于把
+#30 刚堵上的洞挖回去。而是新开一条**只读 DEV 组、type 写死不接受入参**的
+`GET /sys/configs/dev-sandbox-gate`，只挂 `DependsJwtAuth`——暴露面从"整张
+配置表"缩到"两个布尔开关"，跟沙箱本来的设计初衷（"不碰业务数据"）对上号，
+不是给旧漏洞开后门。**一般结论**：改一个被多处复用的通用接口的权限门槛前，
+`grep` 一遍调用方，尤其是那些没有专属业务权限码、靠"反正只要登录就行"这个
+隐含假设活着的旁路用途。
+
 ### 已修：三个让接口直接 500 的坑
 
 - 🔴 **`UniversalStr` / `UniversalText` 必须显式写 `python_type`。**

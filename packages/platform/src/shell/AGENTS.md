@@ -246,6 +246,39 @@ drag 事件、插入位置用 `inset` 阴影画 2px 竖线（不占布局，整�
 同一个坑还会以别的面目出现：宽表格、图表、`whitespace-nowrap` 的长文本。
 新增页面时如果发现整页能左右拖动，先查这条链上有没有漏掉 `min-w-0`。
 
+## 侧边栏：100% 服务端驱动，client-only 节点是特例不是常态
+
+`use-sidebar.ts: useSidebar()` 是**唯一**数据源：`GET /sys/menus/sidebar` →
+`toNavTree()` → `NavNode[]`。`AppSidebar`（渲染）和 `command-menu.tsx`（⌘K 的
+「页面」组）各自调一次这个 hook，但吃的是同一份 `sidebarQuery` 缓存——这意味着
+**新增一个 `sys_menu` 行，两处自动一起更新，不用单独接线**。
+
+🔴 **反过来，不挂 `sys_menu` 的页面 = 侧边栏和 ⌘K 都看不见它，没有例外。**
+`/sandbox/*` 那几个页面（组件沙箱等）故意不占用业务权限码（路由文件自己写了
+"只要登录就能进，不挂业务权限码"），所以它们从来没有 `sys_menu` 行——
+`packages/i18n` 的语言包里其实一直留着 `menu:/sandbox`／`menu:/sandbox/components`
+这两条翻译（连 en-US 都有），像是当初设计过要接、后来没接上就晾在那——
+组件本身能跑、直接敲 URL 能进，但界面上找不到任何入口，是能反复复现的坑，
+不是一次性的疏忽。
+
+**修法是给 `useSidebar()` 本身打一个 client-side 合成节点**（`use-sidebar.ts`
+的 `buildDevToolsNode()`），跟服务端菜单树拼在一起返回。这样只用改一个地方，
+`AppSidebar` 和 `command-menu.tsx` 都自动拿到，不用分别接线。合成节点是否露出
+挂在 `dev-sandbox/api.ts` 的 `readSandboxGate()`（参数配置 DEV 组的开关）上，
+跟页面内容自己的显隐判断复用同一份开关，两处不会对不上。
+
+⚠️ **这条`shell → pages/dev-sandbox` 的 import 方向不寻常**（`shell` 一般更
+底层，不应该反过来认识某个具体页面），是刻意的例外：没有更通用的「client-only
+导航节点」注册机制，专门为一个节点造一套框架投入产出不成比例。**只有「不挂
+`sys_menu` 又需要导航入口」这一类页面才走这条路**，业务页面该走
+`sys_menu` 就老老实实走，别学它。
+
+⚠️ 合成节点的 `path` 复用现成的 `menu:/sandbox` / `menu:/sandbox/components`
+i18n key（而不是随手起新字符串），两个语言的翻译已经现成，不用再补。
+父节点（目录，带 children）的 `path` 不需要对应一个真实路由——`NavItem`
+里点开目录只是展开子项、不会真的导航，`isValidPath` 校验只发生在
+`toNavTree()` 里，合成节点整个绕过了那条校验。
+
 ## 命令面板（⌘/Ctrl+K）与快捷键帮助（?）
 
 | 文件 | 职责 |

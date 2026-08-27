@@ -23,6 +23,7 @@ import { Separator } from "@admin/ui/components/separator"
 
 import { pageRegistry } from "@/lib/page-registry"
 import { buildValidPaths, makeIsValidPath } from "@/lib/valid-paths"
+import { GithubLink } from "@/components/github-link"
 import { UserMenu } from "@/components/user-menu"
 
 export const Route = createFileRoute("/_auth")({
@@ -100,6 +101,7 @@ function AuthLayout() {
           {/* 命令面板入口：⌘K 也能开，但快捷键不摆出来就等于只有作者知道 */}
           <div className="ms-auto flex items-center gap-2">
             <CommandTrigger />
+            <GithubLink />
             <UserMenu />
           </div>
         </header>

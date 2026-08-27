@@ -5,20 +5,24 @@ import { api } from '../../api-client/client'
 /**
  * 沙箱的开关来自**参数配置**（`sys_config` 的 DEV 组）。
  *
- * `GET /sys/configs/all` 只要 `DependsJwtAuth`，所以任何登录用户都读得到 ——
- * 这里只用来决定「露不露出来」，不是访问控制。沙箱本身不碰业务数据，
- * 真要拦得靠路由守卫。
+ * 🔴 走的是专门开的 `GET /sys/configs/dev-sandbox-gate`，**不是**
+ * `GET /sys/configs/all`。issue #30 之前这里确实打的是 `/all?type=DEV`，
+ * 当时它只要 `DependsJwtAuth`；修完 #30 之后 `/all` 改成要 `sys:config:list`，
+ * 而这批新演示账号大多没有这个权限码——沙箱页面直接被 403 打成报错态
+ * （不是「关闭」提示，是真报错，见 `dev-sandbox/index.tsx` 的 `error` 分支）。
+ * 新端点只读 DEV 组、type 写死不接受入参，所以能只挂 `DependsJwtAuth`：
+ * 暴露面从「整张参数配置表（含邮件服务器地址等）」缩到「两个布尔开关」，
+ * 跟这里"沙箱本身不碰业务数据，只用来决定露不露出来"的设计初衷对上号。
  *
- * 只取 DEV 这一组：服务端按 type 过滤，比拉全量再筛干净，
- * 也不会和参数配置页的全量缓存互相作废。
+ * 真正的参数配置读写页面仍然要 `sys:config:list`，两条路径不共用。
  */
 type DevConfigRow = { key: string; value: string }
 
-export const devConfigKeys = { all: ['sys', 'config', 'type', 'DEV'] as const }
+export const devConfigKeys = { all: ['sys', 'config', 'dev-sandbox-gate'] as const }
 
 export const devConfigQuery = queryOptions({
   queryKey: devConfigKeys.all,
-  queryFn: () => api.GET<DevConfigRow[]>('/api/v1/sys/configs/all?type=DEV'),
+  queryFn: () => api.GET<DevConfigRow[]>('/api/v1/sys/configs/dev-sandbox-gate'),
   staleTime: 60_000,
 })
 

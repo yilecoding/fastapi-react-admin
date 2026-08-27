@@ -3,6 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 
 import { sidebarQuery } from '../auth/queries'
 import { MenuType, type SidebarNode } from '../api-client/sidebar-types'
+// 🔴 shell 反过来 import 一个具体页面，方向上不太寻常——但组件沙箱**故意**不挂
+// `sys_menu`（不占用一个业务权限码，见 `sandbox/components.tsx` 的路由注释），
+// 侧边栏又是纯服务端菜单树拼出来的（见下面 `toNavTree`），没有别的地方能把
+// 「开发工具 › 组件沙箱」这一条塞进去。两个消费方（这里 + command-menu.tsx）
+// 都要看到它，所以放在这一个大家都会调用的 hook 里拼一次，不是各自拼一份。
+import { devConfigQuery, readSandboxGate } from '../pages/dev-sandbox/api'
 
 export type NavNode = {
   /** 雪花 ID 以字符串下发，见 sidebar-types.ts */
@@ -122,9 +128,48 @@ function toNavTree(nodes: SidebarNode[], opts: SidebarOptions): NavNode[] {
   return out
 }
 
+/** 「开发工具 › 组件沙箱」这颗合成节点的 id 前缀 */
+export const DEV_TOOLS_NODE_ID = '__dev-tools__'
+
+/**
+ * `path` 特意用 `/sandbox`、`/sandbox/components` ——
+ * 语言包里 `menu:/sandbox` / `menu:/sandbox/components` 这两条翻译早就在
+ * （连 en-US 的 "Sandbox" / "Components" 都有），是这个功能原来就该走
+ * `sys_menu` 下发、后来没接上的遗留物。复用现成 key，不用再新增翻译。
+ * `/sandbox` 本身不是真页面——目录节点在 `NavItem` 里点开是展开子项，不会真的跳转，
+ * 所以它不需要在 `page-registry.tsx` 里有对应组件。
+ */
+function buildDevToolsNode(): NavNode {
+  return {
+    id: DEV_TOOLS_NODE_ID,
+    title: '开发工具',
+    path: '/sandbox',
+    icon: 'ant-design:experiment-outlined',
+    external: null,
+    children: [
+      {
+        id: `${DEV_TOOLS_NODE_ID}:sandbox`,
+        title: '组件沙箱',
+        path: '/sandbox/components',
+        icon: 'ant-design:experiment-outlined',
+        external: null,
+        children: [],
+      },
+    ],
+  }
+}
+
 export function useSidebar(opts: SidebarOptions) {
   const { data, isPending, error } = useQuery(sidebarQuery)
-  const nav = React.useMemo(() => (data ? toNavTree(data, opts) : []), [data, opts])
+  // 沙箱开不开跟侧边栏主查询是两条独立请求——这条失败或还没读回来时**不**露出这个节点，
+  // 不用额外的错误态：真要用沙箱的人打开它自己的页面会看到 `QueryError`，这里只是「入口」，
+  // 不是这条数据本身的展示位，悄悄不出现是可接受的降级（跟硬纪律 9 说的「业务数据」不是一回事）
+  const { data: devRows } = useQuery(devConfigQuery)
+  const sandboxOn = readSandboxGate(devRows, import.meta.env?.DEV ?? false).on
+  const nav = React.useMemo(() => {
+    const base = data ? toNavTree(data, opts) : []
+    return sandboxOn ? [...base, buildDevToolsNode()] : base
+  }, [data, opts, sandboxOn])
   return { nav, isPending, error }
 }
 
