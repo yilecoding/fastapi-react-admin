@@ -2,6 +2,7 @@ import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query
 
 import { api } from '../../api-client/client'
 import { t } from '@admin/i18n'
+import { devConfigKeys } from '../dev-sandbox/api'
 
 /**
  * 参数配置（`plugin/config`）。
@@ -58,11 +59,23 @@ export const configsQuery = queryOptions({
   staleTime: 30_000,
 })
 
+/**
+ * 🔴 光失效 `configKeys.all` 是不够的。`dev-sandbox/api.ts` 的 `devConfigQuery`
+ * 是另一条完全独立的 query key（打的是专门开的 `dev-sandbox-gate` 端点，见那边的
+ * 注释），react-query 的前缀匹配救不了它——存了 `DEV_SANDBOX_ENABLED` 之后，
+ * 侧边栏「开发工具」那颗合成节点要等 `devConfigQuery` 的 `staleTime`（60s）
+ * 自然过期才会跟着变，实测确认过。这两条 key 不共享任何前缀，只能两个都手动失效。
+ */
+function invalidateConfigCaches(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: configKeys.all })
+  qc.invalidateQueries({ queryKey: devConfigKeys.all })
+}
+
 export function useCreateConfig() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body: ConfigBody) => api.POST('/api/v1/sys/configs', { body }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: configKeys.all }),
+    onSuccess: () => invalidateConfigCaches(qc),
   })
 }
 
@@ -71,7 +84,7 @@ export function useUpdateConfig() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: ConfigBody }) =>
       api.PUT(`/api/v1/sys/configs/${id}`, { body }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: configKeys.all }),
+    onSuccess: () => invalidateConfigCaches(qc),
   })
 }
 
@@ -96,7 +109,7 @@ export function useSaveConfigs() {
       const failed = results.filter((r) => r.status === 'rejected').length
       if (failed > 0) throw new Error(t('{{failed}} / {{total}} 项保存失败', { failed, total: rows.length }))
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: configKeys.all }),
+    onSettled: () => invalidateConfigCaches(qc),
   })
 }
 
@@ -105,7 +118,7 @@ export function useDeleteConfigs() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (ids: string[]) => api.DELETE('/api/v1/sys/configs', { body: ids }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: configKeys.all }),
+    onSuccess: () => invalidateConfigCaches(qc),
   })
 }
 
