@@ -26,6 +26,42 @@ CI 的 `release.yml` 里这两步是写死的顺序，本地手打包要自己�
 （`turbo` 的 `@admin/desktop#build` 声明了 `dependsOn: web#build`，所以走
 `pnpm build` 也对；但 `pnpm --filter @admin/desktop package` **不经过** turbo 那条依赖。）
 
+## 代码签名：Windows 有免费的路，macOS 没有
+
+现在三个平台出的都是**未签名**包。要接签名的话，先分清「有没有免费证书」这件事
+两个平台的答案完全不同：
+
+| 平台 | 免费方案 | 代价 / 限制 |
+|---|---|---|
+| **Windows** | ✅ **SignPath Foundation** —— 给开源项目免费签（OV 级，私钥在他们的 HSM 里） | 证书签发给 **SignPath Foundation** 而不是本项目，所以 SmartScreen 和安装对话框里显示的发行者是「SignPath Foundation」。要提交申请、代码公开、用被认可的开源许可证 |
+| **Windows（便宜但不免费）** | Certum 的开源开发者证书（约每年几十欧）· Azure Trusted Signing（约 $10/月） | Azure 那条对主体资质有要求（组织要有若干年可核验的存续记录） |
+| **macOS** | 🔴 **没有。** Apple Developer Program $99/年是唯一的路 | 费用减免只给**非营利组织 / 认证教育机构 / 政府实体**，个人和独立开源项目不适用。入会之后**公证本身不额外收费** |
+| **Linux** | 不需要（AppImage 可选 GPG 签名） | —— |
+
+### 🔴 Windows 的签名不能「打完再签」
+
+直觉做法是：打完包 → 把 `.exe` 送去签 → 传上去。**这会把自动更新弄坏** ——
+`latest.yml` 里的 `sha512` 和 `size` 是 electron-builder 按**打包那一刻**的文件算的，
+签名会改变文件内容，于是清单里的哈希对不上，更新器下完校验失败。
+表现是「查到新版本、下完了、装不上」，而错误信息不会提到签名。
+
+正确的接法是让签名发生在**打包过程之内**：electron-builder 的 `win.sign` 钩子指向一个
+自定义脚本，脚本把文件提交给签名服务（SignPath 有现成的 GitHub Action）拿回签好的文件，
+electron-builder 再据此生成 blockmap 与清单。
+
+### 现在的接线方式：有 secrets 就签，没有就出未签名包
+
+`release.yml` 的「出安装包」这一步已经把环境变量直通了，**配上就生效，不用改流水线**：
+
+| secret | 用途 |
+|---|---|
+| `CSC_LINK` / `CSC_KEY_PASSWORD` | 证书文件（.pfx / .p12，base64 或 URL）与密码，Windows 与 macOS 通用 |
+| `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | macOS 公证 |
+
+⚠️ **公证是按 `APPLE_TEAM_ID` 存在与否动态开的**（`--config.mac.notarize.teamId=...`），
+没写进 `electron-builder.yml`。写死的话，没凭据的构建会**直接失败** ——
+而「没有证书也能出包」是这个模板刻意保留的能力：先能跑，再谈签名。
+
 ## 三个平台：谁能打、打出来能不能用
 
 | 平台 | 产物 | 谁能打 | 装了能用吗 | 自动更新 |
