@@ -18,7 +18,11 @@ directories:
   buildResources: build
 
 # 默认名字是 `Admin Desktop Setup 0.0.1.exe` —— 带空格的文件名进 GitHub Release
-# 下载链接会变成一串 `%20`，也不好写进部署脚本。显式压平：
+# 下载链接会变成一串 `%20`，也不好写进部署脚本。显式压平。
+#
+# 🔴 **一个平台 一个模板，而且带 arch 的必须带 `${arch}`。** mac 要出 arm64 和 x64
+# 两份，共用一个不含 `${arch}` 的模板会让后打的那份**覆盖**前一份 ——
+# 产物目录里只剩一个 dmg，而且你分不出它是哪个架构的。
 artifactName: admin-desktop-${version}-setup.${ext}
 
 # 只把主进程/preload 的产物和 package.json 打进 asar。
@@ -42,7 +46,12 @@ extraResources:
     to: native
     filter: ["**/*", "!.gitkeep"]
 
+# ── 三个平台的产物 ──
+# 🔴 **每个平台只能在自己的机器上打**：mac 的 dmg 需要 macOS 的工具链，
+# Windows 的 nsis 从 mac/linux 交叉打要 Wine。所以 release 流水线是三个 runner
+# 的矩阵（`.github/workflows/release.yml`），不是一台机器出三份。
 win:
+  # Windows 只出 x64 一份，沿用顶部那个 `-setup` 命名
   target:
     - target: nsis
       arch: [x64]
@@ -51,16 +60,29 @@ win:
   # signtoolOptions:
   #   certificateFile: ...
 
-# 交付目标是 Windows。下面这两段只为了让开发机（Mac / Linux）能跑
-# `package:dir` 出一个能双击的产物做本地验证 —— 不要拿它们发布。
 mac:
   target:
-    - target: dir
+    # dmg 给人装，zip 给 electron-updater 用（macOS 的自动更新读 zip，不读 dmg）
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  # 两个架构 → 名字里必须有 arch
+  artifactName: admin-desktop-${version}-${arch}.${ext}
   category: public.app-category.business
-  # 自助终端不需要 Mac 版，所以不配签名与公证；真要发 Mac 版得补 notarize
+  # ⚠️ **没有签名，也没有公证。** 代价写在 apps/desktop/release-notes.md 里：
+  # 用户下下来双击会被 Gatekeeper 拦成「已损坏」，要右键打开或者
+  # `xattr -dr com.apple.quarantine`。而且 **macOS 上未签名的包自动更新是不工作的** ——
+  # electron-updater 要校验运行中应用的代码签名。要真发 Mac 版就得买 Developer ID
+  # （$99/年）+ notarize，那是一笔独立的决定，不是打包配置能绕过去的。
+
 linux:
   target:
-    - target: dir
+    # AppImage：不用装、chmod +x 就能跑，且 electron-updater 支持它
+    - target: AppImage
+      arch: [x64]
+  artifactName: admin-desktop-${version}-${arch}.${ext}
+  category: Office
 
 nsis:
   oneClick: false

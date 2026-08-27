@@ -89,6 +89,8 @@ const ALLOW = new Map(Object.entries({
   'command.tsx': 'cmdk 封装，零调用方已连依赖链一起删除；文档在讲「不要把它引回来」',
   'version.json': '构建产物（vite 发到 dist 根目录），不进 git',
   'latest.yml': 'electron-builder 的产物（更新清单），不进 git',
+  'latest-mac.yml': '同上，macOS 的更新清单',
+  'latest-linux.yml': '同上，Linux 的更新清单',
   'app-update.yml': '同上，打包时写进安装包的 resources/',
   'userData/config.json': '桌面端运行期在用户目录生成的配置',
   'config.json': '同上',
