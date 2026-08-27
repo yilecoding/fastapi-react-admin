@@ -33,6 +33,8 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${WEB_PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // 和 trace/screenshot 同一套取舍：只留失败用例的视频，通过的不录、不占产物体积。
+    video: "retain-on-failure",
   },
 
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
