@@ -10,7 +10,6 @@
     "dev": "node scripts/dev.mjs",
     "build": "vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts",
     "package": "pnpm build && electron-builder --config electron-builder.yml",
-    "release": "pnpm build && electron-builder --config electron-builder.yml --publish always",
     "package:ci": "pnpm build && electron-builder --config electron-builder.yml --publish never",
     "package:dir": "pnpm build && electron-builder --config electron-builder.yml --dir",
     "typecheck": "tsc --noEmit"

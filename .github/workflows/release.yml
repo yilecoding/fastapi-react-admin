@@ -104,17 +104,43 @@ jobs:
           VITE_API_BASE: ''
         run: pnpm --filter web build
 
-      - name: 出安装包并发到 Release（草稿）
+      # 🔴 **不让 electron-builder 自己发**（`--publish never`），产物由下一步用 gh 传。
+      #
+      # 实测（2026-08-27，v0.0.1-rc.1）：`--publish always` 会**建出两个草稿** ——
+      # 它的 GitHub publisher 是每个产物一个上传任务、各自惰性建 release，
+      # 两个任务同时看到「release doesn't exist」就各 POST 了一次，
+      # 而**草稿不按 tag 去重**，于是 GitHub 老老实实建了两个：
+      #   377510322 只有 blockmap
+      #   377510323 有 exe + latest.yml
+      # 而且进程没等 90MB 的 exe 传完就退了，那一版还是「成功」。
+      # 自己传就没有这个竞态，顺带能保证 latest.yml 最后落地（见 apps/desktop/AGENTS.md）。
+      - name: 出安装包
+        run: pnpm --filter @admin/desktop package:ci
+
+      - name: 发到 GitHub Release（草稿）
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm --filter @admin/desktop release
+        run: |
+          VER="${{ steps.ver.outputs.value }}"
+          DIR="apps/desktop/release/$VER"
+          ls -lh "$DIR"
 
-      - name: 只出安装包（手动试跑，不碰 release）
-        if: github.event_name == 'workflow_dispatch'
-        # 显式 `--publish never`：electron-builder 的默认发布策略是 onTagOrDraft，
-        # 不写清楚的话「手动试跑」哪天会突然把包发出去
-        run: pnpm --filter @admin/desktop package:ci
+          # 幂等：同一个 tag 重跑不该多出一个草稿
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" --draft \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file apps/desktop/release-notes.md
+          fi
+
+          # 🔴 latest.yml **最后**传：它先落地的话，中间那几秒里客户端会拿到
+          # 404 或者半个包 —— 而这两种都不报「更新源没准备好」
+          gh release upload "$GITHUB_REF_NAME" \
+            "$DIR/admin-desktop-$VER-setup.exe" \
+            "$DIR/admin-desktop-$VER-setup.exe.blockmap" --clobber
+          gh release upload "$GITHUB_REF_NAME" "$DIR/latest.yml" --clobber
+
+          echo "草稿已就绪：$(gh release view "$GITHUB_REF_NAME" --json url -q .url)"
 
       - name: 上传安装包（试跑时留个下载入口）
         if: github.event_name == 'workflow_dispatch'
