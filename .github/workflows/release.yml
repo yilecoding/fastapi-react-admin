@@ -139,8 +139,33 @@ jobs:
 
       # 🔴 一律 `--publish never`，产物由下面的步骤用 gh 传。
       # electron-builder 自己传会撞竞态（见 apps/desktop/AGENTS.md 的「在线更新」一节）。
+      # 签名是**可选**的：仓库里配了对应 secrets 就签，没配就出未签名包 ——
+      # 两条路都能跑通，区别只在用户端会不会被 SmartScreen / Gatekeeper 拦。
+      # 怎么申请免费证书、以及 Windows 那条为什么不能「打完再签」，见 apps/desktop/AGENTS.md
       - name: 出安装包
-        run: pnpm --filter @admin/desktop package:ci
+        env:
+          # Windows / macOS 通用：electron-builder 认这两个（.pfx / .p12）
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # macOS 公证（notarize）用
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          EXTRA=""
+          # 只有拿到 Apple 的凭据才开公证 —— 无条件写进 electron-builder.yml 的话，
+          # 没凭据的构建会**直接失败**，而现在这种「没证书也能出包」是刻意保留的
+          if [ -n "${APPLE_TEAM_ID:-}" ] && [ "$RUNNER_OS" = "macOS" ]; then
+            EXTRA="--config.mac.notarize.teamId=$APPLE_TEAM_ID"
+            echo "启用 macOS 公证（teamId=$APPLE_TEAM_ID）"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            echo "⚠️ 未配 APPLE_* secrets —— 出的是未签名未公证的包，用户要手动过 Gatekeeper"
+          fi
+          # ⚠️ 主进程/preload 要先编 —— `package:ci` 里那一步在这里是手动的，
+          # 漏了它打进包的是上一次的 dist/
+          pnpm --filter @admin/desktop build
+          pnpm --filter @admin/desktop exec electron-builder \
+            --config electron-builder.yml --publish never $EXTRA
 
       - name: 传到草稿 Release
         if: github.event_name == 'push'

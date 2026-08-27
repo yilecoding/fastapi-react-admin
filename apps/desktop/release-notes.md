@@ -24,7 +24,9 @@
   - Windows：SmartScreen 会拦一次 →「更多信息」→「仍要运行」
   - macOS：Gatekeeper 会说**「已损坏，应移到废纸篓」**。这不是包坏了，是没有公证：
     右键 →「打开」，或者 `xattr -dr com.apple.quarantine /Applications/Admin\ Desktop.app`
-  - 正式交付请在有证书的机器上打包（Windows 代码签名证书 / Apple Developer ID + notarize）
+  - Linux：AppImage 不需要签名
+  - 想去掉这些提示：Windows 侧有面向开源项目的免费证书方案（SignPath Foundation），
+    macOS 侧没有免费路，需要 Apple Developer Program（$99/年）
 - 🔴 **macOS 上的自动更新不工作**（未签名）。electron-updater 要校验运行中应用的代码签名，
   拿不到就拒绝安装更新。Windows 与 Linux(AppImage) 的自动更新正常
 - **读卡器等本地硬件是桩模式**：厂商的原生助手不在仓库里（那是现场的东西），
