@@ -26,6 +26,34 @@ CI 的 `release.yml` 里这两步是写死的顺序，本地手打包要自己�
 （`turbo` 的 `@admin/desktop#build` 声明了 `dependsOn: web#build`，所以走
 `pnpm build` 也对；但 `pnpm --filter @admin/desktop package` **不经过** turbo 那条依赖。）
 
+## 三个平台：谁能打、打出来能不能用
+
+| 平台 | 产物 | 谁能打 | 装了能用吗 | 自动更新 |
+|---|---|---|---|---|
+| Windows x64 | `nsis`（`.exe`） | **只能在 Windows 上**（从 mac/linux 交叉打要 Wine，不做） | ✅ SmartScreen 拦一次 | ✅ |
+| macOS arm64 / x64 | `dmg`（给人装）+ `zip`（给更新器） | **只能在 macOS 上**（dmg 要 macOS 工具链） | ⚠️ 未公证 → Gatekeeper 说「已损坏」，要右键打开或 `xattr -dr com.apple.quarantine` | 🔴 **不工作** |
+| Linux x64 | `AppImage` | Linux（也能在 mac 上打，但没验过） | ✅ `chmod +x` 直接跑 | ✅ |
+
+所以 `release.yml` 是**三个 runner 的矩阵**，不是一台机器出三份。仓库是 public，
+GitHub 的 macOS runner 不额外计费。
+
+🔴 **macOS 的自动更新必须签名。** electron-updater 会校验**运行中那个应用**的代码签名，
+拿不到就拒绝安装更新 —— 表现是「检查到新版本、下完了、装不上」。这不是配置能绕过去的，
+要 Apple Developer ID（$99/年）+ notarize。在那之前 mac 版只能手动下 dmg 覆盖安装。
+
+⚠️ **mac 的 `zip` target 不能省。** 更新器读的是 zip 不是 dmg，只出 dmg 的话
+`latest-mac.yml` 里没有可用条目，更新链路直接断。
+
+⚠️ 三个平台的更新清单文件名不同（`latest.yml` / `latest-mac.yml` / `latest-linux.yml`），
+所以三个 job 往同一个 release 传不会互相覆盖。
+
+### 🔴 草稿必须先建好，且只建一次
+
+三个平台的 job 是并行的。让它们各自「没有就建一个」会撞出多个草稿 ——
+GitHub 的草稿**不按 tag 去重**（实测见下面「在线更新」第 4 条）。
+所以 `release.yml` 里有一个单独的 `prepare` job 先把草稿建出来，
+`build` 矩阵只负责往里传文件。
+
 ## 发布的两条路线
 
 | | 用在哪 | 产物去哪 |
