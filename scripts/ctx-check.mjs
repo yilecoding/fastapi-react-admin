@@ -88,6 +88,12 @@ const ALLOW = new Map(Object.entries({
   'settings-layout.tsx': '已被 settings-shell.tsx 取代，文档在讲换掉它的理由',
   'command.tsx': 'cmdk 封装，零调用方已连依赖链一起删除；文档在讲「不要把它引回来」',
   'version.json': '构建产物（vite 发到 dist 根目录），不进 git',
+  'latest.yml': 'electron-builder 的产物（更新清单），不进 git',
+  'app-update.yml': '同上，打包时写进安装包的 resources/',
+  'userData/config.json': '桌面端运行期在用户目录生成的配置',
+  'config.json': '同上',
+  'resources/': '桌面端放原生助手的目录，仓库里只有一个 .gitkeep —— 而这个扫描器跳过点开头的文件',
+  'release.yml': '在 .github/ 下，而这个扫描器刻意跳过点开头的目录',
 }))
 
 /** 章节标题 → 所在上下文文件。用来判「见「XXX」」指的那一节还在不在、在不在同一份 */

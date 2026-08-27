@@ -25,7 +25,23 @@ let wired = false
 async function getUpdater() {
   // 开发模式没有 app-update.yml,强跑只会报一句误导人的错
   if (!app.isPackaged) return null
-  const { autoUpdater } = await import("electron-updater")
+  /*
+   * 🔴 `const { autoUpdater } = await import(...)` 在**正式包里拿到的是 undefined**。
+   *
+   * electron-updater 是 CommonJS，而主进程产物是 vite 打的 cjs bundle ——
+   * 这条路径上 `import()` 回的是 `{ default: { autoUpdater } }`。两边都认才行。
+   *
+   * ⚠️ **开发模式永远撞不到这个 bug**：上面 `!app.isPackaged` 就早退了，
+   * 根本不加载这个模块。正式包里的表现是
+   * `Cannot read properties of undefined (reading 'setFeedURL')`。
+   * （实测：下游项目的 0.0.x 正式包，2026-08-25）
+   */
+  const mod = (await import("electron-updater")) as unknown as {
+    autoUpdater?: typeof import("electron-updater").autoUpdater
+    default?: { autoUpdater?: typeof import("electron-updater").autoUpdater }
+  }
+  const autoUpdater = mod.autoUpdater ?? mod.default?.autoUpdater
+  if (!autoUpdater) return null
   const { updateUrl } = readConfig()
   // 填了就覆盖成内网源；没填就**不动 feed**，用打包时写进 app-update.yml 的那个
   if (updateUrl) autoUpdater.setFeedURL({ provider: "generic", url: updateUrl })
@@ -66,5 +82,18 @@ export async function checkForUpdates(emit: Emit): Promise<void> {
 
 export async function quitAndInstall(): Promise<void> {
   const updater = await getUpdater()
-  updater?.quitAndInstall()
+  /*
+   * 🔴 必须显式 `(true, true)` = 静默安装 + 装完自动拉回来。
+   *
+   * `quitAndInstall()` 的 `isSilent` 默认是 `false`，而我们的 NSIS 是
+   * `oneClick: false`（带向导，好处是首次安装能选目录）—— 两者一撞，
+   * 拉起来的是**交互式安装向导**：应用退了、新版本没装上、界面上停在
+   * 「下一步」等人点。自助终端/无人值守的机器上没人会去点。
+   *
+   * 实测判据（下游项目 2026-08-25 的落盘日志）：
+   *   Install: isSilent: false, isForceRunAfter: true
+   *   Update installer has already been triggered. Quitting application.
+   * 之后 exe 仍然是旧版本 —— 安装器起来了，停在向导上。
+   */
+  updater?.quitAndInstall(true, true)
 }
