@@ -92,9 +92,15 @@ nsis:
 # 在客户机的 `userData/config.json` 里填 `updateUrl` 指向内网静态服务即可 ——
 # `src/main/updater.ts` 优先用它，没填才回落到这份 app-update.yml。
 # 一份包同时支持两种升级源，不用为内网单独打一版。
+# ⚠️ 这一段**不是**用来上传的 —— CI 里跑的是 `--publish never`，产物由
+# `.github/workflows/release.yml` 用 `gh release upload` 自己传。
+# 理由：electron-builder 的 GitHub publisher 是每个产物一个上传任务、各自惰性建
+# release，两个任务同时看到「release doesn't exist」就各建了一个草稿
+# （草稿不按 tag 去重）—— 实测 v0.0.1-rc.1 当场劈成两个：一个只有 blockmap，
+# 另一个有 exe + latest.yml，而那次运行还是「成功」。
+# 留着这一段是为了让 electron-builder ① 生成 latest.yml ② 把 app-update.yml 打进包里。
 publish:
   provider: github
   owner: yilecoding
   repo: fastapi-react-admin
-  # 先发草稿：安装包能不能装、能不能连上后端，都得人先试一遍
   releaseType: draft

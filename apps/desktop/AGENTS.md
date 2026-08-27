@@ -98,7 +98,27 @@ Update installer has already been triggered. Quitting application.
 的卸载项会让安装器仍然去更新旧位置 → 又要提权 → 静默失败。判据：卸载项的
 `UninstallString` 带 `/allusers`，先卸掉再装新包。
 
-### ⚠️ 4. 增量下载第一次通常回落成全量
+### 🔴 4. 别让 electron-builder 自己往 GitHub Release 传 —— 会建出两个草稿
+
+它的 GitHub publisher 是**每个产物一个上传任务、各自惰性建 release**。两个任务同时
+看到「release doesn't exist」就各 POST 了一次，而**草稿不按 tag 去重**，于是 GitHub
+老老实实建了两个。实测（v0.0.1-rc.1，2026-08-27）：
+
+```
+• publishing   publisher=Github (…)      ← 两次
+• uploading    file=…setup.exe.blockmap
+• uploading    file=…setup.exe
+• creating GitHub release  reason=release doesn't exist   ← 也是两次
+```
+
+结果：草稿 A 只有 blockmap，草稿 B 有 exe + latest.yml，而且进程没等 90MB 的 exe
+传完就退了 —— **那次运行仍然是「成功」**。
+
+所以 CI 里跑的是 `--publish never`，产物由 `gh release upload` 自己传：没有竞态，
+而且能保证 latest.yml 最后落地。`electron-builder.yml` 的 `publish` 段仍然要留着 ——
+它负责生成 latest.yml 和把 app-update.yml 打进包（见上一节）。
+
+### ⚠️ 5. 增量下载第一次通常回落成全量
 
 `.blockmap` 让 electron-updater 只下差异块，但它要拿**本机那个旧安装包**的 blockmap 去比。
 第一次更新常报 `Cannot download differentially, fallback to full download: sha512 checksum
