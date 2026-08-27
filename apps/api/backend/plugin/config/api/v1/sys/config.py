@@ -4,6 +4,7 @@ from fastapi import APIRouter, Body, Depends, Path, Query
 
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
+from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -31,6 +32,21 @@ async def get_all_configs(
     type: Annotated[str | None, Query(description='参数配置类型')] = None,
 ) -> ResponseSchemaModel[list[GetConfigDetail]]:
     configs = await config_service.get_all(db=db, type=type)
+    return response_base.success(data=configs)
+
+
+@router.get(
+    '/dev-sandbox-gate',
+    summary='获取组件沙箱开关',
+    description=(
+        '给「组件沙箱」页面判断露不露出来用——只读 DEV 组那两个开关，'
+        '不是参数配置的通用读接口，type 写死不接受入参，所以能只挂 DependsJwtAuth。'
+        '真正的参数配置读写仍然要 sys:config:list（issue #30）'
+    ),
+    dependencies=[DependsJwtAuth],
+)
+async def get_dev_sandbox_gate(db: CurrentSession) -> ResponseSchemaModel[list[GetConfigDetail]]:
+    configs = await config_service.get_all(db=db, type='DEV')
     return response_base.success(data=configs)
 
 

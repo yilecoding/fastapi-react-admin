@@ -38,4 +38,6 @@ export const BRAND = {
   version: "v0.0.1",
   /** 底座里真正承重的那几样，登录页会把它列出来。不摆 SQL SERVER——数据库是可换的实现细节，不是卖点 */
   stack: ["REACT 19", "TANSTACK", "SHADCN", "TAILWIND", "FASTAPI"],
+  /** 仓库地址。顶栏的 GitHub 图标（`components/github-link.tsx`）读它，fork 出去改这一处就行 */
+  repoUrl: "https://github.com/yilecoding/fastapi-react-admin",
 } as const
