@@ -73,11 +73,16 @@ const inv = (qc: ReturnType<typeof useQueryClient>) => () =>
 
 export function useCreateDictType() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: (b: DictTypeBody) => api.POST('/api/v1/sys/dict-types', { body: b }), onSuccess: inv(qc) })
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: (b: DictTypeBody) => api.POST('/api/v1/sys/dict-types', { body: b }),
+    onSuccess: inv(qc),
+  })
 }
 export function useUpdateDictType() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: DictTypeBody }) => api.PUT(`/api/v1/sys/dict-types/${id}`, { body }),
     onSuccess: inv(qc),
   })
@@ -88,11 +93,16 @@ export function useDeleteDictTypes() {
 }
 export function useCreateDictData() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: (b: DictDataBody) => api.POST('/api/v1/sys/dict-datas', { body: b }), onSuccess: inv(qc) })
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: (b: DictDataBody) => api.POST('/api/v1/sys/dict-datas', { body: b }),
+    onSuccess: inv(qc),
+  })
 }
 export function useUpdateDictData() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: DictDataBody }) => api.PUT(`/api/v1/sys/dict-datas/${id}`, { body }),
     onSuccess: inv(qc),
   })

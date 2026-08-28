@@ -91,6 +91,7 @@ export type NoticeBody = {
 export function useCreateNotice() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (body: NoticeBody) => api.POST<Notice>('/api/v1/sys/notices', { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: noticeKeys.all }),
   })
@@ -160,6 +161,7 @@ export function useSyncNoticeImages() {
 export function useUpdateNotice() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: NoticeBody }) =>
       api.PUT(`/api/v1/sys/notices/${id}`, { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: noticeKeys.all }),

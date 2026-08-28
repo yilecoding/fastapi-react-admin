@@ -116,6 +116,7 @@ export type UpdateUserBody = {
 export function useCreateUser() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (body: CreateUserBody) => api.POST('/api/v1/sys/users', { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.all }),
   })
@@ -124,6 +125,7 @@ export function useCreateUser() {
 export function useUpdateUser() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: UpdateUserBody }) =>
       api.PUT(`/api/v1/sys/users/${id}`, { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.all }),
@@ -184,6 +186,7 @@ export type UserPermissionType = 'superuser' | 'staff' | 'status' | 'multi_login
 export function useToggleUserPermission() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, type }: { id: string; type: UserPermissionType }) =>
       api.PUT(`/api/v1/sys/users/${id}/permissions?type=${type}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.all }),
@@ -200,6 +203,7 @@ export function useToggleUserPermission() {
  */
 export function useResetUserPassword() {
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, password }: { id: string; password: string }) =>
       api.PUT(`/api/v1/sys/users/${id}/password`, { body: { password } }),
   })

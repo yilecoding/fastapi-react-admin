@@ -188,7 +188,6 @@ export function UserPage({
   const [bulkOpen, setBulkOpen] = React.useState(false)
   const del = useDeleteUser()
   const delMany = useDeleteUsers()
-  const [bulkError, setBulkError] = React.useState<string | null>(null)
 
   const handleEdit = React.useCallback((u: User) => {
     setEditing(u)
@@ -272,10 +271,7 @@ export function UserPage({
                     <BulkBar
                       count={selectedIds.length}
                       pending={delMany.isPending}
-                      onDelete={() => {
-                        setBulkError(null)
-                        setBulkOpen(true)
-                      }}
+                      onDelete={() => setBulkOpen(true)}
                     />
                   </Can>
                 </>
@@ -345,8 +341,11 @@ export function UserPage({
         pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
-          await del.mutateAsync(pendingDelete.id)
-          setPendingDelete(null)
+          try {
+            await del.mutateAsync(pendingDelete.id)
+          } finally {
+            setPendingDelete(null)
+          }
         }}
       />
 
@@ -354,22 +353,18 @@ export function UserPage({
         open={bulkOpen}
         onOpenChange={(o) => !o && setBulkOpen(false)}
         title={t('批量删除用户')}
-        description={
-          bulkError
-            ? t('{{err}}（已删除的不会回滚）', { err: bulkError })
-            : t('确定删除选中的 {{n}} 个用户吗？此操作不可撤销。', { n: selectedIds.length })
-        }
+        description={t('确定删除选中的 {{n}} 个用户吗？此操作不可撤销。', { n: selectedIds.length })}
         confirmText={t('删除')}
         destructive
         pending={delMany.isPending}
         onConfirm={async () => {
+          // 部分失败（已删除的不会回滚）由全局 mutationCache 的 onError 弹 toast
+          // 说清楚失败条数，弹窗不用再自己接一份一样的文案
           try {
             await delMany.mutateAsync(selectedIds)
             setRowSelection({})
+          } finally {
             setBulkOpen(false)
-          } catch (e) {
-            // 部分失败：留在弹窗里把失败条数说清楚，不要静默关闭
-            setBulkError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
       />

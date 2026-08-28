@@ -209,8 +209,13 @@ export function DeptPage({
         confirmText={t("删除")} destructive pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
-          await del.mutateAsync(pendingDelete.id)
-          setPendingDelete(null)
+          // 失败（409 冲突等）由全局 mutationCache 的 onError 弹 toast——
+          // 这里只负责收尾：不管成不成功，弹窗都别再挂着一个「反正会再失败」的删除按钮
+          try {
+            await del.mutateAsync(pendingDelete.id)
+          } finally {
+            setPendingDelete(null)
+          }
         }}
       />
     </div>
