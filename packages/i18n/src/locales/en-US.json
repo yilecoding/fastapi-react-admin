@@ -741,6 +741,7 @@
   "操作人": "Operator",
   "操作内容": "Action",
   "操作地点": "Location",
+  "操作失败": "Operation failed",
   "操作日志": "Operation log",
   "操作日志详情。请求头中的凭据类字段已在服务端脱敏，响应体超 10 KB 会被截断。": "Operation log detail. Credential headers are redacted server-side, and response bodies over 10 KB are truncated.",
   "操作时间": "Time",
