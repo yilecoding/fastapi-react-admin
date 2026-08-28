@@ -58,6 +58,7 @@ export type CreateDeptBody = DeptBody & { code: string }
 export function useCreateDept() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (body: CreateDeptBody) => api.POST('/api/v1/sys/depts', { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: deptKeys.all }),
   })
@@ -66,6 +67,7 @@ export function useCreateDept() {
 export function useUpdateDept() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: DeptBody }) =>
       api.PUT(`/api/v1/sys/depts/${id}`, { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: deptKeys.all }),

@@ -200,10 +200,13 @@ export function DataPermissionPage({
         pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
-          const wasSelected = pendingDelete.id === selected?.id
-          await del.mutateAsync([pendingDelete.id])
-          setPendingDelete(null)
-          if (wasSelected) patch({ scope: undefined })
+          try {
+            const wasSelected = pendingDelete.id === selected?.id
+            await del.mutateAsync([pendingDelete.id])
+            if (wasSelected) patch({ scope: undefined })
+          } finally {
+            setPendingDelete(null)
+          }
         }}
       />
     </div>
