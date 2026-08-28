@@ -195,7 +195,10 @@ export function RolePage({
                     </Can>
                     <Can perm="sys:role:del">
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem variant="destructive" onClick={() => setPendingDelete(role)}>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => setPendingDelete(role)}
+                      >
                         <IconTrash className="size-4" />{t('删除')}
                       </DropdownMenuItem>
                     </Can>
@@ -287,10 +290,13 @@ export function RolePage({
         pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
-          const wasSelected = pendingDelete.id === selected?.id
-          await del.mutateAsync([pendingDelete.id])
-          setPendingDelete(null)
-          if (wasSelected) patch({ role: undefined, upage: undefined })
+          try {
+            const wasSelected = pendingDelete.id === selected?.id
+            await del.mutateAsync([pendingDelete.id])
+            if (wasSelected) patch({ role: undefined, upage: undefined })
+          } finally {
+            setPendingDelete(null)
+          }
         }}
       />
     </div>

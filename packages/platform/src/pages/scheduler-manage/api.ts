@@ -111,6 +111,7 @@ export type SchedulerBody = {
 export function useCreateScheduler() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (body: SchedulerBody) => api.POST<TaskScheduler>('/api/v1/tasks/schedulers', { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: schedulerKeys.all }),
   })
@@ -119,6 +120,7 @@ export function useCreateScheduler() {
 export function useUpdateScheduler() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: SchedulerBody }) =>
       api.PUT(`/api/v1/tasks/schedulers/${id}`, { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: schedulerKeys.all }),

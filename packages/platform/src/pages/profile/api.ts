@@ -18,6 +18,7 @@ import { authKeys } from '../../auth/queries'
 export function useUpdateNickname() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (nickname: string) =>
       api.PUT<null>('/api/v1/sys/users/me/nickname', { body: { nickname } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: authKeys.me() }),
@@ -37,6 +38,7 @@ export function useUpdateNickname() {
 export function useUpdateAvatar() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (avatar: string) =>
       api.PUT<null>('/api/v1/sys/users/me/avatar', {
         body: { avatar: avatar.trim() ? avatar.trim() : null },
@@ -62,6 +64,7 @@ export function useUpdateAvatar() {
 export function useSaveTimeZone() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (timezone: string) =>
       api.PUT<null>('/api/v1/sys/users/me/timezone', { body: { timezone } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: authKeys.me() }),
@@ -79,6 +82,7 @@ export function useSaveTimeZone() {
  */
 export function useSendEmailCaptcha() {
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (recipients: string) =>
       api.POST<null>('/api/v1/emails/captcha', { body: { recipients } }),
   })
@@ -88,6 +92,7 @@ export function useSendEmailCaptcha() {
 export function useUpdateEmail() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (v: { email: string; captcha: string }) =>
       api.PUT<null>('/api/v1/sys/users/me/email', { body: v }),
     onSuccess: () => qc.invalidateQueries({ queryKey: authKeys.me() }),
@@ -103,6 +108,7 @@ export function useUpdateEmail() {
  */
 export function useUpdatePassword() {
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (v: { old_password: string; new_password: string; confirm_password: string }) =>
       api.PUT<null>('/api/v1/sys/users/me/password', { body: v }),
   })
@@ -157,6 +163,7 @@ export function useSocialBindingUrl() {
 export function useUnbindSocial() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (source: SocialSource) =>
       api.DELETE(`/api/v1/oauth2/me/unbinding?source=${source}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: socialKeys.bindings() }),
@@ -230,6 +237,7 @@ type UploadedImage = { id: string; public_url: string | null; original_name: str
 export function useUploadAvatar() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: async (file: File) => {
       const saved = await uploadFile<UploadedImage>('/api/v1/sys/files/upload?public=true', file)
       if (!saved.public_url) {

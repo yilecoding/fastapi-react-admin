@@ -11,6 +11,7 @@ import { DataTableSkeletonRows } from '@admin/ui/components/data-table'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@admin/ui/components/table'
+import { toast } from '@admin/ui/components/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 import { cn } from '@admin/ui/lib/utils'
 
@@ -220,8 +221,15 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
         pending={bind.isPending}
         onConfirm={async () => {
           if (!pendingUnbind) return
-          await bind.mutateAsync({ id: scope.id, rules: ids.filter((x) => x !== pendingUnbind.id) })
-          setPendingUnbind(null)
+          try {
+            await bind.mutateAsync({ id: scope.id, rules: ids.filter((x) => x !== pendingUnbind.id) })
+          } catch (e) {
+            // 这个 mutation（useUpdateScopeRules）标了 suppressErrorToast——
+            // rule-picker.tsx 那边已经内联展示过一次，这里不能指望全局兜底，手动弹
+            toast.error(e instanceof Error ? e.message : t('操作失败'))
+          } finally {
+            setPendingUnbind(null)
+          }
         }}
       />
 
@@ -239,8 +247,11 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
         pending={delRule.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
-          await delRule.mutateAsync([pendingDelete.id])
-          setPendingDelete(null)
+          try {
+            await delRule.mutateAsync([pendingDelete.id])
+          } finally {
+            setPendingDelete(null)
+          }
         }}
       />
     </div>

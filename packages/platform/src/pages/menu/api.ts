@@ -68,11 +68,16 @@ const inv = (qc: ReturnType<typeof useQueryClient>) => () => {
 
 export function useCreateMenu() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: (b: MenuBody) => api.POST('/api/v1/sys/menus', { body: b }), onSuccess: inv(qc) })
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: (b: MenuBody) => api.POST('/api/v1/sys/menus', { body: b }),
+    onSuccess: inv(qc),
+  })
 }
 export function useUpdateMenu() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: MenuBody }) => api.PUT(`/api/v1/sys/menus/${id}`, { body }),
     onSuccess: inv(qc),
   })
