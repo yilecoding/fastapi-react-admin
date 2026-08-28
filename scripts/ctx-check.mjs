@@ -96,6 +96,8 @@ const ALLOW = new Map(Object.entries({
   'config.json': '同上',
   'resources/': '桌面端放原生助手的目录，仓库里只有一个 .gitkeep —— 而这个扫描器跳过点开头的文件',
   'release.yml': '在 .github/ 下，而这个扫描器刻意跳过点开头的目录',
+  '.pre-commit-config.yaml': '在仓库里，真实存在（`git ls-files` 能看到）——但这个扫描器刻意跳过点开头的文件，只是巧合命中',
+  'apps/api/.pre-commit-config.yaml': '同上，带路径前缀引用时是另一个 token，一起豁免',
 }))
 
 /** 章节标题 → 所在上下文文件。用来判「见「XXX」」指的那一节还在不在、在不在同一份 */

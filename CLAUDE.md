@@ -168,6 +168,27 @@ pnpm --filter api celery:beat             # 只能一个
 
 后端契约改动后跑 `cd packages/platform && pnpm gen:api` 重新生成 `schema.d.ts`。
 
+🔴 **`pnpm install:all` 会顺带装好本地 pre-commit 钩子，换机器 / 新克隆不用再手动补一步。**
+`apps/api/.pre-commit-config.yaml` 早就在（ruff `--fix --unsafe-fixes` + ruff-format + json/yaml/toml
+检查 + uv-lock/uv-export），`prek` 也是 `lint` 依赖组、`uv sync` 就带上——但光有配置和
+二进制不等于钩子被激活，`.git/hooks/` 不进版本库，得显式 `install` 一次：
+
+```bash
+pnpm hooks:install       # = apps/api/.venv/bin/prek install -C apps/api -f
+```
+
+❌ **不要在仓库根裸跑 `prek install`（不带 `-C apps/api`）**——`.git` 在根目录、
+配置在 `apps/api/` 下，prek 把 cwd 固化进装的时候生成的 shim 里，不会自己向下
+搜子目录找配置。裸装**看似成功**，但下一次真正 `git commit` 才报「找不到配置文件」
+并挡住提交——静默/延迟失败，且装错了没法从 git diff 里看出来。
+
+实测（造一个带未用 `import os` + `if x: return x else: return None` 的坏 `.py` 文件验证）：
+
+| 装法 | 提交时的表现 |
+|---|---|
+| 裸 `prek install` | `No .pre-commit-config.yaml found...`，钩子形同虚设 |
+| `prek install -C apps/api -f`（= `pnpm hooks:install`） | 正确进 workspace：`ruff check` 自动修了 unused-import + superfluous-else-return，`ruff format` 重新格式化；剩下 2 个缺类型标注的错误改不了，提交被挡住（exit 1） |
+
 ---
 
 ## 硬纪律（违反会坏，不是风格问题）
