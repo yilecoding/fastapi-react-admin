@@ -106,6 +106,10 @@
   在已经跑着的循环里再调直接
   `asyncio.run() cannot be called from a running event loop`
 
+- pnpm --filter api db:reset 必须走 db:init:auto（drop_all + create_all + 灌种子）。
+  不要把 alembic downgrade base && upgrade head 当成重置：空基线的 downgrade
+  不会删表或业务数据，它只适合验证迁移链。
+
 ### 🔴 alembic 引进来**之前**手写 ALTER 加的列，守卫测试抓不到
 
 `test_model_matches_migrations` 比对的是**模型 vs fba_test**。如果一列是手写

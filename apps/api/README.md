@@ -35,6 +35,8 @@ uv sync --group dev                       # 装依赖（含 pytest）
 pnpm --filter api dev                     # 起服务 :8000（--reload，只监听 backend/）
 pnpm --filter api test                    # pytest
 pnpm --filter api test:db                 # 重建单元测试库 fba_test
+pnpm --filter api db:reset                # 清空开发库、按当前模型重建并灌种子（危险）
+pnpm --filter api db:upgrade               # 只应用 Alembic 迁移，不清空数据
 ```
 
 ⚠️ **改模型不等于改表。** 没有 alembic 迁移历史（`alembic/versions/` 是空的），
