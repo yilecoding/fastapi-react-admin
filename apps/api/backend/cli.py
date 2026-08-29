@@ -141,6 +141,24 @@ def setup_env_file() -> bool:
         return True
 
 
+def _format_database_connection_error(error: Exception) -> str:
+    """将底层数据库连接异常转换成可操作、且不泄露凭据的 CLI 提示。"""
+    detail = str(error)
+    target = f'{settings.DATABASE_USER}@{settings.DATABASE_HOST}:{settings.DATABASE_PORT}'
+
+    if any(marker in detail for marker in ('18456', '28000', 'Login failed for user')):
+        return (
+            f'数据库登录失败：{target}（SQL Server 错误 18456）。\n'
+            '请检查 apps/api/backend/.env 中的 DATABASE_PASSWORD 是否与当前 SQL Server 实例一致。\n'
+            '如果使用了 Docker 持久化卷，修改 docker-compose.dev.yml 的 MSSQL_SA_PASSWORD 不会更新已有实例。'
+        )
+
+    return (
+        f'数据库连接失败：{settings.DATABASE_TYPE} {target}。\n'
+        '请检查数据库容器状态、主机/端口、宿主机 ODBC Driver 18，以及 .env 中的连接配置。'
+    )
+
+
 async def create_database(conn: AsyncConnection) -> bool:
     """创建或重建数据库"""
     try:
@@ -218,11 +236,16 @@ async def auto_init() -> None:
     ok = Prompt.ask('即将[red]新建/重建数据库[/red]，确认继续吗？', choices=['y', 'n'], default='n')
 
     if ok.lower() == 'y':
-        async_init_engine = create_database_async_engine(get_database_url(with_database=False))
-        async with async_init_engine.connect() as conn:
-            await conn.execution_options(isolation_level='AUTOCOMMIT')
-            if not await create_database(conn):
-                raise cappa.Exit('数据库创建失败', code=1)
+        try:
+            async_init_engine = create_database_async_engine(get_database_url(with_database=False))
+            async with async_init_engine.connect() as conn:
+                await conn.execution_options(isolation_level='AUTOCOMMIT')
+                if not await create_database(conn):
+                    raise cappa.Exit('数据库创建失败', code=1)
+        except cappa.Exit:
+            raise
+        except Exception as e:
+            raise cappa.Exit(_format_database_connection_error(e), code=1) from e
     else:
         console.warning('已取消数据库操作')
 
