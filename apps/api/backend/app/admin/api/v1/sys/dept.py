@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query
 from sqlalchemy import ColumnElement
 
 from backend.app.admin.model import Dept
@@ -61,9 +61,12 @@ async def create_dept(db: CurrentSessionTransaction, obj: CreateDeptParam) -> Re
     ],
 )
 async def update_dept(
-    db: CurrentSessionTransaction, pk: Annotated[int, Path(description='部门 ID')], obj: UpdateDeptParam
+    db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
+    pk: Annotated[int, Path(description='部门 ID')],
+    obj: UpdateDeptParam,
 ) -> ResponseModel:
-    count = await dept_service.update(db=db, pk=pk, obj=obj)
+    count = await dept_service.update(db=db, background_tasks=background_tasks, pk=pk, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()
