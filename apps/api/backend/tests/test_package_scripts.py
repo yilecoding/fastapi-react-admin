@@ -1,6 +1,6 @@
 import json
-from pathlib import Path
 
+from pathlib import Path
 
 API_PACKAGE = Path(__file__).resolve().parents[2] / 'package.json'
 
