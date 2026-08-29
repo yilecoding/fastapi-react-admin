@@ -74,6 +74,7 @@ function invalidateConfigCaches(qc: ReturnType<typeof useQueryClient>) {
 export function useCreateConfig() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (body: ConfigBody) => api.POST('/api/v1/sys/configs', { body }),
     onSuccess: () => invalidateConfigCaches(qc),
   })
@@ -82,6 +83,7 @@ export function useCreateConfig() {
 export function useUpdateConfig() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: ConfigBody }) =>
       api.PUT(`/api/v1/sys/configs/${id}`, { body }),
     onSuccess: () => invalidateConfigCaches(qc),

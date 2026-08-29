@@ -373,35 +373,53 @@ export function DictPage({
       />
 
       <ConfirmDialog
-        open={delType !== null} onOpenChange={(o) => !o && setDelType(null)}
+        open={delType !== null}
+        onOpenChange={(o) => !o && setDelType(null)}
         title={t("删除字典类型")}
-        description={delType ? t('确定删除「{{name}}」吗？其下的字典项也会一并失效。', { name: delType.name }) : ''}
+        description={
+          delType ? t('确定删除「{{name}}」吗？其下的字典项也会一并失效。', { name: delType.name }) : ''
+        }
         confirmText={t("删除")} destructive pending={rmType.isPending}
         onConfirm={async () => {
           if (!delType) return
-          const removingSelected = delType.id === selectedId
-          await rmType.mutateAsync([delType.id])
-          setDelType(null)
-          // 删掉的正是当前选中的 —— 清掉 URL 里的 type，让它回落到第一个
-          if (removingSelected) patch({ type: undefined, page: undefined, q: undefined })
+          try {
+            const removingSelected = delType.id === selectedId
+            await rmType.mutateAsync([delType.id])
+            // 删掉的正是当前选中的 —— 清掉 URL 里的 type，让它回落到第一个
+            if (removingSelected) patch({ type: undefined, page: undefined, q: undefined })
+          } finally {
+            setDelType(null)
+          }
         }}
       />
       <ConfirmDialog
-        open={delData !== null} onOpenChange={(o) => !o && setDelData(null)}
+        open={delData !== null}
+        onOpenChange={(o) => !o && setDelData(null)}
         title={t("删除字典项")}
         description={delData ? t('确定删除「{{label}}」吗？', { label: delData.label }) : ''}
         confirmText={t("删除")} destructive pending={rmData.isPending}
-        onConfirm={async () => { if (delData) { await rmData.mutateAsync([delData.id]); setDelData(null) } }}
+        onConfirm={async () => {
+          if (!delData) return
+          try {
+            await rmData.mutateAsync([delData.id])
+          } finally {
+            setDelData(null)
+          }
+        }}
       />
       <ConfirmDialog
-        open={bulkOpen} onOpenChange={(o) => !o && setBulkOpen(false)}
+        open={bulkOpen}
+        onOpenChange={(o) => !o && setBulkOpen(false)}
         title={t("批量删除字典项")}
         description={t('确定删除选中的 {{n}} 个字典项吗？', { n: selectedIds.length })}
         confirmText={t("删除")} destructive pending={rmData.isPending}
         onConfirm={async () => {
-          await rmData.mutateAsync(selectedIds)
-          setRowSelection({})
-          setBulkOpen(false)
+          try {
+            await rmData.mutateAsync(selectedIds)
+            setRowSelection({})
+          } finally {
+            setBulkOpen(false)
+          }
         }}
       />
     </div>

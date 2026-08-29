@@ -109,6 +109,7 @@ const invScopes = (qc: ReturnType<typeof useQueryClient>) => () =>
 export function useCreateDataScope() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (b: DataScopeBody) => api.POST('/api/v1/sys/data-scopes', { body: b }),
     onSuccess: invScopes(qc),
   })
@@ -117,6 +118,7 @@ export function useCreateDataScope() {
 export function useUpdateDataScope() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: DataScopeBody }) =>
       api.PUT(`/api/v1/sys/data-scopes/${id}`, { body }),
     onSuccess: invScopes(qc),
@@ -135,6 +137,7 @@ export function useDeleteDataScopes() {
 export function useUpdateScopeRules() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, rules }: { id: string; rules: string[] }) =>
       api.PUT(`/api/v1/sys/data-scopes/${id}/rules`, { body: { rules } }),
     onSuccess: (_d, v) => {
@@ -218,6 +221,7 @@ const invRules = (qc: ReturnType<typeof useQueryClient>) => () => {
 export function useCreateDataRule() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (b: DataRuleBody) => api.POST<DataRule>('/api/v1/sys/data-rules', { body: b }),
     onSuccess: invRules(qc),
   })
@@ -226,6 +230,7 @@ export function useCreateDataRule() {
 export function useUpdateDataRule() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: DataRuleBody }) =>
       api.PUT(`/api/v1/sys/data-rules/${id}`, { body }),
     onSuccess: invRules(qc),

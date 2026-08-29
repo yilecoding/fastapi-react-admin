@@ -68,6 +68,7 @@ export const pluginChangedQuery = queryOptions({
 export function useTogglePlugin() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (name: string) => api.PUT(`/api/v1/sys/plugins/${name}/status`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: pluginKeys.all })
@@ -79,6 +80,7 @@ export function useTogglePlugin() {
 export function useUninstallPlugin() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (name: string) => api.DELETE(`/api/v1/sys/plugins/${name}`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: pluginKeys.all })
@@ -97,6 +99,7 @@ export function useUninstallPlugin() {
 export function useInstallPlugin() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: async (v: { type: 'zip'; file: File } | { type: 'git'; repoUrl: string }) => {
       if (v.type === 'git') {
         return api.POST(`/api/v1/sys/plugins?type=git&repo_url=${encodeURIComponent(v.repoUrl)}`)

@@ -130,6 +130,7 @@ export type CreateRoleBody = RoleBody & { code: string }
 export function useCreateRole() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: (body: CreateRoleBody) => api.POST('/api/v1/sys/roles', { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: roleKeys.all }),
   })
@@ -138,6 +139,7 @@ export function useCreateRole() {
 export function useUpdateRole() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: RoleBody }) =>
       api.PUT(`/api/v1/sys/roles/${id}`, { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: roleKeys.all }),
@@ -155,6 +157,7 @@ export function useDeleteRoles() {
 export function useUpdateRoleMenus() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, menus }: { id: string; menus: string[] }) =>
       api.PUT(`/api/v1/sys/roles/${id}/menus`, { body: { menus } }),
     onSuccess: (_d, v) => {
@@ -202,6 +205,7 @@ export const roleScopesQuery = (id: string) =>
 export function useUpdateRoleScopes() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, scopes }: { id: string; scopes: string[] }) =>
       api.PUT(`/api/v1/sys/roles/${id}/scopes`, { body: { scopes } }),
     onSuccess: (_d, v) => {
@@ -268,6 +272,7 @@ function invalidateRoleUsers(qc: ReturnType<typeof useQueryClient>, roleId: stri
 export function useAddRoleUsers() {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, users }: { id: string; users: string[] }) =>
       api.POST(`/api/v1/sys/roles/${id}/users`, { body: { users } }),
     onSuccess: (_d, v) => invalidateRoleUsers(qc, v.id),

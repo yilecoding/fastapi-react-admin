@@ -131,7 +131,6 @@ export function NoticePage({
   const [viewing, setViewing] = React.useState<Notice | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<Notice | null>(null)
   const [bulkOpen, setBulkOpen] = React.useState(false)
-  const [bulkError, setBulkError] = React.useState<string | null>(null)
   const del = useDeleteNotices()
 
   const handleEdit = React.useCallback((n: Notice) => {
@@ -207,10 +206,7 @@ export function NoticePage({
                     <BulkBar
                       count={selectedIds.length}
                       pending={del.isPending}
-                      onDelete={() => {
-                        setBulkError(null)
-                        setBulkOpen(true)
-                      }}
+                      onDelete={() => setBulkOpen(true)}
                     />
                   </Can>
                 </>
@@ -272,8 +268,11 @@ export function NoticePage({
         pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
-          await del.mutateAsync([pendingDelete.id])
-          setPendingDelete(null)
+          try {
+            await del.mutateAsync([pendingDelete.id])
+          } finally {
+            setPendingDelete(null)
+          }
         }}
       />
 
@@ -281,11 +280,7 @@ export function NoticePage({
         open={bulkOpen}
         onOpenChange={(o) => !o && setBulkOpen(false)}
         title={t('批量删除通知公告')}
-        description={
-          bulkError
-            ? t('{{err}}（已删除的不会回滚）', { err: bulkError })
-            : t('确定删除选中的 {{n}} 条通知公告吗？此操作不可撤销。', { n: selectedIds.length })
-        }
+        description={t('确定删除选中的 {{n}} 条通知公告吗？此操作不可撤销。', { n: selectedIds.length })}
         confirmText={t('删除')}
         destructive
         pending={del.isPending}
@@ -293,10 +288,8 @@ export function NoticePage({
           try {
             await del.mutateAsync(selectedIds)
             setRowSelection({})
+          } finally {
             setBulkOpen(false)
-          } catch (e) {
-            // 失败要留在弹窗里说清楚，不要静默关闭
-            setBulkError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
       />

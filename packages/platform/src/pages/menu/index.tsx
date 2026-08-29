@@ -258,11 +258,23 @@ export function MenuPage({
       />
 
       <ConfirmDialog
-        open={pendingDelete !== null} onOpenChange={(o) => !o && setPendingDelete(null)}
+        open={pendingDelete !== null}
+        onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除菜单")}
-        description={pendingDelete ? t('确定删除「{{title}}」吗？其下的子菜单与按钮权限也会一并移除。', { title: pendingDelete.title }) : ''}
+        description={
+          pendingDelete
+            ? t('确定删除「{{title}}」吗？其下的子菜单与按钮权限也会一并移除。', { title: pendingDelete.title })
+            : ''
+        }
         confirmText={t("删除")} destructive pending={del.isPending}
-        onConfirm={async () => { if (pendingDelete) { await del.mutateAsync(pendingDelete.id); setPendingDelete(null) } }}
+        onConfirm={async () => {
+          if (!pendingDelete) return
+          try {
+            await del.mutateAsync(pendingDelete.id)
+          } finally {
+            setPendingDelete(null)
+          }
+        }}
       />
     </div>
   )
