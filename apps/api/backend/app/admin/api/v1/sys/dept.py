@@ -7,7 +7,6 @@ from backend.app.admin.model import Dept
 from backend.app.admin.schema.dept import CreateDeptParam, GetDeptDetail, GetDeptTree, UpdateDeptParam
 from backend.app.admin.service.dept_service import dept_service
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import DataPermissionFilter, RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -15,7 +14,14 @@ from backend.database.db import CurrentSession, CurrentSessionTransaction
 router = APIRouter()
 
 
-@router.get('/{pk}', summary='获取部门详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取部门详情',
+    dependencies=[
+        Depends(RequestPermission('sys:dept:list')),
+        DependsRBAC,
+    ],
+)
 async def get_dept(
     db: CurrentSession, pk: Annotated[int, Path(description='部门 ID')]
 ) -> ResponseSchemaModel[GetDeptDetail]:
@@ -23,7 +29,14 @@ async def get_dept(
     return response_base.success(data=data)
 
 
-@router.get('', summary='获取部门树', dependencies=[DependsJwtAuth])
+@router.get(
+    '',
+    summary='获取部门树',
+    dependencies=[
+        Depends(RequestPermission('sys:dept:list')),
+        DependsRBAC,
+    ],
+)
 async def get_dept_tree(
     db: CurrentSession,
     data_filter: Annotated[ColumnElement[bool], Depends(DataPermissionFilter(Dept))],
