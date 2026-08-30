@@ -13,7 +13,7 @@ from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
 from backend.common.pagination import paging_data
-from backend.utils.file_ops import delete_file, upload_file, upload_file_verify, upload_root
+from backend.utils.file_ops import delete_file, get_file_ext, upload_file, upload_file_verify, upload_root
 
 
 class FileService:
@@ -59,10 +59,18 @@ class FileService:
         file_select = await file_dao.get_select(name, type, ext, created_by, start_time, end_time)
         return await paging_data(db, file_select)
 
+    # 🔴 SVG 是可执行的 XML 文档（能带 <script>/onload），落进无鉴权的 /uploads
+    # 静态子树、被当成独立文档直接导航打开，就是一个完整的存储型 XSS —— 能读到
+    # sessionStorage 里的 access token（token-store.ts 就存在这里）。`ico` 是纯
+    # 二进制图标格式，没有脚本执行面，不受影响。前端 file-icon.tsx 的
+    # canThumbnail 早就因为同样的理由把 svg 排除在缩略图之外，但那个认知没有
+    # 延伸到"能不能进公开子树"这条更危险的路径——这里补上。
+    _PUBLIC_UNSAFE_IMAGE_EXTS = frozenset({'svg'})
+
     @staticmethod
-    def verify_public(file_type: FileType) -> None:
+    def verify_public(file_type: FileType, file_ext: str) -> None:
         """
-        公开子树的准入校验：**只有图片进得去**。
+        公开子树的准入校验：**只有图片进得去，且不能是可执行的图片格式**。
 
         校验放在 service 而不是接口层，也不靠调用方自觉 —— 公开子树被
         `/uploads` 无鉴权挂出去，一旦让文档/压缩包进去，
@@ -74,9 +82,10 @@ class FileService:
         不是「它是图片」的推论。所以这里只否掉非图片，不代替调用方做决定。
 
         :param file_type: 上传物的分类
+        :param file_ext: 小写扩展名，不带点
         :return:
         """
-        if file_type != FileType.image:
+        if file_type != FileType.image or file_ext in FileService._PUBLIC_UNSAFE_IMAGE_EXTS:
             raise errors.RequestError(msg=t('error.file.public_link_images_only'))
 
     @staticmethod
@@ -94,7 +103,7 @@ class FileService:
         # 先否掉再落盘 —— 反过来的话非法文件已经写进公开目录了，
         # 就算接着 raise，那个可读的直链在磁盘上已经存在过一瞬
         if public:
-            FileService.verify_public(file_type)
+            FileService.verify_public(file_type, get_file_ext(file))
 
         saved = await upload_file(file, public=public)
 

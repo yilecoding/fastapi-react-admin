@@ -11,10 +11,12 @@ from fastapi import Depends, FastAPI
 from fastapi_pagination import add_pagination
 from prometheus_client import make_asgi_app
 from sqlalchemy import text
+from starlette.datastructures import MutableHeaders
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
+from starlette.types import Receive, Scope, Send
 from starlette_context.middleware import ContextMiddleware
 from starlette_context.plugins import RequestIdPlugin
 
@@ -91,14 +93,16 @@ async def _verify_production_database() -> None:
                 )
 
         seeded = (
-            await db.execute(
-                select(User.username).where(User.password.in_(SEEDED_PASSWORD_HASHES), User.deleted == 0)
+            (
+                await db.execute(
+                    select(User.username).where(User.password.in_(SEEDED_PASSWORD_HASHES), User.deleted == 0)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         if seeded:
-            problems.append(
-                f'这些账号仍在使用种子数据里的默认密码（123456）：{sorted(seeded)} —— 改掉之后再启动'
-            )
+            problems.append(f'这些账号仍在使用种子数据里的默认密码（123456）：{sorted(seeded)} —— 改掉之后再启动')
 
     if problems:
         lines = '\n'.join(f'  {i}. {p}' for i, p in enumerate(problems, 1))
@@ -251,6 +255,27 @@ def register_health(app: FastAPI) -> None:
         )
 
 
+class _PublicUploadsStaticFiles(StaticFiles):
+    """`/uploads` 公开子树的纵深防御：加 `X-Content-Type-Options` + 限制性 CSP
+
+    (issue #56) SVG 已经在 `FileService.verify_public()` 里被挡在准入门槛外，
+    这里不指望单一防线——万一以后有人往 `UPLOAD_IMAGE_EXT_INCLUDE` 加了别的
+    可执行图片格式，`nosniff` 挡掉 MIME 嗅探绕过，`script-src 'none'` 让即便
+    渗进来的文档也执行不了脚本。这棵子树只用来给 `<img src>` 加载，没有任何
+    功能需要内联脚本/样式，所以这条 CSP 可以直接锁到最紧。
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        async def send_wrapper(message: dict) -> None:
+            if message['type'] == 'http.response.start':
+                headers = MutableHeaders(raw=message['headers'])
+                headers['X-Content-Type-Options'] = 'nosniff'
+                headers['Content-Security-Policy'] = "default-src 'none'; sandbox"
+            await send(message)
+
+        await super().__call__(scope, receive, send_wrapper)
+
+
 def register_static_file(app: FastAPI) -> None:
     """
     注册静态资源服务
@@ -285,7 +310,7 @@ def register_static_file(app: FastAPI) -> None:
     # 顺带白拿 StaticFiles 的 ETag / Last-Modified —— 同一张图重复浏览不重复传字节。
     if not os.path.exists(PUBLIC_UPLOAD_DIR):
         os.makedirs(PUBLIC_UPLOAD_DIR)
-    app.mount('/uploads', StaticFiles(directory=PUBLIC_UPLOAD_DIR), name='uploads')
+    app.mount('/uploads', _PublicUploadsStaticFiles(directory=PUBLIC_UPLOAD_DIR), name='uploads')
 
     # 固有静态资源
     if settings.FASTAPI_STATIC_FILES:

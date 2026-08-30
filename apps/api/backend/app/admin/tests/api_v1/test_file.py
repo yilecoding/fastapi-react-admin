@@ -30,6 +30,11 @@ FILES = '/sys/files'
 # ─── 测试用文件 ────────────────────────────────────────────────────────────────
 
 
+def _svg_bytes() -> bytes:
+    """一段"看起来是图片、实则可执行"的 SVG —— issue #56 的攻击样本"""
+    return b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+
+
 def _png_bytes(color: tuple[int, int, int] = (200, 30, 30)) -> bytes:
     """手搓一个 2x2 PNG —— 不为了一个 fixture 引 Pillow"""
     import struct
@@ -522,3 +527,75 @@ def test_delete_rejects_escaping_path(isolated_upload_dir: Path) -> None:
     delete_file('')
     delete_file('.')
     assert isolated_upload_dir.is_dir()
+
+
+# ─── 公开子树的准入（issue #56：SVG 存储型 XSS） ────────────────────────────────
+
+
+def test_public_upload_rejects_svg(client: TestClient, token_headers: dict[str, str]) -> None:
+    """SVG 不能进公开无鉴权子树 —— 即使 core/conf.py 把它算作"图片"
+
+    SVG 是可执行的 XML 文档，落进 `/uploads` 被当独立文档直接导航打开，
+    就是一个完整的存储型 XSS。回归测试钉住：请求必须被拒绝，且不能有
+    `sys_file` 记录被创建（`verify_public` 必须在落盘*之前*就否掉）。
+    """
+    resp = client.post(
+        f'{FILES}/upload',
+        headers=token_headers,
+        params={'public': True},
+        files={'file': ('logo.svg', _svg_bytes(), 'image/svg+xml')},
+    )
+    assert resp.status_code != 200, 'SVG 走 public=true 必须被拒绝'
+
+    # 确认没有留下孤儿记录：按同一个 sha256 查重应该查不到
+    import hashlib
+
+    sha256 = hashlib.sha256(_svg_bytes()).hexdigest()
+    check = client.get(f'{FILES}/check', headers=token_headers, params={'sha256': sha256})
+    assert check.json()['data'] is None, '被拒绝的公开 SVG 不应该在 sys_file 里留下记录'
+
+
+def test_public_upload_still_accepts_png(client: TestClient, token_headers: dict[str, str]) -> None:
+    """回归对照组：真正的图片走 public=true 必须还能成功
+
+    只测"SVG 被拒绝"不够——不能顺手把合法的公开图片路径也堵死。
+    """
+    upload_resp = client.post(
+        f'{FILES}/upload',
+        headers=token_headers,
+        params={'public': True},
+        files={'file': ('cover.png', _png_bytes(), 'image/png')},
+    )
+    assert upload_resp.status_code == 200, upload_resp.text
+    data = upload_resp.json()['data']
+    try:
+        assert data['is_public'] is True
+        assert data['public_url'], '公开图片必须带 public_url'
+    finally:
+        client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})
+
+
+def test_public_uploads_static_mount_sets_hardening_headers(tmp_path: Path) -> None:
+    """`/uploads` 挂载必须带 `X-Content-Type-Options`/CSP —— 纵深防御的第二道闸
+
+    不经过完整 app（`app.mount` 在应用启动时就把目录烤进了 StaticFiles 实例，
+    没法用 `isolated_upload_dir` 那套 monkeypatch 顶替），直接单测
+    `_PublicUploadsStaticFiles` 这个类本身：即便以后有格式绕过了
+    `verify_public`，这层头也是第二道防线。
+    """
+    from backend.core.registrar import _PublicUploadsStaticFiles
+
+    (tmp_path / 'cover.png').write_bytes(_png_bytes())
+    app = _PublicUploadsStaticFiles(directory=tmp_path)
+
+    # ⚠️ 不能用 `with TestClient(app) as ...`——那会触发 lifespan 握手，
+    # 而 `StaticFiles.__call__` 只认 `scope["type"] == "http"`，会在
+    # lifespan scope 上直接 assert 失败。这个类只当 sub-app 被 `app.mount()`
+    # 挂在一个完整应用下面，lifespan 由外层应用接管；这里只测 HTTP 请求路径，
+    # 不进 `with` 块就不会有 lifespan 事件。
+    static_client = TestClient(app)
+    resp = static_client.get('/cover.png')
+    assert resp.status_code == 200
+    assert resp.content == _png_bytes()
+    assert resp.headers['x-content-type-options'] == 'nosniff'
+    assert 'content-security-policy' in resp.headers
