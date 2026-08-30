@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTasks
 
 from backend.app.admin.crud.crud_data_rule import data_rule_dao
 from backend.app.admin.crud.crud_data_scope import data_scope_dao
@@ -91,11 +92,12 @@ class DataScopeService:
         await data_scope_dao.create(db, obj)
 
     @staticmethod
-    async def update(*, db: AsyncSession, pk: int, obj: UpdateDataScopeParam) -> int:
+    async def update(*, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateDataScopeParam) -> int:
         """
         更新数据范围
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param pk: 范围 ID
         :param obj: 数据范围更新参数
         :return:
@@ -106,15 +108,18 @@ class DataScopeService:
         if data_scope.name != obj.name and await data_scope_dao.get_by_name(db, obj.name):
             raise errors.ConflictError(msg=t('error.data_scope.already_exists'))
         count = await data_scope_dao.update(db, pk, obj)
-        await user_cache_manager.clear_by_data_scope_id(db, [pk])
+        await user_cache_manager.clear_by_data_scope_id(db, background_tasks, [pk])
         return count
 
     @staticmethod
-    async def update_data_scope_rule(*, db: AsyncSession, pk: int, rule_ids: UpdateDataScopeRuleParam) -> int:
+    async def update_data_scope_rule(
+        *, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, rule_ids: UpdateDataScopeRuleParam
+    ) -> int:
         """
         更新数据范围规则
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param pk: 范围 ID
         :param rule_ids: 规则 ID 列表
         :return:
@@ -127,20 +132,21 @@ class DataScopeService:
             if {rule.id for rule in rules} != set(rule_ids.rules):
                 raise errors.NotFoundError(msg=t('error.data_rule.not_found'))
         count = await data_scope_dao.update_rules(db, pk, rule_ids)
-        await user_cache_manager.clear_by_data_scope_id(db, [pk])
+        await user_cache_manager.clear_by_data_scope_id(db, background_tasks, [pk])
         return count
 
     @staticmethod
-    async def delete(*, db: AsyncSession, obj: DeleteDataScopeParam) -> int:
+    async def delete(*, db: AsyncSession, background_tasks: BackgroundTasks, obj: DeleteDataScopeParam) -> int:
         """
         批量删除数据范围
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param obj: 范围 ID 列表
         :return:
         """
         count = await data_scope_dao.delete(db, obj.pks)
-        await user_cache_manager.clear_by_data_scope_id(db, obj.pks)
+        await user_cache_manager.clear_by_data_scope_id(db, background_tasks, obj.pks)
         return count
 
 
