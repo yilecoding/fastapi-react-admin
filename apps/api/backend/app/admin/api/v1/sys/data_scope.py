@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query
 
 from backend.app.admin.schema.data_scope import (
     CreateDataScopeParam,
@@ -13,7 +13,6 @@ from backend.app.admin.schema.data_scope import (
 from backend.app.admin.service.data_scope_service import data_scope_service
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -21,13 +20,27 @@ from backend.database.db import CurrentSession, CurrentSessionTransaction
 router = APIRouter()
 
 
-@router.get('/all', summary='获取所有数据范围', dependencies=[DependsJwtAuth])
+@router.get(
+    '/all',
+    summary='获取所有数据范围',
+    dependencies=[
+        Depends(RequestPermission('data:scope:list')),
+        DependsRBAC,
+    ],
+)
 async def get_all_data_scope(db: CurrentSession) -> ResponseSchemaModel[list[GetDataScopeDetail]]:
     data = await data_scope_service.get_all(db=db)
     return response_base.success(data=data)
 
 
-@router.get('/{pk}', summary='获取数据范围详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取数据范围详情',
+    dependencies=[
+        Depends(RequestPermission('data:scope:list')),
+        DependsRBAC,
+    ],
+)
 async def get_data_scope(
     db: CurrentSession,
     pk: Annotated[int, Path(description='数据范围 ID')],
@@ -36,7 +49,14 @@ async def get_data_scope(
     return response_base.success(data=data)
 
 
-@router.get('/{pk}/rules', summary='获取数据范围所有规则', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}/rules',
+    summary='获取数据范围所有规则',
+    dependencies=[
+        Depends(RequestPermission('data:scope:list')),
+        DependsRBAC,
+    ],
+)
 async def get_data_scope_rules(
     db: CurrentSession,
     pk: Annotated[int, Path(description='数据范围 ID')],
@@ -49,7 +69,8 @@ async def get_data_scope_rules(
     '',
     summary='分页获取所有数据范围',
     dependencies=[
-        DependsJwtAuth,
+        Depends(RequestPermission('data:scope:list')),
+        DependsRBAC,
         DependsPagination,
     ],
 )
@@ -85,10 +106,11 @@ async def create_data_scope(db: CurrentSessionTransaction, obj: CreateDataScopeP
 )
 async def update_data_scope(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     pk: Annotated[int, Path(description='数据范围 ID')],
     obj: UpdateDataScopeParam,
 ) -> ResponseModel:
-    count = await data_scope_service.update(db=db, pk=pk, obj=obj)
+    count = await data_scope_service.update(db=db, background_tasks=background_tasks, pk=pk, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -104,11 +126,12 @@ async def update_data_scope(
 )
 async def update_data_scope_rules(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     pk: Annotated[int, Path(description='数据范围 ID')],
     rule_ids: UpdateDataScopeRuleParam,
 ) -> ResponseModel:
     # 返回值是「写了几条关联」，不是成败 —— 把规则清空（rules=[]）时它就是 0，那是合法保存
-    await data_scope_service.update_data_scope_rule(db=db, pk=pk, rule_ids=rule_ids)
+    await data_scope_service.update_data_scope_rule(db=db, background_tasks=background_tasks, pk=pk, rule_ids=rule_ids)
     return response_base.success()
 
 
@@ -120,8 +143,10 @@ async def update_data_scope_rules(
         DependsRBAC,
     ],
 )
-async def delete_data_scopes(db: CurrentSessionTransaction, obj: DeleteDataScopeParam) -> ResponseModel:
-    count = await data_scope_service.delete(db=db, obj=obj)
+async def delete_data_scopes(
+    db: CurrentSessionTransaction, background_tasks: BackgroundTasks, obj: DeleteDataScopeParam
+) -> ResponseModel:
+    count = await data_scope_service.delete(db=db, background_tasks=background_tasks, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()
