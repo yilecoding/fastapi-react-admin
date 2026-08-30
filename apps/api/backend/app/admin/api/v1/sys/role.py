@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query
 
 from backend.app.admin.schema.menu import GetMenuTree
 from backend.app.admin.schema.role import (
@@ -95,9 +95,12 @@ async def create_role(db: CurrentSessionTransaction, obj: CreateRoleParam) -> Re
     ],
 )
 async def update_role(
-    db: CurrentSessionTransaction, pk: Annotated[int, Path(description='角色 ID')], obj: UpdateRoleParam
+    db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
+    pk: Annotated[int, Path(description='角色 ID')],
+    obj: UpdateRoleParam,
 ) -> ResponseModel:
-    count = await role_service.update(db=db, pk=pk, obj=obj)
+    count = await role_service.update(db=db, background_tasks=background_tasks, pk=pk, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -113,12 +116,13 @@ async def update_role(
 )
 async def update_role_menus(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     pk: Annotated[int, Path(description='角色 ID')],
     menu_ids: UpdateRoleMenuParam,
 ) -> ResponseModel:
     # 返回值是「写入了几条关联」，不是成功与否 —— 把授权清空（menus=[]）时它就是 0，
     # 那是一次合法保存。角色不存在的情况 service 里已经抛 NotFoundError 了。
-    await role_service.update_role_menu(db=db, pk=pk, menu_ids=menu_ids)
+    await role_service.update_role_menu(db=db, background_tasks=background_tasks, pk=pk, menu_ids=menu_ids)
     return response_base.success()
 
 
@@ -132,12 +136,13 @@ async def update_role_menus(
 )
 async def add_role_users(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     pk: Annotated[int, Path(description='角色 ID')],
     obj: UpdateRoleUserParam,
 ) -> ResponseModel:
     # 只往 user_role 里加这一条关联，用户已有的其它角色不动 ——
     # 走 PUT /users/{pk} 改 roles 会连带覆盖整个用户对象
-    await role_service.add_users(db=db, pk=pk, obj=obj)
+    await role_service.add_users(db=db, background_tasks=background_tasks, pk=pk, obj=obj)
     return response_base.success()
 
 
@@ -151,10 +156,11 @@ async def add_role_users(
 )
 async def remove_role_users(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     pk: Annotated[int, Path(description='角色 ID')],
     obj: UpdateRoleUserParam,
 ) -> ResponseModel:
-    await role_service.remove_users(db=db, pk=pk, obj=obj)
+    await role_service.remove_users(db=db, background_tasks=background_tasks, pk=pk, obj=obj)
     return response_base.success()
 
 
@@ -168,11 +174,12 @@ async def remove_role_users(
 )
 async def update_role_scopes(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     pk: Annotated[int, Path(description='角色 ID')],
     scope_ids: UpdateRoleScopeParam,
 ) -> ResponseModel:
     # 同上：scopes=[] 是「不绑任何数据范围」，不是失败
-    await role_service.update_role_scope(db=db, pk=pk, scope_ids=scope_ids)
+    await role_service.update_role_scope(db=db, background_tasks=background_tasks, pk=pk, scope_ids=scope_ids)
     return response_base.success()
 
 
@@ -184,8 +191,10 @@ async def update_role_scopes(
         DependsRBAC,
     ],
 )
-async def delete_roles(db: CurrentSessionTransaction, obj: DeleteRoleParam) -> ResponseModel:
-    count = await role_service.delete(db=db, obj=obj)
+async def delete_roles(
+    db: CurrentSessionTransaction, background_tasks: BackgroundTasks, obj: DeleteRoleParam
+) -> ResponseModel:
+    count = await role_service.delete(db=db, background_tasks=background_tasks, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()
