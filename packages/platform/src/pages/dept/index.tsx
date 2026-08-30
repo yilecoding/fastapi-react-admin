@@ -69,6 +69,9 @@ export function DeptPage({
   const [editing, setEditing] = React.useState<Dept | null>(null)
   const [presetParent, setPresetParent] = React.useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<Dept | null>(null)
+  // 删除失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
+  React.useEffect(() => setDeleteError(null), [pendingDelete])
   const del = useDeleteDept()
 
   const foldAll = search.fold === 'all'
@@ -202,19 +205,23 @@ export function DeptPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除部门")}
         description={
-          pendingDelete
-            ? t('确定删除「{{name}}」吗？若该部门下仍有子部门或用户，后端会拒绝。', { name: pendingDelete.name })
-            : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('确定删除「{{name}}」吗？若该部门下仍有子部门或用户，后端会拒绝。', { name: pendingDelete.name })
+          ) : ''
         }
         confirmText={t("删除")} destructive pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
-          // 失败（409 冲突等）由全局 mutationCache 的 onError 弹 toast——
-          // 这里只负责收尾：不管成不成功，弹窗都别再挂着一个「反正会再失败」的删除按钮
+          // 失败（409 冲突等）留在弹窗里说清楚，不静默关掉——
+          // 「部门下有子部门/用户」这类拒绝，关了弹窗用户也无从知晓原因
+          setDeleteError(null)
           try {
             await del.mutateAsync(pendingDelete.id)
-          } finally {
             setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
       />
