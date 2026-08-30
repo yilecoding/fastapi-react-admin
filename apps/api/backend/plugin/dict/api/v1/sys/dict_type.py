@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, Path, Query
 
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -19,13 +18,27 @@ from backend.plugin.dict.service.dict_type_service import dict_type_service
 router = APIRouter()
 
 
-@router.get('/all', summary='获取所有字典数据', dependencies=[DependsJwtAuth])
+@router.get(
+    '/all',
+    summary='获取所有字典数据',
+    dependencies=[
+        Depends(RequestPermission('dict:type:list')),
+        DependsRBAC,
+    ],
+)
 async def get_all_dict_types(db: CurrentSession) -> ResponseSchemaModel[list[GetDictTypeDetail]]:
     data = await dict_type_service.get_all(db=db)
     return response_base.success(data=data)
 
 
-@router.get('/{pk}', summary='获取字典类型详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取字典类型详情',
+    dependencies=[
+        Depends(RequestPermission('dict:type:list')),
+        DependsRBAC,
+    ],
+)
 async def get_dict_type(
     db: CurrentSession,
     pk: Annotated[int, Path(description='字典类型 ID')],
@@ -38,7 +51,8 @@ async def get_dict_type(
     '',
     summary='分页获取所有字典类型',
     dependencies=[
-        DependsJwtAuth,
+        Depends(RequestPermission('dict:type:list')),
+        DependsRBAC,
         DependsPagination,
     ],
 )

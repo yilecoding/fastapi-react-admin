@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, Path, Query
 
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -19,13 +18,27 @@ from backend.plugin.dict.service.dict_data_service import dict_data_service
 router = APIRouter()
 
 
-@router.get('/all', summary='获取所有字典数据', dependencies=[DependsJwtAuth])
+@router.get(
+    '/all',
+    summary='获取所有字典数据',
+    dependencies=[
+        Depends(RequestPermission('dict:data:list')),
+        DependsRBAC,
+    ],
+)
 async def get_all_dict_datas(db: CurrentSession) -> ResponseSchemaModel[list[GetDictDataDetail]]:
     data = await dict_data_service.get_all(db=db)
     return response_base.success(data=data)
 
 
-@router.get('/{pk}', summary='获取字典数据详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取字典数据详情',
+    dependencies=[
+        Depends(RequestPermission('dict:data:list')),
+        DependsRBAC,
+    ],
+)
 async def get_dict_data(
     db: CurrentSession,
     pk: Annotated[int, Path(description='字典数据 ID')],
@@ -34,7 +47,14 @@ async def get_dict_data(
     return response_base.success(data=data)
 
 
-@router.get('/type-codes/{code}', summary='获取字典数据列表', dependencies=[DependsJwtAuth])
+@router.get(
+    '/type-codes/{code}',
+    summary='获取字典数据列表',
+    dependencies=[
+        Depends(RequestPermission('dict:data:list')),
+        DependsRBAC,
+    ],
+)
 async def get_dict_data_by_type_code(
     db: CurrentSession,
     code: Annotated[str, Path(description='字典类型编码')],
@@ -47,7 +67,8 @@ async def get_dict_data_by_type_code(
     '',
     summary='分页获取所有字典数据',
     dependencies=[
-        DependsJwtAuth,
+        Depends(RequestPermission('dict:data:list')),
+        DependsRBAC,
         DependsPagination,
     ],
 )

@@ -16,7 +16,6 @@ from backend.app.admin.schema.role import (
 from backend.app.admin.service.role_service import role_service
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -24,13 +23,27 @@ from backend.database.db import CurrentSession, CurrentSessionTransaction
 router = APIRouter()
 
 
-@router.get('/all', summary='获取所有角色', dependencies=[DependsJwtAuth])
+@router.get(
+    '/all',
+    summary='获取所有角色',
+    dependencies=[
+        Depends(RequestPermission('sys:role:list')),
+        DependsRBAC,
+    ],
+)
 async def get_all_roles(db: CurrentSession) -> ResponseSchemaModel[list[GetRoleDetail]]:
     data = await role_service.get_all(db=db)
     return response_base.success(data=data)
 
 
-@router.get('/{pk}/menus', summary='获取角色菜单树', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}/menus',
+    summary='获取角色菜单树',
+    dependencies=[
+        Depends(RequestPermission('sys:role:list')),
+        DependsRBAC,
+    ],
+)
 async def get_role_menu_tree(
     db: CurrentSession,
     pk: Annotated[int, Path(description='角色 ID')],
@@ -39,7 +52,14 @@ async def get_role_menu_tree(
     return response_base.success(data=menu)
 
 
-@router.get('/{pk}/scopes', summary='获取角色所有数据范围', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}/scopes',
+    summary='获取角色所有数据范围',
+    dependencies=[
+        Depends(RequestPermission('sys:role:list')),
+        DependsRBAC,
+    ],
+)
 async def get_role_scopes(
     db: CurrentSession, pk: Annotated[int, Path(description='角色 ID')]
 ) -> ResponseSchemaModel[list[int]]:
@@ -47,7 +67,14 @@ async def get_role_scopes(
     return response_base.success(data=rule)
 
 
-@router.get('/{pk}', summary='获取角色详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取角色详情',
+    dependencies=[
+        Depends(RequestPermission('sys:role:list')),
+        DependsRBAC,
+    ],
+)
 async def get_role(
     db: CurrentSession, pk: Annotated[int, Path(description='角色 ID')]
 ) -> ResponseSchemaModel[GetRoleWithRelationDetail]:
@@ -59,7 +86,8 @@ async def get_role(
     '',
     summary='分页获取所有角色',
     dependencies=[
-        DependsJwtAuth,
+        Depends(RequestPermission('sys:role:list')),
+        DependsRBAC,
         DependsPagination,
     ],
 )

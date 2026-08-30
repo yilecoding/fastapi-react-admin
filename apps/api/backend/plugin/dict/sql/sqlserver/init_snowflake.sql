@@ -8,7 +8,9 @@ VALUES
 (2049629108253622290, N'删除类型', 'DeleteDictType', NULL, 0, NULL, 2, 'dict:type:del', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL),
 (2049629108253622291, N'新增数据', 'AddDictData', NULL, 0, NULL, 2, 'dict:data:add', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL),
 (2049629108253622292, N'修改数据', 'EditDictData', NULL, 0, NULL, 2, 'dict:data:edit', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL),
-(2049629108253622293, N'删除数据', 'DeleteDictData', NULL, 0, NULL, 2, 'dict:data:del', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL);
+(2049629108253622293, N'删除数据', 'DeleteDictData', NULL, 0, NULL, 2, 'dict:data:del', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL),
+(2049629108253622339, N'查询类型', 'QueryDictType', NULL, 0, NULL, 2, 'dict:type:list', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL),
+(2049629108253622340, N'查询数据', 'QueryDictData', NULL, 0, NULL, 2, 'dict:data:list', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL);
 
 INSERT INTO sys_dict_type (id, name, code, remark, created_time, updated_time)
 VALUES

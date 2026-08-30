@@ -8,7 +8,9 @@ values
 (2049629108253622290, '删除类型', 'DeleteDictType', null, 0, null, 2, 'dict:type:del', 1, 0, '', null, 2049629108253622287, now(), null),
 (2049629108253622291, '新增数据', 'AddDictData', null, 0, null, 2, 'dict:data:add', 1, 0, '', null, 2049629108253622287, now(), null),
 (2049629108253622292, '修改数据', 'EditDictData', null, 0, null, 2, 'dict:data:edit', 1, 0, '', null, 2049629108253622287, now(), null),
-(2049629108253622293, '删除数据', 'DeleteDictData', null, 0, null, 2, 'dict:data:del', 1, 0, '', null, 2049629108253622287, now(), null);
+(2049629108253622293, '删除数据', 'DeleteDictData', null, 0, null, 2, 'dict:data:del', 1, 0, '', null, 2049629108253622287, now(), null),
+(2049629108253622339, '查询类型', 'QueryDictType', null, 0, null, 2, 'dict:type:list', 1, 0, '', null, 2049629108253622287, now(), null),
+(2049629108253622340, '查询数据', 'QueryDictData', null, 0, null, 2, 'dict:data:list', 1, 0, '', null, 2049629108253622287, now(), null);
 
 insert into sys_dict_type (id, name, code, remark, created_time, updated_time)
 values
