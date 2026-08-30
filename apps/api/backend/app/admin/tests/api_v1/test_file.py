@@ -522,3 +522,59 @@ def test_delete_rejects_escaping_path(isolated_upload_dir: Path) -> None:
     delete_file('')
     delete_file('.')
     assert isolated_upload_dir.is_dir()
+
+
+# ─── Content-Disposition 头注入（issue #62） ────────────────────────────────
+
+
+def test_sanitize_display_name_strips_control_chars() -> None:
+    """`sanitize_display_name` 必须剔除控制字符，尤其是裸 LF/CR
+
+    这是拼 Content-Disposition 头时真正会炸的那个字符——uvicorn 的
+    `HEADER_VALUE_RE` 判定非法，`RuntimeError('Invalid HTTP header value.')`
+    没被 `download_file` 捕获，表现是那条文件记录永久 500。
+    """
+    from backend.utils.file_ops import sanitize_display_name
+
+    assert sanitize_display_name('evil\nx.png') == 'evilx.png'
+    assert sanitize_display_name('evil\r\nx.png') == 'evilx.png'
+    assert sanitize_display_name('evil\x00x.png') == 'evilx.png'
+    # 正常字符（含 CJK、空格、引号）不受影响——这是展示名，不是落盘名，
+    # 不该像 build_filename 那样连标点一起清掉
+    assert sanitize_display_name('季度报告 "终版".docx') == '季度报告 "终版".docx'
+
+
+def test_upload_with_injected_newline_in_filename_does_not_break_download(
+    client: TestClient, token_headers: dict[str, str], isolated_upload_dir: Path
+) -> None:
+    """端到端回归：手工构造的 multipart body 在 filename 里塞裸 LF，上传和下载都不能炸
+
+    httpx 的 `files={...}` 便捷参数自己的编码器不会生成这种畸形 body——
+    要复现就得像原始报告那样手搓 multipart bytes，绕开正常客户端的转义。
+    """
+    boundary = 'x' * 20
+    body = (
+        (
+            f'--{boundary}\r\n'
+            f'Content-Disposition: form-data; name="file"; filename="evil\nx.png"\r\n'
+            f'Content-Type: image/png\r\n\r\n'
+        ).encode()
+        + _png_bytes()
+        + f'\r\n--{boundary}--\r\n'.encode()
+    )
+
+    upload_resp = client.post(
+        f'{FILES}/upload',
+        headers={**token_headers, 'Content-Type': f'multipart/form-data; boundary={boundary}'},
+        content=body,
+    )
+    assert upload_resp.status_code == 200, upload_resp.text
+    data = upload_resp.json()['data']
+    try:
+        assert '\n' not in data['original_name']
+        assert '\r' not in data['original_name']
+
+        download_resp = client.get(f'{FILES}/{data["id"]}/download', headers=token_headers)
+        assert download_resp.status_code == 200, download_resp.text
+    finally:
+        client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})
