@@ -182,6 +182,11 @@ export function UserPage({
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<User | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<User | null>(null)
+  // 删除失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案。
+  // 只对单条删除这么做——批量删除是部分失败语义（allSettled），照旧关弹窗走全局 toast，
+  // 留在原地重试对「已经删掉一半」的选中集合没有意义
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
+  React.useEffect(() => setDeleteError(null), [pendingDelete])
   // 只存 id，用户对象每次从最新的 rows 里取 —— 存快照的话，
   // 切换权限后列表已经 refetch 了，抽屉里的开关还显示旧值（实测踩过）
   const [securityId, setSecurityId] = React.useState<string | null>(null)
@@ -330,21 +335,25 @@ export function UserPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t('删除用户')}
         description={
-          pendingDelete
-            ? t('确定删除「{{who}}」吗？此操作不可撤销。', {
-                who: pendingDelete.nickname || pendingDelete.username,
-              })
-            : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('确定删除「{{who}}」吗？此操作不可撤销。', {
+              who: pendingDelete.nickname || pendingDelete.username,
+            })
+          ) : ''
         }
         confirmText={t('删除')}
         destructive
         pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
+          setDeleteError(null)
           try {
             await del.mutateAsync(pendingDelete.id)
-          } finally {
             setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
       />

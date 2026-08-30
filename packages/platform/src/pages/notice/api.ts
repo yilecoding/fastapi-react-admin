@@ -174,9 +174,16 @@ export function useUpdateNotice() {
  * 后端 `DELETE /sys/notices` 直接收 `{pks: []}`，是**真批量**，
  * 不像用户那边只有单条接口要前端并发发 N 个请求。
  */
-export function useDeleteNotices() {
+/**
+ * 单条删除和批量删除共用同一个接口，但错误处理策略不同：单条删除留在弹窗里
+ * 原地重试（流派一），批量删除是 `allSettled` 的部分失败语义，重试整个选中集合
+ * 没有意义，照旧关弹窗走全局 toast——所以 `suppressErrorToast` 按调用方传，
+ * 两处各自 `useDeleteNotices()` 一份互不影响的 mutation 实例。
+ */
+export function useDeleteNotices(opts: { suppressErrorToast?: boolean } = {}) {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: opts.suppressErrorToast ?? false },
     mutationFn: (pks: string[]) => api.DELETE('/api/v1/sys/notices', { body: { pks } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: noticeKeys.all }),
   })

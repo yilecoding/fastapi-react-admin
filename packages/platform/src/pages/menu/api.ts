@@ -84,7 +84,12 @@ export function useUpdateMenu() {
 }
 export function useDeleteMenu() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: (id: string) => api.DELETE(`/api/v1/sys/menus/${id}`), onSuccess: inv(qc) })
+  // 删除确认框自己接错误、留在原地重试（流派一），不指望全局兜底
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: (id: string) => api.DELETE(`/api/v1/sys/menus/${id}`),
+    onSuccess: inv(qc),
+  })
 }
 
 /** 扁平化成「上级菜单」下拉选项；排除自身及子孙，且按钮不能当父级 */

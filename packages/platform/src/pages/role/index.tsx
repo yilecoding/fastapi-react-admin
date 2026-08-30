@@ -117,6 +117,9 @@ export function RolePage({
   const [editing, setEditing] = React.useState<Role | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<Role | null>(null)
   const [pendingSelect, setPendingSelect] = React.useState<string | null>(null)
+  // 删除失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
+  React.useEffect(() => setDeleteError(null), [pendingDelete])
   const del = useDeleteRoles()
 
   // 两个面板各自有草稿，未保存时切角色要拦一下
@@ -281,21 +284,25 @@ export function RolePage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除角色")}
         description={
-          pendingDelete
-            ? t('确定删除角色「{{name}}」吗？已分配该角色的用户会失去对应权限。', { name: pendingDelete.name })
-            : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('确定删除角色「{{name}}」吗？已分配该角色的用户会失去对应权限。', { name: pendingDelete.name })
+          ) : ''
         }
         confirmText={t("删除")}
         destructive
         pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
+          setDeleteError(null)
           try {
             const wasSelected = pendingDelete.id === selected?.id
             await del.mutateAsync([pendingDelete.id])
             if (wasSelected) patch({ role: undefined, upage: undefined })
-          } finally {
             setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
       />

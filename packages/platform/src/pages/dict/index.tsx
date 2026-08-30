@@ -134,6 +134,13 @@ export function DictPage({
   const [bulkOpen, setBulkOpen] = React.useState(false)
   const rmType = useDeleteDictTypes()
   const rmData = useDeleteDictDatas()
+  // 单条删除单独一个 mutation 实例——留在弹窗里原地重试，不指望全局兜底
+  const rmDataOne = useDeleteDictDatas({ suppressErrorToast: true })
+  // 删除失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案
+  const [typeError, setTypeError] = React.useState<string | null>(null)
+  const [dataError, setDataError] = React.useState<string | null>(null)
+  React.useEffect(() => setTypeError(null), [delType])
+  React.useEffect(() => setDataError(null), [delData])
 
   const columns = React.useMemo(
     () => [
@@ -377,18 +384,24 @@ export function DictPage({
         onOpenChange={(o) => !o && setDelType(null)}
         title={t("删除字典类型")}
         description={
-          delType ? t('确定删除「{{name}}」吗？其下的字典项也会一并失效。', { name: delType.name }) : ''
+          typeError ? (
+            <span className="text-destructive">{typeError}</span>
+          ) : delType ? (
+            t('确定删除「{{name}}」吗？其下的字典项也会一并失效。', { name: delType.name })
+          ) : ''
         }
         confirmText={t("删除")} destructive pending={rmType.isPending}
         onConfirm={async () => {
           if (!delType) return
+          setTypeError(null)
           try {
             const removingSelected = delType.id === selectedId
             await rmType.mutateAsync([delType.id])
             // 删掉的正是当前选中的 —— 清掉 URL 里的 type，让它回落到第一个
             if (removingSelected) patch({ type: undefined, page: undefined, q: undefined })
-          } finally {
             setDelType(null)
+          } catch (e) {
+            setTypeError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
       />
@@ -396,14 +409,22 @@ export function DictPage({
         open={delData !== null}
         onOpenChange={(o) => !o && setDelData(null)}
         title={t("删除字典项")}
-        description={delData ? t('确定删除「{{label}}」吗？', { label: delData.label }) : ''}
-        confirmText={t("删除")} destructive pending={rmData.isPending}
+        description={
+          dataError ? (
+            <span className="text-destructive">{dataError}</span>
+          ) : delData ? (
+            t('确定删除「{{label}}」吗？', { label: delData.label })
+          ) : ''
+        }
+        confirmText={t("删除")} destructive pending={rmDataOne.isPending}
         onConfirm={async () => {
           if (!delData) return
+          setDataError(null)
           try {
-            await rmData.mutateAsync([delData.id])
-          } finally {
+            await rmDataOne.mutateAsync([delData.id])
             setDelData(null)
+          } catch (e) {
+            setDataError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
       />

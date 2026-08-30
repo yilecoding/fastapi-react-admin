@@ -82,6 +82,9 @@ export function MenuPage({
   const [editing, setEditing] = React.useState<Menu | null>(null)
   const [presetParent, setPresetParent] = React.useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<Menu | null>(null)
+  // 删除失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
+  React.useEffect(() => setDeleteError(null), [pendingDelete])
   const del = useDeleteMenu()
 
   const foldAll = search.fold === 'all'
@@ -262,17 +265,21 @@ export function MenuPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除菜单")}
         description={
-          pendingDelete
-            ? t('确定删除「{{title}}」吗？其下的子菜单与按钮权限也会一并移除。', { title: pendingDelete.title })
-            : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('确定删除「{{title}}」吗？其下的子菜单与按钮权限也会一并移除。', { title: pendingDelete.title })
+          ) : ''
         }
         confirmText={t("删除")} destructive pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
+          setDeleteError(null)
           try {
             await del.mutateAsync(pendingDelete.id)
-          } finally {
             setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
       />

@@ -14,10 +14,13 @@ const queryClient = new QueryClient({
     queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false },
   },
   // 硬纪律 9 的「写入型」姊妹：mutation 失败必须可见，但不能靠每个调用处各自
-  // 记得写 toast —— 那正是删除类操作全仓系统性漏掉的地方（409 冲突静默吞掉）。
-  // 这里是唯一兜底：任何 mutation 失败都弹一条 toast，除非调用处显式声明
-  // `meta: { suppressErrorToast: true }`（表单已经把校验错误内联展示在字段
-  // 旁边，再弹一条一样的 toast 只是噪音）。
+  // 记得写 toast。这里是唯一兜底：任何 mutation 失败都弹一条 toast，除非调用处
+  // 显式声明 `meta: { suppressErrorToast: true }`。两类调用处会声明这个标记：
+  //   - 表单校验（create/update）：已经把错误内联展示在字段旁边，再弹一条一样的 toast 只是噪音
+  //   - 单条删除确认框：失败要留在弹窗里说清楚原因、原地重试（流派一），不是关了弹窗
+  //     再靠这条全局 toast 兜底——见各 `pages/*/index.tsx` 删除确认框的 onConfirm
+  // 走到这里报错的主要是**批量删除**（allSettled 的部分失败没法「原地重试」，
+  // 弹窗照旧关掉）和极少数没加内联处理的调用处
   mutationCache: new MutationCache({
     onError: (error, _variables, _context, mutation) => {
       if (mutation.meta?.suppressErrorToast) return
@@ -29,10 +32,10 @@ const queryClient = new QueryClient({
       //
       // ⚠️ 这里显式给了 6s 超时，没有沿用 toast 组件里「error 默认不自动消失」
       // 的约定——那条约定是给「页面上还有别的错误态、toast 只是补充」的场景写的
-      // （见 packages/ui/src/components/toast.tsx 头注释）。这里恰恰相反：
-      // 删除类操作现在**只有**这一条 toast 报错，弹窗本身已经关掉、不留错误文案，
-      // 如果也不自动消失，用户每次删除失败都要多点一次「×」才能继续操作，
-      // 是这条链路独有的摩擦，不代表要改那条组件级默认值
+      // （见 packages/ui/src/components/toast.tsx 头注释）。批量删除失败时弹窗已经
+      // 关掉、不留错误文案，这条 toast 是唯一的可见状态，如果也不自动消失，
+      // 用户每次都要多点一次「×」才能继续操作，是这条链路独有的摩擦，
+      // 不代表要改那条组件级默认值
       toast.error(error instanceof Error ? error.message : t("操作失败"), { timeout: 6000 })
     },
   }),

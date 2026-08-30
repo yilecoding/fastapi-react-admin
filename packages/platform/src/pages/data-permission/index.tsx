@@ -83,6 +83,9 @@ export function DataPermissionPage({
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<DataScope | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<DataScope | null>(null)
+  // 删除失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
+  React.useEffect(() => setDeleteError(null), [pendingDelete])
   const del = useDeleteDataScopes()
 
   return (
@@ -191,21 +194,25 @@ export function DataPermissionPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除数据范围")}
         description={
-          pendingDelete
-            ? t('删除范围「{{name}}」？绑了它的角色会失去这部分数据权限。范围里的规则本身保留，可以挂到别的范围上。', { name: pendingDelete.name })
-            : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('删除范围「{{name}}」？绑了它的角色会失去这部分数据权限。范围里的规则本身保留，可以挂到别的范围上。', { name: pendingDelete.name })
+          ) : ''
         }
         confirmText={t("删除")}
         destructive
         pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
+          setDeleteError(null)
           try {
             const wasSelected = pendingDelete.id === selected?.id
             await del.mutateAsync([pendingDelete.id])
             if (wasSelected) patch({ scope: undefined })
-          } finally {
             setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
       />

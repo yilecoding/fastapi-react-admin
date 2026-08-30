@@ -132,6 +132,11 @@ export function NoticePage({
   const [pendingDelete, setPendingDelete] = React.useState<Notice | null>(null)
   const [bulkOpen, setBulkOpen] = React.useState(false)
   const del = useDeleteNotices()
+  // 单条删除单独一个 mutation 实例——留在弹窗里原地重试，不指望全局兜底
+  const delOne = useDeleteNotices({ suppressErrorToast: true })
+  // 删除失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
+  React.useEffect(() => setDeleteError(null), [pendingDelete])
 
   const handleEdit = React.useCallback((n: Notice) => {
     setEditing(n)
@@ -261,17 +266,23 @@ export function NoticePage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t('删除通知公告')}
         description={
-          pendingDelete ? t('确定删除「{{title}}」吗？此操作不可撤销。', { title: pendingDelete.title }) : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('确定删除「{{title}}」吗？此操作不可撤销。', { title: pendingDelete.title })
+          ) : ''
         }
         confirmText={t('删除')}
         destructive
-        pending={del.isPending}
+        pending={delOne.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
+          setDeleteError(null)
           try {
-            await del.mutateAsync([pendingDelete.id])
-          } finally {
+            await delOne.mutateAsync([pendingDelete.id])
             setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
       />

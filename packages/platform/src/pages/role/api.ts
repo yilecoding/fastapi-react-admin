@@ -149,6 +149,8 @@ export function useUpdateRole() {
 export function useDeleteRoles() {
   const qc = useQueryClient()
   return useMutation({
+    // 删除确认框自己接错误、留在原地重试（流派一），不指望全局兜底
+    meta: { suppressErrorToast: true },
     mutationFn: (ids: string[]) => api.DELETE('/api/v1/sys/roles', { body: { pks: ids } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: roleKeys.all }),
   })

@@ -135,6 +135,8 @@ export function useUpdateUser() {
 export function useDeleteUser() {
   const qc = useQueryClient()
   return useMutation({
+    // 删除确认框自己接错误、留在原地重试（流派一），不指望全局兜底
+    meta: { suppressErrorToast: true },
     mutationFn: (id: string) => api.DELETE(`/api/v1/sys/users/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.all }),
   })
