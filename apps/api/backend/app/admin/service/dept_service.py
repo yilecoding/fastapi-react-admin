@@ -2,10 +2,12 @@ from typing import Any
 
 from sqlalchemy import ColumnElement
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTasks
 
 from backend.app.admin.crud.crud_dept import dept_dao
 from backend.app.admin.model import Dept
 from backend.app.admin.schema.dept import CreateDeptParam, UpdateDeptParam
+from backend.app.admin.utils.cache import user_cache_manager
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.utils.build_tree import get_tree_data
@@ -77,11 +79,12 @@ class DeptService:
         await dept_dao.create(db, obj)
 
     @staticmethod
-    async def update(*, db: AsyncSession, pk: int, obj: UpdateDeptParam) -> int:
+    async def update(*, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateDeptParam) -> int:
         """
         更新部门
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param pk: 部门 ID
         :param obj: 部门更新参数
         :return:
@@ -101,6 +104,9 @@ class DeptService:
             if sibling and sibling.id != dept.id:
                 raise errors.ConflictError(msg=t('error.dept.duplicate_name_in_level'))
         count = await dept_dao.update(db, pk, obj)
+        # (issue #58) 缓存的用户快照里嵌着整个 dept（含 status）——不清的话被禁用
+        # 部门下的用户继续被当成"部门正常"放行，最长锁死一个 TOKEN_EXPIRE_SECONDS
+        await user_cache_manager.clear_by_dept_id(db, background_tasks, [pk])
         return count
 
     @staticmethod

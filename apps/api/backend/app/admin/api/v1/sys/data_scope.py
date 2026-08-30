@@ -13,7 +13,6 @@ from backend.app.admin.schema.data_scope import (
 from backend.app.admin.service.data_scope_service import data_scope_service
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -21,13 +20,27 @@ from backend.database.db import CurrentSession, CurrentSessionTransaction
 router = APIRouter()
 
 
-@router.get('/all', summary='获取所有数据范围', dependencies=[DependsJwtAuth])
+@router.get(
+    '/all',
+    summary='获取所有数据范围',
+    dependencies=[
+        Depends(RequestPermission('data:scope:list')),
+        DependsRBAC,
+    ],
+)
 async def get_all_data_scope(db: CurrentSession) -> ResponseSchemaModel[list[GetDataScopeDetail]]:
     data = await data_scope_service.get_all(db=db)
     return response_base.success(data=data)
 
 
-@router.get('/{pk}', summary='获取数据范围详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取数据范围详情',
+    dependencies=[
+        Depends(RequestPermission('data:scope:list')),
+        DependsRBAC,
+    ],
+)
 async def get_data_scope(
     db: CurrentSession,
     pk: Annotated[int, Path(description='数据范围 ID')],
@@ -36,7 +49,14 @@ async def get_data_scope(
     return response_base.success(data=data)
 
 
-@router.get('/{pk}/rules', summary='获取数据范围所有规则', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}/rules',
+    summary='获取数据范围所有规则',
+    dependencies=[
+        Depends(RequestPermission('data:scope:list')),
+        DependsRBAC,
+    ],
+)
 async def get_data_scope_rules(
     db: CurrentSession,
     pk: Annotated[int, Path(description='数据范围 ID')],
@@ -49,7 +69,8 @@ async def get_data_scope_rules(
     '',
     summary='分页获取所有数据范围',
     dependencies=[
-        DependsJwtAuth,
+        Depends(RequestPermission('data:scope:list')),
+        DependsRBAC,
         DependsPagination,
     ],
 )

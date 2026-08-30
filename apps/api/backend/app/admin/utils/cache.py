@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTasks
 
-from backend.app.admin.model import data_scope_rule, role_data_scope, role_menu, user_role
+from backend.app.admin.model import User, data_scope_rule, role_data_scope, role_menu, user_role
 from backend.core.conf import settings
 from backend.database.redis import redis_client
 
@@ -130,6 +130,26 @@ class UserCacheManager:
             .where(data_scope_rule.c.data_rule_id.in_(rule_ids))
             .distinct()
         )
+        result = await db.execute(stmt)
+        user_ids = result.scalars().all()
+
+        self.clear(background_tasks, user_ids)
+
+    async def clear_by_dept_id(self, db: AsyncSession, background_tasks: BackgroundTasks, dept_ids: list[int]) -> None:
+        """
+        通过部门 ID 清理用户缓存
+
+        (issue #58) 缓存的用户 DTO 里嵌着 `dept: GetDeptDetail`（含 `status`），
+        禁用/改名一个部门却不清该部门下用户的快照，会让这些用户的鉴权继续吃
+        旧部门状态最长一个 TTL——`get_jwt_user()` 只在缓存 MISS 时才会重新查库
+        校验 `dept.status`，命中缓存则直接反序列化旧值，不会重新判断。
+
+        :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
+        :param dept_ids: 部门 ID 列表
+        :return:
+        """
+        stmt = select(User.id).where(User.dept_id.in_(dept_ids), User.deleted == 0).distinct()
         result = await db.execute(stmt)
         user_ids = result.scalars().all()
 

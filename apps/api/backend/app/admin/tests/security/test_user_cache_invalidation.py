@@ -169,3 +169,88 @@ def test_logout_clears_user_snapshot(client: TestClient) -> None:
         'logout 之后 fba:user:{id} 必须被清掉——否则一旦这份快照被卡在旧值上，'
         '重新登录（用户唯一想得到的自救动作）没有任何效果'
     )
+
+
+def test_update_dept_clears_cached_users_snapshot(client: TestClient, token_headers: dict[str, str]) -> None:
+    """issue #58：改部门（含禁用）要清该部门下用户的 `fba:user:{id}` 快照
+
+    缓存的用户 DTO 里嵌着整个 `dept`（含 `status`）——不清的话被禁用部门下的
+    用户继续被当成"部门正常"放行，最长锁死一个 `TOKEN_EXPIRE_SECONDS`。
+    把 admin 临时挪进一个新建的测试专用部门（结束后挪回去），不依赖 admin
+    原来挂在哪个部门。
+    """
+    import asyncio as _asyncio
+
+    from sqlalchemy import select
+    from sqlalchemy import update as sa_update
+
+    from backend.app.admin.model import User
+    from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+
+    # ⚠️ 不能复用共享的 `async_test_db_session`——它已经被 `conftest.py` 的依赖
+    # 覆盖绑到 TestClient 自己的事件循环上了，这里的 `asyncio.run()` 是另起的
+    # 一个循环，用会 "attached to a different loop"（同 `_redis_exists` 那条注释
+    # 是同一个坑）。每次新建一个独立引擎，跟 `test_data_permission.py` 的
+    # `_build`/`_teardown` 是同一个套路。
+    async def _get_admin_dept_id() -> int | None:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        session_maker = create_database_async_session(engine)
+        try:
+            async with session_maker() as session:
+                result = await session.execute(select(User.dept_id).where(User.id == admin_user_id))
+                return result.scalar_one()
+        finally:
+            await engine.dispose()
+
+    async def _set_admin_dept_id(dept_id: int | None) -> None:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        session_maker = create_database_async_session(engine)
+        try:
+            async with session_maker.begin() as session:
+                await session.execute(sa_update(User).where(User.id == admin_user_id).values(dept_id=dept_id))
+        finally:
+            await engine.dispose()
+
+    access_token = token_headers['Authorization'].split(' ', 1)[1]
+    admin_user_id = jwt_decode(access_token).user_id
+
+    dept_code = f'ZCACHETEST{uuid.uuid4().hex[:10].upper()}'
+    create_resp = client.post(
+        '/sys/depts',
+        json={'name': dept_code, 'code': dept_code, 'status': 1, 'sort': 0},
+        headers=token_headers,
+    )
+    assert create_resp.status_code == 200, create_resp.text
+
+    tree_resp = client.get('/sys/depts', params={'code': dept_code}, headers=token_headers)
+    assert tree_resp.status_code == 200, tree_resp.text
+    tree_items = tree_resp.json()['data']
+    assert tree_items, f'刚创建的部门 {dept_code} 应该能被 code 过滤查到'
+    dept_pk = tree_items[0]['id']
+
+    original_dept_id = _asyncio.run(_get_admin_dept_id())
+
+    try:
+        _asyncio.run(_set_admin_dept_id(int(dept_pk)))
+
+        # 挪部门是直接改库，不经过任何 clear_* 调用——这一步之后要显式打一次
+        # 认证接口，把（新的）dept_id 写进快照，才有东西可以被接下来的更新清掉
+        snapshot_key = f'{settings.JWT_USER_REDIS_PREFIX}:{admin_user_id}'
+        warm_resp = client.get('/sys/menus/sidebar', headers=token_headers)
+        assert warm_resp.status_code == 200, warm_resp.text
+        assert _redis_exists(snapshot_key), '打完一个认证接口之后，admin 的用户快照应该已经被写进 Redis'
+
+        update_resp = client.put(
+            f'/sys/depts/{dept_pk}',
+            json={'name': dept_code, 'status': 0, 'sort': 0},  # 禁用
+            headers=token_headers,
+        )
+        assert update_resp.status_code == 200, update_resp.text
+
+        assert not _redis_exists(snapshot_key), (
+            '禁用部门之后，该部门下用户（这里是 admin）的快照应该已经被清掉，'
+            '不能继续拿旧的 dept.status 放行到下次别的操作才清'
+        )
+    finally:
+        _asyncio.run(_set_admin_dept_id(original_dept_id))
+        client.request('DELETE', f'/sys/depts/{dept_pk}', headers=token_headers)
