@@ -19,5 +19,10 @@ apps/web/test-results
 apps/api/backend/log
 apps/api/backend/upload
 apps/api/backend/upload-public
-**/.env
-!**/.env.example
+# 🔴 必须覆盖所有 `.env` 变体（`.env.server`/`.env.e2e`…），不能只挡字面量 `.env`——
+# apps/api/.dockerignore 显式排除的那几个真实密钥文件（backend/.env.e2e、
+# deploy/backend/docker-compose/.env.server）在这份根 ignore 里漏了，
+# `apps/web/Dockerfile` 的构建上下文是仓库根，`COPY . .` 会把它们一起拷进
+# builder 阶段（issue #61：本地/离线构建路径能把生产库密码读出来）。
+**/.env*
+!**/.env*.example
