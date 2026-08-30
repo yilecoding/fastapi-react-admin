@@ -318,8 +318,8 @@ export function ConfigPage({
       {err && <p className="px-1 pt-3 text-sm text-destructive" data-testid="save-error">{err}</p>}
 
       {/* ── 左右主体 ── */}
-      <div className="flex flex-1 flex-col gap-6 py-5 md:flex-row md:gap-8">
-        <aside className="md:sticky md:top-20 md:h-fit md:w-52 md:shrink-0">
+      <div className="flex flex-1 flex-col gap-6 py-5 md:flex-row">
+        <aside className="md:sticky md:top-20 md:h-fit md:w-52 md:shrink-0 lg:w-72">
           {isPending ? (
             <div className="flex flex-col gap-2">
               {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
@@ -335,9 +335,9 @@ export function ConfigPage({
           )}
         </aside>
 
-        {/* max-w-4xl：设置屏不该铺满宽屏 —— 标签与控件隔一千多像素，
-            眼睛要横扫一整屏才能把两者对起来 */}
-        <section className="@container/panel min-w-0 flex-1 md:max-w-4xl" data-testid="config-panel">
+        {/* 和主从页共用「固定宽左栏 + 自适应右区」的几何关系。
+            min-w-0 让右区在空间不足时真正收缩，不被行内控件顶出横向滚动条。 */}
+        <section className="@container/panel min-w-0 flex-1" data-testid="config-panel">
           {isPending && (
             <div className="flex flex-col gap-3" data-testid="config-skeleton">
               {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
@@ -415,7 +415,7 @@ export function ConfigPage({
               不套卡片框，块与块的分隔交给一根 border-b。原来每个小节自己是一张
               `rounded-lg border` 卡片、标题栏还带 `bg-muted/30` 底色，
               一屏堆 5～6 个小节看着比个人中心「重」不少，而这里并不需要
-              这层框：内容列已经封顶 max-w-4xl、左边还有条导航，
+              这层框：左边已有分类导航，右侧小节边界也足够明确，
               「这一块到哪为止」本来就看得出来 */}
           <div className={cn('flex flex-col gap-5', groupOff && 'opacity-60')}>
             {sections.map(([title, items]) => {

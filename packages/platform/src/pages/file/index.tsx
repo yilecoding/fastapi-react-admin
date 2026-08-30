@@ -197,7 +197,7 @@ export function FilePage({
           <FileRail
             value={search.type}
             onChange={(next) => patch({ type: next, page: undefined })}
-            className="hidden w-44 shrink-0 md:flex"
+            className="hidden w-52 shrink-0 md:flex lg:w-72"
           />
 
           <div className="flex min-w-0 flex-1 flex-col gap-3 content-scroll:min-h-0">

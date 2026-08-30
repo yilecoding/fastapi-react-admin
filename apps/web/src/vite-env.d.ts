@@ -8,4 +8,7 @@ interface ImportMetaEnv {
    * 「服务端发新版了」就是靠这两个值不相等判出来的。
    */
   readonly VITE_BUILD_ID?: string
+
+  /** 开发期显式设为 `true` 时挂载 TanStack Router Devtools，默认关闭。 */
+  readonly VITE_ROUTER_DEVTOOLS?: string
 }
