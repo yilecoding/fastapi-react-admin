@@ -16,7 +16,14 @@ services:
   mssql:
     # 2022-latest 是本仓库唯一实测过的版本。2016 以下 T-SQL 有差异
     #（`OFFSET FETCH`、筛选唯一索引都要重新验），换版本前先看 CLAUDE.md 的后端约定
-    image: mcr.microsoft.com/mssql/server:2022-latest
+    #
+    # 🔴 `2022-latest` 是浮动标签——Microsoft 会在同一个标签下持续推送累积更新，
+    # 换内容不换名字。这条 CI job 里的 ruff 版本特意钉死过一次（同一份 workflow
+    # 的 lint-backend job 有原话："用 ruff@latest 的话，ruff 一发新版…CI 就会在
+    # 没人改代码的情况下变红"），SQL Server 服务镜像没理由不一样。加的 `@sha256:`
+    # 锁死当前这颗本机验证过能跑的内容；升级时显式把这串 digest 换掉，不要删掉它
+    # 让标签重新浮动。
+    image: mcr.microsoft.com/mssql/server:2022-latest@sha256:ba4c8329f48fb8f02e1416be6a930ebfd71268caee78aa985f3af4315e457c89
     container_name: fba_mssql
     environment:
       ACCEPT_EULA: "Y"
