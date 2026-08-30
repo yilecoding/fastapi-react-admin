@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
 from backend.app.task.celery import celery_app
+from backend.app.task.tasks.base import with_timeout
 from backend.common.log import log
 from backend.database.db import async_db_session
 from backend.utils.timezone import timezone
@@ -46,8 +47,10 @@ async def _prune_table(
     total = 0
     while True:
         ids = (
-            await db.execute(select(model.id).where(time_col < cutoff).order_by(model.id).limit(batch))
-        ).scalars().all()
+            (await db.execute(select(model.id).where(time_col < cutoff).order_by(model.id).limit(batch)))
+            .scalars()
+            .all()
+        )
         if not ids:
             break
         total += (await db.execute(delete(model).where(model.id.in_(ids)))).rowcount or 0
@@ -58,6 +61,7 @@ async def _prune_table(
 
 
 @celery_app.task(name='maintenance.prune_logs')
+@with_timeout()
 async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
     """清理 N 天前的登录日志与操作日志。
 
@@ -85,6 +89,7 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
 
 
 @celery_app.task(name='maintenance.prune_task_results')
+@with_timeout()
 async def prune_task_results(days: int = 30, batch: int = PRUNE_BATCH) -> str:
     """清理 N 天前的**任务执行记录**（`task_result`）。
 

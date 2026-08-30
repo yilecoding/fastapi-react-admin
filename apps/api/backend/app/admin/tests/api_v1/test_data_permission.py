@@ -47,9 +47,14 @@ from backend.utils.timezone import timezone
 
 PASSWORD = 'Dp!123456'
 
-# 种子菜单里的「查询」权限锚点（perms='sys:user:list'），不是这次建图新加的资源，
-# 只是借用来满足 rbac_verify 的"至少挂一个菜单"门槛——见 add_role()
+# 种子菜单里的「查询」权限锚点，不是这次建图新加的资源，只是借用来满足
+# rbac_verify 的权限码校验——见 add_role()
 QUERY_SYS_USER_MENU_ID = 2049629108253622330
+# (issue #57) GET /sys/depts 现在也挂了 RBAC（perms='sys:dept:list'），
+# 这张图打的就是这条接口，只挂 QUERY_SYS_USER_MENU_ID 不够——那只满足
+# "用户至少有一个菜单"这道闸，RBAC_ROLE_MENU_MODE 还会校验*这条路由自己的
+# 权限码*是不是在角色的菜单里，两个锚点都要挂
+QUERY_SYS_DEPT_MENU_ID = 2049629108253622337
 
 # 每次跑用一个新后缀，避免和上一次残留的行撞唯一约束 / 撞断言
 RUN = uuid.uuid4().hex[:6].upper()
@@ -164,8 +169,12 @@ async def _build(graph: Graph) -> None:
         # rbac_verify 的"用户未分配菜单"这道闸都过不去。种子里的 QuerySysUser
         # 菜单（perms='sys:user:list'）就是给这类只测数据权限、不关心 RBAC 的
         # 角色垫底用的——所有这张图里建出来的角色都挂一份，不然每加一个新角色
-        # 都要记得单独补，迟早漏
+        # 都要记得单独补，迟早漏。
+        # (issue #57) `GET /sys/depts`（这张图实际打的接口）也挂了 RBAC 之后，
+        # 同理要补 QUERY_SYS_DEPT_MENU_ID——只有 sys:user:list 满足"有菜单"，
+        # 满足不了这条路由自己要校验的 sys:dept:list
         r2m.append({'id': _sid(), 'role_id': pk, 'menu_id': QUERY_SYS_USER_MENU_ID})
+        r2m.append({'id': _sid(), 'role_id': pk, 'menu_id': QUERY_SYS_DEPT_MENU_ID})
 
     def add_user(key: str, role_keys: list[str], *, dept: str | None = 'A1', superuser: bool = False) -> None:
         pk = _sid()
@@ -621,9 +630,7 @@ def test_every_crud_class_declares_its_data_scope_stance() -> None:
             continue
         body = path.read_text(encoding='utf-8')
         rel = path.relative_to(api_root).as_posix()
-        offenders.extend(
-            f'{rel}::{cls}' for cls in re.findall(r'^class (\w+)\(CRUDPlus\[', body, flags=re.MULTILINE)
-        )
+        offenders.extend(f'{rel}::{cls}' for cls in re.findall(r'^class (\w+)\(CRUDPlus\[', body, flags=re.MULTILINE))
 
     assert not offenders, (
         '这些 CRUD 类还在直接继承 CRUDPlus，没有对数据权限表态：\n'

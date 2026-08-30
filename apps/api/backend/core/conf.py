@@ -382,6 +382,12 @@ class Settings(BaseSettings):
     CELERY_RABBITMQ_VHOST: str = ''
     CELERY_REDIS_PREFIX: str = 'fba:celery'
     CELERY_TASK_MAX_RETRIES: int = 5
+    # 🔴 celery 标准的 task_time_limit/task_soft_time_limit 对这个 worker pool
+    # 是 no-op——celery_aio_pool.AsyncIOPool 靠 asyncio.run_coroutine_threadsafe(...)
+    # .result() 无限等待，没有实现任何超时/信号机制（源码里搜不到 time_limit/
+    # soft_time_limit/alarm）。真正的超时保护在 tasks/base.py 的 with_timeout()
+    # 装饰器里用 asyncio.wait_for() 补，这个值就是喂给它的默认秒数
+    CELERY_TASK_TIME_LIMIT: int = 1800
 
     ##################################################
     # [ Plugin ] oauth2
@@ -485,9 +491,7 @@ def _entropy_bits(value: str) -> float:
     return -sum((c / n) * math.log2(c / n) for c in counts.values()) * n
 
 
-def _check_secret(
-    name: str, value: str | None, *, min_len: int, min_bits: float, min_distinct: int
-) -> str | None:
+def _check_secret(name: str, value: str | None, *, min_len: int, min_bits: float, min_distinct: int) -> str | None:
     """判定一个密钥 / 密码是不是「还是占位符或者太弱」，返回不合格的原因
 
     🔴 **光查黑名单挡不住伪修复。** 有人把 `CHANGE_ME__...` 改成 `123` 也算「改过了」，
