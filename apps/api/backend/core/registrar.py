@@ -62,6 +62,11 @@ async def _verify_production_database() -> None:
     或者从测试环境 dump 一份过来，都不经过 init。这里按 hash 字面量比对兜底，
     无论库是怎么来的都拦得住（种子 hash 是固定盐，三个方言里同一个常量）。
 
+    ⚠️ 只查 `SEEDED_PASSWORD_HASHES`（admin/test），**不查**
+    `SEEDED_DEMO_PASSWORD_HASHES`（公开演示用的 8 个组织架构账号）——后者的密码
+    设计上永远是 123456，查了就是拿自己的这条检查把自己的公开演示功能锁死。
+    实测踩过：两份混在一起时，同步演示账号进库、下次重启 api 就直接崩溃重启。
+
     :return:
     """
     from alembic.script import ScriptDirectory
