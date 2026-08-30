@@ -148,6 +148,39 @@ effect **整个销毁重建**（`tab-outlet.tsx` 那条注释：「销毁 effect
 打印」。上面这条种子 SQL 的 bug 就是靠专门 `except cappa.Exit as e: print(e.message)`
 才挖出来的。
 
+### 🔴 环境准备要「无条件写」，因为读到的可能是缓存
+
+`global-setup.ts` 关验证码那一步原来是「先读、已经是 `false` 就跳过」。
+而 `config_service.get_all()` 挂着 `@cached`（本地 + Redis 两级，TTL 2 小时，
+e2e 用 Redis db 2）—— 那个读**读的是缓存**。
+
+`pnpm --filter api test:db` 重建的是 SQL 库，**不碰 Redis**：种子把
+`LOGIN_CAPTCHA_ENABLED` 打回 `'true'`，缓存里却还留着上一轮 e2e 写下的 `'false'`。
+于是环境准备读到 `'false'`、判定「已经关了」、跳过写入 —— **库里那条从头到尾
+没被改过**。
+
+失败是延迟且随机的：缓存没过期时登录照常，缓存一过期真值 `'true'` 生效，
+此后每一条走**真实登录表单**的用例（`login.spec.ts` / `session-tabs.spec.ts`）
+当场红，报的是「点了登录还停在 `/sign-in`」，跟验证码八竿子打不着。
+实测踩到过一次，两条红。
+
+现在改成**无条件 PUT 一次 + 回读断言**（写入接口带 `@cache_invalidate`，
+一次 PUT 就能把库和缓存一起摆正）。一般结论：**环境准备里的「已经是目标状态就
+跳过」这种优化，只有在读的那条路径没有缓存时才成立。**
+
+### 🔴 按全局快捷键之前要先等外壳挂上来
+
+`page.goto()` 只等到 `load`，而 `?` / `⌘K` 的监听是 `CommandMenu` 的 effect
+注册的。React 还没提交时按下去，那一次按键**谁也收不到**。
+
+症状会骗人：**单跑那个文件永远绿**（vite 已经热了、机器也不忙），只有整套跑
+（54 条、3 分钟）才偶发红，看着像「快捷键坏了」而不像时序问题。
+`command-palette.spec.ts` 第二条踩过。
+
+等一个外壳里的元素可见即可（`command-trigger` 和 `CommandMenu` 是
+`_auth.tsx` 里的兄弟节点，它可见就说明那次提交已经发生）。
+同一条适用于任何「不点元素、直接发全局事件」的用例。
+
 ### 造前置数据不用走 UI
 
 `fixtures/base.ts` 的 `api` fixture 直接打接口（用 `/auth/login/swagger` 拿 token），

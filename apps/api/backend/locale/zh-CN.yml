@@ -77,6 +77,8 @@ error:
     title_exists: 菜单标题已存在
   notice:
     not_found: 通知公告不存在
+  notification:
+    not_found: 通知不存在
   oauth2:
     account_bound: 用户已绑定 {source} 账号
     account_bound_to_other: 该 {source} 账号已被其他用户绑定

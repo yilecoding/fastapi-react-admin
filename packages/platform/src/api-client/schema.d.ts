@@ -973,6 +973,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页获取我的通知 */
+        get: operations["get_my_notifications_paginated_api_v1_sys_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取我的未读数 */
+        get: operations["get_my_unread_count_api_v1_sys_notifications_unread_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 标记我的全部通知已读 */
+        put: operations["mark_all_read_api_v1_sys_notifications_read_all_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notifications/{pk}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 标记通知已读 */
+        put: operations["mark_read_api_v1_sys_notifications__pk__read_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notifications/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发送站内通知 */
+        post: operations["send_notification_api_v1_sys_notifications_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/notices/{pk}": {
         parameters: {
             query?: never;
@@ -3321,6 +3406,68 @@ export interface components {
             updated_time?: string | null;
         };
         /**
+         * GetNotificationDetail
+         * @description 站内通知详情
+         */
+        GetNotificationDetail: {
+            /**
+             * Title
+             * @description 标题
+             */
+            title: string;
+            /**
+             * Content
+             * @description 内容
+             */
+            content: string;
+            /** @description 分类（0：系统、1：公告、2：任务事件） */
+            category: components["schemas"]["NotificationCategory"];
+            /**
+             * Link
+             * @description 点击跳转的前端路由
+             */
+            link?: string | null;
+            /**
+             * Id
+             * @description 通知 ID
+             */
+            id: string | number;
+            /**
+             * Recipient Id
+             * @description 接收人 ID（为空表示全员广播）
+             */
+            recipient_id?: number | null;
+            /**
+             * Created Time
+             * Format: date-time
+             * @description 创建时间
+             */
+            created_time: string;
+            /**
+             * Read Time
+             * @description 阅读时间（为空表示未读）
+             */
+            read_time?: string | null;
+        };
+        /**
+         * GetNotificationUnreadDetail
+         * @description 未读数（给红点用的轻量接口）
+         */
+        GetNotificationUnreadDetail: {
+            /**
+             * Total
+             * @description 未读总数
+             */
+            total: number;
+            /**
+             * By Category
+             * @description 按分类拆开的未读数，key 是分类数值的字符串形式
+             */
+            by_category: {
+                [key: string]: number;
+            };
+        };
+        /**
          * GetOperaLogDetail
          * @description 操作日志详情
          */
@@ -4015,6 +4162,16 @@ export interface components {
          * @enum {integer}
          */
         NoticeType: 0 | 1;
+        /**
+         * NotificationCategory
+         * @description 站内通知分类
+         *
+         *     ⚠️ `TASK` 目前**没有生产者**：任务执行事件走 socket.io 的瞬时 toast，不落库
+         *     （见 `app/task/tasks/base.py: TaskBase`）。留着这个取值是因为「任务失败要留痕」
+         *     是可预期的下一步，而分类的数值一旦发出去就不该再改。
+         * @enum {integer}
+         */
+        NotificationCategory: 0 | 1 | 2;
         /** PageData[GetConfigDetail] */
         PageData_GetConfigDetail_: {
             /** Items */
@@ -4201,6 +4358,32 @@ export interface components {
         PageData_GetNoticeDetail_: {
             /** Items */
             items: components["schemas"]["GetNoticeDetail"][];
+            /**
+             * Total
+             * @description 数据总条数
+             */
+            total: number;
+            /**
+             * Page
+             * @description 当前页码
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页数量
+             */
+            size: number;
+            /**
+             * Total Pages
+             * @description 总页数
+             */
+            total_pages: number;
+            links: components["schemas"]["_Links"];
+        };
+        /** PageData[GetNotificationDetail] */
+        PageData_GetNotificationDetail_: {
+            /** Items */
+            items: components["schemas"]["GetNotificationDetail"][];
             /**
              * Total
              * @description 数据总条数
@@ -4770,6 +4953,22 @@ export interface components {
             msg: string;
             data: components["schemas"]["GetNoticeDetail"];
         };
+        /** ResponseSchemaModel[GetNotificationUnreadDetail] */
+        ResponseSchemaModel_GetNotificationUnreadDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetNotificationUnreadDetail"];
+        };
         /** ResponseSchemaModel[GetRoleWithRelationDetail] */
         ResponseSchemaModel_GetRoleWithRelationDetail_: {
             /**
@@ -4961,6 +5160,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["PageData_GetNoticeDetail_"];
+        };
+        /** ResponseSchemaModel[PageData[GetNotificationDetail]] */
+        ResponseSchemaModel_PageData_GetNotificationDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["PageData_GetNotificationDetail_"];
         };
         /** ResponseSchemaModel[PageData[GetOperaLogDetail]] */
         ResponseSchemaModel_PageData_GetOperaLogDetail__: {
@@ -5462,6 +5677,38 @@ export interface components {
          * @enum {integer}
          */
         RoleDataRuleOperatorType: 0 | 1;
+        /**
+         * SendNotificationParam
+         * @description 管理端手动发送站内通知参数
+         *
+         *     ⚠️ 和 `CreateNotificationParam` 分开是刻意的：这个是**接口入参**，
+         *     合成一个的话「全员广播」就变成了一个接口调用方随手能省掉的字段
+         *     （不传 = 发给所有人），而那正是最该显式写出来的那种意图。
+         */
+        SendNotificationParam: {
+            /**
+             * Title
+             * @description 标题
+             */
+            title: string;
+            /**
+             * Content
+             * @description 内容
+             */
+            content: string;
+            /** @description 分类（0：系统、1：公告、2：任务事件） */
+            category: components["schemas"]["NotificationCategory"];
+            /**
+             * Link
+             * @description 点击跳转的前端路由
+             */
+            link?: string | null;
+            /**
+             * Recipient Ids
+             * @description 接收人 ID 列表；留空表示全员广播
+             */
+            recipient_ids?: number[];
+        };
         /**
          * ServerMonitorInfo
          * @description 服务器监控信息
@@ -8799,6 +9046,151 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": number[];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_notifications_paginated_api_v1_sys_notifications_get: {
+        parameters: {
+            query?: {
+                /** @description 标题 */
+                title?: string | null;
+                /** @description 分类（0：系统、1：公告、2：任务事件） */
+                category?: number | null;
+                /** @description 只看未读 / 只看已读，不传则不筛 */
+                unread?: boolean | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_PageData_GetNotificationDetail__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_unread_count_api_v1_sys_notifications_unread_count_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetNotificationUnreadDetail_"];
+                };
+            };
+        };
+    };
+    mark_all_read_api_v1_sys_notifications_read_all_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    mark_read_api_v1_sys_notifications__pk__read_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 通知 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_notification_api_v1_sys_notifications_send_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendNotificationParam"];
             };
         };
         responses: {

@@ -19,6 +19,7 @@ import { DevSandboxPage } from "@admin/platform/pages/dev-sandbox"
 import { EmbeddedPage } from "@admin/platform/pages/embedded"
 import { ProfilePage } from "@admin/platform/pages/profile"
 import { NoticePage } from "@admin/platform/pages/notice"
+import { NotificationPage } from "@admin/platform/pages/notification"
 import { PluginPage } from "@admin/platform/pages/plugin"
 import { DashboardPage } from "@admin/platform/pages/dashboard"
 import { SchedulerManagePage } from "@admin/platform/pages/scheduler-manage"
@@ -56,5 +57,6 @@ export const pageRegistry: PageRegistry = {
   "/_auth/monitor/server": MonitorServerPage,
   "/_auth/profile": ProfilePage,
   "/_auth/plugins/notice": NoticePage,
+  "/_auth/notification": NotificationPage,
   "/_auth/system/plugin": PluginPage,
 }

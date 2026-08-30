@@ -37,6 +37,14 @@ test.describe("命令面板", () => {
     authedPage: page,
   }) => {
     await page.goto("/dashboard")
+    // 🔴 按全局快捷键之前必须先等外壳挂上来。`goto` 只等到 `load`，而 `?` 的
+    // 监听是 `CommandMenu` 的 effect 注册的 —— React 还没提交时按下去，
+    // 那一次按键**谁也收不到**，面板不会弹。
+    // 症状会骗人：单跑这个文件永远绿（vite 已经热了、机器也不忙），
+    // 只有整套跑（`pnpm e2e`，54 条、3 分钟）才偶发红，看着像「快捷键坏了」。
+    // `command-trigger` 和 `CommandMenu` 是 `_auth.tsx` 里的兄弟节点，
+    // 它可见就说明那次提交已经发生 —— 上面第一条测试一直这么等。
+    await expect(page.getByTestId("command-trigger")).toBeVisible()
 
     await page.keyboard.press("Shift+Slash")
     await expect(page.getByTestId("shortcuts-dialog")).toBeVisible()

@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as GuestRouteImport } from './routes/_guest'
 import { Route as Auth403RouteImport } from './routes/_auth/403'
 import { Route as AuthDashboardRouteImport } from './routes/_auth/dashboard'
+import { Route as AuthNotificationRouteImport } from './routes/_auth/notification'
 import { Route as AuthProfileRouteImport } from './routes/_auth/profile'
 import { Route as GuestSignInRouteImport } from './routes/_guest/sign-in'
 import { Route as AuthEmbeddedNameRouteImport } from './routes/_auth/embedded/$name'
@@ -59,6 +60,11 @@ const Auth403Route = Auth403RouteImport.update({
 const AuthDashboardRoute = AuthDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthNotificationRoute = AuthNotificationRouteImport.update({
+  id: '/notification',
+  path: '/notification',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthProfileRoute = AuthProfileRouteImport.update({
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/403': typeof Auth403Route
   '/dashboard': typeof AuthDashboardRoute
+  '/notification': typeof AuthNotificationRoute
   '/profile': typeof AuthProfileRoute
   '/sign-in': typeof GuestSignInRoute
   '/embedded/$name': typeof AuthEmbeddedNameRoute
@@ -210,6 +217,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/403': typeof Auth403Route
   '/dashboard': typeof AuthDashboardRoute
+  '/notification': typeof AuthNotificationRoute
   '/profile': typeof AuthProfileRoute
   '/sign-in': typeof GuestSignInRoute
   '/embedded/$name': typeof AuthEmbeddedNameRoute
@@ -241,6 +249,7 @@ export interface FileRoutesById {
   '/_guest': typeof GuestRouteWithChildren
   '/_auth/403': typeof Auth403Route
   '/_auth/dashboard': typeof AuthDashboardRoute
+  '/_auth/notification': typeof AuthNotificationRoute
   '/_auth/profile': typeof AuthProfileRoute
   '/_guest/sign-in': typeof GuestSignInRoute
   '/_auth/embedded/$name': typeof AuthEmbeddedNameRoute
@@ -271,6 +280,7 @@ export interface FileRouteTypes {
     | '/'
     | '/403'
     | '/dashboard'
+    | '/notification'
     | '/profile'
     | '/sign-in'
     | '/embedded/$name'
@@ -299,6 +309,7 @@ export interface FileRouteTypes {
     | '/'
     | '/403'
     | '/dashboard'
+    | '/notification'
     | '/profile'
     | '/sign-in'
     | '/embedded/$name'
@@ -329,6 +340,7 @@ export interface FileRouteTypes {
     | '/_guest'
     | '/_auth/403'
     | '/_auth/dashboard'
+    | '/_auth/notification'
     | '/_auth/profile'
     | '/_guest/sign-in'
     | '/_auth/embedded/$name'
@@ -395,6 +407,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthDashboardRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/notification': {
+      id: '/_auth/notification'
+      path: '/notification'
+      fullPath: '/notification'
+      preLoaderRoute: typeof AuthNotificationRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/profile': {
@@ -564,6 +583,7 @@ declare module '@tanstack/react-router' {
 interface AuthRouteChildren {
   Auth403Route: typeof Auth403Route
   AuthDashboardRoute: typeof AuthDashboardRoute
+  AuthNotificationRoute: typeof AuthNotificationRoute
   AuthProfileRoute: typeof AuthProfileRoute
   AuthEmbeddedNameRoute: typeof AuthEmbeddedNameRoute
   AuthLogLoginRoute: typeof AuthLogLoginRoute
@@ -591,6 +611,7 @@ interface AuthRouteChildren {
 const AuthRouteChildren: AuthRouteChildren = {
   Auth403Route: Auth403Route,
   AuthDashboardRoute: AuthDashboardRoute,
+  AuthNotificationRoute: AuthNotificationRoute,
   AuthProfileRoute: AuthProfileRoute,
   AuthEmbeddedNameRoute: AuthEmbeddedNameRoute,
   AuthLogLoginRoute: AuthLogLoginRoute,
