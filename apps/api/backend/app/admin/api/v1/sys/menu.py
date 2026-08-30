@@ -1,6 +1,6 @@
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Path, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, Request
 
 from backend.app.admin.schema.menu import CreateMenuParam, GetMenuDetail, GetMenuTree, UpdateMenuParam
 from backend.app.admin.service.menu_service import menu_service
@@ -73,9 +73,12 @@ async def create_menu(db: CurrentSessionTransaction, obj: CreateMenuParam) -> Re
     ],
 )
 async def update_menu(
-    db: CurrentSessionTransaction, pk: Annotated[int, Path(description='菜单 ID')], obj: UpdateMenuParam
+    db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
+    pk: Annotated[int, Path(description='菜单 ID')],
+    obj: UpdateMenuParam,
 ) -> ResponseModel:
-    count = await menu_service.update(db=db, pk=pk, obj=obj)
+    count = await menu_service.update(db=db, background_tasks=background_tasks, pk=pk, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -89,8 +92,10 @@ async def update_menu(
         DependsRBAC,
     ],
 )
-async def delete_menu(db: CurrentSessionTransaction, pk: Annotated[int, Path(description='菜单 ID')]) -> ResponseModel:
-    count = await menu_service.delete(db=db, pk=pk)
+async def delete_menu(
+    db: CurrentSessionTransaction, background_tasks: BackgroundTasks, pk: Annotated[int, Path(description='菜单 ID')]
+) -> ResponseModel:
+    count = await menu_service.delete(db=db, background_tasks=background_tasks, pk=pk)
     if count > 0:
         return response_base.success()
     return response_base.fail()

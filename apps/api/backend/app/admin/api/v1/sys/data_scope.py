@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query
 
 from backend.app.admin.schema.data_scope import (
     CreateDataScopeParam,
@@ -85,10 +85,11 @@ async def create_data_scope(db: CurrentSessionTransaction, obj: CreateDataScopeP
 )
 async def update_data_scope(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     pk: Annotated[int, Path(description='数据范围 ID')],
     obj: UpdateDataScopeParam,
 ) -> ResponseModel:
-    count = await data_scope_service.update(db=db, pk=pk, obj=obj)
+    count = await data_scope_service.update(db=db, background_tasks=background_tasks, pk=pk, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -104,11 +105,12 @@ async def update_data_scope(
 )
 async def update_data_scope_rules(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     pk: Annotated[int, Path(description='数据范围 ID')],
     rule_ids: UpdateDataScopeRuleParam,
 ) -> ResponseModel:
     # 返回值是「写了几条关联」，不是成败 —— 把规则清空（rules=[]）时它就是 0，那是合法保存
-    await data_scope_service.update_data_scope_rule(db=db, pk=pk, rule_ids=rule_ids)
+    await data_scope_service.update_data_scope_rule(db=db, background_tasks=background_tasks, pk=pk, rule_ids=rule_ids)
     return response_base.success()
 
 
@@ -120,8 +122,10 @@ async def update_data_scope_rules(
         DependsRBAC,
     ],
 )
-async def delete_data_scopes(db: CurrentSessionTransaction, obj: DeleteDataScopeParam) -> ResponseModel:
-    count = await data_scope_service.delete(db=db, obj=obj)
+async def delete_data_scopes(
+    db: CurrentSessionTransaction, background_tasks: BackgroundTasks, obj: DeleteDataScopeParam
+) -> ResponseModel:
+    count = await data_scope_service.delete(db=db, background_tasks=background_tasks, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()

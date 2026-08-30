@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query
 
 from backend.app.admin.schema.data_rule import (
     CreateDataRuleParam,
@@ -113,10 +113,11 @@ async def create_data_rule(
 )
 async def update_data_rule(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     pk: Annotated[int, Path(description='数据规则 ID')],
     obj: UpdateDataRuleParam,
 ) -> ResponseModel:
-    count = await data_rule_service.update(db=db, pk=pk, obj=obj)
+    count = await data_rule_service.update(db=db, background_tasks=background_tasks, pk=pk, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -130,8 +131,10 @@ async def update_data_rule(
         DependsRBAC,
     ],
 )
-async def delete_data_rules(db: CurrentSessionTransaction, obj: DeleteDataRuleParam) -> ResponseModel:
-    count = await data_rule_service.delete(db=db, obj=obj)
+async def delete_data_rules(
+    db: CurrentSessionTransaction, background_tasks: BackgroundTasks, obj: DeleteDataRuleParam
+) -> ResponseModel:
+    count = await data_rule_service.delete(db=db, background_tasks=background_tasks, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()

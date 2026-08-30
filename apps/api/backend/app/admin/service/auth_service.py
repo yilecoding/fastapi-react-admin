@@ -318,6 +318,11 @@ class AuthService:
         await redis_client.delete(f'{settings.TOKEN_EXTRA_INFO_REDIS_PREFIX}:{user_id}:{session_uuid}')
         if refresh_token:
             await redis_client.delete(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}:{session_uuid}')
+        # 🔴 见 issue #34：这份用户快照（menu_service.get_sidebar 用它筛菜单）原来
+        # 只被 user_cache_manager.clear_* 显式作废，logout 从不碰它——一旦它被卡在
+        # 旧值上（比如另一个管理员改权限的请求撞上了竞态），重新登录并不能重建它，
+        # 用户能想到的所有恢复动作里，这是唯一真正有效的一个，必须补上。
+        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
 
 
 auth_service: AuthService = AuthService()

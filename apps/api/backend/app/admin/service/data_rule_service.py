@@ -3,6 +3,7 @@ from typing import Any
 
 from sqlalchemy import Table
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTasks
 
 from backend.app.admin.crud.crud_data_rule import data_rule_dao
 from backend.app.admin.model import DataRule
@@ -198,11 +199,14 @@ class DataRuleService:
         return await data_rule_dao.create(db, obj)
 
     @classmethod
-    async def update(cls, *, db: AsyncSession, pk: int, obj: UpdateDataRuleParam) -> int:
+    async def update(
+        cls, *, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateDataRuleParam
+    ) -> int:
         """
         更新数据规则
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param pk: 规则 ID
         :param obj: 规则更新参数
         :return:
@@ -214,20 +218,21 @@ class DataRuleService:
         if data_rule.name != obj.name and await data_rule_dao.get_by_name(db, obj.name):
             raise errors.ConflictError(msg=t('error.data_rule.already_exists'))
         count = await data_rule_dao.update(db, pk, obj)
-        await user_cache_manager.clear_by_data_rule_id(db, [pk])
+        await user_cache_manager.clear_by_data_rule_id(db, background_tasks, [pk])
         return count
 
     @staticmethod
-    async def delete(*, db: AsyncSession, obj: DeleteDataRuleParam) -> int:
+    async def delete(*, db: AsyncSession, background_tasks: BackgroundTasks, obj: DeleteDataRuleParam) -> int:
         """
         批量删除数据规则
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param obj: 规则 ID 列表
         :return:
         """
         count = await data_rule_dao.delete(db, obj.pks)
-        await user_cache_manager.clear_by_data_rule_id(db, obj.pks)
+        await user_cache_manager.clear_by_data_rule_id(db, background_tasks, obj.pks)
         return count
 
 

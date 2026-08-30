@@ -2,6 +2,7 @@ from typing import Any
 
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTasks
 
 from backend.app.admin.crud.crud_menu import menu_dao
 from backend.app.admin.model import Menu
@@ -91,11 +92,12 @@ class MenuService:
         await menu_dao.create(db, obj)
 
     @staticmethod
-    async def update(*, db: AsyncSession, pk: int, obj: UpdateMenuParam) -> int:
+    async def update(*, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateMenuParam) -> int:
         """
         更新菜单
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param pk: 菜单 ID
         :param obj: 菜单更新参数
         :return:
@@ -113,15 +115,16 @@ class MenuService:
         if obj.parent_id == menu.id:
             raise errors.ForbiddenError(msg=t('error.dept.cannot_be_own_parent'))
         count = await menu_dao.update(db, pk, obj)
-        await user_cache_manager.clear_by_menu_id(db, [pk])
+        await user_cache_manager.clear_by_menu_id(db, background_tasks, [pk])
         return count
 
     @staticmethod
-    async def delete(*, db: AsyncSession, pk: int) -> int:
+    async def delete(*, db: AsyncSession, background_tasks: BackgroundTasks, pk: int) -> int:
         """
         删除菜单
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param pk: 菜单 ID
         :return:
         """
@@ -131,7 +134,7 @@ class MenuService:
             raise errors.ConflictError(msg=t('error.menu.has_children'))
         count = await menu_dao.delete(db, pk)
         if count:
-            await user_cache_manager.clear_by_menu_id(db, [pk])
+            await user_cache_manager.clear_by_menu_id(db, background_tasks, [pk])
         return count
 
 

@@ -2,6 +2,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTasks
 
 from backend.app.admin.crud.crud_data_scope import data_scope_dao
 from backend.app.admin.crud.crud_menu import menu_dao
@@ -53,9 +54,7 @@ class RoleService:
         return roles
 
     @staticmethod
-    async def get_list(
-        *, db: AsyncSession, name: str | None, code: str | None, status: int | None
-    ) -> dict[str, Any]:
+    async def get_list(*, db: AsyncSession, name: str | None, code: str | None, status: int | None) -> dict[str, Any]:
         """
         获取角色列表
 
@@ -118,11 +117,12 @@ class RoleService:
         await role_dao.create(db, obj)
 
     @staticmethod
-    async def update(*, db: AsyncSession, pk: int, obj: UpdateRoleParam) -> int:
+    async def update(*, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateRoleParam) -> int:
         """
         更新角色
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param pk: 角色 ID
         :param obj: 角色更新参数
         :return:
@@ -134,15 +134,18 @@ class RoleService:
         if role.name != obj.name and await role_dao.get_by_name(db, obj.name):
             raise errors.ConflictError(msg=t('error.role.already_exists'))
         count = await role_dao.update(db, pk, obj)
-        await user_cache_manager.clear_by_role_id(db, [pk])
+        await user_cache_manager.clear_by_role_id(db, background_tasks, [pk])
         return count
 
     @staticmethod
-    async def update_role_menu(*, db: AsyncSession, pk: int, menu_ids: UpdateRoleMenuParam) -> int:
+    async def update_role_menu(
+        *, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, menu_ids: UpdateRoleMenuParam
+    ) -> int:
         """
         更新角色菜单
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param pk: 角色 ID
         :param menu_ids: 菜单 ID 列表
         :return:
@@ -156,15 +159,18 @@ class RoleService:
             if {menu.id for menu in menus} != set(menu_ids.menus):
                 raise errors.NotFoundError(msg=t('error.menu.not_found'))
         count = await role_dao.update_menus(db, pk, menu_ids)
-        await user_cache_manager.clear_by_role_id(db, [pk])
+        await user_cache_manager.clear_by_role_id(db, background_tasks, [pk])
         return count
 
     @staticmethod
-    async def add_users(*, db: AsyncSession, pk: int, obj: UpdateRoleUserParam) -> int:
+    async def add_users(
+        *, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateRoleUserParam
+    ) -> int:
         """
         给角色添加用户
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param pk: 角色 ID
         :param obj: 用户 ID 列表
         :return:
@@ -181,15 +187,18 @@ class RoleService:
 
         count = await role_dao.add_users(db, pk, user_ids)
         # 权限码和侧边栏都缓存在 Redis 里，不清的话新角色要等 token 过期才生效
-        await user_cache_manager.clear(user_ids)
+        user_cache_manager.clear(background_tasks, user_ids)
         return count
 
     @staticmethod
-    async def remove_users(*, db: AsyncSession, pk: int, obj: UpdateRoleUserParam) -> int:
+    async def remove_users(
+        *, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateRoleUserParam
+    ) -> int:
         """
         把用户移出角色
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param pk: 角色 ID
         :param obj: 用户 ID 列表
         :return:
@@ -200,15 +209,18 @@ class RoleService:
 
         user_ids = list(dict.fromkeys(obj.users))
         count = await role_dao.remove_users(db, pk, user_ids)
-        await user_cache_manager.clear(user_ids)
+        user_cache_manager.clear(background_tasks, user_ids)
         return count
 
     @staticmethod
-    async def update_role_scope(*, db: AsyncSession, pk: int, scope_ids: UpdateRoleScopeParam) -> int:
+    async def update_role_scope(
+        *, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, scope_ids: UpdateRoleScopeParam
+    ) -> int:
         """
         更新角色数据范围
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param pk: 角色 ID
         :param scope_ids: 权限规则 ID 列表
         :return:
@@ -222,21 +234,22 @@ class RoleService:
             if {scope.id for scope in scopes} != set(scope_ids.scopes):
                 raise errors.NotFoundError(msg=t('error.data_scope.not_found'))
         count = await role_dao.update_scopes(db, pk, scope_ids)
-        await user_cache_manager.clear_by_role_id(db, [pk])
+        await user_cache_manager.clear_by_role_id(db, background_tasks, [pk])
         return count
 
     @staticmethod
-    async def delete(*, db: AsyncSession, obj: DeleteRoleParam) -> int:
+    async def delete(*, db: AsyncSession, background_tasks: BackgroundTasks, obj: DeleteRoleParam) -> int:
         """
         批量删除角色
 
         :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
         :param obj: 角色 ID 列表
         :return:
         """
 
         count = await role_dao.delete(db, obj.pks)
-        await user_cache_manager.clear_by_role_id(db, obj.pks)
+        await user_cache_manager.clear_by_role_id(db, background_tasks, obj.pks)
         return count
 
 
