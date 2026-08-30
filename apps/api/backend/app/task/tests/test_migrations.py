@@ -198,3 +198,70 @@ def test_migrations_compile_offline_for_every_supported_dialect() -> None:
             f'{dialect} 上离线生成迁移 SQL 失败（说明某条迁移里混进了另一个方言'
             f'专属的类型对象）：\n{result.stderr[-4000:]}'
         )
+
+
+def _column_call_at(text: str, start: int) -> str:
+    r"""从 `sa.Column(` 起按括号配对截出完整调用
+
+    ⚠️ 不能用 `[^)]*\)` 那种「到第一个右括号为止」的正则：`sa.BigInteger()`
+    自己就带一对括号，截出来的片段永远停在它上面，`autoincrement=False`
+    落在片段之外 —— 于是那条守卫会**每一条迁移都报红**（第一版就是这样）。
+    """
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == '(':
+            depth += 1
+        elif text[i] == ')':
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return text[start:]
+
+
+def test_created_tables_declare_snowflake_pk_as_non_autoincrement() -> None:
+    """🔴 迁移里 `create_table` 的雪花主键必须显式 `autoincrement=False`
+
+    **这条守卫补的是 `test_model_matches_migrations` 天生看不见的一个洞。**
+
+    模型侧的 `id_key` 靠 `default=snowflake.generate`（Python 侧默认值）让
+    SQLAlchemy 的 `autoincrement='auto'` 判定为「不是自增列」。但 **alembic
+    autogenerate 渲染不出 Python 侧的 `default=`** —— 它写出来的是一句朴素的
+    `sa.Column('id', sa.BigInteger(), nullable=False)`，重新命中 auto 规则，
+    于是在 SQL Server 上建成 **IDENTITY** 列。后果不是"差一点"，是那张表
+    **一行都写不进去**：ORM 带着雪花 ID 去 INSERT，数据库回
+    `Cannot insert explicit value for identity column ... (544)`。
+
+    为什么 `test_model_matches_migrations` 抓不到：它比的是「模型 vs fba_test」，
+    而 fba_test 是 `create_all` 建的 —— 两边都是「非 IDENTITY」，差集为空，全绿。
+    唯一能暴露它的是「用迁移建出来的库」，也就是**生产**
+    （`core/registrar.py` 在 prod 下要求 alembic 在 head）。
+    实测：`sys_notification` 是本仓库第一张真正由迁移创建的表，当场踩到。
+
+    自增主键模式（`DATABASE_PK_MODE=autoincrement`）下这条不适用 —— 那时
+    IDENTITY 正是想要的，所以只在雪花模式下断言。
+    """
+    import re
+
+    from backend.common.enums import PrimaryKeyType
+    from backend.core.conf import settings
+    from backend.core.path_conf import BASE_PATH
+
+    if PrimaryKeyType(settings.DATABASE_PK_MODE) != PrimaryKeyType.snowflake:
+        pytest.skip('自增主键模式下 IDENTITY 是想要的行为')
+
+    # 只看 `create_table` 里的 id 列 —— `add_column` 加的普通列不涉及主键
+    id_column = re.compile(r"sa\.Column\(\s*'id'\s*,")
+    offenders: list[str] = []
+    for path in sorted((BASE_PATH / 'alembic' / 'versions').glob('*.py')):
+        body = path.read_text(encoding='utf-8')
+        if 'create_table(' not in body:
+            continue
+        for match in id_column.finditer(body):
+            call = _column_call_at(body, match.start())
+            if 'autoincrement=False' not in call:
+                offenders.append(f'{path.name}: {" ".join(call.split())}')
+
+    assert not offenders, (
+        '这些迁移建表时没给雪花主键写 autoincrement=False，SQL Server 上会建成 IDENTITY，\n'
+        '那张表在「用迁移建出来的库」（= 生产）里一行都插不进去：\n' + '\n'.join(f'  - {o}' for o in offenders)
+    )

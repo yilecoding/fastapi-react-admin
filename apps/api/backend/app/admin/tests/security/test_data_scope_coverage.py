@@ -13,6 +13,7 @@
 | `DictType` / `DictData` / `Config` | 前端下拉依赖它们，选项凭空消失 |
 | `DataRule` / `DataScope` | 自锁 —— 管理规则的界面被规则滤掉，改不回来 |
 | `UserSocial` | 在**登录链路**上读，那时还没有「当前用户」 |
+| `Notification` | 收件箱已经按 `current_user.id` 过滤了，再叠一层部门维度就变成「我和我下属的通知」 |
 """
 
 import re
@@ -34,6 +35,7 @@ EXEMPT: dict[str, str] = {
     'CRUDConfig': '系统参数，且在启动 / 登录期读取',
     'CRUDUserPasswordHistory': '改密时内部读，不对外展示',
     'CRUDUserSocial': 'OAuth2 绑定在登录链路上读，那时没有当前用户',
+    'CRUDNotification': '收件箱按 current_user.id 强制过滤，再叠部门维度会变成「我和我下属的通知」',
 }
 
 

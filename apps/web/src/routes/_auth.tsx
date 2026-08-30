@@ -23,6 +23,7 @@ import { Separator } from "@admin/ui/components/separator"
 
 import { pageRegistry } from "@/lib/page-registry"
 import { buildValidPaths, makeIsValidPath } from "@/lib/valid-paths"
+import { NotificationBell } from "@admin/platform/pages/notification/bell"
 import { GithubLink } from "@/components/github-link"
 import { UserMenu } from "@/components/user-menu"
 
@@ -102,6 +103,9 @@ function AuthLayout() {
           <div className="ms-auto flex items-center gap-2">
             <CommandTrigger />
             <GithubLink />
+            {/* 通知铃铛。它是外壳家具（永远处于「当前匹配」的位置），
+                不是标签页，所以可以用 router —— 别把它注册进 page-registry */}
+            <NotificationBell />
             <UserMenu />
           </div>
         </header>

@@ -5,6 +5,10 @@ description = "用于发布系统内部通知、公告"
 author = "wu-clan"
 tags = ["other"]
 database = ["mysql", "postgresql", "sqlserver"]
+# 公告「显示」时会往 sys_notification 写一行广播（notice_service.create/update），
+# 没有 notification 插件的话那个 import 直接炸 —— 依赖要显式声明，
+# 顺带让 `fba init` 先建 notification 的表再灌公告种子
+depends_on = ["notification"]
 
 [app]
 extend = "admin"
