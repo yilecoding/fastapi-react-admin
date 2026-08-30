@@ -202,6 +202,50 @@ const submitQuery = React.useCallback((v) => { setRowSelection({}); q.submit(v) 
 它随选中行出现/消失，放右组的话每选一次行，「搜索 / 重置」就横向位移一次。
 左组是往右长进空白里的，右组不动。
 
+### 🔴 单条删除失败要留在弹窗里，不许无条件关闭
+
+**症状**：删部门时后端拒绝（「部门下有子部门/用户，无法删除」这类 409），
+如果 `ConfirmDialog` 的 `onConfirm` 写成 `try { await del.mutateAsync(id) } finally { close() }`，
+弹窗关了、错误走一条 6s 后自动消失的全局 toast——按钮 loading 是重置了，
+但用户要做的事（先去处理那些依赖项）在弹窗里做不到，白白多开一次弹窗，
+等于没解决问题。这条曾经就是本仓库的规范（PR #51），后来在 PR #75 里改了回来。
+
+**根因/取舍**：这类失败是**业务规则拒绝**，不是可以「原地重试」的瞬时错误——
+但界面上的处理不该看错误类型分叉，应该统一「失败就留在原地说清楚」，
+读起来用户自己判断要不要重试或者去别处处理完再回来点确定。
+调研过 Ant Design 和 TDesign 两家的组件契约：Ant Design 的 `Modal.confirm`
+官方文档就是这个契约（`onOk` 返回的 Promise `resolve` 才关闭，`reject` 不关闭）；
+TDesign 的 `Dialog` 反而中立，`onConfirm` 只是个 `void` 回调，关不关完全交给
+业务方自己拿 `confirmLoading` 判断——两家都没有强制走「关闭 + toast」这条路。
+而且 `_shared/clear-logs.tsx`（清空日志）从一开始就是「留在原地」这套写法，
+PR #51 反而是当时唯一没对齐这个既有写法的地方。
+
+**修法**：`onConfirm` 只在成功时关闭弹窗，失败 `setError`，`description`
+换成错误文案（`<span className="text-destructive">{error}</span>`，和
+`clear-logs.tsx` 同一个视觉写法）；对应的 `useDelete*` mutation 要加
+`meta: { suppressErrorToast: true }`，不再指望 `app.tsx` 的全局
+`MutationCache.onError` 兜底弹 toast。换了删除目标要清空上一次的错误——
+`React.useEffect(() => setError(null), [pendingDelete])`，否则点别的行的
+删除会先看到上一条已经不相关的错误文案。
+
+已经照这条改的：`dept` / `menu` / `role`（单条）/ `data-permission`
+（含 `rules-panel.tsx` 的解绑与彻底删除两处）/ `user`（仅单条）/
+`notice`（仅单条）/ `dict`（仅单条）。
+
+⚠️ **批量删除不适用这条**——`user` / `notice` / `dict` 的批量删除
+（`Promise.allSettled` 部分失败语义）照旧走「无条件关闭 + 全局 toast」：
+已经删掉的不会回滚，选中集合已经过期，「留在原地重试整个选中集合」
+没有意义，正确的恢复路径是关掉弹窗看最新列表。`notice` / `dict` 的单条和
+批量共用同一个 `useDelete*` mutation，处理办法是给 hook 加一个
+`opts.suppressErrorToast` 参数，单条和批量各自 `useDeleteXxx(...)`
+开一份独立的 mutation 实例，互不影响（两份实例的 `isPending` 也要分别
+接到各自的弹窗上，不能共用）。
+
+**实测证据**：造坏文件验证过两条路径——单条删除失败时错误留在弹窗里、
+确定按钮恢复可点；批量删除部分失败时弹窗照常关闭、全局 toast 报
+「N / M 项删除失败」。`pnpm typecheck --force` / `pnpm --filter web lint` /
+`pnpm i18n:check` / `pnpm ctx:check` 全绿。
+
 ### 迁一个列表页到 `QueryBar`
 
 已迁：`log-login` · `log-opera` · `user`。照用户管理页抄，六步：
