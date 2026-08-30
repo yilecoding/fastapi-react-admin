@@ -128,6 +128,8 @@ export function useUpdateDataScope() {
 export function useDeleteDataScopes() {
   const qc = useQueryClient()
   return useMutation({
+    // 删除确认框自己接错误、留在原地重试（流派一），不指望全局兜底
+    meta: { suppressErrorToast: true },
     mutationFn: (ids: string[]) => api.DELETE('/api/v1/sys/data-scopes', { body: { pks: ids } }),
     onSuccess: invScopes(qc),
   })
@@ -240,6 +242,8 @@ export function useUpdateDataRule() {
 export function useDeleteDataRules() {
   const qc = useQueryClient()
   return useMutation({
+    // 删除确认框自己接错误、留在原地重试（流派一），不指望全局兜底
+    meta: { suppressErrorToast: true },
     mutationFn: (ids: string[]) => api.DELETE('/api/v1/sys/data-rules', { body: { pks: ids } }),
     onSuccess: invRules(qc),
   })
