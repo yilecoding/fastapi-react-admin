@@ -128,7 +128,13 @@ export function useUpdateUser() {
     meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: UpdateUserBody }) =>
       api.PUT(`/api/v1/sys/users/${id}`, { body }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.all }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userKeys.all })
+      // body 里带 roles——用户管理页没有 self-edit 限制，管理员可能改的
+      // 就是自己这一行；不判断是不是本人，成本可忽略（同 role/api.ts 的
+      // update_role_menu 那条一样的理由）
+      qc.invalidateQueries({ queryKey: ['auth'] })
+    },
   })
 }
 
@@ -189,7 +195,13 @@ export function useToggleUserPermission() {
     meta: { suppressErrorToast: true },
     mutationFn: ({ id, type }: { id: string; type: UserPermissionType }) =>
       api.PUT(`/api/v1/sys/users/${id}/permissions?type=${type}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.all }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userKeys.all })
+      // 服务端已经挡了对自身的调用（`pk == request.user.id` 直接 403），
+      // 这里补上纯粹是不想给以后新增的「可自我调用」权限位类型留同一个坑——
+      // 到时候后端挡没挡住是另一回事，前端这层不该是那个让人误以为"已经生效"的环节
+      qc.invalidateQueries({ queryKey: ['auth'] })
+    },
   })
 }
 
