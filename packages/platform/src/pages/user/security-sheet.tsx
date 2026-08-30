@@ -13,6 +13,7 @@ import { Switch } from '@admin/ui/components/switch'
 import { ApiError } from '../../api-client/errors'
 import { usePerm } from '../../auth/use-perm'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { FormSection } from '../_shared/form-fields'
 import {
   useResetUserPassword, useToggleUserPermission,
   type User, type UserPermissionType,
@@ -148,7 +149,7 @@ export function UserSecuritySheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 py-2">
+        <div className="flex flex-1 flex-col gap-6 overflow-y-auto px-4 py-2">
           {!isSuperuser && (
             <p className="text-sm text-muted-foreground" data-testid="sec-not-superuser">
               {t('你不是超级管理员，这里的操作都会被服务端拒绝。')}
@@ -156,8 +157,7 @@ export function UserSecuritySheet({
           )}
 
           {/* ── 权限开关 ── */}
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-medium">{t('权限')}</span>
+          <FormSection title={t('权限')}>
             <div className="flex flex-col divide-y divide-border/60">
               {FLAGS.map((f) => {
                 const on = f.read(user)
@@ -188,57 +188,58 @@ export function UserSecuritySheet({
                 {flagError}
               </p>
             )}
-          </div>
+          </FormSection>
 
           {/* ── 重置密码 ── */}
-          <form onSubmit={submitPwd} className="flex flex-col gap-3 border-t border-border/60 pt-4">
-            <span className="text-sm font-medium">{t('重置密码')}</span>
-            <p className="text-xs text-muted-foreground">
-              {t('不需要原密码。强度规则由服务端「参数配置」里的口令策略决定，重置后该用户的登录态会失效。')}
-            </p>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="sec-pwd">{t('新密码')}</Label>
-              <Input
-                id="sec-pwd" data-testid="sec-pwd" type="password" value={pwd}
-                autoComplete="new-password" disabled={!isSuperuser}
-                onChange={(e) => { setPwd(e.target.value); setPwdState('idle') }}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="sec-pwd2">{t('确认新密码')}</Label>
-              <Input
-                id="sec-pwd2" data-testid="sec-pwd2" type="password" value={pwd2}
-                autoComplete="new-password" disabled={!isSuperuser}
-                onChange={(e) => { setPwd2(e.target.value); setPwdState('idle') }}
-              />
-              {mismatch && (
-                <span className="text-xs text-destructive" data-testid="sec-pwd-mismatch">
-                  {t('两次输入的密码不一致')}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                type="submit" size="sm" data-testid="sec-pwd-submit"
-                disabled={!isSuperuser || !pwdReady || reset.isPending}
-              >
-                {reset.isPending && <IconLoader2 className="size-4 animate-spin" />}
-                {t('重置密码')}
-              </Button>
-              {pwdState === 'ok' && (
-                <span className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400"
-                      data-testid="sec-pwd-ok">
-                  <IconCheck className="size-3.5" />
-                  {t('已重置')}
-                </span>
-              )}
-              {pwdState === 'error' && (
-                <span className="flex items-center gap-1.5 text-sm text-destructive" data-testid="sec-pwd-error">
-                  <IconAlertTriangle className="size-3.5 shrink-0" />
-                  {pwdMsg}
-                </span>
-              )}
-            </div>
+          <form onSubmit={submitPwd} className="flex flex-col">
+            <FormSection title={t('重置密码')}>
+              <p className="text-xs text-muted-foreground">
+                {t('不需要原密码。强度规则由服务端「参数配置」里的口令策略决定，重置后该用户的登录态会失效。')}
+              </p>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="sec-pwd">{t('新密码')}</Label>
+                <Input
+                  id="sec-pwd" data-testid="sec-pwd" type="password" value={pwd}
+                  autoComplete="new-password" disabled={!isSuperuser}
+                  onChange={(e) => { setPwd(e.target.value); setPwdState('idle') }}
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="sec-pwd2">{t('确认新密码')}</Label>
+                <Input
+                  id="sec-pwd2" data-testid="sec-pwd2" type="password" value={pwd2}
+                  autoComplete="new-password" disabled={!isSuperuser}
+                  onChange={(e) => { setPwd2(e.target.value); setPwdState('idle') }}
+                />
+                {mismatch && (
+                  <span className="text-xs text-destructive" data-testid="sec-pwd-mismatch">
+                    {t('两次输入的密码不一致')}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="submit" size="sm" data-testid="sec-pwd-submit"
+                  disabled={!isSuperuser || !pwdReady || reset.isPending}
+                >
+                  {reset.isPending && <IconLoader2 className="size-4 animate-spin" />}
+                  {t('重置密码')}
+                </Button>
+                {pwdState === 'ok' && (
+                  <span className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400"
+                        data-testid="sec-pwd-ok">
+                    <IconCheck className="size-3.5" />
+                    {t('已重置')}
+                  </span>
+                )}
+                {pwdState === 'error' && (
+                  <span className="flex items-center gap-1.5 text-sm text-destructive" data-testid="sec-pwd-error">
+                    <IconAlertTriangle className="size-3.5 shrink-0" />
+                    {pwdMsg}
+                  </span>
+                )}
+              </div>
+            </FormSection>
           </form>
         </div>
 
