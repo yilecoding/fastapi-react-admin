@@ -138,6 +138,11 @@ async def download_file(
     # 原名可能带中文/空格，裸塞进 filename= 会被 header 编码规则截断或乱码。
     # RFC 6266 的两段式写法：ASCII 回退 + filename* 带 UTF-8
     ascii_name = file.original_name.encode('ascii', 'ignore').decode() or f'file.{file.ext}'
+    # (issue #62) RFC 6266 的 filename="..." 是 quoted-string，`"`/`\` 必须转义，
+    # 否则原名里带引号会破坏这段 header 的语法。新上传的文件在 sanitize_display_name()
+    # 那一步已经挡掉了控制字符，但这条防线独立存在——万一有旧数据、或者以后
+    # 又长出一条没走 sanitize_display_name() 的写入路径，这里仍然兜得住
+    ascii_name = ascii_name.replace('\\', '\\\\').replace('"', '\\"')
     return FileResponse(
         target,
         media_type=file.content_type or 'application/octet-stream',
