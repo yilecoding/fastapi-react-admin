@@ -7,12 +7,11 @@
     "test": "uv run --no-sync pytest",
     "test:db": "uv run --no-sync python -m backend.scripts.reset_test_db",
     "db:init": "cd backend && uv run python -c \"import sys; sys.argv=['fba','init']; from backend.cli import main; main()\"",
-    "db:init:auto": "cd backend && uv run python -c \"import sys; sys.argv=['fba','init','--auto']; from backend.cli import main; main()\"",
+    "db:reset": "cd backend && uv run python -c \"import sys; sys.argv=['fba','init','--auto']; from backend.cli import main; main()\"",
     "db:upgrade": "cd backend && uv run --no-sync alembic upgrade head",
     "db:revision": "cd backend && uv run --no-sync alembic revision --autogenerate -m",
     "db:current": "cd backend && uv run --no-sync alembic current",
     "db:history": "cd backend && uv run --no-sync alembic history",
-    "db:reset": "pnpm run db:init:auto",
     "e2e:server": "ENV_FILE=.env.e2e uv run --no-sync python -m uvicorn backend.main:app --port 8001",
     "celery:worker": "CELERY_CUSTOM_WORKER_POOL=celery_aio_pool.pool:AsyncIOPool uv run --no-sync celery -A backend.app.task.celery worker -l info --pool=custom",
     "celery:beat": "uv run --no-sync celery -A backend.app.task.celery beat -l info"
