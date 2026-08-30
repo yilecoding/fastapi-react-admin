@@ -123,9 +123,7 @@ def test_fresh_database_is_stamped_at_head(alembic_cfg) -> None:
     from backend.database.db import get_database_url
 
     url = get_database_url(unittest=True).render_as_string(hide_password=False)
-    sync_url = (
-        url.replace('+aioodbc', '+pyodbc').replace('+asyncpg', '+psycopg').replace('+asyncmy', '+pymysql')
-    )
+    sync_url = url.replace('+aioodbc', '+pyodbc').replace('+asyncpg', '+psycopg').replace('+asyncmy', '+pymysql')
 
     engine = create_engine(sync_url, future=True)
     try:
@@ -146,3 +144,57 @@ def test_fresh_database_is_stamped_at_head(alembic_cfg) -> None:
         '  新建库：fba init 会自动 stamp head\n'
         '  已有库：pnpm db:upgrade'
     )
+
+
+def test_migrations_compile_offline_for_every_supported_dialect() -> None:
+    """(issue #59) 每条迁移在三种数据库上都要能编译出 SQL——不只是能在 SQL Server 上跑
+
+    `pnpm --filter api test:db` / 日常 pytest 只跑 SQL Server，一条迁移拿
+    mssql 专属类型对象当 `existing_type`（比如 `mssql.BIT()`、带 SQL Server
+    collation 的 `NVARCHAR`）在这条主线上完全测不出来——直到某个 MySQL/PostgreSQL
+    环境走 `alembic upgrade head` 才会在 DDL 编译阶段炸
+    （`AttributeError: BIT object has no attribute length`，`c0000000comments`
+    就是这样，见该文件的注释）。
+
+    这里用 `alembic upgrade ... --sql`（离线生成 SQL，不需要真实连接）对
+    mysql / postgresql 各跑一遍 `c0000000comments`，只要不抛异常就说明没有
+    方言专属对象泄漏到另一个方言的编译路径里。
+
+    ⚠️ **只测到 `c0000000comments` 这一条，不是整条 head 链**，两个独立原因：
+
+    - 不测 sqlserver——alembic 自己的 mssql 插件在离线 `--sql` 模式下生成列
+      注释语句时有个已知限制（`_add_column_comment` 里 `assert schema_name`，
+      离线模式拿不到 schema 名），这和本仓库的迁移写得对不对无关，真实的
+      在线 `alembic upgrade`（这条主线唯一真正跑迁移的方式）不受影响，
+      本文件其它守卫已经在真连接上覆盖了 sqlserver
+    - 不跑到更后面的迁移——`d0000000usertz` 用 `sa.inspect(bind).get_columns()`
+      做幂等性检查（判断列存不存在），这**需要一个真实连接**，离线 `--sql`
+      模式下 `bind` 是 `MockConnection`，`sa.inspect()` 直接
+      `NoInspectionAvailable`。这是"补历史遗留列"这类迁移的固有约束
+      （运行期自省无法在纯离线模式下工作），不是本条要守的那类 bug，
+      也不该让它挡住这条测试
+
+    子进程跑是因为 `DATABASE_TYPE` 只在进程启动时被 `settings` 读一次——
+    当前测试进程已经是 sqlserver 了，进程内改 `os.environ` 对缓存的单例没有
+    任何效果（同 `env.py` 那条"改 DATABASE_SCHEMA 环境变量顶不住"的注释）。
+    """
+    import os
+    import subprocess
+    import sys
+
+    from backend.core.path_conf import BASE_PATH
+
+    for dialect in ('mysql', 'postgresql'):
+        env = {**os.environ, 'DATABASE_TYPE': dialect}
+        result = subprocess.run(
+            [sys.executable, '-m', 'alembic', 'upgrade', 'b0000000baseline:c0000000comments', '--sql'],
+            cwd=BASE_PATH,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, (
+            f'{dialect} 上离线生成迁移 SQL 失败（说明某条迁移里混进了另一个方言'
+            f'专属的类型对象）：\n{result.stderr[-4000:]}'
+        )
