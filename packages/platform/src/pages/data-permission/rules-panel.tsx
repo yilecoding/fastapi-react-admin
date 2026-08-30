@@ -11,7 +11,6 @@ import { DataTableSkeletonRows } from '@admin/ui/components/data-table'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@admin/ui/components/table'
-import { toast } from '@admin/ui/components/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 import { cn } from '@admin/ui/lib/utils'
 
@@ -45,6 +44,11 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [pendingUnbind, setPendingUnbind] = React.useState<DataRule | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<DataRule | null>(null)
+  // 失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案
+  const [unbindError, setUnbindError] = React.useState<string | null>(null)
+  const [deleteError, setDeleteError] = React.useState<string | null>(null)
+  React.useEffect(() => setUnbindError(null), [pendingUnbind])
+  React.useEffect(() => setDeleteError(null), [pendingDelete])
 
   const bind = useUpdateScopeRules()
   const delRule = useDeleteDataRules()
@@ -212,23 +216,23 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
         onOpenChange={(o) => !o && setPendingUnbind(null)}
         title={t("从本范围移除规则")}
         description={
-          pendingUnbind
-            ? t('把「{{rule}}」从范围「{{scope}}」里摘掉？规则本身还在，其它范围不受影响。', { rule: pendingUnbind.name, scope: scope.name })
-            : ''
+          unbindError ? (
+            <span className="text-destructive">{unbindError}</span>
+          ) : pendingUnbind ? (
+            t('把「{{rule}}」从范围「{{scope}}」里摘掉？规则本身还在，其它范围不受影响。', { rule: pendingUnbind.name, scope: scope.name })
+          ) : ''
         }
         confirmText={t("移除")}
         destructive
         pending={bind.isPending}
         onConfirm={async () => {
           if (!pendingUnbind) return
+          setUnbindError(null)
           try {
             await bind.mutateAsync({ id: scope.id, rules: ids.filter((x) => x !== pendingUnbind.id) })
-          } catch (e) {
-            // 这个 mutation（useUpdateScopeRules）标了 suppressErrorToast——
-            // rule-picker.tsx 那边已经内联展示过一次，这里不能指望全局兜底，手动弹
-            toast.error(e instanceof Error ? e.message : t('操作失败'))
-          } finally {
             setPendingUnbind(null)
+          } catch (e) {
+            setUnbindError(e instanceof Error ? e.message : t('操作失败'))
           }
         }}
       />
@@ -238,19 +242,23 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("彻底删除规则")}
         description={
-          pendingDelete
-            ? t('删除规则「{{name}}」？这会从所有引用它的数据范围里一并消失，不只是本范围。', { name: pendingDelete.name })
-            : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('删除规则「{{name}}」？这会从所有引用它的数据范围里一并消失，不只是本范围。', { name: pendingDelete.name })
+          ) : ''
         }
         confirmText={t("删除")}
         destructive
         pending={delRule.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
+          setDeleteError(null)
           try {
             await delRule.mutateAsync([pendingDelete.id])
-          } finally {
             setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
       />
