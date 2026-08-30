@@ -107,7 +107,9 @@ jobs:
 
     services:
       mssql:
-        image: mcr.microsoft.com/mssql/server:2022-latest
+        # `@sha256:` 钉住内容——`2022-latest` 本身是浮动标签，见 docker-compose.dev.yml
+        # 里的完整说明。升级时显式换这串 digest，不要删掉它让标签重新浮动。
+        image: mcr.microsoft.com/mssql/server:2022-latest@sha256:ba4c8329f48fb8f02e1416be6a930ebfd71268caee78aa985f3af4315e457c89
         env:
           # ⚠️ 必须是字符串 'Y'。裸 Y 会被 YAML 解析成布尔 true，
           # 容器起来后立刻退出，日志里只有一句 EULA 未接受
@@ -240,7 +242,9 @@ jobs:
 
     services:
       mssql:
-        image: mcr.microsoft.com/mssql/server:2022-latest
+        # `@sha256:` 钉住内容——`2022-latest` 本身是浮动标签，见 docker-compose.dev.yml
+        # 里的完整说明。升级时显式换这串 digest，不要删掉它让标签重新浮动。
+        image: mcr.microsoft.com/mssql/server:2022-latest@sha256:ba4c8329f48fb8f02e1416be6a930ebfd71268caee78aa985f3af4315e457c89
         env:
           ACCEPT_EULA: "Y"
           MSSQL_PID: Developer
