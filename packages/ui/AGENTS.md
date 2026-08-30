@@ -84,6 +84,30 @@ Base UI 拿 `TooltipTrigger` 渲染出来的那个元素当**定位参照**。`d
 可见文字了，结果是「进行中」这个状态在界面上任何地方都读不到。
 改成 `aria-busy` + 回调里的重入守卫（`log-login` / `log-opera` 的导出按钮是这么写的）。
 
+### 🔴 没注册的 TanStack 特性，类型检查看不见 —— 渲染时才炸
+
+`DataTable` 内部把行断言成 `Row<any, any>`（`AnyRow`），那个 `any` 让 TS 认为
+**所有特性的方法都在**。但 TanStack v9 是 tree-shaken 的：没在 `tableFeatures({...})`
+里注册 `rowSelectionFeature` 的表上**根本没有** `getIsSelected` ——
+`pnpm typecheck` 一路绿，页面一渲染整张表白屏，报
+`TypeError: row.getIsSelected is not a function`。
+消息中心（收件箱没有批量动作，故意不注册行选中）第一次跑就踩到。
+
+`data-table.tsx` 里那一处已经改成 `getIsSelected?.()`。**再往 DataTable 里加
+「某个特性才有的方法」时，一律写成可选调用**，否则就是给「只注册了自己要用的
+特性」的调用方埋一个类型检查抓不到的雷。
+
+### 🔴 `line-clamp-*` 和 `block` 会互相打架，输的那个只剩「齐字切断」
+
+Tailwind 的 `line-clamp-1` 靠 `display:-webkit-box` 实现。表格单元格里想让
+`max-w-*` 生效又要写 `block` —— 两个 `display` 打架，谁后写谁赢。
+line-clamp 输掉之后只剩它自带的 `overflow:hidden`：正文被**齐字切断、没有省略号**，
+看着像数据坏了而不像截断。
+
+单行截断本来就该用 `truncate`（`overflow:hidden` + `text-overflow:ellipsis` +
+`white-space:nowrap`），它和 `block` 不冲突。`line-clamp-*` 只留给**多行**截断，
+而且那时不要再写 `block`。
+
 ### 为什么有些 className 覆盖有效、有些无声失效
 
 `cn()` = `twMerge(clsx(...))`。**tailwind-merge 只在「同一变体作用域」内消解冲突**：

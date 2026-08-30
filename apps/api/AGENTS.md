@@ -90,6 +90,21 @@
   三份清单做差集，任一方向漂移都会红。**新增接口时照样自己核一遍**，
   但漏了不再只能靠人翻出来
 
+### ⚠️ `.schemas/plugin.schema.json` 是上游带过来的，`sqlserver` 要自己补进去
+
+`plugin.toml` 的 `database` 数组由 `.schemas/plugin.schema.json` 约束
+（`pyproject.toml` 的 `[[tool.tombi.schemas]]` 挂上去，pre-commit 的 `tombi-lint` 执行）。
+那份 schema 是上游 FBA 的，枚举里只有 `mysql` / `postgresql` —— 而这个 fork
+三种库都支持。
+
+**为什么一直没人发现**：pre-commit 只 lint **本次改动的文件**。`notice` / `dict`
+的 `plugin.toml` 早就写着 `sqlserver`，但它们已经提交、之后没再动过，
+所以那条规则从来没被触发。新加一个插件（或只是改一下现有的 `plugin.toml`）
+才会当场被挡住，报的是一句看不出上下文的
+`The value must be one of ["mysql", "postgresql"], but found "sqlserver"`。
+`sqlserver` 已经补进枚举。**以后 cherry-pick 上游改动碰到这个文件时，
+记得别把它覆盖回去。**
+
 ## 数据库结构改动一律走 alembic
 
 **改了模型就要生成迁移，没有例外。** 手写 `ALTER` / `drop_all` 重建那条路已经关了
@@ -140,6 +155,41 @@
 ⚠️ **验证不能只跑 `upgrade head`**（在已经有那一列的库上它就是个 no-op，
 证明不了任何事）。要 `downgrade -1` → 确认列真的消失 → `upgrade head` →
 确认列回来**且存量行被回填**。`d0000000usertz` 是这么验的。
+
+### 🔴 迁移建表时雪花主键会变成 IDENTITY —— 那张表在生产里一行都写不进去
+
+`sys_notification` 是本仓库**第一张真正由迁移创建**的表（基线是空的，之前所有表
+都是 `create_all` 建的），一建出来就踩到：
+
+**症状**：任何 INSERT 报 `Cannot insert explicit value for identity column in table
+'sys_notification' when IDENTITY_INSERT is set to OFF. (544)`。
+
+**根因**：模型侧的 `id_key` 靠 `default=snowflake.generate`（**Python 侧**默认值）
+让 SQLAlchemy 的 `autoincrement='auto'` 判定为「不是自增列」。而 **alembic
+autogenerate 渲染不出 Python 侧的 `default=`** —— 它写出来的是一句朴素的
+`sa.Column('id', sa.BigInteger(), nullable=False)`，重新命中 auto 规则，
+在 mssql 上建成 IDENTITY。于是同一份模型，`create_all` 建的表和迁移建的表
+**结构不一样**。
+
+**为什么守卫抓不到**：`test_model_matches_migrations` 比的是「模型 vs fba_test」，
+而 fba_test 是 `create_all` 建的 —— 两边都是「非 IDENTITY」，差集为空，全绿。
+唯一能暴露它的是「用迁移建出来的库」，也就是**生产**
+（prod 下 `core/registrar.py` 要求 alembic 在 head）。
+
+**修法两层**：`common/model.py` 的 `id_key` 显式写 `autoincrement=False`
+（`create_all` 行为不变，但 autogenerate 会把它渲染出来）；
+新增守卫 `test_created_tables_declare_snowflake_pk_as_non_autoincrement`
+静态扫 `alembic/versions/*.py` 里 `create_table` 的 id 列。
+**手写迁移建新表时照样要自己写上那一行。**
+
+### 🔴 `paging_data()` 返回的 items 是 **dict**，不是 ORM 实例
+
+`paging_data()` 里那句 `paginated_data.model_dump()` 已经把 ORM 实例展开成 dict 了
+（模型是 `MappedAsDataclass`，pydantic 的 dump 会照 dataclass 展开）。
+分页之后想再加工一遍结果（比如站内通知要按 `sys_notification_read` 回填
+`read_time`），按属性取 `item.id` 会直接
+`'dict' object has no attribute 'id'` → 500。用 `item['id']`，
+往 dict 里塞新键即可，FastAPI 那层照样按 response_model 校验得过。
 
 ## 后端国际化（i18n）
 

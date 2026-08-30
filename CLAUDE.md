@@ -34,6 +34,7 @@
 | 加设置屏 —— 骨架本身 / 参数配置那种 | [`_shared` 分册](packages/platform/src/pages/_shared/AGENTS.md) / [`config` 分册](packages/platform/src/pages/config/AGENTS.md) |
 | 动多页签 / 标签条 / 偏好设置 / 侧边栏 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
 | 动文件上传 / 预览 / 附件 | [`packages/platform/src/pages/file/AGENTS.md`](packages/platform/src/pages/file/AGENTS.md) |
+| 动消息通知 / 铃铛 / 收件箱 | [`packages/platform/src/pages/notification/AGENTS.md`](packages/platform/src/pages/notification/AGENTS.md) |
 | 动查询区 / 筛选条件 | [`packages/ui/src/components/query-bar/AGENTS.md`](packages/ui/src/components/query-bar/AGENTS.md) |
 | 动富文本 / 正文里的图片 | [`packages/ui/src/components/rich-text/AGENTS.md`](packages/ui/src/components/rich-text/AGENTS.md) |
 | 挑组件 / 改尺寸覆盖不生效 | [`packages/ui/AGENTS.md`](packages/ui/AGENTS.md) |

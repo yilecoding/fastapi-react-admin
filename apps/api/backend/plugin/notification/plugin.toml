@@ -1,0 +1,14 @@
+[plugin]
+summary = "消息通知中心"
+version = "0.0.1"
+description = "站内消息收件箱：公告推送、未读红点、已读标记"
+author = "yile"
+tags = ["other"]
+database = ["mysql", "postgresql", "sqlserver"]
+
+[app]
+extend = "admin"
+
+[api.notification]
+prefix = "/notifications"
+tags = "系统消息通知"

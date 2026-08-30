@@ -1,11 +1,13 @@
 import * as React from 'react'
 import { io, type Socket } from 'socket.io-client'
+import { toast } from '@admin/ui/components/toast'
 
 import { API_BASE } from '../api-client/client'
 import { tokenStore } from '../api-client/token-store'
+import { dispatchSocketEvent } from './socket-events'
 
 /**
- * 在线状态上报。
+ * 在线状态上报 **+ 服务端推送的接收端**。
  *
  * 「在线用户」页的「实时连接」列读的是 Redis 里的 `fba:token_online` 集合，
  * 而那个集合**只有 socket.io 的 connect/disconnect 事件会写**
@@ -21,6 +23,17 @@ import { tokenStore } from '../api-client/token-store'
  *     Redis 里的 `fba:token_online` 一个都不写，页面上全是「离线」，且日志里
  *     看得到 `WebSocket ... [accepted]`，非常难查。实测：连 `/` 时 SCARD 1，连 `/ws` 时 0
  *   - `auth` 里要 `{ token, session_uuid }`，缺一个后端直接拒绝握手
+ *
+ * ── 它同时是这条连接上所有推送的唯一入口 ──
+ *
+ * 🔴 **不要为了收某个事件再 `io()` 一条连接。** 后端 `connect` 每建立一条连接就往
+ * `fba:token_online` 里记一次，第二条会把「在线用户」页的会话数直接翻倍 ——
+ * 而那个页面的数字看起来仍然像真的。所有事件都从这一条进来，
+ * 转手交给 `socket-events.ts` 广播给订阅方。
+ *
+ * `onAny` 而不是逐个 `.on()`：新增一种服务端事件时这里一行都不用改，
+ * 也就不会出现「后端发了、前端谁也没接」那种死代码
+ * （`task_notification` 就这么当了很久的死代码）。
  *
  * 设计上刻意「安静」：
  *   - 连不上不弹错、不刷控制台 —— 它只是个状态上报，挂了不该影响任何业务功能
@@ -49,6 +62,19 @@ export function usePresence(enabled: boolean) {
         reconnectionDelay: 2000,
         reconnectionDelayMax: 30_000,
         withCredentials: true,
+      })
+
+      // 任务执行事件 → 瞬时 toast。**刻意不落库**：任务的「上次几点跑的、
+      // 失败在哪一行」永远看执行记录页（`task_result` 表），这条只是实时提示。
+      // 文案由后端拼好（永远是中文，见 `app/task/tasks/base.py` 的注释）。
+      socket.on('task_notification', (payload: { msg?: string }) => {
+        if (payload?.msg) toast.message(payload.msg)
+      })
+
+      // 其余事件一律转给订阅方（铃铛在听 `notification:new`）
+      socket.onAny((event: string, payload: unknown) => {
+        if (event === 'task_notification') return
+        dispatchSocketEvent(event, payload)
       })
 
       socket.on('connect_error', (err) => {

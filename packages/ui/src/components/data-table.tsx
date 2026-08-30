@@ -595,7 +595,14 @@ export function DataTable<
                 ) : (
                   <TableRow
                     key={row.id}
-                    data-state={(row as AnyRow).getIsSelected() && "selected"}
+                    /* 🔴 `?.()` 不是防御性写法，是必需的：TanStack v9 是
+                       tree-shaken 的，没注册 `rowSelectionFeature` 的表上
+                       **根本没有** `getIsSelected`。而上面那个 `AnyRow` 断言
+                       （`Row<any, any>`）让 TS 认为所有特性的方法都在，
+                       于是这条 `TypeError: row.getIsSelected is not a function`
+                       类型检查一路绿、渲染时整张表白屏。
+                       消息中心（没有批量动作，故意不注册行选中）第一次跑就踩到。 */
+                    data-state={(row as AnyRow).getIsSelected?.() && "selected"}
                     {...rowAttributes?.(row)}
                   >
                     {(row as AnyRow).getVisibleCells().map((cell) => (
