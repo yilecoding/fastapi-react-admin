@@ -3,7 +3,10 @@
 **fastapi-react-admin** —— 中后台底座。产品标识集中在 `apps/web/src/lib/brand.ts`
 （改名字、改版本只动那一处）。
 
-后端 fork 自 fastapi-best-architecture 并适配 SQL Server，
+后端 fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)（FBA）
+并新增 SQL Server 支持（现在同时支持 MySQL / PostgreSQL / SQL Server 三种数据库，
+前两种沿用上游、SQL Server 是本仓库加的那一种）；三层结构、插件机制、RBAC 与
+数据权限模型都是 FBA 的设计，归属细节见下面「fork 管理」一节。
 前端基于 React 19 + TanStack Router/Query/Table v9 + shadcn（Base UI 底座）。
 
 架构的承重方式是榫卯：`i18n ← ui ← platform ← web` 严格单向，每层只暴露形状
@@ -372,5 +375,15 @@ stamp 只是把这件事声明出来。
 
 ## fork 管理
 
-上游明确拒绝合并 SQL Server 支持，永久分叉是既定事实。
-基线记在 `apps/api/.upstream-baseline`，只 cherry-pick 上游安全补丁，功能更新不跟。
+后端 fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)
+（FBA）—— 三层结构（`api/v1 → service → crud`）、插件机制、RBAC 与数据权限模型
+都是它的设计，不是本仓库发明的。本仓库在此基础上新增了 SQL Server 支持，现在
+同时支持 MySQL / PostgreSQL / SQL Server 三种数据库；前两种沿用上游写法，
+SQL Server 是本仓库加的那一种。上游明确拒绝合并 SQL Server 支持，所以是永久分叉，
+只 cherry-pick 上游安全补丁，功能更新不跟。
+
+- 分叉基线记在 `apps/api/.upstream-baseline`
+- 上游同为 MIT 协议，原始版权声明保留在 `apps/api/LICENSE`
+- 后端架构文档（三层结构 / 插件机制 / RBAC 的设计意图）看上游那份最全：
+  <https://docs.fba.wu-clan.cc>——本仓库的 `apps/api/AGENTS.md` 只记两件事上游文档没有的：
+  和上游的差异点、以及这里踩过的实测坑

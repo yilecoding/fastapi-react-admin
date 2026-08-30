@@ -1,6 +1,9 @@
-# apps/api —— FBA fork（SQL Server 适配）
+# apps/api —— FBA fork（新增 SQL Server 支持）
 
-> 三层 `api/v1 → service → crud`。上游拒绝合并 SQL Server 支持，永久分叉。
+> 三层 `api/v1 → service → crud`、插件机制、RBAC/数据权限模型都是 FBA 的设计。
+> 上游拒绝合并 SQL Server 支持，永久分叉——现在同时支持 MySQL / PostgreSQL /
+> SQL Server 三种数据库，SQL Server 是本仓库新增的那一种，其余两种沿用上游。
+> 归属与上游文档链接见根 `CLAUDE.md` 的「fork 管理」。
 >
 > 这份文件是根 `CLAUDE.md` 的**模块分册**，Claude Code 在你读到本目录下的文件时
 > 才把它加载进上下文（惰性加载），所以它可以写得比根文件细。跨模块的硬纪律
