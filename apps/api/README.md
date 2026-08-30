@@ -1,9 +1,14 @@
 # apps/api
 
-FastAPI 后端。**fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)（FBA）并适配 SQL Server。**
+FastAPI 后端。**fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)（FBA）**——
+三层结构、插件机制、RBAC 与数据权限模型都是它的设计。本仓库在此基础上**新增了
+SQL Server 支持**（现在同时支持 MySQL / PostgreSQL / SQL Server 三种数据库，
+前两种沿用上游、SQL Server 是本仓库加的那一种）。
 
 上游明确拒绝合并 SQL Server 支持，所以这是**永久分叉** —— 只 cherry-pick 上游安全补丁，
-功能更新不跟。基线提交记在 [`.upstream-baseline`](./.upstream-baseline)。
+功能更新不跟。基线提交记在 [`.upstream-baseline`](./.upstream-baseline)。上游同为 MIT，
+原始版权声明保留在 [`LICENSE`](./LICENSE)。后端架构文档看上游那份最全：
+<https://docs.fba.wu-clan.cc>。
 
 > 这个目录下原来有上游的 `README.md` / `README.zh-CN.md` / `CHANGELOG.md` / `CONTRIBUTING.md`。
 > 它们讲的是 FBA 这个项目本身（logo、star 徽章、上游的 release 历史与贡献流程），
