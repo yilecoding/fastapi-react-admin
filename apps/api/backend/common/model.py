@@ -36,6 +36,19 @@ id_key = Annotated[
         primary_key=True,
         unique=True,
         index=True,
+        # 🔴 **必须显式写出来**，虽然 `create_all` 不写也一样。
+        # SQLAlchemy 的 `autoincrement='auto'` 规则是「整型主键 + 没有默认值」才算自增，
+        # 而这一列有 `default=snowflake.generate`（Python 侧），所以 `create_all` 建出来
+        # 的列本来就不是 IDENTITY。**但 alembic autogenerate 渲染不出 Python 侧的
+        # `default=`** —— 它写出来的 `sa.Column('id', sa.BigInteger(), nullable=False)`
+        # 在 mssql 上重新命中「auto」规则，于是**迁移建的表是 IDENTITY、
+        # create_all 建的表不是**。后果：迁移建出来的库里，任何带显式雪花 ID 的
+        # INSERT 都报 `Cannot insert explicit value for identity column ... (544)`，
+        # 也就是那张表**一行都写不进去**。
+        # 而 `test_model_matches_migrations` 抓不到：它比的是「模型 vs fba_test」，
+        # 后者是 `create_all` 建的 —— 两边都是「非 IDENTITY」，全绿。
+        # 实测：`sys_notification` 是本仓库第一张真正由迁移创建的表，当场踩到。
+        autoincrement=False,
         default=snowflake.generate,
         sort_order=-999,
         comment='雪花算法主键 ID',

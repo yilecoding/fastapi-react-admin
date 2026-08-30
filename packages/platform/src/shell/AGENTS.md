@@ -279,6 +279,32 @@ i18n key（而不是随手起新字符串），两个语言的翻译已经现成
 里点开目录只是展开子项、不会真的导航，`isValidPath` 校验只发生在
 `toNavTree()` 里，合成节点整个绕过了那条校验。
 
+## 服务端推送：一条连接，事件走订阅
+
+`use-presence.ts` 建的那条 socket.io 连接**同时**是所有服务端推送的入口。
+它做三件事：上报在线状态、把 `task_notification` 弹成 toast、把其余事件
+`dispatchSocketEvent()` 给 `socket-events.ts`，由关心的人自己 `useSocketEvent()` 订阅。
+
+🔴 **不要为了收某个事件再 `io()` 一条连接。** 后端 `connect` 每建立一条连接就往
+`fba:token_online` 里记一次 —— 第二条会把「在线用户」页的会话数直接翻倍，
+而那个数字看起来仍然像真的。
+
+⚠️ 用 `socket.onAny` 而不是逐个 `.on()`：新增一种服务端事件时 `use-presence.ts`
+一行都不用改，也就不会再出现「后端一直在发、前端谁也没接」那种死代码 ——
+`task_notification` 就这么当了很久的死代码（后端 `TaskBase` 从一开始就在发）。
+
+⚠️ 订阅口把 handler 存进 ref 再调用，所以调用方**不需要** `useCallback`。
+不这么写的话每次渲染都会退订再订阅一遍，而 socket 事件恰恰可能在渲染中途到达，
+那一瞬间没有任何订阅者，事件被静默丢掉。
+
+事件本身刻意**不带内容**（后端 `common/socketio/actions.py`）：带上就意味着
+socket 这条通道也要做一遍「这个人能不能看这条」的权限判断，而它没有请求上下文、
+没有 RBAC 依赖链，做出来一定是第二套、且会和 REST 那套慢慢漂移。
+前端收到只做一件事：重新拉数据。
+
+顶栏那枚铃铛在 `pages/notification/`（不在这里），理由见
+[notification 分册](../pages/notification/AGENTS.md)。
+
 ## 命令面板（⌘/Ctrl+K）与快捷键帮助（?）
 
 | 文件 | 职责 |

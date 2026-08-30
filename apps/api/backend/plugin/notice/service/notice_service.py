@@ -4,18 +4,41 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_file import file_relation_dao
+from backend.common.enums import StatusType
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.pagination import paging_data
 from backend.plugin.notice.crud.crud_notice import notice_dao
 from backend.plugin.notice.model import Notice
 from backend.plugin.notice.schema.notice import CreateNoticeParam, DeleteNoticeParam, UpdateNoticeParam
+from backend.plugin.notification.service.notification_service import notification_service
 
 #: 一条公告挂着两种独立的附件关系（前端 `pages/notice/api.ts` 的常量）：
 #: `NOTICE` 是"附件"面板，`NOTICE_CONTENT` 是正文里的内联图。两者都要在
 #: 公告删除时一并解除关联，否则 (issue #63) 已删除公告的图片仍能通过
 #: `GET /sys/files/targets/{target_type}/{target_id}` 被任意登录用户查到。
 _NOTICE_TARGET_TYPES = ('NOTICE', 'NOTICE_CONTENT')
+
+
+async def _broadcast(db: AsyncSession, notice: Notice, title: str | None = None) -> None:
+    """公告发布时顺带往站内收件箱写一条全员广播
+
+    ⚠️ **正文不复制进通知里**。公告正文是富文本（含内联图，图的可见性挂在
+    `sys_file_relation` 上），复制一份进 `sys_notification` 就有了两份会各自
+    过期的真相；公告改了内容、收件箱里那份还是旧的，而且不会有人发现。
+    这里只放一句摘要 + 一个 `link`，点进去看的永远是公告本身。
+
+    ⚠️ 摘要**永远是中文**，不过 `t()`。它在发布那一刻就写进库了，而读它的人
+    可能是任何语言 —— 翻译只能按「发布者当时的 Accept-Language」定，那是错的
+    锚点。同 `app/task/tasks/base.py: TaskBase` 里那三条推送文案的取舍。
+    """
+    subject = title or notice.title
+    await notification_service.broadcast(
+        db=db,
+        title=subject,
+        content=f'公告《{subject}》已发布，点击查看详情。',
+        link='/plugins/notice',
+    )
 
 
 class NoticeService:
@@ -72,7 +95,10 @@ class NoticeService:
         :return:
         """
 
-        return await notice_dao.create(db, obj)
+        notice = await notice_dao.create(db, obj)
+        if notice.status == StatusType.enable:
+            await _broadcast(db, notice)
+        return notice
 
     @staticmethod
     async def update(*, db: AsyncSession, pk: int, obj: UpdateNoticeParam) -> int:
@@ -88,7 +114,12 @@ class NoticeService:
         notice = await notice_dao.get(db, pk)
         if not notice:
             raise errors.NotFoundError(msg=t('error.notice.not_found'))
+        # 「隐藏 → 显示」才算发布。已经是显示状态的再存一次不重复推送 ——
+        # 否则改个错别字就给全员再发一遍红点
+        was_hidden = notice.status != StatusType.enable
         count = await notice_dao.update(db, pk, obj)
+        if was_hidden and obj.status == StatusType.enable:
+            await _broadcast(db, notice, obj.title)
         return count
 
     @staticmethod

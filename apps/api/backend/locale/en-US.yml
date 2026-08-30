@@ -76,6 +76,8 @@ error:
     title_exists: Menu title already exists
   notice:
     not_found: Notice does not exist
+  notification:
+    not_found: Notification does not exist
   oauth2:
     account_bound: This account is already bound to {source}
     account_bound_to_other: This {source} account is already bound to another user
