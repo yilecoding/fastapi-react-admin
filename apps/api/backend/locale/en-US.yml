@@ -56,6 +56,8 @@ error:
     data_not_found: Dict item does not exist
     type_exists: Dict type already exists
     type_not_found: Dict type does not exist
+  email:
+    send_failed: Failed to send email, please try again later or contact an administrator
   file:
     invalid_filename: Invalid filename
     missing: File is missing, please upload it again

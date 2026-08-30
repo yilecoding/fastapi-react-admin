@@ -6,6 +6,8 @@ from anyio import open_file
 from jinja2 import Template
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.log import log
 from backend.core.conf import settings
 from backend.core.path_conf import PLUGIN_DIR
@@ -70,4 +72,11 @@ async def send_email(
             await smtp_client.login(settings.EMAIL_USERNAME, settings.EMAIL_PASSWORD)
             await smtp_client.sendmail(settings.EMAIL_USERNAME, recipients, message)
     except Exception as e:
+        # 🔴 (issue #64) 原来这里只记日志、函数照常返回 None——调用方
+        # （比如 send_email_captcha）没有任何办法知道发信失败了，无条件
+        # response_base.success()，客户端收到 200 却等一封永远不会到达的
+        # 邮件。凭据错误/中转不可达/网络超时都会走到这里，属于"服务端失败
+        # 被伪装成成功"的那类问题（硬纪律 9），必须往上抛，让调用方决定
+        # 怎么回应客户端，而不是在这里悄悄吞掉
         log.error(f'电子邮件发送失败：{e}')
+        raise errors.GatewayError(msg=t('error.email.send_failed')) from e
