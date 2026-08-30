@@ -20,13 +20,32 @@ password_hash = PasswordHash((BcryptHasher(),))
 # 用它而不是「改种子 SQL 把密码去掉」：种子被 conftest 和整套 E2E 依赖着
 # （`PYTEST_PASSWORD = '123456'`），改掉代价远大于收益。
 # 真正要挡的是「生产库还在用默认密码」，那件事在 prod 启动时查一次就够了。
+#
+# 🔴 只放 admin / test——**不要**把公开演示账号也塞进这一份。
+# 这份集合是 `registrar.py: _verify_production_database()` 的拒绝启动名单，
+# 不是"已知种子密码"的通用登记表；公开演示账号要的是"永远保持 123456"，
+# 跟这份名单的语义（"还在用默认密码，改掉再启动"）正好相反。
+# 之前两者混在一起，8 个演示账号一齐进了这份 frozenset，实测直接把生产库
+# 启动锁死：`_verify_production_database()` 一查到它们就拒绝启动，
+# 而这些账号的密码本来就设计成永远不会被改掉——见下面 `SEEDED_DEMO_PASSWORD_HASHES`
+# 的说明。两份集合的并集才是 `test_seeded_password_hashes_cover_every_seeded_account`
+# 要扫的"种子里出现的所有 123456 hash"，别只改一份漏了那条测试。
 SEEDED_PASSWORD_HASHES: frozenset[str] = frozenset({
     '$2b$12$8y2eNucX19VjmZ3tYhBLcOsBwy9w1IjBQE4SSqwMDL5bGQVp2wqS.',  # admin
     '$2b$12$BMiXsNQAgTx7aNc7kVgnwedXGyUxPEHRnJMFbiikbqHgVoT3y14Za',  # test
-    # 组织架构演示账号（种子 SQL 里补的部门经理/员工/财务/访客几个角色对应的
-    # 账号），密码同样是 123456，故意保留不重置——公开演示要的就是"随便一个
-    # 账号都能直接登录切换视角"。`fba init` 不处理这批账号，见 cli.py 里
-    # `_set_admin_password` 只认 admin/test 两个名字。
+})
+
+# 组织架构演示账号（种子 SQL 里补的部门经理/员工/财务/访客几个角色对应的账号），
+# 密码同样是 123456，**故意永远不重置**——公开演示要的就是"随便一个账号都能
+# 直接登录切换视角"。`fba init` 不处理这批账号，见 cli.py 里 `_set_admin_password`
+# 只认 admin/test 两个名字。
+#
+# 🔴 刻意**不**并进 `SEEDED_PASSWORD_HASHES`：那份是给 prod 启动检查当拒绝名单用的，
+# 这批账号命中了就会把生产库启动锁死（实测：新加 8 个演示账号后重启 api 容器，
+# 连续崩溃重启 12 次，`web`/`beat` 因为在等 api 健康一直卡在 Created，
+# 公开演示站点整个 502）。这份集合只用于种子 hash 的覆盖面对账测试，
+# 不参与 `_verify_production_database()` 的查询。
+SEEDED_DEMO_PASSWORD_HASHES: frozenset[str] = frozenset({
     '$2b$12$Pnvhzs0e1pJ8qyvB9Kkv1em/IpT.46XKEfPqoIoLR2ly8RVCVEcLS',  # zhangwei
     '$2b$12$7xeTTK8azV4xXUGpZY7kBef7pfDj6ilVE1Pkt6VReNH5xd8kCgVEi',  # lina
     '$2b$12$rCfJ7pCZp/CsGhfbBcU9YuXzfYb8xl8Xm7AqSG5u0fiyoetNGInQ.',  # wangfang
@@ -111,6 +130,4 @@ async def validate_new_password(db: AsyncSession, user_id: int, new_password: st
 
     for hist in password_history[: settings.USER_PASSWORD_HISTORY_CHECK_COUNT]:
         if password_verify(new_password, hist.password):
-            raise errors.RequestError(
-                msg=t('error.password.reused', count=settings.USER_PASSWORD_HISTORY_CHECK_COUNT)
-            )
+            raise errors.RequestError(msg=t('error.password.reused', count=settings.USER_PASSWORD_HISTORY_CHECK_COUNT))

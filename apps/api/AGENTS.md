@@ -594,12 +594,22 @@ test_init_handles_every_seeded_account` 硬编码断言 `cli.py: _set_admin_pass
 - ID 故意用 `3000000000000000001` 起步的一段独立区间，跟原来 `2048...`/`2049...`
   开头的雪花 ID 肉眼就能分清，不会误以为是同一批
 - 8 个新账号（张伟/李娜/王芳/刘洋/陈静/赵磊/孙强/周敏）密码都是种子密码 `123456`，
-  **故意永远不重置**——公开演示要的就是"随便挑一个账号登录切换视角"，这跟
-  `check_production_settings()` 挡"生产库还在用默认密码"是两回事：这批账号
-  的 hash 已经补进 `password_security.py: SEEDED_PASSWORD_HASHES` 白名单，
-  `test_seeded_password_hashes_cover_every_seeded_account` 会自动扫 `sql/`
-  下所有 `init_*.sql` 里的 bcrypt hash 做对账，加新演示账号时同步补进那份
-  白名单，否则这条测试会红
+  **故意永远不重置**——公开演示要的就是"随便挑一个账号登录切换视角"。
+  🔴 这批账号的 hash 要补进的是 `password_security.py: SEEDED_DEMO_PASSWORD_HASHES`，
+  **不是** `SEEDED_PASSWORD_HASHES`——两份集合语义相反：后者是
+  `registrar.py: _verify_production_database()` 拿去扫全库、命中就拒绝启动的
+  名单（给 admin/test 这类"必须在 prod 前改掉"的账号用），前者才是"永远保持
+  默认密码也没关系"的公开演示账号。**实测事故**：这两份集合曾经合并成一份，
+  往生产库同步完这 8 个演示账号后重启 `api` 容器——启动检查一查到它们就拒绝
+  启动，容器连续崩溃重启 12 次，`web`/`beat` 因为 `depends_on: api: condition:
+  service_healthy` 一直等不到健康的 `api`，卡在 `Created` 没起来，公开演示站点
+  整个 502。应急止血是把这 8 个账号的密码用新随机盐重新哈希一遍（明文照旧
+  `123456`，只是不再和 `SEEDED_PASSWORD_HASHES` 里那个写死的字面量相等），
+  正式修复是拆成两份集合，把 `_verify_production_database()` 的查询钉死在
+  只读 `SEEDED_PASSWORD_HASHES`。`test_seeded_password_hashes_cover_every_seeded_account`
+  会自动扫 `sql/` 下所有 `init_*.sql` 里的 bcrypt hash，对着**两份集合的并集**
+  做覆盖面对账——加新演示账号时补进 `SEEDED_DEMO_PASSWORD_HASHES`，
+  加新的"必须改密码"账号才补进 `SEEDED_PASSWORD_HASHES`，别补错集合
 - 部门编码从 `TEST` 改成了 `HQ`（"总部"）——`sys_data_rule` 里有一条
   "部门编码等于 xxx" 的规则字面量引用着这个编码（`Dept.code = 'HQ'`），
   改编码的同时要同步改这条规则的 `[value]`，两边不同步的话数据权限演示会
