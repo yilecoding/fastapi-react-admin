@@ -57,6 +57,8 @@ error:
     data_not_found: 字典数据不存在
     type_exists: 字典类型已存在
     type_not_found: 字典类型不存在
+  email:
+    send_failed: 邮件发送失败，请稍后重试或联系管理员
   file:
     invalid_filename: 非法的文件名
     missing: 文件已丢失，请重新上传
