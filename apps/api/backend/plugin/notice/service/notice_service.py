@@ -3,12 +3,19 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.admin.crud.crud_file import file_relation_dao
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.pagination import paging_data
 from backend.plugin.notice.crud.crud_notice import notice_dao
 from backend.plugin.notice.model import Notice
 from backend.plugin.notice.schema.notice import CreateNoticeParam, DeleteNoticeParam, UpdateNoticeParam
+
+#: 一条公告挂着两种独立的附件关系（前端 `pages/notice/api.ts` 的常量）：
+#: `NOTICE` 是"附件"面板，`NOTICE_CONTENT` 是正文里的内联图。两者都要在
+#: 公告删除时一并解除关联，否则 (issue #63) 已删除公告的图片仍能通过
+#: `GET /sys/files/targets/{target_type}/{target_id}` 被任意登录用户查到。
+_NOTICE_TARGET_TYPES = ('NOTICE', 'NOTICE_CONTENT')
 
 
 class NoticeService:
@@ -95,6 +102,18 @@ class NoticeService:
         """
 
         count = await notice_dao.delete(db, obj.pks)
+        # (issue #63) 只删公告本身不够——挂在它上面的附件/内联图关联要一并
+        # 解除，否则 sys_file_relation 里留着指向已删公告的行，永久占用
+        # /sys/files/statistics 的计数，且 GET /sys/files/targets/{type}/{id}
+        # 不检查目标是否存在，任何登录用户仍能查到"已删除"公告的附件列表。
+        # 这里只解关联、不删底层 sys_file——和现有的 detach 接口
+        # （DELETE /sys/files/relations）同一套语义：卸载不等于销毁文件，
+        # 万一同一份文件被挂在别处（复制粘贴同一张图）不会被连带删掉。
+        for pk in obj.pks:
+            for target_type in _NOTICE_TARGET_TYPES:
+                file_ids = await file_relation_dao.get_file_ids_by_target(db, target_type, pk)
+                if file_ids:
+                    await file_relation_dao.delete_by_target(db, target_type, pk, list(file_ids))
         return count
 
 

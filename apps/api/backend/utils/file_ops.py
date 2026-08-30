@@ -102,6 +102,33 @@ def strip_path(filename: str | None) -> str:
     return (filename or '').strip().replace('\\', '/').split('/')[-1]
 
 
+#: ASCII 控制字符（含裸 CR/LF），落盘名走 `build_filename` 的 `_UNSAFE_CHARS`
+#: 已经连标点一起清干净了，这个只单独给 `original_name` 这类"要显示、不落盘"
+#: 的展示名用——它比 `_UNSAFE_CHARS` 宽松（保留空格/标点/CJK），因为原名是给
+#: 人看的，但控制字符在任何语境下都没有合法用途，反而是 issue #62 那种
+#: Content-Disposition 头注入的攻击面
+_CONTROL_CHARS = re.compile(r'[\x00-\x1f\x7f]')
+
+
+def sanitize_display_name(filename: str) -> str:
+    """清洗展示名里的控制字符
+
+    (issue #62) `UploadFile.filename` 里出现裸换行（`\\n`，无前导 `\\r`）能
+    穿过 `python-multipart` 的 header 解析原样落进 `filename`——
+    `HEADER_VALUE` 状态机只在遇到 `CR` 时结束扫描，单独的 LF 不会终止。
+    这类字符原样存进 `original_name` 之后，下载接口拼 Content-Disposition
+    头时会被 uvicorn 的 `HEADER_VALUE_RE`（`[\\x00-\\x08\\x0a-\\x1f\\x7f]`）
+    判定为非法字符，`RuntimeError('Invalid HTTP header value.')` 没有被
+    `download_file` 捕获，表现是这条文件记录的下载/预览此后**永久** 500。
+
+    在落库前挡掉，比在下发时才发现要早——已经存在的脏数据仍然只能删记录重传。
+
+    :param filename: 已经 `strip_path()` 过的文件名
+    :return:
+    """
+    return _CONTROL_CHARS.sub('', filename)
+
+
 def get_file_ext(file: UploadFile) -> str:
     """
     取出小写扩展名
@@ -252,7 +279,7 @@ async def upload_file(file: UploadFile, *, public: bool = False) -> SavedFile:
         name=filename,
         path=relative,
         is_public=public,
-        original_name=strip_path(file.filename),
+        original_name=sanitize_display_name(strip_path(file.filename)),
         ext=get_file_ext(file),
         content_type=file.content_type,
         # 用实际写入的字节数，而不是 file.size —— 后者来自客户端声明，可以撒谎

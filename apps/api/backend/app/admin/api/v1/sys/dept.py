@@ -1,13 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query
 from sqlalchemy import ColumnElement
 
 from backend.app.admin.model import Dept
 from backend.app.admin.schema.dept import CreateDeptParam, GetDeptDetail, GetDeptTree, UpdateDeptParam
 from backend.app.admin.service.dept_service import dept_service
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import DataPermissionFilter, RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -15,7 +14,14 @@ from backend.database.db import CurrentSession, CurrentSessionTransaction
 router = APIRouter()
 
 
-@router.get('/{pk}', summary='获取部门详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取部门详情',
+    dependencies=[
+        Depends(RequestPermission('sys:dept:list')),
+        DependsRBAC,
+    ],
+)
 async def get_dept(
     db: CurrentSession, pk: Annotated[int, Path(description='部门 ID')]
 ) -> ResponseSchemaModel[GetDeptDetail]:
@@ -23,7 +29,14 @@ async def get_dept(
     return response_base.success(data=data)
 
 
-@router.get('', summary='获取部门树', dependencies=[DependsJwtAuth])
+@router.get(
+    '',
+    summary='获取部门树',
+    dependencies=[
+        Depends(RequestPermission('sys:dept:list')),
+        DependsRBAC,
+    ],
+)
 async def get_dept_tree(
     db: CurrentSession,
     data_filter: Annotated[ColumnElement[bool], Depends(DataPermissionFilter(Dept))],
@@ -61,9 +74,12 @@ async def create_dept(db: CurrentSessionTransaction, obj: CreateDeptParam) -> Re
     ],
 )
 async def update_dept(
-    db: CurrentSessionTransaction, pk: Annotated[int, Path(description='部门 ID')], obj: UpdateDeptParam
+    db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
+    pk: Annotated[int, Path(description='部门 ID')],
+    obj: UpdateDeptParam,
 ) -> ResponseModel:
-    count = await dept_service.update(db=db, pk=pk, obj=obj)
+    count = await dept_service.update(db=db, background_tasks=background_tasks, pk=pk, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()
