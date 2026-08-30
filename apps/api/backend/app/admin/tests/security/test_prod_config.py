@@ -97,9 +97,7 @@ def test_empty_redis_password_is_rejected() -> None:
 def test_rabbitmq_password_only_checked_when_used() -> None:
     """没用 rabbitmq 就不该因为它的口令被卡住 —— 否则这套校验会招人绕过"""
     check_production_settings(_FakeSettings(CELERY_BROKER='redis', CELERY_RABBITMQ_PASSWORD='guest'))
-    assert 'CELERY_RABBITMQ_PASSWORD' in _expect_rejected(
-        CELERY_BROKER='rabbitmq', CELERY_RABBITMQ_PASSWORD='guest'
-    )
+    assert 'CELERY_RABBITMQ_PASSWORD' in _expect_rejected(CELERY_BROKER='rabbitmq', CELERY_RABBITMQ_PASSWORD='guest')
 
 
 def test_security_switches_must_stay_on() -> None:
@@ -163,18 +161,28 @@ def test_current_settings_object_is_a_real_settings() -> None:
 
 
 def test_seeded_password_hashes_cover_every_seeded_account() -> None:
-    """🔴 `SEEDED_PASSWORD_HASHES` 必须覆盖种子 SQL 里**每一个**带密码的账号。
+    """🔴 `SEEDED_PASSWORD_HASHES` ∪ `SEEDED_DEMO_PASSWORD_HASHES` 必须覆盖
+    种子 SQL 里**每一个**带密码的账号。
 
-    prod 启动时 `_verify_production_database()` 拿这份清单扫全库。漏一个账号，
-    那个账号就能带着默认密码 123456 活到生产上，而启动检查一声不吭地放行。
+    两份集合语义相反，别搞混：`SEEDED_PASSWORD_HASHES`（admin/test）是
+    prod 启动时 `_verify_production_database()` 拿去扫全库、命中就拒绝启动的
+    名单；`SEEDED_DEMO_PASSWORD_HASHES`（8 个公开演示账号）密码设计上永远是
+    123456，**不参与**那条查询——查了就是拿自己的检查把公开演示锁死
+    （实测踩过：8 个演示账号进库后重启 api 直接崩溃重启 12 次）。
 
-    反过来漏在另一侧也踩过：`fba init` 原来只重置 admin，`test` 还留着种子密码 ——
-    于是 init 成功、prod 却起不来（被自己的检查挡住）。两边都要对得上，
-    所以这里同时断言「清单覆盖种子」和「init 会处理掉它们」。
+    这条测试只管"扫到的 hash 有没有地方登记"，不管落在哪一份集合里：
+    漏一个账号，它就能带着谁都不知道的默认密码活在种子里而没有任何测试盯着。
+
+    反过来漏在另一侧也踩过：`fba init` 原来只重置 admin，`test` 还留着种子密码——
+    于是 init 成功、prod 却起不来（被自己的检查挡住，这条与
+    `SEEDED_DEMO_PASSWORD_HASHES` 无关，`fba init` 本来就不处理演示账号）。
     """
     import re
 
-    from backend.app.admin.utils.password_security import SEEDED_PASSWORD_HASHES
+    from backend.app.admin.utils.password_security import (
+        SEEDED_DEMO_PASSWORD_HASHES,
+        SEEDED_PASSWORD_HASHES,
+    )
     from backend.core.path_conf import BASE_PATH
 
     hashes_in_seed: set[str] = set()
@@ -183,12 +191,14 @@ def test_seeded_password_hashes_cover_every_seeded_account() -> None:
         hashes_in_seed.update(re.findall(r"'(\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53})'", body))
 
     assert hashes_in_seed, '种子 SQL 里一个 bcrypt hash 都没扫到，正则大概率坏了'
-    missing = sorted(hashes_in_seed - SEEDED_PASSWORD_HASHES)
+    known_hashes = SEEDED_PASSWORD_HASHES | SEEDED_DEMO_PASSWORD_HASHES
+    missing = sorted(hashes_in_seed - known_hashes)
     assert not missing, (
-        f'种子 SQL 里有 {len(missing)} 个密码 hash 不在 SEEDED_PASSWORD_HASHES 里：{missing}\n'
-        '这些账号能带着默认密码活到生产，而 prod 启动检查扫不到它们。\n'
-        '修法：把 hash 补进 backend/app/admin/utils/password_security.py，'
-        '并确认 backend/cli.py 的 _set_admin_password 会处理对应账号。'
+        f'种子 SQL 里有 {len(missing)} 个密码 hash 没有登记：{missing}\n'
+        '这些账号用的是种子默认密码却没人知道。\n'
+        '修法：admin/test 这类"必须在 prod 前改掉"的账号补进 SEEDED_PASSWORD_HASHES，'
+        '并确认 backend/cli.py 的 _set_admin_password 会处理对应账号；'
+        '"永远保持默认密码"的公开演示账号补进 SEEDED_DEMO_PASSWORD_HASHES。'
     )
 
 
