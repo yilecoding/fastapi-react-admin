@@ -265,3 +265,29 @@ def test_created_tables_declare_snowflake_pk_as_non_autoincrement() -> None:
         '这些迁移建表时没给雪花主键写 autoincrement=False，SQL Server 上会建成 IDENTITY，\n'
         '那张表在「用迁移建出来的库」（= 生产）里一行都插不进去：\n' + '\n'.join(f'  - {o}' for o in offenders)
     )
+
+
+def test_seed_files_have_a_matching_data_migration_decision() -> None:
+    """🔴 种子文件改了，就必须对「已存在的库怎么追上」做一次决定（issue #86）
+
+    种子 SQL 只在 `fba init`（从零建库）那条路径上跑一次。改了之后
+    **新建的库会有那些行、已经在跑的库永远不会有** —— 而这件事此前没有任何东西
+    会发现：CI 全绿、合并、部署，然后生产库静静地缺着几行数据。
+
+    实际后果（两次，都是真的用户可见回归）：
+
+    - `5c1d594` 加的三条 RBAC 权限锚点菜单从没进生产库，而**校验在部署那一刻
+      就生效了** —— MANAGER 演示账号原本能看的部门树当场 403
+    - `256beae` 加的「每日问候」调度同理：功能部署了，从来没跑过
+
+    这条守卫本身**证明不了**「那条 data migration 真的插了同样的行」，它只强迫作者
+    看一眼并做决定 —— 和 `test_every_crud_class_declares_its_data_scope_stance`
+    同一个物种：「忘了想这件事」会红，而不是「想错了」会红。
+
+    ⚠️ 它也覆盖插件的 `sql/`：`#81` 的消息中心菜单就是从插件那份漏掉的，
+    机制和漏法与基础种子完全一样。
+    """
+    from backend.scripts.seed_manifest import HINT, check
+
+    problems = check()
+    assert not problems, '\n'.join(problems) + HINT
