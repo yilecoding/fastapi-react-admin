@@ -10,9 +10,74 @@
 ## 起服务
 
 ```bash
-pnpm mobile:dev                    # = pnpm --filter @admin/mobile start
+pnpm mobile:dev                                   # = expo start
 EXPO_PUBLIC_WEB_URL=https://... pnpm mobile:dev   # 指向别的站点
 ```
+
+## 🔴 WSL2 + 真机：Metro 会挑一个 Docker bridge 当 LAN 地址，手机永远连不上
+
+**实测现场**：Metro 打印 `Metro: exp://172.24.0.1:8081`，扫码后 Expo Go 停在一屏
+「出错了。对此表示歉意。」—— 那是它拉不到 bundle 时的通用错误页，**不提网络两个字**，
+很容易当成代码写错了去查。
+
+`172.24.0.1` 是本机一个 **Docker bridge**（`br-237b20062eef`）。这台机器上有 8 个
+docker bridge（`172.18`–`172.24`）加 `docker0`，Metro 从网卡列表里挑了其中一个。
+那个地址**三重不可达**：在 WSL 里、在 NAT 后面、而且是 docker 内部网桥。
+WSL 真正的地址是 eth0 的 `172.17.108.1`，而它同样在 NAT 后面
+（`.wslconfig` 里没有 `networkingMode=mirrored`），局域网里的手机照样到不了。
+
+### ❌ 隧道这条路在国内走不通，所以没有 `start:tunnel`
+
+Expo 的标准答案是 `expo start --tunnel`（ngrok）。**实测在这台机器上起不来**：
+
+```
+CommandError: failed to start tunnel
+session closed
+```
+
+原因是 ngrok 的隧道端点被墙 —— `connect.ngrok-agent.com` / `tunnel.us.ngrok.com`
+`curl` 返回 `000`（连不上），而 `status.ngrok.com` 返回 200 只是因为它托管在 Atlassian。
+
+所以**刻意不提供 `start:tunnel` 脚本、也不装 `@expo/ngrok`**：提供一个注定失败的入口，
+只会让下一个人白试一轮，还多一个用不上的依赖。
+
+### ✅ 可行的两条
+
+| 修法 | 代价 |
+|---|---|
+| **WSL2 mirrored networking**（推荐）：`.wslconfig` 加 `networkingMode=mirrored`，然后 `wsl --shutdown` | 一劳永逸，WSL 直接共享 Windows 的 LAN IP，不依赖任何外部服务。⚠️ `wsl --shutdown` 会**杀掉正在跑的容器**（`fba_mssql` / `fba_redis`）和 dev server，做之前先收工。本机 Windows build 26200 / 25H2，远高于所需的 22621 |
+| `REACT_NATIVE_PACKAGER_HOSTNAME` + Windows 侧 `netsh portproxy` | 不用重启 WSL，但要管理员权限、要放行防火墙，而且 **WSL 的 eth0 地址每次重启都会变**，得重新配 |
+
+mirrored 之后直接 `pnpm mobile:dev` 就行，Metro 会打印 Windows 的 LAN 地址。
+
+portproxy 那条的完整步骤（Windows 管理员 PowerShell，`<WSL_IP>` 取 WSL 里
+`ip -4 addr show eth0`，本次是 `172.17.108.1`；Windows 的 Wi-Fi 地址本次是
+`192.168.165.31`）：
+
+```powershell
+netsh interface portproxy add v4tov4 listenport=8081 listenaddress=0.0.0.0 `
+      connectport=8081 connectaddress=<WSL_IP>
+New-NetFirewallRule -DisplayName "Expo 8081" -Direction Inbound -LocalPort 8081 `
+      -Protocol TCP -Action Allow
+```
+
+```bash
+REACT_NATIVE_PACKAGER_HOSTNAME=192.168.165.31 pnpm mobile:dev
+```
+
+⚠️ **只设 `REACT_NATIVE_PACKAGER_HOSTNAME` 是不够的** —— 它只解决「Metro 挑错了
+哪块网卡」，NAT 那一层还在，必须配上 portproxy。这是最容易只做一半的地方。
+
+## 只出 ios / android，不出 web
+
+`app.json` 里写了 `"platforms": ["ios", "android"]`。这是个 WebView 壳，渲染到 web
+等于「浏览器里套一个浏览器」，没有意义；而不限制的话按 `w`（或 Expo 自己探测 web）
+会去解析没装的 `react-native-web`，打出一句
+
+    Unable to resolve "react-native-web/dist/exports/ActivityIndicator"
+
+—— 它和手机连不上**毫无关系**，但会和真正的错误混在同一屏日志里，白排查一轮。
+实测踩过。
 
 ⚠️ **它没有 `dev` 脚本，这是刻意的。** 根 `pnpm dev` 是 `turbo dev`，按**脚本名**
 匹配 —— 叫 `dev` 就会被 `pnpm dev` 一起拉起来，而 Expo 要占端口、要交互式选设备，
