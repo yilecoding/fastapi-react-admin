@@ -126,14 +126,22 @@ class NotificationService:
         return len(recipients)
 
     @staticmethod
-    async def broadcast(*, db: AsyncSession, title: str, content: str, link: str | None = None) -> Notification:
+    async def broadcast(
+        *,
+        db: AsyncSession,
+        title: str,
+        content: str,
+        link: str | None = None,
+        category: NotificationCategory = NotificationCategory.ANNOUNCEMENT,
+    ) -> Notification:
         """
-        发一条全员广播（给别的模块调用，比如公告发布）
+        发一条全员广播（给别的模块调用，比如公告发布 / 每日问候）
 
         :param db: 数据库会话
         :param title: 标题
         :param content: 内容
         :param link: 点击跳转的前端路由
+        :param category: 分类，默认「公告」——调用方不传就是原来的行为
         :return:
         """
         notification = await notification_dao.create(
@@ -141,7 +149,7 @@ class NotificationService:
             CreateNotificationParam(
                 title=title,
                 content=content,
-                category=NotificationCategory.ANNOUNCEMENT,
+                category=category,
                 link=link,
                 recipient_id=None,
             ),
