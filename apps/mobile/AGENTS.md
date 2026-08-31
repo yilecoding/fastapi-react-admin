@@ -26,47 +26,41 @@ docker bridge（`172.18`–`172.24`）加 `docker0`，Metro 从网卡列表里�
 WSL 真正的地址是 eth0 的 `172.17.108.1`，而它同样在 NAT 后面
 （`.wslconfig` 里没有 `networkingMode=mirrored`），局域网里的手机照样到不了。
 
-### ❌ 隧道这条路在国内走不通，所以没有 `start:tunnel`
+### ❌ 三条常规解法在这台机器上都不能用
 
-Expo 的标准答案是 `expo start --tunnel`（ngrok）。**实测在这台机器上起不来**：
-
-```
-CommandError: failed to start tunnel
-session closed
-```
-
-原因是 ngrok 的隧道端点被墙 —— `connect.ngrok-agent.com` / `tunnel.us.ngrok.com`
-`curl` 返回 `000`（连不上），而 `status.ngrok.com` 返回 200 只是因为它托管在 Atlassian。
-
-所以**刻意不提供 `start:tunnel` 脚本、也不装 `@expo/ngrok`**：提供一个注定失败的入口，
-只会让下一个人白试一轮，还多一个用不上的依赖。
-
-### ✅ 可行的两条
-
-| 修法 | 代价 |
+| 解法 | 为什么不能用 |
 |---|---|
-| **WSL2 mirrored networking**（推荐）：`.wslconfig` 加 `networkingMode=mirrored`，然后 `wsl --shutdown` | 一劳永逸，WSL 直接共享 Windows 的 LAN IP，不依赖任何外部服务。⚠️ `wsl --shutdown` 会**杀掉正在跑的容器**（`fba_mssql` / `fba_redis`）和 dev server，做之前先收工。本机 Windows build 26200 / 25H2，远高于所需的 22621 |
-| `REACT_NATIVE_PACKAGER_HOSTNAME` + Windows 侧 `netsh portproxy` | 不用重启 WSL，但要管理员权限、要放行防火墙，而且 **WSL 的 eth0 地址每次重启都会变**，得重新配 |
+| `expo start --tunnel`（ngrok） | **实测起不来**：`CommandError: failed to start tunnel / session closed`。ngrok 的隧道端点被墙 —— `connect.ngrok-agent.com` / `tunnel.us.ngrok.com` curl 返回 `000`，而 `status.ngrok.com` 返回 200 只是因为它托管在 Atlassian。所以**刻意不提供 `start:tunnel` 脚本、也不装 `@expo/ngrok`** |
+| `.wslconfig` 的 `networkingMode=mirrored` | 🔴 **会把 WSL 里监听 `0.0.0.0` 的服务一起暴露到宿主机的局域网地址上** —— 这台机器上跑着 `fba_mssql`（1433）和 `fba_redis`（6380）。为了调一个 spike 把数据库开到局域网，不成比例。**已被否掉，不要再提议** |
+| `netsh interface portproxy` | 同理，是显式往局域网开一个口；而且要管理员权限、WSL 的 eth0 地址每次重启还会变 |
 
-mirrored 之后直接 `pnpm mobile:dev` 就行，Metro 会打印 Windows 的 LAN 地址。
+### ✅ 先用手机浏览器 —— B 路线下它是 WebView 的**忠实代理**
 
-portproxy 那条的完整步骤（Windows 管理员 PowerShell，`<WSL_IP>` 取 WSL 里
-`ip -4 addr show eth0`，本次是 `172.17.108.1`；Windows 的 Wi-Fi 地址本次是
-`192.168.165.31`）：
+这是最容易被跳过的一条：**B 路线的 WebView 用的就是系统浏览器引擎**，
+而生产站 `https://fra.wubunan.com` 本来就是公网可达的。所以手机直接用浏览器打开它，
+**六条验收里有五条当场就能验，一行配置都不用改**：
 
-```powershell
-netsh interface portproxy add v4tov4 listenport=8081 listenaddress=0.0.0.0 `
-      connectport=8081 connectaddress=<WSL_IP>
-New-NetFirewallRule -DisplayName "Expo 8081" -Direction Inbound -LocalPort 8081 `
-      -Protocol TCP -Action Allow
-```
+| # | 验收项 | 浏览器能不能代答 |
+|---|---|---|
+| 1 | 能不能打开、前端资源完整 | ✅ 完全等价 |
+| 2 | 登录能不能过 | ✅ 完全等价 |
+| 3 | cookie 能不能跨刷新回传 | ⚠️ **服务端那一半等价**（cookie 属性在移动端浏览器上成不成立）。但 WebView 有自己独立的 cookie 存储、iOS 还要 `sharedCookiesEnabled`，那部分要壳才验得到。**而且它完全代答不了 C 路线那一问**（RN 的 `fetch` 能不能读到 `set-cookie`）—— 那是另一回事 |
+| 4 | 注入 token 免登录 | ❌ 要壳（`injectedJavaScriptBeforeContentLoaded`） |
+| 5 | 触屏落差实际有多难受（#39 第 2.5 节六条） | ✅ **完全等价，而且这是 step 0 最主要的产出** |
+| 6 | 移动端账号 `is_staff=1` | ✅ 服务端行为，与客户端无关 |
 
-```bash
-REACT_NATIVE_PACKAGER_HOSTNAME=192.168.165.31 pnpm mobile:dev
-```
+**所以顺序应该是：先用浏览器把 1/2/5/6 跑完并记录，再决定值不值得为 3/4 装环境。**
+第 5 条本来就是 step 0 里最需要人眼判断、也最影响路线决策的一条。
 
-⚠️ **只设 `REACT_NATIVE_PACKAGER_HOSTNAME` 是不够的** —— 它只解决「Metro 挑错了
-哪块网卡」，NAT 那一层还在，必须配上 portproxy。这是最容易只做一半的地方。
+### 装环境的话：WSL 内的 Android 模拟器（不碰宿主网络）
+
+要验第 3、4 条就得有真正的壳。在**不暴露任何端口**的前提下，只有这一条：
+在 WSL 里跑 Android 模拟器，Metro 绑 localhost，模拟器通过 `10.0.2.2` 访问它，
+全程在 WSL 内部。
+
+前提这台机器都满足（已核）：`/dev/kvm` 存在（硬件加速）、`/mnt/wslg` 存在（显示）。
+代价是要装 Android SDK + 系统镜像，**几 GB 的下载**。
+装了之后 dev client / prebuild / EAS 本地构建也一起解锁了，不只为 step 0 服务。
 
 ## 只出 ios / android，不出 web
 
