@@ -1,5 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { getDefaultConfig } = require('expo/metro-config')
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { withUniwindConfig } = require('uniwind/metro')
 const path = require('node:path')
 
 /**
@@ -32,4 +34,9 @@ const path = require('node:path')
 const config = getDefaultConfig(__dirname)
 config.watchFolders = [path.resolve(__dirname, '../..')]
 
-module.exports = config
+// uniwind 把 global.css 交给 Tailwind v4 自己的引擎编译，产物再转成 RN 样式。
+// dtsFile 生成的 `uniwind-types.d.ts` 是**生成产物**，不要手改。
+module.exports = withUniwindConfig(config, {
+  cssEntryFile: './src/styles/global.css',
+  dtsFile: './uniwind-types.d.ts',
+})
