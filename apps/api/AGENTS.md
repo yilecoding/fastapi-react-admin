@@ -236,6 +236,48 @@ autogenerate 渲染不出 Python 侧的 `default=`** —— 它写出来的是�
 `'dict' object has no attribute 'id'` → 500。用 `item['id']`，
 往 dict 里塞新键即可，FastAPI 那层照样按 response_model 校验得过。
 
+### 🔴 改了种子 SQL，已存在的库不会跟上 —— 要补一条 data migration（issue #86）
+
+schema 和种子数据走的是**两条完全不同的路**：
+
+| | 谁执行 | 已存在的库会不会跟上 |
+|---|---|---|
+| schema | 部署时 `alembic upgrade head` | ✅ 会，且 `test_model_matches_migrations` 兜着「忘了生成迁移」 |
+| **种子数据** | 只有 `fba init`（`drop_all` + `create_all` + 灌种子 + `stamp head`） | 🔴 **不会。** 没有版本号、没有「这批种子进过这个库吗」的记录 |
+
+**漏过两次，两次都是真的用户可见回归**：`5c1d594` 加的三条 RBAC 权限锚点菜单从没进
+生产库，而校验在部署那一刻就生效了 —— MANAGER 演示账号原本能看的部门树当场 403；
+`256beae` 加的「每日问候」调度同理，功能部署了、从来没跑过。
+
+**机制就是普通的 alembic revision**，只是 `upgrade()` 里不是 DDL 而是幂等 INSERT。
+白拿三样：`alembic_version` 天然记录每个库跑到哪、部署已经在跑 `upgrade head`、
+`fba init` 末尾的 `stamp head` 会把它标成已应用而**不执行**（新库的行来自种子 SQL，
+不会插两遍）。helper 在 `backend/utils/data_migration.py`，样板见
+`alembic/versions/*33ffb491b69f*.py`。
+
+三条纪律：
+
+- 🔴 **外键按业务键解析，不要硬编码 ID。** `sys_menu.name` / `sys_role.code` 这类键
+  跨环境稳定；而三个方言的种子各有一套 ID（postgresql 的角色在 `4000000000000000xxx`、
+  另两个在 `3000000000000000xxx`），生产库的 ID 又只在生产库里成立
+- 🔴 **幂等靠业务键判存在，不要吃唯一约束冲突** —— 三种方言的冲突语法各不相同
+  （`MERGE` / `ON CONFLICT` / `INSERT IGNORE`），写任一种都会在另外两种上炸
+- 🔴 **不要在数据迁移里调 `snowflake.generate()`。** 它要读环境变量或去 Redis 抢节点号，
+  而 `alembic upgrade` 是部署时一个独立的 `migrate` 容器 —— 把 Redis 变成它的前置依赖
+  是个新耦合，失败时还报「雪花 ID 生成失败」，完全看不出跟数据迁移有关。
+  有语义的行（菜单）**照抄种子里那个 ID**（三个方言的 `sys_menu` 是同一套，抄过来能让
+  「升级上来的库」和「新建的库」收敛）；纯连接行（`sys_role_menu`）用
+  `DATA_MIGRATION_PK_BASE` 那一段
+- ⚠️ **不要重新灌整份种子** —— 会把别人在界面上改过的数据覆盖回去。只补「按业务键查不到」的行
+
+守卫是 `test_seed_files_have_a_matching_data_migration_decision`：种子文件的 sha256
+变了而 `backend/sql/seed_manifest.json` 没更新就红。它**证明不了**那条迁移真的插了
+同样的行，只强迫你看一眼并做决定（和 `test_every_crud_class_declares_its_data_scope_stance`
+同一个物种）。确认过之后 `pnpm --filter api seed:manifest --write` 更新清单。
+
+⚠️ 清单覆盖**插件的 `sql/` 也算** —— `#81` 的消息中心菜单就是从插件那份漏掉的，
+机制和漏法与基础种子一模一样。
+
 ## 后端国际化（i18n）
 
 语言包在 `backend/locale/{zh-CN,en-US}.yml`，**统一用 YAML**（2026-08-22 前
