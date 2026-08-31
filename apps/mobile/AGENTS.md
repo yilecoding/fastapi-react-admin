@@ -128,44 +128,105 @@ uniwind + reanimated 4 + worklets + expo-router 之间的版本约束不写在�
 
 —— 它和真正要排的问题毫无关系，但会混在同一屏日志里，白排查一轮。实测踩过。
 
-## 🔬 两条只能在设备上回答的实测（`src/app/index.tsx` 是一次性探针页）
+## 🔴 `src/styles/global.css` 里那条 `@source` 不能省
 
-`src/app/index.tsx` 现在是探针页，不是首页。两条实测跑完就换成真页面。
+**这是这一轮踩到的最贵的一个坑，而它是纯静默的。**
 
-### 1. uniwind 认不认 `oklch()`
+症状：App 正常跑起来、Metro 不报任何错、`expo export` 打包成功、uniwind 的组件包装
+也确实进了 bundle —— 但**每一个 `className` 都是空操作**。界面上所有间距、颜色、
+尺寸全丢，色块因为 `h-16` 没生效而直接不占位、整块消失。看起来像「uniwind 没接上」，
+于是会去查 metro 配置、查 babel、查版本 —— 全是白工。
 
-**为什么要问**：`packages/ui/src/styles/globals.css` 的令牌全是 oklch。认，
-则移动端和 web 可以共享一份真相源；不认，则令牌要在构建期降级成 sRGB，
-**而那意味着两份颜色定义**。
+根因：Tailwind v4 的自动源码探测以**那个 CSS 文件所在目录**为根。这份文件在
+`src/styles/` 下（对齐 `packages/ui/src/styles/globals.css` 的布局），而那个目录里
+一个组件都没有 → **一条工具类都不生成**。模板原本把 `global.css` 放在项目根，
+所以模板自己不会撞上；是「搬进 `src/`」这个决定引入的。
 
-探针（`src/styles/global.css` 的 `--color-probe-*`）：三对色块，每对左边写 oklch、
-右边写**离线算出的精确 sRGB 等价值**。看不出接缝 = 认。
+判据（最省事的一条）：从 dev server 抓 bundle，数几个最普通的工具类在不在。
 
-已知的构建期迹象（还不是结论）：`expo export` 出来的 `.hbc` 里
-**没有字面的 `oklch(` 颜色**，说明 uniwind 在编译期就把它算掉了。
-`strings` 抓到的 3 个 `oklch` 是字符串池里的巧合子串，不是颜色值。
+```bash
+curl -s "http://127.0.0.1:8081/.expo/.virtual-metro-entry.bundle?platform=android&dev=true&minify=false" \
+  -o /tmp/dev.bundle
+grep -c '"flex-1"' /tmp/dev.bundle      # 0 = 一条都没生成；正常是 ≥1
+```
 
-### 2. RN 的 `fetch` 能不能读到 `set-cookie` / cookie jar 会不会自动回传
+实测数据（同一个工程，只差 `@source` 一行）：
 
-**为什么要问**：refresh token 在 httpOnly cookie 里（`fba_refresh_token`，7 天）。
-`apps/desktop/src/main/auth.ts` 那套「读 Set-Cookie → 自己存 → 手工带 Cookie 头」
-在 RN 侧成不成立，全看这一条。不成立就得为移动端改后端刷新链路。
+| | `flex-1` | `p-4` | `gap-6` | `h-16` | 界面 |
+|---|---|---|---|---|---|
+| 没有 `@source` | 0 | 0 | 0 | 0 | 全裸，色块消失 |
+| 加上 `@source` | 2 | 2 | 2 | 2 | 正常 |
 
-探针三步，打的是**本机 dev API**（`http://10.0.2.2:8088`）：
+和根 `CLAUDE.md` **硬纪律 7** 是同一个物种（「class 在、CSS 规则不在」），
+也和 `packages/ui/src/styles/globals.css` 里那两条 `@source` 一致。
 
-1. `GET /api/v1/auth/captcha` → 拿 uuid。答案在 redis：
-   `docker exec fba_redis redis-cli -n 6 --raw GET "fba:login:captcha:<uuid>"`
-2. `POST /api/v1/auth/login` → 打印 `res.headers` 的全部 key，看 `set-cookie` 在不在
-3. `POST /api/v1/auth/refresh` **不带任何头** —— 它只读 refresh cookie。
-   200 = jar 自动回传了；401 = 没回传
+## 🔬 两条实测的结论（`src/app/index.tsx` 是一次性探针页）
 
-⚠️ 探针刻意打**本机 dev** 而不是生产：生产的 `sys_config` 里
-`LOGIN_CAPTCHA_ENABLED` 是 `false`（有意设的），验不到验证码那条链路。
+两条都在 WSL 里的 Android 模拟器上跑完了，**结论都是「行」**。
+探针页留着是因为现在还没有真页面 —— 写第一个真页面时把它删掉。
+
+### ✅ 1. uniwind 认 `oklch()` —— 设计令牌可以和 web 共享一份真相源
+
+`src/styles/global.css` 里三对 `--color-probe-*`：每对左边写 `oklch(...)`、
+右边写它**离线算出的精确 sRGB 等价值**。`adb exec-out screencap` 截图后逐像素比对：
+
+| 探针 | oklch 侧 | sRGB 侧 | 两侧最大通道差 | 与离线期望差 |
+|---|---|---|---|---|
+| `oklch(0.62 0.19 250)` | `#0088F2` | `#0088F2` | **0** | **0** |
+| `oklch(0.72 0.19 145)` | `#43C251` | `#43C251` | **0** | **0** |
+| `oklch(0.65 0.24 20)` | `#FF2C4D` | `#FF2C4D` | **0** | **0** |
+
+**逐位相同** —— uniwind 在构建期就把 oklch 精确转成了 sRGB
+（`expo export` 出来的 `.hbc` 里也没有字面的 `oklch(` 颜色值，两边印证）。
+所以移动端**不需要**为颜色维护第二份定义。
+
+### ✅ 2. RN 的 `fetch` 读得到 `set-cookie`，cookie jar 也会自动回传 —— 后端不用改
+
+`POST /api/v1/auth/login` 的响应头，RN 侧完整可见：
+
+```
+headers: content-length, content-type, date, server, set-cookie, x-request-id
+set-cookie: fba_refresh_token=eyJ…; expires=…; HttpOnly; Max-Age=604800; Path=/; SameSite=lax
+```
+
+🔴 **注意这和浏览器的差别**：浏览器里 `set-cookie` 是禁止读取的响应头，
+`HttpOnly` 的值 JS 绝对拿不到。RN（Android 侧是 okhttp）**给得到，连 `HttpOnly`
+的原始值一起**。写鉴权代码时不要按浏览器的直觉推断。
+
+第二半更关键：`POST /api/v1/auth/refresh` **不带任何头**（它只读 refresh cookie）
+→ **200**，并下发了一个新的 refresh token（`expires` 递增、token 值不同，轮转生效）。
+说明 **RN 自带 cookie jar 并自动回传**。
+
+两条推论：
+
+- **后端不用为移动端改刷新链路**，现有 httpOnly cookie 那套直接可用
+- `apps/desktop/src/main/auth.ts` 那套「读 Set-Cookie → 自己存 → 手工带 Cookie 头」
+  在 RN 上是**多余的**，不要照搬过来
+
+⚠️ 顺带核到一件事：**本机 dev 的 `LOGIN_CAPTCHA_ENABLED` 也是 `false`**
+（`/auth/captcha` 返回 `is_enabled=false`），不只是生产。所以探针的「取验证码 → 
+去 redis 取答案」那两步实际上验不到验证码链路 —— 要验得先把那条 `sys_config` 改回 true。
 
 ## 设备：WSL 里的 Android 模拟器（**不往局域网开任何口**）
 
-`10.0.2.2` 在 Android 模拟器里就是宿主的 `127.0.0.1`（这里的「宿主」是 WSL 本身），
-所以 Metro 和 dev API 都只绑 localhost，全程留在 WSL 内部。
+Metro 和 dev API 都只绑 `127.0.0.1`，靠 **`adb reverse`** 把端口隧道进设备，
+全程留在 WSL 内部、**不往局域网开任何口**：
+
+```bash
+adb reverse tcp:8081 tcp:8081     # Metro（expo start --localhost 会自己设）
+adb reverse tcp:8088 tcp:8088     # dev API（要自己设）
+```
+
+🔴 **不要用 `10.0.2.2`。** 那条「模拟器里 `10.0.2.2` 就是宿主 loopback」的经典说法
+**在这台机器上实测不成立**：
+
+    adb shell ping -c2 10.0.2.2  →  connect: Network is unreachable
+    adb shell ip route           →  （空）
+
+这个 emulator 的网络后端没提供那个别名。表现在 App 里是
+`java.net.ConnectException: Failed to connect to /10.0.2.2:8088` ——
+响亮但指向错误的方向（看着像后端没起）。而且 `10.0.2.2` 本来就只对模拟器成立，
+真机没有等价物；`adb reverse` 两边都通，所以直接统一用它。
 
 ### ❌ 真机 + 三条常规解法，在这台机器上都不能用
 
@@ -205,6 +266,32 @@ uniwind + reanimated 4 + worklets + expo-router 之间的版本约束不写在�
 
 这一条**必须 root**：`sudo gpasswd -a $USER kvm`。加完组不用重启 WSL，
 用 `sg kvm -c '<命令>'` 就能在当前会话里拿到新组。
+
+**没有 KVM 也能跑**（`-accel off`，纯 TCG 软件模拟），这一轮两条实测就是这么跑完的。
+代价是慢一个量级，实测量级：开机 ~9 分钟 · Expo Go 安装 ~3 分钟 ·
+首次 bundle 后到画面出来 ~2 分钟。
+
+**③ 必须 `-no-window`。** 带窗口跑会死在
+`no Qt platform plugin could be initialized`（WSLg 下 emulator 自带的 Qt 起不来）。
+headless 反而更顺手：截图走 `adb exec-out screencap -p`，能直接逐像素比对。
+
+**④ 慢机器上 ANR 弹窗会挡住整屏。** 实测撞到 `Digital Wellbeing isn't responding`
+和 `System UI isn't responding` 两次，都盖在 App 上面 —— 截图看起来像 App 挂了。
+一次性关掉：
+
+```bash
+adb shell settings put global hide_error_dialogs 1
+```
+
+**⑤ 🔴 慢机器上 `pm` / `dumpsys` 会返回空输出而不是报错。**
+`adb install` 报了 `Failure calling service package: Broken pipe`（真失败），
+但紧接着 `pm list packages | grep exponent` 返回空、`dumpsys package` 也返回空 ——
+**「没装」和「包服务当时忙」长得一模一样**，我据此下过一个错判断。
+可靠的判据是 `pm path <包名>` 拿到路径 **且** `cmd package resolve-activity --brief <包名>`
+解析出 activity；只满足前者说明是半装状态，要 `pm uninstall` 再装。
+
+装法上：200MB 的 APK 在 TCG 上别走 `adb install` 的流式协议，
+`adb push` 到 `/data/local/tmp/` 再 `adb shell pm install` 稳得多。
 
 ## 品牌图标还是模板的占位图
 

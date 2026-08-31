@@ -267,6 +267,11 @@ const search = Route.useSearch()
 `packages/ui/src/styles/globals.css` 里的 `@source` 决定哪些文件被扫描。
 漏了的包，它独有的类会**静默不生成**（class 在、CSS 规则不在，表现为布局莫名其妙塌掉）。
 
+⚠️ **新开一个 CSS 入口时同样要写 `@source`** —— Tailwind v4 的自动探测以那个 CSS
+文件所在目录为根。`apps/mobile` 就为此全裸过一轮：入口在 `src/styles/` 下、
+那目录没有组件，**一条工具类都没生成**，而打包和 Metro 全程不报错。
+判据见 [mobile 分册](apps/mobile/AGENTS.md)。
+
 ### 8. 侧边栏同一层级必须用同一套组件
 
 `SidebarMenuButton`（顶层）和 `SidebarMenuSubButton`（子层）内边距不同。

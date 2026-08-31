@@ -1,7 +1,17 @@
 @import "tailwindcss";
 @import "uniwind";
 
-@import "tw-animate-css"; 
+@import "tw-animate-css";
+
+/*
+ * 🔴 **这一行不能省。** Tailwind v4 的自动源码探测以**这个 CSS 文件所在目录**为根，
+ * 而这份文件在 `src/styles/` 下 —— 那里一个组件都没有，于是**一条工具类都不生成**。
+ * 失败形态是纯静默的：打包成功、Metro 不报错、uniwind 的组件包装照常进 bundle，
+ * 只是每个 className 都成了空操作（实测：`flex-1` / `p-4` / `h-16` 在 dev bundle 里
+ * 出现 0 次，界面上所有间距、颜色、尺寸全丢）。
+ * 和根 CLAUDE.md 硬纪律 7 同一个物种，也和 packages/ui/src/styles/globals.css 一致。
+ */
+@source "../**/*.{ts,tsx}";
 
 /*
  * 🔬 oklch 探针（issue #39 C 路线的实测 1）—— 见 AGENTS.md「oklch」一节。
