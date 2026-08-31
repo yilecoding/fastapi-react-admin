@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "中后台",
+    "slug": "fastapi-react-admin-mobile",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "scheme": "fraadmin",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fastapireactadmin.mobile"
+    },
+    "android": {
+      "package": "com.fastapireactadmin.mobile",
+      "edgeToEdgeEnabled": true
+    }
+  }
+}

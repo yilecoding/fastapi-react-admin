@@ -1,0 +1,25 @@
+{
+  "name": "@admin/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "description": "移动端外壳（issue #39 的 B 路线 step 0 spike）：原生壳 + WebView 承载现有 web",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "doctor": "expo-doctor",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "expo": "~57.0.18",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-webview": "13.16.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6"
+  }
+}

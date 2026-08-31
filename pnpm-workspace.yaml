@@ -5,6 +5,9 @@ packages:
   - "apps/worker"
   - "apps/web"
   - "apps/desktop"
+  # 移动端外壳（issue #39 的 B 路线）。注意它**没有 `dev` 脚本** ——
+  # Expo 要占端口、要交互，不该跟着 `pnpm dev` 一起起，单独走 `pnpm mobile:dev`
+  - "apps/mobile"
   - "packages/*"
 
 allowBuilds:
