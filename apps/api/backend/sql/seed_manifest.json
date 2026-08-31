@@ -1,0 +1,20 @@
+{
+  "plugin/config/sql/mysql/init_snowflake.sql": "af17278ba23fe0eab7b71791d81faadeac8609763d0210d85cd381f65c0c7413",
+  "plugin/config/sql/postgresql/init_snowflake.sql": "be726abcf69a61006ef5f6967c1e577158364cbb03752cfb3594eb6f50afc6ab",
+  "plugin/config/sql/sqlserver/init_snowflake.sql": "89ef0315663aa74c5b81cef50248acada3ce3365a580785c03cf96e108de0cf4",
+  "plugin/dict/sql/mysql/init_snowflake.sql": "30117e3057accacdeaa5e17d99cad14a9617acad32318365847749ec7bfc1e38",
+  "plugin/dict/sql/postgresql/init_snowflake.sql": "30117e3057accacdeaa5e17d99cad14a9617acad32318365847749ec7bfc1e38",
+  "plugin/dict/sql/sqlserver/init_snowflake.sql": "915898f37fbadf4df027d7131bf461eb3c43693db1d717b09a5e6f5fadc75f2a",
+  "plugin/notice/sql/mysql/init_snowflake.sql": "1fef06334a7413a777d854f4e09f150d45468a5dc1e9eaebaceb0e7dd4094762",
+  "plugin/notice/sql/postgresql/init_snowflake.sql": "1fef06334a7413a777d854f4e09f150d45468a5dc1e9eaebaceb0e7dd4094762",
+  "plugin/notice/sql/sqlserver/init_snowflake.sql": "655695125fc193e55604d40dd17467d005944878b798771a33a0afaa754fc9f6",
+  "plugin/notification/sql/mysql/init_snowflake.sql": "473e47395c74e4a578c0770bb72b4567964b8d0a94e3d3e403f781c4558b4c79",
+  "plugin/notification/sql/postgresql/init_snowflake.sql": "42a250067aa22281ddaaceb683f1e7d5efa2fabe23f03a9c2b79771624dfefd6",
+  "plugin/notification/sql/sqlserver/init_snowflake.sql": "32e7287a0e34cf6a9517e048127ea1a674c12a55e254922194f43f4506c97e3b",
+  "plugin/oauth2/sql/mysql/init_snowflake.sql": "4a45092ccf992ea92250053a80b931b787924ba61648f420555511b84f10ab6c",
+  "plugin/oauth2/sql/postgresql/init_snowflake.sql": "4a45092ccf992ea92250053a80b931b787924ba61648f420555511b84f10ab6c",
+  "plugin/oauth2/sql/sqlserver/init_snowflake.sql": "b4e0497804e46e0a0b0b8c31975b062152d551bac49c3c2e80932567b4085dcd",
+  "sql/mysql/init_snowflake_test_data.sql": "e8f55d7d621adef5345bb6d39883c47af8a61cf9eff1043c7e8e02659f472c97",
+  "sql/postgresql/init_snowflake_test_data.sql": "e4304d7f771af829dc4fa3cc32cf34753dfc0890488664dc01890426080d2e39",
+  "sql/sqlserver/init_snowflake_test_data.sql": "ecc0354dccdf7870c28d12ad74da7fe48bcee82c85d1151e4810039abea193dc"
+}
