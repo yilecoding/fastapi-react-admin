@@ -160,6 +160,18 @@ export async function restore(): Promise<AuthTokens | null> {
   }
 }
 
+/**
+ * 登出。
+ *
+ * 🔴 这里**只带 cookie、不带 `Authorization`** —— access token 在渲染层的
+ * sessionStorage 里，主进程手上没有。这依赖后端 `auth_service.logout()` 能从
+ * **refresh cookie** 里取出会话身份（`sub` + `session_uuid` 就在那个 JWT 里）。
+ *
+ * 后端曾经只认 access token（第一句 `get_token(request)` 拿不到 Bearer 就 `return`），
+ * 于是这个请求是**彻底的空操作**：本地凭据删了、界面也回到登录页，而服务端三个 key
+ * 一个没删，那个会话的 refresh token 还能再活 7 天。两边都看不出异常。
+ * 回归测试钉在 `test_auth.py::test_logout_works_with_only_the_refresh_cookie`。
+ */
 export async function logout(): Promise<void> {
   const token = loadRefreshToken()
   clearRefreshToken()

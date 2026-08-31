@@ -105,6 +105,51 @@
 `sqlserver` 已经补进枚举。**以后 cherry-pick 上游改动碰到这个文件时，
 记得别把它覆盖回去。**
 
+### 🔴 撤销一个会话 = 删三个 key，漏掉 refresh 那个等于没撤销
+
+`create_new_token()` 只校验「refresh key 存在且值相等」，**从不检查 access key 还在不在**。
+所以只要 `fba:refresh_token:{uid}:{sid}` 还活着，那个会话就能随时换回一个全新的 access token。
+两个入口都栽在这上面（两个都是**静默**的，界面上该消失的都消失了，人还在）：
+
+| 入口 | 原来的样子 | 后果 |
+|---|---|---|
+| **强制下线**（`monitor/online.py: delete_session` → `jwt.py: revoke_token`） | 只删 `TOKEN_REDIS_PREFIX` 和 `TOKEN_EXTRA_INFO_REDIS_PREFIX` | 被踢的人立刻打一次 `/auth/refresh` 就回来了；而此时 `token_keys` 恰好是空的，`multi_login` 那道检查**反而更不会拦** |
+| **登出**（`auth_service.logout`） | 第一句 `get_token(request)`，拿不到 `Authorization: Bearer` 直接 `return` | 见下 |
+
+`revoke_token()` 现在三个 key 一起删。**新增任何「让某个会话失效」的代码时，
+判据是「它还能不能刷出新 token」，不是「在线用户页上还在不在」。**
+
+### 🔴 登出的身份要从 access token **或** refresh cookie 里任取其一
+
+原来只认 access token，于是两类调用方的登出**全都是空操作**，而两边都看不出来：
+
+- **桌面端**：`apps/desktop/src/main/auth.ts` 的 `logout` 只手工带 cookie、不带
+  Authorization —— access token 在渲染层的 sessionStorage 里，主进程手上根本没有。
+  它本地删了凭据、界面也回到登录页，而那个会话的 refresh token 还能再活 7 天
+- **浏览器端**：access token 过期之后点登出，JWT 中间件先 401，请求根本到不了
+  `logout()`，连 `response.delete_cookie` 都没执行 —— 浏览器里那个 httpOnly cookie
+  既没被清、在 Redis 里也仍然有效。**而那恰恰是最需要登出的时刻**
+
+refresh token 的 JWT 里同样带着 `sub` 和 `session_uuid`（`create_refresh_token`），
+它自己就够定位一个会话。安全性不受影响：一种凭据都拿不出时什么都不做，
+拿得出也只能撤销**它自己那一个**会话。
+
+⚠️ **不要顺手把 `/auth/logout` 加进 `TOKEN_REQUEST_PATH_EXCLUDE`。** 我试过，
+为的是让「access token 已过期时点登出」也进得来 —— 但那条路由是**要记操作日志**的，
+白名单会让 `request.user` 变成未认证，`opera_log_middleware` 的 `request.user.username`
+走 AttributeError 分支，**每一次登出都记不下用户名**。而它买到的只有那一种情况，
+且前端的 401 → 单飞刷新 → 重放已经覆盖了（刷新时 `create_new_token()` 自己就会删掉
+旧会话的 access + refresh key）。
+只带 cookie 的请求本来就过得了中间件：`extract_token()` 没有 Authorization 头时返回
+`None`，那是「未认证」而不是「认证失败」。
+
+⚠️ 写这类测试**不能用 `/auth/login/swagger`**：它只发 access token，
+`create_refresh_token` 根本没被调用（`auth_service.swagger_login`），
+拿它测 refresh 撤销等于什么都没测。要走真实 `/auth/login`，
+并且把 `load_login_config` 一起顶掉 —— 只设 `settings.LOGIN_CAPTCHA_ENABLED = False`
+会被它从 sys_config 表里 setattr 回来，而那张表在 `fba_test` 里是什么值
+取决于上一次 E2E 的 global-setup 跑没跑过。
+
 ## 数据库结构改动一律走 alembic
 
 **改了模型就要生成迁移，没有例外。** 手写 `ALTER` / `drop_all` 重建那条路已经关了
