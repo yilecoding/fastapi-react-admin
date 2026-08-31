@@ -24,6 +24,7 @@ from backend.common.security.jwt import (
     create_refresh_token,
     get_token,
     jwt_decode,
+    revoke_token,
 )
 from backend.core.conf import settings
 from backend.database.db import uuid4_str
@@ -299,25 +300,49 @@ class AuthService:
         """
         用户登出
 
+        🔴 **会话身份从 access token 或 refresh cookie 里任取其一，不能只认前者。**
+        原来这里第一句就是 `get_token(request)`，拿不到 `Authorization: Bearer` 直接
+        `return` —— 于是两类调用方的登出**全都是空操作**，而两边都看不出来：
+
+        - **桌面端**（`apps/desktop/src/main/auth.ts` 的 `logout`）只手工带 cookie、
+          不带 Authorization（access token 在渲染层的 sessionStorage 里，主进程手上没有）。
+          它本地删了凭据、界面也回到登录页，但服务端三个 key 一个没删 ——
+          那个会话的 refresh token 还能再活 7 天
+        refresh token 的 JWT 里同样带着 `sub` 和 `session_uuid`
+        （`create_refresh_token`），所以它自己就够定位一个会话。安全性不受影响：
+        没有任何一种凭据时什么都不做，拿得出凭据才撤销**它自己那一个**会话。
+
+        ⚠️ 只带 cookie、不带 Authorization 的请求**本来就过得了 JWT 中间件** ——
+        `extract_token()` 在没有 Authorization 头时返回 `None`，那是「未认证」不是
+        「认证失败」。所以这个修复**不需要**把 `/auth/logout` 加进
+        `TOKEN_REQUEST_PATH_EXCLUDE`（加了反而会让操作日志记不下用户名，见 conf.py 那条注释）。
+
         :param request: FastAPI 请求对象
         :param response: FastAPI 响应对象
         :return:
         """
-        try:
-            token = get_token(request)
-            token_payload = jwt_decode(token)
-            user_id = token_payload.user_id
-            session_uuid = token_payload.session_uuid
-            refresh_token = request.cookies.get(settings.COOKIE_REFRESH_TOKEN_KEY)
-        except errors.TokenError:
-            return
-        finally:
-            response.delete_cookie(settings.COOKIE_REFRESH_TOKEN_KEY)
+        # 无论后面成不成，浏览器里那个 cookie 都要清掉
+        response.delete_cookie(settings.COOKIE_REFRESH_TOKEN_KEY)
 
-        await redis_client.delete(f'{settings.TOKEN_REDIS_PREFIX}:{user_id}:{session_uuid}')
-        await redis_client.delete(f'{settings.TOKEN_EXTRA_INFO_REDIS_PREFIX}:{user_id}:{session_uuid}')
-        if refresh_token:
-            await redis_client.delete(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}:{session_uuid}')
+        identity: tuple[int, str] | None = None
+        for candidate in (
+            # access token 优先：它是「当前这次请求」最直接的身份
+            lambda: get_token(request),
+            lambda: request.cookies.get(settings.COOKIE_REFRESH_TOKEN_KEY) or '',
+        ):
+            try:
+                payload = jwt_decode(candidate())
+            except errors.TokenError:
+                continue
+            identity = (payload.user_id, payload.session_uuid)
+            break
+
+        if identity is None:
+            # 两种凭据都没有或都无效 —— 登出本来就该是幂等的，静默成功
+            return
+
+        user_id, session_uuid = identity
+        await revoke_token(user_id, session_uuid)
         # 🔴 见 issue #34：这份用户快照（menu_service.get_sidebar 用它筛菜单）原来
         # 只被 user_cache_manager.clear_* 显式作废，logout 从不碰它——一旦它被卡在
         # 旧值上（比如另一个管理员改权限的请求撞上了竞态），重新登录并不能重建它，

@@ -167,7 +167,17 @@ async def create_new_token(
 
 async def revoke_token(user_id: int, session_uuid: str) -> None:
     """
-    撤销 token
+    撤销一个会话的**全部**凭据
+
+    🔴 **三个 key 必须一起删，尤其是 refresh key。**
+    原来这里只删 access（`TOKEN_REDIS_PREFIX`）和附加信息，漏了
+    `TOKEN_REFRESH_REDIS_PREFIX` —— 而 `create_new_token()` 只校验
+    「refresh key 存在且值相等」（jwt.py 里那两行），**从不检查 access key 还在不在**。
+    于是「强制下线」（`api/v1/monitor/online.py` 的 `delete_session`）踢掉的会话，
+    只要立刻打一次 `/auth/refresh` 就能换回一个全新的 access token；
+    而此时 `token_keys` 恰好是空的，`multi_login` 那道检查反而更不会拦。
+    表现是「在线用户页点了强制下线、那一行也消失了，人却还在」——
+    界面上没有任何异常，被踢的人也毫无感觉。
 
     :param user_id: 用户 ID
     :param session_uuid: 会话 ID
@@ -175,6 +185,7 @@ async def revoke_token(user_id: int, session_uuid: str) -> None:
     """
     await redis_client.delete(f'{settings.TOKEN_REDIS_PREFIX}:{user_id}:{session_uuid}')
     await redis_client.delete(f'{settings.TOKEN_EXTRA_INFO_REDIS_PREFIX}:{user_id}:{session_uuid}')
+    await redis_client.delete(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}:{session_uuid}')
 
 
 def get_token(request: Request) -> str:
