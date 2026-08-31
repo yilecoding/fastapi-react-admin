@@ -168,3 +168,139 @@ def test_swagger_login_is_not_registered_in_prod(env: str) -> None:
         settings.ENVIRONMENT = original
         # 还原模块状态，否则后面的用例会跑在 prod 版路由表上
         importlib.reload(importlib.import_module('backend.app.admin.api.v1.auth.auth'))
+
+
+# ─── 会话撤销：登出与强制下线 ─────────────────────────────────────────────────
+#
+# 这一组守的是同一件事：**撤销一个会话时 refresh token 必须一起死。**
+# 两个 bug 都是静默的 —— 界面上该消失的都消失了，人还在。
+
+
+@pytest.fixture
+def no_captcha(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """让 `/auth/login` 不走验证码
+
+    ⚠️ 光设 `settings.LOGIN_CAPTCHA_ENABLED = False` 不够：`login()` 第一句就是
+    `await load_login_config(db)`，它会把 **sys_config 表里的值** setattr 回 settings
+    （`utils/dynamic_config.py`）。而那张表在 fba_test 里是什么值，取决于上一次
+    E2E 的 global-setup 有没有跑过 —— 依赖它就是依赖一个看不见的外部状态。
+    所以连那次加载一起顶掉。
+    """
+
+    async def _noop(_db: object) -> None:  # ruff: ignore[unused-async] - 顶掉的原函数是 async，签名要对上
+        return None
+
+    monkeypatch.setattr('backend.app.admin.service.auth_service.load_login_config', _noop)
+    original = settings.LOGIN_CAPTCHA_ENABLED
+    settings.LOGIN_CAPTCHA_ENABLED = False
+    try:
+        yield
+    finally:
+        settings.LOGIN_CAPTCHA_ENABLED = original
+
+
+@pytest.fixture
+def session(client: TestClient, no_captcha: None) -> Iterator[tuple[dict[str, str], str]]:
+    """走**真实** `/auth/login` 建一个带 refresh cookie 的会话
+
+    返回 `(auth_headers, session_uuid)`；refresh cookie 留在 client 的 jar 里，
+    用例只要**不传 Authorization** 就等价于桌面端发出的那个请求。
+
+    ⚠️ 不能用 `/auth/login/swagger`：它只发 access token，`create_refresh_token`
+    根本没被调用（`auth_service.swagger_login`），拿它来测 refresh 撤销等于什么都没测。
+
+    🔴 **也不能自己再 `TestClient(app)` 开一个。** `TestClient` 作为上下文管理器会
+    跑一遍应用的 lifespan，而 `conftest` 里那个 `client` 是 **session 级**、全程开着的 ——
+    第二个实例退出时的 shutdown 会把共享的 Redis / 数据库连接一起关掉，
+    后面所有用例都受牵连，而报出来的错和这里毫无关系。
+
+    ⚠️ cookie 挂在 client 实例上而不是逐请求传 `cookies=` —— 后者在 httpx 里已废弃
+    （"expected behaviour on cookie persistence is ambiguous"）。代价是它是**共享**的，
+    所以 teardown 必须清干净，否则污染同一 session 里的其它用例。
+    """
+    res = client.post('/auth/login', json={'username': PYTEST_USERNAME, 'password': PYTEST_PASSWORD})
+    assert res.status_code == 200, res.text
+    assert client.cookies.get(settings.COOKIE_REFRESH_TOKEN_KEY), 'login 没下发 refresh cookie —— 后面的断言全是假的'
+
+    data = res.json()['data']
+    try:
+        yield {'Authorization': f'Bearer {data["access_token"]}'}, str(data['session_uuid'])
+    finally:
+        client.cookies.clear()
+
+
+def _keep_refresh_cookie(client: TestClient) -> str:
+    """把当前 refresh cookie 的值抠出来备用
+
+    🔴 **登出的响应带 `delete_cookie`，httpx 会照办**——直接在登出之后打
+    `/auth/refresh`，失败的原因是「压根没带 cookie」，不是「服务端撤销了它」。
+    这条断言会**假绿**：把 `revoke_token()` 里删 refresh key 那行注释掉，它照样通过
+    （实测确认过）。真实客户端手里那份凭据不会因为服务端说一声就消失
+    （桌面端就是自己存在磁盘上的），所以测试必须把它塞回去再验。
+    """
+    value = client.cookies.get(settings.COOKIE_REFRESH_TOKEN_KEY)
+    assert value, '还没登录就取 refresh cookie'
+    return value
+
+
+def _user_id(client: TestClient, headers: dict[str, str]) -> int:
+    res = client.get('/sys/users/me', headers=headers)
+    assert res.status_code == 200, res.text
+    return int(res.json()['data']['id'])
+
+
+def test_force_offline_also_revokes_the_refresh_token(client: TestClient, session: tuple[dict[str, str], str]) -> None:
+    """🔴 回归：强制下线之后，refresh token 必须也失效
+
+    `revoke_token()` 原来只删 access 和附加信息两个 key。而 `create_new_token()`
+    只校验「refresh key 存在且值相等」，**从不检查 access key 还在不在** ——
+    被踢的会话立刻打一次 `/auth/refresh` 就能换回全新的 access token，
+    而此时 `token_keys` 恰好是空的，`multi_login` 那道检查反而更不会拦。
+    在线用户页上那一行确实消失了，人却还在。
+    """
+    headers, session_uuid = session
+    user_id = _user_id(client, headers)
+
+    kicked = client.delete(f'/monitors/sessions/{user_id}', params={'session_uuid': session_uuid}, headers=headers)
+    assert kicked.status_code == 200, kicked.text
+
+    revived = client.post('/auth/refresh')
+    assert revived.status_code != 200, (
+        f'强制下线之后还能刷出新 token（HTTP {revived.status_code}）—— refresh key 没被撤销'
+    )
+
+
+def test_logout_revokes_the_refresh_token(client: TestClient, session: tuple[dict[str, str], str]) -> None:
+    """登出之后拿同一个 refresh cookie 刷新必须失败"""
+    headers, _ = session
+    refresh = _keep_refresh_cookie(client)
+
+    assert client.post('/auth/logout', headers=headers).status_code == 200
+    # 模拟「客户端手里那份凭据还在」：服务端撤销了才算数
+    client.cookies.set(settings.COOKIE_REFRESH_TOKEN_KEY, refresh)
+    assert client.post('/auth/refresh').status_code != 200, '登出之后 refresh token 还活着'
+
+
+def test_logout_works_with_only_the_refresh_cookie(client: TestClient, session: tuple[dict[str, str], str]) -> None:
+    """🔴 回归：没有 Authorization 头、只有 refresh cookie 时，登出也必须真的撤销
+
+    这正是桌面端走的路（`apps/desktop/src/main/auth.ts` 的 logout 只手工带 cookie ——
+    access token 在渲染层的 sessionStorage 里，主进程手上没有）。
+    原来 `logout()` 第一句 `get_token(request)` 拿不到 Bearer 就直接 `return`，
+    三个 key 一个没删：桌面端本地删了凭据、界面也回到登录页，而那个会话的
+    refresh token 还能再活 7 天。
+    """
+
+    refresh = _keep_refresh_cookie(client)
+
+    # 关键：**不带 Authorization**，只有 refresh cookie —— 这就是桌面端发出的那个请求
+    assert client.post('/auth/logout').status_code == 200
+    client.cookies.set(settings.COOKIE_REFRESH_TOKEN_KEY, refresh)
+    assert client.post('/auth/refresh').status_code != 200, '只带 cookie 的登出是空操作，refresh token 还活着'
+
+
+def test_logout_without_any_credential_is_a_silent_noop(client: TestClient) -> None:
+    """两种凭据都没有时，登出要静默成功 —— 它本来就该是幂等的"""
+    res = client.post('/auth/logout')
+    assert res.status_code == 200, res.text
+    assert res.json()['code'] == 200

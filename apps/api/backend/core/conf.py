@@ -111,6 +111,14 @@ class Settings(BaseSettings):
     TOKEN_REQUEST_UNDERLYING_SECURITY: bool = True
     TOKEN_REQUEST_PATH_EXCLUDE: list[str] = [  # JWT / RBAC 路由白名单
         f'{FASTAPI_API_V1_PATH}/auth/login',
+        # ⚠️ **不要**把 `/auth/logout` 加进来。曾经加过，为的是让「access token 已过期
+        # 时点登出」不被中间件 401 挡住 —— 但代价是 `request.user` 在这条路由上变成
+        # 未认证，`opera_log_middleware` 的 `request.user.username` 走 AttributeError
+        # 分支，**每一次登出的操作日志都记不下用户名**（那张表本来就是审计用的）。
+        # 而它买到的只有那一种情况，且前端的 401 → 单飞刷新 → 重放已经覆盖了：
+        # 刷新时 `create_new_token()` 自己就会删掉旧会话的 access + refresh key。
+        # 只带 cookie、不带 Authorization 的请求（桌面端）本来就过得了中间件 ——
+        # `extract_token()` 没有 Authorization 头时返回 None，是「未认证」不是「认证失败」。
     ]
     TOKEN_REQUEST_PATH_EXCLUDE_PATTERN: list[Pattern[str]] = []  # JWT / RBAC 路由白名单（正则）
 
