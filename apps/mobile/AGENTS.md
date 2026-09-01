@@ -6,7 +6,8 @@
 > 所以 B 那半天的验收（浏览器代答五条、注入 token 免登录…）连同 `react-native-webview`
 > 一起删掉了，git 历史里还能翻到。
 >
-> 现在的状态：**底座 + 两条实测的探针页**，还没有业务页面。
+> 现在的状态：**登录 + 个人中心 + 一个最小导航壳**。issue #39 的第 2/3 条
+> （要哪几个屏 / 导航形态）还没拍，所以壳是刻意做小的，见下面「导航壳」一节。
 >
 > 这份文件是根 `CLAUDE.md` 的**模块分册**，Claude Code 读到本目录下的文件时才加载它。
 > 跨模块的硬纪律仍然只在根 `CLAUDE.md` 里有一份。
@@ -160,15 +161,15 @@ grep -c '"flex-1"' /tmp/dev.bundle      # 0 = 一条都没生成；正常是 ≥
 和根 `CLAUDE.md` **硬纪律 7** 是同一个物种（「class 在、CSS 规则不在」），
 也和 `packages/ui/src/styles/globals.css` 里那两条 `@source` 一致。
 
-## 🔬 两条实测的结论（`src/app/index.tsx` 是一次性探针页）
+## 🔬 两条实测的结论（探针页已删，结论留在这儿）
 
 两条都在 WSL 里的 Android 模拟器上跑完了，**结论都是「行」**。
-探针页留着是因为现在还没有真页面 —— 写第一个真页面时把它删掉。
+探针页在写登录屏时删掉了，下面是它测出来的东西。
 
 ### ✅ 1. uniwind 认 `oklch()` —— 设计令牌可以和 web 共享一份真相源
 
-`src/styles/global.css` 里三对 `--color-probe-*`：每对左边写 `oklch(...)`、
-右边写它**离线算出的精确 sRGB 等价值**。`adb exec-out screencap` 截图后逐像素比对：
+探针是三对色块：每对左边写 `oklch(...)`、右边写它**离线算出的精确 sRGB 等价值**。
+`adb exec-out screencap` 截图后逐像素比对：
 
 | 探针 | oklch 侧 | sRGB 侧 | 两侧最大通道差 | 与离线期望差 |
 |---|---|---|---|---|
@@ -206,6 +207,108 @@ set-cookie: fba_refresh_token=eyJ…; expires=…; HttpOnly; Max-Age=604800; Pat
 ⚠️ 顺带核到一件事：**本机 dev 的 `LOGIN_CAPTCHA_ENABLED` 也是 `false`**
 （`/auth/captcha` 返回 `is_enabled=false`），不只是生产。所以探针的「取验证码 → 
 去 redis 取答案」那两步实际上验不到验证码链路 —— 要验得先把那条 `sys_config` 改回 true。
+
+## 鉴权：token 在 SecureStore，refresh 在 cookie jar
+
+```
+src/lib/token-store.ts   access token —— expo-secure-store（Keystore / Keychain）
+src/lib/api.ts           fetch 包装：拆 {code,msg,data} 包封 · 401 单飞刷新
+src/lib/session.tsx      SessionProvider：冷启动 / 登录 / 登出，唯一的登录态真相源
+src/app/_layout.tsx      AuthGate：按登录态挂载两棵互斥的路由树
+```
+
+🔴 **access token 必须进 `expo-secure-store`，不能进 `AsyncStorage`。**
+AsyncStorage 在 Android 上就是一个明文 SQLite 文件、iOS 上是明文 plist ——
+root / 越狱设备直接可读，备份也会带走。这条**和 web 端不一样**：web 上 token 在
+`sessionStorage`，关掉标签页就没了；App 会长期驻留，落盘的东西要当长期资产看。
+
+🔴 **refresh token 不要自己管。** 它在 httpOnly cookie 里，RN 自带 cookie jar
+（Android 侧是 okhttp 的 `CookieManager`）会自动带上。
+**不要照搬 `apps/desktop/src/main/auth.ts` 那套「读 Set-Cookie → 自己存 →
+手工带 Cookie 头」** —— 在 RN 上那是多余的第二份状态，两份不同步的失败是静默的
+（刷新"成功"了但用的是旧 token）。
+
+✅ **cookie jar 跨 App 冷启动是持久的**（实测：头一天探针登录留下的 refresh
+cookie，隔夜 + 多次 `am force-stop` + 重装 bundle 之后，冷启动仍然刷新成功）。
+所以「SecureStore 里没有 token」不等于「没登录」—— 冷启动流程是
+**先无条件打 `/me`**，401 由 api 层单飞刷新兜住，刷不动才判定未登录。
+
+🔴 **`AuthGate` 用「渲染哪一棵树」切换登录态，不要用 `router.replace` 跳转。**
+在 effect 里跳转会有一帧渲染出已登录的界面（`user` 还是 `null`，各处崩或闪），
+而且返回键能退回去。现在两棵树用 `Stack.Protected` 互斥挂载，
+未登录时登录屏之外的路由**根本不存在**，没有中间态可漏。
+
+⚠️ **`bootstrapError`：401 和「连不上」必须分开。** 都当成「没登录」的话，
+用户看到一个登录屏、输对密码还是失败，而屏上没有任何东西说是网络不通
+（根 `CLAUDE.md` 硬纪律 9 的移动端形态）。非 401 的启动失败会带到登录屏上显示。
+
+### 改密码之后会话就死了，要主动收场
+
+`user_service.update_password` 会 `delete_by_prefix` 掉该用户的
+access / refresh / 用户缓存**三组** key。不主动登出的话，用户会在下一个请求 401 时
+被莫名其妙弹回登录页 —— 看起来像 bug，其实是预期行为。
+所以 `change-password.tsx` 成功后切到一屏「密码已修改，请重新登录」，明说一句再登出。
+
+## 个人中心：哪些字段能改，哪些不能（不是漏做）
+
+| 字段 | 能不能自己改 | 走哪个口 |
+|---|---|---|
+| 昵称 | ✅ | `PUT /sys/users/me/nickname` |
+| 头像 | ✅ 但**只能填 URL** | `PUT /sys/users/me/avatar` |
+| 密码 | ✅ | `PUT /sys/users/me/password` |
+| 时区 | ✅（界面还没做） | `PUT /sys/users/me/timezone` |
+| **手机号** | ❌ | 后端**没有** `/me/phone`，只有超管的 `PUT /sys/users/{pk}` |
+| **邮箱** | ❌ | `PUT /me/email` 要一个**邮件验证码**，那条链路移动端还没有 |
+
+界面上手机号/邮箱是只读行并写明原因 —— 放一个改了会失败的输入框更糟。
+
+🔴 **头像清空要发 `null`，不能发 `''`。** 读取侧 `GetUserInfoDetail.avatar` 是
+`HttpUrl | None`，存进空串之后登录和 `/users/me` 会**全部 422**
+（`url_parsing: input is empty`），连改坏它的人自己都登不回来。后端那个 handler
+上就记着这次实测。
+
+⚠️ 从相册选头像还没做 —— 要 `expo-image-picker`（Expo Go 自带）+ 文件上传接口，
+是独立一件事。
+
+### `is_staff` 这道闸门**不影响**个人中心
+
+`rbac.py` 那条「非 GET/OPTIONS 且 `is_staff` 为假 → 403」挂在 **`DependsRBAC`** 上，
+而 `/sys/users/me/*` 全部只挂 `DependsJwtAuth`。所以普通用户（`is_staff=False`）
+改自己的昵称/头像/密码**不会 403**。
+（真正会撞上这道闸门的是将来那些管理类的写操作。）
+
+## 导航壳：`src/app/(app)/_layout.tsx` 是唯一的换形态点
+
+issue #39 第 3 条（底部 tab / 抽屉 / 栈怎么组合）还没拍，所以现在是一个**最小 Stack**。
+换形态时**只动那一个文件**：`Stack` → `Tabs`，下面的屏一行都不用改（它们只是
+文件路由里的叶子）。
+
+⚠️ `expo-router` 的 `Tabs` 要额外装 `@react-navigation/bottom-tabs` ——
+它**不在** Expo Go 自带模块清单里，但那是纯 JS 包，装了就能用，不需要 prebuild。
+
+## 契约是手抄的：`src/lib/contract.ts`
+
+web 端的类型是 `pnpm gen:api` 从 OpenAPI 生成的，但那份产物住在
+`packages/platform` 里，而 `apps/mobile` 不在 `i18n ← ui ← platform ← apps/web`
+那条箭头上。所以移动端这份是**手抄**的。
+
+🔴 **改后端契约时这份要跟着改** —— 它不会自己报错，字段对不上只会在运行时变成
+`undefined`（表现为界面上某一项空着，不报错）。
+
+两个抄的时候容易错的点，已经在文件里标了：
+
+- `GET /sys/users/me` 用的是 `GetCurrentUserInfoWithRelationDetail`，
+  它把 `dept` 换成了**部门名字**、`roles` 换成了**角色名字列表**（不是对象）
+- `POST /auth/login` 的响应体里**没有 refresh token**，它只在 Set-Cookie 里；
+  而且响应里的 `user` 是 `GetUserInfoDetail`，**没有 dept/roles 名字** ——
+  所以登录成功后要再打一次 `/me` 才拿得到个人中心要显示的东西
+
+## 🔴 占位符颜色只能走 `placeholderTextColor`
+
+Tailwind 的 `placeholder:*` 是 CSS 伪元素变体，RN 里没有这个概念 ——
+写了不报错也不生效。不给的话各 Android 版本的默认占位色不一样，深色主题下经常
+糊成一片看不见，而这**不会报任何错**。`components/ui/input.tsx` 用
+`useCSSVariable('--color-muted-foreground')` 取值再传给这个 prop。
 
 ## 设备：WSL 里的 Android 模拟器（**不往局域网开任何口**）
 

@@ -1,5 +1,7 @@
 /**
- * 探针要打的后端地址。
+ * 后端地址。
+ *
+ * dev 下走 `adb reverse`（见下），生产走域名 —— `EXPO_PUBLIC_API_BASE` 覆盖。
  *
  * 🔴 **走 `adb reverse`，不要用 `10.0.2.2`。**
  * `10.0.2.2` 是「Android 模拟器里的宿主 loopback 别名」那条经典说法，
