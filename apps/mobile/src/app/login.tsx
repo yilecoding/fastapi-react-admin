@@ -15,7 +15,7 @@ import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
-import { ApiError } from '@admin/api-contract'
+import { ApiError } from '@admin/api'
 
 import { api } from '@/lib/api'
 import { BRAND } from '@/lib/brand'

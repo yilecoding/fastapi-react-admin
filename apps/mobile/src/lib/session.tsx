@@ -1,6 +1,6 @@
 import * as React from 'react'
 
-import { ApiError } from '@admin/api-contract'
+import { ApiError } from '@admin/api'
 
 import { api, setSessionExpiredHandler } from '@/lib/api'
 import type { CurrentUser, LoginResult } from '@/lib/contract'

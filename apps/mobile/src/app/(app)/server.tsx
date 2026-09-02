@@ -42,7 +42,7 @@ export default function ServerScreen() {
     setError(null)
     try {
       const res = await fetch(`${normalized}/api/v1/auth/captcha`, { method: 'GET' })
-      if (!res.ok) throw new Error(`服务器返回 HTTP ${res.status}`)
+      if (!res.ok) throw new Error(t('服务器返回 HTTP {{code}}', { code: res.status }))
       const body = (await res.json()) as { code?: number }
       // FBA 的所有响应都带 code；不带说明这不是本项目的后端
       if (typeof body?.code !== 'number') throw new Error(t('这个地址不像是本项目的后端'))

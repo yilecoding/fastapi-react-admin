@@ -1,8 +1,8 @@
 /**
- * 分页结构和错误类型都在 `@admin/api-contract`（两端共用），这里只留
+ * 分页结构和错误类型都在 `@admin/api`（两端共用），这里只留
  * 移动端用到的那几个 DTO。
  */
-export type { PageData } from '@admin/api-contract'
+export type { PageData } from '@admin/api'
 
 /**
  * 后端契约的手抄本。

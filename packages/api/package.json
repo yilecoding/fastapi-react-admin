@@ -1,5 +1,5 @@
 {
-  "name": "@admin/api-contract",
+  "name": "@admin/api",
   "version": "0.0.0",
   "type": "module",
   "private": true,
@@ -14,5 +14,8 @@
   "devDependencies": {
     "openapi-typescript": "^7",
     "typescript": "~6"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.15.0"
   }
 }

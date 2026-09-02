@@ -226,10 +226,17 @@ set-cookie: fba_refresh_token=eyJ…; expires=…; HttpOnly; Max-Age=604800; Pat
 
 ```
 src/lib/token-store.ts   access token —— expo-secure-store（Keystore / Keychain）
-src/lib/api.ts           fetch 包装：拆 {code,msg,data} 包封 · 401 单飞刷新
+src/lib/api.ts           `@admin/api` 的一次实例化（传输层不在这儿，见下）
 src/lib/session.tsx      SessionProvider：冷启动 / 登录 / 登出，唯一的登录态真相源
 src/app/_layout.tsx      AuthGate：按登录态挂载两棵互斥的路由树
 ```
+
+🔴 **传输层不在 `apps/mobile` 里。** 信封判定、401 单飞刷新、`Accept-Language`
+全在 `@admin/api` 的 `createApiClient()`，**和 web 端共用一份**；`src/lib/api.ts`
+只注入四样东西（地址 / token / 语言 / 网络错误文案）。
+**要改重试或错误判定去改那个包**（[分册](../../packages/api/AGENTS.md)）——
+这份文件曾经自己复制过一遍，代价是「HTTP 200 + `code: 400` 被当成成功」
+那个坑两端各有一份，改一边不修另一边。
 
 🔴 **access token 必须进 `expo-secure-store`，不能进 `AsyncStorage`。**
 AsyncStorage 在 Android 上就是一个明文 SQLite 文件、iOS 上是明文 plist ——
@@ -585,7 +592,13 @@ src/lib/server.ts     服务器地址（本机，运行时可改）
 
 `EXPO_PUBLIC_*` 是**构建期替换的字符串** —— 打成 APK 之后地址就焊死了，
 想在生产/预发/本机之间切只能重新打包。所以地址存 SecureStore，
-`src/lib/api.ts` 每次请求从 `serverStore.current()` 取。
+`src/lib/api.ts` 把 `serverStore.current` 作为 `getBaseUrl` 注进客户端，
+**每次请求现取**。
+
+⚠️ 共享客户端里有一条同源的坑：`openapi-fetch` 会在 `createClient` 时把
+`baseUrl` 固化，所以地址是走**每请求覆盖**传下去的 ——
+细节见 [`packages/api` 分册](../../packages/api/AGENTS.md)。写错的表现是
+「设置屏改完地址、请求还发去旧地址，且不报错」。
 
 ⚠️ `src/lib/config.ts` 里那个 `API_BASE_DEFAULT` 只是**默认值**，
 **不要 import 它去发请求**。
