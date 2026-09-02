@@ -537,6 +537,37 @@ def _check_connection_target(name: str, value: str | None) -> str | None:
     return None
 
 
+def _check_snowflake_node_lease(s: Settings) -> str | None:
+    """雪花节点的心跳必须**明显快于** TTL，否则会发出重复 ID
+
+    节点号是 `SET <key> <pid> NX EX=TTL` 抢到的，靠心跳 `EXPIRE` 续期。
+    心跳慢于 TTL 时，进程**还活着** key 就过期了 —— 另一个副本
+    `acquire_node_id()` 扫一圈看见槽位空着就占走**同一个号**，
+    于是两边用同样的 datacenter/worker 发号，**雪花 ID 开始重复**。
+
+    而全仓所有 ID 都是雪花（硬纪律 6），症状是「偶尔两条记录 ID 一样」——
+    从这个现象追回「心跳配置」几乎不可能，所以要在启动时拦。
+
+    ⚠️ 要留余量，不是只要求「小于」：续期本身要往返 Redis，而且心跳任务和
+    事件循环里的别人抢 CPU。取一半 —— 默认值 30/60 正好是这个比例。
+
+    ⚠️ 判据是 `* 2 >` 而**不是** `* 2 >=`：写成后者会把默认配置本身拒掉，
+    那种误杀比漏判更糟（所有人第一次上生产就起不来，而报错指着一份
+    没改过的配置）。反向验证过，见 `test_prod_config.py` 那三条。
+
+    :param s: 待校验的配置实例
+    :return: 不合格时返回问题描述，合格返回 None
+    """
+    if s.SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS * 2 <= s.SNOWFLAKE_NODE_TTL_SECONDS:
+        return None
+    return (
+        f'SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS={s.SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS} '
+        f'相对 SNOWFLAKE_NODE_TTL_SECONDS={s.SNOWFLAKE_NODE_TTL_SECONDS} 太慢 —— '
+        '心跳要不慢于 TTL 的一半，否则节点号会在进程活着的时候过期、被别的副本抢走，'
+        '两边发出重复的雪花 ID'
+    )
+
+
 def check_production_settings(s: Settings) -> None:
     """prod 启动前置校验 —— 一次性收集**全部**问题后 fail-fast
 
@@ -589,6 +620,8 @@ def check_production_settings(s: Settings) -> None:
         problems.append(f'CORS_ALLOWED_ORIGINS 含本地 / 通配来源：{bad_origins}')
     if s.DATABASE_USER in {'sa', 'root', 'postgres'}:
         problems.append(f'DATABASE_USER={s.DATABASE_USER} 是数据库超级用户，prod 请用最小权限账号')
+
+    problems.append(_check_snowflake_node_lease(s))
 
     found = [p for p in problems if p]
     if found:

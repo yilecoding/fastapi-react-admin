@@ -44,6 +44,9 @@ class _FakeSettings:
         self.USER_PASSWORD_MIN_LENGTH = 8
         self.CORS_ALLOWED_ORIGINS = ['https://admin.example.com']
         self.DATABASE_USER = 'fba_app'
+        # 雪花节点的心跳 / TTL —— 默认就是 conf.py 里那对合格值
+        self.SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS = 30
+        self.SNOWFLAKE_NODE_TTL_SECONDS = 60
         for k, v in overrides.items():
             setattr(self, k, v)
 
@@ -350,3 +353,36 @@ def test_clean_database_passes_prod_startup() -> None:
         assert _run_verify() is None, '库已经干净了，prod 检查却还在拦'
     finally:
         asyncio.run(_run(restore))
+
+
+def test_slow_snowflake_heartbeat_is_rejected() -> None:
+    """🔴 心跳慢于 TTL 一半 → 拒绝启动，否则会**发出重复的雪花 ID**。
+
+    节点号是 `SET key NX EX=TTL` 抢到的，靠心跳 `EXPIRE` 续期。心跳太慢时，
+    进程还活着 key 就过期了 —— 另一个副本 `acquire_node_id()` 看见槽位空着
+    就占走**同一个号**，两边用同样的 datacenter/worker 发号。
+
+    症状是「偶尔两条记录 ID 一样」，而全仓所有 ID 都是雪花（硬纪律 6）——
+    从这个现象追回「心跳配置」几乎不可能。所以要在启动时拦。
+
+    ⚠️ 这条不变式此前**没有任何东西校验**：默认值 30/60 是对的，
+    但改坏了不报错、也不影响单副本，只在多副本时静默发重复号。
+    """
+    msg = _expect_rejected(SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS=90)
+    assert 'SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS' in msg
+    assert '重复的雪花 ID' in msg, msg
+
+
+def test_snowflake_heartbeat_exactly_half_the_ttl_passes() -> None:
+    """刚好一半是**合格**的 —— 默认值 30/60 就是这个比例，不能把它误杀。
+
+    判据写成 `心跳 * 2 > TTL` 而不是 `>=`：写成 `>=` 会把默认配置本身拒掉，
+    而那种误杀比漏判更糟 —— 它让所有人第一次上生产就起不来。
+    """
+    check_production_settings(_FakeSettings(SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS=30, SNOWFLAKE_NODE_TTL_SECONDS=60))
+
+
+def test_snowflake_ttl_shorter_than_heartbeat_is_rejected() -> None:
+    """两个值调反了（TTL 比心跳还短）是最容易犯的一种，必须拦住"""
+    msg = _expect_rejected(SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS=60, SNOWFLAKE_NODE_TTL_SECONDS=30)
+    assert 'SNOWFLAKE_NODE_TTL_SECONDS=30' in msg, msg
