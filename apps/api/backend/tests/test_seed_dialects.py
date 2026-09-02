@@ -112,3 +112,62 @@ def test_every_table_has_the_same_columns_in_every_dialect(seeds) -> None:
                 lack = sorted(set(majority) - set(c))
                 problems.append(f'  {table} 在 {d} 和另两份不同: 多了 {extra}、少了 {lack}')
     assert not problems, '三份种子的列清单对不上：\n' + '\n'.join(problems)
+
+
+#: 关联表（m2m 中间表）→ 它们的外键必须在同一份种子里找得到主
+#:
+#: ⚠️ 这些表**自己也有 `id` 列**，行长这样：`(id, role_id, menu_id)`。
+#: 所以取引用时要跳过每行的第一个数字 —— 第一版没跳，把它们自己的主键
+#: 当成了引用，三个方言一起报「悬空」，而对称的失败正是「解析器坏了」的信号
+#: （行数一致性那条测试是过的，所以数据不可能三份一起坏成同一个样子）。
+_LINK_TABLES = ('sys_role_menu', 'sys_user_role', 'sys_role_data_scope', 'sys_data_scope_rule')
+
+# 行首那个雪花 ID = 主键
+_PK = re.compile(r'\(\s*(\d{15,})')
+# 正文里所有雪花 ID
+_ANY_ID = re.compile(r'\b(\d{15,})\b')
+# 一组值：`(...)`。种子里有 `CONVERT(varchar(36), NEWID())` 这种嵌套括号，
+# 所以只用来切行、不用来切列
+_ROW_GROUP = re.compile(r'\(([^)]*)\)')
+
+
+def _ids(dialect: str) -> tuple[set[str], dict[str, set[str]]]:
+    """→ (这份种子里所有主键, {关联表: 它引用的 ID})"""
+    text = (BASE_PATH / 'sql' / dialect / SEED).read_text(encoding='utf-8')
+
+    pks: set[str] = set()
+    refs: dict[str, set[str]] = {}
+    for table, _cols, body in _INSERT.findall(text):
+        pks.update(_PK.findall(body))
+        if table not in _LINK_TABLES:
+            continue
+        for row in _ROW_GROUP.finditer(body):
+            row_ids = _ANY_ID.findall(row.group(1))
+            if len(row_ids) > 1:
+                # 跳过第一个 —— 那是这一行自己的主键
+                refs.setdefault(table, set()).update(row_ids[1:])
+    return pks, refs
+
+
+@pytest.mark.parametrize('dialect', DIALECTS)
+def test_link_tables_reference_ids_that_exist(dialect: str) -> None:
+    """🔴 关联表里的每个外键都要在同一份种子里找得到主。
+
+    行数和列清单一致**不代表引用对得上**：行还在、只是指向了一个不存在的 ID。
+    表现是那个方言初始化之后「演示角色一个菜单都没有」/「数据范围没绑上」——
+    界面上是空的，日志里什么都没有，而另外两个方言完全正常。
+
+    这一维特别容易漂，因为三份种子的 ID **本来就不一样**（实测：postgresql 的
+    角色在 `4000000000000000xxx`、另两个在 `3000000000000000xxx`）。
+    改一份里的角色 ID 而忘了改同一份里的 `sys_role_menu`，就是这个 bug。
+    """
+    pks, refs = _ids(dialect)
+
+    # 🔴 先断言「有」：解析器一坏就什么都扫不到，而「没有悬空引用」会照旧通过
+    assert len(pks) >= 100, f'{dialect} 只解析出 {len(pks)} 个主键，解析器可能坏了'
+    assert len(refs) == len(_LINK_TABLES), f'{dialect} 只找到 {sorted(refs)} 这几张关联表'
+    checked = sum(len(v) for v in refs.values())
+    assert checked >= 20, f'{dialect} 只核对了 {checked} 个引用，太少，这条证明不了什么'
+
+    dangling = {table: sorted(ids - pks) for table, ids in refs.items() if ids - pks}
+    assert not dangling, f'{dialect} 的种子里有悬空引用（指向不存在的 ID）：{dangling}'
