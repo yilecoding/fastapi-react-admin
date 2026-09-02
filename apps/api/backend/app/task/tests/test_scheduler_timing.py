@@ -43,8 +43,10 @@ def test_factory():
     `sync_db` 默认按 `DATABASE_SCHEMA` 连开发库 —— 测试必须改到 `_test` 库，
     否则这组用例会往你正在手测的库里插调度（而且 beat 真在跑的话会执行它）。
     """
-    url = get_result_backend().removeprefix('db+').replace(
-        f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?'
+    url = (
+        get_result_backend()
+        .removeprefix('db+')
+        .replace(f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?')
     )
     engine = create_engine(url, pool_pre_ping=True, future=True)
     yield sessionmaker(engine, expire_on_commit=False)
@@ -188,7 +190,9 @@ def test_disabled_schedule_never_fires(db):
 def test_expired_schedule_does_not_fire(db):
     """过了截止时间就不再触发。"""
     insert(
-        db, name='timing-已过期', last_run='overdue',
+        db,
+        name='timing-已过期',
+        last_run='overdue',
         expire_time=timezone.now() - timedelta(minutes=1),
     )
     s = CapturingScheduler(app=celery_app)
@@ -199,7 +203,9 @@ def test_expired_schedule_does_not_fire(db):
 def test_not_started_yet_does_not_fire(db):
     """还没到开始时间就不触发。"""
     insert(
-        db, name='timing-未开始', last_run='overdue',
+        db,
+        name='timing-未开始',
+        last_run='overdue',
         start_time=timezone.now() + timedelta(hours=1),
     )
     s = CapturingScheduler(app=celery_app)
@@ -217,7 +223,8 @@ def test_one_off_fires_only_once(db):
     # 把「上次触发」再拨回两分钟前 —— 时间上又到点了，只剩计数能拦住它
     with db() as sess:
         sess.execute(
-            TaskScheduler.__table__.update()
+            TaskScheduler.__table__
+            .update()
             .where(TaskScheduler.id == pk)
             .values(last_run_time=timezone.now() - timedelta(seconds=EVERY * 2))
         )
@@ -283,7 +290,8 @@ def test_one_off_survives_a_reload(db, monkeypatch):
     # 时间上重新到点，但触发计数应该已经落库了
     with db() as sess:
         sess.execute(
-            TaskScheduler.__table__.update()
+            TaskScheduler.__table__
+            .update()
             .where(TaskScheduler.id == pk)
             .values(last_run_time=timezone.now() - timedelta(seconds=EVERY * 2))
         )
@@ -298,6 +306,41 @@ def test_one_off_survives_a_reload(db, monkeypatch):
     entry = s.schedule['timing-一次性抗重载']
     assert entry.total_run_count == 1, '触发计数没落库，重载后被清回 0'
     assert entry.is_due()[0] is False, '重载把触发计数清掉了，one_off 会跑第二次'
+
+
+def test_schedule_reloads_when_the_change_marker_moves(db, monkeypatch):
+    """🔴 「改了调度不用重启 beat」这件事本身必须有测试。
+
+    机制：model 的 after_insert/after_update 事件往 Redis 打一个
+    `{CELERY_REDIS_PREFIX}:last_update` 时间戳，`schedule` 这个 property
+    每次被读时比一下，变了就重新 `all_as_schedule()`。
+
+    ⚠️ **此前零覆盖。** 实测把那个 `if` 改成 `if False`（永不重载），
+    全套 80 条**一条都不红** —— 包括上面那条 `一次性抗重载`，它虽然走了
+    重载路径，但断言在「重载没发生」时同样成立（内存里那个 entry 的
+    计数也是 1）。它测的是落库，不是重载。
+
+    失败方式完全静默：管理员在界面上改了 cron 或停用了任务，beat 一直按
+    老的跑，唯一的补救是重启 beat —— 而界面上显示的是新值，
+    所以人只会怀疑自己的 cron 写错了。
+
+    这条按「先断言『没有』再断言『有』」写，中间那步同时钉住了标记的作用：
+    **没打标记就不该重载**（否则 last_update 这套是白写的，beat 每一 tick
+    都要重读整表）。
+    """
+    s = CapturingScheduler(app=celery_app)
+    assert 'timing-重载新增' not in s.schedule, '预置状态就不干净'
+
+    # beat 已经把调度载进内存了，这时候往库里插一条。
+    # ⚠️ `insert()` 走 core insert，不触发 ORM 事件，所以**不会**打变更标记 ——
+    # 这正好是中间那步断言要的条件
+    insert(db, name='timing-重载新增', id=900000000000000077)
+    assert 'timing-重载新增' not in s.schedule, '没打变更标记就重载了 —— 那 last_update 这套白写了'
+
+    # 打上标记（真实路径是 `TaskScheduler.touch_last_update()`，
+    # 它自己有测试 `test_touch_last_update_works_without_event_loop`）
+    monkeypatch.setattr(DatabaseScheduler, '_remote_last_update', lambda self: 'moved')
+    assert 'timing-重载新增' in s.schedule, '标记变了却没重载 —— 界面上改的调度不会生效，只能重启 beat'
 
 
 # ── 真实数据的读取 ──────────────────────────────────────────────────────────
