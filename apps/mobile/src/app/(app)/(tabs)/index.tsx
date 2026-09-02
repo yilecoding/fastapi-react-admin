@@ -3,14 +3,12 @@ import { BellIcon, ChevronRightIcon, UserRoundIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-
-import { BrandBackdrop } from '@/components/brand-backdrop'
-import { TenonMark } from '@/components/tenon-mark'
-import { Icon } from '@/components/ui/icon'
-import { Eyebrow, Rule, SectionHead } from '@/components/ui/panel'
-import { Text } from '@/components/ui/text'
 import { useCSSVariable } from 'uniwind'
 
+import { TenonMark } from '@/components/tenon-mark'
+import { Card, Divider, Section } from '@/components/ui/panel'
+import { Icon } from '@/components/ui/icon'
+import { Text } from '@/components/ui/text'
 import { BRAND } from '@/lib/brand'
 import { useUnread } from '@/lib/notifications'
 import { useSession } from '@/lib/session'
@@ -21,93 +19,92 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const [refreshing, setRefreshing] = React.useState(false)
-  const inkVar = useCSSVariable('--color-ink')
-  const ink = typeof inkVar === 'string' ? inkVar : '#111'
+  const faintVar = useCSSVariable('--color-faint')
+  const faint = typeof faintVar === 'string' ? faintVar : '#888'
 
   async function onRefresh() {
     setRefreshing(true)
     try {
       await Promise.all([reload(), refreshUnread()])
     } catch {
-      // 首页的刷新失败不值得打断 —— 数据还是上一次那份，个人中心那屏有完整的错误态
+      // 首页刷新失败不值得打断 —— 数据还是上一次那份，个人中心那屏有完整的错误态
     } finally {
       setRefreshing(false)
     }
   }
 
+  const total = unread?.total ?? 0
+
   return (
-    <View className="bg-panel flex-1">
-      {/* 底纹只铺在上半屏：往下是内容区，格子会抢注意力 */}
-      <BrandBackdrop className="absolute top-0 right-0 left-0 h-80" />
-      <ScrollView
-        contentContainerStyle={{ paddingTop: insets.top + 16 }}
-        contentContainerClassName="px-5 pb-12 gap-8"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
-      >
-        <View className="gap-6">
-          <View className="flex-row items-center gap-2.5">
-            <TenonMark size={18} color={ink} />
-            <Text className="text-ink font-mono text-[11px]" style={{ letterSpacing: 0.6 }}>
-              {BRAND.wordmark}
-            </Text>
-          </View>
+    <ScrollView
+      className="bg-panel flex-1"
+      contentContainerStyle={{ paddingTop: insets.top + 12 }}
+      contentContainerClassName="gap-6 px-4 pb-10"
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+    >
+      {/* 顶部只有一行极轻的标识 —— 品牌在登录页已经讲过了，进来之后不该再抢注意力 */}
+      <View className="flex-row items-center gap-2 px-1 pt-1">
+        <TenonMark size={14} color={faint} />
+        <Text className="text-faint font-mono text-[11px]" style={{ letterSpacing: 0.5 }}>
+          {BRAND.wordmark}
+        </Text>
+      </View>
 
-          <View>
-            <Eyebrow>{greetingEyebrow()}</Eyebrow>
-            <Text
-              className="text-ink mt-3 text-[26px] font-semibold"
-              style={{ letterSpacing: -0.7, lineHeight: 34 }}
-            >
-              {user?.nickname || user?.username || ''}
-            </Text>
-            <Text className="text-dim mt-1.5 text-sm">
-              {[user?.dept, user?.roles.join('、')].filter(Boolean).join('  ·  ') || '暂无部门与角色'}
-            </Text>
-          </View>
-        </View>
+      <View className="px-1">
+        <Text className="text-faint text-sm">{greeting()}</Text>
+        <Text className="text-ink mt-1 text-[27px] font-semibold" style={{ letterSpacing: -0.8 }}>
+          {user?.nickname || user?.username || ''}
+        </Text>
+        <Text className="text-dim mt-1.5 text-sm">
+          {[user?.dept, user?.roles.join('、')].filter(Boolean).join('  ·  ') || '暂无部门与角色'}
+        </Text>
+      </View>
 
-        {/* 一条导轨，三格数据钉在上面 —— web 面板里那条 rail 的压缩版 */}
-        <View className="gap-3">
-          <Rule />
-          <View className="flex-row">
-            <Fact label="账号" value={accountKind(user)} />
-            <Fact label="时区" value={user?.timezone ?? '—'} />
-            <Fact label="未读" value={String(unread?.total ?? 0)} accent={(unread?.total ?? 0) > 0} />
-          </View>
+      <Card>
+        <View className="flex-row py-3.5">
+          <Fact label="账号" value={accountKind(user)} />
+          <View className="bg-line w-px" />
+          <Fact label="时区" value={shortZone(user?.timezone)} />
+          <View className="bg-line w-px" />
+          <Fact label="未读" value={String(total)} accent={total > 0} />
         </View>
+      </Card>
 
-        <View className="gap-3">
-          <SectionHead label="ENTRIES" />
-          <View>
-            <Entry
-              icon={BellIcon}
-              title="通知"
-              meta={unread && unread.total > 0 ? `${unread.total} 条未读` : '没有未读'}
-              dot={(unread?.total ?? 0) > 0}
-              onPress={() => router.push('/notifications')}
-            />
-            <Entry icon={UserRoundIcon} title="个人中心" meta="资料 · 密码 · 登出" onPress={() => router.push('/profile')} />
-          </View>
-        </View>
+      <Section label="快捷入口">
+        <Entry
+          icon={BellIcon}
+          title="通知"
+          meta={total > 0 ? `${total} 条未读` : '没有未读'}
+          dot={total > 0}
+          onPress={() => router.push('/notifications')}
+        />
+        <Entry
+          icon={UserRoundIcon}
+          title="个人中心"
+          meta="资料 · 密码 · 登出"
+          onPress={() => router.push('/profile')}
+          last
+        />
+      </Section>
 
-        <View className="gap-3">
-          <SectionHead label="ACTIVITY" />
-          <View className="py-8">
-            <Text className="text-faint text-center text-sm">还没有待办和动态</Text>
-            <Text className="text-faint mt-1.5 text-center text-xs">
-              这一屏等移动端要哪几个功能定下来再填
-            </Text>
-          </View>
+      <Section label="动态">
+        {/* 空态要说清楚是「还没做」，不能长得像「加载失败」或「没有数据」——
+            三者在用户眼里都是一片空，分不清的第一反应是「这 App 坏了」 */}
+        <View className="items-center gap-1.5 px-6 py-9">
+          <Text className="text-dim text-sm">还没有待办和动态</Text>
+          <Text className="text-faint text-center text-xs leading-5">
+            等移动端要哪几个功能定下来再填这一屏
+          </Text>
         </View>
-      </ScrollView>
-    </View>
+      </Section>
+    </ScrollView>
   )
 }
 
 /** 按本机时间问好。刻意不查服务端时区 —— 问候语说的是「你现在」，不是账号设定的时区 */
-function greetingEyebrow() {
+function greeting() {
   const h = new Date().getHours()
-  if (h < 6) return '深夜'
+  if (h < 6) return '夜深了'
   if (h < 12) return '上午好'
   if (h < 14) return '中午好'
   if (h < 18) return '下午好'
@@ -119,17 +116,17 @@ function accountKind(user: { is_superuser: boolean; is_staff: boolean } | null) 
   return user.is_superuser ? '超管' : user.is_staff ? '管理员' : '普通'
 }
 
-/** 钉在导轨上的一格：等宽小标签在上、值在下，左边一竖是刻度 */
+/** `Asia/Shanghai` → `Shanghai`。三格并排放不下全称，而前缀是冗余的 */
+function shortZone(tz?: string) {
+  if (!tz) return '—'
+  return tz.split('/').pop() ?? tz
+}
+
 function Fact({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <View className="border-line flex-1 border-l pl-3 first:border-l-0 first:pl-0">
-      <Text className="text-faint font-mono text-[10px]" style={{ letterSpacing: 1.6 }}>
-        {label}
-      </Text>
-      <Text
-        className={`mt-1.5 text-base font-medium ${accent ? 'text-accent' : 'text-ink'}`}
-        numberOfLines={1}
-      >
+    <View className="flex-1 items-center gap-1">
+      <Text className="text-faint text-xs">{label}</Text>
+      <Text className={`text-[15px] font-medium ${accent ? 'text-accent' : 'text-ink'}`} numberOfLines={1}>
         {value}
       </Text>
     </View>
@@ -142,20 +139,25 @@ function Entry({
   meta,
   onPress,
   dot,
+  last,
 }: {
   icon: React.ComponentProps<typeof Icon>['as']
   title: string
   meta: string
   onPress?: () => void
   dot?: boolean
+  last?: boolean
 }) {
   return (
-    <Pressable onPress={onPress} className="active:bg-node border-line flex-row items-center gap-3 border-b py-3.5">
-      <Icon as={icon} className="text-faint size-4" />
-      <Text className="text-ink flex-1 text-sm">{title}</Text>
-      {dot ? <View className="bg-accent h-1.5 w-1.5 rounded-full" /> : null}
-      <Text className="text-faint font-mono text-[11px]">{meta}</Text>
-      <Icon as={ChevronRightIcon} className="text-faint size-3.5" />
-    </Pressable>
+    <>
+      <Pressable onPress={onPress} className="active:bg-panel min-h-[52px] flex-row items-center gap-3 px-4 py-3">
+        <Icon as={icon} className="text-faint size-4" />
+        <Text className="text-ink flex-1 text-[15px]">{title}</Text>
+        {dot ? <View className="bg-accent h-1.5 w-1.5 rounded-full" /> : null}
+        <Text className="text-faint text-[13px]">{meta}</Text>
+        <Icon as={ChevronRightIcon} className="text-faint size-4" />
+      </Pressable>
+      {last ? null : <Divider />}
+    </>
   )
 }

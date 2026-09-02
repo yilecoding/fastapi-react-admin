@@ -20,7 +20,7 @@ import { TenonMark } from '@/components/tenon-mark'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Icon } from '@/components/ui/icon'
-import { Eyebrow, Rule } from '@/components/ui/panel'
+import { Card, Eyebrow } from '@/components/ui/panel'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { ApiError, api } from '@/lib/api'
@@ -157,8 +157,6 @@ export default function LoginScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="bg-panel flex-1">
-        <BrandBackdrop className="absolute inset-0" />
-
         <KeyboardAvoidingView
           // Android 上键盘遮挡输入框是最常见的移动端落差之一（issue #39 第 2.5 节）。
           // 两个平台的行为不同，behavior 要分开给。
@@ -166,225 +164,119 @@ export default function LoginScreen() {
           className="flex-1"
         >
           <ScrollView
-            contentContainerStyle={{ paddingTop: insets.top + 28, paddingBottom: insets.bottom + 24 }}
-            contentContainerClassName="min-h-full px-5"
+            contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }}
+            contentContainerClassName="min-h-full justify-center gap-4 px-4"
             keyboardShouldPersistTaps="handled"
           >
-            {/* 标识条 —— 对应 web 的 SignInBrandStrip：等宽 wordmark + 榫卯 */}
+            {/*
+             * 品牌卡。**纹理只在这张卡内部** —— 全屏铺过一版，那团辉光就是一块脏污。
+             * 卡的边、圆角和内部纹理三者互相定义，缺一个就不成立。
+             */}
             <FadeIn delay={0}>
-              <View className="flex-row items-center gap-2.5 pb-5">
-                <TenonMark size={20} color={ink} />
-                <Text className="text-ink font-mono text-xs" style={{ letterSpacing: 0.6 }}>
-                  {BRAND.wordmark}
+              <Card className="p-6">
+                <BrandBackdrop />
+                <View className="flex-row items-center gap-2.5">
+                  <TenonMark size={20} color={ink} />
+                  <Text className="text-ink font-mono text-xs" style={{ letterSpacing: 0.6 }}>
+                    {BRAND.wordmark}
+                  </Text>
+                </View>
+                {/* 这个眉标是全屏**唯一**用主色的静态文字 —— 它是品牌陈述，
+                    不是分区标签。别的地方一律 faint。 */}
+                <Eyebrow tone="accent" className="mt-7">
+                  权限与数据的承重层
+                </Eyebrow>
+                <Text
+                  className="text-ink mt-3 text-[27px] font-semibold"
+                  style={{ letterSpacing: -0.8, lineHeight: 35 }}
+                >
+                  一个入口{'\n'}管好权限与数据
                 </Text>
-              </View>
-              <Rule />
+                <Text className="text-dim mt-2.5 text-[13px] leading-5">
+                  组织、角色和数据范围各自成件，靠结构咬合。
+                </Text>
+              </Card>
             </FadeIn>
 
-            {/*
-             * 🔴 文案和表单是**一组**，一起在剩余空间里居中。
-             * 上一版把 `flex-1 justify-center` 只套在文案上、表单跟在后面 ——
-             * 结果文案在剩余空间里居中、表单被挤到屏底，两段各自漂着，
-             * 整屏看着就是「哪儿都不居中」。这是这一版唯一的结构改动。
-             */}
-            <View className="flex-1 justify-center gap-7 py-8">
-              <View>
-                <FadeIn delay={60}>
-                  <Eyebrow>权限与数据的承重层</Eyebrow>
-                </FadeIn>
-                <FadeIn delay={110}>
-                  {/* 显示级：字号大、字距收紧、行高压低 —— web 那边是
-                      tracking-[-0.03em] / leading-[1.16]，这里按 30px 折算 */}
-                  <Text
-                    className="text-ink mt-3.5 text-[30px] font-semibold"
-                    style={{ letterSpacing: -0.9, lineHeight: 38 }}
-                  >
-                    一个入口{'\n'}管好权限与数据
-                  </Text>
-                </FadeIn>
-                <FadeIn delay={160}>
-                  <Text className="text-dim mt-2.5 text-sm leading-6">
-                    组织、角色和数据范围各自成件，靠结构咬合。
-                  </Text>
-                </FadeIn>
-              </View>
+            {/* 表单卡 */}
+            <FadeIn delay={120}>
+              <Card>
+                <MethodTabs value={method} onChange={setMethod} />
+                {/* 🔴 三个页签内容高度要一致，否则切换时整块卡片会跳 */}
+                <View style={{ minHeight: 274 }}>
+                  {method !== 'password' ? (
+                    <NotWired method={method} onUsePassword={() => setMethod('password')} />
+                  ) : (
+                    <View className="gap-3.5 p-4">
+                      {bootstrapError ? (
+                        <View className="border-destructive/40 bg-destructive/10 gap-1 rounded-xl border p-3">
+                          <Text className="text-ink text-sm font-medium">启动时没能连上服务器</Text>
+                          <Text className="text-dim text-xs">{bootstrapError}</Text>
+                        </View>
+                      ) : null}
 
-              {/* 表单牌子：浮在面板上的一块 node 色 */}
-              <FadeIn delay={210}>
-                <View className="bg-node border-hair overflow-hidden rounded-2xl border">
-                  <MethodTabs value={method} onChange={setMethod} />
-                  {/* 🔴 三个页签内容高度必须一致，否则切换时整块卡片会跳。
-                      minHeight 取「密码表单」那一屏的高度 */}
-                  <View style={{ minHeight: 268 }}>
-                    {method !== 'password' ? (
-                      <NotWired method={method} onUsePassword={() => setMethod('password')} />
-                    ) : (
-                      <View className="gap-3.5 p-5">
-                        {bootstrapError ? (
-                          <View className="border-destructive/40 bg-destructive/10 gap-1 rounded-xl border p-3">
-                            <Text className="text-ink text-sm font-medium">启动时没能连上服务器</Text>
-                            <Text className="text-dim text-xs">{bootstrapError}</Text>
-                          </View>
-                        ) : null}
+                      <Input
+                        value={username}
+                        onChangeText={setUsername}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        textContentType="username"
+                        placeholder="用户名"
+                        testID="login-username"
+                      />
+                      <Input
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry
+                        textContentType="password"
+                        placeholder="密码"
+                        onSubmitEditing={() => void submit()}
+                        testID="login-password"
+                      />
+                      <CaptchaBlock
+                        state={captcha}
+                        code={code}
+                        onChangeCode={setCode}
+                        onRetry={() => void loadCaptcha()}
+                        onSubmit={() => void submit()}
+                      />
 
-                        <Input
-                          value={username}
-                          onChangeText={setUsername}
-                          autoCapitalize="none"
-                          autoCorrect={false}
-                          textContentType="username"
-                          placeholder="用户名"
-                          testID="login-username"
-                        />
-                        <Input
-                          value={password}
-                          onChangeText={setPassword}
-                          secureTextEntry
-                          textContentType="password"
-                          placeholder="密码"
-                          onSubmitEditing={() => void submit()}
-                          testID="login-password"
-                        />
-                        <CaptchaBlock
-                          state={captcha}
-                          code={code}
-                          onChangeCode={setCode}
-                          onRetry={() => void loadCaptcha()}
-                          onSubmit={() => void submit()}
-                        />
+                      {error ? (
+                        <Text className="text-destructive text-sm" testID="login-error">
+                          {error}
+                        </Text>
+                      ) : null}
 
-                        {error ? (
-                          <Text className="text-destructive text-sm" testID="login-error">
-                            {error}
-                          </Text>
-                        ) : null}
+                      <Button size="lg" disabled={!canSubmit} onPress={() => void submit()} testID="login-submit">
+                        {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
+                        <Text>{submitting ? '登录中' : '登录'}</Text>
+                      </Button>
 
-                        <Button
-                          size="lg"
-                          disabled={!canSubmit}
-                          onPress={() => void submit()}
-                          testID="login-submit"
-                        >
-                          {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
-                          <Text>{submitting ? '登录中' : '登录'}</Text>
-                        </Button>
-
-                        <Checkbox
-                          checked={remember}
-                          onChange={setRemember}
-                          label="记住账号"
-                          testID="login-remember"
-                        />
-                      </View>
-                    )}
-                  </View>
+                      <Checkbox checked={remember} onChange={setRemember} label="记住账号" testID="login-remember" />
+                    </View>
+                  )}
                 </View>
-              </FadeIn>
-            </View>
+              </Card>
+            </FadeIn>
 
-            {/* 页脚：技术栈 + 版本，等宽小字大字距 —— web 面板底部同款 */}
-            <FadeIn delay={300}>
-              <View className="gap-3">
-                <Rule />
-                <View className="flex-row items-center justify-between gap-3">
-                  <Text
-                    numberOfLines={1}
-                    className="text-faint shrink font-mono text-[10px]"
-                    style={{ letterSpacing: 2 }}
-                  >
-                    {BRAND.stack.join('  ·  ')}
-                  </Text>
-                  <Text className="text-faint font-mono text-[10px]" style={{ letterSpacing: 2 }}>
-                    {BRAND.version}
-                  </Text>
-                </View>
+            <FadeIn delay={220}>
+              <View className="flex-row items-center justify-between gap-3 px-1 pt-1">
+                <Text
+                  numberOfLines={1}
+                  className="text-faint shrink font-mono text-[10px]"
+                  style={{ letterSpacing: 1.6 }}
+                >
+                  {BRAND.stack.join('  ·  ')}
+                </Text>
+                <Text className="text-faint font-mono text-[10px]" style={{ letterSpacing: 1.6 }}>
+                  {BRAND.version}
+                </Text>
               </View>
             </FadeIn>
           </ScrollView>
         </KeyboardAvoidingView>
       </View>
     </>
-  )
-}
-
-/**
- * 入场：上移 10px 的淡入，620ms，错开 60/110/160/210/300ms。
- * 曲线和延迟都照抄 web 的 `.tenon-in` —— 两端打开的节奏是一样的。
- *
- * ⚠️ 用 `Animated`（RN 自带）而不是 reanimated：这就一个透明度 + 位移，
- * 不值得为它引入 worklet 那一层。
- */
-function FadeIn({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
-  const t = React.useRef(new Animated.Value(0)).current
-  React.useEffect(() => {
-    Animated.timing(t, { toValue: 1, duration: 620, delay, useNativeDriver: true }).start()
-  }, [t, delay])
-  return (
-    <Animated.View
-      style={{ opacity: t, transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }}
-    >
-      {children}
-    </Animated.View>
-  )
-}
-
-function CaptchaBlock({
-  state,
-  code,
-  onChangeCode,
-  onRetry,
-  onSubmit,
-}: {
-  state: CaptchaState
-  code: string
-  onChangeCode: (v: string) => void
-  onRetry: () => void
-  onSubmit: () => void
-}) {
-  if (state.kind === 'off') return null
-
-  if (state.kind === 'loading') {
-    return (
-      <View className="h-12 flex-row items-center gap-2">
-        <ActivityIndicator size="small" />
-        <Text className="text-dim text-sm">正在取验证码</Text>
-      </View>
-    )
-  }
-
-  if (state.kind === 'error') {
-    return (
-      <View className="border-destructive/40 bg-destructive/10 gap-2 rounded-xl border p-3">
-        <Text className="text-ink text-sm">验证码没取到：{state.msg}</Text>
-        <Button size="sm" variant="outline" onPress={onRetry}>
-          <Text>重试</Text>
-        </Button>
-      </View>
-    )
-  }
-
-  return (
-    <View className="flex-row items-center gap-3">
-      <Input
-        value={code}
-        onChangeText={onChangeCode}
-        autoCapitalize="none"
-        autoCorrect={false}
-        className="flex-1"
-        placeholder="验证码"
-        onSubmitEditing={onSubmit}
-        testID="login-captcha"
-      />
-      {/* 后端给的是**裸 base64**，不带 `data:` 前缀 —— 要自己拼，
-          少拼的话 Image 静默什么都不显示（不报错） */}
-      <Button variant="outline" className="h-12 w-28 p-0" onPress={onRetry} testID="login-captcha-image">
-        <Image
-          source={{ uri: `data:image/jpeg;base64,${state.image}` }}
-          style={{ width: 106, height: 42, borderRadius: 6 }}
-          resizeMode="contain"
-        />
-      </Button>
-    </View>
   )
 }
 
@@ -438,6 +330,87 @@ function NotWired({ method, onUsePassword }: { method: Method; onUsePassword: ()
       <Text className="text-faint text-center text-xs leading-5">{copy.hint}</Text>
       <Button size="sm" variant="outline" onPress={onUsePassword} className="mt-1">
         <Text>用密码登录</Text>
+      </Button>
+    </View>
+  )
+}
+
+/**
+ * 入场：上移 10px 的淡入，620ms，错开延迟。
+ * 曲线和节奏照抄 web 的 `.tenon-in` —— 两端打开的感觉是一样的。
+ *
+ * ⚠️ 用 `Animated`（RN 自带）而不是 reanimated：这就一个透明度 + 位移，
+ * 不值得为它引入 worklet 那一层。
+ */
+function FadeIn({ delay = 0, children }: { delay?: number; children: React.ReactNode }) {
+  const t = React.useRef(new Animated.Value(0)).current
+  React.useEffect(() => {
+    Animated.timing(t, { toValue: 1, duration: 620, delay, useNativeDriver: true }).start()
+  }, [t, delay])
+  return (
+    <Animated.View
+      style={{ opacity: t, transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) }] }}
+    >
+      {children}
+    </Animated.View>
+  )
+}
+
+function CaptchaBlock({
+  state,
+  code,
+  onChangeCode,
+  onRetry,
+  onSubmit,
+}: {
+  state: CaptchaState
+  code: string
+  onChangeCode: (v: string) => void
+  onRetry: () => void
+  onSubmit: () => void
+}) {
+  if (state.kind === 'off') return null
+
+  if (state.kind === 'loading') {
+    return (
+      <View className="h-12 flex-row items-center gap-2">
+        <ActivityIndicator size="small" />
+        <Text className="text-faint text-sm">正在取验证码</Text>
+      </View>
+    )
+  }
+
+  if (state.kind === 'error') {
+    return (
+      <View className="border-destructive/40 bg-destructive/10 gap-2 rounded-xl border p-3">
+        <Text className="text-ink text-sm">验证码没取到：{state.msg}</Text>
+        <Button size="sm" variant="outline" onPress={onRetry}>
+          <Text>重试</Text>
+        </Button>
+      </View>
+    )
+  }
+
+  return (
+    <View className="flex-row items-center gap-3">
+      <Input
+        value={code}
+        onChangeText={onChangeCode}
+        autoCapitalize="none"
+        autoCorrect={false}
+        className="flex-1"
+        placeholder="验证码"
+        onSubmitEditing={onSubmit}
+        testID="login-captcha"
+      />
+      {/* 后端给的是**裸 base64**，不带 `data:` 前缀 —— 要自己拼，
+          少拼的话 Image 静默什么都不显示（不报错） */}
+      <Button variant="outline" className="h-12 w-28 p-0" onPress={onRetry} testID="login-captcha-image">
+        <Image
+          source={{ uri: `data:image/jpeg;base64,${state.image}` }}
+          style={{ width: 106, height: 42, borderRadius: 6 }}
+          resizeMode="contain"
+        />
       </Button>
     </View>
   )

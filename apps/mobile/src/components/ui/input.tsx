@@ -26,8 +26,8 @@ function Input({
     <TextInput
       placeholderTextColor={typeof placeholderColor === 'string' ? placeholderColor : undefined}
       className={cn(
-        'border-input bg-background text-foreground h-11 rounded-md border px-3 text-base',
-        props.editable === false && 'bg-muted text-muted-foreground',
+        'border-hair bg-panel text-ink h-12 rounded-xl border px-3.5 text-[15px]',
+        props.editable === false && 'text-faint',
         className,
       )}
       {...props}

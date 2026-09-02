@@ -1,3 +1,5 @@
+import { StyleSheet } from 'react-native'
+
 import { Tabs } from 'expo-router'
 import { HomeIcon, LayoutGridIcon, UserRoundIcon } from 'lucide-react-native'
 import { useCSSVariable } from 'uniwind'
@@ -22,9 +24,11 @@ const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
  * 再叠一条系统标题栏会很挤。
  */
 export default function AppLayout() {
-  const primary = useCSSVariable('--color-primary')
-  const muted = useCSSVariable('--color-muted-foreground')
+  const primary = useCSSVariable('--color-accent')
+  const muted = useCSSVariable('--color-faint')
   const { unread } = useUnread()
+  const node = useCSSVariable('--color-node')
+  const line = useCSSVariable('--color-line')
 
   return (
     <Tabs
@@ -35,7 +39,15 @@ export default function AppLayout() {
         // 而写死之后深浅色主题里必然有一头是错的。
         tabBarActiveTintColor: str(primary),
         tabBarInactiveTintColor: str(muted),
-        headerTitleStyle: { fontSize: 17 },
+        // tab 栏要和内容区的「浅底」区分开，否则中间是一道生硬的接缝。
+        // 顶边用 hairlineWidth 而不是 1 —— 1px 在高密度屏上是两三个物理像素，很重。
+        tabBarStyle: {
+          backgroundColor: str(node),
+          borderTopColor: str(line),
+          borderTopWidth: StyleSheet.hairlineWidth,
+          elevation: 0,
+        },
+        tabBarLabelStyle: { fontSize: 11 },
       }}
     >
       <Tabs.Screen

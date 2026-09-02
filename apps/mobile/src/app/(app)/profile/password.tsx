@@ -3,7 +3,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } f
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Eyebrow, Rule } from '@/components/ui/panel'
+import { Eyebrow } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
@@ -49,7 +49,6 @@ export default function ChangePasswordScreen() {
         <Text className="text-ink text-2xl font-semibold" style={{ letterSpacing: -0.6 }}>
           密码已修改
         </Text>
-        <Rule />
         <Text className="text-dim text-sm leading-6">
           服务端已经作废了当前会话，这是后端的既定行为，不是出错。请用新密码重新登录。
         </Text>

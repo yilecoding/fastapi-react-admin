@@ -1,4 +1,6 @@
 import { Stack } from 'expo-router'
+import { StyleSheet } from 'react-native'
+import { useCSSVariable } from 'uniwind'
 
 import { UnreadProvider } from '@/lib/notifications'
 
@@ -14,9 +16,24 @@ import { UnreadProvider } from '@/lib/notifications'
  * 其余屏推在 tab 之上，天然带返回键、盖住 tab 栏 —— 这是移动端的常规做法。
  */
 export default function AppLayout() {
+  const node = useCSSVariable('--color-node')
+  const line = useCSSVariable('--color-line')
+  const ink = useCSSVariable('--color-ink')
+  const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
+
   return (
     <UnreadProvider>
-      <Stack screenOptions={{ headerBackButtonDisplayMode: 'minimal' }}>
+      <Stack
+        screenOptions={{
+          headerBackButtonDisplayMode: 'minimal',
+          // 导航头和 tab 栏用同一块 node 色，底边是发丝线 —— 全 App 只有这一种「面」
+          headerStyle: { backgroundColor: str(node) },
+          headerTintColor: str(ink),
+          headerTitleStyle: { fontSize: 16, fontWeight: '600', color: str(ink) },
+          headerShadowVisible: false,
+          contentStyle: { borderTopColor: str(line), borderTopWidth: StyleSheet.hairlineWidth },
+        }}
+      >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="notifications" options={{ title: '通知' }} />
         <Stack.Screen name="profile/edit" options={{ title: '编辑资料' }} />
