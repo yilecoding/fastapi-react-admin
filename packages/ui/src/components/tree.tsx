@@ -147,7 +147,8 @@ export function Tree({
           expandedSet={expandedSet}
           onToggleExpand={(id) => {
             const next = new Set(expandedSet)
-            next.has(id) ? next.delete(id) : next.add(id)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
             setExpanded([...next])
           }}
           onToggleCheck={toggle}

@@ -66,7 +66,7 @@ export function useTabActions() {
       },
       openInNewWindow: (tab: Tab) => window.open(tab.href, '_blank', 'noopener,noreferrer'),
     }
-  }, [go, goKey])
+  }, [go, goKey, qc])
 }
 
 export type TabCapabilities = {

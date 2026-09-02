@@ -28,9 +28,14 @@
     "zustand": "^5"
   },
   "devDependencies": {
+    "@eslint/js": "^10",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "typescript": "~6"
+    "eslint": "^10",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17",
+    "typescript": "~6",
+    "typescript-eslint": "^8"
   },
   "exports": {
     "./api-client/*": "./src/api-client/*.ts",

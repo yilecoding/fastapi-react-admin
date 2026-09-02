@@ -66,11 +66,17 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # 🔴 **跑 `pnpm lint`（= `turbo lint`），不要写 `--filter <某个包>`。**
+      #
+      # 这里原来是 `pnpm --filter web lint`，于是**别的包的 lint 从来没跑过**：
+      #   - `packages/ui` 悄悄红了 58 条（配置和脚本都在，只是没人跑）
+      #   - `packages/platform` 声明了 `"lint": "eslint"` 却既没装 eslint 也没配置，
+      #     `pnpm lint` 一路 `eslint: not found` —— 一个写在根 CLAUDE.md 里的
+      #     脚本坏了很久，因为 CI 绕过了它
+      #
+      # 用 turbo 跑就没有「漏了哪个包」这回事：谁声明了 lint 谁就在里面。
       - name: eslint
-        run: pnpm --filter web lint
-
-      - name: eslint mobile
-        run: pnpm --filter @admin/mobile lint
+        run: pnpm lint
 
   lint-backend:
     name: ruff

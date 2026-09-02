@@ -303,11 +303,21 @@ const search = Route.useSearch()
 React StrictMode 开发期把 effect 跑两遍。命中限流的接口（如 `/auth/captcha` 的 5次/30秒）
 不去重就是配额腰斩。用 `inFlight` ref 挡住并发调用，配 `alive` ref 防卸载后 setState。
 
-### 11. 不要在仓库根裸跑 `npx tsc -b`
+### 11. 闸门要用 `pnpm <task>` 跑，不要写 `--filter <某个包>`
+
+CI 的 eslint job 原来是 `pnpm --filter web lint`，于是**别的包的 lint 从来没跑过**：
+`packages/ui` 悄悄红了 58 条（配置和脚本都在，只是没人跑）；`packages/platform`
+声明了 `"lint": "eslint"` 却既没装 eslint 也没配置，**`pnpm lint` 一路
+`eslint: not found`** —— 一个写在这份文档里的脚本坏了很久，而 CI 绕过了它。
+
+用 `turbo` 跑（`pnpm lint` / `pnpm typecheck` / `pnpm build`）就没有「漏了哪个包」
+这回事：谁声明了那个 task 谁就在里面。**新增一个包的 lint/typecheck 时不用改 CI。**
+
+### 12. 不要在仓库根裸跑 `npx tsc -b`
 
 根目录没配 `noEmit`，会往 `src` 里吐编译产物（git 未跟踪，容易漏）。统一 `pnpm typecheck`。
 
-### 12. `pnpm typecheck` 的结论要配 `--force` 才可信
+### 13. `pnpm typecheck` 的结论要配 `--force` 才可信
 
 turbo 会缓存 typecheck 的结果，而缓存命中时**打印的是上一次的日志**。
 两种翻车方式都实际发生过：
