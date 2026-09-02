@@ -1,3 +1,13 @@
+/**
+ * ⚠️ **目前没有调用方，这是刻意留的**（死代码扫描会报到它，别顺手删）。
+ *
+ * 判据和被删掉的 `date-picker` / `date-range-picker` 不同 —— 那两个有**现成的
+ * 替代品**（`datetime-picker.tsx` 的 `DateTimeValuePicker` /
+ * `DateTimeRangePicker`，查询区在用），删了不丢任何东西。
+ * 而这个组件在 shadcn / Base UI 生态里**没有对应物**，是手写的：
+ * 月/年两级选择、跨年翻页、以及「只到月份」这种粒度的值格式。
+ * 真要做月度报表筛选时从这里开始改，不要重写。
+ */
 "use client"
 
 import * as React from "react"
