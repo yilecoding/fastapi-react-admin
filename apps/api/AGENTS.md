@@ -321,6 +321,15 @@ m2m 的关联在分页**之后**按本页 ID 批量补一次（`user_service._at
 m2m，但它们是**单条详情**（`id=pk`），不过分页，扇出的多行正是要聚合的数据。
 判据是一句话：**这个 Select 会不会被交给 `paging_data`。**
 
+这条判据已经做成静态守卫（同一个测试文件里的
+`test_paginated_selects_never_join_m2m_tables`）：本仓库里 `-> Select` 就等于
+「要交给 `paging_data`」，所以按**返回类型**就能把两类方法分开，
+m2m 表名从 `model/m2m.py` 自动发现。全仓扫了一遍，只有 `crud_user` 一处。
+
+⚠️ 守卫必须区分 **join 和子查询**，不能只搜表名 —— 第一版就是搜表名，
+当场把刚修好的 `get_select` 报成违规（它的角色筛选用的正是子查询）。
+现在走 AST，只看 `JoinConfig(model=…)` 和 `.join(…)` 的实参。
+
 ### 顺带纠正一条假注释
 
 `common/security/data_scope.py` 的 `count()` 覆盖，原来的注释写着「分页总数也要

@@ -12,6 +12,8 @@
 **永远不显形** —— 必须显式造一个多角色用户才测得出来。
 """
 
+from typing import Any
+
 import pytest
 
 from starlette.testclient import TestClient
@@ -139,3 +141,97 @@ def test_role_filter_keeps_all_roles_of_the_user(
         assert wanted in {str(r['id']) for r in item['roles']}, (
             f'{item["username"]} 没有被筛的那个角色，却出现在结果里 —— 子查询没起作用'
         )
+
+
+def _m2m_table_names() -> set[str]:
+    """`model/m2m.py` 里所有中间表的变量名。
+
+    **自动发现，不硬编码** —— 以后加一张中间表，下面那条守卫自动罩上去。
+    """
+    import sqlalchemy as sa
+
+    from backend.app.admin.model import m2m
+
+    return {name for name, obj in vars(m2m).items() if isinstance(obj, sa.Table)}
+
+
+def _crud_modules() -> list[Any]:
+    """所有 `*/crud/*` 模块（含插件）"""
+    import importlib
+    import pkgutil
+
+    modules = []
+    for pkg_name in ('backend.app', 'backend.plugin'):
+        pkg = importlib.import_module(pkg_name)
+        modules.extend(
+            importlib.import_module(info.name)
+            for info in pkgutil.walk_packages(pkg.__path__, f'{pkg_name}.')
+            if '.crud.' in info.name
+        )
+    return modules
+
+
+def _joined_m2m(source: str, m2m_tables: set[str]) -> list[str]:
+    """挑出源码里**被 join 的** m2m 表名
+
+    🔴 **只看 `JoinConfig(model=…)` 和 `.join(…)` 的实参，不搜表名。**
+    子查询（`id.in_(select(user_role.c.user_id)…)`）不增加行数、是正解，
+    搜表名会把它一起报出来 —— 第一版就是这么写的，当场误报了修好的代码。
+    """
+    import ast
+    import textwrap
+
+    found: set[str] = set()
+    for node in ast.walk(ast.parse(textwrap.dedent(source))):
+        if not isinstance(node, ast.Call):
+            continue
+        args: list[ast.expr] = []
+        func = node.func
+        if isinstance(func, ast.Name) and func.id == 'JoinConfig':
+            args = [kw.value for kw in node.keywords if kw.arg == 'model']
+        elif isinstance(func, ast.Attribute) and func.attr in {'join', 'outerjoin', 'join_from'}:
+            args = list(node.args)
+        found.update(a.id for a in args if isinstance(a, ast.Name) and a.id in m2m_tables)
+    return sorted(found)
+
+
+def test_paginated_selects_never_join_m2m_tables() -> None:
+    """🔴 守卫：返回 `Select` 的 DAO 方法里不能 **join** m2m 中间表。
+
+    这个仓库里 `-> Select` 是一个**约定**：它表示「这个查询要交给
+    `paging_data` 分页」。而 m2m join 会让一条记录扇成多行，分页就错
+    （症状见本文件开头）。真正 join m2m 的方法（`crud_role.get_join`、
+    `crud_data_scope` 那些）返回的是**序列化好的结果**、不是 Select，
+    扇出的多行正是要聚合的数据 —— 所以按返回类型就能把两类分开。
+
+    ⚠️ 按**方法**查，不能按文件查：`crud_user.py` / `crud_role.py` 里
+    m2m 表名各出现 20 多次，绝大多数在增删改和单条详情里，都是对的。
+    """
+    import inspect
+
+    from sqlalchemy import Select
+
+    m2m_tables = _m2m_table_names()
+    assert m2m_tables, 'model/m2m.py 里没发现任何 sa.Table —— 这条守卫会静默失效'
+    modules = _crud_modules()
+    assert modules, '一个 crud 模块都没扫到 —— 这条守卫会静默失效'
+
+    offenders = []
+    checked = 0
+    for mod in modules:
+        for _, cls in inspect.getmembers(mod, inspect.isclass):
+            if cls.__module__ != mod.__name__:
+                continue
+            for fn_name, fn in inspect.getmembers(cls, inspect.isfunction):
+                if inspect.signature(fn).return_annotation is not Select:
+                    continue
+                checked += 1
+                hits = _joined_m2m(inspect.getsource(fn), m2m_tables)
+                if hits:
+                    offenders.append(f'{mod.__name__}.{cls.__name__}.{fn_name} → {hits}')
+
+    assert checked >= 10, f'只找到 {checked} 个返回 Select 的方法，约定可能变了，这条守卫已经罩不住了'
+    assert not offenders, (
+        '这些方法返回的 Select 会交给 paging_data 分页，但里面 join 了 m2m 中间表 —— '
+        '一条记录会扇成多行，total 和翻页会一起错：\n  ' + '\n  '.join(offenders)
+    )
