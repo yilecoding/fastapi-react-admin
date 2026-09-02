@@ -224,7 +224,7 @@ pnpm hooks:install       # = apps/api/.venv/bin/prek install -C apps/api -f
 ### 1. 平台页面组件必须 router-独立
 
 `params` / `search` **只能走 props**，页面内部不得调用
-`Route.useSearch()` / `Route.useParams()` / `useNavigate()`。
+`Route.useSearch()` / `Route.useParams()` / `useNavigate()`。**有闸门：`pnpm arch:check`。**
 
 > 原因：多页签用 `<Activity>` 同时挂载所有已打开的 tab，
 > 但 router 只有一个 location 是「匹配」的 —— 隐藏 tab 拿不到 match 上下文。
@@ -252,6 +252,7 @@ const search = Route.useSearch()
 
 `apps/web/src/routes/**` 只声明 `validateSearch` / `staticData` / `beforeLoad` 守卫，
 `component: () => null`。页面由 `TabOutlet` 按 `lib/page-registry.tsx` 挂载。
+**有闸门：`pnpm arch:check`**（只管 `_auth/` 目录下的，布局和 `_guest/**` 不算）。
 
 ### 4. TabOutlet 不能与 `<Outlet />` 共存
 
@@ -260,7 +261,7 @@ const search = Route.useSearch()
 ### 5. 隐藏 tab 的 DOM 仍在文档树里
 
 任何 `document.querySelector` / 全局 DOM 测量 / 第三方库的全局选择器
-都会命中隐藏页 —— 必须限定在 `[data-visible="true"]` 内。
+都会命中隐藏页 —— 必须限定在 `[data-visible="true"]` 内。**有闸门：`pnpm arch:check`。**
 
 > ⚠️ 但 `[data-visible="true"]` **不是瞬时唯一的**。切 tab 时有一段窗口
 > 两个 frame 都是 `true`（实测：应用内切 tab ~18ms，整页加载后 ~300ms，
@@ -395,5 +396,5 @@ pnpm db:history                        # 看链条
 - 分叉基线记在 `apps/api/.upstream-baseline`
 - 上游同为 MIT 协议，原始版权声明保留在 `apps/api/LICENSE`
 - 后端架构文档（三层结构 / 插件机制 / RBAC 的设计意图）看上游那份最全：
-  <https://docs.fba.wu-clan.cc>——本仓库的 `apps/api/AGENTS.md` 只记两件事上游文档没有的：
-  和上游的差异点、以及这里踩过的实测坑
+  <https://docs.fba.wu-clan.cc>——本仓库的 `apps/api/AGENTS.md` 只记上游没有的两件事：
+  差异点、和这里踩过的实测坑

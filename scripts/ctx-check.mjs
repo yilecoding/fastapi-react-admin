@@ -162,7 +162,10 @@ function resolvePathish(tok) {
 for (const file of ctxFiles) {
   const raw = readFileSync(join(ROOT, file), 'utf8')
   const lines = stripFences(raw)
-  const total = raw.split('\n').length
+  // ⚠️ 末尾换行后面那个空串**不是一行**。原来直接 `split('\n').length`，
+  // 每个文件都多算 1 行 —— 而这个 +1 真的让人白削过文档：一份 400 行、
+  // 预算 400 的文件会被报成「401 行超预算」，然后有人去删掉一句真内容。
+  const total = raw.replace(/\n$/, '').split('\n').length
   const budget = BUDGET[file] ?? BUDGET.default
 
   // 1) 行数预算

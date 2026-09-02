@@ -55,6 +55,33 @@ dev 脚本、零 JS 依赖，不参与）：
 三条 error 都做过反向验证：删掉 `apps/web` 的 `@admin/platform` 声明
 → 前两条同时红；给 `packages/ui` 加上 `@admin/platform` → 第三条红。
 
+### 下半场：多页签那三条硬纪律
+
+| 规则 | 硬纪律 | 违反后的表现 |
+|---|---|---|
+| `page-reads-router` —— 页面组件不得调 `Route.useSearch/useParams` / `useNavigate` | 1 | 隐藏 tab 拿不到 match 上下文 |
+| `route-renders-page` —— `routes/_auth/` 下的 `component` 必须是 `() => null` | 3 | 页面被挂两次 / 切走丢状态 |
+| `unscoped-dom-query` —— `document.querySelector` 等必须带 `[data-tab=…]` 或 `[data-visible="true"]` | 5 | 命中隐藏页的 DOM |
+
+这三条**当前全仓干净**，所以它们是回归守卫，不是在抓存量。值得做成闸门是因为
+失败方式极难归因：违反了不报错，只会「切回这个 tab 时筛选条件没了」或
+「测量到的是隐藏页的尺寸」，而人第一反应永远是去查那个功能本身。
+
+三条同样做过反向验证（各注入一处违规 → 各自红），**而且验证了正确写法能通过** ——
+`[data-tab="/_auth/monitor/server"] …` 和 `[data-visible="true"] …` 两种限定都放行。
+只验「错的会红」不验「对的能过」，规则很容易变成误报陷阱。
+
+⚠️ 三处判定上的讲究：
+
+- **路径判断**：只管 `routes/_auth/` **目录下**的。`routes/_auth.tsx` 自己是布局、
+  `__root.tsx` / `_guest/**` 在多页签体系之外，它们渲染组件是对的。
+  第一版用 `includes('routes/_auth')`，把布局文件也框进来了
+- **`document.getElementById` 也要管**：id 看着「全文档唯一」，但同一个页面被
+  两个 tab 挂载时 id 就重了。允许清单里只有 `apps/web/src/main.tsx`
+  的 React 挂载点（它跑在任何 tab 存在之前）
+- **必须先剥注释**：`pages/` 下有 9 处注释在引用这三条规则本身
+  （「内部不碰 `Route.useSearch()`」这类），裸 grep 会全部误报
+
 首次跑就抓到一条真的：`packages/ui` 在 `package.json` 和 `tsconfig.json` 里
 都声明了 `@admin/i18n`，但**全包无一处 import**（它直接依赖 `react-i18next`，
 而 `packages/i18n` 也没有任何 `declare module` 类型增强）。已删。
@@ -112,6 +139,19 @@ pnpm ctx:check          # 死引用 / 死链接 / 死脚本 / 死 testid / 行�
 
 它**不**校验文字对不对（那要人读），只校验「指向的东西还在不在」。
 这一层能自动守住，剩下的才值得花人的注意力。
+
+### 行数预算原来每个文件都多算 1 行
+
+`ctx:check` 数行用的是 `raw.split('\n').length` —— 末尾换行后面那个空串
+**被当成了一行**，于是每个文件的报数都 +1。一份正好 400 行、预算 400 的文件
+会被报成「401 行超预算」。
+
+这个 off-by-one 真的让人白削过文档：我为了把 `CLAUDE.md` 压回预算内，
+连着删了几句真内容，最后才发现 `wc -l` 是 400、检查说 401。
+已修成 `raw.replace(/\n$/, '').split('\n').length`。
+
+判据：**闸门自己报的数字也要能对得上 `wc -l`。** 一个系统性偏 1 的阈值检查，
+会让人反复付出「删掉一句真东西」的代价，而且每次都以为是自己写多了。
 
 ### 这套文档怎么自己长大
 

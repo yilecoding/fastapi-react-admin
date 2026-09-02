@@ -17,7 +17,9 @@
  * 「一直是绿的，直到某个地方第一次做 scoped install」正是**能被机器核对**的
  * 那种断言 —— 和 `ctx:check` / `i18n:check` 同一个物种，所以做成闸门。
  *
- * 四条规则：
+ * 两组共七条：
+ *
+ * **依赖箭头**（本文件上半）
  *
  * | 规则 | 级别 | 为什么 |
  * |---|---|---|
@@ -25,6 +27,18 @@
  * | tsconfig paths 映射了就必须声明 | error | 事故的**上游**：漂移从这里开始 |
  * | 箭头方向不能反 | error | `ui → platform` 之类会把分层吃穿 |
  * | 声明了但没人 import | warn | 死声明会误导下一个读箭头的人 |
+ *
+ * **多页签那三条硬纪律**（本文件下半，全是 error）
+ *
+ * | 规则 | 硬纪律 | 违反后的表现 |
+ * |---|---|---|
+ * | 页面组件不读路由 | 1 | 隐藏 tab 拿不到 match 上下文 |
+ * | `_auth/` 下的路由文件不渲染页面 | 3 | 页面被挂两次 / 切走丢状态 |
+ * | 全局 DOM 查询要限定作用域 | 5 | 命中隐藏页的 DOM |
+ *
+ * 这三条现在全仓都是干净的，做成闸门是因为**失败方式极难归因**：
+ * 违反了不报错，只会「切回这个 tab 时筛选没了」/「测量到的是隐藏页的尺寸」，
+ * 而人第一反应永远是去查那个功能本身。七条全部做过反向验证（注入违规 → 红）。
  */
 
 import fs from 'node:fs'
@@ -214,6 +228,68 @@ for (const pkgDir of PACKAGES) {
   }
 }
 
+// ── 硬纪律 1 / 3 / 5：多页签那三条 ────────────────────────────────────
+//
+// 这三条现在全仓都是干净的，所以它们是**回归守卫**，不是在抓存量问题。
+// 值得做成闸门是因为**失败方式极难归因**：违反了不会报错，
+// 只会「切回这个 tab 时筛选条件没了」/「测量到的是隐藏页的尺寸」，
+// 而人第一反应永远是去查那个功能本身。
+
+const tsFiles = (dir) => walk(path.join(ROOT, dir)).filter((f) => /\.(ts|tsx)$/.test(f))
+const rel = (f) => path.relative(ROOT, f)
+
+// 硬纪律 1：平台页面组件必须 router-独立
+//
+// `<Activity>` 同时挂载所有已打开的 tab，但 router 只有一个 location 是
+// 「匹配」的 —— 隐藏 tab 拿不到 match 上下文。params / search 只能走 props。
+for (const file of tsFiles('packages/platform/src/pages')) {
+  const src = stripComments(fs.readFileSync(file, 'utf8'))
+  for (const m of src.matchAll(/Route\.use(?:Search|Params)\s*\(|\buseNavigate\s*\(/g)) {
+    add('error', rel(file), 'page-reads-router', `页面组件里出现了 ${m[0].trim()} —— 见硬纪律 1，params / search 只能走 props`)
+  }
+}
+
+// 硬纪律 3：路由文件不渲染页面
+//
+// ⚠️ 只管 `routes/_auth/` **目录下**的（走 TabOutlet 那些）。
+// `routes/_auth.tsx` 本身是布局、`__root.tsx` / `_guest/**` 在多页签体系之外，
+// 它们渲染组件是对的 —— 第一版路径判断用 `includes('routes/_auth')`，
+// 把布局文件也框进来了。
+for (const file of tsFiles('apps/web/src/routes')) {
+  if (!rel(file).includes(`routes${path.sep}_auth${path.sep}`)) continue
+  const src = stripComments(fs.readFileSync(file, 'utf8'))
+  const m = src.match(/component:\s*([^,\n]*)/)
+  if (m && !/\(\)\s*=>\s*null/.test(m[1])) {
+    add('error', rel(file), 'route-renders-page', `component 是 ${m[1].trim()} —— 见硬纪律 3，路由文件只声明守卫，页面由 TabOutlet 挂`)
+  }
+}
+
+// 硬纪律 5：全局 DOM 查询必须限定作用域
+//
+// 隐藏 tab 的 DOM **仍在文档树里**，`document.querySelector` 会命中它们。
+// 按 routeId 锁（`[data-tab="..."]`）比按可见性锁（`[data-visible="true"]`）更稳 ——
+// 切 tab 时有一段窗口两个 frame 都是 `true`（实测 ~18ms，整页加载后 ~300ms）。
+const DOM_QUERY_ALLOWLIST = new Set([
+  // React 挂载点。跑在任何 tab 存在之前，而且 `#root` 全文档唯一
+  path.join('apps', 'web', 'src', 'main.tsx'),
+])
+for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', 'apps/web/e2e']) {
+  for (const file of tsFiles(dir)) {
+    if (DOM_QUERY_ALLOWLIST.has(rel(file))) continue
+    const src = stripComments(fs.readFileSync(file, 'utf8'))
+    // 连着实参一起抓，才能判断有没有限定作用域
+    for (const m of src.matchAll(/document\.(querySelector|querySelectorAll|getElementById|getElementsBy\w+)\s*\(([^)]*)\)/g)) {
+      if (/data-visible|data-tab/.test(m[2])) continue
+      add(
+        'error',
+        rel(file),
+        'unscoped-dom-query',
+        `document.${m[1]} 没限定作用域 —— 见硬纪律 5，隐藏 tab 的 DOM 也在文档树里，按 [data-tab="<routeId>"] 锁`,
+      )
+    }
+  }
+}
+
 // ── 输出 ──────────────────────────────────────────────────────────────
 const errors = problems.filter((p) => p.level === 'error')
 const warns = problems.filter((p) => p.level === 'warn')
@@ -228,6 +304,6 @@ for (const [where, ps] of byWhere) {
   for (const p of ps) console.log(`  ${p.level === 'error' ? '✗' : '!'} [${p.rule}] ${p.msg}`)
 }
 
-console.log(`\n核对 ${PACKAGES.length} 个包 · 错误 ${errors.length} · 警告 ${warns.length}`)
-if (!problems.length) console.log('[ok] 依赖箭头没有漂')
+console.log(`\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 错误 ${errors.length} · 警告 ${warns.length}`)
+if (!problems.length) console.log('[ok] 没有漂')
 process.exit(errors.length ? 1 : 0)
