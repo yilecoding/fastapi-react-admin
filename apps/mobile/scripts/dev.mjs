@@ -26,6 +26,7 @@
  */
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 import path from 'node:path'
 
@@ -82,7 +83,7 @@ if (holder) {
       '',
       `❌ 端口 ${METRO_PORT} 被 pid ${holder} 占着（多半是上一次没关干净的 Metro）。`,
       `   先关掉：kill ${holder}`,
-      '   —— 刻意不自动漂到 8082：漂了之后下面打印的地址就是错的，比连不上更难查。',
+      '   —— 刻意不自动往下一个端口漂：漂了之后上面打印的地址就是错的，比连不上更难查。',
       '',
     ].join('\n'),
   )
@@ -109,6 +110,12 @@ if (!override && devices.length > 0) {
   console.log(`\n📱 WSL 内设备：${devices.join(', ')}（已 adb reverse ${METRO_PORT} / 8088）`)
 }
 
+// 🔴 换成 WSL 自己的 IP 时，**后端也得跟着改绑**。
+// `pnpm --filter api dev` 绑的是 `127.0.0.1`，从 WSL 的 eth0 地址上打不进去 ——
+// 表现是 bundle 加载得动、但一登录就 `Network request failed`，
+// 看着像后端挂了。这是这条路上唯一一个不明显的地方。
+const needsApiRebind = host !== HOST_LOOPBACK && host !== '127.0.0.1'
+
 console.log(
   [
     '',
@@ -118,7 +125,10 @@ console.log(
     `│  App 打的后端：${apiBase}`,
     '└─────────────────────────────────────────────',
     devices.length === 0 && !override
-      ? `   （按「宿主机上的模拟器」算的。用 MuMu / 雷电那类且连不上，就换成\n    MOBILE_HOST=<别的地址> pnpm mobile:dev）`
+      ? `   （按「宿主机上的模拟器」算的。连不上就换一个：\n    MOBILE_HOST=<别的地址> pnpm mobile:dev —— 候选见 AGENTS.md「设备」一节）`
+      : '',
+    needsApiRebind
+      ? `   🔴 用的不是宿主机 loopback，**后端要换成 \`pnpm --filter api dev:host\`**\n      （绑 0.0.0.0）。还用 \`dev\` 的话 bundle 加载得动、一登录就 Network request failed。`
       : '',
     '',
   ]
@@ -140,4 +150,10 @@ if (sdk) {
 // 服务还没起（`cmd: Can't find service: package`），`--android` 会让 expo
 // **整个进程退出** —— 一个瞬时的设备状态变成了「dev server 起不来」。
 const args = ['expo', 'start', '--port', METRO_PORT, ...process.argv.slice(2)]
-spawn('npx', args, { stdio: 'inherit', env }).on('exit', (code) => process.exit(code ?? 0))
+
+// cwd 钉在 apps/mobile：从仓库根直接 `node apps/mobile/scripts/dev.mjs` 时，
+// `npx expo` 会在根目录找不到本地 expo → **去 npm 上装一个最新的**
+// （实测打出 `will be installed: expo@57.0.19`，而工程是 56）。
+// 那是一次很吵但指向完全错误的失败。
+const pkgDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+spawn('npx', args, { stdio: 'inherit', env, cwd: pkgDir }).on('exit', (code) => process.exit(code ?? 0))

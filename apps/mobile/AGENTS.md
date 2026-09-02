@@ -370,21 +370,43 @@ Tailwind 的 `placeholder:*` 是 CSS 伪元素变体，RN 里没有这个概念 
 
 **① 宿主机（Windows）上的模拟器 —— 现在就能用**
 
-`10.0.2.2` 在 Android 模拟器里是**宿主机的 loopback**；而 WSL2 默认
+`10.0.2.2` 在标准 AVD 里是**宿主机的 loopback**；而 WSL2 默认
 `localhostForwarding=true`，Windows 的 localhost 会转进 WSL。所以整条链是
 `10.0.2.2:8800` → Windows loopback → WSL 的 Metro，**WSL 侧什么都不用改，
-后端也可以继续只绑 `127.0.0.1`**。
+后端也可以继续只绑 `127.0.0.1`**。这是脚本的默认值，不用配。
 
     exp://10.0.2.2:8800        # Metro（固定 8800，不是 Expo 默认的 8081）
-    http://10.0.2.2:8088       # App 打的后端（脚本会自动注入）
+    http://10.0.2.2:8088       # App 打的后端（脚本自动注入）
 
-**② USB 真机 —— 也不用开任何口**
+**连不上时换哪个地址** —— `MOBILE_HOST=<地址> pnpm mobile:dev`：
 
-手机插 Windows，在 **Windows** 侧跑 `adb reverse tcp:8800 tcp:8800` 和
-`adb reverse tcp:8088 tcp:8088`：手机的 localhost → Windows 的 localhost →
-（localhostForwarding）→ WSL。然后
+| 地址 | 什么时候用 | 注意 |
+|---|---|---|
+| `10.0.2.2` | 标准 AVD（Android Studio 那个） | 默认值，后端可留在 `127.0.0.1` |
+| WSL 的 eth0 地址 | `10.0.2.2` 不成立时（MuMu / 雷电 / 夜神那类第三方模拟器） | 🔴 **后端要换成 `pnpm --filter api dev:host`**，见下 |
+| `127.0.0.1` | USB 真机 / WSL 内设备，配 `adb reverse` | 脚本检测到本地设备时自动选 |
 
-    MOBILE_HOST=127.0.0.1 pnpm mobile:dev
+WSL 的 eth0 地址**每次 WSL 重启都会变**，现查：
+
+```bash
+ip -4 addr show eth0 | grep -oP 'inet \K[\d.]+'
+```
+
+🔴 **换成 WSL 的 IP 时，后端也得跟着改绑。**
+`pnpm --filter api dev` 绑的是 `127.0.0.1`，从 eth0 那个地址打不进去。
+症状很误导：**bundle 加载得动、一登录就 `Network request failed`**，看着像后端挂了。
+所以另起了一个脚本：
+
+```bash
+pnpm --filter api dev:host        # 绑 0.0.0.0
+```
+
+⚠️ 绑 `0.0.0.0` 在这里**不等于暴露到局域网** —— WSL2 是 NAT 的，只有 Windows 宿主
+够得着（这也是当初否掉 mirrored / portproxy 想保住的性质）。脚本检测到不是
+宿主机 loopback 时会把这条提示打出来。
+
+不要用 Windows 的局域网地址（`ipconfig` 里 Wi-Fi 那个）—— Windows 上没有进程
+监听 8800，要让它转发就得 `netsh portproxy`，那条已经被否掉了。
 
 ⚠️ **Expo Go 一个客户端只支持一个 SDK。** 工程是 SDK 56，手机/模拟器上装的
 Expo Go 也得是 56（`https://expo.dev/go` 下，或用 `~/.expo/android-apk-cache/`
