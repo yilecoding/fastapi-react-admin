@@ -150,7 +150,7 @@ export const socialBindingsQuery = queryOptions({
  * 在「参数配置」或 `.env` 里改，不是前端能修的。
  *
  * 回跳端口的坑已经修了：`OAUTH2_FRONTEND_*_REDIRECT_URI` 原先指向 5173 而前端在
- * 5174，现在两边统一到 1125（`plugin/oauth2/plugin.toml` + `vite.config.ts`）。
+ * 5174，现在两边统一到 8888（`plugin/oauth2/plugin.toml` + `vite.config.ts`）。
  * **改前端端口时这两处要一起改**，只改一边的表现是「授权成功、回跳到空端口」。
  */
 export function useSocialBindingUrl() {
@@ -229,7 +229,7 @@ type UploadedImage = { id: string; public_url: string | null; original_name: str
  *
  * ⚠️ **存的是绝对地址，里面带着 API 主机名。** 后端 `avatar` 字段是 `HttpUrl`，
  * 只收完整地址，而 `public_url` 是相对路径（`/uploads/2026/08/22/xxx.png`）——
- * 相对路径交给浏览器会按**前端** origin 解析（:1125），拿到 404。所以这里必须拼
+ * 相对路径交给浏览器会按**前端** origin 解析（:8888），拿到 404。所以这里必须拼
  * `API_BASE`，代价是库里存下 `http://127.0.0.1:8000/uploads/…`：**换 API 主机名
  * 时这些行会全部失效**。要根治得把后端字段从 `HttpUrl` 改成 `str`、存相对路径、
  * 渲染处再拼 —— 那要动接口契约和所有渲染头像的地方，没做。

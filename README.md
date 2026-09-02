@@ -356,7 +356,7 @@ pnpm ctx:check                                          # 工程文档里的死�
 > 但**改模型不等于改表** —— 表结构改动一律走 alembic（`pnpm db:revision '...'` +
 > `pnpm db:upgrade`），reload 只是重新 import 模型，不会去动库。
 
-> ⚠️ 前端端口固定在 1125（`strictPort`，被占时直接报错而不是漂到 1126）。
+> ⚠️ 前端端口固定在 8888（`strictPort`，被占时直接报错而不是漂到 8889）。
 > 换端口要同时改 `vite.config.ts`、后端 `CORS_ALLOWED_ORIGINS`、
 > oauth2 的 `OAUTH2_FRONTEND_*_REDIRECT_URI` 三处 —— 详见 CLAUDE.md。
 

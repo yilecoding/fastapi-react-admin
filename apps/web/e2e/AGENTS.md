@@ -29,7 +29,7 @@ web :1126  →  api :8001  →  fba_test（不是开发用的 fba）
 
 | 隔离点 | 怎么做的 | 不隔离会怎样 |
 |---|---|---|
-| 端口 | `vite.config.ts` 读 `E2E_WEB_PORT`（未设置时还是 1125）；api 走 `apps/api/package.json` 的 `e2e:server` 脚本，`ENV_FILE=.env.e2e` 覆盖到 8001 | 跟 `pnpm dev` 撞端口，`strictPort` 直接报错退出 |
+| 端口 | `vite.config.ts` 读 `E2E_WEB_PORT`（未设置时还是 8888）；api 走 `apps/api/package.json` 的 `e2e:server` 脚本，`ENV_FILE=.env.e2e` 覆盖到 8001 | 跟 `pnpm dev` 撞端口，`strictPort` 直接报错退出 |
 | 数据库 | `.env.e2e` 把 `DATABASE_SCHEMA` 设成 `fba_test`（复用 pytest 已经在用、已经建好种子的那个库，不是另开一个） | E2E 造的测试部门/角色会写进你正在手测的开发库 `fba`，脏数据混进日常开发 |
 | Redis | `.env.e2e` 把 `REDIS_DATABASE` 换成 `2`（dev 用 0，celery 用 1） | `fba_test` 和 `fba` 是从**同一份**种子脚本建出来的，`admin` 用户在两边的雪花 ID
 **完全相同**（实测确认：`2048601263834267648`）。共用 Redis 会让 E2E 一登录就用

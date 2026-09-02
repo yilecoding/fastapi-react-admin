@@ -168,16 +168,22 @@ pnpm --filter api celery:beat             # 只能一个
 ```
 
 ⚠️ 前端端口固定在 **8888**（`vite.config.ts` 的 `server.port` + `strictPort: true`）。
-**换端口要同时改三处**，只改一处的失败方式都不长得像端口问题：
+**换端口要同时改四处**，只改一处的失败方式都不长得像端口问题：
 
 | 改哪里 | 漏了的表现 |
 |---|---|
 | `apps/web/vite.config.ts` | —— |
 | `backend/core/conf.py: CORS_ALLOWED_ORIGINS` | 页面能开，但**所有接口 CORS 失败** |
 | `backend/plugin/oauth2/plugin.toml` 的两条 `OAUTH2_FRONTEND_*_REDIRECT_URI` | 第三方授权成功后**回跳到空端口** |
+| `apps/desktop/scripts/dev.mjs` 的 `DEV_SERVER_URL` 默认值 | `pnpm desktop:dev` 在一个不存在的端口上等满 **60 秒**，然后打印「先跑 `pnpm --filter web dev`」—— 而它正在跑 |
 
-`strictPort: true` 是刻意的：不写它 Vite 会在端口被占时自己 +1 漂到 1126，
-而上面两处白名单是写死的 —— 宁可起不来，也不要「起来了但接口全挂」。
+🔴 **第四行是补上去的，因为它真的漂走过。** 端口从 1125 改成 8888 时这张表只写了
+三处，桌面端那个默认值被漏下 —— 于是 `pnpm desktop:dev` 一直等在 `localhost:1125`
+上，而超时提示指向一个**已经满足**的前提。改端口时最容易漏的就是「不在这张表里
+的那一处」，所以发现新的就往表里加，别只改代码。
+
+`strictPort: true` 是刻意的：不写它 Vite 会在端口被占时自己 +1 漂到 8889，
+而上面那三处都是写死的 —— 宁可起不来，也不要「起来了但接口全挂」。
 
 账号 `admin` / `123456`。登录要过验证码，验证码答案在 Redis：
 `docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"`。

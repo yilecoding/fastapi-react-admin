@@ -108,7 +108,7 @@ def test_security_switches_must_stay_on() -> None:
 
 def test_local_cors_origin_is_rejected() -> None:
     assert 'CORS_ALLOWED_ORIGINS' in _expect_rejected(
-        CORS_ALLOWED_ORIGINS=['https://admin.example.com', 'http://localhost:1125']
+        CORS_ALLOWED_ORIGINS=['https://admin.example.com', 'http://localhost:8888']
     )
 
 
