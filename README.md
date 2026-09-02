@@ -1,7 +1,7 @@
 # fastapi-react-admin
 
 **FastAPI + React 19 + shadcn/ui 中后台底座** —— 权限细到按钮和数据行，
-多页签切走真的保状态，原生跑 SQL Server。**248 条自动化测试全打真实依赖，不 mock。**
+多页签切走真的保状态，原生跑 SQL Server。**286 条自动化测试全打真实依赖，不 mock。**
 
 > 🚀 **在线演示 / Live demo：** https://fra.wubunan.com/sign-in
 > 账号 `admin` / 密码 `123456` —— 公开演示实例，任何人都能登录，数据会被访客改动/清空，
@@ -57,7 +57,9 @@
 
 An admin foundation on **FastAPI + React 19 + shadcn/ui** — permissions down to buttons
 *and data rows*, multi-tab navigation that actually keeps state, first-class **SQL Server**,
-and **248 automated tests that run against real dependencies, with no mocks**.
+and **286 automated tests that run against real dependencies, with no mocks**.
+Optional **Electron** desktop shell and a native **Expo / React Native** mobile app share
+the backend contract and the request client, not the rendering.
 
 Backend derived from **[fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)**
 (FBA): its three-layer structure, plugin system, and RBAC / data-scope model. This repo is
@@ -75,14 +77,14 @@ code goes next to `packages/platform/src/pages/user/` and follows the same shape
 | **Multi-tab**         | free in Vue via `keep-alive`; usually absent in React, or loses state       | React 19 **`<Activity>`** — every open tab stays mounted; hidden ones drop effects but keep DOM and state |
 | **Component base**    | most templates still on the pre-migration shadcn/Radix combo               | already tracks shadcn's current default, **Base UI** — zero `@radix-ui` imports, plus an in-app sandbox with copy-paste code for all 28+ components |
 | **Database**          | MySQL / PostgreSQL                                                         | **native SQL Server** (`aioodbc`, NVARCHAR, filtered unique indexes, `OFFSET FETCH`); MySQL and PostgreSQL also supported |
-| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **248 tests against real dependencies, zero mocks** — 194 pytest against a real SQL Server, 54 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 62 dedicated security tests |
+| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **286 tests against real dependencies, zero mocks** — 232 pytest against a real SQL Server, 54 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 68 dedicated security tests |
 
 **Status: 0.0.1, never released.** No production instance, no data to preserve — so the
 schema is still free to change. The backend is a **permanent fork** of
 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)
 (upstream declined to merge SQL Server support), tracking only its security patches.
 
-**Tests:** 194 pytest cases (real SQL Server) + 54 Playwright cases (isolated second
+**Tests:** 232 pytest cases (real SQL Server) + 54 Playwright cases (isolated second
 stack: web :1126 → api :8001 → `fba_test`). Data permissions are covered on both sides —
 22 accounts through the API, 19 through the browser. Neither suite runs in CI, because
 both need a live SQL Server instance; run them locally with `pnpm test` and `pnpm e2e`.
@@ -106,6 +108,12 @@ uvicorn (dev) / Granian (`fba run`) · **aioodbc** for SQL Server, asyncmy/PyMyS
 asyncpg/psycopg · Redis 8 + hiredis · Celery 5 + Flower · python-socketio ·
 pwdlib/bcrypt + python-jose · `pyrate-limiter` · OpenTelemetry (FastAPI/SQLAlchemy/Redis/
 Celery/httpx) + prometheus-client + loguru · `starlette-context` (request-scoped i18n)
+
+**Mobile** — Expo SDK 57 · React Native 0.86 · Expo Router · **uniwind** (Tailwind 4
+for RN — not nativewind, whose peer pins Tailwind 3) · `react-native-reusables` (shadcn
+for RN) · TanStack Query 5 · `expo-secure-store` for the access token (refresh stays in
+the httpOnly cookie, replayed by RN's own jar). Native UI, **not a WebView shell** —
+a mobile list is not a table.
 
 **Data & tooling** — SQL Server 2022 (NVARCHAR, filtered unique indexes, `OFFSET FETCH`) ·
 snowflake IDs carried as **strings end to end** · pnpm workspace + turbo 2 · uv · ruff 0.16
@@ -137,7 +145,7 @@ language-independent.
 | **多页签** | Vue 靠 `keep-alive` 白送；React 侧大多没有，或者切走就丢状态 | React 19 的 **`<Activity>`**：所有已开页签同时挂载，隐藏时销毁 effects 但保留 DOM 与 state |
 | **组件基座** | 多数模板还在用 shadcn 迁移前的 Radix 版本 | 已跟进 shadcn 现在的默认底座 **Base UI**（`@radix-ui` 零引用），配一个能直接抄代码的组件沙箱 |
 | **数据库** | MySQL / PostgreSQL | **原生 SQL Server**（`aioodbc` + NVARCHAR / 筛选唯一索引 / `OFFSET FETCH` 适配），MySQL 与 PostgreSQL 也在 |
-| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **248 条打真实依赖、零 mock** —— pytest 194 条对真实 SQL Server，Playwright 54 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 62 条安全测试兜底 |
+| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **286 条打真实依赖、零 mock** —— pytest 232 条对真实 SQL Server，Playwright 54 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 68 条安全测试兜底 |
 
 它不是「拿来改改就交付」的模板，是**底座**：上面那三件事和下面几条纪律是它替你解决掉的部分，
 业务代码照 `packages/platform/src/pages/user/` 抄就行。
@@ -164,6 +172,7 @@ shadcn/ui 2026 年 7 月把默认底座从 Radix 换成了 **Base UI**——这�
 
 | | |
 |---|---|
+| **移动端** | Expo SDK **57** · React Native **0.86** · Expo Router · **uniwind**（Tailwind 4 的 RN 实现，不用 nativewind —— 它的 peer 锁死 Tailwind 3）· `react-native-reusables` · `expo-secure-store` |
 | **框架 / 构建** | React **19.2** · TypeScript **6** · Vite **8**（rolldown）· ESLint 10 + typescript-eslint 8 · Prettier 3 + `prettier-plugin-tailwindcss` |
 | **路由 / 数据** | TanStack **Router v1**（文件路由 + 类型安全 search params）· **Query v5** · **Table v9** · **Virtual v3** |
 | **样式** | Tailwind CSS **4**（`@tailwindcss/vite`，CSS-first 的 `@theme inline`，无 JS 配置文件）· `tailwind-merge` · `class-variance-authority` · `tw-animate-css` |
@@ -222,18 +231,18 @@ shadcn/ui 2026 年 7 月把默认底座从 Radix 换成了 **Base UI**——这�
 
 ## 测试：打真实依赖，不打 mock
 
-**248 条自动化测试**，两边都不 mock 依赖 —— 后端对真实 SQL Server，
+**286 条自动化测试**，两边都不 mock 依赖 —— 后端对真实 SQL Server，
 前端对真实浏览器 + 真实接口 + 真实数据库。
 
 | | 跑在哪 | 条数 | 覆盖 |
 |---|---|---|---|
-| **pytest** | 真实 SQL Server（`fba_test` 库，不碰开发库） | **194** | 安全（RBAC 门禁 / 权限码对账 / 数据权限 fail-closed / 规则校验 / 生产配置 / 健康检查）62 · 数据权限端到端 27 · 定时任务 69 · 文件模块 23 · 迁移守卫 4 · 认证 7 · i18n 对称性 2 |
+| **pytest** | 真实 SQL Server（`fba_test` 库，不碰开发库） | **232** | 安全（RBAC 门禁 / 权限码对账 / 数据权限 fail-closed / 规则校验 / 生产配置 / 健康检查）68 · 定时任务 72 · 文件模块 29 · 数据权限端到端 27 · 认证 11 · 消息通知 9 · 迁移守卫 7 · i18n 对称性 2 · 其他 7 |
 | **Playwright** | 完全隔离的第二套实例：web :1126 → api :8001 → `fba_test` | **54** | 数据权限 29 · 定时任务（调度 + 执行记录 + cron 预览）9 · 部门 CRUD 2 · 登录 2 · 多页签保活 2 · 换身份 2 · 命令面板 2 · 列表刷新 2 · 列表报错 2 · 发新版提示 2 |
 
 > Playwright 那 54 条里有 1 条会按条件跳过（执行记录页要求库里真跑过一次 worker）。
 
 ```bash
-pnpm test          # 后端 pytest（194 条，需要 fba_test 库）
+pnpm test          # 后端 pytest（232 条，需要 fba_test 库）
 pnpm e2e           # 前端 Playwright（54 条，自动拉起隔离的 web+api 实例）
 ```
 
@@ -337,7 +346,7 @@ docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 
 ```bash
 pnpm typecheck                                          # 全仓库 tsc
-pnpm test                                               # 后端 pytest（194 条）
+pnpm test                                               # 后端 pytest（232 条）
 pnpm e2e                                                # 前端 Playwright（54 条）
 pnpm i18n:check && pnpm i18n:jsx                        # 语言包校验 + 裸中文扫描
 pnpm ctx:check                                          # 工程文档里的死引用 / 死链接
@@ -366,17 +375,27 @@ pnpm ctx:check                                          # 工程文档里的死�
 apps/api/          FastAPI 后端（uv 管理）
 apps/web/          业务应用；routes/ 只声明 search schema 与守卫，不渲染页面
 apps/desktop/      Electron 外壳（可选）：静默打印 · 本地硬件 · 凭据托管 · 自动更新；零业务代码
+apps/mobile/       移动端 App（Expo / React Native），是 apps/web 的**兄弟**而不是它的壳
+packages/api/      后端契约 + 共享请求客户端：信封成败语义 · ApiError · 生成的 schema.d.ts（最底层）
+packages/i18n/     语言包 + i18next 实例 + 校验脚本（最底层，不依赖任何 workspace 包）
 packages/ui/       shadcn 原语，零业务
 packages/platform/ 平台能力：api-client · auth · shell（侧边栏/多页签）· pages
-packages/i18n/     语言包 + i18next 实例 + 校验脚本（最底层，不依赖任何 workspace 包）
 ```
 
-依赖方向单向：`i18n ← ui ← platform ← web`。**`ui` 永远不 import `platform`。**
+依赖方向单向：**`i18n` / `api` ← `ui` ← `platform` ← `apps/web`**。
+**`ui` 永远不 import `platform`**；`i18n` 不依赖任何 workspace 包。
+
+`apps/mobile` **直接依赖 `api` / `i18n` 两个最底层包，不经过 `platform`** ——
+platform 是 web 形状的（TanStack Router · react-dom · zustand · socket.io），
+接进 RN 包不合适。移动端的交互逻辑是全新一套（**列表不能是表格**），
+不是把 PC 端塞进 WebView。
 
 ## 几条硬纪律
 
 这些不是风格偏好，是踩过之后写下来的。完整版见 [CLAUDE.md](./CLAUDE.md)
-—— 那是这个仓库的工程纪律手册（1500+ 行，开头有按任务导航的索引）。
+—— 那是这个仓库的工程纪律手册。根文件 ~400 行（开头有按任务导航的索引），
+按模块拆成 **25 份分册共 5500+ 行**，放在各自的代码目录下按需加载；
+`pnpm ctx:check` 会核对里面的死引用 / 死链接 / 死脚本 / 死 testid / 行数预算。
 文件名沿用 `CLAUDE.md` 是因为 Claude Code 这类 AI 编码工具会自动把它读成项目约定，
 **人读同样直接**：里面每一条都带实测数据和「为什么」。
 

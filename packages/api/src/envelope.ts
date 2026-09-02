@@ -27,9 +27,11 @@ export type EnvelopeResult<T> = { ok: true; data: T } | { ok: false; error: ApiE
 /**
  * 把一次响应判定成成败，并拆掉 `{code,msg,data}` 包封。
  *
- * **刻意不在这里处理 401 刷新** —— 那一步两端的机制不一样
- * （web 靠 `credentials: 'include'`，RN 靠自带的 cookie jar），
- * 而且要访问各自的 token 存储。调用方拿到 `error.isUnauthorized` 自己决定。
+ * **这是一个纯判定函数，不碰 401 刷新。** 刷新在 `client.ts` 的
+ * `createApiClient` 里集中做（单飞 + 重放一次），**两端共用同一份** ——
+ * 调用方不需要自己判 `isUnauthorized`。
+ * 拆开的理由是职责：这里只回答「这次响应算成功还是失败」，
+ * 而刷新要访问注入进来的 token 存储、还要能重放请求。
  *
  * @param res    只用到 `ok` / `status` / `statusText`，所以 openapi-fetch 的
  *               响应和裸 `fetch` 的响应都能传

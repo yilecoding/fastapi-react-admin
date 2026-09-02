@@ -36,7 +36,7 @@ jobs:
       # 前端没有自动化测试（已知缺口），所以 build 是目前唯一的
       # 「整个前端还能不能装起来」的信号，别省掉。
       #
-      # 🔴 **跑 `pnpm build`（turbo），不要写 `--filter`**（硬纪律 11）。
+      # 🔴 **跑 `pnpm build`（turbo），不要写 `--filter`**（硬纪律 13）。
       # 原来是 `--filter web` + `--filter @admin/mobile` 两条，于是
       # **`apps/desktop` 的主进程/预加载包从来没在 CI 里构建过** ——
       # 它的 `build` 只是两个 `vite build`（`electron-builder` 只在 `package`

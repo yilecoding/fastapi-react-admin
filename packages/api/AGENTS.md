@@ -34,9 +34,13 @@ if (!outcome.ok) throw outcome.error   // 401 由调用方自己决定怎么处�
 return outcome.data
 ```
 
-⚠️ `resolveEnvelope` **刻意不处理 401 刷新** —— 那一步两端机制不同
-（web 靠 `credentials: 'include'`，RN 靠自带的 cookie jar），而且要访问各自的
-token 存储。调用方拿 `error.isUnauthorized` 自己判。
+⚠️ `resolveEnvelope` 是**纯判定函数，不碰 401 刷新** —— 刷新在
+`createApiClient` 里集中做（单飞 + 重放一次），**两端共用同一份**，
+调用方不需要自己判 `isUnauthorized`。拆开只是职责划分：这里回答
+「这次响应算成功还是失败」，刷新要访问注入的 token 存储、还要能重放请求。
+
+（这句话曾经写的是「那一步两端机制不同，调用方自己判」—— 那是**传输层还没
+收进这个包之前**的状态，现在不成立了。）
 
 ## 客户端也在这里：`createApiClient()`
 
