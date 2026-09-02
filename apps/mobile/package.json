@@ -5,14 +5,16 @@
   "description": "移动端原生 App（issue #39 的 C 路线）：Expo Router + uniwind，交互逻辑独立于 web，不复用 PC 端渲染",
   "main": "expo-router/entry",
   "scripts": {
-    "start": "expo start",
+    "start": "node scripts/dev.mjs",
     "start:clean": "expo start -c",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "doctor": "expo-doctor",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start:plain": "expo start"
   },
   "dependencies": {
+    "@react-navigation/bottom-tabs": "^7.18.18",
     "@rn-primitives/portal": "~1.4.0",
     "@rn-primitives/slot": "^1.5.2",
     "class-variance-authority": "^0.7.1",

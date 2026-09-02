@@ -15,9 +15,25 @@
 ## 起服务
 
 ```bash
-pnpm mobile:dev                                        # = expo start
-EXPO_PUBLIC_API_BASE=http://10.0.2.2:8088 pnpm mobile:dev
+docker start fba_mssql fba_redis     # 前置：数据库 + Redis
+pnpm --filter api dev                # 前置：后端 :8088
+
+pnpm mobile:dev                      # = node scripts/dev.mjs，然后在 TUI 里按 a
 ```
+
+`scripts/dev.mjs` 不是随手包的一层 —— 直接跑 `expo start` 有**三处会静默地不对**：
+
+| 它替你做的事 | 不做会怎样 |
+|---|---|
+| 强制 `--localhost` | Metro 从网卡列表里挑一个 **docker bridge** 打印成 `exp://172.24.0.1:8081`，三重不可达 |
+| `adb reverse` **8088** | Metro 的 8081 是 expo 自己转的，后端那个口没人管 —— App 起得来、所有请求 `Network request failed`，看着像后端挂了 |
+| 自己去 `~/Android/sdk` 找 `adb` | 这台机器的 shell 里 `ANDROID_HOME` 没设、`adb` 不在 PATH 上，`expo start --android` 连设备都找不到，报错不提这件事 |
+
+🔴 **它刻意不自动追加 `--android`。** 试过，是个坏设计：设备刚开机时 package 服务
+还没起（`cmd: Can't find service: package`），`--android` 会让 expo **整个进程退出** ——
+一个瞬时的设备状态变成了「dev server 起不来」。开 App 交给 TUI 里按 `a`。
+
+`start:plain` 是不带这层的原始 `expo start`，排查这层本身有没有问题时用。
 
 ⚠️ **它没有 `dev` 脚本，这是刻意的。** 根 `pnpm dev` 是 `turbo dev`，按**脚本名**
 匹配 —— 叫 `dev` 就会被一起拉起来，而 Expo 要占端口、要交互式选设备，会把那个 TUI
@@ -247,7 +263,7 @@ cookie，隔夜 + 多次 `am force-stop` + 重装 bundle 之后，冷启动仍�
 `user_service.update_password` 会 `delete_by_prefix` 掉该用户的
 access / refresh / 用户缓存**三组** key。不主动登出的话，用户会在下一个请求 401 时
 被莫名其妙弹回登录页 —— 看起来像 bug，其实是预期行为。
-所以 `change-password.tsx` 成功后切到一屏「密码已修改，请重新登录」，明说一句再登出。
+所以 `src/app/(app)/profile/password.tsx` 成功后切到一屏「密码已修改，请重新登录」，明说一句再登出。
 
 ## 个人中心：哪些字段能改，哪些不能（不是漏做）
 
@@ -277,14 +293,35 @@ access / refresh / 用户缓存**三组** key。不主动登出的话，用户�
 改自己的昵称/头像/密码**不会 403**。
 （真正会撞上这道闸门的是将来那些管理类的写操作。）
 
-## 导航壳：`src/app/(app)/_layout.tsx` 是唯一的换形态点
+## 导航壳：底部三个 tab（issue #39 第 3 条已定）
 
-issue #39 第 3 条（底部 tab / 抽屉 / 栈怎么组合）还没拍，所以现在是一个**最小 Stack**。
-换形态时**只动那一个文件**：`Stack` → `Tabs`，下面的屏一行都不用改（它们只是
-文件路由里的叶子）。
+```
+(app)/_layout.tsx          Tabs —— 首页 · 应用 · 我的
+(app)/index.tsx            首页（占位）
+(app)/apps.tsx             应用（占位）
+(app)/profile/_layout.tsx  Stack —— 「我的」这个 tab 内部的栈
+(app)/profile/index.tsx    个人中心
+(app)/profile/edit.tsx     编辑资料
+(app)/profile/password.tsx 修改密码
+```
 
-⚠️ `expo-router` 的 `Tabs` 要额外装 `@react-navigation/bottom-tabs` ——
-它**不在** Expo Go 自带模块清单里，但那是纯 JS 包，装了就能用，不需要 prebuild。
+🔴 **`(app)/` 下每多一个文件就自动多一个 tab。** 不该当 tab 的屏
+（编辑资料、修改密码）放进**子目录 + 自己的 Stack**，`profile/` 就是这么做的。
+另一种写法是 `options={{ href: null }}` 把它藏掉，但那样返回键和标题都要自己接，
+嵌套 Stack 天然就对。
+
+⚠️ 「我的」那个 tab 要 `headerShown: false` —— 它下面那层 Stack 已经出了一个 header，
+不关会**叠两条标题栏**。
+
+⚠️ `Tabs` 靠 `@react-navigation/bottom-tabs`，它**不在** Expo Go 自带模块清单里，
+但那是纯 JS 包，装了就能用，**不需要 prebuild**（豁免仍然成立）。
+
+### 占位屏要说清楚是「还没做」
+
+首页和应用现在是空的。它们用 `components/empty-state.tsx`，措辞刻意区分
+「还没做」/「加载失败」/「没有数据」—— 三者在用户眼里都是一片空，
+分不清的第一反应是「这 App 坏了」。**不要摆一排点不动的功能图标充数**，
+那比空着更糟。
 
 ## 契约是手抄的：`src/lib/contract.ts`
 
