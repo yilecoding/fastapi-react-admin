@@ -179,18 +179,30 @@ params: { query: { page: 1, unread: cond ? true : undefined } }     // ✅
 只是所有调用点悄悄退回 `unknown`。要加行为走 `ApiClientConfig` 上的注入点
 （移动端的网络错误文案本来包在外面，正是为此改成了 `onNetworkError`）。
 
-### ⚠️ schema 对**外键**的类型是错的
+### ⚠️ 外键的类型曾经是错的 —— 已在后端修掉，但只修了**响应**那一侧
 
-`common/schema.py` 只给 `id` 挂了 `@field_serializer('id') -> str | int`，
+`common/schema.py` 原来只给 `id` 挂了 `@field_serializer('id') -> str | int`，
 所以只有 `id` 在 OpenAPI 里是 `string | number` 的联合。而**外键
 （`dept_id` / `parent_id` / `role_id`…）没有那个 serializer**，声明成 `int` ——
 可编码层的 `stringify_unsafe_ints` 照样把它们转成了字符串
 （`utils/serializers.py` 的注释里自己写着「外键都漏了」）。
+移动端打开类型推断时第一个撞上的就是这条。
 
-于是拿外键当请求参数时会撞上硬纪律 6：类型说 `number`、值是 `string`。
-`src/types.ts` 里的 `LoosePath` 只放宽了 **path 参数**（44 个 operation 把
-path 参数声明成 `number`），**请求体和响应体里的外键没有放宽** ——
-真正的修法在后端标注上，不是在这里维护一份「哪些字段的 schema 是错的」名单。
+现在后端补了两个 serializer（`serialize_nullable_fk` / `serialize_required_fk`），
+所以**响应体**里的外键是 `string | number`（可空的再带 `| null`）。
+
+🔴 **必须按可空性分两组写** —— pydantic 拿**返回标注**当那个字段的序列化
+schema，而标注对列出的所有字段是同一份。实测两种一刀切都会错一半：
+
+| 写法 | `type_id: int`（必填） | `dept_id: int \| None` |
+|---|---|---|
+| 返回 `str \| int \| None` | ❌ 被放宽成可空 | ✅ |
+| 返回 `str \| int` + `when_used='unless-none'` | ✅ | ❌ 声明成不可空，而它真的会是 null |
+
+⚠️ **请求体那一侧仍然声明 `integer`。** pydantic 的校验 schema 和序列化 schema
+是两份，`field_serializer` 只动后者。回传 ID 时 FastAPI 会把 `"123"` 强转成
+int，所以**能用**，但声明上不准 —— 那要在入参侧另加标注，是另一件事。
+`src/types.ts` 里的 `LoosePath` 就是为此存在的（放宽 path 参数）。
 
 ### 🔴 web 端为什么还没切：三条**结构性**障碍
 
@@ -226,6 +238,16 @@ path 参数声明成 `number`），**请求体和响应体里的外键没有放�
 ## 生成的类型：`pnpm --filter @admin/api gen:api`
 
 `src/schema.d.ts` 是 `openapi-typescript` 从后端 OpenAPI 生成的，**不要手改**。
+
+🔴 **不需要起服务。** 这条原来是
+`openapi-typescript http://127.0.0.1:8000/openapi -o src/schema.d.ts`，两个毛病：
+**端口是错的**（后端 dev 在 **8088**，`:8000` 上什么都没有 —— 谁跑都只会拿到
+`ECONNREFUSED`，而报错完全不提端口写错了），以及它要求先起服务，
+而生成契约和运行时无关（`app.openapi()` 不碰数据库）。
+现在 `scripts/gen.mjs` 直接 import FastAPI 的 app 拿 spec。
+
+⚠️ 那个脚本让 python 把 JSON **写进文件**而不是走管道 —— 后端启动期会往
+stdout 打几行插件探测日志，混在一起解析会失败，而失败信息看不出是日志的锅。
 它原来在 `packages/platform/src/api-client/` 下，搬过来是为了让 `apps/mobile`
 也能用同一份 —— 移动端现在还有一份**手抄**的 DTO（`src/lib/contract.ts`），
 那是个待还的债：手抄的字段对不上时不会报错，只会在界面上空一格。

@@ -2508,7 +2508,7 @@ export interface components {
              * Dept Id
              * @description 部门 ID
              */
-            dept_id?: number | null;
+            dept_id?: string | number | null;
             /**
              * Username
              * @description 用户名
@@ -2745,7 +2745,7 @@ export interface components {
              * Parent Id
              * @description 部门父级 ID
              */
-            parent_id?: number | null;
+            parent_id?: string | number | null;
             /**
              * Sort
              * @description 排序
@@ -2815,7 +2815,7 @@ export interface components {
              * Parent Id
              * @description 部门父级 ID
              */
-            parent_id?: number | null;
+            parent_id?: string | number | null;
             /**
              * Sort
              * @description 排序
@@ -2885,7 +2885,7 @@ export interface components {
              * Type Id
              * @description 字典类型 ID
              */
-            type_id: number;
+            type_id: string | number;
             /**
              * Label
              * @description 字典标签
@@ -3218,7 +3218,7 @@ export interface components {
              * Parent Id
              * @description 菜单父级 ID
              */
-            parent_id?: number | null;
+            parent_id?: string | number | null;
             /**
              * Sort
              * @description 排序
@@ -3292,7 +3292,7 @@ export interface components {
              * Parent Id
              * @description 菜单父级 ID
              */
-            parent_id?: number | null;
+            parent_id?: string | number | null;
             /**
              * Sort
              * @description 排序
@@ -3436,7 +3436,7 @@ export interface components {
              * Recipient Id
              * @description 接收人 ID（为空表示全员广播）
              */
-            recipient_id?: number | null;
+            recipient_id?: string | number | null;
             /**
              * Created Time
              * Format: date-time
@@ -3961,7 +3961,7 @@ export interface components {
              * Dept Id
              * @description 部门 ID
              */
-            dept_id?: number | null;
+            dept_id?: string | number | null;
             /**
              * Username
              * @description 用户名
@@ -4041,7 +4041,7 @@ export interface components {
              * Dept Id
              * @description 部门 ID
              */
-            dept_id?: number | null;
+            dept_id?: string | number | null;
             /**
              * Username
              * @description 用户名

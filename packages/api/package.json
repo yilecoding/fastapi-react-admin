@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "gen:api": "openapi-typescript http://127.0.0.1:8000/openapi -o src/schema.d.ts"
+    "gen:api": "node scripts/gen.mjs"
   },
   "exports": {
     ".": "./src/index.ts",

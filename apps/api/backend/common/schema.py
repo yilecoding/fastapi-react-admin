@@ -77,6 +77,62 @@ class SchemaBase(BaseModel):
                 return str(value)
             return value
 
+        # 🔴 **外键也要，而且必须按可空性分两组写。**
+        #
+        # 上面那个只覆盖 `id`。外键（`dept_id` / `parent_id` / `role_id`…）指向的
+        # 全是雪花主键的表，值一样超出 JS 安全整数 —— `utils/serializers.py` 的
+        # `stringify_unsafe_ints` 在**编码层**已经把它们转成字符串了
+        # （那份注释里自己写着「外键都漏了」，指的就是这里）。
+        #
+        # 漏在这里的后果不是数据错，是**声明错**：OpenAPI 把它们写成 `integer`，
+        # 于是 `pnpm --filter @admin/api gen:api` 生成的 `schema.d.ts` 里
+        # `dept_id` 是 `number | null`，而 wire 上是字符串。前端按类型信它就会去
+        # `Number(dept_id)` —— 那正是根 CLAUDE.md 硬纪律 6 禁的事
+        # （`2049629108245233664` 会变成 `2049629108245233700`，
+        # 连续几个 ID 塌成同一个值）。实测：移动端打开类型推断时第一个撞上的就是这条。
+        #
+        # ⚠️ **不能直接复用 `serialize_id`** —— 它无条件 `str(value)`，而一半外键
+        # 是可空的，`str(None)` 会得到字符串 `'None'`（不报错，前端拿到一个看起来
+        # 像值的东西）。
+        #
+        # 🔴 **也不能一个 serializer 全包。** pydantic 用**返回标注**当那个字段的
+        # 序列化 schema，而标注对列出的所有字段是同一份。实测两种写法都会错一半：
+        #
+        # | 写法 | `type_id: int`（必填） | `dept_id: int \| None` |
+        # |---|---|---|
+        # | 返回 `str \| int \| None` | ❌ 被放宽成可空 | ✅ |
+        # | 返回 `str \| int` + `when_used='unless-none'` | ✅ | ❌ 声明成不可空，而它真的会是 null |
+        #
+        # 所以按**实际可空性**分两组。加新外键字段时先 grep 一遍它在各 schema 里
+        # 是 `int` 还是 `int | None`，放进对应那一组。
+        #
+        # ⚠️ 只影响**序列化**（响应）。请求体那一侧 pydantic 走的是校验 schema，
+        # 仍然声明 `integer` —— 前端回传 ID 时 FastAPI 会把 `"123"` 强转成 int，
+        # 所以能用，但**声明上仍然不准**。那要在入参侧另加标注，是另一件事。
+        @field_serializer('dept_id', 'parent_id', 'recipient_id', check_fields=False)
+        def serialize_nullable_fk(self, value: int | None) -> str | int | None:
+            if value is not None and self.model_config.get('from_attributes'):
+                return str(value)
+            return value
+
+        # `when_used='unless-none'` 是道保险：这几个字段在所有 schema 里都是必填，
+        # 真的拿到 None 时原样放过去，而不是变成字符串 `'None'`
+        @field_serializer(
+            'user_id',
+            'role_id',
+            'menu_id',
+            'type_id',
+            'target_id',
+            'data_scope_id',
+            'data_rule_id',
+            check_fields=False,
+            when_used='unless-none',
+        )
+        def serialize_required_fk(self, value: int) -> str | int:
+            if self.model_config.get('from_attributes'):
+                return str(value)
+            return value
+
 
 def ser_string(value: Any) -> str | None:
     if value:
