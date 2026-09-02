@@ -3,12 +3,15 @@ from typing import Any
 
 from fastapi import Request
 from pydantic import HttpUrl
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_dept import dept_dao
 from backend.app.admin.crud.crud_role import role_dao
 from backend.app.admin.crud.crud_user import user_dao
 from backend.app.admin.model import Role, User
+from backend.app.admin.model.m2m import user_role
+from backend.app.admin.schema.role import GetRoleDetail
 from backend.app.admin.schema.user import (
     AddUserParam,
     ResetPasswordParam,
@@ -83,10 +86,50 @@ class UserService:
         user_select = await user_dao.get_select(dept=dept, username=username, phone=phone, status=status, role=role)
         data = await paging_data(db, user_select)
         if data['items']:
-            serialized_items = select_join_serialize(data['items'], relationships=['User-m2o-Dept', 'User-m2m-Role'])
+            # ⚠️ `return_as_dict=True` 是必须的：这个函数默认返回 **namedtuple**，
+            # 而 namedtuple 不可变 —— 下面 `_attach_roles` 要往每条里塞 `roles`。
+            # 响应模型是 `from_attributes=True`，dict 和 namedtuple 都能校验。
+            serialized_items = select_join_serialize(
+                data['items'], relationships=['User-m2o-Dept'], return_as_dict=True
+            )
             # 确保返回的是列表，即使只有一个元素
-            data['items'] = [serialized_items] if not isinstance(serialized_items, list) else serialized_items
+            items = [serialized_items] if not isinstance(serialized_items, list) else serialized_items
+            await UserService._attach_roles(db=db, items=items)
+            data['items'] = items
         return data
+
+    @staticmethod
+    async def _attach_roles(*, db: AsyncSession, items: list[dict[str, Any]]) -> None:
+        """给本页的每个用户补上角色列表（原地改 `items`）
+
+        🔴 **必须在分页之后做，不能把 `sys_user_role` join 进分页的那个 Select。**
+        角色是 m2m，join 会让一个挂 N 个角色的用户变成 N 行，而 `total` 和
+        `LIMIT` 都作用在 join 后的行上 —— 原因和三个实测症状写在
+        `crud_user.get_select` 里。
+
+        一条查询覆盖整页，不是 N+1。
+
+        ⚠️ 用 `GetRoleDetail` 而不是响应模型里那个 `GetRoleWithRelationDetail`：
+        后者带 `menus` / `scopes` 两个关系字段，拿 ORM 对象去校验会触发
+        **异步惰性加载** → `MissingGreenlet`。这两个字段在列表上一直是 `[]`
+        （原来那个 join 也只填了 Role 自己的列），行为没变。
+
+        :param db: 数据库会话
+        :param items: 本页的用户字典列表
+        :return:
+        """
+        by_user: dict[int, list[dict[str, Any]]] = {}
+        stmt = (
+            select(user_role.c.user_id, Role)
+            .join(Role, and_(Role.id == user_role.c.role_id, Role.deleted == 0))
+            .where(user_role.c.user_id.in_([int(item['id']) for item in items]))
+        )
+        for user_id, role_obj in (await db.execute(stmt)).all():
+            by_user.setdefault(int(user_id), []).append(GetRoleDetail.model_validate(role_obj).model_dump())
+
+        for item in items:
+            # `roles` 在响应模型里是必填的，没有角色也要给一个空列表
+            item['roles'] = by_user.get(int(item['id']), [])
 
     @staticmethod
     async def create(*, db: AsyncSession, obj: AddUserParam) -> None:

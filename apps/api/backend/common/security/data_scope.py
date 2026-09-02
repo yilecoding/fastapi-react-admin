@@ -115,5 +115,17 @@ class DataScopedCRUD(CRUDPlus[Model]):
         return await super().select_model(session, pk, *self._scoped(whereclause), **kwargs)
 
     async def count(self, session: Any, *whereclause: Any, **kwargs: Any) -> int:
-        """分页总数也要跟着过滤，否则「共 100 条」但只列得出 10 条"""
+        """⚠️ **目前零调用方 —— 分页的总数不走这里。**
+
+        原来这条注释写的是「分页总数也要跟着过滤，否则『共 100 条』但只列得出
+        10 条」。那句话是错的，而且**误导过一次真实的分析**：分页走
+        `paging_data` → fastapi-pagination 的 `apaginate`，它是拿传进去的那个
+        `Select` **自己拼 count**，而那个 Select 来自 `select_order` → `select()`，
+        过滤条件早就在里面了。所以把这个 `count` 改成不过滤，全套测试**一条都不红**
+        —— 不是因为没测试，是因为它压根不在任何路径上（实测）。
+
+        那为什么还留着：这是**安全原语的兜底**，和「零调用方的便利代码」不是
+        一回事。哪天真有人写 `xxx_dao.count(db, ...)` 去统计，少了这层覆盖就是
+        静默 fail-open（数字把被过滤掉的行也算进去）。三行的保险，留着。
+        """
         return await super().count(session, *self._scoped(whereclause), **kwargs)

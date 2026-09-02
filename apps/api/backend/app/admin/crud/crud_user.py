@@ -117,6 +117,25 @@ class CRUDUser(DataScopedCRUD[User]):
         if status is not None:
             filters['status'] = status
 
+        # 🔴 **这里只 join Dept，不 join `sys_user_role` / `sys_role`。**
+        #
+        # 部门是 m2o（一个用户一个部门），join 不会增加行数；角色是 m2m，
+        # join 会让一个挂 N 个角色的用户变成 **N 行**。而这个 Select 是交给
+        # `paging_data` 分页的，`total` 和 `LIMIT` 都作用在 join 后的行上，
+        # 去重（`select_join_serialize`）却发生在**分页之后** —— 三个症状：
+        #
+        # | 症状 | 实测 |
+        # |---|---|
+        # | `total` 数的是 join 行数 | 11 个用户报 `total=12` |
+        # | 每页被重复行偷名额 | `size=20` 的第一页只回 18 条 |
+        # | 同一个用户出现在两页上 | 逐页翻完 12 条里只有 11 个不同的 |
+        #
+        # 三个都**不报错**，每条数据本身还都是对的，所以只表现为「数量对不上」。
+        # 种子数据里每个用户恰好挂一个角色，扇出永远不显形 ——
+        # 守卫测试在 `tests/api_v1/test_pagination_fanout.py`，它显式造一个多角色用户。
+        #
+        # 角色由 `user_service.get_pagination` 在分页**之后**按本页的 ID 批量补，
+        # 一条查询，不影响行数。
         stmt = await self.select_order(
             'id',
             'desc',
@@ -126,25 +145,15 @@ class CRUDUser(DataScopedCRUD[User]):
                     join_on=and_(Dept.id == self.model.dept_id, Dept.deleted == 0),
                     fill_result=True,
                 ),
-                JoinConfig(model=user_role, join_on=user_role.c.user_id == self.model.id),
-                JoinConfig(
-                    model=Role,
-                    join_on=and_(Role.id == user_role.c.role_id, Role.deleted == 0),
-                    fill_result=True,
-                ),
             ],
             **filters,
         )
 
-        # 角色是 m2m，filters 那套 `列名=值` 表达不了，直接落在已 join 的中间表上。
-        #
-        # ⚠️ 副作用：这个 where 同时把 join 出来的角色行也筛了，所以带 role 过滤时
-        # 每条结果的 `roles` 里**只有这一个角色**，不是该用户的全部角色。
-        # 换成 `User.id.in_(子查询)` 能拿回完整 roles，但每个用户会按角色数量重复成多行，
-        # apaginate 是按行计数的 —— total 和翻页会一起错。要用户的完整角色请走
-        # `GET /users/{pk}/roles`。
+        # 角色是 m2m，filters 那套 `列名=值` 表达不了。用子查询而不是 join +
+        # `where user_role.c.role_id == role`：后者会把 join 出来的角色行一起筛掉，
+        # 结果每条的 `roles` 里只剩被筛的那一个角色（不是该用户的全部角色）。
         if role:
-            stmt = stmt.where(user_role.c.role_id == role)
+            stmt = stmt.where(self.model.id.in_(select(user_role.c.user_id).where(user_role.c.role_id == role)))
 
         return stmt
 

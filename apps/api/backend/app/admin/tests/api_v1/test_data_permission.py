@@ -609,6 +609,33 @@ def test_user_list_endpoint_is_filtered(client: TestClient, dp: Graph) -> None:
     assert len(dept_ids) <= 1, f'用户列表跨了多个部门，说明按部门过滤没生效：{dept_ids}'
 
 
+def test_paginated_total_is_filtered_too(client: TestClient, dp: Graph) -> None:
+    """🔴 受限账号看到的 `total` 必须和它实际列得出的条数一致。
+
+    这条最早是冲着「`count()` 没跟着过滤」写的，结果**跑出来的红是另一个 bug**：
+    `total=22` 但只列得出 20 条，而这个账号的范围一页 50 条装得下。
+    真因是用户列表 join 了 `sys_user_role`（m2m）导致的**分页扇出**，
+    和数据权限无关 —— 完整的三个症状和修法在
+    [`test_pagination_fanout.py`](test_pagination_fanout.py) 里。
+
+    留着这一条，是因为它盯的角度不一样：那边用超管测「总数 = 用户数」，
+    这边测**过滤之后**总数仍然对得上。分页的 count 是 fastapi-pagination
+    拿 Select 自己拼的，过滤条件在 Select 里 —— 哪天有人给列表加个
+    「先取全量再在 Python 里过滤」的实现，这条会红。
+
+    ⚠️ 断言用 `total == len(items)`：这个账号只看得到本部门，一页 50 条装得下，
+    所以两者必须相等。
+    """
+    headers = login(client, dp, 'all_dept_id')
+    resp = client.get('/sys/users', headers=headers, params={'page': 1, 'size': 50})
+    assert resp.status_code == 200, resp.text
+    data = resp.json()['data']
+    assert data['total'] == len(data['items']), (
+        f'分页总数 {data["total"]} 和实际能列出的 {len(data["items"])} 条不一致 —— '
+        '说明 count() 没跟着过滤，分页器会翻不到底'
+    )
+
+
 def test_every_crud_class_declares_its_data_scope_stance() -> None:
     """🔴 守卫：每个 CRUD 类都要对数据权限**表态**。
 
