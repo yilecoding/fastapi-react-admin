@@ -7,10 +7,11 @@
   "scripts": {
     "start": "node scripts/dev.mjs",
     "start:clean": "expo start -c",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "doctor": "expo-doctor",
     "typecheck": "tsc --noEmit",
+    "build": "expo export --platform android --output-dir dist",
     "start:plain": "expo start",
     "prebuild": "expo prebuild --platform android --clean",
     "apk": "node scripts/apk.mjs"

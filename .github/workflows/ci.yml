@@ -38,6 +38,14 @@ jobs:
       - name: build
         run: pnpm --filter web build
 
+      # 🔴 移动端必须真的打一次包，typecheck 挡不住它那一类失败。
+      # 实测踩过的三个都是「tsc 全绿、bundle 才炸或才静默失效」：
+      #   - `global.css` 少了 `@source` → 每个 className 都成空操作（不报错）
+      #   - `babel-preset-expo` 没在 devDependencies 里 → Metro 解析不到
+      #   - uniwind 令牌在 light/dark 数量不一致 → 那批颜色隐形（export 仍成功）
+      - name: build mobile
+        run: pnpm --filter @admin/mobile build
+
       # 两个脚本缺一个都会漏：check 管 t('…') 的 key 有没有进语言包，
       # jsx 管压根没进 t() 的裸中文
       - name: i18n

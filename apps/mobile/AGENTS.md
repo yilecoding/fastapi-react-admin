@@ -588,6 +588,60 @@ src/lib/appearance.ts 深浅色偏好（本机）
 src/lib/server.ts     服务器地址（本机，运行时可改）
 ```
 
+### 🔴 主题色只有一份：`global.css`，导航主题从它现读
+
+`react-native-reusables` 的脚手架在 `src/lib/theme.ts` 里带了**一整套自己的
+zinc 色板**（`hsl(0 0% 100%)` / `hsl(0 0% 3.9%)` …）和一个 `NAV_THEME` 派生。
+那套值**和 `src/styles/global.css` 里真正生效的令牌不是一回事** ——
+我们的页面底色是 iOS 分组灰 `#f4f2fa`（深色 `#000000`），导航拿到的是纯白
+（深色 `#0a0a0a`）。
+
+症状：**push / pop 动画期间闪一下白**（深色下闪一下不够黑的灰）。
+静态截图完全看不出来 —— 停下来之后每屏都自己画了 `bg-background`，
+只有转场那几百毫秒里露出的是导航容器的底色。
+
+修法**不是把 hex 抄对**（那就有了两份真相、web 改色时静默偏离），
+而是 `useNavTheme()` 用 `useCSSVariable` 现读 —— 和 `bg-background` 同源。
+
+⚠️ `useCSSVariable` 的签名是 `<const T extends Array<string>>(names: T)`，
+约束是**可变**数组：给名字数组加 `as const` 会编译不过
+（`readonly [...] cannot be assigned to string[]`）。
+
+同一条也适用于 `app.json`：splash 的 `backgroundColor` 和 `expo.backgroundColor`
+原来是 `#ffffff` / 品牌紫，和任何一屏都不一样，已改成页面底色。
+
+### 🔴 原生 splash 要自己压住，否则首帧是白屏
+
+`fontsReady` / `i18nReady` 之前是 `return null`，而原生 splash
+**默认在 JS bundle 一加载完就自己隐藏** —— 冷启动看到的是
+「图标闪一下 → 白屏一会儿 → 界面」。`expo-splash-screen` 一直装着、
+`app.json` 里也配了插件，但**从来没有人 import 它**，那两行 API 从没被调用过。
+
+```ts
+void SplashScreen.preventAutoHideAsync().catch(() => {})   // 模块作用域
+React.useEffect(() => { if (ready) void SplashScreen.hideAsync().catch(() => {}) }, [ready])
+```
+
+🔴 **压住 splash 之后，「永远不 ready」的后果变严重了。** 原来是白屏，
+现在是**启动画面永远不结束** —— 看起来是卡死，连错都看不到。所以字体和 i18n
+都要 **fail-open**：`fontsReady || fontError !== null`，`setupI18n()` 用
+`.catch(() => {}).finally(() => setReady(true))`。
+字体回落成系统字只是丑一点；`t()` 原样返回 key 而 key 就是中文原文，界面仍可用。
+
+### CI 必须真的打一次移动端包
+
+`pnpm typecheck --force` 挡不住移动端那一类失败 —— 实测踩过的三个都是
+**tsc 全绿、bundle 才炸或才静默失效**：
+
+| 实测过的 | 表现 |
+|---|---|
+| `global.css` 少 `@source` | 每个 className 成空操作，**不报错** |
+| `babel-preset-expo` 没进 devDependencies | Metro 解析不到（19 分钟后才报） |
+| uniwind 令牌 light/dark 数量不一致 | 那批颜色隐形，`expo export` **仍返回成功** |
+
+所以 `apps/mobile` 有了 `build` 脚本（`expo export --platform android`），
+CI 的 static job 里跟在 `web build` 后面跑一条。
+
 ### 🔴 服务器地址必须是**运行时**的，不能是编译期常量
 
 `EXPO_PUBLIC_*` 是**构建期替换的字符串** —— 打成 APK 之后地址就焊死了，

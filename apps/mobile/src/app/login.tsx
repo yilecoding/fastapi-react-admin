@@ -49,7 +49,16 @@ type CaptchaState =
   | { kind: 'loading' }
   | { kind: 'ready'; uuid: string; image: string }
   | { kind: 'off' }
-  | { kind: 'error'; msg: string }
+  /**
+   * ⚠️ **存的是「哪一类错」，不是翻好的字符串。**
+   *
+   * 翻译要在**渲染时**做。原来是在 `loadCaptcha` 里就 `t(...)` 存进 state，
+   * 有两个毛病：一是那个 `t` 来自 `useCallback([], …)` 的闭包，切语言之后
+   * 拿到的是**旧的**；二是就算修了闭包，已经存进 state 的那句话也不会
+   * 跟着界面换语言。`rateLimited` 那种可预期的错走 key，
+   * 其余带上服务端原文（`msg`，那本来就是后端按 `Accept-Language` 翻好的）。
+   */
+  | { kind: 'error'; rateLimited: boolean; msg: string }
 
 export default function LoginScreen() {
   const { t } = useTranslation()
@@ -59,7 +68,12 @@ export default function LoginScreen() {
   const fg = typeof fgVar === 'string' ? fgVar : '#111'
 
   const [method, setMethod] = React.useState<Method>('password')
-  const [username, setUsername] = React.useState('admin')
+  /*
+   * 🔴 **发布版不能预填账号。** 这里原来硬写 `'admin'` —— 开发期方便，
+   * 但那个值会跟着进 APK：装到别人手机上，用户名框里躺着一个 `admin`。
+   * `__DEV__` 是 RN 的编译期常量（release 构建里是 `false`，整块会被摇掉）。
+   */
+  const [username, setUsername] = React.useState(__DEV__ ? 'admin' : '')
   const [remember, setRemember] = React.useState(true)
   const [password, setPassword] = React.useState('')
   const [code, setCode] = React.useState('')
@@ -88,13 +102,11 @@ export default function LoginScreen() {
       setCaptcha(data.is_enabled ? { kind: 'ready', uuid: data.uuid, image: data.image } : { kind: 'off' })
     } catch (err) {
       if (!alive.current) return
-      const msg =
-        err instanceof ApiError && err.isRateLimited
-          ? t('验证码请求太频繁，稍等一下再试')
-          : err instanceof Error
-            ? err.message
-            : String(err)
-      setCaptcha({ kind: 'error', msg })
+      setCaptcha({
+        kind: 'error',
+        rateLimited: err instanceof ApiError && err.isRateLimited,
+        msg: err instanceof Error ? err.message : String(err),
+      })
     } finally {
       inFlight.current = false
     }
@@ -104,7 +116,7 @@ export default function LoginScreen() {
     void loadCaptcha()
   }, [loadCaptcha])
 
-  // 记住的账号回填。异步读，所以初值先给 'admin'（开发期方便），读到再覆盖
+  // 记住的账号回填。SecureStore 是异步读，所以先渲染上面那个初值，读到再覆盖
   React.useEffect(() => {
     void remembered.get().then((u) => {
       if (!alive.current) return
@@ -368,7 +380,7 @@ function CaptchaRow({
         <Text className="w-[62px] shrink-0 text-[15px]">{t('验证码')}</Text>
         <View className="flex-1 gap-2 py-1">
           <Text variant="small" className="text-destructive">
-            {state.msg}
+            {state.rateLimited ? t('验证码请求太频繁，稍等一下再试') : state.msg}
           </Text>
           <Button variant="outline" size="sm" onPress={onRetry} className="self-start">
             <Text>{t('重试')}</Text>

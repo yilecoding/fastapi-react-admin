@@ -15,11 +15,23 @@ import { useSession } from '@/lib/session'
  * ⚠️ 所以红点**不是实时的**。别在界面上暗示它是。
  */
 type Ctx = {
+  /** `null` = 还不知道（没拉过 / 拉失败）。**不要把它当 0 用**，见下面那条 */
   unread: NotificationUnread | null
+  /**
+   * 🔴 **「不知道」和「确实是 0」必须分开。**
+   *
+   * 红点本身可以吞掉失败（它是装饰），但**别的地方会拿 `unread?.total ?? 0`
+   * 去做判断** —— 通知页的「全部已读」按钮就是 `disabled={total === 0}`，
+   * 于是未读数拉失败时那个按钮**永久禁用**，且界面上没有任何理由。
+   * 那正是根 CLAUDE.md 硬纪律 9 说的「把服务端错误伪装成这个功能不存在」。
+   *
+   * 所以这里显式给出「知不知道」这一位，调用方按它决定要不要禁用。
+   */
+  known: boolean
   refresh: () => Promise<void>
 }
 
-const UnreadContext = React.createContext<Ctx>({ unread: null, refresh: async () => {} })
+const UnreadContext = React.createContext<Ctx>({ unread: null, known: false, refresh: async () => {} })
 
 export function useUnread() {
   return React.useContext(UnreadContext)
@@ -34,9 +46,10 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
     try {
       setUnread(await api.GET<NotificationUnread>('/api/v1/sys/notifications/unread-count'))
     } catch {
-      // 红点拉不到就不显示 —— 这里**可以**吞掉异常，因为它不是一个「功能入口」，
-      // 而是一个装饰。真正的列表页有完整的错误态（硬纪律 9 说的是不能把
-      // 失败伪装成「这个功能不存在」，红点没有这个风险）。
+      // 红点拉不到就不显示 —— 这里**可以**吞掉异常，因为红点不是一个「功能
+      // 入口」而是一个装饰。但要把 `unread` 归回 `null`（= 不知道），
+      // 不能留着上一次的值，也不能让调用方把它读成 0。
+      setUnread(null)
     }
   }, [status])
 
@@ -45,6 +58,6 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
     else setUnread(null)
   }, [status, refresh])
 
-  const value = React.useMemo(() => ({ unread, refresh }), [unread, refresh])
+  const value = React.useMemo(() => ({ unread, known: unread !== null, refresh }), [unread, refresh])
   return <UnreadContext.Provider value={value}>{children}</UnreadContext.Provider>
 }

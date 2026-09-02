@@ -25,26 +25,44 @@ type Filter = 'all' | 'unread'
  */
 export default function NotificationsScreen() {
   const { t } = useTranslation()
-  const { refresh: refreshUnread, unread } = useUnread()
+  const { refresh: refreshUnread, unread, known: unreadKnown } = useUnread()
   const [filter, setFilter] = React.useState<Filter>('all')
   const [items, setItems] = React.useState<Notification[] | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [refreshing, setRefreshing] = React.useState(false)
   const [marking, setMarking] = React.useState(false)
 
+  /**
+   * 🔴 **切页签会产生竞态，必须丢掉过期的响应。**
+   *
+   * 「全部」和「未读」是两个请求，快速来回点会让它们同时在飞 ——
+   * **后到的那个赢**，而后到的不一定是当前页签的。表现是「选了未读、
+   * 列表里却混着已读」，而且只在网络慢的时候出现，本机几乎复现不出来。
+   *
+   * 每次请求领一个序号，回来时不是最新那个就整个丢掉（连 `setError` 也不设，
+   * 否则一个已经无关的失败会盖住当前页签的正常列表）。
+   */
+  const seq = React.useRef(0)
+
   const load = React.useCallback(async (f: Filter) => {
+    const mine = ++seq.current
     setError(null)
     try {
       const q = f === 'unread' ? '&unread=true' : ''
       const page = await api.GET<PageData<Notification>>(`/api/v1/sys/notifications?page=1&size=50${q}`)
+      if (mine !== seq.current) return
       setItems(page.items)
     } catch (err) {
+      if (mine !== seq.current) return
       setItems(null)
       setError(err instanceof Error ? err.message : String(err))
     }
   }, [])
 
   React.useEffect(() => {
+    // 清回 null 让它显骨架 —— 不清的话切页签时会先显示上一个页签的列表，
+    // 看起来像「筛选没生效」
+    setItems(null)
     void load(filter)
   }, [filter, load])
 
@@ -82,6 +100,15 @@ export default function NotificationsScreen() {
   }
 
   const total = unread?.total ?? 0
+  /*
+   * 🔴 **只在「确实知道是 0」的时候禁用。**
+   *
+   * 原来写的是 `disabled={total === 0 || marking}`，而 `total` 是
+   * `unread?.total ?? 0` —— 未读数那个请求失败时 `unread` 是 `null`，
+   * 于是按钮**永久禁用**，界面上没有任何理由，看起来像「这个功能不存在」
+   * （硬纪律 9）。`known` 为假时放开：接口本身是幂等的，点了最多是白点一次。
+   */
+  const canMarkAll = !marking && (!unreadKnown || total > 0)
 
   return (
     <View className="bg-background flex-1">
@@ -96,7 +123,7 @@ export default function NotificationsScreen() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <Button size="sm" variant="ghost" disabled={total === 0 || marking} onPress={() => void markAll()}>
+        <Button size="sm" variant="ghost" disabled={!canMarkAll} onPress={() => void markAll()}>
           {marking ? <ActivityIndicator size="small" /> : null}
           <Text>{t('全部已读')}</Text>
         </Button>
