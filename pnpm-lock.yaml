@@ -165,15 +165,30 @@ importers:
         specifier: ^1.9.0
         version: 1.11.0(@expo/metro-config@57.0.12(expo@57.0.19)(supports-color@10.2.2)(typescript@6.0.3))(metro-cache@0.84.5(supports-color@10.2.2))(metro-transform-worker@0.84.5(supports-color@10.2.2))(metro@0.84.5(supports-color@10.2.2))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)(tailwindcss@4.3.3)
     devDependencies:
+      '@eslint/js':
+        specifier: ^10
+        version: 10.0.1(eslint@10.8.1(jiti@2.7.0)(supports-color@10.2.2))
       '@types/react':
         specifier: ~19.2.2
         version: 19.2.18
       babel-preset-expo:
         specifier: ~57.0.10
         version: 57.0.10(@babel/core@7.29.7(supports-color@10.2.2))(@babel/runtime@7.29.7)(expo@57.0.19)(react-refresh@0.14.2)(supports-color@10.2.2)
+      eslint:
+        specifier: ^10
+        version: 10.8.1(jiti@2.7.0)(supports-color@10.2.2)
+      eslint-plugin-react-hooks:
+        specifier: ^7.1.1
+        version: 7.1.1(eslint@10.8.1(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)
+      globals:
+        specifier: ^17
+        version: 17.11.0
       typescript:
         specifier: ~6
         version: 6.0.3
+      typescript-eslint:
+        specifier: ^8.67.0
+        version: 8.67.0(eslint@10.8.1(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)
 
   apps/web:
     dependencies:

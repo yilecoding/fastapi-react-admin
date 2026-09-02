@@ -30,7 +30,6 @@ export default function AppLayout() {
   const muted = useCSSVariable('--color-muted-foreground')
   const { unread } = useUnread()
   const card = useCSSVariable('--color-card')
-  const bg = useCSSVariable('--color-background')
   const line = useCSSVariable('--color-border')
 
   return (

@@ -7,11 +7,10 @@
   "scripts": {
     "start": "node scripts/dev.mjs",
     "start:clean": "expo start -c",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
     "doctor": "expo-doctor",
     "typecheck": "tsc --noEmit",
     "build": "expo export --platform android --output-dir dist",
+    "lint": "eslint",
     "start:plain": "expo start",
     "prebuild": "expo prebuild --platform android --clean",
     "apk": "node scripts/apk.mjs"
@@ -57,8 +56,13 @@
     "uniwind": "^1.9.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10",
     "@types/react": "~19.2.2",
     "babel-preset-expo": "~57.0.10",
-    "typescript": "~6"
+    "eslint": "^10",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17",
+    "typescript": "~6",
+    "typescript-eslint": "^8.67.0"
   }
 }

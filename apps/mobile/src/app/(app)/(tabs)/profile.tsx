@@ -134,7 +134,6 @@ function Field({
   note?: string
   mono?: boolean
 }) {
-  const { t } = useTranslation()
   return (
     <Row first={first} className="items-start">
       <Text className="shrink-0 text-[15px]">{label}</Text>

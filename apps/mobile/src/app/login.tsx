@@ -4,7 +4,6 @@ import { KeyRoundIcon, QrCodeIcon, SmartphoneIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useCSSVariable } from 'uniwind'
 
 import { BrandTop } from '@/components/brand-top'
 import { Group, Row } from '@/components/grouped'
@@ -64,8 +63,6 @@ export default function LoginScreen() {
   const { t } = useTranslation()
   const { login, bootstrapError } = useSession()
   const insets = useSafeAreaInsets()
-  const fgVar = useCSSVariable('--color-foreground')
-  const fg = typeof fgVar === 'string' ? fgVar : '#111'
 
   const [method, setMethod] = React.useState<Method>('password')
   /*
@@ -303,7 +300,6 @@ function FieldRow({
   label: string
   children: React.ReactNode
 }) {
-  const { t } = useTranslation()
   return (
     <Row first={first} inset={20}>
       <Text className="w-[62px] shrink-0 text-[15px]">{label}</Text>

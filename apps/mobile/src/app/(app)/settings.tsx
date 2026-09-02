@@ -1,7 +1,7 @@
 import { CheckIcon, ChevronRightIcon } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import * as React from 'react'
-import { Pressable, ScrollView, View } from 'react-native'
+import { ScrollView } from 'react-native'
 
 import { Chevron, Group, GroupHeader, PressRow, Row } from '@/components/grouped'
 import { Icon } from '@/components/ui/icon'

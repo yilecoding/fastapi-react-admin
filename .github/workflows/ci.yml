@@ -69,6 +69,9 @@ jobs:
       - name: eslint
         run: pnpm --filter web lint
 
+      - name: eslint mobile
+        run: pnpm --filter @admin/mobile lint
+
   lint-backend:
     name: ruff
     runs-on: ubuntu-latest

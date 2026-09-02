@@ -851,9 +851,30 @@ localhostForwarding」，只有这台 Windows 自己够得着。
 但它现在只出 favicon 和桌面端图标，**还没有 Android/iOS 那套尺寸**。
 要换的时候扩那个脚本，**不要手放图**。
 
-## 没有 lint，这是暂时的
+## lint：照 `apps/web` 抄，**不用 `eslint-config-expo`**
 
-模板不带任何 eslint 配置。**不要顺手用 `expo lint` / 装 `eslint-config-expo` 补** ——
-它会经 `eslint-import-resolver-typescript` 拖进带 postinstall 的 `unrs-resolver`，
+`pnpm --filter @admin/mobile lint`（CI 的 eslint job 里跟在 web 后面）。
+
+🔴 **不要用 `expo lint` / 装 `eslint-config-expo`** —— 它会经
+`eslint-import-resolver-typescript` 拖进带 postinstall 的 `unrs-resolver`，
 而 pnpm 11 对未放行的 build script 是 **exit 1 不是警告**，要同时改
-`pnpm-workspace.yaml` 的 `allowBuilds`。真要补的时候一起做。
+`pnpm-workspace.yaml` 的 `allowBuilds`。为一套 lint 规则放行一个原生编译的
+postinstall 不划算，我们真正要的只有 `react-hooks`。
+
+三条和 web 那份不同的地方，都是踩出来的：
+
+| | 为什么 |
+|---|---|
+| 文件名 `eslint.config.**mjs**` | RN 的 `package.json` **不能加 `type: "module"`**（`metro.config.js` / `babel.config.js` 是 CommonJS，加了当场坏）。`.js` 配置会先按 CJS 解析失败再重解析成 ESM，并打 MODULE_TYPELESS_PACKAGE_JSON 警告 |
+| `globals` 要 **^17** | `react-native` 那个预设**在 v17 才有**。装到 v16 的话 59 个 RN 全局量全没了，`languageOptions.globals` 收到 `undefined` 直接 `Expected an object` 报错 |
+| `react-hooks/set-state-in-effect` 降 `warn` | web 走 TanStack Query、压根没有「effect 里取数」这种代码；移动端**没有 query 层**，验证码 / 通知列表 / 未读数都是 effect 里发请求 + 同步先置 loading。那条规则是**性能**建议（多一次渲染），不是正确性问题。降成 warn 而不是 off：将来加了 query 层要能看见这 3 处 |
+
+⚠️ 用 `globals['react-native']` 而不是 `globals.browser` 还有个护栏作用：
+往 RN 代码里写 `document.xxx` 会被 `no-undef` 抓住 —— 那正是 `packages/i18n`
+踩过的坑（一句 `document.documentElement.lang` 让移动端一初始化就抛）。
+
+第一次跑抓到 **10 处死代码**（UI 迭代留下的 `bg` / `fg` / `router`、
+三个不调 `t()` 却解构了 `useTranslation()` 的子组件、四个没用的 import），
+以及 `metro.config.js` 里两条**无效的** `eslint-disable`
+（`@typescript-eslint/no-require-imports` 没作用于 `.js`，所以那两行
+反而会以「规则不存在」报错）。

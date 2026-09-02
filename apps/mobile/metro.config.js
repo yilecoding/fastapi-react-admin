@@ -1,6 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { getDefaultConfig } = require('expo/metro-config')
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { withUniwindConfig } = require('uniwind/metro')
 const path = require('node:path')
 

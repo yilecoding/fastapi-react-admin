@@ -1,4 +1,3 @@
-import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
 import { TriangleAlertIcon } from 'lucide-react-native'
 import * as React from 'react'
@@ -27,7 +26,6 @@ export default function ServerScreen() {
   const { t } = useTranslation()
   const { base, isCustom } = useServer()
   const { logout } = useSession()
-  const router = useRouter()
   const [value, setValue] = React.useState(base)
   const [probing, setProbing] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
