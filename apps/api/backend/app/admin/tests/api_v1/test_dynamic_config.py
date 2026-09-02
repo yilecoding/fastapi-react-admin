@@ -66,6 +66,47 @@ def _put(client: TestClient, headers: dict[str, str], row: dict, value: str):
     )
 
 
+def _put_raw(client: TestClient, headers: dict[str, str], row: dict, value: str) -> None:
+    """把脏值**直接写进库**，绕过接口的范围校验。
+
+    🔴 **为什么不能再走接口**：写入侧现在有闸门了
+    （`utils/dynamic_config.py: DYNAMIC_INT_BOUNDS`，schema 层拦），
+    空串和 `not-a-number` 都会被 422 挡掉 —— 这两条测试原来靠接口造脏数据，
+    加上闸门之后就搭不出场景了（实测：两条一起红）。
+
+    但读取侧的回落**仍然要测**：脏数据现在只可能来自直接写库、
+    迁移、或者闸门上线之前留下的历史行。这个 helper 造的正是那种。
+
+    ⚠️ 写完必须**顺手清缓存**：`config_service.get_all` 是 `@cached` 的，
+    直接改库不会触发 `@cache_invalidate`，`load_config` 会读到缓存里的旧值，
+    于是测试以「回落没生效」的样子绿/红，而原因完全在别处。
+    这里用一次**接口写入合法值**来触发失效（`update` 挂着 `@cache_invalidate`），
+    再直接改库 —— 顺序不能反。
+    """
+    import asyncio
+
+    from sqlalchemy import text
+
+    from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+
+    # 先用接口写一发合法值：目的是触发 @cache_invalidate 把整个命名空间清掉
+    _put(client, headers, row, BASELINE[row['key']])
+
+    async def _write() -> None:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        session_maker = create_database_async_session(engine)
+        try:
+            async with session_maker.begin() as session:
+                await session.execute(
+                    text('UPDATE sys_config SET value = :v WHERE id = :pk'),
+                    {'v': value, 'pk': int(row['id'])},
+                )
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_write())
+
+
 @pytest.fixture
 def configs(client: TestClient, token_headers: dict[str, str]):
     """还原被改动的配置值 + 被 setattr 改掉的 settings。
@@ -105,8 +146,12 @@ def test_a_non_numeric_config_value_does_not_break_the_password_path(
 
     突变验证过：拿掉那个 `try/except`，这条会以历史故障的原样报错变红
     （`ValueError: invalid literal for int() with base 10`）。
+
+    ⚠️ 脏值是**直接写库**造的，不走接口 —— 接口现在有范围闸门了
+    （见 `_put_raw` 的说明）。两层各管一段：闸门挡住新的脏数据，
+    回落兜住已经在库里的。
     """
-    assert _put(client, token_headers, configs[DIRTY_KEY], '').json()['code'] == 200, '写入侧应当收得下空串'
+    _put_raw(client, token_headers, configs[DIRTY_KEY], '')
 
     res = client.put(f'/sys/users/{temp_user}/password', headers=token_headers, json={'password': 'Dirty@123456'})
     assert res.status_code != 500, f'脏配置把改密码路径打挂了：{res.text[:200]}'
@@ -122,7 +167,7 @@ def test_the_dirty_key_falls_back_and_the_siblings_still_load(
     会一起静默失效 —— 而界面上还显示着用户设的值。
     """
     assert _put(client, token_headers, configs[SIBLING_KEY], '321').json()['code'] == 200
-    assert _put(client, token_headers, configs[DIRTY_KEY], 'not-a-number').json()['code'] == 200
+    _put_raw(client, token_headers, configs[DIRTY_KEY], 'not-a-number')
 
     # 经真实请求触发 loader
     client.put(f'/sys/users/{temp_user}/password', headers=token_headers, json={'password': 'Dirty@123456'})
