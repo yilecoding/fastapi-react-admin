@@ -15,7 +15,7 @@ jobs:
   # 零外部依赖的检查。要 SQL Server 的那部分在下面的 test-backend job 里，
   # 两者并行 —— 拆开是为了让「装 ODBC 驱动 / 等实例」的抖动不污染这条的红绿信号。
   static:
-    name: typecheck · build · i18n
+    name: typecheck · build · i18n · ctx
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,22 +34,34 @@ jobs:
         run: pnpm typecheck --force
 
       # 前端没有自动化测试（已知缺口），所以 build 是目前唯一的
-      # 「整个前端还能不能装起来」的信号，别省掉
-      - name: build
-        run: pnpm --filter web build
-
-      # 🔴 移动端必须真的打一次包，typecheck 挡不住它那一类失败。
-      # 实测踩过的三个都是「tsc 全绿、bundle 才炸或才静默失效」：
+      # 「整个前端还能不能装起来」的信号，别省掉。
+      #
+      # 🔴 **跑 `pnpm build`（turbo），不要写 `--filter`**（硬纪律 11）。
+      # 原来是 `--filter web` + `--filter @admin/mobile` 两条，于是
+      # **`apps/desktop` 的主进程/预加载包从来没在 CI 里构建过** ——
+      # 它的 `build` 只是两个 `vite build`（`electron-builder` 只在 `package`
+      # 里，发版才跑），几秒钟的事，坏了却要等发版才发现。
+      #
+      # 移动端那一条尤其不能省：typecheck 挡不住它那一类失败，实测踩过的三个
+      # 都是「tsc 全绿、bundle 才炸或才静默失效」——
       #   - `global.css` 少了 `@source` → 每个 className 都成空操作（不报错）
       #   - `babel-preset-expo` 没在 devDependencies 里 → Metro 解析不到
       #   - uniwind 令牌在 light/dark 数量不一致 → 那批颜色隐形（export 仍成功）
-      - name: build mobile
-        run: pnpm --filter @admin/mobile build
+      - name: build
+        run: pnpm build
 
       # 两个脚本缺一个都会漏：check 管 t('…') 的 key 有没有进语言包，
       # jsx 管压根没进 t() 的裸中文
       - name: i18n
         run: pnpm i18n:check && pnpm i18n:jsx
+
+      # 🔴 **文档的机器可核对部分也要在 CI 里核对。**
+      # `ctx:check` 抓死引用 / 死链接 / 死脚本 / 死 testid / 跨文件章节引用，
+      # 它整份存在的理由就是「凡是能被机器核对的断言就让机器核对」——
+      # 而它自己**一直没进 CI**，只在有人手动跑的时候才跑。
+      # 文档腐烂是静默的：它照旧言之凿凿地指着一个已经不存在的文件。
+      - name: ctx
+        run: pnpm ctx:check
 
   lint-frontend:
     name: eslint
