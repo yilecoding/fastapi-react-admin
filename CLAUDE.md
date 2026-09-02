@@ -42,6 +42,7 @@
 | **显示时间 / 动时区** | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) 的「服务端时间一律过 `src/datetime.ts`」 |
 | **动请求客户端 / 后端契约 / 错误判定** | [`packages/api/AGENTS.md`](packages/api/AGENTS.md) |
 | 动后端模型 / 接口 / SQL | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
+| 动公共层（校验 / 异常 / 缓存 / 分页） | [`apps/api/backend/common/AGENTS.md`](apps/api/backend/common/AGENTS.md) |
 | 跑 pytest / 建测试库 / 测试跑不起来 | [`apps/api/backend/tests/AGENTS.md`](apps/api/backend/tests/AGENTS.md) |
 | **动权限码 / 数据范围 / token 与 cookie 时长** | [`apps/api/backend/common/security/AGENTS.md`](apps/api/backend/common/security/AGENTS.md) |
 | **动数据库结构 / 写迁移 / 改种子数据** | [`apps/api/backend/alembic/AGENTS.md`](apps/api/backend/alembic/AGENTS.md) |
@@ -393,8 +394,7 @@ pnpm db:history                        # 看链条
 数据权限模型都是 FBA 的设计，SQL Server 支持是本仓库加的。上游明确拒绝合并
 那部分，所以是**永久分叉**，只 cherry-pick 上游安全补丁，功能更新不跟。
 
-- 分叉基线记在 `apps/api/.upstream-baseline`
-- 上游同为 MIT 协议，原始版权声明保留在 `apps/api/LICENSE`
+- 分叉基线记在 `apps/api/.upstream-baseline`；上游同为 MIT，版权声明保留在 `apps/api/LICENSE`
 - 后端架构文档（三层结构 / 插件机制 / RBAC 的设计意图）看上游那份最全：
   <https://docs.fba.wu-clan.cc>——本仓库的 `apps/api/AGENTS.md` 只记上游没有的两件事：
   差异点、和这里踩过的实测坑

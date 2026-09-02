@@ -4,10 +4,18 @@ from typing import Annotated, Any
 from pydantic import ConfigDict, Field, HttpUrl, PlainSerializer, model_validator
 from typing_extensions import Self
 
+from backend.app.admin.model import User
 from backend.app.admin.schema.dept import GetDeptDetail
 from backend.app.admin.schema.role import GetRoleWithRelationDetail
 from backend.common.enums import StatusType
-from backend.common.schema import CustomEmailStr, CustomPhoneNumber, SchemaBase, SnowflakeIdIn, ser_string
+from backend.common.schema import (
+    ColumnLengthChecked,
+    CustomEmailStr,
+    CustomPhoneNumber,
+    SchemaBase,
+    SnowflakeIdIn,
+    ser_string,
+)
 from backend.core.conf import settings
 
 
@@ -70,8 +78,10 @@ class UserInfoSchemaBase(SchemaBase):
     phone: CustomPhoneNumber | None = Field(None, description='手机号')
 
 
-class UpdateUserParam(UserInfoSchemaBase):
+class UpdateUserParam(ColumnLengthChecked, UserInfoSchemaBase):
     """更新用户参数"""
+
+    __sa_model__ = User
 
     roles: list[int] = Field(description='角色 ID 列表')
 

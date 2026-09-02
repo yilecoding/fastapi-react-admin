@@ -2,8 +2,9 @@ from datetime import datetime
 
 from pydantic import ConfigDict, Field
 
+from backend.app.admin.model import Menu
 from backend.common.enums import MenuType, StatusType
-from backend.common.schema import SchemaBase, SnowflakeIdIn
+from backend.common.schema import ColumnLengthChecked, SchemaBase, SnowflakeIdIn
 
 
 class MenuSchemaBase(SchemaBase):
@@ -23,12 +24,16 @@ class MenuSchemaBase(SchemaBase):
     remark: str | None = Field(None, description='备注')
 
 
-class CreateMenuParam(MenuSchemaBase):
+class CreateMenuParam(ColumnLengthChecked, MenuSchemaBase):
     """创建菜单参数"""
 
+    __sa_model__ = Menu
 
-class UpdateMenuParam(MenuSchemaBase):
+
+class UpdateMenuParam(ColumnLengthChecked, MenuSchemaBase):
     """更新菜单参数"""
+
+    __sa_model__ = Menu
 
 
 class GetMenuDetail(MenuSchemaBase):

@@ -2,8 +2,16 @@ from datetime import datetime
 
 from pydantic import ConfigDict, Field
 
+from backend.app.admin.model import Dept
 from backend.common.enums import StatusType
-from backend.common.schema import CustomCode, CustomEmailStr, CustomPhoneNumber, SchemaBase, SnowflakeIdIn
+from backend.common.schema import (
+    ColumnLengthChecked,
+    CustomCode,
+    CustomEmailStr,
+    CustomPhoneNumber,
+    SchemaBase,
+    SnowflakeIdIn,
+)
 
 
 class DeptSchemaBase(SchemaBase):
@@ -18,19 +26,23 @@ class DeptSchemaBase(SchemaBase):
     status: StatusType = Field(description='状态')
 
 
-class CreateDeptParam(DeptSchemaBase):
+class CreateDeptParam(ColumnLengthChecked, DeptSchemaBase):
     """创建部门参数"""
+
+    __sa_model__ = Dept
 
     code: CustomCode = Field(description='部门编码')
 
 
-class UpdateDeptParam(DeptSchemaBase):
+class UpdateDeptParam(ColumnLengthChecked, DeptSchemaBase):
     """更新部门参数
 
     刻意**不含** `code` —— 编码是给配置、数据权限规则和外部系统用的稳定引用键，
     改掉它会让所有引用静默指向空（不报错，只是查不到）。要换编码就删了重建。
     `update` 走 model_dump(exclude_unset=True)，字段不在这里就不会被写。
     """
+
+    __sa_model__ = Dept
 
 
 class GetDeptDetail(DeptSchemaBase):

@@ -2,10 +2,11 @@ from datetime import datetime
 
 from pydantic import ConfigDict, Field
 
+from backend.app.admin.model import Role
 from backend.app.admin.schema.data_scope import GetDataScopeWithRelationDetail
 from backend.app.admin.schema.menu import GetMenuDetail
 from backend.common.enums import StatusType
-from backend.common.schema import CustomCode, SchemaBase, SnowflakeIdIn
+from backend.common.schema import ColumnLengthChecked, CustomCode, SchemaBase, SnowflakeIdIn
 
 
 class RoleSchemaBase(SchemaBase):
@@ -17,18 +18,22 @@ class RoleSchemaBase(SchemaBase):
     remark: str | None = Field(None, description='备注')
 
 
-class CreateRoleParam(RoleSchemaBase):
+class CreateRoleParam(ColumnLengthChecked, RoleSchemaBase):
     """创建角色参数"""
+
+    __sa_model__ = Role
 
     code: CustomCode = Field(description='角色编码')
 
 
-class UpdateRoleParam(RoleSchemaBase):
+class UpdateRoleParam(ColumnLengthChecked, RoleSchemaBase):
     """更新角色参数
 
     刻意**不含** `code`，理由同 `UpdateDeptParam`：编码是稳定引用键，
     改掉它会让引用方静默失效。
     """
+
+    __sa_model__ = Role
 
 
 class DeleteRoleParam(SchemaBase):

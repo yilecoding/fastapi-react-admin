@@ -1,8 +1,17 @@
 import zoneinfo
 
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar, Self
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, WithJsonSchema, validate_email
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    WithJsonSchema,
+    model_validator,
+    validate_email,
+)
 
 from backend.common.enums import PrimaryKeyType
 from backend.core.conf import settings
@@ -33,6 +42,54 @@ SnowflakeIdIn = Annotated[int, WithJsonSchema({'anyOf': [{'type': 'string'}, {'t
 # 哪个是「名字」。首字符限字母是为了留出「纯数字」这个形态 —— 否则 '123' 这种编码
 # 在任何一处被 Number() 掉都不会被发现（同硬纪律 6 的雪花 ID 坑）。
 CustomCode = Annotated[str, Field(min_length=2, max_length=32, pattern=r'^[A-Z][A-Z0-9_]*$')]
+
+
+class ColumnLengthChecked:
+    """按**绑定模型的列长度**校验字符串字段的 mixin。
+
+    🔴 **不写这层的表现是 500 + 一条裸 SQL 错误。** 实测：给部门的 `leader`
+    传 33 个字符（列是 `UniversalStr(32)`），
+    `pyodbc.ProgrammingError: String or binary data would be truncated in
+    table 'fba_test.dbo.sys_dept', column 'leader'` 直接冒出去。
+    前端限了 20 位，后端 schema 一个字都没限。
+
+    🔴 **为什么不逐个字段写 `max_length=32`。** 全仓有 88 个带长度的字符串列，
+    Create/Update 系列里缺 `max_length` 的可写字符串字段有 **327 处**（实测数的，
+    约 50 个不同字段）。逐个写就是 327 个和列定义分叉的数字 —— 改列忘了改 schema
+    的表现又是那条裸 SQL 错误。这里从 `__table__` 现读，**不可能对不上**。
+
+    ⚠️ **为什么不靠全局异常处理器兜。** 那层也加了
+    （`exception_handler.py` 的 `dbapi_exception_handler`），但它**盖不住
+    INSERT/UPDATE 这条路**：`get_db_transaction` 是在 `begin()` 里 yield 的，
+    commit 发生在**依赖收尾**，那时已经出了异常处理器的覆盖范围
+    （实测：加了处理器之后冒出来的变成 `ContextDoesNotExistError`，
+    因为连 starlette-context 都拆了）。所以写入侧的闸门只能在 schema 这层。
+
+    用法：`class CreateDeptParam(ColumnLengthChecked, DeptSchemaBase): __sa_model__ = Dept`
+    """
+
+    #: 绑定的 SQLAlchemy 模型。没绑的子类这层直接放过
+    __sa_model__: ClassVar[Any] = None
+
+    @model_validator(mode='after')
+    def check_column_lengths(self) -> Self:
+        """逐个字符串字段比一遍列长度"""
+        model = type(self).__sa_model__
+        if model is None:
+            return self
+
+        columns = model.__table__.columns
+        for name in type(self).model_fields:
+            value = getattr(self, name, None)
+            if not isinstance(value, str):
+                continue
+            column = columns.get(name)
+            if column is None:
+                continue
+            length = getattr(column.type, 'length', None)
+            if length and len(value) > length:
+                raise ValueError(f'{name} 最长 {length} 个字符，收到 {len(value)} 个')
+        return self
 
 
 def _validate_iana_timezone(v: str) -> str:
