@@ -5,7 +5,7 @@ from pydantic import ConfigDict, Field
 from backend.app.admin.schema.data_scope import GetDataScopeWithRelationDetail
 from backend.app.admin.schema.menu import GetMenuDetail
 from backend.common.enums import StatusType
-from backend.common.schema import CustomCode, SchemaBase
+from backend.common.schema import CustomCode, SchemaBase, SnowflakeIdIn
 
 
 class RoleSchemaBase(SchemaBase):
@@ -40,8 +40,8 @@ class DeleteRoleParam(SchemaBase):
 class CreateRoleMenuParam(SchemaBase):
     """创建角色菜单参数"""
 
-    role_id: int = Field(description='角色 ID')
-    menu_id: int = Field(description='菜单 ID')
+    role_id: SnowflakeIdIn = Field(description='角色 ID')
+    menu_id: SnowflakeIdIn = Field(description='菜单 ID')
 
 
 class UpdateRoleMenuParam(SchemaBase):
@@ -53,8 +53,8 @@ class UpdateRoleMenuParam(SchemaBase):
 class CreateRoleScopeParam(SchemaBase):
     """创建角色数据范围参数"""
 
-    role_id: int = Field(description='角色 ID')
-    data_scope_id: int = Field(description='数据范围 ID')
+    role_id: SnowflakeIdIn = Field(description='角色 ID')
+    data_scope_id: SnowflakeIdIn = Field(description='数据范围 ID')
 
 
 class UpdateRoleScopeParam(SchemaBase):

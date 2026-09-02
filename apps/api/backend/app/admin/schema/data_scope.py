@@ -4,7 +4,7 @@ from pydantic import ConfigDict, Field
 
 from backend.app.admin.schema.data_rule import GetDataRuleDetail
 from backend.common.enums import StatusType
-from backend.common.schema import SchemaBase
+from backend.common.schema import SchemaBase, SnowflakeIdIn
 
 
 class DataScopeBase(SchemaBase):
@@ -25,8 +25,8 @@ class UpdateDataScopeParam(DataScopeBase):
 class CreateDataScopeRuleParam(SchemaBase):
     """创建数据范围规则参数"""
 
-    data_scope_id: int = Field(description='数据范围 ID')
-    data_rule_id: int = Field(description='数据规则 ID')
+    data_scope_id: SnowflakeIdIn = Field(description='数据范围 ID')
+    data_rule_id: SnowflakeIdIn = Field(description='数据规则 ID')
 
 
 class UpdateDataScopeRuleParam(SchemaBase):

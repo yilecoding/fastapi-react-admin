@@ -3,13 +3,13 @@ from datetime import datetime
 from pydantic import ConfigDict, Field
 
 from backend.common.enums import StatusType
-from backend.common.schema import SchemaBase
+from backend.common.schema import SchemaBase, SnowflakeIdIn
 
 
 class DictDataSchemaBase(SchemaBase):
     """字典数据基础模型"""
 
-    type_id: int = Field(description='字典类型 ID')
+    type_id: SnowflakeIdIn = Field(description='字典类型 ID')
     label: str = Field(description='字典标签')
     value: str = Field(description='字典值')
     color: str | None = Field(None, description='标签颜色')

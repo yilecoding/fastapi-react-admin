@@ -1693,7 +1693,7 @@ export interface components {
              * Dept Id
              * @description 部门 ID
              */
-            dept_id: number;
+            dept_id: string | number;
             /**
              * Roles
              * @description 角色 ID 列表
@@ -1921,7 +1921,7 @@ export interface components {
              * Parent Id
              * @description 部门父级 ID
              */
-            parent_id?: number | null;
+            parent_id?: string | number | null;
             /**
              * Sort
              * @description 排序
@@ -1960,7 +1960,7 @@ export interface components {
              * Type Id
              * @description 字典类型 ID
              */
-            type_id: number;
+            type_id: string | number;
             /**
              * Label
              * @description 字典标签
@@ -2029,7 +2029,7 @@ export interface components {
              * Target Id
              * @description 业务对象 ID
              */
-            target_id: number;
+            target_id: string | number;
         };
         /**
          * CreateMenuParam
@@ -2055,7 +2055,7 @@ export interface components {
              * Parent Id
              * @description 菜单父级 ID
              */
-            parent_id?: number | null;
+            parent_id?: string | number | null;
             /**
              * Sort
              * @description 排序
@@ -2303,7 +2303,7 @@ export interface components {
              * Target Id
              * @description 业务对象 ID
              */
-            target_id: number;
+            target_id: string | number;
         };
         /**
          * DeleteLoginLogParam
@@ -5989,7 +5989,7 @@ export interface components {
              * Parent Id
              * @description 部门父级 ID
              */
-            parent_id?: number | null;
+            parent_id?: string | number | null;
             /**
              * Sort
              * @description 排序
@@ -6023,7 +6023,7 @@ export interface components {
              * Type Id
              * @description 字典类型 ID
              */
-            type_id: number;
+            type_id: string | number;
             /**
              * Label
              * @description 字典标签
@@ -6097,7 +6097,7 @@ export interface components {
              * Parent Id
              * @description 菜单父级 ID
              */
-            parent_id?: number | null;
+            parent_id?: string | number | null;
             /**
              * Sort
              * @description 排序
@@ -6311,7 +6311,7 @@ export interface components {
              * Dept Id
              * @description 部门 ID
              */
-            dept_id?: number | null;
+            dept_id?: string | number | null;
             /**
              * Username
              * @description 用户名
@@ -9520,7 +9520,7 @@ export interface operations {
                 /** @description 状态 */
                 status?: number | null;
                 /** @description 字典类型 ID */
-                type_id?: number | null;
+                type_id?: string | number | null;
                 /** @description 页码 */
                 page?: number;
                 /** @description 每页数量 */

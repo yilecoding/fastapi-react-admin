@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import ConfigDict, Field
 
-from backend.common.schema import SchemaBase
+from backend.common.schema import SchemaBase, SnowflakeIdIn
 from backend.plugin.notification.enums import NotificationCategory
 
 
@@ -18,7 +18,7 @@ class NotificationSchemaBase(SchemaBase):
 class CreateNotificationParam(NotificationSchemaBase):
     """创建站内通知参数（服务端内部用）"""
 
-    recipient_id: int | None = Field(None, description='接收人 ID（为空表示全员广播）')
+    recipient_id: SnowflakeIdIn | None = Field(None, description='接收人 ID（为空表示全员广播）')
 
 
 class SendNotificationParam(NotificationSchemaBase):
@@ -38,7 +38,7 @@ class GetNotificationDetail(NotificationSchemaBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(description='通知 ID')
-    recipient_id: int | None = Field(None, description='接收人 ID（为空表示全员广播）')
+    recipient_id: SnowflakeIdIn | None = Field(None, description='接收人 ID（为空表示全员广播）')
     created_time: datetime = Field(description='创建时间')
     # 由 service 在分页之后按 `sys_notification_read` 回填 —— 不是数据库列。
     # 前端只认它：有值即已读。

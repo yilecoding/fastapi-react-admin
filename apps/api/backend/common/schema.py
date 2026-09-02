@@ -2,12 +2,30 @@ import zoneinfo
 
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, validate_email
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, WithJsonSchema, validate_email
 
 from backend.common.enums import PrimaryKeyType
 from backend.core.conf import settings
 
 CustomPhoneNumber = Annotated[str, Field(pattern=r'^1[3-9]\d{9}$')]
+
+# 🔴 **入参侧的雪花 ID：类型仍是 `int`，但 OpenAPI 声明成 `string | integer`。**
+#
+# 出参侧由 `SchemaBase` 的两个 field_serializer 负责（见文件末尾）；这一条管
+# **请求**那一侧，两者是 pydantic 里两份独立的 schema（校验 / 序列化），
+# `field_serializer` 只动后者。
+#
+# 为什么要改声明：前端拿到的所有 ID 都是**字符串**（雪花超出 JS 安全整数，
+# 后端 `stringify_unsafe_ints` 统一转的），回传时自然还是字符串。FastAPI 在
+# lax 模式下会把 `"123"` 转成 int，所以**一直是能用的** —— 错的只是声明：
+# 生成的 `schema.d.ts` 里请求体写着 `number`，于是前端把一个 string 传进去
+# 就是编译错误，逼着调用点去 `Number(id)`，而那正是根 CLAUDE.md 硬纪律 6
+# 禁的事（`2049629108245233664` → `2049629108245233700`）。
+#
+# ⚠️ `WithJsonSchema` 是**替换**那个字段的 JSON schema，所以只写 anyOf ——
+# `Field(description=...)` 给的描述在字段层，不受影响（实测确认还在）。
+# 校验强度不变：`"abc"` 仍然被 `int_parsing` 挡住。
+SnowflakeIdIn = Annotated[int, WithJsonSchema({'anyOf': [{'type': 'string'}, {'type': 'integer'}]}, mode='validation')]
 
 # 编码：给代码、配置、外部系统用的**稳定引用键**（部门 / 角色都用它）。
 #

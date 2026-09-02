@@ -3,14 +3,14 @@ from datetime import datetime
 from pydantic import ConfigDict, Field
 
 from backend.common.enums import StatusType
-from backend.common.schema import CustomCode, CustomEmailStr, CustomPhoneNumber, SchemaBase
+from backend.common.schema import CustomCode, CustomEmailStr, CustomPhoneNumber, SchemaBase, SnowflakeIdIn
 
 
 class DeptSchemaBase(SchemaBase):
     """部门基础模型"""
 
     name: str = Field(description='部门名称')
-    parent_id: int | None = Field(None, description='部门父级 ID')
+    parent_id: SnowflakeIdIn | None = Field(None, description='部门父级 ID')
     sort: int = Field(0, ge=0, description='排序')
     leader: str | None = Field(None, description='负责人')
     phone: CustomPhoneNumber | None = Field(None, description='联系电话')

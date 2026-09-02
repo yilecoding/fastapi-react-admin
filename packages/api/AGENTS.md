@@ -199,10 +199,30 @@ schema，而标注对列出的所有字段是同一份。实测两种一刀切�
 | 返回 `str \| int \| None` | ❌ 被放宽成可空 | ✅ |
 | 返回 `str \| int` + `when_used='unless-none'` | ✅ | ❌ 声明成不可空，而它真的会是 null |
 
-⚠️ **请求体那一侧仍然声明 `integer`。** pydantic 的校验 schema 和序列化 schema
-是两份，`field_serializer` 只动后者。回传 ID 时 FastAPI 会把 `"123"` 强转成
-int，所以**能用**，但声明上不准 —— 那要在入参侧另加标注，是另一件事。
-`src/types.ts` 里的 `LoosePath` 就是为此存在的（放宽 path 参数）。
+**入参侧也修了**，但要另加一层标注 —— pydantic 的校验 schema 和序列化 schema
+是两份，`field_serializer` 只动后者。`common/schema.py` 里：
+
+```python
+SnowflakeIdIn = Annotated[int, WithJsonSchema({'anyOf': [{'type': 'string'}, {'type': 'integer'}]}, mode='validation')]
+```
+
+Python 类型仍是 `int`（FastAPI 在 lax 模式下把 `"123"` 转成 int，`"abc"` 照旧被
+`int_parsing` 挡住），变的只是**声明**。⚠️ `WithJsonSchema` 是**替换**那个字段的
+JSON schema，所以只写 `anyOf` —— `Field(description=...)` 的描述在字段层，
+不受影响（实测确认还在）。
+
+覆盖面（`*_id` 声明成裸 `number` 的地方）：
+
+| 位置 | 怎么修的 |
+|---|---|
+| 响应体 | `SchemaBase` 的两个 field_serializer（按可空性分组，见上） |
+| 请求体 | 10 个 schema 文件里的字段换成 `SnowflakeIdIn` |
+| 查询参数 | 全仓只有一个（`/sys/dict-datas` 的 `type_id`），同一个标注 |
+| **路径参数** | **没改后端** —— 44 个 operation 把 `pk` 声明成 `number`，由客户端 `src/types.ts` 的 `LoosePath` 统一放宽 |
+
+⚠️ 最后一行是刻意的取舍：路径参数只有 `pk` / `target_id` 两种形状、
+客户端一处映射就全覆盖；去后端改 44 个签名收益一样，但 diff 大得多。
+`LoosePath` 的注释里记着这件事。
 
 ### 🔴 web 端为什么还没切：三条**结构性**障碍
 
