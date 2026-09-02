@@ -44,7 +44,7 @@ export const { setSessionExpiredHandler, endSession } = client
  * | 仪表盘拼动态路径 | `pages/dashboard/api.ts` 的 `` `${path}?${q}` `` | 字面量路径类型对运行时字符串不成立 |
  * | 约 20 个页面的查询串是函数拼的 | `?${qs(p)}` / `?${scopeQs(p)}` / `?${buildQuery(...)}` | 要改成 `params.query` 就得把那 20 个构造器逐个重设计（它们还顺手做了丢空值、格式化日期等事） |
  *
- * ⚠️ 曾经还有第三条「列表页引擎的路径是运行时配置」（`_shared/list-page.tsx`
+ * ⚠️ 曾经还有第三条「列表页引擎的路径是运行时配置」（`_shared` 下那个只读列表工厂
  * 的 `cfg.endpoint`）—— 那个文件**零调用方**，已经删了。休眠代码的代价就是
  * 这个：它让一次架构评估多报了一条根本不存在的障碍。
  *

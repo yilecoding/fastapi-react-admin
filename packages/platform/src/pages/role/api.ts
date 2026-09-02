@@ -55,13 +55,6 @@ function qs(p: RoleListParams) {
   return s.toString()
 }
 
-export const rolesQuery = (p: RoleListParams) =>
-  queryOptions({
-    queryKey: roleKeys.list(p),
-    queryFn: () => api.GET<PageData<Role>>(`/api/v1/sys/roles?${qs(p)}`),
-    placeholderData: (prev) => prev,
-  })
-
 /** 左栏选择器一次取多少 —— 一屏放得下约 12 个，取 30 让首屏基本不用滚就够选 */
 export const ROLE_SCROLL_SIZE = 30
 

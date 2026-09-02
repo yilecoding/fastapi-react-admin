@@ -1446,7 +1446,6 @@
   "这个目录有子项，侧边栏会把它当可展开分组 —— 地址不会被用到，填的 <c>{{path}}</c> 在前端不存在也没关系。": "This directory has children, so the sidebar renders it as an expandable group — the address is never used, and it does not matter that <c>{{path}}</c> does not exist in the frontend.",
   "这个范围下还没有规则。绑到角色上也不会放行任何数据 —— 先加一条。": "This scope has no rules yet. Binding it to a role grants no data at all — add one first.",
   "这个页面不存在": "This page doesn't exist",
-  "这个页面还没实现": "This page is not built yet",
   "这些会话的 token 会被立即吊销。当前会话不在其中（自己踢不了自己）。": "These sessions’ tokens are revoked immediately. Your own session is excluded — you cannot sign yourself out.",
   "这些字段只能由管理员在「用户管理」里改": "Only an admin can change these fields, under Users",
   "这些节点的上级目录没勾，侧边栏里不会出现。点一下自动补齐上级。": "Their parent directories are not selected, so they will not appear in the sidebar. Click to select the parents automatically.",
