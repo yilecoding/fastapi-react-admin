@@ -84,6 +84,39 @@ DELETE · 13 PUT · 8 POST）。写入型里最危险的几条已经补了
 （`api_v1/test_admin_writes.py`），剩下的按「改错了会不会静默」排优先级，
 别为了刷数字去覆盖只读接口。
 
+### 🔴 测试里**不要 `asyncio.run()`** —— 它会关掉共享 Redis 绑的那个循环
+
+想直接调一个 `async` 的 service 函数时很自然会写
+`asyncio.run(load_user_security_config(session))`。它**能跑**，但那个循环一关，
+共享的 `redis_client`（JWT 解析、`@cached` 都用它）就跟着废了 ——
+之后同一 session 里的请求全是 `JWT 授权异常：Event loop is closed`。
+
+**一个测试把后面的测试弄坏了，而全套还是绿的**（靠运行顺序侥幸）。实测踩到：
+`test_dynamic_config.py` 第一版就是这么写的，teardown 里那次还原请求当场炸。
+
+修法是**经真实 HTTP 请求触发**那段逻辑（顺带更贴近真实故障）。查「谁会调它」
+比自己起循环便宜：
+
+| 想触发 | 打哪个接口 |
+|---|---|
+| `load_user_security_config` | 任何改密码的接口（走 `password_security.py`） |
+| `load_login_config` | `GET /auth/captcha` 或登录 |
+
+⚠️ 只有**真的拿不到 HTTP 入口**时才起独立引擎，而且那时也只碰数据库、
+别碰 Redis（见上一节 `temp_user` 的硬删）。
+
+### ⚠️ 还原用的基线可能已经被上一次运行污染了
+
+`test_dynamic_config.py` 的 fixture 把基线值**写死在文件里**，不读「测试开始时
+库里的值」。因为后者踩过：一次突变验证让库里留下 `'not-a-number'`，而那个脏值
+使**任何加载安全配置的请求都 500，包括 teardown 里那次还原请求本身** ——
+当时没断言还原的返回，于是它静默失败，之后每次运行读到的「基线」都是脏值，
+再原样写回去。脏值就永久留在 `fba_test` 里了。
+
+那正是被测的那个故障本身：**改坏它的管理员自己也修不回来。**
+
+两条都要做：**基线写死** + **断言还原成功**。
+
 ### 🔴 测试里建了数据，收尾必须**硬删** —— 接口的 delete 是逻辑删除
 
 `DELETE /sys/users/{pk}` 这类接口走的是 `LogicalDeleteMixin`：把 `deleted` 从 0
