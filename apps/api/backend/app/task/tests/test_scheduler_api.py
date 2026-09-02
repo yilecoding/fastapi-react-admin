@@ -93,7 +93,8 @@ def test_create_returns_id(client: TestClient, token_headers, created):
 def test_duplicate_name_conflicts(client: TestClient, token_headers, created, uniq):
     """重名要给业务错误，不能让库上的唯一约束抛 IntegrityError。"""
     r = client.post(
-        BASE, headers=token_headers,
+        BASE,
+        headers=token_headers,
         json={'name': uniq, 'task': 'maintenance.prune_logs', 'type': 1, 'crontab': '15 3 * * *'},
     )
     assert r.status_code != 200 or r.json().get('code') != 200
@@ -107,7 +108,8 @@ def test_unregistered_task_rejected(client: TestClient, token_headers, uniq):
     「累计触发次数」照涨 —— 看起来一切正常，实际什么都没跑。
     """
     r = client.post(
-        BASE, headers=token_headers,
+        BASE,
+        headers=token_headers,
         json={'name': uniq, 'task': 'maintenance.prune_log', 'type': 1, 'crontab': '* * * * *'},
     )
     assert r.status_code != 200 or r.json().get('code') != 200
@@ -121,8 +123,10 @@ def test_unregistered_task_rejected(client: TestClient, token_headers, uniq):
         ({'type': 0}, '间隔调度缺间隔字段'),
         ({'type': 1, 'crontab': '* * * * *', 'kwargs': '[1]'}, 'kwargs 不是 JSON 对象'),
         ({'type': 1, 'crontab': '* * * * *', 'args': '{"a":1}'}, 'args 不是 JSON 数组'),
-        ({'type': 1, 'crontab': '* * * * *', 'expire_seconds': 60,
-          'expire_time': '2030-01-01T00:00:00+08:00'}, '截止时间与秒数二选一'),
+        (
+            {'type': 1, 'crontab': '* * * * *', 'expire_seconds': 60, 'expire_time': '2030-01-01T00:00:00+08:00'},
+            '截止时间与秒数二选一',
+        ),
     ],
 )
 def test_invalid_schedule_rejected(client: TestClient, token_headers, uniq, payload, why):
@@ -180,7 +184,8 @@ def test_toggle_status_does_not_need_full_object(client: TestClient, token_heade
 
 def test_update_keeps_name_check(client: TestClient, token_headers, created, uniq):
     r = client.put(
-        f'{BASE}/{created}', headers=token_headers,
+        f'{BASE}/{created}',
+        headers=token_headers,
         json={'name': uniq, 'task': 'maintenance.prune_logs', 'type': 1, 'crontab': '30 4 * * *'},
     )
     assert r.status_code == 200, r.text
@@ -192,7 +197,8 @@ def test_update_keeps_name_check(client: TestClient, token_headers, created, uni
 
 def test_soft_delete_hides_from_list(client: TestClient, token_headers, uniq):
     r = client.post(
-        BASE, headers=token_headers,
+        BASE,
+        headers=token_headers,
         json={'name': uniq, 'task': 'maintenance.prune_logs', 'type': 1, 'crontab': '15 3 * * *'},
     )
     pk = r.json()['data']['id']
@@ -203,7 +209,8 @@ def test_soft_delete_hides_from_list(client: TestClient, token_headers, uniq):
     # 🔴 软删之后同名必须能再建：`deleted` 不是布尔而是「0 或这一行自己的 id」，
     # 唯一约束是 (name, deleted) —— 这条设计的全部意义就是让它成立
     again = client.post(
-        BASE, headers=token_headers,
+        BASE,
+        headers=token_headers,
         json={'name': uniq, 'task': 'maintenance.prune_logs', 'type': 1, 'crontab': '15 3 * * *'},
     )
     assert again.status_code == 200, again.text
@@ -236,23 +243,24 @@ def test_result_fields_are_extended(client: TestClient, token_headers):
     from sqlalchemy import create_engine, delete, insert
     from sqlalchemy.orm import sessionmaker
 
-    from backend.app.task.celery import get_result_backend
     from backend.app.task.model import TaskExtended
-    from backend.core.conf import settings
+    from backend.tests.utils.db import sync_test_db_url
 
     # 用同步引擎直插 —— 这张表由 celery 写，没有创建接口；
     # conftest 那套 override_get_db 是异步生成器，同步用例里用不了
-    url = get_result_backend().removeprefix('db+').replace(
-        f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?'
-    )
+    url = sync_test_db_url()
     factory = sessionmaker(create_engine(url, future=True), expire_on_commit=False)
 
     task_id = f'pytest-{_uuid.uuid4()}'
     with factory() as db:
         db.execute(
             insert(TaskExtended.__table__).values(
-                task_id=task_id, status='SUCCESS', name='pytest.demo_task',
-                worker='pytest-worker', retries=2, queue='celery',
+                task_id=task_id,
+                status='SUCCESS',
+                name='pytest.demo_task',
+                worker='pytest-worker',
+                retries=2,
+                queue='celery',
             )
         )
         db.commit()
@@ -301,7 +309,8 @@ def test_quartz_syntax_is_rejected(client: TestClient, token_headers, uniq, expr
     Unix cron 表达不了它，给个 `0 0 28-31 * *` 的近似值等于偷换承诺。
     """
     r = client.post(
-        BASE, headers=token_headers,
+        BASE,
+        headers=token_headers,
         json={'name': uniq, 'task': 'maintenance.prune_logs', 'type': 1, 'crontab': expr},
     )
     assert r.status_code == 422, f'{why} 没被拦住：{r.text[:200]}'
@@ -326,26 +335,32 @@ def seeded_results():
     from sqlalchemy import create_engine, delete, insert
     from sqlalchemy.orm import sessionmaker
 
-    from backend.app.task.celery import get_result_backend
     from backend.app.task.model import TaskExtended
-    from backend.core.conf import settings
+    from backend.tests.utils.db import sync_test_db_url
     from backend.utils.timezone import timezone
 
-    url = get_result_backend().removeprefix('db+').replace(
-        f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?'
-    )
+    url = sync_test_db_url()
     factory = sessionmaker(create_engine(url, future=True), expire_on_commit=False)
 
     tag = f'pytest-range-{_uuid.uuid4().hex[:8]}'
     now = timezone.now().replace(microsecond=0)
     # 'h1' 落在**今天**，专门给「只给日期会丢掉最后一天」那条用例
-    marks = {'h1': now - timedelta(hours=1), 'd1': now - timedelta(days=1),
-             'd5': now - timedelta(days=5), 'd10': now - timedelta(days=10)}
+    marks = {
+        'h1': now - timedelta(hours=1),
+        'd1': now - timedelta(days=1),
+        'd5': now - timedelta(days=5),
+        'd10': now - timedelta(days=10),
+    }
     with factory() as db:
         for key, at in marks.items():
-            db.execute(insert(TaskExtended.__table__).values(
-                task_id=f'{tag}-{key}', status='SUCCESS', name=tag, date_done=at,
-            ))
+            db.execute(
+                insert(TaskExtended.__table__).values(
+                    task_id=f'{tag}-{key}',
+                    status='SUCCESS',
+                    name=tag,
+                    date_done=at,
+                )
+            )
         db.commit()
 
     yield {'tag': tag, 'now': now, 'marks': marks}
@@ -360,7 +375,8 @@ FMT = '%Y-%m-%d %H:%M:%S'
 
 def _query(client: TestClient, token_headers, tag: str, **params) -> list[dict]:
     r = client.get(
-        '/tasks/results', headers=token_headers,
+        '/tasks/results',
+        headers=token_headers,
         params={'name': tag, 'page': 1, 'size': 20, **params},
     )
     assert r.status_code == 200, r.text
@@ -385,7 +401,9 @@ def test_result_time_range_filters(client: TestClient, token_headers, seeded_res
     assert _keys(got) == {'d10'}, got
 
     got = _query(
-        client, token_headers, tag,
+        client,
+        token_headers,
+        tag,
         start_time=(now - timedelta(days=7)).strftime(FMT),
         end_time=(now - timedelta(days=3)).strftime(FMT),
     )
@@ -405,9 +423,7 @@ def test_range_is_inclusive_on_both_ends(client: TestClient, token_headers, seed
     assert _keys(got) == {'d5'}, f'闭区间没命中边界上的那条：{got}'
 
 
-def test_end_time_without_clock_silently_drops_the_last_day(
-    client: TestClient, token_headers, seeded_results
-):
+def test_end_time_without_clock_silently_drops_the_last_day(client: TestClient, token_headers, seeded_results):
     """🔴 这条把「只传日期」的后果钉住，防的是前端偷懒。
 
     `end_time=2026-08-22`（不带时分秒）会被 pydantic 解析成当天 **00:00:00**，
@@ -430,9 +446,7 @@ def test_end_time_without_clock_silently_drops_the_last_day(
     assert 'h1' in with_clock, f'补了时分秒也没查到今天的记录：{with_clock}'
     # 刚过午夜时 h1 会落到昨天，那时这条演示不成立，跳过
     if now.hour >= 1:
-        assert 'h1' not in date_only, (
-            f'只给日期居然命中了今天的记录 —— pydantic 的解析口径变了？{date_only}'
-        )
+        assert 'h1' not in date_only, f'只给日期居然命中了今天的记录 —— pydantic 的解析口径变了？{date_only}'
         assert with_clock > date_only, '只给日期没有丢掉任何东西，这条用例失去意义'
 
 
@@ -454,11 +468,7 @@ def test_every_schedule_in_db_points_at_a_registered_task(client: TestClient, to
     registered = set(client.get(f'{BASE}/meta', headers=token_headers).json()['data']['tasks'])
     rows = client.get(f'{BASE}/all', headers=token_headers).json()['data']
 
-    broken = [
-        f"「{r['name']}」→ {r['task']}"
-        for r in rows
-        if r['enabled'] and r['task'] not in registered
-    ]
+    broken = [f'「{r["name"]}」→ {r["task"]}' for r in rows if r['enabled'] and r['task'] not in registered]
     assert not broken, (
         '这些调度指向未注册的任务，会按时触发但什么都不执行：\n  '
         + '\n  '.join(broken)
@@ -480,11 +490,10 @@ def test_fresh_install_has_every_index_the_models_declare(client: TestClient, to
     ⚠️ 它查的是 **fba_test**（conftest 指过去的那个库），所以
     「改完模型忘了在测试库建索引」也会被它抓到。
     """
-    from sqlalchemy import create_engine, text
+    from sqlalchemy import create_engine, inspect
 
-    from backend.app.task.celery import get_result_backend
     from backend.common.model import MappedBase
-    from backend.core.conf import settings
+    from backend.tests.utils.db import sync_test_db_url
 
     watched = ['task_result', 'task_scheduler', 'sys_login_log', 'sys_opera_log']
     want: set[tuple[str, str]] = set()
@@ -492,20 +501,15 @@ def test_fresh_install_has_every_index_the_models_declare(client: TestClient, to
         table = MappedBase.metadata.tables[name]
         want.update((name, idx.name) for idx in table.indexes)
 
-    url = get_result_backend().removeprefix('db+').replace(
-        f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?'
-    )
+    url = sync_test_db_url()
     engine = create_engine(url, future=True)
     try:
-        with engine.connect() as conn:
-            have = {
-                (r[0], r[1])
-                for r in conn.execute(text(
-                    'SELECT t.name, i.name FROM sys.indexes i '
-                    'JOIN sys.tables t ON t.object_id = i.object_id '
-                    'WHERE i.name IS NOT NULL'
-                ))
-            }
+        # 🔴 用 Inspector，不要查 `sys.indexes` —— 那是 **SQL Server 专属**的系统目录表。
+        # 原来这里是一条裸 SQL，在 postgres 上直接 `relation "sys.indexes" does not exist`
+        # （实测：issue #5 第一次在 postgres 上跑 pytest 时炸出来）。这条测试断言的是
+        # 「模型声明的索引在库里存在」，和方言无关，实现也不该跟某一种方言绑死。
+        inspector = inspect(engine)
+        have = {(name, idx['name']) for name in watched for idx in inspector.get_indexes(name) if idx.get('name')}
     finally:
         engine.dispose()
 
