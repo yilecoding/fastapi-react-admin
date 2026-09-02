@@ -3,7 +3,8 @@ from typing import Self
 
 from pydantic import ConfigDict, Field, model_validator
 
-from backend.common.schema import SchemaBase
+from backend.common.schema import ColumnLengthChecked, SchemaBase
+from backend.plugin.config.model import Config
 from backend.utils.dynamic_config import check_dynamic_int_bounds
 
 
@@ -35,12 +36,16 @@ class ConfigSchemaBase(SchemaBase):
         return self
 
 
-class CreateConfigParam(ConfigSchemaBase):
+class CreateConfigParam(ColumnLengthChecked, ConfigSchemaBase):
     """创建参数配置参数"""
 
+    __sa_model__ = Config
 
-class UpdateConfigParam(ConfigSchemaBase):
+
+class UpdateConfigParam(ColumnLengthChecked, ConfigSchemaBase):
     """更新参数配置参数"""
+
+    __sa_model__ = Config
 
 
 class UpdateConfigsParam(UpdateConfigParam):

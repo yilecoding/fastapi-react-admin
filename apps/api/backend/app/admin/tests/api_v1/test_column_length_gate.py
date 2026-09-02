@@ -136,3 +136,69 @@ def test_mixin_ignores_fields_that_are_not_columns() -> None:
     # `parent_id` 是 BIGINT、`sort` 是 INT，都没有 length；不该被误伤
     param = CreateDeptParam(name='x' * 10, code='OKCODE', leader=None, sort=0, status=1)
     assert param.name == 'x' * 10
+
+
+#: 用户能在界面上编辑的那批 param schema —— 这些必须绑了模型。
+#:
+#: ⚠️ 没列进来的（`UpdateOperaLogParam` / `UpdateLoginLogParam` 那些）是
+#: 中间件自己写的，不经用户输入，暂时没绑。要绑就是加一行 `__sa_model__`。
+USER_WRITABLE = (
+    ('backend.app.admin.schema.dept', ('CreateDeptParam', 'UpdateDeptParam')),
+    ('backend.app.admin.schema.role', ('CreateRoleParam', 'UpdateRoleParam')),
+    ('backend.app.admin.schema.menu', ('CreateMenuParam', 'UpdateMenuParam')),
+    ('backend.app.admin.schema.user', ('UpdateUserParam',)),
+    ('backend.plugin.dict.schema.dict_data', ('CreateDictDataParam', 'UpdateDictDataParam')),
+    ('backend.plugin.dict.schema.dict_type', ('CreateDictTypeParam', 'UpdateDictTypeParam')),
+    ('backend.plugin.notice.schema.notice', ('CreateNoticeParam', 'UpdateNoticeParam')),
+    ('backend.plugin.config.schema.config', ('CreateConfigParam', 'UpdateConfigParam')),
+)
+
+
+def test_user_writable_schemas_are_all_bound() -> None:
+    """🔴 守卫：用户能编辑的 param schema 都要绑上模型。
+
+    删掉一行 `__sa_model__` 的后果是**那个接口悄悄回到 500 的老路上** ——
+    超长值又变成裸 SQL 错误。而删掉之后所有现存测试照旧绿（只有 dept 那两条
+    在盯着），所以要有这条按清单核对。
+    """
+    import importlib
+
+    unbound = []
+    for module_name, class_names in USER_WRITABLE:
+        module = importlib.import_module(module_name)
+        for class_name in class_names:
+            cls = getattr(module, class_name, None)
+            if cls is None:
+                unbound.append(f'{module_name}.{class_name} 不存在了')
+                continue
+            if getattr(cls, '__sa_model__', None) is None:
+                unbound.append(f'{module_name}.{class_name} 没绑 __sa_model__')
+
+    assert not unbound, '这些 schema 的长度闸门没接上：\n  ' + '\n  '.join(unbound)
+
+
+def test_bound_model_matches_the_schema_name() -> None:
+    """绑的模型要**对得上** —— 按命名约定核对：`CreateDeptParam` → `Dept`。
+
+    钉住「绑错模型」这种手滑：`UpdateRoleMenuParam` 曾经被误绑成 `Role`
+    （它的字段全是 ID，一列都对不上），那种绑法无害但误导 —— 看起来有闸门，
+    实际一个字段都没在管。第一版误绑了 5 个。
+
+    ⚠️ **判据不能写成「至少有一个字段对得上」。** 第一版就是那么写的，
+    而突变实验（把 menu 的 schema 绑到 `Role`）**照旧全绿** ——
+    因为 `Role` 和 `Menu` 都有 `name` / `remark` 这种同名带长度的列。
+    我自己刚写的测试当场就是假绿，靠突变抓出来的。按模型名核对才区分得开。
+    """
+    import importlib
+
+    wrong = []
+    for module_name, class_names in USER_WRITABLE:
+        module = importlib.import_module(module_name)
+        for class_name in class_names:
+            cls = getattr(module, class_name)
+            expected = class_name.removeprefix('Create').removeprefix('Update').removesuffix('Param')
+            actual = cls.__sa_model__.__name__
+            if actual != expected:
+                wrong.append(f'{module_name}.{class_name} 绑的是 {actual}，按命名约定应该是 {expected}')
+
+    assert not wrong, '绑错了模型：\n  ' + '\n  '.join(wrong)

@@ -39,6 +39,18 @@ class CreateDeptParam(ColumnLengthChecked, DeptSchemaBase):
 ⚠️ 只给「字段确实对应模型列」的 param 类绑。`UpdateRoleMenuParam` 那种
 （字段是一串 ID）绑上去无害但误导，第一版误绑了 5 个，已撤。
 
-⚠️ 目前只绑了用户真能在界面上编辑的那批（dept / role / menu / user）。
-日志类的 `UpdateOperaLogParam` / `UpdateLoginLogParam` 是中间件自己写的，
-不经用户输入，暂时没绑 —— 要绑就是加一行 `__sa_model__`。
+⚠️ 已绑用户真能在界面上编辑的那批（dept / role / menu / user /
+dict-data / dict-type / notice / config），三个插件端点实测都给出干净的
+422 + 字段名 + 上限。日志类的 `UpdateOperaLogParam` / `UpdateLoginLogParam`
+是中间件自己写的、不经用户输入，暂时没绑 —— 要绑就是加一行 `__sa_model__`。
+
+⚠️ **子类不要再插一遍 mixin。** `UpdateConfigsParam(UpdateConfigParam)` 那种，
+父类已经带了，再写成 `(ColumnLengthChecked, UpdateConfigParam)` 直接
+`TypeError: Cannot create a consistent method resolution order`，
+而且是**插件注入时**才炸（`PluginInjectError`），错误信息里看不出是 MRO 的事。
+子类什么都不用写，mixin 和 `__sa_model__` 都继承得到。
+
+两条守卫测试（`test_column_length_gate.py`）：该绑的都绑了 · 绑的模型按命名
+约定对得上。第二条的判据**不能写成「至少有一个字段对得上」** —— 第一版就是
+那样，而突变（把 menu 的 schema 绑到 `Role`）照旧全绿，因为两个模型都有
+`name` / `remark` 这种同名带长度的列。按模型名核对才区分得开。
