@@ -210,12 +210,17 @@ int，所以**能用**，但声明上不准 —— 那要在入参侧另加标�
 
 | 障碍 | 位置 | 为什么不是机械改动 |
 |---|---|---|
-| 列表页引擎的路径是运行时配置 | `packages/platform/src/pages/_shared/list-page.tsx` 的 `cfg.endpoint` | 字面量路径类型对它不成立；要改成每页各传一个有类型的 queryFn，那是重设计 `ListPage` 的抽象 |
-| 仪表盘也拼动态路径 | `packages/platform/src/pages/dashboard/api.ts` | 同上 |
+| 仪表盘拼动态路径 | `packages/platform/src/pages/dashboard/api.ts` | 字面量路径类型对运行时字符串不成立 |
 | 约 20 个页面的查询串是函数拼的 | `?${qs(p)}` / `?${scopeQs(p)}` / `?${buildQuery(...)}` | 要改成 `params.query` 就得把那 20 个构造器逐个重设计（它们还顺手做了丢空值、格式化日期等事） |
 
 实测数据：把 platform 直接指到严类型面，是 **57 个文件 / 433 个错误**
 （其中根因 90 个：72 个显式泛型 + 18 个模板字符串路径，其余是级联）。
+
+⚠️ 这张表原来有第三条「列表页引擎的路径是运行时配置」—— platform 的
+`_shared` 下曾经有个只读列表工厂，按 `cfg.endpoint`（运行时字符串）取数。
+那个文件**零调用方**（写好之后就没接过），已经删了
+（见 [pages 分册](../platform/src/pages/AGENTS.md)）。
+**休眠代码的代价就是这个**：它让一次架构评估多报了一条根本不存在的障碍。
 
 ### 两处不能直接写的类型（都踩过）
 
