@@ -39,8 +39,22 @@ import path from 'node:path'
  * 再配下面那段占用检查（不漂、直接报 pid），这类问题就绝迹了。
  */
 const METRO_PORT = process.env.RCT_METRO_PORT ?? '8800'
-/** Android 模拟器里指向宿主机 loopback 的固定别名 */
+/**
+ * Android 模拟器里指向宿主机 loopback 的固定别名。
+ *
+ * 🔴 **在这台机器上它不通，所以不是默认值。** 它要求 WSL2 的
+ * `localhostForwarding` 把 Windows 的 localhost 转进 WSL —— 实测没转
+ * （`vEthernet (WSL (Hyper-V firewall))`，Hyper-V 防火墙介入了）。
+ * 症状：Expo Go 报 `Packager is not running at http://10.0.2.2:8800`，
+ * 而同一时刻 WSL 里 `curl 127.0.0.1:8800/status` 是好的。
+ * 留着是因为换台机器可能就通了，以及第三方模拟器用不了 WSL 的 IP 时还得靠它。
+ */
 const HOST_LOOPBACK = '10.0.2.2'
+
+/** WSL 自己的 eth0 地址 —— Windows 侧的模拟器能直接路由到（实测这条通） */
+function wslIp() {
+  return sh(`ip -4 addr show eth0 2>/dev/null | grep -oP 'inet \\K[\\d.]+'`) || null
+}
 
 function sh(cmd) {
   try {
@@ -93,7 +107,7 @@ if (holder) {
 const { adb, sdk } = findAdb()
 const devices = localDevices(adb)
 const override = process.env.MOBILE_HOST
-const host = override ?? (devices.length > 0 ? '127.0.0.1' : HOST_LOOPBACK)
+const host = override ?? (devices.length > 0 ? '127.0.0.1' : (wslIp() ?? HOST_LOOPBACK))
 const apiBase = process.env.EXPO_PUBLIC_API_BASE ?? `http://${host}:8088`
 
 // B 模式：设备在 WSL 里，把端口转进去
@@ -116,6 +130,18 @@ if (!override && devices.length > 0) {
 // 看着像后端挂了。这是这条路上唯一一个不明显的地方。
 const needsApiRebind = host !== HOST_LOOPBACK && host !== '127.0.0.1'
 
+// 🔴 **主动探一下后端在这个地址上通不通，而不是只打一句警告。**
+// `pnpm --filter api dev` 绑的是 127.0.0.1，从 WSL 的 eth0 地址打不进去 ——
+// 而那个失败**要到你在 App 里点登录时才现形**，症状是 `Network request failed`，
+// 看着像后端挂了。从 WSL 这边探到的结果和设备上看到的一致（同一个地址、同一个绑定）。
+let apiReachable = null
+if (needsApiRebind) {
+  const code = sh(
+    `curl -s -o /dev/null -w '%{http_code}' --max-time 3 '${apiBase}/api/v1/auth/captcha' 2>/dev/null`,
+  )
+  apiReachable = code === '200'
+}
+
 console.log(
   [
     '',
@@ -127,8 +153,13 @@ console.log(
     devices.length === 0 && !override
       ? `   （按「宿主机上的模拟器」算的。连不上就换一个：\n    MOBILE_HOST=<别的地址> pnpm mobile:dev —— 候选见 AGENTS.md「设备」一节）`
       : '',
-    needsApiRebind
-      ? `   🔴 用的不是宿主机 loopback，**后端要换成 \`pnpm --filter api dev:host\`**\n      （绑 0.0.0.0）。还用 \`dev\` 的话 bundle 加载得动、一登录就 Network request failed。`
+    apiReachable === true ? '   ✅ 后端在这个地址上通' : '',
+    apiReachable === false
+      ? [
+          '   ❌ **后端在这个地址上打不通** —— 它多半还绑在 127.0.0.1 上。',
+          '      换成：pnpm --filter api dev:host      （绑 0.0.0.0）',
+          '      不换的话：bundle 加载得动，一点登录就 Network request failed。',
+        ].join('\n')
       : '',
     '',
   ]

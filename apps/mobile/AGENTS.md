@@ -367,40 +367,48 @@ Tailwind 的 `placeholder:*` 是 CSS 伪元素变体，RN 里没有这个概念 
 
 **① 宿主机（Windows）上的模拟器 —— 现在就能用**
 
-`10.0.2.2` 在标准 AVD 里是**宿主机的 loopback**；而 WSL2 默认
-`localhostForwarding=true`，Windows 的 localhost 会转进 WSL。所以整条链是
-`10.0.2.2:8800` → Windows loopback → WSL 的 Metro，**WSL 侧什么都不用改，
-后端也可以继续只绑 `127.0.0.1`**。这是脚本的默认值，不用配。
-
-    exp://10.0.2.2:8800        # Metro（固定 8800，不是 Expo 默认的 8081）
-    http://10.0.2.2:8088       # App 打的后端（脚本自动注入）
-
-**连不上时换哪个地址** —— `MOBILE_HOST=<地址> pnpm mobile:dev`：
-
-| 地址 | 什么时候用 | 注意 |
-|---|---|---|
-| `10.0.2.2` | 标准 AVD（Android Studio 那个） | 默认值，后端可留在 `127.0.0.1` |
-| WSL 的 eth0 地址 | `10.0.2.2` 不成立时（MuMu / 雷电 / 夜神那类第三方模拟器） | 🔴 **后端要换成 `pnpm --filter api dev:host`**，见下 |
-| `127.0.0.1` | USB 真机 / WSL 内设备，配 `adb reverse` | 脚本检测到本地设备时自动选 |
-
-WSL 的 eth0 地址**每次 WSL 重启都会变**，现查：
-
 ```bash
-ip -4 addr show eth0 | grep -oP 'inet \K[\d.]+'
+pnpm --filter api dev:host        # 🔴 后端要绑 0.0.0.0，不是默认的 dev
+pnpm mobile:dev                   # 打印 exp://<WSL的eth0>:8800
 ```
 
-🔴 **换成 WSL 的 IP 时，后端也得跟着改绑。**
-`pnpm --filter api dev` 绑的是 `127.0.0.1`，从 eth0 那个地址打不进去。
-症状很误导：**bundle 加载得动、一登录就 `Network request failed`**，看着像后端挂了。
-所以另起了一个脚本：
+地址用 **WSL 自己的 eth0 地址**（脚本自动探），Windows 侧的模拟器能直接路由到 ——
+AVD 是 NAT 在 Windows 后面的，由 Windows 替它路由到 `vEthernet (WSL)`。
 
-```bash
-pnpm --filter api dev:host        # 绑 0.0.0.0
+🔴 **不要用 `10.0.2.2`，在这台机器上它不通。** 那个别名指向**宿主机的 loopback**，
+要靠 WSL2 的 `localhostForwarding` 把 Windows 的 localhost 转进 WSL —— **实测没转**
+（Windows 侧的适配器名是 `vEthernet (WSL (Hyper-V firewall))`，Hyper-V 防火墙介入了）。
+
+症状很有迷惑性：Expo Go 报 `Packager is not running at http://10.0.2.2:8800`，
+而同一时刻在 WSL 里 `curl 127.0.0.1:8800/status` 是好的 —— 看着像 Metro 没起来。
+
+**最省事的判据**：在模拟器的浏览器里开这两个，看哪个出 `packager-status:running`：
+
 ```
+http://10.0.2.2:8800/status
+http://<WSL的eth0>:8800/status      # ip -4 addr show eth0 | grep -oP 'inet \K[\d.]+'
+```
+
+浏览器测比 Expo Go 干净 —— 只验网络，不掺 SDK / bundle / manifest。
+
+🔴 **用 WSL 的 IP 就必须 `pnpm --filter api dev:host`。**
+`pnpm --filter api dev` 绑的是 `127.0.0.1`，从 eth0 那个地址打不进去，而这个失败
+**要到你在 App 里点登录时才现形**（`Network request failed`，看着像后端挂了）。
+`scripts/dev.mjs` 现在会**主动探一下**后端在选定地址上通不通，直接把结论打出来 ——
+不是打一句警告完事。
 
 ⚠️ 绑 `0.0.0.0` 在这里**不等于暴露到局域网** —— WSL2 是 NAT 的，只有 Windows 宿主
-够得着（这也是当初否掉 mirrored / portproxy 想保住的性质）。脚本检测到不是
-宿主机 loopback 时会把这条提示打出来。
+够得着（这正是当初否掉 mirrored / portproxy 想保住的性质）。
+
+⚠️ eth0 地址**每次 WSL 重启都会变**，所以脚本每次现探，不要写死到任何配置里。
+
+**换地址**：`MOBILE_HOST=<地址> pnpm mobile:dev`
+
+| 地址 | 什么时候用 |
+|---|---|
+| WSL 的 eth0 地址 | **默认**，标准 AVD 走这个 |
+| `10.0.2.2` | 换台机器 localhostForwarding 是好的，或第三方模拟器路由不到 WSL 网段 |
+| `127.0.0.1` | USB 真机 / WSL 内设备，配 `adb reverse`。脚本检测到本地设备时自动选 |
 
 不要用 Windows 的局域网地址（`ipconfig` 里 Wi-Fi 那个）—— Windows 上没有进程
 监听 8800，要让它转发就得 `netsh portproxy`，那条已经被否掉了。
