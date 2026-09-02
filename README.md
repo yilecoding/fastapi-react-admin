@@ -1,7 +1,7 @@
 # fastapi-react-admin
 
 **FastAPI + React 19 + shadcn/ui 中后台底座** —— 权限细到按钮和数据行，
-多页签切走真的保状态，原生跑 SQL Server。**320 条自动化测试全打真实依赖，不 mock。**
+多页签切走真的保状态，原生跑 SQL Server。**322 条自动化测试全打真实依赖，不 mock。**
 
 > 🚀 **在线演示 / Live demo：** https://fra.wubunan.com/sign-in
 > 账号 `admin` / 密码 `123456` —— 公开演示实例，任何人都能登录，数据会被访客改动/清空，
@@ -21,7 +21,7 @@
 
 <!-- 前端 -->
 [![React](https://img.shields.io/badge/React-19-149ECA?style=flat-square&logo=react&logoColor=white)](https://react.dev)
-[![TypeScript](https://img.shields.io/badge/TypeScript-6-3208C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3228C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vite.dev)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![shadcn/ui](https://img.shields.io/badge/shadcn%2Fui-Base_UI-000000?style=flat-square&logo=shadcnui&logoColor=white)](https://ui.shadcn.com)
@@ -57,7 +57,7 @@
 
 An admin foundation on **FastAPI + React 19 + shadcn/ui** — permissions down to buttons
 *and data rows*, multi-tab navigation that actually keeps state, first-class **SQL Server**,
-and **320 automated tests that run against real dependencies, with no mocks**.
+and **322 automated tests that run against real dependencies, with no mocks**.
 Optional **Electron** desktop shell and a native **Expo / React Native** mobile app share
 the backend contract and the request client, not the rendering.
 
@@ -77,14 +77,14 @@ code goes next to `packages/platform/src/pages/user/` and follows the same shape
 | **Multi-tab**         | free in Vue via `keep-alive`; usually absent in React, or loses state       | React 19 **`<Activity>`** — every open tab stays mounted; hidden ones drop effects but keep DOM and state |
 | **Component base**    | most templates still on the pre-migration shadcn/Radix combo               | already tracks shadcn's current default, **Base UI** — zero `@radix-ui` imports, plus an in-app sandbox with copy-paste code for all 28+ components |
 | **Database**          | MySQL / PostgreSQL                                                         | **native SQL Server** (`aioodbc`, NVARCHAR, filtered unique indexes, `OFFSET FETCH`); MySQL and PostgreSQL also supported |
-| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **320 tests against real dependencies, zero mocks** — 266 pytest against a real SQL Server, 54 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 68 dedicated security tests |
+| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **322 tests against real dependencies, zero mocks** — 268 pytest against a real SQL Server, 54 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 68 dedicated security tests |
 
 **Status: 0.0.1, never released.** No production instance, no data to preserve — so the
 schema is still free to change. The backend is a **permanent fork** of
 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)
 (upstream declined to merge SQL Server support), tracking only its security patches.
 
-**Tests:** 266 pytest cases (real SQL Server) + 54 Playwright cases (isolated second
+**Tests:** 268 pytest cases (real SQL Server) + 54 Playwright cases (isolated second
 stack: web :1126 → api :8001 → `fba_test`). Data permissions are covered on both sides —
 22 accounts through the API, 19 through the browser. Neither suite runs in CI, because
 both need a live SQL Server instance; run them locally with `pnpm test` and `pnpm e2e`.
@@ -145,7 +145,7 @@ language-independent.
 | **多页签** | Vue 靠 `keep-alive` 白送；React 侧大多没有，或者切走就丢状态 | React 19 的 **`<Activity>`**：所有已开页签同时挂载，隐藏时销毁 effects 但保留 DOM 与 state |
 | **组件基座** | 多数模板还在用 shadcn 迁移前的 Radix 版本 | 已跟进 shadcn 现在的默认底座 **Base UI**（`@radix-ui` 零引用），配一个能直接抄代码的组件沙箱 |
 | **数据库** | MySQL / PostgreSQL | **原生 SQL Server**（`aioodbc` + NVARCHAR / 筛选唯一索引 / `OFFSET FETCH` 适配），MySQL 与 PostgreSQL 也在 |
-| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **320 条打真实依赖、零 mock** —— pytest 266 条对真实 SQL Server，Playwright 54 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 68 条安全测试兜底 |
+| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **322 条打真实依赖、零 mock** —— pytest 268 条对真实 SQL Server，Playwright 54 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 68 条安全测试兜底 |
 
 它不是「拿来改改就交付」的模板，是**底座**：上面那三件事和下面几条纪律是它替你解决掉的部分，
 业务代码照 `packages/platform/src/pages/user/` 抄就行。
@@ -231,18 +231,18 @@ shadcn/ui 2026 年 7 月把默认底座从 Radix 换成了 **Base UI**——这�
 
 ## 测试：打真实依赖，不打 mock
 
-**320 条自动化测试**，两边都不 mock 依赖 —— 后端对真实 SQL Server，
+**322 条自动化测试**，两边都不 mock 依赖 —— 后端对真实 SQL Server，
 前端对真实浏览器 + 真实接口 + 真实数据库。
 
 | | 跑在哪 | 条数 | 覆盖 |
 |---|---|---|---|
-| **pytest** | 真实 SQL Server（`fba_test` 库，不碰开发库） | **266** | 安全（RBAC 门禁 / 权限码对账 / 数据权限 fail-closed / 规则校验 / 生产配置 / 健康检查 / 缓存失效）70 · 定时任务 74 · 文件模块 30 · 数据权限端到端 29 · 分页扇出 4 · 认证 11 · 个人中心信封契约 5 · 高危写接口 9 · 动态配置容灾 3 · 消息通知 9 · 迁移守卫 7 · 种子方言一致性 4 · i18n 对称性 2 · 线上格式（ID 字符串 / 时区标记）2 · 其他 7 |
+| **pytest** | 真实 SQL Server（`fba_test` 库，不碰开发库） | **268** | 安全（RBAC 门禁 / 权限码对账 / 数据权限 fail-closed / 规则校验 / 生产配置 / 健康检查 / 缓存失效）72 · 定时任务 74 · 文件模块 30 · 数据权限端到端 29 · 分页扇出 4 · 认证 11 · 个人中心信封契约 5 · 高危写接口 9 · 动态配置容灾 3 · 消息通知 9 · 迁移守卫 7 · 种子方言一致性 4 · i18n 对称性 2 · 线上格式（ID 字符串 / 时区标记）2 · 其他 7 |
 | **Playwright** | 完全隔离的第二套实例：web :1126 → api :8001 → `fba_test` | **54** | 数据权限 29 · 定时任务（调度 + 执行记录 + cron 预览）9 · 部门 CRUD 2 · 登录 2 · 多页签保活 2 · 换身份 2 · 命令面板 2 · 列表刷新 2 · 列表报错 2 · 发新版提示 2 |
 
 > Playwright 那 54 条里有 1 条会按条件跳过（执行记录页要求库里真跑过一次 worker）。
 
 ```bash
-pnpm test          # 后端 pytest（266 条，需要 fba_test 库）
+pnpm test          # 后端 pytest（268 条，需要 fba_test 库）
 pnpm e2e           # 前端 Playwright（54 条，自动拉起隔离的 web+api 实例）
 ```
 
@@ -346,7 +346,7 @@ docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 
 ```bash
 pnpm typecheck                                          # 全仓库 tsc
-pnpm test                                               # 后端 pytest（266 条）
+pnpm test                                               # 后端 pytest（268 条）
 pnpm e2e                                                # 前端 Playwright（54 条）
 pnpm i18n:check && pnpm i18n:jsx                        # 语言包校验 + 裸中文扫描
 pnpm ctx:check                                          # 工程文档里的死引用 / 死链接

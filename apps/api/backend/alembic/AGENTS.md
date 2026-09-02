@@ -69,6 +69,18 @@ stamp 只是把这件事声明出来。
 > 两个库都有 `alembic_version` 表、看起来都正常，所以没有任何现象。
 > 现在 env.py 改成「调用方设过就不覆盖」，`_stamp_head` 显式写目标库。
 
+## `alembic.ini` 要写 `path_separator = os`
+
+不写的话每次加载配置都打一条 DeprecationWarning：「No path_separator found in
+configuration; falling back to legacy splitting on spaces, commas, and colons」。
+补上之后全套 pytest 的警告从 5 条降到 2 条（`test_migrations.py` 一直在报它）。
+
+⚠️ **不只是消警告。** legacy 切分是按**空格 / 逗号 / 冒号**切 `prepend_sys_path`
+的 —— 现在那个值只有 `..` 一项，怎么切都一样；但哪天有人加第二个路径，
+或者仓库被 clone 到一个**路径带空格**的目录下，它会静默切错，
+表现是 `env.py` 里 `from backend...` 突然 ImportError，而配置文件看着没问题。
+`os` = 用 `os.pathsep`（Linux 上是 `:`）。
+
 ## 后端侧要记的
 
 - 迁移在 `backend/alembic/versions/`，命令要在 `backend/` 下跑

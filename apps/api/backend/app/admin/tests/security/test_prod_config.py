@@ -216,3 +216,137 @@ def test_init_handles_every_seeded_account() -> None:
     src = inspect.getsource(cli._set_admin_password)
     for username in ('admin', 'test'):
         assert f"'{username}'" in src, f'_set_admin_password 没有处理种子账号 {username}'
+
+
+# ── prod 启动时的数据库检查 ─────────────────────────────────────────────────
+#
+# 上面那批查的是**配置**（`check_production_settings`），下面这两条查的是
+# **数据库**（`_verify_production_database`）—— 两个函数，两批问题，
+# 都在 prod 启动路径上，缺一个的后果都是「带着问题正常启动」。
+
+
+def _run_verify() -> str | None:
+    """拿测试库跑一遍 prod 数据库检查，返回它报的问题（没问题返回 None）。
+
+    🔴 **必须换掉 `registrar` 里那个 `async_db_session`**：它连的是
+    `DATABASE_SCHEMA`（开发库 fba），而这条检查会**扫全库的用户密码** ——
+    不换就是拿开发库的数据判定，结论和测试数据无关。
+    （和 `app/task/tests/test_prune_logs.py` 的 `run_prune` 同一个套路，
+    那边的注释是完整版。）
+
+    🔴 **每次起一个独立引擎、跑完 dispose**：不能复用模块级的
+    `async_test_engine`，它的连接池已经绑在 TestClient 的事件循环上了，
+    这里 `asyncio.run` 是另一个循环 → `Future attached to a different loop`。
+    """
+    import asyncio
+
+    import backend.core.registrar as reg
+
+    from backend.core.registrar import _verify_production_database
+    from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+
+    engine = create_database_async_engine(get_database_url(unittest=True))
+    original = reg.async_db_session
+    reg.async_db_session = create_database_async_session(engine)
+
+    async def go() -> str | None:
+        try:
+            await _verify_production_database()
+        except RuntimeError as e:
+            return str(e)
+        else:
+            return None
+        finally:
+            await engine.dispose()
+
+    try:
+        return asyncio.run(go())
+    finally:
+        reg.async_db_session = original
+
+
+def test_seeded_password_refuses_prod_startup() -> None:
+    """🔴 库里还有账号在用种子密码（123456）时，prod 必须**拒绝启动**。
+
+    ⚠️ **这条检查此前零覆盖。** 实测把 `_verify_production_database` 末尾那句
+    `if problems:` 改成 `if False`（永不拦），全套 266 条**一条都不红**。
+    而它整个存在的理由就是「启动即失败」—— 硬纪律 9 说的「失败必须是可见状态」。
+
+    绕过 `fba init` 强制改密的路是现成的：直接拿 `backend/sql/**` 灌库、
+    或者从测试环境 dump 一份过来，都不经过 init。所以这条按**密码 hash 字面量**
+    比对（种子用固定盐，三个方言里同一个常量），无论库是怎么来的都拦得住。
+
+    测试库正好就是那个状态（种子灌进去的 admin / test 都还是 123456），
+    所以这条不需要造数据 —— 它测的就是「这种库不许上生产」。
+    """
+    problem = _run_verify()
+    assert problem is not None, '库里 admin/test 还是种子密码，prod 检查却放行了'
+    assert '种子数据里的默认密码' in problem, problem
+    assert 'admin' in problem, f'没点出是哪些账号：{problem}'
+
+
+def test_clean_database_passes_prod_startup() -> None:
+    """把种子密码改掉之后，同一个库必须**能过**。
+
+    🔴 这是上一条的另一半。只验「坏的会拦」不验「好的能过」的话，
+    一个永远抛异常的实现也是绿的 —— 那种实现会让**任何**生产环境都起不来，
+    而且报的是一条看起来很正当的错误信息。
+
+    顺带这条还证明了另一个分支是好的：迁移版本检查在一个正常 stamp 过的库上
+    不误报（测试库是 `fba init` 建的，stamp 在 head）。
+
+    ⚠️ 收尾必须把 hash 改回去，否则后面所有用 admin 登录的测试全部 403 ——
+    而且是**跨轮**的（改的是真库）。所以放在 `try/finally` 里，不是测试体末尾。
+    """
+    import asyncio
+
+    from sqlalchemy import text
+
+    from backend.app.admin.utils.password_security import SEEDED_PASSWORD_HASHES
+    from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+
+    async def _run(work) -> object:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        session_maker = create_database_async_session(engine)
+        try:
+            async with session_maker.begin() as session:
+                return await work(session)
+        finally:
+            await engine.dispose()
+
+    # 换成一个绝不在种子集合里的值
+    placeholder = '$2b$12$pytestpytestpytestpytestpytestpytestpytestpytestpytes'
+    assert placeholder not in SEEDED_PASSWORD_HASHES
+
+    # 🔴 **逐个用户记下原值再改**，不能拿 `SEEDED_PASSWORD_HASHES` 集合回写：
+    # 那是个集合，admin 和 test 的 hash 万一不同（换了盐、或只改了一个），
+    # 循环回写会把两个人设成同一个值 —— 而测试照旧绿，因为登录只验 hash 对不对，
+    # 不验「是不是原来那一个」。第一版就是这么写的。
+    async def snapshot(session) -> list[tuple[str, str]]:
+        rows = await session.execute(
+            text('SELECT username, password FROM sys_user WHERE username IN (:a, :b)'),
+            {'a': 'admin', 'b': 'test'},
+        )
+        return [(r[0], r[1]) for r in rows]
+
+    saved: list[tuple[str, str]] = asyncio.run(_run(snapshot))
+    assert saved, '测试库里没有 admin / test —— 这条测试的前提不成立'
+
+    async def dirty(session) -> None:
+        await session.execute(
+            text('UPDATE sys_user SET password = :p WHERE username IN (:a, :b)'),
+            {'p': placeholder, 'a': 'admin', 'b': 'test'},
+        )
+
+    async def restore(session) -> None:
+        for username, original in saved:
+            await session.execute(
+                text('UPDATE sys_user SET password = :h WHERE username = :u'),
+                {'h': original, 'u': username},
+            )
+
+    try:
+        asyncio.run(_run(dirty))
+        assert _run_verify() is None, '库已经干净了，prod 检查却还在拦'
+    finally:
+        asyncio.run(_run(restore))
