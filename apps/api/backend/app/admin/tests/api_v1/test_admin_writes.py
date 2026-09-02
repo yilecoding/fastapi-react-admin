@@ -162,8 +162,25 @@ def test_assigning_an_empty_scope_list_is_not_a_failure(
     handler 里为此专门写了一句注释。钉住它：一旦有人照别处的
     `count > 0 ? success() : fail()` 改这条，清空数据范围就会变成
     「界面报错、但其实已经清掉了」。
+
+    🔴 **必须先绑上再清空。** 这条测试第一版直接 PUT `[]` 然后断言读回来是空 ——
+    而 fixture 挑的角色（`/sys/roles/all` 按 id 排序，第一个非 ADMIN 的是 STAFF）
+    **本来就没有数据范围**，所以那个断言在「接口什么都不做」时也成立：
+    一条永远绿的测试。
+
+    判据：**断言「没有」之前先断言「有」。** 同 `test_user_cache_invalidation.py`
+    里「先把快照焐热」那条 —— 不然「被清掉」和「本来就没有」分不开。
     """
     pk = role_with_restored_scopes
+    scopes = client.get('/sys/data-scopes', headers=token_headers, params={'page': 1, 'size': 100}).json()
+    ids = [s['id'] for s in scopes['data']['items'][:2]]
+    assert ids, '种子里应该有数据范围可绑'
+
+    # 先绑上，并确认真的绑上了 —— 这样下面那个「空」才有意义
+    assert client.put(f'/sys/roles/{pk}/scopes', headers=token_headers, json={'scopes': ids}).json()['code'] == 200
+    before = client.get(f'/sys/roles/{pk}/scopes', headers=token_headers).json()['data'] or []
+    assert len(before) == len(ids), f'前置条件没成立：本该绑上 {len(ids)} 条，实际 {before}'
+
     res = client.put(f'/sys/roles/{pk}/scopes', headers=token_headers, json={'scopes': []})
     assert (res.status_code, res.json()['code']) == (200, 200), '清空数据范围不是失败'
     assert (client.get(f'/sys/roles/{pk}/scopes', headers=token_headers).json()['data'] or []) == []
