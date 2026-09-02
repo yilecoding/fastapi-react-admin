@@ -1,10 +1,10 @@
 import json
 import uuid
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import Depends, Request
+from fastapi import Depends, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.security.utils import get_authorization_scheme_param
 from jose import ExpiredSignatureError, JWTError, jwt
@@ -127,6 +127,40 @@ async def create_refresh_token(session_uuid: str, user_id: int, *, multi_login: 
         ex=settings.TOKEN_REFRESH_EXPIRE_SECONDS,
     )
     return RefreshToken(refresh_token=refresh_token, refresh_token_expire_time=expire)
+
+
+def set_refresh_cookie(response: Response, refresh_token: str, expire_time: datetime) -> None:
+    """把 refresh token 写进 HttpOnly cookie。
+
+    🔴 **`max_age` 和 `expires` 必须来自同一个真相源。** 三个调用点
+    （`/auth/login`、`/auth/token/new`、oauth2 回调）原来各写一遍
+    `set_cookie(...)`，而 `max_age` 取的是一个**独立配置**
+    `COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS`、`expires` 取的是 refresh token 的
+    真实过期时间 —— 两个值可以不一致，而且**按 RFC 6265 §5.3，`Max-Age`
+    优先于 `Expires`**，所以赢的是那个可能配错的。
+
+    实测（把那个配置改成 60、refresh token 保持 604800）：同一个响应头里
+    同时出现 `expires=Wed, 09 Sep 2026 ... GMT` 和 `Max-Age=60`。
+    浏览器 60 秒后丢掉 cookie，而服务端那份 refresh token 还有 7 天 ——
+    **静默早退，服务端完全观察不到**（Redis 里 token 还在、日志里什么都没有，
+    用户只是「又被登出了」）。
+
+    所以那个配置删了，`max_age` 直接从 `TOKEN_REFRESH_EXPIRE_SECONDS` 来 ——
+    和 `expires` 同源，不可能再对不上。收成一个函数也是刻意的：
+    三处各写一遍，迟早有一处和别人不一样（和 `file_ops.upload_root` 同一个理由）。
+
+    :param response: FastAPI 响应对象
+    :param refresh_token: 刷新令牌
+    :param expire_time: 刷新令牌的过期时间（本地时区）
+    :return:
+    """
+    response.set_cookie(
+        key=settings.COOKIE_REFRESH_TOKEN_KEY,
+        value=refresh_token,
+        max_age=settings.TOKEN_REFRESH_EXPIRE_SECONDS,
+        expires=timezone.to_utc(expire_time),
+        httponly=True,
+    )
 
 
 async def create_new_token(

@@ -156,7 +156,11 @@ class Settings(BaseSettings):
 
     # Cookie
     COOKIE_REFRESH_TOKEN_KEY: str = 'fba_refresh_token'
-    COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS: int = 60 * 60 * 24 * 7  # 7 天
+    # ⚠️ 这里原来还有一个 `COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS`，已删。
+    # cookie 的 `max_age` 现在直接用 `TOKEN_REFRESH_EXPIRE_SECONDS` ——
+    # 两个独立的值可以配不一致，而 `Max-Age` 按 RFC 6265 优先于 `Expires`，
+    # 于是赢的是配错那个：浏览器提前丢 cookie、服务端 token 还在，静默早退。
+    # 详情见 `common/security/jwt.py: set_refresh_cookie`。
 
     # 数据权限
     DATA_PERMISSION_MODEL_EXCLUDE: list[str] = [  # 排除允许进行数据过滤的 SQLA 模型
@@ -537,6 +541,31 @@ def _check_connection_target(name: str, value: str | None) -> str | None:
     return None
 
 
+def _check_token_lifetimes(s: Settings) -> str | None:
+    """refresh token 必须活得比 access token 长
+
+    access token 过期时，客户端拿 refresh token 去换新的。refresh 的有效期
+    **不长于** access 时，该换的时候换的凭据也已经死了 —— 用户在 access 过期
+    那一刻被硬登出，而「记住我」形同虚设。
+
+    症状是「所有人整整 N 天后一起被登出，怎么都续不上」，而两个值单看都合理
+    （比如有人把 access 调到 7 天做「免登录一周」，忘了 refresh 也是 7 天）。
+
+    ⚠️ 这条不能像 cookie 那个 `max_age` 一样靠「同源」消掉 —— 它们本来就是
+    两个独立的时长，关系型约束只能校验。
+
+    :param s: 待校验的配置实例
+    :return: 不合格时返回问题描述，合格返回 None
+    """
+    if s.TOKEN_REFRESH_EXPIRE_SECONDS > s.TOKEN_EXPIRE_SECONDS:
+        return None
+    return (
+        f'TOKEN_REFRESH_EXPIRE_SECONDS={s.TOKEN_REFRESH_EXPIRE_SECONDS} 不长于 '
+        f'TOKEN_EXPIRE_SECONDS={s.TOKEN_EXPIRE_SECONDS} —— 刷新令牌活得不比访问令牌长，'
+        '该续期的时候续期凭据也已经过期，用户会被硬登出'
+    )
+
+
 def _check_snowflake_node_lease(s: Settings) -> str | None:
     """雪花节点的心跳必须**明显快于** TTL，否则会发出重复 ID
 
@@ -621,7 +650,7 @@ def check_production_settings(s: Settings) -> None:
     if s.DATABASE_USER in {'sa', 'root', 'postgres'}:
         problems.append(f'DATABASE_USER={s.DATABASE_USER} 是数据库超级用户，prod 请用最小权限账号')
 
-    problems.append(_check_snowflake_node_lease(s))
+    problems.extend((_check_snowflake_node_lease(s), _check_token_lifetimes(s)))
 
     found = [p for p in problems if p]
     if found:

@@ -149,3 +149,42 @@ return or_(and_(*where_and_list), or_(*where_or_list))
 另外那份 fixture 是**自己建图自己拆**（5 个部门 / 16 条规则 / 17 个范围 /
 19 个角色 / 22 个用户，每次跑带一个随机后缀），不依赖种子数据，
 teardown 里按 id 硬删干净 —— 因为 `fba_test` 同时也是 Playwright E2E 的库。
+
+## refresh cookie：`max_age` 和 `expires` 必须同源
+
+`set_cookie` 可以同时给 `max_age` 和 `expires`。三个调用点（`/auth/login`、
+`/auth/token/new`、oauth2 回调）原来各写一遍，`max_age` 取一个**独立配置**
+`COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS`、`expires` 取 refresh token 的真实过期
+时间 —— 两个值可以配不一致，而**按 RFC 6265 §5.3，`Max-Age` 优先于
+`Expires`**，所以赢的是那个可能配错的。
+
+实测（把那个配置改成 60、refresh token 保持 604800）同一个响应头：
+
+```
+Set-Cookie: fba_refresh_token=...; expires=Wed, 09 Sep 2026 20:36:40 GMT;
+            HttpOnly; Max-Age=60; Path=/; SameSite=lax
+```
+
+浏览器 60 秒后丢掉 cookie，而服务端那份 refresh token 还有 7 天 ——
+**静默早退，服务端完全观察不到**：Redis 里 token 还在、日志里什么都没有，
+用户只是「又被登出了」。
+
+🔴 **修法是消掉重复的真相源，不是加校验。** 那个配置删了，`max_age` 直接用
+`TOKEN_REFRESH_EXPIRE_SECONDS`，和 `expires` 同源。三处收成
+`common/security/jwt.py: set_refresh_cookie()` —— 各写一遍迟早有一处不一样
+（和 `file_ops.upload_root` 同一个理由）。
+
+实测确认：只改 `TOKEN_REFRESH_EXPIRE_SECONDS=120`，`Max-Age=120` 和 `expires`
+（当前时间 +120 秒）**一起动**。
+
+## refresh token 必须活得比 access token 长
+
+这条**消不掉**（两个本来就独立的时长），只能校验。refresh 不长于 access 时，
+该续期的时候续期凭据也死了 —— 用户在 access 过期那一刻被硬登出、「记住我」
+形同虚设。症状是「所有人整整 N 天后一起被登出，怎么都续不上」，
+而两个值单看都合理（典型走法：把 access 调到 7 天做「免登录一周」，
+忘了 refresh 也是 7 天）。
+
+`_check_token_lifetimes()` 拦这个，判据是 `>` 而**不是 `>=`** ——
+相等时刷新窗口是 0，后果和「refresh 更短」一模一样。两条守卫测试
+（更短 / 相等），双向验证过。

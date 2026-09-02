@@ -25,6 +25,7 @@ from backend.common.security.jwt import (
     get_token,
     jwt_decode,
     revoke_token,
+    set_refresh_cookie,
 )
 from backend.core.conf import settings
 from backend.database.db import uuid4_str
@@ -169,13 +170,7 @@ class AuthService:
                 user.id,
                 multi_login=user.is_multi_login,
             )
-            response.set_cookie(
-                key=settings.COOKIE_REFRESH_TOKEN_KEY,
-                value=refresh_token_data.refresh_token,
-                max_age=settings.COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS,
-                expires=timezone.to_utc(refresh_token_data.refresh_token_expire_time),
-                httponly=True,
-            )
+            set_refresh_cookie(response, refresh_token_data.refresh_token, refresh_token_data.refresh_token_expire_time)
         except errors.BaseExceptionError as e:
             # 记录**所有**登录失败。
             #
@@ -281,13 +276,7 @@ class AuthService:
             browser=ctx.browser,
             device_type=ctx.device,
         )
-        response.set_cookie(
-            key=settings.COOKIE_REFRESH_TOKEN_KEY,
-            value=new_token.new_refresh_token,
-            max_age=settings.COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS,
-            expires=timezone.to_utc(new_token.new_refresh_token_expire_time),
-            httponly=True,
-        )
+        set_refresh_cookie(response, new_token.new_refresh_token, new_token.new_refresh_token_expire_time)
         data = GetNewToken(
             access_token=new_token.new_access_token,
             access_token_expire_time=new_token.new_access_token_expire_time,

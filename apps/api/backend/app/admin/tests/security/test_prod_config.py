@@ -47,6 +47,9 @@ class _FakeSettings:
         # 雪花节点的心跳 / TTL —— 默认就是 conf.py 里那对合格值
         self.SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS = 30
         self.SNOWFLAKE_NODE_TTL_SECONDS = 60
+        # token 时长 —— 默认就是 conf.py 里那对（1 天 / 7 天）
+        self.TOKEN_EXPIRE_SECONDS = 60 * 60 * 24
+        self.TOKEN_REFRESH_EXPIRE_SECONDS = 60 * 60 * 24 * 7
         for k, v in overrides.items():
             setattr(self, k, v)
 
@@ -386,3 +389,29 @@ def test_snowflake_ttl_shorter_than_heartbeat_is_rejected() -> None:
     """两个值调反了（TTL 比心跳还短）是最容易犯的一种，必须拦住"""
     msg = _expect_rejected(SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS=60, SNOWFLAKE_NODE_TTL_SECONDS=30)
     assert 'SNOWFLAKE_NODE_TTL_SECONDS=30' in msg, msg
+
+
+def test_refresh_token_not_outliving_access_token_is_rejected() -> None:
+    """🔴 refresh token 不比 access token 长 → 拒绝启动。
+
+    access 过期时客户端拿 refresh 去换新的；refresh 不长于 access 时，
+    该换的时候换的凭据也死了 —— 用户在 access 过期那一刻被**硬登出**，
+    「记住我」形同虚设。
+
+    症状是「所有人整整 N 天后一起被登出，怎么都续不上」，而两个值单看都合理
+    （典型走法：有人把 access 调到 7 天做「免登录一周」，忘了 refresh 也是 7 天）。
+    """
+    msg = _expect_rejected(TOKEN_EXPIRE_SECONDS=60 * 60 * 24 * 7)
+    assert 'TOKEN_REFRESH_EXPIRE_SECONDS' in msg
+    assert '硬登出' in msg, msg
+
+
+def test_equal_token_lifetimes_are_rejected() -> None:
+    """两个值**相等**也不行 —— 边界要拦在「相等」这一侧。
+
+    相等时 refresh 和 access 同时过期，刷新窗口是 0。判据写成 `>` 而不是 `>=`
+    就是为了这个；写成 `>=` 会把这种配置放过去，而它和「refresh 更短」
+    的后果一模一样。
+    """
+    msg = _expect_rejected(TOKEN_REFRESH_EXPIRE_SECONDS=60 * 60 * 24)
+    assert 'TOKEN_REFRESH_EXPIRE_SECONDS=86400' in msg, msg
