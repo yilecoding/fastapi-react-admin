@@ -350,6 +350,7 @@ pnpm test                                               # 后端 pytest（263 �
 pnpm e2e                                                # 前端 Playwright（54 条）
 pnpm i18n:check && pnpm i18n:jsx                        # 语言包校验 + 裸中文扫描
 pnpm ctx:check                                          # 工程文档里的死引用 / 死链接
+pnpm arch:check                                         # 依赖箭头有没有漂（import / paths / 方向）
 ```
 
 > ⚠️ **两套测试都跑在独立的 `fba_test` 库上**（E2E 连的也是它，只是走另一套端口和

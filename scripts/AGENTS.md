@@ -36,6 +36,48 @@ markdown 里的反引号路径基本都是真路径，所以 `dead-path` 在那�
 （实测：删 `_shared` 的只读列表工厂时留下了两处）。**判据是人的：
 删文件时顺手 `grep` 一遍文件名。** 那比一个噪音检查便宜。
 
+## `pnpm arch:check`：让依赖箭头不漂
+
+```bash
+pnpm arch:check     # 已进 CI（和 ctx 同一个 job）
+```
+
+四条规则，核对 7 个 JS 包（`apps/api` / `apps/worker` 是 Python，只有一个
+dev 脚本、零 JS 依赖，不参与）：
+
+| 规则 | 级别 | 为什么 |
+|---|---|---|
+| `undeclared-import` —— import 了就必须在 `package.json` 里声明 | error | 那次 GHCR 构建事故 |
+| `undeclared-path-mapping` —— tsconfig `paths` 映射了就必须声明 | error | 漂移的**上游**：人总是先加映射让它跑起来 |
+| `wrong-direction` —— 箭头不能反（`ui → platform` 之类） | error | 反了会把分层吃穿 |
+| `unused-declaration` —— 声明了没人 import | warn | 死声明会误导下一个读箭头的人 |
+
+三条 error 都做过反向验证：删掉 `apps/web` 的 `@admin/platform` 声明
+→ 前两条同时红；给 `packages/ui` 加上 `@admin/platform` → 第三条红。
+
+首次跑就抓到一条真的：`packages/ui` 在 `package.json` 和 `tsconfig.json` 里
+都声明了 `@admin/i18n`，但**全包无一处 import**（它直接依赖 `react-i18next`，
+而 `packages/i18n` 也没有任何 `declare module` 类型增强）。已删。
+
+### 两个写这个脚本时踩到的坑
+
+🔴 **剥注释必须字符串感知，不能用正则。** 第一版是两条正则，结果把
+JSON 字符串里的 glob 当成了块注释开头：`"@/*"` 里那两个字符一开，
+就一路吃到 `include` 里某个 `.ts` glob 的块注释结束符，把 JSON 啃成碎片。
+
+而它的**表现**是「解析不了 → 跳过这个文件」，报告照旧显示通过 ——
+检查静默地停止覆盖了 `apps/mobile` 和 `apps/desktop` 两个包。
+所以第二条：**解析失败一律算 error，不许降级成「跳过」**。
+宁可炸，也不要假绿 —— 一个静默失效的闸门比没有闸门更坏，因为它还给人信心。
+
+⚠️ **自引用要放行。** `packages/ui` 里到处
+`import { cn } from '@admin/ui/lib/utils'` —— 那是 Node 标准的包自引用
+（靠 `package.json` 的 `exports` 字段），不需要也不该声明自依赖。
+第一版没放行，差点去「修」一个不存在的问题。
+
+⚠️ 写这段说明的时候还踩了第三种形态：注释里写 `"**/*.ts"` 这样的 glob，
+`*` 和 `/` 挨在一起就把**块注释自己**提前关掉了，脚本直接 `SyntaxError`。
+
 ## `pnpm ctx:check`：让文档不腐烂
 
 这份文档全是**实测出来的结论**，而结论会过期 —— 过期的方式是**静默**的：

@@ -52,7 +52,7 @@
 | **移动端 App / Expo / uniwind / Metro** | [`apps/mobile/AGENTS.md`](apps/mobile/AGENTS.md)（下面还按 `scripts/` · `src/app/` · `src/components/` 拆了三份） |
 | 写或跑前端 E2E | [`apps/web/e2e/AGENTS.md`](apps/web/e2e/AGENTS.md) |
 | 动菜单 / 权限 / 死链判定 | 硬纪律 6 + [`pages/menu/AGENTS.md`](packages/platform/src/pages/menu/AGENTS.md) |
-| 动 `ctx:check` / 品牌图标生成 / 生产部署脚本 | [`scripts/AGENTS.md`](scripts/AGENTS.md) |
+| 动 `ctx:check` / `arch:check` / 品牌图标生成 / 部署脚本 | [`scripts/AGENTS.md`](scripts/AGENTS.md) |
 
 每个目录下有一对 `AGENTS.md`（真身）+ `CLAUDE.md`（指向它的符号链接）：
 Claude Code 只认 `CLAUDE.md`，其余 agent 工具认 `AGENTS.md`，一份内容两边都读得到。
@@ -135,7 +135,8 @@ install 的是 `apps/web/Dockerfile` 那条 `pnpm install --filter web...
 一走到 `packages/platform/src` 就成片 `Cannot find module 'react'`。
 **结论：新增一个 workspace 内的 alias/路径映射时，同时问一句「这个依赖关系
 在 `package.json` 里写了吗」**——两处不同步，会一直是绿的，直到某个地方
-第一次做 scoped install。
+第一次做 scoped install。**这条现在有闸门：`pnpm arch:check`**（已进 CI，核对
+import / tsconfig `paths` / 箭头方向），见 [`scripts` 分册](scripts/AGENTS.md)。
 
 ## 本地起服务
 
@@ -289,6 +290,10 @@ const search = Route.useSearch()
 `packages/ui/src/styles/globals.css` 里的 `@source` 决定哪些文件被扫描。
 漏了的包，它独有的类会**静默不生成**（class 在、CSS 规则不在，表现为布局莫名其妙塌掉）。
 
+⚠️ **实测：那两条 `@source` 是通配的**（`apps/*/src/**` + `packages/*/src/**`），
+新增的包落在 `apps/` 或 `packages/` 下就自动覆盖，别去找一份不存在的逐包清单。
+真正要动手的是下面这半条：新开一个 CSS 入口。
+
 ⚠️ **新开一个 CSS 入口时同样要写 `@source`** —— Tailwind v4 的自动探测以那个 CSS
 文件所在目录为根。`apps/mobile` 就为此全裸过一轮：入口在 `src/styles/` 下、
 那目录没有组件，**一条工具类都没生成**，而打包和 Metro 全程不报错。
@@ -376,20 +381,16 @@ pnpm db:history                        # 看链条
 - **和上游 FBA 冲突是可以接受的代价**。永久分叉是既定事实（见「fork 管理」），
   为了 cherry-pick 方便而保留用不上的结构，是把成本永久摊给自己
 
-> ⚠️ 改模型后**表结构不会跟着变**：`--reload` 只是重启进程重新 import 模型，
-> 不会去动数据库里已经建好的表。新增/删除列仍要手写 `ALTER` 或 drop_all + create_all，
-> 否则新进程一样会 SELECT 不存在的列 —— reload 让人以为「已经生效了」，这是新的坑。
-> 改了字段也要同步 `backend/sql/*/init_*_test_data.sql` —— 那些 INSERT 是显式列名的，
-> 漏改会让全新环境初始化失败。
+> ⚠️ 改模型后**表结构不会跟着变**：`--reload` 只重启进程重新 import 模型，
+> 不动已经建好的表 —— 它让人以为「已经生效了」。要跑迁移（见上一节）。
+> 改了字段还要同步 `backend/sql/*/init_snowflake_test_data.sql`，那些 INSERT 是
+> 显式列名的，漏改会让全新环境初始化失败。
 
 ## fork 管理
 
-后端 fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)
-（FBA）—— 三层结构（`api/v1 → service → crud`）、插件机制、RBAC 与数据权限模型
-都是它的设计，不是本仓库发明的。本仓库在此基础上新增了 SQL Server 支持，现在
-同时支持 MySQL / PostgreSQL / SQL Server 三种数据库；前两种沿用上游写法，
-SQL Server 是本仓库加的那一种。上游明确拒绝合并 SQL Server 支持，所以是永久分叉，
-只 cherry-pick 上游安全补丁，功能更新不跟。
+归属见开头那段：三层结构（`api/v1 → service → crud`）、插件机制、RBAC 与
+数据权限模型都是 FBA 的设计，SQL Server 支持是本仓库加的。上游明确拒绝合并
+那部分，所以是**永久分叉**，只 cherry-pick 上游安全补丁，功能更新不跟。
 
 - 分叉基线记在 `apps/api/.upstream-baseline`
 - 上游同为 MIT 协议，原始版权声明保留在 `apps/api/LICENSE`

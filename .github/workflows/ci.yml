@@ -63,6 +63,14 @@ jobs:
       - name: ctx
         run: pnpm ctx:check
 
+      # 🔴 依赖箭头同理。它比文档更要命：alias / tsconfig paths 写了而
+      # `package.json` 没写，会**一直是绿的**，直到某个地方第一次做
+      # scoped install —— 上一次是 `apps/web/Dockerfile` 的
+      # `pnpm install --filter web...`，在 GHCR 构建里当场炸成一片
+      # `Cannot find module 'react'`。整仓 `pnpm install` 永远盖着这个洞。
+      - name: arch
+        run: pnpm arch:check
+
   lint-frontend:
     name: eslint
     runs-on: ubuntu-latest

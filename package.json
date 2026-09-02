@@ -14,6 +14,7 @@
     "i18n:fix": "pnpm --filter @admin/i18n check:fix",
     "i18n:jsx": "pnpm --filter @admin/i18n jsx",
     "ctx:check": "node scripts/ctx-check.mjs",
+    "arch:check": "node scripts/arch-check.mjs",
     "brand:icons": "node scripts/gen-brand-icons.mjs",
     "deploy:test": "docker compose -f docker-compose.dev.yml up -d",
     "deploy:test:down": "docker compose -f docker-compose.dev.yml down",
