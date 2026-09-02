@@ -47,6 +47,39 @@ docker exec fba_mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$PW" 
 - **`turbo.json` 里 `test` 必须 `cache: false`** —— 测试打真实数据库，
   缓存住「上次通过了」毫无意义
 
+### 🔴 测试里建了数据，收尾必须**硬删** —— 接口的 delete 是逻辑删除
+
+`DELETE /sys/users/{pk}` 这类接口走的是 `LogicalDeleteMixin`：把 `deleted` 从 0
+改成**行自己的 id**（`0：否；id：是`），行永久留在表里。
+
+所以「建临时数据 → 用接口删掉」这个套路会**每跑一次 pytest 就往 `fba_test` 里
+堆几行**，而且没有任何现象（测试照样绿）。实测跑了几轮就积了 11 行，其中 1 行
+还是 **live** 的（`deleted = 0`）—— 那是一次 teardown 自己崩掉留下的，
+而它会让下一次运行直接 `409 用户名已注册`，报错完全看不出跟残留有关。
+
+收尾直连库 `DELETE`，并连带关联行（`sys_user_role` 之类），否则留下孤儿。
+
+⚠️ **不能复用共享的 `async_test_db_session`** —— 它已经被 `conftest.py` 的依赖
+覆盖绑到 TestClient 自己的事件循环上了，在 `asyncio.run()` 里用会
+`attached to a different loop`。每次新建一个独立引擎
+（`create_database_async_engine(get_database_url(unittest=True))`），
+和 `security/test_user_cache_invalidation.py` 是同一个套路。
+范例见 `api_v1/test_admin_writes.py` 的 `temp_user` fixture。
+
+### ⚠️ `count > 0 ? success() : fail()` 这个形状，else 分支不一定走得到
+
+handler 里到处是这个形状，很容易一看到就断言「这里会静默失败」。**要看 service
+有没有先做检查**：
+
+| 接口 | else 分支能到吗 |
+|---|---|
+| `PUT /sys/users/{pk}/password` | **到不了** —— `reset_password` 拿不到用户时先抛 `NotFoundError`，实测返回 **404** 而不是「200 + code 400」 |
+| `PUT /sys/users/me/nickname` | 看方言 —— SQL Server / PostgreSQL 的 rowcount 数**匹配**行，设同值也是 1；MySQL 数**变更**行才会是 0（见 `api_v1/test_me_envelope.py`） |
+
+结论不是「信封判定没必要」—— `fail()` 在别处是真会发生的，客户端只看 `!res.ok`
+依然是错的。结论是**别拿这个形状当「此处会静默失败」的证据**，要么读 service，
+要么写一条测试。
+
 ### 写测试时：`UPLOAD_DIR` 必须顶到 tmp
 
 `UPLOAD_DIR` 是在各模块顶层 `from ... import UPLOAD_DIR` 进来的，
