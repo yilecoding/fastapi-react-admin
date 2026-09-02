@@ -28,9 +28,7 @@ export default function ChangePasswordScreen() {
     setError(null)
     try {
       await api.PUT('/api/v1/sys/users/me/password', {
-        old_password: oldPassword,
-        new_password: newPassword,
-        confirm_password: confirm,
+        body: { old_password: oldPassword, new_password: newPassword, confirm_password: confirm },
       })
       // 🔴 改密成功之后**这个会话已经死了**：`user_service.update_password` 会
       // `delete_by_prefix` 掉该用户的 access / refresh / 用户缓存三组 key。

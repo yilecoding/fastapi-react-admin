@@ -1,58 +1,53 @@
-/**
- * 分页结构和错误类型都在 `@admin/api`（两端共用），这里只留
- * 移动端用到的那几个 DTO。
- */
-export type { PageData } from '@admin/api'
+import type { components } from '@admin/api/schema'
 
 /**
- * 后端契约的手抄本。
+ * 后端契约 —— **从生成的 `schema.d.ts` 派生，不再手抄**。
  *
- * ⚠️ web 端是 `pnpm gen:api` 从 OpenAPI 生成 `schema.d.ts` 的；移动端暂时手抄，
- * 因为那份生成物住在 `packages/platform` 里，而 `apps/mobile` 不在那条依赖箭头上。
- * **改后端契约时这份要跟着改** —— 它不会自己报错，字段对不上只会在运行时
- * 变成 `undefined`（表现为界面上某一项空着，不报错）。
- * 等移动端要用的接口多起来，再考虑把 `gen:api` 的产物拆成一个独立包。
+ * 🔴 这份文件曾经是一整份**手抄本**（十几个 DTO、上百个字段）。它不会自己报错：
+ * 字段名对不上只会在运行时变成 `undefined`，表现为界面上某一项空着、不报错。
+ * 现在全部指向 `components['schemas'][...]`，后端改了契约 →
+ * `pnpm --filter @admin/api gen:api` 重新生成 → **写错就是编译错误**。
+ *
+ * ⚠️ **剩下的三个别名只为「组件 props 要写类型」而存在**（`NotifRow` 收一条
+ * `Notification`、`SessionProvider` 的 state 是 `CurrentUser | null`）。
+ * 返回类型本身**不需要**别名 —— `api.GET('/api/v1/sys/users/me')` 是推断的。
+ * 原来还有 `LoginResult` / `Captcha` / `PageData`，全部因为推断而变成了死代码
+ * （是 eslint 抓出来的）。**不要为了「有个名字」再往这里加别名。**
  */
+type S = components['schemas']
 
-/** `GET /api/v1/sys/users/me` —— 注意 dept / roles 在这个 DTO 里被**摊平成名字**了 */
-export type CurrentUser = {
-  id: string
-  uuid: string
-  dept_id: string | null
-  username: string
-  nickname: string
-  avatar: string | null
-  email: string | null
-  phone: string | null
-  status: number
-  is_superuser: boolean
-  is_staff: boolean
-  is_multi_login: boolean
-  join_time: string
-  last_login_time: string | null
-  timezone: string
-  /** 部门**名称**（`GetCurrentUserInfoWithRelationDetail` 把对象换成了名字） */
-  dept: string | null
-  /** 角色**名称**列表，同上 */
-  roles: string[]
-}
+/**
+ * `GET /api/v1/sys/users/me`。
+ *
+ * ⚠️ `dept` / `roles` 在这个 DTO 里被后端的 model_validator **摊平成名字**了
+ * （`string` / `string[]`，不是对象）。要完整对象得走 `GET /sys/users/{pk}/roles`。
+ *
+ * 🔴 **注意 `dept_id` 的类型是错的（schema 说 `number | null`，wire 上是字符串）。**
+ * 原因很具体：`common/schema.py` 只给 `id` 挂了
+ * `@field_serializer('id') -> str | int`，所以只有 `id` 在 OpenAPI 里是联合类型；
+ * 而**外键（`dept_id` / `parent_id` / `role_id`…）没有那个 serializer**，
+ * 声明成 `int`，可编码层的 `stringify_unsafe_ints` 照样把它们转成了字符串
+ * （`utils/serializers.py` 的注释里自己写着「外键都漏了」）。
+ *
+ * 移动端目前一处都没用到 `dept_id`，所以**不在这里覆盖** —— 覆盖一个类型
+ * 就要维护一份「哪些字段的 schema 是错的」名单，而真正的修法在后端标注上。
+ * 将来要用它做请求参数时先看 [`packages/api` 分册](../../../../packages/api/AGENTS.md)。
+ */
+export type CurrentUser = S['GetCurrentUserInfoWithRelationDetail']
 
-/** `POST /api/v1/auth/login` —— 响应体里**没有 refresh token**，它在 httpOnly cookie 里 */
-export type LoginResult = {
-  access_token: string
-  access_token_expire_time: string
-  password_expire_days_remaining: number | null
-  user: Omit<CurrentUser, 'dept' | 'roles'> & { dept_id: string | null }
-}
+/**
+ * `GET /api/v1/sys/notifications` 的一条。
+ *
+ * 🔴 `read_time` **有值即已读**。它不是数据库列，是 service 在分页之后按
+ * `sys_notification_read` 回填的 —— 别指望能用它做服务端筛选，
+ * 筛未读要用 `?unread=true` 那个查询参数。
+ *
+ * ⚠️ `link` 是**前端路由**，那是 web 的路由；移动端没有对应页面，只展示不跳。
+ */
+export type Notification = S['GetNotificationDetail']
 
-/** `GET /api/v1/auth/captcha` —— `image` 是裸 base64，**不带 `data:` 前缀** */
-export type Captcha = {
-  is_enabled: boolean
-  expire_seconds: number
-  uuid: string
-  image: string
-}
-
+/** `GET /api/v1/sys/notifications/unread-count` */
+export type NotificationUnread = S['GetNotificationUnreadDetail']
 
 /**
  * 站内通知分类。数值来自后端的 `NotificationCategory` 枚举。
@@ -64,29 +59,3 @@ export const NOTIFICATION_CATEGORY = {
   1: '公告',
   2: '任务',
 } as const
-
-export type NotificationCategory = keyof typeof NOTIFICATION_CATEGORY
-
-/** `GET /api/v1/sys/notifications` 的一条 */
-export type Notification = {
-  id: string
-  title: string
-  content: string
-  category: NotificationCategory
-  /** 点击跳转的**前端路由** —— 那是 web 的路由，移动端没有对应页面，暂时只展示不跳 */
-  link: string | null
-  /** 为空表示全员广播 */
-  recipient_id: string | null
-  created_time: string
-  /** 🔴 **有值即已读**。它不是数据库列，是 service 在分页之后按
-   *  `sys_notification_read` 回填的 —— 别指望能用它做服务端筛选，
-   *  筛未读要用 `?unread=true` 那个查询参数。 */
-  read_time: string | null
-}
-
-/** `GET /api/v1/sys/notifications/unread-count` */
-export type NotificationUnread = {
-  total: number
-  /** key 是**分类数值的字符串形式**（'0' / '1' / '2'），不是名字 */
-  by_category: Record<string, number>
-}

@@ -18,7 +18,6 @@ import { ApiError } from '@admin/api'
 
 import { api } from '@/lib/api'
 import { BRAND } from '@/lib/brand'
-import type { Captcha } from '@/lib/contract'
 import { remembered } from '@/lib/remember'
 import { useSession } from '@/lib/session'
 
@@ -94,7 +93,7 @@ export default function LoginScreen() {
     inFlight.current = true
     setCaptcha({ kind: 'loading' })
     try {
-      const data = await api.GET<Captcha>('/api/v1/auth/captcha')
+      const data = await api.GET('/api/v1/auth/captcha')
       if (!alive.current) return
       setCaptcha(data.is_enabled ? { kind: 'ready', uuid: data.uuid, image: data.image } : { kind: 'off' })
     } catch (err) {

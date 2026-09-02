@@ -4,7 +4,7 @@ import { ApiError } from '@admin/api'
 import { setDisplayTimeZone } from '@admin/i18n'
 
 import { api, setSessionExpiredHandler } from '@/lib/api'
-import type { CurrentUser, LoginResult } from '@/lib/contract'
+import type { CurrentUser } from '@/lib/contract'
 import { serverStore } from '@/lib/server'
 import { tokenStore } from '@/lib/token-store'
 
@@ -65,7 +65,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [applyAnonymous])
 
   const reload = React.useCallback(async () => {
-    applyUser(await api.GET<CurrentUser>('/api/v1/sys/users/me'))
+    applyUser(await api.GET('/api/v1/sys/users/me'))
   }, [applyUser])
 
   // 冷启动
@@ -76,7 +76,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       await serverStore.hydrate()
       await tokenStore.hydrate()
       try {
-        const me = await api.GET<CurrentUser>('/api/v1/sys/users/me')
+        const me = await api.GET('/api/v1/sys/users/me')
         if (!alive) return
         setBootstrapError(null)
         applyUser(me)
@@ -99,11 +99,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const login = React.useCallback<Session['login']>(
     async (input) => {
-      const result = await api.POST<LoginResult>('/api/v1/auth/login', {
-        username: input.username,
-        password: input.password,
-        uuid: input.uuid ?? null,
-        captcha: input.captcha ?? null,
+      const result = await api.POST('/api/v1/auth/login', {
+        body: {
+          username: input.username,
+          password: input.password,
+          uuid: input.uuid ?? null,
+          captcha: input.captcha ?? null,
+        },
       })
       await tokenStore.set(result.access_token)
       // 登录响应里的 user 是 `GetUserInfoDetail`，**没有 dept / roles 的名字**；

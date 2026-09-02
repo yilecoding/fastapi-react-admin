@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
 import { api } from '@/lib/api'
-import { NOTIFICATION_CATEGORY, type Notification, type PageData } from '@/lib/contract'
+import { NOTIFICATION_CATEGORY, type Notification } from '@/lib/contract'
 import { relativeTime } from '@/lib/datetime'
 import { useUnread } from '@/lib/notifications'
 
@@ -48,8 +48,18 @@ export default function NotificationsScreen() {
     const mine = ++seq.current
     setError(null)
     try {
-      const q = f === 'unread' ? '&unread=true' : ''
-      const page = await api.GET<PageData<Notification>>(`/api/v1/sys/notifications?page=1&size=50${q}`)
+      /*
+       * ⚠️ 查询参数走 `params.query`，**不要自己拼字符串** —— 拼的话参数名
+       * 不会被校验（写成 `unreadd=true` 后端会静默忽略，界面上像筛选没生效）。
+       *
+       * 🔴 **也不要用条件展开** `...(cond ? { unread: true } : {})`：
+       * 展开进来的属性**绕过 TS 的多余属性检查**，写错名字一样不报
+       * （实测：`unreadd` 经展开是 0 错误，直接写是 1 错误）。
+       * 该省的参数传 `undefined` —— openapi-fetch 的 querySerializer 会跳过它。
+       */
+      const page = await api.GET('/api/v1/sys/notifications', {
+        params: { query: { page: 1, size: 50, unread: f === 'unread' ? true : undefined } },
+      })
       if (mine !== seq.current) return
       setItems(page.items)
     } catch (err) {
@@ -79,7 +89,9 @@ export default function NotificationsScreen() {
     // 失败了也不用回滚到「未读」—— 下一次刷新自然会纠正
     setItems((prev) => prev?.map((x) => (x.id === n.id ? { ...x, read_time: new Date().toISOString() } : x)) ?? null)
     try {
-      await api.PUT(`/api/v1/sys/notifications/${n.id}/read`)
+      // 路径参数走 `params.path`：第一个参数是 **schema 里的模板** `{pk}`，
+      // 不是拼好的串 —— 这样路径写错就是编译错误
+      await api.PUT('/api/v1/sys/notifications/{pk}/read', { params: { path: { pk: n.id } } })
       await refreshUnread()
     } catch {
       void load(filter)

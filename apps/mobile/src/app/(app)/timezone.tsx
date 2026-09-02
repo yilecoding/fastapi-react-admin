@@ -46,7 +46,7 @@ export default function TimezoneScreen() {
     setSaving(id)
     setError(null)
     try {
-      await api.PUT('/api/v1/sys/users/me/timezone', { timezone: id })
+      await api.PUT('/api/v1/sys/users/me/timezone', { body: { timezone: id } })
       await reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

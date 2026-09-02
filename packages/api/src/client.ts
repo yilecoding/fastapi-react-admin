@@ -1,6 +1,7 @@
 import createOpenApiClient from 'openapi-fetch'
 
 import { ApiError, NETWORK_STATUS, resolveEnvelope } from './index'
+import type { ApiMethods } from './types'
 
 /**
  * 两端共用的一份 API 客户端。
@@ -50,17 +51,31 @@ export type ApiClientConfig = {
 
   /** 刷新也救不回来时的收尾（清状态 + 跳登录页）。由各端 auth 层注入 */
   onSessionExpired?: () => void
+
+  /**
+   * 网络层失败（连不上 / DNS / TLS）时加工一下错误再抛。
+   *
+   * ⚠️ **做成注入而不是在调用点包一层**：包一层就要写一个
+   * `async function wrap(p) { try { return await p } catch … }`，
+   * 而**再包一层函数会把泛型全部擦掉** —— 那正是这次要打开的那套推断。
+   * 移动端用它把地址和原因翻成界面语言（RN 只给一句
+   * `Network request failed`，不说是哪一种，而地址是用户自己能改的）。
+   */
+  onNetworkError?: (error: ApiError) => ApiError
 }
 
 export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
 
-export type ApiClient = {
-  GET: <T>(path: string, init?: Record<string, unknown>) => Promise<T>
-  POST: <T>(path: string, init?: Record<string, unknown>) => Promise<T>
-  PUT: <T>(path: string, init?: Record<string, unknown>) => Promise<T>
-  DELETE: <T>(path: string, init?: Record<string, unknown>) => Promise<T>
-  PATCH: <T>(path: string, init?: Record<string, unknown>) => Promise<T>
-
+/**
+ * 🔴 **`Paths` 就是生成的 `schema.d.ts` 里那个 `paths`。**
+ * 路径、查询参数名、请求体、返回字段全部由它推出来 —— 见 `types.ts` 的注释，
+ * 那里记着为什么不能直接 `Paths[P][M]`、以及 path 参数为什么要放宽成 string。
+ *
+ * ⚠️ **不要在外面再包一层函数去转发这五个方法** —— 包一层就把泛型擦成
+ * `Promise<unknown>` 了，推断白做。要加行为（比如网络错误的文案）走
+ * `ApiClientConfig` 上的注入点。
+ */
+export type ApiClient<Paths extends {}> = ApiMethods<Paths> & {
   /**
    * 非 JSON 传输：multipart 上传 / 原始字节下载。
    *
@@ -87,7 +102,7 @@ export type ApiClient = {
   endSession: () => void
 }
 
-export function createApiClient(config: ApiClientConfig): ApiClient {
+export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiClient<Paths> {
   let onSessionExpired: (() => void) | null = config.onSessionExpired ?? null
 
   /*
@@ -146,6 +161,13 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
     return refreshing
   }
 
+  /** 网络层就没走通。把地址带上 —— RN 只给一句 `Network request failed` */
+  function networkError(err: unknown, path: string): ApiError {
+    const reason = err instanceof Error ? err.message : String(err)
+    const base = new ApiError(NETWORK_STATUS, NETWORK_STATUS, reason, `${config.getBaseUrl()}${path}`)
+    return config.onNetworkError ? config.onNetworkError(base) : base
+  }
+
   async function expire(): Promise<void> {
     await config.clearToken()
     onSessionExpired?.()
@@ -175,8 +197,7 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
       // 网络层就没走通（连不上 / DNS / TLS）。RN 只给一句
       // `Network request failed`，不说是哪一种 —— 把地址带上，
       // 否则排查时完全没有线索。
-      const reason = err instanceof Error ? err.message : String(err)
-      throw new ApiError(NETWORK_STATUS, NETWORK_STATUS, reason, `${config.getBaseUrl()}${path}`)
+      throw networkError(err, path)
     }
 
     /*
@@ -215,8 +236,7 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
     try {
       res = await fetch(`${config.getBaseUrl()}${path}`, { method, body, headers, credentials: 'include' })
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err)
-      throw new ApiError(NETWORK_STATUS, NETWORK_STATUS, reason, `${config.getBaseUrl()}${path}`)
+      throw networkError(err, path)
     }
 
     if (!res.ok) {
@@ -240,12 +260,19 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
     return res
   }
 
+  /*
+   * ⚠️ 这里有一次**刻意的** `as`：`send()` 的运行时是按字符串路径转发的
+   * （openapi-fetch 的实例也只能按方法名取），拿不到 `Paths` 的信息。
+   * 类型面在 `types.ts` 里独立成立、并用探针核过（无参 / 雪花 ID 走 path 参数 /
+   * 查询参数名 / 请求体 / 路径写错这 5 种），所以这一次转换是安全的边界。
+   * **只有这一处**，不要在别处再 as。
+   */
   return {
-    GET: (path, init) => send('GET', path, init),
-    POST: (path, init) => send('POST', path, init),
-    PUT: (path, init) => send('PUT', path, init),
-    DELETE: (path, init) => send('DELETE', path, init),
-    PATCH: (path, init) => send('PATCH', path, init),
+    GET: (path: string, init?: Record<string, unknown>) => send('GET', path, init),
+    POST: (path: string, init?: Record<string, unknown>) => send('POST', path, init),
+    PUT: (path: string, init?: Record<string, unknown>) => send('PUT', path, init),
+    DELETE: (path: string, init?: Record<string, unknown>) => send('DELETE', path, init),
+    PATCH: (path: string, init?: Record<string, unknown>) => send('PATCH', path, init),
     sendRaw: (method, path, body, accept) => sendRaw(method, path, body, accept),
     setSessionExpiredHandler: (fn) => {
       onSessionExpired = fn
@@ -254,5 +281,5 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
       void config.clearToken()
       onSessionExpired?.()
     },
-  }
+  } as ApiClient<Paths>
 }

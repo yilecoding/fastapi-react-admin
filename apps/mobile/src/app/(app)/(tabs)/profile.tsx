@@ -82,7 +82,10 @@ export default function ProfileScreen() {
         <Field label={t('手机号')} value={user.phone} note={t('需管理员修改')} />
         <Field label={t('邮箱')} value={user.email} note={t('改邮箱要邮件验证码')} />
         <Field label={t('时区')} value={user.timezone} mono />
-        <Field label={t('账号 ID')} value={user.id} mono />
+        {/* ⚠️ schema 里 `id` 是 `string | number`（后端那个 `field_serializer` 的
+            声明就是 `-> str | int`），wire 上实际总是字符串。这里只是展示，
+            就地 `String()` —— **不要 `Number()`**（硬纪律 6：会丢精度） */}
+        <Field label={t('账号 ID')} value={String(user.id)} mono />
       </Group>
 
       <GroupHeader>{t('账号')}</GroupHeader>

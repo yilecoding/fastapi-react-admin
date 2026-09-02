@@ -737,22 +737,39 @@ src/app/(app)/notifications.tsx 列表：全部 / 未读 · 点一条标已读 �
 ⚠️ 标记已读是**幂等**的（重复标记返回 0 行也算成功），所以列表用了乐观更新、
 失败也不回滚 —— 下一次刷新自然会纠正。
 
-## 契约是手抄的：`src/lib/contract.ts`
+## 契约不再手抄：类型从 `schema.d.ts` 推出来
 
-web 端的类型是 `pnpm gen:api` 从 OpenAPI 生成的，但那份产物住在
-`packages/platform` 里，而 `apps/mobile` 不在 `i18n ← ui ← platform ← apps/web`
-那条箭头上。所以移动端这份是**手抄**的。
+🔴 **移动端用的是严类型面** —— 路径、查询参数名、请求体、返回字段全部由
+`@admin/api` 从 `schema.d.ts` 推出来，**写错就是编译错误**：
 
-🔴 **改后端契约时这份要跟着改** —— 它不会自己报错，字段对不上只会在运行时变成
-`undefined`（表现为界面上某一项空着，不报错）。
+```ts
+const me = await api.GET('/api/v1/sys/users/me')            // me.nickname 有类型
+await api.PUT('/api/v1/sys/notifications/{pk}/read', { params: { path: { pk: n.id } } })
+await api.GET('/api/v1/sys/notifications', { params: { query: { page: 1, size: 50 } } })
+```
 
-两个抄的时候容易错的点，已经在文件里标了：
+⚠️ **web 端还在松类型面上**（三条结构性障碍，见
+[`packages/api` 分册](../../packages/api/AGENTS.md)）—— 所以别照 `packages/platform`
+里的 `api.GET<T>()` 写法抄到这边。
+
+`src/lib/contract.ts` 曾经是一整份**手抄本**（十几个 DTO、上百个字段），
+字段名对不上不会报错、只在运行时变 `undefined`（界面上空一格）。
+现在只剩三个别名，而且都指向 `components['schemas'][...]`，
+留着**只为组件 props 要写类型**（`NotifRow` 收一条 `Notification`）。
+原来的 `LoginResult` / `Captcha` / `PageData` 全部因为推断变成死代码 —— eslint 抓出来的。
+
+两个仍然要知道的契约细节：
 
 - `GET /sys/users/me` 用的是 `GetCurrentUserInfoWithRelationDetail`，
-  它把 `dept` 换成了**部门名字**、`roles` 换成了**角色名字列表**（不是对象）
+  它把 `dept` 换成了**部门名字**、`roles` 换成了**角色名字列表**（不是对象）。
+  要完整对象得走 `GET /sys/users/{pk}/roles`
 - `POST /auth/login` 的响应体里**没有 refresh token**，它只在 Set-Cookie 里；
   而且响应里的 `user` 是 `GetUserInfoDetail`，**没有 dept/roles 名字** ——
   所以登录成功后要再打一次 `/me` 才拿得到个人中心要显示的东西
+
+🔴 **查询参数不要用条件展开**：`...(cond ? { unread: true } : {})` 里的属性
+**绕过 TS 的多余属性检查**（实测：`unreadd` 经展开 0 错误，直接写 1 错误）。
+该省的传 `undefined`。
 
 ## 🔴 占位符颜色只能走 `placeholderTextColor`
 

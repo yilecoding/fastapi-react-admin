@@ -44,7 +44,7 @@ export function UnreadProvider({ children }: { children: React.ReactNode }) {
   const refresh = React.useCallback(async () => {
     if (status !== 'authed') return
     try {
-      setUnread(await api.GET<NotificationUnread>('/api/v1/sys/notifications/unread-count'))
+      setUnread(await api.GET('/api/v1/sys/notifications/unread-count'))
     } catch {
       // 红点拉不到就不显示 —— 这里**可以**吞掉异常，因为红点不是一个「功能
       // 入口」而是一个装饰。但要把 `unread` 归回 `null`（= 不知道），

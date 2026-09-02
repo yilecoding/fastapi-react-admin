@@ -33,14 +33,14 @@ export default function EditProfileScreen() {
       // 两个字段是**两个独立的接口**，后端没有一个「改我的资料」的合并口。
       // 只发改过的那个：全都发的话，没动的字段也会写一遍，头像那条尤其危险（见下）。
       if (nicknameChanged) {
-        await api.PUT('/api/v1/sys/users/me/nickname', { nickname: nickname.trim() })
+        await api.PUT('/api/v1/sys/users/me/nickname', { body: { nickname: nickname.trim() } })
       }
       if (avatarChanged) {
         // 🔴 空串要发 `null`，**不能发 `''`**。
         // 读取侧 `GetUserInfoDetail.avatar` 是 `HttpUrl | None`，存进空串之后
         // 登录和 `/users/me` 会全部 422（`url_parsing: input is empty`）——
         // 连改坏它的人自己都登不回来。后端注释里记了这次实测。
-        await api.PUT('/api/v1/sys/users/me/avatar', { avatar: avatar.trim() || null })
+        await api.PUT('/api/v1/sys/users/me/avatar', { body: { avatar: avatar.trim() || null } })
       }
       await reload()
       router.back()

@@ -145,6 +145,75 @@ printf '%s' '连不上服务器' | iconv -f UTF-8 -t UTF-16LE | grep -c -a -F -f
 ⚠️ 写这类探针时注意上面那条 `fetch` 快照 —— 建完客户端再换
 `globalThis.fetch` 是**无效**的，探针自己会先假绿一次（实测踩到了）。
 
+## 类型推断：`src/types.ts`（移动端已切，web 端还没）
+
+路径、查询参数名、请求体、返回字段全部从 `schema.d.ts` 推出来：
+
+```ts
+const me = await api.GET('/api/v1/sys/users/me')            // me.nickname 有类型
+await api.PUT('/api/v1/sys/notifications/{pk}/read', { params: { path: { pk: n.id } } })
+await api.GET('/api/v1/sys/notifications', { params: { query: { page: 1, size: 50 } } })
+```
+
+在它之前 `api.GET<T>()` 的 `T` 是**手写**的：123 个调用点里 71 个自己声明了
+一遍返回结构，**和 `schema.d.ts` 从来没对过账**。写错一个字段名没有任何信号 ——
+界面上就空一格。移动端更彻底，整份 DTO 是手抄的（`src/lib/contract.ts` 已退役）。
+
+**实测**（突变验证，4/4 全抓）：字段名写错 → `TS2551 Did you mean 'timezone'?`；
+路径写错 → `TS2345 not assignable to PathsWithMethod`；请求体字段写错 →
+`TS2561`；查询参数名写错 → `TS2561`。
+
+### 🔴 不要用条件展开传查询参数
+
+```ts
+params: { query: { page: 1, ...(cond ? { unread: true } : {}) } }   // ❌
+params: { query: { page: 1, unread: cond ? true : undefined } }     // ✅
+```
+
+**展开进来的属性绕过 TS 的多余属性检查。** 实测：`unreadd` 经展开是 **0 错误**，
+直接写是 1 错误。该省的参数传 `undefined` —— openapi-fetch 的 querySerializer 跳过它。
+
+### 🔴 不要在外面再包一层函数转发那五个方法
+
+包一层就把 `Paths` 泛型擦成 `Promise<unknown>` —— 推断全部失效，**而且不报错**，
+只是所有调用点悄悄退回 `unknown`。要加行为走 `ApiClientConfig` 上的注入点
+（移动端的网络错误文案本来包在外面，正是为此改成了 `onNetworkError`）。
+
+### ⚠️ schema 对**外键**的类型是错的
+
+`common/schema.py` 只给 `id` 挂了 `@field_serializer('id') -> str | int`，
+所以只有 `id` 在 OpenAPI 里是 `string | number` 的联合。而**外键
+（`dept_id` / `parent_id` / `role_id`…）没有那个 serializer**，声明成 `int` ——
+可编码层的 `stringify_unsafe_ints` 照样把它们转成了字符串
+（`utils/serializers.py` 的注释里自己写着「外键都漏了」）。
+
+于是拿外键当请求参数时会撞上硬纪律 6：类型说 `number`、值是 `string`。
+`src/types.ts` 里的 `LoosePath` 只放宽了 **path 参数**（44 个 operation 把
+path 参数声明成 `number`），**请求体和响应体里的外键没有放宽** ——
+真正的修法在后端标注上，不是在这里维护一份「哪些字段的 schema 是错的」名单。
+
+### 🔴 web 端为什么还没切：三条**结构性**障碍
+
+不是「还没抄完」。切之前必须先解掉：
+
+| 障碍 | 位置 | 为什么不是机械改动 |
+|---|---|---|
+| 列表页引擎的路径是运行时配置 | `packages/platform/src/pages/_shared/list-page.tsx` 的 `cfg.endpoint` | 字面量路径类型对它不成立；要改成每页各传一个有类型的 queryFn，那是重设计 `ListPage` 的抽象 |
+| 仪表盘也拼动态路径 | `packages/platform/src/pages/dashboard/api.ts` | 同上 |
+| 约 20 个页面的查询串是函数拼的 | `?${qs(p)}` / `?${scopeQs(p)}` / `?${buildQuery(...)}` | 要改成 `params.query` 就得把那 20 个构造器逐个重设计（它们还顺手做了丢空值、格式化日期等事） |
+
+实测数据：把 platform 直接指到严类型面，是 **57 个文件 / 433 个错误**
+（其中根因 90 个：72 个显式泛型 + 18 个模板字符串路径，其余是级联）。
+
+### 两处不能直接写的类型（都踩过）
+
+- **`Paths[P][M]` 写不了。** `paths` 是**接口**、没有索引签名，TS 无法为泛型
+  `Paths` 证明 `M extends keyof Paths[P]`。openapi-fetch 自己的 `ClientMethod`
+  把 Paths 约束成 `Record<string, Record<HttpMethod, {}>>` —— **`paths` 不满足
+  那个约束**（`Index signature for type 'string' is missing`），它们的 `.d.ts`
+  只是被 `skipLibCheck: true` 盖住了。用条件类型把双重索引拆开
+- **名字数组不能加 `as const`**（这条在 mobile 分册，`useCSSVariable` 同一个物种）
+
 ## 🔴 判断错误必须同时看 `httpStatus` 和 `bizCode`
 
 `_get_exception_code` 会把**非法 HTTP 状态码降级成 400**。所以

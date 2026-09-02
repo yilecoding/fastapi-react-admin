@@ -1,4 +1,5 @@
 import { createApiClient, resolveEnvelope, type Method } from '@admin/api'
+import type { paths } from '@admin/api/schema'
 
 import { tokenStore } from './token-store'
 
@@ -21,7 +22,7 @@ export function setApiLanguage(lang: string): void {
  * localStorage（`tokenStore`）、语言来自上面那个注入点。
  * 想改重试/错误判定逻辑，去改那个包，不要在这里补一份。
  */
-const client = createApiClient({
+const client = createApiClient<paths>({
   getBaseUrl: () => API_BASE,
   getToken: () => tokenStore.get(),
   setToken: (t) => tokenStore.set(t),
@@ -31,12 +32,32 @@ const client = createApiClient({
 
 export const { setSessionExpiredHandler, endSession } = client
 
+/**
+ * ⚠️ **web 端目前用的是「松」的类型面：路径是 `string`、返回类型靠调用点手写 `<T>`。**
+ *
+ * `@admin/api` 已经有一套从 `schema.d.ts` 推断的严类型面（`ApiMethods<paths>`，
+ * 见那个包的 `types.ts`），移动端**已经切过去了**。web 端没切，是因为有三处
+ * **结构性**障碍，不是「还没抄完」：
+ *
+ * | 障碍 | 位置 | 为什么不是机械改动 |
+ * |---|---|---|
+ * | 列表页引擎的路径是运行时配置 | `pages/_shared/list-page.tsx` 的 `cfg.endpoint` | 字面量路径类型对它不成立；要改成每页各传一个有类型的 queryFn，那是重设计 `ListPage` 的抽象 |
+ * | 仪表盘也拼动态路径 | `pages/dashboard/api.ts` | 同上 |
+ * | 约 20 个页面的查询串是函数拼的 | `?${qs(p)}` / `?${scopeQs(p)}` / `?${buildQuery(...)}` | 要改成 `params.query` 就得把那 20 个构造器逐个重设计（它们还顺手做了丢空值、格式化日期等事） |
+ *
+ * 🔴 **所以这里刻意保留一层转发 + 一次 `as`。** 转发会把 `Paths` 的泛型擦掉 ——
+ * 那正是「松」的含义，但代价是**路径写错、字段名写错都没有信号**。
+ * 谁要动这块：切换的正确顺序是先解掉上面三条，再把 `api` 换成 `client` 本身。
+ */
+type LooseMethod = (path: string, init?: Record<string, unknown>) => Promise<unknown>
+const loose = client as unknown as Record<Method, LooseMethod>
+
 export const api = {
-  GET: <T>(path: string, init?: Record<string, unknown>) => client.GET<T>(path, init),
-  POST: <T>(path: string, init?: Record<string, unknown>) => client.POST<T>(path, init),
-  PUT: <T>(path: string, init?: Record<string, unknown>) => client.PUT<T>(path, init),
-  DELETE: <T>(path: string, init?: Record<string, unknown>) => client.DELETE<T>(path, init),
-  PATCH: <T>(path: string, init?: Record<string, unknown>) => client.PATCH<T>(path, init),
+  GET: <T>(path: string, init?: Record<string, unknown>) => loose.GET(path, init) as Promise<T>,
+  POST: <T>(path: string, init?: Record<string, unknown>) => loose.POST(path, init) as Promise<T>,
+  PUT: <T>(path: string, init?: Record<string, unknown>) => loose.PUT(path, init) as Promise<T>,
+  DELETE: <T>(path: string, init?: Record<string, unknown>) => loose.DELETE(path, init) as Promise<T>,
+  PATCH: <T>(path: string, init?: Record<string, unknown>) => loose.PATCH(path, init) as Promise<T>,
 }
 
 /**
