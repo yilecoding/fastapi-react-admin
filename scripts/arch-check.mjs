@@ -290,6 +290,33 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', '
   }
 }
 
+// ── 品牌信息：版本号不能写死 ──────────────────────────────────────────
+//
+// `apps/web/src/lib/brand.ts` 的开头写着「改名字、改版本只动这里」，
+// 而 `version` 原来手写着 `"v0.0.1"` —— 和 `apps/web/package.json` 的 `0.0.1`
+// 是**两份真相源**。bump 了包版本忘了改它，登录页和页脚就长期显示旧版本，
+// 而没有任何东西会发现（没人比对过这两个数）。
+//
+// 现在版本从 `package.json` 注入（`VITE_APP_VERSION`），实测 bump 成 9.9.9
+// 产物里就是 `v9.9.9`。这条守卫防的是有人再把它写死回去。
+{
+  const brandPath = path.join(ROOT, 'apps/web/src/lib/brand.ts')
+  if (fs.existsSync(brandPath)) {
+    const src = stripComments(fs.readFileSync(brandPath, 'utf8'))
+    const hardcoded = src.match(/version:\s*['"`](v?\d+\.\d+\.\d+)/)
+    if (hardcoded) {
+      add(
+        'error',
+        'apps/web/src/lib/brand.ts',
+        'hardcoded-version',
+        `version 写死成了 ${hardcoded[1]} —— 它必须来自 package.json（VITE_APP_VERSION）`,
+      )
+    }
+  } else {
+    add('error', 'apps/web/src/lib/brand.ts', 'missing-brand', '文件不在了，这条守卫已经罩不住了')
+  }
+}
+
 // ── 输出 ──────────────────────────────────────────────────────────────
 const errors = problems.filter((p) => p.level === 'error')
 const warns = problems.filter((p) => p.level === 'warn')
@@ -304,6 +331,8 @@ for (const [where, ps] of byWhere) {
   for (const p of ps) console.log(`  ${p.level === 'error' ? '✗' : '!'} [${p.rule}] ${p.msg}`)
 }
 
-console.log(`\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 错误 ${errors.length} · 警告 ${warns.length}`)
+console.log(
+  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 品牌版本 · 错误 ${errors.length} · 警告 ${warns.length}`,
+)
 if (!problems.length) console.log('[ok] 没有漂')
 process.exit(errors.length ? 1 : 0)

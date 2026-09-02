@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process"
+import { createRequire } from "node:module"
 import path from "node:path"
 import tailwindcss from "@tailwindcss/vite"
 import { fileViewerRenderers } from "@file-viewer/vite-plugin"
@@ -16,6 +17,19 @@ import { defineConfig, type Plugin } from "vite"
  * 不用 vite 自己的产物 hash：那要等 bundle 生成完才知道，而
  * `import.meta.env` 的替换发生在更早的转换阶段。
  */
+/**
+ * 产品版本的**唯一真相源是 `package.json`**，注入成
+ * `import.meta.env.VITE_APP_VERSION` 给 `lib/brand.ts` 用。
+ *
+ * ⚠️ 那里原来手写着 `version: "v0.0.1"` —— 和 `package.json` 的 `0.0.1`
+ * 是两份。bump 了包版本忘了改它，登录页和页脚就长期显示旧版本，
+ * **而没有任何东西会发现**（没人比对过这两个数）。
+ *
+ * 用 `createRequire` 读而不是 `import ... from './package.json'`：
+ * 后者要开 `resolveJsonModule`，还会把整个 package.json 打进产物。
+ */
+const pkgVersion = createRequire(import.meta.url)("./package.json").version as string
+
 function buildIdPlugin(): Plugin {
   let buildId = process.env.BUILD_ID ?? ""
   if (!buildId) {
@@ -49,6 +63,10 @@ function buildIdPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  // 产品版本：唯一真相源是 package.json（见上面 pkgVersion 的说明）。
+  // 放主 config 而不是 buildIdPlugin —— 那个是 `apply: "build"`，
+  // 开发期不生效，而版本号在 dev 也该显示对的那个
+  define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkgVersion) },
   plugins: [
     buildIdPlugin(),
     tanstackRouter({ target: "react" }),
