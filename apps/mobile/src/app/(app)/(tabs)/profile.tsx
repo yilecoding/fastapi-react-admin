@@ -1,10 +1,10 @@
 import { useRouter } from 'expo-router'
-import { ChevronRightIcon, KeyRoundIcon, LogOutIcon, SquarePenIcon, TriangleAlertIcon } from 'lucide-react-native'
+import { ChevronRightIcon, KeyRoundIcon, SquarePenIcon, TriangleAlertIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
 import { BrandTop } from '@/components/brand-top'
-import { Chevron, Group, GroupHeader, PressRow, Row, RowIcon } from '@/components/grouped'
+import { Chevron, DangerRow, Group, GroupHeader, PressRow, Row, RowIcon } from '@/components/grouped'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Text } from '@/components/ui/text'
@@ -101,14 +101,7 @@ export default function ProfileScreen() {
       {/* 登出单独一个分组块 —— iOS 上「破坏性动作」就是这么放的 */}
       <View className="pt-4">
         <Group>
-          <Pressable
-            onPress={() => void logout()}
-            testID="profile-logout"
-            className="active:bg-muted min-h-[46px] flex-row items-center justify-center gap-2 px-5"
-          >
-            <RowIcon icon={LogOutIcon} />
-            <Text className="text-destructive text-[15px]">退出登录</Text>
-          </Pressable>
+          <DangerRow label="退出登录" onPress={() => void logout()} testID="profile-logout" />
         </Group>
       </View>
     </ScrollView>

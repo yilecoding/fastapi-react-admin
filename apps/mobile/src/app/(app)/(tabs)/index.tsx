@@ -5,7 +5,6 @@ import { RefreshControl, ScrollView, View } from 'react-native'
 
 import { BrandTop } from '@/components/brand-top'
 import { Chevron, Group, GroupHeader, PressRow, Row, RowIcon } from '@/components/grouped'
-import { Badge } from '@/components/ui/badge'
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
 import { useUnread } from '@/lib/notifications'
@@ -69,12 +68,11 @@ export default function HomeScreen() {
       <GroupHeader>入口</GroupHeader>
       <Group>
         <PressRow first inset={56} onPress={() => router.push('/notifications')}>
-          <RowIcon icon={BellIcon} active={total > 0} />
+          <RowIcon icon={BellIcon} />
           <Text className="flex-1 text-[15px]">通知</Text>
+          {/* 状态表达在**值**上，不动图标 —— 定稿那版就是这个规则 */}
           {total > 0 ? (
-            <Badge>
-              <Text>{total > 99 ? '99+' : total}</Text>
-            </Badge>
+            <Text className="text-primary text-[13px] font-medium">{total} 条未读</Text>
           ) : (
             <Text className="text-muted-foreground text-[13px]">没有未读</Text>
           )}

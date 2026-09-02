@@ -59,6 +59,9 @@ export default function AppLayout() {
         options={{
           title: '首页',
           headerShown: false,
+          // 未读红点挂在**首页**：通知的入口就在这一屏。
+          // 挂到「我的」上过一版 —— 点进去找不到通知，语义不对
+          tabBarBadge: unread && unread.total > 0 ? unread.total : undefined,
           tabBarIcon: ({ color }) => <Icon as={HomeIcon} color={color} />,
         }}
       />
@@ -75,9 +78,6 @@ export default function AppLayout() {
         options={{
           title: '我的',
           headerShown: false,
-          // 未读数挂在「我的」上 —— 通知的入口在首页快捷入口里，
-          // 而红点要在任何一个 tab 上都看得见，挂最右边那个最不打扰
-          tabBarBadge: unread && unread.total > 0 ? unread.total : undefined,
           tabBarIcon: ({ color }) => <Icon as={UserRoundIcon} color={color} />,
         }}
       />

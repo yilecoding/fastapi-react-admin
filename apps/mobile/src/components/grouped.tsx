@@ -92,13 +92,39 @@ export function Chevron({ icon }: { icon: React.ComponentProps<typeof Icon>['as'
   return <Icon as={icon} className="text-muted-foreground size-4 opacity-40" />
 }
 
-/** 行左侧的单色图标。V2 那版刻意不用彩色方块 —— 彩块会让它更像系统设置 */
-export function RowIcon({
-  icon,
-  active,
+/**
+ * 行左侧的图标。**永远单色**，没有「高亮」这个口子。
+ *
+ * 🔴 定稿那版（V2）的规则是「单色图标 + 主色的**值**」。实现时给铃铛按未读数
+ * 染了主色，结果一排灰图标里蹦出一个紫的，很突兀 —— 用户当场指出来了。
+ * 状态要表达就表达在**值**上（`1 条未读` 走主色），不要动图标。
+ */
+export function RowIcon({ icon }: { icon: React.ComponentProps<typeof Icon>['as'] }) {
+  return <Icon as={icon} className="text-muted-foreground size-[19px]" />
+}
+
+/**
+ * iOS 的「破坏性动作」行：**居中的红字，没有图标**。
+ *
+ * 🔴 加过一版带图标的，图标和文字两块红还不同调，一眼就怪。
+ * iOS 上退出登录/删除账号从来只有一行居中红字。
+ */
+export function DangerRow({
+  label,
+  onPress,
+  testID,
 }: {
-  icon: React.ComponentProps<typeof Icon>['as']
-  active?: boolean
+  label: string
+  onPress: () => void
+  testID?: string
 }) {
-  return <Icon as={icon} className={cn('size-[19px]', active ? 'text-primary' : 'text-muted-foreground')} />
+  return (
+    <Pressable
+      onPress={onPress}
+      testID={testID}
+      className="active:bg-muted min-h-[46px] items-center justify-center px-5"
+    >
+      <Text className="text-destructive text-[15px]">{label}</Text>
+    </Pressable>
+  )
 }

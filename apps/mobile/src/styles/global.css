@@ -78,7 +78,8 @@
       --color-border: #eeecf4;
       --color-input: #e4e0ee;
       --color-ring: #4630db;
-      --color-destructive: #e5484d;
+      /* iOS systemRed。之前用的 #E5484D 偏粉，和系统红不同调 */
+      --color-destructive: #ff3b30;
     }
 
     @variant dark {

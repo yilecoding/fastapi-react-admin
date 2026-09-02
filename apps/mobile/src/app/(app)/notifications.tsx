@@ -3,7 +3,6 @@ import * as React from 'react'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Group, GroupHeader, Row } from '@/components/grouped'
 import { Icon } from '@/components/ui/icon'
@@ -150,13 +149,16 @@ function NotifRow({ n, first, onPress }: { n: Notification; first?: boolean; onP
       {first ? null : <View className="bg-border ml-5 h-px" />}
       <Pressable onPress={onPress} className="active:bg-muted gap-1.5 px-5 py-3.5">
         <View className="flex-row items-center gap-2">
-          <Badge variant={unread ? 'default' : 'secondary'}>
-            <Text>{NOTIFICATION_CATEGORY[n.category] ?? '通知'}</Text>
-          </Badge>
+          {/* 未读只用一枚主色圆点 —— 不要把分类标签染成主色，
+              那是「状态」和「分类」两回事混在一起 */}
+          {unread ? <View className="bg-primary h-1.5 w-1.5 rounded-full" /> : null}
+          <Text className="text-muted-foreground text-[11px]">
+            {NOTIFICATION_CATEGORY[n.category] ?? '通知'}
+          </Text>
           <View className="flex-1" />
           <Text className="text-muted-foreground font-mono text-[11px]">{relativeTime(n.created_time)}</Text>
         </View>
-        <Text className={`text-sm ${unread ? 'font-semibold' : ''}`}>{n.title}</Text>
+        <Text className={`text-[15px] ${unread ? 'font-semibold' : ''}`}>{n.title}</Text>
         <Text variant="small" className="text-muted-foreground leading-5" numberOfLines={2}>
           {n.content}
         </Text>
