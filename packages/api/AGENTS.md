@@ -15,16 +15,24 @@
 `200`（成功）/ `400`（失败）/ `500`（服务端错误），加上 `40001` 那类业务码
 （它们经 `_get_exception_code` 降级后配的是 HTTP 400）。
 
-**这条踩过一次，而且两端各有一份。** 客户端只看 `!res.ok` 的话，所有
-「写了 0 行 → `fail()`」的响应都被读成成功：
+**这条踩过一次，而且两端各有一份。** 客户端只看 `!res.ok` 的话，所有 `fail()`
+都被读成成功 —— 而 `count > 0 ? success() : fail()` 这个形状在 handler 里到处都是
+（`/sys/users/me/nickname` · `/me/avatar` · `/me/timezone` · `/sys/configs/{pk}` …）。
 
-| 接口 | handler 里的形状 |
-|---|---|
-| `PUT /sys/users/me/nickname` | `if count > 0: success() else: fail()` |
-| `PUT /sys/users/me/avatar` | 同上 |
-| `PUT /sys/users/me/timezone` | 同上 |
+⚠️ **一条需要纠正的说法。** 这里原来断言「设一个和库里一样的值 → 0 行 →
+`fail()`，界面上表现为『保存成功、页面退回、值没变』」。**在 SQL Server 上那是错的**：
 
-界面上表现为「保存成功、页面退回、值没变」，**一个错都不报**。
+| 方言 | 设同值时的 rowcount | 接口返回 |
+|---|---|---|
+| SQL Server（aioodbc） | **匹配**行 = 1 | `code: 200` |
+| PostgreSQL（asyncpg） | 匹配行 = 1 | `code: 200` |
+| MySQL（asyncmy，本仓库**没**设 `CLIENT_FOUND_ROWS`） | **变更**行 = 0 | `code: 400` |
+
+**同一个接口在三个方言上行为不同**，而本仓库宣称支持三种数据库。
+实测钉在 `backend/app/admin/tests/api_v1/test_me_envelope.py`（那条测试自己
+按 `DATABASE_TYPE` 分支，所以换方言跑也不会变成假失败）。
+
+判定本身不受影响：`fail()` 该当成失败，无论它因为什么原因发生。
 
 所以这个判定收进 `resolveEnvelope()`，**两端共用**：
 

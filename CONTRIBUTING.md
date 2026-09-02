@@ -93,7 +93,7 @@ pnpm lint                       # eslint（web · ui · platform · mobile 四�
 pnpm build                      # web + mobile + desktop —— 前端唯一的「整体还装得起来」信号
 pnpm i18n:check && pnpm i18n:jsx
 pnpm ctx:check                  # 工程文档里的死引用 / 死链接 / 死脚本 / 死 testid
-pnpm test                       # 后端 pytest（236 条）；要先备好 fba_test 库
+pnpm test                       # 后端 pytest（241 条）；要先备好 fba_test 库
 pnpm e2e                        # 前端 Playwright（54 条）；自动拉起隔离的 web+api 实例
 ```
 

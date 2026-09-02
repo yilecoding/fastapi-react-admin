@@ -8,11 +8,19 @@ import { ApiError, type Envelope, isEnvelope } from './errors'
  * `200`（成功）/ `400`（失败）/ `500`（服务端错误），加上 `40001` 那类业务码
  * （它们经 `_get_exception_code` 降级后配的是 HTTP 400）。
  *
- * 这条踩过一次，而且**静默**：客户端只看 `!res.ok`，于是所有
- * 「写了 0 行 → `fail()`」的响应都被读成成功。移动端用到的三个写接口
- * （`/sys/users/me/nickname`、`/me/avatar`、`/me/timezone`）在
- * `if count > 0: success() else: fail()` 里走的正是这条路 ——
- * 界面上表现为「保存成功、页面退回、值没变」，一个错都不报。
+ * 客户端只看 `!res.ok` 的话，所有 `fail()` 都会被读成成功 —— 而 `fail()`
+ * 是**全站写接口的通用失败出口**（`count > 0 ? success() : fail()` 这个形状
+ * 在 handler 里到处都是）。
+ *
+ * ⚠️ **一条需要纠正的说法**：这里原来写着「设一个和库里一样的值 → 0 行 →
+ * fail()」，并说界面上表现为「保存成功、页面退回、值没变」。**在 SQL Server
+ * 上那是错的** —— `rowcount` 数的是**匹配**行而不是**变更**行，设同值照样
+ * 返回 `code: 200`（`backend/app/admin/tests/api_v1/test_me_envelope.py`
+ * 实测钉住了）。那个说法只在 **MySQL** 上成立（asyncmy 默认报变更行，
+ * 而本仓库没有设 `CLIENT_FOUND_ROWS`）—— 也就是说**同一个接口在三个方言上
+ * 行为不同**。
+ *
+ * 判定本身不受影响：`fail()` 该当成失败，无论它因为什么原因发生。
  *
  * web 端的 `packages/platform` 当初也是同一个洞。所以这个判断收进这个包，
  * **两端共用一份**，不要在客户端里各写一遍。

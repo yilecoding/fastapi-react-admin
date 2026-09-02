@@ -9,9 +9,16 @@ import { authKeys } from '../../auth/queries'
  * 个人中心的四个写接口。
  *
  * ⚠️ 后端这几个 handler 统一是 `count > 0 ? success() : fail()` —— `count` 是
- * **受影响行数**，不是成败。提交一个跟库里一模一样的值，rowcount = 0，
- * 接口会返回「失败」但其实什么都没错。所以页面侧必须在「值没变」时禁用提交，
- * 别把这个假失败甩给用户看。
+ * **受影响行数**，不是成败。
+ *
+ * 🔴 **「提交同值会 rowcount = 0 从而假失败」这件事只在 MySQL 上成立。**
+ * `rowcount` 是 DBAPI 报什么就是什么：SQL Server（aioodbc）和 PostgreSQL
+ * （asyncpg）报的是**匹配**行，设同值照样是 1 行、照样成功；MySQL（asyncmy，
+ * 本仓库没设 `CLIENT_FOUND_ROWS`）报的是**变更**行，才会是 0。
+ * 实测见 `backend/app/admin/tests/api_v1/test_me_envelope.py`。
+ *
+ * 所以页面侧「值没变就禁用提交」**要保留**，但理由变了：在 MySQL 上它是
+ * 正确性要求，在另两个方言上是省一次无意义的请求。
  */
 
 /** 昵称：`PUT /sys/users/me/nickname`，body 是 embed 的 `{nickname}` */
