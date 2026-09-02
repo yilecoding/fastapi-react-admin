@@ -1,6 +1,7 @@
 import * as React from 'react'
 
 import { ApiError } from '@admin/api'
+import { setDisplayTimeZone } from '@admin/i18n'
 
 import { api, setSessionExpiredHandler } from '@/lib/api'
 import type { CurrentUser, LoginResult } from '@/lib/contract'
@@ -32,7 +33,26 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<CurrentUser | null>(null)
   const [bootstrapError, setBootstrapError] = React.useState<string | null>(null)
 
+  /**
+   * 🔴 **拿到 `/me` 就要把显示时区喂给 `@admin/i18n` 的 datetime 层。**
+   *
+   * 「显示时区」是**账号级**设置（`PUT /sys/users/me/timezone`，和 web 共用
+   * 一份）。web 端在 `platform/src/auth/queries.ts` 的 meQuery 里调
+   * `setDisplayTimeZone(me.timezone)`；移动端一直**没有这一步** ——
+   * 设置屏能选、能存、`/me` 里也回来了，但界面上每个时间仍按**设备**时区渲染。
+   * 那是一个「设置好了但什么都没变」的空转开关，界面上看不出错。
+   *
+   * ⚠️ 登出要归位（传 `null` = 回落到设备时区），否则换账号登进来还带着
+   * 上一个账号的时区。
+   */
+  const applyUser = React.useCallback((me: CurrentUser) => {
+    setDisplayTimeZone(me.timezone)
+    setUser(me)
+    setStatus('authed')
+  }, [])
+
   const applyAnonymous = React.useCallback(() => {
+    setDisplayTimeZone(null)
     setUser(null)
     setStatus('anonymous')
   }, [])
@@ -45,10 +65,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [applyAnonymous])
 
   const reload = React.useCallback(async () => {
-    const me = await api.GET<CurrentUser>('/api/v1/sys/users/me')
-    setUser(me)
-    setStatus('authed')
-  }, [])
+    applyUser(await api.GET<CurrentUser>('/api/v1/sys/users/me'))
+  }, [applyUser])
 
   // 冷启动
   React.useEffect(() => {
@@ -60,9 +78,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       try {
         const me = await api.GET<CurrentUser>('/api/v1/sys/users/me')
         if (!alive) return
-        setUser(me)
         setBootstrapError(null)
-        setStatus('authed')
+        applyUser(me)
       } catch (err) {
         if (!alive) return
         // 🔴 401 和「连不上」必须区分开。
@@ -78,7 +95,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false
     }
-  }, [applyAnonymous])
+  }, [applyAnonymous, applyUser])
 
   const login = React.useCallback<Session['login']>(
     async (input) => {

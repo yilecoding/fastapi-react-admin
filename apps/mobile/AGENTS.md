@@ -277,7 +277,7 @@ access / refresh / 用户缓存**三组** key。不主动登出的话，用户�
 | 昵称 | ✅ | `PUT /sys/users/me/nickname` |
 | 头像 | ✅ 但**只能填 URL** | `PUT /sys/users/me/avatar` |
 | 密码 | ✅ | `PUT /sys/users/me/password` |
-| 时区 | ✅（界面还没做） | `PUT /sys/users/me/timezone` |
+| 时区 | ✅ | `PUT /sys/users/me/timezone`，并 `setDisplayTimeZone()` |
 | **手机号** | ❌ | 后端**没有** `/me/phone`，只有超管的 `PUT /sys/users/{pk}` |
 | **邮箱** | ❌ | `PUT /me/email` 要一个**邮件验证码**，那条链路移动端还没有 |
 
@@ -681,6 +681,36 @@ CI 的 static job 里跟在 `web build` 后面跑一条。
 
 列表是**常用项不是全集**，所以「账号上的时区不在列表里」要单独显示出来 ——
 否则用户看到一个都没选中，会以为设置丢了。
+
+### 🔴 选了时区还得**喂给 datetime 层**，否则是个空转开关
+
+这个设置曾经**完整地什么都没做**：设置屏能选、能存、`/me` 里也回来了，
+但界面上每个时间仍按**设备**时区渲染 —— 一个「设置好了但什么都没变」的开关，
+而且没有任何错误现象。
+
+漏的是这一句（web 端在 `packages/platform/src/auth/queries.ts` 的 meQuery 里）：
+
+```ts
+setDisplayTimeZone(me.timezone)   // 拿到 /me 就调，登出传 null 归位
+```
+
+现在收在 `session.tsx` 的 `applyUser()` / `applyAnonymous()` 里。
+⚠️ **登出必须归位**，否则换账号登进来还带着上一个账号的时区。
+
+### 时间的解析和格式化一律用 `@admin/i18n` 的 `datetime`
+
+`src/lib/datetime.ts` 只剩「相对时间」那十行文案，解析走 `toEpochMs()`、
+兜底日期走 `dateKey()`。**不要自己 `new Date(iso)`**：后端下发的时间戳有两种
+形态（实测同一个接口里就混着 `…Z` 和 `…+08:00`），而 ES 规范对不带时区标记的串
+按本地时区解释、空格分隔的那种规范里压根没定义。抄一份必漏，
+而漏掉的表现是**时间差 8 小时**、不报错。
+
+⚠️ **Hermes 的 Intl 是部分实现**：`Collator` / `DateTimeFormat` / `NumberFormat`
+有，**`RelativeTimeFormat` 没有**（缺了是静默回落）。所以相对时间那几句自己写。
+`DateTimeFormat`（`dateKey` / `formatDateTime` 用的那个）是安全的 ——
+RN 在两端都硬编译了 `-DHERMES_ENABLE_INTL=True`
+（`ReactAndroid/hermes-engine/build.gradle.kts:358`，注释是
+"We intentionally build Hermes with Intl support only"）。
 
 ## 通知：接的是 `plugin/notification`，但**没有实时推送**
 
