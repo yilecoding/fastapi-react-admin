@@ -53,44 +53,41 @@ peer 写死 `tailwindcss: "~3"` —— 而本仓库 `packages/ui` 是 Tailwind *
 （`@theme inline` + oklch）。选 nativewind 等于在同一个仓库里维护两套 Tailwind 大版本，
 设计令牌就没有唯一真相源了。
 
-## 版本：跟模板的 SDK 56，不是自己挑最新
+## 版本：SDK 57，跟 Expo Go 的商店版本对齐
 
-`package.json` 里的版本**整组抄 `minimal-uniwind` 模板**（SDK 56 / RN 0.85.3 /
-React 19.2.3），不是逐个挑最新的。理由：这是**被测过的组合**；
-uniwind + reanimated 4 + worklets + expo-router 之间的版本约束不写在任何一处，
-偏离它的失败长得像随机的运行时错误。
+`react-native-reusables` 的 `minimal-uniwind` 模板给的是 **SDK 56**，
+底座一开始就是照抄那一组（被测过的组合），两条实测和登录/个人中心都是在 56 上验的。
 
-之前那个 WebView spike 是 SDK 57，掉头时**降到 56** —— 模板还没跟上 57。
+**2026-09-02 升到了 57**，理由不是「追新」：
+
+🔴 **Expo Go 一个客户端只支持一个 SDK，而且两个版本包名相同
+（`host.exp.exponent`），装不了两份。** 它把整套原生运行时（RN 核心、Hermes、
+所有自带原生模块的编译产物）打进了 APK —— 同时支持两个 SDK 等于塞两套运行时，
+Expo 早期这么干过，后来砍掉了。
+
+于是钉在 56 就意味着：手动装旧 APK，**而且 Play 商店每次自动更新都会把它顶回最新**，
+得一直手动压着。升一次一劳永逸。
+
+实测报错长这样（是 Expo Go 拿到 manifest 读到 `sdkVersion` 之后才报的，
+所以**看到它反而说明网络那条链已经通了**）：
+
+    Project is incompatible with this version of Expo Go
+    • The installed version of Expo Go is for SDK 57.
+    • The project you opened uses SDK 56.
+
+升级前先核了 SDK 57 的自带清单，我们用到的原生模块**一个都不缺**
+（reanimated 4.5.1 / worklets 0.10.1 / screens ~4.26.0 / svg 15.15.4 /
+gesture-handler ~2.32.0 / safe-area-context ~5.7.0 / expo-router ~57.0.18 /
+expo-secure-store ~57.0.3），所以「Expo Go 就能跑、不用 prebuild」那条豁免还在。
 
 🔴 **改任何一个 RN 生态依赖后跑 `npx expo install --check`。**
-实测抓到一个：模板写 `react-native-screens: 4.25.2`，但 pnpm 把 `expo` 解到
+实测抓到过：模板写 `react-native-screens: 4.25.2`，但 pnpm 把 `expo` 解到
 `56.0.21`，那个补丁版把 screens 提到了 `~4.26.0`。**`--check` 是唯一会说话的地方** ——
-打包、typecheck、Expo Go 启动全都不报。
+打包、typecheck、Expo Go 启动全都不报。升级用 `npx expo install --fix` 一次对齐。
 
-## Expo Go 还能用：uniwind 是纯 JS
-
-核过了：`uniwind@1.11.0` 的 npm 包里**没有 android / ios 目录、没有 podspec、
-也没有 expo-module 声明文件** —— 它是 Metro transformer + babel 层的东西，
-把 `global.css` 交给 Tailwind v4 自己的引擎编译，产物转成 RN 样式。**没有原生代码。**
-
-其余带原生代码的依赖逐个核过 expo 包自带的 bundledNativeModules 清单（SDK 56），
-全都在清单里 —— 在清单里就意味着 Expo Go 自带：
-
-| 包 | 清单里的版本 |
-|---|---|
-| `react-native-reanimated` | 4.3.1 |
-| `react-native-worklets` | 0.8.3 |
-| `react-native-screens` | ~4.26.0 |
-| `react-native-svg` | 15.15.4 |
-| `react-native-gesture-handler` | ~2.31.1 |
-| `react-native-safe-area-context` | ~5.7.0 |
-| `expo-router` | ~56.2.20 |
-
-**所以现在还不用 `expo prebuild`、不用碰 pnpm 的 `nodeLinker: hoisted`**（那是个
-**整仓**开关，会连带影响 web 与 desktop 的依赖隔离）。
-
-⚠️ 一旦需要一个 Expo Go 不带的原生模块（扫码、静默打印…），这条豁免就没了。
-那时候再评估 hoisted 的代价，**别提前付**。
+⚠️ 升级会往 `pnpm-workspace.yaml` 的 `minimumReleaseAgeExclude` 里追加一串条目 ——
+那是本仓库的供应链新鲜度闸门，`expo install` 会自动给新版本放行。**要读一眼再提交**，
+别当成无关噪音。
 
 ## 🔴 `@/*` 指向 `src/`，而 `global.css` 也必须在 `src/` 下
 
@@ -408,8 +405,8 @@ pnpm --filter api dev:host        # 绑 0.0.0.0
 不要用 Windows 的局域网地址（`ipconfig` 里 Wi-Fi 那个）—— Windows 上没有进程
 监听 8800，要让它转发就得 `netsh portproxy`，那条已经被否掉了。
 
-⚠️ **Expo Go 一个客户端只支持一个 SDK。** 工程是 SDK 56，手机/模拟器上装的
-Expo Go 也得是 56（`https://expo.dev/go` 下，或用 `~/.expo/android-apk-cache/`
+⚠️ **Expo Go 一个客户端只支持一个 SDK。** 工程是 SDK 57，手机/模拟器上装的
+Expo Go 也得是 57（`https://expo.dev/go` 下，或用 `~/.expo/android-apk-cache/`
 里 expo 自己下好的那份）。版本不对的表现是一屏「出错了」，不提 SDK 两个字。
 
 ### ❌ 局域网那三条解法仍然不能用
