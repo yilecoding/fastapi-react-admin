@@ -41,12 +41,15 @@
 | 加文案 / 动多语言 | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) |
 | **显示时间 / 动时区** | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) 的「服务端时间一律过 `src/datetime.ts`」 |
 | **动请求客户端 / 后端契约 / 错误判定** | [`packages/api/AGENTS.md`](packages/api/AGENTS.md) |
-| 动后端模型 / 接口 / SQL · 跑 pytest | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
+| 动后端模型 / 接口 / SQL | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
+| 跑 pytest / 建测试库 / 测试跑不起来 | [`apps/api/backend/tests/AGENTS.md`](apps/api/backend/tests/AGENTS.md) |
+| **动权限码 / 数据范围（行级过滤）** | [`apps/api/backend/common/security/AGENTS.md`](apps/api/backend/common/security/AGENTS.md) |
+| **动数据库结构 / 写迁移 / 改种子数据** | [`apps/api/backend/alembic/AGENTS.md`](apps/api/backend/alembic/AGENTS.md) |
 | 动定时任务 / Celery / 调度 | [`apps/api/backend/app/task/AGENTS.md`](apps/api/backend/app/task/AGENTS.md) |
 | 动命令面板 / 快捷键 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
 | 动构建注入 / 发版提示 / 错误页 | [`apps/web/AGENTS.md`](apps/web/AGENTS.md) |
 | **桌面端打包 / 发版 / 自动更新** | [`apps/desktop/AGENTS.md`](apps/desktop/AGENTS.md) |
-| **移动端 App / Expo / uniwind / Metro** | [`apps/mobile/AGENTS.md`](apps/mobile/AGENTS.md) |
+| **移动端 App / Expo / uniwind / Metro** | [`apps/mobile/AGENTS.md`](apps/mobile/AGENTS.md)（下面还按 `scripts/` · `src/app/` · `src/components/` 拆了三份） |
 | 写或跑前端 E2E | [`apps/web/e2e/AGENTS.md`](apps/web/e2e/AGENTS.md) |
 | 动菜单 / 权限 / 死链判定 | 硬纪律 6 + [`pages/menu/AGENTS.md`](packages/platform/src/pages/menu/AGENTS.md) |
 
@@ -321,7 +324,7 @@ turbo 会缓存 typecheck 的结果，而缓存命中时**打印的是上一次�
 
 ## 数据库结构改动一律走 alembic
 
-**改了模型就要生成迁移，没有例外。** 手写 `ALTER` / `drop_all` 重建那条路已经关了。
+🔴 **改了模型就要生成迁移，没有例外。** 手写 `ALTER` / `drop_all` 重建那条路已经关了。
 
 ```bash
 pnpm db:current                        # 现在在哪个版本
@@ -331,61 +334,10 @@ pnpm db:upgrade                        # 升到 head
 pnpm db:history                        # 看链条
 ```
 
-### 为什么改这条
-
-之前是「改模型 + 手工 ALTER」，两步之间**没有任何东西对账**。少做一步的后果
-都是静默的：本机开发库手工改过（能跑），全新环境按模型建出来缺那一列，
-要到部署时才炸；或者反过来，模型声明了索引、库上没建，功能全对只是全表扫。
-
-**已有环境**不需要重建：`alembic stamp b0000000baseline` 认领起点，再 `db:upgrade`。
-
-**全新环境**走 `fba init`（`drop_all` + `create_all` + 灌种子），它建完表会
-**自动 `alembic stamp head`** —— 表是从当前模型建的，本来就是最新结构，
-stamp 只是把这件事声明出来。
-
-> 🔴 **`create_all` 建的库不自带 `alembic_version`** —— 那张表不在
-> `MappedBase.metadata` 里。漏掉 stamp 的失败是**延迟且静默**的：库照常能用，
-> 直到第 4 条迁移出现，`db:upgrade` 从 base 把前 3 条重跑一遍。
-> 现在这 3 条碰巧无害（基线是空的、`c0000000comments` 全程 suppress、
-> `d0000000usertz` 有 `_has_column()` 早退），所以这个坑到目前为止**看不出来** ——
-> 下一条普通的 `add_column` 就会在部署时炸。
->
-> ⚠️ prod 下应用**不再自己建表**：`core/registrar.py` 的 lifespan 改成校验
-> `alembic_version` 在不在 head，不在就拒绝启动。开发环境保留 `create_all` 的便利。
-
-### 三条纪律
-
-- 🔴 **基线（`b0000000baseline`）刻意是空的。** 它只标记「起点」，不含建表 DDL——
-  把 23 张表的 DDL 写进去就有了两份真相，改模型忘了改它就静默偏离。
-  唯一一份真相仍然在模型里，基线之后每次改动一份增量
-- 🔴 **`env.py` 必须 `import backend.main`。** `MappedBase.metadata` 只有在模型
-  被 import 之后才有内容。原来只 import 了 `MappedBase` 本身 —— metadata 是空的，
-  autogenerate 拿「空 metadata」和「有 23 张表的库」做 diff，会安静地写出一份
-  **「drop 掉全部 23 张表」**的迁移，而它不会问你
-- ⚠️ **「补齐历史遗留」类的迁移必须幂等。** 新建的库天然就是目标状态：
-  `c0000000comments` 在老库上要改注释，在刚 `create_all` 出来的库上再执行会报
-  `Property 'MS_Description' already exists` —— alembic 在 mssql 上把
-  `alter_column(comment=)` 编译成 add 而不是 update。写这类迁移先问
-  「新库跑这一步会怎样」
-
-### 守卫（`app/task/tests/test_migrations.py`）
-
-| 测试 | 挡什么 |
-|---|---|
-| `test_model_matches_migrations` | **改了模型但没生成迁移** —— 这条是整套约定的支点 |
-| `test_single_head` | 两个人各自 revision 导致分叉，`upgrade head` 谁都升不了 |
-| `test_every_revision_is_reachable_from_base` | 断链的迁移永远不会执行 |
-| `test_fresh_database_is_stamped_at_head` | **新建的库没 stamp** —— 将来 `upgrade head` 会把已有迁移重跑一遍 |
-
-⚠️ 这些比对的是 **fba_test**，所以本地跑测试前它要在 head 上
-（`pnpm --filter api test:db` 会重建并自动 stamp）。
-
-> 🔴 第 4 条上线时当场抓到一个已经存在很久的 bug：`reset_test_db._stamp_head`
-> 一直在 stamp **开发库**而不是测试库。它靠设 `os.environ['DATABASE_SCHEMA']` 切库，
-> 但 `settings` 是模块级缓存单例、import 期就构造好了，进程内改 environ 影响不到它；
-> 就算改对了也没用，因为 `alembic/env.py` 会**无条件覆盖** `sqlalchemy.url`。
-> 两个库都有 `alembic_version` 表、看起来都正常，所以没有任何现象。
-> 现在 env.py 改成「调用方设过就不覆盖」，`_stamp_head` 显式写目标库。
+为什么改这条、三条纪律（基线刻意是空的 / `env.py` 必须 import `backend.main` /
+补历史的迁移必须幂等）、以及四个守卫测试，都在
+[`backend/alembic` 分册](apps/api/backend/alembic/AGENTS.md)——
+**动迁移之前先读那一份**，少读一条的失败方式都是延迟且静默的。
 
 ## 还没发版 —— 可以自由重构
 

@@ -152,187 +152,13 @@ refresh token 的 JWT 里同样带着 `sub` 和 `session_uuid`（`create_refresh
 
 ## 数据库结构改动一律走 alembic
 
-**改了模型就要生成迁移，没有例外。** 手写 `ALTER` / `drop_all` 重建那条路已经关了
-（2026-08-22 起）。命令、三条纪律和守卫写在根 `CLAUDE.md`
-的「数据库结构改动一律走 alembic」一节，这里只补后端侧要记的：
+🔴 **改了模型就要生成迁移，没有例外**（2026-08-22 起）。手写 `ALTER` /
+`drop_all` 重建那条路已经关了。
 
-- 迁移在 `backend/alembic/versions/`，命令要在 `backend/` 下跑
-  （`alembic.ini` 的 `script_location` 是相对它的）。走 `pnpm db:upgrade` / `pnpm db:revision` 就不用管
-- `env.py` 里那句 `import backend.main` **不能删**。它不是多余的 import ——
-  `MappedBase.metadata` 靠它才有内容，删了 autogenerate 会生成一份
-  「drop 掉全部 23 张表」的迁移，而且不会问你
-- `pnpm --filter api test:db` 重建测试库之后会**自动 stamp 到 head**
-  （`reset_test_db.py: _stamp_head`）。不 stamp 的话
-  `test_model_matches_migrations` 会红 —— 它比对的就是 fba_test
-- 🔴 `_stamp_head()` 必须在 `asyncio.run()` **之外**调用：alembic 的
-  `command.stamp` 会执行 `env.py`，而那份 env 里是 `asyncio.run(...)`，
-  在已经跑着的循环里再调直接
-  `asyncio.run() cannot be called from a running event loop`
-
-- pnpm --filter api db:reset 必须直接走 `fba init --auto`（drop_all + create_all + 灌种子）。
-  不再暴露 `db:init:auto` 别名，避免和 reset 形成重复入口。不要把 alembic downgrade base && upgrade head 当成重置：空基线的 downgrade
-  不会删表或业务数据，它只适合验证迁移链。
-
-### 🔴 alembic 引进来**之前**手写 ALTER 加的列，守卫测试抓不到
-
-`test_model_matches_migrations` 比对的是**模型 vs fba_test**。如果一列是手写
-`ALTER` 加进去的（alembic 之前的做法），那两边本来就一致 —— 测试全绿，
-而迁移链里**没有任何一条创建这一列**。`sys_user.timezone` 就是这样漏的。
-
-漏了之后的失败是双重静默的：
-
-1. `c0000000comments` 那种「补齐历史遗留」的迁移里每一步都包着
-   `contextlib.suppress(ProgrammingError)`，在缺列的库上 `alter_column`
-   抛错被吞掉，`db:upgrade` 一路绿到 head，**列还是不存在**
-2. 要等下一次读那张表的请求才炸，报 `Invalid column name 'xxx'`
-
-所以：**凡是 alembic 之前手工改过结构的列，逐个回头补一条迁移。**
-补的时候两件事：
-
-- **必须幂等**（先 `sa.inspect(bind).get_columns()` 查在不在）——
-  新建的库是 `create_all` 从模型建的，天然就有那一列，无条件 `add_column`
-  会报 `Column names in each table must be unique`
-- **加完要 `alter_column(server_default=None)`**。回填存量行要
-  `server_default`，但模型侧的默认值是 Python 级的（`default=`）——
-  库上留着 DEFAULT 约束的话，`create_all` 建的新库和迁移升上来的旧库不一致，
-  `test_model_matches_migrations` 会报一条 server_default 差异
-
-⚠️ **验证不能只跑 `upgrade head`**（在已经有那一列的库上它就是个 no-op，
-证明不了任何事）。要 `downgrade -1` → 确认列真的消失 → `upgrade head` →
-确认列回来**且存量行被回填**。`d0000000usertz` 是这么验的。
-
-### 🔴 迁移建表时雪花主键会变成 IDENTITY —— 那张表在生产里一行都写不进去
-
-`sys_notification` 是本仓库**第一张真正由迁移创建**的表（基线是空的，之前所有表
-都是 `create_all` 建的），一建出来就踩到：
-
-**症状**：任何 INSERT 报 `Cannot insert explicit value for identity column in table
-'sys_notification' when IDENTITY_INSERT is set to OFF. (544)`。
-
-**根因**：模型侧的 `id_key` 靠 `default=snowflake.generate`（**Python 侧**默认值）
-让 SQLAlchemy 的 `autoincrement='auto'` 判定为「不是自增列」。而 **alembic
-autogenerate 渲染不出 Python 侧的 `default=`** —— 它写出来的是一句朴素的
-`sa.Column('id', sa.BigInteger(), nullable=False)`，重新命中 auto 规则，
-在 mssql 上建成 IDENTITY。于是同一份模型，`create_all` 建的表和迁移建的表
-**结构不一样**。
-
-**为什么守卫抓不到**：`test_model_matches_migrations` 比的是「模型 vs fba_test」，
-而 fba_test 是 `create_all` 建的 —— 两边都是「非 IDENTITY」，差集为空，全绿。
-唯一能暴露它的是「用迁移建出来的库」，也就是**生产**
-（prod 下 `core/registrar.py` 要求 alembic 在 head）。
-
-**修法两层**：`common/model.py` 的 `id_key` 显式写 `autoincrement=False`
-（`create_all` 行为不变，但 autogenerate 会把它渲染出来）；
-新增守卫 `test_created_tables_declare_snowflake_pk_as_non_autoincrement`
-静态扫 `alembic/versions/*.py` 里 `create_table` 的 id 列。
-**手写迁移建新表时照样要自己写上那一行。**
-
-### 🔴 `paging_data()` 返回的 items 是 **dict**，不是 ORM 实例
-
-`paging_data()` 里那句 `paginated_data.model_dump()` 已经把 ORM 实例展开成 dict 了
-（模型是 `MappedAsDataclass`，pydantic 的 dump 会照 dataclass 展开）。
-分页之后想再加工一遍结果（比如站内通知要按 `sys_notification_read` 回填
-`read_time`），按属性取 `item.id` 会直接
-`'dict' object has no attribute 'id'` → 500。用 `item['id']`，
-往 dict 里塞新键即可，FastAPI 那层照样按 response_model 校验得过。
-
-### 🔴 改了种子 SQL，已存在的库不会跟上 —— 要补一条 data migration（issue #86）
-
-schema 和种子数据走的是**两条完全不同的路**：
-
-| | 谁执行 | 已存在的库会不会跟上 |
-|---|---|---|
-| schema | 部署时 `alembic upgrade head` | ✅ 会，且 `test_model_matches_migrations` 兜着「忘了生成迁移」 |
-| **种子数据** | 只有 `fba init`（`drop_all` + `create_all` + 灌种子 + `stamp head`） | 🔴 **不会。** 没有版本号、没有「这批种子进过这个库吗」的记录 |
-
-**漏过两次，两次都是真的用户可见回归**：`5c1d594` 加的三条 RBAC 权限锚点菜单从没进
-生产库，而校验在部署那一刻就生效了 —— MANAGER 演示账号原本能看的部门树当场 403；
-`256beae` 加的「每日问候」调度同理，功能部署了、从来没跑过。
-
-**机制就是普通的 alembic revision**，只是 `upgrade()` 里不是 DDL 而是幂等 INSERT。
-白拿三样：`alembic_version` 天然记录每个库跑到哪、部署已经在跑 `upgrade head`、
-`fba init` 末尾的 `stamp head` 会把它标成已应用而**不执行**（新库的行来自种子 SQL，
-不会插两遍）。helper 在 `backend/utils/data_migration.py`，样板见
-`alembic/versions/*33ffb491b69f*.py`。
-
-三条纪律：
-
-- 🔴 **外键按业务键解析，不要硬编码 ID。** `sys_menu.name` / `sys_role.code` 这类键
-  跨环境稳定；而三个方言的种子各有一套 ID（postgresql 的角色在 `4000000000000000xxx`、
-  另两个在 `3000000000000000xxx`），生产库的 ID 又只在生产库里成立
-- 🔴 **幂等靠业务键判存在，不要吃唯一约束冲突** —— 三种方言的冲突语法各不相同
-  （`MERGE` / `ON CONFLICT` / `INSERT IGNORE`），写任一种都会在另外两种上炸
-- 🔴 **不要在数据迁移里调 `snowflake.generate()`。** 它要读环境变量或去 Redis 抢节点号，
-  而 `alembic upgrade` 是部署时一个独立的 `migrate` 容器 —— 把 Redis 变成它的前置依赖
-  是个新耦合，失败时还报「雪花 ID 生成失败」，完全看不出跟数据迁移有关。
-  有语义的行（菜单）**照抄种子里那个 ID**（三个方言的 `sys_menu` 是同一套，抄过来能让
-  「升级上来的库」和「新建的库」收敛）；纯连接行（`sys_role_menu`）用
-  `DATA_MIGRATION_PK_BASE` 那一段
-- ⚠️ **不要重新灌整份种子** —— 会把别人在界面上改过的数据覆盖回去。只补「按业务键查不到」的行
-
-守卫是 `test_seed_files_have_a_matching_data_migration_decision`：种子文件的 sha256
-变了而 `backend/sql/seed_manifest.json` 没更新就红。它**证明不了**那条迁移真的插了
-同样的行，只强迫你看一眼并做决定（和 `test_every_crud_class_declares_its_data_scope_stance`
-同一个物种）。确认过之后 `pnpm --filter api seed:manifest --write` 更新清单。
-
-⚠️ 清单覆盖**插件的 `sql/` 也算** —— `#81` 的消息中心菜单就是从插件那份漏掉的，
-机制和漏法与基础种子一模一样。
-
-🔴 **守卫只看得见清单建立那一刻之后的改动 —— 建基线会把当时已有的缺口一次性洗白。**
-实测踩到：引进这份清单时（`33ffb491b69f`），`#83`（每日问候调度）的种子改动已经落地
-且没有对应的数据迁移。清单一算，那次改动就被记成「已确认」，守卫此后再也看不见它、
-而且是**绿的** —— 缺口比引进守卫之前更难发现，最后靠人肉对账才捞出来
-（`677aa7aa0f73` 补的）。
-
-所以 **`seed:manifest --write` 之前必须先确认当前种子与迁移链是一致的**。
-在一个「已知落后」的状态上建基线，等于把缺口永久藏起来。
-接手一个不确定的状态时，先按种子文件逐块对一遍库，别先跑 `--write`。
-
-## 后端国际化（i18n）
-
-语言包在 `backend/locale/{zh-CN,en-US}.yml`，**统一用 YAML**（2026-08-22 前
-`en-US` 还是 `.json`，已合并）。识别语言靠标准 `Accept-Language` 请求头
-（`middleware/i18n_middleware.py`），不是自定义 header/query 参数。
-
-- **不要以为 YAML 性能更好**——实测反过来：同一份内容 `yaml.safe_load`
-  比 `json.loads` 慢两个数量级（本机 4.7ms vs 0.02ms/次）。选 YAML 纯粹是
-  为了能写注释。反正 `I18n.load_locales()` 只在进程启动时跑一次，这点
-  耗时不影响任何请求延迟
-- 🔴 **业务错误消息统一走 `t('error.模块.slug', **kwargs)`，不要再用中文原文
-  当 key。** 2026-08-22 之前是反过来——`raise errors.XxxError(msg='用户不存在')`
-  写中文字面量，响应出口按原文查表翻译（`I18n.tm()`）。这套「中文当 key」
-  查出过一整轮真问题（治理记录见下），根子是：中文原文一改字（哪怕改错字）
-  翻译就跟着断，两个语言包永远没有机器能查的「对不对齐」标准。现在改法：
-  - 键定义在两个语言包的 `error.*`（按模块分：`error.user.*`/`error.dept.*`/…）
-    和 `file_type.*`（上传报错要用到的「图片/文档/…」标签，因为标签本身
-    也是要翻译的中文词，不能直接拼进英文句子）
-  - `t()` 自带 `.format(**kwargs)`，带变量的消息直接 `t('error.file.unsupported_format',
-    file_ext=file_ext)`，不再需要正则模板去匹配插值后的字符串
-    （`tm()` 的 `_templates()`/`message_templates` 机制已删除）
-  - `tm()` 现在只剩一个用途：**反向翻译我们不控制抛出点的框架异常**
-    （FastAPI/Starlette 自己抛的 `Not authenticated`/`Method Not Allowed`，
-    这类拿不到一个能传参数的调用点，只能反过来拿英文原文当 key）。
-    `exception_handler.py`/`response_schema.py` 在 `exc.msg`/`res.msg` 上
-    无差别调 `tm()`：业务异常这时已经是 `t()` 的最终产物，查不到表就原样
-    返回，对已翻译文本是幂等的
-  - **两个语言包在 `error.*`/`file_type.*` 下的键集合必须完全相同**——
-    `t()` 查不到键会把键名字符串原样吐出来（比如响应里出现
-    `"msg": "error.dept.something"`），这比旧机制的「静默显示中文」更容易
-    被发现，但仍然只能靠人看。`backend/tests/test_i18n.py` 机器化了这条：
-    一条断言两个语言包键集合对称，一条断言源码里每处 `t('error.xxx')`
-    引用的键在语言包里真实存在（两条都做过变异验证，打回问题会红）
-  - `pydantic.*` 段是**唯一还保留的不对称**：只在 `zh-CN.yml` 有 100 条
-    （pydantic-core 报错原生是英文，中文界面才需要翻），`exception_handler.py`
-    里 `if i18n.current_language != 'en-US':` 把英文请求短路掉了，根本不查，
-    `en-US.yml` 没有这一段是对的，不要照着补一份对称的过来
-- **这次治理连带修了一个更隐蔽的 bug**：`jwt_auth_middleware.py` 的
-  `auth_exception_handler`（Starlette `AuthenticationMiddleware` 的
-  `on_error` 钩子）直接读 `exc.msg`/`exc.detail` 拼响应，**从来没调用过
-  `tm()`**——所有 JWT 鉴权失败（token 无效/过期、账号锁定、部门/角色被禁用…）
-  不管 `Accept-Language` 传什么，永远是中文。旧机制下这个旁路必须每加一个
-  异常序列化路径就记得手动翻一次，漏了不报错；新机制下翻译在 `raise` 那一刻
-  就已经发生（`msg=t(...)`），不管后面被哪条路径读到 `.msg` 都已经是对的
-  语言——这类「序列化出口忘了翻」的问题整类消失了，不是又堵上一个洞
+命令、三条纪律、四个守卫，以及后端侧那一串坑（雪花主键被建成 IDENTITY ·
+alembic 之前手写 ALTER 加的列守卫抓不到 · 种子数据要配 data migration …）
+全在 [`backend/alembic` 分册](backend/alembic/AGENTS.md)。
+**动迁移之前先读那一份** —— 少读一条的失败方式都是延迟且静默的。
 
 ## 时区：单时区系统，但**下发的时间必须带时区标记**
 
@@ -475,147 +301,6 @@ schema 和种子数据走的是**两条完全不同的路**：
 > 另外记住 `update` 走 `model_dump(exclude_unset=True)`：前端不传的字段不会被写 ——
 > 这条在「前端删字段」时是好事（不会静默重置老数据），但要归一老值就得显式传一次。
 
-## 数据权限（data scope / data rule）
-
-一条链：**角色 → 数据范围（`sys_data_scope`）→ 数据规则（`sys_data_rule`）→ 一个 WHERE 条件**，
-拼装在 `common/security/permission.py: filter_data_permission()`。
-用例在 `backend/app/admin/tests/api_v1/test_data_permission.py`（22 个真实账号，
-每个账号一种配置，全部走 `/auth/login/swagger` + `GET /sys/depts` 断言可见集合）。
-
-### 🔴 它是 fail-open 的：规则「落不到列上」= 完全不过滤
-
-`filter_data_permission()` 遍历规则时，遇到下面任一情况就 `continue`，
-一条条跳完之后 `where_list` 是空的 —— 返回的是 **`or_(1 == 1)`**，也就是**放行全部**：
-
-| 情况 | 例子 |
-|---|---|
-| 字段在目标模型上不存在 | 种子里的「本部门数据权限」= `Dept.__dept_id__`，而 `__dept_id__` 解析成 `dept_id`，`sys_dept` **没有这一列** |
-| 字段名拼错 | 建规则时后端**不校验** model/column 是否存在（`CreateDataRuleParam` 只有 `str`），前端那个框还允许手填 |
-| 字段在 `DATA_PERMISSION_COLUMN_EXCLUDE` 里 | `id` / `created_time` / `sort` / `deleted…` |
-| 规则打在别的模型上 | 规则是 `User.xxx`，而接口 `DataPermissionFilter(Dept)` |
-
-对比之下，「开了过滤但一个数据范围都没配」返回的是 `or_(1 != 1)`（**一条都看不见**）。
-同一个函数里两种相反的兜底，而**配错的那一种恰好是放行的那一种**：
-一个名字叫「本部门数据权限」的范围，实际效果是「全部部门」，界面上没有任何提示。
-
-要收紧的话改 `filter_data_permission()` 里那三处 `continue` —— 但那是产品决定
-（现有配置会立刻从"能看"变成"看不见"），不是 bug 修复，所以**没有动**，只用
-`test_rule_on_missing_column_fails_open` 等四条钉住了当前行为。
-
-### 🔴 AND 组和 OR 组在**顶层是 OR** —— 一条 OR 规则能抬掉所有 AND 规则
-
-```python
-return or_(and_(*where_and_list), or_(*where_or_list))
-```
-
-配「`parent_id == RA`（AND，想收紧）」+「`status == 1`（OR）」，结果是**并集**不是交集，
-那条 OR 规则把限制整个抬掉了。界面上这两个下拉都叫「运算符」，看不出会有这个后果。
-实测：`test_or_rule_defeats_and_rule`。
-
-### 多角色取**最宽**，不是取交集
-
-`for role in request.user.roles: if role.status and not role.is_filter_scopes: return or_(1 == 1)`
-—— 只要有一个启用角色勾了「不过滤数据权限」，其它角色配的限制**一条都不看**。
-给人加角色是「加能力」，这里同时也在「减限制」。实测：`test_one_unfiltered_role_defeats_all_restrictive_roles`。
-
-### 🔴 覆盖面：不是每个接口都挂了 `DataPermissionFilter`
-
-`GET /sys/depts` 是最早接上的一个，后来 `GET /sys/users` 也接了
-（`test_user_list_endpoint_is_filtered`）。**但覆盖面不是靠数一个固定数字来钉的**——
-旧版本这里有一条 `test_data_permission_filter_is_wired_to_exactly_one_endpoint`
-断言"全仓只有一个接口挂了 `DataPermissionFilter`"，覆盖面一扩大它就必然红，
-本身是在记录缺口而不是校验行为。现在换成了
-`test_every_crud_class_declares_its_data_scope_stance`：每个 DAO 类要么继承
-`DataScopedCRUD`（默认过滤），要么显式写 `data_scope_enabled = False` 并说明理由，
-"忘了想这件事"会红——这才是原来那个洞真正的成因。
-
-`PUT/DELETE /sys/depts/{pk}`、文件、任务执行记录……这类写接口目前仍然全部无过滤，
-所以配「仅本人数据权限」`__ALL__ + __created_by__` 时不要以为它作用于所有模型 ——
-`__ALL__` 说的是「规则匹配哪些模型」，不是「过滤器挂在哪些接口上」。
-
-### 🔴 GET 也要 RBAC——只挂 `DependsJwtAuth` 等于这条路由退出了鉴权（issue #30）
-
-行级数据权限和接口级 RBAC 是两道**独立**的闸，`filter_data_permission` fail-open
-不代表 `DependsRBAC` 也可以不挂。2026-08-26 之前，`GET /sys/users`、
-`/sys/configs`（+`/all`）、`/sys/data-rules`（+`/all`）、`GET /sys/menus`、
-`GET /monitors/redis`、`/logs/login`、`/logs/opera` 这批读接口**只有
-`DependsJwtAuth`**，没有 `RequestPermission(...)`，也没有 `DependsRBAC`——
-`rbac.py: rbac_verify` 对没声明权限标识的路由是直接 `return`（放行），
-所以这不是漏配一个字符串，是这条路由整个退出了鉴权。实测：一个只绑「仪表盘」
-菜单的账号，直接打 `GET /sys/users` 能拿到全量用户列表（含 email/phone/dept_id），
-打 `GET /logs/opera` 能拿到全量操作日志（含别人的 trace_id/username/IP）。
-`GET` 还额外免了 `is_staff` 校验（`method not in {GET, OPTIONS}` 那个判断），
-读接口比写接口更容易被这类漏配放过。
-
-`/monitors/redis` 那条更离谱：同一个 `/monitors` 前缀下 `/server`、`/sessions`
-都是 `DependsSuperUser`，就它一条是 `DependsJwtAuth`——三条本来就该同一套门槛。
-
-修法是给这批读接口补 `RequestPermission('xxx:list')` + `DependsRBAC`
-（新权限码统一用 `:list` 后缀，跟现成的 `sys:file:list` 对齐，不是随手起的名字），
-**同时必须在种子菜单里补上对应的权限锚点菜单、并挂到需要保留访问的角色上**——
-光加校验不加种子授权，会把当前能用的页面全锁死，这正是 #30 的建议里特别提醒的坑。
-补的时候顺带发现：`test_data_permission.py` 那张自建图（`dp` fixture）里的角色
-一个菜单都没挂——以前用不上，因为它打的接口都没有 `DependsRBAC`；这次给
-`/sys/users` 补上之后必须给每个建出来的角色都挂一份权限锚点菜单（`add_role()`
-里统一处理），不然 `rbac_verify` 里"用户未分配菜单"那道更早的闸就先炸了。
-
-🔴 **`test_permission_codes.py` 那三条三方对账测试抓不住"接口压根没声明权限码"
-这类洞**——它们做的是"后端声明的权限码 vs 前端 vs 种子菜单"三边 diff，一条路由
-如果从来没调用过 `RequestPermission(...)`，根本不会进入被比较的集合，不会有
-任何差集，测试照样全绿。这类洞目前只能靠人工审计接口清单发现，同 `sys/depts`
-那批写接口的裸奔状态一样——不是这次的范围，留作已知缺口。
-
-🔴 **给一个通用读接口补权限码之前，先搜一遍谁在拿它当"只要登录就行"的旁路用。**
-这条修完当场炸了一个：`packages/platform/src/pages/dev-sandbox/api.ts` 一直在打
-`GET /sys/configs/all?type=DEV`，代码注释原话是"只要 `DependsJwtAuth`，所以任何
-登录用户都读得到"——组件沙箱故意不挂业务权限码（`sandbox/components.tsx`：
-"只要登录就能进，不挂业务权限码"），是因为它假设了这条读接口的旧门槛。
-`/sys/configs/all` 补上 `sys:config:list` 之后，没有这个权限码的账号（这次新加的
-8 个演示账号一个都没有）打组件沙箱直接吃 403——不是显示"沙箱已关闭"那条降级
-文案（那条走的是 `readSandboxGate` 的正常分支），是 `useQuery` 的 `error` 分支，
-`QueryError` 报接口出错。硬纪律 9 在这起事故里表现是"失败确实可见"，但可见
-不等于对：用户看到的是一个跟真实原因（RBAC）毫不相关的报错页。
-修法不是把 `sys:config:list` 加进 `RBAC_ROLE_MENU_EXCLUDE`——那会把整张参数
-配置表（含邮件服务器地址这类真敏感字段）重新对所有登录用户开放，等于把
-#30 刚堵上的洞挖回去。而是新开一条**只读 DEV 组、type 写死不接受入参**的
-`GET /sys/configs/dev-sandbox-gate`，只挂 `DependsJwtAuth`——暴露面从"整张
-配置表"缩到"两个布尔开关"，跟沙箱本来的设计初衷（"不碰业务数据"）对上号，
-不是给旧漏洞开后门。**一般结论**：改一个被多处复用的通用接口的权限门槛前，
-`grep` 一遍调用方，尤其是那些没有专属业务权限码、靠"反正只要登录就行"这个
-隐含假设活着的旁路用途。
-
-### 已修：三个让接口直接 500 的坑
-
-- 🔴 **`UniversalStr` / `UniversalText` 必须显式写 `python_type`。**
-  `TypeDecorator` **不会**把 `python_type` 转发给 `impl`，基类实现直接
-  `raise NotImplementedError`。而 `filter_data_permission()` 要靠
-  `table.columns[c].type.python_type` 做值类型转换 —— 于是**任何打在字符串列上的
-  数据规则都让接口 500**（`Dept.code`、`Dept.name`、`User.username`…，
-  也就是这个 fork 里几乎所有能写规则的文本列）。种子里的「部门编码等于 TEST」就是一条。
-  实测：修之前 `test_eq` 等 5 条直接 `NotImplementedError` → 500。
-  （`TimeZone` 早就显式写了一份，是同一个原因 —— 加新 `TypeDecorator` 时记得跟上）
-- 🔴 **`${now}` 要放调用结果，不是函数对象。** 原来是 `'${now}': timezone.now`，
-  `datetime(<function now>)` 抛 TypeError 被 `except` 吞掉，
-  于是 `'${now}'` 这个**字面量**被拼进 SQL —— 规则不是不生效，是让接口 500
-- 🔴 **模板变量解析不出值时要 fail-closed，不能把字面量塞进 SQL。**
-  用户没有部门时 `${dept_id}` 是 None，`int(None)` 同样被吞，
-  `WHERE parent_id = '${dept_id}'` 实测报
-  `Error converting data type varchar to bigint (8114)` → 500。
-  现在解析失败的规则编译成 `false()`（看不见），不是放行、也不是崩
-
-### ⚠️ 写数据权限测试：JWT 用户解析**不走**依赖注入
-
-`jwt.get_jwt_user()` 里直接用了 `backend.database.db.async_db_session`（**开发库
-`fba`**），而 `conftest.py` 只重载了接口层的 `get_db`（→ `fba_test`）。
-现有用例从没暴露这条，是因为它们只用 admin，而 `fba` 和 `fba_test` 是同一份种子
-建出来的、admin 的雪花 ID 完全相同。**只存在于测试库里的用户会登录成功、
-第一个请求就 `TokenError`** —— 必须把 `jwt_module.async_db_session` 也换掉
-（见 `test_data_permission.py` 的 `dp` fixture）。
-
-另外那份 fixture 是**自己建图自己拆**（5 个部门 / 16 条规则 / 17 个范围 /
-19 个角色 / 22 个用户，每次跑带一个随机后缀），不依赖种子数据，
-teardown 里按 id 硬删干净 —— 因为 `fba_test` 同时也是 Playwright E2E 的库。
-
 ## 请求 IP 只在可信代理后面才作数
 
 🔴 `utils/request_parse.py: get_request_ip()` 原来**无条件信任** `X-Real-IP`，
@@ -662,137 +347,60 @@ async_db_session`"，定时任务/脚本/CLI 命令这类不经过 FastAPI 依�
 ⚠️ 相关：限流在测试里默认关闭（`REQUEST_LIMITER_ENABLED`，同一个 IP 反复登录
 会互相打成 429）。要验 429 的用例用 `rate_limiter` fixture 显式打开。
 
-## 跑测试
+## 后端国际化（i18n）
 
-```bash
-pnpm test                     # = turbo test → apps/api 的 pytest
-cd apps/api && uv run pytest backend/app/admin/tests/api_v1/test_file.py -q
-```
+语言包在这个目录，机制在 `../common/i18n.py` 和 `../middleware/i18n_middleware.py`。
+前端那一侧（`Accept-Language` 必须跟界面语言同步）见 [`packages/i18n` 分册](packages/i18n/AGENTS.md)。
 
-**测试跑在独立的 `fba_test` 库上**（`backend/conftest.py` 覆盖了 `get_db`，
-另有一个 autouse fixture 补上三处不走依赖注入的会话，见上一节），
-不是开发库。第一次要手工准备，否则报的是一句看不出原因的 sqlalchemy 连接错误：
+语言包在 `backend/locale/{zh-CN,en-US}.yml`，**统一用 YAML**（2026-08-22 前
+`en-US` 还是 `.json`，已合并）。识别语言靠标准 `Accept-Language` 请求头
+（`middleware/i18n_middleware.py`），不是自定义 header/query 参数。
 
-```bash
-# 1. 建库
-docker exec fba_mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$PW" -C \
-  -Q "IF DB_ID('fba_test') IS NULL CREATE DATABASE fba_test;"
+- **不要以为 YAML 性能更好**——实测反过来：同一份内容 `yaml.safe_load`
+  比 `json.loads` 慢两个数量级（本机 4.7ms vs 0.02ms/次）。选 YAML 纯粹是
+  为了能写注释。反正 `I18n.load_locales()` 只在进程启动时跑一次，这点
+  耗时不影响任何请求延迟
+- 🔴 **业务错误消息统一走 `t('error.模块.slug', **kwargs)`，不要再用中文原文
+  当 key。** 2026-08-22 之前是反过来——`raise errors.XxxError(msg='用户不存在')`
+  写中文字面量，响应出口按原文查表翻译（`I18n.tm()`）。这套「中文当 key」
+  查出过一整轮真问题（治理记录见下），根子是：中文原文一改字（哪怕改错字）
+  翻译就跟着断，两个语言包永远没有机器能查的「对不对齐」标准。现在改法：
+  - 键定义在两个语言包的 `error.*`（按模块分：`error.user.*`/`error.dept.*`/…）
+    和 `file_type.*`（上传报错要用到的「图片/文档/…」标签，因为标签本身
+    也是要翻译的中文词，不能直接拼进英文句子）
+  - `t()` 自带 `.format(**kwargs)`，带变量的消息直接 `t('error.file.unsupported_format',
+    file_ext=file_ext)`，不再需要正则模板去匹配插值后的字符串
+    （`tm()` 的 `_templates()`/`message_templates` 机制已删除）
+  - `tm()` 现在只剩一个用途：**反向翻译我们不控制抛出点的框架异常**
+    （FastAPI/Starlette 自己抛的 `Not authenticated`/`Method Not Allowed`，
+    这类拿不到一个能传参数的调用点，只能反过来拿英文原文当 key）。
+    `exception_handler.py`/`response_schema.py` 在 `exc.msg`/`res.msg` 上
+    无差别调 `tm()`：业务异常这时已经是 `t()` 的最终产物，查不到表就原样
+    返回，对已翻译文本是幂等的
+  - **两个语言包在 `error.*`/`file_type.*` 下的键集合必须完全相同**——
+    `t()` 查不到键会把键名字符串原样吐出来（比如响应里出现
+    `"msg": "error.dept.something"`），这比旧机制的「静默显示中文」更容易
+    被发现，但仍然只能靠人看。`backend/tests/test_i18n.py` 机器化了这条：
+    一条断言两个语言包键集合对称，一条断言源码里每处 `t('error.xxx')`
+    引用的键在语言包里真实存在（两条都做过变异验证，打回问题会红）
+  - `pydantic.*` 段是**唯一还保留的不对称**：只在 `zh-CN.yml` 有 100 条
+    （pydantic-core 报错原生是英文，中文界面才需要翻），`exception_handler.py`
+    里 `if i18n.current_language != 'en-US':` 把英文请求短路掉了，根本不查，
+    `en-US.yml` 没有这一段是对的，不要照着补一份对称的过来
+- **这次治理连带修了一个更隐蔽的 bug**：`jwt_auth_middleware.py` 的
+  `auth_exception_handler`（Starlette `AuthenticationMiddleware` 的
+  `on_error` 钩子）直接读 `exc.msg`/`exc.detail` 拼响应，**从来没调用过
+  `tm()`**——所有 JWT 鉴权失败（token 无效/过期、账号锁定、部门/角色被禁用…）
+  不管 `Accept-Language` 传什么，永远是中文。旧机制下这个旁路必须每加一个
+  异常序列化路径就记得手动翻一次，漏了不报错；新机制下翻译在 `raise` 那一刻
+  就已经发生（`msg=t(...)`），不管后面被哪条路径读到 `.msg` 都已经是对的
+  语言——这类「序列化出口忘了翻」的问题整类消失了，不是又堵上一个洞
 
-# 2. 建表（从模型生成，和开发库同一套路子）
-cd apps/api && uv run python -c "
-import asyncio, backend.app.admin.model, backend.plugin.config.model, backend.plugin.dict.model
-import backend.plugin.notice.model, backend.plugin.oauth2.model
-from backend.common.model import MappedBase
-from backend.database.db import create_database_async_engine, get_database_url
-async def m():
-    eng = create_database_async_engine(get_database_url(unittest=True))
-    async with eng.begin() as c: await c.run_sync(MappedBase.metadata.create_all)
-    await eng.dispose()
-asyncio.run(m())"
+## 拆出去的分册
 
-# 3. 灌种子（登录 fixture 要 admin 账号）
-docker cp backend/sql/sqlserver/init_snowflake_test_data.sql fba_mssql:/tmp/seed.sql
-docker exec fba_mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$PW" -C -I \
-  -d fba_test -i /tmp/seed.sql
-```
-
-三个坑：
-
-- **`sqlcmd` 灌种子必须加 `-I`**（QUOTED_IDENTIFIER ON）。`sys_user` 上有筛选唯一索引
-  （`_EMAIL_UNIQUE`），SQL Server 要求这个选项为 ON 才允许 INSERT，否则报
-  `Msg 1934 … SET options have incorrect settings: 'QUOTED_IDENTIFIER'`
-- **`test` 脚本用 `uv run --no-sync`**。裸 `uv run` 每次都会重新 sync 依赖，
-  那一步要联网 —— 在 turbo 的净化环境里会卡成 `Request failed after 3 retries`。
-  代价是要先跑过一次 `uv sync --group dev`
-- **`turbo.json` 里 `test` 必须 `cache: false`** —— 测试打真实数据库，
-  缓存住「上次通过了」毫无意义
-
-### 写测试时：`UPLOAD_DIR` 必须顶到 tmp
-
-`UPLOAD_DIR` 是在各模块顶层 `from ... import UPLOAD_DIR` 进来的，
-改 `path_conf` 上那一个**没用** —— 必须逐个模块 monkeypatch
-（`utils.file_ops` 和 `service.file_service` 各一份，见 `test_file.py` 的
-`isolated_upload_dir`）。漏掉哪个，那条路径就会读写开发环境真实的 `backend/upload/`。
-
-### 🔴 手搓的 ZIP/docx 测试夹具，逐字节比较前先固定 `date_time`
-
-`test_file.py: _docx_bytes()` 用 `zipfile.ZipFile.writestr(name, data)` 传纯
-字符串文件名——内部会拿 `time.localtime()` 把**当前时刻**的 DOS 时间戳
-（2 秒精度）写进 local file header。`test_download_inline_and_attachment`
-拿它生成两次（一次上传、一次比对）做 `inline.content == _docx_bytes()`
-逐字节比较，两次调用只要跨过这个 2 秒边界，固定字节位置就会错开一位——
-偶发红，CI 上实测抓到过一次：`At index 10 diff: b'#' != b'$'`，正是那个
-mod-time 字段。本地几乎复现不了（两次调用间隔通常远小于 2 秒），只有 CI
-偶尔卡在边界上才会红，看起来像随机抽风。
-修法：改传 `zipfile.ZipInfo(name, date_time=固定值)`，与调用时刻无关。
-同类坑：任何拿标准库时间戳字段做逐字节/逐值比较的测试夹具（ZIP、tar、
-某些序列化格式），生成两次要么固定时间戳，要么比较时排除掉那个字段。
-
-### 种子数据里那批 `3000000000000000xxx` 开头的 ID，是公开演示专门加的
-
-`sql/sqlserver/init_snowflake_test_data.sql` 原来只有 1 个部门 + 1 个角色 + 2 个
-账号（admin/test），是纯粹的"能跑测试就行"的最小集合。为了公开演示时组织
-架构看着像回事，补了一批部门/角色/账号，全部是**纯新增 INSERT**，没有改
-admin/test 的 ID、密码或者角色绑定，前后端所有测试用的还是同一个
-`admin`/`test`（这两个用户名本身不能改——`test_prod_config.py:
-test_init_handles_every_seeded_account` 硬编码断言 `cli.py: _set_admin_password`
-处理这两个名字）。
-
-- ID 故意用 `3000000000000000001` 起步的一段独立区间，跟原来 `2048...`/`2049...`
-  开头的雪花 ID 肉眼就能分清，不会误以为是同一批
-- 8 个新账号（张伟/李娜/王芳/刘洋/陈静/赵磊/孙强/周敏）密码都是种子密码 `123456`，
-  **故意永远不重置**——公开演示要的就是"随便挑一个账号登录切换视角"。
-  🔴 这批账号的 hash 要补进的是 `password_security.py: SEEDED_DEMO_PASSWORD_HASHES`，
-  **不是** `SEEDED_PASSWORD_HASHES`——两份集合语义相反：后者是
-  `registrar.py: _verify_production_database()` 拿去扫全库、命中就拒绝启动的
-  名单（给 admin/test 这类"必须在 prod 前改掉"的账号用），前者才是"永远保持
-  默认密码也没关系"的公开演示账号。**实测事故**：这两份集合曾经合并成一份，
-  往生产库同步完这 8 个演示账号后重启 `api` 容器——启动检查一查到它们就拒绝
-  启动，容器连续崩溃重启 12 次，`web`/`beat` 因为 `depends_on: api: condition:
-  service_healthy` 一直等不到健康的 `api`，卡在 `Created` 没起来，公开演示站点
-  整个 502。应急止血是把这 8 个账号的密码用新随机盐重新哈希一遍（明文照旧
-  `123456`，只是不再和 `SEEDED_PASSWORD_HASHES` 里那个写死的字面量相等），
-  正式修复是拆成两份集合，把 `_verify_production_database()` 的查询钉死在
-  只读 `SEEDED_PASSWORD_HASHES`。`test_seeded_password_hashes_cover_every_seeded_account`
-  会自动扫 `sql/` 下所有 `init_*.sql` 里的 bcrypt hash，对着**两份集合的并集**
-  做覆盖面对账——加新演示账号时补进 `SEEDED_DEMO_PASSWORD_HASHES`，
-  加新的"必须改密码"账号才补进 `SEEDED_PASSWORD_HASHES`，别补错集合
-- 部门编码从 `TEST` 改成了 `HQ`（"总部"）——`sys_data_rule` 里有一条
-  "部门编码等于 xxx" 的规则字面量引用着这个编码（`Dept.code = 'HQ'`），
-  改编码的同时要同步改这条规则的 `[value]`，两边不同步的话数据权限演示会
-  静默失效（规则匹配不到任何行，等价于清空这条过滤，不会报错）
-- 角色编码从 `TEST` 改成了 `STAFF`（"普通员工"），新增 `MANAGER`/`FINANCE_STAFF`/
-  `VIEWER` 三个角色，分别挂了 `部门及以下`/`本部门`/`仅本人` 三档数据范围——
-  凑够这三种能在数据权限页面演示出可见的差异，不是随便起的名字
-- 种子 SQL 文件里**不能加解释性的独立注释块**（`--` 开头的裸注释会被
-  `sql_parser.py` 的白名单校验直接判成非法语句，见「跑测试」一节踩过的坑），
-  上面这些"为什么"只能写在这里，不能写进 SQL 文件本身
-- 🔴 **三个方言各自一份文件，靠人工保持同步——没有任何机器校验三份内容对得上。**
-  这批"公开演示"数据最早只加进了 `sql/sqlserver/`，`mysql/`、`postgresql/`
-  两份原地放了半年多还是最初那个 1 部门 + 1 角色 + 2 账号的最小种子，没人发现，
-  因为两条守卫（`test_seeded_password_hashes_cover_every_seeded_account` /
-  `test_model_matches_migrations`）都不比较"三份种子内容是否一致"，只比较
-  "种子里出现的 hash 在不在白名单里"——三份缺两份一样能全绿。
-  这台生产机跑的是 PostgreSQL，公开演示上线之后组织架构一直是那个最小种子，
-  直到有人发现"看着不像回事"才补的。2026-08-26 已把 `mysql`/`postgresql`
-  两份补齐到跟 `sqlserver` 同样的内容（部门/角色/账号语义一致，
-  ID 各方言自己独立一套——`mysql` 恰好和 `sqlserver` 本来就共用同一批 ID，
-  直接照抄；`postgresql` 的基础种子（admin/test/部门/角色）本来就是另一套 ID，
-  改名复用 + 新增部分另起一段 `4000000000000000xxx` 区间）。
-  **以后改这批演示数据，三份 `init_snowflake_test_data.sql` 一起改，
-  改完跑一遍 `test_seeded_password_hashes_cover_every_seeded_account`
-  只能保证 hash 有登记，保证不了三份"部门/角色长得一样"，这条得靠人记。**
-
-### 有测试的部分 / 没测试的部分
-
-| | 状态 |
+| 我要… | 读 |
 |---|---|
-| 文件模块接口（上传 · 去重 · 穿越 · 日期目录 · 列表 · 统计 · 下载 · 附件 · 删除） | `test_file.py` 23 条 |
-| 数据权限（表达式矩阵 · 组合语义 · fail-open · 模板变量 · 覆盖面 · 缓存失效） | `test_data_permission.py` 27 条 / 22 个账号 |
-| `/auth/logout` | 上游留下的 1 条 |
-| **其余所有模块** | **没有测试** |
-| **前端** | Playwright E2E 3 条种子用例（登录 · 部门 CRUD · 多页签保活），见下节 |
-
-> `test_file.py` 里两条标了 🔴 的是**回归测试**，对应两个真出现过的 bug
-> （去重丢文件名 · 列表缺 `download_url`）。做过变异验证：把修复分别打回去，
-> 对应的测试会失败 —— 它们不是摆设。
+| 跑 pytest / 建测试库 / 测试跑不起来 | [`backend/tests` 分册](backend/tests/AGENTS.md) |
+| 动权限码 / 数据范围（行级过滤） | [`backend/common/security` 分册](backend/common/security/AGENTS.md) |
+| 写迁移 / 改种子数据 | [`backend/alembic` 分册](backend/alembic/AGENTS.md) |
+| 动定时任务 / Celery | [`backend/app/task` 分册](backend/app/task/AGENTS.md) |
