@@ -604,6 +604,56 @@ def test_delete_rejects_escaping_path(isolated_upload_dir: Path) -> None:
     assert isolated_upload_dir.is_dir()
 
 
+def test_upload_refuses_escaping_target_when_build_filename_regresses(
+    isolated_upload_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 上传落点的越界检查是**第二道防线** —— 第一道失守时它必须拦住。
+
+    `upload_file` 里那句 `target.resolve().is_relative_to(root.resolve())`
+    自己的注释写着「这一条挡的是『将来有人改了 build_filename』」。
+    实测把它改成 `if False`，全套 265 条**一条都不红** —— 因为第一道防线
+    （`build_filename` 剥掉路径成分，由 `test_upload_strips_path_traversal`
+    盯着）让它从外部输入永远到不了。
+
+    所以这条**直接模拟第一道防线失守**：把 `build_filename` 打桩成返回带
+    `../` 的名字。防御纵深只能这么测 —— 否则「两道防线是刻意的」这句话
+    只是注释，没有任何人验证过第二道真的在。
+
+    ⚠️ 打桩要打在 `file_ops` 这个模块的名字上，不是 import 进来的那个引用 ——
+    `upload_file` 是在同模块里直接调 `build_filename()` 的。
+
+    ⚠️ **`../` 要给足四层。** 落点是 `root/<Y>/<m>/<d>/<filename>`，日期目录
+    那三层会**吸收掉三个 `../`** —— `../../escaped.png` 解析完还在 root 里面，
+    检查不该拦、也确实没拦（第一版就是两层，测试报「DID NOT RAISE」）。
+    第四层才真的跨出根目录。所以这条测试的载荷长度是跟着
+    `build_date_dir()` 的层数走的：那个函数改了格式，这里也要跟着改。
+    """
+    import asyncio
+
+    from io import BytesIO
+
+    from starlette.datastructures import UploadFile
+
+    from backend.common.exception import errors
+    from backend.utils import file_ops
+
+    outsider = isolated_upload_dir.parent / 'escaped.png'
+    assert not outsider.exists(), '预置状态就不干净'
+
+    # 第一道防线「回归」了：把路径成分原样吐出来
+    monkeypatch.setattr(file_ops, 'build_filename', lambda file: '../../../../escaped.png')
+
+    upload = UploadFile(filename='innocent.png', file=BytesIO(_png_bytes()))
+
+    async def go() -> None:
+        await file_ops.upload_file(upload)
+
+    with pytest.raises(errors.RequestError):
+        asyncio.run(go())
+
+    assert not outsider.exists(), '第二道防线没拦住 —— 文件被写到了 UPLOAD_DIR 之外'
+
+
 # ─── Content-Disposition 头注入（issue #62） ────────────────────────────────
 
 

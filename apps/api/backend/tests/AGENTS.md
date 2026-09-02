@@ -135,6 +135,34 @@ DELETE · 13 PUT · 8 POST）。写入型里最危险的几条已经补了
 （「先把快照焐热，否则『被清掉』和『本来就没有』分不开」）——
 **它不只对 Redis 成立**，对数据库、对列表、对任何「断言缺失」都成立。
 
+### 🔴 「第二道防线」要靠**打桩掉第一道**来测
+
+防御纵深有个天然的测试盲区：第一道防线让第二道永远到不了，于是第二道
+**一行覆盖都没有**，而注释还写着「两道防线是刻意的」。
+
+实测样本：`upload_file` 里那句
+`target.resolve().is_relative_to(root.resolve())`，注释自己写着
+「这一条挡的是『将来有人改了 `build_filename`』」。把它改成 `if False`，
+全套 265 条**一条都不红** —— 因为 `build_filename` 已经把路径成分剥干净了
+（第一道，由 `test_upload_strips_path_traversal` 盯着）。
+
+唯一的测法就是**模拟第一道失守**：`monkeypatch.setattr(file_ops,
+'build_filename', lambda file: '../../../../escaped.png')`，然后断言
+`upload_file` 抛错、且越界位置没有文件。
+
+⚠️ 两个实测出来的讲究：
+
+- **打桩要打模块属性**（`file_ops.build_filename`），不是 import 进来的引用 ——
+  `upload_file` 是在同模块里直接调它的
+- **`../` 要给足四层。** 落点是 `root/<Y>/<m>/<d>/<name>`，日期目录那三层会
+  **吸收掉三个 `../`**，`../../escaped.png` 解析完还在 root 里、检查不该拦、
+  也确实没拦（第一版就是两层，测试报 `DID NOT RAISE`）。
+  载荷长度是跟着 `build_date_dir()` 的层数走的
+
+判据：**看到「兜底」「第二道防线」「将来有人改了 X 的时候」这类注释，
+先问一句「它现在有测试吗」。** 大概率没有 —— 因为写它的人正是因为
+「正常路径到不了」才把它叫做兜底。
+
 ### 怎么找出永远绿的测试：让写入静默回滚
 
 比逐条读测试便宜得多的办法 —— 临时把 `backend/tests/utils/db.py` 的
