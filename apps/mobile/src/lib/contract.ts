@@ -1,4 +1,10 @@
 /**
+ * 分页结构和错误类型都在 `@admin/api-contract`（两端共用），这里只留
+ * 移动端用到的那几个 DTO。
+ */
+export type { PageData } from '@admin/api-contract'
+
+/**
  * 后端契约的手抄本。
  *
  * ⚠️ web 端是 `pnpm gen:api` 从 OpenAPI 生成 `schema.d.ts` 的；移动端暂时手抄，
@@ -47,14 +53,6 @@ export type Captcha = {
   image: string
 }
 
-/** FBA 的分页返回结构 */
-export type PageData<T> = {
-  items: T[]
-  total: number
-  page: number
-  size: number
-  total_pages: number
-}
 
 /**
  * 站内通知分类。数值来自后端的 `NotificationCategory` 枚举。

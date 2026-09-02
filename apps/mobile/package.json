@@ -16,6 +16,7 @@
     "apk": "node scripts/apk.mjs"
   },
   "dependencies": {
+    "@admin/api-contract": "workspace:*",
     "@admin/i18n": "workspace:*",
     "@expo-google-fonts/jetbrains-mono": "^0.4.1",
     "@react-navigation/bottom-tabs": "^7.18.18",

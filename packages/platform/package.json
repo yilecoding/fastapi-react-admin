@@ -4,11 +4,11 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "gen:api": "openapi-typescript http://127.0.0.1:8000/openapi -o src/api-client/schema.d.ts",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@admin/api-contract": "workspace:*",
     "@admin/i18n": "workspace:*",
     "@admin/ui": "workspace:*",
     "@hookform/resolvers": "^5",
@@ -31,7 +31,6 @@
   "devDependencies": {
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "openapi-typescript": "^7",
     "typescript": "~6"
   },
   "exports": {

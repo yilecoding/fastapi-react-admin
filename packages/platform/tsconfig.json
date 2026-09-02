@@ -11,7 +11,11 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "paths": {
-      "@admin/i18n": ["../i18n/src/index.ts"], "@platform/*": ["./src/*"] }
+      "@admin/api-contract": ["../api-contract/src/index.ts"],
+      "@admin/api-contract/schema": ["../api-contract/src/schema.d.ts"],
+      "@admin/i18n": ["../i18n/src/index.ts"],
+      "@platform/*": ["./src/*"]
+    }
   },
   "include": ["src"]
 }

@@ -40,6 +40,7 @@
 | 挑组件 / 改尺寸覆盖不生效 | [`packages/ui/AGENTS.md`](packages/ui/AGENTS.md) |
 | 加文案 / 动多语言 | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) |
 | **显示时间 / 动时区** | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) 的「服务端时间一律过 `src/datetime.ts`」 |
+| **动请求客户端 / 后端契约 / 错误判定** | [`packages/api-contract/AGENTS.md`](packages/api-contract/AGENTS.md) |
 | 动后端模型 / 接口 / SQL · 跑 pytest | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
 | 动定时任务 / Celery / 调度 | [`apps/api/backend/app/task/AGENTS.md`](apps/api/backend/app/task/AGENTS.md) |
 | 动命令面板 / 快捷键 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
@@ -97,14 +98,18 @@ pnpm ctx:check          # 死引用 / 死链接 / 死脚本 / 死 testid / 行�
 ## 结构
 
 ```
-apps/api/          FBA fork（Python，uv 管理）
-apps/web/          业务应用；routes/ 只声明 schema/守卫，不渲染页面
-packages/i18n/     多语言包：语言文件 · i18next 实例 · 校验脚本（最底层）
-packages/ui/       shadcn 原语，零业务
-packages/platform/ 平台能力：api-client · auth · shell · pages
+apps/api/            FBA fork（Python，uv 管理）
+apps/web/            业务应用；routes/ 只声明 schema/守卫，不渲染页面
+apps/mobile/         移动端 App（Expo / RN），是 apps/web 的**兄弟**
+packages/i18n/       多语言包：语言文件 · i18next 实例 · 校验脚本（最底层）
+packages/api-contract/ 后端契约：信封成败语义 · ApiError · 生成的 schema.d.ts（最底层）
+packages/ui/         shadcn 原语，零业务
+packages/platform/   平台能力：api-client · auth · shell · pages
 ```
 
-依赖方向单向：**`i18n` ← `ui` ← `platform` ← `apps/web`**。
+依赖方向单向：**`i18n` / `api-contract` ← `ui` ← `platform` ← `apps/web`**。
+`apps/mobile` **直接依赖那两个最底层包**，不经过 `platform` —— platform 是
+web 形状的（TanStack Router、react-dom、zustand、socket.io），接进 RN 包不合适。
 **`ui` 永远不 import `platform`；`i18n` 不 import 任何 workspace 包**（连
 `react-i18next` 都不依赖 —— 它要保持框架无关，React 绑定在 app 层注入）。
 
@@ -171,7 +176,7 @@ pnpm --filter api celery:beat             # 只能一个
 账号 `admin` / `123456`。登录要过验证码，验证码答案在 Redis：
 `docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"`。
 
-后端契约改动后跑 `cd packages/platform && pnpm gen:api` 重新生成 `schema.d.ts`。
+后端契约改动后跑 `pnpm --filter @admin/api-contract gen:api` 重新生成 `schema.d.ts`。
 
 🔴 **`pnpm install:all` 会顺带装好本地 pre-commit 钩子，换机器 / 新克隆不用再手动补一步。**
 `apps/api/.pre-commit-config.yaml` 早就在（ruff `--fix --unsafe-fixes` + ruff-format + json/yaml/toml

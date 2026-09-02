@@ -50,6 +50,9 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@admin/api-contract':
+        specifier: workspace:*
+        version: link:../../packages/api-contract
       '@admin/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -274,6 +277,15 @@ importers:
 
   apps/worker: {}
 
+  packages/api-contract:
+    devDependencies:
+      openapi-typescript:
+        specifier: ^7
+        version: 7.13.0(typescript@6.0.3)
+      typescript:
+        specifier: ~6
+        version: 6.0.3
+
   packages/i18n:
     dependencies:
       i18next:
@@ -282,6 +294,9 @@ importers:
 
   packages/platform:
     dependencies:
+      '@admin/api-contract':
+        specifier: workspace:*
+        version: link:../api-contract
       '@admin/i18n':
         specifier: workspace:*
         version: link:../i18n
@@ -343,9 +358,6 @@ importers:
       '@types/react-dom':
         specifier: ^19
         version: 19.2.4(@types/react@19.2.18)
-      openapi-typescript:
-        specifier: ^7
-        version: 7.13.0(typescript@6.0.3)
       typescript:
         specifier: ~6
         version: 6.0.3

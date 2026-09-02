@@ -1,0 +1,18 @@
+{
+  "name": "@admin/api-contract",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "gen:api": "openapi-typescript http://127.0.0.1:8000/openapi -o src/schema.d.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.d.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7",
+    "typescript": "~6"
+  }
+}

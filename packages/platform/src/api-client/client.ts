@@ -1,7 +1,8 @@
 import createOpenApiClient from 'openapi-fetch'
 
-import type { paths } from './schema'
-import { ApiError, isEnvelope } from './errors'
+import type { paths } from '@admin/api-contract/schema'
+import { ApiError, isEnvelope, resolveEnvelope } from '@admin/api-contract'
+
 import { tokenStore } from './token-store'
 
 export const API_BASE = import.meta.env?.VITE_API_BASE ?? 'http://127.0.0.1:8088'
@@ -112,23 +113,25 @@ async function send<T>(method: Method, path: string, init: Record<string, unknow
   }
   const { data, error, response } = result
 
-  if (error !== undefined || !response.ok) {
-    const body = (error ?? data) as unknown
-    const bizCode = isEnvelope(body) ? body.code : response.status
-    const msg = isEnvelope(body) ? body.msg : response.statusText
+  /*
+   * 🔴 成败判定走 `@admin/api-contract` 的 `resolveEnvelope` —— **不要只看
+   * `response.ok`**。`response_base.fail()` 返回的是 HTTP 200 + `code: 400`，
+   * 只看 HTTP 状态会把「写了 0 行」这类失败读成成功。详见那个函数的注释。
+   */
+  const outcome = resolveEnvelope<T>(response, error ?? data)
 
+  if (!outcome.ok) {
     // 401 → 单飞刷新后重放一次；刷新失败则判定会话结束
-    if (response.status === 401 && retry) {
+    if (outcome.error.isUnauthorized && retry) {
       const ok = await refreshToken()
       if (ok) return send<T>(method, path, init, false)
       tokenStore.clear()
       onSessionExpired?.()
     }
-    throw new ApiError(response.status, bizCode, msg, isEnvelope(body) ? body.data : body)
+    throw outcome.error
   }
 
-  // 拆包：业务代码不该看见 code/msg
-  return (isEnvelope(data) ? (data.data as T) : (data as T))
+  return outcome.data
 }
 
 export const api = {
@@ -160,19 +163,17 @@ async function sendRaw(method: Method, path: string, body: BodyInit | undefined,
       tokenStore.clear()
       onSessionExpired?.()
     }
-    // 错误响应仍然是 FBA 的 JSON 包封，尽量把 msg 捞出来给用户看
-    let msg = res.statusText
-    let bizCode: number | string = res.status
+    // 错误响应仍然是 FBA 的 JSON 包封，尽量把 msg 捞出来给用户看。
+    // ⚠️ 这里不能用 `res.json()` 之后再交给 resolveEnvelope 判成败 ——
+    // 成功路径的 body 是二进制/multipart 响应，不能提前消费掉。
+    let parsed: unknown = null
     try {
-      const parsed: unknown = await res.json()
-      if (isEnvelope(parsed)) {
-        msg = parsed.msg
-        bizCode = parsed.code
-      }
+      parsed = await res.json()
     } catch {
-      // 不是 JSON（例如反代返回的 HTML 错误页）就保留 statusText
+      // 不是 JSON（例如反代返回的 HTML 错误页）
     }
-    throw new ApiError(res.status, bizCode, msg)
+    const outcome = resolveEnvelope<never>(res, parsed)
+    throw outcome.ok ? new ApiError(res.status, res.status, res.statusText) : outcome.error
   }
   return res
 }
@@ -195,12 +196,5 @@ export async function fetchBytes(path: string): Promise<ArrayBuffer> {
   return res.arrayBuffer()
 }
 
-/** FBA 的分页返回结构，直接喂 TanStack Table 的服务端分页 */
-export type PageData<T> = {
-  items: T[]
-  total: number
-  page: number
-  size: number
-  total_pages: number
-  links: { first: string; last: string; next: string | null; prev: string | null }
-}
+/** 分页结构在 `@admin/api-contract` 里，这里 re-export 保持调用点不变 */
+export type { PageData } from '@admin/api-contract'

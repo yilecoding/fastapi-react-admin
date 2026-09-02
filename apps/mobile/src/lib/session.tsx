@@ -1,6 +1,8 @@
 import * as React from 'react'
 
-import { ApiError, api, setSessionExpiredHandler } from '@/lib/api'
+import { ApiError } from '@admin/api-contract'
+
+import { api, setSessionExpiredHandler } from '@/lib/api'
 import type { CurrentUser, LoginResult } from '@/lib/contract'
 import { serverStore } from '@/lib/server'
 import { tokenStore } from '@/lib/token-store'
