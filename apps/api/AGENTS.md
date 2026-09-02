@@ -173,6 +173,44 @@ refresh token 的 JWT 里同样带着 `sub` 和 `session_uuid`（`create_refresh
   不再暴露 `db:init:auto` 别名，避免和 reset 形成重复入口。不要把 alembic downgrade base && upgrade head 当成重置：空基线的 downgrade
   不会删表或业务数据，它只适合验证迁移链。
 
+### 🔴 迁移里「失败了就吞掉」的写法，三种方言语义**相反**（issue #5）
+
+「补齐历史遗留」类的迁移常写成「执行，失败就忽略」（新库天然已是目标状态，
+再执行会报 already exists）。这个写法的正确形态**取决于方言**：
+
+| 方言 | 一条 DDL 失败之后 | 裸 `contextlib.suppress` | `begin_nested()`（SAVEPOINT） |
+|---|---|---|---|
+| postgresql | 整个事务被置成 aborted | ❌ 后续语句连环 `InFailedSQLTransactionError` | ✅ |
+| mssql | 事务照常可用 | ✅ | ❌ `Cannot roll back sa_savepoint_1...` |
+
+两条都是实测出来的（空库 `alembic upgrade c0000000comments`，8 条 ALTER 全部
+命中不存在的表）。postgres 那条的要害是：**Python 层把异常吞掉，并不能让已经
+作废的事务活过来**——报错信息完全不提「事务」，只说下一条语句失败了。
+
+`c0000000comments` 里的 `_tolerate_already_applied()` 是现成的抄法：postgres 走
+SAVEPOINT、其余走 suppress、离线 `--sql` 模式直接放行（那时 bind 是
+`MockConnection`，没有 `begin_nested()`，不放行会打掉
+`test_migrations_compile_offline_for_every_supported_dialect` 那条守卫）。
+
+⚠️ **不要拿一种方言的实测结论当通用前提。** 这条迁移原来的 docstring 写着
+「实测 SQL Server 在这里不会毒化事务」——对 mssql 成立，对 postgres 不成立，
+而当时只有 SQL Server 在 CI 里跑，所以这句话一直看着是对的。
+
+### ⚠️ 整条迁移链**不能**从 base 重放，这是设计而不是缺陷
+
+有人（包括 issue #5 一开始）会想加一条「空库 `alembic upgrade head` 必须成功」
+的冒烟检查。跑不通，而且不该跑通：
+
+- 基线 `b0000000baseline` **刻意是空的**（只是起点标记，不含建表 DDL）
+- 所以空库升上去时，`c0000000comments` 的 ALTER 全部落空（现在被容错分支接住），
+  再往后 `33ffb491b69f` 要往 `sys_role`/`sys_menu` 插种子行 —— 那些表不存在，炸
+- 反过来，先 `create_all` 再 stamp 基线也不行：`9609aedfaf8d` 会 `CREATE TABLE
+  sys_notification`，而 `create_all` 已经建过了
+
+**新库的正路是 `fba init`（create_all + 种子 + stamp head），不是重放迁移。**
+迁移链只对「基线之后才出现的增量」负责。真正需要守的是「下一条迁移在三种方言上
+都能编译」，那条守卫已经有了（`test_migrations_compile_offline_for_every_supported_dialect`）。
+
 ### 🔴 alembic 引进来**之前**手写 ALTER 加的列，守卫测试抓不到
 
 `test_model_matches_migrations` 比对的是**模型 vs fba_test**。如果一列是手写
@@ -706,6 +744,33 @@ docker exec fba_mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$PW" 
   代价是要先跑过一次 `uv sync --group dev`
 - **`turbo.json` 里 `test` 必须 `cache: false`** —— 测试打真实数据库，
   缓存住「上次通过了」毫无意义
+
+### 🔴 pytest 现在在**两种方言**上跑，别再假设只有 SQL Server（issue #5）
+
+CI 有两个平行 job：`pytest · SQL Server`（主线）和 `pytest · PostgreSQL`。
+补上后者的时候，第一次在 postgres 上跑 pytest 当场炸出三个「代码分支存在、
+但从没被任何自动化跑过」的 bug。写测试时碰到这三样先问一句「换个方言还成立吗」：
+
+| 要干的事 | ❌ 别这么写 | ✅ 这么写 |
+|---|---|---|
+| 把 URL 里的库名换成测试库 | `url.replace(f'/{SCHEMA}?', …)` | `backend/tests/utils/db.py: sync_test_db_url()` |
+| 查库上真实存在的索引 / 表 | `SELECT … FROM sys.indexes` | `sqlalchemy.inspect(engine).get_indexes(...)` |
+| 造布尔列的数据 | `0` / `1` | `true` / `false`（postgres 类型严格） |
+
+第一条那个字符串替换是最阴的：它依赖库名后面紧跟一个 `?`，而只有 SQL Server 的
+结果后端 URL 带查询串（`?driver=ODBC+Driver+18…`）。postgres/mysql 上**替换静默
+失效**，于是五处测试连的是**开发库**——往 `fba` 里塞数据、拿 `fba_test` 的结果
+断言，报错信息一个字都不提数据库连错了。
+
+本地想在 postgres 上跑一遍：
+
+```bash
+docker compose -f docker-compose.dev.yml --profile postgresql up -d postgres
+# 建 fba / fba_test 两个空库，然后带着环境变量跑（env 优先级高于 backend/.env）
+DATABASE_TYPE=postgresql DATABASE_PORT=5432 DATABASE_USER=postgres \
+  DATABASE_PASSWORD=postgres uv run python -m backend.scripts.reset_test_db
+DATABASE_TYPE=postgresql … uv run pytest
+```
 
 ### 写测试时：`UPLOAD_DIR` 必须顶到 tmp
 
