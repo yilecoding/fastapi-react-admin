@@ -3,7 +3,6 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } f
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Eyebrow } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
@@ -45,7 +44,7 @@ export default function ChangePasswordScreen() {
   if (done) {
     return (
       <View className="bg-panel flex-1 justify-center gap-5 px-6">
-        <Eyebrow>已生效</Eyebrow>
+        <Text className="text-accent font-mono text-[10px]" style={{ letterSpacing: 3 }}>已生效</Text>
         <Text className="text-ink text-2xl font-semibold" style={{ letterSpacing: -0.6 }}>
           密码已修改
         </Text>
@@ -61,19 +60,16 @@ export default function ChangePasswordScreen() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="bg-panel flex-1">
-      <ScrollView contentContainerClassName="gap-7 px-5 py-6" keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerClassName="gap-7 px-6 py-7" keyboardShouldPersistTaps="handled">
         <View className="gap-2">
-          <Eyebrow tone="faint">当前密码</Eyebrow>
-          <Input value={oldPassword} onChangeText={setOldPassword} secureTextEntry testID="password-old" />
+          <Input label="当前密码" value={oldPassword} onChangeText={setOldPassword} secureTextEntry testID="password-old" />
         </View>
         <View className="gap-2">
-          <Eyebrow tone="faint">新密码</Eyebrow>
-          <Input value={newPassword} onChangeText={setNewPassword} secureTextEntry testID="password-new" />
+          <Input label="新密码" value={newPassword} onChangeText={setNewPassword} secureTextEntry testID="password-new" />
           <Text className="text-faint text-xs">服务端有强度与历史密码校验，不合格会在提交时告诉你</Text>
         </View>
         <View className="gap-2">
-          <Eyebrow tone="faint">确认新密码</Eyebrow>
-          <Input value={confirm} onChangeText={setConfirm} secureTextEntry testID="password-confirm" />
+          <Input label="确认新密码" value={confirm} onChangeText={setConfirm} secureTextEntry testID="password-confirm" />
         </View>
 
         {mismatch ? <Text className="text-destructive text-sm">两次输入的新密码不一致</Text> : null}

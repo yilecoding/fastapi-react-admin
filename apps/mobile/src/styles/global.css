@@ -13,8 +13,9 @@
  */
 @source "../**/*.{ts,tsx}";
 
+/* 图纸是方的 —— 6px 而不是模板给的 10px。所有 rounded-* 都从这里派生 */
 @theme {
-  --radius: 10px;
+  --radius: 6px;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

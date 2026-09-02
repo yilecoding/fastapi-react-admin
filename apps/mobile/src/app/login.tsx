@@ -15,12 +15,13 @@ import { useCSSVariable } from 'uniwind'
 
 import { KeyRoundIcon, QrCodeIcon, SmartphoneIcon } from 'lucide-react-native'
 
+import { AuthChain } from '@/components/auth-chain'
 import { BrandBackdrop } from '@/components/brand-backdrop'
 import { TenonMark } from '@/components/tenon-mark'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Icon } from '@/components/ui/icon'
-import { Card, Eyebrow } from '@/components/ui/panel'
+
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { ApiError, api } from '@/lib/api'
@@ -157,79 +158,77 @@ export default function LoginScreen() {
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <View className="bg-panel flex-1">
+        {/* 纹理铺在整页，但**极淡**（方格 0.6 透明度 + 一团很轻的辉光）——
+            它是纸的肌理，不是一个视觉元素。上一版把它做成有边界的卡内纹理，
+            那是在躲问题；真正的问题是当时辉光太重。 */}
+        <BrandBackdrop />
+
         <KeyboardAvoidingView
-          // Android 上键盘遮挡输入框是最常见的移动端落差之一（issue #39 第 2.5 节）。
-          // 两个平台的行为不同，behavior 要分开给。
+          // Android 上键盘遮挡输入框是最常见的移动端落差之一（issue #39 第 2.5 节）
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           className="flex-1"
         >
           <ScrollView
-            contentContainerStyle={{ paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }}
-            contentContainerClassName="min-h-full justify-center gap-4 px-4"
+            contentContainerStyle={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 20 }}
+            contentContainerClassName="min-h-full px-6"
             keyboardShouldPersistTaps="handled"
           >
-            {/*
-             * 品牌卡。**纹理只在这张卡内部** —— 全屏铺过一版，那团辉光就是一块脏污。
-             * 卡的边、圆角和内部纹理三者互相定义，缺一个就不成立。
-             */}
             <FadeIn delay={0}>
-              <Card className="p-6">
-                <BrandBackdrop />
-                <View className="flex-row items-center gap-2.5">
-                  <TenonMark size={20} color={ink} />
-                  <Text className="text-ink font-mono text-xs" style={{ letterSpacing: 0.6 }}>
-                    {BRAND.wordmark}
-                  </Text>
-                </View>
-                {/* 这个眉标是全屏**唯一**用主色的静态文字 —— 它是品牌陈述，
-                    不是分区标签。别的地方一律 faint。 */}
-                <Eyebrow tone="accent" className="mt-7">
-                  权限与数据的承重层
-                </Eyebrow>
-                <Text
-                  className="text-ink mt-3 text-[27px] font-semibold"
-                  style={{ letterSpacing: -0.8, lineHeight: 35 }}
-                >
-                  一个入口{'\n'}管好权限与数据
+              <View className="flex-row items-center gap-2.5">
+                <TenonMark size={20} color={ink} />
+                <Text className="text-ink font-mono text-[13px]" style={{ letterSpacing: 0.6 }}>
+                  {BRAND.wordmark}
                 </Text>
-                <Text className="text-dim mt-2.5 text-[13px] leading-5">
-                  组织、角色和数据范围各自成件，靠结构咬合。
-                </Text>
-              </Card>
+              </View>
             </FadeIn>
 
-            {/* 表单卡 */}
-            <FadeIn delay={120}>
-              <Card>
+            <FadeIn delay={70}>
+              <Text
+                className="text-ink mt-9 text-[28px] font-semibold"
+                style={{ letterSpacing: -0.9, lineHeight: 35 }}
+              >
+                一个入口{'\n'}管好权限与数据
+              </Text>
+            </FadeIn>
+
+            {/* hero 是权限链本身 —— 这个产品是什么，一眼看到 */}
+            <FadeIn delay={130}>
+              <View className="mt-8">
+                <AuthChain />
+              </View>
+            </FadeIn>
+
+            <FadeIn delay={200}>
+              <View className="mt-9">
                 <MethodTabs value={method} onChange={setMethod} />
-                {/* 🔴 三个页签内容高度要一致，否则切换时整块卡片会跳 */}
-                <View style={{ minHeight: 274 }}>
+                {/* 🔴 三个页签内容高度要一致，否则切换时下面的东西会跳 */}
+                <View style={{ minHeight: 250 }} className="pt-6">
                   {method !== 'password' ? (
                     <NotWired method={method} onUsePassword={() => setMethod('password')} />
                   ) : (
-                    <View className="gap-3.5 p-4">
+                    <View className="gap-5">
                       {bootstrapError ? (
-                        <View className="border-destructive/40 bg-destructive/10 gap-1 rounded-xl border p-3">
+                        <View className="border-destructive/40 bg-destructive/10 gap-1 rounded-md border p-3">
                           <Text className="text-ink text-sm font-medium">启动时没能连上服务器</Text>
                           <Text className="text-dim text-xs">{bootstrapError}</Text>
                         </View>
                       ) : null}
 
                       <Input
+                        label="用户名"
                         value={username}
                         onChangeText={setUsername}
                         autoCapitalize="none"
                         autoCorrect={false}
                         textContentType="username"
-                        placeholder="用户名"
                         testID="login-username"
                       />
                       <Input
+                        label="密码"
                         value={password}
                         onChangeText={setPassword}
                         secureTextEntry
                         textContentType="password"
-                        placeholder="密码"
                         onSubmitEditing={() => void submit()}
                         testID="login-password"
                       />
@@ -247,20 +246,28 @@ export default function LoginScreen() {
                         </Text>
                       ) : null}
 
-                      <Button size="lg" disabled={!canSubmit} onPress={() => void submit()} testID="login-submit">
-                        {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
-                        <Text>{submitting ? '登录中' : '登录'}</Text>
-                      </Button>
-
-                      <Checkbox checked={remember} onChange={setRemember} label="记住账号" testID="login-remember" />
+                      <View className="mt-1 flex-row items-center justify-between gap-4">
+                        <Checkbox checked={remember} onChange={setRemember} label="记住账号" testID="login-remember" />
+                        <Button
+                          disabled={!canSubmit}
+                          onPress={() => void submit()}
+                          testID="login-submit"
+                          className="min-w-[112px]"
+                        >
+                          {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
+                          <Text>{submitting ? '登录中' : '登录'}</Text>
+                        </Button>
+                      </View>
                     </View>
                   )}
                 </View>
-              </Card>
+              </View>
             </FadeIn>
 
-            <FadeIn delay={220}>
-              <View className="flex-row items-center justify-between gap-3 px-1 pt-1">
+            <View className="flex-1" />
+
+            <FadeIn delay={300}>
+              <View className="border-line mt-8 flex-row items-center justify-between gap-3 border-t pt-3.5">
                 <Text
                   numberOfLines={1}
                   className="text-faint shrink font-mono text-[10px]"
@@ -291,12 +298,15 @@ function MethodTabs({ value, onChange }: { value: Method; onChange: (m: Method) 
             key={m.value}
             onPress={() => onChange(m.value)}
             testID={`login-method-${m.value}`}
-            className="flex-1 flex-row items-center justify-center gap-1.5 py-3.5"
+            className="flex-1 flex-row items-center justify-center gap-1.5 pb-2.5"
           >
             <Icon as={m.icon} className={`size-3.5 ${active ? 'text-accent' : 'text-faint'}`} />
             <Text className={`text-[13px] ${active ? 'text-ink font-medium' : 'text-faint'}`}>{m.label}</Text>
             {/* 选中标记是一条压在分隔线上的短横 —— 结构件仍然只有「线」这一种 */}
-            <View className={`absolute right-0 bottom-0 left-0 h-0.5 ${active ? 'bg-accent' : ''}`} />
+            {/* 选中标记：压在那条底线上的一段主色。结构件仍然只有「线」 */}
+            <View
+              className={active ? 'bg-accent absolute right-0 -bottom-px left-0 h-[1.5px]' : ''}
+            />
           </Pressable>
         )
       })}
@@ -392,26 +402,27 @@ function CaptchaBlock({
   }
 
   return (
-    <View className="flex-row items-center gap-3">
-      <Input
-        value={code}
-        onChangeText={onChangeCode}
-        autoCapitalize="none"
-        autoCorrect={false}
-        className="flex-1"
-        placeholder="验证码"
-        onSubmitEditing={onSubmit}
-        testID="login-captcha"
-      />
+    <View className="flex-row items-end gap-3">
+      <View className="flex-1">
+        <Input
+          label="验证码"
+          value={code}
+          onChangeText={onChangeCode}
+          autoCapitalize="none"
+          autoCorrect={false}
+          onSubmitEditing={onSubmit}
+          testID="login-captcha"
+        />
+      </View>
       {/* 后端给的是**裸 base64**，不带 `data:` 前缀 —— 要自己拼，
           少拼的话 Image 静默什么都不显示（不报错） */}
-      <Button variant="outline" className="h-12 w-28 p-0" onPress={onRetry} testID="login-captcha-image">
+      <Pressable onPress={onRetry} testID="login-captcha-image" className="self-end">
         <Image
           source={{ uri: `data:image/jpeg;base64,${state.image}` }}
-          style={{ width: 106, height: 42, borderRadius: 6 }}
+          style={{ width: 104, height: 40, borderRadius: 4 }}
           resizeMode="contain"
         />
-      </Button>
+      </Pressable>
     </View>
   )
 }

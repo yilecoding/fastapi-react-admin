@@ -16,7 +16,7 @@ import { UnreadProvider } from '@/lib/notifications'
  * 其余屏推在 tab 之上，天然带返回键、盖住 tab 栏 —— 这是移动端的常规做法。
  */
 export default function AppLayout() {
-  const node = useCSSVariable('--color-node')
+  const panel = useCSSVariable('--color-panel')
   const line = useCSSVariable('--color-line')
   const ink = useCSSVariable('--color-ink')
   const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
@@ -26,8 +26,8 @@ export default function AppLayout() {
       <Stack
         screenOptions={{
           headerBackButtonDisplayMode: 'minimal',
-          // 导航头和 tab 栏用同一块 node 色，底边是发丝线 —— 全 App 只有这一种「面」
-          headerStyle: { backgroundColor: str(node) },
+          // 导航头和 tab 栏用**纸色**，不是另一块白面 —— 这套语言里只有一张纸
+          headerStyle: { backgroundColor: str(panel) },
           headerTintColor: str(ink),
           headerTitleStyle: { fontSize: 16, fontWeight: '600', color: str(ink) },
           headerShadowVisible: false,

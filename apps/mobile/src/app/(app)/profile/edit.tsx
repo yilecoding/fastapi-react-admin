@@ -4,7 +4,6 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } f
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Eyebrow } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
@@ -51,15 +50,13 @@ export default function EditProfileScreen() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="bg-panel flex-1">
-      <ScrollView contentContainerClassName="gap-7 px-5 py-6" keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerClassName="gap-7 px-6 py-7" keyboardShouldPersistTaps="handled">
         <View className="gap-2">
-          <Eyebrow tone="faint">昵称</Eyebrow>
-          <Input value={nickname} onChangeText={setNickname} placeholder="昵称" testID="edit-nickname" />
+          <Input label="昵称" value={nickname} onChangeText={setNickname} testID="edit-nickname" />
         </View>
 
         <View className="gap-2">
-          <Eyebrow tone="faint">头像地址</Eyebrow>
-          <Input
+          <Input label="头像地址"
             value={avatar}
             onChangeText={setAvatar}
             autoCapitalize="none"

@@ -1,7 +1,7 @@
 import { ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Section } from '@/components/ui/panel'
+import { Rail, RailSection } from '@/components/rail'
 import { Text } from '@/components/ui/text'
 
 export default function AppsScreen() {
@@ -9,25 +9,23 @@ export default function AppsScreen() {
   return (
     <ScrollView
       className="bg-panel flex-1"
-      contentContainerStyle={{ paddingTop: insets.top + 12 }}
-      contentContainerClassName="gap-6 px-4 pb-10"
+      contentContainerStyle={{ paddingTop: insets.top + 20 }}
+      contentContainerClassName="px-6 pb-12"
     >
-      <View className="px-1 pt-1">
-        <Text className="text-ink text-[27px] font-semibold" style={{ letterSpacing: -0.8 }}>
-          应用
-        </Text>
-        <Text className="text-dim mt-1.5 text-sm">按你的权限列出能进的功能模块</Text>
-      </View>
+      <Text className="text-ink text-[28px] font-semibold" style={{ letterSpacing: -0.9 }}>
+        应用
+      </Text>
+      <Text className="text-dim mt-1.5 text-[14px]">按你的权限列出能进的功能模块</Text>
 
-      <Section label="可用模块">
-        <View className="items-center gap-1.5 px-6 py-12">
-          <Text className="text-dim text-sm">还没有可用的应用</Text>
-          <Text className="text-faint text-center text-xs leading-5">
-            要先定移动端需要哪几个屏，再决定这一屏列什么
+      <Rail className="mt-6">
+        <RailSection label="可用模块" />
+        <View className="py-10">
+          <Text className="text-dim text-[14px]">还没有可用的应用</Text>
+          <Text className="text-faint mt-1.5 text-[12px] leading-5">
+            要先定移动端需要哪几个屏，再决定这一段列什么
           </Text>
         </View>
-      </Section>
-      
+      </Rail>
     </ScrollView>
   )
 }
