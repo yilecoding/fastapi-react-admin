@@ -1,9 +1,9 @@
 import * as React from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
 
-import { Field } from '@/components/field'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Eyebrow, Rule } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
@@ -44,12 +44,16 @@ export default function ChangePasswordScreen() {
 
   if (done) {
     return (
-      <View className="bg-background flex-1 justify-center gap-4 p-6">
-        <Text className="text-foreground text-lg font-semibold">密码已修改</Text>
-        <Text className="text-muted-foreground text-sm">
-          服务端已经作废了当前会话（这是后端的既定行为，不是出错）。请用新密码重新登录。
+      <View className="bg-panel flex-1 justify-center gap-5 px-6">
+        <Eyebrow>已生效</Eyebrow>
+        <Text className="text-ink text-2xl font-semibold" style={{ letterSpacing: -0.6 }}>
+          密码已修改
         </Text>
-        <Button onPress={() => void logout()} testID="password-relogin">
+        <Rule />
+        <Text className="text-dim text-sm leading-6">
+          服务端已经作废了当前会话，这是后端的既定行为，不是出错。请用新密码重新登录。
+        </Text>
+        <Button size="lg" onPress={() => void logout()} testID="password-relogin">
           <Text>去重新登录</Text>
         </Button>
       </View>
@@ -57,20 +61,21 @@ export default function ChangePasswordScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="bg-background flex-1"
-    >
-      <ScrollView contentContainerClassName="gap-5 p-4" keyboardShouldPersistTaps="handled">
-        <Field label="当前密码">
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="bg-panel flex-1">
+      <ScrollView contentContainerClassName="gap-7 px-5 py-6" keyboardShouldPersistTaps="handled">
+        <View className="gap-2">
+          <Eyebrow tone="faint">当前密码</Eyebrow>
           <Input value={oldPassword} onChangeText={setOldPassword} secureTextEntry testID="password-old" />
-        </Field>
-        <Field label="新密码" hint="服务端有密码强度与历史密码校验，不合格会在提交时告诉你">
+        </View>
+        <View className="gap-2">
+          <Eyebrow tone="faint">新密码</Eyebrow>
           <Input value={newPassword} onChangeText={setNewPassword} secureTextEntry testID="password-new" />
-        </Field>
-        <Field label="确认新密码">
+          <Text className="text-faint text-xs">服务端有强度与历史密码校验，不合格会在提交时告诉你</Text>
+        </View>
+        <View className="gap-2">
+          <Eyebrow tone="faint">确认新密码</Eyebrow>
           <Input value={confirm} onChangeText={setConfirm} secureTextEntry testID="password-confirm" />
-        </Field>
+        </View>
 
         {mismatch ? <Text className="text-destructive text-sm">两次输入的新密码不一致</Text> : null}
         {error ? (
@@ -79,11 +84,10 @@ export default function ChangePasswordScreen() {
           </Text>
         ) : null}
 
-        <Button disabled={!canSubmit} onPress={() => void submit()} testID="password-submit">
-          {saving ? <ActivityIndicator size="small" /> : null}
-          <Text>{saving ? '提交中…' : '确认修改'}</Text>
+        <Button size="lg" disabled={!canSubmit} onPress={() => void submit()} testID="password-submit">
+          {saving ? <ActivityIndicator size="small" color="#fff" /> : null}
+          <Text>{saving ? '提交中' : '确认修改'}</Text>
         </Button>
-        <View className="h-8" />
       </ScrollView>
     </KeyboardAvoidingView>
   )

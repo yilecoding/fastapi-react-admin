@@ -11,4 +11,6 @@ export const BRAND = {
   version: 'v0.0.1',
   /** 应用显示名（launcher / 任务切换器）。`app.json` 的 `name` 也是它 */
   appName: '中后台',
+  /** 底座里真正承重的那几样。登录页页脚会把它列出来 —— 和 web 端同一份 */
+  stack: ['REACT 19', 'TANSTACK', 'SHADCN', 'TAILWIND', 'FASTAPI'],
 } as const

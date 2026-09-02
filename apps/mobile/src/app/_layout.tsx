@@ -1,5 +1,6 @@
 import '@/styles/global.css'
 
+import { JetBrainsMono_400Regular, JetBrainsMono_500Medium, useFonts } from '@expo-google-fonts/jetbrains-mono'
 import { PortalHost } from '@rn-primitives/portal'
 import { Stack } from 'expo-router'
 import { ThemeProvider } from 'expo-router/react-navigation'
@@ -17,6 +18,12 @@ export {
 
 export default function RootLayout() {
   const { theme } = useUniwind()
+  // 🔴 等宽字**没载完之前不要渲染**。RN 里 fontFamily 指向一个还没注册的字族
+  // 是**静默回落到系统字体**的（不报错），于是首帧那些眉标会先是系统 mono、
+  // 再跳成 JetBrains Mono —— 一次很明显的抖动。
+  const [fontsReady] = useFonts({ JetBrainsMono_400Regular, JetBrainsMono_500Medium })
+
+  if (!fontsReady) return null
 
   return (
     <ThemeProvider value={NAV_THEME[theme ?? 'light']}>

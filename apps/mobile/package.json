@@ -14,6 +14,7 @@
     "start:plain": "expo start"
   },
   "dependencies": {
+    "@expo-google-fonts/jetbrains-mono": "^0.4.1",
     "@react-navigation/bottom-tabs": "^7.18.18",
     "@rn-primitives/portal": "~1.4.0",
     "@rn-primitives/slot": "^1.5.2",
@@ -21,6 +22,7 @@
     "clsx": "^2.1.1",
     "expo": "~57.0.19",
     "expo-constants": "~57.0.17",
+    "expo-font": "~57.0.3",
     "expo-linking": "~57.0.9",
     "expo-router": "~57.0.18",
     "expo-secure-store": "~57.0.3",

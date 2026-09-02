@@ -4,8 +4,9 @@ import * as React from 'react'
 import { Image, Pressable, RefreshControl, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Card, CardLabel, CardRow } from '@/components/ui/card'
+import { BrandBackdrop } from '@/components/brand-backdrop'
 import { Icon } from '@/components/ui/icon'
+import { Eyebrow, Rule, SectionHead } from '@/components/ui/panel'
 import { Text } from '@/components/ui/text'
 import { useSession } from '@/lib/session'
 
@@ -31,124 +32,112 @@ export default function ProfileScreen() {
   if (!user) return null
 
   return (
-    <ScrollView
-      className="bg-background flex-1"
-      contentContainerClassName="pb-10"
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
-    >
-      <View className="bg-primary px-5 pb-10" style={{ paddingTop: insets.top + 16 }}>
+    <View className="bg-panel flex-1">
+      <BrandBackdrop className="absolute top-0 right-0 left-0 h-64" />
+      <ScrollView
+        contentContainerStyle={{ paddingTop: insets.top + 20 }}
+        contentContainerClassName="px-5 pb-12 gap-8"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      >
         <View className="flex-row items-center gap-4">
           <Avatar url={user.avatar} fallback={user.nickname || user.username} />
           <View className="flex-1 gap-1">
-            <Text className="text-primary-foreground text-xl font-semibold" testID="profile-nickname">
+            <Text className="text-ink text-xl font-semibold" style={{ letterSpacing: -0.4 }} testID="profile-nickname">
               {user.nickname || user.username}
             </Text>
-            <Text className="text-primary-foreground/70 text-sm">@{user.username}</Text>
+            <Text className="text-faint font-mono text-xs">@{user.username}</Text>
           </View>
         </View>
-      </View>
 
-      <View className="-mt-5 gap-6 px-4">
         {error ? (
-          <View className="border-destructive/40 bg-destructive/10 rounded-lg border p-3">
-            <Text className="text-foreground text-sm">刷新失败：{error}</Text>
+          <View className="border-destructive/40 bg-destructive/10 rounded-xl border p-3">
+            <Text className="text-ink text-sm">刷新失败：{error}</Text>
           </View>
         ) : null}
 
-        <Card>
-          <InfoRow first label="部门" value={user.dept} />
-          <InfoRow label="角色" value={user.roles.join('、')} />
-          {/* 🔴 手机号和邮箱在这里是**只读**的，不是漏做：
-              - 手机号：后端**没有** `/me/phone` 这个口，只有超管能改（`PUT /sys/users/{pk}`）
-              - 邮箱：`PUT /me/email` 要一个**邮箱验证码**，那条链路移动端还没有
-              与其放一个改了会失败的输入框，不如把原因写在这儿。 */}
-          <InfoRow label="手机号" value={user.phone} hint="需管理员修改" />
-          <InfoRow label="邮箱" value={user.email} hint="改邮箱要邮件验证码" />
-          <InfoRow label="时区" value={user.timezone} />
-        </Card>
-
-        <View>
-          <CardLabel>账号</CardLabel>
-          <Card>
-            <ActionRow
-              first
-              icon={SquarePenIcon}
-              label="编辑资料"
-              onPress={() => router.push('/profile/edit')}
-              testID="profile-edit"
-            />
-            <ActionRow
-              icon={KeyRoundIcon}
-              label="修改密码"
-              onPress={() => router.push('/profile/password')}
-              testID="profile-password"
-            />
-          </Card>
+        <View className="gap-3">
+          <SectionHead label="PROFILE" />
+          <View>
+            <Field label="部门" value={user.dept} />
+            <Field label="角色" value={user.roles.join('、')} />
+            {/* 🔴 手机号和邮箱是**只读**的，不是漏做：
+                - 手机号：后端**没有** `/me/phone`，只有超管能改（`PUT /sys/users/{pk}`）
+                - 邮箱：`PUT /me/email` 要邮箱验证码，那条链路移动端还没有
+                与其放一个改了会失败的输入框，不如把原因写在这儿。 */}
+            <Field label="手机号" value={user.phone} note="需管理员修改" />
+            <Field label="邮箱" value={user.email} note="改邮箱要邮件验证码" />
+            <Field label="时区" value={user.timezone} mono />
+            <Field label="账号 ID" value={user.id} mono last />
+          </View>
         </View>
 
-        <Card>
-          <ActionRow
-            first
-            danger
-            icon={LogOutIcon}
-            label="退出登录"
-            onPress={() => void logout()}
-            testID="profile-logout"
-          />
-        </Card>
-      </View>
-    </ScrollView>
+        <View className="gap-3">
+          <SectionHead label="ACCOUNT" />
+          <View>
+            <Action icon={SquarePenIcon} label="编辑资料" onPress={() => router.push('/profile/edit')} testID="profile-edit" />
+            <Action icon={KeyRoundIcon} label="修改密码" onPress={() => router.push('/profile/password')} testID="profile-password" />
+            <Action icon={LogOutIcon} label="退出登录" danger onPress={() => void logout()} testID="profile-logout" last />
+          </View>
+        </View>
+      </ScrollView>
+    </View>
   )
 }
 
-function InfoRow({
-  first,
+/** 一行字段。左标签右值，底下一条发丝线 —— 没有卡片、没有背景块 */
+function Field({
   label,
   value,
-  hint,
+  note,
+  mono,
+  last,
 }: {
-  first?: boolean
   label: string
   value?: string | null
-  hint?: string
+  note?: string
+  mono?: boolean
+  last?: boolean
 }) {
   return (
-    <CardRow first={first} className="items-start">
-      <Text className="text-muted-foreground w-20 shrink-0 text-sm">{label}</Text>
+    <View className={`flex-row items-start gap-4 py-3 ${last ? '' : 'border-line border-b'}`}>
+      <Text className="text-faint w-20 shrink-0 text-sm">{label}</Text>
       <View className="flex-1 items-end gap-0.5">
-        <Text className="text-foreground text-right text-sm">{value?.trim() ? value : '—'}</Text>
-        {hint ? <Text className="text-muted-foreground text-right text-xs">{hint}</Text> : null}
+        <Text
+          className={`text-ink text-right text-sm ${mono ? 'font-mono text-xs' : ''}`}
+          numberOfLines={2}
+        >
+          {value?.trim() ? value : '—'}
+        </Text>
+        {note ? <Text className="text-faint text-right text-xs">{note}</Text> : null}
       </View>
-    </CardRow>
+    </View>
   )
 }
 
-function ActionRow({
-  first,
+function Action({
   icon,
   label,
   onPress,
   danger,
+  last,
   testID,
 }: {
-  first?: boolean
   icon: React.ComponentProps<typeof Icon>['as']
   label: string
   onPress: () => void
   danger?: boolean
+  last?: boolean
   testID?: string
 }) {
   return (
     <Pressable
       onPress={onPress}
       testID={testID}
-      className={`active:bg-accent flex-row items-center gap-3 px-4 py-3.5 ${first ? '' : 'border-border border-t'}`}
+      className={`active:bg-node flex-row items-center gap-3 py-3.5 ${last ? '' : 'border-line border-b'}`}
     >
-      <Icon as={icon} className={danger ? 'text-destructive size-4.5' : 'text-muted-foreground size-4.5'} />
-      <Text className={`flex-1 text-sm font-medium ${danger ? 'text-destructive' : 'text-foreground'}`}>
-        {label}
-      </Text>
-      {danger ? null : <Icon as={ChevronRightIcon} className="text-muted-foreground size-4" />}
+      <Icon as={icon} className={`size-4 ${danger ? 'text-destructive' : 'text-faint'}`} />
+      <Text className={`flex-1 text-sm ${danger ? 'text-destructive' : 'text-ink'}`}>{label}</Text>
+      {danger ? null : <Icon as={ChevronRightIcon} className="text-faint size-3.5" />}
     </Pressable>
   )
 }
@@ -159,18 +148,10 @@ function Avatar({ url, fallback }: { url: string | null; fallback: string }) {
   // 回落到首字符，让「没有头像」和「头像挂了」都有一个确定的样子。
   if (!url || broken) {
     return (
-      <View className="bg-primary-foreground/15 border-primary-foreground/25 h-16 w-16 items-center justify-center rounded-full border">
-        <Text className="text-primary-foreground text-2xl font-semibold">
-          {fallback.slice(0, 1).toUpperCase()}
-        </Text>
+      <View className="bg-node border-hair h-14 w-14 items-center justify-center rounded-2xl border">
+        <Text className="text-ink text-xl font-semibold">{fallback.slice(0, 1).toUpperCase()}</Text>
       </View>
     )
   }
-  return (
-    <Image
-      source={{ uri: url }}
-      onError={() => setBroken(true)}
-      style={{ width: 64, height: 64, borderRadius: 32 }}
-    />
-  )
+  return <Image source={{ uri: url }} onError={() => setBroken(true)} style={{ width: 56, height: 56, borderRadius: 16 }} />
 }

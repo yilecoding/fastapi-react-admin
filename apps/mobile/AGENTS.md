@@ -316,38 +316,92 @@ access / refresh / 用户缓存**三组** key。不主动登出的话，用户�
 `tabBar*TintColor` 是原生组件的 prop，不吃 `className`；写死一个 hex 的话
 深浅色主题里必然有一头是错的。
 
-## 设计令牌：抄自 `packages/ui`，不是模板那套中性灰
+## UI 语言：抄 web 登录页那块「榫卯面板」，不是 shadcn 默认灰
 
-`src/styles/global.css` 里的颜色是从 `packages/ui/src/styles/globals.css`
-**逐值抄过来**的，包括品牌紫 `--color-primary: oklch(0.457 0.24 277.023)`。
-rnr 模板给的是一套全无彩度的中性灰（`oklch(0.205 0 0)` 那种），照着跑出来
-一眼就是"模板感"。
+**这套观感有两半，缺一半就回到「模板感」：**
 
-抄而不是 import：那份 CSS 里有 `@custom-variant`、shadcn 的 tailwind 预设、字体包
-一堆 web-only 的东西，而 `apps/mobile` 也不在 `i18n ← ui ← platform ← apps/web`
-那条依赖箭头上。**能直接抄是因为实测确认 uniwind 在构建期精确转换 `oklch()`**
-（见上面「两条实测的结论」）—— 否则这里得维护第二份降级成 sRGB 的颜色。
+1. **表面是往 277 色相（品牌紫）偏了一点点的灰**，不是中性灰。
+   八个令牌（`panel` / `node` / `line` / `hair` / `ink` / `dim` / `faint` / `accent`）
+   抄自 `apps/web/src/routes/_guest/-sign-in-brand.tsx` 里的 `.tenon-panel`。
+2. **主色只用在细笔画上** —— 眉标、刻度、选中下划线、未读点。
+   🔴 **从不铺成大色块。** 第一版做了一整条饱和紫的头部，那是最通用的那个答案，
+   和 web 端的克制完全对不上，返工了一整轮。
 
-⚠️ **web 改了主题色，这里要跟着改**，不会自己报错。
+结构件**只有三个**，都在 `src/components/ui/panel.tsx`：
 
-🔴 **深色模式的 `--border` / `--input` 是唯一一处刻意和 web 不同的令牌。**
-web 上它们是 `oklch(1 0 0 / 10%)`（带透明度的白）；RN 里半透明边框叠在深色卡片上
-**看不见**（卡片本身就比背景亮），所以换成了实色。
+| | |
+|---|---|
+| `Panel` | 比页面低一档的一块面，极细内描边（不用 1px 实线，小屏上太重） |
+| `Rule` | 发丝横线 —— **分隔的唯一手段**，不要用间距或背景色去暗示分隔 |
+| `Eyebrow` / `SectionHead` | 等宽 + 大字距 + 主色的小字。全 App 唯一的分区抬头 |
+
+⚠️ `tracking` 在 RN 里是 `letterSpacing`（**绝对 px**），不是 em。
+web 那边 `tracking-[0.32em]` 在 10px 字号下折算过来约 3.2px。
+
+### 字体：JetBrains Mono 是签名，不能用系统 mono 代
+
+`--font-mono` 指向 `JetBrainsMono_500Medium`，在 `src/app/_layout.tsx` 用
+`useFonts` 载入。**眉标那点等宽小字是这套观感的签名**，Android 的 Droid Sans Mono /
+iOS 的 Menlo 字形差太远。
+
+🔴 **字没载完之前 `_layout` 直接 `return null`。** RN 里 `fontFamily` 指向一个
+还没注册的字族是**静默回落到系统字体**的（不报错），于是首帧那些眉标会先是
+系统 mono、再跳成 JetBrains Mono —— 一次很明显的抖动。
+
+### 🔴 `--color-*` 必须在 light 和 dark 里都声明，数量一致
+
+uniwind 会校验，少一个就打：
+
+    Uniwind Error - Theme light is missing variable --color-faint
+    Uniwind Error - All themes must have the same variables
+
+**但 `expo export` 仍然返回成功、照样产出 bundle**，只是那批变量没生效 ——
+界面上表现为「某个颜色是隐形的」。实测踩过：把这套色写在裸 `@theme {}` 里、
+只在 dark 下重定义，就是这个下场（登录页的眉标整行看不见）。
+
+### 底纹：竖向线性渐隐，不要径向
+
+`src/components/brand-backdrop.tsx` 是 web 那块面板的移动端版：38px 方格 +
+左上角一团主色辉光。
+
+🔴 **渐隐必须是竖向线性的。** 照抄 web 的 `radial-gradient` mask，在手机的
+窄长比例下那个圆的边界会在屏幕中间**压出一条清晰的横带**，看着像渲染坏了。实测。
+
+⚠️ web 那边还有第三层胶片颗粒（`feTurbulence`）。`react-native-svg` 的 filter
+支持不全，**没做** —— 缺了它面板会平一点，但不会错。
+
+### 布局：一屏里只能有一个 `flex-1 justify-center`
+
+登录页返工过一次：文案块设成 `flex-1 justify-center`、表单跟在它**后面** ——
+结果文案在剩余空间里居中、表单被挤到屏底，两段各自漂着，整屏看着「哪儿都不居中」。
+**要居中的东西必须包在同一个容器里一起居中。**
 
 ### 品牌图形
 
 `src/components/tenon-mark.tsx` 是 `apps/web/src/components/tenon-mark.tsx` 的
 RN 版，**路径逐字一致**。⚠️ web 那份用 `currentColor` 上色，`react-native-svg`
-**不认 `currentColor`**（没有 CSS 继承），所以颜色走 `color` prop 显式传。
+**不认 `currentColor`**（没有 CSS 继承），颜色走 `color` prop 显式传。
 
 图标由 `scripts/gen-brand-icons.mjs` 生成（`pnpm brand:icons`），**不要手放图**。
-移动端那三张的形状要求各不相同，不能拿同一张糊过去：
+移动端那三张形状要求各不相同：
 
 | 文件 | 形状 | 为什么 |
 |---|---|---|
 | `icon.png` | 满幅方形、**不透明** | iOS 自己会圆角裁切；给带透明圆角的图，那几个角在 iOS 上会变成**黑色** |
-| `adaptive-icon.png` | **透明底、墨迹缩到安全区内** | Android 用系统蒙版裁这张前景层，外圈约 1/3 一定被切掉；底色在 `app.json` 的 `adaptiveIcon.backgroundColor` 给 |
+| `adaptive-icon.png` | **透明底、墨迹缩到安全区内** | Android 用系统蒙版裁这张前景层，外圈约 1/3 一定被切掉 |
 | `splash.png` | 圆形徽章、透明底 | 配 `app.json` 里的浅/深背景色 |
+
+⚠️ **在 Expo Go 里，桌面图标和任务切换器显示的永远是 Expo Go 自己的**图标和名字 ——
+App 是跑在它里面的。`app.json` 的 `name` 和这套图标只在启动画面、Expo Go 的项目卡片、
+dev menu 里生效。要让桌面上真出现，必须打独立 APK。
+
+### 登录方式：三个页签，后两个是诚实的占位
+
+和 web 端 `_guest/sign-in.tsx` 的 `METHODS` 一一对应：密码 / 手机 / 扫码。
+后两个走 `NotWired`，**说清楚为什么不能用，并把人送回能用的那条** ——
+光禁用一个页签只会让人反复去点它。
+
+⚠️ 三个页签的内容区要 `minHeight` 对齐，否则切换时整块卡片会跳。
 
 ## 通知：接的是 `plugin/notification`，但**没有实时推送**
 
