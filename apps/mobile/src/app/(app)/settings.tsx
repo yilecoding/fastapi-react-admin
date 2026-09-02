@@ -71,8 +71,8 @@ export default function SettingsScreen() {
         </PressRow>
       </Group>
       <Text className="text-muted-foreground px-5 pt-2 text-xs leading-5">
-        {t(isCustom ? '已自定义。' : '用的是打包时的默认地址。')}
-        改地址会退出当前登录 —— token 是跟着服务器发的。
+        {isCustom ? t('已自定义。') : t('用的是打包时的默认地址。')}{' '}
+        {t('改地址会退出当前登录 —— token 是跟着服务器发的。')}
       </Text>
 
       <GroupHeader>{t('关于')}</GroupHeader>

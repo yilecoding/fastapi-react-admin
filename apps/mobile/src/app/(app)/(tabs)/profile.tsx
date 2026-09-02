@@ -79,8 +79,8 @@ export default function ProfileScreen() {
             - 手机号：后端**没有** `/me/phone`，只有超管能改（`PUT /sys/users/{pk}`）
             - 邮箱：`PUT /me/email` 要邮箱验证码，那条链路移动端还没有
             与其放一个改了会失败的输入框，不如把原因写在这儿。 */}
-        <Field label={t('手机号')} value={user.phone} note="需管理员修改" />
-        <Field label={t('邮箱')} value={user.email} note="改邮箱要邮件验证码" />
+        <Field label={t('手机号')} value={user.phone} note={t('需管理员修改')} />
+        <Field label={t('邮箱')} value={user.email} note={t('改邮箱要邮件验证码')} />
         <Field label={t('时区')} value={user.timezone} mono />
         <Field label={t('账号 ID')} value={user.id} mono />
       </Group>

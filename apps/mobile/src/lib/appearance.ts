@@ -19,9 +19,16 @@ let cached: Appearance = 'system'
 const listeners = new Set<() => void>()
 
 function apply(v: Appearance) {
-  // uniwind 的 theme 只认具体值；'system' 交回给它自己按系统判断
-  if (v === 'system') Uniwind.setTheme(undefined as never)
-  else Uniwind.setTheme(v)
+  // 🔴 uniwind 的 `setTheme` 签名是 `ThemeName | 'system'` ——
+  // **'system' 是它自己认的字面量**，不是 `undefined`。
+  // 之前写的是 `setTheme(undefined as never)`，命中
+  //     `if (!this._themes.includes(theme)) throw`
+  // 于是整个 `apply()` 抛异常：`listeners.forEach` 不跑（对勾不动）、
+  // `SecureStore.delete` 不跑（旧的显式选择永远留着），而调用处是 `void` 的
+  // → 一个未处理的 rejection，界面上就是「点了没反应」。
+  // 那个 `as never` 断言正是把它糊过 tsc 的东西 —— 以后要写 `as never`，
+  // 先想清楚是不是在骗类型检查。
+  Uniwind.setTheme(v)
 }
 
 export const appearanceStore = {

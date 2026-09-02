@@ -97,7 +97,7 @@ export default function EditProfileScreen() {
             className="h-[50px] rounded-xl"
           >
             {saving ? <ActivityIndicator size="small" color="#fff" /> : null}
-            <Text className="text-base font-semibold">{t(saving ? '保存中' : '保存')}</Text>
+            <Text className="text-base font-semibold">{saving ? t('保存中') : t('保存')}</Text>
           </Button>
         </View>
       </ScrollView>

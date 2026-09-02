@@ -89,7 +89,7 @@ export default function ChangePasswordScreen() {
             className="h-[50px] rounded-xl"
           >
             {saving ? <ActivityIndicator size="small" color="#fff" /> : null}
-            <Text className="text-base font-semibold">{t(saving ? '提交中' : '确认修改')}</Text>
+            <Text className="text-base font-semibold">{saving ? t('提交中') : t('确认修改')}</Text>
           </Button>
         </View>
       </ScrollView>

@@ -74,7 +74,7 @@ export default function HomeScreen() {
           <Text className="flex-1 text-[15px]">{t('通知')}</Text>
           {/* 状态表达在**值**上，不动图标 —— 定稿那版就是这个规则 */}
           {total > 0 ? (
-            <Text className="text-primary text-[13px] font-medium">{total} 条未读</Text>
+            <Text className="text-primary text-[13px] font-medium">{t('{{n}} 条未读', { n: total })}</Text>
           ) : (
             <Text className="text-muted-foreground text-[13px]">{t('没有未读')}</Text>
           )}

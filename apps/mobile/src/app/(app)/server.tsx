@@ -84,8 +84,7 @@ export default function ServerScreen() {
         </Group>
 
         <Text className="text-muted-foreground px-5 text-xs leading-5">
-          要带协议（`https://`）。生产必须是域名 + HTTPS —— 证书是签给域名的，走 IP 会 TLS 失败，
-          而 RN 报的只是一句笼统的「连不上」。
+          {t('要带协议（https://）。生产必须是域名 + HTTPS —— 证书是签给域名的，走 IP 会 TLS 失败，而 RN 报的只是一句笼统的「连不上」。')}
         </Text>
 
         {error ? (
@@ -105,7 +104,7 @@ export default function ServerScreen() {
             className="h-[50px] rounded-xl"
           >
             {probing ? <ActivityIndicator size="small" color="#fff" /> : null}
-            <Text className="text-base font-semibold">{t(probing ? '正在连…' : '测试并保存')}</Text>
+            <Text className="text-base font-semibold">{probing ? t('正在连…') : t('测试并保存')}</Text>
           </Button>
           <Text className="text-muted-foreground px-1 text-xs leading-5">
             {t('保存前会先探一次这个地址；成功后会退出当前登录（token 跟着服务器发的）。')}

@@ -247,7 +247,7 @@ export default function LoginScreen() {
                     className="h-[50px] rounded-xl"
                   >
                     {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
-                    <Text className="text-base font-semibold">{t(submitting ? '登录中' : '登录')}</Text>
+                    <Text className="text-base font-semibold">{submitting ? t('登录中') : t('登录')}</Text>
                   </Button>
 
                   <Pressable
