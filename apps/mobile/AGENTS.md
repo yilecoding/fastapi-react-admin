@@ -502,6 +502,75 @@ dev menu 里生效。要让桌面上真出现，必须打独立 APK。
 `apps/mobile/src` 已经加进 `packages/i18n/src/scripts/check.mjs` 的 `SRC_ROOTS`，
 `pnpm i18n:check` 会一起校验（`missing-keys` 是硬失败）。
 
+## 打 APK：`pnpm --filter @admin/mobile apk`（流程跑到一半，见下）
+
+```bash
+pnpm --filter @admin/mobile apk     # = node scripts/apk.mjs
+```
+
+⚠️ **2026-09-02 这条只验到「原生模块逐个编 .aar」那一步就按用户要求停了**，
+没有产出过一个真的 APK。下面三条是这一轮**实测出来的**，不是推测。
+
+### ✅ `expo prebuild` 在 pnpm 隔离布局下能过
+
+这是挂了很久的一个未知项：分册里一直写着「一旦需要 prebuild 就得评估
+`nodeLinker: hoisted` 的代价」。**实测不需要** —— `expo prebuild --platform android`
+一次通过，autolinking 正常。那个整仓开关（会连带影响 web 与 desktop 的依赖隔离）
+的成本**不用付**。
+
+### 🔴 JVM 不认 `http_proxy` 环境变量
+
+这台机器上有 `http_proxy=http://172.17.96.1:18080`（指向 Windows 宿主）。
+**`curl` 认这些环境变量，JVM 不认** —— Java 只看 `-Dhttp.proxyHost` 那类系统属性。
+
+于是 gradle wrapper 去直连，10 秒超时：
+
+    Downloading https://…/gradle-9.3.1-bin.zip failed: timeout (10000ms)
+
+**一个字不提代理**，而同一个 URL `curl` 是 200 —— 看着像「gradle 的服务器挂了」。
+我据此误判成「307 跳转被墙」、换了镜像，照样超时。
+
+`scripts/apk.mjs` 现在把 shell 的代理翻译成 JVM 系统属性，**两处都要喂**：
+
+| 喂给谁 | 怎么喂 | 为什么 |
+|---|---|---|
+| wrapper 那个 JVM | `GRADLE_OPTS` | 它负责下载 gradle 发行版 |
+| gradle **daemon** | `android/gradle.properties` 的 `systemProp.*` | daemon 是**另一个进程**，`GRADLE_OPTS` 管不到它；Maven 依赖解析在它里面跑 |
+
+⚠️ `no_proxy` 也要翻译：Java 的 `nonProxyHosts` 用 `|` 分隔、`*` 通配，
+和 shell 的逗号分隔不一样。
+
+### 🔴 `babel-preset-expo` 必须显式声明，否则**只有打包会炸**
+
+`babel.config.js` 写着 `presets: ['babel-preset-expo']`，而 babel 是
+**相对配置文件所在目录**解析预设的 —— pnpm 隔离布局下 `apps/mobile/node_modules`
+里根本没有这个包（它只在 store 里）。
+
+**`expo export` 一路都是绿的**（验了十几次）：Expo CLI 从**自己的位置**解析
+transformer，在 store 里看得见。gradle 的 `createBundleReleaseJsAndAssets`
+走的是另一条路径、解析起点不同，就炸了 —— 而且是**跑了 19 分钟原生编译之后**
+才炸在最后那个 JS 打包步骤上：
+
+    Failed to construct transformer: Error: Cannot find module 'babel-preset-expo'
+
+和根 `CLAUDE.md`「结构」一节那条硬纪律同一个物种（`apps/web` 漏声明
+`@admin/platform`）：**用到什么就在 `package.json` 里声明什么**，
+别指望「别人顺带装上了」。
+
+### 其他
+
+- `android/` 和 `local.properties` 都是 gitignore 的（CNG：原生工程可再生）。
+  所以 gradle 镜像、代理、SDK 路径这些**只能在 `scripts/apk.mjs` 里每次重写** ——
+  改完提交不进版本库，下一次 `prebuild --clean` 就回到原样
+- `release` 用的是模板自带的 **debug keystore**，所以能直接出可安装的包。
+  🔴 真发版要生成自己的 keystore（`android/app/build.gradle` 里有注释提醒）
+- 🔴 `EXPO_PUBLIC_API_BASE` 要在打包时显式给成生产地址。它是**构建期替换的
+  字符串**，不给就是 dev 的 `http://127.0.0.1:8088` —— 装到手机上第一个请求
+  就连不上，而报错只说「连不上服务器」。（App 里能改，见「设置」一节，
+  但一个装上就连不通的包不该发出去）
+- `app.json` 里 `android.edgeToEdgeEnabled` 已删：Android 16 起 edge-to-edge
+  是强制的，那个键被 Expo 废弃了，prebuild 会警告
+
 ## 设置：外观 · 时区 · 服务器地址
 
 ```
