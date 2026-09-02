@@ -27,6 +27,81 @@ from starlette.testclient import TestClient
 FILES = '/sys/files'
 
 
+@pytest.fixture(autouse=True)
+def _sweep_uploads(client: TestClient, token_headers: dict[str, str]) -> Generator[None, None, None]:
+    """每条测试跑完，把残留的**存活**文件行删掉（走接口，逻辑删除就够）。
+
+    🔴 治的是**轮内**中毒。下面那个 module 级的硬清治跨轮，但同一轮里
+    「上传测试红了 → 漏下存活行 → 后面按 sha256 去重的测试跟着红」照样会发生。
+    实测：人为让 `test_upload_document` 在尾巴的 DELETE 之前红，
+    结果是 **2 failed** —— 第二条（`test_check_by_sha256`）是红鲱鱼，
+    它红的原因和自己无关。级联失败会让人去查错的那一条。
+
+    走接口而不是硬删：去重查询只看 `deleted = 0`，逻辑删除足够解毒；
+    而且不用起数据库引擎（`client` 是 session 级的，这里几乎零成本）。
+    堆下来的软删除行由 module 级那个收尾统一硬清。
+
+    ⚠️ `client` / `token_headers` 分别是 session / module 作用域，
+    所以这个 autouse 不会让每条测试重新登录。
+    """
+    yield
+
+    resp = client.get(FILES, headers=token_headers, params={'page': 1, 'size': 100})
+    if resp.status_code != 200:
+        return
+    pks = [item['id'] for item in resp.json()['data']['items']]
+    if pks:
+        client.request('DELETE', FILES, headers=token_headers, json={'pks': pks})
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _purge_test_files() -> Generator[None, None, None]:
+    """跑完这个文件里的测试，把 `sys_file` 里存活的行**硬清**一遍。
+
+    🔴 **这是补上去的，因为这批测试会自我中毒。** 清理原来只写在每条测试体的
+    **最后一行**（`client.request('DELETE', FILES, ...)`）—— 断言一红那行就跑不到，
+    于是漏下一条存活记录。而文件模块按 **sha256 去重**：漏下的那条会让**同一条
+    测试**在后续每次运行里都走进去重分支、不写盘，然后以「文件没落盘」
+    这个完全不同的症状红。
+
+    实测踩到的完整链条：一次突变实验让 `test_upload_document` 在
+    `isinstance(data['created_by'], str)` 那句断言红了 → 尾巴上的 DELETE 没跑 →
+    留下一条 `季度报告.docx` 的存活行 → 之后**每次**跑都红在
+    `assert (isolated_upload_dir / today / name).is_file()` 上，而那句和真正的
+    原因毫无关系。查了半小时才看到隔离目录是空的（去重命中，压根没写盘）。
+
+    ⚠️ **必须硬删，接口的 DELETE 是逻辑删除**（`deleted` 从 0 改成行自己的 id）。
+    实测：清空前测试库里堆了 **1029 行**、14 种夹具文件名、47 轮的量，
+    而这些都不影响测试绿 —— 唯一的现象就是上面那条中毒。
+    和 `tests/conftest.py` 的 `temp_user` 是同一个套路，那边的注释是完整版
+    （包括为什么不能复用共享 session）。
+
+    ⚠️ 放在 **module 作用域**而不是每条测试：一次引擎起停约几十毫秒，
+    挂到 30 条测试上就是白烧一秒多。跨轮中毒才是真正咬人的那个，
+    而模块级收尾无条件会跑（测试红了也跑），正好治它。
+    """
+    yield
+
+    import asyncio
+
+    from sqlalchemy import text
+
+    from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+
+    async def _purge() -> None:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        session_maker = create_database_async_session(engine)
+        try:
+            async with session_maker.begin() as session:
+                # 关联行先删，否则留下孤儿 sys_file_relation
+                await session.execute(text('DELETE FROM sys_file_relation'))
+                await session.execute(text('DELETE FROM sys_file'))
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_purge())
+
+
 # ─── 测试用文件 ────────────────────────────────────────────────────────────────
 
 
