@@ -17,8 +17,7 @@ from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.admin.model import LoginLog, OperaLog
-from backend.app.task.celery import get_result_backend
-from backend.core.conf import settings
+from backend.tests.utils.db import sync_test_db_url
 from backend.utils.timezone import timezone
 
 MARK = 'pytest-prune'
@@ -30,9 +29,7 @@ _next_id = iter(range(910000000000000001, 910000000000001000))
 
 @pytest.fixture(scope='module')
 def factory():
-    url = get_result_backend().removeprefix('db+').replace(
-        f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?'
-    )
+    url = sync_test_db_url()
     engine = create_engine(url, pool_pre_ping=True, future=True)
     yield sessionmaker(engine, expire_on_commit=False)
     engine.dispose()
@@ -61,12 +58,21 @@ def seed_login(factory, *, days_ago: float, n: int = 1) -> None:
     now = timezone.now()
     with factory() as s:
         for i in range(n):
-            s.execute(LoginLog.__table__.insert().values(
-                id=next(_next_id),
-                user_uuid=f'{MARK}-{days_ago}-{i}', username=MARK, status=1,
-                ip='127.0.0.1', os='t', browser='t', device='t', msg='t',
-                login_time=at, created_time=now,   # ← 故意错开
-            ))
+            s.execute(
+                LoginLog.__table__.insert().values(
+                    id=next(_next_id),
+                    user_uuid=f'{MARK}-{days_ago}-{i}',
+                    username=MARK,
+                    status=1,
+                    ip='127.0.0.1',
+                    os='t',
+                    browser='t',
+                    device='t',
+                    msg='t',
+                    login_time=at,
+                    created_time=now,  # ← 故意错开
+                )
+            )
         s.commit()
 
 
@@ -75,13 +81,25 @@ def seed_opera(factory, *, days_ago: float, n: int = 1) -> None:
     now = timezone.now()
     with factory() as s:
         for i in range(n):
-            s.execute(OperaLog.__table__.insert().values(
-                id=next(_next_id),
-                trace_id=f'{MARK}-{days_ago}-{i}', username=MARK, method='GET',
-                title='t', path='/t', ip='127.0.0.1', os='t', browser='t', device='t',
-                code='200', status=1, cost_time=1.0,
-                opera_time=at, created_time=now,   # ← 故意错开
-            ))
+            s.execute(
+                OperaLog.__table__.insert().values(
+                    id=next(_next_id),
+                    trace_id=f'{MARK}-{days_ago}-{i}',
+                    username=MARK,
+                    method='GET',
+                    title='t',
+                    path='/t',
+                    ip='127.0.0.1',
+                    os='t',
+                    browser='t',
+                    device='t',
+                    code='200',
+                    status=1,
+                    cost_time=1.0,
+                    opera_time=at,
+                    created_time=now,  # ← 故意错开
+                )
+            )
         s.commit()
 
 
@@ -156,8 +174,8 @@ def test_boundary_is_strictly_older_than(db):
     差一天的实现（`<=` 还是 `<`、cutoff 算错一天）在小数据量下看不出来，
     但它决定「保留 30 天」到底是 30 天还是 29 天。
     """
-    seed_login(db, days_ago=29.9)   # 还没到 30 天
-    seed_login(db, days_ago=30.1)   # 过了
+    seed_login(db, days_ago=29.9)  # 还没到 30 天
+    seed_login(db, days_ago=30.1)  # 过了
     run_prune(days=30)
     assert count(db, LoginLog) == 1
 
@@ -220,10 +238,14 @@ def seed_result(factory, *, days_ago: float, n: int = 1) -> None:
     at = timezone.now() - timedelta(days=days_ago)
     with factory() as s:
         for i in range(n):
-            s.execute(TaskExtended.__table__.insert().values(
-                task_id=f'{MARK}-{days_ago}-{i}', status='SUCCESS',
-                name=MARK, date_done=at,
-            ))
+            s.execute(
+                TaskExtended.__table__.insert().values(
+                    task_id=f'{MARK}-{days_ago}-{i}',
+                    status='SUCCESS',
+                    name=MARK,
+                    date_done=at,
+                )
+            )
         s.commit()
 
 
@@ -231,9 +253,7 @@ def count_results(factory) -> int:
     from backend.app.task.model import TaskExtended
 
     with factory() as s:
-        return s.execute(
-            select(func.count()).select_from(TaskExtended).where(TaskExtended.name == MARK)
-        ).scalar_one()
+        return s.execute(select(func.count()).select_from(TaskExtended).where(TaskExtended.name == MARK)).scalar_one()
 
 
 @pytest.fixture

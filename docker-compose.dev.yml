@@ -51,7 +51,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     container_name: fba_redis
     # 端口刻意用 6380 而不是默认的 6379：开发机上常常已经跑着一个本地 Redis，
     # 撞端口时 compose 只会报 bind 失败，不会告诉你是哪个进程占的
@@ -67,13 +67,19 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # 可选的 PostgreSQL 验证环境：代码层已支持（DataBaseType.postgresql），
-  # 但从未实测跑过。不进默认 `up -d`（会跟 mssql 一起起、误导成"两个都要"），
-  # 需要时显式 `docker compose -f docker-compose.dev.yml --profile postgresql up -d postgres`。
+  # 可选的 PostgreSQL 环境。⚠️ 这里原来写着「代码层已支持，但从未实测跑过」——
+  # 那句话从 issue #5 起作废：CI 有一个平行的 `pytest · PostgreSQL` job，
+  # 整套 pytest 在 postgres 上是绿的（当时也当场炸出三个 bug，见 apps/api/AGENTS.md
+  # 「pytest 现在在**两种方言**上跑」）。
+  #
+  # 不进默认 `up -d`（会跟 mssql 一起起、误导成"两个都要"），需要时显式：
+  #   docker compose -f docker-compose.dev.yml --profile postgresql up -d postgres
   # 验证完想换回 SQL Server 主线，把 apps/api/.env 的 DATABASE_TYPE 改回 sqlserver 即可，
   # 这个容器留着不影响默认流程。
   postgres:
-    image: postgres:16-alpine
+    # 钉 digest 的理由同上面的 mssql（issue #66）：浮动标签会让环境在没人改代码的
+    # 情况下漂移。升级时显式换这串，不要删掉它让标签重新浮动。
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
     container_name: fba_postgres
     profiles: ["postgresql"]
     environment:

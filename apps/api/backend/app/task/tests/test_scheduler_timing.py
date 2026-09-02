@@ -25,11 +25,11 @@ import pytest
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import sessionmaker
 
-from backend.app.task.celery import celery_app, get_result_backend
+from backend.app.task.celery import celery_app
 from backend.app.task.model.scheduler import TaskScheduler
 from backend.app.task.utils import schedulers as sched_mod
 from backend.app.task.utils.schedulers import DatabaseScheduler
-from backend.core.conf import settings
+from backend.tests.utils.db import sync_test_db_url
 from backend.utils.timezone import timezone
 
 #: 间隔统一 60 秒 —— 远大于任何建连/查询抖动
@@ -43,9 +43,7 @@ def test_factory():
     `sync_db` 默认按 `DATABASE_SCHEMA` 连开发库 —— 测试必须改到 `_test` 库，
     否则这组用例会往你正在手测的库里插调度（而且 beat 真在跑的话会执行它）。
     """
-    url = get_result_backend().removeprefix('db+').replace(
-        f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?'
-    )
+    url = sync_test_db_url()
     engine = create_engine(url, pool_pre_ping=True, future=True)
     yield sessionmaker(engine, expire_on_commit=False)
     engine.dispose()
@@ -188,7 +186,9 @@ def test_disabled_schedule_never_fires(db):
 def test_expired_schedule_does_not_fire(db):
     """过了截止时间就不再触发。"""
     insert(
-        db, name='timing-已过期', last_run='overdue',
+        db,
+        name='timing-已过期',
+        last_run='overdue',
         expire_time=timezone.now() - timedelta(minutes=1),
     )
     s = CapturingScheduler(app=celery_app)
@@ -199,7 +199,9 @@ def test_expired_schedule_does_not_fire(db):
 def test_not_started_yet_does_not_fire(db):
     """还没到开始时间就不触发。"""
     insert(
-        db, name='timing-未开始', last_run='overdue',
+        db,
+        name='timing-未开始',
+        last_run='overdue',
         start_time=timezone.now() + timedelta(hours=1),
     )
     s = CapturingScheduler(app=celery_app)
@@ -217,7 +219,8 @@ def test_one_off_fires_only_once(db):
     # 把「上次触发」再拨回两分钟前 —— 时间上又到点了，只剩计数能拦住它
     with db() as sess:
         sess.execute(
-            TaskScheduler.__table__.update()
+            TaskScheduler.__table__
+            .update()
             .where(TaskScheduler.id == pk)
             .values(last_run_time=timezone.now() - timedelta(seconds=EVERY * 2))
         )
@@ -283,7 +286,8 @@ def test_one_off_survives_a_reload(db, monkeypatch):
     # 时间上重新到点，但触发计数应该已经落库了
     with db() as sess:
         sess.execute(
-            TaskScheduler.__table__.update()
+            TaskScheduler.__table__
+            .update()
             .where(TaskScheduler.id == pk)
             .values(last_run_time=timezone.now() - timedelta(seconds=EVERY * 2))
         )

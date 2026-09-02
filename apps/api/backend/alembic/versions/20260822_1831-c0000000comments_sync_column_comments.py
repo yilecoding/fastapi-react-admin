@@ -30,6 +30,8 @@ Create Date: 2026-08-22 18:30:43.003028+08:00
 
 import contextlib
 
+from collections.abc import Iterator
+
 import sqlalchemy as sa
 import sqlalchemy.exc
 
@@ -41,6 +43,46 @@ revision = 'c0000000comments'
 down_revision = 'b0000000baseline'
 branch_labels = None
 depends_on = None
+
+
+@contextlib.contextmanager
+def _tolerate_already_applied() -> Iterator[None]:
+    """吞掉「这一列已经是目标状态」那类失败，且只吞这一条语句。
+
+    🔴 **三种方言在「一条语句失败之后事务还能不能用」上语义是相反的，
+    这里必须分支，两边都不能照抄对方。** 实测（issue #5）：
+
+    | 方言 | 一条 DDL 失败之后 | 裸 `contextlib.suppress` | `begin_nested()`（SAVEPOINT） |
+    |---|---|---|---|
+    | postgresql | 整个事务被置成 aborted | ❌ 后续语句连环 `InFailedSQLTransactionError` | ✅ 回滚到语句之前 |
+    | mssql | 事务照常可用 | ✅ | ❌ `Cannot roll back sa_savepoint_1...`（出错时保存点已经没了） |
+
+    postgres 那一列是「Python 层把异常吞掉并不能让事务活过来」——
+    这条迁移原来只有 `suppress`，在 postgres 空库上 `upgrade head` 第一条
+    ALTER 失败之后就连环崩。mssql 那一列是反过来：出错时 SQL Server 已经把
+    保存点丢掉了，再 `ROLLBACK TO SAVEPOINT` 是第二次报错。
+
+    旧 docstring 写的「实测 SQL Server 在这里不会毒化事务」没错，
+    错在**把一种方言的实测结论当成了通用前提**。
+
+    ⚠️ 仍然只吞 `ProgrammingError`：连接断了、权限不足必须让迁移失败。
+    """
+    # 离线模式（`alembic … --sql`）下没有任何语句真的执行，也就没有「事务被毒化」
+    # 这回事；而那时 bind 是 `MockConnection`，压根没有 `begin_nested()`。
+    # 不判这一条会打掉 `test_migrations_compile_offline_for_every_supported_dialect`
+    # ——那是 issue #59 留下的守卫，正是它替这条迁移挡住方言专属对象泄漏。
+    if op.get_context().as_sql or op.get_bind().dialect.name != 'postgresql':
+        with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+            yield
+        return
+
+    nested = op.get_bind().begin_nested()
+    try:
+        yield
+    except sqlalchemy.exc.ProgrammingError:
+        nested.rollback()
+    else:
+        nested.commit()
 
 
 def _existing_types() -> dict[str, sa.types.TypeEngine]:
@@ -111,14 +153,14 @@ def upgrade() -> None:
     这不是这一份的特例 —— **凡是「补齐历史遗留」类的迁移都有这个形状**：
     新建的库天然就是目标状态。写这类迁移时先问「新库跑这一步会怎样」。
 
-    ⚠️ 只吞 `ProgrammingError`（"already exists" 属于它），不吞所有异常 ——
-    连接断了、权限不足也是异常，那些必须让迁移失败。实测 SQL Server 在这里
-    不会毒化事务，后续语句照常执行。
+    ⚠️ 每一条都套 SAVEPOINT 而不是裸 `contextlib.suppress` —— 原因见
+    `_tolerate_already_applied()`：postgres 上一条语句失败会毒化整个事务，
+    只吞 Python 异常救不回来。
     """
     t = _existing_types()
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column('sys_dept', 'code', existing_type=t['varchar32'], comment='部门编码', existing_nullable=False)
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_file',
             'path',
@@ -127,7 +169,7 @@ def upgrade() -> None:
             existing_comment='相对 UPLOAD_DIR 的存储路径',
             existing_nullable=False,
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_file',
             'is_public',
@@ -136,7 +178,7 @@ def upgrade() -> None:
             comment='是否落在公开子树（不鉴权可读）',
             existing_nullable=False,
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_opera_log',
             'request_headers',
@@ -144,11 +186,11 @@ def upgrade() -> None:
             comment='请求头（已脱敏）',
             existing_nullable=True,
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_opera_log', 'response_headers', existing_type=t['longtext'], comment='响应头', existing_nullable=True
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_opera_log',
             'response_body',
@@ -156,9 +198,9 @@ def upgrade() -> None:
             comment='响应体（超限截断）',
             existing_nullable=True,
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column('sys_role', 'code', existing_type=t['varchar32'], comment='角色编码', existing_nullable=False)
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_user',
             'timezone',
@@ -171,7 +213,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     t = _existing_types()
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_user',
             'timezone',
@@ -181,7 +223,7 @@ def downgrade() -> None:
             existing_comment='显示时区(IANA 标识)',
             existing_nullable=False,
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_role',
             'code',
@@ -190,7 +232,7 @@ def downgrade() -> None:
             existing_comment='角色编码',
             existing_nullable=False,
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_opera_log',
             'response_body',
@@ -199,7 +241,7 @@ def downgrade() -> None:
             existing_comment='响应体（超限截断）',
             existing_nullable=True,
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_opera_log',
             'response_headers',
@@ -208,7 +250,7 @@ def downgrade() -> None:
             existing_comment='响应头',
             existing_nullable=True,
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_opera_log',
             'request_headers',
@@ -217,7 +259,7 @@ def downgrade() -> None:
             existing_comment='请求头（已脱敏）',
             existing_nullable=True,
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_file',
             'is_public',
@@ -227,7 +269,7 @@ def downgrade() -> None:
             existing_comment='是否落在公开子树（不鉴权可读）',
             existing_nullable=False,
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_file',
             'path',
@@ -236,7 +278,7 @@ def downgrade() -> None:
             existing_comment='相对落盘根目录的存储路径',
             existing_nullable=False,
         )
-    with contextlib.suppress(sqlalchemy.exc.ProgrammingError):
+    with _tolerate_already_applied():
         op.alter_column(
             'sys_dept',
             'code',
