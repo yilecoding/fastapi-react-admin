@@ -1,4 +1,5 @@
 import { CheckIcon, TriangleAlertIcon } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import * as React from 'react'
 import { ActivityIndicator, ScrollView, View } from 'react-native'
 
@@ -19,6 +20,7 @@ import { useSession } from '@/lib/session'
  * 所以这里给的是**一个列表**而不是输入框 —— 手输时区名是最容易打错的那类字段，
  * 而存进一个拼错的时区会让那个用户所有带时间的页面白屏（后端注释里记着这次实测）。
  */
+/** ⚠️ `label` 是 **key**，不在这里 `t()` —— 模块级常量切语言不会变 */
 const ZONES = [
   { id: 'Asia/Shanghai', label: '中国标准时间', offset: 'UTC+8' },
   { id: 'Asia/Hong_Kong', label: '香港', offset: 'UTC+8' },
@@ -34,6 +36,7 @@ const ZONES = [
 ] as const
 
 export default function TimezoneScreen() {
+  const { t } = useTranslation()
   const { user, reload } = useSession()
   const [saving, setSaving] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
@@ -60,7 +63,7 @@ export default function TimezoneScreen() {
       {error ? (
         <View className="px-4 pt-4">
           <Alert variant="destructive" icon={TriangleAlertIcon}>
-            <AlertTitle>没保存成功</AlertTitle>
+            <AlertTitle>{t('没保存成功')}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         </View>
@@ -70,7 +73,7 @@ export default function TimezoneScreen() {
           会以为设置丢了。列表是常用项，不是全集 */}
       {current && !known ? (
         <>
-          <GroupHeader>当前</GroupHeader>
+          <GroupHeader>{t('当前')}</GroupHeader>
           <Group>
             <PressRow first>
               <Text className="flex-1 font-mono text-[13px]">{current}</Text>
@@ -78,17 +81,17 @@ export default function TimezoneScreen() {
             </PressRow>
           </Group>
           <Text className="text-muted-foreground px-5 pt-2 text-xs">
-            这个时区不在下面的常用列表里，是在 web 端设置的。
+            {t('这个时区不在下面的常用列表里，是在 web 端设置的。')}
           </Text>
         </>
       ) : null}
 
-      <GroupHeader>常用时区</GroupHeader>
+      <GroupHeader>{t('常用时区')}</GroupHeader>
       <Group>
         {ZONES.map((z, i) => (
           <PressRow key={z.id} first={i === 0} onPress={() => void pick(z.id)}>
             <View className="flex-1">
-              <Text className="text-[15px]">{z.label}</Text>
+              <Text className="text-[15px]">{t(z.label)}</Text>
               <Text className="text-muted-foreground font-mono text-[11px]">{z.id}</Text>
             </View>
             <Text className="text-muted-foreground font-mono text-[11px]">{z.offset}</Text>

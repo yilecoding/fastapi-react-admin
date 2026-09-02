@@ -14,6 +14,7 @@
     "start:plain": "expo start"
   },
   "dependencies": {
+    "@admin/i18n": "workspace:*",
     "@expo-google-fonts/jetbrains-mono": "^0.4.1",
     "@react-navigation/bottom-tabs": "^7.18.18",
     "@rn-primitives/avatar": "^1.5.2",
@@ -30,6 +31,7 @@
     "expo-font": "~57.0.3",
     "expo-linear-gradient": "~57.0.1",
     "expo-linking": "~57.0.9",
+    "expo-localization": "~57.0.1",
     "expo-router": "~57.0.18",
     "expo-secure-store": "~57.0.3",
     "expo-splash-screen": "~57.0.8",
@@ -37,6 +39,7 @@
     "expo-system-ui": "~57.0.3",
     "lucide-react-native": "^1.21.0",
     "react": "19.2.3",
+    "react-i18next": "^17.0.11",
     "react-native": "0.86.3",
     "react-native-gesture-handler": "~2.32.0",
     "react-native-reanimated": "4.5.1",

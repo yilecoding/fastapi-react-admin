@@ -56,7 +56,11 @@ export type PageData<T> = {
   total_pages: number
 }
 
-/** 站内通知分类。数值来自后端的 `NotificationCategory` 枚举 */
+/**
+ * 站内通知分类。数值来自后端的 `NotificationCategory` 枚举。
+ *
+ * ⚠️ 值是 **key**，不在这里 `t()` —— 模块级常量切语言不会变。
+ */
 export const NOTIFICATION_CATEGORY = {
   0: '系统',
   1: '公告',

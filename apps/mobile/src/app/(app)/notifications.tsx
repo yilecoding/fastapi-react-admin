@@ -1,4 +1,5 @@
 import { BellIcon, TriangleAlertIcon } from 'lucide-react-native'
+import { useTranslation } from 'react-i18next'
 import * as React from 'react'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
@@ -23,6 +24,7 @@ type Filter = 'all' | 'unread'
  * 拍 C 路线的判据就是这个）—— 这里是「一条条 + 下拉刷新」。
  */
 export default function NotificationsScreen() {
+  const { t } = useTranslation()
   const { refresh: refreshUnread, unread } = useUnread()
   const [filter, setFilter] = React.useState<Filter>('all')
   const [items, setItems] = React.useState<Notification[] | null>(null)
@@ -87,16 +89,16 @@ export default function NotificationsScreen() {
         <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)} className="flex-1">
           <TabsList className="flex-row">
             <TabsTrigger value="all" className="flex-1">
-              <Text>全部</Text>
+              <Text>{t('全部')}</Text>
             </TabsTrigger>
             <TabsTrigger value="unread" className="flex-1">
-              <Text>{total > 0 ? `未读 ${total}` : '未读'}</Text>
+              <Text>{total > 0 ? t('未读 {{n}}', { n: total }) : t('未读')}</Text>
             </TabsTrigger>
           </TabsList>
         </Tabs>
         <Button size="sm" variant="ghost" disabled={total === 0 || marking} onPress={() => void markAll()}>
           {marking ? <ActivityIndicator size="small" /> : null}
-          <Text>全部已读</Text>
+          <Text>{t('全部已读')}</Text>
         </Button>
       </View>
 
@@ -108,10 +110,10 @@ export default function NotificationsScreen() {
             和「一条通知都没有」长得一样 */}
         {error ? (
           <Alert variant="destructive" icon={TriangleAlertIcon}>
-            <AlertTitle>通知拉取失败</AlertTitle>
+            <AlertTitle>{t('通知拉取失败')}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
             <Button variant="outline" size="sm" onPress={() => void load(filter)} className="mt-2 self-start">
-              <Text>重试</Text>
+              <Text>{t('重试')}</Text>
             </Button>
           </Alert>
         ) : items === null ? (
@@ -124,10 +126,10 @@ export default function NotificationsScreen() {
           <Group className="mx-0 items-center gap-2 py-10">
               <Icon as={BellIcon} className="text-muted-foreground size-8" />
               <Text variant="small" className="text-muted-foreground">
-                {filter === 'unread' ? '没有未读通知' : '还没有通知'}
+                {t(filter === 'unread' ? '没有未读通知' : '还没有通知')}
               </Text>
               <Text className="text-muted-foreground text-center text-xs">
-                {filter === 'unread' ? '所有通知都读过了' : '有新消息时会出现在这里'}
+                {t(filter === 'unread' ? '所有通知都读过了' : '有新消息时会出现在这里')}
               </Text>
           </Group>
         ) : (
@@ -143,6 +145,7 @@ export default function NotificationsScreen() {
 }
 
 function NotifRow({ n, first, onPress }: { n: Notification; first?: boolean; onPress: () => void }) {
+  const { t } = useTranslation()
   const unread = !n.read_time
   return (
     <>
@@ -153,7 +156,7 @@ function NotifRow({ n, first, onPress }: { n: Notification; first?: boolean; onP
               那是「状态」和「分类」两回事混在一起 */}
           {unread ? <View className="bg-primary h-1.5 w-1.5 rounded-full" /> : null}
           <Text className="text-muted-foreground text-[11px]">
-            {NOTIFICATION_CATEGORY[n.category] ?? '通知'}
+            {t(NOTIFICATION_CATEGORY[n.category] ?? '通知')}
           </Text>
           <View className="flex-1" />
           <Text className="text-muted-foreground font-mono text-[11px]">{relativeTime(n.created_time)}</Text>

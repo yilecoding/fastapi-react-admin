@@ -1,3 +1,5 @@
+import { currentLanguage, t } from '@admin/i18n'
+
 import { serverStore } from '@/lib/server'
 import { tokenStore } from '@/lib/token-store'
 
@@ -94,9 +96,12 @@ async function send<T>(method: Method, path: string, body?: unknown, retry = tru
     res = await fetch(`${serverStore.current()}${path}`, {
       method,
       headers: {
-        // 后端有 i18n 中间件按 Accept-Language 切响应 msg。不发这个头的话
-        // 未映射的语言会让**所有** msg 变成「当前语言包未初始化或不存在」。
-        'Accept-Language': 'zh-CN',
+        // 🔴 后端有 i18n 中间件按 `Accept-Language` 切响应 `msg`
+        // （`backend/common/i18n.py`）。**必须跟界面语言同步** ——
+        // 之前这里写死 `'zh-CN'`，切成英文界面之后接口报错还是中文，
+        // 看起来像坏了。另外不发这个头的话，未映射的语言会让**所有** msg
+        // 变成「当前语言包未初始化或不存在」。
+        'Accept-Language': currentLanguage(),
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
@@ -105,7 +110,7 @@ async function send<T>(method: Method, path: string, body?: unknown, retry = tru
   } catch (err) {
     // 网络层失败（连不上 / DNS / TLS）在 RN 里只有一句笼统的 `Network request failed`，
     // 不提是哪一种。把地址带上，否则排查时完全没有线索。
-    throw new ApiError(0, 0, `连不上服务器（${serverStore.current()}）：${String(err)}`)
+    throw new ApiError(0, 0, t('连不上服务器（{{base}}）：{{reason}}', { base: serverStore.current(), reason: String(err) }))
   }
 
   let parsed: unknown = null

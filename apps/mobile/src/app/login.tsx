@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router'
+import { useTranslation } from 'react-i18next'
 import { KeyRoundIcon, QrCodeIcon, SmartphoneIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native'
@@ -49,6 +50,7 @@ type CaptchaState =
   | { kind: 'error'; msg: string }
 
 export default function LoginScreen() {
+  const { t } = useTranslation()
   const { login, bootstrapError } = useSession()
   const insets = useSafeAreaInsets()
   const fgVar = useCSSVariable('--color-foreground')
@@ -86,7 +88,7 @@ export default function LoginScreen() {
       if (!alive.current) return
       const msg =
         err instanceof ApiError && err.isRateLimited
-          ? '验证码请求太频繁，稍等一下再试'
+          ? t('验证码请求太频繁，稍等一下再试')
           : err instanceof Error
             ? err.message
             : String(err)
@@ -157,11 +159,11 @@ export default function LoginScreen() {
           <BrandTop>
             <View className="gap-1.5">
               <Text className="text-primary font-mono text-[10px]" style={{ letterSpacing: 2.4 }}>
-                权限与数据的承重层
+                {t('权限与数据的承重层')}
               </Text>
               {/* iOS 大标题：34/700/-0.03em。这是这套语言里最重的一处排版 */}
               <Text className="text-3xl font-bold" style={{ letterSpacing: -0.9 }}>
-                登录
+                {t('登录')}
               </Text>
             </View>
           </BrandTop>
@@ -172,7 +174,7 @@ export default function LoginScreen() {
                 {METHODS.map((m) => (
                   <TabsTrigger key={m.value} value={m.value} className="flex-1 flex-row gap-1.5">
                     <Icon as={m.icon} className="size-3.5" />
-                    <Text>{m.label}</Text>
+                    <Text>{t(m.label)}</Text>
                   </TabsTrigger>
                 ))}
               </TabsList>
@@ -188,7 +190,7 @@ export default function LoginScreen() {
                 {bootstrapError ? (
                   <View className="px-4">
                     <Alert variant="destructive" icon={KeyRoundIcon}>
-                      <AlertTitle>启动时没能连上服务器</AlertTitle>
+                      <AlertTitle>{t('启动时没能连上服务器')}</AlertTitle>
                       <AlertDescription>{bootstrapError}</AlertDescription>
                     </Alert>
                   </View>
@@ -197,7 +199,7 @@ export default function LoginScreen() {
                 {/* 输入框做成**分组块里的行**：左侧标签、右侧输入。
                     iOS 上表单就是这个形状，不是一个个描边盒子 */}
                 <Group>
-                  <FieldRow first label="用户名">
+                  <FieldRow first label={t('用户名')}>
                     <Input
                       value={username}
                       onChangeText={setUsername}
@@ -209,7 +211,7 @@ export default function LoginScreen() {
                       className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
                     />
                   </FieldRow>
-                  <FieldRow label="密码">
+                  <FieldRow label={t('密码')}>
                     <Input
                       value={password}
                       onChangeText={setPassword}
@@ -245,7 +247,7 @@ export default function LoginScreen() {
                     className="h-[50px] rounded-xl"
                   >
                     {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
-                    <Text className="text-base font-semibold">{submitting ? '登录中' : '登录'}</Text>
+                    <Text className="text-base font-semibold">{t(submitting ? '登录中' : '登录')}</Text>
                   </Button>
 
                   <Pressable
@@ -257,7 +259,7 @@ export default function LoginScreen() {
                     {/* 可点区域包住文字 —— 方块本身在触屏上远低于可用尺寸 */}
                     <Checkbox checked={remember} onCheckedChange={setRemember} />
                     <Text variant="small" className="text-muted-foreground">
-                      记住账号
+                      {t('记住账号')}
                     </Text>
                   </Pressable>
                 </View>
@@ -287,6 +289,7 @@ function FieldRow({
   label: string
   children: React.ReactNode
 }) {
+  const { t } = useTranslation()
   return (
     <Row first={first} inset={20}>
       <Text className="w-[62px] shrink-0 text-[15px]">{label}</Text>
@@ -300,6 +303,7 @@ function FieldRow({
  * 措辞和 web 端 `_guest/sign-in.tsx` 的 `NotWired` 保持一致。
  */
 function NotWired({ method, onUsePassword }: { method: Method; onUsePassword: () => void }) {
+  const { t } = useTranslation()
   const copy =
     method === 'phone'
       ? {
@@ -317,12 +321,12 @@ function NotWired({ method, onUsePassword }: { method: Method; onUsePassword: ()
   return (
     <Group className="items-center gap-3 px-6 py-9">
       <Icon as={copy.icon} className="text-muted-foreground size-8" />
-      <Text className="text-center font-medium">{copy.title}</Text>
+      <Text className="text-center font-medium">{t(copy.title)}</Text>
       <Text variant="small" className="text-muted-foreground text-center leading-5">
-        {copy.hint}
+        {t(copy.hint)}
       </Text>
       <Button variant="outline" size="sm" onPress={onUsePassword} className="mt-1">
-        <Text>用密码登录</Text>
+        <Text>{t('用密码登录')}</Text>
       </Button>
     </Group>
   )
@@ -341,15 +345,16 @@ function CaptchaRow({
   onRetry: () => void
   onSubmit: () => void
 }) {
+  const { t } = useTranslation()
   if (state.kind === 'off') return null
 
   if (state.kind === 'loading') {
     return (
       <Row inset={20}>
-        <Text className="w-[62px] shrink-0 text-[15px]">验证码</Text>
+        <Text className="w-[62px] shrink-0 text-[15px]">{t('验证码')}</Text>
         <ActivityIndicator size="small" />
         <Text variant="small" className="text-muted-foreground">
-          正在获取
+          {t('正在获取')}
         </Text>
       </Row>
     )
@@ -358,13 +363,13 @@ function CaptchaRow({
   if (state.kind === 'error') {
     return (
       <Row inset={20} className="items-start">
-        <Text className="w-[62px] shrink-0 text-[15px]">验证码</Text>
+        <Text className="w-[62px] shrink-0 text-[15px]">{t('验证码')}</Text>
         <View className="flex-1 gap-2 py-1">
           <Text variant="small" className="text-destructive">
             {state.msg}
           </Text>
           <Button variant="outline" size="sm" onPress={onRetry} className="self-start">
-            <Text>重试</Text>
+            <Text>{t('重试')}</Text>
           </Button>
         </View>
       </Row>
@@ -373,7 +378,7 @@ function CaptchaRow({
 
   return (
     <Row inset={20}>
-      <Text className="w-[62px] shrink-0 text-[15px]">验证码</Text>
+      <Text className="w-[62px] shrink-0 text-[15px]">{t('验证码')}</Text>
       <Input
         value={code}
         onChangeText={onChangeCode}

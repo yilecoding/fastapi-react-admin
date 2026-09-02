@@ -1,4 +1,5 @@
 import { StyleSheet } from 'react-native'
+import { useTranslation } from 'react-i18next'
 
 import { Tabs } from 'expo-router'
 import { HomeIcon, LayoutGridIcon, UserRoundIcon } from 'lucide-react-native'
@@ -24,6 +25,7 @@ const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
  * 再叠一条系统标题栏会很挤。
  */
 export default function AppLayout() {
+  const { t } = useTranslation()
   const primary = useCSSVariable('--color-primary')
   const muted = useCSSVariable('--color-muted-foreground')
   const { unread } = useUnread()
@@ -57,7 +59,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '首页',
+          title: t('首页'),
           headerShown: false,
           // 未读红点挂在**首页**：通知的入口就在这一屏。
           // 挂到「我的」上过一版 —— 点进去找不到通知，语义不对
@@ -68,7 +70,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="apps"
         options={{
-          title: '应用',
+          title: t('应用'),
           headerShown: false,
           tabBarIcon: ({ color }) => <Icon as={LayoutGridIcon} color={color} />,
         }}
@@ -76,7 +78,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: '我的',
+          title: t('我的'),
           headerShown: false,
           tabBarIcon: ({ color }) => <Icon as={UserRoundIcon} color={color} />,
         }}

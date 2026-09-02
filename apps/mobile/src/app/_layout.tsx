@@ -10,6 +10,7 @@ import { ActivityIndicator, View } from 'react-native'
 import { useUniwind } from 'uniwind'
 
 import { appearanceStore } from '@/lib/appearance'
+import { setupI18n } from '@/lib/i18n'
 import { NAV_THEME } from '@/lib/theme'
 import { SessionProvider, useSession } from '@/lib/session'
 
@@ -31,7 +32,14 @@ export default function RootLayout() {
     void appearanceStore.hydrate()
   }, [])
 
-  if (!fontsReady) return null
+  // 🔴 i18n 必须在渲染任何用到 `t()` 的东西**之前**跑完，所以和字体一样卡住首帧。
+  // 语言偏好存在 SecureStore 里、读是异步的，拿不到同步初值。
+  const [i18nReady, setI18nReady] = React.useState(false)
+  React.useEffect(() => {
+    void setupI18n().then(() => setI18nReady(true))
+  }, [])
+
+  if (!fontsReady || !i18nReady) return null
 
   return (
     <ThemeProvider value={NAV_THEME[theme ?? 'light']}>

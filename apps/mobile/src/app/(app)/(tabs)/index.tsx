@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router'
+import { useTranslation } from 'react-i18next'
 import { BellIcon, ChevronRightIcon, InboxIcon, UserRoundIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { RefreshControl, ScrollView, View } from 'react-native'
@@ -11,6 +12,7 @@ import { useUnread } from '@/lib/notifications'
 import { useSession } from '@/lib/session'
 
 export default function HomeScreen() {
+  const { t } = useTranslation()
   const { user, reload } = useSession()
   const { unread, refresh: refreshUnread } = useUnread()
   const router = useRouter()
@@ -37,7 +39,7 @@ export default function HomeScreen() {
     >
       <BrandTop>
         <View className="gap-1 pt-1">
-          <Text className="text-muted-foreground text-[13px]">{greeting()}</Text>
+          <Text className="text-muted-foreground text-[13px]">{t(greeting())}</Text>
           {/* iOS 大标题 */}
           <Text className="text-3xl font-bold" style={{ letterSpacing: -0.9 }}>
             {user?.nickname || user?.username || ''}
@@ -45,64 +47,68 @@ export default function HomeScreen() {
         </View>
       </BrandTop>
 
-      <GroupHeader>我的组织</GroupHeader>
+      <GroupHeader>{t('我的组织')}</GroupHeader>
       <Group>
         <Row first>
-          <Text className="shrink-0 text-[15px]">部门</Text>
+          <Text className="shrink-0 text-[15px]">{t('部门')}</Text>
           <Text className="text-muted-foreground flex-1 text-right text-[14px]">{user?.dept ?? '—'}</Text>
         </Row>
         <Row>
-          <Text className="shrink-0 text-[15px]">角色</Text>
+          <Text className="shrink-0 text-[15px]">{t('角色')}</Text>
           <Text className="text-muted-foreground flex-1 text-right text-[14px]">
             {user?.roles.join('、') || '—'}
           </Text>
         </Row>
         <Row>
-          <Text className="shrink-0 text-[15px]">时区</Text>
+          <Text className="shrink-0 text-[15px]">{t('时区')}</Text>
           <Text className="text-muted-foreground flex-1 text-right font-mono text-xs">
             {user?.timezone ?? '—'}
           </Text>
         </Row>
       </Group>
 
-      <GroupHeader>入口</GroupHeader>
+      <GroupHeader>{t('入口')}</GroupHeader>
       <Group>
         <PressRow first inset={56} onPress={() => router.push('/notifications')}>
           <RowIcon icon={BellIcon} />
-          <Text className="flex-1 text-[15px]">通知</Text>
+          <Text className="flex-1 text-[15px]">{t('通知')}</Text>
           {/* 状态表达在**值**上，不动图标 —— 定稿那版就是这个规则 */}
           {total > 0 ? (
             <Text className="text-primary text-[13px] font-medium">{total} 条未读</Text>
           ) : (
-            <Text className="text-muted-foreground text-[13px]">没有未读</Text>
+            <Text className="text-muted-foreground text-[13px]">{t('没有未读')}</Text>
           )}
           <Chevron icon={ChevronRightIcon} />
         </PressRow>
         <PressRow inset={56} onPress={() => router.push('/profile')}>
           <RowIcon icon={UserRoundIcon} />
-          <Text className="flex-1 text-[15px]">个人中心</Text>
-          <Text className="text-muted-foreground text-[13px]">资料 · 密码</Text>
+          <Text className="flex-1 text-[15px]">{t('个人中心')}</Text>
+          <Text className="text-muted-foreground text-[13px]">{t('资料 · 密码')}</Text>
           <Chevron icon={ChevronRightIcon} />
         </PressRow>
       </Group>
 
-      <GroupHeader>待办与动态</GroupHeader>
+      <GroupHeader>{t('待办与动态')}</GroupHeader>
       <Group className="items-center gap-2 py-8">
         {/* 空态要说清楚是「还没做」，不能长得像「加载失败」或「没有数据」——
             三者在用户眼里都是一片空，分不清的第一反应是「这 App 坏了」 */}
         <Icon as={InboxIcon} className="text-muted-foreground size-7" />
         <Text variant="small" className="text-muted-foreground">
-          还没有内容
+          {t('还没有内容')}
         </Text>
         <Text className="text-muted-foreground/70 px-8 text-center text-xs leading-5">
-          等移动端要哪几个功能定下来再填这一块
+          {t('等移动端要哪几个功能定下来再填这一块')}
         </Text>
       </Group>
     </ScrollView>
   )
 }
 
-/** 按本机时间问好。刻意不查服务端时区 —— 问候语说的是「你现在」，不是账号设定的时区 */
+/**
+ * 按本机时间问好。刻意不查服务端时区 —— 问候语说的是「你现在」，不是账号设定的时区。
+ *
+ * ⚠️ 返回的是 **key**，由调用处 `t()`。函数在模块级、拿不到 hook 的 `t`。
+ */
 function greeting() {
   const h = new Date().getHours()
   if (h < 6) return '夜深了'

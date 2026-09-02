@@ -453,6 +453,55 @@ dev menu 里生效。要让桌面上真出现，必须打独立 APK。
 
 ⚠️ 三个页签的内容区要 `minHeight` 对齐，否则切换时下面的东西会跳。
 
+## i18n：复用 `@admin/i18n`，接线层在 `src/lib/i18n.ts`
+
+语言包、i18next 实例、校验脚本都在 `packages/i18n`（最底层、**框架无关**，
+连 `react-i18next` 都不依赖）。移动端和 `apps/web/src/i18n.ts` 对称，
+只挂 React 绑定和副作用。
+
+🔴 **依赖箭头写进了 `apps/mobile/package.json`**（`@admin/i18n: workspace:*`），
+不是只靠 Metro 能解析 —— 根 `CLAUDE.md` 结构那一节的硬纪律。
+
+### 为此改动了 `packages/i18n`（两处，都是 web-only 的东西）
+
+| | 原来 | 现在 |
+|---|---|---|
+| `notify()` 里 `document.documentElement.lang = lang` | 🔴 RN **没有 `document`**，移动端一初始化就抛 | 挪到 `apps/web/src/i18n.ts` 的 `onLanguageChange` 订阅里 —— 和那个包自己写的「副作用由上层注册」是同一条规则，当初漏了这处 |
+| `initI18n(plugins)` 只从 `localStorage` 读初值 | RN 没有 `localStorage`，`readStoredLanguage()` 走 catch **恒定返回基准语言**（不报错，但永远读不到用户的选择） | 加了第二个参数 `initialLanguage`，移动端传自己异步读出来的值 |
+
+⚠️ **以后往 `packages/i18n` 里加东西，先问一句「RN 上有这个 API 吗」。**
+
+### 移动端这一侧
+
+- 语言存 `expo-secure-store`；没选过就取**设备语言**
+- ⚠️ `getLocales()[0]` 可能是 `zh-Hant-TW` / `en-GB` 这种带地区的标签，
+  而我们只有两个语言。**按语言主段落匹配**，别拿完整标签比 ——
+  那样 `en-GB` 会被判成「不支持」然后给一个中文界面
+- 🔴 `Accept-Language` **必须跟界面语言同步**（`api.ts` 从 `currentLanguage()` 取）。
+  之前写死 `'zh-CN'`：切成英文界面之后接口报错还是中文，看起来像坏了
+- 🔴 i18n 和字体一样**卡住首帧**（`_layout` 里 `!i18nReady` 直接 `return null`）。
+  忘了注入 `initReactI18next` 的后果很隐蔽：`useTranslation()` 会绑到
+  react-i18next **自己的默认实例**上，那个实例没有 resources，`t()` 原样返回 key ——
+  界面看起来「全是中文」（因为 key 就是中文），连 `{{n}}` 插值都不做
+
+### 写文案的两条
+
+🔴 **模块级常量里放 key，不要在定义处 `t()`。** 那是 import 时求值的 ——
+切语言不会变，而且求值时 i18n 可能还没初始化完。
+`APPEARANCE_LABEL` / `ZONES[].label` / `METHODS[].label` /
+`NOTIFICATION_CATEGORY` / `greeting()` / `accountKind()` 全是这个形态，
+一律在使用处 `t(常量)`。
+
+🔴 **局部变量不要叫 `t`。** `src/lib/datetime.ts` 里有个时间戳原来叫 `t`，
+把导入的 `t()` 遮住了 —— 这正是 `i18n:check` 的 `shadowed-t` 规则要抓的东西
+（tsc 也会报 `Type 'Number' has no call signatures`，算是响亮）。
+
+⚠️ **语言名本身不翻译** —— 「English」在中文界面里也要显示 English，
+否则用户找不到自己那一项。这是少数刻意不 `t()` 的地方。
+
+`apps/mobile/src` 已经加进 `packages/i18n/src/scripts/check.mjs` 的 `SRC_ROOTS`，
+`pnpm i18n:check` 会一起校验（`missing-keys` 是硬失败）。
+
 ## 设置：外观 · 时区 · 服务器地址
 
 ```

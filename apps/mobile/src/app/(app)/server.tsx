@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router'
+import { useTranslation } from 'react-i18next'
 import { TriangleAlertIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
@@ -23,6 +24,7 @@ import { useSession } from '@/lib/session'
  * 而那个失败会表现成「莫名其妙 401」。
  */
 export default function ServerScreen() {
+  const { t } = useTranslation()
   const { base, isCustom } = useServer()
   const { logout } = useSession()
   const router = useRouter()
@@ -43,7 +45,7 @@ export default function ServerScreen() {
       if (!res.ok) throw new Error(`服务器返回 HTTP ${res.status}`)
       const body = (await res.json()) as { code?: number }
       // FBA 的所有响应都带 code；不带说明这不是本项目的后端
-      if (typeof body?.code !== 'number') throw new Error('这个地址不像是本项目的后端')
+      if (typeof body?.code !== 'number') throw new Error(t('这个地址不像是本项目的后端'))
       await serverStore.set(normalized === API_BASE_DEFAULT ? null : normalized)
       await logout()
     } catch (err) {
@@ -67,7 +69,7 @@ export default function ServerScreen() {
       <ScrollView contentContainerClassName="gap-4 py-4" keyboardShouldPersistTaps="handled">
         <Group>
           <Row first>
-            <Text className="w-[52px] shrink-0 text-[15px]">地址</Text>
+            <Text className="w-[52px] shrink-0 text-[15px]">{t('地址')}</Text>
             <Input
               value={value}
               onChangeText={setValue}
@@ -89,7 +91,7 @@ export default function ServerScreen() {
         {error ? (
           <View className="px-4">
             <Alert variant="destructive" icon={TriangleAlertIcon}>
-              <AlertTitle>连不上这个地址</AlertTitle>
+              <AlertTitle>{t('连不上这个地址')}</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           </View>
@@ -103,19 +105,19 @@ export default function ServerScreen() {
             className="h-[50px] rounded-xl"
           >
             {probing ? <ActivityIndicator size="small" color="#fff" /> : null}
-            <Text className="text-base font-semibold">{probing ? '正在连…' : '测试并保存'}</Text>
+            <Text className="text-base font-semibold">{t(probing ? '正在连…' : '测试并保存')}</Text>
           </Button>
           <Text className="text-muted-foreground px-1 text-xs leading-5">
-            保存前会先探一次这个地址；成功后会退出当前登录（token 跟着服务器发的）。
+            {t('保存前会先探一次这个地址；成功后会退出当前登录（token 跟着服务器发的）。')}
           </Text>
         </View>
 
         {isCustom ? (
           <>
-            <GroupHeader>恢复</GroupHeader>
+            <GroupHeader>{t('恢复')}</GroupHeader>
             <Group>
               <PressRow first onPress={() => void reset()} testID="server-reset">
-                <Text className="text-destructive flex-1 text-[15px]">恢复默认地址</Text>
+                <Text className="text-destructive flex-1 text-[15px]">{t('恢复默认地址')}</Text>
                 <Text className="text-muted-foreground font-mono text-[11px]" numberOfLines={1}>
                   {API_BASE_DEFAULT}
                 </Text>

@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router'
+import { useTranslation } from 'react-i18next'
 import { StyleSheet } from 'react-native'
 import { useCSSVariable } from 'uniwind'
 
@@ -16,6 +17,7 @@ import { UnreadProvider } from '@/lib/notifications'
  * 其余屏推在 tab 之上，天然带返回键、盖住 tab 栏 —— 这是移动端的常规做法。
  */
 export default function AppLayout() {
+  const { t } = useTranslation()
   const card = useCSSVariable('--color-card')
   const line = useCSSVariable('--color-border')
   const fg = useCSSVariable('--color-foreground')
@@ -35,12 +37,12 @@ export default function AppLayout() {
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="notifications" options={{ title: '通知' }} />
-        <Stack.Screen name="settings" options={{ title: '设置' }} />
-        <Stack.Screen name="server" options={{ title: '服务器地址' }} />
-        <Stack.Screen name="timezone" options={{ title: '显示时区' }} />
-        <Stack.Screen name="profile/edit" options={{ title: '编辑资料' }} />
-        <Stack.Screen name="profile/password" options={{ title: '修改密码' }} />
+        <Stack.Screen name="notifications" options={{ title: t('通知') }} />
+        <Stack.Screen name="settings" options={{ title: t('设置') }} />
+        <Stack.Screen name="server" options={{ title: t('服务器地址') }} />
+        <Stack.Screen name="timezone" options={{ title: t('显示时区') }} />
+        <Stack.Screen name="profile/edit" options={{ title: t('编辑资料') }} />
+        <Stack.Screen name="profile/password" options={{ title: t('修改密码') }} />
       </Stack>
     </UnreadProvider>
   )

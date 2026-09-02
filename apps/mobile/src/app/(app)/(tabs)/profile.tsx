@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router'
+import { useTranslation } from 'react-i18next'
 import { ChevronRightIcon, KeyRoundIcon, SettingsIcon, SquarePenIcon, TriangleAlertIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
@@ -11,6 +12,7 @@ import { Text } from '@/components/ui/text'
 import { useSession } from '@/lib/session'
 
 export default function ProfileScreen() {
+  const { t } = useTranslation()
   const { user, reload, logout } = useSession()
   const router = useRouter()
   const [refreshing, setRefreshing] = React.useState(false)
@@ -53,7 +55,7 @@ export default function ProfileScreen() {
               {user.nickname || user.username}
             </Text>
             <Text className="text-muted-foreground font-mono text-xs">
-              @{user.username} · {accountKind(user)}
+              @{user.username} · {t(accountKind(user))}
             </Text>
           </View>
           <Chevron icon={ChevronRightIcon} />
@@ -63,43 +65,43 @@ export default function ProfileScreen() {
       {error ? (
         <View className="px-4 pt-4">
           <Alert variant="destructive" icon={TriangleAlertIcon}>
-            <AlertTitle>刷新失败</AlertTitle>
+            <AlertTitle>{t('刷新失败')}</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         </View>
       ) : null}
 
-      <GroupHeader>资料</GroupHeader>
+      <GroupHeader>{t('资料')}</GroupHeader>
       <Group>
-        <Field first label="部门" value={user.dept} />
-        <Field label="角色" value={user.roles.join('、')} />
+        <Field first label={t('部门')} value={user.dept} />
+        <Field label={t('角色')} value={user.roles.join('、')} />
         {/* 🔴 手机号和邮箱是**只读**的，不是漏做：
             - 手机号：后端**没有** `/me/phone`，只有超管能改（`PUT /sys/users/{pk}`）
             - 邮箱：`PUT /me/email` 要邮箱验证码，那条链路移动端还没有
             与其放一个改了会失败的输入框，不如把原因写在这儿。 */}
-        <Field label="手机号" value={user.phone} note="需管理员修改" />
-        <Field label="邮箱" value={user.email} note="改邮箱要邮件验证码" />
-        <Field label="时区" value={user.timezone} mono />
-        <Field label="账号 ID" value={user.id} mono />
+        <Field label={t('手机号')} value={user.phone} note="需管理员修改" />
+        <Field label={t('邮箱')} value={user.email} note="改邮箱要邮件验证码" />
+        <Field label={t('时区')} value={user.timezone} mono />
+        <Field label={t('账号 ID')} value={user.id} mono />
       </Group>
 
-      <GroupHeader>账号</GroupHeader>
+      <GroupHeader>{t('账号')}</GroupHeader>
       <Group>
         <PressRow first inset={56} onPress={() => router.push('/profile/edit')} testID="profile-edit">
           <RowIcon icon={SquarePenIcon} />
-          <Text className="flex-1 text-[15px]">编辑资料</Text>
-          <Text className="text-muted-foreground text-[13px]">昵称 · 头像</Text>
+          <Text className="flex-1 text-[15px]">{t('编辑资料')}</Text>
+          <Text className="text-muted-foreground text-[13px]">{t('昵称 · 头像')}</Text>
           <Chevron icon={ChevronRightIcon} />
         </PressRow>
         <PressRow inset={56} onPress={() => router.push('/profile/password')} testID="profile-password">
           <RowIcon icon={KeyRoundIcon} />
-          <Text className="flex-1 text-[15px]">修改密码</Text>
+          <Text className="flex-1 text-[15px]">{t('修改密码')}</Text>
           <Chevron icon={ChevronRightIcon} />
         </PressRow>
         <PressRow inset={56} onPress={() => router.push('/settings')} testID="profile-settings">
           <RowIcon icon={SettingsIcon} />
-          <Text className="flex-1 text-[15px]">设置</Text>
-          <Text className="text-muted-foreground text-[13px]">外观 · 时区 · 服务器</Text>
+          <Text className="flex-1 text-[15px]">{t('设置')}</Text>
+          <Text className="text-muted-foreground text-[13px]">{t('外观 · 时区 · 服务器')}</Text>
           <Chevron icon={ChevronRightIcon} />
         </PressRow>
       </Group>
@@ -107,13 +109,14 @@ export default function ProfileScreen() {
       {/* 登出单独一个分组块 —— iOS 上「破坏性动作」就是这么放的 */}
       <View className="pt-4">
         <Group>
-          <DangerRow label="退出登录" onPress={() => void logout()} testID="profile-logout" />
+          <DangerRow label={t('退出登录')} onPress={() => void logout()} testID="profile-logout" />
         </Group>
       </View>
     </ScrollView>
   )
 }
 
+/** ⚠️ 返回 **key**，由调用处 `t()` */
 function accountKind(user: { is_superuser: boolean; is_staff: boolean }) {
   return user.is_superuser ? '超级管理员' : user.is_staff ? '后台管理员' : '普通用户'
 }
@@ -131,6 +134,7 @@ function Field({
   note?: string
   mono?: boolean
 }) {
+  const { t } = useTranslation()
   return (
     <Row first={first} className="items-start">
       <Text className="shrink-0 text-[15px]">{label}</Text>

@@ -22,6 +22,17 @@ setApiLanguage(readStoredLanguage())
 initI18n([initReactI18next])
 
 /*
+ * `<html lang>`。这句原来在 `packages/i18n` 的 `notify()` 里 —— 但那个包是最底层、
+ * 要被 `apps/mobile`（React Native，**没有 `document`**）直接复用，留在那里
+ * 移动端一初始化就抛异常。挪到这里，和「副作用由上层注册」的原则一致。
+ */
+const syncHtmlLang = (lang: string): void => {
+  document.documentElement.lang = lang
+}
+onLanguageChange(syncHtmlLang)
+syncHtmlLang(readStoredLanguage())
+
+/*
  * 浏览器标签页标题。`index.html` 里那句是写死的中文，切语言不会动 ——
  * 界面全英文、标签页还写着中文，是最容易被忽略的一处（agent 审计时发现的）。
  * 挂在这里而不是某个页面组件里：它是「整个 app 一份」的，和路由无关。

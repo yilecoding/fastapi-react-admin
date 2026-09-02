@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
@@ -9,6 +10,7 @@ import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
 
 export default function ChangePasswordScreen() {
+  const { t } = useTranslation()
   const { logout } = useSession()
   const [oldPassword, setOldPassword] = React.useState('')
   const [newPassword, setNewPassword] = React.useState('')
@@ -47,13 +49,13 @@ export default function ChangePasswordScreen() {
       <View className="bg-background flex-1 justify-center gap-5 px-6">
         
         <Text className="text-foreground text-2xl font-semibold" style={{ letterSpacing: -0.6 }}>
-          密码已修改
+          {t('密码已修改')}
         </Text>
         <Text className="text-muted-foreground text-sm leading-6">
-          服务端已经作废了当前会话，这是后端的既定行为，不是出错。请用新密码重新登录。
+          {t('服务端已经作废了当前会话，这是后端的既定行为，不是出错。请用新密码重新登录。')}
         </Text>
         <Button size="lg" onPress={() => void logout()} testID="password-relogin">
-          <Text>去重新登录</Text>
+          <Text>{t('去重新登录')}</Text>
         </Button>
       </View>
     )
@@ -63,16 +65,16 @@ export default function ChangePasswordScreen() {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="bg-background flex-1">
       <ScrollView contentContainerClassName="gap-4 py-4" keyboardShouldPersistTaps="handled">
         <Group>
-          <PwRow first label="当前密码" value={oldPassword} onChange={setOldPassword} testID="password-old" />
-          <PwRow label="新密码" value={newPassword} onChange={setNewPassword} testID="password-new" />
-          <PwRow label="确认" value={confirm} onChange={setConfirm} testID="password-confirm" />
+          <PwRow first label={t('当前密码')} value={oldPassword} onChange={setOldPassword} testID="password-old" />
+          <PwRow label={t('新密码')} value={newPassword} onChange={setNewPassword} testID="password-new" />
+          <PwRow label={t('确认')} value={confirm} onChange={setConfirm} testID="password-confirm" />
         </Group>
 
         <Text className="text-muted-foreground px-5 text-xs leading-5">
-          服务端有强度与历史密码校验，不合格会在提交时告诉你。
+          {t('服务端有强度与历史密码校验，不合格会在提交时告诉你。')}
         </Text>
 
-        {mismatch ? <Text className="text-destructive px-5 text-sm">两次输入的新密码不一致</Text> : null}
+        {mismatch ? <Text className="text-destructive px-5 text-sm">{t('两次输入的新密码不一致')}</Text> : null}
         {error ? (
           <Text className="text-destructive px-5 text-sm" testID="password-error">
             {error}
@@ -87,7 +89,7 @@ export default function ChangePasswordScreen() {
             className="h-[50px] rounded-xl"
           >
             {saving ? <ActivityIndicator size="small" color="#fff" /> : null}
-            <Text className="text-base font-semibold">{saving ? '提交中' : '确认修改'}</Text>
+            <Text className="text-base font-semibold">{t(saving ? '提交中' : '确认修改')}</Text>
           </Button>
         </View>
       </ScrollView>

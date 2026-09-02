@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router'
+import { useTranslation } from 'react-i18next'
 import * as React from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
 
@@ -10,6 +11,7 @@ import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
 
 export default function EditProfileScreen() {
+  const { t } = useTranslation()
   const { user, reload } = useSession()
   const router = useRouter()
   const [nickname, setNickname] = React.useState(user?.nickname ?? '')
@@ -54,7 +56,7 @@ export default function EditProfileScreen() {
       <ScrollView contentContainerClassName="gap-4 py-4" keyboardShouldPersistTaps="handled">
         <Group>
           <Row first>
-            <Text className="w-[70px] shrink-0 text-[15px]">昵称</Text>
+            <Text className="w-[70px] shrink-0 text-[15px]">{t('昵称')}</Text>
             <Input
               value={nickname}
               onChangeText={setNickname}
@@ -63,7 +65,7 @@ export default function EditProfileScreen() {
             />
           </Row>
           <Row>
-            <Text className="w-[70px] shrink-0 text-[15px]">头像</Text>
+            <Text className="w-[70px] shrink-0 text-[15px]">{t('头像')}</Text>
             <Input
               value={avatar}
               onChangeText={setAvatar}
@@ -78,7 +80,7 @@ export default function EditProfileScreen() {
         </Group>
 
         <Text className="text-muted-foreground px-5 text-xs leading-5">
-          头像留空表示清除。暂时只能填 URL —— 从相册选图要 expo-image-picker + 文件上传接口，还没接。
+          {t('头像留空表示清除。暂时只能填 URL —— 从相册选图要 expo-image-picker + 文件上传接口，还没接。')}
         </Text>
 
         {error ? (
@@ -95,7 +97,7 @@ export default function EditProfileScreen() {
             className="h-[50px] rounded-xl"
           >
             {saving ? <ActivityIndicator size="small" color="#fff" /> : null}
-            <Text className="text-base font-semibold">{saving ? '保存中' : '保存'}</Text>
+            <Text className="text-base font-semibold">{t(saving ? '保存中' : '保存')}</Text>
           </Button>
         </View>
       </ScrollView>

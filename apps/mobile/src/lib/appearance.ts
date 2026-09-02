@@ -59,6 +59,13 @@ export function useAppearance() {
   return React.useSyncExternalStore(appearanceStore.subscribe, appearanceStore.current)
 }
 
+/**
+ * 标签的 **key**（本仓库「中文原文即 key」）。
+ *
+ * 🔴 **不要在这里 `t()`。** 这是模块级常量，import 那一刻就求值了 ——
+ * 切语言之后它不会变，而且求值时 i18n 可能还没初始化完。
+ * 一律在使用处 `t(APPEARANCE_LABEL[v])`。
+ */
 export const APPEARANCE_LABEL: Record<Appearance, string> = {
   system: '跟随系统',
   light: '浅色',

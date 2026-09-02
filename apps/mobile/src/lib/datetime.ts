@@ -1,3 +1,5 @@
+import { t } from '@admin/i18n'
+
 /**
  * 相对时间。
  *
@@ -11,17 +13,20 @@
  * 缺了是**静默回落**（输出英文或抛错），而这点逻辑自己写只有十行。
  */
 export function relativeTime(iso: string): string {
-  const t = new Date(iso).getTime()
-  if (Number.isNaN(t)) return ''
-  const diff = Date.now() - t
+  // ⚠️ 这个局部变量原来叫 `t`，把导入的 `t()` 遮住了 —— 正是 `i18n:check`
+  // 里 `shadowed-t` 那条规则要抓的东西（tsc 也会报 `Type 'Number' has no
+  // call signatures`，算是响亮）。凡是这个文件里要用 `t()`，局部就别叫 t。
+  const ms = new Date(iso).getTime()
+  if (Number.isNaN(ms)) return ''
+  const diff = Date.now() - ms
   const min = Math.floor(diff / 60000)
-  if (min < 1) return '刚刚'
-  if (min < 60) return `${min} 分钟前`
+  if (min < 1) return t('刚刚')
+  if (min < 60) return t('{{n}} 分钟前', { n: min })
   const hour = Math.floor(min / 60)
-  if (hour < 24) return `${hour} 小时前`
+  if (hour < 24) return t('{{n}} 小时前', { n: hour })
   const day = Math.floor(hour / 24)
-  if (day < 30) return `${day} 天前`
-  const d = new Date(t)
+  if (day < 30) return t('{{n}} 天前', { n: day })
+  const d = new Date(ms)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
