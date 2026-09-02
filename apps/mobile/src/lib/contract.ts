@@ -46,3 +46,45 @@ export type Captcha = {
   uuid: string
   image: string
 }
+
+/** FBA 的分页返回结构 */
+export type PageData<T> = {
+  items: T[]
+  total: number
+  page: number
+  size: number
+  total_pages: number
+}
+
+/** 站内通知分类。数值来自后端的 `NotificationCategory` 枚举 */
+export const NOTIFICATION_CATEGORY = {
+  0: '系统',
+  1: '公告',
+  2: '任务',
+} as const
+
+export type NotificationCategory = keyof typeof NOTIFICATION_CATEGORY
+
+/** `GET /api/v1/sys/notifications` 的一条 */
+export type Notification = {
+  id: string
+  title: string
+  content: string
+  category: NotificationCategory
+  /** 点击跳转的**前端路由** —— 那是 web 的路由，移动端没有对应页面，暂时只展示不跳 */
+  link: string | null
+  /** 为空表示全员广播 */
+  recipient_id: string | null
+  created_time: string
+  /** 🔴 **有值即已读**。它不是数据库列，是 service 在分页之后按
+   *  `sys_notification_read` 回填的 —— 别指望能用它做服务端筛选，
+   *  筛未读要用 `?unread=true` 那个查询参数。 */
+  read_time: string | null
+}
+
+/** `GET /api/v1/sys/notifications/unread-count` */
+export type NotificationUnread = {
+  total: number
+  /** key 是**分类数值的字符串形式**（'0' / '1' / '2'），不是名字 */
+  by_category: Record<string, number>
+}

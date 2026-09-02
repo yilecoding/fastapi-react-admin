@@ -16,7 +16,7 @@
       "edgeToEdgeEnabled": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#4630db"
       }
     },
     "platforms": [
@@ -30,7 +30,11 @@
         {
           "image": "./assets/images/splash.png",
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "imageWidth": 160,
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#0a0a0a"
+          }
         }
       ],
       "expo-status-bar",
@@ -38,6 +42,7 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "backgroundColor": "#4630db"
   }
 }

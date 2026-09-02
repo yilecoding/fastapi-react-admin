@@ -291,35 +291,88 @@ access / refresh / 用户缓存**三组** key。不主动登出的话，用户�
 改自己的昵称/头像/密码**不会 403**。
 （真正会撞上这道闸门的是将来那些管理类的写操作。）
 
-## 导航壳：底部三个 tab（issue #39 第 3 条已定）
+## 导航壳：Stack 套 Tabs
 
 ```
-(app)/_layout.tsx          Tabs —— 首页 · 应用 · 我的
-(app)/index.tsx            首页（占位）
-(app)/apps.tsx             应用（占位）
-(app)/profile/_layout.tsx  Stack —— 「我的」这个 tab 内部的栈
-(app)/profile/index.tsx    个人中心
-(app)/profile/edit.tsx     编辑资料
-(app)/profile/password.tsx 修改密码
+(app)/_layout.tsx            Stack —— 外层，非 tab 的屏推在这里
+(app)/(tabs)/_layout.tsx     Tabs —— 首页 · 应用 · 我的
+(app)/(tabs)/index.tsx       首页
+(app)/(tabs)/apps.tsx        应用
+(app)/(tabs)/profile.tsx     个人中心
+(app)/notifications.tsx      通知      ┐ 推在 tab 之上：
+(app)/profile/edit.tsx       编辑资料  │ 天然带返回键、盖住 tab 栏
+(app)/profile/password.tsx   修改密码  ┘
 ```
 
-🔴 **`(app)/` 下每多一个文件就自动多一个 tab。** 不该当 tab 的屏
-（编辑资料、修改密码）放进**子目录 + 自己的 Stack**，`profile/` 就是这么做的。
-另一种写法是 `options={{ href: null }}` 把它藏掉，但那样返回键和标题都要自己接，
-嵌套 Stack 天然就对。
+🔴 **tabs 必须套在一层 Stack 里，不能让 `(app)` 直接是 Tabs。**
+`(tabs)/` 下每多一个文件就自动多一个 tab，所以通知、编辑资料这类屏没地方放。
+用 `options={{ href: null }}` 藏得掉，但那样它**仍在 tab 导航器内 ——
+没有返回键、标题也要自己接**。这条踩过一次：通知屏一加就变成第 4 个 tab。
 
-⚠️ 「我的」那个 tab 要 `headerShown: false` —— 它下面那层 Stack 已经出了一个 header，
-不关会**叠两条标题栏**。
+⚠️ 三个 tab 都关掉了 Tabs 自己的 header（`headerShown: false`）：它们各自有品牌头
+或自定义筛选条，再叠一条系统标题栏会很挤。
 
-⚠️ `Tabs` 靠 `@react-navigation/bottom-tabs`，它**不在** Expo Go 自带模块清单里，
-但那是纯 JS 包，装了就能用，**不需要 prebuild**（豁免仍然成立）。
+⚠️ tab 的选中色**只能从令牌取**（`useCSSVariable('--color-primary')`）——
+`tabBar*TintColor` 是原生组件的 prop，不吃 `className`；写死一个 hex 的话
+深浅色主题里必然有一头是错的。
 
-### 占位屏要说清楚是「还没做」
+## 设计令牌：抄自 `packages/ui`，不是模板那套中性灰
 
-首页和应用现在是空的。它们用 `components/empty-state.tsx`，措辞刻意区分
-「还没做」/「加载失败」/「没有数据」—— 三者在用户眼里都是一片空，
-分不清的第一反应是「这 App 坏了」。**不要摆一排点不动的功能图标充数**，
-那比空着更糟。
+`src/styles/global.css` 里的颜色是从 `packages/ui/src/styles/globals.css`
+**逐值抄过来**的，包括品牌紫 `--color-primary: oklch(0.457 0.24 277.023)`。
+rnr 模板给的是一套全无彩度的中性灰（`oklch(0.205 0 0)` 那种），照着跑出来
+一眼就是"模板感"。
+
+抄而不是 import：那份 CSS 里有 `@custom-variant`、shadcn 的 tailwind 预设、字体包
+一堆 web-only 的东西，而 `apps/mobile` 也不在 `i18n ← ui ← platform ← apps/web`
+那条依赖箭头上。**能直接抄是因为实测确认 uniwind 在构建期精确转换 `oklch()`**
+（见上面「两条实测的结论」）—— 否则这里得维护第二份降级成 sRGB 的颜色。
+
+⚠️ **web 改了主题色，这里要跟着改**，不会自己报错。
+
+🔴 **深色模式的 `--border` / `--input` 是唯一一处刻意和 web 不同的令牌。**
+web 上它们是 `oklch(1 0 0 / 10%)`（带透明度的白）；RN 里半透明边框叠在深色卡片上
+**看不见**（卡片本身就比背景亮），所以换成了实色。
+
+### 品牌图形
+
+`src/components/tenon-mark.tsx` 是 `apps/web/src/components/tenon-mark.tsx` 的
+RN 版，**路径逐字一致**。⚠️ web 那份用 `currentColor` 上色，`react-native-svg`
+**不认 `currentColor`**（没有 CSS 继承），所以颜色走 `color` prop 显式传。
+
+图标由 `scripts/gen-brand-icons.mjs` 生成（`pnpm brand:icons`），**不要手放图**。
+移动端那三张的形状要求各不相同，不能拿同一张糊过去：
+
+| 文件 | 形状 | 为什么 |
+|---|---|---|
+| `icon.png` | 满幅方形、**不透明** | iOS 自己会圆角裁切；给带透明圆角的图，那几个角在 iOS 上会变成**黑色** |
+| `adaptive-icon.png` | **透明底、墨迹缩到安全区内** | Android 用系统蒙版裁这张前景层，外圈约 1/3 一定被切掉；底色在 `app.json` 的 `adaptiveIcon.backgroundColor` 给 |
+| `splash.png` | 圆形徽章、透明底 | 配 `app.json` 里的浅/深背景色 |
+
+## 通知：接的是 `plugin/notification`，但**没有实时推送**
+
+```
+src/lib/notifications.tsx      UnreadProvider —— 未读数，tab 红点的唯一来源
+src/app/(app)/notifications.tsx 列表：全部 / 未读 · 点一条标已读 · 全部已读
+```
+
+🔴 **刻意没接 socket.io。** web 端靠 `packages/platform/src/shell/use-presence.ts`
+收 `notification_new` 事件实时刷新；移动端这一版用「进入页面 + 下拉刷新」代替。
+理由是长连接在移动端要处理的东西完全不同（切后台被系统掐、蜂窝网切换、省电策略），
+那是独立一件事，不该顺手塞进来。**所以红点不是实时的，界面上也不要暗示它是。**
+
+契约上两个容易错的点：
+
+- `read_time` **有值即已读**，而它**不是数据库列** —— 是 service 在分页之后按
+  `sys_notification_read` 回填的。别指望拿它做服务端筛选，筛未读要用 `?unread=true`
+- `unread-count` 的 `by_category` 的 key 是**分类数值的字符串形式**（`'0'`/`'1'`/`'2'`），
+  不是名字
+
+⚠️ `link` 字段是**web 的前端路由**（`/profile`、`/plugins/notice` 这种），
+移动端没有对应页面，所以现在只展示不跳。哪天移动端页面多了再做映射。
+
+⚠️ 标记已读是**幂等**的（重复标记返回 0 行也算成功），所以列表用了乐观更新、
+失败也不回滚 —— 下一次刷新自然会纠正。
 
 ## 契约是手抄的：`src/lib/contract.ts`
 

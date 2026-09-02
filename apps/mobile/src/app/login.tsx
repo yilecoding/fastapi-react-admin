@@ -1,12 +1,14 @@
 import { Stack } from 'expo-router'
 import * as React from 'react'
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
-import { Field } from '@/components/field'
+import { TenonMark } from '@/components/tenon-mark'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { ApiError, api } from '@/lib/api'
+import { BRAND } from '@/lib/brand'
 import type { Captcha } from '@/lib/contract'
 import { useSession } from '@/lib/session'
 
@@ -26,6 +28,7 @@ type CaptchaState =
 
 export default function LoginScreen() {
   const { login, bootstrapError } = useSession()
+  const insets = useSafeAreaInsets()
 
   const [username, setUsername] = React.useState('admin')
   const [password, setPassword] = React.useState('')
@@ -104,30 +107,34 @@ export default function LoginScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <KeyboardAvoidingView
-        // Android 上键盘遮挡输入框是最常见的移动端落差之一（issue #39 第 2.5 节
-        // 六条里的一条）。两个平台的行为不同，behavior 要分开给。
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        className="bg-background flex-1"
-      >
-        <ScrollView
-          contentContainerClassName="min-h-full justify-center gap-6 p-6"
-          keyboardShouldPersistTaps="handled"
-        >
-          <View className="gap-1">
-            <Text className="text-foreground text-3xl font-semibold">中后台</Text>
-            <Text className="text-muted-foreground text-sm">登录后使用</Text>
+      <View className="bg-background flex-1">
+        {/* 品牌头部：整块铺主色，把「这是哪个产品」放在第一眼。
+            高度用 insets.top 撑开状态栏，不要用固定 padding —— 各机型刘海高度不同。 */}
+        <View className="bg-primary px-6 pb-10" style={{ paddingTop: insets.top + 48 }}>
+          <View className="flex-row items-center gap-3">
+            <TenonMark size={34} color="#fff" />
+            <Text className="text-primary-foreground text-2xl font-semibold tracking-tight">
+              {BRAND.wordmark}
+            </Text>
           </View>
+          <Text className="text-primary-foreground/70 mt-2 text-sm">{BRAND.tagline}</Text>
+        </View>
 
-          {bootstrapError ? (
-            <View className="border-destructive/40 bg-destructive/10 gap-1 rounded-md border p-3">
-              <Text className="text-foreground text-sm font-medium">启动时没能连上服务器</Text>
-              <Text className="text-muted-foreground text-xs">{bootstrapError}</Text>
-            </View>
-          ) : null}
+        <KeyboardAvoidingView
+          // Android 上键盘遮挡输入框是最常见的移动端落差之一（issue #39 第 2.5 节
+          // 六条里的一条）。两个平台的行为不同，behavior 要分开给。
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          className="flex-1"
+        >
+          <ScrollView contentContainerClassName="gap-5 p-6" keyboardShouldPersistTaps="handled">
+            {bootstrapError ? (
+              <View className="border-destructive/40 bg-destructive/10 gap-1 rounded-lg border p-3">
+                <Text className="text-foreground text-sm font-medium">启动时没能连上服务器</Text>
+                <Text className="text-muted-foreground text-xs">{bootstrapError}</Text>
+              </View>
+            ) : null}
 
-          <View className="gap-4">
-            <Field label="用户名">
+            <View className="gap-4">
               <Input
                 value={username}
                 onChangeText={setUsername}
@@ -137,9 +144,6 @@ export default function LoginScreen() {
                 placeholder="用户名"
                 testID="login-username"
               />
-            </Field>
-
-            <Field label="密码">
               <Input
                 value={password}
                 onChangeText={setPassword}
@@ -149,29 +153,32 @@ export default function LoginScreen() {
                 onSubmitEditing={() => void submit()}
                 testID="login-password"
               />
-            </Field>
+              <CaptchaBlock
+                state={captcha}
+                code={code}
+                onChangeCode={setCode}
+                onRetry={() => void loadCaptcha()}
+                onSubmit={() => void submit()}
+              />
+            </View>
 
-            <CaptchaBlock
-              state={captcha}
-              code={code}
-              onChangeCode={setCode}
-              onRetry={() => void loadCaptcha()}
-              onSubmit={() => void submit()}
-            />
-          </View>
+            {error ? (
+              <View className="border-destructive/40 bg-destructive/10 rounded-lg border px-3 py-2.5">
+                <Text className="text-destructive text-sm" testID="login-error">
+                  {error}
+                </Text>
+              </View>
+            ) : null}
 
-          {error ? (
-            <Text className="text-destructive text-sm" testID="login-error">
-              {error}
-            </Text>
-          ) : null}
+            <Button size="lg" disabled={!canSubmit} onPress={() => void submit()} testID="login-submit">
+              {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
+              <Text>{submitting ? '登录中…' : '登录'}</Text>
+            </Button>
 
-          <Button disabled={!canSubmit} onPress={() => void submit()} testID="login-submit">
-            {submitting ? <ActivityIndicator size="small" /> : null}
-            <Text>{submitting ? '登录中…' : '登录'}</Text>
-          </Button>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            <Text className="text-muted-foreground text-center text-xs">{BRAND.version}</Text>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
     </>
   )
 }
@@ -193,7 +200,7 @@ function CaptchaBlock({
 
   if (state.kind === 'loading') {
     return (
-      <View className="h-11 flex-row items-center gap-2">
+      <View className="h-12 flex-row items-center gap-2">
         <ActivityIndicator size="small" />
         <Text className="text-muted-foreground text-sm">正在取验证码…</Text>
       </View>
@@ -202,7 +209,7 @@ function CaptchaBlock({
 
   if (state.kind === 'error') {
     return (
-      <View className="border-destructive/40 bg-destructive/10 gap-2 rounded-md border p-3">
+      <View className="border-destructive/40 bg-destructive/10 gap-2 rounded-lg border p-3">
         <Text className="text-foreground text-sm">验证码没取到：{state.msg}</Text>
         <Button size="sm" variant="outline" onPress={onRetry}>
           <Text>重试</Text>
@@ -212,28 +219,26 @@ function CaptchaBlock({
   }
 
   return (
-    <Field label="验证码">
-      <View className="flex-row items-center gap-3">
-        <Input
-          value={code}
-          onChangeText={onChangeCode}
-          autoCapitalize="none"
-          autoCorrect={false}
-          className="flex-1"
-          placeholder="图片里的字符"
-          onSubmitEditing={onSubmit}
-          testID="login-captcha"
+    <View className="flex-row items-center gap-3">
+      <Input
+        value={code}
+        onChangeText={onChangeCode}
+        autoCapitalize="none"
+        autoCorrect={false}
+        className="flex-1"
+        placeholder="验证码"
+        onSubmitEditing={onSubmit}
+        testID="login-captcha"
+      />
+      {/* 后端给的是**裸 base64**，不带 `data:` 前缀 —— 要自己拼，
+          少拼的话 Image 静默什么都不显示（不报错） */}
+      <Button variant="outline" className="h-12 w-28 p-0" onPress={onRetry} testID="login-captcha-image">
+        <Image
+          source={{ uri: `data:image/jpeg;base64,${state.image}` }}
+          style={{ width: 108, height: 44, borderRadius: 6 }}
+          resizeMode="contain"
         />
-        {/* 后端给的是**裸 base64**，不带 `data:` 前缀 —— 要自己拼，
-            少拼的话 Image 静默什么都不显示（不报错） */}
-        <Button variant="ghost" size="icon" className="h-11 w-28" onPress={onRetry} testID="login-captcha-image">
-          <Image
-            source={{ uri: `data:image/jpeg;base64,${state.image}` }}
-            style={{ width: 108, height: 40, borderRadius: 6 }}
-            resizeMode="contain"
-          />
-        </Button>
-      </View>
-    </Field>
+      </Button>
+    </View>
   )
 }
