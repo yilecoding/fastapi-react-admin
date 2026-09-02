@@ -13,7 +13,9 @@
 # 所以保留 workspace 的原始目录结构，整仓 COPY。代价只是构建阶段镜像大一点，
 # 多阶段之后丢弃，运行镜像里只有 dist + nginx。
 
-FROM node:22-bookworm-slim AS builder
+# 钉 digest 的理由见 apps/api/Dockerfile.prod 顶部（issue #66）：
+# 标签给人读，digest 是真相；升级时两者一起换，一次显式提交。
+FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS builder
 RUN corepack enable && corepack prepare pnpm@11.21.0 --activate
 WORKDIR /repo
 
@@ -42,7 +44,7 @@ ARG VITE_API_BASE=""
 RUN printf 'VITE_API_BASE=%s\n' "$VITE_API_BASE" > apps/web/.env.production \
  && pnpm --filter web build
 
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS runtime
 ENV TZ=Asia/Shanghai
 COPY --from=builder /repo/apps/web/dist /usr/share/nginx/html
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
