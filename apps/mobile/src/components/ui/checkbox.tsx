@@ -1,41 +1,47 @@
-import { CheckIcon } from 'lucide-react-native'
-import { Pressable, View } from 'react-native'
+import { Icon } from '@/components/ui/icon';
+import { cn } from '@/lib/utils';
+import * as CheckboxPrimitive from '@rn-primitives/checkbox';
+import { Check } from 'lucide-react-native';
+import { Platform } from 'react-native';
 
-import { Icon } from '@/components/ui/icon'
-import { Text } from '@/components/ui/text'
+const DEFAULT_HIT_SLOP = 24;
 
-/**
- * 勾选框 + 标签。RN 没有原生复选框，自己拼一个。
- *
- * ⚠️ **可点区域是整行**（含文字），不只是那个小方块 —— 16px 的方块在触屏上
- * 远低于可用的点击尺寸，这是移动端最常见的落差之一（issue #39 第 2.5 节）。
- */
-export function Checkbox({
-  checked,
-  onChange,
-  label,
-  testID,
-}: {
-  checked: boolean
-  onChange: (v: boolean) => void
-  label: string
-  testID?: string
-}) {
+function Checkbox({
+  className,
+  checkedClassName,
+  indicatorClassName,
+  iconClassName,
+  ...props
+}: React.ComponentProps<typeof CheckboxPrimitive.Root> & {
+    checkedClassName?: string;
+    indicatorClassName?: string;
+    iconClassName?: string;
+  }) {
   return (
-    <Pressable
-      onPress={() => onChange(!checked)}
-      testID={testID}
-      hitSlop={8}
-      className="flex-row items-center gap-2.5 self-start py-1"
-    >
-      <View
-        className={`h-[18px] w-[18px] items-center justify-center rounded-[5px] border ${
-          checked ? 'bg-accent border-accent' : 'border-hair bg-node'
-        }`}
-      >
-        {checked ? <Icon as={CheckIcon} className="size-3 text-white" /> : null}
-      </View>
-      <Text className="text-dim text-sm">{label}</Text>
-    </Pressable>
-  )
+    <CheckboxPrimitive.Root
+      className={cn(
+        'border-input dark:bg-input/30 size-4 shrink-0 rounded-[4px] border shadow-sm shadow-black/5',
+        Platform.select({
+          web: 'focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive peer cursor-default outline-none transition-shadow focus-visible:ring-[3px] disabled:cursor-not-allowed',
+          native: 'overflow-hidden',
+        }),
+        props.checked && cn('border-primary', checkedClassName),
+        props.disabled && 'opacity-50',
+        className
+      )}
+      hitSlop={DEFAULT_HIT_SLOP}
+      {...props}>
+      <CheckboxPrimitive.Indicator
+        className={cn('bg-primary h-full w-full items-center justify-center', indicatorClassName)}>
+        <Icon
+          as={Check}
+          size={12}
+          strokeWidth={Platform.OS === 'web' ? 2.5 : 3.5}
+          className={cn('text-primary-foreground', iconClassName)}
+        />
+      </CheckboxPrimitive.Indicator>
+    </CheckboxPrimitive.Root>
+  );
 }
+
+export { Checkbox };

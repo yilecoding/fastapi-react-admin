@@ -24,11 +24,11 @@ const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
  * 再叠一条系统标题栏会很挤。
  */
 export default function AppLayout() {
-  const primary = useCSSVariable('--color-accent')
-  const muted = useCSSVariable('--color-faint')
+  const primary = useCSSVariable('--color-primary')
+  const muted = useCSSVariable('--color-muted-foreground')
   const { unread } = useUnread()
-  const panel = useCSSVariable('--color-panel')
-  const line = useCSSVariable('--color-line')
+  const card = useCSSVariable('--color-card')
+  const line = useCSSVariable('--color-border')
 
   return (
     <Tabs
@@ -42,7 +42,7 @@ export default function AppLayout() {
         // tab 栏要和内容区的「浅底」区分开，否则中间是一道生硬的接缝。
         // 顶边用 hairlineWidth 而不是 1 —— 1px 在高密度屏上是两三个物理像素，很重。
         tabBarStyle: {
-          backgroundColor: str(panel),
+          backgroundColor: str(card),
           borderTopColor: str(line),
           borderTopWidth: StyleSheet.hairlineWidth,
           elevation: 0,

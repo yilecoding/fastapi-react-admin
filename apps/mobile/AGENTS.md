@@ -316,84 +316,76 @@ access / refresh / 用户缓存**三组** key。不主动登出的话，用户�
 `tabBar*TintColor` 是原生组件的 prop，不吃 `className`；写死一个 hex 的话
 深浅色主题里必然有一头是错的。
 
-## UI 方向：**一张能操作的装配图**
+## UI：**用 `react-native-reusables` 的组件，不要自己发明**
 
-先说方向，因为前三版都是**在对差评做反应，没有立场** ——
-shadcn 默认 + 紫头部 → web 面板整屏铺开 → 退回标准设置列表。
-第三版被一句话说中：「看不出有啥 UI 设计」。对的，那时候确实没有。
+🔴 **这一条是四次返工换来的，最贵的一条。**
 
-方向不是凭空挑的，是这个产品**自己的语汇**：品牌标记是**榫卯**，
-web 登录页把权限链画成**一条带刻度的导轨 + 一道流动的脉冲**（`AuthChain`）。
-那就是工程制图。移动端继承同一套。
+底座就是 [`react-native-reusables`](https://github.com/founded-labs/react-native-reusables)
+（shadcn 的 RN 版）。它有一整套设计好的组件，装法和 shadcn 一样：
 
-| | |
+```bash
+cd apps/mobile
+npx @react-native-reusables/cli@latest add card avatar badge separator input label alert tabs skeleton checkbox --styling-library uniwind
+```
+
+**而我一开始只抄了模板里的 `button` / `text` / `icon` 三个，剩下全自己写。**
+于是接连四版都难看，每一版都是对上一版差评的躲闪：
+
+| 走过的路 | 结果 |
 |---|---|
-| **纸** | `--color-panel`：往 277 色相偏一点点的浅灰。不是中性灰，也不是奶油色 |
-| **墨** | `--color-ink` 近黑。🔴 **没有阴影、没有白卡片** —— 图纸不投影 |
-| **结构件** | **导轨**（`src/components/rail.tsx`）：一条竖发丝线贯穿内容，每项用一枚**刻度**挂上去，分区用一枚**主色销钉**钉在线上 |
-| **标注** | 等宽字承载所有**数据**（ID、计数、时区、时间）。是尺寸标注，不是装饰 —— 所以散文类的值（部门名、角色名）用 `plain` 走正文字体 |
-| **主色** | 只给「活的线」：销钉、未读刻度、选中下划线、脉冲、主按钮。**静态文字一律 `faint`** |
-| **圆角** | `--radius: 6px`。图纸是方的 |
-| **签名** | 登录页的 hero 是**权限链本身**（用户 → 角色 → 菜单/数据范围），一道主色脉冲沿导轨下行 |
+| shadcn 默认灰 + 一整条饱和紫头部 | 最通用的那个答案 |
+| 把 web 登录页那块面板整屏铺开 | 辉光成了一块脏污、通栏发丝线成了电子表格 |
+| 退回白卡片 + 通栏分隔线 | 一套没有设计意图的设置列表 |
+| 自创一套「装配图」语言（导轨/刻度/销钉 + 自创令牌） | 组件库全用不上，每一屏都要手写样式 |
 
-`01`–`04` 那组编号**只在权限链上出现** —— 那条链真有先后，编号载着信息。
-别处不摆编号，那是最常见的一种假结构。
+**结论：组件从 CLI 装，页面用它们组合**（`Card` + `CardHeader` + `CardTitle` +
+`CardContent`、`Avatar`、`Badge`、`Separator`、`Tabs`、`Alert`、`Skeleton`…），
+排版走 `Text` 的 `variant`（`h1`–`h4` / `p` / `lead` / `large` / `small` / `muted` / `code`），
+不要写 `text-[27px]` 那种一次性字号。
 
-### 输入框是「尺寸线」，不是圆角盒子
+### 令牌只有 shadcn 那一套
 
-`src/components/ui/input.tsx`：等宽小标签在上，值坐在一条发丝线上，聚焦时线变主色。
-🔴 **不要退回圆角描边的盒子** —— 那是所有表单的默认长相，和这套语言对不上
-（图纸上没有一个个方框，只有线和标注）。返工过一版盒子，整屏立刻回到「随便一个 App」。
+`src/styles/global.css` 里的颜色**逐值抄自 `packages/ui/src/styles/globals.css`**
+（唯一真相源），含品牌紫 `--color-primary: oklch(0.457 0.24 277.023)`。
+🔴 **不要另起一套自己的令牌** —— 组件读的是 `bg-card` / `border-input` /
+`text-muted-foreground` 这套名字，自创的它们一个也用不上。
 
-### 走错过的路（别再走回去）
+⚠️ web 改了主题色，这里要跟着改，不会自己报错。
 
-| | 结果 |
-|---|---|
-| 一整条**饱和紫的头部** | 最通用的那个答案 |
-| 把 web 那块面板**整屏铺开** | 辉光成了一块脏污、通栏发丝线成了电子表格。那块面板好看是因为它是**有边界的卡**；铺满全屏三样都没了 |
-| 退回**白卡片 + 通栏分隔线** | 一套标准设置列表，没有任何设计意图 |
-| 分区眉标用**主色** | 全屏最艳的东西成了俩静态标签 |
-
-### 排版
-
-- 显示级 28 / `letterSpacing: -0.9` / semibold（web 是 `tracking-[-0.03em]`）
-- 正文 15、次要 13、标注等宽 10–11
-- 行高 `min-h-[46px]`，页边距 24
-- ⚠️ `tracking` 在 RN 里是 `letterSpacing`（**绝对 px**），不是 em
-
-### 字体：JetBrains Mono 是签名
-
-`--font-mono` 指向 `JetBrainsMono_500Medium`，`src/app/_layout.tsx` 用 `useFonts` 载。
-系统 mono（Android 的 Droid Sans Mono / iOS 的 Menlo）字形差太远。
-
-🔴 **字没载完之前 `_layout` 直接 `return null`。** RN 里 `fontFamily` 指向一个
-还没注册的字族是**静默回落到系统字体**的（不报错），首帧会明显抖一下。
+🔴 深色模式的 `--border` / `--input` 是唯一刻意和 web 不同的一处：web 上是
+`oklch(1 0 0 / 10%)`（半透明白），RN 里半透明边框叠在深色卡片上**看不见**
+（卡片本身就比背景亮），所以换成了实色。
 
 ### 🔴 `--color-*` 必须在 light 和 dark 里都声明，数量一致
 
-uniwind 会校验，少一个就打 `Theme light is missing variable --color-faint`，
+uniwind 会校验，少一个就打 `Theme light is missing variable --color-xxx`，
 **但 `expo export` 仍然返回成功、照样产出 bundle**，只是那批变量没生效 ——
-界面上表现为「某个颜色是隐形的」。实测踩过（登录页眉标整行看不见）。
+界面上表现为「某个颜色是隐形的」。实测踩过（登录页有一整行看不见）。
 
-### 底纹
+### CLI 装完要补的两处
 
-`brand-backdrop.tsx`：38px 方格 + 左上一团很轻的辉光，铺在登录页整页，
-作为**纸的肌理**存在，不是一个视觉元素。
+- `src/components/ui/input.tsx` 解构了 `placeholderClassName`，但 `TextInputProps`
+  里没有这个键，TS 6 下报错。**补一条可选声明，不要把解构删掉** —— 删了它会被
+  透传到原生 `TextInput`
+- `add` 对**已存在的同名文件默认跳过**（提示 `files might be identical`）。
+  自己先写过一版同名组件的话要么 `--overwrite`，要么先删 —— 不然装了等于没装
+  （实测：`checkbox` 装了两次都还是我那个旧的）
 
-🔴 渐隐用**竖向线性**，不要照抄 web 的 `radial-gradient` mask —— 在手机的窄长
-比例下那个圆的边界会压出一条清晰的横带。⚠️ web 那第三层胶片颗粒
-（`feTurbulence`）没做，`react-native-svg` 的 filter 支持不全。
+### 排版与间距
 
-### 布局：一屏里只能有一个 `flex-1 justify-center`
+- 页边距 16（`px-4`），卡片之间 16（`gap-4`）
+- 行高 `min-h-[48px]` —— 低于这个在触屏上点不准
+- 等宽字（JetBrains Mono）只给**数据**：ID、时间戳、用户名。
+  `--font-mono` 指向 `JetBrainsMono_500Medium`，`src/app/_layout.tsx` 用 `useFonts` 载
+- 🔴 **字没载完之前 `_layout` 直接 `return null`。** RN 里 `fontFamily` 指向一个
+  还没注册的字族是**静默回落到系统字体**的（不报错），首帧会明显抖一下
+- ⚠️ `tracking` 在 RN 里是 `letterSpacing`（**绝对 px**），不是 em
 
-登录页返工过：文案块设成居中、表单跟在它后面 —— 文案在剩余空间里居中、
-表单被挤到屏底，整屏「哪儿都不居中」。**要一起居中的东西必须包在同一个容器里。**
+### 导航容器要自己上色
 
-### 导航容器用**纸色**
-
-tab 栏和 Stack header 都设成 `panel` + 发丝顶边（`StyleSheet.hairlineWidth`，
-不是 1 —— 1px 在高密度屏上是两三个物理像素）。这套语言里只有一张纸，
-不该再冒出一块白面板。
+tab 栏和 Stack header 都设成 `--color-card` + `hairlineWidth` 边（不是 1 ——
+1px 在高密度屏上是两三个物理像素）。不设的话它们是系统默认白，和内容区之间
+有一道生硬的接缝。
 
 ⚠️ 这些是**原生组件的 prop，不吃 `className`**，颜色只能从 `useCSSVariable` 取；
 写死 hex 的话深浅色主题里必有一头是错的。
@@ -422,7 +414,7 @@ dev menu 里生效。要让桌面上真出现，必须打独立 APK。
 后两个走 `NotWired`：**说清楚为什么不能用，并把人送回能用的那条** ——
 光禁用一个页签只会让人反复去点它。
 
-⚠️ 三个页签的内容区要 `minHeight` 对齐，否则切换时下面的东西会跳。
+⚠️ 三个页签的内容区要 `minHeight` 对齐，否则切换时整块卡片会跳。
 
 ## 通知：接的是 `plugin/notification`，但**没有实时推送**
 

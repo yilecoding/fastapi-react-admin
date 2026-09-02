@@ -1,9 +1,15 @@
-
+import { BellIcon, TriangleAlertIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Rail } from '@/components/rail'
+import { Card, CardContent } from '@/components/ui/card'
+import { Icon } from '@/components/ui/icon'
+import { Separator } from '@/components/ui/separator'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
 import { api } from '@/lib/api'
 import { NOTIFICATION_CATEGORY, type Notification, type PageData } from '@/lib/contract'
@@ -16,7 +22,7 @@ type Filter = 'all' | 'unread'
  * 通知列表。
  *
  * 🔴 **不用表格、不做分页器。** 这是移动端和 web 端分道的地方（issue #39 第 1 条
- * 拍 C 路线的判据就是这个）—— 这里是「一条条卡片 + 下拉刷新 + 触底加载」。
+ * 拍 C 路线的判据就是这个）—— 这里是「一条条 + 下拉刷新」。
  */
 export default function NotificationsScreen() {
   const { refresh: refreshUnread, unread } = useUnread()
@@ -52,7 +58,7 @@ export default function NotificationsScreen() {
   async function markRead(n: Notification) {
     if (n.read_time) return
     // 乐观更新：这个接口是幂等的（重复标记返回 0 行也算成功），
-    // 所以失败了也不用回滚到「未读」——下一次刷新自然会纠正。
+    // 失败了也不用回滚到「未读」—— 下一次刷新自然会纠正
     setItems((prev) => prev?.map((x) => (x.id === n.id ? { ...x, read_time: new Date().toISOString() } : x)) ?? null)
     try {
       await api.PUT(`/api/v1/sys/notifications/${n.id}/read`)
@@ -78,12 +84,18 @@ export default function NotificationsScreen() {
   const total = unread?.total ?? 0
 
   return (
-    <View className="bg-panel flex-1">
-      <View className="border-line flex-row items-center gap-2 border-b px-6 py-2.5">
-        <Chip label="全部" active={filter === 'all'} onPress={() => setFilter('all')} />
-        <Text className="text-line">/</Text>
-        <Chip label={total > 0 ? `未读 ${total}` : '未读'} active={filter === 'unread'} onPress={() => setFilter('unread')} />
-        <View className="flex-1" />
+    <View className="bg-background flex-1">
+      <View className="flex-row items-center gap-3 px-4 py-3">
+        <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)} className="flex-1">
+          <TabsList className="flex-row">
+            <TabsTrigger value="all" className="flex-1">
+              <Text>全部</Text>
+            </TabsTrigger>
+            <TabsTrigger value="unread" className="flex-1">
+              <Text>{total > 0 ? `未读 ${total}` : '未读'}</Text>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <Button size="sm" variant="ghost" disabled={total === 0 || marking} onPress={() => void markAll()}>
           {marking ? <ActivityIndicator size="small" /> : null}
           <Text>全部已读</Text>
@@ -91,83 +103,69 @@ export default function NotificationsScreen() {
       </View>
 
       <ScrollView
-        contentContainerClassName="px-6 pb-12 pt-1"
+        contentContainerClassName="gap-3 px-4 pb-10"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
       >
         {/* 硬纪律 9：失败必须是**可见状态**，不是缺失状态 —— 不能让「拉取失败」
             和「一条通知都没有」长得一样 */}
         {error ? (
-          <View className="border-destructive/40 bg-destructive/10 mt-4 gap-2 rounded-md border p-3.5">
-            <Text className="text-ink text-sm">通知拉取失败：{error}</Text>
-            <Button size="sm" variant="outline" onPress={() => void load(filter)}>
+          <Alert variant="destructive" icon={TriangleAlertIcon}>
+            <AlertTitle>通知拉取失败</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+            <Button variant="outline" size="sm" onPress={() => void load(filter)} className="mt-2 self-start">
               <Text>重试</Text>
             </Button>
-          </View>
+          </Alert>
         ) : items === null ? (
-          <View className="items-center py-20">
-            <ActivityIndicator />
+          <View className="gap-3">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-24 rounded-xl" />
+            ))}
           </View>
         ) : items.length === 0 ? (
-          <View className="py-20">
-            <Text className="text-dim text-center text-sm">
-              {filter === 'unread' ? '没有未读通知' : '还没有通知'}
-            </Text>
-            <Text className="text-faint mt-1.5 text-center text-xs">
-              {filter === 'unread' ? '所有通知都读过了' : '有新消息时会出现在这里'}
-            </Text>
-          </View>
+          <Card>
+            <CardContent className="items-center gap-2 py-10">
+              <Icon as={BellIcon} className="text-muted-foreground size-8" />
+              <Text variant="small" className="text-muted-foreground">
+                {filter === 'unread' ? '没有未读通知' : '还没有通知'}
+              </Text>
+              <Text className="text-muted-foreground text-center text-xs">
+                {filter === 'unread' ? '所有通知都读过了' : '有新消息时会出现在这里'}
+              </Text>
+            </CardContent>
+          </Card>
         ) : (
-          <Rail className="mt-4">
-            {items.map((n) => (
-              <Row key={n.id} n={n} onPress={() => void markRead(n)} />
-            ))}
-          </Rail>
+          <Card>
+            <CardContent className="gap-0 px-0">
+              {items.map((n, i) => (
+                <Row key={n.id} n={n} first={i === 0} onPress={() => void markRead(n)} />
+              ))}
+            </CardContent>
+          </Card>
         )}
       </ScrollView>
     </View>
   )
 }
 
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      className="py-1"
-    >
-      <Text
-        className={`font-mono text-[11px] ${active ? 'text-ink' : 'text-faint'}`}
-        style={{ letterSpacing: 1.4, textDecorationLine: active ? 'underline' : 'none' }}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  )
-}
-
-/**
- * 一条通知挂在导轨上。未读那枚刻度是主色实心 —— 和权限链上的节点同一套语汇。
- */
-function Row({ n, onPress }: { n: Notification; onPress: () => void }) {
+function Row({ n, first, onPress }: { n: Notification; first?: boolean; onPress: () => void }) {
   const unread = !n.read_time
   return (
-    <Pressable onPress={onPress} className="active:bg-node border-line gap-1.5 border-b py-3.5">
-      {/* 刻度：把这条钉在导轨上 */}
-      <View
-        pointerEvents="none"
-        className={unread ? 'bg-accent' : 'bg-line'}
-        style={{ position: 'absolute', left: -15, top: 22, width: 9, height: unread ? 2 : 1 }}
-      />
-      <View className="flex-row items-center gap-2">
-        <Text className="text-faint font-mono text-[10px]" style={{ letterSpacing: 1.4 }}>
-          {(NOTIFICATION_CATEGORY[n.category] ?? '通知').toUpperCase()}
+    <>
+      {first ? null : <Separator className="my-0" />}
+      <Pressable onPress={onPress} className="active:bg-accent gap-1.5 px-6 py-3.5">
+        <View className="flex-row items-center gap-2">
+          <Badge variant={unread ? 'default' : 'secondary'}>
+            <Text>{NOTIFICATION_CATEGORY[n.category] ?? '通知'}</Text>
+          </Badge>
+          <View className="flex-1" />
+          <Text className="text-muted-foreground font-mono text-[11px]">{relativeTime(n.created_time)}</Text>
+        </View>
+        <Text className={`text-sm ${unread ? 'font-semibold' : ''}`}>{n.title}</Text>
+        <Text variant="small" className="text-muted-foreground leading-5" numberOfLines={2}>
+          {n.content}
         </Text>
-        <View className="flex-1" />
-        <Text className="text-faint font-mono text-[10px]">{relativeTime(n.created_time)}</Text>
-      </View>
-      <Text className={`text-ink text-[15px] ${unread ? 'font-semibold' : ''}`}>{n.title}</Text>
-      <Text className="text-dim text-[13px] leading-5" numberOfLines={2}>
-        {n.content}
-      </Text>
-    </Pressable>
+      </Pressable>
+    </>
   )
 }

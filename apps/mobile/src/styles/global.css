@@ -13,9 +13,8 @@
  */
 @source "../**/*.{ts,tsx}";
 
-/* 图纸是方的 —— 6px 而不是模板给的 10px。所有 rounded-* 都从这里派生 */
 @theme {
-  --radius: 6px;
+  --radius: 10px;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -52,7 +51,6 @@
       --color-secondary-foreground: oklch(0.21 0.006 285.885);
       --color-muted: oklch(0.97 0 0);
       --color-muted-foreground: oklch(0.556 0 0);
-      --color-accent: oklch(0.97 0 0);
       --color-accent-foreground: oklch(0.205 0 0);
       --color-destructive: oklch(0.577 0.245 27.325);
       --color-border: oklch(0.922 0 0);
@@ -63,15 +61,6 @@
       --color-chart-3: oklch(0.398 0.07 227.392);
       --color-chart-4: oklch(0.828 0.189 84.429);
       --color-chart-5: oklch(0.769 0.188 70.08);
-      /* ── 榫卯面板那套（见下方注释）───────────────────────────── */
-      --color-panel: oklch(0.976 0.004 277);
-      --color-node: oklch(1 0 0);
-      --color-line: oklch(0.145 0 0 / 0.09);
-      --color-hair: oklch(0.145 0 0 / 0.08);
-      --color-ink: oklch(0.145 0 0);
-      --color-dim: oklch(0.44 0.01 277);
-      --color-faint: oklch(0.55 0.012 277);
-      --color-accent: oklch(0.457 0.24 277);
     }
 
     @variant dark {
@@ -87,7 +76,6 @@
       --color-secondary-foreground: oklch(0.985 0 0);
       --color-muted: oklch(0.269 0 0);
       --color-muted-foreground: oklch(0.708 0 0);
-      --color-accent: oklch(0.269 0 0);
       --color-accent-foreground: oklch(0.985 0 0);
       --color-destructive: oklch(0.704 0.191 22.216);
       /* 🔴 web 上这两个是 `oklch(1 0 0 / 10%)`（带透明度的白）。
@@ -101,16 +89,6 @@
       --color-chart-3: oklch(0.769 0.188 70.08);
       --color-chart-4: oklch(0.627 0.265 303.9);
       --color-chart-5: oklch(0.645 0.246 16.439);
-      /* ── 榫卯面板那套 ─────────────────────────────────────────── */
-      --color-panel: oklch(0.155 0.014 277);
-      --color-node: oklch(0.205 0.016 277);
-      --color-line: oklch(1 0 0 / 0.1);
-      --color-hair: oklch(1 0 0 / 0.09);
-      --color-ink: oklch(0.98 0 0);
-      --color-dim: oklch(0.7 0.012 277);
-      --color-faint: oklch(0.52 0.014 277);
-      /* 深色下主色要提亮，否则在近黑上读不出来 —— web 那边也是这么分的 */
-      --color-accent: oklch(0.78 0.15 277);
     }
   }
 }
@@ -118,19 +96,22 @@
 /*
  * 🔴 **`--color-*` 必须在 light 和 dark 两个 variant 里都声明，数量一致。**
  * uniwind 会校验：少一个就打
- *     Uniwind Error - Theme light is missing variable --color-faint
+ *     Uniwind Error - Theme light is missing variable --color-xxx
  *     Uniwind Error - All themes must have the same variables
  * ——**但 `expo export` 仍然返回成功、照样产出 bundle**，只是那批变量没生效。
- * 实测踩过：把这套色写在裸 `@theme {}` 里、只在 dark 下重定义，就是这个下场。
+ * 界面上表现为「某个颜色是隐形的」。实测踩过（登录页有一整行看不见）。
  *
- * 上面「榫卯面板」那八个（panel / node / line / hair / ink / dim / faint / accent）
- * 抄自 `apps/web/src/routes/_guest/-sign-in-brand.tsx` 里的 `.tenon-panel`，
- * web 端登录页左栏就是这一套。
+ * 上面这一整套就是 shadcn 的标准令牌，值抄自 `packages/ui/src/styles/globals.css`
+ * （唯一真相源），含品牌紫 `--color-primary: oklch(0.457 0.24 277.023)`。
+ * `react-native-reusables` 的组件读的就是这套名字（`bg-card` / `border-input` /
+ * `text-muted-foreground` …），**不要另起一套自己的令牌** —— 试过一版「榫卯面板」
+ * 的自创色（panel / ink / faint …），结果是组件库用不上、全屏得自己手写样式。
  *
- * 🔴 **注意它们不是中性灰，是往 277 色相（品牌紫）偏了一点点的灰。**
- * 这是 web 那套观感的一半：大面积表面带一丝同色系的偏色，整屏才「是一件东西」，
- * 而不是「shadcn 默认灰 + 一个紫按钮」。照抄基础 token 得到的就是后者。
- * 另一半是**主色只用在细笔画上**（眉标、刻度、销钉），从不铺成大色块。
+ * ⚠️ web 改了主题色，这里要跟着改，不会自己报错。
+ *
+ * 🔴 深色模式的 `--border` / `--input` 是唯一刻意和 web 不同的一处：
+ * web 上是 `oklch(1 0 0 / 10%)`（半透明白），RN 里半透明边框叠在深色卡片上
+ * **看不见**（卡片本身就比背景亮），所以换成了实色。
  */
 
 /*

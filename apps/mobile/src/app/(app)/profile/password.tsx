@@ -3,6 +3,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } f
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Text } from '@/components/ui/text'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
@@ -43,12 +44,12 @@ export default function ChangePasswordScreen() {
 
   if (done) {
     return (
-      <View className="bg-panel flex-1 justify-center gap-5 px-6">
-        <Text className="text-accent font-mono text-[10px]" style={{ letterSpacing: 3 }}>已生效</Text>
-        <Text className="text-ink text-2xl font-semibold" style={{ letterSpacing: -0.6 }}>
+      <View className="bg-background flex-1 justify-center gap-5 px-6">
+        
+        <Text className="text-foreground text-2xl font-semibold" style={{ letterSpacing: -0.6 }}>
           密码已修改
         </Text>
-        <Text className="text-dim text-sm leading-6">
+        <Text className="text-muted-foreground text-sm leading-6">
           服务端已经作废了当前会话，这是后端的既定行为，不是出错。请用新密码重新登录。
         </Text>
         <Button size="lg" onPress={() => void logout()} testID="password-relogin">
@@ -59,17 +60,20 @@ export default function ChangePasswordScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="bg-panel flex-1">
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="bg-background flex-1">
       <ScrollView contentContainerClassName="gap-7 px-6 py-7" keyboardShouldPersistTaps="handled">
         <View className="gap-2">
-          <Input label="当前密码" value={oldPassword} onChangeText={setOldPassword} secureTextEntry testID="password-old" />
+          <Label>当前密码</Label>
+          <Input value={oldPassword} onChangeText={setOldPassword} secureTextEntry testID="password-old" />
         </View>
         <View className="gap-2">
-          <Input label="新密码" value={newPassword} onChangeText={setNewPassword} secureTextEntry testID="password-new" />
-          <Text className="text-faint text-xs">服务端有强度与历史密码校验，不合格会在提交时告诉你</Text>
+          <Label>新密码</Label>
+          <Input value={newPassword} onChangeText={setNewPassword} secureTextEntry testID="password-new" />
+          <Text className="text-muted-foreground text-xs">服务端有强度与历史密码校验，不合格会在提交时告诉你</Text>
         </View>
         <View className="gap-2">
-          <Input label="确认新密码" value={confirm} onChangeText={setConfirm} secureTextEntry testID="password-confirm" />
+          <Label>确认新密码</Label>
+          <Input value={confirm} onChangeText={setConfirm} secureTextEntry testID="password-confirm" />
         </View>
 
         {mismatch ? <Text className="text-destructive text-sm">两次输入的新密码不一致</Text> : null}

@@ -1,58 +1,41 @@
-import * as React from 'react'
-import { TextInput, View } from 'react-native'
-import { useCSSVariable } from 'uniwind'
-
-import { Text } from '@/components/ui/text'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils';
+import { Platform, TextInput } from 'react-native';
 
 /**
- * 输入框做成**尺寸线**：等宽小标签在上，值坐在一条发丝线上，聚焦时线变主色。
- *
- * 🔴 **不要做成圆角描边的盒子。** 那是所有表单的默认长相，和这套图纸语言
- * 对不上（图纸上没有一个个方框，只有线和标注）。返工过一版盒子，
- * 整屏立刻回到「随便一个 App」。
- *
- * 🔴 **占位符颜色只能走 `placeholderTextColor`。** Tailwind 的 `placeholder:*`
- * 是 CSS 伪元素变体，RN 里没有这个概念 —— 写了不报错、也不生效。不给的话
- * 各 Android 版本的默认占位色不一样，深色主题下经常糊成一片看不见。
+ * ⚠️ 这是 `react-native-reusables` 生成的原样组件，只补了一处类型：
+ * 它解构了 `placeholderClassName`（为了不让这个 prop 被 spread 到原生
+ * `TextInput` 上），但 `TextInputProps` 里没有这个键 —— TS 6 下会报
+ * `Property 'placeholderClassName' does not exist`。加一条可选声明即可，
+ * **不要把解构删掉**：删了它就会被透传，原生侧收到未知 prop。
  */
 function Input({
-  label,
   className,
-  onFocus,
-  onBlur,
+  placeholderClassName,
   ...props
-}: React.ComponentProps<typeof TextInput> & { label?: string }) {
-  const [focused, setFocused] = React.useState(false)
-  const placeholderColor = useCSSVariable('--color-faint')
-
+}: React.ComponentProps<typeof TextInput> &
+  React.RefAttributes<TextInput> & { placeholderClassName?: string }) {
   return (
-    <View className="gap-1">
-      {label ? (
-        <Text className="text-faint font-mono text-[10px]" style={{ letterSpacing: 2 }}>
-          {label}
-        </Text>
-      ) : null}
-      <TextInput
-        placeholderTextColor={typeof placeholderColor === 'string' ? placeholderColor : undefined}
-        onFocus={(e) => {
-          setFocused(true)
-          onFocus?.(e)
-        }}
-        onBlur={(e) => {
-          setFocused(false)
-          onBlur?.(e)
-        }}
-        className={cn(
-          'text-ink h-10 border-b px-0 text-[16px]',
-          focused ? 'border-accent' : 'border-line',
-          props.editable === false && 'text-faint',
-          className,
-        )}
-        {...props}
-      />
-    </View>
-  )
+    <TextInput
+      className={cn(
+        'dark:bg-input/30 border-input bg-background text-foreground flex h-10 w-full min-w-0 flex-row items-center rounded-md border px-3 py-1 text-base leading-5 shadow-sm shadow-black/5 sm:h-9',
+        props.editable === false &&
+          cn(
+            'opacity-50',
+            Platform.select({ web: 'disabled:pointer-events-none disabled:cursor-not-allowed' })
+          ),
+        Platform.select({
+          web: cn(
+            'placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground outline-none transition-[color,box-shadow] md:text-sm',
+            'focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
+            'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive'
+          ),
+          native: 'placeholder:text-muted-foreground/50',
+        }),
+        className
+      )}
+      {...props}
+    />
+  );
 }
 
-export { Input }
+export { Input };

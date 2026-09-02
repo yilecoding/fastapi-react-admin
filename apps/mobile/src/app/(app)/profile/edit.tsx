@@ -4,6 +4,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } f
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Text } from '@/components/ui/text'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
@@ -49,14 +50,16 @@ export default function EditProfileScreen() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="bg-panel flex-1">
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="bg-background flex-1">
       <ScrollView contentContainerClassName="gap-7 px-6 py-7" keyboardShouldPersistTaps="handled">
         <View className="gap-2">
-          <Input label="昵称" value={nickname} onChangeText={setNickname} testID="edit-nickname" />
+          <Label>昵称</Label>
+          <Input value={nickname} onChangeText={setNickname} testID="edit-nickname" />
         </View>
 
         <View className="gap-2">
-          <Input label="头像地址"
+          <Label>头像地址</Label>
+          <Input
             value={avatar}
             onChangeText={setAvatar}
             autoCapitalize="none"
@@ -65,7 +68,7 @@ export default function EditProfileScreen() {
             placeholder="https://"
             testID="edit-avatar"
           />
-          <Text className="text-faint text-xs leading-5">
+          <Text className="text-muted-foreground text-xs leading-5">
             留空表示清除头像。暂时只能填 URL —— 从相册选图要 expo-image-picker + 文件上传接口，还没接。
           </Text>
         </View>
