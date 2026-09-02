@@ -11,10 +11,35 @@
 #
 #     docker build -f apps/api/Dockerfile.prod -t fba-api apps/api
 #
-ARG PY=3.13
+# 🔴 **基础镜像钉 digest，Python 版本因此长在镜像引用里，不再有 `ARG PY`。**
+# 原来是 `ARG PY=3.13` + `FROM …:python${PY}-bookworm-slim`。digest 一钉，那个 ARG
+# 就成了摆设：`--build-arg PY=3.12` 看起来生效了，实际拉的还是下面这串 digest 指向的
+# 3.13 镜像——**改了参数、行为没变、也不报错**，比不给参数更坏。要升 Python 就把
+# 标签和 digest 一起换掉，一次显式提交。
+#
+# 为什么钉（issue #66）：浮动标签下，同一个 commit 在两个时间点构建出来的镜像
+# 底包可能已经不同，出问题时无法从 Dockerfile 回推当时用的是哪个版本。
+# 标签留着是给人读的，digest 才是真相。
+#
+# 要升级 / 换一个 digest（不需要能 `docker pull`，问 registry 就行）：
+#
+#     # ghcr.io（本文件这个）
+#     T=$(curl -fsS "https://ghcr.io/token?scope=repository:astral-sh/uv:pull&service=ghcr.io" \
+#          | sed -E 's/.*"token":"([^"]+)".*/\1/')
+#     curl -fsSI -H "Authorization: Bearer $T" \
+#       -H 'Accept: application/vnd.oci.image.index.v1+json' \
+#       https://ghcr.io/v2/astral-sh/uv/manifests/python3.13-bookworm-slim | grep -i docker-content-digest
+#
+#     # Docker Hub（apps/web/Dockerfile 的 node / nginx）把 auth 换成
+#     # https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/node:pull
+#     # 再问 https://registry-1.docker.io/v2/library/node/manifests/<tag>
+#
+# 换完拿新 digest 反查一次（`…/manifests/sha256:<新值>`），确认它真的存在、
+# 且清单里有 linux/amd64——digest 写错的表现是构建时 manifest unknown，
+# 而那时你已经在 main 上了（`build-images` 只在 main 的 push 上跑）。
 
 # ── 构建期：uv 按 lock 装依赖 ──────────────────────────────────────
-FROM ghcr.io/astral-sh/uv:python${PY}-bookworm-slim AS builder
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim@sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         gcc g++ make python3-dev unixodbc-dev \
@@ -33,7 +58,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-default-groups --group server --no-install-project
 
 # ── 运行期 ─────────────────────────────────────────────────────────
-FROM ghcr.io/astral-sh/uv:python${PY}-bookworm-slim AS runtime
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim@sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca AS runtime
 
 # 🔴 msodbcsql18 是必须的，上游那份 Dockerfile 没有这一段。
 # 应用走 `mssql+aioodbc`，celery 的 result backend 走 `mssql+pyodbc`，
