@@ -18,20 +18,21 @@
 docker start fba_mssql fba_redis     # 前置：数据库 + Redis
 pnpm --filter api dev                # 前置：后端 :8088
 
-pnpm mobile:dev                      # = node scripts/dev.mjs，然后在 TUI 里按 a
+pnpm mobile:dev                      # = node scripts/dev.mjs，打印一个地址，去 Expo Go 里填
 ```
 
-`scripts/dev.mjs` 不是随手包的一层 —— 直接跑 `expo start` 有**三处会静默地不对**：
+`scripts/dev.mjs` 不是随手包的一层 —— 直接跑 `expo start` 有**四处会静默地不对**：
 
 | 它替你做的事 | 不做会怎样 |
 |---|---|
-| 强制 `--localhost` | Metro 从网卡列表里挑一个 **docker bridge** 打印成 `exp://172.24.0.1:8081`，三重不可达 |
-| `adb reverse` **8088** | Metro 的 8081 是 expo 自己转的，后端那个口没人管 —— App 起得来、所有请求 `Network request failed`，看着像后端挂了 |
-| 自己去 `~/Android/sdk` 找 `adb` | 这台机器的 shell 里 `ANDROID_HOME` 没设、`adb` 不在 PATH 上，`expo start --android` 连设备都找不到，报错不提这件事 |
+| 算出一个**真能连的地址**，用 `EXPO_PACKAGER_HOSTNAME` 钉住 | Metro 从网卡列表里挑一个 **docker bridge**（这台机器有 8 个）打印成 `exp://172.24.0.1:8800` —— 在 WSL 里、在 NAT 后面、还是 docker 内部网桥，三重不可达 |
+| 注入 `EXPO_PUBLIC_API_BASE` | App 打的后端地址和 Metro 的不是一回事，写死哪个都会错一半 —— 表现是 App 起得来、所有请求 `Network request failed`，看着像后端挂了 |
+| 端口固定 **8800** + 被占时**直接报 pid 退出** | Expo 默认 8081 太容易撞，撞了它**默默漂到 8082** —— 打印的地址就是错的，「地址看着有、就是不通」比连不上难查得多 |
+| 自己去 `~/Android/sdk` 找 `adb` | 这台机器的 shell 里 `ANDROID_HOME` 没设、`adb` 不在 PATH 上，涉及设备的分支全都静默走不到 |
 
 🔴 **它刻意不自动追加 `--android`。** 试过，是个坏设计：设备刚开机时 package 服务
 还没起（`cmd: Can't find service: package`），`--android` 会让 expo **整个进程退出** ——
-一个瞬时的设备状态变成了「dev server 起不来」。开 App 交给 TUI 里按 `a`。
+一个瞬时的设备状态变成了「dev server 起不来」。
 
 `start:plain` 是不带这层的原始 `expo start`，排查这层本身有没有问题时用。
 
@@ -162,7 +163,7 @@ uniwind + reanimated 4 + worklets + expo-router 之间的版本约束不写在�
 判据（最省事的一条）：从 dev server 抓 bundle，数几个最普通的工具类在不在。
 
 ```bash
-curl -s "http://127.0.0.1:8081/.expo/.virtual-metro-entry.bundle?platform=android&dev=true&minify=false" \
+curl -s "http://127.0.0.1:8800/.expo/.virtual-metro-entry.bundle?platform=android&dev=true&minify=false" \
   -o /tmp/dev.bundle
 grep -c '"flex-1"' /tmp/dev.bundle      # 0 = 一条都没生成；正常是 ≥1
 ```
@@ -371,15 +372,15 @@ Tailwind 的 `placeholder:*` 是 CSS 伪元素变体，RN 里没有这个概念 
 
 `10.0.2.2` 在 Android 模拟器里是**宿主机的 loopback**；而 WSL2 默认
 `localhostForwarding=true`，Windows 的 localhost 会转进 WSL。所以整条链是
-`10.0.2.2:8081` → Windows loopback → WSL 的 Metro，**WSL 侧什么都不用改，
+`10.0.2.2:8800` → Windows loopback → WSL 的 Metro，**WSL 侧什么都不用改，
 后端也可以继续只绑 `127.0.0.1`**。
 
-    exp://10.0.2.2:8081        # Metro
+    exp://10.0.2.2:8800        # Metro（固定 8800，不是 Expo 默认的 8081）
     http://10.0.2.2:8088       # App 打的后端（脚本会自动注入）
 
 **② USB 真机 —— 也不用开任何口**
 
-手机插 Windows，在 **Windows** 侧跑 `adb reverse tcp:8081 tcp:8081` 和
+手机插 Windows，在 **Windows** 侧跑 `adb reverse tcp:8800 tcp:8800` 和
 `adb reverse tcp:8088 tcp:8088`：手机的 localhost → Windows 的 localhost →
 （localhostForwarding）→ WSL。然后
 

@@ -29,7 +29,15 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 
-const METRO_PORT = process.env.RCT_METRO_PORT ?? '8081'
+/**
+ * Metro 端口固定 **8800**，不用 Expo 默认的 8081。
+ *
+ * 8081 在这台机器上太容易撞（RN 生态里到处是它，随手起的进程都抢），而撞了之后
+ * Expo 的默认行为是**默默漂到 8082** —— 漂了之后这份脚本打印的地址就是错的，
+ * 「地址看着有、就是不通」比直接连不上难查得多。挑一个没人抢的号，
+ * 再配下面那段占用检查（不漂、直接报 pid），这类问题就绝迹了。
+ */
+const METRO_PORT = process.env.RCT_METRO_PORT ?? '8800'
 /** Android 模拟器里指向宿主机 loopback 的固定别名 */
 const HOST_LOOPBACK = '10.0.2.2'
 
