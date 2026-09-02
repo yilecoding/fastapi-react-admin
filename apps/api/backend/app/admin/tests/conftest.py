@@ -1,7 +1,12 @@
-"""`api_v1` 测试共用的 fixture。
+"""`app/admin/tests` 下共用的 fixture。
 
-`temp_user` 原来在 `test_admin_writes.py` 里，`test_dynamic_config.py` 也要用 ——
-提到这里而不是复制一份：那个 fixture 里装着两条实测出来的注意事项
+⚠️ **放在 `tests/` 这一层，不是 `tests/api_v1/`** —— conftest 的 fixture 只对
+**它所在目录树**可见。`temp_user` 一开始放在 `api_v1/conftest.py`，
+`security/` 下的测试就 `fixture 'temp_user' not found`（实测踩到）。
+两边都要用的东西放它们的共同父目录。
+
+`temp_user` 原来在 `api_v1/test_admin_writes.py` 里，现在三个文件都要用 ——
+提上来而不是复制：那个 fixture 里装着两条实测出来的注意事项
 （ID 不能硬编码 / 收尾必须硬删），复制会让它们分叉。
 """
 

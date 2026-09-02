@@ -84,6 +84,38 @@ DELETE · 13 PUT · 8 POST）。写入型里最危险的几条已经补了
 （`api_v1/test_admin_writes.py`），剩下的按「改错了会不会静默」排优先级，
 别为了刷数字去覆盖只读接口。
 
+### ⚠️ conftest 的 fixture 只对**它所在目录树**可见
+
+`temp_user` 一开始放在 `api_v1/` 自己的 conftest 里，`security/` 下的
+测试立刻 `fixture 'temp_user' not found`。两边都要用的东西放**共同父目录**
+（现在在 `app/admin/tests/conftest.py`）。
+
+### 缓存失效：每个入口都要单独测，共用的 manager 证明不了接线
+
+`user_cache_manager.clear_*` 清的是 `fba:user:{id}` —— JWT 鉴权用的用户快照，
+而它装着 `roles[].menus[]` 和 `roles[].scopes[].rules[]`
+（`GetUserInfoWithRelationDetail`）。**不清的后果不是报错，是权限改了不生效**，
+最长一天（`TOKEN_EXPIRE_SECONDS`）：
+
+| 忘了清 | 用户看到的 |
+|---|---|
+| 菜单变更 | 收回的按钮**还能继续点** |
+| 数据规则变更 | 收窄了数据范围，**还能看到本该看不到的行** |
+
+`security/test_user_cache_invalidation.py` 现在覆盖五个入口（改角色菜单 ·
+登出 · 改部门 · **改菜单** · **改数据规则**）。单测 `UserCacheManager` 证明不了
+这些 —— mock 不会漏接，但**接口层可能忘了把 `background_tasks` 一路传下去**，
+所以每个入口都要走真实请求。
+
+写这类测试的两条：
+
+- 🔴 **先把快照焐热**（打一个认证接口并断言 key 在），否则「被清掉」和
+  「本来就没有」分不开
+- ⚠️ **受害者要选对**。数据范围在种子里绑的是 MANAGER / FINANCE_STAFF /
+  VIEWER，**不是 ADMIN**（超管绕过数据权限）—— 拿 admin 当受害者的话，
+  改数据规则根本不会碰它的快照，测试会**永远绿**。要造一个真的落在那条链上的
+  用户（临时用户 → 加进 MANAGER → 用它自己登录焐热）
+
 ### 🔴 测试里**不要 `asyncio.run()`** —— 它会关掉共享 Redis 绑的那个循环
 
 想直接调一个 `async` 的 service 函数时很自然会写
