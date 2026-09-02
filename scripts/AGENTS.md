@@ -12,6 +12,30 @@ deploy-prod.mjs      `pnpm deploy:prod:*` —— 生产部署编排
 `pnpm brand:icons` 重新生成，**不要手改生成产物**（favicon / 桌面图标 /
 `apps/mobile/assets/images/*`）。
 
+## ⚠️ 试过并否掉：把 `dead-path` 扩到**代码注释**
+
+markdown 里的反引号路径基本都是真路径，所以 `dead-path` 在那儿信噪比很好。
+**代码注释里不是**：那里合法地引用着一大堆长得像路径的东西。
+
+实测（扫 `packages` + `apps/*/src` + `scripts` 的注释行）：**151 条候选，
+真阳性约 2 条**，其余全是这几类合法引用 ——
+
+| 误报类型 | 例子 |
+|---|---|
+| 后端 API 路由 | `` `/api/v1/auth/captcha` `` · `` `/users/me` `` |
+| 前端路由 | `` `/monitor/online` `` · `` `/system/dept` `` |
+| eslint 规则名 | `` `react-hooks/exhaustive-deps` `` |
+| MIME 类型 | `` `application/x-www-form-urlencoded` `` |
+| 运行时生成的文件 | `` `version.json` `` · `` `app-update.yml` `` |
+| 无扩展名的模块路径 | `` `pages/log-login` `` · `` `shell/preferences` `` |
+
+要压到可用的信噪比就得为上面每一类维护白名单，而白名单本身会腐烂 ——
+**一个 1% 命中率的检查不会有人跑，或者会长出一张比它自己还长的豁免表。**
+
+那 2 条真阳性是这么产生的：删掉一个文件之后，注释里指向它的引用没跟着删
+（实测：删 `_shared` 的只读列表工厂时留下了两处）。**判据是人的：
+删文件时顺手 `grep` 一遍文件名。** 那比一个噪音检查便宜。
+
 ## `pnpm ctx:check`：让文档不腐烂
 
 这份文档全是**实测出来的结论**，而结论会过期 —— 过期的方式是**静默**的：
