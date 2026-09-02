@@ -1,132 +1,135 @@
 #!/usr/bin/env node
 /**
- * `pnpm mobile:dev` 的入口。
+ * `pnpm mobile:dev` 的入口 —— 它存在的唯一理由是**给你一个真的能连的地址**。
  *
- * 直接跑 `expo start` 在这个仓库里有**三处会静默地不对**，所以套了这一层：
+ * 直接跑 `expo start` 在这台机器上给不出：Metro 会从网卡列表里挑一个 **docker
+ * bridge**（这里有 8 个）打印成 `exp://172.24.0.1:8081` —— 那个地址在 WSL 里、
+ * 在 NAT 后面、还是 docker 内部网桥，三重不可达。
  *
- * 1. **Metro 会挑一个 docker bridge 当地址。** 这台机器上有 8 个 docker bridge，
- *    Metro 从网卡列表里挑一个打印成 `exp://172.24.0.1:8081` —— 三重不可达。
- *    这里强制 `--localhost`，配 `adb reverse`，模拟器和 USB 真机都通。
- * 2. **后端那个口没人转。** Metro 的 8081 是 expo 自己 reverse 的，但 App 要打的
- *    dev API（默认 `127.0.0.1:8088`）没人管 —— 表现是 App 能起来、所有请求
- *    `Network request failed`，看着像后端挂了。
- * 3. **`adb` 不在 PATH 上、`ANDROID_HOME` 也没设。** 于是 `expo start --android`
- *    连设备都找不到，报的错不提这件事。
+ * 两种设备，地址不一样，脚本自己判断：
+ *
+ * A) **宿主机（Windows）上的模拟器** —— 默认。
+ *    Android 模拟器里的 `10.0.2.2` 是**宿主机的 loopback**；而 WSL2 默认
+ *    `localhostForwarding=true`，Windows 的 localhost 会转进 WSL。
+ *    所以 `10.0.2.2:8081` → Windows loopback → WSL 的 Metro，整条通。
+ *    后端同理走 `10.0.2.2:8088`，**后端可以继续只绑 127.0.0.1**。
+ *
+ * B) **WSL 里的模拟器 / USB 真机** —— 检测到 adb 有设备时自动切。
+ *    走 `adb reverse` + `127.0.0.1`，全程留在 WSL 内部。
+ *
+ * 🔴 **两种模式都不往局域网开口。** WSL2 是 NAT 的，只有 Windows 宿主够得着 ——
+ *    这正是当初否掉 `networkingMode=mirrored` 和 `netsh portproxy` 想保住的性质
+ *    （那台机器上跑着 fba_mssql:1433 和 fba_redis:6380）。
+ *
+ * 用的不是标准 AVD（MuMu / 雷电 / 夜神那类，`10.0.2.2` 不一定成立）时：
+ *   MOBILE_HOST=<能连到的地址> pnpm mobile:dev
  */
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 
-const SDK_CANDIDATES = [
-  process.env.ANDROID_HOME,
-  process.env.ANDROID_SDK_ROOT,
-  path.join(homedir(), 'Android', 'sdk'),
-  path.join(homedir(), 'Android', 'Sdk'),
-].filter(Boolean)
+const METRO_PORT = process.env.RCT_METRO_PORT ?? '8081'
+/** Android 模拟器里指向宿主机 loopback 的固定别名 */
+const HOST_LOOPBACK = '10.0.2.2'
+
+function sh(cmd) {
+  try {
+    return execFileSync('sh', ['-c', cmd], { encoding: 'utf8' }).trim()
+  } catch {
+    return ''
+  }
+}
 
 function findAdb() {
-  for (const sdk of SDK_CANDIDATES) {
+  for (const sdk of [
+    process.env.ANDROID_HOME,
+    process.env.ANDROID_SDK_ROOT,
+    path.join(homedir(), 'Android', 'sdk'),
+    path.join(homedir(), 'Android', 'Sdk'),
+  ].filter(Boolean)) {
     const p = path.join(sdk, 'platform-tools', 'adb')
     if (existsSync(p)) return { adb: p, sdk }
   }
-  try {
-    const p = execFileSync('sh', ['-c', 'command -v adb'], { encoding: 'utf8' }).trim()
-    if (p) return { adb: p, sdk: null }
-  } catch {
-    // 没装就是没装
-  }
-  return { adb: null, sdk: null }
+  const p = sh('command -v adb')
+  return p ? { adb: p, sdk: null } : { adb: null, sdk: null }
 }
 
-function devices(adb) {
-  try {
-    return execFileSync(adb, ['devices'], { encoding: 'utf8' })
-      .split('\n')
-      .slice(1)
-      .map((l) => l.trim())
-      .filter((l) => l.endsWith('\tdevice'))
-      .map((l) => l.split('\t')[0])
-  } catch {
-    return []
-  }
+function localDevices(adb) {
+  if (!adb) return []
+  return sh(`"${adb}" devices`)
+    .split('\n')
+    .slice(1)
+    .map((l) => l.trim())
+    .filter((l) => l.endsWith('\tdevice'))
+    .map((l) => l.split('\t')[0])
 }
 
-/** dev API 的端口 —— 只有指向本机 loopback 时才需要 reverse */
-function apiPort() {
-  const base = process.env.EXPO_PUBLIC_API_BASE ?? 'http://127.0.0.1:8088'
-  try {
-    const u = new URL(base)
-    if (u.hostname !== '127.0.0.1' && u.hostname !== 'localhost') return null
-    return u.port || (u.protocol === 'https:' ? '443' : '80')
-  } catch {
-    return null
-  }
+// ── 端口先检查，别让它悄悄漂到 8082 ────────────────────────────────────────────
+// 漂了之后下面打印的地址就是错的，而这**比连不上更难查**：地址看着有、就是不通。
+const holder = sh(`ss -ltnp 2>/dev/null | grep ':${METRO_PORT} ' | grep -oP 'pid=\\K[0-9]+' | head -1`)
+if (holder) {
+  console.error(
+    [
+      '',
+      `❌ 端口 ${METRO_PORT} 被 pid ${holder} 占着（多半是上一次没关干净的 Metro）。`,
+      `   先关掉：kill ${holder}`,
+      '   —— 刻意不自动漂到 8082：漂了之后下面打印的地址就是错的，比连不上更难查。',
+      '',
+    ].join('\n'),
+  )
+  process.exit(1)
 }
 
 const { adb, sdk } = findAdb()
-const found = adb ? devices(adb) : []
-const port = apiPort()
+const devices = localDevices(adb)
+const override = process.env.MOBILE_HOST
+const host = override ?? (devices.length > 0 ? '127.0.0.1' : HOST_LOOPBACK)
+const apiBase = process.env.EXPO_PUBLIC_API_BASE ?? `http://${host}:8088`
 
-if (!adb) {
-  console.log(
-    [
-      '',
-      '⚠️  找不到 adb（试过 ANDROID_HOME / ANDROID_SDK_ROOT / ~/Android/sdk / PATH）。',
-      '   Metro 照常起，但没法把端口转进设备 —— 设备上会连不上 Metro 和后端。',
-      '',
-    ].join('\n'),
-  )
-} else if (found.length === 0) {
-  console.log(
-    [
-      '',
-      '⚠️  没有连上的设备/模拟器，端口转发这一步跳过了。',
-      '   Metro 照常起，但**设备连不上**（这台机器上手机走局域网到不了 WSL，',
-      '   见 apps/mobile/AGENTS.md「设备」一节）。',
-      '',
-      '   起 WSL 里的模拟器：',
-      `     ${sdk ?? '$ANDROID_HOME'}/emulator/emulator -avd fra_mobile -no-window -no-audio -accel off &`,
-      '   开机后重新跑这条命令即可（冷启动约 9 分钟，因为没有 KVM 权限）。',
-      '',
-    ].join('\n'),
-  )
-} else {
-  for (const serial of found) {
-    const fwd = ['8081', ...(port ? [port] : [])]
-    for (const p of fwd) {
+// B 模式：设备在 WSL 里，把端口转进去
+if (!override && devices.length > 0) {
+  for (const serial of devices) {
+    for (const p of [METRO_PORT, '8088']) {
       try {
         execFileSync(adb, ['-s', serial, 'reverse', `tcp:${p}`, `tcp:${p}`], { stdio: 'ignore' })
       } catch {
         console.log(`⚠️  ${serial}: adb reverse tcp:${p} 失败`)
       }
     }
-    console.log(`✅ ${serial} 已转发 ${fwd.join(' / ')}`)
-
-    // 🔴 慢机器上 `pm` 会**返回空输出或报 `Can't find service: package`**，
-    // 而不是一个能区分的错误 ——「没装 App」和「系统还没起完」长得一模一样。
-    // 这里只探一下并提示，不阻塞。
-    try {
-      execFileSync(adb, ['-s', serial, 'shell', 'cmd', 'package', 'list', 'packages'], { stdio: 'ignore' })
-    } catch {
-      console.log(`   ⏳ ${serial} 的 package 服务还没起完，稍等一会儿再在 TUI 里按 a`)
-    }
   }
+  console.log(`\n📱 WSL 内设备：${devices.join(', ')}（已 adb reverse ${METRO_PORT} / 8088）`)
 }
 
-// 🔴 **刻意不自动追加 `--android`。** 试过，是个坏设计：设备刚开机时
-// package 服务还没起（`cmd: Can't find service: package`），`--android`
-// 会让 expo **整个进程退出**——一个瞬时的设备状态变成了「dev server 起不来」。
-// 端口转发（上面那步）才是这层要解决的事；开 App 交给 TUI 里按 `a`。
-//
-// `--localhost`：不要让 Metro 去网卡列表里挑地址（见文件头第 1 条）
-const args = ['expo', 'start', '--localhost', ...process.argv.slice(2)]
+console.log(
+  [
+    '',
+    '┌─────────────────────────────────────────────',
+    `│  在模拟器/Expo Go 里填这个地址：`,
+    `│      exp://${host}:${METRO_PORT}`,
+    `│  App 打的后端：${apiBase}`,
+    '└─────────────────────────────────────────────',
+    devices.length === 0 && !override
+      ? `   （按「宿主机上的模拟器」算的。用 MuMu / 雷电那类且连不上，就换成\n    MOBILE_HOST=<别的地址> pnpm mobile:dev）`
+      : '',
+    '',
+  ]
+    .filter(Boolean)
+    .join('\n'),
+)
 
-const env = { ...process.env }
+const env = { ...process.env, EXPO_PUBLIC_API_BASE: apiBase }
+// 让 Metro 用我们算出来的地址，而不是自己去网卡列表里挑（见文件头）
+env.EXPO_PACKAGER_HOSTNAME = host
+env.REACT_NATIVE_PACKAGER_HOSTNAME = host
 if (sdk) {
   env.ANDROID_HOME ??= sdk
   env.ANDROID_SDK_ROOT ??= sdk
   env.PATH = `${path.join(sdk, 'platform-tools')}:${env.PATH}`
 }
 
+// 🔴 **刻意不自动追加 `--android`。** 试过，是个坏设计：设备刚开机时 package
+// 服务还没起（`cmd: Can't find service: package`），`--android` 会让 expo
+// **整个进程退出** —— 一个瞬时的设备状态变成了「dev server 起不来」。
+const args = ['expo', 'start', '--port', METRO_PORT, ...process.argv.slice(2)]
 spawn('npx', args, { stdio: 'inherit', env }).on('exit', (code) => process.exit(code ?? 0))

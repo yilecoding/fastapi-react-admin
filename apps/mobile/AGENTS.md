@@ -347,91 +347,58 @@ Tailwind 的 `placeholder:*` 是 CSS 伪元素变体，RN 里没有这个概念 
 糊成一片看不见，而这**不会报任何错**。`components/ui/input.tsx` 用
 `useCSSVariable('--color-muted-foreground')` 取值再传给这个 prop。
 
-## 设备：WSL 里的 Android 模拟器（**不往局域网开任何口**）
+## 设备：用**宿主机（Windows）侧**的 Expo Go，不要在 WSL 里跑模拟器
 
-Metro 和 dev API 都只绑 `127.0.0.1`，靠 **`adb reverse`** 把端口隧道进设备，
-全程留在 WSL 内部、**不往局域网开任何口**：
+🔴 **WSL 内的 Android 模拟器这条路已经放弃了，不要再往回走。**
+它能跑通（两条实测就是在上面跑的），但兼容性代价太高，实测踩到的：
 
-```bash
-adb reverse tcp:8081 tcp:8081     # Metro（expo start --localhost 会自己设）
-adb reverse tcp:8088 tcp:8088     # dev API（要自己设）
-```
-
-🔴 **不要用 `10.0.2.2`。** 那条「模拟器里 `10.0.2.2` 就是宿主 loopback」的经典说法
-**在这台机器上实测不成立**：
-
-    adb shell ping -c2 10.0.2.2  →  connect: Network is unreachable
-    adb shell ip route           →  （空）
-
-这个 emulator 的网络后端没提供那个别名。表现在 App 里是
-`java.net.ConnectException: Failed to connect to /10.0.2.2:8088` ——
-响亮但指向错误的方向（看着像后端没起）。而且 `10.0.2.2` 本来就只对模拟器成立，
-真机没有等价物；`adb reverse` 两边都通，所以直接统一用它。
-
-### ❌ 真机 + 三条常规解法，在这台机器上都不能用
-
-**实测现场**：Metro 打印 `Metro: exp://172.24.0.1:8081`，扫码后 Expo Go 停在一屏
-「出错了。对此表示歉意。」—— 那是它拉不到 bundle 时的通用错误页，**不提网络两个字**。
-
-`172.24.0.1` 是本机一个 **Docker bridge**。这台机器上有 8 个 docker bridge
-（`172.18`–`172.24`）加 `docker0`，Metro 从网卡列表里挑了其中一个。那个地址
-**三重不可达**：在 WSL 里、在 NAT 后面、而且是 docker 内部网桥。
-
-| 解法 | 为什么不能用 |
+| 症状 | 真因 |
 |---|---|
-| `expo start --tunnel`（ngrok） | **实测起不来**：`CommandError: failed to start tunnel / session closed`。ngrok 的隧道端点被墙（`connect.ngrok-agent.com` curl 返回 `000`；`status.ngrok.com` 返回 200 只是因为它托管在 Atlassian）。所以**刻意不提供 `start:tunnel` 脚本、也不装 `@expo/ngrok`** |
-| `.wslconfig` 的 `networkingMode=mirrored` | 🔴 **会把 WSL 里监听 `0.0.0.0` 的服务一起暴露到局域网** —— 这台机器上跑着 `fba_mssql`（1433）和 `fba_redis`（6380）。**已被否掉，不要再提议** |
-| `netsh interface portproxy` | 同理，是显式往局域网开一个口；还要管理员权限，WSL 的 eth0 地址每次重启还会变 |
+| `libpulse.so.0: cannot open shared object file` | 系统缺库，`-no-audio` 不管用（链接期就死） |
+| `ProbeKVM: This user doesn't have permissions` | 不在 `kvm` 组 → 只能 `-accel off`，开机 9 分钟 |
+| `no Qt platform plugin could be initialized` | 非交互 shell 里 `DISPLAY` 是空的；设了又只有 `xcb` 插件、没有 `wayland` |
+| `screencap` 超时 / 画面全黑 | 软件 GPU 下 SurfaceFlinger 僵死，换 `-gpu guest` 也一样 |
+| 装的 App 每次开机都没了 | AVD 的 `disk.dataPartition.path = <temp>`，数据分区是临时的 |
+| `pm` / `dumpsys` 返回**空输出**而不是报错 | 机器太慢，「没装」和「服务还没起」长得一模一样 |
 
-另外：**Expo Go 一个客户端只支持一个 SDK**（实测手机上是
-`54.0.8 / Supported SDK 54`，工程是 56，加载不了）。走模拟器时
-`expo start --android` 会**自动装匹配版本的 Expo Go**，这个问题顺带就没了。
+每一条都能修，但加起来是一条**长期不稳的验证链路**，而且和被测代码毫无关系。
 
-### 装模拟器踩的两个坑
+### 两条外部路径
 
-**① `libpulse.so.0` 缺失，报错完全不提音频。**
-`emulator` 进程正常启动、日志一切正常，然后：
+`scripts/dev.mjs` 会按情况打印**一个**地址，照着填就行。
 
-    qemu-system-x86_64: error while loading shared libraries:
-    libpulse.so.0: cannot open shared object file
+**① 宿主机（Windows）上的模拟器 —— 现在就能用**
 
-`-no-audio` **不管用** —— 动态链接在 `main()` 之前就失败了。
-不需要动系统：deb 解到本地目录、`LD_LIBRARY_PATH` 指过去即可
-（`libpulse0` 会连带拖出 `libsndfile1` → 7 个音频编解码库）。
+`10.0.2.2` 在 Android 模拟器里是**宿主机的 loopback**；而 WSL2 默认
+`localhostForwarding=true`，Windows 的 localhost 会转进 WSL。所以整条链是
+`10.0.2.2:8081` → Windows loopback → WSL 的 Metro，**WSL 侧什么都不用改，
+后端也可以继续只绑 `127.0.0.1`**。
 
-**② `/dev/kvm` 存在 ≠ 有权限用。** 根 `CLAUDE.md` 之前只核了「文件在不在」，
-不够 —— 还要在 `kvm` 组里：
+    exp://10.0.2.2:8081        # Metro
+    http://10.0.2.2:8088       # App 打的后端（脚本会自动注入）
 
-    ProbeKVM: This user doesn't have permissions to use KVM (/dev/kvm).
+**② USB 真机 —— 也不用开任何口**
 
-这一条**必须 root**：`sudo gpasswd -a $USER kvm`。加完组不用重启 WSL，
-用 `sg kvm -c '<命令>'` 就能在当前会话里拿到新组。
+手机插 Windows，在 **Windows** 侧跑 `adb reverse tcp:8081 tcp:8081` 和
+`adb reverse tcp:8088 tcp:8088`：手机的 localhost → Windows 的 localhost →
+（localhostForwarding）→ WSL。然后
 
-**没有 KVM 也能跑**（`-accel off`，纯 TCG 软件模拟），这一轮两条实测就是这么跑完的。
-代价是慢一个量级，实测量级：开机 ~9 分钟 · Expo Go 安装 ~3 分钟 ·
-首次 bundle 后到画面出来 ~2 分钟。
+    MOBILE_HOST=127.0.0.1 pnpm mobile:dev
 
-**③ 必须 `-no-window`。** 带窗口跑会死在
-`no Qt platform plugin could be initialized`（WSLg 下 emulator 自带的 Qt 起不来）。
-headless 反而更顺手：截图走 `adb exec-out screencap -p`，能直接逐像素比对。
+⚠️ **Expo Go 一个客户端只支持一个 SDK。** 工程是 SDK 56，手机/模拟器上装的
+Expo Go 也得是 56（`https://expo.dev/go` 下，或用 `~/.expo/android-apk-cache/`
+里 expo 自己下好的那份）。版本不对的表现是一屏「出错了」，不提 SDK 两个字。
 
-**④ 慢机器上 ANR 弹窗会挡住整屏。** 实测撞到 `Digital Wellbeing isn't responding`
-和 `System UI isn't responding` 两次，都盖在 App 上面 —— 截图看起来像 App 挂了。
-一次性关掉：
+### ❌ 局域网那三条解法仍然不能用
 
-```bash
-adb shell settings put global hide_error_dialogs 1
-```
+| 解法 | 为什么 |
+|---|---|
+| `expo start --tunnel`（ngrok） | 隧道端点被墙，`CommandError: failed to start tunnel`。所以**刻意不装 `@expo/ngrok`** |
+| `.wslconfig` 的 `networkingMode=mirrored` | 🔴 会把 WSL 里监听 `0.0.0.0` 的服务一起暴露到局域网 —— 这台机器上跑着 `fba_mssql`（1433）和 `fba_redis`（6380）。**已被否掉，不要再提议** |
+| `netsh interface portproxy` | 同理，显式往局域网开口。**已被否掉** |
 
-**⑤ 🔴 慢机器上 `pm` / `dumpsys` 会返回空输出而不是报错。**
-`adb install` 报了 `Failure calling service package: Broken pipe`（真失败），
-但紧接着 `pm list packages | grep exponent` 返回空、`dumpsys package` 也返回空 ——
-**「没装」和「包服务当时忙」长得一模一样**，我据此下过一个错判断。
-可靠的判据是 `pm path <包名>` 拿到路径 **且** `cmd package resolve-activity --brief <包名>`
-解析出 activity；只满足前者说明是半装状态，要 `pm uninstall` 再装。
-
-装法上：200MB 的 APK 在 TCG 上别走 `adb install` 的流式协议，
-`adb push` 到 `/data/local/tmp/` 再 `adb shell pm install` 稳得多。
+上面两条外部路径都**不碰局域网**：走的都是「宿主机 loopback + WSL2 自带的
+localhostForwarding」，只有这台 Windows 自己够得着。
 
 ## 品牌图标还是模板的占位图
 
