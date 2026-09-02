@@ -52,6 +52,7 @@
 | **移动端 App / Expo / uniwind / Metro** | [`apps/mobile/AGENTS.md`](apps/mobile/AGENTS.md)（下面还按 `scripts/` · `src/app/` · `src/components/` 拆了三份） |
 | 写或跑前端 E2E | [`apps/web/e2e/AGENTS.md`](apps/web/e2e/AGENTS.md) |
 | 动菜单 / 权限 / 死链判定 | 硬纪律 6 + [`pages/menu/AGENTS.md`](packages/platform/src/pages/menu/AGENTS.md) |
+| 动 `ctx:check` / 品牌图标生成 / 生产部署脚本 | [`scripts/AGENTS.md`](scripts/AGENTS.md) |
 
 每个目录下有一对 `AGENTS.md`（真身）+ `CLAUDE.md`（指向它的符号链接）：
 Claude Code 只认 `CLAUDE.md`，其余 agent 工具认 `AGENTS.md`，一份内容两边都读得到。
@@ -63,37 +64,16 @@ Claude Code 只认 `CLAUDE.md`，其余 agent 工具认 `AGENTS.md`，一份内�
 ## 让这套文档不腐烂：`pnpm ctx:check`
 
 这份文档全是**实测出来的结论**，而结论会过期 —— 过期的方式是**静默**的：
-它照旧言之凿凿地指着一个已经不存在的文件。实测样本：这套规则第一次跑起来
-就抓到「别用 command.tsx」这条 —— 那个 cmdk 组件早就删了，规则却还教了很久。
-
-所以凡是能被机器核对的断言就让机器核对，和 `i18n:check` 同一个物种：
+它照旧言之凿凿地指着一个已经不存在的文件。所以凡是能被机器核对的断言就让
+机器核对，和 `i18n:check` 同一个物种：
 
 ```bash
 pnpm ctx:check          # 死引用 / 死链接 / 死脚本 / 死 testid / 行数预算
 ```
 
-| 规则 | 级别 | 抓什么 |
-|---|---|---|
-| `dead-path` | 错误 | 反引号里的文件路径在仓库里找不到 |
-| `dead-link` | 错误 | markdown 相对链接指向不存在的文件 |
-| `dead-script` | 错误 | 反引号里的 pnpm 脚本没有任何 package.json 声明 |
-| `dead-testid` | 错误 | 提到的 `data-testid` 源码里不存在 |
-| `dead-anchor` | 错误 | 正文里的章节交叉引用指向一个全仓都不存在的章节 |
-| `cross-file-anchor` | 错误 | 那一节在**别的分册**里 —— 拆分册最容易留下的债，改成相对链接 |
-| `empty-scope` | 错误 | `AGENTS.md` 所在目录下没有源码（模块被搬走了） |
-| `budget` | 警告 | 根文件 > 400 行 / 分册 > 500 行 —— 该拆了 |
-
-覆盖 **40 份**文档：`CLAUDE.md` / `AGENTS.md` 之外，还有 `README.md` /
-`CONTRIBUTING.md` / `SECURITY.md` / PR 模板。⚠️ 后面那几个是**后来才加进来的** ——
-在那之前它们完全不在覆盖范围，而一次人工梳理就从里面翻出三条过期断言
-（推荐了已被硬纪律否掉的命令 · Playwright 条数停在 44（实际 54）· 闸门清单少两道门）。
-**新增一类文档时先问一句「ctx:check 扫得到它吗」。**
-
-🔴 **它在 CI 里跑**（static job 的 `ctx` 步骤）。曾经不在 —— 一个「让机器核对
-断言」的脚本自己没被自动核对过，只在有人想起来时才跑。
-
 它**不**校验文字对不对（那要人读），只校验「指向的东西还在不在」。
-这一层能自动守住，剩下的才值得花人的注意力。
+八条规则、覆盖哪 40 份文档、以及豁免表的登记约定，见
+[`scripts` 分册](scripts/AGENTS.md)。
 
 ### 这套文档怎么自己长大
 
