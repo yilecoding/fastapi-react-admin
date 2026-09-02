@@ -14,7 +14,8 @@
 @source "../**/*.{ts,tsx}";
 
 @theme {
-  --radius: 10px;
+  /* iOS 分组块的圆角。rnr 的 rounded-xl 等派生值都从这里来 */
+  --radius: 15px;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -61,6 +62,23 @@
       --color-chart-3: oklch(0.398 0.07 227.392);
       --color-chart-4: oklch(0.828 0.189 84.429);
       --color-chart-5: oklch(0.769 0.188 70.08);
+      /* ── iOS 分组列表语义（见文件末尾那段注释）──────────────── */
+      /* 页面 = grouped background；卡片 = 分组块 */
+      --color-background: #f4f2fa;
+      --color-card: #ffffff;
+      --color-card-foreground: #171523;
+      --color-foreground: #171523;
+      --color-muted: #eeecf4;
+      --color-muted-foreground: #6b6580;
+      --color-secondary: #eeecf4;
+      --color-secondary-foreground: #171523;
+      --color-accent: #eeecf4;
+      --color-accent-foreground: #171523;
+      /* 分隔线 —— iOS 上它比描边浅得多 */
+      --color-border: #eeecf4;
+      --color-input: #e4e0ee;
+      --color-ring: #4630db;
+      --color-destructive: #e5484d;
     }
 
     @variant dark {
@@ -89,6 +107,24 @@
       --color-chart-3: oklch(0.769 0.188 70.08);
       --color-chart-4: oklch(0.627 0.265 303.9);
       --color-chart-5: oklch(0.645 0.246 16.439);
+      /* ── iOS 深色分组（V4）─────────────────────────────────── */
+      --color-background: #000000;
+      --color-card: #1c1c1e;
+      --color-card-foreground: #ffffff;
+      --color-foreground: #ffffff;
+      --color-muted: #2c2c2e;
+      --color-muted-foreground: #8e8e93;
+      --color-secondary: #2c2c2e;
+      --color-secondary-foreground: #ffffff;
+      --color-accent: #2c2c2e;
+      --color-accent-foreground: #ffffff;
+      --color-border: #2c2c2e;
+      --color-input: #3a3a3c;
+      --color-ring: #6b57ff;
+      --color-destructive: #ff453a;
+      /* 主色在纯黑上要提亮，#4630DB 在黑底几乎读不出来 */
+      --color-primary: #6b57ff;
+      --color-primary-foreground: #ffffff;
     }
   }
 }
@@ -112,6 +148,25 @@
  * 🔴 深色模式的 `--border` / `--input` 是唯一刻意和 web 不同的一处：
  * web 上是 `oklch(1 0 0 / 10%)`（半透明白），RN 里半透明边框叠在深色卡片上
  * **看不见**（卡片本身就比背景亮），所以换成了实色。
+ */
+
+
+/*
+ * ── 为什么中性色不是照抄 web 的 ────────────────────────────────────────
+ *
+ * `--color-primary` 仍然是**品牌紫，和 `packages/ui` 同步**（web 改了要跟着改）。
+ * 但**中性色是移动端自己一套**，刻意的：
+ *
+ * web 是「白页 + 描边卡片」的桌面表面；移动端选的是 **iOS 分组列表**
+ * （`background` = 带一点 277 偏色的浅灰底，`card` = 纯白分组块，
+ * `border` 只当**分隔线**用、比描边浅得多）。这两种表面的语义不一样，
+ * 硬套 web 的灰会得到一堆看不见的分隔线和糊在一起的层级。
+ *
+ * 深色那套是 iOS 深色设置的原值（`#000` 页面 / `#1C1C1E` 分组块 /
+ * `#2C2C2E` 分隔线），并把主色提亮到 `#6B57FF` —— `#4630DB` 在纯黑上几乎读不出来。
+ *
+ * 🔴 值用 hex 不用 oklch，是因为这些是**取自系统的定值**，不是从品牌色派生的；
+ * 写成 oklch 只会让人以为可以随手调。
  */
 
 /*

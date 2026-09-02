@@ -1,14 +1,12 @@
 import { useRouter } from 'expo-router'
 import { BellIcon, ChevronRightIcon, InboxIcon, UserRoundIcon } from 'lucide-react-native'
 import * as React from 'react'
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { RefreshControl, ScrollView, View } from 'react-native'
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { BrandTop } from '@/components/brand-top'
+import { Chevron, Group, GroupHeader, PressRow, Row, RowIcon } from '@/components/grouped'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Icon } from '@/components/ui/icon'
-import { Separator } from '@/components/ui/separator'
 import { Text } from '@/components/ui/text'
 import { useUnread } from '@/lib/notifications'
 import { useSession } from '@/lib/session'
@@ -16,7 +14,6 @@ import { useSession } from '@/lib/session'
 export default function HomeScreen() {
   const { user, reload } = useSession()
   const { unread, refresh: refreshUnread } = useUnread()
-  const insets = useSafeAreaInsets()
   const router = useRouter()
   const [refreshing, setRefreshing] = React.useState(false)
 
@@ -36,72 +33,73 @@ export default function HomeScreen() {
   return (
     <ScrollView
       className="bg-background flex-1"
-      contentContainerStyle={{ paddingTop: insets.top + 12 }}
-      contentContainerClassName="gap-4 px-4 pb-10"
+      contentContainerClassName="pb-10"
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
     >
-      <View className="flex-row items-center gap-3 px-1 py-2">
-        <Avatar alt={user?.nickname ?? ''} className="size-11">
-          {user?.avatar ? <AvatarImage source={{ uri: user.avatar }} /> : null}
-          <AvatarFallback>
-            <Text className="font-semibold">
-              {(user?.nickname || user?.username || '?').slice(0, 1).toUpperCase()}
-            </Text>
-          </AvatarFallback>
-        </Avatar>
-        <View className="flex-1">
-          <Text variant="small" className="text-muted-foreground">
-            {greeting()}
+      <BrandTop>
+        <View className="gap-1 pt-1">
+          <Text className="text-muted-foreground text-[13px]">{greeting()}</Text>
+          {/* iOS 大标题 */}
+          <Text className="text-3xl font-bold" style={{ letterSpacing: -0.9 }}>
+            {user?.nickname || user?.username || ''}
           </Text>
-          <Text className="text-xl font-semibold">{user?.nickname || user?.username || ''}</Text>
         </View>
-      </View>
+      </BrandTop>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>我的组织</CardTitle>
-          <CardDescription>部门与角色决定你能进哪、能看到哪些数据</CardDescription>
-        </CardHeader>
-        <CardContent className="flex-row gap-3">
-          <Stat label="部门" value={user?.dept ?? '—'} />
-          <Separator orientation="vertical" />
-          <Stat label="角色" value={user?.roles.join('、') || '—'} />
-        </CardContent>
-      </Card>
+      <GroupHeader>我的组织</GroupHeader>
+      <Group>
+        <Row first>
+          <Text className="shrink-0 text-[15px]">部门</Text>
+          <Text className="text-muted-foreground flex-1 text-right text-[14px]">{user?.dept ?? '—'}</Text>
+        </Row>
+        <Row>
+          <Text className="shrink-0 text-[15px]">角色</Text>
+          <Text className="text-muted-foreground flex-1 text-right text-[14px]">
+            {user?.roles.join('、') || '—'}
+          </Text>
+        </Row>
+        <Row>
+          <Text className="shrink-0 text-[15px]">时区</Text>
+          <Text className="text-muted-foreground flex-1 text-right font-mono text-xs">
+            {user?.timezone ?? '—'}
+          </Text>
+        </Row>
+      </Group>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>快捷入口</CardTitle>
-        </CardHeader>
-        <CardContent className="gap-0 px-0">
-          <Entry
-            icon={BellIcon}
-            label="通知"
-            badge={total}
-            hint={total > 0 ? undefined : '没有未读'}
-            onPress={() => router.push('/notifications')}
-            first
-          />
-          <Entry icon={UserRoundIcon} label="个人中心" hint="资料 · 密码 · 登出" onPress={() => router.push('/profile')} />
-        </CardContent>
-      </Card>
+      <GroupHeader>入口</GroupHeader>
+      <Group>
+        <PressRow first inset={56} onPress={() => router.push('/notifications')}>
+          <RowIcon icon={BellIcon} active={total > 0} />
+          <Text className="flex-1 text-[15px]">通知</Text>
+          {total > 0 ? (
+            <Badge>
+              <Text>{total > 99 ? '99+' : total}</Text>
+            </Badge>
+          ) : (
+            <Text className="text-muted-foreground text-[13px]">没有未读</Text>
+          )}
+          <Chevron icon={ChevronRightIcon} />
+        </PressRow>
+        <PressRow inset={56} onPress={() => router.push('/profile')}>
+          <RowIcon icon={UserRoundIcon} />
+          <Text className="flex-1 text-[15px]">个人中心</Text>
+          <Text className="text-muted-foreground text-[13px]">资料 · 密码</Text>
+          <Chevron icon={ChevronRightIcon} />
+        </PressRow>
+      </Group>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>待办与动态</CardTitle>
-        </CardHeader>
+      <GroupHeader>待办与动态</GroupHeader>
+      <Group className="items-center gap-2 py-8">
         {/* 空态要说清楚是「还没做」，不能长得像「加载失败」或「没有数据」——
             三者在用户眼里都是一片空，分不清的第一反应是「这 App 坏了」 */}
-        <CardContent className="items-center gap-2 py-6">
-          <Icon as={InboxIcon} className="text-muted-foreground size-7" />
-          <Text variant="small" className="text-muted-foreground text-center">
-            还没有内容
-          </Text>
-          <Text className="text-muted-foreground text-center text-xs leading-5">
-            等移动端要哪几个功能定下来再填这一块
-          </Text>
-        </CardContent>
-      </Card>
+        <Icon as={InboxIcon} className="text-muted-foreground size-7" />
+        <Text variant="small" className="text-muted-foreground">
+          还没有内容
+        </Text>
+        <Text className="text-muted-foreground/70 px-8 text-center text-xs leading-5">
+          等移动端要哪几个功能定下来再填这一块
+        </Text>
+      </Group>
     </ScrollView>
   )
 }
@@ -114,52 +112,4 @@ function greeting() {
   if (h < 14) return '中午好'
   if (h < 18) return '下午好'
   return '晚上好'
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <View className="flex-1 gap-1">
-      <Text className="text-muted-foreground text-xs">{label}</Text>
-      <Text className="font-medium" numberOfLines={1}>
-        {value}
-      </Text>
-    </View>
-  )
-}
-
-function Entry({
-  icon,
-  label,
-  hint,
-  badge = 0,
-  onPress,
-  first,
-}: {
-  icon: React.ComponentProps<typeof Icon>['as']
-  label: string
-  hint?: string
-  badge?: number
-  onPress: () => void
-  first?: boolean
-}) {
-  return (
-    <>
-      {first ? null : <Separator className="my-0" />}
-      <Pressable
-        onPress={onPress}
-        className="active:bg-accent min-h-[48px] flex-row items-center gap-3 px-6 py-2.5"
-      >
-        <Icon as={icon} className="text-muted-foreground size-4" />
-        <Text className="flex-1 text-sm">{label}</Text>
-        {badge > 0 ? (
-          <Badge>
-            <Text>{badge > 99 ? '99+' : badge}</Text>
-          </Badge>
-        ) : hint ? (
-          <Text className="text-muted-foreground text-xs">{hint}</Text>
-        ) : null}
-        <Icon as={ChevronRightIcon} className="text-muted-foreground size-4" />
-      </Pressable>
-    </>
-  )
 }

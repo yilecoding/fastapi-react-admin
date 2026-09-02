@@ -5,14 +5,13 @@ import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, Sc
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useCSSVariable } from 'uniwind'
 
-import { TenonMark } from '@/components/tenon-mark'
+import { BrandTop } from '@/components/brand-top'
+import { Group, Row } from '@/components/grouped'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
 import { ApiError, api } from '@/lib/api'
@@ -150,121 +149,149 @@ export default function LoginScreen() {
         className="bg-background flex-1"
       >
         <ScrollView
-          contentContainerStyle={{ paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}
-          contentContainerClassName="min-h-full justify-center gap-6 px-5"
+          contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+          contentContainerClassName="min-h-full"
           keyboardShouldPersistTaps="handled"
         >
-          <View className="items-center gap-2">
-            <TenonMark size={30} color={fg} />
-            <Text variant="small" className="text-muted-foreground font-mono">
-              {BRAND.wordmark}
-            </Text>
+          {/* 品牌头：唯一的品牌表达，不铺满不饱和 */}
+          <BrandTop>
+            <View className="gap-1.5">
+              <Text className="text-primary font-mono text-[10px]" style={{ letterSpacing: 2.4 }}>
+                权限与数据的承重层
+              </Text>
+              {/* iOS 大标题：34/700/-0.03em。这是这套语言里最重的一处排版 */}
+              <Text className="text-3xl font-bold" style={{ letterSpacing: -0.9 }}>
+                登录
+              </Text>
+            </View>
+          </BrandTop>
+
+          <View className="px-4 pt-4">
+            <Tabs value={method} onValueChange={(v) => setMethod(v as Method)}>
+              <TabsList className="w-full flex-row">
+                {METHODS.map((m) => (
+                  <TabsTrigger key={m.value} value={m.value} className="flex-1 flex-row gap-1.5">
+                    <Icon as={m.icon} className="size-3.5" />
+                    <Text>{m.label}</Text>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
           </View>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">登录</CardTitle>
-              <CardDescription>{BRAND.tagline}</CardDescription>
-            </CardHeader>
-            <CardContent className="gap-5">
-              <Tabs value={method} onValueChange={(v) => setMethod(v as Method)}>
-                <TabsList className="w-full flex-row">
-                  {METHODS.map((m) => (
-                    <TabsTrigger key={m.value} value={m.value} className="flex-1 flex-row gap-1.5">
-                      <Icon as={m.icon} className="size-3.5" />
-                      <Text>{m.label}</Text>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-
-              {/* 🔴 三个页签内容高度要一致，否则切换时整块卡片会跳 */}
-              <View style={{ minHeight: 236 }}>
-                {method !== 'password' ? (
-                  <NotWired method={method} onUsePassword={() => setMethod('password')} />
-                ) : (
-                  <View className="gap-4">
-                    {bootstrapError ? (
-                      <Alert variant="destructive" icon={KeyRoundIcon}>
-                        <AlertTitle>启动时没能连上服务器</AlertTitle>
-                        <AlertDescription>{bootstrapError}</AlertDescription>
-                      </Alert>
-                    ) : null}
-
-                    <View className="gap-1.5">
-                      <Label htmlFor="username">用户名</Label>
-                      <Input
-                        id="username"
-                        value={username}
-                        onChangeText={setUsername}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        textContentType="username"
-                        placeholder="admin"
-                        testID="login-username"
-                      />
-                    </View>
-
-                    <View className="gap-1.5">
-                      <Label htmlFor="password">密码</Label>
-                      <Input
-                        id="password"
-                        value={password}
-                        onChangeText={setPassword}
-                        secureTextEntry
-                        textContentType="password"
-                        placeholder="••••••"
-                        onSubmitEditing={() => void submit()}
-                        testID="login-password"
-                      />
-                    </View>
-
-                    <CaptchaBlock
-                      state={captcha}
-                      code={code}
-                      onChangeCode={setCode}
-                      onRetry={() => void loadCaptcha()}
-                      onSubmit={() => void submit()}
-                    />
-
-                    {error ? (
-                      <Text variant="small" className="text-destructive" testID="login-error">
-                        {error}
-                      </Text>
-                    ) : null}
-
-                    <Button disabled={!canSubmit} onPress={() => void submit()} testID="login-submit">
-                      {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
-                      <Text>{submitting ? '登录中' : '登录'}</Text>
-                    </Button>
-
-                    <Pressable
-                      onPress={() => setRemember(!remember)}
-                      hitSlop={8}
-                      testID="login-remember"
-                      className="flex-row items-center gap-2.5 self-start"
-                    >
-                      {/* 可点区域包住文字 —— 18px 的方块在触屏上远低于可用尺寸 */}
-                      <Checkbox checked={remember} onCheckedChange={setRemember} />
-                      <Text variant="small" className="text-muted-foreground">
-                        记住账号
-                      </Text>
-                    </Pressable>
+          {/* 🔴 三个页签内容高度要一致，否则切换时下面的东西会跳 */}
+          <View style={{ minHeight: 336 }} className="pt-4">
+            {method !== 'password' ? (
+              <NotWired method={method} onUsePassword={() => setMethod('password')} />
+            ) : (
+              <View className="gap-4">
+                {bootstrapError ? (
+                  <View className="px-4">
+                    <Alert variant="destructive" icon={KeyRoundIcon}>
+                      <AlertTitle>启动时没能连上服务器</AlertTitle>
+                      <AlertDescription>{bootstrapError}</AlertDescription>
+                    </Alert>
                   </View>
-                )}
-              </View>
-            </CardContent>
-          </Card>
+                ) : null}
 
-          <View className="flex-row items-center justify-between gap-3 px-1">
-            <Text numberOfLines={1} className="text-muted-foreground shrink font-mono text-[10px]">
+                {/* 输入框做成**分组块里的行**：左侧标签、右侧输入。
+                    iOS 上表单就是这个形状，不是一个个描边盒子 */}
+                <Group>
+                  <FieldRow first label="用户名">
+                    <Input
+                      value={username}
+                      onChangeText={setUsername}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      textContentType="username"
+                      placeholder="admin"
+                      testID="login-username"
+                      className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+                    />
+                  </FieldRow>
+                  <FieldRow label="密码">
+                    <Input
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry
+                      textContentType="password"
+                      placeholder="••••••"
+                      onSubmitEditing={() => void submit()}
+                      testID="login-password"
+                      className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+                    />
+                  </FieldRow>
+                  <CaptchaRow
+                    state={captcha}
+                    code={code}
+                    onChangeCode={setCode}
+                    onRetry={() => void loadCaptcha()}
+                    onSubmit={() => void submit()}
+                  />
+                </Group>
+
+                {error ? (
+                  <Text variant="small" className="text-destructive px-5" testID="login-error">
+                    {error}
+                  </Text>
+                ) : null}
+
+                <View className="gap-3 px-4">
+                  {/* iOS 主按钮：满宽、50 高、大圆角 */}
+                  <Button
+                    disabled={!canSubmit}
+                    onPress={() => void submit()}
+                    testID="login-submit"
+                    className="h-[50px] rounded-xl"
+                  >
+                    {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
+                    <Text className="text-base font-semibold">{submitting ? '登录中' : '登录'}</Text>
+                  </Button>
+
+                  <Pressable
+                    onPress={() => setRemember(!remember)}
+                    hitSlop={8}
+                    testID="login-remember"
+                    className="flex-row items-center gap-2.5 self-start px-1 py-1"
+                  >
+                    {/* 可点区域包住文字 —— 方块本身在触屏上远低于可用尺寸 */}
+                    <Checkbox checked={remember} onCheckedChange={setRemember} />
+                    <Text variant="small" className="text-muted-foreground">
+                      记住账号
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+          </View>
+
+          <View className="mt-auto flex-row items-center justify-between gap-3 px-5 pt-6">
+            <Text numberOfLines={1} className="text-muted-foreground shrink font-mono text-[9.5px]">
               {BRAND.stack.join(' · ')}
             </Text>
-            <Text className="text-muted-foreground font-mono text-[10px]">{BRAND.version}</Text>
+            <Text className="text-muted-foreground font-mono text-[9.5px]">{BRAND.version}</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </>
+  )
+}
+
+/** 表单的一行：左标签右输入。标签宽度固定，三行的输入起点才对得齐 */
+function FieldRow({
+  first,
+  label,
+  children,
+}: {
+  first?: boolean
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <Row first={first} inset={20}>
+      <Text className="w-[62px] shrink-0 text-[15px]">{label}</Text>
+      {children}
+    </Row>
   )
 }
 
@@ -288,7 +315,7 @@ function NotWired({ method, onUsePassword }: { method: Method; onUsePassword: ()
           hint: '扫码要后端有一套派发登录票据的接口，现在还没有。这个 App 将来就是扫码的那一端。',
         }
   return (
-    <View className="flex-1 items-center justify-center gap-3 px-2">
+    <Group className="items-center gap-3 px-6 py-9">
       <Icon as={copy.icon} className="text-muted-foreground size-8" />
       <Text className="text-center font-medium">{copy.title}</Text>
       <Text variant="small" className="text-muted-foreground text-center leading-5">
@@ -297,11 +324,11 @@ function NotWired({ method, onUsePassword }: { method: Method; onUsePassword: ()
       <Button variant="outline" size="sm" onPress={onUsePassword} className="mt-1">
         <Text>用密码登录</Text>
       </Button>
-    </View>
+    </Group>
   )
 }
 
-function CaptchaBlock({
+function CaptchaRow({
   state,
   code,
   onChangeCode,
@@ -318,51 +345,53 @@ function CaptchaBlock({
 
   if (state.kind === 'loading') {
     return (
-      <View className="h-10 flex-row items-center gap-2">
+      <Row inset={20}>
+        <Text className="w-[62px] shrink-0 text-[15px]">验证码</Text>
         <ActivityIndicator size="small" />
         <Text variant="small" className="text-muted-foreground">
-          正在取验证码
+          正在获取
         </Text>
-      </View>
+      </Row>
     )
   }
 
   if (state.kind === 'error') {
     return (
-      <Alert variant="destructive" icon={KeyRoundIcon}>
-        <AlertTitle>验证码没取到</AlertTitle>
-        <AlertDescription>{state.msg}</AlertDescription>
-        <Button variant="outline" size="sm" onPress={onRetry} className="mt-2 self-start">
-          <Text>重试</Text>
-        </Button>
-      </Alert>
+      <Row inset={20} className="items-start">
+        <Text className="w-[62px] shrink-0 text-[15px]">验证码</Text>
+        <View className="flex-1 gap-2 py-1">
+          <Text variant="small" className="text-destructive">
+            {state.msg}
+          </Text>
+          <Button variant="outline" size="sm" onPress={onRetry} className="self-start">
+            <Text>重试</Text>
+          </Button>
+        </View>
+      </Row>
     )
   }
 
   return (
-    <View className="gap-1.5">
-      <Label htmlFor="captcha">验证码</Label>
-      <View className="flex-row items-center gap-3">
-        <Input
-          id="captcha"
-          value={code}
-          onChangeText={onChangeCode}
-          autoCapitalize="none"
-          autoCorrect={false}
-          className="flex-1"
-          onSubmitEditing={onSubmit}
-          testID="login-captcha"
+    <Row inset={20}>
+      <Text className="w-[62px] shrink-0 text-[15px]">验证码</Text>
+      <Input
+        value={code}
+        onChangeText={onChangeCode}
+        autoCapitalize="none"
+        autoCorrect={false}
+        onSubmitEditing={onSubmit}
+        testID="login-captcha"
+        className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+      />
+      {/* 后端给的是**裸 base64**，不带 `data:` 前缀 —— 要自己拼，
+          少拼的话 Image 静默什么都不显示（不报错） */}
+      <Pressable onPress={onRetry} testID="login-captcha-image">
+        <Image
+          source={{ uri: `data:image/jpeg;base64,${state.image}` }}
+          style={{ width: 92, height: 34, borderRadius: 5 }}
+          resizeMode="contain"
         />
-        {/* 后端给的是**裸 base64**，不带 `data:` 前缀 —— 要自己拼，
-            少拼的话 Image 静默什么都不显示（不报错） */}
-        <Pressable onPress={onRetry} testID="login-captcha-image">
-          <Image
-            source={{ uri: `data:image/jpeg;base64,${state.image}` }}
-            style={{ width: 104, height: 40, borderRadius: 6 }}
-            resizeMode="contain"
-          />
-        </Pressable>
-      </View>
-    </View>
+      </Pressable>
+    </Row>
   )
 }

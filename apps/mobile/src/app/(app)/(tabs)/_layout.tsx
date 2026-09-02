@@ -28,6 +28,7 @@ export default function AppLayout() {
   const muted = useCSSVariable('--color-muted-foreground')
   const { unread } = useUnread()
   const card = useCSSVariable('--color-card')
+  const bg = useCSSVariable('--color-background')
   const line = useCSSVariable('--color-border')
 
   return (
@@ -41,6 +42,9 @@ export default function AppLayout() {
         tabBarInactiveTintColor: str(muted),
         // tab 栏要和内容区的「浅底」区分开，否则中间是一道生硬的接缝。
         // 顶边用 hairlineWidth 而不是 1 —— 1px 在高密度屏上是两三个物理像素，很重。
+        // iOS 的 tab 栏比页面底稍亮一点（浅色）/ 稍暗一点（深色），
+        // 靠 card 色 + 发丝顶边和内容区分开。**不能留系统默认白** ——
+        // 那和 grouped background 之间会有一道生硬的接缝
         tabBarStyle: {
           backgroundColor: str(card),
           borderTopColor: str(line),

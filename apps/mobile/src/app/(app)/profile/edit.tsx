@@ -3,8 +3,8 @@ import * as React from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
+import { Group, Row } from '@/components/grouped'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Text } from '@/components/ui/text'
 import { api } from '@/lib/api'
 import { useSession } from '@/lib/session'
@@ -51,38 +51,53 @@ export default function EditProfileScreen() {
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="bg-background flex-1">
-      <ScrollView contentContainerClassName="gap-7 px-6 py-7" keyboardShouldPersistTaps="handled">
-        <View className="gap-2">
-          <Label>昵称</Label>
-          <Input value={nickname} onChangeText={setNickname} testID="edit-nickname" />
-        </View>
+      <ScrollView contentContainerClassName="gap-4 py-4" keyboardShouldPersistTaps="handled">
+        <Group>
+          <Row first>
+            <Text className="w-[70px] shrink-0 text-[15px]">昵称</Text>
+            <Input
+              value={nickname}
+              onChangeText={setNickname}
+              testID="edit-nickname"
+              className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+            />
+          </Row>
+          <Row>
+            <Text className="w-[70px] shrink-0 text-[15px]">头像</Text>
+            <Input
+              value={avatar}
+              onChangeText={setAvatar}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              placeholder="https://"
+              testID="edit-avatar"
+              className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+            />
+          </Row>
+        </Group>
 
-        <View className="gap-2">
-          <Label>头像地址</Label>
-          <Input
-            value={avatar}
-            onChangeText={setAvatar}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            placeholder="https://"
-            testID="edit-avatar"
-          />
-          <Text className="text-muted-foreground text-xs leading-5">
-            留空表示清除头像。暂时只能填 URL —— 从相册选图要 expo-image-picker + 文件上传接口，还没接。
-          </Text>
-        </View>
+        <Text className="text-muted-foreground px-5 text-xs leading-5">
+          头像留空表示清除。暂时只能填 URL —— 从相册选图要 expo-image-picker + 文件上传接口，还没接。
+        </Text>
 
         {error ? (
-          <Text className="text-destructive text-sm" testID="edit-error">
+          <Text className="text-destructive px-5 text-sm" testID="edit-error">
             {error}
           </Text>
         ) : null}
 
-        <Button size="lg" disabled={!dirty || saving} onPress={() => void save()} testID="edit-save">
-          {saving ? <ActivityIndicator size="small" color="#fff" /> : null}
-          <Text>{saving ? '保存中' : '保存'}</Text>
-        </Button>
+        <View className="px-4 pt-1">
+          <Button
+            disabled={!dirty || saving}
+            onPress={() => void save()}
+            testID="edit-save"
+            className="h-[50px] rounded-xl"
+          >
+            {saving ? <ActivityIndicator size="small" color="#fff" /> : null}
+            <Text className="text-base font-semibold">{saving ? '保存中' : '保存'}</Text>
+          </Button>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   )

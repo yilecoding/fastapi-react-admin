@@ -5,9 +5,8 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from '
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Group, GroupHeader, Row } from '@/components/grouped'
 import { Icon } from '@/components/ui/icon'
-import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
@@ -85,7 +84,7 @@ export default function NotificationsScreen() {
 
   return (
     <View className="bg-background flex-1">
-      <View className="flex-row items-center gap-3 px-4 py-3">
+      <View className="flex-row items-center gap-3 px-4 pt-3 pb-1">
         <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)} className="flex-1">
           <TabsList className="flex-row">
             <TabsTrigger value="all" className="flex-1">
@@ -103,7 +102,7 @@ export default function NotificationsScreen() {
       </View>
 
       <ScrollView
-        contentContainerClassName="gap-3 px-4 pb-10"
+        contentContainerClassName="gap-3 px-4 pb-10 pt-3"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
       >
         {/* 硬纪律 9：失败必须是**可见状态**，不是缺失状态 —— 不能让「拉取失败」
@@ -123,8 +122,7 @@ export default function NotificationsScreen() {
             ))}
           </View>
         ) : items.length === 0 ? (
-          <Card>
-            <CardContent className="items-center gap-2 py-10">
+          <Group className="mx-0 items-center gap-2 py-10">
               <Icon as={BellIcon} className="text-muted-foreground size-8" />
               <Text variant="small" className="text-muted-foreground">
                 {filter === 'unread' ? '没有未读通知' : '还没有通知'}
@@ -132,28 +130,25 @@ export default function NotificationsScreen() {
               <Text className="text-muted-foreground text-center text-xs">
                 {filter === 'unread' ? '所有通知都读过了' : '有新消息时会出现在这里'}
               </Text>
-            </CardContent>
-          </Card>
+          </Group>
         ) : (
-          <Card>
-            <CardContent className="gap-0 px-0">
-              {items.map((n, i) => (
-                <Row key={n.id} n={n} first={i === 0} onPress={() => void markRead(n)} />
-              ))}
-            </CardContent>
-          </Card>
+          <Group className="mx-0">
+            {items.map((n, i) => (
+              <NotifRow key={n.id} n={n} first={i === 0} onPress={() => void markRead(n)} />
+            ))}
+          </Group>
         )}
       </ScrollView>
     </View>
   )
 }
 
-function Row({ n, first, onPress }: { n: Notification; first?: boolean; onPress: () => void }) {
+function NotifRow({ n, first, onPress }: { n: Notification; first?: boolean; onPress: () => void }) {
   const unread = !n.read_time
   return (
     <>
-      {first ? null : <Separator className="my-0" />}
-      <Pressable onPress={onPress} className="active:bg-accent gap-1.5 px-6 py-3.5">
+      {first ? null : <View className="bg-border ml-5 h-px" />}
+      <Pressable onPress={onPress} className="active:bg-muted gap-1.5 px-5 py-3.5">
         <View className="flex-row items-center gap-2">
           <Badge variant={unread ? 'default' : 'secondary'}>
             <Text>{NOTIFICATION_CATEGORY[n.category] ?? '通知'}</Text>
