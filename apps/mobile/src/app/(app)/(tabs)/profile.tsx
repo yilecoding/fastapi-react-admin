@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router'
-import { ChevronRightIcon, KeyRoundIcon, SquarePenIcon, TriangleAlertIcon } from 'lucide-react-native'
+import { ChevronRightIcon, KeyRoundIcon, SettingsIcon, SquarePenIcon, TriangleAlertIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
@@ -94,6 +94,12 @@ export default function ProfileScreen() {
         <PressRow inset={56} onPress={() => router.push('/profile/password')} testID="profile-password">
           <RowIcon icon={KeyRoundIcon} />
           <Text className="flex-1 text-[15px]">修改密码</Text>
+          <Chevron icon={ChevronRightIcon} />
+        </PressRow>
+        <PressRow inset={56} onPress={() => router.push('/settings')} testID="profile-settings">
+          <RowIcon icon={SettingsIcon} />
+          <Text className="flex-1 text-[15px]">设置</Text>
+          <Text className="text-muted-foreground text-[13px]">外观 · 时区 · 服务器</Text>
           <Chevron icon={ChevronRightIcon} />
         </PressRow>
       </Group>

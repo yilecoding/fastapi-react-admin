@@ -1,4 +1,4 @@
-import { API_BASE } from '@/lib/config'
+import { serverStore } from '@/lib/server'
 import { tokenStore } from '@/lib/token-store'
 
 /**
@@ -66,7 +66,7 @@ async function refreshToken(): Promise<boolean> {
     try {
       // refresh token 在 httpOnly cookie 里，RN 的 cookie jar 自动带上 ——
       // 这里**刻意不设任何头**，实测就是这么刷成功的
-      const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, { method: 'POST' })
+      const res = await fetch(`${serverStore.current()}/api/v1/auth/refresh`, { method: 'POST' })
       if (!res.ok) return false
       const body = (await res.json()) as Envelope
       const next = (body?.data as { access_token?: string } | undefined)?.access_token
@@ -91,7 +91,7 @@ async function send<T>(method: Method, path: string, body?: unknown, retry = tru
   const token = tokenStore.get()
   let res: Response
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(`${serverStore.current()}${path}`, {
       method,
       headers: {
         // 后端有 i18n 中间件按 Accept-Language 切响应 msg。不发这个头的话
@@ -105,7 +105,7 @@ async function send<T>(method: Method, path: string, body?: unknown, retry = tru
   } catch (err) {
     // 网络层失败（连不上 / DNS / TLS）在 RN 里只有一句笼统的 `Network request failed`，
     // 不提是哪一种。把地址带上，否则排查时完全没有线索。
-    throw new ApiError(0, 0, `连不上服务器（${API_BASE}）：${String(err)}`)
+    throw new ApiError(0, 0, `连不上服务器（${serverStore.current()}）：${String(err)}`)
   }
 
   let parsed: unknown = null

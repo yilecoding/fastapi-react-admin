@@ -36,6 +36,9 @@ export default function AppLayout() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="notifications" options={{ title: '通知' }} />
+        <Stack.Screen name="settings" options={{ title: '设置' }} />
+        <Stack.Screen name="server" options={{ title: '服务器地址' }} />
+        <Stack.Screen name="timezone" options={{ title: '显示时区' }} />
         <Stack.Screen name="profile/edit" options={{ title: '编辑资料' }} />
         <Stack.Screen name="profile/password" options={{ title: '修改密码' }} />
       </Stack>

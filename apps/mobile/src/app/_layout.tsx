@@ -5,9 +5,11 @@ import { PortalHost } from '@rn-primitives/portal'
 import { Stack } from 'expo-router'
 import { ThemeProvider } from 'expo-router/react-navigation'
 import { StatusBar } from 'expo-status-bar'
+import * as React from 'react'
 import { ActivityIndicator, View } from 'react-native'
 import { useUniwind } from 'uniwind'
 
+import { appearanceStore } from '@/lib/appearance'
 import { NAV_THEME } from '@/lib/theme'
 import { SessionProvider, useSession } from '@/lib/session'
 
@@ -22,6 +24,12 @@ export default function RootLayout() {
   // 是**静默回落到系统字体**的（不报错），于是首帧那些眉标会先是系统 mono、
   // 再跳成 JetBrains Mono —— 一次很明显的抖动。
   const [fontsReady] = useFonts({ JetBrainsMono_400Regular, JetBrainsMono_500Medium })
+
+  // ⚠️ uniwind 自己不持久化主题：`setTheme()` 只改当前会话，重启就回到跟随系统。
+  // 所以偏好要自己存、冷启动喂回去（`src/lib/appearance.ts`）
+  React.useEffect(() => {
+    void appearanceStore.hydrate()
+  }, [])
 
   if (!fontsReady) return null
 

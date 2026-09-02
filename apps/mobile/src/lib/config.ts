@@ -17,4 +17,9 @@
  * （Let's Encrypt 的证书签给 `fra.wubunan.com`，走 IP 会 TLS 失败，
  * 而 RN 报的是一个笼统的 `Network request failed`，不提「证书」两个字）。
  */
-export const API_BASE = process.env.EXPO_PUBLIC_API_BASE ?? 'http://127.0.0.1:8088'
+/**
+ * 编译期的**默认**地址。运行时真正用哪个由 `src/lib/server.ts` 决定 ——
+ * 🔴 不要直接 import 这个常量去发请求，`EXPO_PUBLIC_*` 是构建期替换的字符串，
+ * 打成 APK 之后就改不了了。
+ */
+export const API_BASE_DEFAULT = process.env.EXPO_PUBLIC_API_BASE ?? 'http://127.0.0.1:8088'

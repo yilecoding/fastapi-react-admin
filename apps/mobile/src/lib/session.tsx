@@ -2,6 +2,7 @@ import * as React from 'react'
 
 import { ApiError, api, setSessionExpiredHandler } from '@/lib/api'
 import type { CurrentUser, LoginResult } from '@/lib/contract'
+import { serverStore } from '@/lib/server'
 import { tokenStore } from '@/lib/token-store'
 
 type Status = 'loading' | 'authed' | 'anonymous'
@@ -51,6 +52,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     let alive = true
     void (async () => {
+      // 🔴 顺序不能换：地址要先读出来，否则第一个请求打的是编译期默认地址
+      await serverStore.hydrate()
       await tokenStore.hydrate()
       try {
         const me = await api.GET<CurrentUser>('/api/v1/sys/users/me')
