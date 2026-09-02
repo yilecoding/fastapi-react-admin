@@ -47,6 +47,43 @@ docker exec fba_mssql /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$PW" 
 - **`turbo.json` 里 `test` 必须 `cache: false`** —— 测试打真实数据库，
   缓存住「上次通过了」毫无意义
 
+### 接口覆盖：跑完整套 pytest 会打印真值
+
+```
+===== 接口覆盖 =====
+64/137（47%）—— 按测试真正发出的请求算
+没被任何测试请求打到的接口：
+  DELETE /api/v1/logs/login/all
+  ...
+```
+
+机制在 `conftest.py`：包一层 `TestClient.request` 记下每个实际请求，
+收尾拿 FastAPI 自己的路由表匹配。
+
+🔴 **别用 grep 测试文件里的路径字面量来算这个数。** 试过，两个方向都不可信：
+
+| 判据 | 得到 | 错在哪 |
+|---|---|---|
+| 只认整条路径字面量 | 55% | **漏判** —— 测试常把路径存成常量再拼（`NOTIFICATIONS = '/sys/notifications'`），字面量永远不出现 |
+| 路径每一段都在测试里出现过 | 91% | **误判** —— `sys` / `users` / `permissions` 各自到处都有，碰巧全中就算覆盖 |
+| **真记请求** | **47%** | —— |
+
+两个错的数字都足够像结论，会被直接引用（我就引用过 55%）。
+
+⚠️ **报告只在跑整套时出现。** `pytest -k foo` 或指定文件时不打 —— 那时
+「没打到」不等于「没测试」，报出来就是谎报一片空缺。判断用的是
+`config.invocation_params.args`（真实命令行），**不是 `config.args`** ——
+后者被 `pyproject.toml` 的 `testpaths` 填满了四个目录，拿它判断会把整套也
+误判成局部，于是报告永远不出现（实测：全绿但一个字都不打）。
+
+⚠️ 输出用 `pytest_terminal_summary`，**不是 `pytest_sessionfinish`** ——
+后者里的 `print` 会被 pytest 的输出捕获吞掉（同样实测踩过）。
+
+**47% 是个诚实但不好看的数字**：73 条接口从没收到过一个请求（38 GET · 14
+DELETE · 13 PUT · 8 POST）。写入型里最危险的几条已经补了
+（`api_v1/test_admin_writes.py`），剩下的按「改错了会不会静默」排优先级，
+别为了刷数字去覆盖只读接口。
+
 ### 🔴 测试里建了数据，收尾必须**硬删** —— 接口的 delete 是逻辑删除
 
 `DELETE /sys/users/{pk}` 这类接口走的是 `LogicalDeleteMixin`：把 `deleted` 从 0
