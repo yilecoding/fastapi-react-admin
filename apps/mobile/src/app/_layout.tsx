@@ -12,6 +12,7 @@ import { useUniwind } from 'uniwind'
 
 import { appearanceStore } from '@/lib/appearance'
 import { setupI18n } from '@/lib/i18n'
+import { QueryProvider } from '@/lib/query'
 import { useNavTheme } from '@/lib/theme'
 import { SessionProvider, useSession } from '@/lib/session'
 
@@ -77,9 +78,14 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={navTheme}>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      <SessionProvider>
-        <AuthGate />
-      </SessionProvider>
+      {/* 🔴 QueryProvider 要在 SessionProvider **外面**：`useUnread()` 之类的
+          查询按 `useSession()` 的状态 `enabled`，所以 session 是它的输入；
+          反过来套的话 session 里的东西读不到 QueryClient */}
+      <QueryProvider>
+        <SessionProvider>
+          <AuthGate />
+        </SessionProvider>
+      </QueryProvider>
       <PortalHost />
     </ThemeProvider>
   )

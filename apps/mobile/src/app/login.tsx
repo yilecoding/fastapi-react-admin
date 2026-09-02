@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { KeyRoundIcon, QrCodeIcon, SmartphoneIcon } from 'lucide-react-native'
 import * as React from 'react'
@@ -73,13 +74,9 @@ export default function LoginScreen() {
   const [remember, setRemember] = React.useState(true)
   const [password, setPassword] = React.useState('')
   const [code, setCode] = React.useState('')
-  const [captcha, setCaptcha] = React.useState<CaptchaState>({ kind: 'loading' })
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
-  // 硬纪律 10：`/auth/captcha` 是 5 次/30 秒的限流接口，而 StrictMode 开发期
-  // 把 effect 跑两遍 —— 不去重就是配额腰斩。`alive` 防卸载后 setState。
-  const inFlight = React.useRef(false)
   const alive = React.useRef(true)
   React.useEffect(() => {
     alive.current = true
@@ -88,29 +85,52 @@ export default function LoginScreen() {
     }
   }, [])
 
-  const loadCaptcha = React.useCallback(async () => {
-    if (inFlight.current) return
-    inFlight.current = true
-    setCaptcha({ kind: 'loading' })
-    try {
-      const data = await api.GET('/api/v1/auth/captcha')
-      if (!alive.current) return
-      setCaptcha(data.is_enabled ? { kind: 'ready', uuid: data.uuid, image: data.image } : { kind: 'off' })
-    } catch (err) {
-      if (!alive.current) return
-      setCaptcha({
+  /**
+   * 验证码。
+   *
+   * 🔴 **硬纪律 10（有限流的接口必须做单飞）现在是 query 层给的。**
+   * `/auth/captcha` 是 5 次/30 秒，而 StrictMode 开发期把 effect 跑两遍 ——
+   * 手写版本要自己维护一个 `inFlight` ref 加一个 `alive` ref。
+   * React Query 对同一个 key 的并发请求天然去重，那就是单飞；
+   * 卸载后不 setState 也是它管的。
+   *
+   * ⚠️ `retry` 在 `lib/query.tsx` 里对 429 显式返回 false —— 限流重试就是
+   * 拿配额换一次必然的失败。
+   */
+  const captchaQuery = useQuery({
+    queryKey: ['auth', 'captcha'] as const,
+    queryFn: () => api.GET('/api/v1/auth/captcha'),
+    // 验证码是一次性的，不该被当成「新鲜数据」复用
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+  })
+
+  /**
+   * 摊成一个状态机 —— 根 `CLAUDE.md` 硬纪律 9。web 登录页就是在这里踩过：
+   * `catch {}` 里把验证码字段藏掉，限流 429 被吞 → 字段消失 → 后端仍强制校验
+   * → 用户拿到一个怎么点都登不进去、还看不出原因的表单。
+   *
+   * `off` **只给「服务端明确说关了」这一种情况**，失败一律是 `error` + 重试入口。
+   */
+  const captcha: CaptchaState = React.useMemo(() => {
+    if (captchaQuery.isPending) return { kind: 'loading' }
+    if (captchaQuery.error) {
+      const err = captchaQuery.error
+      return {
         kind: 'error',
         rateLimited: err instanceof ApiError && err.isRateLimited,
         msg: err instanceof Error ? err.message : String(err),
-      })
-    } finally {
-      inFlight.current = false
+      }
     }
-  }, [])
+    const d = captchaQuery.data
+    if (!d?.is_enabled) return { kind: 'off' }
+    return { kind: 'ready', uuid: d.uuid, image: d.image }
+  }, [captchaQuery.isPending, captchaQuery.error, captchaQuery.data])
 
-  React.useEffect(() => {
-    void loadCaptcha()
-  }, [loadCaptcha])
+  const loadCaptcha = React.useCallback(() => {
+    void captchaQuery.refetch()
+  }, [captchaQuery])
 
   // 记住的账号回填。SecureStore 是异步读，所以先渲染上面那个初值，读到再覆盖
   React.useEffect(() => {
@@ -139,7 +159,7 @@ export default function LoginScreen() {
       // 验证码是一次性的，失败后必须换一张，否则用户重试必然再错一次
       if (captcha.kind === 'ready') {
         setCode('')
-        void loadCaptcha()
+        loadCaptcha()
       }
     } finally {
       if (alive.current) setSubmitting(false)
@@ -237,7 +257,7 @@ export default function LoginScreen() {
                     state={captcha}
                     code={code}
                     onChangeCode={setCode}
-                    onRetry={() => void loadCaptcha()}
+                    onRetry={loadCaptcha}
                     onSubmit={() => void submit()}
                   />
                 </Group>

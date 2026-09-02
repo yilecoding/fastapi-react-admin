@@ -712,6 +712,56 @@ RN 在两端都硬编译了 `-DHERMES_ENABLE_INTL=True`
 （`ReactAndroid/hermes-engine/build.gradle.kts:358`，注释是
 "We intentionally build Hermes with Intl support only"）。
 
+## 取数层：`@tanstack/react-query`（`src/lib/query.tsx`）
+
+加它的动机很具体 —— **三个修过的 bug 是同一个根因**：每屏自己写
+`useEffect` + `useState` 取数。
+
+| 修过的 bug | 手写取数的哪一面 |
+|---|---|
+| 通知页切页签的竞态（慢的那个后到会赢，选了未读却混着已读） | 没有请求版本管理 —— 筛选条件进 query key 就没有这回事 |
+| 未读数「不知道 vs 是 0」被混成一个，「全部已读」永久禁用 | 没有 `status` / `error` 的区分，只有一个 `T \| null` |
+| 3 条 `react-hooks/set-state-in-effect` | effect 里同步置 loading 态 |
+
+三处都换掉之后 lint 的那 3 条警告归零，所以那条规则**已经恢复成 `error`**
+（和 `apps/web` 一致）—— 再出现就说明有人又在 effect 里手写取数了。
+
+🔴 **硬纪律 10（有限流的接口必须做单飞）现在由 query 层给。**
+`/auth/captcha` 是 5 次/30 秒，而 StrictMode 开发期把 effect 跑两遍。
+React Query 对同一个 key 的并发请求天然去重 —— 那就是单飞，
+手写的 `inFlight` ref + `alive` ref 都可以退了。
+
+### ⚠️ 不引入 `@react-native-community/netinfo`
+
+官方 RN 集成用它接 `onlineManager`（离线时不重试）。**那是原生模块，
+Expo Go 里没有** —— 装了本仓库赖以调试的那条路就断了（见「设备」一节）。
+所以只接 `focusManager` 那一半，它走 `AppState`、纯 JS：
+
+```ts
+AppState.addEventListener('change', (s) => focusManager.setFocused(s === 'active'))
+```
+
+🔴 **不接这一句的话 `refetchOnWindowFocus` 是静默无效的** ——
+web 上它监听 `visibilitychange`，RN 没有那个事件。
+
+代价是「离线时不重试」这个优化没有：请求照常失败、照常显示错误态，不影响正确性。
+
+### 🔴 401 / 403 / 429 / 422 不重试
+
+401 的收尾在 `@admin/api` 的客户端里（单飞刷新 → 刷不回来就判会话结束 →
+弹回登录屏）。query 层再重试只会多打几个必然失败的请求，
+还会把「弹回登录屏」推迟几秒。429 同理：重试就是拿限流配额换一次必然的失败。
+
+### 会话引导刻意**不**走 query 层
+
+`src/lib/session.tsx` 的冷启动那一段仍然是手写的 effect，三个理由：
+它决定**挂哪一棵路由树**（跑在任何屏渲染之前）· 必须按顺序 hydrate 两个
+SecureStore（地址再 token，顺序不能换）· 要把 401 和「连不上」分开。
+**query 层管「数据」，那一段管「会话存不存在」，不要合并。**
+
+⚠️ `QueryProvider` 要在 `SessionProvider` **外面**：`useUnread()` 这类查询
+按 `useSession()` 的状态 `enabled`，所以 session 是它的输入。
+
 ## 通知：接的是 `plugin/notification`，但**没有实时推送**
 
 ```

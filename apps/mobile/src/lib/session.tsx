@@ -68,7 +68,20 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     applyUser(await api.GET('/api/v1/sys/users/me'))
   }, [applyUser])
 
-  // 冷启动
+  /*
+   * 冷启动引导。
+   *
+   * ⚠️ **这一段刻意不走 query 层**（`lib/query.tsx`），移动端其余取数都走。
+   * 三个理由：
+   *   1. 它决定**挂哪一棵路由树**（`AuthGate`），跑在任何屏渲染之前 ——
+   *      query 的 `enabled` / `isPending` 是给「屏里的数据」用的状态机，
+   *      套在这里要多一层「还没开始」和「不该开始」的区分
+   *   2. 它必须**先按顺序 hydrate 两个 SecureStore**（地址再 token，顺序不能换），
+   *      而那是命令式的
+   *   3. 它要把 401 和「连不上」分开（见下），而不是统一当成一个 error
+   *
+   * 换句话说：query 层管「数据」，这一段管「会话存不存在」。**不要合并。**
+   */
   React.useEffect(() => {
     let alive = true
     void (async () => {

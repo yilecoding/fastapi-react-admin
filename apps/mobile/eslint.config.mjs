@@ -53,18 +53,11 @@ export default defineConfig([
       '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }],
 
       /*
-       * ⚠️ **移动端刻意降级这一条**（`apps/web` 那份是默认的 error，而且过）。
-       *
-       * 区别在于取数方式：web 走 TanStack Query，压根没有「在 effect 里取数」
-       * 这种代码；移动端**没有 query 层**，`login.tsx` 的验证码、
-       * `notifications.tsx` 的列表、`lib/notifications.tsx` 的未读数
-       * 都是 effect 里发请求 + 同步先置一个 loading 态。
-       *
-       * 那条规则说的是「同步 setState 会引发级联渲染」—— 是**性能**建议，
-       * 不是正确性问题（多一次渲染）。真要消掉得先引入 query 层，
-       * 那是独立一件事。降成 warn 而不是 off：将来加了 query 层要能看见它们。
+       * ⚠️ 这条曾经降成 `warn` —— 当时移动端没有 query 层，验证码 / 通知列表 /
+       * 未读数都是 effect 里发请求 + 同步先置 loading 态，3 处都会命中。
+       * 引入 `@tanstack/react-query` 之后那 3 处全没了，所以**恢复成 error**
+       * （和 `apps/web` 一致）。再出现就说明有人又在 effect 里手写取数了。
        */
-      'react-hooks/set-state-in-effect': 'warn',
     },
   },
   {

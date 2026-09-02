@@ -3,8 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { StyleSheet } from 'react-native'
 import { useCSSVariable } from 'uniwind'
 
-import { UnreadProvider } from '@/lib/notifications'
-
 /**
  * 已登录那棵树的**外层 Stack**。
  *
@@ -24,26 +22,24 @@ export default function AppLayout() {
   const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
 
   return (
-    <UnreadProvider>
-      <Stack
-        screenOptions={{
-          headerBackButtonDisplayMode: 'minimal',
-          // 导航头和 tab 栏用卡片色 + 发丝底边，和内容区的 background 区分开
-          headerStyle: { backgroundColor: str(card) },
-          headerTintColor: str(fg),
-          headerTitleStyle: { fontSize: 16, fontWeight: '600', color: str(fg) },
-          headerShadowVisible: false,
-          contentStyle: { borderTopColor: str(line), borderTopWidth: StyleSheet.hairlineWidth },
-        }}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="notifications" options={{ title: t('通知') }} />
-        <Stack.Screen name="settings" options={{ title: t('设置') }} />
-        <Stack.Screen name="server" options={{ title: t('服务器地址') }} />
-        <Stack.Screen name="timezone" options={{ title: t('显示时区') }} />
-        <Stack.Screen name="profile/edit" options={{ title: t('编辑资料') }} />
-        <Stack.Screen name="profile/password" options={{ title: t('修改密码') }} />
-      </Stack>
-    </UnreadProvider>
+    <Stack
+      screenOptions={{
+        headerBackButtonDisplayMode: 'minimal',
+        // 导航头和 tab 栏用卡片色 + 发丝底边，和内容区的 background 区分开
+        headerStyle: { backgroundColor: str(card) },
+        headerTintColor: str(fg),
+        headerTitleStyle: { fontSize: 16, fontWeight: '600', color: str(fg) },
+        headerShadowVisible: false,
+        contentStyle: { borderTopColor: str(line), borderTopWidth: StyleSheet.hairlineWidth },
+      }}
+    >
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="notifications" options={{ title: t('通知') }} />
+      <Stack.Screen name="settings" options={{ title: t('设置') }} />
+      <Stack.Screen name="server" options={{ title: t('服务器地址') }} />
+      <Stack.Screen name="timezone" options={{ title: t('显示时区') }} />
+      <Stack.Screen name="profile/edit" options={{ title: t('编辑资料') }} />
+      <Stack.Screen name="profile/password" options={{ title: t('修改密码') }} />
+    </Stack>
   )
 }
