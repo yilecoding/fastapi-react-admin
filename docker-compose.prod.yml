@@ -1,77 +1,28 @@
-# 生产编排（SQL Server 主线）。
+# 生产编排 —— 唯一一份。服务器上跑的必须是这份文件的**逐字节副本**：本机差异
+# 全部走 compose 同级的 `.env`（`FBA_WEB_PORT` / `FBA_ENV_FILE` / `FBA_PULL_MIRROR`），
+# 不要在服务器上手改这个文件。为什么会有这条纪律，见 deploy/AGENTS.md
+# 「服务器上那份 compose 是手抄的」。
 #
-#     cp apps/api/deploy/backend/docker-compose/.env.server.example \
-#        apps/api/deploy/backend/docker-compose/.env.server
-#     # 改完里面的 CHANGE_ME，然后二选一：
+# 部署命令一律走 deploy/prod.sh —— 服务器上跑的是同一个脚本，它刻意不依赖仓库：
 #
-#   🔴 **这份文件的属主必须是 uid:gid 1000:1000，不能是 root。**
-#   `apps/api/Dockerfile.prod` 里容器进程是 `USER fba`（`useradd -u 1000 -g 1000`），
-#   而 `scripts/deploy-prod.mjs` 的前置检查又要求这份文件权限严格是 `600`
-#   （不能有 group/other 位）——如果只满足"600"但 owner 是 root，宿主机上看着
-#   权限没问题，容器里的 fba 用户却读不到它：pydantic-settings 加载配置那一步
-#   直接 `PermissionError: [Errno 13] Permission denied`，报错点在依赖库内部，
-#   不会提示"权限"两个字，容易当成配置本身写错了去排查。实测：`chmod 600`
-#   但 owner 仍是 root 时必现；改成 `chown 1000:1000 && chmod 600` 后两边
-#   （deploy 脚本的安全检查 + 容器内非 root 用户可读）同时满足：
+#     bash deploy/prod.sh pull     # 拉 CI 推到 GHCR 的镜像（可走加速器，自动 retag）
+#     bash deploy/prod.sh up       # 先 migrate，成功了才起 api/worker/beat/web
+#     bash deploy/prod.sh status   # 在跑的是哪个提交、和 main 差多少
+#     bash deploy/prod.sh sync     # 服务器上更新这份 compose 的唯一正确姿势
 #
-#     chown 1000:1000 apps/api/deploy/backend/docker-compose/.env.server
-#     chmod 600       apps/api/deploy/backend/docker-compose/.env.server
+# 回滚不用等一次新构建 —— 除了 latest 还有 sha-<短 SHA> 和 sha-<完整 SHA> 两种标签：
 #
-# 【日常部署】CI 已经把镜像 build 好推到 GHCR 了，服务器只管拉：
+#     TAG=sha-abc1234 bash deploy/prod.sh pull
+#     TAG=sha-abc1234 bash deploy/prod.sh up
 #
-#     docker compose -f docker-compose.prod.yml pull
-#     docker compose -f docker-compose.prod.yml up -d
-#
-#   镜像名固定用 `ghcr.io/<owner>/fba-api` / `fba-web`，标签有 `latest` 和
-#   `sha-<短 SHA>` 两种——回滚就是把 `TAG` 环境变量设成某个短 SHA 再重新
-#   `pull` + `up -d`，不用等一次新的构建：
-#
-#     TAG=sha-abc1234 docker compose -f docker-compose.prod.yml pull
-#     TAG=sha-abc1234 docker compose -f docker-compose.prod.yml up -d
-#
-#   ⚠️ CI 用 GITHUB_TOKEN 发布到 GHCR 的包**默认是 private**，第一次跑完后
-#   要去 GitHub 网页上把这两个 package 的可见性改成 public（仓库本来就是
-#   public 的，没有理由把编译产物设成私有），否则这里的 `pull` 会因为没
-#   登录而失败。也可以反过来在服务器上 `docker login ghcr.io` 一次，看你选哪条。
-#
-#   🔴 **国内服务器直连 `ghcr.io` 可能被限速到几十 KB/s**，不是断连、也不报错，
-#   `docker compose pull` 会挂着不动，看着像卡住了其实是在以「一层镜像下载
-#   几个小时」的速度爬。实测（腾讯云国内节点）：`curl` 探测 `ghcr.io` 能通、
-#   `docker pull` 却常年卡在 ~30KB/s；换成镜像加速器 `ghcr.nju.edu.cn` 同一层
-#   几秒钟拉完。判断卡没卡看 `docker compose pull` 的层进度是否在涨，几分钟
-#   完全不动就该换加速器，不要傻等。加速器不能直接替换 compose 里的镜像名
-#   （它们只是同步了内容、路径前缀不一样），要拉完再重新打标签：
-#
-#     docker pull ghcr.nju.edu.cn/<owner>/fba-api:latest
-#     docker pull ghcr.nju.edu.cn/<owner>/fba-web:latest
-#     docker tag  ghcr.nju.edu.cn/<owner>/fba-api:latest ghcr.io/<owner>/fba-api:latest
-#     docker tag  ghcr.nju.edu.cn/<owner>/fba-web:latest ghcr.io/<owner>/fba-web:latest
-#     docker compose -f docker-compose.prod.yml up -d   # 本地已有同名镜像，不会再去拉
-#
-#   这类加速器不是官方服务，可用性会变化，卡住时换一个镜像加速域名重试即可，
-#   原理都一样（对外暴露一份 `ghcr.io` 内容的镜像）。
-#
-# 【本地 / 离线场景】不想依赖 GHCR，直接在当前机器上从源码构建：
+# 【本地 / 离线场景】不想依赖 GHCR，直接在当前机器上从源码构建。和上面二选一，
+# 不要混用，否则 up 跑的到底是哪次构建，取决于谁最后碰过本地镜像缓存：
 #
 #     docker compose -f docker-compose.prod.yml build
-#     docker compose -f docker-compose.prod.yml up -d
+#     bash deploy/prod.sh up
 #
 # 与 apps/api/docker-compose.yml 的关系：那份是**上游的**（主库 PostgreSQL、
 # broker RabbitMQ、挂的还是已废弃的 static/upload 路径），照它起不来。
-#
-# ⚠️ 走本地构建这条路时，先确认 **docker daemon 自己**够得着镜像仓库。它不读
-# shell 的 http_proxy —— 本机实测：curl 拿得到 ghcr.io，`docker build` 却
-# i/o timeout，报错指向 Dockerfile 的 FROM 行，看起来像镜像名写错了。要在
-# WSL / 代理环境里构建，给 daemon 单独配一次：
-#
-#     sudo mkdir -p /etc/systemd/system/docker.service.d
-#     sudo tee /etc/systemd/system/docker.service.d/http-proxy.conf <<'EOF'
-#     [Service]
-#     Environment="HTTP_PROXY=http://<代理>:<端口>"
-#     Environment="HTTPS_PROXY=http://<代理>:<端口>"
-#     Environment="NO_PROXY=localhost,127.0.0.1"
-#     EOF
-#     sudo systemctl daemon-reload && sudo systemctl restart docker
 #
 # 🔴 **SQL Server 和 Redis 都不进这份编排**，各自独立部署、独立运维：
 #   1. `docker compose down -v` 一条命令就能把生产数据（DB + 缓存）一起抹掉
@@ -83,20 +34,16 @@
 # migrate。`.env.server` 里的 `DATABASE_*` / `REDIS_*` 指向哪，它们就连哪 ——
 # 跟这份文件在不在同一台机器、用不用容器，这份编排完全不关心。
 #
-# ⚠️ 如果 SQL Server / Redis 就跑在**这台宿主机**上、但不在 Docker 里（比如宝塔
-# 面板自带的 Redis/MySQL 管理），容器默认桥接网络连不到宿主机的 `127.0.0.1` ——
-# 那是容器自己的回环地址，不是宿主机的。`.env.server` 里的 `DATABASE_HOST` /
-# `REDIS_HOST` 要填宿主机在 docker 网桥上的地址（一般是 `172.17.0.1`，
-# `ip addr show docker0` 能查到），或者给下面的服务加
-# `extra_hosts: ["host.docker.internal:host-gateway"]` 再填
-# `host.docker.internal`。直接填 `127.0.0.1`/`localhost` 是最常见的踩坑，
-# 表现是 API 容器起来了、健康检查却一直连不上数据库/Redis。
+# 其余踩坑（GHCR 国内限速要走加速器 / `.env.server` 属主必须匹配容器 uid /
+# 容器连宿主机不能填 127.0.0.1 / docker daemon 不读 shell 的 http_proxy）
+# 都在 deploy/AGENTS.md —— 那份按目录自动加载，别在这里再抄一份。
 
 name: fastapi-react-admin
 
 x-api-base: &api-base
   # IMAGE_OWNER 默认是这个仓库自己（fork 出去部署时改一下就行，不用碰别的地方）；
   # TAG 默认 latest，回滚时设成某个 sha-<短 SHA>，见文件顶部注释。
+  # 这两个连同 FBA_* 都从 compose 同级的 .env 读，服务器上只改那一份。
   image: ghcr.io/${IMAGE_OWNER:-yilecoding}/fba-api:${TAG:-latest}
   build:
     context: ./apps/api
@@ -107,7 +54,7 @@ x-api-base: &api-base
   # 挂成容器里的 backend/.env。⚠️ 缺这个文件时应用会**拒绝启动**而不是
   # 自动拷示例（conf.py: _ensure_env_file 检测到 /.dockerenv 即视为生产形态）
   volumes:
-    - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
+    - "${FBA_ENV_FILE:-./apps/api/deploy/backend/docker-compose/.env.server}:/app/backend/.env:ro"
     - fba_upload:/app/backend/upload
     - fba_upload_public:/app/backend/upload-public
   logging:
@@ -127,7 +74,7 @@ services:
       - -c
       - cd /app/backend && alembic upgrade head
     volumes:
-      - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
+      - "${FBA_ENV_FILE:-./apps/api/deploy/backend/docker-compose/.env.server}:/app/backend/.env:ro"
 
   api:
     <<: *api-base
@@ -135,7 +82,7 @@ services:
       migrate:
         condition: service_completed_successfully
     volumes:
-      - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
+      - "${FBA_ENV_FILE:-./apps/api/deploy/backend/docker-compose/.env.server}:/app/backend/.env:ro"
       - fba_upload:/app/backend/upload
       - fba_upload_public:/app/backend/upload-public
       - fba_log_api:/app/backend/log
@@ -168,7 +115,7 @@ services:
       migrate:
         condition: service_completed_successfully
     volumes:
-      - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
+      - "${FBA_ENV_FILE:-./apps/api/deploy/backend/docker-compose/.env.server}:/app/backend/.env:ro"
       - fba_upload:/app/backend/upload
       - fba_upload_public:/app/backend/upload-public
       - fba_log_worker:/app/backend/log
@@ -207,7 +154,7 @@ services:
       api:
         condition: service_healthy
     volumes:
-      - ./apps/api/deploy/backend/docker-compose/.env.server:/app/backend/.env:ro
+      - "${FBA_ENV_FILE:-./apps/api/deploy/backend/docker-compose/.env.server}:/app/backend/.env:ro"
       - fba_log_beat:/app/backend/log
     # 🔴 镜像基于 Debian slim，没装 procps——`pgrep` 是「命令不存在」（exit 127），
     # 不是「没找到进程」，健康检查因此永远失败，即便 beat 跑得好好的。
@@ -229,8 +176,10 @@ services:
         VITE_API_BASE: ""
     restart: unless-stopped
     ports:
-      # TLS 建议交给上游 LB / Caddy / 宝塔的反代，这里只出 80
-      - "80:80"
+      # TLS 建议交给上游 LB / Caddy / 宝塔的反代，这里只出一个明文端口。
+      # 宿主机 80 被别的东西占着（宝塔 nginx 就是），在 .env 里写
+      # FBA_WEB_PORT=8080，不要改这一行 —— 改了服务器就和仓库分叉了
+      - "${FBA_WEB_PORT:-80}:80"
     depends_on:
       api:
         condition: service_healthy

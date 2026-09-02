@@ -447,9 +447,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 两个标签都推：`latest` 给日常部署用，短 SHA 给回滚用——出问题时服务器上
-      # 把 .env.server 同目录的 TAG 环境变量设成某个短 SHA 再 `deploy:prod:pull`，
-      # 不用等一次新的构建。
+      # 🔴 短 SHA 标签是**后补的**：这里原来只推 `sha-${{ github.sha }}`，而
+      # `github.sha` 是**完整 40 位** SHA，可所有文档写的回滚命令都是
+      # `TAG=sha-abc1234`（GitHub 网页上显示的就是短 SHA，人手里只有这个）。
+      # 实测 `docker manifest inspect ghcr.io/…/fba-api:sha-8f92000` →
+      # `no such manifest`，换成完整 SHA 才拿得到。回滚是**出事那一刻**才会跑的
+      # 命令，照文档敲第一下就失败，最不该在那时候现查。现在三个标签都推：
+      # `latest` 日常、短 SHA 给人敲、完整 SHA 给机器引用。
+      #
+      # `labels` 把提交号写进镜像（OCI 标准字段），`deploy/prod.sh status` 靠它
+      # 回答「服务器上跑的是哪个提交、落后 main 多少」——没有这个标签就只能比
+      # 镜像摘要，而摘要在走加速器 retag 之后本地根本对不上。
+      - name: 短 SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: Build & push api image
         uses: docker/build-push-action@v6
         with:
@@ -458,7 +470,11 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/fba-api:latest
+            ghcr.io/${{ github.repository_owner }}/fba-api:sha-${{ steps.sha.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/fba-api:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=fba-api
           cache-to: type=gha,mode=max,scope=fba-api
 
@@ -472,6 +488,10 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/fba-web:latest
+            ghcr.io/${{ github.repository_owner }}/fba-web:sha-${{ steps.sha.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/fba-web:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=fba-web
           cache-to: type=gha,mode=max,scope=fba-web

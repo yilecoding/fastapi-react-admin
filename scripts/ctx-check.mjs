@@ -54,7 +54,9 @@ const dirSet = new Set(allFiles.flatMap((f) => {
 }))
 
 /** 所有源码拼一起，用来核对 testid / 权限码 / 符号是否真的存在 */
-const SRC_EXT = /\.(tsx?|jsx?|mjs|py|css|json|sql|toml)$/
+// `sh` 在列表里是因为 deploy/ 的「源码」就是一个 shell 脚本 —— 少了它
+// `empty-scope` 会把 deploy/AGENTS.md 判成「模块被搬走了」，而那是误报
+const SRC_EXT = /\.(tsx?|jsx?|mjs|py|css|json|sql|toml|sh)$/
 const srcBlob = allFiles
   .filter((f) => SRC_EXT.test(f) && !f.endsWith('.md'))
   .map((f) => { try { return readFileSync(join(ROOT, f), 'utf8') } catch { return '' } })
@@ -98,6 +100,7 @@ const ALLOW = new Map(Object.entries({
   'release.yml': '在 .github/ 下，而这个扫描器刻意跳过点开头的目录',
   '.pre-commit-config.yaml': '在仓库里，真实存在（`git ls-files` 能看到）——但这个扫描器刻意跳过点开头的文件，只是巧合命中',
   'apps/api/.pre-commit-config.yaml': '同上，带路径前缀引用时是另一个 token，一起豁免',
+  'scripts/deploy-prod.mjs': '已被 deploy/prod.sh 取代（它假设部署机上有整个仓库）；文档在讲这个假设为什么不成立',
 }))
 
 /** 章节标题 → 所在上下文文件。用来判「见「XXX」」指的那一节还在不在、在不在同一份 */
