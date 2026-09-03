@@ -29,7 +29,7 @@ from backend.app.admin.utils.password_security import get_hash_password
 from backend.common.enums import StatusType
 from backend.common.exception import errors
 from backend.common.i18n import t
-from backend.common.security.data_scope import DataScopedCRUD
+from backend.common.security.data_scope import DataScopedCRUD, bypass_data_scope
 from backend.plugin.core import check_plugin_installed
 from backend.utils.serializers import select_join_serialize
 from backend.utils.timezone import timezone
@@ -56,7 +56,20 @@ class CRUDUser(DataScopedCRUD[User]):
         :param username: 用户名
         :return:
         """
-        return await self.select_model_by_column(db, username=username, deleted=0)
+        # 🔴 **唯一性 / 业务规则检查不是「展示读」，必须豁免数据权限。**
+        # 这个 DAO 是 `DataScopedCRUD`，而「开了范围过滤但没配范围」的角色是
+        # fail-closed —— 冲突行落在范围外时这里查不到，检查静默通过，
+        # 然后撞到数据库的唯一约束上：**IntegrityError → 500**，
+        # 而正确的表现是干净的 409。
+        #
+        # 实测（`set_current_user` 造一个受限用户）：超管视角三个查询全 True，
+        # 受限视角全 False（`test_conflict_checks.py` 就是那份实测）。
+        #
+        # ⚠️ 在**方法内部**豁免而不是在调用点：已逐个核实过这些方法的调用方
+        # 全是「冲突检查 / 认证链路 / CLI」，没有一个是把结果展示给用户的。
+        # 逐个调用点包的话，下一个新调用点会漏。
+        with bypass_data_scope():
+            return await self.select_model_by_column(db, username=username, deleted=0)
 
     async def get_all_by_usernames(self, db: AsyncSession, usernames: list[str]) -> Sequence[User]:
         """
@@ -86,7 +99,20 @@ class CRUDUser(DataScopedCRUD[User]):
         :param email: 电子邮箱
         :return:
         """
-        return await self.select_model_by_column(db, email=email, deleted=0)
+        # 🔴 **唯一性 / 业务规则检查不是「展示读」，必须豁免数据权限。**
+        # 这个 DAO 是 `DataScopedCRUD`，而「开了范围过滤但没配范围」的角色是
+        # fail-closed —— 冲突行落在范围外时这里查不到，检查静默通过，
+        # 然后撞到数据库的唯一约束上：**IntegrityError → 500**，
+        # 而正确的表现是干净的 409。
+        #
+        # 实测（`set_current_user` 造一个受限用户）：超管视角三个查询全 True，
+        # 受限视角全 False（`test_conflict_checks.py` 就是那份实测）。
+        #
+        # ⚠️ 在**方法内部**豁免而不是在调用点：已逐个核实过这些方法的调用方
+        # 全是「冲突检查 / 认证链路 / CLI」，没有一个是把结果展示给用户的。
+        # 逐个调用点包的话，下一个新调用点会漏。
+        with bypass_data_scope():
+            return await self.select_model_by_column(db, email=email, deleted=0)
 
     async def get_select(
         self,

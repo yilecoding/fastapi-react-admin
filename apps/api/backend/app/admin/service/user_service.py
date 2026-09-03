@@ -352,13 +352,9 @@ class UserService:
             raise errors.RequestError(msg=t('error.user.captcha_expired'))
         if captcha != captcha_code:
             raise errors.CustomError(error=CustomErrorCode.CAPTCHA_ERROR)
-        # 🔴 同理：唯一性检查也不是「展示」。`check_email` 走 scoped 的
-        # `select_model_by_column`，邮箱被一个**当前用户看不见的人**占着时，
-        # 这里查不到 → 冲突检查静默通过 → 落到数据库的唯一索引
-        # （`uk_sys_user_email_deleted`）上 → IntegrityError → 500，
-        # 而正确的表现应该是干净的 409。
-        with bypass_data_scope():
-            email_user = await user_dao.check_email(db, email)
+        # 唯一性检查的豁免已经挪进 `user_dao.check_email` 内部了
+        # （连同另外 6 个同类方法，见那里的注释）—— 这里不用再包一层
+        email_user = await user_dao.check_email(db, email)
         if email_user and email_user.id != user_id:
             raise errors.ConflictError(msg=t('error.user.email_bound'))
         await redis_client.delete(f'{settings.EMAIL_CAPTCHA_REDIS_PREFIX}:{ctx.ip}')

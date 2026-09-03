@@ -7,7 +7,7 @@ from sqlalchemy_crud_plus import JoinConfig
 
 from backend.app.admin.model import Dept, User
 from backend.app.admin.schema.dept import CreateDeptParam, UpdateDeptParam
-from backend.common.security.data_scope import DataScopedCRUD
+from backend.common.security.data_scope import DataScopedCRUD, bypass_data_scope
 from backend.utils.serializers import select_join_serialize
 from backend.utils.timezone import timezone
 
@@ -33,7 +33,20 @@ class CRUDDept(DataScopedCRUD[Dept]):
         :param code: 部门编码
         :return:
         """
-        return await self.select_model_by_column(db, code=code, deleted=0)
+        # 🔴 **唯一性 / 业务规则检查不是「展示读」，必须豁免数据权限。**
+        # 这个 DAO 是 `DataScopedCRUD`，而「开了范围过滤但没配范围」的角色是
+        # fail-closed —— 冲突行落在范围外时这里查不到，检查静默通过，
+        # 然后撞到数据库的唯一约束上：**IntegrityError → 500**，
+        # 而正确的表现是干净的 409。
+        #
+        # 实测见 `tests/security/test_conflict_checks.py`：改之前受限视角下
+        # `get_by_code('HQ')` 找不到，超管视角找得到。
+        #
+        # ⚠️ 在**方法内部**豁免而不是在调用点：已逐个核实过这些方法的调用方
+        # 全是「冲突检查 / 认证链路 / CLI」，没有一个把结果展示给用户。
+        # 逐个调用点包的话，下一个新调用点会漏。
+        with bypass_data_scope():
+            return await self.select_model_by_column(db, code=code, deleted=0)
 
     async def get_sibling_by_name(self, db: AsyncSession, name: str, parent_id: int | None) -> Dept | None:
         """
@@ -47,7 +60,20 @@ class CRUDDept(DataScopedCRUD[Dept]):
         :param parent_id: 父部门 ID（None 表示顶级）
         :return:
         """
-        return await self.select_model_by_column(db, name=name, parent_id=parent_id, deleted=0)
+        # 🔴 **唯一性 / 业务规则检查不是「展示读」，必须豁免数据权限。**
+        # 这个 DAO 是 `DataScopedCRUD`，而「开了范围过滤但没配范围」的角色是
+        # fail-closed —— 冲突行落在范围外时这里查不到，检查静默通过，
+        # 然后撞到数据库的唯一约束上：**IntegrityError → 500**，
+        # 而正确的表现是干净的 409。
+        #
+        # 实测见 `tests/security/test_conflict_checks.py`：改之前受限视角下
+        # `get_by_code('HQ')` 找不到，超管视角找得到。
+        #
+        # ⚠️ 在**方法内部**豁免而不是在调用点：已逐个核实过这些方法的调用方
+        # 全是「冲突检查 / 认证链路 / CLI」，没有一个把结果展示给用户。
+        # 逐个调用点包的话，下一个新调用点会漏。
+        with bypass_data_scope():
+            return await self.select_model_by_column(db, name=name, parent_id=parent_id, deleted=0)
 
     async def get_all(
         self,
@@ -156,7 +182,20 @@ class CRUDDept(DataScopedCRUD[Dept]):
         :param dept_id: 部门 ID
         :return:
         """
-        return await self.select_models(db, parent_id=dept_id, deleted=0)
+        # 🔴 **唯一性 / 业务规则检查不是「展示读」，必须豁免数据权限。**
+        # 这个 DAO 是 `DataScopedCRUD`，而「开了范围过滤但没配范围」的角色是
+        # fail-closed —— 冲突行落在范围外时这里查不到，检查静默通过，
+        # 然后撞到数据库的唯一约束上：**IntegrityError → 500**，
+        # 而正确的表现是干净的 409。
+        #
+        # 实测见 `tests/security/test_conflict_checks.py`：改之前受限视角下
+        # `get_by_code('HQ')` 找不到，超管视角找得到。
+        #
+        # ⚠️ 在**方法内部**豁免而不是在调用点：已逐个核实过这些方法的调用方
+        # 全是「冲突检查 / 认证链路 / CLI」，没有一个把结果展示给用户。
+        # 逐个调用点包的话，下一个新调用点会漏。
+        with bypass_data_scope():
+            return await self.select_models(db, parent_id=dept_id, deleted=0)
 
 
 dept_dao: CRUDDept = CRUDDept(Dept)

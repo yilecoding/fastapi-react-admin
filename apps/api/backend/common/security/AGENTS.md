@@ -208,14 +208,30 @@ Set-Cookie: fba_refresh_token=...; expires=Wed, 09 Sep 2026 20:36:40 GMT;
 因为只有改密码**先 `get()` 了一次**。所以这个 bug 的可见面极窄 ——
 一个受限用户想改自己的密码，拿到 500，而管理员自己（超管豁免）永远复现不了。
 
-### 还有 25 处同构的没动
+### 那 25 处后来逐个核实了，7 个方法要豁免
 
-「唯一性检查」这件事在每个模块都有：`get_by_name`（6 处）· `get_by_code`（4）·
-`check_email`（3）· `get_sibling_by_name`（2）· `get_by_username`（2）·
-`get_by_title`（2）· `get_by_label_and_type_code`（2）· `get_by_key`（2）…
-一共 **25 处** `ConflictError` 前的检查，全走 scoped 的 `select_model_by_column`。
+先按 DAO 分类：**豁免清单里的那批压根没这个问题**（`CRUDMenu` / `CRUDConfig` /
+`CRUDDictType` / `CRUDDictData` / `CRUDDataRule` / `CRUDDataScope` /
+`CRUDNotification` / `CRUDUserSocial` / `CRUDUserPasswordHistory` 都写着
+`data_scope_enabled = False`）。25 处里大半自动出局，真正 scoped 的只有
+dept / role / user / notice / file 这几个。
 
-它们只在「冲突行对当前操作者不可见」时误判，而那要求操作者是**非超管**、
-**开了范围过滤**、**且冲突行在范围外**。没有一次性全改，理由是：
-那 9 个 DAO 方法可能还有别的（展示用的）调用方，一次改 9 处而不逐个核实
-是拿一个已知 bug 换一批未知 bug。**要改就一个方法一个方法核实调用方。**
+逐个核实调用方之后，7 个方法在**方法内部**加了 `bypass_data_scope()`：
+
+| 方法 | 调用方（全是非展示读） |
+|---|---|
+| `user_dao.get_by_username` | 登录 · OAuth2 查号 · 建/改用户的冲突检查 · CLI |
+| `user_dao.check_email` | 改邮箱 / 建用户的冲突检查 |
+| `dept_dao.get_by_code` · `get_sibling_by_name` | 建/改部门的冲突检查 |
+| `dept_dao.get_children` | 删部门前「还有没有子部门」的业务规则检查 |
+| `role_dao.get_by_code` · `get_by_name` | 建/改角色的冲突检查 |
+
+⚠️ **写在方法内部而不是调用点**：这些方法**只**服务于检查和认证，没有一个
+把结果展示给用户。逐个调用点包的话，下一个新调用点会漏 ——
+而漏的表现是静默的 500。
+
+⚠️ **种子配置下这个 bug 走不到**：四个非超管演示角色一个写权限都没有
+（实测 `:add`/`:edit`/`:del` 全为 0），而要触发冲突检查得先有写权限。
+但这是个底座 —— 数据范围功能的用途就是做「区域管理员」（写权限 + 部门范围），
+第一个这么配的人就会踩到。守卫测试自己造那个配置
+（`set_current_user` + `SimpleNamespace`），不依赖种子里恰好有没有。
