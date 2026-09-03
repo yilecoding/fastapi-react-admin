@@ -166,7 +166,7 @@ jobs:
           --health-start-period 20s
 
       redis:
-        image: redis:7-alpine
+        image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
         # 6380 是为了和 .env.example / docker-compose.dev.yml 对齐。
         # 改端口要同步改那两处，否则表现是 Redis 连不上而不是端口问题
         ports:
@@ -255,6 +255,123 @@ jobs:
         working-directory: apps/api
         run: uv run --no-sync pytest
 
+  # PostgreSQL 的平行 job（issue #5）。
+  #
+  # 🔴 **主线仍然是 SQL Server，这个 job 是第二条腿，不是取代。** 结构刻意和上面
+  # `test-backend` 保持一一对应，改一个记得看另一个。
+  #
+  # 为什么值得多花这几分钟：postgres 路径此前**零自动化覆盖**——唯一一次验证是
+  # 2026-08-25 那次人工部署（腾讯云那台内存装不下 SQL Server），当场炸出两个 bug。
+  # 补这个 job 的时候第一次在 postgres 上跑 pytest，又当场炸出三个，全部是
+  # 「代码分支存在、但从没被任何自动化跑过」：
+  #   1. 五处测试用 `url.replace('/fba?', '/fba_test?')` 换库名，而只有 mssql 的
+  #      结果后端 URL 带查询串 —— postgres/mysql 上替换**静默失效**，测试连到开发库
+  #   2. `test_fresh_install_has_every_index_the_models_declare` 直接查 `sys.indexes`
+  #      （SQL Server 专属系统目录表）
+  #   3. `c0000000comments` 用裸 `contextlib.suppress` 容错，而 postgres 里一条语句
+  #      失败会毒化整个事务，Python 层吞掉异常救不回来
+  # 三条都不是「postgres 支持得不好」，是「没人跑过」。
+  #
+  # 这个 job 比 test-backend 快得多：不用装 ODBC 驱动，postgres 容器几秒就绪。
+  test-backend-postgres:
+    name: pytest · PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      DATABASE_TYPE: postgresql
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: "5432"
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_SCHEMA: fba
+      # 🔴 和 sqlserver 同理：postgres 也只有 init_snowflake_test_data.sql 这一份种子，
+      # 改成 autoincrement 会静默跳过灌数据，库建好了却没有 admin
+      DATABASE_PK_MODE: snowflake
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6380"
+      TOKEN_SECRET_KEY: ci-only-not-a-real-secret-Ku3Jd9wQpZ2vLxR7
+      PLUGIN_PIP_CHINA: "false"
+
+    services:
+      postgres:
+        # 钉 digest 的理由同 mssql（issue #66）：浮动标签会让 CI 在没人改代码的
+        # 情况下变红/变绿。升级时显式换这串，不要删掉它让标签重新浮动。
+        image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+      redis:
+        image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: uv sync
+        working-directory: apps/api
+        run: uv sync --locked --no-group lint
+
+      - name: .env
+        working-directory: apps/api
+        run: cp backend/.env.example backend/.env
+
+      # fba 建成空库即可（理由同 test-backend）；fba_test 是测试库；
+      # fba_empty 给下面那条容错分支的守卫用
+      - name: 建库（fba + fba_test + fba_empty）
+        env:
+          PG_CID: ${{ job.services.postgres.id }}
+        run: |
+          for db in fba fba_test fba_empty; do
+            docker exec "$PG_CID" psql -U postgres -c "CREATE DATABASE $db;"
+          done
+
+      - name: 重建测试库
+        working-directory: apps/api
+        run: uv run --no-sync python -m backend.scripts.reset_test_db
+
+      # 顺序不能调，理由同 test-backend
+      - name: 测试库升到 head
+        working-directory: apps/api/backend
+        env:
+          DATABASE_SCHEMA: fba_test
+        run: uv run --no-sync alembic upgrade head
+
+      # 🔴 这一步守的是 `c0000000comments` 里那个「容错」分支 —— 它是整条迁移链上
+      # 唯一会**故意让语句失败再吞掉**的地方，而各方言在「失败之后事务还能不能用」
+      # 上语义相反（详见那份迁移的 `_tolerate_already_applied()`）。
+      # 空库上跑它，8 条 ALTER 全部命中不存在的表，正好把容错分支整条走一遍：
+      # 退回裸 suppress 的话，postgres 这里会连环 InFailedSQLTransactionError。
+      # 平时这个分支在 CI 里一次都不会执行（测试库是 create_all + stamp head 的）。
+      - name: 迁移的容错分支（空库）
+        working-directory: apps/api/backend
+        env:
+          DATABASE_SCHEMA: fba_empty
+        run: uv run --no-sync alembic upgrade c0000000comments
+
+      - name: pytest
+        working-directory: apps/api
+        run: uv run --no-sync pytest
+
   test-e2e:
     name: playwright · E2E
     runs-on: ubuntu-latest
@@ -296,7 +413,7 @@ jobs:
           --health-start-period 20s
 
       redis:
-        image: redis:7-alpine
+        image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
         ports:
           - 6380:6379
         options: >-
@@ -484,9 +601,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 两个标签都推：`latest` 给日常部署用，短 SHA 给回滚用——出问题时服务器上
-      # 把 .env.server 同目录的 TAG 环境变量设成某个短 SHA 再 `deploy:prod:pull`，
-      # 不用等一次新的构建。
+      # 🔴 短 SHA 标签是**后补的**：这里原来只推 `sha-${{ github.sha }}`，而
+      # `github.sha` 是**完整 40 位** SHA，可所有文档写的回滚命令都是
+      # `TAG=sha-abc1234`（GitHub 网页上显示的就是短 SHA，人手里只有这个）。
+      # 实测 `docker manifest inspect ghcr.io/…/fba-api:sha-8f92000` →
+      # `no such manifest`，换成完整 SHA 才拿得到。回滚是**出事那一刻**才会跑的
+      # 命令，照文档敲第一下就失败，最不该在那时候现查。现在三个标签都推：
+      # `latest` 日常、短 SHA 给人敲、完整 SHA 给机器引用。
+      #
+      # `labels` 把提交号写进镜像（OCI 标准字段），`deploy/prod.sh status` 靠它
+      # 回答「服务器上跑的是哪个提交、落后 main 多少」——没有这个标签就只能比
+      # 镜像摘要，而摘要在走加速器 retag 之后本地根本对不上。
+      - name: 短 SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: Build & push api image
         uses: docker/build-push-action@v6
         with:
@@ -495,7 +624,11 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/fba-api:latest
+            ghcr.io/${{ github.repository_owner }}/fba-api:sha-${{ steps.sha.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/fba-api:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=fba-api
           cache-to: type=gha,mode=max,scope=fba-api
 
@@ -509,6 +642,10 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/fba-web:latest
+            ghcr.io/${{ github.repository_owner }}/fba-web:sha-${{ steps.sha.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/fba-web:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=fba-web
           cache-to: type=gha,mode=max,scope=fba-web

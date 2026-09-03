@@ -95,7 +95,7 @@ pnpm i18n:check && pnpm i18n:jsx
 pnpm ctx:check                  # 工程文档里的死引用 / 死链接 / 死脚本 / 死 testid
 pnpm arch:check                 # 依赖箭头：import / tsconfig paths / 方向
 pnpm test                       # 后端 pytest（303 条）；要先备好 fba_test 库
-pnpm e2e                        # 前端 Playwright（54 条）；自动拉起隔离的 web+api 实例
+pnpm e2e                        # 前端 Playwright（69 条）；自动拉起隔离的 web+api 实例
 ```
 
 🔴 **用 `pnpm <task>` 跑，别写 `--filter <某个包>`**（硬纪律 13）。这里原来写的是

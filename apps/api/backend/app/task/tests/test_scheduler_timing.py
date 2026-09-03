@@ -25,11 +25,11 @@ import pytest
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.orm import sessionmaker
 
-from backend.app.task.celery import celery_app, get_result_backend
+from backend.app.task.celery import celery_app
 from backend.app.task.model.scheduler import TaskScheduler
 from backend.app.task.utils import schedulers as sched_mod
 from backend.app.task.utils.schedulers import DatabaseScheduler
-from backend.core.conf import settings
+from backend.tests.utils.db import sync_test_db_url
 from backend.utils.timezone import timezone
 
 #: 间隔统一 60 秒 —— 远大于任何建连/查询抖动
@@ -43,11 +43,7 @@ def test_factory():
     `sync_db` 默认按 `DATABASE_SCHEMA` 连开发库 —— 测试必须改到 `_test` 库，
     否则这组用例会往你正在手测的库里插调度（而且 beat 真在跑的话会执行它）。
     """
-    url = (
-        get_result_backend()
-        .removeprefix('db+')
-        .replace(f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?')
-    )
+    url = sync_test_db_url()
     engine = create_engine(url, pool_pre_ping=True, future=True)
     yield sessionmaker(engine, expire_on_commit=False)
     engine.dispose()

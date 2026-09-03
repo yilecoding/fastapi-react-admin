@@ -50,6 +50,17 @@ stamp 只是把这件事声明出来。
   `alter_column(comment=)` 编译成 add 而不是 update。写这类迁移先问
   「新库跑这一步会怎样」
 
+- `pnpm --filter api test:db` 重建测试库之后会**自动 stamp 到 head**
+  （`reset_test_db.py: _stamp_head`）。不 stamp 的话
+  `test_model_matches_migrations` 会红 —— 它比对的就是 fba_test
+- 🔴 `_stamp_head()` 必须在 `asyncio.run()` **之外**调用：alembic 的
+  `command.stamp` 会执行 `env.py`，而那份 env 里是 `asyncio.run(...)`，
+  在已经跑着的循环里再调直接
+  `asyncio.run() cannot be called from a running event loop`
+- `pnpm --filter api db:reset` 直接走 `fba init --auto`（drop_all + create_all +
+  灌种子）。不要把 `alembic downgrade base && upgrade head` 当成重置：
+  空基线的 downgrade 不会删表或业务数据，它只适合验证迁移链
+
 ### 守卫（`app/task/tests/test_migrations.py`）
 
 | 测试 | 挡什么 |
@@ -245,3 +256,41 @@ schema 和种子数据走的是**两条完全不同的路**：
 所以 **`seed:manifest --write` 之前必须先确认当前种子与迁移链是一致的**。
 在一个「已知落后」的状态上建基线，等于把缺口永久藏起来。
 接手一个不确定的状态时，先按种子文件逐块对一遍库，别先跑 `--write`。
+
+### 🔴 迁移里「失败了就吞掉」的写法，三种方言语义**相反**（issue #5）
+
+「补齐历史遗留」类的迁移常写成「执行，失败就忽略」（新库天然已是目标状态，
+再执行会报 already exists）。这个写法的正确形态**取决于方言**：
+
+| 方言 | 一条 DDL 失败之后 | 裸 `contextlib.suppress` | `begin_nested()`（SAVEPOINT） |
+|---|---|---|---|
+| postgresql | 整个事务被置成 aborted | ❌ 后续语句连环 `InFailedSQLTransactionError` | ✅ |
+| mssql | 事务照常可用 | ✅ | ❌ `Cannot roll back sa_savepoint_1...` |
+
+两条都是实测出来的（空库 `alembic upgrade c0000000comments`，8 条 ALTER 全部
+命中不存在的表）。postgres 那条的要害是：**Python 层把异常吞掉，并不能让已经
+作废的事务活过来**——报错信息完全不提「事务」，只说下一条语句失败了。
+
+`c0000000comments` 里的 `_tolerate_already_applied()` 是现成的抄法：postgres 走
+SAVEPOINT、其余走 suppress、离线 `--sql` 模式直接放行（那时 bind 是
+`MockConnection`，没有 `begin_nested()`，不放行会打掉
+`test_migrations_compile_offline_for_every_supported_dialect` 那条守卫）。
+
+⚠️ **不要拿一种方言的实测结论当通用前提。** 这条迁移原来的 docstring 写着
+「实测 SQL Server 在这里不会毒化事务」——对 mssql 成立，对 postgres 不成立，
+而当时只有 SQL Server 在 CI 里跑，所以这句话一直看着是对的。
+
+### ⚠️ 整条迁移链**不能**从 base 重放，这是设计而不是缺陷
+
+有人（包括 issue #5 一开始）会想加一条「空库 `alembic upgrade head` 必须成功」
+的冒烟检查。跑不通，而且不该跑通：
+
+- 基线 `b0000000baseline` **刻意是空的**（只是起点标记，不含建表 DDL）
+- 所以空库升上去时，`c0000000comments` 的 ALTER 全部落空（现在被容错分支接住），
+  再往后 `33ffb491b69f` 要往 `sys_role`/`sys_menu` 插种子行 —— 那些表不存在，炸
+- 反过来，先 `create_all` 再 stamp 基线也不行：`9609aedfaf8d` 会 `CREATE TABLE
+  sys_notification`，而 `create_all` 已经建过了
+
+**新库的正路是 `fba init`（create_all + 种子 + stamp head），不是重放迁移。**
+迁移链只对「基线之后才出现的增量」负责。真正需要守的是「下一条迁移在三种方言上
+都能编译」，那条守卫已经有了（`test_migrations_compile_offline_for_every_supported_dialect`）。

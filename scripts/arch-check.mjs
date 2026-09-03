@@ -341,25 +341,46 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', '
   let checked = 0
   if (fs.existsSync(e2eDir)) {
     for (const file of walk(e2eDir).filter((f) => f.endsWith('.ts'))) {
-      const lines = stripComments(fs.readFileSync(file, 'utf8')).split('\n')
-      lines.forEach((line, index) => {
-        for (const m of line.matchAll(/expect\s*\(/g)) {
-          // 匹配器可能换行写，往后看几行
-          const chunk = lines.slice(index, index + 4).join(' ')
-          if (!WEB_FIRST.some((w) => chunk.includes(`.${w}(`))) continue
-          checked += 1
-          const before = line.slice(0, m.index)
-          const awaited = /\bawait\b/.test(before) || /^\s*(await|return)\b/.test(line)
-          if (!awaited) {
-            add(
-              'error',
-              `${rel(file)}:${index + 1}`,
-              'unawaited-assertion',
-              `web-first 断言漏了 await，这条断言不会执行：${line.trim().slice(0, 80)}`,
-            )
+      const src = stripComments(fs.readFileSync(file, 'utf8'))
+      const lines = src.split('\n')
+      for (const m of src.matchAll(/\bexpect\s*\(/g)) {
+        // 🔴 **必须定位到「这一个 expect 调用自己的匹配器」**，不能往后看几行。
+        //
+        // 第一版是 `lines.slice(index, index + 4)` 里找 web-first 匹配器 ——
+        // 结果把 `expect(dirs.length, '...').toBeGreaterThan(0)` 报成违规
+        // （合并 main 的新 e2e 用例时当场撞到）：`toBeGreaterThan` 是**同步**
+        // 匹配器、压根不需要 await，只是它下面几行恰好有个 `toBeVisible()`。
+        //
+        // 现在从 `expect(` 开始数括号找到这次调用的结尾，只看紧跟其后的那个
+        // `.xxx(`（允许中间夹 `.not` / `.resolves` / 换行）。
+        let i = m.index + m[0].length - 1
+        let depth = 0
+        while (i < src.length) {
+          if (src[i] === '(') depth += 1
+          else if (src[i] === ')') {
+            depth -= 1
+            if (depth === 0) break
           }
+          i += 1
         }
-      })
+        const tail = src.slice(i + 1, i + 200)
+        const matcher = tail.match(/^\s*(?:\.(?:not|resolves|rejects)\s*)*\.\s*(\w+)\s*\(/)
+        if (!matcher || !WEB_FIRST.includes(matcher[1])) continue
+
+        checked += 1
+        const lineNo = src.slice(0, m.index).split('\n').length
+        const line = lines[lineNo - 1] ?? ''
+        const before = src.slice(Math.max(0, m.index - 200), m.index)
+        const awaited = /\b(await|return)\s*$/.test(before) || /\bawait\b[^\n;]*$/.test(before.split('\n').pop() ?? '')
+        if (!awaited) {
+          add(
+            'error',
+            `${rel(file)}:${lineNo}`,
+            'unawaited-assertion',
+            `web-first 断言漏了 await，这条断言不会执行：${line.trim().slice(0, 80)}`,
+          )
+        }
+      }
     }
   }
   // 🔴 先断言「有」：扫不到任何断言时「没有漏 await」天然成立

@@ -251,17 +251,12 @@ def test_result_fields_are_extended(client: TestClient, token_headers):
     from sqlalchemy import create_engine, delete, insert
     from sqlalchemy.orm import sessionmaker
 
-    from backend.app.task.celery import get_result_backend
     from backend.app.task.model import TaskExtended
-    from backend.core.conf import settings
+    from backend.tests.utils.db import sync_test_db_url
 
     # 用同步引擎直插 —— 这张表由 celery 写，没有创建接口；
     # conftest 那套 override_get_db 是异步生成器，同步用例里用不了
-    url = (
-        get_result_backend()
-        .removeprefix('db+')
-        .replace(f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?')
-    )
+    url = sync_test_db_url()
     factory = sessionmaker(create_engine(url, future=True), expire_on_commit=False)
 
     task_id = f'pytest-{_uuid.uuid4()}'
@@ -348,16 +343,11 @@ def seeded_results():
     from sqlalchemy import create_engine, delete, insert
     from sqlalchemy.orm import sessionmaker
 
-    from backend.app.task.celery import get_result_backend
     from backend.app.task.model import TaskExtended
-    from backend.core.conf import settings
+    from backend.tests.utils.db import sync_test_db_url
     from backend.utils.timezone import timezone
 
-    url = (
-        get_result_backend()
-        .removeprefix('db+')
-        .replace(f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?')
-    )
+    url = sync_test_db_url()
     factory = sessionmaker(create_engine(url, future=True), expire_on_commit=False)
 
     tag = f'pytest-range-{_uuid.uuid4().hex[:8]}'
@@ -508,11 +498,10 @@ def test_fresh_install_has_every_index_the_models_declare(client: TestClient, to
     ⚠️ 它查的是 **fba_test**（conftest 指过去的那个库），所以
     「改完模型忘了在测试库建索引」也会被它抓到。
     """
-    from sqlalchemy import create_engine, text
+    from sqlalchemy import create_engine, inspect
 
-    from backend.app.task.celery import get_result_backend
     from backend.common.model import MappedBase
-    from backend.core.conf import settings
+    from backend.tests.utils.db import sync_test_db_url
 
     watched = ['task_result', 'task_scheduler', 'sys_login_log', 'sys_opera_log']
     want: set[tuple[str, str]] = set()
@@ -520,24 +509,15 @@ def test_fresh_install_has_every_index_the_models_declare(client: TestClient, to
         table = MappedBase.metadata.tables[name]
         want.update((name, idx.name) for idx in table.indexes)
 
-    url = (
-        get_result_backend()
-        .removeprefix('db+')
-        .replace(f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?')
-    )
+    url = sync_test_db_url()
     engine = create_engine(url, future=True)
     try:
-        with engine.connect() as conn:
-            have = {
-                (r[0], r[1])
-                for r in conn.execute(
-                    text(
-                        'SELECT t.name, i.name FROM sys.indexes i '
-                        'JOIN sys.tables t ON t.object_id = i.object_id '
-                        'WHERE i.name IS NOT NULL'
-                    )
-                )
-            }
+        # 🔴 用 Inspector，不要查 `sys.indexes` —— 那是 **SQL Server 专属**的系统目录表。
+        # 原来这里是一条裸 SQL，在 postgres 上直接 `relation "sys.indexes" does not exist`
+        # （实测：issue #5 第一次在 postgres 上跑 pytest 时炸出来）。这条测试断言的是
+        # 「模型声明的索引在库里存在」，和方言无关，实现也不该跟某一种方言绑死。
+        inspector = inspect(engine)
+        have = {(name, idx['name']) for name in watched for idx in inspector.get_indexes(name) if idx.get('name')}
     finally:
         engine.dispose()
 

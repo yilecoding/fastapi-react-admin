@@ -54,7 +54,9 @@ const dirSet = new Set(allFiles.flatMap((f) => {
 }))
 
 /** 所有源码拼一起，用来核对 testid / 权限码 / 符号是否真的存在 */
-const SRC_EXT = /\.(tsx?|jsx?|mjs|py|css|json|sql|toml)$/
+// `sh` 在列表里是因为 deploy/ 的「源码」就是一个 shell 脚本 —— 少了它
+// `empty-scope` 会把 deploy/AGENTS.md 判成「模块被搬走了」，而那是误报
+const SRC_EXT = /\.(tsx?|jsx?|mjs|py|css|json|sql|toml|sh)$/
 const srcBlob = allFiles
   .filter((f) => SRC_EXT.test(f) && !f.endsWith('.md'))
   .map((f) => { try { return readFileSync(join(ROOT, f), 'utf8') } catch { return '' } })
@@ -109,6 +111,7 @@ const ALLOW = new Map(Object.entries({
   'release.yml': '在 .github/ 下，而这个扫描器刻意跳过点开头的目录',
   '.pre-commit-config.yaml': '在仓库里，真实存在（`git ls-files` 能看到）——但这个扫描器刻意跳过点开头的文件，只是巧合命中',
   'apps/api/.pre-commit-config.yaml': '同上，带路径前缀引用时是另一个 token，一起豁免',
+  'scripts/deploy-prod.mjs': '已被 deploy/prod.sh 取代（它假设部署机上有整个仓库）；文档在讲这个假设为什么不成立',
 }))
 
 /** 章节标题 → 所在上下文文件。用来判「见「XXX」」指的那一节还在不在、在不在同一份 */
@@ -156,7 +159,14 @@ function resolvePathish(tok) {
   if (fileSet.has(t) || dirSet.has(t.endsWith('/') ? t : t + '/')) return true
   const pool = t.endsWith('/') ? dirSet : allFiles
   for (const c of pool) if (segMatch(t, c)) return true
-  return false
+  // ⚠️ **兜一层真实文件系统。** 上面那几个集合来自本文件顶部那个扫描，
+  // 而它会跳过以 `.` 开头的条目 —— 于是「目录里只有点文件」的路径永远进不了
+  // `dirSet`，被判成「仓库里找不到」。
+  //
+  // 实测撞到：`apps/api/deploy/backend/docker-compose/` 里只有
+  // `.env.server` 和 `.env.server.example`，`deploy/README.md` 指它时被报死引用，
+  // 而那个目录是真的在。误报比漏报更伤 —— 它会让人去「修」一份本来正确的文档。
+  return existsSync(resolve(ROOT, t))
 }
 
 for (const file of ctxFiles) {

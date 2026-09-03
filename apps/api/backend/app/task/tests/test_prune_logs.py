@@ -17,8 +17,7 @@ from sqlalchemy import create_engine, delete, func, select
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.admin.model import LoginLog, OperaLog
-from backend.app.task.celery import get_result_backend
-from backend.core.conf import settings
+from backend.tests.utils.db import sync_test_db_url
 from backend.utils.timezone import timezone
 
 MARK = 'pytest-prune'
@@ -30,11 +29,7 @@ _next_id = iter(range(910000000000000001, 910000000000001000))
 
 @pytest.fixture(scope='module')
 def factory():
-    url = (
-        get_result_backend()
-        .removeprefix('db+')
-        .replace(f'/{settings.DATABASE_SCHEMA}?', f'/{settings.DATABASE_SCHEMA}_test?')
-    )
+    url = sync_test_db_url()
     engine = create_engine(url, pool_pre_ping=True, future=True)
     yield sessionmaker(engine, expire_on_commit=False)
     engine.dispose()

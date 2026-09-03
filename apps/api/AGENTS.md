@@ -457,3 +457,5 @@ async_db_session`"，定时任务/脚本/CLI 命令这类不经过 FastAPI 依�
 | 动权限码 / 数据范围（行级过滤） | [`backend/common/security` 分册](backend/common/security/AGENTS.md) |
 | 写迁移 / 改种子数据 | [`backend/alembic` 分册](backend/alembic/AGENTS.md) |
 | 动定时任务 / Celery | [`backend/app/task` 分册](backend/app/task/AGENTS.md) |
+| 动公共层（校验 / 异常 / 缓存 / 分页） | [`backend/common` 分册](backend/common/AGENTS.md) |
+| admin 模块的测试笔记（动态配置 / prod 检查 / 上传） | [`app/admin/tests` 分册](backend/app/admin/tests/AGENTS.md) |
