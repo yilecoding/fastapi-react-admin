@@ -30,6 +30,7 @@ from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.pagination import paging_data
 from backend.common.response.response_code import CustomErrorCode
+from backend.common.security.data_scope import bypass_data_scope
 from backend.common.security.jwt import get_token, jwt_decode
 from backend.core.conf import settings
 from backend.database.redis import redis_client
@@ -268,9 +269,19 @@ class UserService:
             raise errors.NotFoundError(msg=t('error.user.not_found'))
 
         await validate_new_password(db, user.id, password)
+        # 🔴 **旧 hash 必须在改之前抓住。** `user` 和 `reset_password` 动的是
+        # **同一个 ORM 实例**，改完之后 `user.password` 已经是新 hash 了 ——
+        # 于是历史表里存进去的是「刚设的那个密码」，而不是被换掉的那个。
+        #
+        # 实测（改一次密码后直接查 `sys_user_password_history`）：
+        # 那一行 `password_verify(新密码, hash)` 是 **True**、
+        # `password_verify(旧密码, hash)` 是 **False**。
+        # 后果是「不许复用最近 N 个密码」这条控制**从来没生效过**：
+        # 改回上一个密码照样通过（实测 code=200），而界面上没有任何异常。
+        previous_password = user.password
         count = await user_dao.reset_password(db, user.id, password)
 
-        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=user.password)
+        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
         await redis_client.delete_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user.id}')
@@ -341,7 +352,13 @@ class UserService:
             raise errors.RequestError(msg=t('error.user.captcha_expired'))
         if captcha != captcha_code:
             raise errors.CustomError(error=CustomErrorCode.CAPTCHA_ERROR)
-        email_user = await user_dao.check_email(db, email)
+        # 🔴 同理：唯一性检查也不是「展示」。`check_email` 走 scoped 的
+        # `select_model_by_column`，邮箱被一个**当前用户看不见的人**占着时，
+        # 这里查不到 → 冲突检查静默通过 → 落到数据库的唯一索引
+        # （`uk_sys_user_email_deleted`）上 → IntegrityError → 500，
+        # 而正确的表现应该是干净的 409。
+        with bypass_data_scope():
+            email_user = await user_dao.check_email(db, email)
         if email_user and email_user.id != user_id:
             raise errors.ConflictError(msg=t('error.user.email_bound'))
         await redis_client.delete(f'{settings.EMAIL_CAPTCHA_REDIS_PREFIX}:{ctx.ip}')
@@ -359,7 +376,22 @@ class UserService:
         :param obj: 密码重置参数
         :return:
         """
-        user = await user_dao.get(db, user_id)
+        # 🔴 **读自己那一行必须豁免数据权限。** `user_dao` 是 `DataScopedCRUD`，
+        # 而「开了范围过滤但一个范围都没配」的角色是 fail-closed（种子里的 STAFF
+        # 就是这样）—— 那种用户**看不见自己**，`get()` 返回 None，下一句
+        # `user.password` 直接 `AttributeError` → **500**。
+        #
+        # 实测：拿 STAFF 角色的账号打 `PUT /sys/users/me/password`，
+        # 500 `AttributeError: 'NoneType' object has no attribute 'password'`。
+        # 而 `/users/me`、`/me/nickname`、`/me/avatar` 都是 200 —— 只有这一条炸，
+        # 因为只有它先 `get()` 了一次。
+        #
+        # 这次读的目的不是「把数据展示给用户」，是「验他自己的旧密码」，
+        # 按可见范围过滤没有意义 —— 正是 `bypass_data_scope()` 注释里写的那种场景。
+        with bypass_data_scope():
+            user = await user_dao.get(db, user_id)
+        if not user:
+            raise errors.NotFoundError(msg=t('error.user.not_found'))
 
         if user.password and not password_verify(obj.old_password, user.password):
             raise errors.RequestError(msg=t('error.user.wrong_old_password'))
@@ -368,9 +400,11 @@ class UserService:
             raise errors.RequestError(msg=t('error.user.password_mismatch'))
 
         await validate_new_password(db, user_id, obj.new_password)
+        # 旧 hash 要在改之前抓住 —— 理由同 `reset_password`（同一个 ORM 实例）
+        previous_password = user.password
         count = await user_dao.reset_password(db, user_id, obj.new_password)
 
-        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=user.password)
+        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
         await redis_client.delete_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user_id}')

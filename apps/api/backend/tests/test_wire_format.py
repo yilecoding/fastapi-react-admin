@@ -89,6 +89,19 @@ def _walk_ints(node: Any, trail: str = '$') -> tuple[list[str], int]:
     return bad, snowflakes
 
 
+#: 这些键底下是**原样记录的载荷**，不受「服务端下发必须带时区」的约束。
+#:
+#: 🔴 这条豁免是被自己的守卫教出来的：操作日志把请求的查询参数原样存进
+#: `args`，而测试里打过 `?start_time=2026-08-29 09:51:41` 这种**不带时区**的
+#: 参数（时间范围那几条测试就是这么写的，客户端本来也可以那么传）。
+#: 于是 `/logs/opera` 一返回，守卫就在 `$.data.items[0].args.query_params.start_time`
+#: 上报违规 —— 而那根本不是服务端生成的时间，是回声。
+#:
+#: ⚠️ 更要紧的是它**按数据碰运气**：只有当日志表里恰好有那种参数时才红。
+#: 一条时红时绿的守卫比没有守卫更糟，所以这里按键名整棵子树跳过。
+_RECORDED_PAYLOAD_KEYS = frozenset({'args', 'kwargs', 'body', 'request_body', 'response', 'result', 'traceback'})
+
+
 def _walk_datetimes(node: Any, trail: str = '$') -> tuple[list[str], int]:
     """递归找出「没带时区标记的时间串」
 
@@ -107,6 +120,8 @@ def _walk_datetimes(node: Any, trail: str = '$') -> tuple[list[str], int]:
         return bad, seen
     if isinstance(node, dict):
         for key, value in node.items():
+            if key in _RECORDED_PAYLOAD_KEYS:
+                continue
             sub_bad, sub_seen = _walk_datetimes(value, f'{trail}.{key}')
             bad.extend(sub_bad)
             seen += sub_seen

@@ -188,3 +188,34 @@ Set-Cookie: fba_refresh_token=...; expires=Wed, 09 Sep 2026 20:36:40 GMT;
 `_check_token_lifetimes()` 拦这个，判据是 `>` 而**不是 `>=`** ——
 相等时刷新窗口是 0，后果和「refresh 更短」一模一样。两条守卫测试
 （更短 / 相等），双向验证过。
+
+## 🔴 「非展示的读」必须 `bypass_data_scope()` —— 否则受限用户会自锁
+
+`bypass_data_scope()` 的注释写着它给「请求上下文里的系统内部读」用，
+理由是「这些读的目的不是把数据展示给用户，按可见范围过滤没有意义，
+而且会自锁」。**这条纪律有两处漏了，都是实测踩出来的。**
+
+前提：种子里的 `STAFF` 角色是 `is_filter_scopes=True` 但**一个数据范围都没配**
+—— 而那种组合是 fail-closed（`filter_data_permission_for_user` 里
+`if not data_rules: return or_(1 != 1)`）。也就是说这种用户**看不见自己**。
+
+| 漏的地方 | 实测表现 |
+|---|---|
+| `update_password` 先 `user_dao.get()` 验旧密码 | **500** `AttributeError: 'NoneType' object has no attribute 'password'` |
+| `update_email` 用 `check_email()` 查唯一性 | 邮箱被**看不见的人**占着时冲突检查静默通过 → 撞唯一索引 `uk_sys_user_email_deleted` → 500（正确应是 409） |
+
+⚠️ 只有改密码那一条炸：`/users/me`、`/me/nickname`、`/me/avatar` 实测都是 200，
+因为只有改密码**先 `get()` 了一次**。所以这个 bug 的可见面极窄 ——
+一个受限用户想改自己的密码，拿到 500，而管理员自己（超管豁免）永远复现不了。
+
+### 还有 25 处同构的没动
+
+「唯一性检查」这件事在每个模块都有：`get_by_name`（6 处）· `get_by_code`（4）·
+`check_email`（3）· `get_sibling_by_name`（2）· `get_by_username`（2）·
+`get_by_title`（2）· `get_by_label_and_type_code`（2）· `get_by_key`（2）…
+一共 **25 处** `ConflictError` 前的检查，全走 scoped 的 `select_model_by_column`。
+
+它们只在「冲突行对当前操作者不可见」时误判，而那要求操作者是**非超管**、
+**开了范围过滤**、**且冲突行在范围外**。没有一次性全改，理由是：
+那 9 个 DAO 方法可能还有别的（展示用的）调用方，一次改 9 处而不逐个核实
+是拿一个已知 bug 换一批未知 bug。**要改就一个方法一个方法核实调用方。**
