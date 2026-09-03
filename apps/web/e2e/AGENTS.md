@@ -314,3 +314,25 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 两个方向都反向验证过：拿掉一处 `await` → 报 `unawaited-assertion`；
 把 `e2e/tests` 挪走 → 报 `e2e-scanner-broken`（扫不到断言时
 「没有漏 await」天然成立，所以要先断言「有」）。
+
+## ⚠️ 有一条 E2E 是**休眠**的（数据不在就跳过）
+
+`scheduler.spec.ts` 的「执行记录」那条：
+
+```ts
+if ((await first.count()) === 0) {
+  test.skip(true, "fba_test 里还没有执行记录（需要跑过一次 worker）")
+```
+
+**实测这条分支永远成立** —— `fba_test` 的 `task_result` 是 0 行：种子里只有
+`task_scheduler`，执行记录是 celery 写的、没有创建接口，而 `global-setup.ts`
+只能走 HTTP 造数据。于是它下面那几行断言**一次都没执行过**，
+而跳过在报告里长得像通过。
+
+好在那个 bug 没失守，后端覆盖着（把 CRUD 绑成 `Task` 一打，
+`test_scheduler_api.py` 的 4 条 + `test_result_columns.py` 的 1 条会红）。
+留着这一条是为了「有 worker 跑过的环境里顺手多验一层 UI」。
+
+判据：**「数据不在就跳过」的 E2E，先量一遍那个条件在 CI 环境里是不是恒成立。**
+恒成立的话它就不是测试，是一行注释 —— 那么真正的防线必须在别处，
+而且要写清楚在哪（否则下一个人会以为这里守着）。
