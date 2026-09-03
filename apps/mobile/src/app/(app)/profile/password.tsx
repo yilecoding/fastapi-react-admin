@@ -141,7 +141,7 @@ function PwRow({
   return (
     <>
       <Row first={first}>
-        <Text className="w-[76px] shrink-0 text-[15px]">{label}</Text>
+        <Text className="min-w-[76px] shrink-0 text-[15px]">{label}</Text>
         <Input
           value={value}
           onChangeText={onChange}

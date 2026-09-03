@@ -1,6 +1,20 @@
 import createOpenApiClient from 'openapi-fetch'
 
-import { ApiError, NETWORK_STATUS, resolveEnvelope } from './index'
+/*
+ * 🔴 **从叶子模块直接取，不要 import 自己的 barrel（`./index`）。**
+ *
+ * 这里原来写的是 `from './index'`，而 `index.ts` 又 `export { createApiClient }
+ * from './client'` —— 一个环。Metro 会打出
+ * `Require cycle: packages/api/src/index.ts -> packages/api/src/client.ts -> ...`
+ * （**只有 Metro 打**：Vite / tsc / eslint 全都不说话，所以 web 端跑了很久都没人发现，
+ * 是移动端在设备上跑起来才现形的）。
+ *
+ * 现在能跑是因为这三个绑定都只在**函数体里**用；一旦有人在模块作用域用它们
+ * （`const E = new ApiError(...)`、或者给默认参数），环里后加载的那一侧会拿到
+ * `undefined` —— 报的是 `undefined is not a constructor` 之类，和真因隔着两层。
+ */
+import { ApiError } from './errors'
+import { NETWORK_STATUS, resolveEnvelope } from './envelope'
 import type { ApiMethods } from './types'
 
 /**
