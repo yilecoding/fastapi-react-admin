@@ -71,7 +71,7 @@ export default function EditProfileScreen() {
       <ScrollView contentContainerClassName="gap-4 py-4" keyboardShouldPersistTaps="handled">
         <Group>
           <Row first>
-            <Text className="w-[70px] shrink-0 text-[15px]">{t('昵称')}</Text>
+            <Text className="min-w-[70px] shrink-0 text-[15px]">{t('昵称')}</Text>
             <Input
               value={nickname}
               onChangeText={(v) => {
@@ -86,7 +86,7 @@ export default function EditProfileScreen() {
           </Row>
           <FieldError message={fieldErrors.nickname} testID="edit-nickname-error" />
           <Row>
-            <Text className="w-[70px] shrink-0 text-[15px]">{t('头像')}</Text>
+            <Text className="min-w-[70px] shrink-0 text-[15px]">{t('头像')}</Text>
             <Input
               value={avatar}
               onChangeText={(v) => {
