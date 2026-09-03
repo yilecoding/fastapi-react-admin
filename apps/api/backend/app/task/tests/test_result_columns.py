@@ -32,10 +32,21 @@ import pytest
 from sqlalchemy import text
 from starlette.testclient import TestClient
 
+from backend.utils.timezone import timezone
+
 #: ⚠️ **不能自己指定 id** —— `task_result.id` 是 `autoincrement=True`，
 #: 在 SQL Server 上就是 IDENTITY 列，显式给值直接
 #: `Cannot insert explicit value for identity column ... IDENTITY_INSERT is set to OFF`。
 #: 这张表和别的表不一样（其余表都是雪花 ID、自己发号），所以插完读回来。
+#: 🔴 **必须传真的 `datetime`，不能传字符串。** pyodbc（SQL Server）会帮你把
+#: `'2026-09-03 08:00:00'` 转成时间，而 **asyncpg（PostgreSQL）不会** ——
+#: 直接 `DataError: invalid input for query argument $7 ... (expected a
+#: datetime.date or datetime.datetime instance, got 'str')`。
+#:
+#: 这一条是 CI 上 PostgreSQL 那个平行 job 抓到的（本机只跑 SQL Server，
+#: 一直是绿的）—— 「一种方言上过了」不等于「对」。
+_DONE_AT = timezone.now().replace(microsecond=0)
+
 TASK_ID = 'pytest-result-columns'
 EXPECTED = {'name': 'maintenance.prune_logs', 'worker': 'pytest-worker', 'retries': 2, 'queue': 'pytest-queue'}
 
@@ -78,7 +89,7 @@ def seeded_result():
             'worker': EXPECTED['worker'],
             'retries': EXPECTED['retries'],
             'queue': EXPECTED['queue'],
-            'done': '2026-09-03 08:00:00',
+            'done': _DONE_AT,
         },
     )
     row_id = _run('SELECT id FROM task_result WHERE task_id = :tid', {'tid': TASK_ID}, fetch=True)
