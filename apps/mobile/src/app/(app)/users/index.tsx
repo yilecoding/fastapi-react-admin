@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
+import { toast } from '@/components/ui/toast'
 import type { UserListItem } from '@/lib/contract'
 import { useDebounced } from '@/lib/debounce'
 import { useUsers, type UserFilter } from '@/lib/users'
@@ -63,9 +64,24 @@ export default function UsersScreen() {
   const total = q.data?.pages[0]?.total ?? 0
   const filtering = debounced.trim() !== '' || status !== 'all'
   const firstPageError = q.isError && items === null ? errText(q.error) : null
-  // ⚠️ 「翻页失败」= 已经有数据了、但再拉一页失败。它和首屏失败共用 `q.isError`，
-  // 靠 `items` 有没有值区分 —— 分不开的话前面拿到的内容会被整屏错误吃掉
-  const nextPageError = q.isError && items !== null ? errText(q.error) : null
+  /*
+   * ⚠️ 「翻页失败」用 **`isFetchNextPageError`**，不要用 `isError && items !== null`。
+   * 后者会把**下拉刷新失败**也算进来 —— 于是列表底部冒出一句「加载更多失败」，
+   * 而用户刚做的动作是下拉。文案指着一个他没做过的操作，比不报还难懂。
+   * TanStack Query v5 把这两件事分开了（`isFetchNextPageError`）。
+   */
+  const nextPageError = q.isFetchNextPageError ? errText(q.error) : null
+
+  /*
+   * 🔴 下拉刷新失败必须说一声（硬纪律 9）。它是这一屏唯一**没有位置可占**的失败：
+   * 列表内容还在（那是上一次的数据、仍然可读），把整屏换成错误块反而丢内容。
+   * 所以走 toast —— 和「写操作失败走 toast」同一条理由（见 `ui/toast.tsx`）。
+   * 不报的话下拉一下什么都没变，看起来像「刷新了但没有新数据」。
+   */
+  async function onPullRefresh() {
+    const r = await q.refetch()
+    if (r.isError) toast.error(t('刷新失败'), { description: errText(r.error) })
+  }
 
   return (
     <View className="bg-background flex-1">
@@ -98,7 +114,10 @@ export default function UsersScreen() {
           </Tabs>
           {/* 总数只在真的知道时显示 —— 拉失败时 `?? 0` 会让它显示「共 0 人」，
               那是一个看起来像结论的假数字 */}
-          {items !== null ? (
+          {/* 占位期间转个圈：屏上还是旧结果，不给信号的话看起来像「搜了但没反应」 */}
+          {q.isPlaceholderData && q.isFetching ? (
+            <ActivityIndicator size="small" />
+          ) : items !== null ? (
             <Text className="text-muted-foreground shrink-0 text-xs" testID="users-total">
               {t('共 {{n}} 人', { n: total })}
             </Text>
@@ -128,7 +147,10 @@ export default function UsersScreen() {
           keyExtractor={(u) => String(u.id)}
           contentContainerClassName="gap-2.5 px-4 pt-1 pb-10"
           refreshControl={
-            <RefreshControl refreshing={q.isRefetching && !q.isFetchingNextPage} onRefresh={() => void q.refetch()} />
+            <RefreshControl
+              refreshing={q.isRefetching && !q.isFetchingNextPage}
+              onRefresh={() => void onPullRefresh()}
+            />
           }
           /*
            * 🔴 `onEndReachedThreshold` 的单位是**屏高的倍数**，不是像素。
@@ -141,7 +163,9 @@ export default function UsersScreen() {
            */
           onEndReachedThreshold={0.5}
           onEndReached={() => {
-            if (q.hasNextPage && !q.isFetchingNextPage) void q.fetchNextPage()
+            // 🔴 占位期间（`isPlaceholderData`）显示的是**上一套筛选条件**的数据，
+            // 此时 `hasNextPage` / 页码都属于旧的那一套 —— 翻页会把两套结果串起来
+            if (q.hasNextPage && !q.isFetchingNextPage && !q.isPlaceholderData) void q.fetchNextPage()
           }}
           ListEmptyComponent={
             <Card className="items-center gap-2 rounded-xl border-0 py-12 shadow-none">
@@ -227,35 +251,49 @@ function UserRow({ user, onPress }: { user: UserListItem; onPress: () => void })
   const name = user.nickname || user.username
 
   return (
-    <Pressable onPress={onPress} testID={`user-row-${user.id}`}>
-      <Card className="active:bg-muted flex-row items-center gap-3 rounded-xl border-0 px-4 py-3 shadow-none">
-        <Avatar alt={name} className="size-11 rounded-[14px]">
-          {user.avatar ? <AvatarImage source={{ uri: user.avatar }} /> : null}
-          <AvatarFallback className="bg-primary rounded-[14px]">
-            <Text className="text-primary-foreground font-semibold">{name.slice(0, 1).toUpperCase()}</Text>
-          </AvatarFallback>
-        </Avatar>
-        <View className="flex-1 gap-1">
-          <View className="flex-row items-center gap-2">
-            <Text className="shrink text-[15px] font-medium" numberOfLines={1}>
-              {name}
-            </Text>
-            {/* 停用才出徽标 —— 「启用」是常态，给常态挂标签等于满屏噪音 */}
-            {user.status === 0 ? (
-              <Badge variant="secondary">
-                <Text>{t('停用')}</Text>
-              </Badge>
-            ) : null}
-          </View>
-          <Text className="text-muted-foreground text-xs" numberOfLines={1}>
-            @{user.username}
-            {/* ⚠️ `dept` 是对象、`roles` 是对象数组 —— 见 `UserListItem` 的注释 */}
-            {user.dept?.name ? ` · ${user.dept.name}` : ''}
-            {user.roles.length > 0 ? ` · ${user.roles.map((r) => r.name).join('、')}` : ''}
+    /*
+     * 🔴 **`active:` 只在 uniwind 的 `Pressable` 包装里解析，挂在别的组件上是死代码。**
+     * 这里原来是 `<Pressable><Card className="active:bg-muted …">`，那个 `active:`
+     * **一次都不会生效** —— 读 uniwind 的实现：`Pressable.js` 把 `style` 传成
+     * 函数并在 `state.pressed` 时带上 `isPressed` 重算，而 `View.js`（`Card` 就是
+     * 一个 View）只有 `useStyle(className, props)`，压根没有 pressed 这一维。
+     * 不报错、不警告，就是按下去没反应。
+     *
+     * 所以行本身就是 Pressable、自己画卡片表面，不再套 `Card`
+     * （仓库里其余 `active:` 也都在 Pressable 上：`grouped.tsx` 的 `PressRow` /
+     * `DangerRow`、通知列表那一行）。
+     */
+    <Pressable
+      onPress={onPress}
+      testID={`user-row-${user.id}`}
+      className="bg-card active:bg-muted flex-row items-center gap-3 rounded-xl px-4 py-3"
+    >
+      <Avatar alt={name} className="size-11 rounded-[14px]">
+        {user.avatar ? <AvatarImage source={{ uri: user.avatar }} /> : null}
+        <AvatarFallback className="bg-primary rounded-[14px]">
+          <Text className="text-primary-foreground font-semibold">{name.slice(0, 1).toUpperCase()}</Text>
+        </AvatarFallback>
+      </Avatar>
+      <View className="flex-1 gap-1">
+        <View className="flex-row items-center gap-2">
+          <Text className="shrink text-[15px] font-medium" numberOfLines={1}>
+            {name}
           </Text>
+          {/* 停用才出徽标 —— 「启用」是常态，给常态挂标签等于满屏噪音 */}
+          {user.status === 0 ? (
+            <Badge variant="secondary">
+              <Text>{t('停用')}</Text>
+            </Badge>
+          ) : null}
         </View>
-        <Icon as={ChevronRightIcon} className="text-muted-foreground size-4 opacity-40" />
-      </Card>
+        <Text className="text-muted-foreground text-xs" numberOfLines={1}>
+          @{user.username}
+          {/* ⚠️ `dept` 是对象、`roles` 是对象数组 —— 见 `UserListItem` 的注释 */}
+          {user.dept?.name ? ` · ${user.dept.name}` : ''}
+          {user.roles.length > 0 ? ` · ${user.roles.map((r) => r.name).join('、')}` : ''}
+        </Text>
+      </View>
+      <Icon as={ChevronRightIcon} className="text-muted-foreground size-4 opacity-40" />
     </Pressable>
   )
 }

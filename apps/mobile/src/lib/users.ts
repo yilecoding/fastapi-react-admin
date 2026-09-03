@@ -42,6 +42,8 @@ const PAGE_SIZE = 20
 
 export const usersKey = {
   all: ['users'] as const,
+  /** 所有筛选条件下的列表（删除后要失效的就是这一层） */
+  lists: ['users', 'list'] as const,
   list: (filter: UserFilter) => ['users', 'list', filter] as const,
   detail: (id: string) => ['users', 'detail', id] as const,
 }
@@ -85,6 +87,19 @@ export function useUsers(filter: UserFilter) {
      * 给了 `total_pages`，用它就没有边界情况。
      */
     getNextPageParam: (last) => (last.page < last.total_pages ? last.page + 1 : undefined),
+    /*
+     * 🔴 **搜索时保留上一套结果，否则每敲一次（防抖落地）整块列表都会变骨架屏。**
+     *
+     * 筛选条件进 key 换来了「每套条件一份缓存、没有竞态」，代价是**新 key 没有
+     * 数据** —— 于是 `items === null`，屏上从「一列用户」跳成「五条骨架」再跳回来。
+     * 功能没错，但那个闪动读起来像「列表被清空了」，而这是模板里最会被抄走的
+     * 一段代码。
+     *
+     * ⚠️ 代价要知道：占位期间 `data` 是**上一套条件**的，所以
+     * `hasNextPage` / `fetchNextPage` 说的也是上一套 —— 调用方必须用
+     * `isPlaceholderData` 把「翻页」挡住（`users/index.tsx` 的 `onEndReached` 里）。
+     */
+    placeholderData: (prev) => prev,
   })
 }
 
@@ -123,10 +138,20 @@ export function useDeleteUser() {
   return useMutation({
     // 🔴 同上：字符串原样传
     mutationFn: (id: string) => api.DELETE('/api/v1/sys/users/{pk}', { params: { path: { pk: id } } }),
-    onSuccess: async (_data, id) => {
-      // 列表整棵失效（哪一页、哪套筛选条件都可能含这条），详情那份直接移除
-      qc.removeQueries({ queryKey: usersKey.detail(id) })
-      await qc.invalidateQueries({ queryKey: usersKey.all })
+    /*
+     * 🔴 **只失效列表那一层，不要碰详情，也不要 `removeQueries`。**
+     *
+     * 删除是从**详情屏**发起的，而那一屏此刻还挂着 `useUser(id)`（`router.back()`
+     * 是紧接着才发生的）。往 `usersKey.all`（= `['users']`）上失效会连带命中
+     * `['users','detail',id]` —— 那个查询有活跃观察者，于是它会去**重新请求一个
+     * 刚刚被删掉的 ID**：白打一个必然 404 的请求，还可能在屏 pop 之前闪一下
+     * 「这个用户不存在」。`removeQueries` 是同一个形状（移除后观察者重新取）。
+     *
+     * 列表失效就够了：详情那份缓存随屏卸载后自然被回收（默认 gcTime 5 分钟），
+     * 而它已经不可能被点到 —— 列表里没有这条了。
+     */
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: usersKey.lists })
     },
   })
 }

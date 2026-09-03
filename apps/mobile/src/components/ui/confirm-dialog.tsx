@@ -58,6 +58,14 @@ export function ConfirmDialog({
   onConfirm: () => void
   testID?: string
 }) {
+  /*
+   * 🔴 **portal 的 `name` 必须每个实例唯一。** `@rn-primitives/portal` 的宿主
+   * 按 name 存内容，两个同名的浮层会互相顶掉。写死一个字面量在「同时只可能开一个」
+   * 的假设下能跑，但那个假设是隐式的 —— 现在有两屏各挂一个确认框
+   * （个人中心的退出登录、用户详情的删除），而 tab 屏在详情推上来之后**仍然挂载**。
+   */
+  const portalName = `confirm-dialog-${React.useId()}`
+
   React.useEffect(() => {
     if (!open) return
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -72,7 +80,7 @@ export function ConfirmDialog({
   if (!open) return null
 
   return (
-    <Portal name="confirm-dialog">
+    <Portal name={portalName}>
       <View className="absolute inset-0 z-40 items-center justify-center p-6" testID={testID}>
         {/* 遮罩。点它关掉 —— iOS/Android 都是这个约定 */}
         <Pressable
