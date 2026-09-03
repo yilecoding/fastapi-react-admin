@@ -99,7 +99,14 @@ export default function AppsScreen() {
   }
 
   // ⚠️ 只有 `known` 之后才谈「有哪些」—— 之前算出来的一定是空数组
-  const allowed = known ? MODULES.filter((m) => m.href && canAny(...m.perms)) : []
+  const permitted = known ? MODULES.filter((m) => canAny(...m.perms)) : []
+  const allowed = permitted.filter((m) => m.href)
+  /*
+   * 「还没做的」也要**按权限过滤**。不过滤的话，一个只有用户权限的账号会看到
+   * 「角色、部门、菜单、文件、操作日志、登录日志」一整排 —— 那些他压根进不去，
+   * 读起来像「有权限但我们没做」。过滤之后这句话才是准的。
+   */
+  const notBuilt = permitted.filter((m) => !m.href)
 
   return (
     <ScrollView
@@ -178,7 +185,7 @@ export default function AppsScreen() {
       ) : null}
 
       {/* 还没做的模块：明说「还没做」，不要长得像「没权限」 */}
-      {known && MODULES.some((m) => !m.href) ? (
+      {notBuilt.length > 0 ? (
         <>
           <GroupHeader>{t('还没做的')}</GroupHeader>
           <Group className="py-3">
@@ -186,9 +193,7 @@ export default function AppsScreen() {
               <Icon as={LayoutGridIcon} className="text-muted-foreground size-4" />
               <Text className="text-muted-foreground flex-1 text-xs leading-5">
                 {t('后端有、移动端还没做这一屏的模块：{{list}}', {
-                  list: MODULES.filter((m) => !m.href)
-                    .map((m) => t(m.label))
-                    .join('、'),
+                  list: notBuilt.map((m) => t(m.label)).join('、'),
                 })}
               </Text>
             </View>

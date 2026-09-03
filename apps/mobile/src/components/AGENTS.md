@@ -216,3 +216,34 @@ toast 进了 store、屏上没有，纯静默。
 
 **要翻页的列表用独立卡片**（每条一个 `Card`，`contentContainerClassName` 里给
 `gap-2.5`），见 `src/app/(app)/users/index.tsx`。
+
+## 🔴 `active:` 只在 uniwind 的 `Pressable` 里解析 —— 挂在别的组件上是死代码
+
+写过 `<Pressable><Card className="active:bg-muted …">`，那个 `active:`
+**一次都不会生效**：按下去没有任何反应，而且**不报错、不警告**。
+
+根因在 uniwind 的组件包装里，读了实现：
+
+| 包装 | 怎么算样式 |
+|---|---|
+| uniwind 的 Pressable 包装 | `style` 传成**函数**，`state.pressed` 时带 `isPressed` 重算 |
+| uniwind 的 View 包装（`Card` / `Group` / `Row` 都是 View） | 只有 `useStyle(className, props)`，**压根没有 pressed 这一维** |
+
+（两个文件在 `node_modules/…/uniwind/dist/module/components/native/` 下，
+要复核就去读那一对。）
+
+所以规则是：**`active:` 必须写在那个 `Pressable` 自己的 `className` 上。**
+仓库里其余几处都是对的（`grouped.tsx` 的 `PressRow` / `DangerRow`、通知列表那一行），
+只有列表行那次写错了 —— 因为想复用 `Card` 的卡片表面。
+**要卡片表面就让 `Pressable` 自己画**（`bg-card active:bg-muted rounded-xl`），
+别套一层 `Card` 再往里挂 `active:`。
+
+## 🔴 portal 浮层的 `name` 要每实例唯一
+
+`@rn-primitives/portal` 的宿主**按 name 存内容**，两个同名浮层会互相顶掉。
+`ConfirmDialog` 用 `confirm-dialog-${React.useId()}`。
+
+写死一个字面量在「同时只可能开一个」的假设下能跑 —— 但那个假设是隐式的，
+而现在已经有两屏各挂一个（个人中心的退出登录、用户详情的删除），
+且 tab 屏在详情推上来之后**仍然挂载**。
+
