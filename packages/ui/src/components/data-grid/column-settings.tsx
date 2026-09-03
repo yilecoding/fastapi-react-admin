@@ -53,8 +53,11 @@ export function DataGridColumnSettings({
 
   const order: string[] = React.useMemo(
     () => all.map((c: any) => c.id),
-    // getAllLeafColumns 每次都是新数组，用 id 串做依赖才稳
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // getAllLeafColumns 每次都是新数组，用 id 串做依赖才稳。
+    // ⚠️ 要**两条** disable：`exhaustive-deps` 管「少了 all」，而 react-hooks v7
+    // 新加的 `use-memo` 管「依赖必须是简单表达式（x / x.y.z）」——
+    // 旧的那一条覆盖不到它。
+    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo
     [all.map((c: any) => c.id).join()]
   )
 

@@ -139,7 +139,10 @@ export function LogOnlinePage({
   }, [qb])
 
   const { data, isPending, isFetching, error, dataUpdatedAt } = useQuery(sessionsQuery(refresh * 1000))
-  const all = data ?? []
+  // ⚠️ **`?? []` 要包进 useMemo**：不包的话每次渲染都是**新数组**，而它是下面
+  // 那个 useMemo 的依赖 —— 于是那个 memo 从来没生效过（每次都重算）。
+  // 这不报错、只是白写了一个 memo，`exhaustive-deps` 正好抓这个。
+  const all = React.useMemo(() => data ?? [], [data])
   const currentUuid = currentSessionUuid()
 
   // 「剩余有效期」的基准时刻。跟着取数走而不是每渲染一次读一次 Date.now() ——

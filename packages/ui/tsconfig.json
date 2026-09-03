@@ -9,7 +9,6 @@
     "strict": true,
     "noEmit": true,
     "paths": {
-      "@admin/i18n": ["../i18n/src/index.ts"],
       "@admin/ui/*": ["./src/*"]
     }
   },

@@ -45,13 +45,6 @@ function scopeQs(p: ScopeListParams) {
   return s.toString()
 }
 
-export const dataScopesQuery = (p: ScopeListParams) =>
-  queryOptions({
-    queryKey: scopeKeys.list(p),
-    queryFn: () => api.GET<PageData<DataScope>>(`/api/v1/sys/data-scopes?${scopeQs(p)}`),
-    placeholderData: (prev) => prev,
-  })
-
 /** 与角色页同一套：左栏选择器走滚动加载，不放分页条 */
 export const SCOPE_SCROLL_SIZE = 30
 

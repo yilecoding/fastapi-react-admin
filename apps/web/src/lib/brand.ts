@@ -35,7 +35,16 @@ export const BRAND = {
   wordmark: "fastapi-react-admin",
   /** 一句话定位，含品类词。站点标题读它，登录页对比表旁边也会引用 */
   tagline: "FastAPI + React 19 中后台底座",
-  version: "v0.0.1",
+  /**
+   * 版本号**不在这里写死** —— 它来自 `package.json`，构建时注入成
+   * `VITE_APP_VERSION`（见 `vite.config.ts`）。
+   *
+   * ⚠️ 原来这里手写着 `"v0.0.1"`，和 `package.json` 的 `0.0.1` 是两份真相源：
+   * bump 了包版本忘了改这里，登录页和页脚就长期显示旧版本，而没有任何东西
+   * 会发现。回落值刻意写成 `v0.0.0` 而不是当前版本 —— 万一注入没接上，
+   * 显示一个明显不对的数比显示一个碰巧对的数好。
+   */
+  version: `v${import.meta.env.VITE_APP_VERSION ?? "0.0.0"}`,
   /** 底座里真正承重的那几样，登录页会把它列出来。不摆 SQL SERVER——数据库是可换的实现细节，不是卖点 */
   stack: ["REACT 19", "TANSTACK", "SHADCN", "TAILWIND", "FASTAPI"],
   /** 仓库地址。顶栏的 GitHub 图标（`components/github-link.tsx`）读它，fork 出去改这一处就行 */

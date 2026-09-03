@@ -202,6 +202,14 @@ def test_soft_delete_hides_from_list(client: TestClient, token_headers, uniq):
         json={'name': uniq, 'task': 'maintenance.prune_logs', 'type': 1, 'crontab': '15 3 * * *'},
     )
     pk = r.json()['data']['id']
+
+    # 🔴 **删之前先断言它在列表里。** 不然「软删把它藏起来了」和
+    # 「压根没建成」分不开 —— 创建静默失败时列表也是 0 条，这条测试会照样绿。
+    # 判据同 `test_user_cache_invalidation.py` 的「先把快照焐热」：
+    # **断言「没有」之前先断言「有」。**
+    pre = client.get(BASE, headers=token_headers, params={'name': uniq, 'page': 1, 'size': 10}).json()
+    assert pre['data']['total'] == 1, f'前置条件没成立：刚建的调度应该能按名字查到，实际 {pre["data"]["total"]} 条'
+
     client.request('DELETE', BASE, headers=token_headers, json={'pks': [pk]})
     listed = client.get(BASE, headers=token_headers, params={'name': uniq, 'page': 1, 'size': 10}).json()
     assert listed['data']['total'] == 0

@@ -4,7 +4,7 @@ from urllib.parse import quote
 from pydantic import ConfigDict, Field, computed_field
 
 from backend.common.enums import FileType
-from backend.common.schema import SchemaBase
+from backend.common.schema import SchemaBase, SnowflakeIdIn
 from backend.core.conf import settings
 
 
@@ -91,7 +91,7 @@ class CreateFileRelationParam(SchemaBase):
 
     file_ids: list[int] = Field(description='文件 ID 列表')
     target_type: str = Field(max_length=32, description='业务对象类型')
-    target_id: int = Field(description='业务对象 ID')
+    target_id: SnowflakeIdIn = Field(description='业务对象 ID')
 
 
 class DeleteFileRelationParam(SchemaBase):
@@ -99,4 +99,4 @@ class DeleteFileRelationParam(SchemaBase):
 
     file_ids: list[int] = Field(description='文件 ID 列表')
     target_type: str = Field(max_length=32, description='业务对象类型')
-    target_id: int = Field(description='业务对象 ID')
+    target_id: SnowflakeIdIn = Field(description='业务对象 ID')

@@ -1,0 +1,49 @@
+{
+  "expo": {
+    "name": "中后台",
+    "slug": "fastapi-react-admin-mobile",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "scheme": "fraadmin",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/icon.png",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fastapireactadmin.mobile"
+    },
+    "android": {
+      "package": "com.fastapireactadmin.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#4630db"
+      }
+    },
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash.png",
+          "resizeMode": "contain",
+          "imageWidth": 160,
+          "backgroundColor": "#f4f2fa",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      "expo-status-bar",
+      "expo-secure-store",
+      "expo-font",
+      "expo-localization"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "backgroundColor": "#f4f2fa"
+  }
+}

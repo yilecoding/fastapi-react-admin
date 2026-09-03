@@ -40,7 +40,13 @@ export const BASE_LANGUAGE: Language = 'zh-CN'
 
 const STORAGE_KEY = 'admin:language'
 
-/** 语言是**用户偏好**而不是会话状态，所以用 localStorage（tab 栈才是 sessionStorage） */
+/**
+ * 语言是**用户偏好**而不是会话状态，所以用 localStorage（tab 栈才是 sessionStorage）。
+ *
+ * ⚠️ **这个函数是 web-only 的。** RN 里没有 `localStorage`，会走 catch 分支
+ * 恒定返回 `BASE_LANGUAGE` —— 不报错，但也永远读不到用户的选择。
+ * 移动端自己持久化，并把初值传给 `initI18n(plugins, lang)`。
+ */
 export function readStoredLanguage(): Language {
   try {
     const v = localStorage.getItem(STORAGE_KEY)
@@ -72,8 +78,17 @@ export function onLanguageChange(fn: Listener): () => void {
  * 界面看起来「全是中文」（因为 key 就是中文），连 `{{n}}` 插值都不做，
  * 分页条会直接显示 `共 {{total}} 条`。实测踩过。
  */
-export function initI18n(plugins: Parameters<typeof i18next.use>[0][] = []): typeof i18next {
-  const lng = readStoredLanguage()
+export function initI18n(
+  plugins: Parameters<typeof i18next.use>[0][] = [],
+  /**
+   * 初始语言。不传就走 `readStoredLanguage()`（`localStorage`，web 的行为不变）。
+   *
+   * ⚠️ `apps/mobile` 必须传：RN 没有 `localStorage`，而它的持久化
+   * （`expo-secure-store`）是**异步**的，拿不到同步初值。
+   */
+  initialLanguage?: Language,
+): typeof i18next {
+  const lng = initialLanguage ?? readStoredLanguage()
   for (const p of plugins) i18next.use(p)
   void i18next.init({
     lng,
@@ -99,7 +114,12 @@ export function initI18n(plugins: Parameters<typeof i18next.use>[0][] = []): typ
 }
 
 function notify(lang: Language): void {
-  document.documentElement.lang = lang
+  // 🔴 **这里不能碰 `document`。** 原来有一句 `document.documentElement.lang = lang`，
+  // 那是 web-only 的副作用，而本包是最底层、要被 `apps/mobile`（React Native，
+  // **没有 `document`**）直接复用。留着它移动端一初始化就抛异常。
+  // 现在那句挂在 `apps/web/src/i18n.ts` 的 `onLanguageChange` 里 ——
+  // 和本文件开头那条「需要副作用的一律走订阅、由上层注册」是同一条规则，
+  // 只是当初漏了这一处。
   for (const fn of listeners) fn(lang)
 }
 
@@ -108,7 +128,8 @@ export async function changeLanguage(lang: Language): Promise<void> {
   try {
     localStorage.setItem(STORAGE_KEY, lang)
   } catch {
-    /* 隐私模式下写不进去，内存态仍然生效 */
+    // 隐私模式下写不进去；RN 里根本没有这个 API —— 两种情况都靠
+    // `onLanguageChange` 的订阅者去做真正的持久化，内存态在本次会话仍然生效
   }
   notify(lang)
 }

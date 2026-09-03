@@ -92,6 +92,8 @@ export function DataGridColumnFilter({ column }: { column: any }) {
 
 function TextFilter({ column }: { column: any }) {
   const [v, setV] = React.useState(String(column.getFilterValue?.() ?? ""))
+  // 受控 prop 镜像进本地 state：输入框要能自由输入（本地 state），
+  // 但外部改了值也得跟上。见 eslint.config.js 里对 set-state-in-effect 的说明。
   React.useEffect(() => setV(String(column.getFilterValue?.() ?? "")), [column])
   return (
     <Input

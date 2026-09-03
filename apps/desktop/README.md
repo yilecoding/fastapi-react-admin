@@ -71,7 +71,7 @@ node install.js
 两个终端：
 
 ```bash
-pnpm --filter web dev                 # 渲染层 :1125（必须先起）
+pnpm --filter web dev                 # 渲染层 :8888（必须先起）
 pnpm --filter @admin/desktop dev      # 编译 main/preload → 等 dev server → 拉起 Electron
 ```
 
@@ -94,7 +94,7 @@ WSLg（`/tmp/.X11-unix/X0`）时自动设成 `:0`。两种情况都会打印一�
 DESKTOP_ELECTRON_ARGS=--remote-debugging-port=9555 pnpm --filter @admin/desktop dev
 ```
 
-渲染层不在 1125 时用 `DESKTOP_DEV_SERVER_URL` 指过去。
+渲染层不在 8888 时用 `DESKTOP_DEV_SERVER_URL` 指过去。
 
 ### 打包
 

@@ -1,3 +1,19 @@
+/**
+ * ⚠️ **目前没有调用方，这是刻意留的**（死代码扫描会报到它，别顺手删）。
+ *
+ * 判据和被删掉的 `date-picker` / `date-range-picker` 不同 —— 那两个有**现成的
+ * 替代品**（`datetime-picker.tsx` 的 `DateTimeValuePicker` /
+ * `DateTimeRangePicker`，查询区在用），删了不丢任何东西。
+ * 而这个是手写的 241 行「受控树 + 三态复选」——
+ * 文件下面那段注释自己写着「shadcn/Base UI 生态里没有现成的树形多选」。
+ *
+ * 🔴 **它没人用，是因为权限矩阵页（`platform/pages/role/perm-matrix.tsx`）
+ * 用裸 `Checkbox` 又实现了一套三态树。** 也就是说仓库里有**两套**同类实现，
+ * 这一套是被绕过的那个 —— 和被删掉的那个只读列表工厂完全同形。
+ *
+ * 没删是因为「把 perm-matrix 收敛到这一套」是设计活、要动一个改错了会静默
+ * 出错的页面（勾选状态），不该顺手做。真要合并从这里开始。
+ */
 "use client"
 
 import * as React from "react"
@@ -147,7 +163,8 @@ export function Tree({
           expandedSet={expandedSet}
           onToggleExpand={(id) => {
             const next = new Set(expandedSet)
-            next.has(id) ? next.delete(id) : next.add(id)
+            if (next.has(id)) next.delete(id)
+            else next.add(id)
             setExpanded([...next])
           }}
           onToggleCheck={toggle}

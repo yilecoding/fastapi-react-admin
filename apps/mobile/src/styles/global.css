@@ -1,0 +1,181 @@
+@import "tailwindcss";
+@import "uniwind";
+
+@import "tw-animate-css";
+
+/*
+ * 🔴 **这一行不能省。** Tailwind v4 的自动源码探测以**这个 CSS 文件所在目录**为根，
+ * 而这份文件在 `src/styles/` 下 —— 那里一个组件都没有，于是**一条工具类都不生成**。
+ * 失败形态是纯静默的：打包成功、Metro 不报错、uniwind 的组件包装照常进 bundle，
+ * 只是每个 className 都成了空操作（实测：`flex-1` / `p-4` / `h-16` 在 dev bundle 里
+ * 出现 0 次，界面上所有间距、颜色、尺寸全丢）。
+ * 和根 CLAUDE.md 硬纪律 7 同一个物种，也和 packages/ui/src/styles/globals.css 一致。
+ */
+@source "../**/*.{ts,tsx}";
+
+@theme {
+  /* iOS 分组块的圆角。rnr 的 rounded-xl 等派生值都从这里来 */
+  --radius: 15px;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --spacing-hairline: hairlineWidth();
+}
+
+/*
+ * 🔴 **这些值是从 `packages/ui/src/styles/globals.css` 抄过来的，那边是唯一真相源。**
+ * 抄而不是 import：那份 CSS 里有 `@custom-variant`、`shadcn/tailwind.css`、
+ * 字体包等一堆 web-only 的东西，而 `apps/mobile` 也不在
+ * `i18n ← ui ← platform ← apps/web` 那条依赖箭头上。
+ *
+ * 能直接抄是因为**实测确认 uniwind 在构建期精确转换 `oklch()`**
+ * （三对色块逐像素比对，通道差 0，见本分册「两条实测的结论」）——
+ * 否则这里就得维护第二份降级成 sRGB 的颜色。
+ *
+ * ⚠️ **web 改了主题色，这里要跟着改**，不会自己报错。
+ */
+@layer theme {
+  :root {
+    @variant light {
+      --color-background: oklch(1 0 0);
+      --color-foreground: oklch(0.145 0 0);
+      --color-card: oklch(1 0 0);
+      --color-card-foreground: oklch(0.145 0 0);
+      --color-popover: oklch(1 0 0);
+      --color-popover-foreground: oklch(0.145 0 0);
+      /* 品牌紫 —— 和登录页的 --tenon-accent 同一个 */
+      --color-primary: oklch(0.457 0.24 277.023);
+      --color-primary-foreground: oklch(0.962 0.018 272.314);
+      --color-secondary: oklch(0.967 0.001 286.375);
+      --color-secondary-foreground: oklch(0.21 0.006 285.885);
+      --color-muted: oklch(0.97 0 0);
+      --color-muted-foreground: oklch(0.556 0 0);
+      --color-accent-foreground: oklch(0.205 0 0);
+      --color-destructive: oklch(0.577 0.245 27.325);
+      --color-border: oklch(0.922 0 0);
+      --color-input: oklch(0.922 0 0);
+      --color-ring: oklch(0.708 0 0);
+      --color-chart-1: oklch(0.646 0.222 41.116);
+      --color-chart-2: oklch(0.6 0.118 184.704);
+      --color-chart-3: oklch(0.398 0.07 227.392);
+      --color-chart-4: oklch(0.828 0.189 84.429);
+      --color-chart-5: oklch(0.769 0.188 70.08);
+      /* ── iOS 分组列表语义（见文件末尾那段注释）──────────────── */
+      /* 页面 = grouped background；卡片 = 分组块 */
+      --color-background: #f4f2fa;
+      --color-card: #ffffff;
+      --color-card-foreground: #171523;
+      --color-foreground: #171523;
+      --color-muted: #eeecf4;
+      --color-muted-foreground: #6b6580;
+      --color-secondary: #eeecf4;
+      --color-secondary-foreground: #171523;
+      --color-accent: #eeecf4;
+      --color-accent-foreground: #171523;
+      /* 分隔线 —— iOS 上它比描边浅得多 */
+      --color-border: #eeecf4;
+      --color-input: #e4e0ee;
+      --color-ring: #4630db;
+      /* iOS systemRed。之前用的 #E5484D 偏粉，和系统红不同调 */
+      --color-destructive: #ff3b30;
+    }
+
+    @variant dark {
+      --color-background: oklch(0.145 0 0);
+      --color-foreground: oklch(0.985 0 0);
+      --color-card: oklch(0.205 0 0);
+      --color-card-foreground: oklch(0.985 0 0);
+      --color-popover: oklch(0.205 0 0);
+      --color-popover-foreground: oklch(0.985 0 0);
+      --color-primary: oklch(0.398 0.195 277.366);
+      --color-primary-foreground: oklch(0.962 0.018 272.314);
+      --color-secondary: oklch(0.274 0.006 286.033);
+      --color-secondary-foreground: oklch(0.985 0 0);
+      --color-muted: oklch(0.269 0 0);
+      --color-muted-foreground: oklch(0.708 0 0);
+      --color-accent-foreground: oklch(0.985 0 0);
+      --color-destructive: oklch(0.704 0.191 22.216);
+      /* 🔴 web 上这两个是 `oklch(1 0 0 / 10%)`（带透明度的白）。
+         RN 里半透明边框叠在深色卡片上会**看不见**（卡片本身就比背景亮），
+         所以这里换成实色 —— 这是移动端和 web 唯一一处刻意不同的令牌。 */
+      --color-border: oklch(0.32 0 0);
+      --color-input: oklch(0.36 0 0);
+      --color-ring: oklch(0.556 0 0);
+      --color-chart-1: oklch(0.488 0.243 264.376);
+      --color-chart-2: oklch(0.696 0.17 162.48);
+      --color-chart-3: oklch(0.769 0.188 70.08);
+      --color-chart-4: oklch(0.627 0.265 303.9);
+      --color-chart-5: oklch(0.645 0.246 16.439);
+      /* ── iOS 深色分组（V4）─────────────────────────────────── */
+      --color-background: #000000;
+      --color-card: #1c1c1e;
+      --color-card-foreground: #ffffff;
+      --color-foreground: #ffffff;
+      --color-muted: #2c2c2e;
+      --color-muted-foreground: #8e8e93;
+      --color-secondary: #2c2c2e;
+      --color-secondary-foreground: #ffffff;
+      --color-accent: #2c2c2e;
+      --color-accent-foreground: #ffffff;
+      --color-border: #2c2c2e;
+      --color-input: #3a3a3c;
+      --color-ring: #6b57ff;
+      --color-destructive: #ff453a;
+      /* 主色在纯黑上要提亮，#4630DB 在黑底几乎读不出来 */
+      --color-primary: #6b57ff;
+      --color-primary-foreground: #ffffff;
+    }
+  }
+}
+
+/*
+ * 🔴 **`--color-*` 必须在 light 和 dark 两个 variant 里都声明，数量一致。**
+ * uniwind 会校验：少一个就打
+ *     Uniwind Error - Theme light is missing variable --color-xxx
+ *     Uniwind Error - All themes must have the same variables
+ * ——**但 `expo export` 仍然返回成功、照样产出 bundle**，只是那批变量没生效。
+ * 界面上表现为「某个颜色是隐形的」。实测踩过（登录页有一整行看不见）。
+ *
+ * 上面这一整套就是 shadcn 的标准令牌，值抄自 `packages/ui/src/styles/globals.css`
+ * （唯一真相源），含品牌紫 `--color-primary: oklch(0.457 0.24 277.023)`。
+ * `react-native-reusables` 的组件读的就是这套名字（`bg-card` / `border-input` /
+ * `text-muted-foreground` …），**不要另起一套自己的令牌** —— 试过一版「榫卯面板」
+ * 的自创色（panel / ink / faint …），结果是组件库用不上、全屏得自己手写样式。
+ *
+ * ⚠️ web 改了主题色，这里要跟着改，不会自己报错。
+ *
+ * 🔴 深色模式的 `--border` / `--input` 是唯一刻意和 web 不同的一处：
+ * web 上是 `oklch(1 0 0 / 10%)`（半透明白），RN 里半透明边框叠在深色卡片上
+ * **看不见**（卡片本身就比背景亮），所以换成了实色。
+ */
+
+
+/*
+ * ── 为什么中性色不是照抄 web 的 ────────────────────────────────────────
+ *
+ * `--color-primary` 仍然是**品牌紫，和 `packages/ui` 同步**（web 改了要跟着改）。
+ * 但**中性色是移动端自己一套**，刻意的：
+ *
+ * web 是「白页 + 描边卡片」的桌面表面；移动端选的是 **iOS 分组列表**
+ * （`background` = 带一点 277 偏色的浅灰底，`card` = 纯白分组块，
+ * `border` 只当**分隔线**用、比描边浅得多）。这两种表面的语义不一样，
+ * 硬套 web 的灰会得到一堆看不见的分隔线和糊在一起的层级。
+ *
+ * 深色那套是 iOS 深色设置的原值（`#000` 页面 / `#1C1C1E` 分组块 /
+ * `#2C2C2E` 分隔线），并把主色提亮到 `#6B57FF` —— `#4630DB` 在纯黑上几乎读不出来。
+ *
+ * 🔴 值用 hex 不用 oklch，是因为这些是**取自系统的定值**，不是从品牌色派生的；
+ * 写成 oklch 只会让人以为可以随手调。
+ */
+
+/*
+ * 等宽字族。JetBrains Mono 是 web 端 `--font-mono` 的那一支，
+ * 这里也载它 —— **眉标那点等宽小字是这套观感的签名**，用系统 mono
+ * （Android 的 Droid Sans Mono / iOS 的 Menlo）字形差太远。
+ * 载入见 `src/app/_layout.tsx` 的 `useFonts`。
+ */
+@theme {
+  --font-mono: 'JetBrainsMono_500Medium';
+}

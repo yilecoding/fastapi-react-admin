@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process"
+import { createRequire } from "node:module"
 import path from "node:path"
 import tailwindcss from "@tailwindcss/vite"
 import { fileViewerRenderers } from "@file-viewer/vite-plugin"
@@ -16,6 +17,19 @@ import { defineConfig, type Plugin } from "vite"
  * 不用 vite 自己的产物 hash：那要等 bundle 生成完才知道，而
  * `import.meta.env` 的替换发生在更早的转换阶段。
  */
+/**
+ * 产品版本的**唯一真相源是 `package.json`**，注入成
+ * `import.meta.env.VITE_APP_VERSION` 给 `lib/brand.ts` 用。
+ *
+ * ⚠️ 那里原来手写着 `version: "v0.0.1"` —— 和 `package.json` 的 `0.0.1`
+ * 是两份。bump 了包版本忘了改它，登录页和页脚就长期显示旧版本，
+ * **而没有任何东西会发现**（没人比对过这两个数）。
+ *
+ * 用 `createRequire` 读而不是 `import ... from './package.json'`：
+ * 后者要开 `resolveJsonModule`，还会把整个 package.json 打进产物。
+ */
+const pkgVersion = createRequire(import.meta.url)("./package.json").version as string
+
 function buildIdPlugin(): Plugin {
   let buildId = process.env.BUILD_ID ?? ""
   if (!buildId) {
@@ -49,6 +63,10 @@ function buildIdPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  // 产品版本：唯一真相源是 package.json（见上面 pkgVersion 的说明）。
+  // 放主 config 而不是 buildIdPlugin —— 那个是 `apply: "build"`，
+  // 开发期不生效，而版本号在 dev 也该显示对的那个
+  define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkgVersion) },
   plugins: [
     buildIdPlugin(),
     tanstackRouter({ target: "react" }),
@@ -82,12 +100,12 @@ export default defineConfig({
       chunkStrategy: "none",
     }),
   ],
-  // 端口固定在 1125。`strictPort` 是关键：不写它 Vite 会在端口被占时自己 +1 漂到
-  // 1126，而后端 CORS 白名单和 oauth2 回跳地址都是写死 1125 的 —— 漂走之后表现是
-  // 「页面能开，但所有接口 CORS 失败」，比直接起不来难查得多。
+  // 端口固定在 8888。`strictPort` 是关键：不写它 Vite 会在端口被占时自己 +1 漂到
+  // 8889，而后端 CORS 白名单、oauth2 回跳地址、桌面端 dev 脚本都是写死 8888 的 ——
+  // 漂走之后表现是「页面能开，但所有接口 CORS 失败」，比直接起不来难查得多。
   //
   // `E2E_WEB_PORT` 是唯一的例外口子：E2E 起的是完全隔离的第二个实例（连 fba_test，
-  // 不是 fba），不设置这个变量时行为和以前完全一样，还是 1125。
+  // 不是 fba），不设置这个变量时行为和以前完全一样，还是 8888。
   server: {
     // Playwright 的 E2E webServer 用 127.0.0.1 探活；macOS 上 Vite 默认可能只绑定 ::1。
     host: "127.0.0.1",
@@ -99,7 +117,7 @@ export default defineConfig({
       //
       // 🔴 这条代理是**必须**的，而且必须让存进库的 src 保持**相对路径**：
       // 正文是 HTML，里面是 `<img src="/uploads/2026/…/x.png">`。
-      // 不加代理的话相对地址会打到 Vite（:1125）拿 404；
+      // 不加代理的话相对地址会打到 Vite（:8888）拿 404；
       // 而改成绝对地址就等于把 `http://127.0.0.1:8000` 烙进 sys_notice.content ——
       // 每一篇在开发机上写的公告都会带着这个 host，换环境全部裂掉。
       //

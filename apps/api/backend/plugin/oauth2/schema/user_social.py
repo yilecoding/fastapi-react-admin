@@ -1,6 +1,6 @@
 from pydantic import ConfigDict, Field
 
-from backend.common.schema import SchemaBase
+from backend.common.schema import SchemaBase, SnowflakeIdIn
 from backend.plugin.oauth2.enums import UserSocialType
 
 
@@ -14,7 +14,7 @@ class UserSocialSchemaBase(SchemaBase):
 class CreateUserSocialParam(UserSocialSchemaBase):
     """创建用户社交参数"""
 
-    user_id: int = Field(description='用户 ID')
+    user_id: SnowflakeIdIn = Field(description='用户 ID')
 
 
 class UpdateUserSocialParam(SchemaBase):

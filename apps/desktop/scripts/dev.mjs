@@ -2,11 +2,19 @@
  * 开发时的编排器：watch 构建 main + preload，等 apps/web 的 dev server 起来，
  * 然后拉起 Electron；main/preload 改动后自动重启 Electron。
  *
- * 渲染层不在这里构建 —— 它由 `pnpm --filter web dev` 提供（http://localhost:1125）。
+ * 渲染层不在这里构建 —— 它由 `pnpm --filter web dev` 提供（http://localhost:8888）。
  * 所以完整的开发命令是两条：
- *     pnpm --filter web dev
- *     pnpm --filter @admin/desktop dev
- * 或者直接 `pnpm dev`（turbo 会把 api / web / desktop 一起拉起来）。
+ *     pnpm dev                              # api + web + worker（**不含** desktop）
+ *     pnpm desktop:dev                      # 本脚本
+ *
+ * ⚠️ 根 `pnpm dev` 是 `turbo dev --filter=!@admin/desktop` —— **刻意排除了桌面端**
+ * （它要等渲染层起来，塞进同一个 TUI 里日志会互相盖）。
+ *
+ * 🔴 下面那个默认端口曾经是 `1125`，而前端早就固定在 **8888** 了 ——
+ * 于是 `waitForDevServer` 在一个永远不会开的端口上等满 60 秒，然后打印
+ * 「先跑 `pnpm --filter web dev`」。那句提示是**错的**：web dev 正在跑，
+ * 只是在别的端口上。改端口时这里是**第四处**要同步的地方，
+ * 见根 `CLAUDE.md` 那张表。
  */
 import { spawn } from "node:child_process"
 import fs from "node:fs"
@@ -15,7 +23,7 @@ import process from "node:process"
 import electronPath from "electron"
 import { build } from "vite"
 
-const DEV_SERVER_URL = process.env.DESKTOP_DEV_SERVER_URL ?? "http://localhost:1125"
+const DEV_SERVER_URL = process.env.DESKTOP_DEV_SERVER_URL ?? "http://localhost:8888"
 
 /**
  * Linux（含 WSL）上的两件适配。放在 dev 脚本里而不是让人记命令行参数 ——

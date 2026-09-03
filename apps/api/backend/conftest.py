@@ -120,3 +120,85 @@ def token_headers(client: TestClient) -> dict[str, str]:
     access_token = response.json()['access_token']
     headers = {'Authorization': f'{token_type} {access_token}'}
     return headers
+
+
+# ── 接口覆盖：记录测试真正打到过哪些路由 ──────────────────────────────────────
+#
+# 🔴 **为什么要真记，而不是 grep 测试文件里的路径字面量。** 试过后者，
+# 得到的数字**两个方向都不可信**：
+#
+# | 判据 | 结果 | 错在哪 |
+# |---|---|---|
+# | 只认整条路径字面量 | 55% | **漏判** —— 测试常把路径存成常量再拼，字面量永远不出现 |
+# | 路径每一段都在测试里出现过 | 91% | **误判** —— 各段到处都有，碰巧全中就算「覆盖」 |
+#
+# 真值在两者之间，而两个都会被当成结论引用。所以改成在 `TestClient` 上记实际
+# 请求，再拿 FastAPI 自己的路由表匹配 —— 这个没有解释空间。
+#
+# ⚠️ **只在跑完整套件时才报告。** `pytest -k foo` 只跑一部分，那时「没打到」
+# 不等于「没测试」—— 不加这个判断的话，报告会在每次局部运行时谎报一片空缺。
+_ENDPOINT_HITS: set[tuple[str, str]] = set()
+
+
+@pytest.fixture(scope='session', autouse=True)
+def _record_endpoint_hits(client: TestClient) -> Generator[None, None, None]:
+    """把 TestClient 的 request 包一层，记下 (方法, 具体路径)"""
+    original = client.request
+
+    def recording(method, url, *args, **kwargs) -> object:
+        path = str(url).split('?', 1)[0]
+        marker = 'testserver'
+        if marker in path:
+            path = path[path.index(marker) + len(marker) :]
+        if not path.startswith('/'):
+            path = '/' + path
+        _ENDPOINT_HITS.add((str(method).upper(), path))
+        return original(method, url, *args, **kwargs)
+
+    client.request = recording
+    yield
+    client.request = original
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:
+    """跑完整套件时，打印没被任何请求打到的接口
+
+    ⚠️ 用 `pytest_terminal_summary` 而不是 `pytest_sessionfinish` —— 后者里的
+    `print` 会被 pytest 的输出捕获吞掉（实测：测试全绿但报告一个字都不出来）。
+    """
+    import re
+
+    if not _ENDPOINT_HITS:
+        return
+    opt = config.option
+    if getattr(opt, 'keyword', None) or getattr(opt, 'markexpr', None):
+        return
+    # ⚠️ **要看真实命令行参数，不能看 `config.args`** —— 后者被 `pyproject.toml`
+    # 的 `testpaths` 填满了（四个目录），拿它判断会把「跑整套」也误判成局部，
+    # 于是报告永远不出现（实测：全绿但一个字都不打）。
+    cli = [a for a in config.invocation_params.args if not a.startswith('-')]
+    if cli:
+        return
+
+    spec_paths = app.openapi()['paths']
+    prefix = settings.FASTAPI_API_V1_PATH
+    methods = ('GET', 'POST', 'PUT', 'DELETE', 'PATCH')
+    missing = []
+    total = 0
+    for path, item in spec_paths.items():
+        rel = path.removeprefix(prefix)
+        pattern = re.compile('^' + re.sub(r'\\\{[a-z_]+\\\}', '[^/]+', re.escape(rel)) + '$')
+        for method in item:
+            if method.upper() not in methods:
+                continue
+            total += 1
+            if not any(m == method.upper() and pattern.match(p) for m, p in _ENDPOINT_HITS):
+                missing.append(f'{method.upper():6} {path}')
+
+    hit = total - len(missing)
+    terminalreporter.write_sep('=', '接口覆盖')
+    terminalreporter.write_line(f'{hit}/{total}（{100 * hit / total:.0f}%）—— 按测试真正发出的请求算')
+    if missing:
+        terminalreporter.write_line('没被任何测试请求打到的接口：')
+        for line in sorted(missing):
+            terminalreporter.write_line(f'  {line}')

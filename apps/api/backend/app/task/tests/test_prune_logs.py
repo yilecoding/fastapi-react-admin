@@ -221,12 +221,55 @@ def test_batches_until_drained(db):
 
     循环写成 `if` 而不是 `while` 的话，一次只删 batch 条 —— 表面看任务
     天天在跑、日志也在减少，实际上永远追不上新增量，表还是无限长。
-    这条用 5 条数据 + batch=2 逼出至少三轮循环。
+
+    ⚠️ **这条只验「删干净」，不验「分批了」。** 注释原来写的是
+    「5 条数据 + batch=2 逼出至少三轮循环」—— 那句话不成立：代码完全不分批
+    （一条无界 DELETE）时它照样绿（实测 79 条全绿）。机制本身由
+    `test_deletes_in_batches_not_one_unbounded_statement` 盯着。
     """
     seed_login(db, days_ago=40, n=5)
     msg = run_prune(days=30, batch=2)
     assert count(db, LoginLog) == 0, '没删干净 —— 分批循环可能只跑了一轮'
     assert '登录日志 5 条' in msg, msg
+
+
+def test_deletes_in_batches_not_one_unbounded_statement(db):
+    """🔴 分批这件事**本身**必须发生，不只是「删干净」。
+
+    实测：把整个 while 循环换成一条无界 `DELETE ... WHERE time_col < cutoff`，
+    上面那条 `test_batches_until_drained`（名字就叫「分批」）**照旧绿** ——
+    它验的是删干净，而一条 DELETE 也能删干净。全套 79 条一条都不红。
+
+    要防的后果写在任务体的注释里：SQL Server 上单表累计约 5000 个行锁就
+    **升级成表锁**，于是清理期间所有写操作日志的请求被阻塞 —— 而每个 API
+    请求都写操作日志。表现是「凌晨三点整站卡住几分钟，而日志里只有一条
+    任务成功」。那个后果在测试里造不出来，但**「发了几条 DELETE」造得出来**。
+
+    ⚠️ 监听挂在 `Engine` 类上（对所有引擎生效），所以只在 `run_prune`
+    前后那一小段挂着：造数据和事后计数走的是夹具自己的同步引擎，
+    挂久了会把它们的 DELETE 也数进来。
+    """
+    from sqlalchemy import event
+    from sqlalchemy.engine import Engine
+
+    deletes: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany) -> None:
+        if statement.lstrip().upper().startswith('DELETE'):
+            deletes.append(statement)
+
+    seed_login(db, days_ago=40, n=5)
+    event.listen(Engine, 'before_cursor_execute', record)
+    try:
+        run_prune(days=30, batch=2)
+    finally:
+        event.remove(Engine, 'before_cursor_execute', record)
+
+    assert count(db, LoginLog) == 0, '没删干净'
+    # 5 条 / batch=2 → 三条 DELETE（2 + 2 + 1）。操作日志这边是 0 条，不发 DELETE
+    assert len(deletes) >= 3, (
+        f'只发了 {len(deletes)} 条 DELETE —— 分批没生效。一条无界 DELETE 也能把数据「删干净」，所以光看结果分辨不出来'
+    )
 
 
 # ── 任务执行记录的清理 ──────────────────────────────────────────────────────

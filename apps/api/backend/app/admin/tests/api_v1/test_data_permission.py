@@ -232,6 +232,10 @@ async def _build(graph: Graph) -> None:
     add_rule('all_dept_id', '__ALL__', '__dept_id__', Op.AND, Expr.eq, '${dept_id}')
     # 真能落到 Dept 上的 __ALL__ 规则
     add_rule('all_status', '__ALL__', 'status', Op.AND, Expr.eq, '1')
+    # ⚠️ 上面那条**匹配图里所有部门**（它们都是 status=1），所以「规则生效」和
+    # 「规则没生效」都是「全可见」—— 单靠它区分不出来（实测：把 `__ALL__` 改成
+    # 永不生效，那条测试照旧绿）。这一条匹配 0 个部门，才是能区分的那一半。
+    add_rule('all_status0', '__ALL__', 'status', Op.AND, Expr.eq, '0')
     # 值模板变量
     add_rule('parent_tpl', 'Dept', 'parent_id', Op.AND, Expr.eq, '${dept_id}')
     add_rule('now_tpl', 'Dept', 'created_time', Op.AND, Expr.lt, f'${now}')
@@ -252,6 +256,7 @@ async def _build(graph: Graph) -> None:
     add_scope('s_user_only', ['user_only'])
     add_scope('s_all_dept_id', ['all_dept_id'])
     add_scope('s_all_status', ['all_status'])
+    add_scope('s_all_status0', ['all_status0'])
     add_scope('s_parent_tpl', ['parent_tpl'])
     add_scope('s_now_tpl', ['now_tpl'])
     add_scope('s_excluded_col', ['excluded_col'])
@@ -271,6 +276,7 @@ async def _build(graph: Graph) -> None:
     add_role('r_user_only', ['s_user_only'])
     add_role('r_all_dept_id', ['s_all_dept_id'])
     add_role('r_all_status', ['s_all_status'])
+    add_role('r_all_status0', ['s_all_status0'])
     add_role('r_parent_tpl', ['s_parent_tpl'])
     add_role('r_now_tpl', ['s_now_tpl'])
     add_role('r_excluded', ['s_excluded_col'])
@@ -293,6 +299,7 @@ async def _build(graph: Graph) -> None:
     add_user('user_only', ['r_user_only'])
     add_user('all_dept_id', ['r_all_dept_id'])
     add_user('all_status', ['r_all_status'])
+    add_user('all_status0', ['r_all_status0'])
     add_user('excluded', ['r_excluded'])
     add_user('ghost', ['r_ghost'])
     add_user('noscope', ['r_noscope'])
@@ -530,9 +537,27 @@ def test_all_model_rule_on_column_missing_from_dept_fails_open(client: TestClien
     assert dp_codes(client, dp, 'all_dept_id') == {dp.code(k) for k in ALL_DP}
 
 
-def test_all_model_rule_applies_when_column_exists(client: TestClient, dp: Graph) -> None:
-    """`__ALL__` + status（Dept 上真有这一列）才真正生效"""
+def test_all_model_rule_matching_everything_keeps_everything(client: TestClient, dp: Graph) -> None:
+    """`__ALL__` + `status == 1`：Dept 上真有这一列，规则落得下去，而图里的部门
+    **全都是 status=1**，所以结果是全可见。
+
+    ⚠️ **这一条单独看证明不了「规则生效了」** —— 它原来的名字和注释是
+    「才真正生效」，但实测把 `__ALL__` 改成永不生效，它照旧绿（因为「不过滤」
+    也是全可见）。能区分的那一半在下面那条。这条留着是为了钉住
+    「规则匹配全部时不会误伤」。
+    """
     assert dp_codes(client, dp, 'all_status') == {dp.code(k) for k in ALL_DP}
+
+
+def test_all_model_rule_matching_nothing_hides_everything(client: TestClient, dp: Graph) -> None:
+    """🔴 `__ALL__` + `status == 0`：图里没有停用部门，所以规则**真落下去**了
+    就该一个都看不到。
+
+    这是上面那条缺的另一半：`__ALL__` 规则不生效的话结果是「全可见」，
+    生效才是「全不可见」—— 两个结果相反，这条才区分得开。
+    实测：把 `__ALL__` 的目标模型改成空列表（规则永不生效），这条会红。
+    """
+    assert dp_codes(client, dp, 'all_status0') == set()
 
 
 # --------------------------------------------------------------------------
@@ -607,6 +632,33 @@ def test_user_list_endpoint_is_filtered(client: TestClient, dp: Graph) -> None:
     items = resp.json()['data']['items']
     dept_ids = {str(i.get('dept_id')) for i in items}
     assert len(dept_ids) <= 1, f'用户列表跨了多个部门，说明按部门过滤没生效：{dept_ids}'
+
+
+def test_paginated_total_is_filtered_too(client: TestClient, dp: Graph) -> None:
+    """🔴 受限账号看到的 `total` 必须和它实际列得出的条数一致。
+
+    这条最早是冲着「`count()` 没跟着过滤」写的，结果**跑出来的红是另一个 bug**：
+    `total=22` 但只列得出 20 条，而这个账号的范围一页 50 条装得下。
+    真因是用户列表 join 了 `sys_user_role`（m2m）导致的**分页扇出**，
+    和数据权限无关 —— 完整的三个症状和修法在
+    [`test_pagination_fanout.py`](test_pagination_fanout.py) 里。
+
+    留着这一条，是因为它盯的角度不一样：那边用超管测「总数 = 用户数」，
+    这边测**过滤之后**总数仍然对得上。分页的 count 是 fastapi-pagination
+    拿 Select 自己拼的，过滤条件在 Select 里 —— 哪天有人给列表加个
+    「先取全量再在 Python 里过滤」的实现，这条会红。
+
+    ⚠️ 断言用 `total == len(items)`：这个账号只看得到本部门，一页 50 条装得下，
+    所以两者必须相等。
+    """
+    headers = login(client, dp, 'all_dept_id')
+    resp = client.get('/sys/users', headers=headers, params={'page': 1, 'size': 50})
+    assert resp.status_code == 200, resp.text
+    data = resp.json()['data']
+    assert data['total'] == len(data['items']), (
+        f'分页总数 {data["total"]} 和实际能列出的 {len(data["items"])} 条不一致 —— '
+        '说明 count() 没跟着过滤，分页器会翻不到底'
+    )
 
 
 def test_every_crud_class_declares_its_data_scope_stance() -> None:

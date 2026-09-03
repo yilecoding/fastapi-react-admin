@@ -36,8 +36,15 @@ pages/xxx/
 | `_shared/login-log.ts` | `LoginLog` 类型 + `formatLocation`（内网 IP 后端返 `Reserved`）。两个调用方：登录日志页、个人中心的「最近登录」 |
 | `_shared/use-query-search.ts` | `QueryBar` ↔ URL 的胶水：从地址栏恢复条件 · 本地编辑 · 搜索时写回 URL + 拼接口入参 + **跳回第一页**。两个日志页 + 用户管理页在用，见 [查询区分册](../../../ui/src/components/query-bar/AGENTS.md) |
 
-`pages/_shared/list-page.tsx` 是只读列表的工厂，**目前没有调用方**
-（两个日志页长出了统计条/导出/详情抽屉后已搬出去手写）。
+⚠️ 这里**没有**「只读列表工厂」了。`_shared` 下那个 `createListPage(cfg)`
+删掉了 —— 它写好之后一直**零调用方**（两个日志页长出
+统计条 / 导出 / 详情抽屉之后就搬出去手写了），而休眠代码的代价是实测出来的：
+它按 `cfg.endpoint`（**运行时字符串**）取数，于是在评估「web 端能不能打开
+`@admin/api` 的类型推断」时被当成头号结构性障碍报了出去 ——
+而它谁都不挡。和硬纪律里「删字段就真删，不要留休眠字段」同一条。
+
+新加只读列表页就照现有页面手写（`log-login` / `log-opera` 是范本），
+共用的部分本来就在 `filters.tsx` / `list-query.ts` / `pagination.ts` 里。
 
 `DataTable` 自己管加载态：传 `loading`（表体骨架行，工具栏与表头留在原位）和
 `busy`（后台取数时整表降透明 + `aria-busy`）。**不要**再在页面里写

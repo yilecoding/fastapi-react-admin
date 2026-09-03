@@ -83,16 +83,24 @@ tag 推上去之后：
 
 ## 提 PR 之前
 
-这几道门必须全绿，CI 五个都跑（`static` / `eslint` / `ruff` / `pytest · SQL Server` /
-`playwright · E2E`，后两个要真实 SQL Server，CI 里会自建库，不再是「本地才跑」）：
+这几道门必须全绿，CI 五个 job 都跑（`typecheck · build · i18n · ctx` / `eslint` /
+`ruff` / `pytest · SQL Server` / `playwright · E2E`，后两个要真实 SQL Server，
+CI 里会自建库，不再是「本地才跑」）：
 
 ```bash
-pnpm typecheck                 # 全仓库 tsc（结论要 --force 才可信，见 CLAUDE.md 硬纪律 12）
-pnpm --filter web build         # 前端唯一的「整体还装得起来」信号
+pnpm typecheck --force          # 全仓库 tsc（不带 --force 会命中 turbo 缓存，见 CLAUDE.md 硬纪律 12）
+pnpm lint                       # eslint（web · ui · platform · mobile 四个包）
+pnpm build                      # web + mobile + desktop —— 前端唯一的「整体还装得起来」信号
 pnpm i18n:check && pnpm i18n:jsx
-pnpm test                       # 后端 pytest（194 条）；要先备好 fba_test 库
-pnpm e2e                        # 前端 Playwright（44 条）；自动拉起隔离的 web+api 实例
+pnpm ctx:check                  # 工程文档里的死引用 / 死链接 / 死脚本 / 死 testid
+pnpm arch:check                 # 依赖箭头：import / tsconfig paths / 方向
+pnpm test                       # 后端 pytest（303 条）；要先备好 fba_test 库
+pnpm e2e                        # 前端 Playwright（69 条）；自动拉起隔离的 web+api 实例
 ```
+
+🔴 **用 `pnpm <task>` 跑，别写 `--filter <某个包>`**（硬纪律 13）。这里原来写的是
+`pnpm --filter web build`，于是移动端和桌面端的构建都不在门里 —— 而 `packages/ui`
+的 lint 也正是这么悄悄红了 58 条的。
 
 改了前端页面/组件、后端接口/数据权限逻辑，对应的测试文件找不到就自己补一条——
 这两套测试的价值就在于打真实依赖，不接受用 mock 绕过去的版本。

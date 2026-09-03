@@ -2,6 +2,8 @@
 # 迁到了「稳定点分键」（`t()` 查表）。详情见 zh-CN.yml 顶部注释和
 # `apps/api/AGENTS.md`「后端国际化」一节。
 error:
+  db:
+    value_too_long: The submitted content exceeds the maximum length for this field
   auth:
     account_locked: Account is locked, please contact the administrator
     admin_forbidden: This account is not allowed to perform admin operations, please contact the administrator

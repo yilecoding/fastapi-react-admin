@@ -133,13 +133,7 @@ class OAuth2Service:
             msg=t('success.login.oauth2_success'),
         )
         await redis_client.delete(f'{settings.LOGIN_CAPTCHA_REDIS_PREFIX}:{ctx.ip}')
-        response.set_cookie(
-            key=settings.COOKIE_REFRESH_TOKEN_KEY,
-            value=refresh_token_data.refresh_token,
-            max_age=settings.COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS,
-            expires=timezone.to_utc(refresh_token_data.refresh_token_expire_time),
-            httponly=True,
-        )
+        jwt.set_refresh_cookie(response, refresh_token_data.refresh_token, refresh_token_data.refresh_token_expire_time)
         data = GetLoginToken(
             access_token=access_token_data.access_token,
             access_token_expire_time=access_token_data.access_token_expire_time,

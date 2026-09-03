@@ -1,0 +1,16 @@
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# prebuild 产出的原生工程。step 0 走 Expo Go，压根不生成这两棵树；
+# 将来真要 prebuild 也不该进版本库（CNG 的前提就是它们可再生）
+android/
+ios/
+
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*

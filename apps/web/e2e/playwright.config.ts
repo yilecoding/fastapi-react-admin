@@ -2,7 +2,7 @@ import path from "node:path"
 import { defineConfig, devices } from "@playwright/test"
 
 /**
- * E2E 打的是一套完全隔离的实例，和你手动 `pnpm dev` 起的 1125/8000 不共用端口、
+ * E2E 打的是一套完全隔离的实例，和你手动 `pnpm dev` 起的 8888/8088 不共用端口、
  * 不共用数据库 —— 具体隔离了什么、为什么隔离，见 CLAUDE.md「E2E 测试」一节。
  *
  *   web  :1126  →  api :8001  →  fba_test（不是开发用的 fba）
@@ -61,7 +61,7 @@ export default defineConfig({
       command: "pnpm --filter web dev",
       cwd: REPO_ROOT,
       env: {
-        // vite.config.ts 只在这个变量存在时才偏离固定的 1125（见那边的注释）
+        // vite.config.ts 只在这个变量存在时才偏离固定的 8888（见那边的注释）
         E2E_WEB_PORT: String(WEB_PORT),
         // api-client 的 API_BASE 和 /uploads 代理目标都读这个变量，早就是可覆盖的
         VITE_API_BASE: `http://127.0.0.1:${API_PORT}`,

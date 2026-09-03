@@ -9,9 +9,16 @@ import { authKeys } from '../../auth/queries'
  * 个人中心的四个写接口。
  *
  * ⚠️ 后端这几个 handler 统一是 `count > 0 ? success() : fail()` —— `count` 是
- * **受影响行数**，不是成败。提交一个跟库里一模一样的值，rowcount = 0，
- * 接口会返回「失败」但其实什么都没错。所以页面侧必须在「值没变」时禁用提交，
- * 别把这个假失败甩给用户看。
+ * **受影响行数**，不是成败。
+ *
+ * 🔴 **「提交同值会 rowcount = 0 从而假失败」这件事只在 MySQL 上成立。**
+ * `rowcount` 是 DBAPI 报什么就是什么：SQL Server（aioodbc）和 PostgreSQL
+ * （asyncpg）报的是**匹配**行，设同值照样是 1 行、照样成功；MySQL（asyncmy，
+ * 本仓库没设 `CLIENT_FOUND_ROWS`）报的是**变更**行，才会是 0。
+ * 实测见 `backend/app/admin/tests/api_v1/test_me_envelope.py`。
+ *
+ * 所以页面侧「值没变就禁用提交」**要保留**，但理由变了：在 MySQL 上它是
+ * 正确性要求，在另两个方言上是省一次无意义的请求。
  */
 
 /** 昵称：`PUT /sys/users/me/nickname`，body 是 embed 的 `{nickname}` */
@@ -150,7 +157,7 @@ export const socialBindingsQuery = queryOptions({
  * 在「参数配置」或 `.env` 里改，不是前端能修的。
  *
  * 回跳端口的坑已经修了：`OAUTH2_FRONTEND_*_REDIRECT_URI` 原先指向 5173 而前端在
- * 5174，现在两边统一到 1125（`plugin/oauth2/plugin.toml` + `vite.config.ts`）。
+ * 5174，现在两边统一到 8888（`plugin/oauth2/plugin.toml` + `vite.config.ts`）。
  * **改前端端口时这两处要一起改**，只改一边的表现是「授权成功、回跳到空端口」。
  */
 export function useSocialBindingUrl() {
@@ -229,7 +236,7 @@ type UploadedImage = { id: string; public_url: string | null; original_name: str
  *
  * ⚠️ **存的是绝对地址，里面带着 API 主机名。** 后端 `avatar` 字段是 `HttpUrl`，
  * 只收完整地址，而 `public_url` 是相对路径（`/uploads/2026/08/22/xxx.png`）——
- * 相对路径交给浏览器会按**前端** origin 解析（:1125），拿到 404。所以这里必须拼
+ * 相对路径交给浏览器会按**前端** origin 解析（:8888），拿到 404。所以这里必须拼
  * `API_BASE`，代价是库里存下 `http://127.0.0.1:8000/uploads/…`：**换 API 主机名
  * 时这些行会全部失效**。要根治得把后端字段从 `HttpUrl` 改成 `str`、存相对路径、
  * 渲染处再拼 —— 那要动接口契约和所有渲染头像的地方，没做。

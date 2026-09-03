@@ -191,6 +191,13 @@ export function DataGrid({
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const virtualOn =
     Boolean(virtual?.enabled) && centerRows.length >= (virtual?.threshold ?? 80)
+  // @tanstack/react-virtual 的 useVirtualizer 在内部改自己的实例，React Compiler
+  // 的规则因此跳过这一段编译。那是库的实现方式，不是这里能改的，而虚拟滚动没有替代品。
+  //
+  // ⚠️ 下面那条 disable 必须**单独一行、紧贴代码** —— `eslint-disable-next-line`
+  // 只作用于紧邻的下一行，写成多行注释的第一行会落到第二行注释上（然后报
+  // 「Unused eslint-disable directive」，而真正的告警照旧）。
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: virtualOn ? centerRows.length : 0,
     getScrollElement: () => scrollRef.current,

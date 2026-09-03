@@ -15,6 +15,15 @@ jobs:
   # 零外部依赖的检查。要 SQL Server 的那部分在下面的 test-backend job 里，
   # 两者并行 —— 拆开是为了让「装 ODBC 驱动 / 等实例」的抖动不污染这条的红绿信号。
   static:
+    # 🔴 **这个 name 是分支保护规则按字面引用的，不要改。**
+    # `main-github-flow` ruleset 里的 required status check 写的就是
+    # `typecheck · build · i18n` 这一串字符 —— job 改名之后那个被要求的检查
+    # **永远不会上报**，于是所有 PR 都卡在「等待必需的检查」上，
+    # 而 CI 全是绿的、看不出哪里不对（实测：加 ctx:check 时顺手把这行改成
+    # `… · ctx`，PR #90 直接变成 not mergeable，排查了半天才找到）。
+    #
+    # 新增步骤就加在下面的 steps 里，不要动 name。这是「同一件事两个真相源」
+    # 的典型：名字同时活在这个文件和 GitHub 的 ruleset 里，而后者不在仓库里。
     name: typecheck · build · i18n
     runs-on: ubuntu-latest
     steps:
@@ -34,14 +43,42 @@ jobs:
         run: pnpm typecheck --force
 
       # 前端没有自动化测试（已知缺口），所以 build 是目前唯一的
-      # 「整个前端还能不能装起来」的信号，别省掉
+      # 「整个前端还能不能装起来」的信号，别省掉。
+      #
+      # 🔴 **跑 `pnpm build`（turbo），不要写 `--filter`**（硬纪律 13）。
+      # 原来是 `--filter web` + `--filter @admin/mobile` 两条，于是
+      # **`apps/desktop` 的主进程/预加载包从来没在 CI 里构建过** ——
+      # 它的 `build` 只是两个 `vite build`（`electron-builder` 只在 `package`
+      # 里，发版才跑），几秒钟的事，坏了却要等发版才发现。
+      #
+      # 移动端那一条尤其不能省：typecheck 挡不住它那一类失败，实测踩过的三个
+      # 都是「tsc 全绿、bundle 才炸或才静默失效」——
+      #   - `global.css` 少了 `@source` → 每个 className 都成空操作（不报错）
+      #   - `babel-preset-expo` 没在 devDependencies 里 → Metro 解析不到
+      #   - uniwind 令牌在 light/dark 数量不一致 → 那批颜色隐形（export 仍成功）
       - name: build
-        run: pnpm --filter web build
+        run: pnpm build
 
       # 两个脚本缺一个都会漏：check 管 t('…') 的 key 有没有进语言包，
       # jsx 管压根没进 t() 的裸中文
       - name: i18n
         run: pnpm i18n:check && pnpm i18n:jsx
+
+      # 🔴 **文档的机器可核对部分也要在 CI 里核对。**
+      # `ctx:check` 抓死引用 / 死链接 / 死脚本 / 死 testid / 跨文件章节引用，
+      # 它整份存在的理由就是「凡是能被机器核对的断言就让机器核对」——
+      # 而它自己**一直没进 CI**，只在有人手动跑的时候才跑。
+      # 文档腐烂是静默的：它照旧言之凿凿地指着一个已经不存在的文件。
+      - name: ctx
+        run: pnpm ctx:check
+
+      # 🔴 依赖箭头同理。它比文档更要命：alias / tsconfig paths 写了而
+      # `package.json` 没写，会**一直是绿的**，直到某个地方第一次做
+      # scoped install —— 上一次是 `apps/web/Dockerfile` 的
+      # `pnpm install --filter web...`，在 GHCR 构建里当场炸成一片
+      # `Cannot find module 'react'`。整仓 `pnpm install` 永远盖着这个洞。
+      - name: arch
+        run: pnpm arch:check
 
   lint-frontend:
     name: eslint
@@ -58,8 +95,17 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # 🔴 **跑 `pnpm lint`（= `turbo lint`），不要写 `--filter <某个包>`。**
+      #
+      # 这里原来是 `pnpm --filter web lint`，于是**别的包的 lint 从来没跑过**：
+      #   - `packages/ui` 悄悄红了 58 条（配置和脚本都在，只是没人跑）
+      #   - `packages/platform` 声明了 `"lint": "eslint"` 却既没装 eslint 也没配置，
+      #     `pnpm lint` 一路 `eslint: not found` —— 一个写在根 CLAUDE.md 里的
+      #     脚本坏了很久，因为 CI 绕过了它
+      #
+      # 用 turbo 跑就没有「漏了哪个包」这回事：谁声明了 lint 谁就在里面。
       - name: eslint
-        run: pnpm --filter web lint
+        run: pnpm lint
 
   lint-backend:
     name: ruff

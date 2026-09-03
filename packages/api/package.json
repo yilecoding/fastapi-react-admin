@@ -1,0 +1,22 @@
+{
+  "name": "@admin/api",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "gen:api": "node scripts/gen.mjs"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema.d.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7",
+    "typescript": "~6"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.15.0",
+    "openapi-typescript-helpers": "^0.0.15"
+  }
+}

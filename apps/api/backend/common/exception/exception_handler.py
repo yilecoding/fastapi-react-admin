@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
+from sqlalchemy.exc import DBAPIError
 from starlette.exceptions import HTTPException
 from starlette.middleware.cors import CORSMiddleware
 from uvicorn.protocols.http.h11_impl import STATUS_PHRASES
@@ -77,6 +78,46 @@ async def _validation_exception_handler(exc: RequestValidationError | Validation
     ctx.__request_validation_exception__ = content  # 用于在中间件中获取异常信息
     content.update(trace_id=get_request_trace_id())
     return MsgSpecJSONResponse(status_code=StandardResponseCode.HTTP_422, content=content)
+
+
+#: 「值太长」在三种方言下的样子。SQLSTATE `22001` 是标准码，
+#: 但 pyodbc 报的是 `42000`，所以还得认消息文本。
+#:
+#: 🔴 **不加这层的表现是 500 + 一条裸 SQL 错误。** 实测：给部门的 `leader`
+#: 传 33 个字符（列是 `UniversalStr(32)`），
+#: `pyodbc.ProgrammingError: String or binary data would be truncated in
+#: table 'fba_test.dbo.sys_dept', column 'leader'` 一路冒到
+#: `ServerErrorMiddleware`。
+#:
+#: 为什么在这里兜而不是逐个字段补 `max_length`：全仓有 **88 个**带长度的
+#: 字符串列，而 schema 里只有 **9 处** `max_length`（实测数的）。
+#: 逐个补是 88 份重复声明、88 个会和列定义分叉的地方；在这里兜一次，
+#: 现在和以后新增的列一起罩上。
+#:
+#: ⚠️ 这不替代 `max_length` —— 有 `max_length` 的字段报的是 422 + **字段名**，
+#: 比这里的 400 精确得多。前端已经限制了长度的字段（`dept.leader`、
+#: `role.remark` 那些）值得单独补上，让报错点出是哪一个框。
+_VALUE_TOO_LONG_MARKERS = (
+    'string or binary data would be truncated',  # SQL Server (2628 / 8152)
+    'data too long for column',  # MySQL (1406)
+    'value too long for type',  # PostgreSQL (22001)
+)
+
+
+def _is_value_too_long(exc: BaseException) -> bool:
+    """判断一个数据库异常是不是「值超出列长度」"""
+    sqlstate = getattr(getattr(exc, 'orig', None), 'sqlstate', None)
+    if sqlstate == '22001':
+        return True
+    message = str(getattr(exc, 'orig', exc)).lower()
+    return any(marker in message for marker in _VALUE_TOO_LONG_MARKERS)
+
+
+def _unknown_exception_content(exc: BaseException) -> dict:
+    """未知异常的响应体（dev 带原文，prod 只给标准 500）"""
+    if settings.ENVIRONMENT == 'dev':
+        return {'code': StandardResponseCode.HTTP_500, 'msg': str(exc), 'data': None}
+    return response_base.fail(res=CustomResponseCode.HTTP_500).model_dump()
 
 
 def register_exception(app: FastAPI) -> None:  # ruff:ignore[complex-structure]
@@ -176,6 +217,28 @@ def register_exception(app: FastAPI) -> None:  # ruff:ignore[complex-structure]
             content=content,
             background=exc.background,
         )
+
+    @app.exception_handler(DBAPIError)
+    async def dbapi_exception_handler(request: Request, exc: DBAPIError):
+        """数据库驱动异常 —— 把「值太长」翻译成 400，其余仍按未知异常走 500
+
+        :param request: FastAPI 请求对象
+        :param exc: SQLAlchemy 包装过的驱动异常
+        :return:
+        """
+        if not _is_value_too_long(exc):
+            content = _unknown_exception_content(exc)
+            ctx.__request_unknown_exception__ = content
+            content.update(trace_id=get_request_trace_id())
+            return MsgSpecJSONResponse(status_code=StandardResponseCode.HTTP_500, content=content)
+
+        content = {
+            'code': StandardResponseCode.HTTP_400,
+            'msg': t('error.db.value_too_long'),
+            'data': None,
+        }
+        content.update(trace_id=get_request_trace_id())
+        return MsgSpecJSONResponse(status_code=StandardResponseCode.HTTP_400, content=content)
 
     @app.exception_handler(Exception)
     async def all_unknown_exception_handler(request: Request, exc: Exception):

@@ -159,6 +159,8 @@ export function QueryBar({
     defaultViewApplied.current = true
     const def = views.find((v) => v.isDefault)
     if (!def) return
+    // 首次载入时套用默认视图（由上面的 ref 保证只跑一次）。「默认视图」是从
+    // 服务端拿到 `views` 之后才知道的，没有更早的时机可用。
     setActiveView(def.id)
     onChange(def.value)
     setSearched(packQuery(def.value) ?? "")

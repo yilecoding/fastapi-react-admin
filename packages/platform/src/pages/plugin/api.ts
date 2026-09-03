@@ -1,8 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { API_BASE, api } from '../../api-client/client'
-import { ApiError } from '../../api-client/errors'
-import { tokenStore } from '../../api-client/token-store'
+import { api, fetchBytes, uploadFile } from '../../api-client/client'
 import { t } from '@admin/i18n'
 
 /**
@@ -92,9 +90,13 @@ export function useUninstallPlugin() {
  * 安装：zip 上传或 git 仓库地址。仅开发环境可用。
  *
  * zip 走 multipart，**不能经 `api.POST`** —— openapi-fetch 默认会把 body
- * JSON 序列化，FormData 进去就废了。而且 multipart 的 Content-Type 必须让
- * 浏览器自己生成（要带 boundary），手写会导致后端解析不出文件。
- * 所以这里直接 fetch，只补一个 Authorization 头。
+ * JSON 序列化，FormData 进去就废了。走 `uploadFile()`，它内部是 `sendRaw`：
+ * 不设 Content-Type（boundary 要浏览器自己生成）、但共用 401 单飞刷新、
+ * `Accept-Language` 和信封判定。
+ *
+ * ⚠️ 这里原来是自己 `new fetch` + 手拼 Authorization —— 那份复制品漏了
+ * `Accept-Language`（安装失败的 msg 永远是中文）也没有 401 刷新
+ * （token 刚过期时安装会直接失败而不是重放）。**不要再自己 fetch。**
  */
 export function useInstallPlugin() {
   const qc = useQueryClient()
@@ -104,19 +106,7 @@ export function useInstallPlugin() {
       if (v.type === 'git') {
         return api.POST(`/api/v1/sys/plugins?type=git&repo_url=${encodeURIComponent(v.repoUrl)}`)
       }
-      const fd = new FormData()
-      fd.append('file', v.file)
-      const token = tokenStore.get()
-      const res = await fetch(`${API_BASE}/api/v1/sys/plugins?type=zip`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-      })
-      const body = (await res.json().catch(() => null)) as { code?: number; msg?: string } | null
-      if (!res.ok || (body?.code !== undefined && body.code !== 200)) {
-        throw new ApiError(res.status, body?.code ?? res.status, body?.msg ?? t('安装失败（HTTP {{code}}）', { code: res.status }), body)
-      }
-      return body
+      return uploadFile<string>('/api/v1/sys/plugins?type=zip', v.file)
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: pluginKeys.all })
@@ -129,25 +119,12 @@ export function useInstallPlugin() {
  *
  * 不能用 `<a href>` 直接指过去 —— 这个接口挂了 `DependsSuperUser`，
  * 普通链接不会带 Authorization 头，服务端会回 401 而浏览器只会显示一个坏文件。
- * 必须手动 fetch 带上 token，再用 blob URL 触发下载。
+ * 所以走 `fetchBytes()`（共用客户端的 `sendRaw`：带 token、带
+ * `Accept-Language`、401 会刷新重放），再用 blob URL 触发下载。
  */
 export async function downloadPlugin(name: string): Promise<void> {
-  const token = tokenStore.get()
-  const res = await fetch(`${API_BASE}/api/v1/sys/plugins/${name}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
-  if (!res.ok) {
-    let msg = t('下载失败（HTTP {{code}}）', { code: res.status })
-    try {
-      const body = await res.json()
-      if (body?.msg) msg = body.msg
-    } catch {
-      /* 非 JSON 响应，保留默认文案 */
-    }
-    throw new ApiError(res.status, res.status, msg, null)
-  }
-  const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
+  const bytes = await fetchBytes(`/api/v1/sys/plugins/${name}`)
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }))
   const a = document.createElement('a')
   a.href = url
   a.download = `${name}.zip`

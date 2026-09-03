@@ -304,6 +304,41 @@ def test_one_off_survives_a_reload(db, monkeypatch):
     assert entry.is_due()[0] is False, '重载把触发计数清掉了，one_off 会跑第二次'
 
 
+def test_schedule_reloads_when_the_change_marker_moves(db, monkeypatch):
+    """🔴 「改了调度不用重启 beat」这件事本身必须有测试。
+
+    机制：model 的 after_insert/after_update 事件往 Redis 打一个
+    `{CELERY_REDIS_PREFIX}:last_update` 时间戳，`schedule` 这个 property
+    每次被读时比一下，变了就重新 `all_as_schedule()`。
+
+    ⚠️ **此前零覆盖。** 实测把那个 `if` 改成 `if False`（永不重载），
+    全套 80 条**一条都不红** —— 包括上面那条 `一次性抗重载`，它虽然走了
+    重载路径，但断言在「重载没发生」时同样成立（内存里那个 entry 的
+    计数也是 1）。它测的是落库，不是重载。
+
+    失败方式完全静默：管理员在界面上改了 cron 或停用了任务，beat 一直按
+    老的跑，唯一的补救是重启 beat —— 而界面上显示的是新值，
+    所以人只会怀疑自己的 cron 写错了。
+
+    这条按「先断言『没有』再断言『有』」写，中间那步同时钉住了标记的作用：
+    **没打标记就不该重载**（否则 last_update 这套是白写的，beat 每一 tick
+    都要重读整表）。
+    """
+    s = CapturingScheduler(app=celery_app)
+    assert 'timing-重载新增' not in s.schedule, '预置状态就不干净'
+
+    # beat 已经把调度载进内存了，这时候往库里插一条。
+    # ⚠️ `insert()` 走 core insert，不触发 ORM 事件，所以**不会**打变更标记 ——
+    # 这正好是中间那步断言要的条件
+    insert(db, name='timing-重载新增', id=900000000000000077)
+    assert 'timing-重载新增' not in s.schedule, '没打变更标记就重载了 —— 那 last_update 这套白写了'
+
+    # 打上标记（真实路径是 `TaskScheduler.touch_last_update()`，
+    # 它自己有测试 `test_touch_last_update_works_without_event_loop`）
+    monkeypatch.setattr(DatabaseScheduler, '_remote_last_update', lambda self: 'moved')
+    assert 'timing-重载新增' in s.schedule, '标记变了却没重载 —— 界面上改的调度不会生效，只能重启 beat'
+
+
 # ── 真实数据的读取 ──────────────────────────────────────────────────────────
 
 

@@ -40,12 +40,18 @@
 | 挑组件 / 改尺寸覆盖不生效 | [`packages/ui/AGENTS.md`](packages/ui/AGENTS.md) |
 | 加文案 / 动多语言 | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) |
 | **显示时间 / 动时区** | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) 的「服务端时间一律过 `src/datetime.ts`」 |
-| 动后端模型 / 接口 / SQL · 跑 pytest | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
+| **动请求客户端 / 后端契约 / 错误判定** | [`packages/api/AGENTS.md`](packages/api/AGENTS.md) |
+| 动后端模型 / 接口 / SQL | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
+| 动公共层（校验 / 异常 / 缓存 / 分页） | [`apps/api/backend/common/AGENTS.md`](apps/api/backend/common/AGENTS.md) |
+| 跑 pytest / 建测试库 / 测试跑不起来 | [`backend/tests/AGENTS.md`](apps/api/backend/tests/AGENTS.md)（admin 模块自己的在 [`app/admin/tests/`](apps/api/backend/app/admin/tests/AGENTS.md)） |
+| **动权限码 / 数据范围 / token 与 cookie 时长** | [`apps/api/backend/common/security/AGENTS.md`](apps/api/backend/common/security/AGENTS.md) |
+| **动数据库结构 / 写迁移 / 改种子数据** | [`apps/api/backend/alembic/AGENTS.md`](apps/api/backend/alembic/AGENTS.md) |
 | 动定时任务 / Celery / 调度 | [`apps/api/backend/app/task/AGENTS.md`](apps/api/backend/app/task/AGENTS.md) |
 | 动命令面板 / 快捷键 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
 | 动构建注入 / 发版提示 / 错误页 | [`apps/web/AGENTS.md`](apps/web/AGENTS.md) |
 | **桌面端打包 / 发版 / 自动更新** | [`apps/desktop/AGENTS.md`](apps/desktop/AGENTS.md) |
-| **发到生产服务器 / 回滚 / 部署脚本** | [`deploy/AGENTS.md`](deploy/AGENTS.md) |
+| **移动端 App / Expo / uniwind / Metro** | [`apps/mobile/AGENTS.md`](apps/mobile/AGENTS.md)（下面还按 `scripts/` · `src/app/` · `src/components/` 拆了三份） |
+| **发到生产服务器 / 回滚** · 动闸门脚本 / 品牌图标 | [`deploy/AGENTS.md`](deploy/AGENTS.md) · [`scripts/AGENTS.md`](scripts/AGENTS.md) |
 | 写或跑前端 E2E | [`apps/web/e2e/AGENTS.md`](apps/web/e2e/AGENTS.md) |
 | 动菜单 / 权限 / 死链判定 | 硬纪律 6 + [`pages/menu/AGENTS.md`](packages/platform/src/pages/menu/AGENTS.md) |
 
@@ -59,28 +65,16 @@ Claude Code 只认 `CLAUDE.md`，其余 agent 工具认 `AGENTS.md`，一份内�
 ## 让这套文档不腐烂：`pnpm ctx:check`
 
 这份文档全是**实测出来的结论**，而结论会过期 —— 过期的方式是**静默**的：
-它照旧言之凿凿地指着一个已经不存在的文件。实测样本：这套规则第一次跑起来
-就抓到「别用 command.tsx」这条 —— 那个 cmdk 组件早就删了，规则却还教了很久。
-
-所以凡是能被机器核对的断言就让机器核对，和 `i18n:check` 同一个物种：
+它照旧言之凿凿地指着一个已经不存在的文件。所以凡是能被机器核对的断言就让
+机器核对，和 `i18n:check` 同一个物种：
 
 ```bash
 pnpm ctx:check          # 死引用 / 死链接 / 死脚本 / 死 testid / 行数预算
 ```
 
-| 规则 | 级别 | 抓什么 |
-|---|---|---|
-| `dead-path` | 错误 | 反引号里的文件路径在仓库里找不到 |
-| `dead-link` | 错误 | markdown 相对链接指向不存在的文件 |
-| `dead-script` | 错误 | 反引号里的 pnpm 脚本没有任何 package.json 声明 |
-| `dead-testid` | 错误 | 提到的 `data-testid` 源码里不存在 |
-| `dead-anchor` | 错误 | 正文里的章节交叉引用指向一个全仓都不存在的章节 |
-| `cross-file-anchor` | 错误 | 那一节在**别的分册**里 —— 拆分册最容易留下的债，改成相对链接 |
-| `empty-scope` | 错误 | `AGENTS.md` 所在目录下没有源码（模块被搬走了） |
-| `budget` | 警告 | 根文件 > 400 行 / 分册 > 500 行 —— 该拆了 |
-
 它**不**校验文字对不对（那要人读），只校验「指向的东西还在不在」。
-这一层能自动守住，剩下的才值得花人的注意力。
+八条规则、覆盖哪 40 份文档、以及豁免表的登记约定，见
+[`scripts` 分册](scripts/AGENTS.md)。
 
 ### 这套文档怎么自己长大
 
@@ -91,20 +85,37 @@ pnpm ctx:check          # 死引用 / 死链接 / 死脚本 / 死 testid / 行�
 判据是一句话：**违反了会坏，而且多数是静默地坏。** 风格偏好、
 能从代码直接读出来的事实、一次性的调试过程，都不写。
 
+🔴 **「实测证据」那一栏只能放真的跑过的东西，不能放从代码形状推出来的结论。**
+这条是被自己坑出来的 —— 同一轮里有三条写进文档的断言后来被实测推翻：
+
+| 写下的断言 | 实测 |
+|---|---|
+| 「`count > 0 ? success() : fail()`，设同值会 0 行 → 假成功」 | SQL Server / PostgreSQL 的 rowcount 数**匹配**行，设同值照样成功；只有 MySQL 才是 0。**同一接口三个方言行为不同** |
+| 「重置密码对不存在的用户会走 `fail()`」 | 返回 **404** —— service 先抛了 `NotFoundError`，那个分支走不到 |
+| 「接口覆盖率 55%」（grep 路径字面量算的） | 真记请求是 **47%**；换个 grep 判据还能算出 91%。**两个错数字都足够像结论** |
+
+三次的共同点：读了代码、推出了行为、把推断写进了证据栏。
+**形状看起来像什么，不等于它会发生。** 拿不准就写一条测试 —— 那比写一段
+言之凿凿的注释便宜，而且不会骗下一个人。
+
 写的时候用 `/ctx` 技能（`.claude/skills/ctx/SKILL.md`），它管三件事：
 挑分册 · 按这里的文体写（症状 / 根因 / 修法 / **实测证据** 四件套）· 收尾跑校验。
 
 ## 结构
 
 ```
-apps/api/          FBA fork（Python，uv 管理）
-apps/web/          业务应用；routes/ 只声明 schema/守卫，不渲染页面
-packages/i18n/     多语言包：语言文件 · i18next 实例 · 校验脚本（最底层）
-packages/ui/       shadcn 原语，零业务
-packages/platform/ 平台能力：api-client · auth · shell · pages
+apps/api/            FBA fork（Python，uv 管理）
+apps/web/            业务应用；routes/ 只声明 schema/守卫，不渲染页面
+apps/mobile/         移动端 App（Expo / RN），是 apps/web 的**兄弟**
+packages/i18n/       多语言包：语言文件 · i18next 实例 · 校验脚本（最底层）
+packages/api/ 后端契约：信封成败语义 · ApiError · 生成的 schema.d.ts（最底层）
+packages/ui/         shadcn 原语，零业务
+packages/platform/   平台能力：api-client · auth · shell · pages
 ```
 
-依赖方向单向：**`i18n` ← `ui` ← `platform` ← `apps/web`**。
+依赖方向单向：**`i18n` / `api` ← `ui` ← `platform` ← `apps/web`**。
+`apps/mobile` **直接依赖那两个最底层包**，不经过 `platform` —— platform 是
+web 形状的（TanStack Router、react-dom、zustand、socket.io），接进 RN 包不合适。
 **`ui` 永远不 import `platform`；`i18n` 不 import 任何 workspace 包**（连
 `react-i18next` 都不依赖 —— 它要保持框架无关，React 绑定在 app 层注入）。
 
@@ -125,7 +136,8 @@ install 的是 `apps/web/Dockerfile` 那条 `pnpm install --filter web...
 一走到 `packages/platform/src` 就成片 `Cannot find module 'react'`。
 **结论：新增一个 workspace 内的 alias/路径映射时，同时问一句「这个依赖关系
 在 `package.json` 里写了吗」**——两处不同步，会一直是绿的，直到某个地方
-第一次做 scoped install。
+第一次做 scoped install。**这条现在有闸门：`pnpm arch:check`**（已进 CI，核对
+import / tsconfig `paths` / 箭头方向），见 [`scripts` 分册](scripts/AGENTS.md)。
 
 ## 本地起服务
 
@@ -157,21 +169,27 @@ pnpm --filter api celery:beat             # 只能一个
 ```
 
 ⚠️ 前端端口固定在 **8888**（`vite.config.ts` 的 `server.port` + `strictPort: true`）。
-**换端口要同时改三处**，只改一处的失败方式都不长得像端口问题：
+**换端口要同时改四处**，只改一处的失败方式都不长得像端口问题：
 
 | 改哪里 | 漏了的表现 |
 |---|---|
 | `apps/web/vite.config.ts` | —— |
 | `backend/core/conf.py: CORS_ALLOWED_ORIGINS` | 页面能开，但**所有接口 CORS 失败** |
 | `backend/plugin/oauth2/plugin.toml` 的两条 `OAUTH2_FRONTEND_*_REDIRECT_URI` | 第三方授权成功后**回跳到空端口** |
+| `apps/desktop/scripts/dev.mjs` 的 `DEV_SERVER_URL` 默认值 | `pnpm desktop:dev` 在一个不存在的端口上等满 **60 秒**，然后打印「先跑 `pnpm --filter web dev`」—— 而它正在跑 |
 
-`strictPort: true` 是刻意的：不写它 Vite 会在端口被占时自己 +1 漂到 1126，
-而上面两处白名单是写死的 —— 宁可起不来，也不要「起来了但接口全挂」。
+🔴 **第四行是补上去的，因为它真的漂走过。** 端口从 1125 改成 8888 时这张表只写了
+三处，桌面端那个默认值被漏下 —— 于是 `pnpm desktop:dev` 一直等在 `localhost:1125`
+上，而超时提示指向一个**已经满足**的前提。改端口时最容易漏的就是「不在这张表里
+的那一处」，所以发现新的就往表里加，别只改代码。
+
+`strictPort: true` 是刻意的：不写它 Vite 会在端口被占时自己 +1 漂到 8889，
+而上面那三处都是写死的 —— 宁可起不来，也不要「起来了但接口全挂」。
 
 账号 `admin` / `123456`。登录要过验证码，验证码答案在 Redis：
 `docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"`。
 
-后端契约改动后跑 `cd packages/platform && pnpm gen:api` 重新生成 `schema.d.ts`。
+后端契约改动后跑 `pnpm --filter @admin/api gen:api` 重新生成 `schema.d.ts`。
 
 🔴 **`pnpm install:all` 会顺带装好本地 pre-commit 钩子，换机器 / 新克隆不用再手动补一步。**
 `apps/api/.pre-commit-config.yaml` 早就在（ruff `--fix --unsafe-fixes` + ruff-format + json/yaml/toml
@@ -198,10 +216,16 @@ pnpm hooks:install       # = apps/api/.venv/bin/prek install -C apps/api -f
 
 ## 硬纪律（违反会坏，不是风格问题）
 
+> 🔴 **新增一条就追加到末尾，不要插队。** 全仓有约 **110 处**注释按编号引用它们
+> （`硬纪律 9` 有 47 处、`硬纪律 6` 有 21 处…）。插在中间会让后面每一条的引用
+> **静默指错** —— 实测踩过一次：新增的「闸门」那条本来插成了 11，于是
+> `CONTRIBUTING.md` 和 PR 模板里两处「见硬纪律 12」（本意是 typecheck 那条）
+> 都指到了别的规则上，而两处都还是「有效编号」，任何检查都发现不了。
+
 ### 1. 平台页面组件必须 router-独立
 
 `params` / `search` **只能走 props**，页面内部不得调用
-`Route.useSearch()` / `Route.useParams()` / `useNavigate()`。
+`Route.useSearch()` / `Route.useParams()` / `useNavigate()`。**有闸门：`pnpm arch:check`。**
 
 > 原因：多页签用 `<Activity>` 同时挂载所有已打开的 tab，
 > 但 router 只有一个 location 是「匹配」的 —— 隐藏 tab 拿不到 match 上下文。
@@ -229,6 +253,7 @@ const search = Route.useSearch()
 
 `apps/web/src/routes/**` 只声明 `validateSearch` / `staticData` / `beforeLoad` 守卫，
 `component: () => null`。页面由 `TabOutlet` 按 `lib/page-registry.tsx` 挂载。
+**有闸门：`pnpm arch:check`**（只管 `_auth/` 目录下的，布局和 `_guest/**` 不算）。
 
 ### 4. TabOutlet 不能与 `<Outlet />` 共存
 
@@ -237,7 +262,7 @@ const search = Route.useSearch()
 ### 5. 隐藏 tab 的 DOM 仍在文档树里
 
 任何 `document.querySelector` / 全局 DOM 测量 / 第三方库的全局选择器
-都会命中隐藏页 —— 必须限定在 `[data-visible="true"]` 内。
+都会命中隐藏页 —— 必须限定在 `[data-visible="true"]` 内。**有闸门：`pnpm arch:check`。**
 
 > ⚠️ 但 `[data-visible="true"]` **不是瞬时唯一的**。切 tab 时有一段窗口
 > 两个 frame 都是 `true`（实测：应用内切 tab ~18ms，整页加载后 ~300ms，
@@ -266,6 +291,15 @@ const search = Route.useSearch()
 
 `packages/ui/src/styles/globals.css` 里的 `@source` 决定哪些文件被扫描。
 漏了的包，它独有的类会**静默不生成**（class 在、CSS 规则不在，表现为布局莫名其妙塌掉）。
+
+⚠️ **实测：那两条 `@source` 是通配的**（`apps/*/src/**` + `packages/*/src/**`），
+新增的包落在 `apps/` 或 `packages/` 下就自动覆盖，别去找一份不存在的逐包清单。
+真正要动手的是下面这半条：新开一个 CSS 入口。
+
+⚠️ **新开一个 CSS 入口时同样要写 `@source`** —— Tailwind v4 的自动探测以那个 CSS
+文件所在目录为根。`apps/mobile` 就为此全裸过一轮：入口在 `src/styles/` 下、
+那目录没有组件，**一条工具类都没生成**，而打包和 Metro 全程不报错。
+判据见 [mobile 分册](apps/mobile/AGENTS.md)。
 
 ### 8. 侧边栏同一层级必须用同一套组件
 
@@ -307,11 +341,21 @@ turbo 会缓存 typecheck 的结果，而缓存命中时**打印的是上一次�
 所以**判断「类型过了」一律 `pnpm typecheck --force`**。日常开发跑不带 force
 的没问题（快），但凡要据此删代码或收工，必须 force 一遍。
 
+### 13. 闸门要用 `pnpm <task>` 跑，不要写 `--filter <某个包>`
+
+CI 的 eslint job 原来是 `pnpm --filter web lint`，于是**别的包的 lint 从来没跑过**：
+`packages/ui` 悄悄红了 58 条（配置和脚本都在，只是没人跑）；`packages/platform`
+声明了 `"lint": "eslint"` 却既没装 eslint 也没配置，**`pnpm lint` 一路
+`eslint: not found`** —— 一个写在这份文档里的脚本坏了很久，而 CI 绕过了它。
+
+用 `turbo` 跑（`pnpm lint` / `pnpm typecheck` / `pnpm build`）就没有「漏了哪个包」
+这回事：谁声明了那个 task 谁就在里面。**新增一个包的 lint/typecheck 时不用改 CI。**
+
 ---
 
 ## 数据库结构改动一律走 alembic
 
-**改了模型就要生成迁移，没有例外。** 手写 `ALTER` / `drop_all` 重建那条路已经关了。
+🔴 **改了模型就要生成迁移，没有例外。** 手写 `ALTER` / `drop_all` 重建那条路已经关了。
 
 ```bash
 pnpm db:current                        # 现在在哪个版本
@@ -321,61 +365,10 @@ pnpm db:upgrade                        # 升到 head
 pnpm db:history                        # 看链条
 ```
 
-### 为什么改这条
-
-之前是「改模型 + 手工 ALTER」，两步之间**没有任何东西对账**。少做一步的后果
-都是静默的：本机开发库手工改过（能跑），全新环境按模型建出来缺那一列，
-要到部署时才炸；或者反过来，模型声明了索引、库上没建，功能全对只是全表扫。
-
-**已有环境**不需要重建：`alembic stamp b0000000baseline` 认领起点，再 `db:upgrade`。
-
-**全新环境**走 `fba init`（`drop_all` + `create_all` + 灌种子），它建完表会
-**自动 `alembic stamp head`** —— 表是从当前模型建的，本来就是最新结构，
-stamp 只是把这件事声明出来。
-
-> 🔴 **`create_all` 建的库不自带 `alembic_version`** —— 那张表不在
-> `MappedBase.metadata` 里。漏掉 stamp 的失败是**延迟且静默**的：库照常能用，
-> 直到第 4 条迁移出现，`db:upgrade` 从 base 把前 3 条重跑一遍。
-> 现在这 3 条碰巧无害（基线是空的、`c0000000comments` 全程 suppress、
-> `d0000000usertz` 有 `_has_column()` 早退），所以这个坑到目前为止**看不出来** ——
-> 下一条普通的 `add_column` 就会在部署时炸。
->
-> ⚠️ prod 下应用**不再自己建表**：`core/registrar.py` 的 lifespan 改成校验
-> `alembic_version` 在不在 head，不在就拒绝启动。开发环境保留 `create_all` 的便利。
-
-### 三条纪律
-
-- 🔴 **基线（`b0000000baseline`）刻意是空的。** 它只标记「起点」，不含建表 DDL——
-  把 23 张表的 DDL 写进去就有了两份真相，改模型忘了改它就静默偏离。
-  唯一一份真相仍然在模型里，基线之后每次改动一份增量
-- 🔴 **`env.py` 必须 `import backend.main`。** `MappedBase.metadata` 只有在模型
-  被 import 之后才有内容。原来只 import 了 `MappedBase` 本身 —— metadata 是空的，
-  autogenerate 拿「空 metadata」和「有 23 张表的库」做 diff，会安静地写出一份
-  **「drop 掉全部 23 张表」**的迁移，而它不会问你
-- ⚠️ **「补齐历史遗留」类的迁移必须幂等。** 新建的库天然就是目标状态：
-  `c0000000comments` 在老库上要改注释，在刚 `create_all` 出来的库上再执行会报
-  `Property 'MS_Description' already exists` —— alembic 在 mssql 上把
-  `alter_column(comment=)` 编译成 add 而不是 update。写这类迁移先问
-  「新库跑这一步会怎样」
-
-### 守卫（`app/task/tests/test_migrations.py`）
-
-| 测试 | 挡什么 |
-|---|---|
-| `test_model_matches_migrations` | **改了模型但没生成迁移** —— 这条是整套约定的支点 |
-| `test_single_head` | 两个人各自 revision 导致分叉，`upgrade head` 谁都升不了 |
-| `test_every_revision_is_reachable_from_base` | 断链的迁移永远不会执行 |
-| `test_fresh_database_is_stamped_at_head` | **新建的库没 stamp** —— 将来 `upgrade head` 会把已有迁移重跑一遍 |
-
-⚠️ 这些比对的是 **fba_test**，所以本地跑测试前它要在 head 上
-（`pnpm --filter api test:db` 会重建并自动 stamp）。
-
-> 🔴 第 4 条上线时当场抓到一个已经存在很久的 bug：`reset_test_db._stamp_head`
-> 一直在 stamp **开发库**而不是测试库。它靠设 `os.environ['DATABASE_SCHEMA']` 切库，
-> 但 `settings` 是模块级缓存单例、import 期就构造好了，进程内改 environ 影响不到它；
-> 就算改对了也没用，因为 `alembic/env.py` 会**无条件覆盖** `sqlalchemy.url`。
-> 两个库都有 `alembic_version` 表、看起来都正常，所以没有任何现象。
-> 现在 env.py 改成「调用方设过就不覆盖」，`_stamp_head` 显式写目标库。
+为什么改这条、三条纪律（基线刻意是空的 / `env.py` 必须 import `backend.main` /
+补历史的迁移必须幂等）、以及四个守卫测试，都在
+[`backend/alembic` 分册](apps/api/backend/alembic/AGENTS.md)——
+**动迁移之前先读那一份**，少读一条的失败方式都是延迟且静默的。
 
 ## 还没发版 —— 可以自由重构
 
@@ -390,23 +383,18 @@ stamp 只是把这件事声明出来。
 - **和上游 FBA 冲突是可以接受的代价**。永久分叉是既定事实（见「fork 管理」），
   为了 cherry-pick 方便而保留用不上的结构，是把成本永久摊给自己
 
-> ⚠️ 改模型后**表结构不会跟着变**：`--reload` 只是重启进程重新 import 模型，
-> 不会去动数据库里已经建好的表。新增/删除列仍要手写 `ALTER` 或 drop_all + create_all，
-> 否则新进程一样会 SELECT 不存在的列 —— reload 让人以为「已经生效了」，这是新的坑。
-> 改了字段也要同步 `backend/sql/*/init_*_test_data.sql` —— 那些 INSERT 是显式列名的，
-> 漏改会让全新环境初始化失败。
+> ⚠️ 改模型后**表结构不会跟着变**：`--reload` 只重启进程重新 import 模型，
+> 不动已经建好的表 —— 它让人以为「已经生效了」。要跑迁移（见上一节）。
+> 改了字段还要同步 `backend/sql/*/init_snowflake_test_data.sql`，那些 INSERT 是
+> 显式列名的，漏改会让全新环境初始化失败。
 
 ## fork 管理
 
-后端 fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)
-（FBA）—— 三层结构（`api/v1 → service → crud`）、插件机制、RBAC 与数据权限模型
-都是它的设计，不是本仓库发明的。本仓库在此基础上新增了 SQL Server 支持，现在
-同时支持 MySQL / PostgreSQL / SQL Server 三种数据库；前两种沿用上游写法，
-SQL Server 是本仓库加的那一种。上游明确拒绝合并 SQL Server 支持，所以是永久分叉，
-只 cherry-pick 上游安全补丁，功能更新不跟。
+归属见开头那段：三层结构（`api/v1 → service → crud`）、插件机制、RBAC 与
+数据权限模型都是 FBA 的设计，SQL Server 支持是本仓库加的。上游明确拒绝合并
+那部分，所以是**永久分叉**，只 cherry-pick 上游安全补丁，功能更新不跟。
 
-- 分叉基线记在 `apps/api/.upstream-baseline`
-- 上游同为 MIT 协议，原始版权声明保留在 `apps/api/LICENSE`
+- 分叉基线记在 `apps/api/.upstream-baseline`；上游同为 MIT，版权声明保留在 `apps/api/LICENSE`
 - 后端架构文档（三层结构 / 插件机制 / RBAC 的设计意图）看上游那份最全：
-  <https://docs.fba.wu-clan.cc>——本仓库的 `apps/api/AGENTS.md` 只记两件事上游文档没有的：
-  和上游的差异点、以及这里踩过的实测坑
+  <https://docs.fba.wu-clan.cc>——本仓库的 `apps/api/AGENTS.md` 只记上游没有的两件事：
+  差异点、和这里踩过的实测坑

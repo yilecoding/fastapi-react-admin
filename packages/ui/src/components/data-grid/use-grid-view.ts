@@ -32,11 +32,16 @@ export function useGridView(storageKey?: string, initial?: Partial<GridView>) {
   // ⚠️ 不能直接 `{...DEFAULTS, ...initial}`：调用方不传 defaultDensity 时
   // initial 是 `{density: undefined}`，展开会把默认值**覆盖成 undefined**，
   // 后面 `GRID_DENSITY[undefined].head` 直接抛。显式过滤掉 undefined。
+  // ⚠️ 下面刻意只列三个字段而不是 `initial` 本身：调用方传的是字面量对象，
+  // 每次渲染都是新引用 —— 列 `initial` 会让这个 memo 每次都重算，而后面那个
+  // effect 依赖 `base`，于是每次渲染都 `setView`，把用户存在 localStorage 里的
+  // 偏好反复冲掉。
   const base = React.useMemo(() => {
     const defined = Object.fromEntries(
       Object.entries(initial ?? {}).filter(([, v]) => v !== undefined)
     ) as Partial<GridView>
     return { ...DEFAULTS, ...defined }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 见上面那段注释
   }, [initial?.density, initial?.striped, initial?.bordered])
   const [view, setView] = React.useState<GridView>(base)
 
