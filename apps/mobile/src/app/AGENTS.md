@@ -286,6 +286,8 @@ src/lib/debounce.ts     useDebounced —— 延后「值」，不是延后「请
 - 🔴 `onEndReached` 一次滚动里会被调多次，**必须看 `hasNextPage && !isFetchingNextPage`**，
   否则会连发几页
 
+✅ **实测（Android，真机验收）**：滚到底自动拉下一页、没有连发。
+
 ### 🔴 五个状态，缺一个都会变成「这 App 坏了」
 
 | 状态 | 长什么样 |

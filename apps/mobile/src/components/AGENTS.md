@@ -194,14 +194,16 @@ toast 进了 store、屏上没有，纯静默。
 （`open` / `onOpenChange` / `title` / `description` / `confirmLabel` /
 `cancelLabel` / `variant` / `onConfirm`），多一个 `busy`（确认后的请求还在飞）。
 
-**为什么不用 RN 的 `Modal`**：它把内容挂到**另一个原生根视图**上。uniwind 的令牌
-解析发生在 React 里，理论上跨 `Modal` 也成立 —— 但这台机器上**没有能跑起来的设备**
-（模拟器还卡在 kvm 组），而「样式在另一个原生根上失效」这一类问题
-**打包和 typecheck 全都不报**。所以选了已经在用的那条路：`@rn-primitives/portal`
-渲染进根 layout 的 `<PortalHost />`，**同一棵 React 树、同一个原生根**。
+**为什么不用 RN 的 `Modal`**：它把内容挂到**另一个原生根视图**上，而「样式在另一个
+原生根上失效」这一类问题**打包和 typecheck 全都不报**。所以选了已经在用的那条路：
+`@rn-primitives/portal` 渲染进根 layout 的 `<PortalHost />`，
+**同一棵 React 树、同一个原生根**。
 
-⚠️ **这是一个「此刻无法验证」下的选择，不是结论。** 等设备能跑起来了要实测一次
-再决定要不要换 `Modal` —— 别因为「Modal 更标准」就换过去。
+✅ **实测证据（Android，真机验收）**：三条一起过的 —— 确认框层级正确 ·
+**Android 返回键关的是弹框而不是把屏退掉** · toast 弹出期间屏上其它元素照旧可点
+（`pointerEvents="box-none"` 生效）。当初这是「无法验证前提下的选择」，现在是结论。
+
+⚠️ **只在 Android 上验过**，iOS 一次没跑过。
 
 🔴 **走 portal 的浮层必须自己接 Android 返回键**（`BackHandler`）。在原生看来它
 只是一层普通 View，返回键**不会关它** —— 会直接把当前屏 pop 掉，于是「按返回」=
