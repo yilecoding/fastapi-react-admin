@@ -74,6 +74,8 @@ export function DataGridToolbar({
   actions?: React.ReactNode
 }) {
   const [localSearch, setLocalSearch] = React.useState(search ?? "")
+  // 受控 prop 镜像进本地 state：输入框要能自由输入（本地 state），
+  // 但外部改了值也得跟上。见 eslint.config.js 里对 set-state-in-effect 的说明。
   React.useEffect(() => setLocalSearch(search ?? ""), [search])
 
   const canExpand = typeof table.toggleAllRowsExpanded === "function"

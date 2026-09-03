@@ -10,6 +10,25 @@ from backend.utils.timezone import timezone
 
 
 class CRUDNotice(DataScopedCRUD[Notice]):
+    #: 显式豁免数据权限 —— 公告是**全局内容**，而且这张表没有任何归属维度
+    #:
+    #: 🔴 **默默继承默认值（过滤）会让公告对所有受限用户消失。** 实测：
+    #: 超管看到 3 条，STAFF 角色的用户看到 **0 条**（HTTP 200、空列表、无任何提示），
+    #: 仪表盘那张统计卡也跟着显示 0。
+    #:
+    #: 原因是 fail-closed：`filter_data_permission_for_user` 里
+    #: `if not data_rules: return or_(1 != 1)` —— 而四个种子演示角色都是
+    #: 「开了 is_filter_scopes 但没配范围」。
+    #:
+    #: 而且这张表**没有可过滤的维度**：只有 `id / title / type / status / content`，
+    #: 没有 `dept_id`、没有 `created_by`。规则想表达「某部门才看得到某公告」
+    #: 压根表达不了 —— 所以过滤在这里只有 fail-closed 一种效果。
+    #:
+    #: ⚠️ `GET /sys/notices` 只挂 `DependsJwtAuth`、**没有权限门禁** ——
+    #: 它是给所有登录用户看公告的接口（仪表盘也拿它做统计卡），
+    #: 不是管理端列表。和菜单/字典同一类：滤掉了界面就空，而用户不知道为什么。
+    data_scope_enabled = False
+
     """通知公告数据库操作类"""
 
     async def get(self, db: AsyncSession, pk: int) -> Notice | None:

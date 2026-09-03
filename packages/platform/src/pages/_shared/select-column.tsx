@@ -7,12 +7,10 @@ import { Checkbox } from '@admin/ui/components/checkbox'
  * 硬拿泛型串起来会掉进 TanStack v9 的类型方差坑（页面里已有 `columns as never`），
  * 所以这里只要求传进来的 helper 有 `display` 方法。
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyColumnHelper = { display: (def: any) => any }
 
 /** 是否可选由调用方决定（如超管行不允许删除时也不允许勾选） */
 export function buildSelectColumn(col: AnyColumnHelper,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   opts: { canSelect?: (row: any) => boolean } = {},
   /**
    * 翻译函数由调用方传进来 —— 这是**普通函数**，在 `useMemo` 里被调用，

@@ -3,12 +3,15 @@ from typing import Any
 
 from fastapi import Request
 from pydantic import HttpUrl
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_dept import dept_dao
 from backend.app.admin.crud.crud_role import role_dao
 from backend.app.admin.crud.crud_user import user_dao
 from backend.app.admin.model import Role, User
+from backend.app.admin.model.m2m import user_role
+from backend.app.admin.schema.role import GetRoleDetail
 from backend.app.admin.schema.user import (
     AddUserParam,
     ResetPasswordParam,
@@ -27,6 +30,7 @@ from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.pagination import paging_data
 from backend.common.response.response_code import CustomErrorCode
+from backend.common.security.data_scope import bypass_data_scope
 from backend.common.security.jwt import get_token, jwt_decode
 from backend.core.conf import settings
 from backend.database.redis import redis_client
@@ -83,10 +87,50 @@ class UserService:
         user_select = await user_dao.get_select(dept=dept, username=username, phone=phone, status=status, role=role)
         data = await paging_data(db, user_select)
         if data['items']:
-            serialized_items = select_join_serialize(data['items'], relationships=['User-m2o-Dept', 'User-m2m-Role'])
+            # ⚠️ `return_as_dict=True` 是必须的：这个函数默认返回 **namedtuple**，
+            # 而 namedtuple 不可变 —— 下面 `_attach_roles` 要往每条里塞 `roles`。
+            # 响应模型是 `from_attributes=True`，dict 和 namedtuple 都能校验。
+            serialized_items = select_join_serialize(
+                data['items'], relationships=['User-m2o-Dept'], return_as_dict=True
+            )
             # 确保返回的是列表，即使只有一个元素
-            data['items'] = [serialized_items] if not isinstance(serialized_items, list) else serialized_items
+            items = [serialized_items] if not isinstance(serialized_items, list) else serialized_items
+            await UserService._attach_roles(db=db, items=items)
+            data['items'] = items
         return data
+
+    @staticmethod
+    async def _attach_roles(*, db: AsyncSession, items: list[dict[str, Any]]) -> None:
+        """给本页的每个用户补上角色列表（原地改 `items`）
+
+        🔴 **必须在分页之后做，不能把 `sys_user_role` join 进分页的那个 Select。**
+        角色是 m2m，join 会让一个挂 N 个角色的用户变成 N 行，而 `total` 和
+        `LIMIT` 都作用在 join 后的行上 —— 原因和三个实测症状写在
+        `crud_user.get_select` 里。
+
+        一条查询覆盖整页，不是 N+1。
+
+        ⚠️ 用 `GetRoleDetail` 而不是响应模型里那个 `GetRoleWithRelationDetail`：
+        后者带 `menus` / `scopes` 两个关系字段，拿 ORM 对象去校验会触发
+        **异步惰性加载** → `MissingGreenlet`。这两个字段在列表上一直是 `[]`
+        （原来那个 join 也只填了 Role 自己的列），行为没变。
+
+        :param db: 数据库会话
+        :param items: 本页的用户字典列表
+        :return:
+        """
+        by_user: dict[int, list[dict[str, Any]]] = {}
+        stmt = (
+            select(user_role.c.user_id, Role)
+            .join(Role, and_(Role.id == user_role.c.role_id, Role.deleted == 0))
+            .where(user_role.c.user_id.in_([int(item['id']) for item in items]))
+        )
+        for user_id, role_obj in (await db.execute(stmt)).all():
+            by_user.setdefault(int(user_id), []).append(GetRoleDetail.model_validate(role_obj).model_dump())
+
+        for item in items:
+            # `roles` 在响应模型里是必填的，没有角色也要给一个空列表
+            item['roles'] = by_user.get(int(item['id']), [])
 
     @staticmethod
     async def create(*, db: AsyncSession, obj: AddUserParam) -> None:
@@ -225,9 +269,19 @@ class UserService:
             raise errors.NotFoundError(msg=t('error.user.not_found'))
 
         await validate_new_password(db, user.id, password)
+        # 🔴 **旧 hash 必须在改之前抓住。** `user` 和 `reset_password` 动的是
+        # **同一个 ORM 实例**，改完之后 `user.password` 已经是新 hash 了 ——
+        # 于是历史表里存进去的是「刚设的那个密码」，而不是被换掉的那个。
+        #
+        # 实测（改一次密码后直接查 `sys_user_password_history`）：
+        # 那一行 `password_verify(新密码, hash)` 是 **True**、
+        # `password_verify(旧密码, hash)` 是 **False**。
+        # 后果是「不许复用最近 N 个密码」这条控制**从来没生效过**：
+        # 改回上一个密码照样通过（实测 code=200），而界面上没有任何异常。
+        previous_password = user.password
         count = await user_dao.reset_password(db, user.id, password)
 
-        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=user.password)
+        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
         await redis_client.delete_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user.id}')
@@ -298,6 +352,8 @@ class UserService:
             raise errors.RequestError(msg=t('error.user.captcha_expired'))
         if captcha != captcha_code:
             raise errors.CustomError(error=CustomErrorCode.CAPTCHA_ERROR)
+        # 唯一性检查的豁免已经挪进 `user_dao.check_email` 内部了
+        # （连同另外 6 个同类方法，见那里的注释）—— 这里不用再包一层
         email_user = await user_dao.check_email(db, email)
         if email_user and email_user.id != user_id:
             raise errors.ConflictError(msg=t('error.user.email_bound'))
@@ -316,7 +372,22 @@ class UserService:
         :param obj: 密码重置参数
         :return:
         """
-        user = await user_dao.get(db, user_id)
+        # 🔴 **读自己那一行必须豁免数据权限。** `user_dao` 是 `DataScopedCRUD`，
+        # 而「开了范围过滤但一个范围都没配」的角色是 fail-closed（种子里的 STAFF
+        # 就是这样）—— 那种用户**看不见自己**，`get()` 返回 None，下一句
+        # `user.password` 直接 `AttributeError` → **500**。
+        #
+        # 实测：拿 STAFF 角色的账号打 `PUT /sys/users/me/password`，
+        # 500 `AttributeError: 'NoneType' object has no attribute 'password'`。
+        # 而 `/users/me`、`/me/nickname`、`/me/avatar` 都是 200 —— 只有这一条炸，
+        # 因为只有它先 `get()` 了一次。
+        #
+        # 这次读的目的不是「把数据展示给用户」，是「验他自己的旧密码」，
+        # 按可见范围过滤没有意义 —— 正是 `bypass_data_scope()` 注释里写的那种场景。
+        with bypass_data_scope():
+            user = await user_dao.get(db, user_id)
+        if not user:
+            raise errors.NotFoundError(msg=t('error.user.not_found'))
 
         if user.password and not password_verify(obj.old_password, user.password):
             raise errors.RequestError(msg=t('error.user.wrong_old_password'))
@@ -325,9 +396,11 @@ class UserService:
             raise errors.RequestError(msg=t('error.user.password_mismatch'))
 
         await validate_new_password(db, user_id, obj.new_password)
+        # 旧 hash 要在改之前抓住 —— 理由同 `reset_password`（同一个 ORM 实例）
+        previous_password = user.password
         count = await user_dao.reset_password(db, user_id, obj.new_password)
 
-        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=user.password)
+        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
         await redis_client.delete_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user_id}')

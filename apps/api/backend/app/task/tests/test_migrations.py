@@ -1,8 +1,10 @@
 """迁移守卫。
 
-放在 `app/task/tests` 下不是因为它属于 task 模块，而是因为 `pyproject.toml` 的
-`testpaths` 只列了几个目录 —— 这是当前**唯一**能被收集到的非 admin 位置。
-将来加 `backend/tests` 到 testpaths 时把它挪过去。
+放在 `app/task/tests` 下不是因为它属于 task 模块，而是当年 `pyproject.toml` 的
+`testpaths` 里只有那几个目录。
+
+⚠️ **`backend/tests` 现在已经在 testpaths 里了**（种子方言一致性守卫就放在那儿），
+所以这份文件可以挪过去 —— 只是挪动会让 git 历史断在这儿，等下次真要动它时一起做。
 """
 
 import pytest

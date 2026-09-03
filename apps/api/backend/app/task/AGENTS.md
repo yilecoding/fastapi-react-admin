@@ -100,6 +100,34 @@ autodiscover 拿到的包名是 `backendtask.tasks.maintenance`，worker/beat
 应该打印 `['backend.app.task.tasks.maintenance']`（点分完整，不是
 `backendtask...`）。
 
+## 两处被突变体量出来的测试缺口
+
+拿突变体扫了一遍这个模块（当时 80 条测试），两条：
+
+**1. 「分批删日志」这件事本身没测。** 把 `prune_logs` 里整个 while 循环换成
+一条无界 `DELETE ... WHERE time_col < cutoff`，**80 条一条都不红** ——
+包括名字叫 `test_batches_until_drained` 的那条，因为它验的是「删干净」，
+而一条 DELETE 也能删干净。要防的后果（SQL Server 约 5000 行锁就升级成表锁 →
+清理期间整站写操作日志被阻塞）在测试里造不出来，但**「发了几条 DELETE」造得出来**：
+挂个 `before_cursor_execute` 监听，5 条数据 + batch=2 应该看到 ≥3 条 DELETE。
+
+**2. 「改了调度不用重启 beat」没测。** 把 `schedule` property 里那个
+`if latest is not None and latest != self._last_seen_update` 改成 `if False`
+（永不重载），同样一条都不红。已有那条 `一次性抗重载` 虽然走了重载路径，
+但它的断言在「重载没发生」时同样成立（内存里那个 entry 的计数也是 1）——
+它测的是落库，不是重载。
+
+失败方式完全静默：管理员在界面上改了 cron 或停用了任务，beat 一直按老的跑，
+**而界面显示的是新值**，所以人只会怀疑自己的 cron 写错了。
+
+补的那条按「先断言没有、再断言有」写，中间还钉住了标记的作用（没打标记
+就不该重载，否则 beat 每 tick 都要重读整表）。双向验证过：改成永不重载 →
+最后一句红；改成每次都重载 → 中间那句红。
+
+> ⚠️ 数这个模块的测试条数别用 `grep -c '^def test_'` ——
+> `test_scheduler_timing.py` 里有个 **fixture** 叫 `test_factory`，
+> 名字以 `test_` 开头但不会被收集，grep 会多算一条。
+
 ## 调度只有一个来源：`task_scheduler` 表
 
 🔴 **刻意不配 `beat_schedule`。** `DatabaseScheduler.setup_schedule()` 只 SELECT

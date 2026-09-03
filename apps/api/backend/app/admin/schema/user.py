@@ -4,10 +4,18 @@ from typing import Annotated, Any
 from pydantic import ConfigDict, Field, HttpUrl, PlainSerializer, model_validator
 from typing_extensions import Self
 
+from backend.app.admin.model import User
 from backend.app.admin.schema.dept import GetDeptDetail
 from backend.app.admin.schema.role import GetRoleWithRelationDetail
 from backend.common.enums import StatusType
-from backend.common.schema import CustomEmailStr, CustomPhoneNumber, SchemaBase, ser_string
+from backend.common.schema import (
+    ColumnLengthChecked,
+    CustomEmailStr,
+    CustomPhoneNumber,
+    SchemaBase,
+    SnowflakeIdIn,
+    ser_string,
+)
 from backend.core.conf import settings
 
 
@@ -31,15 +39,15 @@ class AddUserParam(AuthSchemaBase):
     nickname: str | None = Field(None, description='昵称')
     email: CustomEmailStr | None = Field(None, description='邮箱')
     phone: CustomPhoneNumber | None = Field(None, description='手机号码')
-    dept_id: int = Field(description='部门 ID')
+    dept_id: SnowflakeIdIn = Field(description='部门 ID')
     roles: list[int] = Field(description='角色 ID 列表')
 
 
 class AddUserRoleParam(SchemaBase):
     """添加用户角色"""
 
-    user_id: int = Field(description='用户 ID')
-    role_id: int = Field(description='角色 ID')
+    user_id: SnowflakeIdIn = Field(description='用户 ID')
+    role_id: SnowflakeIdIn = Field(description='角色 ID')
 
 
 class AddOAuth2UserParam(AuthSchemaBase):
@@ -62,7 +70,7 @@ class ResetPasswordParam(SchemaBase):
 class UserInfoSchemaBase(SchemaBase):
     """用户信息基础模型"""
 
-    dept_id: int | None = Field(None, description='部门 ID')
+    dept_id: SnowflakeIdIn | None = Field(None, description='部门 ID')
     username: str = Field(description='用户名')
     nickname: str = Field(description='昵称')
     avatar: Annotated[HttpUrl, PlainSerializer(ser_string)] | None = Field(None, description='头像地址')
@@ -70,8 +78,10 @@ class UserInfoSchemaBase(SchemaBase):
     phone: CustomPhoneNumber | None = Field(None, description='手机号')
 
 
-class UpdateUserParam(UserInfoSchemaBase):
+class UpdateUserParam(ColumnLengthChecked, UserInfoSchemaBase):
     """更新用户参数"""
+
+    __sa_model__ = User
 
     roles: list[int] = Field(description='角色 ID 列表')
 
@@ -81,7 +91,7 @@ class GetUserInfoDetail(UserInfoSchemaBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-    dept_id: int | None = Field(None, description='部门 ID')
+    dept_id: SnowflakeIdIn | None = Field(None, description='部门 ID')
     id: int = Field(description='用户 ID')
     uuid: str = Field(description='用户 UUID')
     status: StatusType = Field(description='状态')

@@ -4,11 +4,11 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "gen:api": "openapi-typescript http://127.0.0.1:8000/openapi -o src/api-client/schema.d.ts",
     "lint": "eslint",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@admin/api": "workspace:*",
     "@admin/i18n": "workspace:*",
     "@admin/ui": "workspace:*",
     "@hookform/resolvers": "^5",
@@ -19,7 +19,6 @@
     "cron-parser": "^5.10.0",
     "cronstrue": "^3.24.0",
     "i18next": "^26.3.6",
-    "openapi-fetch": "^0.15.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-hook-form": "^7",
@@ -29,10 +28,14 @@
     "zustand": "^5"
   },
   "devDependencies": {
+    "@eslint/js": "^10",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "openapi-typescript": "^7",
-    "typescript": "~6"
+    "eslint": "^10",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17",
+    "typescript": "~6",
+    "typescript-eslint": "^8"
   },
   "exports": {
     "./api-client/*": "./src/api-client/*.ts",

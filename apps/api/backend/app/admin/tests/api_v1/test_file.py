@@ -27,6 +27,81 @@ from starlette.testclient import TestClient
 FILES = '/sys/files'
 
 
+@pytest.fixture(autouse=True)
+def _sweep_uploads(client: TestClient, token_headers: dict[str, str]) -> Generator[None, None, None]:
+    """每条测试跑完，把残留的**存活**文件行删掉（走接口，逻辑删除就够）。
+
+    🔴 治的是**轮内**中毒。下面那个 module 级的硬清治跨轮，但同一轮里
+    「上传测试红了 → 漏下存活行 → 后面按 sha256 去重的测试跟着红」照样会发生。
+    实测：人为让 `test_upload_document` 在尾巴的 DELETE 之前红，
+    结果是 **2 failed** —— 第二条（`test_check_by_sha256`）是红鲱鱼，
+    它红的原因和自己无关。级联失败会让人去查错的那一条。
+
+    走接口而不是硬删：去重查询只看 `deleted = 0`，逻辑删除足够解毒；
+    而且不用起数据库引擎（`client` 是 session 级的，这里几乎零成本）。
+    堆下来的软删除行由 module 级那个收尾统一硬清。
+
+    ⚠️ `client` / `token_headers` 分别是 session / module 作用域，
+    所以这个 autouse 不会让每条测试重新登录。
+    """
+    yield
+
+    resp = client.get(FILES, headers=token_headers, params={'page': 1, 'size': 100})
+    if resp.status_code != 200:
+        return
+    pks = [item['id'] for item in resp.json()['data']['items']]
+    if pks:
+        client.request('DELETE', FILES, headers=token_headers, json={'pks': pks})
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _purge_test_files() -> Generator[None, None, None]:
+    """跑完这个文件里的测试，把 `sys_file` 里存活的行**硬清**一遍。
+
+    🔴 **这是补上去的，因为这批测试会自我中毒。** 清理原来只写在每条测试体的
+    **最后一行**（`client.request('DELETE', FILES, ...)`）—— 断言一红那行就跑不到，
+    于是漏下一条存活记录。而文件模块按 **sha256 去重**：漏下的那条会让**同一条
+    测试**在后续每次运行里都走进去重分支、不写盘，然后以「文件没落盘」
+    这个完全不同的症状红。
+
+    实测踩到的完整链条：一次突变实验让 `test_upload_document` 在
+    `isinstance(data['created_by'], str)` 那句断言红了 → 尾巴上的 DELETE 没跑 →
+    留下一条 `季度报告.docx` 的存活行 → 之后**每次**跑都红在
+    `assert (isolated_upload_dir / today / name).is_file()` 上，而那句和真正的
+    原因毫无关系。查了半小时才看到隔离目录是空的（去重命中，压根没写盘）。
+
+    ⚠️ **必须硬删，接口的 DELETE 是逻辑删除**（`deleted` 从 0 改成行自己的 id）。
+    实测：清空前测试库里堆了 **1029 行**、14 种夹具文件名、47 轮的量，
+    而这些都不影响测试绿 —— 唯一的现象就是上面那条中毒。
+    和 `tests/conftest.py` 的 `temp_user` 是同一个套路，那边的注释是完整版
+    （包括为什么不能复用共享 session）。
+
+    ⚠️ 放在 **module 作用域**而不是每条测试：一次引擎起停约几十毫秒，
+    挂到 30 条测试上就是白烧一秒多。跨轮中毒才是真正咬人的那个，
+    而模块级收尾无条件会跑（测试红了也跑），正好治它。
+    """
+    yield
+
+    import asyncio
+
+    from sqlalchemy import text
+
+    from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+
+    async def _purge() -> None:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        session_maker = create_database_async_session(engine)
+        try:
+            async with session_maker.begin() as session:
+                # 关联行先删，否则留下孤儿 sys_file_relation
+                await session.execute(text('DELETE FROM sys_file_relation'))
+                await session.execute(text('DELETE FROM sys_file'))
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_purge())
+
+
 # ─── 测试用文件 ────────────────────────────────────────────────────────────────
 
 
@@ -527,6 +602,56 @@ def test_delete_rejects_escaping_path(isolated_upload_dir: Path) -> None:
     delete_file('')
     delete_file('.')
     assert isolated_upload_dir.is_dir()
+
+
+def test_upload_refuses_escaping_target_when_build_filename_regresses(
+    isolated_upload_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 上传落点的越界检查是**第二道防线** —— 第一道失守时它必须拦住。
+
+    `upload_file` 里那句 `target.resolve().is_relative_to(root.resolve())`
+    自己的注释写着「这一条挡的是『将来有人改了 build_filename』」。
+    实测把它改成 `if False`，全套 265 条**一条都不红** —— 因为第一道防线
+    （`build_filename` 剥掉路径成分，由 `test_upload_strips_path_traversal`
+    盯着）让它从外部输入永远到不了。
+
+    所以这条**直接模拟第一道防线失守**：把 `build_filename` 打桩成返回带
+    `../` 的名字。防御纵深只能这么测 —— 否则「两道防线是刻意的」这句话
+    只是注释，没有任何人验证过第二道真的在。
+
+    ⚠️ 打桩要打在 `file_ops` 这个模块的名字上，不是 import 进来的那个引用 ——
+    `upload_file` 是在同模块里直接调 `build_filename()` 的。
+
+    ⚠️ **`../` 要给足四层。** 落点是 `root/<Y>/<m>/<d>/<filename>`，日期目录
+    那三层会**吸收掉三个 `../`** —— `../../escaped.png` 解析完还在 root 里面，
+    检查不该拦、也确实没拦（第一版就是两层，测试报「DID NOT RAISE」）。
+    第四层才真的跨出根目录。所以这条测试的载荷长度是跟着
+    `build_date_dir()` 的层数走的：那个函数改了格式，这里也要跟着改。
+    """
+    import asyncio
+
+    from io import BytesIO
+
+    from starlette.datastructures import UploadFile
+
+    from backend.common.exception import errors
+    from backend.utils import file_ops
+
+    outsider = isolated_upload_dir.parent / 'escaped.png'
+    assert not outsider.exists(), '预置状态就不干净'
+
+    # 第一道防线「回归」了：把路径成分原样吐出来
+    monkeypatch.setattr(file_ops, 'build_filename', lambda file: '../../../../escaped.png')
+
+    upload = UploadFile(filename='innocent.png', file=BytesIO(_png_bytes()))
+
+    async def go() -> None:
+        await file_ops.upload_file(upload)
+
+    with pytest.raises(errors.RequestError):
+        asyncio.run(go())
+
+    assert not outsider.exists(), '第二道防线没拦住 —— 文件被写到了 UPLOAD_DIR 之外'
 
 
 # ─── Content-Disposition 头注入（issue #62） ────────────────────────────────

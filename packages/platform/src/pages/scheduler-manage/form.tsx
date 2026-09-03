@@ -102,7 +102,10 @@ export function SchedulerFormSheet({
   const [serverError, setServerError] = React.useState<string | null>(null)
 
   const { data: meta } = useQuery(schedulerMetaQuery())
-  const tasks = meta?.tasks ?? []
+  // ⚠️ **`?? []` 要包进 useMemo**：不包的话每次渲染都是**新数组**，而它是下面
+  // 那个 useMemo 的依赖 —— 于是那个 memo 从来没生效过（每次都重算）。
+  // 这不报错、只是白写了一个 memo，`exhaustive-deps` 正好抓这个。
+  const tasks = React.useMemo(() => meta?.tasks ?? [], [meta?.tasks])
 
   const typeItems = React.useMemo(
     () => Object.fromEntries(Object.entries(SCHEDULER_TYPE_FORM_ITEMS).map(([v, l]) => [v, t(l)])),

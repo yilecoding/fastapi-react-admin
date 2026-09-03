@@ -27,7 +27,7 @@ const fix = process.argv.includes('--fix')
 
 /** 扫代码里的 key。只认字符串字面量 —— 和抽取器同口径（GitLab 同样的硬规则） */
 // 也扫自己：formatDuration 里的 `{{n}} 小时` 之类同样是语言包 key
-const SRC_ROOTS = ['apps/web/src', 'packages/i18n/src', 'packages/platform/src', 'packages/ui/src']
+const SRC_ROOTS = ['apps/web/src', 'apps/mobile/src', 'packages/i18n/src', 'packages/platform/src', 'packages/ui/src']
 /**
  * 不纳管的目录。前四个是组件沙箱/试验页（只有开发工具菜单能进，不对业务用户露出）；
  * `query-bar` / `data-grid` 目前只被沙箱页引用，还在迭代中，等它们进业务页再一起纳管。

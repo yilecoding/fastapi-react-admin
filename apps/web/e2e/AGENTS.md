@@ -29,7 +29,7 @@ web :1126  →  api :8001  →  fba_test（不是开发用的 fba）
 
 | 隔离点 | 怎么做的 | 不隔离会怎样 |
 |---|---|---|
-| 端口 | `vite.config.ts` 读 `E2E_WEB_PORT`（未设置时还是 1125）；api 走 `apps/api/package.json` 的 `e2e:server` 脚本，`ENV_FILE=.env.e2e` 覆盖到 8001 | 跟 `pnpm dev` 撞端口，`strictPort` 直接报错退出 |
+| 端口 | `vite.config.ts` 读 `E2E_WEB_PORT`（未设置时还是 8888）；api 走 `apps/api/package.json` 的 `e2e:server` 脚本，`ENV_FILE=.env.e2e` 覆盖到 8001 | 跟 `pnpm dev` 撞端口，`strictPort` 直接报错退出 |
 | 数据库 | `.env.e2e` 把 `DATABASE_SCHEMA` 设成 `fba_test`（复用 pytest 已经在用、已经建好种子的那个库，不是另开一个） | E2E 造的测试部门/角色会写进你正在手测的开发库 `fba`，脏数据混进日常开发 |
 | Redis | `.env.e2e` 把 `REDIS_DATABASE` 换成 `2`（dev 用 0，celery 用 1） | `fba_test` 和 `fba` 是从**同一份**种子脚本建出来的，`admin` 用户在两边的雪花 ID
 **完全相同**（实测确认：`2048601263834267648`）。共用 Redis 会让 E2E 一登录就用
@@ -335,3 +335,42 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 **还没覆盖的**（按值排的下一批）：用户 CRUD 的角色/部门分配、标签条右键菜单
 （关闭其他 / 右侧 / 固定）、个人中心的时区与改密、富文本里的图片、字典与参数配置、
 导出 CSV、监控页。
+
+## web-first 断言漏 `await` 有闸门了（`pnpm arch:check`）
+
+`expect(locator).toBeVisible()` 返回 promise。漏了 `await`，这条断言
+**压根不执行** —— 测试照旧绿，而它什么都没验。这是 Playwright 最经典的静默
+失效，比选择器写错更难发现（选择器错了至少会超时报错，漏 await 连报错都没有）。
+
+⚠️ **eslint 在这个仓库里管不了它。** `@typescript-eslint/no-floating-promises`
+需要 type-aware linting（`projectService` / `parserOptions.project`），
+而 `apps/web/eslint.config.js` 没配 —— 开它要付整仓 lint 的时间代价。
+所以做成了 `arch:check` 里的静态检查，覆盖的正是这一个形状。
+
+实测基线：**128 处 web-first 断言，0 处漏 `await`**。这条守的是「保持 0」。
+
+两个方向都反向验证过：拿掉一处 `await` → 报 `unawaited-assertion`；
+把 `e2e/tests` 挪走 → 报 `e2e-scanner-broken`（扫不到断言时
+「没有漏 await」天然成立，所以要先断言「有」）。
+
+## ⚠️ 有一条 E2E 是**休眠**的（数据不在就跳过）
+
+`scheduler.spec.ts` 的「执行记录」那条：
+
+```ts
+if ((await first.count()) === 0) {
+  test.skip(true, "fba_test 里还没有执行记录（需要跑过一次 worker）")
+```
+
+**实测这条分支永远成立** —— `fba_test` 的 `task_result` 是 0 行：种子里只有
+`task_scheduler`，执行记录是 celery 写的、没有创建接口，而 `global-setup.ts`
+只能走 HTTP 造数据。于是它下面那几行断言**一次都没执行过**，
+而跳过在报告里长得像通过。
+
+好在那个 bug 没失守，后端覆盖着（把 CRUD 绑成 `Task` 一打，
+`test_scheduler_api.py` 的 4 条 + `test_result_columns.py` 的 1 条会红）。
+留着这一条是为了「有 worker 跑过的环境里顺手多验一层 UI」。
+
+判据：**「数据不在就跳过」的 E2E，先量一遍那个条件在 CI 环境里是不是恒成立。**
+恒成立的话它就不是测试，是一行注释 —— 那么真正的防线必须在别处，
+而且要写清楚在哪（否则下一个人会以为这里守着）。

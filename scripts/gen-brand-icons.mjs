@@ -62,14 +62,23 @@ function buildFaviconSvg() {
 // ---------------------------------------------------------------------------
 // 位图版：4×4 超采样后取平均色，圆边和榫卯的直角边都靠这个抗锯齿。
 // ---------------------------------------------------------------------------
-function renderIcon(size) {
+/**
+ * @param {number} size 边长
+ * @param {{shape?: 'circle'|'square', bg?: number[]|null, glyph?: number}} [opts]
+ *   shape  圆形徽章（web favicon / 桌面端）还是**满幅方形**（移动端 app 图标）
+ *   bg     底色；`null` = 透明底（Android 自适应图标的前景层要透明）
+ *   glyph  墨迹缩放的额外系数。Android 自适应图标的外圈会被系统蒙版裁掉，
+ *          安全区只有中心 66%，所以那一张要缩小
+ */
+function renderIcon(size, opts = {}) {
+  const { shape = 'circle', bg = PURPLE, glyph = 1 } = opts
   const SS = 4
   const big = size * SS
   const cx = big / 2
   const cy = big / 2
   const R = big / 2
   // 徽章直径 48 时的缩放系数是 1.6；直径变了按比例换算，保证墨迹始终占相同比例
-  const scale = GLYPH_SCALE_AT_D48 * (big / 48)
+  const scale = GLYPH_SCALE_AT_D48 * (big / 48) * glyph
 
   const rgba = Buffer.alloc(size * size * 4)
   for (let oy = 0; oy < size; oy++) {
@@ -84,13 +93,14 @@ function renderIcon(size) {
           const py = oy * SS + sy + 0.5
           const dx = px - cx
           const dy = py - cy
-          if (dx * dx + dy * dy > R * R) continue // 圆外：透明,不累加颜色
+          if (shape === 'circle' && dx * dx + dy * dy > R * R) continue // 圆外：透明,不累加颜色
           const gx = (px - cx) / scale + 12
           const gy = (py - cy) / scale + 12
           let rgb
           if (inTenon(gx, gy)) rgb = [255, 255, 255]
           else if (inMortise(gx, gy)) rgb = MORTISE_RGB
-          else rgb = PURPLE
+          else if (bg) rgb = bg
+          else continue // 透明底：墨迹之外不累加,保持 alpha=0
           r += rgb[0]
           g += rgb[1]
           b += rgb[2]
@@ -158,9 +168,9 @@ function encodePng(size, rgba) {
   ])
 }
 
-function writePng(path, size) {
+function writePng(path, size, opts) {
   mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, encodePng(size, renderIcon(size)))
+  writeFileSync(path, encodePng(size, renderIcon(size, opts)))
   console.log(`  ${path.replace(ROOT + "/", "")}  (${size}×${size})`)
 }
 
@@ -173,4 +183,21 @@ console.log(`  ${svgPath.replace(ROOT + "/", "")}`)
 writePng(resolve(ROOT, "apps/web/public/favicon-32.png"), 32)
 writePng(resolve(ROOT, "apps/web/public/apple-touch-icon.png"), 180)
 writePng(resolve(ROOT, "apps/desktop/build/icon.png"), 1024)
+
+// ---------------------------------------------------------------------------
+// 移动端（Expo）
+//
+// 三张的形状要求各不相同,不能拿同一张糊过去:
+//   icon.png          🔴 **满幅方形、不透明**。iOS 自己会圆角裁切;
+//                     给一张带透明圆角的图,那几个角在 iOS 上会变成**黑色**
+//   adaptive-icon.png 🔴 **透明底、只有墨迹,而且要缩到安全区内**。Android 用
+//                     系统蒙版裁这张前景层,外圈 1/3 一定会被切掉;底色在
+//                     app.json 的 adaptiveIcon.backgroundColor 里给
+//   splash.png        圆形徽章、透明底,配 app.json 里的浅色背景
+// ---------------------------------------------------------------------------
+const MOBILE = resolve(ROOT, "apps/mobile/assets/images")
+writePng(resolve(MOBILE, "icon.png"), 1024, { shape: "square" })
+writePng(resolve(MOBILE, "adaptive-icon.png"), 1024, { shape: "square", bg: null, glyph: 0.72 })
+writePng(resolve(MOBILE, "splash.png"), 1024, { shape: "circle" })
+
 console.log("done.")

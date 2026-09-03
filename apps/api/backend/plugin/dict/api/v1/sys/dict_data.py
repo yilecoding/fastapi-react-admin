@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Path, Query
 
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
+from backend.common.schema import SnowflakeIdIn
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -78,7 +79,10 @@ async def get_dict_datas_paginated(
     label: Annotated[str | None, Query(description='字典数据标签')] = None,
     value: Annotated[str | None, Query(description='字典数据键值')] = None,
     status: Annotated[int | None, Query(description='状态')] = None,
-    type_id: Annotated[int | None, Query(description='字典类型 ID')] = None,
+    # 全仓唯一一个作为**查询参数**的雪花 ID。走 `SnowflakeIdIn` 让 OpenAPI 声明成
+    # `string | integer` —— 前端手上的 ID 都是字符串（硬纪律 6）。
+    # 请求体那一侧由各 schema 里的同一个标注负责，见 `common/schema.py`。
+    type_id: Annotated[SnowflakeIdIn | None, Query(description='字典类型 ID')] = None,
 ) -> ResponseSchemaModel[PageData[GetDictDataDetail]]:
     page_data = await dict_data_service.get_list(
         db=db,

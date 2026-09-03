@@ -164,6 +164,16 @@ test.describe("执行记录", () => {
 
     const first = page.locator('[data-testid^="open-result-"]').first()
     if ((await first.count()) === 0) {
+      // ⚠️ **实测这条分支永远成立**：`fba_test` 的 `task_result` 是 0 行
+      // （种子里只有 `task_scheduler`；执行记录是 celery 写的、没有创建接口，
+      // 而 global-setup 只能走 HTTP 造数据）。也就是说下面那几行断言
+      // **一次都没执行过**，而跳过在报告里长得像通过。
+      //
+      // 那个 bug 本身没有失守 —— 后端覆盖着：
+      // `app/task/tests/test_scheduler_api.py::test_result_fields_are_extended`
+      // 管列表、`test_result_columns.py` 管详情，把 CRUD 绑成 `Task` 那几条会红。
+      // 留着这一条是为了「有 worker 跑过的环境里顺手多验一层 UI」，
+      // 别把它当成那个 bug 的防线。
       test.skip(true, "fba_test 里还没有执行记录（需要跑过一次 worker）")
       return
     }

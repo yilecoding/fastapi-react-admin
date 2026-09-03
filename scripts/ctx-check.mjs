@@ -73,7 +73,16 @@ for (const f of allFiles.filter((f) => f.endsWith('package.json'))) {
 
 // ── 收集上下文文件 ────────────────────────────────────────────────────
 const ctxFiles = allFiles
-  .filter((f) => /(^|\/)(CLAUDE|AGENTS)\.md$/.test(f))
+  /*
+   * 🔴 **不只是 `CLAUDE.md` / `AGENTS.md`。**
+   *
+   * 原来只扫那两种，于是 `README.md` / `CONTRIBUTING.md` / PR 模板**完全不在
+   * 覆盖范围** —— 而它们含的是同一类机器可核对的断言（脚本名、文件路径、
+   * 相对链接）。实测：一次人工梳理从这三个文件里翻出 `pnpm --filter web build`
+   * 已被硬纪律否掉、Playwright 条数停在 44（实际 54）、闸门清单少两道门。
+   * 打开覆盖之后全仓只多出 **2 条**存量（见下面 ALLOW 里那两条），几乎零成本。
+   */
+  .filter((f) => /(^|\/)(CLAUDE|AGENTS|README|CONTRIBUTING|SECURITY|PULL_REQUEST_TEMPLATE)\.md$/.test(f))
   // 每个模块目录下是 AGENTS.md（真身）+ CLAUDE.md（符号链接），
   // 不去重的话同一条问题会报两遍
   .filter((f) => !lstatSync(join(ROOT, f)).isSymbolicLink())
@@ -83,6 +92,8 @@ const ctxFiles = allFiles
  * 运行时才生成）。登记时必须写理由 —— 没理由的豁免下次就没人敢删了。
  */
 const ALLOW = new Map(Object.entries({
+  'README.zh-CN.md': 'apps/api/README.md 里那句话正是在说「上游这几个文件已经删掉」',
+  'CHANGELOG.md': '同上 —— 上游 FBA 的 changelog，分叉里刻意不留',
   'versions/': 'alembic 迁移目录，文档说的就是「它是空的」',
   'backend/upload/': '运行时创建的上传目录，不进 git',
   'backend/upload-public/': '同上，公开子树',
@@ -148,13 +159,23 @@ function resolvePathish(tok) {
   if (fileSet.has(t) || dirSet.has(t.endsWith('/') ? t : t + '/')) return true
   const pool = t.endsWith('/') ? dirSet : allFiles
   for (const c of pool) if (segMatch(t, c)) return true
-  return false
+  // ⚠️ **兜一层真实文件系统。** 上面那几个集合来自本文件顶部那个扫描，
+  // 而它会跳过以 `.` 开头的条目 —— 于是「目录里只有点文件」的路径永远进不了
+  // `dirSet`，被判成「仓库里找不到」。
+  //
+  // 实测撞到：`apps/api/deploy/backend/docker-compose/` 里只有
+  // `.env.server` 和 `.env.server.example`，`deploy/README.md` 指它时被报死引用，
+  // 而那个目录是真的在。误报比漏报更伤 —— 它会让人去「修」一份本来正确的文档。
+  return existsSync(resolve(ROOT, t))
 }
 
 for (const file of ctxFiles) {
   const raw = readFileSync(join(ROOT, file), 'utf8')
   const lines = stripFences(raw)
-  const total = raw.split('\n').length
+  // ⚠️ 末尾换行后面那个空串**不是一行**。原来直接 `split('\n').length`，
+  // 每个文件都多算 1 行 —— 而这个 +1 真的让人白削过文档：一份 400 行、
+  // 预算 400 的文件会被报成「401 行超预算」，然后有人去删掉一句真内容。
+  const total = raw.replace(/\n$/, '').split('\n').length
   const budget = BUDGET[file] ?? BUDGET.default
 
   // 1) 行数预算

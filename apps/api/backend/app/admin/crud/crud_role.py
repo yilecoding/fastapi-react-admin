@@ -14,7 +14,7 @@ from backend.app.admin.schema.role import (
     UpdateRoleParam,
     UpdateRoleScopeParam,
 )
-from backend.common.security.data_scope import DataScopedCRUD
+from backend.common.security.data_scope import DataScopedCRUD, bypass_data_scope
 from backend.utils.serializers import select_join_serialize
 from backend.utils.timezone import timezone
 
@@ -127,7 +127,20 @@ class CRUDRole(DataScopedCRUD[Role]):
         :param code: 角色编码
         :return:
         """
-        return await self.select_model_by_column(db, code=code, deleted=0)
+        # 🔴 **唯一性 / 业务规则检查不是「展示读」，必须豁免数据权限。**
+        # 这个 DAO 是 `DataScopedCRUD`，而「开了范围过滤但没配范围」的角色是
+        # fail-closed —— 冲突行落在范围外时这里查不到，检查静默通过，
+        # 然后撞到数据库的唯一约束上：**IntegrityError → 500**，
+        # 而正确的表现是干净的 409。
+        #
+        # 实测（`set_current_user` 造一个受限用户）：超管视角三个查询全 True，
+        # 受限视角全 False（`test_conflict_checks.py` 就是那份实测）。
+        #
+        # ⚠️ 在**方法内部**豁免而不是在调用点：已逐个核实过这些方法的调用方
+        # 全是「冲突检查 / 认证链路 / CLI」，没有一个是把结果展示给用户的。
+        # 逐个调用点包的话，下一个新调用点会漏。
+        with bypass_data_scope():
+            return await self.select_model_by_column(db, code=code, deleted=0)
 
     async def get_by_name(self, db: AsyncSession, name: str) -> Role | None:
         """
@@ -137,7 +150,20 @@ class CRUDRole(DataScopedCRUD[Role]):
         :param name: 角色名称
         :return:
         """
-        return await self.select_model_by_column(db, name=name, deleted=0)
+        # 🔴 **唯一性 / 业务规则检查不是「展示读」，必须豁免数据权限。**
+        # 这个 DAO 是 `DataScopedCRUD`，而「开了范围过滤但没配范围」的角色是
+        # fail-closed —— 冲突行落在范围外时这里查不到，检查静默通过，
+        # 然后撞到数据库的唯一约束上：**IntegrityError → 500**，
+        # 而正确的表现是干净的 409。
+        #
+        # 实测（`set_current_user` 造一个受限用户）：超管视角三个查询全 True，
+        # 受限视角全 False（`test_conflict_checks.py` 就是那份实测）。
+        #
+        # ⚠️ 在**方法内部**豁免而不是在调用点：已逐个核实过这些方法的调用方
+        # 全是「冲突检查 / 认证链路 / CLI」，没有一个是把结果展示给用户的。
+        # 逐个调用点包的话，下一个新调用点会漏。
+        with bypass_data_scope():
+            return await self.select_model_by_column(db, name=name, deleted=0)
 
     async def create(self, db: AsyncSession, obj: CreateRoleParam) -> None:
         """

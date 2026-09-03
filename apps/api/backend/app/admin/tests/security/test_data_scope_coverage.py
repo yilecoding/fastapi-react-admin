@@ -36,6 +36,7 @@ EXEMPT: dict[str, str] = {
     'CRUDUserPasswordHistory': '改密时内部读，不对外展示',
     'CRUDUserSocial': 'OAuth2 绑定在登录链路上读，那时没有当前用户',
     'CRUDNotification': '收件箱按 current_user.id 强制过滤，再叠部门维度会变成「我和我下属的通知」',
+    'CRUDNotice': '公告是全局内容，表里没有归属维度，过滤只有 fail-closed 一种效果（实测受限用户看到 0 条）',
 }
 
 

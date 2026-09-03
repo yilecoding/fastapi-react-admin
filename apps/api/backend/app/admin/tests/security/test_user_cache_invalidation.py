@@ -254,3 +254,112 @@ def test_update_dept_clears_cached_users_snapshot(client: TestClient, token_head
     finally:
         _asyncio.run(_set_admin_dept_id(original_dept_id))
         client.request('DELETE', f'/sys/depts/{dept_pk}', headers=token_headers)
+
+
+def test_update_menu_clears_the_snapshot_of_users_who_have_it(
+    client: TestClient, token_headers: dict[str, str]
+) -> None:
+    """`PUT /sys/menus/{pk}` 必须清掉持有该菜单的用户快照。
+
+    这个入口此前没测过。不清的后果**不是报错，是权限改了不生效**：
+    快照里装着 `roles[].menus[]`（见 `GetUserInfoWithRelationDetail`），
+    而它的 TTL 是 `TOKEN_EXPIRE_SECONDS`（默认一天）——
+    收回一个按钮权限之后，那个用户**还能继续点一整天**。
+
+    ⚠️ 回写的是菜单**原样的字段**，不改任何东西 —— 这条测的是「有没有清缓存」，
+    不是「能不能改菜单」。改内容会牵动侧边栏和权限码，收尾不干净就污染别的测试。
+    """
+    access_token = token_headers['Authorization'].split(' ', 1)[1]
+    admin_user_id = jwt_decode(access_token).user_id
+    snapshot_key = f'{settings.JWT_USER_REDIS_PREFIX}:{admin_user_id}'
+
+    tree = client.get('/sys/menus', headers=token_headers)
+    assert tree.status_code == 200, tree.text
+    menu = tree.json()['data'][0]
+
+    # 先把快照焐热 —— 否则「被清掉」和「本来就没有」分不开
+    assert client.get('/sys/menus/sidebar', headers=token_headers).status_code == 200
+    assert _redis_exists(snapshot_key), '打完一个认证接口之后，快照应该已经在 Redis 里'
+
+    res = client.put(
+        f'/sys/menus/{menu["id"]}',
+        headers=token_headers,
+        json={
+            'title': menu['title'],
+            'name': menu['name'],
+            'path': menu['path'],
+            'parent_id': menu['parent_id'],
+            'sort': menu['sort'],
+            'icon': menu['icon'],
+            'type': menu['type'],
+            'perms': menu['perms'],
+            'status': menu['status'],
+            'display': menu['display'],
+            'link': menu['link'],
+            'remark': menu['remark'],
+        },
+    )
+    assert res.status_code == 200, res.text
+    assert not _redis_exists(snapshot_key), (
+        '改完菜单，持有它的用户快照必须已经被清 —— 不清就是「权限改了，'
+        f'但那个用户还有 {settings.TOKEN_EXPIRE_SECONDS} 秒照旧」'
+    )
+
+
+def test_update_data_rule_clears_the_snapshot_of_users_in_that_scope(
+    client: TestClient, token_headers: dict[str, str], temp_user: str
+) -> None:
+    """`PUT /sys/data-rules/{pk}` 必须清掉受该规则影响的用户快照。
+
+    🔴 这条比菜单那条更要紧：快照里装着 `roles[].scopes[].rules[]`
+    （`GetDataScopeWithRelationDetail`），也就是**行级过滤的依据**。
+    不清的后果是「收窄了数据范围，但那个用户还能看到本该看不到的行」——
+    最长一天，而且没有任何现象。
+
+    ⚠️ 数据范围在种子里绑的是 MANAGER / FINANCE_STAFF / VIEWER，**不是 ADMIN**
+    （超管绕过数据权限），所以不能像菜单那条一样拿 admin 自己当受害者 ——
+    要造一个真的落在那条链上的用户：
+    临时用户 → 加进 MANAGER 角色 → 用它登录把快照焐热。
+    """
+    roles = client.get('/sys/roles/all', headers=token_headers).json()['data']
+    manager = next((r for r in roles if r['code'] == 'MANAGER'), None)
+    assert manager, '种子里应该有 MANAGER 角色（数据范围演示用）'
+
+    scope_ids = client.get(f'/sys/roles/{manager["id"]}/scopes', headers=token_headers).json()['data'] or []
+    assert scope_ids, 'MANAGER 角色应该绑着数据范围'
+    rules = client.get(f'/sys/data-scopes/{scope_ids[0]}/rules', headers=token_headers).json()['data']
+    rule = (rules if isinstance(rules, list) else rules.get('rules', []))[0]
+
+    # 把临时用户加进 MANAGER —— 这样它才真的落在这条数据规则的影响范围里
+    add = client.post(f'/sys/roles/{manager["id"]}/users', headers=token_headers, json={'users': [temp_user]})
+    assert add.status_code == 200, add.text
+
+    snapshot_key = f'{settings.JWT_USER_REDIS_PREFIX}:{temp_user}'
+    try:
+        # 用临时用户自己登录，把它的快照焐热（admin 的快照证明不了这条）
+        login = client.post('/auth/login/swagger', params={'username': 'pytest_tmp_writes', 'password': 'Tmp@123456'})
+        assert login.status_code == 200, f'临时用户登不进来：{login.text}'
+        tmp_headers = {'Authorization': f'Bearer {login.json()["access_token"]}'}
+        assert client.get('/sys/users/me', headers=tmp_headers).status_code == 200
+        assert _redis_exists(snapshot_key), '临时用户打过认证接口之后，它的快照应该在 Redis 里'
+
+        res = client.put(
+            f'/sys/data-rules/{rule["id"]}',
+            headers=token_headers,
+            json={
+                'name': rule['name'],
+                'model': rule['model'],
+                'column': rule['column'],
+                'operator': rule['operator'],
+                'expression': rule['expression'],
+                'value': rule['value'],
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert not _redis_exists(snapshot_key), (
+            '改完数据规则，受影响用户的快照必须已经被清 —— 不清就是「数据范围收窄了，但那个用户还能看到本该看不到的行」'
+        )
+    finally:
+        client.request(
+            'DELETE', f'/sys/roles/{manager["id"]}/users', headers=token_headers, json={'users': [temp_user]}
+        )

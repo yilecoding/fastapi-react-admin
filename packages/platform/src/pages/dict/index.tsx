@@ -85,7 +85,10 @@ export function DictPage({
   const typesQuery = useQuery(dictTypesQuery({ page: 1, size: TYPE_PAGE_SIZE }))
   const { data: typesPage, isPending: loadingTypes } = typesQuery
   const typesState = listState(typesQuery)
-  const types = typesPage?.items ?? []
+  // ⚠️ **`?? []` 要包进 useMemo**：不包的话每次渲染都是**新数组**，而它是下面
+  // 那个 useMemo 的依赖 —— 于是那个 memo 从来没生效过（每次都重算）。
+  // 这不报错、只是白写了一个 memo，`exhaustive-deps` 正好抓这个。
+  const types = React.useMemo(() => typesPage?.items ?? [], [typesPage?.items])
   const typeTotal = typesPage?.total ?? 0
 
   const [typeQ, setTypeQ] = React.useState(search.tq ?? '')

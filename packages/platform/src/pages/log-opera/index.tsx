@@ -384,8 +384,18 @@ export function LogOperaPage({
             .join(',')
         )
       })
-      // ﻿ 是 BOM —— 没有它 Excel 打开中文会乱码
-      const blob = new Blob(['﻿' + lines.join('\n')], {
+      /*
+       * 🔴 **BOM 必须写成转义 `'\ufeff'`，不要在源码里放那个字符本身。**
+       *
+       * 没有它 Excel 打开 UTF-8 的 CSV 会把中文显示成乱码。而它是**不可见字符**：
+       * 直接写字面量的话，任何一次格式化、复制粘贴、或编辑器的「去除 BOM」
+       * 都可能把它悄悄弄掉 —— 然后导出的文件在 Excel 里乱码，**代码看起来
+       * 一模一样、也不报错**。
+       *
+       * （原来这里注释和字符串里各有一个字面 BOM。`no-irregular-whitespace`
+       * 只抓到了注释里那个 —— 它默认跳过字符串，而字符串里那个才是承重的。）
+       */
+      const blob = new Blob(['\ufeff' + lines.join('\n')], {
         type: 'text/csv;charset=utf-8',
       })
       const url = URL.createObjectURL(blob)

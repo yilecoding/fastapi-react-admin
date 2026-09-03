@@ -3,8 +3,9 @@ from datetime import datetime
 from pydantic import ConfigDict, Field
 
 from backend.common.enums import StatusType
-from backend.common.schema import SchemaBase
+from backend.common.schema import ColumnLengthChecked, SchemaBase
 from backend.plugin.notice.enums import NoticeType
+from backend.plugin.notice.model import Notice
 
 
 class NoticeSchemaBase(SchemaBase):
@@ -16,12 +17,16 @@ class NoticeSchemaBase(SchemaBase):
     content: str = Field(description='内容')
 
 
-class CreateNoticeParam(NoticeSchemaBase):
+class CreateNoticeParam(ColumnLengthChecked, NoticeSchemaBase):
     """创建通知公告参数"""
 
+    __sa_model__ = Notice
 
-class UpdateNoticeParam(NoticeSchemaBase):
+
+class UpdateNoticeParam(ColumnLengthChecked, NoticeSchemaBase):
     """更新通知公告参数"""
+
+    __sa_model__ = Notice
 
 
 class DeleteNoticeParam(SchemaBase):

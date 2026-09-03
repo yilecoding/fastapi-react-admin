@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
+import { queryOptions } from '@tanstack/react-query'
 
 import { api, type PageData } from '../../api-client/client'
 
@@ -70,14 +70,6 @@ export const resultDetailQuery = (id: number) =>
     queryKey: resultKeys.detail(id),
     queryFn: () => api.GET<TaskResult>(`/api/v1/tasks/results/${id}`),
   })
-
-export function useDeleteResults() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (pks: number[]) => api.DELETE('/api/v1/tasks/results', { body: { pks } }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: resultKeys.all }),
-  })
-}
 
 /**
  * celery 的任务状态。
