@@ -22,16 +22,21 @@ type S = components['schemas']
  * ⚠️ `dept` / `roles` 在这个 DTO 里被后端的 model_validator **摊平成名字**了
  * （`string` / `string[]`，不是对象）。要完整对象得走 `GET /sys/users/{pk}/roles`。
  *
- * 🔴 **注意 `dept_id` 的类型是错的（schema 说 `number | null`，wire 上是字符串）。**
- * 原因很具体：`common/schema.py` 只给 `id` 挂了
- * `@field_serializer('id') -> str | int`，所以只有 `id` 在 OpenAPI 里是联合类型；
- * 而**外键（`dept_id` / `parent_id` / `role_id`…）没有那个 serializer**，
- * 声明成 `int`，可编码层的 `stringify_unsafe_ints` 照样把它们转成了字符串
- * （`utils/serializers.py` 的注释里自己写着「外键都漏了」）。
+ * ⚠️ **`dept_id` 的类型曾经是错的，现在不是了 —— 别再照着防。**
+ * 原来 `common/schema.py` 只给 `id` 挂了 `@field_serializer('id') -> str | int`,
+ * 外键（`dept_id` / `parent_id` / `role_id`…）声明成 `int`，而编码层的
+ * `stringify_unsafe_ints` 照样把它们转成了字符串 —— 于是 `schema.d.ts` 里是
+ * `number | null`、wire 上是字符串，按类型信它就会去 `Number()`（硬纪律 6）。
+ * 修在后端标注上：`common/schema.py` 现在按**可空性分两组**挂了
+ * `serialize_nullable_fk` / `serialize_required_fk`（不能一组全包，返回标注
+ * 对列出的所有字段是同一份 —— 那边记着实测的两种错法），重新生成之后
+ * `dept_id` 是 `string | number | null`。
  *
- * 移动端目前一处都没用到 `dept_id`，所以**不在这里覆盖** —— 覆盖一个类型
- * 就要维护一份「哪些字段的 schema 是错的」名单，而真正的修法在后端标注上。
- * 将来要用它做请求参数时先看 [`packages/api` 分册](../../../../packages/api/AGENTS.md)。
+ * 🔴 **所以拿它当请求参数时仍然是 `string`，不要 `Number()`。** 联合类型只是
+ * 说「声明终于不撒谎了」，不是说可以当数字用。
+ * ⚠️ **请求体那一侧的声明还是 `integer`** —— pydantic 的校验 schema 和序列化
+ * schema 是两份，`field_serializer` 只动后者。回传能用（FastAPI 会把 `"123"`
+ * 强转），但声明不准。细节看 [`packages/api` 分册](../../../../packages/api/AGENTS.md)。
  */
 export type CurrentUser = S['GetCurrentUserInfoWithRelationDetail']
 
