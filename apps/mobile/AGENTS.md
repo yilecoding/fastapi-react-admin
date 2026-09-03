@@ -6,10 +6,15 @@
 > 所以 B 那半天的验收（浏览器代答五条、注入 token 免登录…）连同 `react-native-webview`
 > 一起删掉了，git 历史里还能翻到。
 >
-> 现在的状态：**登录 + 个人中心 + 一个最小导航壳，一个业务屏都还没有**。
-> #39 已关闭（三件事里路线和导航形态都定了），**还开着的只有「要哪几个业务屏」→ #96**
-> —— 所以首页的「待办与动态」和「应用」整屏是刻意留空的（空态文案里就写着在等什么）。
-> 导航形态已定：**Stack 套 Tabs**，见 [`src/app/` 分册](src/app/AGENTS.md) 的「导航壳」一节。
+> **这个仓库只做模板，不做某家公司的业务。** 所以判据不是「有几个业务屏」，
+> 而是**下游一定会抄的范式，这里有没有一处可抄的**：鉴权 · 取数 · 权限门控 ·
+> 分页列表 · 详情 · 写操作的确认与反馈 · 表单的字段级错误。都有了一份，
+> 载体是「用户」模块（挑它没有业务含义，挑的是形状）——
+> 见 [`src/app/` 分册](src/app/AGENTS.md) 的「用户模块」与「权限」两节。
+> 导航形态：**Stack 套 Tabs**，同一份分册的「导航壳」一节。
+>
+> 还缺的范式记在 #96（图片上传 / socket 实时 / 系统推送 / 原生能力都**明确不做**，
+> 理由在那条 issue 里）。
 >
 > 这份文件是根 `CLAUDE.md` 的**模块分册**，Claude Code 读到本目录下的文件时才加载它。
 > 跨模块的硬纪律仍然只在根 `CLAUDE.md` 里有一份。
@@ -417,6 +422,47 @@ await api.GET('/api/v1/sys/notifications', { params: { query: { page: 1, size: 5
 🔴 **查询参数不要用条件展开**：`...(cond ? { unread: true } : {})` 里的属性
 **绕过 TS 的多余属性检查**（实测：`unreadd` 经展开 0 错误，直接写 1 错误）。
 该省的传 `undefined`。
+
+### 🔴 查询参数名是严的，**路径参数完全不检查**
+
+实测结论和它的后果（雪花 ID 当路径参数时编译器两个方向都不管）记在
+[`packages/api` 分册](../../packages/api/AGENTS.md) 的同名一节 —— 那是共享客户端
+的性质，两端都适用。**一句话：`params.path` 里的 ID 原样传字符串，永远不要 `Number()`。**
+
+### 🔴 `/users` 列表和 `/users/me` 的 DTO **不是同一个形状**
+
+两个名字只差一截、字段几乎一样，但**关联字段完全不同**：
+
+| | `GetCurrentUserInfoWithRelationDetail`（`/me`） | `GetUserInfoWithRelationDetail`（列表 / 详情） |
+|---|---|---|
+| `dept` | `string \| null` —— 部门**名字** | `GetDeptDetail \| null` —— 整个**对象** |
+| `roles` | `string[]` —— 角色**名字** | `GetRoleWithRelationDetail[]` —— **对象数组** |
+
+`/me` 那份是后端 `model_validator` 摊平过的，列表这份没有。照着个人中心那屏抄
+`user.dept` / `user.roles.join('、')` 会渲染出 `[object Object]`。
+
+🔴 **给组件 props 写类型时从 `lib/contract.ts` 取别名，不要手写字段。**
+这个坑最后是 tsc 抓住的，但只因为 props 用了那个别名 —— 当初 `UserRow` 的 props
+是手写的行内类型（`{ dept?: string | null; roles: string[] }`），
+那份手写声明和真实契约分叉了，编译器只会说「数据不匹配这个组件」，
+不会说「你把契约记错了」。
+
+### 🔴 422 的**字段级**信息只在后端 `ENVIRONMENT == 'dev'` 时才有
+
+`src/lib/field-errors.ts` 把 422 拆成「哪个字段错了」+「一句通用的」。
+读 `common/exception/exception_handler.py` 的 `_validation_exception_handler`：
+
+| | dev | 非 dev（生产） |
+|---|---|---|
+| 信封 `data` | `{'errors': [...]}`（pydantic 原始错误，**带 `loc`**） | **`None`** |
+| 信封 `msg` | `f'{field} {error_msg}…'`（**带字段名**） | 只有 `error_msg` |
+
+所以那个函数在生产下**必然只返回 `general`**。
+⚠️ **不要把表单写成「只显示字段错误」** —— 那样生产上会变成「保存失败了，
+但屏上什么都没说」。两个都要渲染：有字段错就贴到那一格，`general` 始终显示。
+
+⚠️ `loc` 是路径数组（`['body','avatar']`、`['body','items',0,'name']`），
+取**最后一个字符串段**当字段名 —— 不跳过数组下标的话字段名会变成 `0`。
 
 ## 品牌图标还是模板的占位图
 

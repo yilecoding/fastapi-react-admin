@@ -263,6 +263,36 @@ JSON schema，所以只写 `anyOf` —— `Field(description=...)` 的描述在�
   只是被 `skipLibCheck: true` 盖住了。用条件类型把双重索引拆开
 - **名字数组不能加 `as const`**（这条在 mobile 分册，`useCSSVariable` 同一个物种）
 
+## 🔴 查询参数名是严的，**路径参数完全不检查** —— 实测
+
+同一次调用里：
+
+| | 类型检查 | 实测 |
+|---|---|---|
+| `params.query` 的**参数名** | **严** | 写成 `usernamee` → `TS2561`，还提示「Did you mean 'username'」 |
+| `params.path` 的**值** | **不检查** | schema 里写着 `pk: number`，传 `string` / `string \| number` **零报错** |
+
+所以雪花 ID 当路径参数时**编译器两个方向都不管**：
+
+- 好的一面：不会被 `pk: number` 那个声明逼着去写 `Number(id)`
+- 🔴 坏的一面：**也没人挡着你写 `Number(id)`** —— 写了照样编译通过，
+  然后静默打开/删掉另一条记录（硬纪律 6：`2049629108245233664` →
+  `...233700`，连续几个 ID 还会塌成同一个值）
+
+⚠️ `pk: number` 这个声明本身是后端**入参侧**的标注问题（pydantic 的校验 schema
+和序列化 schema 是两份，`field_serializer` 只动后者 —— 所以**响应**里的 `id` /
+外键已经是 `string | number` 了，而路径/请求体那一侧仍然声明 `integer`）。
+**别在前端覆盖类型**绕过它 —— 那要维护一份「哪些声明是错的」名单，
+真正的修法在后端入参侧加标注。
+
+探针长这样（三行都在同一个文件里，只有第三行报错）：
+
+```ts
+api.GET('/api/v1/sys/users/{pk}', { params: { path: { pk: idStr } } })       // ✅ 0 错误
+api.GET('/api/v1/sys/users/{pk}', { params: { path: { pk: idUnion } } })     // ✅ 0 错误
+api.GET('/api/v1/sys/users', { params: { query: { usernamee: 'x' } } })     // ❌ TS2561
+```
+
 ## 🔴 判断错误必须同时看 `httpStatus` 和 `bizCode`
 
 `_get_exception_code` 会把**非法 HTTP 状态码降级成 400**。所以

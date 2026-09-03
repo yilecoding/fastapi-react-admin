@@ -7,6 +7,7 @@ import { Group, Row } from '@/components/grouped'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { api } from '@/lib/api'
+import { parseFieldErrors, type FieldErrors } from '@/lib/field-errors'
 import { useSession } from '@/lib/session'
 
 export default function ChangePasswordScreen() {
@@ -17,6 +18,9 @@ export default function ChangePasswordScreen() {
   const [confirm, setConfirm] = React.useState('')
   const [saving, setSaving] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  // ⚠️ 生产环境下这个一定是空的（后端只在 dev 下发 `loc`），所以 `error`
+  // 那一条必须照旧渲染。见 `lib/field-errors.ts`
+  const [fieldErrors, setFieldErrors] = React.useState<FieldErrors>({})
   const [done, setDone] = React.useState(false)
 
   const mismatch = confirm.length > 0 && newPassword !== confirm
@@ -26,6 +30,7 @@ export default function ChangePasswordScreen() {
     if (!canSubmit) return
     setSaving(true)
     setError(null)
+    setFieldErrors({})
     try {
       await api.PUT('/api/v1/sys/users/me/password', {
         body: { old_password: oldPassword, new_password: newPassword, confirm_password: confirm },
@@ -36,7 +41,10 @@ export default function ChangePasswordScreen() {
       // 看起来像 bug，其实是预期行为。所以这里明说一句再登出。
       setDone(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      // 后端的强度/历史密码校验也走 422，所以「新密码太弱」能贴到那一格上
+      const parsed = parseFieldErrors(err)
+      setError(parsed.general)
+      setFieldErrors(parsed.fields)
     } finally {
       setSaving(false)
     }
@@ -63,9 +71,28 @@ export default function ChangePasswordScreen() {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="bg-background flex-1">
       <ScrollView contentContainerClassName="gap-4 py-4" keyboardShouldPersistTaps="handled">
         <Group>
-          <PwRow first label={t('当前密码')} value={oldPassword} onChange={setOldPassword} testID="password-old" />
-          <PwRow label={t('新密码')} value={newPassword} onChange={setNewPassword} testID="password-new" />
-          <PwRow label={t('确认')} value={confirm} onChange={setConfirm} testID="password-confirm" />
+          <PwRow
+            first
+            label={t('当前密码')}
+            value={oldPassword}
+            onChange={setOldPassword}
+            error={fieldErrors.old_password}
+            testID="password-old"
+          />
+          <PwRow
+            label={t('新密码')}
+            value={newPassword}
+            onChange={setNewPassword}
+            error={fieldErrors.new_password}
+            testID="password-new"
+          />
+          <PwRow
+            label={t('确认')}
+            value={confirm}
+            onChange={setConfirm}
+            error={fieldErrors.confirm_password}
+            testID="password-confirm"
+          />
         </Group>
 
         <Text className="text-muted-foreground px-5 text-xs leading-5">
@@ -100,24 +127,34 @@ function PwRow({
   label,
   value,
   onChange,
+  error,
   testID,
 }: {
   first?: boolean
   label: string
   value: string
   onChange: (v: string) => void
+  /** 该字段的 422 错误。只在后端是 dev 时才拿得到 */
+  error?: string
   testID: string
 }) {
   return (
-    <Row first={first}>
-      <Text className="w-[76px] shrink-0 text-[15px]">{label}</Text>
-      <Input
-        value={value}
-        onChangeText={onChange}
-        secureTextEntry
-        testID={testID}
-        className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
-      />
-    </Row>
+    <>
+      <Row first={first}>
+        <Text className="w-[76px] shrink-0 text-[15px]">{label}</Text>
+        <Input
+          value={value}
+          onChangeText={onChange}
+          secureTextEntry
+          testID={testID}
+          className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+        />
+      </Row>
+      {error ? (
+        <Text className="text-destructive px-5 pb-2 text-xs leading-4" testID={`${testID}-error`}>
+          {error}
+        </Text>
+      ) : null}
+    </>
   )
 }

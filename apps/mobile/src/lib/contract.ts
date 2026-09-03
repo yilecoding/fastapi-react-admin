@@ -51,6 +51,31 @@ export type CurrentUser = S['GetCurrentUserInfoWithRelationDetail']
  */
 export type Notification = S['GetNotificationDetail']
 
+/**
+ * `GET /api/v1/sys/users` 的一条，也是 `GET /api/v1/sys/users/{pk}` 的返回。
+ *
+ * 🔴 **它和 `CurrentUser`（`/users/me`）不是同一个形状，这里最容易想当然。**
+ * 两个 DTO 名字只差一截，字段也几乎一样，但**关联字段完全不同**：
+ *
+ * | | `/users/me`（`CurrentUser`） | `/users` 列表 / 详情（本类型） |
+ * |---|---|---|
+ * | `dept` | `string \| null` —— **部门名字** | `GetDeptDetail \| null` —— **整个对象** |
+ * | `roles` | `string[]` —— **角色名字** | `GetRoleWithRelationDetail[]` —— **对象数组** |
+ *
+ * `/me` 那份是后端的 `model_validator` 摊平过的（分册里记着），列表这份没有。
+ * 所以渲染要写 `user.dept?.name` / `user.roles.map((r) => r.name)`，
+ * 照着个人中心那屏抄 `user.dept` / `user.roles.join('、')` 会得到
+ * `[object Object]`。
+ *
+ * ⚠️ **实测**：这个坑是 tsc 抓住的（`Type '{ name: string; … }' is not
+ * assignable to type 'string'`）—— 但只有在**用这个别名给组件 props 写类型**
+ * 时才抓得到。当初 `UserRow` 的 props 是手写的行内类型
+ * （`{ dept?: string | null; roles: string[] }`），那份手写声明和真实契约
+ * 分叉了，编译器只会说「列表数据不匹配这个组件」，不会说「你把契约记错了」。
+ * **给组件 props 写类型时从这里取，不要手写字段。**
+ */
+export type UserListItem = S['GetUserInfoWithRelationDetail']
+
 /** `GET /api/v1/sys/notifications/unread-count` */
 export type NotificationUnread = S['GetNotificationUnreadDetail']
 

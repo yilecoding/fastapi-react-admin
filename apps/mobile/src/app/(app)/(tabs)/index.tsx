@@ -1,20 +1,23 @@
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
-import { BellIcon, ChevronRightIcon, InboxIcon, UserRoundIcon } from 'lucide-react-native'
+import { BellIcon, ChevronRightIcon, UserRoundIcon, UsersIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { RefreshControl, ScrollView, View } from 'react-native'
 
 import { BrandTop } from '@/components/brand-top'
 import { Chevron, Group, GroupHeader, PressRow, Row, RowIcon } from '@/components/grouped'
-import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
 import { useUnread } from '@/lib/notifications'
+import { usePerm } from '@/lib/perm'
 import { useSession } from '@/lib/session'
 
 export default function HomeScreen() {
   const { t } = useTranslation()
   const { user, reload } = useSession()
   const { unread, refresh: refreshUnread } = useUnread()
+  // ⚠️ 只在**确实知道**有权限时才放这个入口。`known` 为假（权限码没问上）时
+  // 不出现 —— 那一层的错误提示统一在「应用」那一屏兜住，首页不重复报一遍
+  const { can, known: permKnown } = usePerm()
   const router = useRouter()
   const [refreshing, setRefreshing] = React.useState(false)
 
@@ -86,20 +89,22 @@ export default function HomeScreen() {
           <Text className="text-muted-foreground text-[13px]">{t('资料 · 密码')}</Text>
           <Chevron icon={ChevronRightIcon} />
         </PressRow>
+        {permKnown && can('sys:user:list') ? (
+          <PressRow inset={56} onPress={() => router.push('/users')} testID="home-users">
+            <RowIcon icon={UsersIcon} />
+            <Text className="flex-1 text-[15px]">{t('用户')}</Text>
+            <Text className="text-muted-foreground text-[13px]">{t('查看 · 搜索')}</Text>
+            <Chevron icon={ChevronRightIcon} />
+          </PressRow>
+        ) : null}
       </Group>
 
-      <GroupHeader>{t('待办与动态')}</GroupHeader>
-      <Group className="items-center gap-2 py-8">
-        {/* 空态要说清楚是「还没做」，不能长得像「加载失败」或「没有数据」——
-            三者在用户眼里都是一片空，分不清的第一反应是「这 App 坏了」 */}
-        <Icon as={InboxIcon} className="text-muted-foreground size-7" />
-        <Text variant="small" className="text-muted-foreground">
-          {t('还没有内容')}
-        </Text>
-        <Text className="text-muted-foreground/70 px-8 text-center text-xs leading-5">
-          {t('等移动端要哪几个功能定下来再填这一块')}
-        </Text>
-      </Group>
+      {/*
+        这里原来有一块「待办与动态」的空态，文案是「等移动端要哪几个功能定下来
+        再填这一块」。**那个前提已经变了**：这个仓库只做模板，不做某家公司的业务，
+        所以「待办」永远不会有内容 —— 一块永久的空态比没有这块更糟
+        （它长得像「加载失败」）。业务屏由下游按 `(tabs)/apps.tsx` 那张表往里加。
+      */}
     </ScrollView>
   )
 }

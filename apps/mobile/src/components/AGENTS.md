@@ -148,3 +148,71 @@ Tailwind 的 `placeholder:*` 是 CSS 伪元素变体，RN 里没有这个概念 
 写了不报错也不生效。不给的话各 Android 版本的默认占位色不一样，深色主题下经常
 糊成一片看不见，而这**不会报任何错**。`components/ui/input.tsx` 用
 `useCSSVariable('--color-muted-foreground')` 取值再传给这个 prop。
+
+## 反馈：`toast` 管写操作，屏内错误块管拉取 —— 别混用
+
+硬纪律 9 说「请求失败必须是可见状态」，但**可见的形式有两种**，混用哪一种都会坏：
+
+| | 用什么 | 为什么 |
+|---|---|---|
+| **拉取**失败（列表 / 详情 / 权限码） | 屏内 `Alert` + 重试按钮 | 那块内容本来就没有，错误要**占住它的位置**。toast 飘走之后屏上是一片空，和「没有数据」分不清 |
+| **写**失败（删除 / 保存） | `toast.error()` | 屏上内容还是对的（删除失败 = 那条还在），没有位置可占；而且写操作常常 `router.back()`，屏内提示跟着卸载**等于没报** |
+
+web 那边是同一个分工（拉取走 `QueryError`、mutation 走全局 toast，见 #51）。
+移动端在 `ui/toast.tsx` 之前**只有前一半**，于是三个屏各写了一段 inline 错误，
+而删除类操作一个都没有 —— 因为没地方报。
+
+`toast.success/error/info/warning/message/dismiss` 与 `packages/ui` 的
+[toast](../../../../packages/ui/src/components/toast.tsx) **同名同形**（抄形状不抄实现）。
+**没有** `loading` / `promise` / `update` —— 那三个是给「长任务原地变结果态」用的，
+这一版没有那种场景。
+
+🔴 **命令式 API 的状态必须在模块级 store 里**（`useSyncExternalStore` 订阅），
+不能做成 context + hook —— mutation 的 `onError` 在 React 之外，拿不到 hook。
+
+🔴 **`emit()` 里必须换数组引用**（`items = [...items]`）。`useSyncExternalStore`
+用 `Object.is` 比快照，原地 `push` 的话订阅者**一次都不会重渲染** ——
+toast 进了 store、屏上没有，纯静默。
+
+⚠️ 三个和 web 刻意不同的地方：
+
+- **错误 toast 不自动消失**（同 web），但**必须给退出口** —— 手机上一条不会走的
+  横幅会一直压着内容，而没有 hover 这回事。所以整条可点掉、右侧有一枚 ✕
+- **同时最多 3 条**：屏窄，第 4 条一来最早那条就该走，否则能盖掉半屏
+- 非错误的 timeout 是 **3.5s**（web 是 4.5s）：它压在内容上
+
+🔴 **`Toaster` 只能挂一个**（根 `_layout.tsx` 里、`<PortalHost />` **之后**）。
+挂两个每条 toast 会显示两遍。
+
+🔴 **容器要 `pointerEvents="box-none"`。** 它绝对定位铺满整屏，不写这一句会吃掉
+**整屏**的触摸 —— 而且只在有 toast 的那几秒里发生，和「界面卡住」很难区分。
+
+## 确认框走 portal，不走 `Modal` —— 代价是返回键要自己接
+
+`ui/confirm-dialog.tsx` 的 props 形状照 `packages/ui` 的
+[confirm-dialog](../../../../packages/ui/src/components/confirm-dialog.tsx) 抄
+（`open` / `onOpenChange` / `title` / `description` / `confirmLabel` /
+`cancelLabel` / `variant` / `onConfirm`），多一个 `busy`（确认后的请求还在飞）。
+
+**为什么不用 RN 的 `Modal`**：它把内容挂到**另一个原生根视图**上。uniwind 的令牌
+解析发生在 React 里，理论上跨 `Modal` 也成立 —— 但这台机器上**没有能跑起来的设备**
+（模拟器还卡在 kvm 组），而「样式在另一个原生根上失效」这一类问题
+**打包和 typecheck 全都不报**。所以选了已经在用的那条路：`@rn-primitives/portal`
+渲染进根 layout 的 `<PortalHost />`，**同一棵 React 树、同一个原生根**。
+
+⚠️ **这是一个「此刻无法验证」下的选择，不是结论。** 等设备能跑起来了要实测一次
+再决定要不要换 `Modal` —— 别因为「Modal 更标准」就换过去。
+
+🔴 **走 portal 的浮层必须自己接 Android 返回键**（`BackHandler`）。在原生看来它
+只是一层普通 View，返回键**不会关它** —— 会直接把当前屏 pop 掉，于是「按返回」=
+确认框还开着、底下的屏却退了。`Modal` 的 `onRequestClose` 白送这一条，portal 没有。
+`busy` 时也要返回 `true`（吃掉返回键），否则请求在飞、屏被退掉。
+
+## 🔴 `Group` 和虚拟化列表冲突
+
+`grouped.tsx` 的 `Group` 是一个 `Card` 包住所有行、行间画内缩分隔线 —— 那个形状
+**只适合定长列表**（设置屏、详情页的资料块）。`FlatList` 只挂载可见的那几行，
+包不住一个跨全表的圆角容器，滚动时上下边缘的圆角会跟着行进出而闪。
+
+**要翻页的列表用独立卡片**（每条一个 `Card`，`contentContainerClassName` 里给
+`gap-2.5`），见 `src/app/(app)/users/index.tsx`。

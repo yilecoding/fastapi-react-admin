@@ -15,8 +15,13 @@
 (app)/(tabs)/profile.tsx     个人中心
 (app)/notifications.tsx      通知      ┐ 推在 tab 之上：
 (app)/profile/edit.tsx       编辑资料  │ 天然带返回键、盖住 tab 栏
-(app)/profile/password.tsx   修改密码  ┘
+(app)/profile/password.tsx   修改密码  │
+(app)/users/index.tsx        用户列表  │ ← 分页列表的范式样板
+(app)/users/[id].tsx         用户详情  ┘ ← 详情 + 写操作的范式样板
 ```
+
+⚠️ 动态段在 `(app)/_layout.tsx` 里注册时，`name` 用的是**文件名**
+（`users/[id]`），不是拼好的路径。
 
 🔴 **tabs 必须套在一层 Stack 里，不能让 `(app)` 直接是 Tabs。**
 `(tabs)/` 下每多一个文件就自动多一个 tab，所以通知、编辑资料这类屏没地方放。
@@ -216,3 +221,114 @@ src/app/(app)/notifications.tsx 列表：全部 / 未读 · 点一条标已读 �
 
 ⚠️ 标记已读是**幂等**的（重复标记返回 0 行也算成功），所以列表用了乐观更新、
 失败也不回滚 —— 下一次刷新自然会纠正。
+
+## 权限：`usePerm()`，而门控天生会把错误伪装成缺失
+
+```
+src/lib/perm.ts               usePerm() —— /auth/codes + can / canAny / canWrite
+src/app/(app)/(tabs)/apps.tsx 「应用」：按权限码列模块，三种「空」分开
+```
+
+权限码来自 `GET /auth/codes`（登录后一次，形如 `sys:user:add`）。
+在 `lib/perm.ts` 之前移动端**完全没有权限概念** —— `CurrentUser` 里只有
+`roles: string[]`，那是角色**名字**不是码，不能拿来判断。
+
+### 🔴 `known` 这一位是必须的（硬纪律 9 的权限形态）
+
+`can()` 返回 false 的原因有**两个**：真没权限 / 权限码没问上。界面上长得一样，
+而后者会让**所有入口消失** —— 用户看到的是「一个功能不存在的 App」。
+
+所以 `usePerm()` 除了 `can` 还给 `known`（= `isSuccess || isSuperuser`）和 `error`，
+调用方**先看 `known`，再看 `can()`**。和未读数那次是同一个物种
+（`lib/notifications.tsx` 里记着）：**「不知道」不等于「没有」。**
+
+⚠️ 错误只在**一处**兜（「应用」那一屏）—— 首页的用户入口和详情页的删除按钮都是
+「`known` 为假就不出现」，不重复报一遍。三个屏各弹一次同一个错更糟。
+
+### 🔴 写操作用 `canWrite()`，不是 `can()`
+
+`common/security/rbac.py` 的闸门**有顺序**，逐条读过：
+
+| 顺序 | 判断 |
+|---|---|
+| 1 | `is_superuser` → **直接放行**，后面全跳过 |
+| 2 | 有没有启用的角色（否则 403 `role_locked`） |
+| 3 | 角色有没有挂菜单（否则 403 `menu_not_assigned`） |
+| 4 | **非 GET/OPTIONS 且 `is_staff` 为假 → 403** ← 权限码还没开始校验 |
+| 5 | 权限码在不在已分配菜单里 |
+
+第 4 道是新建账号最容易撞的：`is_staff` 默认 False，而 `AddUserParam` 里
+**根本没有这个字段**。症状是「能登录、能看列表、所有写操作 403」，
+而三条 403 的文案都不提移动端。`canWrite()` = `isSuperuser || (isStaff && can(...))`，
+把这道闸门算进去 —— 界面上就不会出现一个点了必然 403 的按钮。
+
+## 用户模块：列表 → 详情 → 删除（**范式样板**）
+
+```
+(app)/users/index.tsx   分页列表：useInfiniteQuery + FlatList + 防抖搜索 + 五个状态
+(app)/users/[id].tsx    详情 + 删除（确认框 + toast）
+src/lib/users.ts        取数（列表 / 详情 / 删除 mutation）
+src/lib/debounce.ts     useDebounced —— 延后「值」，不是延后「请求」
+```
+
+挑用户这个模块没有业务含义，挑的是它的**形状**。字典、部门、公告要抄的就是这一份。
+
+### 🔴 列表要 `useInfiniteQuery` + `FlatList`，不是「一个大 size + map()」
+
+通知那一屏是 `size: 50` 一次拉完 + `ScrollView` + `map()`。那个形状在几十条以内
+看不出问题，**照抄到上千条的列表上就废了**（首屏等全量、内存里挂上千个 View、
+滚动掉帧）。移动端的列表既然不能是表格，它就必须是「一条条 + 翻到底继续拉」。
+
+两个容易写错的地方：
+
+- 🔴 翻页终点用 `page < total_pages`，**不要用 `items.length < size`** ——
+  后者在「最后一页刚好装满」时会多请求一次空页。FBA 的 `PageData` 直接给了 `total_pages`
+- 🔴 `onEndReached` 一次滚动里会被调多次，**必须看 `hasNextPage && !isFetchingNextPage`**，
+  否则会连发几页
+
+### 🔴 五个状态，缺一个都会变成「这 App 坏了」
+
+| 状态 | 长什么样 |
+|---|---|
+| 首屏加载 | 骨架屏 |
+| **首屏失败** | 占位错误块 + 重试 |
+| 空（没筛选） | 「还没有用户」 |
+| 空（**筛了**） | 「没有匹配」+ 提示改条件 —— 和上一条**必须分开**，筛出空白时用户第一反应是「搜坏了」 |
+| **翻页失败** | 列表**底部**一条错误 + 重试。⚠️ 最容易漏 —— 前面的数据是好的，不能把整屏换成错误块 |
+
+后两条共用 `q.isError`，靠 `items` 有没有值区分。
+
+### 🔴 搜索要防抖「值」，不要自己 setTimeout 发请求
+
+延后值之后它进的是 query key（`usersKey.list(filter)`）—— 每套条件一份缓存，
+没有「后到的请求赢」这种竞态，退回上一个关键词还是秒开。
+自己管 timer 发请求等于把竞态搬到自己手里。
+⚠️ 输入框显示的是**未延后**的值，否则每敲一个字要等 300ms 才看到字符。
+
+### 🔴 自己不能删自己 —— 后端**没有**这道守卫
+
+`user_service.delete` 读过了：查到就删，然后 `delete_by_prefix` 掉该用户的
+access / refresh / 用户缓存三组 key。所以删自己会**成功**，然后当前会话立刻失效、
+被弹回登录屏 —— 看起来像「App 把我踢了」。这道守卫只能在客户端做。
+
+⚠️ 判据比 `id` 且两边都 `String()`：`id` 在 schema 里是 `string | number`，
+路由参数一定是字符串，不统一的话 `===` 永远为假、守卫**静默失效**。
+
+### 🔴 删除接口在「删了 0 行」时是 `HTTP 200 + code: 400`
+
+`resolveEnvelope` 会判成失败并抛 —— 所以不要写成「走到这儿就是成了」。
+而且「删了 0 行」在三个方言下**不是同一件事**（MySQL 数变更行，
+PostgreSQL / SQL Server 数匹配行），别拿这个接口的返回当「记录存在与否」的判据。
+
+## 🔴 typed routes 那份声明是 `expo start` 生成的，`expo export` **不生成**
+
+`.expo/types/router.d.ts` 给 `router.push()` 提供路由字面量的联合类型。
+它是**生成产物且在 `.gitignore` 里**，两个后果都要知道：
+
+| | |
+|---|---|
+| 本地加了新屏 | `pnpm typecheck` 对着一份**过期**的声明报错（`Argument of type '"/users"' is not assignable…`）。**实测 `expo export` 不会刷新它** —— 要跑一次 `expo start`（约 4 秒就写好了，然后可以 kill） |
+| CI | `.expo/` 不在版本库里 → **那份声明压根不存在** → `Href` 退化成宽松类型，**路由写错 CI 抓不到** |
+
+所以路由字面量的正确性**只有本地 typecheck 才保得住**，而它依赖一个手动步骤。
+加屏之后跑一次 dev server 再 typecheck。
