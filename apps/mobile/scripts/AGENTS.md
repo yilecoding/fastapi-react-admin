@@ -78,6 +78,23 @@ transformer，在 store 里看得见。gradle 的 `createBundleReleaseJsAndAsset
 - `app.json` 里 `android.edgeToEdgeEnabled` 已删：Android 16 起 edge-to-edge
   是强制的，那个键被 Expo 废弃了，prebuild 会警告
 
+## dev.mjs 替你做的四件事
+
+`pnpm mobile:dev` = `node scripts/dev.mjs`。直接跑 `expo start` 有**四处会静默地不对**：
+
+| 它替你做的事 | 不做会怎样 |
+|---|---|
+| 算出一个**真能连的地址**，用 `EXPO_PACKAGER_HOSTNAME` 钉住 | Metro 从网卡列表里挑一个 **docker bridge**（这台机器有 8 个）打印成 `exp://172.24.0.1:8800` —— 在 WSL 里、在 NAT 后面、还是 docker 内部网桥，三重不可达 |
+| 注入 `EXPO_PUBLIC_API_BASE` | App 打的后端地址和 Metro 的不是一回事，写死哪个都会错一半 —— 表现是 App 起得来、所有请求 `Network request failed`，看着像后端挂了 |
+| 端口固定 **8800** + 被占时**直接报 pid 退出** | Expo 默认 8081 太容易撞，撞了它**默默漂到 8082** —— 打印的地址就是错的，「地址看着有、就是不通」比连不上难查得多 |
+| 自己去 `~/Android/sdk` 找 `adb` | 这台机器的 shell 里 `ANDROID_HOME` 没设、`adb` 不在 PATH 上，涉及设备的分支全都静默走不到 |
+
+🔴 **它刻意不自动追加 `--android`。** 试过，是个坏设计：设备刚开机时 package 服务
+还没起（`cmd: Can't find service: package`），`--android` 会让 expo **整个进程退出** ——
+一个瞬时的设备状态变成了「dev server 起不来」。
+
+`start:plain` 是不带这层的原始 `expo start`，排查这层本身有没有问题时用。
+
 ## 设备：用**宿主机（Windows）侧**的 Expo Go，不要在 WSL 里跑模拟器
 
 🔴 **WSL 内的 Android 模拟器这条路已经放弃了，不要再往回走。**
