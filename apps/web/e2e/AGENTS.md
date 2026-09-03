@@ -297,3 +297,20 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 
 **没有**做视觉回归、没有覆盖其余列表页的筛选组合——那些页面共用同一套模板，
 测一次模板 + 抽样几页就够，不是每页都要单独写一条。
+
+## web-first 断言漏 `await` 有闸门了（`pnpm arch:check`）
+
+`expect(locator).toBeVisible()` 返回 promise。漏了 `await`，这条断言
+**压根不执行** —— 测试照旧绿，而它什么都没验。这是 Playwright 最经典的静默
+失效，比选择器写错更难发现（选择器错了至少会超时报错，漏 await 连报错都没有）。
+
+⚠️ **eslint 在这个仓库里管不了它。** `@typescript-eslint/no-floating-promises`
+需要 type-aware linting（`projectService` / `parserOptions.project`），
+而 `apps/web/eslint.config.js` 没配 —— 开它要付整仓 lint 的时间代价。
+所以做成了 `arch:check` 里的静态检查，覆盖的正是这一个形状。
+
+实测基线：**128 处 web-first 断言，0 处漏 `await`**。这条守的是「保持 0」。
+
+两个方向都反向验证过：拿掉一处 `await` → 报 `unawaited-assertion`；
+把 `e2e/tests` 挪走 → 报 `e2e-scanner-broken`（扫不到断言时
+「没有漏 await」天然成立，所以要先断言「有」）。

@@ -317,6 +317,57 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', '
   }
 }
 
+// ── E2E：Playwright 的 web-first 断言不能漏 await ─────────────────────
+//
+// `expect(locator).toBeVisible()` 返回 promise。漏了 `await`，这条断言
+// **压根不执行** —— 测试照旧绿，而它什么都没验。这是 Playwright 最经典的
+// 静默失效，比选择器写错更难发现（选择器错了至少会超时报错）。
+//
+// ⚠️ **eslint 在这个仓库里管不了它。** `@typescript-eslint/no-floating-promises`
+// 需要 type-aware linting（`projectService` / `parserOptions.project`），
+// 而 `apps/web/eslint.config.js` 没配 —— 开它要付整仓 lint 的时间代价。
+// 这条静态检查便宜得多，覆盖的正是这一个形状。
+//
+// 实测基线：128 处 web-first 断言，0 处漏 await。这条守的是「保持 0」。
+{
+  //: Playwright 的 web-first 匹配器 —— 这些返回 promise，必须 await
+  const WEB_FIRST = [
+    'toBeVisible', 'toBeHidden', 'toHaveText', 'toContainText', 'toHaveCount',
+    'toHaveValue', 'toHaveURL', 'toHaveTitle', 'toBeEnabled', 'toBeDisabled',
+    'toBeChecked', 'toHaveAttribute', 'toHaveClass', 'toBeEmpty', 'toBeFocused',
+    'toBeEditable', 'toHaveScreenshot', 'toPass',
+  ]
+  const e2eDir = path.join(ROOT, 'apps/web/e2e')
+  let checked = 0
+  if (fs.existsSync(e2eDir)) {
+    for (const file of walk(e2eDir).filter((f) => f.endsWith('.ts'))) {
+      const lines = stripComments(fs.readFileSync(file, 'utf8')).split('\n')
+      lines.forEach((line, index) => {
+        for (const m of line.matchAll(/expect\s*\(/g)) {
+          // 匹配器可能换行写，往后看几行
+          const chunk = lines.slice(index, index + 4).join(' ')
+          if (!WEB_FIRST.some((w) => chunk.includes(`.${w}(`))) continue
+          checked += 1
+          const before = line.slice(0, m.index)
+          const awaited = /\bawait\b/.test(before) || /^\s*(await|return)\b/.test(line)
+          if (!awaited) {
+            add(
+              'error',
+              `${rel(file)}:${index + 1}`,
+              'unawaited-assertion',
+              `web-first 断言漏了 await，这条断言不会执行：${line.trim().slice(0, 80)}`,
+            )
+          }
+        }
+      })
+    }
+  }
+  // 🔴 先断言「有」：扫不到任何断言时「没有漏 await」天然成立
+  if (checked < 50) {
+    add('error', 'apps/web/e2e', 'e2e-scanner-broken', `只扫到 ${checked} 处 web-first 断言，扫描器可能坏了`)
+  }
+}
+
 // ── 输出 ──────────────────────────────────────────────────────────────
 const errors = problems.filter((p) => p.level === 'error')
 const warns = problems.filter((p) => p.level === 'warn')
@@ -332,7 +383,7 @@ for (const [where, ps] of byWhere) {
 }
 
 console.log(
-  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 品牌版本 · 错误 ${errors.length} · 警告 ${warns.length}`,
+  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 品牌版本 · E2E 断言 · 错误 ${errors.length} · 警告 ${warns.length}`,
 )
 if (!problems.length) console.log('[ok] 没有漂')
 process.exit(errors.length ? 1 : 0)
