@@ -235,3 +235,29 @@ dept / role / user / notice / file 这几个。
 但这是个底座 —— 数据范围功能的用途就是做「区域管理员」（写权限 + 部门范围），
 第一个这么配的人就会踩到。守卫测试自己造那个配置
 （`set_current_user` + `SimpleNamespace`），不依赖种子里恰好有没有。
+
+## 🔴 没有权限门禁的端点，绝不能挂 scoped 的 DAO
+
+这两件事单独都合理，**撞在一起就是「界面静默变空」**：
+
+- 端点只挂 `DependsJwtAuth`（所有登录用户可读）
+- 它读的 DAO 是 `DataScopedCRUD`（默认过滤，而「开了过滤没配范围」是 fail-closed）
+
+结果是那个用户**永远**看不到任何行 —— 而且没有任何办法给他授权，
+因为他缺的不是权限码，是数据范围，而那个模型可能压根没有可过滤的维度。
+
+实测样本：公告。`GET /sys/notices` 只挂 `DependsJwtAuth`（给所有人看公告，
+仪表盘还拿它做统计卡），而 `CRUDNotice` 默默继承了默认值。
+超管看到 3 条，STAFF 用户看到 **0 条** —— HTTP 200、空列表、无任何提示。
+而 `sys_notice` 只有 `id / title / type / status / content`，
+没有 `dept_id` 也没有 `created_by`：规则想表达「某部门才看得到某公告」
+压根表达不了，所以过滤在这里**只有 fail-closed 一种效果**。已豁免。
+
+⚠️ **反过来，有权限门禁的端点是安全的** —— 实测 `/logs/login`、`/logs/opera`、
+`/sys/files` 对受限用户都是 **403**（缺 `log:login:list` 那些码），
+请求在 RBAC 那层就被拒了，压根到不了 DAO。所以这个坑的范围很精确：
+**「无权限码 + scoped DAO」那一小撮**。
+
+⚠️ 排查时容易误报的一条：`/auth/codes` 对 STAFF 返回 0 条，看着像同一个 bug ——
+但那是**对的**，STAFF 那三个菜单一个 `perms` 都没有（实测）。
+「受限用户看到的少」不等于「被错误地过滤了」。
