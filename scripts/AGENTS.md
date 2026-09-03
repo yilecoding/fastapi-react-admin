@@ -55,6 +55,47 @@ dev 脚本、零 JS 依赖，不参与）：
 三条 error 都做过反向验证：删掉 `apps/web` 的 `@admin/platform` 声明
 → 前两条同时红；给 `packages/ui` 加上 `@admin/platform` → 第三条红。
 
+### 🔴 第五条：运行时 import 不能成环（`import-cycle`）
+
+一个模块不能直接或间接 import 回自己。**这条是被真事故追加的**：
+`packages/api/src/client.ts` 写的是 `from './index'`，而 `index.ts` 又
+`export { createApiClient } from './client'`。
+
+为什么值一道闸门 —— 它的暴露路径**恰好是 CI 里没有的那一条**：
+
+| 谁会说话 | 说不说 |
+|---|---|
+| Metro（真机上一条 `Require cycle:` 黄条） | ✅ 只有它 |
+| Vite · tsc · eslint · `expo export` | ❌ 全都不说话 |
+
+所以 web 端带着这个环跑了很久，是**移动端在设备上跑起来**才现形的。
+后果也不只是一条警告：环里的模块加载顺序不确定，后加载的那一侧会拿到
+`undefined` —— 当时能跑只是因为那几个绑定都在函数体里用，
+一旦有人在模块作用域用（`const E = new ApiError(...)`、或当默认参数），
+报的是 `undefined is not a constructor`，和真因隔着两层。
+
+两条实现上的取舍：
+
+- ⚠️ **只算运行时 import。** `import type` / `export type` 被 tsc 整句擦掉、
+  不构成环（`packages/platform` 里就有一处合法的 `import type … from './index'`）。
+  混写的（`import { a, type B }`）算运行时
+- ⚠️ **只查包内相对路径。** 跨包方向由上面那三条管；bare specifier 要解析
+  node_modules，是另一个量级的活
+
+**反向验证做了四组**（这是这条闸门唯一的证据）：
+
+| 造的东西 | 期望 | 实测 |
+|---|---|---|
+| 一对互相 `import` 的 `.ts` | 报 | ✅ 报出完整环路径 |
+| 同一对改成 `import type` | **不报** | ✅ 静默 |
+| 混写 `import { x, type Y }` | 报 | ✅ 报 |
+| **把 `client.ts` 那条 import 改回 `./index`**（复现原事故） | 报 | ✅ `client.ts → index.ts → client.ts` |
+
+外加一条自检：扫到的内部 import 边少于 20 条就直接报
+`cycle-scanner-broken` —— **一条边都没扫到时「没有环」天然成立**，
+而这个扫描器第一版就是这么坏的（`PACKAGES` 是字符串数组，我按对象取了 `.dir`，
+于是 0 条边、报告照旧「通过」）。
+
 ### 还有一条：品牌版本不能写死
 
 `apps/web/src/lib/brand.ts` 的开头写着「改名字、改版本**只动这里**」，

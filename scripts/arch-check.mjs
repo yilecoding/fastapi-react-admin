@@ -389,6 +389,111 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', '
   }
 }
 
+// ── 模块环：运行时 import 不能成环 ────────────────────────────────────
+/**
+ * 🔴 **一个模块不能（直接或间接）import 回自己。**
+ *
+ * 实测踩过：`packages/api/src/client.ts` 写的是 `from './index'`，而 `index.ts`
+ * 又 `export { createApiClient } from './client'` —— 一个环。
+ *
+ * 为什么值一道闸门：**只有 Metro 会打这个警告**（真机上一条 `Require cycle:`
+ * 的黄条），Vite / tsc / eslint 全都不说话。所以 web 端带着这个环跑了很久，
+ * 是移动端在设备上跑起来才现形的 —— 一个「跨端才暴露」的问题，
+ * 而暴露它的那条路（真机）恰恰是 CI 里没有的。
+ *
+ * 后果也不只是一条警告：环里的模块**加载顺序不确定**，后加载的那一侧会拿到
+ * `undefined`。现在能跑是因为那几个绑定都只在函数体里用；一旦有人在模块作用域
+ * 用它们（`const E = new ApiError(...)`、或当默认参数），报的是
+ * `undefined is not a constructor` 之类，和真因隔着两层。
+ *
+ * ⚠️ **只看运行时 import。** `import type` / `export type` 会被 tsc 整句擦掉，
+ * 不构成环（`packages/platform` 里就有一处 `import type { OperaLog } from './index'`，
+ * 那是合法的）。混写的（`import { A, type B }`）算运行时。
+ *
+ * ⚠️ **只查包内的相对路径。** 跨包的方向由上面「依赖箭头」那一节管，
+ * 而 bare specifier 要解析 node_modules，那是另一个量级的活。
+ */
+{
+  const SRC_DIRS = PACKAGES.map((p) => `${p}/src`).filter((d) => fs.existsSync(path.join(ROOT, d)))
+  const files = SRC_DIRS.flatMap((d) => tsFiles(d)).filter((f) => !f.endsWith('.d.ts'))
+
+  /** 把一个相对 specifier 解析成仓库里的真实文件；解析不到返回 null */
+  const resolve = (from, spec) => {
+    const base = path.resolve(path.dirname(from), spec)
+    const candidates = [
+      base,
+      `${base}.ts`,
+      `${base}.tsx`,
+      path.join(base, 'index.ts'),
+      path.join(base, 'index.tsx'),
+    ]
+    for (const c of candidates) {
+      if (fs.existsSync(c) && fs.statSync(c).isFile()) return c
+    }
+    return null
+  }
+
+  const graph = new Map()
+  let edges = 0
+  for (const f of files) {
+    const src = stripComments(fs.readFileSync(f, 'utf8'))
+    const deps = new Set()
+    // `import ... from './x'` / `export ... from './x'` / `import './x'`
+    // 🔴 `import type` / `export type` 整句跳过 —— 它们被擦掉，不成环
+    const re = /(?:^|\n)\s*(import|export)(\s+type)?\s+(?:[^;'"]*?\s+from\s+)?['"](\.[^'"]*)['"]/g
+    for (const m of src.matchAll(re)) {
+      if (m[2]) continue
+      const target = resolve(f, m[3])
+      if (target) deps.add(target)
+    }
+    graph.set(f, deps)
+    edges += deps.size
+  }
+
+  // 🔴 先断言「扫到了东西」：一条边都没扫到时「没有环」天然成立
+  if (edges < 20) {
+    add('error', 'scripts', 'cycle-scanner-broken', `只扫到 ${edges} 条内部 import 边，扫描器可能坏了`)
+  }
+
+  // 迭代式 DFS 找环（三色标记），报第一次撞到的那个环
+  const WHITE = 0
+  const GREY = 1
+  const BLACK = 2
+  const color = new Map(files.map((f) => [f, WHITE]))
+  const reported = new Set()
+  for (const start of files) {
+    if (color.get(start) !== WHITE) continue
+    const stack = [[start, [...(graph.get(start) ?? [])]]]
+    color.set(start, GREY)
+    const path_ = [start]
+    while (stack.length) {
+      const top = stack[stack.length - 1]
+      const next = top[1].pop()
+      if (next === undefined) {
+        color.set(top[0], BLACK)
+        stack.pop()
+        path_.pop()
+        continue
+      }
+      const c = color.get(next)
+      if (c === GREY) {
+        const at = path_.indexOf(next)
+        const loop = [...path_.slice(at), next].map((f) => rel(f))
+        const key = [...loop].sort().join('|')
+        if (!reported.has(key)) {
+          reported.add(key)
+          add('error', rel(next), 'import-cycle', `运行时 import 成环：${loop.join(' → ')}`)
+        }
+        continue
+      }
+      if (c === BLACK) continue
+      color.set(next, GREY)
+      path_.push(next)
+      stack.push([next, [...(graph.get(next) ?? [])]])
+    }
+  }
+}
+
 // ── 输出 ──────────────────────────────────────────────────────────────
 const errors = problems.filter((p) => p.level === 'error')
 const warns = problems.filter((p) => p.level === 'warn')
@@ -404,7 +509,7 @@ for (const [where, ps] of byWhere) {
 }
 
 console.log(
-  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 品牌版本 · E2E 断言 · 错误 ${errors.length} · 警告 ${warns.length}`,
+  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 品牌版本 · E2E 断言 · 模块环 · 错误 ${errors.length} · 警告 ${warns.length}`,
 )
 if (!problems.length) console.log('[ok] 没有漂')
 process.exit(errors.length ? 1 : 0)

@@ -142,12 +142,26 @@ dev menu 里生效。要让桌面上真出现，必须打独立 APK。
 
 ⚠️ 三个页签的内容区要 `minHeight` 对齐，否则切换时下面的东西会跳。
 
-## 🔴 占位符颜色只能走 `placeholderTextColor`
+## 🔴 占位符颜色走 uniwind 的 `placeholderTextColorClassName`
 
-Tailwind 的 `placeholder:*` 是 CSS 伪元素变体，RN 里没有这个概念 ——
+Tailwind 的 `placeholder:*` 是 CSS 伪元素变体，**RN 里没有这个概念** ——
 写了不报错也不生效。不给的话各 Android 版本的默认占位色不一样，深色主题下经常
-糊成一片看不见，而这**不会报任何错**。`components/ui/input.tsx` 用
-`useCSSVariable('--color-muted-foreground')` 取值再传给这个 prop。
+糊成一片看不见，而这**不会报任何错**。
+
+⚠️ **这一条以前写的是「`input.tsx` 用 `useCSSVariable` 取值再传给
+`placeholderTextColor`」——那是错的，两处都错：**
+
+| | |
+|---|---|
+| 代码 | `input.tsx` **压根没设过**占位色。它带的是模板原样的 `placeholder:text-muted-foreground/50`（native 分支里），也就是上面说的那个不生效的写法 —— 所以整个 App 的占位符一直用的是平台默认色 |
+| 解法 | 不用自己 `useCSSVariable`。uniwind 的 TextInput 包装有专门的 prop：**`placeholderTextColorClassName`**（读它的实现确认过，经 `useAccentColor` 解析成 `placeholderTextColor`），给它一个类名就行 |
+
+现在 `input.tsx` 默认传 `text-muted-foreground`，调用处可覆盖。
+
+🔴 **这也是「文档会静默过期」的一个样本**：那段话言之凿凿地描述了一个
+不存在的实现，而 `ctx:check` 抓不到 —— 它只核对「指向的东西还在不在」，
+不核对「说的事是不是真的」。**写实现细节时给出可核对的锚点**
+（这里是「uniwind 的 TextInput 包装」），下一个人才有办法验。
 
 ## 反馈：`toast` 管写操作，屏内错误块管拉取 —— 别混用
 
@@ -210,14 +224,57 @@ toast 进了 store、屏上没有，纯静默。
 确认框还开着、底下的屏却退了。`Modal` 的 `onRequestClose` 白送这一条，portal 没有。
 `busy` 时也要返回 `true`（吃掉返回键），否则请求在飞、屏被退掉。
 
-## 🔴 `Group` 和虚拟化列表冲突
+## 🔴 长列表是**通栏连续白面**，不是带间距的浮动卡片
 
 `grouped.tsx` 的 `Group` 是一个 `Card` 包住所有行、行间画内缩分隔线 —— 那个形状
 **只适合定长列表**（设置屏、详情页的资料块）。`FlatList` 只挂载可见的那几行，
 包不住一个跨全表的圆角容器，滚动时上下边缘的圆角会跟着行进出而闪。
 
-**要翻页的列表用独立卡片**（每条一个 `Card`，`contentContainerClassName` 里给
-`gap-2.5`），见 `src/app/(app)/users/index.tsx`。
+⚠️ **但「`Group` 用不了」不等于「改成浮动卡片」。** 这里推错过一次：
+用户列表第一版写成「每条一张 `rounded-xl` 卡 + `gap-2.5`」，
+而**带间距的圆角卡是 web / Material 的语言** —— 混进这个通篇 iOS 分组列表的 App 里，
+用户的第一反应是「这一屏不像这个 App」（原话是「太丑了」）。
+
+iOS 自己的长实体列表（通讯录 / 邮件）是**通栏、无圆角、无间距**，行间一条
+**内缩到文字起点**的发丝线。那个形状和虚拟化恰好没有冲突 ——
+它**根本不需要一个跨全表的容器**：白色由每一行自己画（`bg-card`），
+分隔线走 `ItemSeparatorComponent`，首尾各补一条通栏发丝线收口。
+
+🔴 **分隔线那个组件也要 `bg-card`。** 它渲染在两行**之间**、在行的背景之外，
+只给里层发丝线上色的话，内缩掉的那 72px 会漏出页面底色（`#f4f2fa`）——
+每条线左边多一截浅灰，整列看起来是脏的。
+
+样板：`src/app/(app)/users/index.tsx`。同一屏还有三条也是"丑"的具体来源：
+
+- ⚠️ **第二行别把所有关联字段串成一行。** 原来是 `@username · 部门 · 角色1、角色2`，
+  一个挂三个角色的账号就把那行顶到省略号，整列是一片糊字。列表放
+  `@用户名 · 部门`，角色留给详情屏
+- ⚠️ **长列表不要 chevron。** iOS 的通讯录 / 邮件都不带 —— 有头像的行本身就读作可点，
+  20 行 chevron 是 20 个重复的小箭头。`PressRow` 带 chevron 是因为那是**设置类**定长列表
+- ⚠️ **搜索框用填充式**（`bg-muted` 无描边），不是 shadcn 的描边白底 input ——
+  后者是桌面语言，放在灰底分组列表上像"另一个 App 的控件"。
+  外加**手机上必须有清空口**：全选删除很难点，而收起键盘后那几个字符会一直卡着
+  筛选条件，用户会以为"列表就这么少"
+
+## ⚠️ 「数 bundle 里的类名」这条判据只对**新鲜**的 bundle 成立
+
+分册里那条「从 dev bundle 里 `grep -c '"flex-1"'` 判断类有没有生成」很有用，
+但它有个静默的失效方式：**dev server 是长活的，量到的可能是上一份 bundle。**
+
+实测踩过：改完一屏之后连量三次，字节数**一模一样**（14543053），
+十几个新类全是 0 —— 差点据此去查 `@source`。真因是 8899 上有个早先起的
+dev server 一直没死，而 `pkill -f "expo start --port 8899"` **匹配不到它**
+（真正的 node 进程 args 不是那个字符串，是 `.../expo/bin/cli start …`）。
+
+判据要配两条：
+
+```bash
+ss -ltnp | grep ':<port>' | grep -oP 'pid=\K[0-9]+'   # 按端口找到真 pid，kill 它
+npx expo start --port <port> -c                        # -c 清缓存
+```
+
+**看字节数变不变**是最省事的自检：改了代码而 bundle 大小分毫不差，
+先怀疑你量的是旧的那份。
 
 ## 🔴 `active:` 只在 uniwind 的 `Pressable` 里解析 —— 挂在别的组件上是死代码
 

@@ -192,26 +192,11 @@ pnpm --filter api celery:beat             # 只能一个
 
 后端契约改动后跑 `pnpm --filter @admin/api gen:api` 重新生成 `schema.d.ts`。
 
-🔴 **`pnpm install:all` 会顺带装好本地 pre-commit 钩子，换机器 / 新克隆不用再手动补一步。**
-`apps/api/.pre-commit-config.yaml` 早就在（ruff `--fix --unsafe-fixes` + ruff-format + json/yaml/toml
-检查 + uv-lock/uv-export），`prek` 也是 `lint` 依赖组、`uv sync` 就带上——但光有配置和
-二进制不等于钩子被激活，`.git/hooks/` 不进版本库，得显式 `install` 一次：
-
-```bash
-pnpm hooks:install       # = apps/api/.venv/bin/prek install -C apps/api -f
-```
-
-❌ **不要在仓库根裸跑 `prek install`（不带 `-C apps/api`）**——`.git` 在根目录、
-配置在 `apps/api/` 下，prek 把 cwd 固化进装的时候生成的 shim 里，不会自己向下
-搜子目录找配置。裸装**看似成功**，但下一次真正 `git commit` 才报「找不到配置文件」
-并挡住提交——静默/延迟失败，且装错了没法从 git diff 里看出来。
-
-实测（造一个带未用 `import os` + `if x: return x else: return None` 的坏 `.py` 文件验证）：
-
-| 装法 | 提交时的表现 |
-|---|---|
-| 裸 `prek install` | `No .pre-commit-config.yaml found...`，钩子形同虚设 |
-| `prek install -C apps/api -f`（= `pnpm hooks:install`） | 正确进 workspace：`ruff check` 自动修了 unused-import + superfluous-else-return，`ruff format` 重新格式化；剩下 2 个缺类型标注的错误改不了，提交被挡住（exit 1） |
+🔴 **`pnpm install:all` 会顺带装好本地 pre-commit 钩子**（`pnpm hooks:install`
+= `prek install -C apps/api -f`），换机器 / 新克隆不用再手动补一步。
+❌ **不要在仓库根裸跑 `prek install`** —— 装错了看似成功，下一次 `git commit`
+才报「找不到配置文件」。为什么、以及两种装法的实测对照，见
+[`apps/api` 分册](apps/api/AGENTS.md) 的「pre-commit 钩子」一节。
 
 ---
 
@@ -351,6 +336,13 @@ CI 的 eslint job 原来是 `pnpm --filter web lint`，于是**别的包的 lint
 
 用 `turbo` 跑（`pnpm lint` / `pnpm typecheck` / `pnpm build`）就没有「漏了哪个包」
 这回事：谁声明了那个 task 谁就在里面。**新增一个包的 lint/typecheck 时不用改 CI。**
+
+### 14. 运行时 import 不能成环
+
+一个模块不能直接或间接 import 回自己。**只有 Metro 会报**（真机上一条
+`Require cycle:` 黄条）—— Vite / tsc / eslint / `expo export` 全都不说话，
+所以 web 端可以带着环长期绿灯，直到移动端在设备上跑起来。
+**有闸门：`pnpm arch:check`**（`import type` 不算，见 [`scripts` 分册](scripts/AGENTS.md)）。
 
 ---
 
