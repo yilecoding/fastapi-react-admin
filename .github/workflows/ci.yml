@@ -15,7 +15,16 @@ jobs:
   # 零外部依赖的检查。要 SQL Server 的那部分在下面的 test-backend job 里，
   # 两者并行 —— 拆开是为了让「装 ODBC 驱动 / 等实例」的抖动不污染这条的红绿信号。
   static:
-    name: typecheck · build · i18n · ctx
+    # 🔴 **这个 name 是分支保护规则按字面引用的，不要改。**
+    # `main-github-flow` ruleset 里的 required status check 写的就是
+    # `typecheck · build · i18n` 这一串字符 —— job 改名之后那个被要求的检查
+    # **永远不会上报**，于是所有 PR 都卡在「等待必需的检查」上，
+    # 而 CI 全是绿的、看不出哪里不对（实测：加 ctx:check 时顺手把这行改成
+    # `… · ctx`，PR #90 直接变成 not mergeable，排查了半天才找到）。
+    #
+    # 新增步骤就加在下面的 steps 里，不要动 name。这是「同一件事两个真相源」
+    # 的典型：名字同时活在这个文件和 GitHub 的 ruleset 里，而后者不在仓库里。
+    name: typecheck · build · i18n
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
