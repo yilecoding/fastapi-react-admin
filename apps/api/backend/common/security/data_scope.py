@@ -36,6 +36,13 @@
 拿不到用户，条件为 `None`，不加任何过滤。所以那些路径不需要显式豁免。
 需要 `bypass_data_scope()` 的只有一种：**请求上下文里的系统内部读**
 （典型的是认证链路自己去查用户）。
+
+⚠️ **但「天然不过滤」只对「不代表任何人」的任务成立。** 一旦有任务是**代替
+某个人**读写业务数据（编排流程、浏览器自动化、以后的 AI 工具调用都是这种），
+同一个 `None` 默认值就从「合理的不过滤」变成**静默 fail-open** —— 那个人
+只该看到本部门的行，任务却查回了全库，而且不报错。这类路径必须用下面的
+`run_as(user)` 显式声明执行身份。判据是一句话：**这段代码的读，结果要给
+某个具体的人看或按他的权限写吗？** 要，就得 `run_as`。
 """
 
 from collections.abc import Iterator
@@ -74,6 +81,45 @@ def bypass_data_scope() -> Iterator[None]:
         yield
     finally:
         _bypass.reset(token)
+
+
+@contextmanager
+def run_as(user: Any) -> Iterator[None]:
+    """在非请求上下文里显式声明「以谁的身份执行」
+
+    ## 为什么必须有这个
+
+    `_current_user` 默认 `None`，而 `_data_scope_condition()` 在拿到 `None` 时
+    **返回 `None`（不加任何过滤）**。对定时清日志那类任务这是对的 —— 它们不代表
+    任何人。但只要有一条任务是「代替某个人去查业务数据」，同一个默认值就变成
+    **静默 fail-open**：没有报错、没有 403，只是查出来的行比那个人有权看的多。
+
+    RBAC（权限码）拦不住这个：那一层在 API 依赖里判，而行级过滤在 DAO 层靠这个
+    ContextVar 生效 —— 两层的失效方式完全不同，走 Celery 的路径根本不经过 API 依赖。
+
+    ## 用法
+
+    Celery 任务 / CLI / 编排引擎里，凡是要代表某个人读写业务数据的，把那段包起来::
+
+        async with async_db_session() as db:
+            user = await user_dao.get(db, workflow.run_as_id)
+        with run_as(user):
+            ...  # 这里面的 DAO 读会按 user 的数据范围过滤
+
+    🔴 **不接受 `None`。** 「不知道以谁的身份跑」不是一个可以继续执行的状态 ——
+    允许它就等于把 fail-open 重新开了个后门。任务确实不代表任何人时，
+    根本不要调这个函数（默认的不过滤是刻意的）；要跳过过滤就用
+    `bypass_data_scope()`，那是**显式**的、看得见的。
+
+    :param user: 执行身份，必须是已加载 roles → scopes → rules 的用户对象
+    """
+    if user is None:
+        raise ValueError('run_as() 不接受 None —— 执行身份必须确定；要跳过过滤请用 bypass_data_scope()')
+    token = _current_user.set(user)
+    try:
+        yield
+    finally:
+        _current_user.reset(token)
 
 
 class DataScopedCRUD(CRUDPlus[Model]):
