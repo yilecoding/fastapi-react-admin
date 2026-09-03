@@ -112,6 +112,7 @@ const ALLOW = new Map(Object.entries({
   '.pre-commit-config.yaml': '在仓库里，真实存在（`git ls-files` 能看到）——但这个扫描器刻意跳过点开头的文件，只是巧合命中',
   'apps/api/.pre-commit-config.yaml': '同上，带路径前缀引用时是另一个 token，一起豁免',
   'scripts/deploy-prod.mjs': '已被 deploy/prod.sh 取代（它假设部署机上有整个仓库）；文档在讲这个假设为什么不成立',
+  'apps/api/backend/plugin/workflow/': 'docs/workflow/README.md 是待建插件的设计文档，指向的就是还没建的目录 —— 第 1 期建出来后这条豁免可以删',
 }))
 
 /** 章节标题 → 所在上下文文件。用来判「见「XXX」」指的那一节还在不在、在不在同一份 */

@@ -54,6 +54,7 @@
 | **发到生产服务器 / 回滚** · 动闸门脚本 / 品牌图标 | [`deploy/AGENTS.md`](deploy/AGENTS.md) · [`scripts/AGENTS.md`](scripts/AGENTS.md) |
 | 写或跑前端 E2E | [`apps/web/e2e/AGENTS.md`](apps/web/e2e/AGENTS.md) |
 | 动菜单 / 权限 / 死链判定 | 硬纪律 6 + [`pages/menu/AGENTS.md`](packages/platform/src/pages/menu/AGENTS.md) |
+| **浏览器自动化 / 编排任务**（设计，未开工） | [`docs/workflow/README.md`](docs/workflow/README.md) |
 
 每个目录下有一对 `AGENTS.md`（真身）+ `CLAUDE.md`（指向它的符号链接）：
 Claude Code 只认 `CLAUDE.md`，其余 agent 工具认 `AGENTS.md`，一份内容两边都读得到。
