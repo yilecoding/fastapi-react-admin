@@ -147,7 +147,7 @@ export function AppSidebar({
   const activePath = useRouterState({ select: (s) => s.location.pathname })
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" data-tour="sidebar">
       <SidebarHeader>
         {/*
           折叠态必须去掉内层 `px-2` 并改成居中，否则 logo 比下面的导航图标右偏 6px。

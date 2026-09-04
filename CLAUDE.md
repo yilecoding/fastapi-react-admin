@@ -47,7 +47,7 @@
 | **动权限码 / 数据范围 / token 与 cookie 时长** | [`apps/api/backend/common/security/AGENTS.md`](apps/api/backend/common/security/AGENTS.md) |
 | **动数据库结构 / 写迁移 / 改种子数据** | [`apps/api/backend/alembic/AGENTS.md`](apps/api/backend/alembic/AGENTS.md) |
 | 动定时任务 / Celery / 调度 | [`apps/api/backend/app/task/AGENTS.md`](apps/api/backend/app/task/AGENTS.md) |
-| 动命令面板 / 快捷键 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
+| 动命令面板 / 快捷键 / 功能引导 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
 | 动构建注入 / 发版提示 / 错误页 | [`apps/web/AGENTS.md`](apps/web/AGENTS.md) |
 | **桌面端打包 / 发版 / 自动更新** | [`apps/desktop/AGENTS.md`](apps/desktop/AGENTS.md) |
 | **移动端 App / Expo / uniwind / Metro** | [`apps/mobile/AGENTS.md`](apps/mobile/AGENTS.md)（下面还按 `scripts/` · `src/app/` · `src/components/` 拆了三份） |

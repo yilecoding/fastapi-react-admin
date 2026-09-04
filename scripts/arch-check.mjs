@@ -36,6 +36,13 @@
  * | `_auth/` 下的路由文件不渲染页面 | 3 | 页面被挂两次 / 切走丢状态 |
  * | 全局 DOM 查询要限定作用域 | 5 | 命中隐藏页的 DOM |
  *
+ * **功能引导那两条**（硬纪律 5 的延伸，见 `shell/tour/targets.ts` 头注释）
+ *
+ * | 规则 | 违反后的表现 |
+ * |---|---|
+ * | `driver.js` 只能在 `shell/tour/` 里 import | 裸选择器字串绕过上面那条 DOM 规则，命中隐藏页签 |
+ * | 步骤引用的 `data-tour` 目标必须存在 | 那一步凭空消失（或变成居中的空弹窗），没有任何报错 |
+ *
  * 这三条现在全仓都是干净的，做成闸门是因为**失败方式极难归因**：
  * 违反了不报错，只会「切回这个 tab 时筛选没了」/「测量到的是隐藏页的尺寸」，
  * 而人第一反应永远是去查那个功能本身。七条全部做过反向验证（注入违规 → 红）。
@@ -290,6 +297,49 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', '
   }
 }
 
+// ── 功能引导：tour 库不出 shell/tour/、目标标记不能是死的 ─────────────────
+//
+// driver.js 对字符串目标是 `document.querySelector(e)`，发生在 node_modules 里 ——
+// 上面的 `unscoped-dom-query` 看不见。所以把库锁在一个目录里，那个目录的 `targets.ts`
+// 只暴露函数形态的目标（类型上传不了字串），并且它自己的查询都带 `data-tab` 作用域。
+const TOUR_DIR = path.join('packages', 'platform', 'src', 'shell', 'tour')
+for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src']) {
+  for (const file of tsFiles(dir)) {
+    if (rel(file).startsWith(TOUR_DIR)) continue
+    const src = stripComments(fs.readFileSync(file, 'utf8'))
+    if (/from\s+['"]driver\.js/.test(src) || /import\s*\(\s*['"]driver\.js/.test(src)) {
+      add('error', rel(file), 'tour-lib-outside-tour-dir', `import 了 driver.js —— 只能在 ${TOUR_DIR}/ 里 import，别处拿 startTour() / TourDef`)
+    }
+  }
+}
+
+// 步骤里 `inShell('x')` / `inTab(key, 'x')` 引用的 id，源码里必须有对应的 `data-tour="x"`。
+// 和 ctx:check 的 dead-testid 同一物种：目标标记被改名 / 删掉后导览照样「跑」，
+// 只是那一步没了（`resolveSteps` 会把它过滤掉），typecheck / lint / E2E 全绿。
+{
+  const referenced = new Map() // id -> 首个引用处
+  for (const file of tsFiles('packages/platform/src')) {
+    const src = stripComments(fs.readFileSync(file, 'utf8'))
+    for (const m of src.matchAll(/\binShell\(\s*['"]([^'"]+)['"]/g)) referenced.set(m[1], referenced.get(m[1]) ?? rel(file))
+    for (const m of src.matchAll(/\binTab\([^,]+,\s*['"]([^'"]+)['"]/g)) referenced.set(m[1], referenced.get(m[1]) ?? rel(file))
+  }
+  const defined = new Map() // id -> 首个定义处
+  for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src']) {
+    for (const file of tsFiles(dir)) {
+      const src = stripComments(fs.readFileSync(file, 'utf8'))
+      for (const m of src.matchAll(/data-tour=\{?['"]([^'"]+)['"]/g)) defined.set(m[1], defined.get(m[1]) ?? rel(file))
+    }
+  }
+  for (const [id, where] of referenced) {
+    if (!defined.has(id)) add('error', where, 'dead-tour-target', `导览步骤引用了 data-tour="${id}"，但源码里没有这个标记 —— 那一步会静默消失`)
+  }
+  for (const [id, where] of defined) {
+    if (!referenced.has(id)) add('warn', where, 'unused-tour-target', `data-tour="${id}" 没有任何导览步骤引用它`)
+  }
+  // 🔴 先断言「有」：一条引用都扫不到时「没有死目标」天然成立
+  if (referenced.size === 0) add('error', TOUR_DIR, 'tour-scanner-broken', '没扫到任何 inShell() / inTab() 引用，扫描器可能坏了')
+}
+
 // ── 品牌信息：版本号不能写死 ──────────────────────────────────────────
 //
 // `apps/web/src/lib/brand.ts` 的开头写着「改名字、改版本只动这里」，
@@ -404,7 +454,7 @@ for (const [where, ps] of byWhere) {
 }
 
 console.log(
-  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 品牌版本 · E2E 断言 · 错误 ${errors.length} · 警告 ${warns.length}`,
+  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 功能引导两条 · 品牌版本 · E2E 断言 · 错误 ${errors.length} · 警告 ${warns.length}`,
 )
 if (!problems.length) console.log('[ok] 没有漂')
 process.exit(errors.length ? 1 : 0)
