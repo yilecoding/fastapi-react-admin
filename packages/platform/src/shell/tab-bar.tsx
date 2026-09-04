@@ -178,6 +178,7 @@ export function TabBar() {
         tabStyle === 'underline' && 'h-9'
       )}
       data-style={tabStyle}
+      data-tour="tab-bar"
       data-testid="tab-bar"
     >
       {overflow.left && (

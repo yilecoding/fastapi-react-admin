@@ -338,3 +338,43 @@ socket 这条通道也要做一遍「这个人能不能看这条」的权限判�
 
 `Kbd` / `KbdGroup`（`ui/components/kbd.tsx`）终于有调用方了：面板底部提示条、
 顶栏按钮上的 `⌘K`、快捷键清单三处。
+
+## 功能引导（`shell/tour/`，driver.js）
+
+选型与被排除的库（Shepherd / Intro.js 是 AGPL）见 issue #98。这里只记接进这个外壳时
+会**静默**坏的东西。
+
+| 文件 | 职责 |
+|---|---|
+| `tour/targets.ts` | 目标解析：`inShell(id)` · `inTab(tabKey, id)` · `tabFrame(tabKey)`，**只暴露函数**，写不了裸选择器 |
+| `tour/tour.ts` | `startTour(def, { userId })` · `resolveSteps()` · `tourSeen` / `markTourSeen`；**唯一**允许 import `driver.js` 的地方 |
+| `tour/shell-tour.ts` | 外壳导览七步（侧边栏 · 多页签 · 页面内容 · ⌘K · 铃铛 · 个人中心 · 帮助） |
+| `tour/tour-autostart.tsx` | 首登在仪表盘自动弹一次，挂在 `_auth.tsx` |
+| `help-menu.tsx` | 顶栏 `?` 按钮：重看功能引导 · 快捷键清单。**看得见的入口**，⌘K 里那条只有知道去搜的人才找得到；阶段 2 的「本页导览」也放这里 |
+| `tour/tour.css` | driver.css 的主题映射，跟 `--popover` / `--radius` / `.dark` 走 |
+| `preferences.ts` 的 `toursSeen` | `"<userId>:<tourId>" → 版本号`。是「人」的属性，v1 先放这里，落库时只动 `tour.ts` 两个函数 |
+
+加一步 = `shell-tour.ts` 加一条 + 目标元素加 `data-tour="…"` + 两个语言包加文案。
+漏第二步 `arch:check` 的 `dead-tour-target` 红，漏第三步 `i18n:check` 红。
+**不要复用 `data-testid` 当目标**：测试和引导的生命周期不一样。
+
+四条实测出来的：
+
+- 🔴 **裸选择器会命中隐藏页签，而 `arch:check` 看不见。** driver.js 对字串目标是
+  `document.querySelector(e)`（1.8.0 产物实读），发生在 node_modules 里，`unscoped-dom-query`
+  只扫源码。所以 `TourTarget` 只接受函数、`inTab` 按 tab key 锁、`inShell` 排除 `[data-tab] *`，
+  再加一道 `isRendered()`（隐藏页签里的元素 `getClientRects()` 为空）。
+  变异验证：把 `tabFrame` 改成不锁 key → E2E 第 2 条当场红（那一步直接消失）
+- 🔴 **找不到目标 driver.js 不报错，换一个 0×0 的 dummy 居中弹**（`skipMissingElement` 默认
+  false）。RBAC 藏掉按钮的用户会看到一个讲「点这里」却什么都没高亮的弹窗。`resolveSteps()`
+  启动前先过滤，一步不剩就不启动、不记看过。变异验证：去掉过滤 → 进度从 `1 / 5` 变 `1 / 6`
+- 🔴 **「看过了」在启动成功时记，不放 `onDestroyed`。** driver.js 只在高亮过渡（400ms）跑完
+  才写 `__activeElement`，而 destroy 只在有活动元素时才调钩子 —— 气泡一出就按 Esc，钩子
+  **一次都不跑**、没有报错。实测：Playwright 里按 Esc 后 `localStorage.setItem` 零调用，刷新又弹
+- ⚠️ **`progressText` 不能套 `t()`**：driver.js 的占位符是 `{{current}}` / `{{total}}`，和 i18next
+  同形，会被当插值吃掉。另：走过的步骤身上 `driver-active-element` 类**留着**（destroy 时才统一摘），
+  E2E 要定位当前高亮元素得加别的限定（`.driver-active-element[data-tab]`）
+
+E2E：`e2e/tests/tour.spec.ts`。**fixture 默认把外壳导览标成已看过**（`seedTourSeen`），
+否则每条落到 `/dashboard` 的用例首屏都是一层遮罩、所有点击被挡，整套一起红而报错各不相同。
+

@@ -1,0 +1,87 @@
+/*
+ * driver.js 气泡的主题映射。driver.css 里全是写死的 #fff / #2d2d2d，
+ * 这里把它接到 globals.css 的语义色上 —— 深色模式随 `.dark` 下的变量自动跟随，
+ * 密度偏好改 `--radius` / 字号时气泡一起变。
+ *
+ * 选择器都带 `.admin-tour`（`startTour()` 里的 `popoverClass`），特异性压过 driver.css
+ * 的单类选择器；这份文件在 tour.ts 里紧跟 driver.css 之后 import，顺序也在后面。
+ *
+ * ⚠️ 箭头要按四个方向分别写。driver.css 用 `border: 5px solid #fff` 再把三边设透明来画
+ * 三角形，统一改 `border-color` 会把四边都染上 —— 变成一个方块。
+ */
+.driver-popover.admin-tour {
+  font-family: var(--font-sans);
+  color: var(--popover-foreground);
+  background-color: var(--popover);
+  border-radius: var(--radius);
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent),
+    0 8px 24px -12px rgb(0 0 0 / 0.35);
+  min-width: 16rem;
+  max-width: 20rem;
+  padding: 1rem;
+}
+
+.admin-tour .driver-popover-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.4;
+  padding-right: 1.5rem;
+}
+
+.admin-tour .driver-popover-description {
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--muted-foreground);
+}
+
+.admin-tour .driver-popover-close-btn {
+  color: var(--muted-foreground);
+  border-radius: calc(var(--radius) * 0.6);
+}
+.admin-tour .driver-popover-close-btn:hover,
+.admin-tour .driver-popover-close-btn:focus-visible {
+  color: var(--foreground);
+}
+
+.admin-tour .driver-popover-progress-text {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-tour .driver-popover-footer-btn {
+  font-family: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: calc(var(--radius) * 0.8);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  background-color: var(--background);
+  text-shadow: none;
+}
+.admin-tour .driver-popover-footer-btn:hover,
+.admin-tour .driver-popover-footer-btn:focus {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+.admin-tour .driver-popover-footer-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.admin-tour .driver-popover-next-btn {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background-color: var(--primary);
+}
+.admin-tour .driver-popover-next-btn:hover,
+.admin-tour .driver-popover-next-btn:focus {
+  color: var(--primary-foreground);
+  background-color: color-mix(in oklch, var(--primary) 90%, black);
+}
+
+.admin-tour .driver-popover-arrow-side-left { border-left-color: var(--popover); }
+.admin-tour .driver-popover-arrow-side-right { border-right-color: var(--popover); }
+.admin-tour .driver-popover-arrow-side-top { border-top-color: var(--popover); }
+.admin-tour .driver-popover-arrow-side-bottom { border-bottom-color: var(--popover); }

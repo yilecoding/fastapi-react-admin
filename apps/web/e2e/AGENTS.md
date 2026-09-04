@@ -327,6 +327,7 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 | `notification.spec.ts` | 红点走 REST 不只靠 socket；取数失败显示 `!` | 断线期间的通知在红点上**永远看不见** |
 | `menu-dead-link.spec.ts` | 死链判定的漏报**和**误报（那 3 个假死链的回归） | 侧边栏静默跳过一条配好的菜单；或者反过来，人去修一个没坏的东西 |
 | `file-upload.spec.ts` | 上传闭环 + 未登录时两条读取路径都拿不到文件 | `UPLOAD_DIR` 挪回 `STATIC_DIR` 下的话功能全对，只是文件全公开了 |
+| `tour.spec.ts` | 功能引导：看过不再弹 · 两个页签时高亮**可见**的那个（硬纪律 5）· 缺目标的步骤被跳过 | 刷新又弹 / 高亮到隐藏页签 / 一个居中的空弹窗，三种都不报错。fixture 默认 `seedTourSeen`，否则整套用例被遮罩挡住 |
 
 **没有**做视觉回归、没有覆盖其余列表页的筛选组合——那些页面共用同一套模板，
 测一次模板 + 抽样几页就够，不是每页都要单独写一条（`query-bar.spec.ts` 就是
