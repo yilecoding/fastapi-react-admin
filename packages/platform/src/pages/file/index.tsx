@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { IconLayoutGrid, IconLayoutList, IconTrash, IconUpload, IconX } from '@tabler/icons-react'
 
+import { Alert } from '@admin/ui/components/alert'
 import { Button } from '@admin/ui/components/button'
 import { DataTablePagination } from '@admin/ui/components/data-table'
 import { QueryError } from '@admin/ui/components/query-error'
@@ -288,13 +289,9 @@ export function FilePage({
             </div>
 
             {actionError && (
-              <p
-                role="alert"
-                data-testid="file-error"
-                className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-              >
+              <Alert tone="danger" data-testid="file-error">
                 {actionError}
-              </p>
+              </Alert>
             )}
 
             {/* 内容区。后台取数时整块降透明，但**不换成骨架** ——

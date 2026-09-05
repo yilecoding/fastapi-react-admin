@@ -1,6 +1,8 @@
 # packages/api —— 后端契约，两端共用的那一份
 
-> 这份文件是根 `CLAUDE.md` 的**模块分册**，Claude Code 读到本目录下的文件时才加载它。
+> 这份文件是根 [`CLAUDE.md`](../../CLAUDE.md) 的**模块分册**，Claude Code 读到本目录下的文件时
+> 才把它加载进上下文（惰性加载），所以它可以写得比根文件细。跨模块的硬纪律只在根
+> `CLAUDE.md` 里有一份；**新增结论请追加到离代码最近的那一份**。
 
 **最底层之一**（和 `packages/i18n` 同一个物种）：**不依赖任何 workspace 包**，
 也不依赖任何运行时 —— 没有 DOM、没有 React Native、没有 React。

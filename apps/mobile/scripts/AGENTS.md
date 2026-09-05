@@ -1,6 +1,8 @@
 # apps/mobile/scripts —— 起服务 · 打包 · 连设备
 
-> 这份文件是 [`apps/mobile` 分册](../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的文件时才加载它。
+> 这份文件是 [`apps/mobile` 分册](../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的
+> 文件时才把它加载进上下文（惰性加载）。跨模块的硬纪律只在根 `CLAUDE.md` 里有一份；
+> **新增结论请追加到离代码最近的那一份**。
 
 ```
 dev.mjs   `pnpm mobile:dev` —— 挑一个能连的地址 · adb reverse · 探活后端

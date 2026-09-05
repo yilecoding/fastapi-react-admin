@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../../lib/i18n"
 import { IconPlus, IconSearch, IconSelector, IconX } from "@tabler/icons-react"
 
 import { Button } from "@admin/ui/components/button"
@@ -68,7 +68,7 @@ export function BasicFilter({
   onSubmit?: () => void
   errors?: QueryErrors
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const byKey = React.useMemo(() => indexFields(fields), [fields])
 
   const patch = (id: string, next: Condition) =>
@@ -222,7 +222,7 @@ function OperatorPicker({
   onChange: (op: Operator) => void
   testId?: string
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -276,7 +276,7 @@ export function FieldPicker({
   conditions: readonly Condition[]
   onChange: (next: Condition[]) => void
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const [q, setQ] = React.useState("")
   const used = React.useMemo(() => new Set(conditions.map((c) => c.field)), [conditions])
 

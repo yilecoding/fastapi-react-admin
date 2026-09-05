@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../lib/i18n"
 import { IconCalendar, IconClock } from "@tabler/icons-react"
 import type { DateRange } from "react-day-picker"
 
@@ -153,7 +153,7 @@ export function DateTimeValuePicker({
   "aria-label"?: string
   "data-testid"?: string
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const [open, setOpen] = React.useState(false)
   const date = parseDateStr(value)
 
@@ -254,7 +254,7 @@ export function DateTimeRangePicker({
   "aria-label"?: string
   "data-testid"?: string
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const [open, setOpen] = React.useState(false)
   const [start, end] = value ?? [undefined, undefined]
   const range: DateRange | undefined = React.useMemo(() => {

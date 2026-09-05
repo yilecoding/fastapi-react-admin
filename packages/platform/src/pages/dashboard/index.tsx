@@ -4,9 +4,10 @@ import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
-  IconAlertTriangle, IconArrowRight, IconLoader2, IconRefresh,
+  IconArrowRight, IconLoader2, IconRefresh,
 } from '@tabler/icons-react'
 
+import { Alert } from '@admin/ui/components/alert'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { QueryError } from '@admin/ui/components/query-error'
@@ -102,11 +103,7 @@ export function DashboardPage() {
 
           {/* 今日有登录失败就顶上去 —— 这是这一页最该被看见的一条 */}
           {fails > 0 && (
-            <div
-              className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
-              data-testid="dash-fail-alert"
-            >
-              <IconAlertTriangle className="size-4 shrink-0" />
+            <Alert tone="warning" data-testid="dash-fail-alert" className="items-center [&>div]:flex-row [&>div]:flex-wrap [&>div]:items-center [&>div]:gap-2">
               {/* 整句一个 key —— 拆成「前半 t() + <strong> + 后半 t()」换英文语序就散架 */}
               <span>
                 <Trans
@@ -126,7 +123,7 @@ export function DashboardPage() {
                   {t('查看明细')} <IconArrowRight className="size-3.5" />
                 </Link>
               )}
-            </div>
+            </Alert>
           )}
 
           {/* ── 今日指标 ── */}

@@ -1,6 +1,8 @@
 # apps/api/backend/tests —— 跑后端测试
 
-> 这份文件是 [`apps/api` 分册](../../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的文件时才加载它。
+> 这份文件是 [`apps/api` 分册](../../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的
+> 文件时才把它加载进上下文（惰性加载）。跨模块的硬纪律只在根 `CLAUDE.md` 里有一份；
+> **新增结论请追加到离代码最近的那一份**。
 
 ⚠️ 测试**不只在这个目录**：`app/admin/tests/` · `app/task/tests/` ·`plugin/*/tests/` 各有一批。这里记的是「怎么跑」和跑不起来时的判据。
 

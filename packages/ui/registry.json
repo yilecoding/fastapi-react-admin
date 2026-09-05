@@ -1,0 +1,1004 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "fastapi-react-admin",
+  "homepage": "https://github.com/yilecoding/fastapi-react-admin",
+  "items": [
+    {
+      "name": "accordion",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/accordion.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "alert",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react",
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "button",
+        "i18n",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/alert.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "avatar",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/avatar.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "badge",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/badge.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "breadcrumb",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/breadcrumb.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "button",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/button.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "calendar",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react",
+        "react-day-picker"
+      ],
+      "registryDependencies": [
+        "button",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/calendar.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "card",
+      "type": "registry:ui",
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/card.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "checkbox",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/checkbox.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "collapsible",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react"
+      ],
+      "files": [
+        {
+          "path": "src/components/collapsible.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "combobox",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/combobox.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "command-palette",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "dialog",
+        "i18n",
+        "kbd",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/command-palette.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "context-menu",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/context-menu.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "copy-button",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "button",
+        "i18n",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/copy-button.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "data-grid",
+      "type": "registry:ui",
+      "dependencies": [
+        "@dnd-kit/core",
+        "@dnd-kit/modifiers",
+        "@dnd-kit/sortable",
+        "@dnd-kit/utilities",
+        "@tabler/icons-react",
+        "@tanstack/react-table",
+        "@tanstack/react-virtual"
+      ],
+      "registryDependencies": [
+        "button",
+        "checkbox",
+        "context-menu",
+        "input",
+        "input-group",
+        "pagination",
+        "popover",
+        "separator",
+        "skeleton",
+        "table",
+        "toggle-group",
+        "tooltip",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/data-grid/bulk-bar.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/data-grid/column-filter.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/data-grid/column-settings.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/data-grid/columns.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/data-grid/density.ts",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/data-grid/index.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/data-grid/pagination.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/data-grid/toolbar.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/data-grid/use-grid-view.ts",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "data-table",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react",
+        "@tanstack/react-table"
+      ],
+      "registryDependencies": [
+        "badge",
+        "button",
+        "dropdown-menu",
+        "i18n",
+        "pagination",
+        "popover",
+        "query-error",
+        "separator",
+        "skeleton",
+        "table",
+        "tooltip"
+      ],
+      "files": [
+        {
+          "path": "src/components/data-table.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "datetime-picker",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react",
+        "react-day-picker"
+      ],
+      "registryDependencies": [
+        "button",
+        "calendar",
+        "i18n",
+        "input",
+        "popover",
+        "separator",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/datetime-picker.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "descriptions",
+      "type": "registry:ui",
+      "registryDependencies": [
+        "copy-button",
+        "i18n",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/descriptions.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "dialog",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "button",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/dialog.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "dropdown-menu",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/dropdown-menu.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "field",
+      "type": "registry:ui",
+      "dependencies": [
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "label",
+        "separator",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/field.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "file-viewer",
+      "type": "registry:ui",
+      "dependencies": [
+        "@file-viewer/core",
+        "@file-viewer/react",
+        "@file-viewer/renderer-archive",
+        "@file-viewer/renderer-image",
+        "@file-viewer/renderer-pdf",
+        "@file-viewer/renderer-spreadsheet",
+        "@file-viewer/renderer-text",
+        "@file-viewer/renderer-word"
+      ],
+      "registryDependencies": [
+        "skeleton",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/file-viewer/index.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/file-viewer/viewer.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "input",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/input.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "input-group",
+      "type": "registry:ui",
+      "dependencies": [
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "button",
+        "input",
+        "textarea",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/input-group.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "kbd",
+      "type": "registry:ui",
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/kbd.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "label",
+      "type": "registry:ui",
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/label.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "multi-select",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "checkbox",
+        "i18n",
+        "separator",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/multi-select.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "pagination",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "button",
+        "i18n",
+        "label",
+        "select",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/pagination.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "popover",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/popover.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "progress",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/progress.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "query-bar",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "button",
+        "checkbox",
+        "combobox",
+        "datetime-picker",
+        "dropdown-menu",
+        "i18n",
+        "input",
+        "input-group",
+        "multi-select",
+        "popover",
+        "select",
+        "separator",
+        "toggle-group",
+        "tooltip",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/query-bar/advanced.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/query-bar/basic.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/query-bar/field-control.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/query-bar/index.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/query-bar/params.ts",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/query-bar/types.ts",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/query-bar/validate.ts",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/query-bar/value.ts",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/query-bar/views.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "query-error",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "button",
+        "i18n"
+      ],
+      "files": [
+        {
+          "path": "src/components/query-error.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "radio-group",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/radio-group.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "rich-text",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react",
+        "@tiptap/core",
+        "@tiptap/extension-file-handler",
+        "@tiptap/extension-image",
+        "@tiptap/extension-text-align",
+        "@tiptap/extensions",
+        "@tiptap/pm",
+        "@tiptap/react",
+        "@tiptap/starter-kit"
+      ],
+      "registryDependencies": [
+        "button",
+        "i18n",
+        "input",
+        "popover",
+        "separator",
+        "tooltip",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/rich-text/images.ts",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/rich-text/index.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/rich-text/prose.ts",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/rich-text/toolbar.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/rich-text/upload-placeholder.ts",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "select",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/select.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "separator",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/separator.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "sheet",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "button",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/sheet.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "sidebar",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "@tabler/icons-react",
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "button",
+        "i18n",
+        "input",
+        "separator",
+        "sheet",
+        "skeleton",
+        "tooltip",
+        "use-mobile",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/sidebar.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "skeleton",
+      "type": "registry:ui",
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/skeleton.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "switch",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/switch.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "table",
+      "type": "registry:ui",
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/table.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "tabs",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/tabs.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "textarea",
+      "type": "registry:ui",
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/textarea.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "toast",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "i18n",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/toast.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "toggle",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/toggle.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "toggle-group",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react",
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "toggle",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/toggle-group.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "tooltip",
+      "type": "registry:ui",
+      "dependencies": [
+        "@base-ui/react"
+      ],
+      "registryDependencies": [
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/tooltip.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "tree",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "checkbox",
+        "i18n",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/tree-state.ts",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/tree.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "utils",
+      "type": "registry:lib",
+      "dependencies": [
+        "clsx",
+        "tailwind-merge"
+      ],
+      "files": [
+        {
+          "path": "src/lib/utils.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
+      "name": "i18n",
+      "type": "registry:lib",
+      "dependencies": [
+        "react-i18next"
+      ],
+      "files": [
+        {
+          "path": "src/lib/i18n.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
+      "name": "use-mobile",
+      "type": "registry:hook",
+      "files": [
+        {
+          "path": "src/hooks/use-mobile.ts",
+          "type": "registry:hook"
+        }
+      ]
+    }
+  ]
+}

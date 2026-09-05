@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { Toast as ToastPrimitive } from "@base-ui/react/toast"
-import { useTranslation } from "react-i18next"
+import { useT } from "../lib/i18n"
 import {
   IconAlertTriangle,
   IconCircleCheck,
@@ -148,7 +148,7 @@ const TONE_CLASS: Record<ToastTone, string> = {
 }
 
 function ToastItem({ toast: item }: { toast: ToastPrimitive.Root.ToastObject }) {
-  const { t } = useTranslation()
+  const t = useT()
   const position = React.useContext(ToastPositionContext)
   // promise() 的 loading 阶段不带 type，按 loading 处理（转圈比信息图标准）
   const tone = (item.type as ToastTone | undefined) ?? "loading"
