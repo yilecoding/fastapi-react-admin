@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../lib/i18n"
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"
@@ -255,7 +255,7 @@ function SidebarTrigger({
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
-  const { t } = useTranslation()
+  const t = useT()
   const { toggleSidebar } = useSidebar()
 
   return (
@@ -278,7 +278,7 @@ function SidebarTrigger({
 }
 
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
-  const { t } = useTranslation()
+  const t = useT()
   const { toggleSidebar } = useSidebar()
 
   return (

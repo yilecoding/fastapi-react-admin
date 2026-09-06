@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../../lib/i18n"
 import { IconCopy, IconFolderPlus, IconPlus, IconX } from "@tabler/icons-react"
 
 import { Button } from "@admin/ui/components/button"
@@ -69,7 +69,7 @@ function GroupNode({
   onSubmit?: () => void
   errors?: QueryErrors
 }) {
-  const { t } = useTranslation()
+  const t = useT()
 
   const patchChild = (id: string, next: Condition | ConditionGroup | null) =>
     onChange({
@@ -182,7 +182,7 @@ function LogicSelect({
   onChange: (v: "and" | "or") => void
   testId?: string
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   // items 是**关闭态**的标签源，必须在渲染处翻 —— 传中文常量进去等于关闭态永不翻译
   const items = React.useMemo(
     () => ({ and: t("全部满足"), or: t("任一满足") }),
@@ -216,7 +216,7 @@ function ConditionRow({
   onDuplicate: () => void
   onSubmit?: () => void
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const field = fields.find((f) => f.key === cond.field) ?? fields[0]!
   const ops = operatorsOf(field)
 

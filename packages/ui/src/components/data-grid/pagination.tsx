@@ -1,20 +1,16 @@
-"use client"
-
-import {
-  IconChevronLeft,
-  IconChevronRight,
-  IconChevronsLeft,
-  IconChevronsRight,
-} from "@tabler/icons-react"
-
-import { Button } from "@admin/ui/components/button"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@admin/ui/components/select"
+/**
+ * data-grid 的分页条。
+ *
+ * 实现已经搬到 `components/pagination.tsx`（全站唯一一份，`DataTable` 也用它）。
+ * 这里只剩一层适配：把 grid 的 `page` 对象摊平成 `Pagination` 的 props，
+ * 并钉住 `grid-*` 这组 testid。
+ *
+ * 🔴 **原来这里是一份独立实现**，和 `DataTable` 那份行为一致但细节全不同：
+ * 每页选项 `[10,20,50,100]` vs `[10,20,30,50]`、页码显示 `1 / 9` vs `第 1 / 9 页`、
+ * 而且**整份硬编码中文**（这个目录在 i18n 的 SKIP_DIRS 里）。
+ * 于是同一个产品里有两种分页条，切到用 data-grid 的页面就换一种说法。
+ */
+import { Pagination } from "@admin/ui/components/pagination"
 
 export type GridPagination = {
   /** 0 起 */
@@ -27,55 +23,6 @@ export type GridPagination = {
   pageSizeOptions?: number[]
 }
 
-const DEFAULT_SIZES = [10, 20, 50, 100]
-
 export function DataGridPagination({ page }: { page: GridPagination }) {
-  const sizes = page.pageSizeOptions ?? DEFAULT_SIZES
-  const items = Object.fromEntries(sizes.map((s) => [String(s), `${s} / 页`]))
-  const cur = page.pageIndex + 1
-  const last = Math.max(1, page.pageCount)
-
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-sm text-muted-foreground">
-      <span data-testid="grid-total">共 {page.totalCount} 条</span>
-
-      <div className="flex items-center gap-3">
-        <Select
-          value={String(page.pageSize)}
-          items={items}
-          onValueChange={(v: string | null) => v && page.onPageSizeChange(Number(v))}
-        >
-          <SelectTrigger className="h-8 w-24" data-testid="grid-page-size">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {sizes.map((s) => (
-              <SelectItem key={s} value={String(s)}>{s} / 页</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <span className="tabular-nums" data-testid="grid-page-indicator">{cur} / {last}</span>
-
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" className="size-8" aria-label="首页"
-                  disabled={cur <= 1} onClick={() => page.onPageChange(0)} data-testid="grid-page-first">
-            <IconChevronsLeft className="size-4" />
-          </Button>
-          <Button variant="outline" size="icon" className="size-8" aria-label="上一页"
-                  disabled={cur <= 1} onClick={() => page.onPageChange(page.pageIndex - 1)} data-testid="grid-page-prev">
-            <IconChevronLeft className="size-4" />
-          </Button>
-          <Button variant="outline" size="icon" className="size-8" aria-label="下一页"
-                  disabled={cur >= last} onClick={() => page.onPageChange(page.pageIndex + 1)} data-testid="grid-page-next">
-            <IconChevronRight className="size-4" />
-          </Button>
-          <Button variant="outline" size="icon" className="size-8" aria-label="末页"
-                  disabled={cur >= last} onClick={() => page.onPageChange(last - 1)} data-testid="grid-page-last">
-            <IconChevronsRight className="size-4" />
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
+  return <Pagination {...page} testIdPrefix="grid" />
 }

@@ -1,8 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { IconCheck, IconCopy } from '@tabler/icons-react'
 
-import { Button } from '@admin/ui/components/button'
+import { CopyButton } from '@admin/ui/components/copy-button'
 import { cn } from '@admin/ui/lib/utils'
 
 /**
@@ -79,44 +78,4 @@ function highlight(src: string): React.ReactNode {
   }
   if (last < src.length) parts.push(src.slice(last))
   return parts
-}
-
-export function CopyButton({
-  text,
-  className,
-  label,
-}: {
-  text: string
-  className?: string
-  label?: string
-}) {
-  const { t } = useTranslation()
-  const [done, setDone] = React.useState(false)
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      aria-label={label ?? t('复制')}
-      title={label ?? t('复制')}
-      className={cn('size-6 shrink-0', className)}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text)
-        } catch {
-          // 非安全上下文（http + 非 localhost）没有 clipboard API，退回选中
-          const ta = document.createElement('textarea')
-          ta.value = text
-          document.body.appendChild(ta)
-          ta.select()
-          document.execCommand('copy')
-          ta.remove()
-        }
-        setDone(true)
-        setTimeout(() => setDone(false), 1400)
-      }}
-    >
-      {done ? <IconCheck className="size-3.5 text-emerald-600" /> : <IconCopy className="size-3.5" />}
-    </Button>
-  )
 }

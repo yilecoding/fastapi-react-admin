@@ -3,7 +3,6 @@ import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { useQueryClient } from "@tanstack/react-query"
 import {
-  IconAlertTriangle,
   IconArrowRight,
   IconDeviceMobile,
   IconEye,
@@ -18,6 +17,7 @@ import {
 
 import { login } from "@admin/platform/auth/session"
 import { ApiError } from "@admin/platform/api-client/errors"
+import { Alert } from "@admin/ui/components/alert"
 import { Button } from "@admin/ui/components/button"
 import { Checkbox } from "@admin/ui/components/checkbox"
 import {
@@ -317,13 +317,9 @@ function SignInPage() {
                   )}
 
                   {error && (
-                    <p
-                      data-testid="login-error"
-                      className="flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive ring-1 ring-destructive/20"
-                    >
-                      <IconAlertTriangle className="mt-0.5 size-4 shrink-0" />
+                    <Alert tone="danger" data-testid="login-error">
                       {error}
-                    </p>
+                    </Alert>
                   )}
 
                   <Button

@@ -1,17 +1,20 @@
-import * as React from 'react'
+
 import { Trans, useTranslation } from 'react-i18next'
 
 import { formatDateTime, t as tr } from '@admin/i18n'
+import { Alert } from '@admin/ui/components/alert'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
+import { CopyButton } from '@admin/ui/components/copy-button'
+import { Descriptions, DescriptionItem } from '@admin/ui/components/descriptions'
 import {
   Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from '@admin/ui/components/sheet'
-import { Separator } from '@admin/ui/components/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
 import { cn } from '@admin/ui/lib/utils'
 
-import { CopyButton, JsonViewer } from '../_shared/json-viewer'
+import { JsonViewer } from '../_shared/json-viewer'
+import { DetailIdRow, DetailSection } from '../_shared/detail-sheet'
 import { StatusPill } from '../_shared/status'
 import type { OperaLog } from './index'
 
@@ -64,39 +67,36 @@ export function OperaLogDetailSheet({
 
         <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 py-2">
           {/* ── 基本信息 ── */}
-          <Section title={t("基本信息")}>
+          <DetailSection title={t("基本信息")}>
             {/* 19 位雪花 ID 与 32 位 trace 放半列里必然折行，单独占整行 */}
             <div className="mb-3 grid grid-cols-1 gap-2 rounded-md border border-border bg-muted/30 p-2.5 sm:grid-cols-2">
-              <IdRow label={t("日志 ID")} value={log.id} />
-              <IdRow label="Trace ID" value={log.trace_id} testId="d-trace" />
+              <DetailIdRow label={t('日志 ID')} value={log.id} labelWidth="w-16" />
+              <DetailIdRow label="Trace ID" value={log.trace_id} testId="d-trace" labelWidth="w-16" />
             </div>
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
-              <Row label={t("操作人")} value={log.username ?? t('匿名')} />
-              <Row label={t("操作时间")} value={formatDateTime(log.opera_time)} mono />
-              <Row label={t("操作内容")} value={t(log.title)} />
-              <Row label={t("请求方法")} value={log.method} mono />
-              <Row label={t("操作 IP")} value={log.ip} mono copy />
-              <Row label={t("操作地点")} value={formatLocation(log)} />
-              <Row label={t("浏览器")} value={log.browser ?? '—'} />
-              <Row label={t("终端系统")} value={`${log.os ?? '—'}${log.device ? ` · ${log.device}` : ''}`} />
-              <Row
-                label={t("状态")}
-                node={
-                  <span className="flex items-center gap-1.5">
-                    <StatusPill tone={ok ? 'success' : 'danger'}>{ok ? t('成功') : t('异常')}</StatusPill>
-                    <Badge variant="outline" className="font-mono font-normal">{log.code}</Badge>
-                  </span>
-                }
+            <Descriptions columns={2}>
+              <DescriptionItem label={t('操作人')} value={log.username ?? t('匿名')} />
+              <DescriptionItem label={t('操作时间')} value={formatDateTime(log.opera_time)} mono />
+              <DescriptionItem label={t('操作内容')} value={t(log.title)} />
+              <DescriptionItem label={t('请求方法')} value={log.method} mono />
+              <DescriptionItem label={t('操作 IP')} value={log.ip} mono copy />
+              <DescriptionItem label={t('操作地点')} value={formatLocation(log)} />
+              <DescriptionItem label={t('浏览器')} value={log.browser} />
+              <DescriptionItem
+                label={t('终端系统')}
+                value={`${log.os ?? '—'}${log.device ? ` · ${log.device}` : ''}`}
               />
-              <Row
-                label={t("耗时")}
-                node={
-                  <span className={cn('font-mono text-sm tabular-nums', log.cost_time > 500 && 'font-medium text-amber-600 dark:text-amber-400')}>
-                    {log.cost_time.toFixed(1)} ms
-                  </span>
-                }
-              />
-            </dl>
+              <DescriptionItem label={t('状态')}>
+                <span className="flex items-center gap-1.5">
+                  <StatusPill tone={ok ? 'success' : 'danger'}>{ok ? t('成功') : t('异常')}</StatusPill>
+                  <Badge variant="outline" className="font-mono font-normal">{log.code}</Badge>
+                </span>
+              </DescriptionItem>
+              <DescriptionItem label={t('耗时')}>
+                <span className={cn('font-mono text-sm tabular-nums', log.cost_time > 500 && 'font-medium text-amber-600 dark:text-amber-400')}>
+                  {log.cost_time.toFixed(1)} ms
+                </span>
+              </DescriptionItem>
+            </Descriptions>
 
             <div className="mt-3 flex items-start gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
               <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">{t('请求 URI')}</span>
@@ -105,14 +105,14 @@ export function OperaLogDetailSheet({
             </div>
 
             {log.msg && log.msg !== 'Success' && (
-              <p className={cn('mt-2 rounded-md px-3 py-2 text-xs', ok ? 'bg-muted/40 text-muted-foreground' : 'bg-destructive/10 text-destructive ring-1 ring-destructive/25')}>
+              <Alert tone={ok ? 'muted' : 'danger'} icon={false} className="mt-2 py-2 text-xs">
                 {t(log.msg)}
-              </p>
+              </Alert>
             )}
-          </Section>
+          </DetailSection>
 
           {/* ── 响应信息 ── */}
-          <Section title={t("响应信息")}>
+          <DetailSection title={t("响应信息")}>
             <Tabs defaultValue="res-headers">
               <TabsList>
                 <TabsTrigger value="res-headers" data-testid="tab-res-headers">{t('响应头')}</TabsTrigger>
@@ -129,10 +129,10 @@ export function OperaLogDetailSheet({
                 />
               </TabsContent>
             </Tabs>
-          </Section>
+          </DetailSection>
 
           {/* ── 请求信息 ── */}
-          <Section title={t("请求信息")}>
+          <DetailSection title={t("请求信息")}>
             <Tabs defaultValue="req-headers">
               <TabsList>
                 <TabsTrigger value="req-headers" data-testid="tab-req-headers">{t('请求头')}</TabsTrigger>
@@ -165,7 +165,7 @@ export function OperaLogDetailSheet({
                 </div>
               </TabsContent>
             </Tabs>
-          </Section>
+          </DetailSection>
         </div>
 
         <SheetFooter>
@@ -173,66 +173,5 @@ export function OperaLogDetailSheet({
         </SheetFooter>
       </SheetContent>
     </Sheet>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <h3 className="flex items-center gap-2 text-sm font-semibold">
-        <span className="h-3.5 w-[3px] shrink-0 rounded-full bg-primary" aria-hidden />
-        <span className="shrink-0">{title}</span>
-        <Separator className="ms-1 min-w-0 flex-1" />
-      </h3>
-      {children}
-    </section>
-  )
-}
-
-function IdRow({ label, value, testId }: { label: string; value: string; testId?: string }) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-16 shrink-0 text-xs text-muted-foreground">{label}</span>
-      <code className="min-w-0 flex-1 truncate font-mono text-xs tabular-nums" title={value} data-testid={testId}>
-        {value}
-      </code>
-      <CopyButton text={value} label={t('复制{{what}}', { what: label })} />
-    </div>
-  )
-}
-
-function Row({
-  label, value, node, mono, copy, 'data-testid': testId,
-}: {
-  label: string
-  value?: string | number
-  node?: React.ReactNode
-  mono?: boolean
-  copy?: boolean
-  'data-testid'?: string
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex items-baseline gap-2">
-      <dt className="w-16 shrink-0 text-xs text-muted-foreground">{label}</dt>
-      <dd className="flex min-w-0 flex-1 items-center gap-1">
-        {node ?? (
-          <span
-            className={cn(
-              'min-w-0 text-sm',
-              // ID / trace 这类定长值必须完整可见 —— 截断了等于没显示，
-              // 所以允许折行而不是 truncate
-              mono ? 'font-mono text-xs break-all tabular-nums' : 'truncate'
-            )}
-            title={String(value ?? '')}
-            data-testid={testId}
-          >
-            {value ?? '—'}
-          </span>
-        )}
-        {copy && value !== undefined && <CopyButton text={String(value)} label={t('复制{{what}}', { what: label })} />}
-      </dd>
-    </div>
   )
 }
