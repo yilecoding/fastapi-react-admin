@@ -12,6 +12,9 @@
  *
  * 用法：pnpm ctx:check          （有 error 退出码 1）
  *      pnpm ctx:check --quiet  （只打错误）
+ *
+ * 规则见 `scripts/AGENTS.md`。加规则时**先造一个反例验证它会红** ——
+ * 一条永远不报的检查和没有这条检查是一回事。
  */
 import { readFileSync, existsSync, readdirSync, lstatSync } from 'node:fs'
 import { join, relative, dirname, resolve } from 'node:path'
@@ -81,8 +84,12 @@ const ctxFiles = allFiles
    * 相对链接）。实测：一次人工梳理从这三个文件里翻出 `pnpm --filter web build`
    * 已被硬纪律否掉、Playwright 条数停在 44（实际 54）、闸门清单少两道门。
    * 打开覆盖之后全仓只多出 **2 条**存量（见下面 ALLOW 里那两条），几乎零成本。
+   *
+   * `PORTING.md` 是同一个理由加进来的：它整篇都在报路径和依赖名
+   * （「拷 `src/lib/i18n.ts`」「删掉 `@tiptap/*`」），而它面向的是
+   * **拿走这个包的下家** —— 指错一个路径的代价比内部文档还高。
    */
-  .filter((f) => /(^|\/)(CLAUDE|AGENTS|README|CONTRIBUTING|SECURITY|PULL_REQUEST_TEMPLATE)\.md$/.test(f))
+  .filter((f) => /(^|\/)(CLAUDE|AGENTS|README|CONTRIBUTING|SECURITY|PORTING|PULL_REQUEST_TEMPLATE)\.md$/.test(f))
   // 每个模块目录下是 AGENTS.md（真身）+ CLAUDE.md（符号链接），
   // 不去重的话同一条问题会报两遍
   .filter((f) => !lstatSync(join(ROOT, f)).isSymbolicLink())
@@ -190,6 +197,56 @@ for (const file of ctxFiles) {
     const dir = file.slice(0, -'AGENTS.md'.length)
     const has = allFiles.some((f) => f.startsWith(dir) && SRC_EXT.test(f))
     if (!has) add('error', file, 1, 'empty-scope', `${dir || './'} 下没有任何源码文件`)
+
+    // 8) 分册序言：H1 之后必须有一段声明「我是谁的分册」
+    //
+    // 为什么值得做成规则：这份声明**不是格式洁癖**，它带着两条给下一个人
+    // （和下一个 agent）的指令 —— 「惰性加载，可以写细」和「新增结论追加到
+    //  离代码最近的那一份」。缺了它，写文档的人不知道该往哪儿写，
+    // 于是全堆进根 CLAUDE.md，而根文件超预算就开始掉注意力。
+    //
+    // 实测：28 份分册里 3 份完全没有这段，另有 9 份措辞各不相同
+    // （模块分册长/短两版 + 子分册版混用），而「谁是谁的子册」压根对不上目录层级。
+    //
+    // 判据是**可推导**的，所以能查：目录的某个祖先也有 AGENTS.md → 子分册
+    //（链到最近的那个祖先）；否则 → 模块分册（链到根 CLAUDE.md）。
+    const here = dir.replace(/\/$/, '')
+    let anc = here
+    let parent = null
+    while (anc.includes('/') || anc) {
+      anc = anc.includes('/') ? anc.slice(0, anc.lastIndexOf('/')) : ''
+      if (!anc) break
+      if (fileSet.has(`${anc}/AGENTS.md`)) { parent = `${anc}/AGENTS.md`; break }
+    }
+    // 9) H1 必须点名自己的目录。
+    //
+    // 同时挂着七八份分册时，`# 生产部署` / `# 富文本编辑器` 这种标题不告诉你
+    // 「这是哪个目录的规矩」—— 而分册之间的区别恰恰是目录。
+    // 判据取**目录名**（不是完整路径），所以 `# pages/menu —— 死链判定` 和
+    // `# packages/platform/src/pages/menu —— …` 都算过。
+    const base = here.includes('/') ? here.slice(here.lastIndexOf('/') + 1) : here
+    if (base && !(lines[0] ?? '').includes(base)) {
+      add('error', file, 1, 'anonymous-title',
+        `H1 里没出现目录名 ${base} —— 写成「# <短路径> —— <一句话>」`)
+    }
+
+    const head = lines.slice(0, 15).join('\n')
+    const decl = head.match(/这份文件是[^\n]*?\]\(([^)]+)\)/)
+    if (!decl) {
+      add('error', file, 1, 'missing-preamble',
+        `H1 之后缺「这份文件是…分册」的声明 —— 少了它，下一个人不知道结论该往哪份文件写`)
+    } else {
+      const want = relative(join(ROOT, here), join(ROOT, parent ?? 'CLAUDE.md')).replaceAll('\\', '/')
+      const kind = parent ? '子分册' : '模块分册'
+      if (!head.includes(`**${kind}**`)) {
+        add('error', file, 1, 'wrong-preamble-kind',
+          `${parent ? `它在 ${parent.replace(/\/AGENTS\.md$/, '')} 底下，` : '它不在任何分册底下，'}应该声明成**${kind}**`)
+      }
+      if (decl[1] !== want) {
+        add('error', file, 1, 'wrong-preamble-link',
+          `序言链到了 ${decl[1]}，应该是 ${want}（${parent ?? '根 CLAUDE.md'}）`)
+      }
+    }
   }
 
   lines.forEach((line, i) => {

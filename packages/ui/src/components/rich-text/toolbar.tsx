@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useEditorState, type Editor } from "@tiptap/react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../../lib/i18n"
 import {
   IconAlignCenter, IconAlignLeft, IconAlignRight, IconArrowBackUp, IconArrowForwardUp,
   IconBlockquote, IconBold, IconClearFormatting, IconCode, IconH1, IconH2, IconH3,
@@ -48,7 +48,7 @@ export function RichTextToolbar({
   onPickImage?: () => void
   imageBusy?: boolean
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const s = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -210,7 +210,7 @@ function Item({
 }
 
 function LinkButton({ editor }: { editor: Editor }) {
-  const { t } = useTranslation()
+  const t = useT()
   const [url, setUrl] = React.useState("")
   const [open, setOpen] = React.useState(false)
   // 和上面同理：裸读 isActive 在「只移动光标」时不刷新

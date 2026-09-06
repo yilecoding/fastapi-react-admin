@@ -136,7 +136,12 @@ export function DevSandboxPage({
           query={query}
           onQuery={(q) => onSearchChange?.({ ...search, q: q || undefined })}
           onSelect={(c) => onSearchChange?.({ ...search, c })}
-          className="lg:col-start-1 lg:row-start-1 lg:sticky lg:top-2 lg:self-start"
+          /*
+            🔴 高度上限是 sticky 能生效的前提 —— 元素比视口高时它没有可粘的余量。
+            窄屏是堆叠布局，限 60svh 免得 49 个条目把正文全顶下去；
+            lg 起减掉外壳的顶栏（3rem）+ 标签条（约 2.5rem）+ 呼吸。
+          */
+          className="max-h-[60svh] lg:col-start-1 lg:row-start-1 lg:sticky lg:top-2 lg:max-h-[calc(100svh-7.5rem)] lg:self-start"
         />
 
         <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-1">
@@ -151,6 +156,17 @@ export function DevSandboxPage({
             <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {active.summary}
             </p>
+
+            {/*
+              「什么时候用 / 什么时候别用」。
+              这两行是目录的主要价值，不是装饰 —— 自主型库的失败模式是
+              「下家没看见已经有什么，于是重新造了一个」，而人不会去读
+              AGENTS.md 里那张表，只会翻这个界面。所以那张表搬到这里。
+            */}
+            <div className="mt-1 flex max-w-2xl flex-col gap-1.5">
+              <UseLine tone="use" label="什么时候用" text={active.use} />
+              {active.avoid && <UseLine tone="avoid" label="什么时候别用" text={active.avoid} />}
+            </div>
           </header>
 
           {/*
@@ -231,6 +247,32 @@ export function DevSandboxPage({
         />
       </div>
     </div>
+  )
+}
+
+/** 「什么时候用 / 别用」的一行。左边一条竖色条比图标省地方，也不抢视线 */
+function UseLine({
+  tone,
+  label,
+  text,
+}: {
+  tone: 'use' | 'avoid'
+  label: string
+  text: string
+}) {
+  return (
+    <p
+      data-testid={`sandbox-${tone}`}
+      className={cn(
+        'flex gap-2 border-s-2 ps-2.5 text-sm leading-relaxed',
+        tone === 'use'
+          ? 'border-emerald-500/50 text-foreground/90'
+          : 'border-amber-500/50 text-foreground/80'
+      )}
+    >
+      <span className="shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="min-w-0">{text}</span>
+    </p>
   )
 }
 

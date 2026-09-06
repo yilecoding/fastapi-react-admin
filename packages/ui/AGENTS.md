@@ -2,24 +2,113 @@
 
 > 通用组件的约定与坑。**`ui` 永远不 import `platform`**。
 >
-> 这份文件是根 `CLAUDE.md` 的**模块分册**，Claude Code 在你读到本目录下的文件时
-> 才把它加载进上下文（惰性加载），所以它可以写得比根文件细。跨模块的硬纪律
-> 仍然只在根 `CLAUDE.md` 里有一份。新增结论请追加到**离代码最近**的那一份。
+> 这份文件是根 [`CLAUDE.md`](../../CLAUDE.md) 的**模块分册**，Claude Code 读到本目录下的文件时
+> 才把它加载进上下文（惰性加载），所以它可以写得比根文件细。跨模块的硬纪律只在根
+> `CLAUDE.md` 里有一份；**新增结论请追加到离代码最近的那一份**。
 
 
-## ⚠️ `@admin/i18n` 这条依赖是**运行时**的，不要当成死依赖清掉
+## 这个包的定位：**被下游整包拿走自己改**
 
-`package.json` 里声明了 `@admin/i18n`、`tsconfig.json` 里也有它的路径映射，
-但**全包 0 处 import** —— 看起来是可以删的死依赖。它不是：
+不是「发一个 npm 包给人 import」，是 shadcn 那个模型 ——
+**组件是下游拥有的代码，不是下游消费的包**。用它的人应该能把
+`packages/ui` 拷进自己的项目、按自己的产品直接改，而不是等我们发版、
+提 issue 求一个 prop。
 
-本包的 16 个组件走 `react-i18next` 的 `useTranslation()`，从 **app 层注入的
-context** 里取翻译函数，而那个 i18next 实例是 `@admin/i18n` 建的
-（那个包刻意不依赖 react，React 绑定在 app 层注入 —— 见
-[i18n 分册](../i18n/AGENTS.md)）。所以耦合是真的，只是**不经过 import**：
-少了那个实例，本包所有文案都会原样返回 key。
+拿走这件事怎么做，见 [`PORTING.md`](./PORTING.md)（拷哪些目录、
+`globals.css` 怎么接、翻译怎么注入、哪些开关需要外部提供）。
 
-保留声明是为了让 pnpm 的依赖图和文档里那条箭头（`i18n` / `api` ← `ui`）一致 ——
-根 `CLAUDE.md` 那条硬纪律要求的正是「箭头必须体现在 `package.json` 里」。
+这个定位决定了本包的取舍**和普通组件库不一样**：
+
+| | 消费型库（npm 包） | 本包（拿走就改） |
+|---|---|---|
+| 组件数量 | 越多越好 | **每个都得有人真的用过** —— 没验证过的代码是给下家的坑 |
+| 最重要的是 | API 稳定 | **代码可读、约定一致**（下家要改它） |
+| 文档 | 写 props | **目录**（能看见有什么）—— 看不见就会重复造 |
+| 内部耦合 | 无所谓 | **隐性耦合是致命的** —— 拿走后静默失效 |
+
+三条落在闸门上，不靠自觉：
+
+- 🔴 **每个组件都要有生产调用方或沙箱 demo**，二者皆无就删。
+  闸门是 `pnpm arch:check` 的 `orphan-component`。
+  实测过一轮：12,646 行里 2,935 行（≈23%）零调用方，其中包括一个
+  **文档在教人别用**的图表组件和一个和 platform 那份重复、但不支持 async pending
+  的二次确认框 —— 后者纯粹是个陷阱，下一个人按目录直觉 import 它就中招
+- 🔴 **沙箱就是这个库的目录。** `/sandbox/components` 按「基础 / 复杂 / 令牌」
+  三层列全部组件，每个带「什么时候用 / 什么时候别用」。下面那张「组件约定」表
+  已经搬到界面上了 —— 只有读文档的人看得到的表，等于没有
+- 🔴 **第三方死声明也有闸门**（`unused-third-party`）：`date-fns` 就误加过一条，
+  源码零引用，它其实是 `react-day-picker` 自己的依赖
+
+## ⚠️ `i18n ← ui` 这条箭头**不走 pnpm 依赖图**，是运行时注入
+
+根 `CLAUDE.md` 有一条硬纪律：「箭头必须体现在 `package.json` 的
+`dependencies` 里」。**`i18n ← ui` 是那条纪律的唯一例外，而且是刻意的。**
+
+本包的 15 个组件走 `react-i18next` 的 `useTranslation()`，从 **app 层注入的
+context** 里取翻译函数，而那个 i18next 实例是 `@admin/i18n` 建的。
+耦合是真的，但**不经过 import** —— 所以 `package.json` 里没有
+任何 `@admin/*` 依赖，`tsconfig.json` 的 `paths` 里也只有 `@admin/ui/*`。
+
+为什么不把声明加回去：**ui 对 workspace 零依赖正是它能被拿走的原因。**
+加回去只为了让依赖图好看，代价是下家拷走之后 `pnpm install` 找不到
+`@admin/i18n` —— 用一个真实的障碍换一条纪律的形式一致。
+
+> 📌 这一节以前写的是反的（「声明了 `@admin/i18n`……不要当成死依赖清掉」）。
+> 那条声明在 #90 里就删掉了，而为它辩护的文档留了下来，**在教下一个人别删
+> 一个已经不存在的东西**。`pnpm ctx:check` 查不到这种漂移 ——
+> 它只校验「指向的东西还在不在」，不校验文字对不对。
+
+**没接翻译实例也不会坏。** `lib/i18n.ts` 的 `useT()` 在没有实例时回落到
+「key 原样 + **做插值**」：
+
+| | 有实例 | 裸 `react-i18next` | 本包的兜底 |
+|---|---|---|---|
+| `t('重试')` | 重试 | 重试 | 重试 |
+| `t('共 {{total}} 条', {total: 42})` | 共 42 条 | **`共 {{total}} 条`** | 共 42 条 |
+
+中间那一列就是分页条上真的出现过的样子。**组件里不要直接
+`useTranslation()`，一律 `useT()`** —— 直接用就绕过了兜底，
+而失效方式是「99% 的文案都对，只有带数字的那几条显示成模板源码」。
+
+## 🔴 `src/components/` 下的 `.ts`（无 JSX 的纯逻辑）要走相对路径 import
+
+**症状**：`pnpm typecheck --force`、`pnpm lint`、`pnpm build` **全绿**，
+`pnpm dev` 打开页面白屏，控制台一条
+`Failed to resolve import "@admin/ui/components/tree-state"`。
+
+**根因是两套解析规则不同步**：
+
+| 谁在解析 | 规则 | 认不认扩展名 |
+|---|---|---|
+| `tsc`（typecheck） | `tsconfig.json` 的 `paths`：`@admin/ui/*` → `./src/*` | **不认** —— `.ts` / `.tsx` 都能找到 |
+| vite dev（浏览器） | `package.json` 的 `exports`：`./components/*` → `./src/components/*.tsx` | **写死 `.tsx`** |
+
+于是 `tree-state.ts`（`tree.tsx` 拆出来的纯逻辑，没有 JSX 所以是 `.ts`）
+在类型层面完全正常，运行时解析不到。**`pnpm build` 也不报** ——
+生产构建的解析器和 dev 的 import-analysis 行为不同，实测 build 是绿的。
+也就是说三道闸门一道都拦不住，只有真的把页面打开才看得见。
+
+两件事都做了：
+
+- `exports` 补了 `.ts` 兜底：`"./components/*": ["./src/components/*.tsx", "./src/components/*.ts"]`
+- **本目录内部一律相对路径**（`from "./tree-state"`），和同文件的 `../lib/i18n` 一致
+
+**新增 `src/components/*.ts` 时照这条办。** 判据很简单：
+拆纯逻辑出去是好事（能测），但别顺手用包自引用去 import 它。
+
+## 🔴 「demo 里的代码」也会教错人 —— 它是要被抄走的
+
+沙箱的代码块存在的意义就是「抄走就能用」，所以**写错的 demo 比没有 demo 更糟**。
+
+实测：`Breadcrumb` 的第一版 demo 把 `BreadcrumbSeparator` 套进了
+`BreadcrumbItem` 里 —— 两个都渲染成 `<li>`，于是 `<li>` 嵌 `<li>`，
+非法 HTML。`typecheck` / `lint` 全绿，界面**看着完全正常**，
+只有浏览器控制台里一条 React 19 的
+`In HTML, <li> cannot be a descendant of <li>`。
+而那段错的结构同时出现在**代码块里**，抄走就带走了。
+
+所以补 demo 之后要**真的在浏览器里打开一遍并看控制台**，
+`typecheck` 绿不算数。
 
 ## 组件约定
 
@@ -34,14 +123,18 @@ context** 里取翻译函数，而那个 i18next 实例是 `@admin/i18n` 建的
 | 命令面板 / 全局搜索 | `ui/components/command-palette.tsx`（Dialog + 受控列表 + 子序列打分，手写）。**不要**为它重新引 cmdk，也**不要**用 `Combobox` 套进 Dialog —— 后者是「触发器 + 浮层」的选值控件，两层焦点管理会互相抢。业务组装在 `platform/shell/command-menu.tsx` |
 | 快捷键提示 | `Kbd` / `KbdGroup`。图标按钮的 tooltip 里也能放（`in-data-[slot=tooltip-content]` 的配色已经在基础类里） |
 | 可搜索下拉 | 走 `Combobox`（Base UI 底座，和其余组件同源）。**不要引 cmdk** —— 曾经有个零调用方的 cmdk 封装，已删除 |
-| 滚动条外观 | 已在 `ui/styles/globals.css` 全站统一（`scrollbar-width: thin` + `--scrollbar-thumb`），**不要逐个容器改**，也**别用 `scroll-area.tsx`**（零调用方，理由见那个文件的头注释）。刻意不用 `::-webkit-scrollbar` —— 它会强制 macOS 退回常驻滚动条 |
+| 滚动条外观 | 已在 `ui/styles/globals.css` 全站统一（`scrollbar-width: thin` + `--scrollbar-thumb`），**不要逐个容器改**，也**不要再引一个 ScrollArea 组件**（原来那个零调用方、已删）。刻意不用 `::-webkit-scrollbar` —— 它会强制 macOS 退回常驻滚动条 |
 | 隐藏滚动条 | 一律 `no-scrollbar`（shadcn 上游的 `@utility`），别手写 `[scrollbar-width:none] [&::-webkit-scrollbar]:hidden`。用在**操作区**（标签条、侧边栏），内容区不要藏 |
 | 抽屉表单的字段 | `_shared/form-fields.tsx` 的 `FormField`（标签在上/控件/错误），**不是** `ui/components/field` 的 `Field` —— 后者是 `ComponentProps<'div'>`，没有 label/error/required。历史上 5 个表单各写了一份包裹件、3 份字节级相同 |
 | 长表单分组 | `_shared/form-fields.tsx` 的 `FormSection`（`▌标题 ────`）。渲染成 `fieldset` + `legend`，读屏会念「联系信息 分组」。**只给字段多的表单用** —— 菜单 12 个、用户 7 个值得，4 个字段的公告加了就是装饰 |
 | DropdownMenuLabel | 必须包在 `DropdownMenuGroup` 内，否则 Base UI 抛 `MenuGroupContext is missing` |
 | 表格容器 | `overflow-x-auto`，**不要** `overflow-hidden`（会把最右侧操作列裁掉，点不到） |
-| 二次确认 | `platform/shell/confirm-dialog`（支持 async + pending），渲染成触发器的兄弟节点，不能放进 `DropdownMenuContent` |
+| 二次确认 | `platform/shell/confirm-dialog`（支持 async + pending），渲染成触发器的兄弟节点，不能放进 `DropdownMenuContent`。**ui 下没有同名组件** —— 原来有一个不支持 async pending 的重复实现，按目录直觉 import 它就中招，已删 |
 | 树形多选 | `packages/ui/components/tree`（三态 + 级联 + 过滤）。**角色授权不用它**，见 [pages 分册](../platform/src/pages/AGENTS.md) 的「主从页」 |
+| 提示条 / 警告条 | `ui/components/alert` 的 `<Alert tone>`。**不要手写「图标 + 彩色边框盒子」** —— 全仓抄过 28 处、四五种形状（`ring-1` vs `border`、`rounded-md` vs `rounded-lg`、内边距四种）。判据是「会不会自己消失」：Alert 是版面的一部分，`toast()` 不是，取数失败是 `QueryError` |
+| 只读键值详情 | `ui/components/descriptions` 的 `<Descriptions layout columns>` + `<DescriptionItem label value mono wrap copy>`。三种布局：`inline`（标签在左）/ `stacked`（值很长）/ `divided`（行多要逐行扫）。5 个 `detail-sheet` 原先各写了一份私有 `Row` |
+| 复制按钮 | `ui/components/copy-button`。🔴 它自带 `document.execCommand` 兜底 —— `navigator.clipboard` 只在**安全上下文**（https / localhost）下存在，而局域网 http 访问后台是这类系统最常见的部署形态，那时点了没有任何反应 |
+| 分页条 | `ui/components/pagination`，全站唯一一份（`DataTable` 和 `data-grid` 都用它）。`pageIndex` 是 **0 起**的，写 URL 时是 1 起、且「回第一页」写 `page: undefined`。每页下拉的 id 走 `useId()` —— 一屏两个分页条（主从页）时写死 id 会废掉 label↔控件的关联，点标签聚焦到别人的下拉，而且不报错 |
 | 状态色 | 只在 `pages/_shared/status.tsx` 定义，用 `<StatusBadge>` / `<StatusPill tone>`；页面里手抄那串 emerald/destructive class 是禁止的 |
 | 行选中 | 要么配 `buildSelectColumn` + `BulkBar`，要么 `enableRowSelection: false`（只读列表）；开着却没有复选框列，分页条上的「已选 N 项」永远是 0 |
 | 半选复选框 | Base UI 是独立的 `indeterminate` prop，**不是** `checked="indeterminate"` |

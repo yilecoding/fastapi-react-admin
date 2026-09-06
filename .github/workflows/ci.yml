@@ -64,6 +64,19 @@ jobs:
       - name: i18n
         run: pnpm i18n:check && pnpm i18n:jsx
 
+      # 🔴 **前端单测一直不在 CI 里跑。**
+      # `packages/ui` 的 86 条 vitest（三态级联 / URL 序列化 / 网格列状态 /
+      # 翻译兜底）加进来的时候，CI 里没有任何一步会执行它们 —— 两个 pytest job
+      # 直接调 `uv run pytest`，不走 turbo。一套只在有人想起来时才跑的测试，
+      # 和没有这套测试是一回事（和硬纪律 13 里 eslint 那次同一个形状）。
+      #
+      # ⚠️ 用**排除式**过滤而不是列包名：`apps/api` 的 `test` 是 pytest，
+      # 这个 job 没有数据库、跑不了它（它在下面两个 pytest job 里跑）。
+      # 排除式的好处是**新增一个 JS 包默认就在里面**，不用改 CI —— 
+      # 列包名那种写法正是硬纪律 13 说的「漏了哪个包」。
+      - name: unit
+        run: pnpm test:js
+
       # 🔴 **文档的机器可核对部分也要在 CI 里核对。**
       # `ctx:check` 抓死引用 / 死链接 / 死脚本 / 死 testid / 跨文件章节引用，
       # 它整份存在的理由就是「凡是能被机器核对的断言就让机器核对」——

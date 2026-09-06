@@ -4,9 +4,9 @@
 > [`plugin/notification`](../../../../../apps/api/AGENTS.md)，socket 连接在
 > [shell 分册](../../shell/AGENTS.md)。
 >
-> 这份文件是根 `CLAUDE.md` 的**模块分册**，Claude Code 在你读到本目录下的文件时
-> 才把它加载进上下文（惰性加载），所以它可以写得比根文件细。跨模块的硬纪律
-> 仍然只在根 `CLAUDE.md` 里有一份。新增结论请追加到**离代码最近**的那一份。
+> 这份文件是 [`packages/platform/src/pages` 分册](../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的
+> 文件时才把它加载进上下文（惰性加载）。跨模块的硬纪律只在根 `CLAUDE.md` 里有一份；
+> **新增结论请追加到离代码最近的那一份**。
 
 ## 三个文件各管一件事
 

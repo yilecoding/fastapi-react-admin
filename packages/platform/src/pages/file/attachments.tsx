@@ -1,8 +1,9 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { IconAlertTriangle, IconDownload, IconEye, IconPaperclip, IconUpload, IconX } from '@tabler/icons-react'
+import { IconDownload, IconEye, IconPaperclip, IconUpload, IconX } from '@tabler/icons-react'
 
+import { Alert } from '@admin/ui/components/alert'
 import { Button } from '@admin/ui/components/button'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
@@ -157,13 +158,9 @@ export function FileAttachments({
       </div>
 
       {actionError && (
-        <p
-          role="alert"
-          data-testid="attach-error"
-          className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-1.5 text-xs text-destructive"
-        >
+        <Alert tone="danger" data-testid="attach-error" className="mt-2 py-1.5 text-xs">
           {actionError}
-        </p>
+        </Alert>
       )}
 
       <div className="mt-2">
@@ -174,15 +171,17 @@ export function FileAttachments({
           </div>
         ) : isError ? (
           // 硬纪律 9：失败是可见状态 + 有重试入口，不能静默显示成「没有附件」
-          <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-2 text-xs text-destructive">
-            <IconAlertTriangle className="size-4 shrink-0" />
-            <span className="min-w-0 flex-1">
-              {error instanceof Error ? error.message : t('附件加载失败')}
-            </span>
-            <Button size="sm" variant="outline" onClick={() => void refetch()} data-testid="attach-retry">
-              {t('重试')}
-            </Button>
-          </div>
+          <Alert
+            tone="danger"
+            className="py-2 text-xs"
+            action={
+              <Button size="sm" variant="outline" onClick={() => void refetch()} data-testid="attach-retry">
+                {t('重试')}
+              </Button>
+            }
+          >
+            {error instanceof Error ? error.message : t('附件加载失败')}
+          </Alert>
         ) : files.length === 0 ? (
           <p className="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
             {t('暂无附件')}

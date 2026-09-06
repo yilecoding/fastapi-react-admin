@@ -2,6 +2,16 @@ import { IconCopy, IconDots, IconTrash } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuGroup,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from '@admin/ui/components/context-menu'
+import {
   Dialog,
   DialogClose,
   DialogContent,
@@ -50,6 +60,82 @@ const ALIGNS = ['start', 'center', 'end'] as const
 
 export const OVERLAY_DEMOS: Demo[] = [
   {
+    id: 'context-menu',
+    name: 'ContextMenu',
+    zh: '右键菜单',
+    group: 'overlay',
+    summary:
+      '右键（或长按）唤出的动作菜单。和 DropdownMenu 是同一套 Base UI 底座、同一套子组件形状，' +
+      '区别只在触发方式 —— 所以 ContextMenuLabel 同样必须包在 ContextMenuGroup 里，' +
+      '不然 Base UI 抛 MenuGroupContext is missing。',
+    source: 'packages/ui/src/components/context-menu.tsx',
+    use: '表格行、标签条、画布元素上的**次要**动作 —— 右键是给熟手用的加速通道。',
+    avoid: '不要把只在右键里出现的动作做成唯一入口 —— 触屏和不知道能右键的人永远找不到。DataGrid 的行菜单同时有一个「⋯」按钮。',
+    knobs: {
+      shortcut: { kind: 'bool', label: '显示快捷键', default: true },
+      danger: { kind: 'bool', label: '含危险动作', default: true, hint: 'variant="destructive"' },
+      label: { kind: 'text', label: '分组标题', default: '行操作' },
+    },
+    render: (v) => (
+      <ContextMenu>
+        <ContextMenuTrigger
+          render={
+            <div className="flex h-24 w-72 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-sm text-muted-foreground select-none" />
+          }
+        >
+          在这块区域上点右键
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuGroup>
+            {s(v, 'label') && <ContextMenuLabel>{s(v, 'label')}</ContextMenuLabel>}
+            <ContextMenuItem>
+              查看详情
+              {b(v, 'shortcut') && <ContextMenuShortcut>⏎</ContextMenuShortcut>}
+            </ContextMenuItem>
+            <ContextMenuItem>
+              复制 ID
+              {b(v, 'shortcut') && <ContextMenuShortcut>⌘C</ContextMenuShortcut>}
+            </ContextMenuItem>
+          </ContextMenuGroup>
+          {b(v, 'danger') && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuGroup>
+                <ContextMenuItem variant="destructive">
+                  删除
+                  {b(v, 'shortcut') && <ContextMenuShortcut>⌫</ContextMenuShortcut>}
+                </ContextMenuItem>
+              </ContextMenuGroup>
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
+    ),
+    code: (v) =>
+      jsx(
+        'ContextMenu',
+        {},
+        lines(
+          '<ContextMenuTrigger render={<TableRow />}>…</ContextMenuTrigger>',
+          '<ContextMenuContent>',
+          '  {/* 🔴 Label 必须包在 Group 里，否则 Base UI 抛 MenuGroupContext is missing */}',
+          '  <ContextMenuGroup>',
+          s(v, 'label') ? `    <ContextMenuLabel>${s(v, 'label')}</ContextMenuLabel>` : '',
+          '    <ContextMenuItem onClick={() => open(row)}>',
+          '      查看详情',
+          b(v, 'shortcut') ? '      <ContextMenuShortcut>⏎</ContextMenuShortcut>' : '',
+          '    </ContextMenuItem>',
+          '  </ContextMenuGroup>',
+          b(v, 'danger') ? '  <ContextMenuSeparator />' : '',
+          b(v, 'danger') ? '  <ContextMenuGroup>' : '',
+          b(v, 'danger') ? '    <ContextMenuItem variant="destructive">删除</ContextMenuItem>' : '',
+          b(v, 'danger') ? '  </ContextMenuGroup>' : '',
+          '</ContextMenuContent>'
+        )
+      ),
+  },
+
+  {
     id: 'dialog',
     name: 'Dialog',
     zh: '对话框',
@@ -57,6 +143,8 @@ export const OVERLAY_DEMOS: Demo[] = [
     summary:
       '打断式确认。业务里的二次确认不要手搭这个 —— 用 platform/shell/confirm-dialog（支持 async + pending）。',
     source: 'packages/ui/src/components/dialog.tsx',
+    use: '需要用户当场决断、且内容不多的：二次确认、简短表单。',
+    avoid: '字段多的表单用 Sheet（抽屉能给更多纵向空间）；二次确认直接用 platform/shell/confirm-dialog。',
     rows: [
       {
         title: '用法',
@@ -129,6 +217,8 @@ export const OVERLAY_DEMOS: Demo[] = [
     summary:
       '表单类的编辑面板走它。改宽度必须带同样的变体前缀：data-[side=right]:sm:max-w-2xl，纯 sm:max-w-2xl 会失效。',
     source: 'packages/ui/src/components/sheet.tsx',
+    use: '侧滑抽屉：新增 / 编辑表单、详情。宽度覆盖必须带 data-[side=right]: 前缀。',
+    avoid: '只有一两个字段、或只是确认一下的用 Dialog。',
     rows: [
       {
         title: '方向',
@@ -194,6 +284,8 @@ export const OVERLAY_DEMOS: Demo[] = [
     group: 'overlay',
     summary: '非打断式的补充信息或小表单。side / align 决定它从哪边冒出来。',
     source: 'packages/ui/src/components/popover.tsx',
+    use: '挂在某个元素上的轻浮层：筛选面板、颜色选择、说明卡。',
+    avoid: '一句话说明用 Tooltip（不需要点，也不抢焦点）；一列可点动作用 DropdownMenu。',
     rows: [
       {
         title: '方位',
@@ -253,6 +345,8 @@ export const OVERLAY_DEMOS: Demo[] = [
     summary:
       '只放「看一眼就够」的短说明。必须包一层 TooltipProvider —— 应用里没有全局挂。图标按钮一律配它 + aria-label。',
     source: 'packages/ui/src/components/tooltip.tsx',
+    use: '给图标按钮补一句话。图标按钮一律要配，否则读屏只念出一个空按钮。',
+    avoid: '锚点不能是 display:contents 的包装元素 —— 气泡会飞到视口左上角。直接 render={trigger}。',
     rows: [
       {
         title: '方位',
@@ -310,6 +404,8 @@ export const OVERLAY_DEMOS: Demo[] = [
     summary:
       '行操作、批量操作的入口。DropdownMenuLabel 必须包在 DropdownMenuGroup 里，否则 Base UI 会抛 MenuGroupContext is missing。',
     source: 'packages/ui/src/components/dropdown-menu.tsx',
+    use: '一列可点动作：行操作、用户菜单。DropdownMenuLabel 必须包在 DropdownMenuGroup 里。',
+    avoid: '选一个值出来（而不是执行动作）用 Select / Combobox —— 菜单不维护「当前选中」。',
     rows: [
       {
         title: '方位与分组',

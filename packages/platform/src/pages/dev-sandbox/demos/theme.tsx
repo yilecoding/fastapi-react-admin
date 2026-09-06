@@ -165,6 +165,8 @@ export const THEME_DEMOS: Demo[] = [
     summary:
       '读的是 <html> 上真实生效的 token 值，不是硬编码色卡 —— 切主题这一页跟着变。业务代码里只用这些 token，不要写具体色值。',
     source: 'packages/ui/src/styles/globals.css',
+    use: '看主题色板与语义色令牌。所有组件的颜色都从这里来，改 globals.css 一处全站生效。',
+    avoid: '页面里不要手写 #rrggbb 或 emerald-500 那串 class —— 状态色只在 _shared/status 定义。',
     stage: 'stretch',
     knobs: {
       view: { kind: 'select', label: '看什么', options: ['颜色', '圆角', '字级'], default: '颜色' },

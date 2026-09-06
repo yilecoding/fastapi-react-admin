@@ -14,7 +14,7 @@
  *   - 卡片式页面（仪表盘 / 监控页）直接摆在页头下面
  */
 import { IconAlertTriangle, IconRefresh } from "@tabler/icons-react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../lib/i18n"
 
 import { Button } from "@admin/ui/components/button"
 
@@ -39,7 +39,7 @@ export function QueryError({
   testId = "query-error",
   className = "",
 }: QueryErrorProps) {
-  const { t } = useTranslation()
+  const t = useT()
   const e = error as { httpStatus?: number; message?: string } | null
   const forbidden = e?.httpStatus === 403
   return (

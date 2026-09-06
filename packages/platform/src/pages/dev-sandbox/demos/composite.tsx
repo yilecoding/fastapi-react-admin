@@ -1,39 +1,27 @@
-import { IconChartBar, IconKey, IconUsers } from '@tabler/icons-react'
-
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@admin/ui/components/accordion'
-import { Avatar, AvatarFallback, AvatarGroup } from '@admin/ui/components/avatar'
-import { Badge } from '@admin/ui/components/badge'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@admin/ui/components/card'
-import { Separator } from '@admin/ui/components/separator'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
-
 import { b, jsx, lines, preview, s, type Demo } from '../kit'
 import { DataGridDemo } from './data-grid-demo'
 import { QueryBarDemo } from './query-bar-demo'
 import { RichTextDemo } from './rich-text-demo'
 
-export const DATA_DEMOS: Demo[] = [
+/**
+ * 三个「自带一整套子界面」的复杂组件。
+ *
+ * 它们的舞台太大，塞不进 demo 对象里，所以 render 各指向一个独立文件
+ * （`*-demo.tsx`）—— 那三个文件里是真实的受控状态和真实的交互。
+ */
+export const COMPOSITE_DEMOS: Demo[] = [
   {
     id: 'query-bar',
     name: 'QueryBar',
     zh: '查询区',
-    group: 'data',
+    group: 'composite',
     summary:
       '列表页顶部那块查询区。字段声明式配置、默认不铺满、按需「添加条件」、显式点搜索才发请求。' +
       '高级模式能表达 (A 且 B) 或 C —— 基础模式的平铺 AND 永远表达不了。' +
       '值由调用方持有（受控），页面负责把它写进 URL；组件只自己存「筛选视图」这种个人偏好。',
     source: 'packages/ui/src/components/query-bar/index.tsx',
+    use: '列表页的筛选栏。配 _shared/use-query-search 把条件、接口入参、URL 三者接起来。',
+    avoid: '只有一两个筛选条件的页面直接用 _shared/filters 的 TextFilter / SelectFilter。',
     stage: 'stretch',
     knobs: {
       mode: { kind: 'select', label: '初始模式', options: ['basic', 'advanced'], default: 'basic' },
@@ -113,7 +101,7 @@ export const DATA_DEMOS: Demo[] = [
     id: 'rich-text',
     name: 'RichText',
     zh: '富文本',
-    group: 'data',
+    group: 'composite',
     summary:
       'Tiptap（ProseMirror）编辑器，输出 HTML 字符串，直接落 NVARCHAR(MAX) 列。' +
       '只读渲染用 RichTextViewer 而不是 dangerouslySetInnerHTML —— 它走同一套 schema 解析，' +
@@ -122,6 +110,8 @@ export const DATA_DEMOS: Demo[] = [
       '传了才有插图按钮、才接粘贴与拖拽。正文里存的是相对直链 /uploads/… 加 data-file-id，' +
       '不是 base64 也不是 blob —— 前者会把列表接口的响应灌爆，后者活不过一次刷新。',
     source: 'packages/ui/src/components/rich-text/index.tsx',
+    use: '需要排版的正文：公告、说明文档。存 HTML，读的时候用 RichTextViewer（走 Tiptap schema 过滤，不是 dangerouslySetInnerHTML）。',
+    avoid: '纯文本用 Textarea。图片能力由 platform 注入 useRichTextImages()，不传 images 整块关掉。',
     stage: 'stretch',
     knobs: {
       mode: { kind: 'select', label: '形态', options: ['editor', 'viewer'], default: 'editor', hint: 'viewer 是发布后的样子' },
@@ -186,17 +176,18 @@ export const DATA_DEMOS: Demo[] = [
               )
           ),
   },
-
   {
     id: 'data-grid',
     name: 'DataGrid',
     zh: '数据表格',
-    group: 'data',
+    group: 'table',
     summary:
       '全能力表格外壳：密度、固定列、行置顶、行内展开、右键菜单、批量浮条、虚拟滚动。' +
       '组件不持有业务状态 —— 列定义、feature 注册、筛选分页都在调用方，所以同一个 grid ' +
       '既能配服务端分页也能配全量滚动。分组/排序/拖拽这些可调项更多，去 /sandbox/table 那个实验台。',
     source: 'packages/ui/src/components/data-grid/index.tsx',
+    use: '列多量大、需要虚拟滚动 / 拖拽调列 / 列内筛选 / 密度切换的表。',
+    avoid: '普通 CRUD 列表用 DataTable —— DataGrid 的可调项多一个量级，配起来不划算。',
     stage: 'stretch',
     knobs: {
       density: { kind: 'select', label: '密度', options: ['compact', 'standard', 'loose'], default: 'standard', hint: '也可以在表格工具栏里切' },
@@ -243,234 +234,6 @@ export const DATA_DEMOS: Demo[] = [
         b(v, 'pinActions')
           ? "// 操作列固定在末尾：state.columnPinning = { start: [], end: ['actions'] }"
           : ''
-      ),
-  },
-  {
-    id: 'tabs',
-    name: 'Tabs',
-    zh: '页签',
-    group: 'data',
-    summary:
-      'default 是胶囊，line 是下划线。主从页的面板要配 keepMounted，否则切走再回来草稿就没了。',
-    source: 'packages/ui/src/components/tabs.tsx',
-    rows: [
-      {
-        title: '变体',
-        hint: 'default 是胶囊组（自成一块），line 是下划线（贴着内容顶边）。同一屏里别混用。',
-        items: [
-          preview({ variant: 'default', icon: false }, 'default'),
-          preview({ variant: 'line', icon: false }, 'line'),
-          preview({ variant: 'default', icon: true }, 'default + 图标'),
-          preview({ variant: 'line', icon: true }, 'line + 图标'),
-        ],
-      },
-    ],
-    knobs: {
-      variant: { kind: 'select', label: 'variant', options: ['default', 'line'], default: 'default' },
-      icon: { kind: 'bool', label: '带图标', default: false },
-    },
-    render: (v) => (
-      <Tabs defaultValue="perms" className="w-80">
-        <TabsList variant={s(v, 'variant') as 'default'}>
-          <TabsTrigger value="perms">
-            {b(v, 'icon') && <IconKey />}
-            菜单权限
-          </TabsTrigger>
-          <TabsTrigger value="scopes">
-            {b(v, 'icon') && <IconChartBar />}
-            数据范围
-          </TabsTrigger>
-          <TabsTrigger value="users">
-            {b(v, 'icon') && <IconUsers />}
-            成员
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="perms" className="pt-3 text-muted-foreground">
-          勾菜单和按钮。
-        </TabsContent>
-        <TabsContent value="scopes" className="pt-3 text-muted-foreground">
-          配这个角色能看到哪些行。
-        </TabsContent>
-        <TabsContent value="users" className="pt-3 text-muted-foreground">
-          这个角色下的人。
-        </TabsContent>
-      </Tabs>
-    ),
-    code: (v) =>
-      jsx(
-        'Tabs',
-        { defaultValue: 'perms' },
-        lines(
-          jsx(
-            'TabsList',
-            { variant: s(v, 'variant') === 'default' ? undefined : s(v, 'variant') },
-            lines(
-              `<TabsTrigger value="perms">${b(v, 'icon') ? '<IconKey />' : ''}菜单权限</TabsTrigger>`,
-              `<TabsTrigger value="scopes">${b(v, 'icon') ? '<IconChartBar />' : ''}数据范围</TabsTrigger>`
-            )
-          ),
-          '<TabsContent value="perms" keepMounted>…</TabsContent>',
-          '<TabsContent value="scopes" keepMounted>…</TabsContent>'
-        )
-      ),
-  },
-
-  {
-    id: 'accordion',
-    name: 'Accordion',
-    zh: '折叠面板',
-    group: 'data',
-    summary: '长表单分段、或一屏放不下的说明。defaultValue 是数组，可以同时展开多项。',
-    source: 'packages/ui/src/components/accordion.tsx',
-    rows: [
-      {
-        title: '默认展开',
-        hint: 'defaultValue 是数组，可以同时展开多项。首屏至少展开一项，否则用户不知道里面有东西。',
-        items: [
-          preview({ open: '第一项' }, "['a']"),
-          preview({ open: '全部' }, "['a','b']"),
-          preview({ open: '都收起' }, '[]'),
-          preview({ open: '第一项', disabled: true }, 'disabled'),
-        ],
-      },
-    ],
-    knobs: {
-      open: { kind: 'select', label: '默认展开', options: ['第一项', '全部', '都收起'], default: '第一项' },
-      disabled: { kind: 'bool', label: 'disabled', default: false },
-    },
-    render: (v) => {
-      const mode = s(v, 'open')
-      const value = mode === '全部' ? ['a', 'b'] : mode === '第一项' ? ['a'] : []
-      return (
-        <Accordion defaultValue={value} disabled={b(v, 'disabled')} className="w-80">
-          <AccordionItem value="a">
-            <AccordionTrigger>角色决定什么</AccordionTrigger>
-            <AccordionContent className="text-muted-foreground">
-              能进哪些菜单、能点哪些按钮。
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="b">
-            <AccordionTrigger>数据范围决定什么</AccordionTrigger>
-            <AccordionContent className="text-muted-foreground">
-              同一个页面里，他能看到哪些行。
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      )
-    },
-    code: (v) => {
-      const mode = s(v, 'open')
-      const value = mode === '全部' ? "{['a', 'b']}" : mode === '第一项' ? "{['a']}" : '{[]}'
-      return jsx(
-        'Accordion',
-        { defaultValue: `DV${value}`, disabled: b(v, 'disabled') },
-        lines(
-          '<AccordionItem value="a">',
-          '  <AccordionTrigger>角色决定什么</AccordionTrigger>',
-          '  <AccordionContent>说明文案</AccordionContent>',
-          '</AccordionItem>'
-        )
-      ).replace(`defaultValue="DV${value}"`, `defaultValue=${value}`)
-    },
-  },
-
-  {
-    id: 'avatar',
-    name: 'Avatar',
-    zh: '头像',
-    group: 'data',
-    summary: '有图用 AvatarImage，没图落回 AvatarFallback（取名字首字）。多人用 AvatarGroup 叠。',
-    source: 'packages/ui/src/components/avatar.tsx',
-    rows: [
-      {
-        title: '尺寸与成组',
-        hint: 'AvatarGroup 会把头像叠起来，用在「这条记录关联了哪几个人」。',
-        items: [
-          preview({ mode: '单个', size: 'size-8' }, 'size-8'),
-          preview({ mode: '单个', size: 'size-9' }, 'size-9'),
-          preview({ mode: '单个', size: 'size-12' }, 'size-12'),
-          preview({ mode: '一组', size: 'size-9' }, 'group'),
-        ],
-      },
-    ],
-    knobs: {
-      mode: { kind: 'select', label: '形态', options: ['单个', '一组'], default: '单个' },
-      size: { kind: 'select', label: '尺寸', options: ['size-8', 'size-9', 'size-12'], default: 'size-9' },
-    },
-    render: (v) => {
-      const size = s(v, 'size')
-      if (s(v, 'mode') === '一组')
-        return (
-          <AvatarGroup>
-            {['管', '李', '王'].map((t) => (
-              <Avatar key={t} className={size}>
-                <AvatarFallback>{t}</AvatarFallback>
-              </Avatar>
-            ))}
-          </AvatarGroup>
-        )
-      return (
-        <Avatar className={size}>
-          <AvatarFallback>管</AvatarFallback>
-        </Avatar>
-      )
-    },
-    code: (v) => {
-      const inner = jsx('Avatar', { className: s(v, 'size') }, '<AvatarFallback>管</AvatarFallback>')
-      return s(v, 'mode') === '一组' ? jsx('AvatarGroup', {}, inner) : inner
-    },
-  },
-
-  {
-    id: 'card',
-    name: 'Card',
-    zh: '卡片',
-    group: 'data',
-    summary:
-      '一块有边界的内容。列表页不要用它包表格 —— DataTable 自己就有容器；卡片是给指标、说明这类东西的。',
-    source: 'packages/ui/src/components/card.tsx',
-    rows: [
-      {
-        title: '组合',
-        hint: '指标卡只要标题 + 数字；有说明才加 CardDescription。分隔线是给「头身内容性质不同」时用的。',
-        items: [
-          preview({ description: false, badge: false, separator: false }, '最小'),
-          preview({ description: true, badge: false, separator: false }, '带描述'),
-          preview({ description: true, badge: true, separator: false }, '带徽标'),
-          preview({ description: true, badge: true, separator: true }, '带分隔线'),
-        ],
-      },
-    ],
-    knobs: {
-      description: { kind: 'bool', label: '带描述', default: true },
-      badge: { kind: 'bool', label: '带徽标', default: false },
-      separator: { kind: 'bool', label: '头身之间加分隔线', default: false },
-    },
-    render: (v) => (
-      <Card className="w-72">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            在线会话
-            {b(v, 'badge') && <Badge variant="secondary">实时</Badge>}
-          </CardTitle>
-          {b(v, 'description') && <CardDescription>扫 Redis 的 token 键，一次全给。</CardDescription>}
-        </CardHeader>
-        {b(v, 'separator') && <Separator />}
-        <CardContent className="text-2xl font-semibold tabular-nums">12</CardContent>
-      </Card>
-    ),
-    code: (v) =>
-      jsx(
-        'Card',
-        {},
-        lines(
-          '<CardHeader>',
-          '  <CardTitle>在线会话</CardTitle>',
-          b(v, 'description') && '  <CardDescription>说明文案</CardDescription>',
-          '</CardHeader>',
-          b(v, 'separator') && '<Separator />',
-          '<CardContent>12</CardContent>'
-        )
       ),
   },
 ]

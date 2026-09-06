@@ -18,7 +18,7 @@
  */
 import * as React from "react"
 import { IconCornerDownLeft, IconSearch } from "@tabler/icons-react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../lib/i18n"
 
 import { Dialog, DialogContent, DialogTitle } from "@admin/ui/components/dialog"
 import { Kbd } from "@admin/ui/components/kbd"
@@ -107,7 +107,7 @@ export function CommandPalette({
   title?: string
   testId?: string
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const [query, setQuery] = React.useState("")
   const [activeIndex, setActiveIndex] = React.useState(0)
   const listRef = React.useRef<HTMLDivElement | null>(null)

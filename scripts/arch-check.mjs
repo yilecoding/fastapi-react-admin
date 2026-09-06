@@ -17,7 +17,7 @@
  * 「一直是绿的，直到某个地方第一次做 scoped install」正是**能被机器核对**的
  * 那种断言 —— 和 `ctx:check` / `i18n:check` 同一个物种，所以做成闸门。
  *
- * 两组共七条：
+ * 分四组：
  *
  * **依赖箭头**（本文件上半）
  *
@@ -43,13 +43,23 @@
  * | `driver.js` 只能在 `shell/tour/` 里 import | 裸选择器字串绕过上面那条 DOM 规则，命中隐藏页签 |
  * | 步骤引用的 `data-tour` 目标必须存在 | 那一步凭空消失（或变成居中的空弹窗），没有任何报错 |
  *
+ * **组件库自主化那三条**（`packages/ui` 要能被下游整包拿走，见 `packages/ui/PORTING.md`）
+ *
+ * | 规则 | 级别 | 违反后的表现 |
+ * |---|---|---|
+ * | 组件既没有生产调用方、也没有沙箱 demo | error | 下家读到它，无从判断「能用的还是没写完的」 |
+ * | `dependencies` 里的第三方包源码零引用 | warn | 下一个人以为「这个库我们直接在用」 |
+ * | `registry.json` 和源码的 import 图对不上 | error | `shadcn add` 少拷一个文件，下家编译时才炸 |
+ *
  * 这三条现在全仓都是干净的，做成闸门是因为**失败方式极难归因**：
  * 违反了不报错，只会「切回这个 tab 时筛选没了」/「测量到的是隐藏页的尺寸」，
- * 而人第一反应永远是去查那个功能本身。七条全部做过反向验证（注入违规 → 红）。
+ * 而人第一反应永远是去查那个功能本身。每一条都做过反向验证（注入违规 → 红）。
  */
 
 import fs from 'node:fs'
 import path from 'node:path'
+
+import { buildRegistry } from './gen-ui-registry.mjs'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 
@@ -439,6 +449,187 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src']) 
   }
 }
 
+// ── 自主型组件库：每个组件都得有人真的用过 ────────────────────────────
+//
+// `packages/ui` 的定位是**被下游整包拿走自己改**（见 `packages/ui/PORTING.md`）。
+// 这个定位下，「造了没人用的组件」是最贵的债：下家读到它，无从判断
+// 「这是能用的，还是没写完的」—— 而它长得和能用的一模一样。
+//
+// 实测过一轮：12,646 行里有 2,935 行（≈23%）零调用方，包括一个
+// **文档在教人别用**的图表组件（recharts 的 ResponsiveContainer 要测容器宽度，
+// 而隐藏页签是 display:none、宽度为 0）和一个和 platform 那份重复、
+// 但不支持 async pending 的二次确认框 —— 后者纯粹是个陷阱，
+// 下一个人按目录直觉 import 它就中招。
+//
+// 判据：**生产调用方 或 沙箱 demo，二者必居其一**。
+// demo 也算数，因为沙箱就是这个库的目录，而目录本身就是「有人验证过」的证据。
+{
+  const uiComponents = path.join(ROOT, 'packages/ui/src/components')
+  const names = fs.existsSync(uiComponents)
+    ? fs.readdirSync(uiComponents, { withFileTypes: true }).flatMap((e) => {
+        if (e.isDirectory()) return [e.name]
+        return e.name.endsWith('.tsx') ? [e.name.replace(/\.tsx$/, '')] : []
+      })
+    : []
+
+  // demo 清单：沙箱的 `source:` 字段指向的组件文件
+  const demoDir = path.join(ROOT, 'packages/platform/src/pages/dev-sandbox')
+  const demoed = new Set()
+  for (const file of fs.existsSync(demoDir) ? walk(demoDir).filter((f) => /\.tsx?$/.test(f)) : []) {
+    const src = stripComments(fs.readFileSync(file, 'utf8'))
+    for (const m of src.matchAll(/source:\s*'packages\/ui\/src\/components\/([a-z0-9-]+)/g)) {
+      demoed.add(m[1])
+    }
+  }
+
+  // 生产调用方：沙箱和实验台之外的任何 import
+  const SANDBOX = [
+    path.join('packages', 'platform', 'src', 'pages', 'dev-sandbox'),
+    path.join('packages', 'platform', 'src', 'pages', 'playground-table'),
+  ]
+  const usedInProd = new Set()
+  const usedAnywhere = new Set()
+  for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', 'apps/desktop/src']) {
+    for (const file of tsFiles(dir)) {
+      const r = rel(file)
+      const src = stripComments(fs.readFileSync(file, 'utf8'))
+      for (const m of src.matchAll(/@admin\/ui\/components\/([a-z0-9-]+)/g)) {
+        // 组件自己 import 自己不算「有人用」
+        if (r === path.join('packages', 'ui', 'src', 'components', `${m[1]}.tsx`)) continue
+        if (r.startsWith(path.join('packages', 'ui', 'src', 'components', m[1]) + path.sep)) continue
+        usedAnywhere.add(m[1])
+        if (!SANDBOX.some((sb) => r.startsWith(sb))) usedInProd.add(m[1])
+      }
+    }
+  }
+
+  for (const name of names) {
+    if (usedInProd.has(name) || demoed.has(name)) continue
+    add(
+      'error',
+      `packages/ui/src/components/${name}`,
+      'orphan-component',
+      usedAnywhere.has(name)
+        ? `只有沙箱在 import 它、却没有 demo 条目 —— 补一个 demo（source 指向它）或删掉`
+        : `既没有生产调用方、也没有沙箱 demo —— 补一个 demo 或删掉，别留给下家判断`,
+    )
+  }
+
+  // 🔴 先断言「有」：一个组件都扫不到时「没有孤儿」天然成立
+  if (names.length < 20) {
+    add('error', 'packages/ui/src/components', 'orphan-scanner-broken', `只扫到 ${names.length} 个组件，扫描器可能坏了`)
+  }
+  if (demoed.size < 20) {
+    add('error', demoDir, 'demo-scanner-broken', `只扫到 ${demoed.size} 条 demo 的 source，扫描器可能坏了`)
+  }
+}
+
+// ── shadcn registry 和源码对不对得上 ──────────────────────────────────
+//
+// `packages/ui/registry.json` 让下家 `npx shadcn add <url>/data-table`
+// 逐个取用组件，依赖自动带上（定位见 `packages/ui/PORTING.md`）。
+//
+// 它是**生成**的（`pnpm ui:registry`，依赖关系从源码的 import 语句算出来），
+// 做成闸门是因为漂移方式是静默的：加一个组件、改一处 import，清单不会自己跟上，
+// 而 `shadcn add` 照常成功、只是少拷了一个文件 —— 下家那边编译时才炸，
+// 报的是「找不到 ./checkbox」，跟 registry 八竿子打不着。
+{
+  const registryPath = path.join(ROOT, 'packages/ui/registry.json')
+  if (!fs.existsSync(registryPath)) {
+    add('error', 'packages/ui/registry.json', 'missing-registry', '文件不在了 —— 跑 `pnpm ui:registry`')
+  } else {
+    const want = `${JSON.stringify(buildRegistry(), null, 2)}\n`
+    if (fs.readFileSync(registryPath, 'utf8') !== want) {
+      add('error', 'packages/ui/registry.json', 'stale-registry', '和源码对不上了 —— 跑 `pnpm ui:registry` 重新生成')
+    }
+  }
+}
+
+// ── 第三方死声明 ──────────────────────────────────────────────────────
+//
+// 上面那条 `unused-declaration` 只查 `@admin/*` 开头的，所以
+// `date-fns` 这种第三方死声明查不到 —— 实测就漏过一条：源码零引用，
+// 它其实是 `react-day-picker` 自己的依赖，我们这条声明纯属误加。
+//
+// 死声明的代价不只是多装一个包：下一个人读 `dependencies` 时会以为
+// 「这个库我们直接在用」，于是照着它写新代码，而它随时可能被清掉。
+//
+// ⚠️ 只查**运行时**依赖，不查 devDependencies —— 工具链的包（eslint 插件、
+// tailwind、类型包）本来就不该在源码里出现，那不是死声明。
+{
+  //: 不会在源码里 import、但确实在用的运行时依赖。
+  //
+  //  ⚠️ 往这里加之前先想清楚**它凭什么是运行时依赖** —— 理由写在旁边。
+  //  这个豁免表长得越快，这条规则越没用。
+  const RUNTIME_ONLY = {
+    'packages/ui': new Set([
+      // CSS 入口 import 的，不走 JS
+      'tw-animate-css',
+      'shadcn',
+      '@fontsource-variable/inter',
+      '@fontsource-variable/jetbrains-mono',
+      // Tiptap 的 ProseMirror 底座，由 @tiptap/react 要求显式安装
+      '@tiptap/pm',
+      // react-i18next 的 peerDependency（`i18next: >= 26.2.0`）。
+      // 本包不 import 它，但少了它 react-i18next 装不起来
+      'i18next',
+      // 本包渲染的是 DOM 组件，运行时必须有一个 DOM 渲染器。
+      // Base UI 的浮层走 createPortal，那是它自己的依赖 —— 我们这条是「宿主要求」
+      'react-dom',
+    ]),
+    'packages/platform': new Set([
+      // 同 ui：react-i18next 的 peer，以及 DOM 渲染器
+      'i18next',
+      'react-dom',
+    ]),
+    'apps/web': new Set([
+      // react-i18next 的 peer。本 app 是**唯一**把 React 绑定接上去的地方
+      // （`src/i18n.ts` 的 initI18n([initReactI18next])），所以这条声明留着
+      'i18next',
+    ]),
+    'apps/mobile': new Set([
+      // Expo 的**自动链接**原生模块 —— 装了就生效，不需要（也不该）在 JS 里 import。
+      // expo-router 的文档把这几个列为必装项
+      'expo-constants',
+      'expo-font',
+      'expo-linking',
+      'expo-system-ui',
+      'react-native-gesture-handler',
+      'react-native-screens',
+      // react-native-reanimated 的运行时，由 Babel 插件在编译期注入调用
+      'react-native-worklets',
+    ]),
+  }
+
+  for (const pkgDir of PACKAGES) {
+    const abs = path.join(ROOT, pkgDir)
+    const pkgJson = readJson(path.join(abs, 'package.json'))
+    const deps = Object.keys(pkgJson.dependencies ?? {}).filter((d) => !d.startsWith('@admin/'))
+    if (!deps.length) continue
+
+    const allowed = RUNTIME_ONLY[pkgDir] ?? new Set()
+    const srcDir = path.join(abs, 'src')
+    let blob = ''
+    for (const file of fs.existsSync(srcDir)
+      ? walk(srcDir).filter((f) => /\.(ts|tsx|js|jsx|mjs|css)$/.test(f))
+      : []) {
+      blob += fs.readFileSync(file, 'utf8')
+    }
+    // 配置文件也算（vite.config.ts 里 import 的插件是真在用）
+    for (const name of fs.readdirSync(abs).filter((f) => /^(vite|tailwind|postcss|metro|app)\..*\.(ts|js|mjs|json)$/.test(f))) {
+      blob += fs.readFileSync(path.join(abs, name), 'utf8')
+    }
+
+    for (const dep of deps) {
+      if (allowed.has(dep)) continue
+      // `from 'x'` / `from 'x/sub'` / `import('x')` / `@import "x"` 都算
+      const esc = dep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      if (new RegExp(`['"\`]${esc}(?:/|['"\`])`).test(blob)) continue
+      add('warn', `${pkgDir}/package.json`, 'unused-third-party', `声明了 ${dep} 但源码里没有一处引用它`)
+    }
+  }
+}
+
 // ── 输出 ──────────────────────────────────────────────────────────────
 const errors = problems.filter((p) => p.level === 'error')
 const warns = problems.filter((p) => p.level === 'warn')
@@ -454,7 +645,7 @@ for (const [where, ps] of byWhere) {
 }
 
 console.log(
-  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 功能引导两条 · 品牌版本 · E2E 断言 · 错误 ${errors.length} · 警告 ${warns.length}`,
+  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 功能引导两条 · 组件孤儿 · registry · 品牌版本 · E2E 断言 · 错误 ${errors.length} · 警告 ${warns.length}`,
 )
 if (!problems.length) console.log('[ok] 没有漂')
 process.exit(errors.length ? 1 : 0)

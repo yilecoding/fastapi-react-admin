@@ -2,10 +2,11 @@ import * as React from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAdjustments, IconAlertTriangle, IconClock, IconCode, IconKey, IconLock,
+  IconAdjustments, IconClock, IconCode, IconKey, IconLock,
   IconLockAccess, IconLogin, IconPlus, IconRestore, IconSearch, IconServer,
 } from '@tabler/icons-react'
 
+import { Alert } from '@admin/ui/components/alert'
 import { Button } from '@admin/ui/components/button'
 import {
   InputGroup, InputGroupAddon, InputGroupInput,
@@ -388,19 +389,13 @@ export function ConfigPage({
                 )}
               </div>
               {groupOff && (
-                <div
-                  className="flex items-start gap-2 rounded-md bg-amber-500/10 px-3 py-2 ring-1 ring-amber-500/25"
-                  data-testid="group-off-banner"
-                >
-                  <IconAlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <p className="text-xs leading-relaxed text-amber-700 dark:text-amber-300">
-                    <Trans
-                      t={t}
-                      i18nKey="这一组的总开关是关的 —— 后端整组不加载，下面的值改了也不会生效，实际用的是 <c>.env</c> 里的默认值。"
-                      components={{ c: <code /> }}
-                    />
-                  </p>
-                </div>
+                <Alert tone="warning" className="py-2 text-xs" data-testid="group-off-banner">
+                  <Trans
+                    t={t}
+                    i18nKey="这一组的总开关是关的 —— 后端整组不加载，下面的值改了也不会生效，实际用的是 <c>.env</c> 里的默认值。"
+                    components={{ c: <code /> }}
+                  />
+                </Alert>
               )}
             </div>
           )}

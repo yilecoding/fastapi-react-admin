@@ -1,6 +1,8 @@
 # apps/mobile/src/components —— 移动端 UI
 
-> 这份文件是 [`apps/mobile` 分册](../../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的文件时才加载它。
+> 这份文件是 [`apps/mobile` 分册](../../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的
+> 文件时才把它加载进上下文（惰性加载）。跨模块的硬纪律只在根 `CLAUDE.md` 里有一份；
+> **新增结论请追加到离代码最近的那一份**。
 
 组件来自 `react-native-reusables`（RN 版的 shadcn），令牌在 `../styles/global.css`。
 **风格是 iOS 分组列表**，不是 web 那套「白页 + 描边卡片」——为什么这么定、以及自创令牌那次翻车，都在下面。

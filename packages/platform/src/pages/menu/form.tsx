@@ -3,8 +3,9 @@ import { Trans, useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { IconAlertTriangle, IconLoader2 } from '@tabler/icons-react'
+import { IconLoader2 } from '@tabler/icons-react'
 
+import { Alert } from '@admin/ui/components/alert'
 import { Button } from '@admin/ui/components/button'
 import { Input } from '@admin/ui/components/input'
 import { Label } from '@admin/ui/components/label'
@@ -251,11 +252,7 @@ export function MenuFormSheet({
                   </p>
                 )}
                 {pathMissing && !dirPathUnused && (
-                  <p
-                    className="flex items-start gap-1.5 rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 ring-1 ring-amber-500/25 dark:text-amber-300"
-                    data-testid="m-path-missing"
-                  >
-                    <IconAlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <Alert tone="warning" className="p-2 text-xs" data-testid="m-path-missing">
                     <span>
                       <Trans
                         t={t}
@@ -264,7 +261,7 @@ export function MenuFormSheet({
                         components={{ c: <code />, d: <code /> }}
                       />
                     </span>
-                  </p>
+                  </Alert>
                 )}
                 <p className="text-xs text-muted-foreground">
                   {t('只列出前端真实存在的 {{n}} 个路由 —— 从根上杜绝死链。', { n: validPaths.length })}

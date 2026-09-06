@@ -1,6 +1,7 @@
-import { Badge } from '@admin/ui/components/badge'
+import { Alert } from '@admin/ui/components/alert'
 import { Button } from '@admin/ui/components/button'
 import { Progress, ProgressLabel, ProgressValue } from '@admin/ui/components/progress'
+import { QueryError } from '@admin/ui/components/query-error'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import {
   setToastPosition,
@@ -31,6 +32,139 @@ const fakeRequest = (ms: number, ok: boolean) =>
 
 export const FEEDBACK_DEMOS: Demo[] = [
   {
+    id: 'alert',
+    name: 'Alert',
+    zh: '提示条',
+    group: 'feedback',
+    summary:
+      '常驻在版面上的一段说明或警告。tone 决定语气色，和 _shared/status 的 TONE_CLASS 同源 —— ' +
+      '同一个语义在药丸和提示条上得是同一个颜色。判据是「会不会自己消失」：' +
+      'Alert 是版面的一部分，toast 不是。',
+    source: 'packages/ui/src/components/alert.tsx',
+    use: '需要一直看得见的说明：改动要重启才生效、这一组开关是关的、当前值在路由里不存在。',
+    avoid: '一次操作的回执用 toast（会自己消失，不占版面）；取数失败用 QueryError（它认 403 且带重试）。',
+    stage: 'stretch',
+    knobs: {
+      tone: { kind: 'select', label: 'tone', options: ['info', 'success', 'warning', 'danger', 'muted'], default: 'warning' },
+      title: { kind: 'text', label: '标题', default: '', hint: '只有一句话时不用给' },
+      body: { kind: 'text', label: '正文', default: '有插件发生变更，需要重启后端服务才会生效。' },
+      icon: { kind: 'bool', label: '图标', default: true },
+      action: { kind: 'bool', label: '右侧动作', default: false },
+      dismiss: { kind: 'bool', label: '可关闭', default: false, hint: '关不关得掉由调用方决定，组件自己不记状态' },
+    },
+    rows: [
+      {
+        title: '五种语气',
+        hint: 'info 说明 · success 已完成 · warning 会有后果 · danger 已经出错 · muted 纯补充。',
+        items: [
+          preview({ tone: 'info', body: '这一页的数据每 10 秒自动刷新一次。' }),
+          preview({ tone: 'success', body: '配置已保存，30 秒内全部节点生效。' }),
+          preview({ tone: 'warning', body: '这一组的总开关是关的，下面的值改了也不会生效。' }),
+          preview({ tone: 'danger', body: '导出失败：任务队列没有响应。' }),
+          preview({ tone: 'muted', body: '趋势只是本次会话的采样，后端没有历史存储。' }),
+        ],
+      },
+      {
+        title: '带标题 / 带动作',
+        hint: '两行以上才给标题；右侧动作放「去设置」这种，关闭按钮走 onDismiss 不占动作位。',
+        items: [
+          preview({ tone: 'danger', title: '登录失败', body: '验证码错误或已过期，请重新获取。' }),
+          preview({ tone: 'warning', body: '附件加载失败。', action: true }),
+          preview({ tone: 'info', body: '有新版本可用。', dismiss: true }),
+        ],
+      },
+    ],
+    render: (v) => (
+      <Alert
+        tone={s(v, 'tone') as 'info'}
+        title={s(v, 'title') || undefined}
+        icon={b(v, 'icon') ? undefined : false}
+        action={
+          b(v, 'action') ? (
+            <Button size="sm" variant="outline">
+              重试
+            </Button>
+          ) : undefined
+        }
+        onDismiss={b(v, 'dismiss') ? () => {} : undefined}
+        className="max-w-xl"
+      >
+        {s(v, 'body')}
+      </Alert>
+    ),
+    code: (v) =>
+      jsx(
+        'Alert',
+        {
+          tone: s(v, 'tone') === 'info' ? undefined : s(v, 'tone'),
+          title: s(v, 'title') || undefined,
+          icon: b(v, 'icon') ? undefined : '{false}',
+          action: b(v, 'action') ? '{<Button size="sm" variant="outline">重试</Button>}' : undefined,
+          onDismiss: b(v, 'dismiss') ? '{() => setShown(false)}' : undefined,
+        },
+        s(v, 'body')
+      ),
+  },
+
+  {
+    id: 'query-error',
+    name: 'QueryError',
+    zh: '取数错误块',
+    group: 'feedback',
+    summary:
+      '取数失败的错误块，全站唯一一份。它认 ApiError.httpStatus —— 403 显示' +
+      '「没有权限查看这些数据」，而不是把后端那句原文糊上去。' +
+      'DataTable / MonitorError 内部用的都是它。',
+    source: 'packages/ui/src/components/query-error.tsx',
+    use: '任何 useQuery 失败的地方。硬纪律 9：失败必须是可见状态，不是缺失状态。',
+    avoid: '不要把错误落进 emptyMessage —— 「接口挂了」和「筛选太窄没查到」长成同一个空态，用户会一直改筛选。',
+    stage: 'stretch',
+    knobs: {
+      status: { kind: 'select', label: 'httpStatus', options: ['500', '403', '502', '（无）'], default: '500' },
+      message: { kind: 'text', label: 'error.message', default: '服务器开小差了' },
+      retry: { kind: 'bool', label: '重试入口', default: true, hint: '不给就只有错误文案，用户没有出路' },
+      title: { kind: 'text', label: '覆盖标题', default: '' },
+    },
+    rows: [
+      {
+        title: '403 有专门文案',
+        hint: '权限不足和服务端出错是两件事：前者重试一万次也没用，文案要说清楚。',
+        items: [
+          preview({ status: '500' }, '500'),
+          preview({ status: '403' }, '403'),
+          preview({ status: '（无）', message: 'Failed to fetch' }, '网络层'),
+        ],
+      },
+    ],
+    render: (v) => {
+      const raw = s(v, 'status')
+      const error =
+        raw === '（无）'
+          ? new Error(s(v, 'message'))
+          : Object.assign(new Error(s(v, 'message')), { httpStatus: Number(raw) })
+      return (
+        <QueryError
+          error={error}
+          onRetry={b(v, 'retry') ? () => {} : undefined}
+          title={s(v, 'title') || undefined}
+          className="max-w-xl"
+        />
+      )
+    },
+    code: (v) =>
+      lines(
+        '// 列表页不要手写这三行状态位，走 _shared/list-query 的 listState()',
+        'const list = listState(useQuery(usersQuery(params)))',
+        '',
+        jsx('QueryError', {
+          error: '{list.error}',
+          onRetry: b(v, 'retry') ? '{list.onRetry}' : undefined,
+          title: s(v, 'title') || undefined,
+        })
+      ),
+  },
+
+  {
     id: 'toast',
     name: 'Toast',
     zh: '通知',
@@ -38,6 +172,8 @@ export const FEEDBACK_DEMOS: Demo[] = [
     summary:
       'manager 是模块级的，mutation 的 onError、api-client 拦截器这些非组件代码也能弹。error 和 loading 默认不自动消失 —— 一条自己溜走的报错等于没报。',
     source: 'packages/ui/src/components/toast.tsx',
+    use: '一次操作的结果回执：保存成功、删除失败。会自己消失，不占版面。',
+    avoid: '需要常驻在版面上的说明或警告用 Alert；取数失败用 QueryError（它有重试入口）。',
     knobs: {
       tone: { kind: 'select', label: 'tone', options: TONES, default: 'success' },
       title: { kind: 'text', label: '标题', default: '已保存 3 项配置' },
@@ -199,7 +335,6 @@ export const FEEDBACK_DEMOS: Demo[] = [
         : `setToastPosition('${s(v, 'position')}')  // <Toaster> 是全局单例，这里等价于设置默认方位\n${toastCall}`
     },
   },
-
   {
     id: 'progress',
     name: 'Progress',
@@ -207,6 +342,8 @@ export const FEEDBACK_DEMOS: Demo[] = [
     group: 'feedback',
     summary: '已知总量的进度。总量未知（等接口回来）用 Skeleton 或转圈，不要拿它假装。',
     source: 'packages/ui/src/components/progress.tsx',
+    use: '有确定百分比的进度：上传、导出、批量任务。',
+    avoid: '不知道要多久的等待用 Skeleton 或按钮上的转圈 —— 假进度条比没有更糟。',
     knobs: {
       value: { kind: 'int', label: 'value', default: 62, min: 0, max: 100 },
       label: { kind: 'bool', label: '带标题与数值', default: true },
@@ -247,7 +384,6 @@ export const FEEDBACK_DEMOS: Demo[] = [
           : undefined
       ),
   },
-
   {
     id: 'skeleton',
     name: 'Skeleton',
@@ -256,6 +392,8 @@ export const FEEDBACK_DEMOS: Demo[] = [
     summary:
       '占位要和真实内容同形同位。DataTable 自己管加载态（传 loading），页面里不要再写「isPending ? 骨架 : 表格」—— 那会让筛选栏在加载完成时凭空出现。',
     source: 'packages/ui/src/components/skeleton.tsx',
+    use: '首屏取数时占住版面，避免内容回来时整页跳动。',
+    avoid: '后台刷新（已经有旧数据）不要换成骨架 —— 那会让用户正在看的内容凭空消失。传 DataTable 的 busy。',
     knobs: {
       shape: {
         kind: 'select',
@@ -338,58 +476,5 @@ export const FEEDBACK_DEMOS: Demo[] = [
         '</div>'
       )
     },
-  },
-
-  {
-    id: 'badge',
-    name: 'Badge',
-    zh: '徽标',
-    group: 'feedback',
-    summary:
-      '短状态标签。**业务状态（正常/停用）不要在这里手搭** —— 走 pages/_shared/status.tsx 的 StatusBadge，色板只在那一处定义。',
-    source: 'packages/ui/src/components/badge.tsx',
-    knobs: {
-      variant: {
-        kind: 'select',
-        label: 'variant',
-        options: ['default', 'secondary', 'outline', 'destructive', 'ghost', 'link'],
-        default: 'secondary',
-      },
-      children: { kind: 'text', label: '文案', default: '待审核' },
-    },
-    rows: [
-      {
-        title: '变体',
-        hint: 'secondary 是默认选择；default 那么重的底色一屏出现十几个就成噪音了。',
-        items: [
-          preview({ variant: 'default', children: 'default' }),
-          preview({ variant: 'secondary', children: 'secondary' }),
-          preview({ variant: 'outline', children: 'outline' }),
-          preview({ variant: 'destructive', children: 'destructive' }),
-          preview({ variant: 'ghost', children: 'ghost' }),
-        ],
-      },
-      {
-        title: '真实用法',
-        hint: '徽标里的数字要 tabular-nums，否则一列数字宽窄跳动。',
-        items: [
-          preview({ variant: 'secondary', children: '待审核' }),
-          preview({ variant: 'outline', children: 'v1.0.0' }),
-          preview({ variant: 'destructive', children: '已停用' }),
-          preview({ variant: 'secondary', children: '12' }),
-        ],
-      },
-    ],
-    render: (v) => (
-      <Badge variant={s(v, 'variant') as 'default'} className="tabular-nums">
-        {s(v, 'children')}
-      </Badge>
-    ),
-    code: (v) =>
-      jsx(
-        'Badge',
-        { variant: s(v, 'variant') === 'default' ? undefined : s(v, 'variant') },
-        s(v, 'children')
-      ),
   },
 ]

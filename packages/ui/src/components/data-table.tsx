@@ -16,16 +16,9 @@
  *                                （错误块本身在 components/query-error.tsx）
  */
 import * as React from "react"
-import {
-  IconChevronLeft,
-  IconChevronRight,
-  IconChevronsLeft,
-  IconChevronsRight,
-  IconLayoutColumns,
-  IconPlus,
-} from "@tabler/icons-react"
+import { IconLayoutColumns, IconPlus } from "@tabler/icons-react"
 import { FlexRender } from "@tanstack/react-table"
-import { useTranslation } from "react-i18next"
+import { useT } from "../lib/i18n"
 import type { Row, RowData, Table, TableFeatures } from "@tanstack/react-table"
 
 import { Badge } from "@admin/ui/components/badge"
@@ -37,23 +30,16 @@ import {
   DropdownMenuGroup,
   DropdownMenuTrigger,
 } from "@admin/ui/components/dropdown-menu"
-import { Label } from "@admin/ui/components/label"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@admin/ui/components/popover"
+import { Pagination, type PaginationProps } from "@admin/ui/components/pagination"
 import { QueryError, type QueryErrorProps } from "@admin/ui/components/query-error"
 import { Separator } from "@admin/ui/components/separator"
 import { Skeleton } from "@admin/ui/components/skeleton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@admin/ui/components/tooltip"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@admin/ui/components/select"
 import {
   Table as TableRoot,
   TableBody,
@@ -96,7 +82,7 @@ export function DataTableColumnVisibility<
   table: tableProp,
   columnLabels = {},
 }: DataTableColumnVisibilityProps<TFeatures, TData>) {
-  const { t } = useTranslation()
+  const t = useT()
   const table = tableProp as AnyTable
   const hidableColumns = table
     .getAllColumns()
@@ -148,110 +134,13 @@ export function DataTableColumnVisibility<
 
 // ─── DataTablePagination ──────────────────────────────────────────────────────
 
-export interface DataTablePaginationProps {
-  /** Current page index (0-based) */
-  pageIndex: number
-  /** Total number of pages */
-  pageCount: number
-  /** Current page size */
-  pageSize: number
-  /** 左侧信息区显示的已选行数。只读列表不传 —— 那时只显示总条数 */
-  selectedCount?: number
-  /** Total filtered rows shown in the left info text */
-  totalCount: number
-  onPageChange: (index: number) => void
-  onPageSizeChange: (size: number) => void
-  pageSizeOptions?: number[]
-}
-
-export function DataTablePagination({
-  pageIndex,
-  pageCount,
-  pageSize,
-  selectedCount,
-  totalCount,
-  onPageChange,
-  onPageSizeChange,
-  pageSizeOptions = [10, 20, 30, 50],
-}: DataTablePaginationProps) {
-  const { t } = useTranslation()
-  return (
-    // shrink-0：表格被撑成滚动视区时，分页条要钉在底部而不是被压扁
-    <div className="flex shrink-0 items-center justify-between px-1">
-      <div className="hidden flex-1 text-sm text-muted-foreground sm:flex">
-        {selectedCount === undefined
-          ? t("共 {{total}} 条", { total: totalCount })
-          : t("已选 {{n}} 项 / 共 {{total}} 条", { n: selectedCount, total: totalCount })}
-      </div>
-      <div className="flex w-full items-center gap-8 lg:w-fit">
-        <div className="hidden items-center gap-2 lg:flex">
-          <Label htmlFor="rows-per-page" className="text-sm font-medium">
-            {t("每页")}
-          </Label>
-          <Select
-            value={`${pageSize}`}
-            onValueChange={(value) => onPageSizeChange(Number(value))}
-          >
-            <SelectTrigger size="sm" className="w-20" id="rows-per-page">
-              <SelectValue placeholder={pageSize} />
-            </SelectTrigger>
-            <SelectContent side="top">
-              {pageSizeOptions.map((ps) => (
-                <SelectItem key={ps} value={`${ps}`}>
-                  {ps}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex w-fit items-center justify-center text-sm font-medium">
-          {t("第 {{page}} / {{total}} 页", { page: pageIndex + 1, total: Math.max(pageCount, 1) })}
-        </div>
-        <div className="ml-auto flex items-center gap-2 lg:ml-0">
-          <Button
-            variant="outline"
-            className="hidden h-8 w-8 p-0 lg:flex"
-            onClick={() => onPageChange(0)}
-            disabled={pageIndex === 0}
-          >
-            <span className="sr-only">{t("首页")}</span>
-            <IconChevronsLeft />
-          </Button>
-          <Button
-            variant="outline"
-            className="size-8"
-            size="icon"
-            onClick={() => onPageChange(pageIndex - 1)}
-            disabled={pageIndex === 0}
-          >
-            <span className="sr-only">{t("上一页")}</span>
-            <IconChevronLeft />
-          </Button>
-          <Button
-            variant="outline"
-            className="size-8"
-            size="icon"
-            onClick={() => onPageChange(pageIndex + 1)}
-            disabled={pageIndex >= pageCount - 1}
-          >
-            <span className="sr-only">{t("下一页")}</span>
-            <IconChevronRight />
-          </Button>
-          <Button
-            variant="outline"
-            className="hidden size-8 lg:flex"
-            size="icon"
-            onClick={() => onPageChange(pageCount - 1)}
-            disabled={pageIndex >= pageCount - 1}
-          >
-            <span className="sr-only">{t("末页")}</span>
-            <IconChevronsRight />
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
+/**
+ * 分页条。实现已经搬到 `components/pagination.tsx`（全站唯一一份，
+ * `data-grid` 也用它）—— 这里只留一个薄薄的名字别名，
+ * 因为 15 个列表页 import 的是 `DataTablePagination`。
+ */
+export type DataTablePaginationProps = PaginationProps
+export const DataTablePagination = Pagination
 
 // ─── DataTableFacetedFilter ───────────────────────────────────────────────────
 
@@ -277,7 +166,7 @@ export function DataTableFacetedFilter({
   selected,
   onSelectionChange,
 }: DataTableFacetedFilterProps) {
-  const { t } = useTranslation()
+  const t = useT()
   const toggle = (value: string) => {
     if (selected.includes(value)) {
       onSelectionChange(selected.filter((v) => v !== value))
@@ -520,7 +409,7 @@ export function DataTable<
   error,
   onRetry,
 }: DataTableProps<TFeatures, TData>) {
-  const { t } = useTranslation()
+  const t = useT()
   const table = tableProp as AnyTable
   // 有错但上一次的行还在（翻页失败那种）→ 行留着，错误挂成横幅
   const errorBanner = Boolean(error) && rows.length > 0

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../../lib/i18n"
 import { IconLoader2, IconRotate, IconSearch } from "@tabler/icons-react"
 
 import { Button } from "@admin/ui/components/button"
@@ -108,7 +108,7 @@ export function QueryBar({
   validate,
   applied,
 }: QueryBarProps) {
-  const { t } = useTranslation()
+  const t = useT()
   const [storedViews, setStoredViews] = useQueryViews(controlledViews ? undefined : viewsStorageKey)
   const views = controlledViews ?? storedViews
   const setViews = onViewsChange ?? setStoredViews

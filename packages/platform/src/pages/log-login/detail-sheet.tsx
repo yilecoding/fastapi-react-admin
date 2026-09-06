@@ -1,17 +1,16 @@
-import { IconAlertTriangle } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 
 import { formatDateTime } from '@admin/i18n'
+import { Alert } from '@admin/ui/components/alert'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
-import { Separator } from '@admin/ui/components/separator'
+import { CopyButton } from '@admin/ui/components/copy-button'
+import { Descriptions, DescriptionItem } from '@admin/ui/components/descriptions'
 import {
   Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from '@admin/ui/components/sheet'
-import { cn } from '@admin/ui/lib/utils'
 
-import { CopyButton } from '../_shared/json-viewer'
-
+import { DetailIdRow, DetailSection } from '../_shared/detail-sheet'
 import { StatusPill } from '../_shared/status'
 import { formatLocation, type LoginLog } from '../_shared/login-log'
 
@@ -47,33 +46,31 @@ export function LoginLogDetailSheet({
 
         <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 py-2">
           {!ok && (
-            <div className="flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2.5 ring-1 ring-destructive/25">
-              <IconAlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-destructive">{t('登录失败')}</p>
-                <p className="text-sm text-destructive/90" data-testid="d-msg">{t(log.msg)}</p>
-              </div>
-            </div>
+            <Alert tone="danger" title={t('登录失败')}>
+              <span data-testid="d-msg">{t(log.msg)}</span>
+            </Alert>
           )}
 
-          <Section title={t("基本信息")}>
+          <DetailSection title={t('基本信息')}>
             <div className="mb-3 grid grid-cols-1 gap-2 rounded-md border border-border bg-muted/30 p-2.5 sm:grid-cols-2">
-              <IdRow label={t("日志 ID")} value={log.id} />
-              <IdRow label={t("用户 UUID")} value={log.user_uuid} testId="d-uuid" />
+              <DetailIdRow label={t('日志 ID')} value={log.id} />
+              <DetailIdRow label={t('用户 UUID')} value={log.user_uuid} testId="d-uuid" />
             </div>
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
-              <Row label={t("登录账号")} value={log.username} />
-              <Row label={t("登录时间")} value={formatDateTime(log.login_time)} mono />
-              <Row label={t("登录 IP")} value={log.ip} mono copy />
-              <Row label={t("登录地点")} value={formatLocation(log)} />
-              <Row label={t("浏览器")} value={log.browser ?? '—'} />
-              <Row label={t("终端系统")} value={log.os ?? '—'} />
-              <Row label={t("设备类型")} node={<Badge variant="outline" className="font-normal">{log.device ?? '—'}</Badge>} />
-              <Row label={t("结果说明")} value={t(log.msg)} />
-            </dl>
-          </Section>
+            <Descriptions columns={2}>
+              <DescriptionItem label={t('登录账号')} value={log.username} />
+              <DescriptionItem label={t('登录时间')} value={formatDateTime(log.login_time)} mono />
+              <DescriptionItem label={t('登录 IP')} value={log.ip} mono copy />
+              <DescriptionItem label={t('登录地点')} value={formatLocation(log)} />
+              <DescriptionItem label={t('浏览器')} value={log.browser} />
+              <DescriptionItem label={t('终端系统')} value={log.os} />
+              <DescriptionItem label={t('设备类型')}>
+                <Badge variant="outline" className="font-normal">{log.device ?? '—'}</Badge>
+              </DescriptionItem>
+              <DescriptionItem label={t('结果说明')} value={t(log.msg)} />
+            </Descriptions>
+          </DetailSection>
 
-          <Section title="User-Agent">
+          <DetailSection title="User-Agent">
             <div className="relative rounded-md border border-border bg-muted/30 p-3 pe-12">
               <CopyButton text={log.user_agent ?? ''} className="absolute end-2 top-2" />
               <p className="break-all font-mono text-xs leading-relaxed" data-testid="d-ua">
@@ -83,7 +80,7 @@ export function LoginLogDetailSheet({
             <p className="text-xs text-muted-foreground">
               {t('浏览器 / 终端系统 / 设备类型都是从这串原文解析出来的，对不上时以原文为准。')}
             </p>
-          </Section>
+          </DetailSection>
         </div>
 
         <SheetFooter>
@@ -91,56 +88,5 @@ export function LoginLogDetailSheet({
         </SheetFooter>
       </SheetContent>
     </Sheet>
-  )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <h3 className="flex items-center gap-2 text-sm font-semibold">
-        <span className="h-3.5 w-[3px] shrink-0 rounded-full bg-primary" aria-hidden />
-        <span className="shrink-0">{title}</span>
-        <Separator className="ms-1 min-w-0 flex-1" />
-      </h3>
-      {children}
-    </section>
-  )
-}
-
-function IdRow({ label, value, testId }: { label: string; value: string; testId?: string }) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-20 shrink-0 text-xs text-muted-foreground">{label}</span>
-      <code className="min-w-0 flex-1 truncate font-mono text-xs tabular-nums" title={value} data-testid={testId}>
-        {value}
-      </code>
-      <CopyButton text={value} label={t('复制{{what}}', { what: label })} />
-    </div>
-  )
-}
-
-function Row({
-  label, value, node, mono, copy,
-}: {
-  label: string
-  value?: string | null
-  node?: React.ReactNode
-  mono?: boolean
-  copy?: boolean
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex items-baseline gap-2">
-      <dt className="w-16 shrink-0 text-xs text-muted-foreground">{label}</dt>
-      <dd className="flex min-w-0 flex-1 items-center gap-1">
-        {node ?? (
-          <span className={cn('min-w-0 text-sm', mono ? 'font-mono text-xs break-all tabular-nums' : 'truncate')} title={String(value ?? '')}>
-            {value || '—'}
-          </span>
-        )}
-        {copy && value && <CopyButton text={value} label={t('复制{{what}}', { what: label })} />}
-      </dd>
-    </div>
   )
 }

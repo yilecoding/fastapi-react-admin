@@ -5,6 +5,7 @@ import { createColumnHelper, useTable } from '@tanstack/react-table'
 import { IconDownload, IconLoader2 } from '@tabler/icons-react'
 
 import { formatDateTime } from '@admin/i18n'
+import { Alert } from '@admin/ui/components/alert'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
@@ -493,13 +494,9 @@ export function LogOperaPage({
             />
 
             {exportError && (
-              <p
-                role="alert"
-                data-testid="export-error"
-                className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-              >
+              <Alert tone="danger" data-testid="export-error">
                 {exportError}
-              </p>
+              </Alert>
             )}
 
             {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下

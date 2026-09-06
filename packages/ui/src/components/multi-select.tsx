@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../lib/i18n"
 import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox"
 import { IconSearch, IconSelector, IconX } from "@tabler/icons-react"
 
@@ -76,7 +76,7 @@ function MultiSelect({
   "aria-label"?: string
   "data-testid"?: string
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const selected = React.useMemo(() => [...(value ?? [])], [value])
 
   const values = React.useMemo(() => options.map((o) => o.value), [options])

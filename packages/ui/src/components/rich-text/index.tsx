@@ -3,7 +3,7 @@
 import * as React from "react"
 import { EditorContent, useEditor, type Editor } from "@tiptap/react"
 import { PluginKey } from "@tiptap/pm/state"
-import { useTranslation } from "react-i18next"
+import { useT } from "../../lib/i18n"
 import StarterKit from "@tiptap/starter-kit"
 import { CharacterCount, Placeholder } from "@tiptap/extensions"
 import { FileHandlePlugin } from "@tiptap/extension-file-handler"
@@ -133,7 +133,7 @@ export function RichTextEditor({
   className,
   "data-testid": testId = "rich-text",
 }: RichTextEditorProps) {
-  const { t } = useTranslation()
+  const t = useT()
   const hint = placeholder ?? t("请输入内容…")
 
   const [notice, setNotice] = React.useState<Notice | null>(null)
@@ -386,7 +386,7 @@ export function RichTextViewer({
   className?: string
   "data-testid"?: string
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const editor = useEditor(
     {
       extensions: baseExtensions({}),

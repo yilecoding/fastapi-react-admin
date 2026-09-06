@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../../lib/i18n"
 import { IconX } from "@tabler/icons-react"
 
 import { Combobox } from "@admin/ui/components/combobox"
@@ -82,7 +82,7 @@ export function FieldControl({
   className,
   testId,
 }: FieldControlContext & { size?: "sm" | "default" }) {
-  const { t } = useTranslation()
+  const t = useT()
   const shape = valueShape(field, op)
 
   // 「为空 / 不为空」不吃值，渲染出来只会让人以为要填
@@ -243,7 +243,7 @@ type SubProps = {
 function RangeControl({
   field, value, onChange, onSubmit, size, invalid, inline, testId, box, className, ph,
 }: SubProps) {
-  const { t } = useTranslation()
+  const t = useT()
   const [a, b] = (Array.isArray(value) ? value : []) as [unknown, unknown]
 
   const isDate = field.type === "date" || field.type === "dateRange"
@@ -326,7 +326,7 @@ function RangeControl({
 function MultiControl({
   field, value, onChange, onSubmit, size, inline, testId, box, className, ph,
 }: SubProps) {
-  const { t } = useTranslation()
+  const t = useT()
   const arr = React.useMemo(
     () => (Array.isArray(value) ? value.map((v) => String(v)) : []),
     [value]
@@ -407,7 +407,7 @@ export function TagsInput({
   label?: string
   testId?: string
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const [draft, setDraft] = React.useState("")
   const visible = compact ? value.slice(0, COMPACT_CHIPS) : value
   const rest = value.length - visible.length
@@ -496,7 +496,7 @@ export function TagsInput({
 
 function SelectControl(props: SubProps) {
   const { field, value, onChange, size, testId, box, className, ph } = props
-  const { t } = useTranslation()
+  const t = useT()
   const items = React.useMemo(
     () => [
       { value: ALL, label: t("不限") },

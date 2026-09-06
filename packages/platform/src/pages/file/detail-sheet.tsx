@@ -4,6 +4,7 @@ import { IconDownload, IconEye } from '@tabler/icons-react'
 import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
+import { Descriptions, DescriptionItem } from '@admin/ui/components/descriptions'
 import {
   Sheet,
   SheetContent,
@@ -75,50 +76,22 @@ export function FileDetailSheet({
                 </Button>
               </div>
 
-              <dl className="flex flex-col gap-3 text-sm">
-                <Row label={t('原始文件名')} value={file.original_name} />
-                <Row label={t('存储文件名')} value={file.name} mono />
+              <Descriptions layout="stacked">
+                <DescriptionItem label={t('原始文件名')} value={file.original_name} />
+                <DescriptionItem label={t('存储文件名')} value={file.name} mono />
                 {/* 落盘按 YYYY/MM/DD 分目录，排障时要知道在哪一天那一格 */}
-                <Row label={t('存储路径')} value={file.path} mono wrap />
-                <Row label={t('MIME 类型')} value={file.content_type ?? '—'} mono />
-                <Row label={t('字节数')} value={String(file.size)} mono />
-                <Row label={t('上传时间')} value={formatDateTime(file.created_time)} mono />
-                <Row label={t('上传人 ID')} value={file.created_by} mono />
+                <DescriptionItem label={t('存储路径')} value={file.path} mono wrap />
+                <DescriptionItem label={t('MIME 类型')} value={file.content_type} mono />
+                <DescriptionItem label={t('字节数')} value={file.size} mono />
+                <DescriptionItem label={t('上传时间')} value={formatDateTime(file.created_time)} mono />
+                <DescriptionItem label={t('上传人 ID')} value={file.created_by} mono />
                 {/* 64 个 hex 必须能换行，否则会把抽屉横向撑破 */}
-                <Row label={t('校验和')} value={file.sha256 ?? '—'} mono wrap />
-              </dl>
+                <DescriptionItem label={t('校验和')} value={file.sha256} mono wrap copy />
+              </Descriptions>
             </div>
           </>
         )}
       </SheetContent>
     </Sheet>
-  )
-}
-
-function Row({
-  label,
-  value,
-  mono,
-  wrap,
-}: {
-  label: string
-  value: string
-  mono?: boolean
-  wrap?: boolean
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd
-        className={[
-          'text-sm',
-          mono ? 'font-mono text-xs' : '',
-          wrap ? 'break-all' : 'truncate',
-        ].join(' ')}
-        title={value}
-      >
-        {value}
-      </dd>
-    </div>
   )
 }

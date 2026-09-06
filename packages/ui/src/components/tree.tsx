@@ -1,27 +1,39 @@
 /**
- * ⚠️ **目前没有调用方，这是刻意留的**（死代码扫描会报到它，别顺手删）。
+ * ⚠️ **没有生产调用方**，留着是刻意的 —— 但判据变了，见下。
  *
- * 判据和被删掉的 `date-picker` / `date-range-picker` 不同 —— 那两个有**现成的
- * 替代品**（`datetime-picker.tsx` 的 `DateTimeValuePicker` /
- * `DateTimeRangePicker`，查询区在用），删了不丢任何东西。
- * 而这个是手写的 241 行「受控树 + 三态复选」——
- * 文件下面那段注释自己写着「shadcn/Base UI 生态里没有现成的树形多选」。
+ * 现在它满足「留」的条件：有沙箱 demo（`/sandbox/components?c=tree`）+
+ * 纯逻辑单测（`tree-state.test.ts`，23 条）。`pnpm arch:check` 的
+ * `orphan-component` 认这个 —— **零调用方零 demo 才报错**。
  *
- * 🔴 **它没人用，是因为权限矩阵页（`platform/pages/role/perm-matrix.tsx`）
- * 用裸 `Checkbox` 又实现了一套三态树。** 也就是说仓库里有**两套**同类实现，
- * 这一套是被绕过的那个 —— 和被删掉的那个只读列表工厂完全同形。
- *
- * 没删是因为「把 perm-matrix 收敛到这一套」是设计活、要动一个改错了会静默
- * 出错的页面（勾选状态），不该顺手做。真要合并从这里开始。
+ * 🔴 **它没有业务调用方，是因为权限矩阵页（`platform/pages/role/perm-matrix.tsx`）
+ * 用裸 `Checkbox` 又实现了一套三态树。** 仓库里有**两套**同类实现，
+ * 这一套是被绕过的那个。没合并是因为「把 perm-matrix 收敛到这一套」是设计活、
+ * 要动一个改错了会**静默**出错的页面（勾选状态），不该顺手做。
+ * 真要合并从 `tree-state.ts` 开始 —— 三态与级联的纯逻辑都在那里，有测试兜着。
  */
 "use client"
 
 import * as React from "react"
 import { IconChevronRight } from "@tabler/icons-react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../lib/i18n"
 
 import { cn } from "@admin/ui/lib/utils"
 import { Checkbox } from "@admin/ui/components/checkbox"
+// ⚠️ 相对路径，不是 `@admin/ui/components/tree-state`。
+// 包自引用走 package.json 的 `exports`，而 `./components/*` 那条原来只映射
+// `*.tsx` —— 这是本目录唯一一个 `.ts`（纯逻辑、无 JSX），于是解析不到。
+// 失败方式很脏：`tsconfig` 的 `paths`（`@admin/ui/*` → `./src/*`）不认扩展名，
+// 所以 **typecheck / lint / build 全绿**，只有 `pnpm dev` 白屏 500。
+// `exports` 现在补了 `.ts` 兜底，但这里保持相对路径 —— 和同文件的
+// `../lib/i18n` 一致，也少一层解析。
+import {
+  buildIndex,
+  filterTree,
+  nodeState,
+  toggleNode,
+  type NodeState,
+  type TreeNode,
+} from "./tree-state"
 
 /**
  * 受控树 + 三态复选。
@@ -41,16 +53,6 @@ import { Checkbox } from "@admin/ui/components/checkbox"
  * 不做虚拟滚动 —— 菜单/部门量级在几百以内，加虚拟化只会让键盘导航和
  * 展开动画复杂化。真到几千节点再说。
  */
-export type TreeNode = {
-  id: string
-  label: React.ReactNode
-  /** 用于搜索过滤的纯文本，缺省时不参与过滤 */
-  searchText?: string
-  icon?: React.ReactNode
-  disabled?: boolean
-  children?: TreeNode[]
-}
-
 export type TreeProps = {
   nodes: TreeNode[]
   /** 选中的 id（只含被显式勾选的节点，父节点半选不在其中） */
@@ -64,29 +66,6 @@ export type TreeProps = {
   emptyText?: string
 }
 
-/** 收集某节点下的全部 id（含自身） */
-function collectIds(node: TreeNode, out: string[] = []): string[] {
-  out.push(node.id)
-  node.children?.forEach((c) => collectIds(c, out))
-  return out
-}
-
-function useNodeIndex(nodes: TreeNode[]) {
-  return React.useMemo(() => {
-    const byId = new Map<string, TreeNode>()
-    const parentOf = new Map<string, string | null>()
-    const walk = (list: TreeNode[], parent: string | null) => {
-      for (const n of list) {
-        byId.set(n.id, n)
-        parentOf.set(n.id, parent)
-        if (n.children?.length) walk(n.children, n.id)
-      }
-    }
-    walk(nodes, null)
-    return { byId, parentOf }
-  }, [nodes])
-}
-
 export function Tree({
   nodes,
   checked,
@@ -97,8 +76,8 @@ export function Tree({
   className,
   emptyText,
 }: TreeProps) {
-  const { t } = useTranslation()
-  const { byId, parentOf } = useNodeIndex(nodes)
+  const t = useT()
+  const index = React.useMemo(() => buildIndex(nodes), [nodes])
   const checkedSet = React.useMemo(() => new Set(checked), [checked])
 
   const [innerExpanded, setInnerExpanded] = React.useState<string[]>(() =>
@@ -110,42 +89,18 @@ export function Tree({
   )
   const setExpanded = onExpandedChange ?? setInnerExpanded
 
-  /** 某节点的勾选态：全选 / 半选 / 未选 */
+  // 三态判定与级联都在 `tree-state.ts` 里（纯函数，有单测覆盖）——
+  // 这里只把 React 的状态接上去
   const stateOf = React.useCallback(
-    (node: TreeNode): "checked" | "indeterminate" | "unchecked" => {
-      if (!node.children?.length) return checkedSet.has(node.id) ? "checked" : "unchecked"
-      const ids = collectIds(node).slice(1)
-      const hit = ids.filter((i) => checkedSet.has(i)).length
-      if (checkedSet.has(node.id) && hit === ids.length) return "checked"
-      if (hit === 0) return checkedSet.has(node.id) ? "indeterminate" : "unchecked"
-      return hit === ids.length ? "checked" : "indeterminate"
-    },
+    (node: TreeNode): NodeState => nodeState(node, checkedSet),
     [checkedSet]
   )
 
   const toggle = React.useCallback(
     (node: TreeNode, next: boolean) => {
-      const affected = cascade ? collectIds(node) : [node.id]
-      const set = new Set(checkedSet)
-      for (const id of affected) {
-        if (byId.get(id)?.disabled) continue
-        if (next) set.add(id)
-        else set.delete(id)
-      }
-      // 向上修正祖先：子节点全选则祖先也选中，否则取消
-      let p = parentOf.get(node.id) ?? null
-      while (p) {
-        const parent = byId.get(p)
-        if (!parent) break
-        const kids = collectIds(parent).slice(1)
-        const all = kids.length > 0 && kids.every((i) => set.has(i))
-        if (all) set.add(p)
-        else set.delete(p)
-        p = parentOf.get(p) ?? null
-      }
-      onCheckedChange([...set])
+      onCheckedChange(toggleNode(node, next, checked, index, cascade))
     },
-    [byId, parentOf, checkedSet, cascade, onCheckedChange]
+    [checked, index, cascade, onCheckedChange]
   )
 
   if (!nodes.length) {
@@ -184,7 +139,7 @@ function TreeItem({
   onToggleExpand: (id: string) => void
   onToggleCheck: (n: TreeNode, next: boolean) => void
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const hasChildren = Boolean(node.children?.length)
   const open = expandedSet.has(node.id)
   const state = stateOf(node)
@@ -240,18 +195,6 @@ function TreeItem({
   )
 }
 
-/** 按关键字过滤树，保留命中节点的祖先链 */
-export function filterTree(nodes: TreeNode[], keyword: string): TreeNode[] {
-  const q = keyword.trim().toLowerCase()
-  if (!q) return nodes
-  const walk = (list: TreeNode[]): TreeNode[] => {
-    const out: TreeNode[] = []
-    for (const n of list) {
-      const kids = n.children ? walk(n.children) : []
-      const text = (n.searchText ?? (typeof n.label === "string" ? n.label : "")).toLowerCase()
-      if (text.includes(q) || kids.length) out.push({ ...n, children: kids.length ? kids : n.children })
-    }
-    return out
-  }
-  return walk(nodes)
-}
+// 纯逻辑都在 tree-state.ts。这里继续 re-export，调用方不用关心它在哪一个文件
+export { filterTree }
+export type { TreeNode, NodeState }

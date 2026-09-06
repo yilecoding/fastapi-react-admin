@@ -281,6 +281,7 @@
   "关闭后登录不再要求验证码，暴力破解的门槛会显著降低": "With this off sign-in no longer requires a captcha, which markedly lowers the bar for brute force",
   "关闭后该角色不受数据范围限制，可看到全部数据（如集团总部角色）。": "With this off the role is not limited by data scopes and sees everything (as a head-office role would).",
   "关闭左侧标签页": "Close tabs to the left",
+  "关闭提示": "Dismiss",
   "关闭标签页（可在偏好设置里关掉）": "Close tab (can be disabled in preferences)",
   "其中 {{n}} 次失败": "{{n}} of them failed",
   "其中 {{n}} 次异常": "{{n}} of them errored",
