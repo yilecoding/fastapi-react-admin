@@ -147,13 +147,28 @@ JSON 字符串里的 glob 当成了块注释开头：`"@/*"` 里那两个字符�
 ⚠️ **`unused-third-party` 只查 `dependencies`，不查 `devDependencies`** ——
 工具链的包（eslint 插件、tailwind、类型包）本来就不该在源码里出现。
 它的豁免表 `RUNTIME_ONLY` 里每一条都写了「凭什么是运行时依赖」：
-CSS 入口 import 的、peerDependency、Expo 自动链接的原生模块。
+CSS 入口 import 的、Expo 自动链接的原生模块。
 **往里加之前先想清楚理由** —— 豁免表长得越快，这条规则越没用。
 
 实测这条第一次跑就抓出 5 条真的死声明：`lucide-react`（全仓用的是 tabler）
 在 `ui` 和 `web` 各一条、`zod` / `zustand` / `@tanstack/react-table` 声明在
 用不到它们的包里。加上更早人工发现的 `date-fns`（其实是 `react-day-picker`
 自己的依赖），一共 6 条。
+
+🔴 **`react-dom` 和 `i18next` 在 `ui` / `platform` / `web` 里也是死声明，
+第一版规则却把它们**allowlist 了**而不是删掉** —— 判据是「react-i18next
+的 peerDependency」「运行时要有 DOM 渲染器」，两条听着都成立，**都没跑过**。
+issue #97 第 2 条早就点名过 `platform` 那条 `react-dom`，第一版偷懒把它
+「合法化」进豁免表，等于用这条新闸门反过来给一个已知死声明背书。
+
+**实测**（在 `apps/web/Dockerfile` 那条 scoped install 的精确复现环境里
+——`pnpm install --frozen-lockfile --filter web... --filter .`，就是
+#90 那次 GHCR 事故的现场）：拔掉这四处声明，`typecheck` / `build` 照样全绿。
+根源是 `packages/i18n` 才是**真正** `import i18next from 'i18next'` 的地方，
+且自己声明了这条依赖——`ui` / `platform` / `web` 全都只经 `react-i18next`
+的 context 间接够到它，一次都没有 `from 'i18next'`。`react-dom` 同理，
+三个包源码里也是零引用。**允许表不是「听起来对就能写」的地方，
+写之前要像加硬纪律一样先跑一遍真实场景。**
 
 ## `pnpm ctx:check`：让文档不腐烂
 
