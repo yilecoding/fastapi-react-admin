@@ -216,9 +216,6 @@ importers:
       '@tanstack/router-devtools':
         specifier: ^1.167.1
         version: 1.167.1(@tanstack/react-router@1.170.31(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(@tanstack/router-core@1.171.26)(csstype@3.2.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      i18next:
-        specifier: ^26.3.6
-        version: 26.3.6(typescript@6.0.3)
       react:
         specifier: ^19.2.6
         version: 19.2.8
@@ -227,7 +224,7 @@ importers:
         version: 19.2.8(react@19.2.8)
       react-i18next:
         specifier: ^17.0.11
-        version: 17.0.11(i18next@26.3.6(typescript@6.0.3))(react-dom@19.2.8(react@19.2.8))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react@19.2.8)(typescript@6.0.3)
+        version: 17.0.11(i18next@26.4.0(typescript@6.0.3))(react-dom@19.2.8(react@19.2.8))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react@19.2.8)(typescript@6.0.3)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -343,21 +340,15 @@ importers:
       driver.js:
         specifier: 1.8.0
         version: 1.8.0
-      i18next:
-        specifier: ^26.3.6
-        version: 26.3.6(typescript@6.0.3)
       react:
         specifier: ^19.2.6
         version: 19.2.8
-      react-dom:
-        specifier: ^19.2.6
-        version: 19.2.8(react@19.2.8)
       react-hook-form:
         specifier: ^7
         version: 7.85.0(react@19.2.8)
       react-i18next:
         specifier: ^17.0.11
-        version: 17.0.11(i18next@26.3.6(typescript@6.0.3))(react-dom@19.2.8(react@19.2.8))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react@19.2.8)(typescript@6.0.3)
+        version: 17.0.11(i18next@26.4.0(typescript@6.0.3))(react-dom@19.2.8(react@19.2.8))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react@19.2.8)(typescript@6.0.3)
       socket.io-client:
         specifier: ^4.8.3
         version: 4.8.3(supports-color@10.2.2)
@@ -374,9 +365,6 @@ importers:
       '@types/react':
         specifier: ^19
         version: 19.2.18
-      '@types/react-dom':
-        specifier: ^19
-        version: 19.2.4(@types/react@19.2.18)
       eslint:
         specifier: ^10
         version: 10.8.1(jiti@2.7.0)(supports-color@10.2.2)
@@ -479,21 +467,15 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      i18next:
-        specifier: ^26.3.6
-        version: 26.3.6(typescript@6.0.3)
       react:
         specifier: ^19.2.6
         version: 19.2.8
       react-day-picker:
         specifier: ^10.0.1
         version: 10.0.1(@types/react@19.2.18)(react@19.2.8)
-      react-dom:
-        specifier: ^19.2.6
-        version: 19.2.8(react@19.2.8)
       react-i18next:
         specifier: ^17.0.11
-        version: 17.0.11(i18next@26.3.6(typescript@6.0.3))(react-dom@19.2.8(react@19.2.8))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react@19.2.8)(typescript@6.0.3)
+        version: 17.0.11(i18next@26.4.0(typescript@6.0.3))(react-dom@19.2.8(react@19.2.8))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react@19.2.8)(typescript@6.0.3)
       shadcn:
         specifier: ^4.17.0
         version: 4.18.0(supports-color@10.2.2)(typescript@6.0.3)
@@ -519,9 +501,6 @@ importers:
       '@types/react':
         specifier: ^19
         version: 19.2.18
-      '@types/react-dom':
-        specifier: ^19
-        version: 19.2.4(@types/react@19.2.18)
       eslint:
         specifier: ^10
         version: 10.8.1(jiti@2.7.0)(supports-color@10.2.2)
@@ -5525,14 +5504,6 @@ packages:
     resolution: {integrity: sha512-lfbf80OzkocvX7nmZtu7nSTNbrTYR52sLWxPtlXX1zAhVw8WEnFk4puUkCR4B1dNQwbSpEHHHemcZu//7EcB7A==}
     peerDependencies:
       typescript: ^5
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-
-  i18next@26.3.6:
-    resolution: {integrity: sha512-Bu5Z2nAXgfVyM8xvW3jk9EKRIuX37PudsrBViThNFx7CR7aaYTpP01cxNB/E4c4UUzTDiAZRstEhsRfPOL/8xA==}
-    peerDependencies:
-      typescript: ^5 || ^6 || ^7
     peerDependenciesMeta:
       typescript:
         optional: true
@@ -13823,10 +13794,6 @@ snapshots:
     optionalDependencies:
       typescript: 5.9.3
 
-  i18next@26.3.6(typescript@6.0.3):
-    optionalDependencies:
-      typescript: 6.0.3
-
   i18next@26.4.0(typescript@6.0.3):
     optionalDependencies:
       typescript: 6.0.3
@@ -15185,18 +15152,6 @@ snapshots:
     dependencies:
       react: 19.2.8
 
-  react-i18next@17.0.11(i18next@26.3.6(typescript@6.0.3))(react-dom@19.2.8(react@19.2.8))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react@19.2.8)(typescript@6.0.3):
-    dependencies:
-      '@babel/runtime': 7.29.7
-      html-parse-stringify: 4.0.1
-      i18next: 26.3.6(typescript@6.0.3)
-      react: 19.2.8
-      use-sync-external-store: 1.6.0(react@19.2.8)
-    optionalDependencies:
-      react-dom: 19.2.8(react@19.2.8)
-      react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2)
-      typescript: 6.0.3
-
   react-i18next@17.0.11(i18next@26.4.0(typescript@6.0.3))(react-dom@19.2.8(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)(typescript@6.0.3):
     dependencies:
       '@babel/runtime': 7.29.7
@@ -15207,6 +15162,18 @@ snapshots:
     optionalDependencies:
       react-dom: 19.2.8(react@19.2.3)
       react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.3)(supports-color@10.2.2)
+      typescript: 6.0.3
+
+  react-i18next@17.0.11(i18next@26.4.0(typescript@6.0.3))(react-dom@19.2.8(react@19.2.8))(react-native@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2))(react@19.2.8)(typescript@6.0.3):
+    dependencies:
+      '@babel/runtime': 7.29.7
+      html-parse-stringify: 4.0.1
+      i18next: 26.4.0(typescript@6.0.3)
+      react: 19.2.8
+      use-sync-external-store: 1.6.0(react@19.2.8)
+    optionalDependencies:
+      react-dom: 19.2.8(react@19.2.8)
+      react-native: 0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@10.2.2))(supports-color@10.2.2))(@types/react@19.2.18)(react@19.2.8)(supports-color@10.2.2)
       typescript: 6.0.3
 
   react-is@16.13.1: {}

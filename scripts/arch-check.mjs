@@ -570,22 +570,6 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src']) 
       '@fontsource-variable/jetbrains-mono',
       // Tiptap 的 ProseMirror 底座，由 @tiptap/react 要求显式安装
       '@tiptap/pm',
-      // react-i18next 的 peerDependency（`i18next: >= 26.2.0`）。
-      // 本包不 import 它，但少了它 react-i18next 装不起来
-      'i18next',
-      // 本包渲染的是 DOM 组件，运行时必须有一个 DOM 渲染器。
-      // Base UI 的浮层走 createPortal，那是它自己的依赖 —— 我们这条是「宿主要求」
-      'react-dom',
-    ]),
-    'packages/platform': new Set([
-      // 同 ui：react-i18next 的 peer，以及 DOM 渲染器
-      'i18next',
-      'react-dom',
-    ]),
-    'apps/web': new Set([
-      // react-i18next 的 peer。本 app 是**唯一**把 React 绑定接上去的地方
-      // （`src/i18n.ts` 的 initI18n([initReactI18next])），所以这条声明留着
-      'i18next',
     ]),
     'apps/mobile': new Set([
       // Expo 的**自动链接**原生模块 —— 装了就生效，不需要（也不该）在 JS 里 import。
