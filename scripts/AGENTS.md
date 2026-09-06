@@ -218,6 +218,13 @@ pnpm ctx:check          # 死引用 / 死链接 / 死脚本 / 死 testid / 行�
 🔴 **它在 CI 里跑**（static job 的 `ctx` 步骤）。曾经不在 —— 一个「让机器核对
 断言」的脚本自己没被自动核对过，只在有人想起来时才跑。
 
+> 同一个形状又踩了一次：`packages/ui` 加了 86 条 vitest 之后，**CI 里没有任何
+> 一步会执行它们** —— 两个 pytest job 直接调 `uv run pytest`、不走 turbo，
+> 而 static job 只跑 typecheck / build / i18n / ctx / arch。现在补了
+> `unit` 步（`pnpm test:js` = `turbo test --filter=!api`）。
+> **排除式过滤不是偷懒**：列包名那种写法正是硬纪律 13 说的「漏了哪个包」，
+> 而排除式让新增的 JS 包默认就在里面，不用改 CI。
+
 它**不**校验文字对不对（那要人读），只校验「指向的东西还在不在」。
 这一层能自动守住，剩下的才值得花人的注意力。
 
