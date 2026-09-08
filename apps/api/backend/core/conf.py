@@ -276,6 +276,34 @@ class Settings(BaseSettings):
     UPLOAD_ARCHIVE_EXT_INCLUDE: list[str] = ['zip', 'rar', '7z', 'tar', 'gz']
     UPLOAD_ARCHIVE_SIZE_MAX: int = 100 * 1024 * 1024  # 100 MB
 
+    # 表格导入（解析层见 utils/excel_ops.py）
+    #
+    # 刻意**不复用** UPLOAD_DOCUMENT_SIZE_MAX 那 50 MB：那是「存档一份文档」的
+    # 上限，而导入表格是要被整份读进内存解析的，量级完全不同。
+    #
+    # 🔴 `UNCOMPRESSED` 那条是独立的一道闸门，不是上一条的换算。xlsx 是 zip，
+    # 实测一个 199 KB 的上传能声明出 200 MB 的解压体积 —— 只看上传大小完全无感
+    TABLE_IMPORT_SIZE_MAX: int = 5 * 1024 * 1024  # 5 MB
+    TABLE_IMPORT_UNCOMPRESSED_MAX: int = 100 * 1024 * 1024  # 100 MB
+    TABLE_IMPORT_MAX_ROWS: int = 1000
+
+    # 用户批量导入
+    #
+    # 🔴 **默认密码放这里而不是 sys_config**（参数配置插件那张表）。那张表的值
+    # 会**原样显示在参数配置页**上，而且 `PUT /sys/configs` 的请求体会进操作日志
+    # （`value` 不在 `OPERA_LOG_REDACT_KEYS` 里）—— 放进去等于同时在两个地方公开它。
+    #
+    # 🔴 **空串 = 关掉导入功能**，不是「用某个内置默认值」。没有一个内置值是安全的：
+    # 它会跟着仓库一起公开，而每套部署都会照抄。
+    #
+    # ⚠️ 这个值**自己必须过 `validate_password_strength()`** —— 比如 `123456`
+    # 就过不了（`is_has_letter` 那条）。不校验的表现是**延迟且分裂的**：导入成功、
+    # 用户拿默认密码能登录，但他自己去改密码时被「必须含字母」挡住，
+    # 而这两件事看不出是同一个原因。导入接口每次都现校验一遍
+    USER_IMPORT_DEFAULT_PASSWORD: str = ''
+    USER_IMPORT_REDIS_PREFIX: str = 'fba:user:import'
+    USER_IMPORT_EXPIRE_SECONDS: int = 60 * 10  # 10 分钟
+
     # 演示模式配置（上游 FBA 自带：只读锁定，非 GET 请求一律 403）。
     # 🔴 与 ENVIRONMENT=prod 互斥（见 check_production_settings），只适合
     # ENVIRONMENT=dev 的「看不能动」式静态演示。
@@ -598,6 +626,22 @@ def _check_snowflake_node_lease(s: Settings) -> str | None:
     )
 
 
+def _check_import_default_password(s: Settings) -> str | None:
+    """
+    批量导入的默认密码不能是常见弱口令。
+
+    影响面是「乘以 N」：它一次给一整批新账号用，而这些账号在本人改密之前
+    全都是同一个口令。空串是**关闭功能**，不算配错。
+
+    ⚠️ 这里只拦最常见的那几个。真正的强度校验在导入接口里现查一遍
+    （`validate_password_strength()`，读的是动态配置，这一层拿不到 db）。
+    """
+    weak = {'123456', '12345678', 'admin', 'password', 'admin123', 'abc123'}
+    if s.USER_IMPORT_DEFAULT_PASSWORD and s.USER_IMPORT_DEFAULT_PASSWORD.lower() in weak:
+        return 'USER_IMPORT_DEFAULT_PASSWORD 是常见弱口令，prod 请换掉'
+    return None
+
+
 def check_production_settings(s: Settings) -> None:
     """prod 启动前置校验 —— 一次性收集**全部**问题后 fail-fast
 
@@ -651,7 +695,11 @@ def check_production_settings(s: Settings) -> None:
     if s.DATABASE_USER in {'sa', 'root', 'postgres'}:
         problems.append(f'DATABASE_USER={s.DATABASE_USER} 是数据库超级用户，prod 请用最小权限账号')
 
-    problems.extend((_check_snowflake_node_lease(s), _check_token_lifetimes(s)))
+    problems.extend((
+        _check_snowflake_node_lease(s),
+        _check_token_lifetimes(s),
+        _check_import_default_password(s),
+    ))
 
     found = [p for p in problems if p]
     if found:

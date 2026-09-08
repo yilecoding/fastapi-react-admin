@@ -327,6 +327,7 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 | `notification.spec.ts` | 红点走 REST 不只靠 socket；取数失败显示 `!` | 断线期间的通知在红点上**永远看不见** |
 | `menu-dead-link.spec.ts` | 死链判定的漏报**和**误报（那 3 个假死链的回归） | 侧边栏静默跳过一条配好的菜单；或者反过来，人去修一个没坏的东西 |
 | `file-upload.spec.ts` | 上传闭环 + 未登录时两条读取路径都拿不到文件 | `UPLOAD_DIR` 挪回 `STATIC_DIR` 下的话功能全对，只是文件全公开了 |
+| `user-import.spec.ts` | 批量导入的预览三类问题 + token 一次性 + 非 xlsx 被挡 | 「导入成功了、人数对不上」——文件内重名 / 编码查不到 / 某列拼错整列丢数据，全都不报错 |
 
 **没有**做视觉回归、没有覆盖其余列表页的筛选组合——那些页面共用同一套模板，
 测一次模板 + 抽样几页就够，不是每页都要单独写一条（`query-bar.spec.ts` 就是
@@ -335,6 +336,20 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 **还没覆盖的**（按值排的下一批）：用户 CRUD 的角色/部门分配、标签条右键菜单
 （关闭其他 / 右侧 / 固定）、个人中心的时区与改密、富文本里的图片、字典与参数配置、
 导出 CSV、监控页。
+
+### 导入类用例的 xlsx 现造，不提交固件
+
+`e2e/utils/xlsx.ts` 里有一个最小 xlsx 生成器（单表 + 内联字符串 + 数字格）。
+
+- 🔴 **不提交 .xlsx 固件**：表里的 `dept_code` / `role_codes` 必须是这套库里**真实
+  存在**的编码，而 `fba_test` 的种子会变（现在还混着历次 E2E 留下的 `PROBE20` /
+  `E2EDPR_*`）。写死编码的坏处不只是「种子一改就红」，更糟的是**也可能不红** ——
+  编码恰好还在，但已经不是当初那条数据了。所以编码从接口现读、表格现造
+- ⚠️ **zip 是手写的 STORE，不引 jszip。** 试过 jszip：它是 CJS，在 Playwright 的
+  TS 加载器下当场 `Unexpected module status 3`（CJS/ESM 互操作）。而这里要的只是
+  「把 5 个 XML 打成一个包」，STORE 模式几十行就够，xlsx 读取器一律接受
+- ⚠️ 数字单元格要能造得出来 —— 「Excel 里直接打的手机号是数字」正是解析层要归一的
+  那个形状（裸 `str()` 会得到 `'13800138001.0'`），用例造不出这个形状就测不到它
 
 ## web-first 断言漏 `await` 有闸门了（`pnpm arch:check`）
 

@@ -234,6 +234,30 @@ const submitQuery = React.useCallback((v) => { setRowSelection({}); q.submit(v) 
 服务端**没有排序入参**（各 `crud_*.py` 固定 `select_order('id')`），
 所以表格一律不注册 `rowSortingFeature`。要做排序得先改后端。
 
+## 批量导入（用户页的「导入」抽屉）
+
+`pages/user/import-sheet.tsx`。两阶段：预览只校验不落库 + 一个存 Redis 的短期
+token；提交带 token、允许部分成功。后端那一侧见
+[`apps/api/backend/app/admin` 分册](../../../../apps/api/backend/app/admin/AGENTS.md)。
+
+- 🔴 **上传用 `uploadFile()` 不是 `api.POST`**（`api-client/client.ts`）。它是
+  multipart，而且成败判定过 `resolveEnvelope` —— FBA 的 `fail()` 是
+  **HTTP 200 + `code: 400`**，只看 `res.ok` 会把被拒的上传当成功
+- 🔴 **模板下载不能做成 `<a href>`**：那个地址要 Authorization 头，裸链接带不上，
+  存下来的是 401 的 JSON，而文件管理器只会说「文件已损坏」（同文件页的下载那条）
+- 🔴 **`import_token` 是一次性的**，服务端在建号**之前**就删掉它。所以提交失败后
+  不能原地重试 —— 界面要把用户送回「重新选文件」，而不是留一个点了没反应的按钮
+- 🔴 **「未识别的表头」必须显示出来。** `phone` 拼成 `phone_number` 时整份文件照样
+  解析成功，只是那一列的数据**全丢了** —— 不说的话没有任何现象
+- ⚠️ **换同一个文件要先清 `input.value`。** 用户改完 Excel 再选**同一个文件**不会
+  触发 change 事件，表现成「点了没反应」，而文件确实变了
+- ⚠️ **抽屉宽度要写 `data-[side=right]:sm:max-w-3xl`**，裸 `sm:max-w-3xl` 无效
+  （`cn()` 是 tailwind-merge，只在同一变体作用域内消解冲突，基础类
+  `data-[side=right]:sm:max-w-sm` 会赢）。**这条踩过**：类在、宽度没变，
+  「校验」那一列被挤出视口 —— 错误信息在 DOM 里，文本断言全绿，
+  只有截图才看得出用户根本看不见。规则见
+  [`packages/ui` 分册](../../../ui/AGENTS.md) 的「为什么有些覆盖有效、有些无声失效」
+
 ## 主从页（左列表 / 右详情）
 
 角色管理是这一类的样板（`pages/role/`）：左边是**选择器**不是表格，

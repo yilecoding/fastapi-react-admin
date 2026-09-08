@@ -1,6 +1,7 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, Path, Query, Request
+from fastapi import APIRouter, Body, Depends, File, Path, Query, Request, UploadFile
+from fastapi.responses import Response
 from pydantic import HttpUrl
 
 from backend.app.admin.schema.role import GetRoleDetail
@@ -11,6 +12,8 @@ from backend.app.admin.schema.user import (
     ResetPasswordParam,
     UpdateUserParam,
 )
+from backend.app.admin.schema.user_import import ImportCommitDetail, ImportCommitParam, ImportPreviewDetail
+from backend.app.admin.service.user_import_service import user_import_service
 from backend.app.admin.service.user_service import user_service
 from backend.common.enums import UserPermissionType
 from backend.common.pagination import DependsPagination, PageData
@@ -20,6 +23,7 @@ from backend.common.security.jwt import DependsJwtAuth, DependsSuperUser
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
+from backend.utils.excel_ops import read_table_upload
 
 router = APIRouter()
 
@@ -27,6 +31,45 @@ router = APIRouter()
 @router.get('/me', summary='获取当前用户信息', dependencies=[DependsJwtAuth])
 async def get_current_user(request: Request) -> ResponseSchemaModel[GetCurrentUserInfoWithRelationDetail]:
     data = request.user.model_dump()
+    return response_base.success(data=data)
+
+
+# ⚠️ **导入这三条必须声明在 `GET /{pk}` 之前。** 它们现在是两段路径
+# （`/import/xxx`），和一段的 `/{pk}` 撞不上；但只要以后有人加一条
+# **一段**的（比如 `GET /import`），放在 `/{pk}` 后面就会被它吞掉 ——
+# 而表现不是 404，是 `422 pk 不是合法整数`，看着像参数写错了。
+#
+# 权限一律 `DependsSuperUser`，和 `POST /sys/users` 保持一致：建号本来就是
+# 超级管理员专属，批量建号的影响面只会更大，没有理由放得更松。
+
+
+@router.get('/import/template', summary='下载用户导入模板', dependencies=[DependsSuperUser])
+async def download_user_import_template() -> Response:
+    # 现生成、不落盘、不写 `sys_file` —— 模板是每次都一样的产物，
+    # 存档一份只会在文件管理页里多一条没人会点开的记录
+    return Response(
+        content=user_import_service.template(),
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': 'attachment; filename="user-import-template.xlsx"'},
+    )
+
+
+@router.post('/import/preview', summary='预览用户导入', dependencies=[DependsSuperUser])
+async def preview_user_import(
+    db: CurrentSession,
+    file: Annotated[UploadFile, File(description='xlsx 文件')],
+) -> ResponseSchemaModel[ImportPreviewDetail]:
+    # 只校验不落库，所以用 `CurrentSession` 而不是 `CurrentSessionTransaction`
+    raw = await read_table_upload(file)
+    data = await user_import_service.preview(db=db, raw=raw)
+    return response_base.success(data=data)
+
+
+@router.post('/import/commit', summary='提交用户导入', dependencies=[DependsSuperUser])
+async def commit_user_import(
+    db: CurrentSessionTransaction, obj: ImportCommitParam
+) -> ResponseSchemaModel[ImportCommitDetail]:
+    data = await user_import_service.commit(db=db, obj=obj)
     return response_base.success(data=data)
 
 
@@ -71,9 +114,7 @@ async def get_users_paginated(
     status: Annotated[int | None, Query(description='状态')] = None,
     role: Annotated[int | None, Query(description='角色 ID')] = None,
 ) -> ResponseSchemaModel[PageData[GetUserInfoWithRelationDetail]]:
-    page_data = await user_service.get_list(
-        db=db, dept=dept, username=username, phone=phone, status=status, role=role
-    )
+    page_data = await user_service.get_list(db=db, dept=dept, username=username, phone=phone, status=status, role=role)
     return response_base.success(data=page_data)
 
 
