@@ -9,6 +9,21 @@
 > 才把它加载进上下文（惰性加载），所以它可以写得比根文件细。跨模块的硬纪律
 > 仍然只在根 `CLAUDE.md` 里有一份。新增结论请追加到**离代码最近**的那一份。
 
+## 为什么默认库换成了 PostgreSQL（2026-09-08）
+
+上面「SQL Server 是本仓库新增的那一种」说的是**归属**，不是「哪个库是主线」——
+之前混在一起过：改动前 SQL Server 是 `.env.example` 默认值、`docker-compose.dev.yml`
+默认起的库、CI 注释和 README/CONTRIBUTING 统称的"主线"，即便种子数据的历史
+（[`backend/tests` 分册](backend/tests/AGENTS.md)「`3000000000000000xxx` 开头的
+ID」一节，现在有 `test_seed_dialects.py` 守着）显示这套"SQL Server 优先"顺序
+真出过事故。这次把"本地默认起哪个库"也一起翻了：三处默认值改指 PostgreSQL，
+文档「主线」字样跟着改，**但 CI 的 `test-backend`/`test-backend-postgres` job id
+没改名**（分支保护 required checks 认字面量，要动先去仓库设置确认），
+`test-e2e` 也仍连 SQL Server（换方言要真跑一轮 CI 验证，没跟这次揉一起）。
+
+**结论**：下面「后端约定」里那几条 SQL Server 专属约定依然要遵守——本地默认库
+变 PostgreSQL 后测不出来，只有 CI 的 `pytest · SQL Server` job 能拦住。
+
 ## 后端约定
 
 三层：`api/v1/` → `service/` → `crud/`，模型在 `model/`、DTO 在 `schema/`。

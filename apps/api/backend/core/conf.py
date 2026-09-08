@@ -459,6 +459,7 @@ _KNOWN_PLACEHOLDERS: frozenset[str] = frozenset({
     'e2e-only-not-a-real-secret-CHANGE-ME',
     'ci-only-not-a-real-secret-Ku3Jd9wQpZ2vLxR7',
     'YourStrong!Passw0rd',
+    'postgres',
     '123456',
     '12345678',
     'password',

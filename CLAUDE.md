@@ -142,7 +142,7 @@ import / tsconfig `paths` / 箭头方向），见 [`scripts` 分册](scripts/AGE
 ## 本地起服务
 
 ```bash
-docker start fba_mssql fba_redis          # SQL Server :1433 / Redis :6380
+docker start fba_postgres fba_redis       # PostgreSQL :5432 / Redis :6380（2026-09-08 起默认库，换回 SQL Server 见 docker-compose.dev.yml 的 mssql 注释）
 pnpm dev                                  # api :8088 · web :8888 · celery worker（含内嵌 beat）
 ```
 
