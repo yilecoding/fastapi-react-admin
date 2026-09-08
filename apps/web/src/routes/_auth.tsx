@@ -4,6 +4,8 @@ import { createFileRoute, useRouter, useRouterState } from "@tanstack/react-rout
 import { requireAuth } from "@admin/platform/auth/guards"
 import { AppSidebar } from "@admin/platform/shell/app-sidebar"
 import { CommandMenu, CommandTrigger } from "@admin/platform/shell/command-menu"
+import { HelpMenu } from "@admin/platform/shell/help-menu"
+import { TourAutostart } from "@admin/platform/shell/tour/tour-autostart"
 import { TenonMark } from "@/components/tenon-mark"
 import { BRAND } from "@/lib/brand"
 import { NavBreadcrumb } from "@admin/platform/shell/nav-breadcrumb"
@@ -103,6 +105,8 @@ function AuthLayout() {
           <div className="ms-auto flex items-center gap-2">
             <CommandTrigger />
             <GithubLink />
+            {/* 帮助：重看功能引导 / 快捷键清单。没有这个按钮，那两样只有知道的人才找得到 */}
+            <HelpMenu />
             {/* 通知铃铛。它是外壳家具（永远处于「当前匹配」的位置），
                 不是标签页，所以可以用 router —— 别把它注册进 page-registry */}
             <NotificationBell />
@@ -127,6 +131,8 @@ function AuthLayout() {
 
         {/* 命令面板 + 快捷键帮助。挂在外壳里（不是页面里）—— 它要在任何 tab 上都能呼出 */}
         <CommandMenu options={options} />
+        {/* 首次登录在仪表盘自动弹一次外壳导览；之后从 ⌘K 的「功能引导」重放 */}
+        <TourAutostart />
       </SidebarInset>
     </SidebarProvider>
     </PlatformProvider>

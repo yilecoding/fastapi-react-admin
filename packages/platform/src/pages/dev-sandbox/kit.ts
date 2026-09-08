@@ -28,13 +28,51 @@ export const s = (v: KnobValues, k: string): string => String(v[k] ?? '')
 export const b = (v: KnobValues, k: string): boolean => v[k] === true
 export const n = (v: KnobValues, k: string): number => Number(v[k] ?? 0)
 
-export const GROUPS = [
-  { id: 'form', label: '输入与表单' },
-  { id: 'feedback', label: '反馈' },
-  { id: 'overlay', label: '弹层' },
-  { id: 'data', label: '数据展示' },
-  { id: 'theme', label: '主题' },
+/**
+ * 目录的两级分类：**层级（tier）** 在上，**分组（group）** 在下。
+ *
+ * 🔴 分层的判据是「拿走之后要接多少东西」，不是「代码多长」：
+ *
+ * | tier | 判据 | 拿走它要做什么 |
+ * |---|---|---|
+ * | `basic` | 自包含。props 进、DOM 出 | 复制文件即可 |
+ * | `complex` | 有**外部契约**：要喂数据源 / 要接状态 / 要注入能力 | 得读一遍它的契约 |
+ * | `token` | 不是组件，是设计变量 | 改 `globals.css` |
+ *
+ * 为什么按这条线分：这个库的定位是**被下游整包拿走自己改**（见 PORTING.md）。
+ * 下家第一件事是判断「哪些我可以直接用、哪些得先搞懂」——
+ * 按「表单 / 反馈 / 弹层」分只回答了「它长什么样」，不回答这个问题。
+ * `Button` 和 `DataGrid` 放在同一层平铺，是在骗人。
+ */
+export const TIERS = [
+  {
+    id: 'basic',
+    label: '基础组件',
+    hint: '自包含：props 进、DOM 出。拿走复制文件就能用。',
+  },
+  {
+    id: 'complex',
+    label: '复杂组件',
+    hint: '有外部契约：要喂数据源、接状态或注入能力。拿走前先读它的契约。',
+  },
+  { id: 'token', label: '设计令牌', hint: '不是组件，是主题变量。改 globals.css 一处。' },
 ] as const
+
+export type TierId = (typeof TIERS)[number]['id']
+
+export const GROUPS = [
+  // ── 基础组件 ──
+  { id: 'form', label: '输入与表单', tier: 'basic' },
+  { id: 'display', label: '数据展示', tier: 'basic' },
+  { id: 'feedback', label: '反馈与状态', tier: 'basic' },
+  { id: 'overlay', label: '弹层', tier: 'basic' },
+  { id: 'nav', label: '导航', tier: 'basic' },
+  // ── 复杂组件 ──
+  { id: 'table', label: '表格', tier: 'complex' },
+  { id: 'composite', label: '成套能力', tier: 'complex' },
+  // ── 设计令牌 ──
+  { id: 'theme', label: '主题', tier: 'token' },
+] as const satisfies readonly { id: string; label: string; tier: TierId }[]
 
 export type GroupId = (typeof GROUPS)[number]['id']
 
@@ -94,6 +132,16 @@ export type Demo = {
   summary: string
   /** 组件源文件（相对仓库根）—— 抄用法时能直接找过去 */
   source: string
+  /**
+   * 「什么时候用它」。一句话，界面上直接显示。
+   *
+   * 🔴 这一栏是**目录的主要价值**，不是装饰。自主型库的失败模式是
+   * 「下家没看见已经有什么，于是重新造了一个」——
+   * 而人不会去读 `AGENTS.md` 里那张表，只会翻这个目录。
+   */
+  use: string
+  /** 「什么时候别用它」+ 该用什么。没有真实误用风险的组件可以不给 */
+  avoid?: string
   /** 舞台布局：center 居中放小件，stretch 占满放表格这种 */
   stage?: 'center' | 'stretch'
   knobs: KnobSet

@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 
 import { formatDateTime } from '@admin/i18n'
+import { Descriptions, DescriptionItem } from '@admin/ui/components/descriptions'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
@@ -10,14 +11,6 @@ import {
 import { StatusPill } from '../_shared/status'
 import { RESULT_STATUS_LABEL, RESULT_STATUS_TONE, resultDetailQuery } from './api'
 
-function Row({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
-  return (
-    <div className="grid grid-cols-[7rem_1fr] gap-3 border-b py-2 last:border-b-0">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className={mono ? 'font-mono text-xs break-all' : 'text-sm break-all'}>{value}</span>
-    </div>
-  )
-}
 
 /**
  * 一次执行的详情。
@@ -67,11 +60,13 @@ export function TaskResultDetailSheet({
             </div>
           ) : data ? (
             <>
-              <Row label={t('任务 UUID')} value={data.task_id ?? '—'} mono />
-              <Row label={t('执行节点')} value={data.worker ?? '—'} />
-              <Row label={t('队列')} value={data.queue ?? '—'} />
-              <Row label={t('重试次数')} value={String(data.retries ?? 0)} />
-              <Row label={t('返回值')} value={data.result ?? '—'} mono />
+              <Descriptions layout="divided" labelWidth="7rem">
+                <DescriptionItem label={t('任务 UUID')} value={data.task_id} mono wrap copy />
+                <DescriptionItem label={t('执行节点')} value={data.worker} wrap />
+                <DescriptionItem label={t('队列')} value={data.queue} />
+                <DescriptionItem label={t('重试次数')} value={data.retries ?? 0} />
+                <DescriptionItem label={t('返回值')} value={data.result} mono wrap />
+              </Descriptions>
 
               {data.traceback ? (
                 <div className="mt-4 flex flex-col gap-2">

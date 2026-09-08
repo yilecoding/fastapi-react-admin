@@ -167,6 +167,12 @@ export type Preferences = {
   tabShowIcon: boolean
   /** 拖拽调整标签页顺序（固定与非固定分区互不跨越） */
   tabDraggable: boolean
+  /**
+   * 看过的功能引导：`"<userId>:<tourId>" → 看过的版本号`。
+   * 按 shell 分册「设备 vs 人」那张表它是**人**的属性、该落服务端；v1 先放这里，
+   * key 带 userId 防公用机器串号。读写只走 `shell/tour/tour.ts` 的 `tourSeen` / `markTourSeen`。
+   */
+  toursSeen: Record<string, number>
 }
 
 export const PREF_DEFAULTS: Preferences = {
@@ -182,6 +188,7 @@ export const PREF_DEFAULTS: Preferences = {
   tabMiddleClickClose: true,
   tabShowIcon: true,
   tabDraggable: true,
+  toursSeen: {},
 }
 
 type PrefState = Preferences & {
@@ -195,7 +202,8 @@ export const usePreferences = create<PrefState>()(
     (set) => ({
       ...PREF_DEFAULTS,
       patch: (next) => set(next),
-      reset: () => set(PREF_DEFAULTS),
+      // 「恢复默认」是外观上的事，不该把人看过的引导忘掉 —— 否则点一次重置就重新被弹一遍导览
+      reset: () => set((s) => ({ ...PREF_DEFAULTS, toursSeen: s.toursSeen })),
     }),
     {
       name: "admin:prefs",

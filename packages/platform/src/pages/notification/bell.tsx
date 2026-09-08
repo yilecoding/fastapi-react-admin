@@ -94,6 +94,7 @@ export function NotificationBell() {
           size="icon"
           className="relative size-7"
           data-testid="notification-bell"
+          data-tour="notifications"
           aria-label={t('通知中心')}
         />
       }

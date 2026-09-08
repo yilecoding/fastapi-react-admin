@@ -2,18 +2,22 @@ import * as React from 'react'
 import { menuKey } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
 import {
-  IconExternalLink, IconKeyboard, IconPin, IconRefresh, IconSearch, IconX,
+  IconCompass, IconExternalLink, IconKeyboard, IconPin, IconRefresh, IconSearch, IconX,
 } from '@tabler/icons-react'
 
 import { CommandPalette, type CommandItem } from '@admin/ui/components/command-palette'
 import { Kbd, KbdGroup } from '@admin/ui/components/kbd'
 
+import { meQuery } from '../auth/queries'
 import { useCommandStore } from './command-store'
 import { isEditableTarget, MOD_LABEL } from './hotkeys'
 import { MenuIcon } from './icon-registry'
 import { ShortcutsDialog } from './shortcuts-dialog'
 import { isRemovable, useTabStore } from './tab-store'
+import { SHELL_TOUR } from './tour/shell-tour'
+import { startTour } from './tour/tour'
 import { useSidebar, type NavNode, type SidebarOptions } from './use-sidebar'
 import { tabCapabilities, useTabActions } from './use-tab-actions'
 
@@ -43,6 +47,8 @@ export function CommandMenu({ options }: { options: SidebarOptions }) {
   const tabs = useTabStore((s) => s.tabs)
   const activeKey = useTabStore((s) => s.activeKey)
   const act = useTabActions()
+  // 「功能引导」要按人记「看过了」，所以要 userId（和顶栏的用户菜单同一个 query 缓存）
+  const userId = useQuery(meQuery).data?.id
 
   // ── 全局快捷键 ──
   React.useEffect(() => {
@@ -187,8 +193,20 @@ export function CommandMenu({ options }: { options: SidebarOptions }) {
       icon: <IconKeyboard className="size-4" />,
       onSelect: () => setShortcutsOpen(true),
     })
+    if (userId) {
+      out.push({
+        id: 'action:tour',
+        group: t('操作'),
+        label: t('功能引导'),
+        hint: t('重新看一遍外壳的使用导览。'),
+        keywords: 'tour guide onboarding walkthrough help 引导 导览 新手',
+        icon: <IconCompass className="size-4" />,
+        // 面板先关（CommandPalette 在 onSelect 之前 onOpenChange(false)），导览再起，两层浮层不叠
+        onSelect: () => void startTour(SHELL_TOUR, { userId }),
+      })
+    }
     return out
-  }, [tabs, activeKey, act, setShortcutsOpen, t])
+  }, [tabs, activeKey, act, setShortcutsOpen, userId, t])
 
   const items = React.useMemo(
     () => [...tabItems, ...pageItems, ...actionItems],
@@ -243,6 +261,7 @@ export function CommandTrigger() {
       type="button"
       onClick={() => setOpen(true)}
       data-testid="command-trigger"
+      data-tour="command"
       aria-label={t('打开命令面板')}
       className="flex h-8 items-center gap-2 rounded-md border border-border bg-muted/40 px-2 text-sm text-muted-foreground transition-colors hover:bg-muted sm:w-56"
     >

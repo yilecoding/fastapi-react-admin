@@ -7,18 +7,36 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * 滚动方式变体 —— 根节点上的 `data-scroll-mode` 由
- * `platform/shell/use-apply-preferences.ts: applyScrollMode()` 写入。
+ * 滚动方式变体。
  *
- * `content-scroll:` 外壳锁在视口内，只有 <main> 滚动（默认）
+ * `content-scroll:` 外壳锁在视口内，只有 <main> 滚动（**默认**）
  * `page-scroll:`    整份文档跟着滚，顶栏与标签条会滚出视口
  *
  * 做成变体而不是把偏好透传成 prop：`packages/ui` 里的 `SidebarInset`
  * 也要按模式分叉，而 ui **永远不能** import platform（见 CLAUDE.md 的依赖方向）。
  * 特异性上 `[data-scroll-mode="x"] .cls` 是 (0,2,0)，稳赢裸 utility 的 (0,1,0) ——
  * 所以 `md:h-[…] content-scroll:md:h-full` 这种「两条都留下」的写法结果是确定的。
+ *
+ * 🔴 `content-scroll` 刻意写成「**不是** page」而不是「等于 content」。
+ *
+ * 谁在写这个属性：本仓库里是 `platform/shell/use-apply-preferences.ts:
+ * applyScrollMode()`（偏好设置里的「滚动方式」）。但 `packages/ui` 的定位是
+ * **被下游整包拿走**（见 PORTING.md），只拿 ui 不拿 platform 时**没有人写这个
+ * 属性** —— 原来那版 `[data-scroll-mode="content"] &` 于是一条都不匹配，
+ * `content-scroll:min-h-0` / `content-scroll:flex-1` 全变空操作：
+ * `DataTable` 永远不会变成定高视区，表头跟着行一起滚走，
+ * 而 DevTools 里那些 class **明明都在**。典型的静默失效。
+ *
+ * 写成 `:not([data-scroll-mode="page"])` 之后，属性缺席 = 默认的 content 模式，
+ * 和 `preferences.ts` 的 `scrollMode: "content"` 默认值一致，
+ * 接不接 platform 行为都一样。
+ * 特异性也保住了：`:not()` 取参数的特异性，`[data-scroll-mode="page"] *` 是
+ * (0,1,0)，加上自身那个类正好还是 **(0,2,0)** —— 和旧写法一致，上面那段
+ * 「稳赢裸 utility」的结论不变。⚠️ 这里**不能**图省事包一层 `:where()`，
+ * 它的特异性是 0，会让 `content-scroll:md:h-full` 掉到 (0,1,0)、
+ * 和 `md:h-[…]` 打平，胜负改由源码顺序决定。
  */
-@custom-variant content-scroll ([data-scroll-mode="content"] &);
+@custom-variant content-scroll (&:not([data-scroll-mode="page"] *));
 @custom-variant page-scroll ([data-scroll-mode="page"] &);
 /*
  * Tailwind 内容扫描源。

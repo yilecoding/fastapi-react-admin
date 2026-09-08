@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useTranslation } from "react-i18next"
+import { useT } from "../../lib/i18n"
 import {
   IconBookmark, IconCheck, IconDeviceFloppy, IconPencil, IconStar, IconStarFilled, IconTrash,
 } from "@tabler/icons-react"
@@ -96,7 +96,7 @@ export function QueryViews({
   onApply: (v: QueryView) => void
   onChange: (next: QueryView[]) => void
 }) {
-  const { t } = useTranslation()
+  const t = useT()
   const [name, setName] = React.useState("")
   const [renaming, setRenaming] = React.useState<string | undefined>()
   const [renameText, setRenameText] = React.useState("")

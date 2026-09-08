@@ -2,10 +2,11 @@ import * as React from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAlertTriangle, IconChevronDown, IconDatabaseExclamation, IconDownload,
+  IconChevronDown, IconDatabaseExclamation, IconDownload,
   IconLoader2, IconPlus, IconRefresh, IconTrash,
 } from '@tabler/icons-react'
 
+import { Alert } from '@admin/ui/components/alert'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { Card, CardContent, CardHeader } from '@admin/ui/components/card'
@@ -97,29 +98,19 @@ export function PluginPage({
 
           {/* 改动要重启才生效 —— 这件事必须说出来，否则用户以为点完开关就生效了 */}
           {changed && (
-            <div
-              className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
-              data-testid="plugin-changed-banner"
-            >
-              <IconAlertTriangle className="mt-0.5 size-4 shrink-0" />
-              <span>
-                <Trans
-                  t={t}
-                  i18nKey="有插件发生变更，<b>需要重启后端服务才会生效</b>。启停/安装/卸载都只改了 Redis 里的记录，运行中的路由不会热更新。"
-                  components={{ b: <strong /> }}
-                />
-              </span>
-            </div>
+            <Alert tone="warning" data-testid="plugin-changed-banner">
+              <Trans
+                t={t}
+                i18nKey="有插件发生变更，<b>需要重启后端服务才会生效</b>。启停/安装/卸载都只改了 Redis 里的记录，运行中的路由不会热更新。"
+                components={{ b: <strong /> }}
+              />
+            </Alert>
           )}
 
           {actionError && (
-            <div
-              className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-              data-testid="plugin-action-error"
-            >
-              <IconAlertTriangle className="mt-0.5 size-4 shrink-0" />
-              <span>{actionError}</span>
-            </div>
+            <Alert tone="danger" data-testid="plugin-action-error">
+              {actionError}
+            </Alert>
           )}
 
           {/* 工具栏 */}

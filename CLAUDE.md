@@ -38,6 +38,7 @@
 | 动查询区 / 筛选条件 | [`packages/ui/src/components/query-bar/AGENTS.md`](packages/ui/src/components/query-bar/AGENTS.md) |
 | 动富文本 / 正文里的图片 | [`packages/ui/src/components/rich-text/AGENTS.md`](packages/ui/src/components/rich-text/AGENTS.md) |
 | 挑组件 / 改尺寸覆盖不生效 | [`packages/ui/AGENTS.md`](packages/ui/AGENTS.md) |
+| **把组件库搬进别的项目** | [`packages/ui/PORTING.md`](packages/ui/PORTING.md) |
 | 加文案 / 动多语言 | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) |
 | **显示时间 / 动时区** | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) 的「服务端时间一律过 `src/datetime.ts`」 |
 | **动请求客户端 / 后端契约 / 错误判定** | [`packages/api/AGENTS.md`](packages/api/AGENTS.md) |
@@ -47,7 +48,7 @@
 | **动权限码 / 数据范围 / token 与 cookie 时长** | [`apps/api/backend/common/security/AGENTS.md`](apps/api/backend/common/security/AGENTS.md) |
 | **动数据库结构 / 写迁移 / 改种子数据** | [`apps/api/backend/alembic/AGENTS.md`](apps/api/backend/alembic/AGENTS.md) |
 | 动定时任务 / Celery / 调度 | [`apps/api/backend/app/task/AGENTS.md`](apps/api/backend/app/task/AGENTS.md) |
-| 动命令面板 / 快捷键 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
+| 动命令面板 / 快捷键 / 功能引导 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
 | 动构建注入 / 发版提示 / 错误页 | [`apps/web/AGENTS.md`](apps/web/AGENTS.md) |
 | **桌面端打包 / 发版 / 自动更新** | [`apps/desktop/AGENTS.md`](apps/desktop/AGENTS.md) |
 | **移动端 App / Expo / uniwind / Metro** | [`apps/mobile/AGENTS.md`](apps/mobile/AGENTS.md)（下面还按 `scripts/` · `src/app/` · `src/components/` 拆了三份） |
@@ -72,8 +73,8 @@ Claude Code 只认 `CLAUDE.md`，其余 agent 工具认 `AGENTS.md`，一份内�
 pnpm ctx:check          # 死引用 / 死链接 / 死脚本 / 死 testid / 行数预算
 ```
 
-它**不**校验文字对不对（那要人读），只校验「指向的东西还在不在」。
-八条规则、覆盖哪 40 份文档、以及豁免表的登记约定，见
+它**不**校验文字对不对（那要人读），只校验「指向的东西还在不在」和
+「分册的形状对不对」。规则清单、覆盖哪些文档、豁免表的登记约定，见
 [`scripts` 分册](scripts/AGENTS.md)。
 
 ### 这套文档怎么自己长大
@@ -139,6 +140,11 @@ install 的是 `apps/web/Dockerfile` 那条 `pnpm install --filter web...
 第一次做 scoped install。**这条现在有闸门：`pnpm arch:check`**（已进 CI，核对
 import / tsconfig `paths` / 箭头方向），见 [`scripts` 分册](scripts/AGENTS.md)。
 
+⚠️ **唯一的例外是 `i18n ← ui`**：那条耦合走运行时 context 注入、源码里一处
+import 都没有，所以 `packages/ui` 对 workspace 零依赖 —— 刻意的，那正是它能被
+下游整包拿走的原因。**例外只给「一次都不 import」的情形。** 见
+[`ui` 分册](packages/ui/AGENTS.md) · [`PORTING.md`](packages/ui/PORTING.md)。
+
 ## 本地起服务
 
 ```bash
@@ -160,13 +166,8 @@ pnpm --filter worker dev                  # celery worker -B（worker + 内嵌 b
 自己的窗格。写进 `apps/api` 的 `dev` 里（`uvicorn & celery & wait`）也能跑，
 但两份日志会挤在一个窗格里交替刷，而 worker 的日志很密。
 
-🔴 **`-B`（内嵌 beat）只用于开发。** 多副本部署时每个副本都会跑一个 beat，
-同一条调度被触发 N 次。生产要分开，且 beat **只起一个**：
-
-```bash
-pnpm --filter api celery:worker           # 可以多副本
-pnpm --filter api celery:beat             # 只能一个
-```
+🔴 **`-B`（内嵌 beat）只用于开发** —— 多副本部署时每个副本都跑一个 beat，
+同一条调度被触发 N 次。生产的起法见 [`task` 分册](apps/api/backend/app/task/AGENTS.md)。
 
 ⚠️ 前端端口固定在 **8888**（`vite.config.ts` 的 `server.port` + `strictPort: true`）。
 **换端口要同时改四处**，只改一处的失败方式都不长得像端口问题：
@@ -384,9 +385,9 @@ pnpm db:history                        # 看链条
   为了 cherry-pick 方便而保留用不上的结构，是把成本永久摊给自己
 
 > ⚠️ 改模型后**表结构不会跟着变**：`--reload` 只重启进程重新 import 模型，
-> 不动已经建好的表 —— 它让人以为「已经生效了」。要跑迁移（见上一节）。
-> 改了字段还要同步 `backend/sql/*/init_snowflake_test_data.sql`，那些 INSERT 是
-> 显式列名的，漏改会让全新环境初始化失败。
+> 不动已经建好的表 —— 它让人以为「已经生效了」。要跑迁移（见上一节）。改了字段
+> 还要同步 `backend/sql/*/init_snowflake_test_data.sql`（显式列名的 INSERT，
+> 漏改会让全新环境初始化失败）。
 
 ## fork 管理
 
@@ -396,5 +397,4 @@ pnpm db:history                        # 看链条
 
 - 分叉基线记在 `apps/api/.upstream-baseline`；上游同为 MIT，版权声明保留在 `apps/api/LICENSE`
 - 后端架构文档（三层结构 / 插件机制 / RBAC 的设计意图）看上游那份最全：
-  <https://docs.fba.wu-clan.cc>——本仓库的 `apps/api/AGENTS.md` 只记上游没有的两件事：
-  差异点、和这里踩过的实测坑
+  <https://docs.fba.wu-clan.cc>——本仓库的 `apps/api/AGENTS.md` 只记上游没有的两件事：差异点、和这里踩过的实测坑

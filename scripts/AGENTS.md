@@ -1,9 +1,13 @@
 # scripts —— 仓库级脚本
 
-> 这份文件是[根 `CLAUDE.md`](../CLAUDE.md) 的**模块分册**，Claude Code 读到本目录下的文件时才加载它。
+> 这份文件是根 [`CLAUDE.md`](../CLAUDE.md) 的**模块分册**，Claude Code 读到本目录下的文件时
+> 才把它加载进上下文（惰性加载），所以它可以写得比根文件细。跨模块的硬纪律只在根
+> `CLAUDE.md` 里有一份；**新增结论请追加到离代码最近的那一份**。
 
 ```
 ctx-check.mjs        `pnpm ctx:check` —— 核对工程文档里的断言还成不成立
+arch-check.mjs       `pnpm arch:check` —— 依赖箭头 / 多页签纪律 / 组件孤儿 / registry
+gen-ui-registry.mjs  `pnpm ui:registry` —— 从源码 import 生成 packages/ui/registry.json
 gen-brand-icons.mjs  `pnpm brand:icons` —— 从一份图形生成 favicon / 桌面 / 移动端图标
 deploy-prod.mjs      `pnpm deploy:prod:*` —— 生产部署编排
 ```
@@ -123,6 +127,49 @@ JSON 字符串里的 glob 当成了块注释开头：`"@/*"` 里那两个字符�
 ⚠️ 写这段说明的时候还踩了第三种形态：注释里写 `"**/*.ts"` 这样的 glob，
 `*` 和 `/` 挨在一起就把**块注释自己**提前关掉了，脚本直接 `SyntaxError`。
 
+### 组件库那三条（`orphan-component` / `unused-third-party` / `stale-registry`）
+
+都是为 `packages/ui`「**被下游整包拿走自己改**」这个定位服务的
+（见 [`PORTING.md`](../packages/ui/PORTING.md)）。
+
+| 规则 | 级别 | 违反后的表现 |
+|---|---|---|
+| `orphan-component` —— 组件既没有生产调用方也没有沙箱 demo | error | 下家读到它，无从判断「这是能用的还是没写完的」 |
+| `unused-third-party` —— `dependencies` 里的第三方包源码零引用 | warn | 下一个人以为「这个库我们直接在用」，照着它写新代码 |
+| `stale-registry` —— `registry.json` 和源码的 import 图对不上 | error | `shadcn add` 照常成功、只是少拷一个文件，下家编译时才炸 |
+
+三条都做过反向验证（造一个零调用方组件 / 加一条假依赖 / 改一处 import → 全部转红）。
+
+⚠️ **`orphan-component` 认 demo，不只认生产调用方。** 沙箱就是这个库的目录，
+一个组件有 demo = 有人真的把它跑起来过。`tree.tsx` 就是这么留下来的
+（零业务调用方，但有 demo + 23 条纯逻辑单测）。
+
+⚠️ **`unused-third-party` 只查 `dependencies`，不查 `devDependencies`** ——
+工具链的包（eslint 插件、tailwind、类型包）本来就不该在源码里出现。
+它的豁免表 `RUNTIME_ONLY` 里每一条都写了「凭什么是运行时依赖」：
+CSS 入口 import 的、Expo 自动链接的原生模块。
+**往里加之前先想清楚理由** —— 豁免表长得越快，这条规则越没用。
+
+实测这条第一次跑就抓出 5 条真的死声明：`lucide-react`（全仓用的是 tabler）
+在 `ui` 和 `web` 各一条、`zod` / `zustand` / `@tanstack/react-table` 声明在
+用不到它们的包里。加上更早人工发现的 `date-fns`（其实是 `react-day-picker`
+自己的依赖），一共 6 条。
+
+🔴 **`react-dom` 和 `i18next` 在 `ui` / `platform` / `web` 里也是死声明，
+第一版规则却把它们**allowlist 了**而不是删掉** —— 判据是「react-i18next
+的 peerDependency」「运行时要有 DOM 渲染器」，两条听着都成立，**都没跑过**。
+issue #97 第 2 条早就点名过 `platform` 那条 `react-dom`，第一版偷懒把它
+「合法化」进豁免表，等于用这条新闸门反过来给一个已知死声明背书。
+
+**实测**（在 `apps/web/Dockerfile` 那条 scoped install 的精确复现环境里
+——`pnpm install --frozen-lockfile --filter web... --filter .`，就是
+#90 那次 GHCR 事故的现场）：拔掉这四处声明，`typecheck` / `build` 照样全绿。
+根源是 `packages/i18n` 才是**真正** `import i18next from 'i18next'` 的地方，
+且自己声明了这条依赖——`ui` / `platform` / `web` 全都只经 `react-i18next`
+的 context 间接够到它，一次都没有 `from 'i18next'`。`react-dom` 同理，
+三个包源码里也是零引用。**允许表不是「听起来对就能写」的地方，
+写之前要像加硬纪律一样先跑一遍真实场景。**
+
 ## `pnpm ctx:check`：让文档不腐烂
 
 这份文档全是**实测出来的结论**，而结论会过期 —— 过期的方式是**静默**的：
@@ -144,16 +191,54 @@ pnpm ctx:check          # 死引用 / 死链接 / 死脚本 / 死 testid / 行�
 | `dead-anchor` | 错误 | 正文里的章节交叉引用指向一个全仓都不存在的章节 |
 | `cross-file-anchor` | 错误 | 那一节在**别的分册**里 —— 拆分册最容易留下的债，改成相对链接 |
 | `empty-scope` | 错误 | `AGENTS.md` 所在目录下没有源码（模块被搬走了） |
+| `missing-preamble` | 错误 | 分册 H1 之后没有「这份文件是…分册」的声明 |
+| `wrong-preamble-kind` | 错误 | 该是子分册的声明成了模块分册（或反过来） |
+| `wrong-preamble-link` | 错误 | 序言链到了错的父册 |
+| `anonymous-title` | 错误 | H1 里没出现自己的目录名 |
 | `budget` | 警告 | 根文件 > 400 行 / 分册 > 500 行 —— 该拆了 |
 
-覆盖 **40 份**文档：`CLAUDE.md` / `AGENTS.md` 之外，还有 `README.md` /
-`CONTRIBUTING.md` / `SECURITY.md` / PR 模板。⚠️ 后面那几个是**后来才加进来的** ——
+覆盖 **45 份**文档：`CLAUDE.md` / `AGENTS.md` 之外，还有 `README.md` /
+`CONTRIBUTING.md` / `SECURITY.md` / `PORTING.md` / PR 模板。⚠️ 后面那几个是**后来才加进来的** ——
 在那之前它们完全不在覆盖范围，而一次人工梳理就从里面翻出三条过期断言
 （推荐了已被硬纪律否掉的命令 · Playwright 条数停在 44（实际 54）· 闸门清单少两道门）。
 **新增一类文档时先问一句「ctx:check 扫得到它吗」。**
 
+### 分册序言那四条：为什么格式也值得做成闸门
+
+前四条新规则查的是**每份分册开头那段声明**，看着像格式洁癖，其实不是 ——
+那段话带着两条给下一个人（和下一个 agent）的指令：
+「惰性加载，所以可以写细」和「**新增结论追加到离代码最近的那一份**」。
+缺了它，写文档的人不知道该往哪儿写，于是全堆进根 `CLAUDE.md`，
+而根文件一超预算就开始掉注意力 —— 这正是这套分册结构要治的病。
+
+实测（2026-09-05 全仓审）：28 份分册里 **3 份完全没有这段**，
+另有 9 份措辞各不相同（模块分册长/短两版 + 子分册版混着用），
+而「谁是谁的子册」压根对不上目录层级 —— 比如 `apps/web/e2e` 明明在
+`apps/web` 底下，却声明自己直接挂在根上。
+
+能做成闸门是因为判据**可推导**，不用维护名单：
+
+| | 判据 | 声明该链到 |
+|---|---|---|
+| **子分册** | 目录的某个祖先也有 `AGENTS.md` | 最近的那个祖先 |
+| **模块分册** | 没有这样的祖先 | 根 `CLAUDE.md` |
+
+`anonymous-title` 是同一件事的另一半：同时挂着七八份分册时，
+`# 生产部署` / `# 富文本编辑器` 这种标题不告诉你「这是哪个目录的规矩」，
+而分册之间的区别恰恰是目录。判据取**目录名**不是完整路径，
+所以 `# pages/menu —— 死链判定` 这种短写法照样过。
+
+四条都做过反向验证（删掉序言 / 改错类型 / 链到别的册 / 把 H1 改回纯主题 → 全部转红）。
+
 🔴 **它在 CI 里跑**（static job 的 `ctx` 步骤）。曾经不在 —— 一个「让机器核对
 断言」的脚本自己没被自动核对过，只在有人想起来时才跑。
+
+> 同一个形状又踩了一次：`packages/ui` 加了 86 条 vitest 之后，**CI 里没有任何
+> 一步会执行它们** —— 两个 pytest job 直接调 `uv run pytest`、不走 turbo，
+> 而 static job 只跑 typecheck / build / i18n / ctx / arch。现在补了
+> `unit` 步（`pnpm test:js` = `turbo test --filter=!api`）。
+> **排除式过滤不是偷懒**：列包名那种写法正是硬纪律 13 说的「漏了哪个包」，
+> 而排除式让新增的 JS 包默认就在里面，不用改 CI。
 
 它**不**校验文字对不对（那要人读），只校验「指向的东西还在不在」。
 这一层能自动守住，剩下的才值得花人的注意力。
