@@ -21,6 +21,10 @@ from backend.core.conf import settings
 from backend.database.db import async_db_session
 from backend.utils.trace_id import get_request_trace_id
 
+#: 超过这个大小的 JSON 响应不做脱敏解析（它反正会被截断）。
+#: 不是配置项：它只影响「记不记」，不影响业务，没有按环境调的理由
+_RESPONSE_PARSE_MAX_SIZE = 5 * 1024 * 1024
+
 
 class OperaLogMiddleware(BaseHTTPMiddleware):
     """操作日志中间件"""
@@ -240,16 +244,35 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
         }
 
     @staticmethod
-    def desensitization(args: dict[str, Any]) -> dict[str, Any]:
+    def desensitization(args: Any, _depth: int = 0) -> Any:
         """
-        脱敏处理
+        脱敏处理，**递归**遍历嵌套的 dict / list。
 
-        :param args: 需要脱敏的参数字典
+        🔴 **原来只看顶层 key**，于是任何包在一层结构里的敏感字段都漏网：
+        `{"data": {"items": [{"password": "..."}]}}` 里那个 `password` 一个字符
+        都不会被打码。顶层能挡住只是因为 `AddUserParam` 这类扁平 DTO 恰好把
+        `password` 放在顶层 —— 换个稍微嵌套一点的契约就没了，而且**看不出来**：
+        日志照常写、字段照常在，只是没打码。
+
+        :param args: 待脱敏的结构，dict / list 会被递归处理，其余原样返回
+        :param _depth: 递归深度，防御环形/超深结构（JSON 本身不会有环，
+            但这个函数也吃 form-data 解析出来的东西）
         :return:
         """
-        for key in args:
-            if key in settings.OPERA_LOG_REDACT_KEYS:
-                args[key] = '[REDACTED]'
+        if _depth > 20:
+            return args
+
+        if isinstance(args, dict):
+            return {
+                key: '[REDACTED]'
+                if key in settings.OPERA_LOG_REDACT_KEYS
+                else OperaLogMiddleware.desensitization(value, _depth + 1)
+                for key, value in args.items()
+            }
+
+        if isinstance(args, list):
+            return [OperaLogMiddleware.desensitization(item, _depth + 1) for item in args]
+
         return args
 
     @staticmethod
@@ -288,7 +311,7 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
         if body_iterator is None:
             # 非流式响应（如已构造好的 Response），直接读 body
             raw = getattr(response, 'body', b'') or b''
-            return response, OperaLogMiddleware.truncate_body(raw)
+            return response, OperaLogMiddleware.truncate_body(OperaLogMiddleware.redact_body(raw, content_type))
 
         chunks: list[bytes] = [
             chunk if isinstance(chunk, bytes) else str(chunk).encode() async for chunk in body_iterator
@@ -301,11 +324,43 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
             headers=dict(response.headers),
             media_type=response.media_type,
         )
-        return rebuilt, OperaLogMiddleware.truncate_body(raw)
+        return rebuilt, OperaLogMiddleware.truncate_body(OperaLogMiddleware.redact_body(raw, content_type))
+
+    @staticmethod
+    def redact_body(raw: bytes, content_type: str) -> bytes:
+        """
+        对 JSON 响应体做脱敏。
+
+        🔴 **响应体此前完全不脱敏** —— `desensitization()` 只作用在请求的
+        query/path/json/form 上，响应是原样落进 `sys_opera_log.response_body` 的。
+        任何把密码放进响应的接口（哪怕只出现一次、只给管理员看），
+        都等于把它**永久**写进日志表，而那张表有自己的查看权限。
+
+        ⚠️ **解析失败时不记原文，记一句占位。** 这是刻意的 fail-closed：
+        既然结构读不出来就没法确认里面没有敏感字段，宁可少一条日志，
+        也不要记一条**看起来正常、实际没打码**的。
+
+        ⚠️ `text/plain` 不在此列 —— 纯文本没有可以按字段打码的结构，
+        原样截断记录（同改动前）。往纯文本响应里放凭据要自己当心。
+        """
+        if content_type != 'application/json' or not raw:
+            return raw
+
+        # 超大 JSON 不解析：它反正会被截断，而截断后的片段本来就不是合法 JSON。
+        # 这里同样 fail-closed
+        if len(raw) > _RESPONSE_PARSE_MAX_SIZE:
+            return f'[未记录：响应 {len(raw)} 字节，超过可脱敏解析的上限]'.encode()
+
+        try:
+            payload = json.loads(raw)
+        except (ValueError, UnicodeDecodeError):
+            return '[未记录：响应体不是可解析的 JSON，无法确认已脱敏]'.encode()
+
+        return json.dumps(OperaLogMiddleware.desensitization(payload), ensure_ascii=False).encode()
 
     @staticmethod
     def truncate_body(raw: bytes) -> str | None:
-        """响应体转字符串并按上限截断"""
+        """响应体转字符串并按上限截断。**截断发生在脱敏之后**，顺序反了等于没脱敏"""
         if not raw:
             return None
         limit = settings.OPERA_LOG_RESPONSE_MAX_SIZE

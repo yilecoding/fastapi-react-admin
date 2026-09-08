@@ -10,9 +10,13 @@
 （ID 不能硬编码 / 收尾必须硬删），复制会让它们分叉。
 """
 
+from collections.abc import Iterator
+
 import pytest
 
 from starlette.testclient import TestClient
+
+from backend.core.conf import settings
 
 
 @pytest.fixture
@@ -71,3 +75,29 @@ def temp_user(client: TestClient, token_headers: dict[str, str]):
             await engine.dispose()
 
     asyncio.run(_purge())
+
+
+# ⚠️ **提到这一层是因为有第二个调用方了**（`test_user_import.py` 要验「导进去的人
+# 真的能用默认密码登录」）。复制一份的话，下面 docstring 里那条实测注意事项会分叉 ——
+# 同 `temp_user` 当初提上来的理由。
+@pytest.fixture
+def no_captcha(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """让 `/auth/login` 不走验证码
+
+    ⚠️ 光设 `settings.LOGIN_CAPTCHA_ENABLED = False` 不够：`login()` 第一句就是
+    `await load_login_config(db)`，它会把 **sys_config 表里的值** setattr 回 settings
+    （`utils/dynamic_config.py`）。而那张表在 fba_test 里是什么值，取决于上一次
+    E2E 的 global-setup 有没有跑过 —— 依赖它就是依赖一个看不见的外部状态。
+    所以连那次加载一起顶掉。
+    """
+
+    async def _noop(_db: object) -> None:  # ruff: ignore[unused-async] - 顶掉的原函数是 async，签名要对上
+        return None
+
+    monkeypatch.setattr('backend.app.admin.service.auth_service.load_login_config', _noop)
+    original = settings.LOGIN_CAPTCHA_ENABLED
+    settings.LOGIN_CAPTCHA_ENABLED = False
+    try:
+        yield
+    finally:
+        settings.LOGIN_CAPTCHA_ENABLED = original

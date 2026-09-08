@@ -70,6 +70,14 @@ error:
     unknown_type: Unknown file type
     unsupported_format: File format {file_ext} is not supported
     upload_failed: File upload failed
+  import:
+    default_password_unset: No import default password is configured (USER_IMPORT_DEFAULT_PASSWORD), bulk import is off
+    dept_code_not_found: Department code {code} does not exist
+    duplicated_email: Email {value} is duplicated in the file, already used on row {row_no}
+    duplicated_username: Username {value} is duplicated in the file, already used on row {row_no}
+    nothing_to_create: Nothing left to create, check the excluded rows
+    role_code_not_found: Role code {code} does not exist
+    token_expired: The import token has expired, upload the file again to preview
   language_not_found: Current language pack is not initialized or does not exist
   menu:
     has_children: This menu has sub-menus and cannot be deleted
@@ -146,6 +154,20 @@ error:
   sql:
     illegal_operation: 'SQL script {filepath} contains an illegal operation, only allowed: {allowed}'
     script_not_found: SQL script file does not exist
+  table:
+    bomb: The spreadsheet expands to more than {size_mb} MB when decompressed and was rejected
+    cell_formula: Formulas are not supported, paste as values before uploading
+    cell_number_unsafe: Number exceeds the precise range, format the column as text and re-enter it
+    cell_required: This field is required
+    cell_unsupported: Unsupported cell type {type}
+    corrupt: The file is corrupted or not a valid xlsx, re-save it with Excel and try again
+    empty: The spreadsheet contains no data
+    header_duplicated: Column {column} appears more than once in the header row
+    header_missing: 'The header row is missing required columns: {columns}'
+    not_xlsx: Only xlsx is supported, got {file_ext}
+    sheet_not_found: No worksheet named {sheet}
+    size_exceeded: The spreadsheet exceeds the {size_mb} MB limit
+    too_many_rows: At most {max_rows} rows per import, please split the file
   task:
     deadline_conflict: Only one of deadline and countdown seconds can be set
     not_registered: 'Task {task} is not registered; available: {available}'
@@ -179,6 +201,16 @@ file_type:
 # pydantic-core 原生报错本身就是英文，`exception_handler.py` 里
 # `if i18n.current_language != 'en-US':` 已经把英文请求短路掉了，
 # 根本不会来查这张表。别看着 zh-CN.yml 有就照着补一份对称的过来。
+
+import:
+  # Column notes rendered on the import template's README sheet
+  column:
+    dept_code: Department code (required, e.g. DEPT_0001)
+    email: Email (optional, must be globally unique)
+    nickname: Nickname (optional, defaults to the username)
+    phone: Phone (optional, 11 digits; format this column as text)
+    role_codes: Role codes (optional, comma separated, e.g. ROLE_0001,ROLE_0002)
+    username: Username (required, must be globally unique)
 
 response:
   error: Request error

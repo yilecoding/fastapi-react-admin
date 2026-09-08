@@ -98,6 +98,38 @@ token，再 `PUT /sys/configs/{pk}` 把这条配置在 `fba_test` 里也改成 `
   `fba` 盖回来——**加新的 CI 环境变量覆盖前，先想清楚它会不会连带影响到
   同一个 job 里另一个不该受它影响的步骤**
 
+### 🔴 CI 里给 E2E 设的那些 `env:` **传不进 api 服务器** —— turbo 把它们滤掉了
+
+上一节说「job 级 OS 环境变量优先级高于 dotenv 文件」，那对**直接**跑
+`uv run pytest` 的 job 成立（两个 pytest job 就是这样）。但 E2E 不是：
+它的 api 服务器是 Playwright 的 `webServer` 起的，而那条链是
+`pnpm e2e` → **turbo** → `playwright test` → `pnpm --filter api e2e:server`。
+
+turbo 2.x 默认 `envMode: strict`：**没在 `turbo.json` 里声明 `env` /
+`passThroughEnv` 的变量，在进任务之前就被滤掉了。** 实测：
+
+```bash
+npx turbo run e2e --dry=json   # → envMode: strict, e2e 的 passThroughEnv: None
+```
+
+所以 `.github/workflows/ci.yml` 里 E2E job 那一整块
+`env: DATABASE_TYPE/HOST/PORT/USER/PASSWORD` 和「E2E test」步骤里那个
+`DATABASE_SCHEMA: fba_test` 覆盖，**对 api 服务器一个都没生效过**。
+它一直读的是 `backend/.env.e2e`，只是那个文件恰好写着同样的值，所以看不出来。
+
+🔴 **实测代价**：把 `.env.e2e.example` 的 `DATABASE_TYPE` 改成 `postgresql`
+（跟着「本地默认库换 PG」一起改的），CI 的 E2E 当场
+`ConnectionRefusedError: [Errno 111]` —— asyncpg 去连 5432，而那个 job 上
+只有 1433 的 mssql。**而 job 级 env 明明写着 `sqlserver`**，看起来完全矛盾，
+栈里也只有一句 `create_tables()` 连不上，不会告诉你是哪一层的配置没生效。
+（认方言的线索在栈本身：`uvloop.loop.create_connection` 是 asyncpg 的 TCP 栈，
+aioodbc 报的会是 `pyodbc.OperationalError`。）
+
+**判据：改 E2E 的数据库/Redis 指向时，改 `backend/.env.e2e.example`，
+不要改 workflow 里的 `env:`。** 想让 workflow 那份成为权威，得先给
+`turbo.json` 的 `e2e` 任务补 `passThroughEnv` —— 那是另一个改动，
+做之前先想清楚它会不会连带影响 turbo 的缓存命中。
+
 ### 🔴 `storageState` 在这个应用上走不通，登录态靠 `addInitScript` 注入
 
 Playwright 常规的「登一次、存 `storageState.json`、后面测试全复用」这条路，在这个
@@ -327,6 +359,7 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 | `notification.spec.ts` | 红点走 REST 不只靠 socket；取数失败显示 `!` | 断线期间的通知在红点上**永远看不见** |
 | `menu-dead-link.spec.ts` | 死链判定的漏报**和**误报（那 3 个假死链的回归） | 侧边栏静默跳过一条配好的菜单；或者反过来，人去修一个没坏的东西 |
 | `file-upload.spec.ts` | 上传闭环 + 未登录时两条读取路径都拿不到文件 | `UPLOAD_DIR` 挪回 `STATIC_DIR` 下的话功能全对，只是文件全公开了 |
+| `user-import.spec.ts` | 批量导入的预览三类问题 + token 一次性 + 非 xlsx 被挡 | 「导入成功了、人数对不上」——文件内重名 / 编码查不到 / 某列拼错整列丢数据，全都不报错 |
 | `tour.spec.ts` | 功能引导：看过不再弹 · 两个页签时高亮**可见**的那个（硬纪律 5）· 缺目标的步骤被跳过 | 刷新又弹 / 高亮到隐藏页签 / 一个居中的空弹窗，三种都不报错。fixture 默认 `seedTourSeen`，否则整套用例被遮罩挡住 |
 
 **没有**做视觉回归、没有覆盖其余列表页的筛选组合——那些页面共用同一套模板，
@@ -336,6 +369,20 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 **还没覆盖的**（按值排的下一批）：用户 CRUD 的角色/部门分配、标签条右键菜单
 （关闭其他 / 右侧 / 固定）、个人中心的时区与改密、富文本里的图片、字典与参数配置、
 导出 CSV、监控页。
+
+### 导入类用例的 xlsx 现造，不提交固件
+
+`e2e/utils/xlsx.ts` 里有一个最小 xlsx 生成器（单表 + 内联字符串 + 数字格）。
+
+- 🔴 **不提交 .xlsx 固件**：表里的 `dept_code` / `role_codes` 必须是这套库里**真实
+  存在**的编码，而 `fba_test` 的种子会变（现在还混着历次 E2E 留下的 `PROBE20` /
+  `E2EDPR_*`）。写死编码的坏处不只是「种子一改就红」，更糟的是**也可能不红** ——
+  编码恰好还在，但已经不是当初那条数据了。所以编码从接口现读、表格现造
+- ⚠️ **zip 是手写的 STORE，不引 jszip。** 试过 jszip：它是 CJS，在 Playwright 的
+  TS 加载器下当场 `Unexpected module status 3`（CJS/ESM 互操作）。而这里要的只是
+  「把 5 个 XML 打成一个包」，STORE 模式几十行就够，xlsx 读取器一律接受
+- ⚠️ 数字单元格要能造得出来 —— 「Excel 里直接打的手机号是数字」正是解析层要归一的
+  那个形状（裸 `str()` 会得到 `'13800138001.0'`），用例造不出这个形状就测不到它
 
 ## web-first 断言漏 `await` 有闸门了（`pnpm arch:check`）
 

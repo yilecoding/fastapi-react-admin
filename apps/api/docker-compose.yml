@@ -1,9 +1,11 @@
-# ⚠️ 这是**上游 fastapi-best-architecture 的整套部署 compose**，主库是 PostgreSQL。
-# 本仓库的主线是 SQL Server，所以它**与根目录 README 描述的开发环境不一致** ——
-# 照它起出来的库连不上本仓库的默认配置。保留它是因为里面的 nginx / celery /
-# 可观测性（loki + prometheus + tempo + grafana）编排有参考价值。
+# ⚠️ 这是**上游 fastapi-best-architecture 的整套部署 compose**，主库是 PostgreSQL——
+# 这一点现在（2026-09-08 起）与本仓库根目录 README 描述的默认开发环境一致了。
+# 但这份 compose 起的是 PostgreSQL 加固定账号/端口，**不等于**直接照它连本仓库的
+# 默认配置就行——保留它主要是因为里面的 nginx / celery / 可观测性
+# （loki + prometheus + tempo + grafana）编排有参考价值。
 #
-# 开发只需要 SQL Server + Redis：用仓库根的 `docker-compose.dev.yml`。
+# 日常开发用仓库根的 `docker-compose.dev.yml`（PostgreSQL + Redis，
+# 可选 SQL Server profile）。
 #
 networks:
   fba_network:

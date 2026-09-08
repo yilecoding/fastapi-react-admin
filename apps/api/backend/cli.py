@@ -93,7 +93,7 @@ def setup_env_file() -> bool:
     try:
         env_content = Path(ENV_EXAMPLE_FILE_PATH).read_text(encoding='utf-8')
         console.note('配置数据库连接信息...')
-        db_type = Prompt.ask('数据库类型', choices=['mysql', 'postgresql', 'sqlserver'], default='sqlserver')
+        db_type = Prompt.ask('数据库类型', choices=['mysql', 'postgresql', 'sqlserver'], default='postgresql')
         db_host = Prompt.ask('数据库主机', default='127.0.0.1')
         db_port = Prompt.ask('数据库端口', default={'sqlserver': '1433', 'postgresql': '5432'}.get(db_type, '3306'))
         db_user = Prompt.ask('数据库用户名', default={'sqlserver': 'sa', 'postgresql': 'postgres'}.get(db_type, 'root'))
@@ -109,17 +109,15 @@ def setup_env_file() -> bool:
         token_secret = secrets.token_urlsafe(32)
 
         console.info('写入 .env 文件...')
-        env_content = env_content.replace("DATABASE_TYPE='sqlserver'", f"DATABASE_TYPE='{db_type}'")
+        env_content = env_content.replace("DATABASE_TYPE='postgresql'", f"DATABASE_TYPE='{db_type}'")
         settings.DATABASE_TYPE = db_type
         env_content = env_content.replace("DATABASE_HOST='127.0.0.1'", f"DATABASE_HOST='{db_host}'")
         settings.DATABASE_HOST = db_host
-        env_content = env_content.replace('DATABASE_PORT=1433', f'DATABASE_PORT={db_port}')
+        env_content = env_content.replace('DATABASE_PORT=5432', f'DATABASE_PORT={db_port}')
         settings.DATABASE_PORT = db_port
-        env_content = env_content.replace("DATABASE_USER='sa'", f"DATABASE_USER='{db_user}'")
+        env_content = env_content.replace("DATABASE_USER='postgres'", f"DATABASE_USER='{db_user}'")
         settings.DATABASE_USER = db_user
-        env_content = env_content.replace(
-            "DATABASE_PASSWORD='YourStrong!Passw0rd'", f"DATABASE_PASSWORD='{db_password}'"
-        )
+        env_content = env_content.replace("DATABASE_PASSWORD='postgres'", f"DATABASE_PASSWORD='{db_password}'")
         settings.DATABASE_PASSWORD = db_password
         env_content = env_content.replace("REDIS_HOST='127.0.0.1'", f"REDIS_HOST='{redis_host}'")
         settings.REDIS_HOST = redis_host

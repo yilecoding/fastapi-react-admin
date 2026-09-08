@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { api, type PageData } from '../../api-client/client'
+import { api, fetchBytes, uploadFile, type PageData } from '../../api-client/client'
 import { t } from '@admin/i18n'
 
 /**
@@ -221,4 +221,91 @@ export function useResetUserPassword() {
     mutationFn: ({ id, password }: { id: string; password: string }) =>
       api.PUT(`/api/v1/sys/users/${id}/password`, { body: { password } }),
   })
+}
+
+// ─── 超管专属：批量导入 ──────────────────────────────────────────────────────
+
+/** 预览里的一行。`row_no` 是 **Excel 里的真实行号**（表头是 1），不是「第几条」 */
+export type ImportPreviewRow = {
+  row_no: number
+  username: string | null
+  nickname: string | null
+  email: string | null
+  phone: string | null
+  dept_code: string | null
+  role_codes: string[]
+  ok: boolean
+  errors: string[]
+}
+
+export type ImportPreview = {
+  import_token: string
+  expire_seconds: number
+  total: number
+  valid: number
+  rows: ImportPreviewRow[]
+  /**
+   * 表头里没被认领的列。**必须显示出来** —— `phone` 拼成 `phone_number` 时
+   * 整份文件照样解析成功，只是那一列的数据全丢了，纯静默。
+   */
+  ignored_headers: string[]
+  empty_rows: number
+}
+
+export type ImportCommitResult = {
+  created: string[]
+  failed: Array<{ row_no: number; column: string | null; msg: string }>
+  used_default_password: boolean
+}
+
+/**
+ * 上传 xlsx 做预览。**只校验不落库**。
+ *
+ * ⚠️ 走 `uploadFile` 而不是 `api.POST` —— 它是 multipart，而且成败判定过
+ * `resolveEnvelope`（FBA 的 `fail()` 是 HTTP 200 + `code: 400`，
+ * 只看 `res.ok` 会把被拒的上传当成功）。
+ */
+export function useImportPreview() {
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: (file: File) => uploadFile<ImportPreview>('/api/v1/sys/users/import/preview', file),
+  })
+}
+
+/**
+ * 按 token 真正建号。
+ *
+ * ⚠️ **token 是一次性的**：服务端在建号前就把它删了（不删的话重放一次就是
+ * 重复建号）。所以提交失败之后不能拿同一个 token 重试 —— 要让用户重新上传。
+ */
+export function useImportCommit() {
+  const qc = useQueryClient()
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: (body: { import_token: string; exclude_rows: number[] }) =>
+      api.POST<ImportCommitResult>('/api/v1/sys/users/import/commit', { body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.all }),
+  })
+}
+
+/**
+ * 下载导入模板。
+ *
+ * 🔴 **不能做成 `<a href>`** —— 这个地址要 Authorization 头，裸链接带不上，
+ * 结果是把 401 的 JSON 当 xlsx 存下来，而文件管理器只会说「文件已损坏」
+ * （同 `file/index.tsx` 的下载那条）。
+ */
+export async function downloadImportTemplate(filename: string): Promise<void> {
+  const buffer = await fetchBytes('/api/v1/sys/users/import/template')
+  const url = URL.createObjectURL(
+    new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+  )
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  // 不 revoke 会把整个文件的字节留在内存里直到刷新页面
+  URL.revokeObjectURL(url)
 }

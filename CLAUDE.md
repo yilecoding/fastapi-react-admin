@@ -42,7 +42,7 @@
 | 加文案 / 动多语言 | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) |
 | **显示时间 / 动时区** | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) 的「服务端时间一律过 `src/datetime.ts`」 |
 | **动请求客户端 / 后端契约 / 错误判定** | [`packages/api/AGENTS.md`](packages/api/AGENTS.md) |
-| 动后端模型 / 接口 / SQL | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
+| 动后端模型 / 接口 / SQL · **解析上传的 xlsx** | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
 | 动公共层（校验 / 异常 / 缓存 / 分页） | [`apps/api/backend/common/AGENTS.md`](apps/api/backend/common/AGENTS.md) |
 | 跑 pytest / 建测试库 / 测试跑不起来 | [`backend/tests/AGENTS.md`](apps/api/backend/tests/AGENTS.md)（admin 模块自己的在 [`app/admin/tests/`](apps/api/backend/app/admin/tests/AGENTS.md)） |
 | **动权限码 / 数据范围 / token 与 cookie 时长** | [`apps/api/backend/common/security/AGENTS.md`](apps/api/backend/common/security/AGENTS.md) |
@@ -148,7 +148,7 @@ import 都没有，所以 `packages/ui` 对 workspace 零依赖 —— 刻意的
 ## 本地起服务
 
 ```bash
-docker start fba_mssql fba_redis          # SQL Server :1433 / Redis :6380
+docker start fba_postgres fba_redis       # PostgreSQL :5432 / Redis :6380（2026-09-08 起默认库，换回 SQL Server 见 docker-compose.dev.yml 的 mssql 注释）
 pnpm dev                                  # api :8088 · web :8888 · celery worker（含内嵌 beat）
 ```
 
