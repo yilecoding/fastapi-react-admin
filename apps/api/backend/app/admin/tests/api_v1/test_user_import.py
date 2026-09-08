@@ -264,12 +264,18 @@ def test_a_default_password_that_fails_the_policy_is_refused_up_front(
 
 
 def test_commit_creates_the_users_and_they_can_sign_in(
-    client: TestClient, token_headers: dict[str, str], refs: dict
+    client: TestClient, token_headers: dict[str, str], refs: dict, no_captcha: None
 ) -> None:
     """端到端那一条：导进去的人**真的能用默认密码登录**。
 
     只断言「接口返回 200」是不够的 —— 密码 hash 写错、角色没关联、状态是停用，
     这三种都能让接口成功而人登不进来。
+
+    ⚠️ **必须用 `no_captcha` fixture，光设 `settings.LOGIN_CAPTCHA_ENABLED = False`
+    不够**：`login()` 第一句 `load_login_config(db)` 会把 sys_config 表里的值 setattr
+    回 settings。而那张表在 `fba_test` 里是什么值，取决于上一次 E2E 的 global-setup
+    跑没跑过 —— **本地绿、CI 红**，报的是「验证码无效」，跟导入八竿子打不着。
+    这条实测踩过（CI 上两个 pytest job 各红一条，本地 388 全绿）。
     """
     username = f'{PREFIX}login'
     raw = build_xlsx([[username, '登录测试', '', '13800138003', refs['dept_code'], refs['role_code']]])
@@ -280,7 +286,6 @@ def test_commit_creates_the_users_and_they_can_sign_in(
     assert body['data']['created'] == [username]
     assert body['data']['used_default_password'] is True
 
-    settings.LOGIN_CAPTCHA_ENABLED = False
     login = client.post('/auth/login', json={'username': username, 'password': DEFAULT_PASSWORD})
     assert login.status_code == 200 and login.json()['code'] == 200, login.text
 

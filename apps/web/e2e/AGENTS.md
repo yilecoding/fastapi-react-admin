@@ -98,6 +98,38 @@ token，再 `PUT /sys/configs/{pk}` 把这条配置在 `fba_test` 里也改成 `
   `fba` 盖回来——**加新的 CI 环境变量覆盖前，先想清楚它会不会连带影响到
   同一个 job 里另一个不该受它影响的步骤**
 
+### 🔴 CI 里给 E2E 设的那些 `env:` **传不进 api 服务器** —— turbo 把它们滤掉了
+
+上一节说「job 级 OS 环境变量优先级高于 dotenv 文件」，那对**直接**跑
+`uv run pytest` 的 job 成立（两个 pytest job 就是这样）。但 E2E 不是：
+它的 api 服务器是 Playwright 的 `webServer` 起的，而那条链是
+`pnpm e2e` → **turbo** → `playwright test` → `pnpm --filter api e2e:server`。
+
+turbo 2.x 默认 `envMode: strict`：**没在 `turbo.json` 里声明 `env` /
+`passThroughEnv` 的变量，在进任务之前就被滤掉了。** 实测：
+
+```bash
+npx turbo run e2e --dry=json   # → envMode: strict, e2e 的 passThroughEnv: None
+```
+
+所以 `.github/workflows/ci.yml` 里 E2E job 那一整块
+`env: DATABASE_TYPE/HOST/PORT/USER/PASSWORD` 和「E2E test」步骤里那个
+`DATABASE_SCHEMA: fba_test` 覆盖，**对 api 服务器一个都没生效过**。
+它一直读的是 `backend/.env.e2e`，只是那个文件恰好写着同样的值，所以看不出来。
+
+🔴 **实测代价**：把 `.env.e2e.example` 的 `DATABASE_TYPE` 改成 `postgresql`
+（跟着「本地默认库换 PG」一起改的），CI 的 E2E 当场
+`ConnectionRefusedError: [Errno 111]` —— asyncpg 去连 5432，而那个 job 上
+只有 1433 的 mssql。**而 job 级 env 明明写着 `sqlserver`**，看起来完全矛盾，
+栈里也只有一句 `create_tables()` 连不上，不会告诉你是哪一层的配置没生效。
+（认方言的线索在栈本身：`uvloop.loop.create_connection` 是 asyncpg 的 TCP 栈，
+aioodbc 报的会是 `pyodbc.OperationalError`。）
+
+**判据：改 E2E 的数据库/Redis 指向时，改 `backend/.env.e2e.example`，
+不要改 workflow 里的 `env:`。** 想让 workflow 那份成为权威，得先给
+`turbo.json` 的 `e2e` 任务补 `passThroughEnv` —— 那是另一个改动，
+做之前先想清楚它会不会连带影响 turbo 的缓存命中。
+
 ### 🔴 `storageState` 在这个应用上走不通，登录态靠 `addInitScript` 注入
 
 Playwright 常规的「登一次、存 `storageState.json`、后面测试全复用」这条路，在这个
