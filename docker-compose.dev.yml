@@ -1,18 +1,62 @@
-# 开发依赖：SQL Server + Redis
+# 开发依赖：PostgreSQL + Redis
 #
 #     docker compose -f docker-compose.dev.yml up -d
 #
 # 只起「后端跑起来最少需要的两个东西」，不含应用本身 —— 应用用 `pnpm dev` 起，
 # 这样改代码有热重载。要整套容器化部署看 apps/api/docker-compose.yml（那份是上游的，
-# 主库是 PostgreSQL，与本仓库的 SQL Server 主线不一致，仅作参考）。
+# 主库同样是 PostgreSQL，和本仓库现在的默认库一致）。
 #
-# ⚠️ 宿主机还要装 **Microsoft ODBC Driver 18**（后端走 aioodbc，容器里那份驱动不算）。
+# ⚠️ 想切回 SQL Server（`--profile sqlserver`）的话，宿主机还要装
+# **Microsoft ODBC Driver 18**（后端走 aioodbc，容器里那份驱动不算）。
 # 装法见仓库根 README 的「起服务」一节 —— 这是 SQL Server + Python 最常见的
 # 「容器起来了但连不上库」的原因。
 
 name: fastapi-react-admin-dev
 
 services:
+  postgres:
+    # 钉 digest 的理由同下面的 mssql（issue #66）：浮动标签会让环境在没人改代码的
+    # 情况下漂移。升级时显式换这串，不要删掉它让标签重新浮动。
+    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    container_name: fba_postgres
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+    container_name: fba_redis
+    # 端口刻意用 6380 而不是默认的 6379：开发机上常常已经跑着一个本地 Redis，
+    # 撞端口时 compose 只会报 bind 失败，不会告诉你是哪个进程占的
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # 可选的 SQL Server 环境（本仓库历史上的主线，2026-09-08 起默认库换成了上面的
+  # PostgreSQL —— 理由见 apps/api/AGENTS.md「为什么默认库换成了 PostgreSQL」）。
+  #
+  # 不进默认 `up -d`（会跟 postgres 一起起、误导成"两个都要"），需要时显式：
+  #   docker compose -f docker-compose.dev.yml --profile sqlserver up -d mssql
+  #   # 再把 apps/api/backend/.env 的 DATABASE_TYPE 改成 sqlserver（端口/账号见下）
   mssql:
     # 2022-latest 是本仓库唯一实测过的版本。2016 以下 T-SQL 有差异
     #（`OFFSET FETCH`、筛选唯一索引都要重新验），换版本前先看 CLAUDE.md 的后端约定
@@ -25,6 +69,7 @@ services:
     # 让标签重新浮动。
     image: mcr.microsoft.com/mssql/server:2022-latest@sha256:ba4c8329f48fb8f02e1416be6a930ebfd71268caee78aa985f3af4315e457c89
     container_name: fba_mssql
+    profiles: ["sqlserver"]
     environment:
       ACCEPT_EULA: "Y"
       # Developer 版免费、功能等同 Enterprise，仅限开发/测试用途
@@ -48,53 +93,6 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
-    container_name: fba_redis
-    # 端口刻意用 6380 而不是默认的 6379：开发机上常常已经跑着一个本地 Redis，
-    # 撞端口时 compose 只会报 bind 失败，不会告诉你是哪个进程占的
-    ports:
-      - "${REDIS_PORT:-6380}:6379"
-    command: redis-server --save 60 1 --loglevel warning
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    restart: unless-stopped
-
-  # 可选的 PostgreSQL 环境。⚠️ 这里原来写着「代码层已支持，但从未实测跑过」——
-  # 那句话从 issue #5 起作废：CI 有一个平行的 `pytest · PostgreSQL` job，
-  # 整套 pytest 在 postgres 上是绿的（当时也当场炸出三个 bug，见 apps/api/AGENTS.md
-  # 「pytest 现在在**两种方言**上跑」）。
-  #
-  # 不进默认 `up -d`（会跟 mssql 一起起、误导成"两个都要"），需要时显式：
-  #   docker compose -f docker-compose.dev.yml --profile postgresql up -d postgres
-  # 验证完想换回 SQL Server 主线，把 apps/api/.env 的 DATABASE_TYPE 改回 sqlserver 即可，
-  # 这个容器留着不影响默认流程。
-  postgres:
-    # 钉 digest 的理由同上面的 mssql（issue #66）：浮动标签会让环境在没人改代码的
-    # 情况下漂移。升级时显式换这串，不要删掉它让标签重新浮动。
-    image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
-    container_name: fba_postgres
-    profiles: ["postgresql"]
-    environment:
-      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
-      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
     restart: unless-stopped
 
   # RabbitMQ —— **默认不起**。celery 的 broker 默认走 Redis（.env 的 CELERY_BROKER），

@@ -50,6 +50,8 @@ class _FakeSettings:
         # token 时长 —— 默认就是 conf.py 里那对（1 天 / 7 天）
         self.TOKEN_EXPIRE_SECONDS = 60 * 60 * 24
         self.TOKEN_REFRESH_EXPIRE_SECONDS = 60 * 60 * 24 * 7
+        # 批量导入的默认密码 —— 默认空串（= 功能关闭），prod 下只在非空时才查
+        self.USER_IMPORT_DEFAULT_PASSWORD = ''
         for k, v in overrides.items():
             setattr(self, k, v)
 
@@ -63,6 +65,17 @@ def _expect_rejected(**overrides: object) -> str:
 def test_a_well_configured_prod_passes() -> None:
     """基线：合格配置不能被误杀，否则下面的断言都没意义"""
     check_production_settings(_FakeSettings())
+
+
+def test_weak_import_default_password_is_rejected() -> None:
+    """默认密码是给一整批新账号用的，弱口令在这里的影响面是「乘以 N」"""
+    msg = _expect_rejected(USER_IMPORT_DEFAULT_PASSWORD='123456')
+    assert 'USER_IMPORT_DEFAULT_PASSWORD' in msg
+
+
+def test_empty_import_default_password_is_fine() -> None:
+    """空串是「关掉导入功能」，不是「配错了」—— 误杀它等于强迫每套部署都开这个功能"""
+    check_production_settings(_FakeSettings(USER_IMPORT_DEFAULT_PASSWORD=''))
 
 
 def test_dev_is_never_checked() -> None:

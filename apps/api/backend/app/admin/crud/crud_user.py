@@ -209,6 +209,81 @@ class CRUDUser(DataScopedCRUD[User]):
             user_role_stmt = insert(user_role)
             await db.execute(user_role_stmt, user_role_data)
 
+    async def get_existing_usernames(self, db: AsyncSession, usernames: list[str]) -> set[str]:
+        """
+        一次查出这批用户名里哪些已经存在。
+
+        **不要在循环里逐条调 `get_by_username`** —— 一份 200 行的表就是 200 次
+        往返，而这一步只是预览阶段的一次校验。
+
+        🔴 同 `get_by_username`：唯一性检查不是「展示读」，必须豁免数据权限。
+        「开了范围过滤但没配范围」的角色是 fail-closed，冲突行落在范围外时这里
+        查不到 → 检查静默通过 → 撞到数据库唯一约束上变成 500，
+        而正确的表现是这一行在预览里就被标成「用户名已存在」。
+        """
+        if not usernames:
+            return set()
+        with bypass_data_scope():
+            stmt = select(User.username).where(User.username.in_(usernames), User.deleted == 0)
+            return set((await db.execute(stmt)).scalars().all())
+
+    async def get_existing_emails(self, db: AsyncSession, emails: list[str]) -> set[str]:
+        """一次查出这批邮箱里哪些已经被绑定。理由同 `get_existing_usernames`"""
+        if not emails:
+            return set()
+        with bypass_data_scope():
+            stmt = select(User.email).where(User.email.in_(emails), User.deleted == 0)
+            return set((await db.execute(stmt)).scalars().all())
+
+    async def bulk_add(self, db: AsyncSession, rows: list[dict[str, Any]], password: str) -> list[str]:
+        """
+        批量建用户。
+
+        🔴 **不要改写成循环调 `add()`。** `add()` 每行都跑一次
+        `bcrypt.gensalt()` + `get_hash_password()`，而那是**同步**调用、单次约
+        190 ms（实测）。87 行就是 16.7 秒 —— 不是「这个请求慢」，是整个事件循环
+        被占住，**所有人的所有请求**一起停 16.7 秒，而日志里只会看到一片莫名
+        其妙的慢请求。这里整批只算一次 hash。
+
+        ⚠️ 代价说清楚：这批用户在库里是**同一个 hash + 同一个 salt**。他们本来
+        就共用同一个默认密码，所以泄露的信息只有「这几个人密码相同」——而这件事
+        本身就是真的。任何一个人改一次密码，`reset_password` 会重新
+        `gensalt()`，那一行就有自己的盐了。
+
+        :param rows: 每行 `{'username','nickname','email','phone','dept_id','role_ids'}`
+        :param password: 明文密码，整批共用
+        :return: 成功创建的用户名
+        """
+        salt = bcrypt.gensalt()
+        hashed = get_hash_password(password, salt)
+
+        users = [
+            User(
+                username=row['username'],
+                nickname=row['nickname'],
+                password=hashed,
+                salt=salt,
+                email=row['email'],
+                phone=row['phone'],
+                dept_id=row['dept_id'],
+            )
+            for row in rows
+        ]
+        db.add_all(users)
+        # 雪花 ID 是 Python 侧生成的（`common/model.py` 的 `id_key`），
+        # flush 之后就能拿到，不用逐条 refresh
+        await db.flush()
+
+        user_role_data = [
+            {'user_id': user.id, 'role_id': role_id}
+            for user, row in zip(users, rows, strict=True)
+            for role_id in row['role_ids']
+        ]
+        if user_role_data:
+            await db.execute(insert(user_role), user_role_data)
+
+        return [user.username for user in users]
+
     async def add_by_oauth2(self, db: AsyncSession, obj: AddOAuth2UserParam) -> None:
         """
         通过 OAuth2 添加用户

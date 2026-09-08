@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTable, type RowSelectionState } from '@tanstack/react-table'
 import { useQuery } from '@tanstack/react-query'
-import { IconPlus } from '@tabler/icons-react'
+import { IconPlus, IconUpload } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
@@ -29,6 +29,7 @@ import {
 import { COLUMN_LABELS, buildColumns } from './columns'
 import { features } from './table-features'
 import { UserFormSheet } from './form'
+import { UserImportSheet } from './import-sheet'
 import { UserSecuritySheet } from './security-sheet'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 
@@ -191,6 +192,7 @@ export function UserPage({
   // 切换权限后列表已经 refetch 了，抽屉里的开关还显示旧值（实测踩过）
   const [securityId, setSecurityId] = React.useState<string | null>(null)
   const [bulkOpen, setBulkOpen] = React.useState(false)
+  const [importOpen, setImportOpen] = React.useState(false)
   const del = useDeleteUser()
   const delMany = useDeleteUsers()
 
@@ -264,6 +266,17 @@ export function UserPage({
                       <IconPlus className="size-4" />
                       {t('新增用户')}
                     </Button>
+                    {/* 导入同样是 DependsSuperUser（`user.py` 那三条 import 路由），
+                        次要动作所以是 outline —— 一行里主动作只能有一个 */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      data-testid="import-users"
+                      onClick={() => setImportOpen(true)}
+                    >
+                      <IconUpload className="size-4" />
+                      {t('导入')}
+                    </Button>
                   </SuperOnly>
                   {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
                   <RefreshButton busy={isFetching} onClick={list.onRetry} />
@@ -324,6 +337,7 @@ export function UserPage({
       </div>
 
       <UserFormSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} />
+      <UserImportSheet open={importOpen} onOpenChange={setImportOpen} />
       <UserSecuritySheet
         open={securityId !== null}
         onOpenChange={(o) => !o && setSecurityId(null)}

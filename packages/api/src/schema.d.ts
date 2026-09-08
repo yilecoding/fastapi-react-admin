@@ -334,6 +334,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/users/import/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下载用户导入模板 */
+        get: operations["download_user_import_template_api_v1_sys_users_import_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/users/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 预览用户导入 */
+        post: operations["preview_user_import_api_v1_sys_users_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/users/import/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 提交用户导入 */
+        post: operations["commit_user_import_api_v1_sys_users_import_commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/users/{pk}": {
         parameters: {
             query?: never;
@@ -1730,6 +1781,14 @@ export interface components {
         Body_install_plugin_api_v1_sys_plugins_post: {
             /** File */
             file?: string | null;
+        };
+        /** Body_preview_user_import_api_v1_sys_users_import_preview_post */
+        Body_preview_user_import_api_v1_sys_users_import_preview_post: {
+            /**
+             * File
+             * @description xlsx 文件
+             */
+            file: string;
         };
         /** Body_reset_user_password_api_v1_sys_users__pk__password_put */
         Body_reset_user_password_api_v1_sys_users__pk__password_put: {
@@ -4125,6 +4184,157 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * ImportCommitDetail
+         * @description 提交结果
+         */
+        ImportCommitDetail: {
+            /**
+             * Created
+             * @description 成功创建的用户名
+             */
+            created: string[];
+            /**
+             * Failed
+             * @description 失败的行
+             */
+            failed: components["schemas"]["ImportRowError"][];
+            /**
+             * Used Default Password
+             * @description 这批账号是否使用了系统默认密码
+             */
+            used_default_password: boolean;
+        };
+        /**
+         * ImportCommitParam
+         * @description 提交导入
+         */
+        ImportCommitParam: {
+            /**
+             * Import Token
+             * @description 预览接口返回的导入令牌
+             */
+            import_token: string;
+            /**
+             * Exclude Rows
+             * @description 要排除的 Excel 行号
+             */
+            exclude_rows?: number[];
+        };
+        /**
+         * ImportPreviewDetail
+         * @description 预览结果
+         */
+        ImportPreviewDetail: {
+            /**
+             * Import Token
+             * @description 导入令牌
+             */
+            import_token: string;
+            /**
+             * Expire Seconds
+             * @description 令牌有效期（秒）
+             */
+            expire_seconds: number;
+            /**
+             * Total
+             * @description 解析出的数据行数
+             */
+            total: number;
+            /**
+             * Valid
+             * @description 其中可以建的行数
+             */
+            valid: number;
+            /**
+             * Rows
+             * @description 逐行结果
+             */
+            rows: components["schemas"]["ImportPreviewRow"][];
+            /**
+             * Ignored Headers
+             * @description 未识别的表头
+             */
+            ignored_headers?: string[];
+            /**
+             * Empty Rows
+             * @description 被跳过的空行数
+             * @default 0
+             */
+            empty_rows: number;
+        };
+        /**
+         * ImportPreviewRow
+         * @description 预览里的一行
+         */
+        ImportPreviewRow: {
+            /**
+             * Row No
+             * @description Excel 行号
+             */
+            row_no: number;
+            /**
+             * Username
+             * @description 用户名
+             */
+            username?: string | null;
+            /**
+             * Nickname
+             * @description 昵称
+             */
+            nickname?: string | null;
+            /**
+             * Email
+             * @description 邮箱
+             */
+            email?: string | null;
+            /**
+             * Phone
+             * @description 手机号
+             */
+            phone?: string | null;
+            /**
+             * Dept Code
+             * @description 部门编码
+             */
+            dept_code?: string | null;
+            /**
+             * Role Codes
+             * @description 角色编码
+             */
+            role_codes?: string[];
+            /**
+             * Ok
+             * @description 这一行能不能建
+             */
+            ok: boolean;
+            /**
+             * Errors
+             * @description 这一行的问题
+             */
+            errors?: string[];
+        };
+        /**
+         * ImportRowError
+         * @description 一行里某一处的问题
+         */
+        ImportRowError: {
+            /**
+             * Row No
+             * @description Excel 行号
+             */
+            row_no: number;
+            /**
+             * Column
+             * @description 出问题的列，整行性问题为空
+             */
+            column?: string | null;
+            /**
+             * Msg
+             * @description 问题描述
+             */
+            msg: string;
+        };
+        /**
          * MemInfo
          * @description 内存信息
          */
@@ -5032,6 +5242,38 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["GetUserInfoWithRelationDetail"];
+        };
+        /** ResponseSchemaModel[ImportCommitDetail] */
+        ResponseSchemaModel_ImportCommitDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["ImportCommitDetail"];
+        };
+        /** ResponseSchemaModel[ImportPreviewDetail] */
+        ResponseSchemaModel_ImportPreviewDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["ImportPreviewDetail"];
         };
         /** ResponseSchemaModel[PageData[GetConfigDetail]] */
         ResponseSchemaModel_PageData_GetConfigDetail__: {
@@ -7331,6 +7573,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseSchemaModel_GetCurrentUserInfoWithRelationDetail_"];
+                };
+            };
+        };
+    };
+    download_user_import_template_api_v1_sys_users_import_template_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    preview_user_import_api_v1_sys_users_import_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_user_import_api_v1_sys_users_import_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_ImportPreviewDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    commit_user_import_api_v1_sys_users_import_commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCommitParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_ImportCommitDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

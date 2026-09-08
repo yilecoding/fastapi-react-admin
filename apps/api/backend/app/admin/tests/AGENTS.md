@@ -1,6 +1,6 @@
 # apps/api/backend/app/admin/tests —— admin 模块的测试笔记
 
-> 这份文件是 [`apps/api` 分册](../../../../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的
+> 这份文件是 [`app/admin` 分册](../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的
 > 文件时才把它加载进上下文（惰性加载）。跨模块的硬纪律只在根 `CLAUDE.md` 里有一份；
 > **新增结论请追加到离代码最近的那一份**。
 

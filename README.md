@@ -192,7 +192,7 @@ shadcn/ui 2026 年 7 月把默认底座从 Radix 换成了 **Base UI**——这�
 | **框架** | FastAPI · Pydantic **2** + pydantic-settings · msgspec（响应编码）· Python ≥ **3.10** |
 | **ORM / 数据层** | SQLAlchemy **2**（asyncio）· `sqlalchemy-crud-plus` · `fastapi-pagination` · **Alembic**（表结构改动一律走迁移，空基线 + 四条 pytest 守卫：改了模型没生成迁移 / 多 head 分叉 / 断链 / 新库没 stamp，见下节） |
 | **ASGI 服务** | 开发 **uvicorn**（`--reload`，只监听 `backend/`）· `fba run` 走 **Granian** |
-| **数据库驱动** | **aioodbc**（SQL Server，主线）· asyncmy + PyMySQL（MySQL）· asyncpg + psycopg（PostgreSQL） |
+| **数据库驱动** | **asyncpg + psycopg**（PostgreSQL，主线）· aioodbc（SQL Server）· asyncmy + PyMySQL（MySQL） |
 | **缓存 / 队列** | Redis **8** + hiredis · cachebox（进程内）· Celery **5** + `celery-aio-pool` + Flower |
 | **认证 / 安全** | pwdlib + bcrypt（口令哈希）· python-jose（JWT）· cryptography · itsdangerous · `pyrate-limiter`（限流）· `fast-captcha`（图形验证码） |
 | **实时** | python-socketio（⚠️ 命名空间是 `/`，路径是 `/ws/socket.io` —— 见 CLAUDE.md） |
@@ -204,11 +204,11 @@ shadcn/ui 2026 年 7 月把默认底座从 Radix 换成了 **Base UI**——这�
 
 | | |
 |---|---|
-| **数据库** | **SQL Server 2022**（主线：`UniversalStr`/NVARCHAR · 筛选唯一索引 · `OFFSET FETCH` 强制 `ORDER BY`）· MySQL · PostgreSQL |
+| **数据库** | **PostgreSQL 16**（主线，2026-09-08 起）· SQL Server 2022（`UniversalStr`/NVARCHAR · 筛选唯一索引 · `OFFSET FETCH` 强制 `ORDER BY` 这几条方言约定仍必须遵守，本地跑 PG 不会替你检查）· MySQL |
 | **主键** | 雪花 ID（≈2^61，**全链路当字符串**：后端 `stringify_unsafe_ints` 下发，前端连 search params 的 `JSON.parse` 都拦过） |
 | **单仓** | pnpm workspace + **turbo 2**（`apps/api` 也是 workspace 成员，`turbo dev` 一条命令起前后端） |
 | **Python 工具链** | **uv**（依赖与虚拟环境）· **ruff 0.16**（CI 里钉死版本 + `--no-fix`）· prek（pre-commit） |
-| **CI** | GitHub Actions：typecheck · web build · i18n 双校验 · ruff。**刻意不含 pytest / Playwright** —— 两套都要真实 SQL Server 实例，跑在本地或自建 runner 上 |
+| **CI** | GitHub Actions：typecheck · web build · i18n 双校验 · ruff · pytest（SQL Server + PostgreSQL 两条平行 job）· Playwright E2E —— 数据库用 GitHub Actions 的 service containers 起，不需要自建 runner |
 | **桌面端**（可选） | Electron **42** + electron-builder **26** + electron-updater **6**，零业务代码 |
 
 后端 fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)

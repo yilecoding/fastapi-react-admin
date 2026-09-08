@@ -122,7 +122,8 @@ pnpm e2e                        # 前端 Playwright（69 条）；自动拉起�
 
 三层：`api/v1/` → `service/` → `crud/`，模型在 `model/`、DTO 在 `schema/`。
 
-SQL Server 的适配约定（用错了在 PostgreSQL 上跑得通、在主线数据库上炸）：
+SQL Server 的适配约定（用错了在本地默认的 PostgreSQL 上多半跑得通，
+只在 CI 的 `pytest · SQL Server` job 上炸——本地起 PG 不会替你查这几条）：
 
 - 存中文用 `UniversalStr(n)`，**不要** `sa.String(n)`
 - 分页查询必须带 `ORDER BY`（`select_order`）—— `OFFSET FETCH` 强制要求

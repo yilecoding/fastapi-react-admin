@@ -71,6 +71,14 @@ error:
     unknown_type: 未知的文件类型
     unsupported_format: 此文件格式 {file_ext} 暂不支持
     upload_failed: 上传文件失败
+  import:
+    default_password_unset: 系统未配置导入默认密码（USER_IMPORT_DEFAULT_PASSWORD），批量导入已关闭
+    dept_code_not_found: 部门编码 {code} 不存在
+    duplicated_email: 邮箱 {value} 在文件里重复了，第 {row_no} 行已经用过
+    duplicated_username: 用户名 {value} 在文件里重复了，第 {row_no} 行已经用过
+    nothing_to_create: 没有可创建的行，请检查排除项
+    role_code_not_found: 角色编码 {code} 不存在
+    token_expired: 导入令牌已失效，请重新上传文件预览
   language_not_found: 当前语言包未初始化或不存在
   menu:
     has_children: 菜单下存在子菜单，无法删除
@@ -147,6 +155,20 @@ error:
   sql:
     illegal_operation: SQL 脚本 {filepath} 存在非法操作，仅允许：{allowed}
     script_not_found: SQL 脚本文件不存在
+  table:
+    bomb: 表格文件解压后超过 {size_mb} MB，已拒绝解析
+    cell_formula: 不支持公式，请复制后「选择性粘贴 → 值」再上传
+    cell_number_unsafe: 数字超出可精确表示的范围，请把该列设置为「文本」格式后重填
+    cell_required: 必填项不能为空
+    cell_unsupported: 不支持的单元格类型 {type}
+    corrupt: 文件已损坏或不是有效的 xlsx，请用 Excel 重新另存后上传
+    empty: 表格里没有数据
+    header_duplicated: 表头中的列 {column} 出现了多次，请删掉多余的那一列
+    header_missing: 表头缺少必需的列：{columns}
+    not_xlsx: 只支持 xlsx 格式，当前是 {file_ext}
+    sheet_not_found: 找不到名为 {sheet} 的工作表
+    size_exceeded: 表格文件超出最大限制 {size_mb} MB
+    too_many_rows: 单次最多导入 {max_rows} 行，请拆分后分批上传
   task:
     deadline_conflict: 截止时间与截止秒数只能设置一个
     not_registered: 任务 {task} 未注册；可用的有：{available}
@@ -178,6 +200,16 @@ file_type:
   document: 文档
   image: 图片
   video: 视频
+
+import:
+  # 导入模板 README 页里的列说明
+  column:
+    dept_code: 部门编码（必填，例如 DEPT_0001）
+    email: 邮箱（可选，需全局唯一）
+    nickname: 昵称（可选，留空则与用户名相同）
+    phone: 手机号（可选，11 位；请把该列设置为「文本」格式）
+    role_codes: 角色编码（可选，多个用逗号分隔，例如 ROLE_0001,ROLE_0002）
+    username: 用户名（必填，需全局唯一）
 
 pydantic:
   # 自定义验证错误信息，参考：

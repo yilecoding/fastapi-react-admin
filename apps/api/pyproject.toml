@@ -11,6 +11,7 @@ authors = [
   { name = "yilecoding" },
 ]
 dependencies = [
+  "aioodbc>=0.5.0",
   # 🔴 随仓库自带的插件依赖必须锁在这里，不能只留在
   # `backend/plugin/*/requirements.txt` 里。`backend/main.py` 在 **import 期**
   # 就跑 `_prepare_plugins()` → `uv pip install`，缺了它们的环境会在
@@ -18,12 +19,10 @@ dependencies = [
   # pytest 收集阶段联网、容器启动联网，两个都是静默的偶发失败。
   # 装上之后 `_requirements_installed()` 命中即跳过，那段逻辑变成空转。
   # requirements.txt 保留不动：那是插件自己的清单，`fba add` 装第三方插件时要用。
-  "aiosmtplib>=5.1.2",       # plugin/email
-  "fastapi-oauth20>=0.0.3",  # plugin/oauth2
+  "aiosmtplib>=5.1.2",  # plugin/email
   "alembic>=1.19.1",
   "asgiref>=3.12.1",
   "asyncmy>=0.2.13",
-  "aioodbc>=0.5.0",
   "asyncpg>=0.31.0",
   "bcrypt>=5.0.0",
   # If there is a serious problem, we will try `moka-py`
@@ -36,6 +35,7 @@ dependencies = [
   "cryptography>=47.0.0",
   "dulwich>=1.2.12",
   "fast-captcha>=0.3.2",
+  "fastapi-oauth20>=0.0.3",  # plugin/oauth2
   "fastapi-pagination[sqlalchemy]>=0.15.16",
   "fastapi[standard-no-fastapi-cloud-cli]>=0.141.1",
   "flower>=2.0.1",
@@ -45,6 +45,7 @@ dependencies = [
   "jinja2>=3.1.6",
   "loguru>=0.7.3",
   "msgspec>=0.21.1",
+  "openpyxl>=3.1.5",
   "opentelemetry-exporter-otlp-proto-grpc>=1.44.0",
   "opentelemetry-instrumentation-asyncio>=0.65b0",
   "opentelemetry-instrumentation-celery>=0.65b0",
@@ -109,7 +110,12 @@ path = "backend/__init__.py"
 # `pnpm test` 照样全绿，而你以为它有覆盖。实测踩过：`app/task` 的 18 条
 # 单元测试写完、单独跑全绿，全量跑却只有 24 条（admin 23 + auth 1），
 # 少的正是新写的那 18 条，输出里没有任何提示。
-testpaths = ["backend/app/admin/tests", "backend/app/task/tests", "backend/plugin", "backend/tests"]
+testpaths = [
+  "backend/app/admin/tests",
+  "backend/app/task/tests",
+  "backend/plugin",
+  "backend/tests"
+]
 python_files = ["test_*.py"]
 # 测试跑在**独立的 fba_test 库**上（conftest 覆盖了 get_db）。
 # 库不存在时报的是 sqlalchemy 连接错误，很难看出是「没建库」——
@@ -275,7 +281,10 @@ ignore = [
   "missing-return-type-undocumented-public-function",
   "missing-return-type-private-function",
 ]
-"**/conftest.py" = ["missing-type-function-argument", "missing-return-type-undocumented-public-function"]
+"**/conftest.py" = [
+  "missing-type-function-argument",
+  "missing-return-type-undocumented-public-function"
+]
 # 这两个文件的模块 docstring 里是 markdown 对照表（「上游怎么写 / 为什么在 mssql 上不行 /
 # 改成什么」），一行一条。按 120 列硬拆会把表格拆散，反而读不成表
 "backend/app/task/model/result.py" = ["line-too-long"]

@@ -9,6 +9,21 @@
 > 才把它加载进上下文（惰性加载），所以它可以写得比根文件细。跨模块的硬纪律只在根
 > `CLAUDE.md` 里有一份；**新增结论请追加到离代码最近的那一份**。
 
+## 为什么默认库换成了 PostgreSQL（2026-09-08）
+
+上面「SQL Server 是本仓库新增的那一种」说的是**归属**，不是「哪个库是主线」——
+之前混在一起过：改动前 SQL Server 是 `.env.example` 默认值、`docker-compose.dev.yml`
+默认起的库、CI 注释和 README/CONTRIBUTING 统称的"主线"，即便种子数据的历史
+（[`backend/tests` 分册](backend/tests/AGENTS.md)「`3000000000000000xxx` 开头的
+ID」一节，现在有 `test_seed_dialects.py` 守着）显示这套"SQL Server 优先"顺序
+真出过事故。这次把"本地默认起哪个库"也一起翻了：三处默认值改指 PostgreSQL，
+文档「主线」字样跟着改，**但 CI 的 `test-backend`/`test-backend-postgres` job id
+没改名**（分支保护 required checks 认字面量，要动先去仓库设置确认），
+`test-e2e` 也仍连 SQL Server（换方言要真跑一轮 CI 验证，没跟这次揉一起）。
+
+**结论**：下面「后端约定」里那几条 SQL Server 专属约定依然要遵守——本地默认库
+变 PostgreSQL 后测不出来，只有 CI 的 `pytest · SQL Server` job 能拦住。
+
 ## 后端约定
 
 三层：`api/v1/` → `service/` → `crud/`，模型在 `model/`、DTO 在 `schema/`。
@@ -149,6 +164,41 @@ refresh token 的 JWT 里同样带着 `sub` 和 `session_uuid`（`create_refresh
 并且把 `load_login_config` 一起顶掉 —— 只设 `settings.LOGIN_CAPTCHA_ENABLED = False`
 会被它从 sys_config 表里 setattr 回来，而那张表在 `fba_test` 里是什么值
 取决于上一次 E2E 的 global-setup 跑没跑过。
+
+## 上传的表格一律过 `utils/excel_ops.py`
+
+Excel 有一大票**「解析成功、有数据、就是错的」**的坑，一个都不报错。
+八条实测结论 + 变异检验的做法在 [`backend/utils` 分册](backend/utils/AGENTS.md)。
+**自己 `load_workbook` 之前先读那一份。**
+
+## 🔴 `pnpm install` 补不了后端依赖，而缺依赖只有一半的脚本会报
+
+`apps/api/package.json` 里**一个 dependency 都没有**，只有 scripts —— 它是 pnpm
+workspace 成员纯粹为了让 `turbo dev` 给它一个日志窗格（同 `apps/worker`）。
+Python 依赖归 `uv` 管（`pyproject.toml` + `uv.lock`），pnpm 不知道它们存在。
+改了 `pyproject.toml` 要 `pnpm --filter api exec uv sync`（或 `pnpm install:all`）。
+
+⚠️ **「忘了同步」的表现取决于你跑哪个脚本**（空 venv 实测）：`dev` / `dev:host` /
+`db:init` / `db:reset` 是裸 `uv run`，**会自动同步**（当场装了 143 个包）；
+`test` / `test:db` / `db:upgrade` / `e2e:server` / `celery:*` / `seed:manifest`
+带 `--no-sync`，直接 `ModuleNotFoundError`。所以**「`pnpm dev` 跑得起来」证明不了
+「依赖装齐了」**——两者是不同的代码路径。CI（`uv sync --locked`）和生产镜像
+（`requirements.txt`，pre-commit 的 `uv-export` 生成）本来就是对的，不用管。
+
+## 用户批量导入
+
+`POST /sys/users/import/{preview,commit}` + 模板下载。两阶段（预览只校验不落库
++ Redis 短期 token；提交允许部分成功），明文密码在整条链路上一次都不出现。
+
+🔴 **批量建号不要循环调 `user_service.create()`** —— 每行一次 bcrypt，实测 87 行
+把事件循环占住 16.7 秒。这条和另外六条在
+[`backend/app/admin` 分册](backend/app/admin/AGENTS.md)。
+
+## 操作日志的脱敏
+
+🔴 响应体此前**完全不脱敏**，请求侧的 `desensitization()` 又只看顶层 key。
+两个洞都是静默的，修法和三条注意事项在
+[`backend/middleware` 分册](backend/middleware/AGENTS.md)。
 
 ## 数据库结构改动一律走 alembic
 
@@ -339,21 +389,6 @@ ORM 的身份映射让这件事看起来像它会是旧的。
 ⚠️ 只在 prod 校验，因为它只在**多副本**时咬人（单副本没有第二个抢号的）。
 这也是 `check_production_settings` 那批检查的共同前提。
 
-## 已经删掉的东西，不要照上游加回来
-
-`sys_menu` 的两列已从**模型、DTO、种子 SQL 和数据库**里彻底删除：
-
-| 列 | 上游的用途 | 为什么这里不需要 |
-|---|---|---|
-| `component` | Vue 运行时动态路由的组件路径 | 前端是编译期文件路由，`page-registry.tsx` 按 routeId 挂载 |
-| `cache` | Vben `<KeepAlive>` 的 per-page 开关 | `TabOutlet` 用 `<Activity>` 一律保活，没有 per-page 概念 |
-
-侧边栏也不再下发 `meta.keepAlive`（`utils/build_tree.py`）。
-
-> 想给某一页关掉保活时**不要复活这个字段**，直接在 `TabOutlet` 里判断。
-> 另外记住 `update` 走 `model_dump(exclude_unset=True)`：前端不传的字段不会被写 ——
-> 这条在「前端删字段」时是好事（不会静默重置老数据），但要归一老值就得显式传一次。
-
 ## 请求 IP 只在可信代理后面才作数
 
 🔴 `utils/request_parse.py: get_request_ip()` 原来**无条件信任** `X-Real-IP`，
@@ -459,3 +494,6 @@ async_db_session`"，定时任务/脚本/CLI 命令这类不经过 FastAPI 依�
 | 动定时任务 / Celery | [`backend/app/task` 分册](backend/app/task/AGENTS.md) |
 | 动公共层（校验 / 异常 / 缓存 / 分页） | [`backend/common` 分册](backend/common/AGENTS.md) |
 | admin 模块的测试笔记（动态配置 / prod 检查 / 上传） | [`app/admin/tests` 分册](backend/app/admin/tests/AGENTS.md) |
+| 解析上传的 xlsx | [`backend/utils` 分册](backend/utils/AGENTS.md) |
+| 用户批量导入 / 批量建号的性能 · **`sys_menu` 删掉的那两列** | [`backend/app/admin` 分册](backend/app/admin/AGENTS.md) |
+| 操作日志脱敏 / 中间件 | [`backend/middleware` 分册](backend/middleware/AGENTS.md) |
