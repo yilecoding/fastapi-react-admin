@@ -33,6 +33,32 @@
 `tests/test_ai_security.py::test_mutating_requires_is_staff`，**做过变异检验**
 （摘掉 `is_staff` 判断那条测试当场红）。
 
+## 🔴 行级数据权限由 dispatcher 锚定，不靠「中间件反正会设」
+
+`DataScopedCRUD._data_scope_condition()` 在 `_current_user` 为 `None` 时
+**不加任何过滤**（= 看全部）。那是给 Celery / CLI / 启动期用的 fail-open，
+对它们是对的——那些路径没有「谁在看」这个概念。
+
+🔴 **但 `set_current_user()` 全仓只有 `middleware/jwt_auth_middleware.py` 调。**
+今天只有网页 SSE 一个入口、走 JWT，所以没事；设计里「入口可插拔」那一层一旦落地
+（API key / MCP / sidecar），新入口忘了设上下文就是**受限用户通过 AI 拿到全量数据**，
+而接口返回 200、审计记「成功」、界面一切正常——没有任何现象。
+
+所以 `dispatch()` 自己用 `scoped_to_user(ctx.user)`（`common/security/data_scope.py`）
+把上下文建起来再执行 handler。它是工具执行的**唯一**通路，在这里锚定 =
+以后加入口不用再想这件事。
+
+守卫：`tests/test_ai_security.py::TestDispatcherAnchorsDataScope`，**做过变异检验**
+（摘掉 `scoped_to_user` / 换成不还原的裸 `set_current_user`，各打红一条）。
+
+⚠️ **这两条测试必须在干净的上下文里跑** —— 在已经设好上下文的情况下测，
+测的是中间件而不是这道闸。
+
+🔴 **而且「还原」那条的断言必须和 dispatch 在同一个协程里。** 第一版写的是
+`asyncio.run(dispatch(...))` 然后在外面读 `_current_user`，那条测试**永远不会失败**：
+`asyncio.run` 把协程放进一个新任务，任务拿的是上下文的**副本**，里面的 `set`
+传不回调用方。是变异检验抓出来的——它当时是绿的，而且看起来完全合理。
+
 ## 🔴 数据范围：什么都不做才是对的，加一句 bypass 就漏
 
 `jwt_auth_middleware` 已经把当前用户写进了 `data_scope` 的 ContextVar，所以工具走
@@ -133,6 +159,26 @@ URL 变了、请求发出去了、接口返回 200、页面照常渲染——只
 `test_permission_codes.py` 的种子扫描正则是 `'([a-z0-9_]+(?::[a-z0-9_]+)+)'`——
 `ai:tool-log:list` 这种带连字符的码**扫不到**，于是"后端声明了但种子里没有"那条
 断言会红，而报错完全不提是连字符的问题。现在用的是 `ai:log:list`。
+
+## 🔴 确认令牌：先验归属、再用 `DELETE` 的返回值抢占
+
+`chat_service.confirm_tool` 是变更类工具**唯一**的执行入口，两处原来都是静默错的：
+
+| 症状 | 根因 | 修法 |
+|---|---|---|
+| 同一个确认被执行多次（双击 / 网络重试 / 两个标签页） | 「`GET` 到就算数、再 `DELETE`」不是原子的 | 以 `DELETE` 返回 1 为准，只有删到的那一个执行 |
+| 别人拿到令牌试一次，本人点确认只看到「已过期」 | 先删令牌再比 `user_id` | 归属校验挪到抢占之前（只读不删） |
+
+**实测证据**（`tests/test_ai_confirm.py`，真实 Redis）：修复前 5 个并发确认**执行了 5 次**；
+陌生人试一次后本人得到 `confirm_expired`。修复后两条转绿，连跑 3 次稳定。
+
+🔴 **竞态测试必须先预热连接池，否则假绿。** 第一版没预热就是绿的：冷池里第一个请求
+复用 `SET` 留下的连接，其余的都在建新连接（connect + AUTH），等它们发出 `GET` 时
+第一个早已读完删完。直接探针实测：冷池 5 个并发只有 1 个读到令牌，热池 5 个全读到。
+**生产的连接池是热的**，测冷池等于测一个不存在的现实。
+
+⚠️ 用真实 Redis 而不是 mock：竞态窗口就是「读」和「删」之间那两次网络往返，
+mock 掉 Redis 就把窗口一起 mock 没了。
 
 ## 目前只有只读工具
 

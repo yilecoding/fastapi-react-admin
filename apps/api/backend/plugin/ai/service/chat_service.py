@@ -145,21 +145,34 @@ class ChatService:
     async def confirm_tool(*, user: Any, token: str) -> AsyncIterator[str]:
         """用户点了确认之后，真正执行那个变更类工具。
 
-        令牌是**一次性**的：先删再执行（同用户批量导入的 `import_token`）。
+        令牌是**一次性**的：先消费再执行（同用户批量导入的 `import_token`）。
         顺序反过来的话，执行失败时令牌还在，用户刷新页面能把同一个变更再提交一次。
+
+        顺序是「读 → 验归属 → 抢占 → 执行」，两处都是实测踩出来的
+        （`tests/test_ai_confirm.py`）：
+
+        - 🔴 **抢占要原子**：以 `DELETE` 的返回值为准，只有删到的那一个执行。
+          原来是「GET 到就算数、再 DELETE」，热连接池下 5 个并发确认 5 个都读到令牌，
+          同一个变更执行了 5 次（双击、网络重试、两个标签页都会触发）
+        - 🔴 **验归属在抢占之前**：原来先删再比 `user_id`，别人拿到令牌试一次，
+          本人再点确认只会看到「已过期」—— 查不出原因的作废
         """
         key = f'{settings.AI_CONFIRM_REDIS_PREFIX}:{token}'
         raw = await redis_client.get(key)
         if not raw:
             yield _sse(ErrorEvent(message='确认已过期，请重新发起这个操作', code='confirm_expired'))
             return
-        await redis_client.delete(key)
 
         staged = json.loads(raw)
         # 🔴 令牌里记着是谁发起的：换个账号拿到别人的令牌不能执行。
         # 令牌本身是随机的，但"随机"不等于"不会泄露"（日志、截图、转发都可能带出去）
         if staged['user_id'] != str(user.id):
             yield _sse(ErrorEvent(message='这个确认不属于当前用户', code='confirm_mismatch'))
+            return
+
+        if not await redis_client.delete(key):
+            # 并发的另一次确认已经抢到了 —— 对这一次来说令牌就是用过了
+            yield _sse(ErrorEvent(message='确认已过期，请重新发起这个操作', code='confirm_expired'))
             return
 
         spec = get_tool(staged['tool'])
