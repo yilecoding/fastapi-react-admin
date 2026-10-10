@@ -138,6 +138,8 @@ class ChatService:
                         tool_calls=json.dumps(traces, ensure_ascii=False) if traces else None,
                     )
                 await db.commit()
+                # 工具挂的提交后动作（清用户缓存等）—— 必须在 commit 之后，见 `RunContext.background_tasks`
+                await ctx.background_tasks()
         finally:
             await redis_client.delete(lock_key)
 
@@ -186,6 +188,7 @@ class ChatService:
             call = ToolCallRequest(call_id=token, name=staged['tool'], arguments=staged['arguments'])
             outcome = await tool_dispatcher.dispatch(call, ctx, pre_approved=True)
             await db.commit()
+            await ctx.background_tasks()
 
         yield _sse(ToolResultEvent(call_id=token, name=call.name, ok=outcome.kind == 'ok', summary=outcome.summary))
         yield _sse(DoneEvent())

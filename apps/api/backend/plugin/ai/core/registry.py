@@ -8,7 +8,7 @@ import importlib
 import inspect
 import pkgutil
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from pydantic import create_model
@@ -58,6 +58,7 @@ def ai_tool(
     domain: str,
     perm: str | None = None,
     mutating: bool = False,
+    preview: Callable[..., Awaitable[str]] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """把一个 async 函数注册成 AI 可调用的工具。
 
@@ -66,6 +67,7 @@ def ai_tool(
     :param domain: 工具域，对应 `AI_TOOL_DOMAINS`，整域可开关
     :param perm: 权限码。复用现有 RBAC 权限码，**不要发明新的授权模型**
     :param mutating: 会不会改变系统状态。`True` 触发二次确认 + `is_staff` 校验
+    :param preview: 变更类工具**必填**的预演函数（只读），返回「会变成什么」给人确认
     """
 
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -73,6 +75,12 @@ def ai_tool(
             raise TypeError(f'AI 工具 {name} 必须是 async 函数')
         if name in _REGISTRY:
             raise ValueError(f'AI 工具重名：{name}')
+        # 🔴 变更类工具必须带预演。没有它，确认卡片上只有「工具名 + 参数」——
+        # `dept_id: "2048601263515500544"` 对人来说什么都没说，「点头」就退化成了走过场
+        if mutating and preview is None:
+            raise TypeError(f'变更类 AI 工具 {name} 必须提供 preview（预演）')
+        if preview is not None and not inspect.iscoroutinefunction(preview):
+            raise TypeError(f'AI 工具 {name} 的 preview 必须是 async 函数')
 
         spec = ToolSpec(
             name=name,
@@ -82,6 +90,7 @@ def ai_tool(
             domain=domain,
             perm=perm,
             mutating=mutating,
+            preview=preview,
             wants_db='db' in inspect.signature(fn).parameters,
             wants_ctx='ctx' in inspect.signature(fn).parameters,
         )

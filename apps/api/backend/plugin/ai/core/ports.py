@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTasks
 
 from backend.plugin.ai.core.events import AgentEvent
 
@@ -58,6 +59,10 @@ class ToolSpec:
     mutating: bool = False
     """是否会改变系统状态。`True` 的工具走二次确认，且额外要求 `is_staff`。"""
 
+    preview: Callable[..., Awaitable[str]] | None = None
+    """变更类工具的**预演**：入参同 handler（`db` / `ctx` 同样注入），只读不写，
+    返回给人看的「会变成什么」。抛异常 = 这次调用在请人确认之前就被拒掉。"""
+
     wants_db: bool = False
     """handler 是否声明了 `db` 参数（由 registry 检测，dispatcher 据此注入会话）。"""
 
@@ -89,6 +94,9 @@ class RunContext:
     db: AsyncSession
     provider: Any
     max_tool_rounds: int = 5
+    background_tasks: BackgroundTasks = field(default_factory=BackgroundTasks)
+    """工具挂的**提交后**动作（如清用户缓存）。由开会话的那一方在 commit 之后执行 ——
+    提交前清缓存，并发请求会在提交前把旧数据重新缓存回去。"""
     extra: dict[str, Any] = field(default_factory=dict)
 
 

@@ -50,7 +50,10 @@ async def _fake_session() -> AsyncIterator[Any]:
 
 @pytest.fixture
 def probe_tool() -> Iterator[None]:
-    @ai_tool(name=_TOOL, description='探针', domain='system', perm=None, mutating=True)
+    async def _preview() -> str:  # ruff: ignore[unused-async]
+        return '探针预演'
+
+    @ai_tool(name=_TOOL, description='探针', domain='system', perm=None, mutating=True, preview=_preview)
     async def _probe() -> dict[str, Any]:  # ruff: ignore[unused-async]
         return {'ok': True}
 

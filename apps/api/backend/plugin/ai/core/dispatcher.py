@@ -15,10 +15,12 @@
 （两套相似但独立的东西必然漂移），且漂移的表现是静默越权。
 """
 
+import inspect
 import json
 import time
 import uuid
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -67,6 +69,11 @@ def _redact(value: Any, _depth: int = 0) -> Any:
     if isinstance(value, list):
         return [_redact(v, _depth + 1) for v in value]
     return value
+
+
+def _error_text(e: Exception) -> str:
+    """业务异常（`errors.BaseExceptionError`）的可读消息在 `.msg` 上，`str(e)` 可能是空串"""
+    return getattr(e, 'msg', None) or str(e) or type(e).__name__
 
 
 def _stringify(result: Any) -> str:
@@ -157,7 +164,31 @@ class ToolDispatcher:
                 return DispatchOutcome(kind='denied', payload='你不具备后台管理操作权限。', summary='无后台操作权限')
 
             if settings.AI_CONFIRM_MUTATING_TOOLS and not pre_approved:
-                token, preview = await self._stage_confirm(spec, call, ctx)
+                # 先预演再请人确认：预演就会失败的调用（部门不存在 / 不在你的数据范围 /
+                # 同级重名…）不该先弹一张确认卡片，等人点了才报错
+                try:
+                    preview = await self._invoke(spec.preview, call, ctx) if spec.preview else None
+                except Exception as e:
+                    reason = _error_text(e)
+                    await self._audit(
+                        ctx,
+                        call,
+                        ToolInvocationStatus.FAILED,
+                        perm=spec.perm,
+                        error=f'预演失败：{reason}',
+                        started=started,
+                    )
+                    return DispatchOutcome(
+                        kind='failed',
+                        payload=f'无法执行：{reason}',
+                        summary=f'{spec.name} 预演未通过',
+                        perm=spec.perm,
+                        duration_ms=int((time.perf_counter() - started) * 1000),
+                    )
+                token = await self._stage_confirm(spec, call, ctx)
+                if not preview:
+                    safe_args = json.dumps(_redact(call.arguments), ensure_ascii=False)
+                    preview = f'将执行：{spec.name}\n参数：{safe_args}'
                 await self._audit(ctx, call, ToolInvocationStatus.PENDING_CONFIRM, perm=spec.perm, started=started)
                 return DispatchOutcome(
                     kind='confirm_required',
@@ -168,23 +199,8 @@ class ToolDispatcher:
                 )
 
         try:
-            kwargs = dict(call.arguments)
-            if spec.wants_db:
-                kwargs['db'] = ctx.db
-            if spec.wants_ctx:
-                kwargs['ctx'] = ctx
-            # 🔴 行级数据权限由**这里**负责锚定，不依赖「中间件反正会设」。
-            #
-            # `_current_user` 为 None 时 `DataScopedCRUD` 不加任何过滤（= 看全部）——
-            # 对 Celery / CLI 是对的，对「认证方式不是 JWT 的入口」就是静默越权。
-            # 而 `set_current_user()` 全仓只有 `jwt_auth_middleware` 调：今天只有
-            # 网页 SSE 一个入口所以没事，哪天接上 API key / MCP / sidecar
-            # （设计里的「入口可插拔」那一层），忘了设就是受限用户通过 AI 拿到全量，
-            # 接口 200、审计记「成功」，没有任何现象。
-            #
-            # dispatch 是工具执行的**唯一**通路，在这里锚定 = 以后加入口不用再想这件事。
-            with scoped_to_user(ctx.user):
-                result = await spec.handler(**kwargs)
+            # 数据范围在 `_invoke` 里锚定（见那里的注释）
+            result = await self._invoke(spec.handler, call, ctx)
         except TypeError as e:
             # 模型填错参数属于日常，不是系统故障——把错误回给它让它重填
             await self._audit(ctx, call, ToolInvocationStatus.FAILED, perm=spec.perm, error=str(e), started=started)
@@ -197,10 +213,11 @@ class ToolDispatcher:
             )
         except Exception as e:
             log.exception(f'AI 工具 {spec.name} 执行失败')
-            await self._audit(ctx, call, ToolInvocationStatus.FAILED, perm=spec.perm, error=str(e), started=started)
+            reason = _error_text(e)
+            await self._audit(ctx, call, ToolInvocationStatus.FAILED, perm=spec.perm, error=reason, started=started)
             return DispatchOutcome(
                 kind='failed',
-                payload=f'执行失败：{e}',
+                payload=f'执行失败：{reason}',
                 summary=f'{spec.name} 执行失败',
                 perm=spec.perm,
                 duration_ms=int((time.perf_counter() - started) * 1000),
@@ -216,15 +233,30 @@ class ToolDispatcher:
             duration_ms=int((time.perf_counter() - started) * 1000),
         )
 
-    async def _stage_confirm(self, spec: ToolSpec, call: ToolCallRequest, ctx: RunContext) -> tuple[str, str]:
-        """把一次待确认的调用暂存到 Redis，返回（一次性令牌，预览文本）
+    @staticmethod
+    async def _invoke(fn: Callable[..., Awaitable[Any]], call: ToolCallRequest, ctx: RunContext) -> Any:
+        """按签名注入 `db` / `ctx`，**在调用者的数据范围里**执行 handler 或 preview。
 
-        ⚠️ v1 的"预览"是**要执行什么**（工具名 + 脱敏入参），不是**会变成什么**。
-        真正的 dry-run 要每个工具自己实现（service 层给一个 `preview=True` 分支），
-        那是下一步。即便如此这道闸仍然有价值：它把"模型决定"变成了"人点头"。
+        🔴 行级数据权限由**这里**负责锚定，不依赖「中间件反正会设」。
+        `_current_user` 为 None 时 `DataScopedCRUD` 不加任何过滤（= 看全部）——
+        对 Celery / CLI 是对的，对「认证方式不是 JWT 的入口」就是静默越权。
+        而 `set_current_user()` 全仓只有 `jwt_auth_middleware` 调：哪天接上
+        API key / MCP / sidecar，忘了设就是受限用户通过 AI 拿到全量，没有任何现象。
+        dispatch 是工具执行的**唯一**通路，在这里锚定 = 以后加入口不用再想这件事。
+        预演也走这里：它读的是同一批数据，范围必须一致。
         """
+        kwargs = dict(call.arguments)
+        params = inspect.signature(fn).parameters
+        if 'db' in params:
+            kwargs['db'] = ctx.db
+        if 'ctx' in params:
+            kwargs['ctx'] = ctx
+        with scoped_to_user(ctx.user):
+            return await fn(**kwargs)
+
+    async def _stage_confirm(self, spec: ToolSpec, call: ToolCallRequest, ctx: RunContext) -> str:
+        """把一次待确认的调用暂存到 Redis，返回一次性令牌"""
         token = uuid.uuid4().hex
-        safe_args = _redact(call.arguments)
         await redis_client.set(
             f'{settings.AI_CONFIRM_REDIS_PREFIX}:{token}',
             json.dumps(
@@ -238,8 +270,7 @@ class ToolDispatcher:
             ),
             ex=settings.AI_CONFIRM_TOKEN_EXPIRE_SECONDS,
         )
-        preview = f'将执行：{spec.name}\n参数：{json.dumps(safe_args, ensure_ascii=False)}'
-        return token, preview
+        return token
 
     async def _audit(
         self,
