@@ -27,7 +27,7 @@ from backend.common.security.data_scope import scoped_to_user
 from backend.core.conf import settings
 from backend.database.redis import redis_client
 from backend.plugin.ai.core.permission import user_can, user_can_mutate
-from backend.plugin.ai.core.ports import RunContext, ToolCallRequest, ToolSpec
+from backend.plugin.ai.core.ports import RunContext, ToolCallRequest, ToolSchema, ToolSpec
 from backend.plugin.ai.core.registry import get_tool, tools_in_domains
 from backend.plugin.ai.enums import ToolInvocationStatus
 
@@ -102,6 +102,10 @@ class ToolDispatcher:
                 continue
             visible.append(spec)
         return visible
+
+    def visible_schemas(self, user: Any) -> list[ToolSchema]:
+        """交给引擎的那一份：同 `visible_tools`，但去掉了可执行体（见 `ToolSchema`）"""
+        return [spec.schema for spec in self.visible_tools(user)]
 
     async def dispatch(
         self,

@@ -18,6 +18,15 @@
 二次确认 / 审计落库全在这里。引擎（进程内循环、将来的 Node sidecar…）对系统来说
 都是**不受信任的建议者**，它只能提议调用某个工具。
 
+🔴 **「不受信任」是结构，不是约定：引擎手上没有可执行体。** 端口 `run(tools=...)`
+收的是 `ToolSchema`（name / description / parameters / mutating，纯数据），
+不是带 `handler` 的 `ToolSpec`。原来收的是后者，pydantic-ai spike 实测过那个洞：
+适配器里写一句 `Tool(spec.handler)`，框架直接执行，权限 / 确认 / 审计全跳过，
+**不报任何错**。守卫 `tests/test_ai_security.py::TestEnginesNeverHoldExecutables`
+（端口类型 · schema 无可调用字段 · `engines/` 里不许出现 `.handler` / `.visible_tools` /
+import `core.registry`），**做过变异检验**（三种绕过各打红一条）。
+写新引擎时要执行工具，唯一的路是 `tool_dispatcher.dispatch(ToolCallRequest(...), ctx)`。
+
 安全逻辑一旦下沉进引擎适配器，就会变成"每接一个引擎写一遍"——而那正是
 [`common/security` 分册](../../common/security/AGENTS.md) 里反复出现的失败模式
 （两套相似但独立的东西必然漂移），且漂移的表现是静默越权。

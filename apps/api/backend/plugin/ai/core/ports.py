@@ -15,11 +15,32 @@ from backend.plugin.ai.core.events import AgentEvent
 
 
 @dataclass(frozen=True, slots=True)
-class ToolSpec:
-    """一个工具的完整描述——**与用哪个引擎无关**。
+class ToolSchema:
+    """交给引擎的工具描述——**纯数据，没有可执行体**。
 
-    工具作者只写这个；翻译成 OpenAI function schema / pi 的 tool 定义 / MCP tool
-    是各个引擎适配器的责任。这样新增工具时不需要知道当前跑的是哪个引擎。
+    🔴 引擎只能拿到这个，拿不到 `ToolSpec`。原来端口收的是带 `handler` 的
+    `ToolSpec`，「引擎只是建议者」就只是一句约定：pydantic-ai spike 实测，
+    适配器里写一句 `Tool(spec.handler)` 框架就直接执行了，权限码 / 二次确认 /
+    审计全部跳过，不报任何错。现在引擎手上没有能执行的东西，想执行只能
+    提议一个 `ToolCallRequest` 交给 `tool_dispatcher.dispatch()`。
+    守卫：`tests/test_ai_security.py::TestEnginesNeverHoldExecutables`。
+
+    翻译成 OpenAI function schema / pydantic-ai 的 `ToolDefinition` / MCP tool
+    是各个引擎适配器的责任。
+    """
+
+    name: str
+    description: str
+    parameters: dict[str, Any]
+    mutating: bool = False
+    """给引擎 / 入口做展示用（如 MCP 的 `readOnlyHint`）。**安全判定不看它**，看 dispatcher。"""
+
+
+@dataclass(frozen=True, slots=True)
+class ToolSpec:
+    """一个工具的完整描述——**与用哪个引擎无关**，且**只在 dispatcher 手里**。
+
+    工具作者只写这个（经 `@ai_tool`）；交给引擎的是它的 `schema` 投影。
     """
 
     name: str
@@ -46,6 +67,13 @@ class ToolSpec:
     要算数据范围（`filter_data_permission_for_user`）的工具必须声明它——
     数据范围是**按调用者**算的，拿不到 user 就只能退化成"看全部"，
     而那正是最不该静默发生的事。"""
+
+    @property
+    def schema(self) -> ToolSchema:
+        """去掉可执行体的投影 —— 引擎能看到的只有这些"""
+        return ToolSchema(
+            name=self.name, description=self.description, parameters=self.parameters, mutating=self.mutating
+        )
 
 
 @dataclass(slots=True)
@@ -90,13 +118,14 @@ class AgentRuntimePort(Protocol):
     def run(
         self,
         history: list[dict[str, Any]],
-        tools: list[ToolSpec],
+        tools: list[ToolSchema],
         ctx: RunContext,
     ) -> AsyncIterator[AgentEvent]:
         """驱动一轮对话，产出引擎无关的事件流。
 
         :param history: OpenAI 形状的消息列表（已含本次用户输入）
-        :param tools: **已经按调用者权限过滤过**的工具集——引擎看不到无权调用的工具
+        :param tools: **已经按调用者权限过滤过**的工具描述——引擎看不到无权调用的工具，
+            也拿不到任何工具的可执行体
         :param ctx: 运行上下文
         """
         ...

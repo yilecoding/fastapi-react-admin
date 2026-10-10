@@ -27,14 +27,14 @@ from backend.plugin.ai.core.events import (
     ToolResultEvent,
     UsageEvent,
 )
-from backend.plugin.ai.core.ports import RunContext, ToolCallRequest, ToolSpec
+from backend.plugin.ai.core.ports import RunContext, ToolCallRequest, ToolSchema
 from backend.plugin.ai.llm.client import OpenAICompatClient, accumulate_tool_calls
 
 
-def to_openai_tools(tools: list[ToolSpec]) -> list[dict[str, Any]]:
-    """`ToolSpec` → OpenAI function 定义。
+def to_openai_tools(tools: list[ToolSchema]) -> list[dict[str, Any]]:
+    """`ToolSchema` → OpenAI function 定义。
 
-    这层翻译是**适配器的责任**，不是工具作者的。工具作者写的永远是 `ToolSpec`，
+    这层翻译是**适配器的责任**，不是工具作者的。工具作者写的永远是 `@ai_tool`，
     换引擎时只有这个函数要重写。
     """
     return [
@@ -61,7 +61,7 @@ class NativeLoopEngine:
     async def run(  # ruff: ignore[complex-structure]
         self,
         history: list[dict[str, Any]],
-        tools: list[ToolSpec],
+        tools: list[ToolSchema],
         ctx: RunContext,
     ) -> AsyncIterator[AgentEvent]:
         messages = list(history)

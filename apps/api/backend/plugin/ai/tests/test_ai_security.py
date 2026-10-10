@@ -14,11 +14,15 @@
 - 密钥不能出现在任何响应 schema 里
 """
 
+import ast
 import asyncio
+import dataclasses
 import inspect
+import typing
 
 from collections.abc import Iterator
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -28,7 +32,7 @@ from backend.common.security.data_scope import _current_user
 from backend.plugin.ai.api.v1 import tool as tool_api
 from backend.plugin.ai.core.dispatcher import tool_dispatcher
 from backend.plugin.ai.core.permission import user_can, user_can_mutate
-from backend.plugin.ai.core.ports import RunContext, ToolCallRequest
+from backend.plugin.ai.core.ports import AgentRuntimePort, RunContext, ToolCallRequest, ToolSchema
 from backend.plugin.ai.core.registry import _REGISTRY, ai_tool, all_tools, get_tool, load_builtin_tools
 from backend.plugin.ai.crud.crud_tool_invocation import ai_tool_invocation_dao
 from backend.plugin.ai.llm.client import _parse_sse_line, accumulate_tool_calls
@@ -316,7 +320,63 @@ class TestDispatcherAnchorsDataScope:
         assert outcome.kind == 'ok', outcome
         assert probe['user'] is user, '工具执行时数据权限上下文是空的 —— 行级过滤会静默退化成「看全部」'
 
-    def test_scope_is_restored_afterwards(self) -> None:
-        """出了 dispatch 要还原，不能把上下文漏给同一请求里后面的代码"""
-        asyncio.run(self._dispatch(_user(superuser=True)))
-        assert _current_user.get() is None
+    def test_scope_is_restored_afterwards(self, probe: dict[str, Any]) -> None:
+        """出了 dispatch 要还原，不能把上下文漏给同一请求里后面的代码。
+
+        🔴 **断言必须和 dispatch 在同一个协程里**。第一版写的是
+        `asyncio.run(self._dispatch(...))` 然后在外面读 `_current_user` ——
+        那条测试**永远不会失败**：`asyncio.run` 把协程放进一个新任务，
+        而任务拿的是上下文的**副本**，里面的 `set` 根本传不回调用方。
+        变异检验抓出来的（把 `with scoped_to_user` 换成裸 `set_current_user`，
+        那一版照样绿）。直接 `await`（不建任务）才共享同一个上下文。
+        """
+
+        async def run_and_observe() -> Any:
+            await self._dispatch(_user(superuser=True))
+            return _current_user.get()
+
+        assert asyncio.run(run_and_observe()) is None, 'dispatch 把数据权限上下文漏出去了'
+
+
+class TestEnginesNeverHoldExecutables:
+    """🔴 引擎拿到的工具清单里**不能有可执行体**，否则「引擎只是建议者」只是约定。
+
+    原来 `AgentRuntimePort.run` 收的是 `ToolSpec`，里面带着 `handler`。pydantic-ai
+    spike 实测过这个洞：适配器里写一句 `Tool(spec.handler)`，框架就直接执行了，
+    权限码 / 二次确认 / 审计全部跳过，**不报任何错**，对话照样正常。
+    所以端口只给 `ToolSchema`（纯数据），执行只能回到 `tool_dispatcher.dispatch()`。
+    """
+
+    ENGINES_DIR = Path(__file__).resolve().parents[1] / 'engines'
+    # 引擎里出现这些就能绕过 dispatcher 拿到可执行体
+    FORBIDDEN_ATTRS = frozenset({'handler', 'visible_tools'})
+    FORBIDDEN_MODULES = frozenset({'backend.plugin.ai.core.registry'})
+
+    def test_port_takes_schemas_not_specs(self) -> None:
+        hints = typing.get_type_hints(AgentRuntimePort.run)
+        assert hints['tools'] == list[ToolSchema], f'引擎端口收的是 {hints["tools"]}，应为 list[ToolSchema]'
+
+    def test_schema_has_no_callables(self) -> None:
+        load_builtin_tools()
+        schemas = tool_dispatcher.visible_schemas(_user(superuser=True))
+        assert schemas, '前置：超管应当看得到工具'
+        for schema in schemas:
+            assert isinstance(schema, ToolSchema)
+            for f in dataclasses.fields(schema):
+                assert not callable(getattr(schema, f.name)), f'{schema.name}.{f.name} 是可执行的'
+
+    def test_engines_do_not_reach_for_handlers(self) -> None:
+        offenders = []
+        for path in sorted(self.ENGINES_DIR.glob('*.py')):
+            for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
+                if isinstance(node, ast.Attribute) and node.attr in self.FORBIDDEN_ATTRS:
+                    offenders.append(f'{path.name}:{node.lineno} .{node.attr}')
+                elif isinstance(node, ast.ImportFrom) and node.module in self.FORBIDDEN_MODULES:
+                    offenders.append(f'{path.name}:{node.lineno} from {node.module}')
+                elif isinstance(node, ast.Import):
+                    offenders += [
+                        f'{path.name}:{node.lineno} import {a.name}'
+                        for a in node.names
+                        if a.name in self.FORBIDDEN_MODULES
+                    ]
+        assert not offenders, f'引擎绕过 dispatcher 拿可执行体：{offenders}'

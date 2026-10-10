@@ -96,7 +96,7 @@ class ChatService:
                 await db.commit()
 
                 history = await _build_history(db, conversation_id)
-                tools = tool_dispatcher.visible_tools(user)
+                tools = tool_dispatcher.visible_schemas(user)
                 ctx = RunContext(
                     user=user,
                     conversation_id=conversation_id,
