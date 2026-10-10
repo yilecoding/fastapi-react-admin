@@ -1,0 +1,144 @@
+# plugin/ai —— AI 助手（可插拔 agent 引擎 + 受 RBAC 约束的系统操作工具）
+
+> 应用级插件（`[app] router = ["v1"]`），接口在 `/api/v1/ai/*`。设计与选型见 issue #104。
+>
+> 这份文件是 [`apps/api` 分册](../../../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的
+> 文件时才把它加载进上下文（惰性加载）。跨模块的硬纪律只在根 `CLAUDE.md` 里有一份；
+> **新增结论请追加到离代码最近的那一份**。
+
+## 三层可插拔，一层焊死
+
+| 层 | 接缝 | 换它要改什么 |
+|---|---|---|
+| **引擎**（谁驱动对话） | `core/ports.py: AgentRuntimePort` | 一个适配器文件 + `AI_AGENT_ENGINE` 一个值 |
+| **入口**（用户从哪进来） | `core/events.py` 的事件协议 | 加一个入口，不动引擎和工具 |
+| **工具集**（AI 能做什么） | `core/registry.py: @ai_tool` | 加一个文件，下游项目不改插件源码 |
+
+🔴 **`core/dispatcher.py` 是唯一不可插拔的那层**：权限码过滤 / 数据范围继承 /
+二次确认 / 审计落库全在这里。引擎（进程内循环、将来的 Node sidecar…）对系统来说
+都是**不受信任的建议者**，它只能提议调用某个工具。
+
+安全逻辑一旦下沉进引擎适配器，就会变成"每接一个引擎写一遍"——而那正是
+[`common/security` 分册](../../common/security/AGENTS.md) 里反复出现的失败模式
+（两套相似但独立的东西必然漂移），且漂移的表现是静默越权。
+
+## 🔴 工具权限判定必须跟 `rbac_verify` 同步改
+
+`core/permission.py` 是照着 `common/security/rbac.py: rbac_verify()` 的分支逐条写的
+（前者返回布尔用于过滤清单，后者抛异常用于拦请求）。**改 `rbac_verify` 的判据时这里要跟着改**——
+两边分叉的表现是：界面上点不到的按钮，换成"让 AI 帮我做"就能做。
+
+其中 `user_can_mutate()` 那条**不是多余的**：`rbac_verify` 对非 GET 请求额外要求
+`is_staff`，而工具调用不经过 HTTP 方法，够不着那道闸。守卫在
+`tests/test_ai_security.py::test_mutating_requires_is_staff`，**做过变异检验**
+（摘掉 `is_staff` 判断那条测试当场红）。
+
+## 🔴 数据范围：什么都不做才是对的，加一句 bypass 就漏
+
+`jwt_auth_middleware` 已经把当前用户写进了 `data_scope` 的 ContextVar，所以工具走
+service 层时**自动**继承调用者的可见范围。反过来说：谁在工具里图省事调一句
+`bypass_data_scope()`，受限用户就会通过 AI 看到全量数据——而那个豁免的本意是给
+"非展示的内部读"（登录查重、冲突检查）用的。
+
+⚠️ **例外是部门**：`dept_service.get_tree` 的数据过滤是**显式入参**（`data_filter`），
+不走 ContextVar。所以 `tools/dept_tools.py` 必须自己算一遍
+`filter_data_permission_for_user(ctx.user, Dept)`——少了它，只该看见本部门的人
+问"有哪些部门"会拿到整棵组织树。
+
+## 🔴 SSE：三个会静默坏的地方
+
+- **不能用注入进来的 `CurrentSession`。** FastAPI 的 yield 依赖在 `StreamingResponse`
+  开始发送**之前**就被收尾了，拿它在生成器里用会在流到一半时撞 "session is closed"——
+  而前几帧已经正常发出去了，表现成"AI 说到一半突然断"。`chat_service` 自己开会话，
+  代价是它绕过了依赖注入，所以**必须**登记进 `backend/conftest.py` 的
+  `_PATCHED_SESSION_MODULES`（不登记就是跑测试往开发库写对话记录）
+- **帧结尾必须是两个换行**（`data: {...}\n\n`）。少一个浏览器一直等下一行，整条流卡住不出字
+- **工具调用的分片要按 `index` 累积**（`llm/client.py: accumulate_tool_calls`）。
+  OpenAI 把一次调用拆成多个 delta 发，`id` 只在第一片里、`arguments` 是**被切碎的字符串**。
+  每片当成一次独立调用的话，表现是"模型调用了 20 次工具、每次参数都是残缺 JSON"，
+  而错误会被当成"模型参数填错了"，永远查不到流式解析这一层。守卫：
+  `tests/test_ai_security.py::TestStreamParsing`
+
+## 🔴 内网网关的两条约束（来自 sop2ppt 的实测）
+
+`llm/client.py` 里那两个参数不是可选项：
+
+| 参数 | 不设的表现 |
+|---|---|
+| `verify=False`（供应商配置里的 `verify_ssl`） | 内网自签证书 Python 的 certifi 验不过，报 `SSLCertVerificationError`，**看起来像网关挂了** |
+| `trust_env=False` | 企业代理到不了内网网关，请求被代理吞掉，表现是**超时**——而网关本身是好的 |
+
+`base_url` **刻意不强制要求带 `/v1`**（不是所有网关都用这个版本段，硬卡会把合法配置拒掉）。
+漏写的后果（404）由 `_explain_http_error` 在出错那一刻解释清楚。
+
+## 🔴 布尔列不能用 `.is_(True)` —— SQL Server 上是非法语法
+
+`crud_provider.clear_default()` 第一版写的是 `AiProvider.is_default.is_(True)`，
+SQLAlchemy 把它编译成 `is_default IS 1`，**SQL Server 直接语法错**：
+`Incorrect syntax near '1'` → 创建默认供应商的接口 500。
+实测踩到（PostgreSQL 上不会报，所以本地默认库换成 PG 之后更难发现）。
+
+用 `== True`（配 `# noqa: E712`）：它在 SQL Server 上渲染成 `= 1`、在 PG 上是 `= true`。
+
+⚠️ 同一族里还有一个**更阴**的：`deleted.is_(False)` 在 SQL Server 上**不报错，
+只是永远匹配不到**（`app/task/tests/test_scheduler.py` 记过）。
+判据：**凡是拿布尔/整数列做条件，用 `==`，不要用 `.is_()`**；
+`.is_()` 只留给真正的 `NULL` 判断。
+
+## 密钥
+
+- `AESCipher`（`utils/encrypt.py`）加密落库，密钥取 `AI_ENCRYPT_SECRET_KEY`
+- 🔴 **没配密钥就拒绝保存，不静默存明文**——"存了但没加密"在界面上和"存了且加密了"
+  完全一样，等发现时密钥已经在库里躺了很久
+- 🔴 **响应 schema 里既没有明文也没有密文**，只有掩码。密文一旦出现在响应里，
+  它就和明文一样值钱了（密文 + 一次代码泄露 = 明文）。守卫：`TestSecretsNeverLeak`
+- 它在 `plugin.toml` 里的默认值是 `""`，真值放 `.env`（`.env` 优先级高于 plugin.toml）。
+  这样**不会因为没配就启动不了**，而 fail-closed 的检查仍然在
+
+## 种子菜单刻意没有 `sys_role_menu` 授权行
+
+超管本来就拿得到全部菜单（`menu_service.get_sidebar` 对 `is_superuser` 走
+`get_sidebar(db, None)`），不需要授权行；而哪些非超管角色该有 AI 入口是**每套部署
+自己的产品决定**——基础种子里的 `STAFF` 是"只看仪表盘和个人中心"的角色，
+给它一个能枚举系统数据的对话入口不该是开箱默认值。
+
+⚠️ 第一版误把 `2048601269345583104` 当成超管角色授权了，那个 ID 其实是 **STAFF**。
+改种子里的角色授权前，**先去 `backend/sql/*/init_snowflake_test_data.sql` 确认那个 ID 是谁**。
+
+## 🔴 筛选参数要对齐三层，少一层都是「死控件」
+
+审计列表的「调用时间」范围踩过一次，症状是**筛选条件完全不起作用**，而每一层看起来都对：
+URL 变了、请求发出去了、接口返回 200、页面照常渲染——只是返回的始终是全量。
+
+根因是三层里断了一层，而**每一处断法都不报错**：
+
+| 断在哪 | 表现 |
+|---|---|
+| DAO 收了参数、接口没声明 | **FastAPI 静默丢弃**未声明的查询参数。这次就是它 |
+| 接口声明了、没往 DAO 传 | 最阴的一种：签名对齐、类型检查过、OpenAPI 里也看得见那个参数 |
+| DAO 声明了、没拼进 `kwargs` | SQL 里压根没有那个 WHERE |
+
+守卫是 `tests/test_ai_security.py::TestLogFilterParams` 四条，**每条都做过变异检验**
+（摘掉签名 / 删一处透传 / 让 `created_time__le` 不生效，各自打红对应的那一条）。
+**新增筛选维度时不用改测试**——它是按签名求差集的，漏了哪一侧当场红；
+只有「接口上刻意不开」的参数要进 `EXEMPT`（现在只有 `user_id`）。
+
+⚠️ **别拿渲染出来的日期字符串做断言。** `TimeZone` 列类型会把带时区的入参
+`astimezone()` 到 `DATETIME_TIMEZONE`，传 UTC 的 `2030-12-31 23:59:59` 渲染出来是
+`2031-01-01 07:59:59+08:00`——按日期子串断言会把一次**正确**的时区换算误判成
+「过滤没生效」。实测被自己坑过一次，现在断言的是绑定值。
+
+## 权限码里不能有连字符
+
+`test_permission_codes.py` 的种子扫描正则是 `'([a-z0-9_]+(?::[a-z0-9_]+)+)'`——
+`ai:tool-log:list` 这种带连字符的码**扫不到**，于是"后端声明了但种子里没有"那条
+断言会红，而报错完全不提是连字符的问题。现在用的是 `ai:log:list`。
+
+## 目前只有只读工具
+
+`tools/` 下 5 个工具全是 `mutating=False`。二次确认的机制（`_stage_confirm` +
+`/ai/chat/tools/confirm`）已经做好并接进了前端，但**还没有变更类工具用它**——
+写操作是风险最高的一档，留到工具本身支持 dry-run 预览之后再开（见 issue #104 阶段 4）。
+
+⚠️ 现在的"预览"是**要执行什么**（工具名 + 脱敏入参），不是**会变成什么**。
+真正的 dry-run 要每个工具自己在 service 层实现。

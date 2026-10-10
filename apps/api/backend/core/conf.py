@@ -447,6 +447,21 @@ class Settings(BaseSettings):
     OAUTH2_FRONTEND_BINDING_REDIRECT_URI: str
 
     ##################################################
+    # [ Plugin ] ai
+    ##################################################
+    # 基础配置（in plugin.toml）
+    AI_AGENT_ENGINE: str
+    AI_MAX_TOOL_ROUNDS: int
+    AI_TOOL_DOMAINS: list[str]
+    AI_CONFIRM_MUTATING_TOOLS: bool
+    AI_CONFIRM_TOKEN_EXPIRE_SECONDS: int
+    AI_CONFIRM_REDIS_PREFIX: str
+    AI_EXTERNAL_HTTP_TIMEOUT: int
+    AI_EXTERNAL_HTTP_USE_PROXY: bool
+    # 模型密钥的落库加密密钥（64 位十六进制）。留空 = 拒绝保存密钥，不会静默存明文
+    AI_ENCRYPT_SECRET_KEY: str
+
+    ##################################################
     # [ Plugin ] email
     ##################################################
     # .env
