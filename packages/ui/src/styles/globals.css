@@ -287,3 +287,42 @@
 html[data-scroll-mode="page"] {
   scrollbar-gutter: stable;
 }
+
+/**
+ * `shimmer` —— 文字级的等待态。
+ *
+ * 用在"已经开始了、但还没有内容"的那一小段（AI 流式回复在首帧到达之前）。
+ * 比三个跳动的点强的地方是：它本身就是**要显示的那句话**在发光，
+ * 而不是在真正的内容旁边额外摆一个装饰物——等字出来时是原地替换，不会跳。
+ *
+ * ⚠️ 必须尊重 `prefers-reduced-motion`：前庭功能敏感的人对这种持续循环的
+ * 渐变位移是有反应的，而它又恰恰是常驻在视野中心的。关掉动画后回落成
+ * 普通的次级文字色，信息一点不少。
+ */
+@keyframes shimmer-sweep {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@utility shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--foreground) 45%,
+    var(--muted-foreground) 90%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: shimmer-sweep 1.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    animation: none;
+    background-image: none;
+    color: var(--muted-foreground);
+  }
+}
