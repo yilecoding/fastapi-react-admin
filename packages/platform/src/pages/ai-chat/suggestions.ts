@@ -1,3 +1,5 @@
+import { t } from '@admin/i18n'
+
 import type { AiTool } from './api'
 
 /**
@@ -25,8 +27,10 @@ export function buildSuggestions(tools: AiTool[] | undefined, limit = 6): string
   return tools
     // 变更类工具不做成"一键提问"：第一次用就触发一个会改数据的操作，
     // 哪怕后面有二次确认，也是个糟糕的默认
-    .filter((t) => !t.mutating)
-    .map((t) => PHRASING[t.name])
+    .filter((tool) => !tool.mutating)
+    .map((tool) => PHRASING[tool.name])
     .filter((q): q is string => !!q)
     .slice(0, limit)
+    // 提问会原样发给模型 —— 按界面语言发，模型也按这个语言回
+    .map((q) => t(q))
 }

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { Trans, useTranslation } from 'react-i18next'
 import { IconSparkles } from '@tabler/icons-react'
 import * as React from 'react'
 
@@ -35,6 +36,7 @@ function FirstRun({
   onPick: (q: string) => void
   composer: React.ReactNode
 }) {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-4 py-8">
       <div className="w-full max-w-3xl">
@@ -42,10 +44,13 @@ function FirstRun({
           <div className="mx-auto flex size-10 items-center justify-center rounded-xl border border-primary/20 bg-primary/10">
             <IconSparkles className="size-5 text-primary" />
           </div>
-          <h2 className="mt-3 text-lg font-medium tracking-tight">问点关于这套系统的事</h2>
+          <h2 className="mt-3 text-lg font-medium tracking-tight">{t('问点关于这套系统的事')}</h2>
           <p className="mx-auto mt-1.5 max-w-lg text-sm text-balance text-muted-foreground">
-            它会调用你<strong className="font-medium text-foreground">有权限</strong>
-            的那些工具去查真实数据，每一次调用都记在「调用日志」里。
+            <Trans
+              t={t}
+              i18nKey="它会调用你<b>有权限</b>的那些工具去查真实数据，每一次调用都记在「调用日志」里。"
+              components={{ b: <strong className="font-medium text-foreground" /> }}
+            />
           </p>
         </div>
 

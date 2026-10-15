@@ -1,5 +1,6 @@
 import { IconArrowUp } from '@tabler/icons-react'
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * 输入区。
@@ -26,6 +27,7 @@ export function Composer({
   modelName?: string
   toolCount?: number
 }) {
+  const { t } = useTranslation()
   const ref = React.useRef<HTMLTextAreaElement>(null)
 
   // 随内容长高，到 160px 封顶后内部滚动。固定两行的话，粘一段长文进去只能看见开头
@@ -48,7 +50,7 @@ export function Composer({
             onChange={(e) => onChange(e.target.value)}
             disabled={disabled}
             rows={1}
-            placeholder="问点什么…"
+            placeholder={t('问点什么…')}
             className="max-h-40 min-h-9 flex-1 resize-none bg-transparent px-2 py-1.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -62,7 +64,7 @@ export function Composer({
             type="button"
             onClick={onSend}
             disabled={!canSend}
-            aria-label="发送"
+            aria-label={t('发送')}
             className="mb-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-30"
           >
             <IconArrowUp className="size-4" />
@@ -71,8 +73,8 @@ export function Composer({
 
         <div className="flex items-center gap-3 border-t px-4 py-1.5 text-[11px] text-muted-foreground">
           {modelName ? <span className="font-mono">{modelName}</span> : null}
-          {toolCount !== undefined ? <span>{toolCount} 个可用工具</span> : null}
-          <span className="ms-auto">Enter 发送 · Shift+Enter 换行</span>
+          {toolCount !== undefined ? <span>{t('{{n}} 个可用工具', { n: toolCount })}</span> : null}
+          <span className="ms-auto">{t('Enter 发送 · Shift+Enter 换行')}</span>
         </div>
       </div>
     </div>

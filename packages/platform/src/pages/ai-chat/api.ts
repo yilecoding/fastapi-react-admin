@@ -1,5 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 
+import { t } from '@admin/i18n'
+
 import { api, API_BASE, type PageData } from '../../api-client/client'
 import { tokenStore } from '../../api-client/token-store'
 
@@ -147,13 +149,13 @@ export async function streamChat(
     // 不这么做的话表现是「点发送没反应」——硬纪律 9 说的正是这个。
     onEvent({
       type: 'error',
-      message: response.status === 401 ? '登录已过期，请刷新页面重新登录' : `请求失败（HTTP ${response.status}）`,
+      message: response.status === 401 ? t('登录已过期，请刷新页面重新登录') : t('请求失败（HTTP {{status}}）', { status: response.status }),
       code: String(response.status),
     })
     return
   }
   if (!response.body) {
-    onEvent({ type: 'error', message: '当前浏览器不支持流式响应', code: 'no_stream' })
+    onEvent({ type: 'error', message: t('当前浏览器不支持流式响应'), code: 'no_stream' })
     return
   }
 

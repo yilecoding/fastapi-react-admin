@@ -1,4 +1,5 @@
 import { IconAlertTriangle, IconCheck, IconSparkles, IconX } from '@tabler/icons-react'
+import { useTranslation } from 'react-i18next'
 
 import { Button } from '@admin/ui/components/button'
 import { CopyButton } from '@admin/ui/components/copy-button'
@@ -36,10 +37,11 @@ export type Bubble = {
  * 上一版是几行裸文字浮在正文旁边，读起来像日志误入了对话。
  */
 function ToolTraces({ traces }: { traces: ToolTrace[] }) {
+  const { t } = useTranslation()
   return (
     <div className="overflow-hidden rounded-lg border bg-muted/40">
       <div className="border-b bg-muted/40 px-3 py-1.5 text-[11px] text-muted-foreground">
-        查了 {traces.length} 次
+        {t('查了 {{n}} 次', { n: traces.length })}
       </div>
       <ul className="divide-y divide-border/60">
         {traces.map((trace, i) => (
@@ -68,9 +70,10 @@ function ToolTraces({ traces }: { traces: ToolTrace[] }) {
  * 而不是在旁边摆三个跳动的点：字出来的时候是原地替换，整块不会跳。
  */
 function Thinking() {
+  const { t } = useTranslation()
   return (
-    <p className="shimmer py-0.5 text-sm" aria-label="正在生成回复">
-      正在查…
+    <p className="shimmer py-0.5 text-sm" aria-label={t('正在生成回复')}>
+      {t('正在查…')}
     </p>
   )
 }
@@ -96,6 +99,7 @@ export function MessageBubble({
   onConfirm: (token: string) => void
   confirming: boolean
 }) {
+  const { t } = useTranslation()
   if (bubble.role === 'user') {
     // 用户消息靠右、带底色气泡 —— 让「谁在说」一眼可分。
     // 底色用主色淡染而不是 `bg-muted`：页面里别的灰块（卡片、表头、代码块）太多了，
@@ -131,12 +135,12 @@ export function MessageBubble({
             <div className="flex items-start gap-2">
               <IconAlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <div className="min-w-0 flex-1 space-y-2">
-                <p className="text-sm font-medium">这个操作会改变系统数据</p>
+                <p className="text-sm font-medium">{t('这个操作会改变系统数据')}</p>
                 <pre className="overflow-x-auto rounded bg-background/60 p-2 font-mono text-[11px] whitespace-pre-wrap">
                   {bubble.confirm.preview}
                 </pre>
                 <Button size="sm" disabled={confirming} onClick={() => onConfirm(bubble.confirm!.token)}>
-                  确认执行
+                  {t('确认执行')}
                 </Button>
               </div>
             </div>
@@ -147,7 +151,7 @@ export function MessageBubble({
             一屏下来全是图标；而 `focus-visible:` 那条保证键盘用户仍然够得到 */}
         {bubble.content && !bubble.pending ? (
           <div className="opacity-0 transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100">
-            <CopyButton text={bubble.content} label="复制回答" className="size-7" />
+            <CopyButton text={bubble.content} label={t('复制回答')} className="size-7" />
           </div>
         ) : null}
       </div>

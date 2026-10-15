@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { IconCheck, IconPencil, IconPlugConnected, IconPlus, IconTrash, IconX } from '@tabler/icons-react'
 import * as React from 'react'
 
@@ -27,6 +28,7 @@ import { ProviderFormSheet } from './form'
  * 套完整的分页/筛选/列显隐机制是过度设计，而每一样都要维护。
  */
 export function AiProviderPage() {
+  const { t } = useTranslation()
   const listQuery = useQuery(providersQuery())
   const del = useDeleteProvider()
   const test = useTestProvider()
@@ -59,7 +61,7 @@ export function AiProviderPage() {
        说明文字死贴标签栏 */
     <div className="flex flex-1 flex-col gap-4 py-3 content-scroll:min-h-0">
       <p className="text-sm text-muted-foreground">
-        AI 助手通过这里配置的供应商调用模型。密钥加密落库，界面上只显示掩码。
+        {t('AI 助手通过这里配置的供应商调用模型。密钥加密落库，界面上只显示掩码。')}
       </p>
 
       {listQuery.error ? (
@@ -86,16 +88,16 @@ export function AiProviderPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="truncate font-medium">{provider.name}</span>
-                      {provider.is_default ? <Badge variant="secondary">默认</Badge> : null}
+                      {provider.is_default ? <Badge variant="secondary">{t('默认')}</Badge> : null}
                       <StatusBadge value={provider.status} />
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {PROVIDER_TYPE_LABELS[provider.provider_type]} · {provider.model}
+                      {t(PROVIDER_TYPE_LABELS[provider.provider_type])} · {provider.model}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-1">
                     <Can perm="ai:provider:edit">
-                      <Button size="icon" variant="ghost" className="size-7" aria-label="编辑" onClick={() => openEdit(provider)}>
+                      <Button size="icon" variant="ghost" className="size-7" aria-label={t('编辑')} onClick={() => openEdit(provider)}>
                         <IconPencil className="size-4" />
                       </Button>
                     </Can>
@@ -104,7 +106,7 @@ export function AiProviderPage() {
                         size="icon"
                         variant="ghost"
                         className="size-7"
-                        aria-label="删除"
+                        aria-label={t('删除')}
                         onClick={() => setPendingDelete(provider)}
                       >
                         <IconTrash className="size-4" />
@@ -115,16 +117,16 @@ export function AiProviderPage() {
 
                 <dl className="space-y-1.5 text-xs">
                   <div className="flex gap-2">
-                    <dt className="w-10 shrink-0 text-muted-foreground">地址</dt>
+                    <dt className="w-10 shrink-0 text-muted-foreground">{t('地址')}</dt>
                     <dd className="min-w-0 truncate font-mono">{provider.base_url}</dd>
                   </div>
                   <div className="flex gap-2">
-                    <dt className="w-10 shrink-0 text-muted-foreground">密钥</dt>
+                    <dt className="w-10 shrink-0 text-muted-foreground">{t('密钥')}</dt>
                     <dd className="font-mono">{provider.api_key_mask}</dd>
                   </div>
                   <div className="flex gap-2">
                     <dt className="w-10 shrink-0 text-muted-foreground">TLS</dt>
-                    <dd>{provider.verify_ssl ? '校验' : '不校验（内网自签）'}</dd>
+                    <dd>{provider.verify_ssl ? t('校验') : t('不校验（内网自签）')}</dd>
                   </div>
                 </dl>
 
@@ -132,7 +134,7 @@ export function AiProviderPage() {
                   <Can perm="ai:provider:edit">
                     <Button size="sm" variant="outline" disabled={test.isPending} onClick={() => void runTest(provider)}>
                       <IconPlugConnected className="size-4" />
-                      测试连通性
+                      {t('测试连通性')}
                     </Button>
                   </Can>
                   {result ? (
@@ -140,7 +142,7 @@ export function AiProviderPage() {
                       className={`flex items-center gap-1 text-xs ${result.ok ? 'text-emerald-600' : 'text-destructive'}`}
                     >
                       {result.ok ? <IconCheck className="size-3.5" /> : <IconX className="size-3.5" />}
-                      {result.ok ? `连接正常 · ${result.latency_ms}ms` : result.message}
+                      {result.ok ? t('连接正常 · {{ms}}ms', { ms: result.latency_ms }) : result.message}
                     </span>
                   ) : null}
                 </div>
@@ -155,9 +157,9 @@ export function AiProviderPage() {
               className="flex min-h-44 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40 hover:text-foreground"
             >
               <IconPlus className="size-5" />
-              <span className="text-sm">新增供应商</span>
+              <span className="text-sm">{t('新增供应商')}</span>
               {providers.length === 0 ? (
-                <span className="max-w-56 text-xs text-balance">先配一个可用的供应商，AI 助手才能对话</span>
+                <span className="max-w-56 text-xs text-balance">{t('先配一个可用的供应商，AI 助手才能对话')}</span>
               ) : null}
             </button>
           </Can>
@@ -169,8 +171,8 @@ export function AiProviderPage() {
       <ConfirmDialog
         open={pendingDelete !== null}
         onOpenChange={(o) => !o && setPendingDelete(null)}
-        title="删除模型供应商"
-        description={`确定删除「${pendingDelete?.name ?? ''}」？已经用它创建的会话会回落到默认供应商。`}
+        title={t('删除模型供应商')}
+        description={t('确定删除「{{name}}」？已经用它创建的会话会回落到默认供应商。', { name: pendingDelete?.name ?? '' })}
         onConfirm={async () => {
           if (pendingDelete) await del.mutateAsync(pendingDelete.id)
           setPendingDelete(null)

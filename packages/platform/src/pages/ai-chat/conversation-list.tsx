@@ -1,5 +1,6 @@
 import { IconPlus, IconTrash } from '@tabler/icons-react'
 import * as React from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
@@ -58,6 +59,7 @@ function ConversationRow({
   onSelect: () => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <div
       className={`group relative flex items-center rounded-lg transition-colors ${
@@ -80,7 +82,7 @@ function ConversationRow({
         size="icon"
         variant="ghost"
         className="me-1 size-6 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-        aria-label={`删除会话 ${conversation.title}`}
+        aria-label={t('删除会话 {{title}}', { title: conversation.title })}
         onClick={onDelete}
       >
         <IconTrash className="size-3.5" />
@@ -111,13 +113,14 @@ export function ConversationList({
   onCreate: () => void
   onDelete: (id: string) => void
 }) {
+  const { t } = useTranslation()
   const groups = React.useMemo(() => groupByRecency(conversations), [conversations])
 
   return (
     <aside className="flex w-full shrink-0 flex-col rounded-xl border bg-card lg:w-64 content-scroll:lg:min-h-0">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
         <span className="text-sm font-medium">
-          会话
+          {t('会话')}
           {conversations.length ? (
             <span className="ms-1.5 text-xs font-normal tabular-nums text-muted-foreground">
               {conversations.length}
@@ -126,7 +129,7 @@ export function ConversationList({
         </span>
         <Button size="sm" variant="ghost" className="h-7 px-2" onClick={onCreate} disabled={creating}>
           <IconPlus className="size-3.5" />
-          新建
+          {t('新建')}
         </Button>
       </div>
 
@@ -138,13 +141,13 @@ export function ConversationList({
             <Skeleton className="h-11" />
           </div>
         ) : conversations.length === 0 ? (
-          <p className="px-2 py-6 text-center text-xs text-muted-foreground">还没有会话</p>
+          <p className="px-2 py-6 text-center text-xs text-muted-foreground">{t('还没有会话')}</p>
         ) : (
           groups.map(([label, items]) => (
             <section key={label} className="mb-1 last:mb-0">
               {/* 段标题钉住：一段有二三十条时，滚到中间还知道自己在哪一段 */}
               <h3 className="sticky top-0 z-10 bg-card/95 px-2.5 py-1 text-[10.5px] font-medium tracking-wide text-muted-foreground backdrop-blur-sm">
-                {label}
+                {t(label)}
               </h3>
               <div className="space-y-0.5">
                 {items.map((c) => (

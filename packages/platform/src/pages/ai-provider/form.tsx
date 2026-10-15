@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useTranslation } from 'react-i18next'
 import * as React from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -19,6 +20,7 @@ import { Switch } from '@admin/ui/components/switch'
 import { Textarea } from '@admin/ui/components/textarea'
 
 import { ApiError } from '../../api-client/errors'
+import { useFieldError } from '../_shared/form-error'
 import { FormField } from '../_shared/form-fields'
 import {
   PROVIDER_PRESETS,
@@ -68,6 +70,8 @@ export function ProviderFormSheet({
   onOpenChange: (o: boolean) => void
   editing: AiProvider | null
 }) {
+  const { t } = useTranslation()
+  const fe = useFieldError()
   const isEdit = editing !== null
   const create = useCreateProvider()
   const update = useUpdateProvider()
@@ -120,32 +124,37 @@ export function ProviderFormSheet({
       else await create.mutateAsync(body)
       onOpenChange(false)
     } catch (e) {
-      setServerError(e instanceof ApiError ? e.message : '保存失败，请稍后重试')
+      setServerError(e instanceof ApiError ? e.message : t('保存失败，请稍后重试'))
     }
   }
 
   const errs = form.formState.errors
+  // 常量表在渲染处翻（同 dept/form.tsx 的 statusItems）
+  const typeItems = React.useMemo(
+    () => Object.fromEntries(Object.entries(PROVIDER_TYPE_LABELS).map(([v, l]) => [v, t(l)])),
+    [t],
+  )
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="data-[side=right]:sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>{isEdit ? '编辑模型供应商' : '新增模型供应商'}</SheetTitle>
+          <SheetTitle>{isEdit ? t('编辑模型供应商') : t('新增模型供应商')}</SheetTitle>
           <SheetDescription>
-            全部走 OpenAI 兼容接口。内网自建网关选「自定义」，并按需要关掉 TLS 校验。
+            {t('全部走 OpenAI 兼容接口。内网自建网关选「自定义」，并按需要关掉 TLS 校验。')}
           </SheetDescription>
         </SheetHeader>
 
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-1 flex-col overflow-hidden">
           <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-2">
-            <FormField label="名称" error={errs.name?.message} required>
+            <FormField label={t('名称')} error={fe(errs.name?.message)} required>
               <Input {...form.register('name')} autoComplete="off" maxLength={64} />
             </FormField>
 
-            <FormField label="类型" error={errs.provider_type?.message} required>
+            <FormField label={t('类型')} error={fe(errs.provider_type?.message)} required>
               <Select
                 value={type}
-                items={PROVIDER_TYPE_LABELS}
+                items={typeItems}
                 onValueChange={(v) => {
                   const next = v as Values['provider_type']
                   form.setValue('provider_type', next, { shouldDirty: true })
@@ -160,7 +169,7 @@ export function ProviderFormSheet({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(PROVIDER_TYPE_LABELS).map(([v, label]) => (
+                  {Object.entries(typeItems).map(([v, label]) => (
                     <SelectItem key={v} value={v}>
                       {label}
                     </SelectItem>
@@ -170,39 +179,39 @@ export function ProviderFormSheet({
             </FormField>
 
             <FormField
-              label="接口地址"
-              error={errs.base_url?.message}
+              label={t('接口地址')}
+              error={fe(errs.base_url?.message)}
               required
-              hint="OpenAI 兼容的 base，通常要带 /v1；代码会在它后面拼 chat/completions"
+              hint={t('OpenAI 兼容的 base，通常要带 /v1；代码会在它后面拼 chat/completions')}
             >
               <Input {...form.register('base_url')} autoComplete="off" placeholder="https://api.deepseek.com/v1" />
             </FormField>
 
-            <FormField label="模型" error={errs.model?.message} required>
+            <FormField label={t('模型')} error={fe(errs.model?.message)} required>
               <Input {...form.register('model')} autoComplete="off" placeholder="deepseek-chat" />
             </FormField>
 
             <FormField
               label="API Key"
-              error={errs.api_key?.message}
+              error={fe(errs.api_key?.message)}
               required={!isEdit}
-              hint={isEdit ? '留空表示不修改（接口不会回显已保存的密钥）' : undefined}
+              hint={isEdit ? t('留空表示不修改（接口不会回显已保存的密钥）') : undefined}
             >
               <Input {...form.register('api_key')} type="password" autoComplete="new-password" />
             </FormField>
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField label="超时（秒）" error={errs.timeout?.message}>
+              <FormField label={t('超时（秒）')} error={fe(errs.timeout?.message)}>
                 <Input {...form.register('timeout')} type="number" min={1} max={600} />
               </FormField>
-              <FormField label="重试次数" error={errs.max_retries?.message}>
+              <FormField label={t('重试次数')} error={fe(errs.max_retries?.message)}>
                 <Input {...form.register('max_retries')} type="number" min={0} max={5} />
               </FormField>
             </div>
 
             <FormField
-              label="校验 TLS 证书"
-              hint="内网自签证书要关掉，否则 Python 的 certifi 验不过，报错看起来像网关挂了"
+              label={t('校验 TLS 证书')}
+              hint={t('内网自签证书要关掉，否则 Python 的 certifi 验不过，报错看起来像网关挂了')}
             >
               <Switch
                 checked={form.watch('verify_ssl')}
@@ -211,8 +220,8 @@ export function ProviderFormSheet({
             </FormField>
 
             <FormField
-              label="走系统代理"
-              hint="内网网关按实际可达路径选：直连不通就打开它。配错的表现是纯超时，看起来像网关挂了"
+              label={t('走系统代理')}
+              hint={t('内网网关按实际可达路径选：直连不通就打开它。配错的表现是纯超时，看起来像网关挂了')}
             >
               <Switch
                 checked={form.watch('use_proxy')}
@@ -220,14 +229,14 @@ export function ProviderFormSheet({
               />
             </FormField>
 
-            <FormField label="设为默认" hint="新会话默认用它；只能有一个默认">
+            <FormField label={t('设为默认')} hint={t('新会话默认用它；只能有一个默认')}>
               <Switch
                 checked={form.watch('is_default')}
                 onCheckedChange={(c) => form.setValue('is_default', c, { shouldDirty: true })}
               />
             </FormField>
 
-            <FormField label="备注">
+            <FormField label={t('备注')}>
               <Textarea {...form.register('remark')} rows={2} />
             </FormField>
 
@@ -236,9 +245,9 @@ export function ProviderFormSheet({
 
           <SheetFooter>
             <Button type="submit" disabled={pending}>
-              保存
+              {t('保存')}
             </Button>
-            <SheetClose render={<Button type="button" variant="outline" />}>取消</SheetClose>
+            <SheetClose render={<Button type="button" variant="outline" />}>{t('取消')}</SheetClose>
           </SheetFooter>
         </form>
       </SheetContent>

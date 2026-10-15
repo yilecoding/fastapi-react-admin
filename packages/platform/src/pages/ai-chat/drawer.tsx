@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useTranslation } from 'react-i18next'
 import { IconChevronDown, IconExternalLink, IconRobot, IconX } from '@tabler/icons-react'
 import { Link } from '@tanstack/react-router'
 import * as React from 'react'
@@ -26,18 +27,19 @@ const maxWidth = () => Math.min(880, Math.round(window.innerWidth * 0.6))
 
 /** 顶栏入口。和铃铛一样是**外壳家具**，不是标签页 —— 别注册进 page-registry */
 export function AiDrawerTrigger() {
+  const { t } = useTranslation()
   const toggle = useAiDrawerStore((s) => s.toggle)
   const open = useAiDrawerStore((s) => s.open)
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <Button variant="ghost" size="icon" aria-label="AI 助手" aria-expanded={open} onClick={toggle}>
+          <Button variant="ghost" size="icon" aria-label={t('AI 助手')} aria-expanded={open} onClick={toggle}>
             <IconRobot className="size-4" />
           </Button>
         }
       />
-      <TooltipContent>AI 助手</TooltipContent>
+      <TooltipContent>{t('AI 助手')}</TooltipContent>
     </Tooltip>
   )
 }
@@ -51,6 +53,7 @@ export function AiDrawerTrigger() {
  * 只用 Esc 关闭。代价是焦点管理要自己想，收益是它真的能当副驾用。
  */
 export function AiDrawer() {
+  const { t } = useTranslation()
   const open = useAiDrawerStore((s) => s.open)
   const setOpen = useAiDrawerStore((s) => s.setOpen)
   const conversationId = useAiDrawerStore((s) => s.conversationId)
@@ -130,7 +133,7 @@ export function AiDrawer() {
   return (
     <aside
       role="complementary"
-      aria-label="AI 助手"
+      aria-label={t('AI 助手')}
       className="fixed inset-y-0 end-0 z-40 flex flex-col border-s bg-background shadow-lg"
       style={{ width }}
     >
@@ -138,7 +141,7 @@ export function AiDrawer() {
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label="调整宽度"
+        aria-label={t('调整宽度')}
         onMouseDown={() => setDragging(true)}
         className={`absolute inset-y-0 -start-0.5 w-1.5 cursor-col-resize transition-colors hover:bg-primary/30 ${
           dragging ? 'bg-primary/40' : ''
@@ -155,7 +158,7 @@ export function AiDrawer() {
           <DropdownMenuTrigger
             render={
               <Button variant="ghost" size="sm" className="h-8 min-w-0 flex-1 justify-start gap-1 px-2">
-                <span className="truncate text-sm">{activeTitle ?? '选择会话'}</span>
+                <span className="truncate text-sm">{activeTitle ?? t('选择会话')}</span>
                 <IconChevronDown className="size-3.5 shrink-0 opacity-60" />
               </Button>
             }
@@ -169,7 +172,7 @@ export function AiDrawer() {
           </DropdownMenuContent>
         </DropdownMenu>
         <Button variant="ghost" size="sm" className="h-8 px-2" onClick={startNew} disabled={createConversation.isPending}>
-          新建
+          {t('新建')}
         </Button>
         {/* 在整页打开：抽屉适合顺手问一句，长对话/要看历史还是整页舒服。
             带上当前会话 ID，两边看的是同一段对话。
@@ -182,17 +185,17 @@ export function AiDrawer() {
                   to="/ai/chat"
                   search={{ c: conversationId }}
                   onClick={() => setOpen(false)}
-                  aria-label="在整页打开"
+                  aria-label={t('在整页打开')}
                   className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <IconExternalLink className="size-4" />
                 </Link>
               }
             />
-            <TooltipContent>在整页打开</TooltipContent>
+            <TooltipContent>{t('在整页打开')}</TooltipContent>
           </Tooltip>
         ) : null}
-        <Button variant="ghost" size="icon" className="size-8" aria-label="关闭" onClick={() => setOpen(false)}>
+        <Button variant="ghost" size="icon" className="size-8" aria-label={t('关闭')} onClick={() => setOpen(false)}>
           <IconX className="size-4" />
         </Button>
       </header>
@@ -200,7 +203,7 @@ export function AiDrawer() {
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-3">
         {bubbles.length === 0 ? (
           <div className="space-y-2 pt-6">
-            <p className="text-center text-xs text-muted-foreground">问点关于这套系统的事</p>
+            <p className="text-center text-xs text-muted-foreground">{t('问点关于这套系统的事')}</p>
             {suggestions.map((q) => (
               <button
                 key={q}
