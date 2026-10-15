@@ -26,6 +26,7 @@ import { Separator } from "@admin/ui/components/separator"
 import { pageRegistry } from "@/lib/page-registry"
 import { buildValidPaths, makeIsValidPath } from "@/lib/valid-paths"
 import { NotificationBell } from "@admin/platform/pages/notification/bell"
+import { AiDrawer, AiDrawerTrigger } from "@admin/platform/pages/ai-chat/drawer"
 import { GithubLink } from "@/components/github-link"
 import { UserMenu } from "@/components/user-menu"
 
@@ -110,10 +111,13 @@ function AuthLayout() {
             {/* 通知铃铛。它是外壳家具（永远处于「当前匹配」的位置），
                 不是标签页，所以可以用 router —— 别把它注册进 page-registry */}
             <NotificationBell />
+            {/* AI 抽屉入口。同铃铛，是外壳家具不是标签页 —— 别注册进 page-registry */}
+            <AiDrawerTrigger />
             <UserMenu />
           </div>
         </header>
         <TabBar />
+        <AiDrawer />
         {/* 这一层是 div 不是 main —— `SidebarInset` 自己渲染的就是 <main>，
             再嵌一个会出现两个 main 地标，读屏「跳到主内容」不知道该去哪个。
             水平内边距统一在这里给（页面级块一律不加 px-*，见 CLAUDE.md）。 */}

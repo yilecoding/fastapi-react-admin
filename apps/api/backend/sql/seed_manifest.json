@@ -1,4 +1,7 @@
 {
+  "plugin/ai/sql/mysql/init_snowflake.sql": "c86426146832f7d2958c5aba1f5ebb6d390f215bc466cd5b402d377d3a6c956c",
+  "plugin/ai/sql/postgresql/init_snowflake.sql": "c86426146832f7d2958c5aba1f5ebb6d390f215bc466cd5b402d377d3a6c956c",
+  "plugin/ai/sql/sqlserver/init_snowflake.sql": "8fee8df2e3791272593c3cbbc5a53ad95d5e572527d46c248de6e2462cdef5c5",
   "plugin/config/sql/mysql/init_snowflake.sql": "af17278ba23fe0eab7b71791d81faadeac8609763d0210d85cd381f65c0c7413",
   "plugin/config/sql/postgresql/init_snowflake.sql": "be726abcf69a61006ef5f6967c1e577158364cbb03752cfb3594eb6f50afc6ab",
   "plugin/config/sql/sqlserver/init_snowflake.sql": "89ef0315663aa74c5b81cef50248acada3ce3365a580785c03cf96e108de0cf4",
