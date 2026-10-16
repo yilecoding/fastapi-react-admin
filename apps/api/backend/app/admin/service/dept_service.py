@@ -37,7 +37,8 @@ async def _check_leader(db: AsyncSession, leader_id: int | None) -> None:
     """
     if leader_id is None:
         return
-    found = await db.scalar(select(User.id).where(User.id == leader_id, User.deleted == 0))
+    # 停用的账号也不行：审批按负责人取人时会把它当「没配」往上找，设了等于没设
+    found = await db.scalar(select(User.id).where(User.id == leader_id, User.deleted == 0, User.status == 1))
     if not found:
         raise errors.NotFoundError(msg=t('error.dept.leader_not_found'))
 

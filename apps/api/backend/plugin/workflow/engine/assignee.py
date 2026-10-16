@@ -10,10 +10,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select, true
+from sqlalchemy import case, select, true
 
 from backend.app.admin.model import Dept, User
 from backend.app.admin.model.m2m import user_role
+from backend.plugin.workflow.engine.form import is_bigint_id
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +26,7 @@ def _ids(values: Any) -> list[int]:
     发起页的流程预告拿的是**还没校验**的表单（填到一半的人员字段可能是空串），
     这里 `int()` 一个非数字就是 500 —— 预告是给人看的，宁可少算一个人也不能整个挂掉。
     """
-    return [int(x) for x in values or [] if str(x).isdigit()]
+    return [int(x) for x in values or [] if is_bigint_id(x)]
 
 
 async def users_by_ids(db: AsyncSession, ids: list[int]) -> list[tuple[int, str]]:
@@ -47,9 +48,14 @@ async def _dept_chain(db: AsyncSession, dept_id: int | None) -> list[Any]:
     seen: set[int] = set()
     while dept_id is not None and dept_id not in seen:
         seen.add(dept_id)
+        # 负责人停用 / 删除了就当「没配」：不然这一级照样算命中、取人为空，走 onEmpty（默认驳回）——
+        # 组长离职账号一停，组员之后每张单都被自动驳回（独立审查发现）
+        leader_ok = select(User.id).where(User.id == Dept.leader_id, User.deleted == 0, User.status == 1).exists()
         row = (
             await db.execute(
-                select(Dept.id, Dept.parent_id, Dept.leader_id).where(Dept.id == dept_id, Dept.deleted == 0)
+                select(Dept.id, Dept.parent_id, case((leader_ok, Dept.leader_id), else_=None).label('leader_id')).where(
+                    Dept.id == dept_id, Dept.deleted == 0
+                )
             )
         ).first()
         if row is None:

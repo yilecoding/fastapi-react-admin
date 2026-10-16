@@ -214,6 +214,17 @@ def validate_publish(form_json: dict[str, Any], model_json: dict[str, Any]) -> l
                 for var in _vars(b.get('when')):
                     if var in BUILTIN_VARS:
                         continue
+                    if any(
+                        (r.node.get('fieldPerms') or {}).get(var) == 'hidden'
+                        for r in nodes.values()
+                        if r.node['type'] == 'approval'
+                    ):
+                        warn(
+                            'CONDITION_VAR_HIDDEN',
+                            f'分支「{b["name"]}」按一个对部分审批人隐藏的字段判断：走了哪条分支，看得到进度的人就能推出它的大概取值',
+                            nodeId=nid,
+                            fieldId=var,
+                        )
                     f = fields.get(var)
                     if f is None:
                         err('CONDITION_VAR_UNKNOWN', f'分支「{b["name"]}」用了不存在的字段', nodeId=nid, fieldId=var)

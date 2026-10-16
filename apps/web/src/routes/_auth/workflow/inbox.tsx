@@ -12,6 +12,8 @@ const searchSchema = z.object({
   id: z.string().optional(),
   /** 正在发起的流程编码 */
   start: z.string().optional(),
+  /** 重新发起：从这张单复制内容（雪花 ID，字符串） */
+  from: z.string().optional(),
 })
 
 /**

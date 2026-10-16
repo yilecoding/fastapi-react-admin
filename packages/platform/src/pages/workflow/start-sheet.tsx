@@ -11,11 +11,11 @@ import { toast } from '@admin/ui/components/toast'
 
 import { ApiError } from '../../api-client/errors'
 import { meQuery } from '../../auth/queries'
-import { useTabVisible } from '../../shell/tab-outlet'
+import { useTabPortalContainer } from '../../shell/tab-outlet'
 import { FormField as Row } from '../_shared/form-fields'
 import {
-  idempotencyKey, previewQuery, startFormQuery, useStartInstance,
-  type FieldPerm, type FormData, type StartForm,
+  detailQuery, idempotencyKey, previewQuery, startFormQuery, useStartInstance,
+  type FieldPerm, type FileMeta, type FormData, type StartForm,
 } from './api'
 import { FormRenderer, missingRequired } from './form-renderer'
 import { UserSelect } from './pickers'
@@ -31,29 +31,33 @@ import { ApprovalTrack, TemplateTile, type TrackItem } from './track'
  * ⚠️ 表单草稿只在组件 state 里：抽屉关掉就没了。想要「草稿箱」得另做，这一版没有。
  */
 export function StartSheet({
-  code, onClose, onStarted,
+  code, fromId, onClose, onStarted,
 }: {
   code: string | null
+  /** 重新发起：从这张（已驳回 / 撤回的）单复制内容 */
+  fromId?: string | null
   onClose: () => void
   onStarted: (instanceId: string) => void
 }) {
-  // 同 InstanceSheet：开在 URL 上（`?start=`），只在自己这个 tab 在前台时打开
-  const visible = useTabVisible()
-  // 不在前台就整个不渲染，原因见 InstanceSheet
-  if (!visible) return null
+  // 抽屉开在 URL 上：portal 挂进本 tab 的根节点，后台时跟着 tab 一起隐藏、状态不丢（见 `useTabPortalContainer` 的注释）
+  const container = useTabPortalContainer()
   return (
     <Sheet open={!!code} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" className="gap-0 data-[side=right]:w-full data-[side=right]:sm:w-3/4 data-[side=right]:sm:max-w-4xl" data-testid="wf-start-sheet">
-        {code && <Body code={code} onStarted={onStarted} />}
+      <SheetContent
+        container={container}
+        side="right"
+        className="gap-0 data-[side=right]:w-full data-[side=right]:sm:w-3/4 data-[side=right]:sm:max-w-4xl" data-testid="wf-start-sheet">
+        {code && <Body key={`${code}:${fromId ?? ''}`} code={code} fromId={fromId ?? null} onStarted={onStarted} />}
       </SheetContent>
     </Sheet>
   )
 }
 
-function Body({ code, onStarted }: { code: string; onStarted: (id: string) => void }) {
+function Body({ code, fromId, onStarted }: { code: string; fromId: string | null; onStarted: (id: string) => void }) {
   const { t } = useTranslation()
   const query = useQuery(startFormQuery(code))
-  if (query.isPending) {
+  const from = useQuery({ ...detailQuery(fromId ?? ''), enabled: !!fromId })
+  if (query.isPending || (fromId && from.isPending)) {
     return (
       <div className="flex flex-col gap-4 p-6">
         <SheetTitle className="sr-only">{t('发起审批')}</SheetTitle>
@@ -70,7 +74,15 @@ function Body({ code, onStarted }: { code: string; onStarted: (id: string) => vo
       </div>
     )
   }
-  return <Filler code={code} sf={query.data} onStarted={onStarted} />
+  return (
+    <Filler
+      code={code}
+      sf={query.data}
+      initial={from.data?.form_data}
+      initialFiles={from.data?.files}
+      onStarted={onStarted}
+    />
+  )
 }
 
 /** 停手 400ms 再试算 —— 每敲一个字都请求一次没有意义 */
@@ -83,11 +95,29 @@ function useDebounced<T>(value: T, ms: number): T {
   return v
 }
 
-function Filler({ code, sf, onStarted }: { code: string; sf: StartForm; onStarted: (id: string) => void }) {
+function Filler({
+  code, sf, initial, initialFiles, onStarted,
+}: {
+  code: string
+  sf: StartForm
+  /** 重新发起时带过来的旧内容。只取当前表单里还在、发起人能填的字段 —— 流程改过版本的话旧字段可能已经没了 */
+  initial?: FormData
+  /** 旧单上附件的文件名 / 大小 —— 不带的话复制过来的附件只剩 ID，显示成「文件已删除」 */
+  initialFiles?: Record<string, FileMeta>
+  onStarted: (id: string) => void
+}) {
   const { t } = useTranslation()
   const start = useStartInstance()
   const me = useQuery(meQuery).data
-  const [form, setForm] = React.useState<FormData>({})
+  const [form, setForm] = React.useState<FormData>(() => {
+    if (!initial) return {}
+    const perms = sf.model.root.fieldPerms ?? {}
+    return Object.fromEntries(
+      sf.form.fields
+        .filter((f) => (perms[f.id] ?? 'editable') === 'editable' && f.id in initial)
+        .map((f) => [f.id, initial[f.id]])
+    )
+  })
   const [selected, setSelected] = React.useState<Record<string, string[]>>({})
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   // 一次填写 = 一个幂等键：网络抖动重试 / 双击提交不会建出两张单
@@ -117,16 +147,26 @@ function Filler({ code, sf, onStarted }: { code: string; sf: StartForm; onStarte
     { key: 'end', kind: 'end', title: t('结束'), state: 'future' },
   ]
 
+  // 自选审批人只问**会走到**的那几个节点（服务端也只校验这些）。试算还没回来时先全列出来
+  const pickNodes = React.useMemo(() => {
+    const steps = preview.data?.steps
+    if (!steps) return sf.select_nodes
+    const onPath = new Set(steps.map((s) => s.node_id))
+    return sf.select_nodes.filter((n) => onPath.has(n.id))
+  }, [preview.data, sf.select_nodes])
+
   async function submit() {
     const errs: Record<string, string> = {}
     for (const [k, label] of Object.entries(missingRequired(schema, form, editable))) {
       errs[k] = t('请填写「{{f}}」', { f: label })
     }
-    for (const n of sf.select_nodes) if (!selected[n.id]?.length) errs[`select:${n.id}`] = t('请选择审批人')
+    for (const n of pickNodes) if (!selected[n.id]?.length) errs[`select:${n.id}`] = t('请选择审批人')
     setErrors(errs)
     if (Object.keys(errs).length) return
     try {
-      const res = await start.mutateAsync({ code, form, selected, key: key.current })
+      // 走不到的节点上选过的人不带过去
+      const picked = Object.fromEntries(pickNodes.filter((n) => selected[n.id]).map((n) => [n.id, selected[n.id]]))
+      const res = await start.mutateAsync({ code, form, selected: picked, key: key.current })
       toast.success(t('已提交'))
       key.current = idempotencyKey()
       onStarted(String(res.instance_id))
@@ -153,8 +193,16 @@ function Filler({ code, sf, onStarted }: { code: string; sf: StartForm; onStarte
 
       <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_20rem]">
         <section className="flex flex-col gap-5 px-6 py-5">
-          <FormRenderer schema={schema} value={form} onChange={setForm} mode="view" perms={perms} errors={errors} />
-          {sf.select_nodes.map((n) => (
+          <FormRenderer
+            schema={schema}
+            value={form}
+            onChange={setForm}
+            mode="view"
+            perms={perms}
+            errors={errors}
+            files={initialFiles}
+          />
+          {pickNodes.map((n) => (
             <Row key={n.id} label={t('{{node}}：选择审批人', { node: n.name })} required error={errors[`select:${n.id}`]}>
               <UserSelect
                 value={selected[n.id] ?? []}

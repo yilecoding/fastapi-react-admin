@@ -17,7 +17,7 @@ import { formatDateTime } from '@admin/i18n'
 
 import { ApiError } from '../../api-client/errors'
 import { meQuery } from '../../auth/queries'
-import { useTabVisible } from '../../shell/tab-outlet'
+import { useTabPortalContainer } from '../../shell/tab-outlet'
 import { FormField as Row } from '../_shared/form-fields'
 import {
   detailQuery, idempotencyKey, useAct, useMarkCcRead,
@@ -39,23 +39,40 @@ import { ApprovalTrack, PersonAvatar } from './track'
  * 🔴 **按钮只按能力信封渲染**（`capabilities`），不根据实例状态自己推导 ——
  * 同一个函数在服务端也用来判定执行，前端推出来的规则迟早和它漂移。
  */
-export function InstanceSheet({ id, onClose }: { id: string | null; onClose: () => void }) {
+export function InstanceSheet({
+  id, onClose, onResubmit,
+}: {
+  id: string | null
+  onClose: () => void
+  /** 给了才有「重新发起」（审批中心给，实例监控不给）：用这张单的内容新开一张 */
+  onResubmit?: (code: string, fromId: string) => void
+}) {
   const { t } = useTranslation()
-  // 抽屉开在 URL 上（`?id=`）：只在自己这个 tab 在前台时打开，见 `useTabVisible` 的注释
-  const visible = useTabVisible()
-  // 不在前台就**整个不渲染**，不能只传 open={false}：Base UI 关抽屉要等退场动画的 effect 跑完
-  // 才卸掉 portal，而后台 tab 的 effect 被 <Activity> 销毁了 —— 实测「关掉」的抽屉一直留在屏幕上
-  if (!visible) return null
+  // 抽屉开在 URL 上：portal 挂进本 tab 的根节点，后台时跟着 tab 一起隐藏、状态不丢（见 `useTabPortalContainer` 的注释）
+  const container = useTabPortalContainer()
   return (
     <Sheet open={!!id} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" className="gap-0 data-[side=right]:w-full data-[side=right]:sm:w-3/4 data-[side=right]:sm:max-w-5xl" data-testid="wf-instance-sheet">
-        {id ? <Body id={id} onClose={onClose} /> : <SheetTitle className="sr-only">{t('审批详情')}</SheetTitle>}
+      <SheetContent
+        container={container}
+        side="right"
+        className="gap-0 data-[side=right]:w-full data-[side=right]:sm:w-3/4 data-[side=right]:sm:max-w-5xl" data-testid="wf-instance-sheet">
+        {id ? (
+          <Body id={id} onClose={onClose} onResubmit={onResubmit} />
+        ) : (
+          <SheetTitle className="sr-only">{t('审批详情')}</SheetTitle>
+        )}
       </SheetContent>
     </Sheet>
   )
 }
 
-function Body({ id, onClose }: { id: string; onClose: () => void }) {
+function Body({
+  id, onClose, onResubmit,
+}: {
+  id: string
+  onClose: () => void
+  onResubmit?: (code: string, fromId: string) => void
+}) {
   const { t } = useTranslation()
   const query = useQuery(detailQuery(id))
   const markCc = useMarkCcRead()
@@ -92,10 +109,25 @@ function Body({ id, onClose }: { id: string; onClose: () => void }) {
       </div>
     )
   }
-  return <Detail detail={d} onDone={onClose} />
+  // 被驳回 / 撤回之后**不能改了复活**（#107 生命周期第 3 条），要重新提交就复制成一张新单
+  const canResubmit =
+    !!onResubmit && !!me && d.instance.initiator_id === me.id && ['rejected', 'withdrawn'].includes(d.instance.status)
+  return (
+    <Detail
+      detail={d}
+      onDone={onClose}
+      onResubmit={canResubmit ? () => onResubmit?.(d.instance.definition_code, d.instance.id) : undefined}
+    />
+  )
 }
 
-function Detail({ detail: d, onDone }: { detail: InstanceDetail; onDone: () => void }) {
+function Detail({
+  detail: d, onDone, onResubmit,
+}: {
+  detail: InstanceDetail
+  onDone: () => void
+  onResubmit?: () => void
+}) {
   const { t } = useTranslation()
   const [tab, setTab] = React.useState('form')
   // 审批人可编辑的字段：草稿只存「改了的那几个」，同意时一起提交
@@ -140,6 +172,7 @@ function Detail({ detail: d, onDone }: { detail: InstanceDetail; onDone: () => v
                 value={merged}
                 mode="view"
                 perms={d.field_perms}
+                files={d.files}
                 onChange={(v) => {
                   const next: FormData = {}
                   for (const k of editable) if (k in v) next[k] = v[k]
@@ -177,7 +210,18 @@ function Detail({ detail: d, onDone }: { detail: InstanceDetail; onDone: () => v
           />
         </TabsContent>
       </Tabs>
-      <ActionBar detail={d} patch={patch} editable={editable} onDone={onDone} onResetPatch={() => setPatch({})} />
+      {onResubmit ? (
+        <footer className="flex items-center gap-3 border-t bg-background px-6 py-4">
+          <span className="text-sm text-muted-foreground">
+            {t('这张单已经结束，改不了了。可以用它的内容重新发起一张新的。')}
+          </span>
+          <Button className="ms-auto" onClick={onResubmit} data-testid="wf-resubmit">
+            {t('重新发起')}
+          </Button>
+        </footer>
+      ) : (
+        <ActionBar detail={d} patch={patch} editable={editable} onDone={onDone} onResetPatch={() => setPatch({})} />
+      )}
     </>
   )
 }

@@ -13,15 +13,20 @@ import json
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Path, Query, Request
+from fastapi import APIRouter, Depends, File, Path, Query, Request, UploadFile
 
+from backend.app.admin.service.file_service import file_service
+from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.response.response_schema import ResponseModel, response_base
 from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
 from backend.plugin.workflow.engine.flow import index_nodes
+from backend.plugin.workflow.engine.form import is_bigint_id
 from backend.plugin.workflow.engine.simulate import simulate
+from backend.plugin.workflow.enums import FORM_BIZ_TYPE
 from backend.plugin.workflow.model import WfDefinition, WfDefinitionVersion
 from backend.plugin.workflow.schema.workflow import (
     ActionParam,
@@ -44,6 +49,13 @@ Pk = Annotated[int, Path(description='ID')]
 
 def _actor(request: Request) -> Actor:
     return Actor.from_user(request.user)
+
+
+def _form_only(d: WfDefinition) -> None:
+    """发起页 / 预告只给表单审批：业务审批从业务页面发起。不拦的话，任何登录用户都能对一个业务流程试算，
+    借此拿到角色成员名单和各部门负责人（独立审查发现）"""
+    if d.biz_type != FORM_BIZ_TYPE:
+        raise errors.NotFoundError(msg=t('error.workflow.definition_not_startable'))
 
 
 def _definition_row(d: WfDefinition, *, with_draft: bool = False) -> dict[str, Any]:
@@ -92,6 +104,7 @@ async def get_startable(db: CurrentSession) -> ResponseModel:
 @router.get('/startable/{code}', summary='发起页：表单与要自选审批人的节点', dependencies=[DependsJwtAuth])
 async def get_start_form(db: CurrentSession, code: Annotated[str, Path(max_length=64)]) -> ResponseModel:
     d, v = await runtime_service.published_definition(db, code)
+    _form_only(d)
     model = json.loads(v.model_json)
     select_nodes = [
         {'id': r.node['id'], 'name': r.node['name'], 'mode': r.node.get('mode') or 'any'}
@@ -114,7 +127,8 @@ async def get_start_form(db: CurrentSession, code: Annotated[str, Path(max_lengt
 async def preview_start(
     request: Request, db: CurrentSession, code: Annotated[str, Path(max_length=64)], obj: PreviewParam
 ) -> ResponseModel:
-    _, v = await runtime_service.published_definition(db, code)
+    d, v = await runtime_service.published_definition(db, code)
+    _form_only(d)
     model = json.loads(v.model_json)
     actor = _actor(request)
     steps = await simulate(
@@ -127,6 +141,23 @@ async def preview_start(
         start_from=index_nodes(model)[model['root']['id']].after,
     )
     return response_base.success(data={'steps': steps})
+
+
+@router.post('/files', summary='上传审批附件', dependencies=[DependsJwtAuth])
+async def upload_attachment(
+    request: Request, db: CurrentSessionTransaction, file: Annotated[UploadFile, File(description='文件')]
+) -> ResponseModel:
+    """审批里的附件上传。
+
+    `/sys/files/upload` 挂着 `sys:file:upload`，而且 RBAC 拒绝非员工账号的 POST ——
+    普通员工在审批里传不了附件。这里只要登录，复用同一套文件服务（同样的类型 / 大小 /
+    路径穿越校验、私有存储）。挂到单子上时服务端再核一次「是不是你自己传的」
+    （`runtime_service._check_attachments`）。
+    """
+    f = await file_service.upload(db=db, file=file, user_id=request.user.id)
+    return response_base.success(
+        data={'id': f.id, 'name': f.original_name, 'size': f.size, 'ext': f.ext, 'content_type': f.content_type}
+    )
 
 
 @router.post('/instances', summary='发起审批', dependencies=[DependsJwtAuth])
@@ -220,8 +251,13 @@ async def get_directory_users(
     keyword: Keyword = None,
     ids: Annotated[str | None, Query(max_length=2200, description='逗号分隔的用户 ID（回显已选的人）')] = None,
 ) -> ResponseModel:
-    id_list = [int(x) for x in (ids or '').split(',') if x.strip().isdigit()]
-    return response_base.success(data=await query_service.directory_users(db, keyword=keyword, ids=id_list))
+    if ids is not None:
+        # 传了 ids 就只按 ids 回查：全部不合法时返回空，而不是退化成「不筛」把前 20 个人都给出去
+        id_list = [int(x) for x in ids.split(',') if is_bigint_id(x.strip())]
+        if not id_list:
+            return response_base.success(data=[])
+        return response_base.success(data=await query_service.directory_users(db, keyword=None, ids=id_list))
+    return response_base.success(data=await query_service.directory_users(db, keyword=keyword, ids=None))
 
 
 @router.get('/directory/depts', summary='通讯录：部门', dependencies=[DependsJwtAuth])
@@ -334,10 +370,16 @@ async def validate_definition(db: CurrentSession, pk: Pk) -> ResponseModel:
     dependencies=[Depends(RequestPermission('workflow:definition:publish')), DependsRBAC],
 )
 async def publish_definition(request: Request, db: CurrentSessionTransaction, pk: Pk) -> ResponseModel:
-    v, issues = await definition_service.publish(db, pk, request.user.id)
+    v, issues, created = await definition_service.publish(db, pk, request.user.id)
     # 有 ERROR 不发布，但这是「校验没过」不是「请求出错」—— 照样 200，issues 带回去让设计器高亮节点
     return response_base.success(
-        data={'published': v is not None, 'version': _version_row(v) if v else None, 'issues': issues}
+        data={
+            'published': v is not None,
+            # False = 草稿和当前版本一样，没有出新版本
+            'new_version': created,
+            'version': _version_row(v) if v else None,
+            'issues': issues,
+        }
     )
 
 

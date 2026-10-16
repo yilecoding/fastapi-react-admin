@@ -222,7 +222,7 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
                     {d.description || t('没有说明')}
                   </p>
                   <div className="flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
-                    <span className="tabular-nums">{d.version_no ? t('v{{n}}', { n: d.version_no }) : t('未发布')}</span>
+                    <span className="tabular-nums">{d.version_no ? `v${d.version_no}` : t('未发布')}</span>
                     <span>·</span>
                     <span className="tabular-nums">{t('{{at}} 更新', { at: formatDateTimeShort(d.updated_time ?? d.created_time) })}</span>
                     <Button
@@ -369,12 +369,14 @@ function Designer({
 
   async function doSave(): Promise<boolean> {
     if (!draft) return true
+    const saving = draft
     try {
       await save.mutateAsync({
         id,
         body: { form: cur.form, model: cur.model, name: cur.name, category: cur.category, description: cur.description },
       })
-      setDraft(null)
+      // 存的过程中又改了的话，那部分还没存 —— 不能一起清掉
+      setDraft((now) => (now === saving ? null : now))
       return true
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : t('保存失败'))
@@ -387,7 +389,8 @@ function Designer({
     try {
       const res = await publish.mutateAsync(id)
       setIssues(res.issues)
-      if (res.published) toast.success(t('已发布 v{{n}}', { n: res.version?.version_no }))
+      if (res.published && !res.new_version) toast.info(t('没有改动，当前仍是 v{{n}}', { n: res.version?.version_no }))
+      else if (res.published) toast.success(t('已发布 v{{n}}', { n: res.version?.version_no }))
       else toast.error(t('有 {{n}} 个问题要先解决', { n: res.issues.filter((i) => i.level === 'ERROR').length }))
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : t('发布失败'))

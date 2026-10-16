@@ -111,11 +111,23 @@ def check(d: WfDefinition) -> list[dict[str, str]]:
     return validate_publish(json.loads(d.draft_form_json), json.loads(d.draft_model_json))
 
 
-async def publish(db: AsyncSession, pk: int, user_id: int) -> tuple[WfDefinitionVersion | None, list[dict[str, str]]]:
+async def publish(
+    db: AsyncSession, pk: int, user_id: int
+) -> tuple[WfDefinitionVersion | None, list[dict[str, str]], bool]:
+    """发布草稿。返回 (版本, 校验问题, 是否真的新出了一个版本)。
+
+    草稿和当前版本**一字不差**时不再出新版本：反复点「发布」会刷出一串内容相同的 v3 v4 v5，
+    版本历史就没法看了。停用状态下点发布 = 重新启用当前版本。
+    """
     d = await get(db, pk)
     issues = check(d)
     if any(i['level'] == 'ERROR' for i in issues):
-        return None, issues
+        return None, issues, False
+    if d.current_version_id is not None:
+        cur = await db.get(WfDefinitionVersion, d.current_version_id)
+        if cur is not None and cur.form_json == d.draft_form_json and cur.model_json == d.draft_model_json:
+            d.status = DefinitionStatus.published
+            return cur, issues, False
     last = await db.scalar(
         select(func.coalesce(func.max(WfDefinitionVersion.version_no), 0)).where(
             WfDefinitionVersion.definition_id == pk
@@ -133,7 +145,7 @@ async def publish(db: AsyncSession, pk: int, user_id: int) -> tuple[WfDefinition
     await db.flush()
     d.current_version_id = v.id
     d.status = DefinitionStatus.published
-    return v, issues
+    return v, issues, True
 
 
 async def set_enabled(db: AsyncSession, pk: int, *, enabled: bool) -> None:

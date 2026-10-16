@@ -21,15 +21,24 @@ schema，但只有这一份算数。
 
 from __future__ import annotations
 
-import re
-
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from backend.plugin.workflow.enums import FieldPerm
 
-_ID = re.compile(r'^\d{1,20}$')
+_BIGINT_MAX = 2**63 - 1
+
+
+def is_bigint_id(x: Any) -> bool:
+    """纯 ASCII 数字、19 位以内、不超过 bigint。
+
+    🔴 不能用 `str.isdigit()`：`'²'` 也算 digit，`int('²')` 当场 ValueError → 500；
+    20 位数过了正则却超出 bigint，PG / SQL Server 报溢出 → 500。
+    """
+    s = str(x)
+    return 0 < len(s) <= 19 and s.isascii() and s.isdigit() and int(s) <= _BIGINT_MAX
+
 
 #: 字段值的长度上限 —— 表单数据整份存进一个 TEXT 列，不限的话一个字段就能塞几 MB
 _MAX_TEXT = 2000
@@ -66,12 +75,16 @@ def _check(field: dict[str, Any], v: Any) -> tuple[Any, str | None]:  # ruff:ign
             d = Decimal(str(v))
         except InvalidOperation:
             return v, '应为金额'
-        if not d.is_finite():
-            return v, '应为金额'
+        # 整数位封顶：`quantize` 对超出精度的值抛 InvalidOperation（'1e30' 实测 500）
+        if not d.is_finite() or abs(d) >= Decimal(10) ** 15:
+            return v, '应为金额（整数部分不超过 15 位）'
         precision = field.get('precision')
         if precision is None:
             precision = 2
-        return str(d.quantize(Decimal(1).scaleb(-precision))), None
+        try:
+            return str(d.quantize(Decimal(1).scaleb(-precision))), None
+        except InvalidOperation:
+            return v, '应为金额'
     if t == 'date':
         try:
             return date.fromisoformat(str(v)).isoformat(), None
@@ -97,13 +110,13 @@ def _check(field: dict[str, Any], v: Any) -> tuple[Any, str | None]:  # ruff:ign
         return list(dict.fromkeys(v)), None
     if t in {'user', 'dept'}:
         items = v if field.get('multiple') else [v]
-        if not isinstance(items, list) or not all(isinstance(x, str) and _ID.match(x) for x in items):
+        if not isinstance(items, list) or not all(isinstance(x, str) and is_bigint_id(x) for x in items):
             # ID 必须是字符串：前端要是传了数字，2^53 之上的已经被 JSON.parse 改过了，
             # 收下来就是一个指向别人的 ID（硬纪律 6）
             return v, '应为 ID 字符串'
         return (list(dict.fromkeys(items)) if field.get('multiple') else v), None
     if t == 'attachment':
-        if not isinstance(v, list) or not all(isinstance(x, str) and _ID.match(x) for x in v):
+        if not isinstance(v, list) or not all(isinstance(x, str) and is_bigint_id(x) for x in v):
             return v, '应为文件 ID 字符串数组'
         return v, None
     if t == 'table':

@@ -136,6 +136,11 @@ def test_running_instance_keeps_its_snapshot(
     assert v2['version']['version_no'] == 2
     versions = ok(client.get(f'/sys/workflow/definitions/{pk}/versions', headers=token_headers))
     assert [v['version_no'] for v in versions] == [2, 1]
+    # 没改动再点一次发布：不出新版本
+    again = ok(client.post(f'/sys/workflow/definitions/{pk}/publish', headers=token_headers))
+    assert again['published'] is True and again['new_version'] is False
+    assert again['version']['version_no'] == 2
+    assert len(ok(client.get(f'/sys/workflow/definitions/{pk}/versions', headers=token_headers))) == 2
 
     d = ok(client.get(f'/sys/workflow/instances/{inst}', headers=login('sunqiang')))
     assert [t['assignee_name'] for t in d['tasks']] == ['赵磊']

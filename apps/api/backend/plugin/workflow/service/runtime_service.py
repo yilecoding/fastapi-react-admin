@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import false, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from backend.common.exception import errors
@@ -47,9 +47,11 @@ from backend.plugin.workflow.engine.flow import condition_variables, index_nodes
 from backend.plugin.workflow.engine.form import (
     FormDataError,
     editable_fields,
+    is_bigint_id,
     start_editable_fields,
     validate_form_data,
 )
+from backend.plugin.workflow.engine.simulate import simulate
 from backend.plugin.workflow.enums import (
     FORM_BIZ_TYPE,
     PERM_TERMINATE,
@@ -297,7 +299,8 @@ async def _advance(ctx: _Ctx, inst: WfInstance, start_from: dict[str, Any] | Non
     nodes = index_nodes(model)
     form_data = _json(inst.form_data)
     variables = _json(inst.variables)
-    cond_vars = condition_variables(form_data, inst.initiator_dept_id)
+    # 业务审批的条件变量（handler snapshot 给的）在下面，表单字段在上面
+    cond_vars = condition_variables({**(variables.get('biz') or {}), **form_data}, inst.initiator_dept_id)
     selected: dict[str, list[str]] = variables.get('selected') or {}
 
     node = start_from
@@ -464,10 +467,13 @@ def _require(caps: list[Capability], action: Action, inst: WfInstance) -> None:
 # ── 入口 ─────────────────────────────────────────────────────────────────────
 
 
-async def _replay(db: AsyncSession, key: str) -> dict[str, Any] | None:
+async def _replay(db: AsyncSession, key: str, actor_id: int) -> dict[str, Any] | None:
     rec = await db.scalar(select(WfActionRecord).where(WfActionRecord.idempotency_key == key))
     if rec is None:
         return None
+    # 键是别人用过的：不能把别人的结果当成「你这次已经成功了」还给你
+    if rec.actor_id != actor_id:
+        raise errors.ConflictError(msg=t('error.workflow.idempotency_key_invalid'))
     if rec.result != 'ok':
         raise errors.ConflictError(msg=rec.reject_reason or t('error.workflow.action_not_allowed'))
     return {'instance_id': rec.instance_id, 'replayed': True}
@@ -523,7 +529,7 @@ async def execute(  # ruff:ignore[complex-structure]
         ctx = _Ctx(db=db, actor_id=actor.id)
         try:
             async with db.begin():
-                replay = await _replay(db, key)
+                replay = await _replay(db, key, actor.id)
                 if replay is not None:
                     return replay
                 instance_id = await body(ctx)
@@ -538,7 +544,7 @@ async def execute(  # ruff:ignore[complex-structure]
             if db.in_transaction():
                 await db.rollback()
             async with db.begin():
-                replay = await _replay(db, key)
+                replay = await _replay(db, key, actor.id)
             if replay is not None:
                 return replay
             raise
@@ -584,22 +590,35 @@ async def start_in_tx(
         data = validate_form_data(form_schema, form_data, only=start_editable_fields(form_schema, model['root']))
     except FormDataError as e:
         raise errors.RequestError(msg=t('error.workflow.form_invalid', detail=str(e)), data=e.errors) from e
+    await _check_attachments(db, form_schema, {}, data, actor.id)
 
     # 自选审批人：只收「这个节点确实是 select_on_start」的，其余的丢掉
     clean_selected: dict[str, list[str]] = {}
     for nid, ids in (selected or {}).items():
         ref = nodes.get(nid)
         if ref and ref.node['type'] == 'approval' and (ref.node.get('assignee') or {}).get('kind') == 'select_on_start':
-            if not isinstance(ids, list) or not all(isinstance(x, str) and x.isdigit() for x in ids):
+            if not isinstance(ids, list) or not all(isinstance(x, str) and is_bigint_id(x) for x in ids):
                 raise errors.RequestError(msg=t('error.workflow.selected_invalid'))
             clean_selected[nid] = ids
-    for ref in nodes.values():
-        n = ref.node
-        is_select = n['type'] == 'approval' and (n.get('assignee') or {}).get('kind') == 'select_on_start'
-        if is_select and not clean_selected.get(n['id']):
-            raise errors.RequestError(msg=t('error.workflow.selected_required', node=n['name']))
 
     snap = await handler.snapshot(db, biz_id, data)
+    # 业务审批没有表单，条件变量来自 handler 的 snapshot；存进实例，推进 / 预告都要用
+    biz_vars = snap.variables if definition.biz_type != FORM_BIZ_TYPE else {}
+
+    # 「发起人自选」只要求**会走到的**节点选人：按这次填的内容试算一遍，和预告同一套规则。
+    # 原来是所有自选节点都必须选 —— 走不到的那条分支也要挑一个审批人，否则提交不了
+    steps = await simulate(
+        db,
+        model,
+        form_data={**biz_vars, **data},
+        initiator_id=actor.id,
+        initiator_dept_id=actor.dept_id,
+        selected=clean_selected,
+        start_from=nodes[model['root']['id']].after,
+    )
+    for st in steps:
+        if st['outcome'] == 'pick':
+            raise errors.RequestError(msg=t('error.workflow.selected_required', node=st['name']))
     seq = 1
     active_key = None
     if definition.biz_type != FORM_BIZ_TYPE:
@@ -619,7 +638,7 @@ async def start_in_tx(
         biz_id=biz_id,
         seq=seq,
         title=snap.title or t('workflow.default_title', name=definition.name, user=actor.nickname),
-        summary=snap.summary or _summary(form_schema, data),
+        summary=snap.summary or _summary(form_schema, data, model),
         initiator_id=actor.id,
         initiator_dept_id=actor.dept_id,
         status=InstanceStatus.running,
@@ -628,7 +647,7 @@ async def start_in_tx(
         form_snapshot=version.form_json,
         model_snapshot=version.model_json,
         form_data=json.dumps(data, ensure_ascii=False),
-        variables=json.dumps({'selected': clean_selected}, ensure_ascii=False),
+        variables=json.dumps({'selected': clean_selected, 'biz': biz_vars}, ensure_ascii=False),
         active_key=active_key,
     )
     db.add(inst)
@@ -638,11 +657,54 @@ async def start_in_tx(
     return inst
 
 
-def _summary(form_schema: dict[str, Any], data: dict[str, Any]) -> str | None:
-    """前三个有值的简单字段拼成一行，审批中心列表里显示"""
+async def _check_attachments(
+    db: AsyncSession, form_schema: dict[str, Any], before: dict[str, Any], after: dict[str, Any], actor_id: int
+) -> None:
+    """新挂上的附件必须是**这个人自己上传的**文件。
+
+    🔴 不校验的话，表单里填一个别人私有文件的 ID，审批单就成了一条读取通道：
+    详情接口会把它当附件列出来，所有参与人都能下载。已经在单子上的（前面的人挂的）不算「新挂」，
+    不受这条限制 —— 审批人改的是自己那几个字段，别人挂的附件他动不了也不该被挡。
+    """
+    from backend.app.admin.model import File
+
+    new_ids: set[int] = set()
+    for f in form_schema.get('fields') or []:
+        if f['type'] != 'attachment':
+            continue
+        old = set(before.get(f['id']) or [])
+        new_ids |= {int(x) for x in after.get(f['id']) or [] if x not in old}
+    if not new_ids:
+        return
+    owned = set(
+        (
+            await db.scalars(
+                select(File.id).where(
+                    File.id.in_(new_ids), File.created_by == actor_id, File.is_public == false(), File.deleted == 0
+                )
+            )
+        ).all()
+    )
+    if owned != new_ids:
+        raise errors.RequestError(msg=t('error.workflow.attachment_not_yours'))
+
+
+def _summary(form_schema: dict[str, Any], data: dict[str, Any], model: dict[str, Any]) -> str | None:
+    """前三个有值的简单字段拼成一行，审批中心列表 / 抄送通知 / 详情头部里显示。
+
+    🔴 **只用对所有人都可见的字段**：摘要在发起时就拼好存下，之后原样出现在待办、抄送列表和
+    通知正文里，**不经过**按查看人裁字段那一步。原来取的是前三个有值的字段 ——
+    「薪资」在审批节点上是 hidden，抄送人照样在列表里看到「薪资：50000」（独立审查发现）。
+    所以凡是在任何一个节点（含开始节点）上被设成 hidden 的字段，一律不进摘要。
+    """
+    hidden: set[str] = {k for k, v in (model['root'].get('fieldPerms') or {}).items() if v == 'hidden'}
+    for ref in index_nodes(model).values():
+        hidden |= {k for k, v in (ref.node.get('fieldPerms') or {}).items() if v == 'hidden'}
     parts = []
     for f in form_schema.get('fields') or []:
         v = data.get(f['id'])
+        if f['id'] in hidden:
+            continue
         if v in (None, '', []) or f['type'] in {'table', 'attachment', 'user', 'dept', 'description'}:
             continue
         if f['type'] == 'select':
@@ -677,13 +739,17 @@ async def start_form(
 
 
 async def start_for_biz(
-    db: AsyncSession, *, code: str, biz_id: int, actor: Actor, variables: dict[str, Any] | None = None
+    db: AsyncSession, *, code: str, biz_id: int, actor: Actor
 ) -> tuple[WfInstance, list[Callable[[], Awaitable[None]]]]:
-    """业务审批：在业务**自己的事务**里调。返回实例和提交后要跑的推送（业务提交后调 `run_effects`）"""
+    """业务审批：在业务**自己的事务**里调。返回实例和提交后要跑的推送（业务提交后调 `run_effects`）。
+
+    条件变量由 handler 的 `snapshot().variables` 给 —— 原来这里另收一个 `variables` 参数当表单数据，
+    结果被表单校验整个滤掉（业务流程的表单是空的），条件分支永远走兜底（独立审查发现）。
+    """
     d, v = await published_definition(db, code)
     ctx = _Ctx(db=db, actor_id=actor.id)
     inst = await start_in_tx(
-        ctx, definition=d, version=v, actor=actor, form_data=variables or {}, selected={}, biz_id=biz_id, key=None
+        ctx, definition=d, version=v, actor=actor, form_data={}, selected={}, biz_id=biz_id, key=None
     )
     return inst, ctx.effects
 
@@ -738,7 +804,7 @@ async def act(  # ruff:ignore[complex-structure]
                 assert my_task is not None
                 node = nodes[my_task.node_id].node
                 # 不传改动也要走一遍：这个节点上「可编辑 + 必填」的字段没填，不许同意
-                detail = _apply_form_patch(inst, node, form_patch or {})
+                detail = await _apply_form_patch(ctx.db, inst, node, form_patch or {}, actor.id)
                 await _close_task(ctx.db, my_task, TaskStatus.done, 'approve', opinion)
                 _record(
                     ctx,
@@ -818,7 +884,19 @@ async def act(  # ruff:ignore[complex-structure]
                 target_id, target_name = users[0]
                 if target_id == inst.initiator_id:
                     raise ActionRejected('transfer_to_initiator', instance_id=inst.id)
-                on_node = {t_.assignee_id for t_ in await _pending_tasks(ctx.db, inst.id, my_task.node_id)}
+                # 本节点上还在办的、**已经同意过的**都算「已经在这一步里」：转给已同意的人，
+                # 会签就成了一个人投两票（A 同意 → B 转给 A → A 再同意，三人会签只有两人表态）
+                on_node = set(
+                    (
+                        await ctx.db.scalars(
+                            select(WfTask.assignee_id).where(
+                                WfTask.instance_id == inst.id,
+                                WfTask.node_id == my_task.node_id,
+                                (WfTask.status == TaskStatus.pending) | (WfTask.decision == 'approve'),
+                            )
+                        )
+                    ).all()
+                )
                 if target_id in on_node:
                     raise ActionRejected('transfer_to_existing', instance_id=inst.id)
                 await _close_task(ctx.db, my_task, TaskStatus.transferred, None, opinion)
@@ -868,7 +946,9 @@ async def act(  # ruff:ignore[complex-structure]
     return await execute(db, key=key, action=action.value, actor=actor, body=body)
 
 
-def _apply_form_patch(inst: WfInstance, node: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+async def _apply_form_patch(
+    db: AsyncSession, inst: WfInstance, node: dict[str, Any], patch: dict[str, Any], actor_id: int
+) -> dict[str, Any]:
     """审批时改表单：🔴 **只收这个节点上 editable 的字段**，其余的直接拒绝（不是静默丢掉 ——
     静默丢掉的话前端以为改成功了）。
 
@@ -888,6 +968,7 @@ def _apply_form_patch(inst: WfInstance, node: dict[str, Any], patch: dict[str, A
     except FormDataError as e:
         raise errors.RequestError(msg=t('error.workflow.form_invalid', detail=str(e)), data=e.errors) from e
     data = {**{k: v for k, v in before.items() if k not in allowed}, **edited}
+    await _check_attachments(db, form_schema, before, data, actor_id)
     changes = {k: {'from': before.get(k), 'to': data.get(k)} for k in allowed if before.get(k) != data.get(k)}
     inst.form_data = json.dumps(data, ensure_ascii=False)
     return {'form_changes': changes} if changes else {}

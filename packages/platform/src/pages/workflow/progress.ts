@@ -49,6 +49,7 @@ export function forecastItems(steps: ForecastStep[], t: T): TrackItem[] {
       case 'reject':
         return { ...base, state: 'warn', note: t('找不到审批人，提交后会被自动驳回') }
       default:
+        if (s.masked) return { ...base, state: 'future', note: t('由申请内容里的人员决定') }
         return { ...base, state: 'future', tag: modeTag(s.mode, s.users.length, t) }
     }
   })

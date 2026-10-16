@@ -191,6 +191,7 @@ error:
     username_registered: Username is already registered
     wrong_old_password: Current password is incorrect
   workflow:
+    attachment_not_yours: You can only attach files you uploaded yourself
     instance_not_found: Approval not found
     instance_finished: This approval has already ended
     action_disabled: 'This action is not available right now: {reason}'

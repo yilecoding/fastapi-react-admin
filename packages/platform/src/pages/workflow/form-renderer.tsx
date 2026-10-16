@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { IconPlus, IconTrash } from '@tabler/icons-react'
+import { IconLoader2, IconPaperclip, IconPlus, IconTrash, IconUpload, IconX } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import { Combobox } from '@admin/ui/components/combobox'
@@ -9,10 +9,15 @@ import { DateTimeRangePicker, DateTimeValuePicker } from '@admin/ui/components/d
 import { Input } from '@admin/ui/components/input'
 import { MultiSelect } from '@admin/ui/components/multi-select'
 import { Textarea } from '@admin/ui/components/textarea'
+import { toast } from '@admin/ui/components/toast'
 import { cn } from '@admin/ui/lib/utils'
 
+import { ApiError } from '../../api-client/errors'
 import { FormField as Row } from '../_shared/form-fields'
-import { directoryDeptsQuery, directoryUsersQuery, type FieldPerm, type FormData, type FormField, type FormSchema } from './api'
+import {
+  directoryDeptsQuery, directoryUsersQuery, downloadAttachment, uploadAttachment,
+  type FieldPerm, type FileMeta, type FormData, type FormField, type FormSchema,
+} from './api'
 import { DeptSelect, UserSelect } from './pickers'
 
 /**
@@ -33,6 +38,7 @@ export function FormRenderer({
   mode,
   perms,
   errors,
+  files,
 }: {
   schema: FormSchema
   value: FormData
@@ -40,9 +46,12 @@ export function FormRenderer({
   mode: 'edit' | 'view'
   perms?: Record<string, FieldPerm>
   errors?: Record<string, string>
+  /** 已有附件的文件名 / 大小（详情接口带的）。新上传的由附件控件自己记着 */
+  files?: Record<string, FileMeta>
 }) {
   const set = (id: string, v: unknown) => onChange?.({ ...value, [id]: v })
   return (
+    <FilesContext.Provider value={files ?? EMPTY_FILES}>
     <div className="flex flex-col gap-4" data-testid="wf-form">
       {schema.fields.map((f) => {
         if (f.type === 'description') {
@@ -76,8 +85,12 @@ export function FormRenderer({
         )
       })}
     </div>
+    </FilesContext.Provider>
   )
 }
+
+const EMPTY_FILES: Record<string, FileMeta> = {}
+const FilesContext = React.createContext<Record<string, FileMeta>>(EMPTY_FILES)
 
 function empty(v: unknown): boolean {
   return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
@@ -163,7 +176,7 @@ function FieldInput({ field: f, value, onChange }: { field: FormField; value: un
     case 'table':
       return <TableInput field={f} value={(value as Record<string, unknown>[]) ?? []} onChange={onChange} />
     case 'attachment':
-      return <p className="text-sm text-muted-foreground">{t('附件控件将在下一版接入文件模块')}</p>
+      return <AttachmentInput ids={(value as string[]) ?? []} onChange={onChange} testId={`wf-files-${f.id}`} />
     default:
       return null
   }
@@ -219,7 +232,6 @@ function TableInput({
 }
 
 function FieldDisplay({ field: f, value }: { field: FormField; value: unknown }) {
-  const { t } = useTranslation()
   const text = 'text-sm whitespace-pre-wrap break-words'
   if (empty(value)) return <p className={cn(text, 'text-muted-foreground')}>—</p>
   switch (f.type) {
@@ -264,10 +276,122 @@ function FieldDisplay({ field: f, value }: { field: FormField; value: unknown })
       )
     }
     case 'attachment':
-      return <p className={text}>{t('{{n}} 个附件', { n: (value as string[]).length })}</p>
+      return <AttachmentList ids={value as string[]} />
     default:
       return <p className={text}>{String(value)}</p>
   }
+}
+
+function fmtSize(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
+function AttachmentRow({ id, meta, onRemove }: { id: string; meta?: FileMeta; onRemove?: () => void }) {
+  const { t } = useTranslation()
+  const [busy, setBusy] = React.useState(false)
+  const name = meta?.name ?? t('（文件已删除）')
+  return (
+    <li className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 text-sm">
+      <IconPaperclip className="size-4 shrink-0 text-muted-foreground" />
+      <button
+        type="button"
+        className="min-w-0 flex-1 truncate text-start hover:text-primary hover:underline disabled:no-underline"
+        disabled={!meta || busy}
+        onClick={async () => {
+          if (!meta) return
+          setBusy(true)
+          try {
+            await downloadAttachment(id, meta.name)
+          } catch (e) {
+            toast.error(e instanceof ApiError ? e.message : t('下载失败，请稍后重试'))
+          } finally {
+            setBusy(false)
+          }
+        }}
+        title={t('下载')}
+      >
+        {name}
+      </button>
+      {meta && <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{fmtSize(meta.size)}</span>}
+      {busy && <IconLoader2 className="size-3.5 animate-spin text-muted-foreground" />}
+      {onRemove && (
+        <Button type="button" variant="ghost" size="icon" className="size-6" aria-label={t('移除附件')} onClick={onRemove}>
+          <IconX className="size-3.5" />
+        </Button>
+      )}
+    </li>
+  )
+}
+
+function AttachmentList({ ids }: { ids: string[] }) {
+  const files = React.useContext(FilesContext)
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {ids.map((id) => <AttachmentRow key={id} id={id} meta={files[id]} />)}
+    </ul>
+  )
+}
+
+/** 附件上传：一次可选多个，传完立刻挂进表单值（文件 ID 字符串数组） */
+function AttachmentInput({ ids, onChange, testId }: { ids: string[]; onChange: (v: unknown) => void; testId: string }) {
+  const { t } = useTranslation()
+  const known = React.useContext(FilesContext)
+  const [uploaded, setUploaded] = React.useState<Record<string, FileMeta>>({})
+  const [busy, setBusy] = React.useState(0)
+  const input = React.useRef<HTMLInputElement>(null)
+  // 上传是异步的，多个文件一起传完再各自回调 —— 用 ref 拿最新的值，别让后回来的覆盖先回来的
+  const latest = React.useRef(ids)
+  latest.current = ids
+
+  async function pick(list: FileList | null) {
+    const picked = [...(list ?? [])]
+    if (input.current) input.current.value = '' // 同一个文件再选一次也要能触发 change
+    for (const file of picked) {
+      setBusy((n) => n + 1)
+      try {
+        const meta = await uploadAttachment(file)
+        const id = String(meta.id)
+        setUploaded((u) => ({ ...u, [id]: meta }))
+        latest.current = [...latest.current, id]
+        onChange(latest.current)
+      } catch (e) {
+        toast.error(e instanceof ApiError ? `${file.name}：${e.message}` : t('上传失败，请稍后重试'))
+      } finally {
+        setBusy((n) => n - 1)
+      }
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5" data-testid={testId}>
+      {ids.length > 0 && (
+        <ul className="flex flex-col gap-1.5">
+          {ids.map((id) => (
+            <AttachmentRow
+              key={id}
+              id={id}
+              meta={uploaded[id] ?? known[id]}
+              onRemove={() => onChange(ids.filter((x) => x !== id))}
+            />
+          ))}
+        </ul>
+      )}
+      <input ref={input} type="file" multiple hidden onChange={(e) => pick(e.target.files)} data-testid={`${testId}-input`} />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="self-start"
+        disabled={busy > 0}
+        onClick={() => input.current?.click()}
+      >
+        {busy > 0 ? <IconLoader2 className="size-4 animate-spin" /> : <IconUpload className="size-4" />}
+        {busy > 0 ? t('上传中…') : t('添加附件')}
+      </Button>
+    </div>
+  )
 }
 
 export function UserNames({ ids, className }: { ids: string[]; className?: string }) {

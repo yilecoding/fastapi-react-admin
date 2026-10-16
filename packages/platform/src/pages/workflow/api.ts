@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { api, type PageData } from '../../api-client/client'
+import { api, fetchBytes, uploadFile, type PageData } from '../../api-client/client'
 
 /**
  * 审批流的接口与类型（issue #107）。
@@ -157,7 +157,7 @@ export type RecordRow = {
 export type Capability = { action: Action; enabled: boolean; reason: string | null }
 
 export type InstanceDetail = {
-  instance: InstanceRow & { seq: number; biz_id: string | null }
+  instance: InstanceRow & { seq: number; biz_id: string | null; definition_code: string }
   /** 已经按当前查看人裁掉了隐藏字段（服务端做的） */
   form_schema: FormSchema
   form_data: FormData
@@ -171,6 +171,8 @@ export type InstanceDetail = {
   ccs: { user_id: string; user_name: string | null; read_time: string | null }[]
   capabilities: Capability[]
   my_task_id: string | null
+  /** 表单里看得见的附件 → 文件名 / 大小（隐藏字段里的不下发） */
+  files: Record<string, FileMeta>
   /** 流程图里出现的用户 / 角色 ID → 名字（看图的人不一定有权限查角色 / 用户接口） */
   names: ModelNames
   /** 还没走到的步骤（服务端试算，和真实推进同一套规则） */
@@ -185,7 +187,11 @@ export type ForecastStep = {
   users: { id: string; name: string }[]
   /** ok 有人办 · pick 发起人自选还没选 · skip 跳过 · admin 转给管理员 · reject 将被自动驳回 */
   outcome: 'ok' | 'pick' | 'skip' | 'admin' | 'reject'
+  /** 办理人来自查看人看不到的人员字段：服务端不给名字 */
+  masked?: boolean
 }
+
+export type FileMeta = { id?: string; name: string; size: number; ext: string; content_type: string | null }
 
 export type ModelNames = { users: Record<string, string>; roles: Record<string, string> }
 
@@ -390,10 +396,13 @@ export function useSaveDefinition() {
   return useMutation({
     mutationFn: ({ id, body }: { id: string; body: Partial<Pick<Definition, 'name' | 'category' | 'icon' | 'description' | 'sort'>> & { form?: FormSchema; model?: FlowModel } }) =>
       api.PUT(`${BASE}/definitions/${id}`, { body }),
-    onSuccess: (_d, v) => {
-      qc.invalidateQueries({ queryKey: workflowKeys.definitions() })
-      qc.invalidateQueries({ queryKey: workflowKeys.definition(v.id) })
-    },
+    // 🔴 要 return：`mutateAsync` 才会等重取完成。不等的话设计器清掉草稿那一刻显示的还是
+    // 旧的服务端数据 —— 刚存的改动「闪回」一下再出现，赶上那一下点发布还会以为没存上
+    onSuccess: (_d, v) =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: workflowKeys.definitions() }),
+        qc.invalidateQueries({ queryKey: workflowKeys.definition(v.id) }),
+      ]),
   })
 }
 
@@ -409,7 +418,7 @@ export function usePublishDefinition() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) =>
-      api.POST<{ published: boolean; version: { version_no: number } | null; issues: Issue[] }>(
+      api.POST<{ published: boolean; new_version: boolean; version: { version_no: number } | null; issues: Issue[] }>(
         `${BASE}/definitions/${id}/publish`
       ),
     onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
@@ -451,3 +460,26 @@ export const previewQuery = (code: string, form: FormData, selected: Record<stri
     placeholderData: (prev) => prev,
     staleTime: 10_000,
   })
+
+/**
+ * 审批附件上传。走 `/sys/workflow/files`（只要登录）而不是 `/sys/files/upload` ——
+ * 后者要 `sys:file:upload`，普通员工在审批里传不了。
+ * 🔴 用 `uploadFile()` 不是 `api.POST`：multipart，而且成败要过信封判定（pages 分册）
+ */
+export function uploadAttachment(file: File): Promise<FileMeta & { id: string }> {
+  return uploadFile<FileMeta & { id: string }>(`${BASE}/files`, file)
+}
+
+/**
+ * 下载附件。🔴 不能做成 `<a href>`：下载地址要 Authorization 头，裸链接带不上，
+ * 存下来的是 401 的 JSON（同文件页那条）。
+ */
+export async function downloadAttachment(id: string, name: string): Promise<void> {
+  const buf = await fetchBytes(`/api/v1/sys/files/${id}/download?disposition=attachment`)
+  const url = URL.createObjectURL(new Blob([buf]))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}

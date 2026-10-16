@@ -17,11 +17,11 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Select, func, or_, select
 
-from backend.app.admin.model import Dept, Role, User
+from backend.app.admin.model import Dept, File, Role, User
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.plugin.workflow.engine.flow import index_nodes
-from backend.plugin.workflow.engine.form import hidden_fields_for, node_field_perm
+from backend.plugin.workflow.engine.form import hidden_fields_for, is_bigint_id, node_field_perm
 from backend.plugin.workflow.engine.simulate import simulate
 from backend.plugin.workflow.enums import PERM_TERMINATE, TaskStatus
 from backend.plugin.workflow.handler import get_handler
@@ -243,7 +243,20 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
         ).all()
     )
     names = await _initiator_names(db, {inst.initiator_id, *(c.user_id for c in ccs)})
-    definition_name = await db.scalar(select(WfDefinition.name).where(WfDefinition.id == inst.definition_id))
+    definition_name, definition_code = (
+        await db.execute(select(WfDefinition.name, WfDefinition.code).where(WfDefinition.id == inst.definition_id))
+    ).one()
+
+    # 🔴 条件分支用到了这个查看人看不到的字段：走了哪条分支 = 那个字段的取值区间（「金额 > 1 万」走了左边）。
+    # 对他抹掉分支标签和整段预告；用到隐藏的人员字段取审批人的，预告里也不给名字（独立审查发现）。
+    # ⚠️ 抹不干净：已经走过的节点本身就暴露了路径 —— 发布校验对这种配置给 WARN（CONDITION_VAR_HIDDEN）
+    sensitive_conds = {
+        r.node['id']
+        for r in nodes.values()
+        if r.node['type'] == 'condition'
+        and any(v in hidden for b in r.node['branches'] for v in _cond_vars(b.get('when')))
+    }
+    records = [r for r in records if not (r.action == 'branch' and r.node_id in sensitive_conds)]
 
     # 只读流程图要知道每个节点的状态：走过的 / 当前的 / 没走到的
     node_state: dict[str, str] = {}
@@ -266,6 +279,8 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
             'initiator_name': names.get(inst.initiator_id),
             'seq': inst.seq,
             'biz_id': inst.biz_id,
+            # 「重新发起」要知道从哪个流程发起（复制成新单，旧单不动 —— #107 生命周期第 3 条）
+            'definition_code': definition_code,
         },
         'form_schema': form_schema,
         'form_data': form_data,
@@ -307,19 +322,22 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
         'ccs': [{'user_id': c.user_id, 'user_name': names.get(c.user_id), 'read_time': c.read_time} for c in ccs],
         'capabilities': [{'action': c.action, 'enabled': c.enabled, 'reason': c.reason} for c in caps],
         'names': await model_names(db, model),
+        'files': await _attachment_meta(db, form_schema, form_data),
         # 还没走到的步骤（预告）。只在运行中时有；和真实推进同一套规则（engine/simulate.py）
-        'forecast': (
+        'forecast': _mask_forecast(
             await simulate(
                 db,
                 model,
-                form_data=json.loads(inst.form_data),
+                form_data={**(json.loads(inst.variables).get('biz') or {}), **json.loads(inst.form_data)},
                 initiator_id=inst.initiator_id,
                 initiator_dept_id=inst.initiator_dept_id,
                 selected=json.loads(inst.variables).get('selected') or {},
                 start_from=nodes[inst.current_node_id].after,
             )
-            if inst.status == 'running' and inst.current_node_id in nodes
-            else []
+            if inst.status == 'running' and inst.current_node_id in nodes and not sensitive_conds
+            else [],
+            nodes,
+            hidden,
         ),
         'my_task_id': my_task.id if my_task else None,
     }
@@ -393,8 +411,8 @@ async def model_names(db: AsyncSession, model: dict[str, Any]) -> dict[str, dict
 
     def scan(o: Any) -> None:
         if isinstance(o, dict):
-            users.update(int(x) for x in o.get('user_ids') or [] if str(x).isdigit())
-            roles.update(int(x) for x in o.get('role_ids') or [] if str(x).isdigit())
+            users.update(int(x) for x in o.get('user_ids') or [] if is_bigint_id(x))
+            roles.update(int(x) for x in o.get('role_ids') or [] if is_bigint_id(x))
             for v in o.values():
                 scan(v)
         elif isinstance(o, list):
@@ -409,4 +427,53 @@ async def model_names(db: AsyncSession, model: dict[str, Any]) -> dict[str, dict
     if roles:
         rows = await db.execute(select(Role.id, Role.name).where(Role.id.in_(roles)))
         out['roles'] = {str(k): v for k, v in rows.all()}
+    return out
+
+
+async def _attachment_meta(
+    db: AsyncSession, form_schema: dict[str, Any], form_data: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    """表单里（**已经按字段权限裁过的**）附件 → 文件名 / 大小，一次查回来。
+
+    只给看得见的字段查：隐藏字段里的附件连名字都不该漏出去。
+    """
+    ids: set[int] = set()
+    for f in form_schema.get('fields') or []:
+        if f['type'] == 'attachment':
+            ids |= {int(x) for x in form_data.get(f['id']) or [] if is_bigint_id(x)}
+    if not ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(File.id, File.original_name, File.size, File.ext, File.content_type).where(
+                File.id.in_(ids), File.deleted == 0
+            )
+        )
+    ).all()
+    return {str(r[0]): {'name': r[1], 'size': r[2], 'ext': r[3], 'content_type': r[4]} for r in rows}
+
+
+def _cond_vars(cond: dict[str, Any] | None) -> list[str]:
+    if not cond:
+        return []
+    out: list[str] = []
+    for k in ('all', 'any'):
+        for c in cond.get(k) or []:
+            out += _cond_vars(c)
+    if cond.get('var'):
+        out.append(cond['var'])
+    return out
+
+
+def _mask_forecast(steps: list[dict[str, Any]], nodes: dict[str, Any], hidden: set[str]) -> list[dict[str, Any]]:
+    """预告里由「表单人员字段」解析出来的人，字段对查看人隐藏时不给名字"""
+    if not hidden:
+        return steps
+    out = []
+    for st in steps:
+        node = nodes[st['node_id']].node
+        rules = [node.get('assignee') or {}] if node['type'] == 'approval' else node.get('targets') or []
+        if any(r.get('kind') == 'var_user' and r.get('field') in hidden for r in rules):
+            st = {**st, 'users': [], 'masked': True}
+        out.append(st)
     return out

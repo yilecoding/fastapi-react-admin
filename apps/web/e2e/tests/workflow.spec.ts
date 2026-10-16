@@ -174,3 +174,106 @@ test("设计器：打开定义、选中节点出属性面板、发布校验能�
   // 保存成功了（草稿），未保存提示消失
   await expect(scope.getByTestId("wfd-dirty")).toHaveCount(0)
 })
+
+test("附件上传 / 下载 + 驳回后重新发起（带着原来的内容）", async ({ browser }) => {
+  const code = `${CODE}F`
+  const { api, dispose } = await createApiClient()
+  const created = (await api.post("/api/v1/sys/workflow/definitions", {
+    code,
+    name: `E2E 附件 ${code}`,
+    category: "E2E",
+    form: {
+      schemaVersion: 1,
+      fields: [
+        { id: "f_what", type: "text", label: "事项", required: true },
+        { id: "f_files", type: "attachment", label: "附件", required: true },
+      ],
+    },
+    model: {
+      schemaVersion: 1,
+      root: {
+        type: "start",
+        id: "start",
+        next: {
+          type: "approval", id: "n1", name: "直属主管", mode: "any",
+          assignee: { kind: "dept_leader", level: 1 }, onEmpty: "reject", next: null,
+        },
+      },
+    },
+  })) as { id: string }
+  await api.post(`/api/v1/sys/workflow/definitions/${created.id}/publish`)
+  await dispose()
+
+  const a = await browser.newPage()
+  await loginPageAs(a, "sunqiang", "123456")
+  await a.goto(`/workflow/inbox?start=${code}`)
+  const sheet = a.getByTestId("wf-start-sheet")
+  await sheet.getByTestId("wf-field-f_what").locator("input").fill("报销打车费")
+  // 普通员工也能传（走审批自己的上传口，不要 sys:file:upload）
+  await sheet.getByTestId("wf-files-f_files-input").setInputFiles({
+    name: "车票.txt", mimeType: "text/plain", buffer: Buffer.from("taxi 42.00"),
+  })
+  await expect(sheet.getByTestId("wf-files-f_files")).toContainText("车票.txt")
+  await sheet.getByTestId("wf-start-submit").click()
+  const detail = a.getByTestId("wf-instance-sheet")
+  await expect(detail.getByTestId("wf-status")).toHaveText("审批中")
+  const id = new URL(a.url()).searchParams.get("id")
+
+  // 审批人看得到附件名，驳回
+  const b = await browser.newPage()
+  await loginPageAs(b, "zhaolei", "123456")
+  await b.goto(`/workflow/inbox?id=${id}`)
+  const sheetB = b.getByTestId("wf-instance-sheet")
+  await expect(sheetB.getByTestId("wf-field-f_files")).toContainText("车票.txt")
+  // 下载：带鉴权取字节再存，文件名是原名、内容一字不差（裸 <a href> 会存下 401 的 JSON）
+  const [dl] = await Promise.all([
+    b.waitForEvent("download"),
+    sheetB.getByTestId("wf-field-f_files").getByRole("button", { name: "车票.txt" }).click(),
+  ])
+  expect(dl.suggestedFilename()).toBe("车票.txt")
+  const chunks: Buffer[] = []
+  for await (const c of (await dl.createReadStream())!) chunks.push(c as Buffer)
+  expect(Buffer.concat(chunks).toString()).toBe("taxi 42.00")
+  await sheetB.getByTestId("wf-action-opinion").fill("缺发票")
+  await sheetB.getByTestId("wf-act-reject").click()
+  await expect(sheetB).toBeHidden()
+
+  // 发起人：已驳回 → 重新发起，原来的内容带过来（附件也在），提交成一张新单
+  await a.reload()
+  const again = a.getByTestId("wf-instance-sheet")
+  await expect(again.getByTestId("wf-status")).toHaveText("已驳回")
+  await again.getByTestId("wf-resubmit").click()
+  const sheet2 = a.getByTestId("wf-start-sheet")
+  await expect(sheet2.getByTestId("wf-field-f_what").locator("input")).toHaveValue("报销打车费")
+  await expect(sheet2.getByTestId("wf-files-f_files")).toContainText("车票.txt")
+  await sheet2.getByTestId("wf-start-submit").click()
+  await expect(a.getByTestId("wf-instance-sheet").getByTestId("wf-status")).toHaveText("审批中")
+  const id2 = new URL(a.url()).searchParams.get("id")
+  expect(id2).toBeTruthy()
+  expect(id2).not.toBe(id)
+
+  await a.close()
+  await b.close()
+})
+
+test("填到一半切走再切回来：草稿还在；后台的抽屉不挡前台页面", async ({ page }) => {
+  await loginPageAs(page, "sunqiang", "123456")
+  await page.goto(`/workflow/inbox?start=${CODE}`)
+  const sheet = page.getByTestId("wf-start-sheet")
+  await sheet.getByTestId("wf-field-f_reason").locator("input").fill("填了一半的事由")
+
+  // 应用内切到消息中心（不是 goto —— 整页刷新本来就会丢掉所有内存状态）。
+  // 抽屉开着时外面是 inert 的，先按 Esc 之外的方式离开：直接改地址栏走路由
+  // 字符串形式：e2e 的 tsconfig 不带 DOM 类型
+  await page.evaluate('history.pushState({}, "", "/notification"); dispatchEvent(new PopStateEvent("popstate"))')
+  const front = page.locator('[data-tab="/_auth/notification"]')
+  await expect(front).toHaveAttribute("data-visible", "true")
+  // 后台那个抽屉跟着 tab 一起藏起来，不压在前台上（曾经挡住所有点击）
+  await expect(sheet).toBeHidden()
+  await front.getByTestId("page-title").waitFor({ state: "attached" })
+  await page.getByTestId("tab-/_auth/workflow/inbox").click()
+
+  // 切回来：抽屉还开着，填的内容还在（曾经为了不挡前台把整个抽屉卸载，草稿跟着没了）
+  await expect(sheet).toBeVisible()
+  await expect(sheet.getByTestId("wf-field-f_reason").locator("input")).toHaveValue("填了一半的事由")
+})

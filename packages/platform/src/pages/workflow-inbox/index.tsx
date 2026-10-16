@@ -37,6 +37,8 @@ export type WorkflowInboxSearch = {
   id?: string
   /** 正在发起的流程编码（发起抽屉） */
   start?: string
+  /** 重新发起：从这张单复制内容 */
+  from?: string
 }
 
 const TABS: { value: InboxTab; label: string; icon: React.ComponentType<{ className?: string }>; empty: string }[] = [
@@ -201,11 +203,16 @@ export function WorkflowInboxPage({
           patch({ start: code })
         }}
       />
-      <InstanceSheet id={search.id ?? null} onClose={() => patch({ id: undefined })} />
+      <InstanceSheet
+        id={search.id ?? null}
+        onClose={() => patch({ id: undefined })}
+        onResubmit={(code, fromId) => patch({ id: undefined, start: code, from: fromId })}
+      />
       <StartSheet
         code={search.start ?? null}
-        onClose={() => patch({ start: undefined })}
-        onStarted={(id) => patch({ start: undefined, tab: 'initiated', page: 1, id })}
+        fromId={search.from ?? null}
+        onClose={() => patch({ start: undefined, from: undefined })}
+        onStarted={(id) => patch({ start: undefined, from: undefined, tab: 'initiated', page: 1, id })}
       />
     </div>
   )
