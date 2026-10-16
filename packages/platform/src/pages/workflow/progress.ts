@@ -1,0 +1,173 @@
+/**
+ * 把接口数据拼成审批轨道（`track.tsx`）的条目。纯函数，不 import React。
+ *
+ * 详情页的轨道 = 发起 + 已经发生的（按时间）+ 正在等的 + 预告（服务端试算）+ 结束。
+ * 发起页的轨道 = 发起 + 预告。两边的「预告」是同一个函数转出来的，长得一样。
+ */
+import type { ForecastStep, InstanceDetail, TaskRow } from './api'
+import type { TrackItem, TrackPerson } from './track'
+
+type T = (k: string, o?: Record<string, unknown>) => string
+
+type Tone = NonNullable<TrackPerson['result']>['tone']
+
+const DECISION: Record<string, { text: string; tone: Tone }> = {
+  approve: { text: '已同意', tone: 'ok' },
+  reject: { text: '已驳回', tone: 'bad' },
+  transferred: { text: '已转交', tone: 'muted' },
+  canceled: { text: '无需处理', tone: 'muted' },
+  pending: { text: '审批中', tone: 'pending' },
+}
+
+function modeTag(mode: string | undefined, count: number, t: T): string | undefined {
+  if (count < 2) return undefined
+  return mode === 'all' ? t('会签 · 需全部同意') : t('或签 · 一人同意即可')
+}
+
+/** 预告步骤 → 轨道条目 */
+export function forecastItems(steps: ForecastStep[], t: T): TrackItem[] {
+  return steps.map((s) => {
+    const people = s.users.map((u) => ({ name: u.name }))
+    if (s.type === 'cc') {
+      return {
+        key: `f-${s.node_id}`,
+        kind: 'cc',
+        title: s.name || t('抄送'),
+        state: s.users.length ? 'future' : 'skipped',
+        people,
+        note: s.users.length ? undefined : t('没有要抄送的人'),
+      } satisfies TrackItem
+    }
+    const base = { key: `f-${s.node_id}`, kind: 'approval' as const, title: s.name, people }
+    switch (s.outcome) {
+      case 'pick':
+        return { ...base, state: 'warn', note: t('请在上面选择审批人') }
+      case 'skip':
+        return { ...base, state: 'skipped', tag: t('自动跳过'), note: t('找不到审批人，这一步会自动跳过') }
+      case 'admin':
+        return { ...base, state: 'future', tag: t('转给管理员'), note: t('找不到对应的审批人，转给管理员处理') }
+      case 'reject':
+        return { ...base, state: 'warn', note: t('找不到审批人，提交后会被自动驳回') }
+      default:
+        return { ...base, state: 'future', tag: modeTag(s.mode, s.users.length, t) }
+    }
+  })
+}
+
+/** 详情 → 完整的审批进度 */
+export function progressItems(d: InstanceDetail, t: T): TrackItem[] {
+  const items: (TrackItem & { at: number })[] = []
+  const ts = (s: string | null | undefined) => (s ? new Date(s).getTime() : 0)
+
+  items.push({
+    key: 'start',
+    kind: 'start',
+    title: t('发起申请'),
+    state: 'done',
+    people: [{ name: d.instance.initiator_name ?? '—' }],
+    time: d.instance.created_time,
+    at: ts(d.instance.created_time) - 1,
+  })
+
+  // 待办按节点分组：同一个节点（含转交出来的那一条）是一步
+  const groups = new Map<string, TaskRow[]>()
+  for (const tk of d.tasks) {
+    // 现在一个节点只会走一次；以后做「退回到指定节点」时这里要按批次分开
+    groups.set(tk.node_id, [...(groups.get(tk.node_id) ?? []), tk])
+  }
+  for (const [nodeId, tasks] of groups) {
+    const pending = tasks.some((x) => x.status === 'pending')
+    const rejected = tasks.some((x) => x.decision === 'reject')
+    const lastDone = tasks.filter((x) => x.finished_time).map((x) => x.finished_time as string).sort().pop()
+    const mode = findMode(d, nodeId)
+    items.push({
+      key: `n-${nodeId}`,
+      kind: 'approval',
+      title: tasks[0].node_name,
+      tag: modeTag(mode, tasks.filter((x) => x.status !== 'transferred').length, t),
+      state: rejected ? 'rejected' : pending ? (d.instance.status === 'running' ? 'current' : 'skipped') : 'done',
+      people: tasks.map((tk) => {
+        const key = tk.status === 'done' ? (tk.decision ?? 'approve') : tk.status
+        const meta = DECISION[key] ?? DECISION.pending
+        const transferTo =
+          tk.status === 'transferred'
+            ? d.records.find((r) => r.action === 'transfer' && r.node_id === nodeId && r.actor_id === tk.assignee_id)
+            : undefined
+        return {
+          name: tk.assignee_name,
+          result: {
+            text: transferTo?.target_user_name ? t('转交给 {{n}}', { n: transferTo.target_user_name }) : t(meta.text),
+            tone: meta.tone,
+          },
+          time: tk.finished_time,
+          opinion: tk.opinion,
+        }
+      }),
+      time: pending ? null : lastDone,
+      at: ts(tasks[0].created_time),
+    })
+  }
+
+  for (const r of d.records) {
+    if (r.action === 'skip') {
+      items.push({
+        key: `r-${r.id}`, kind: 'system', title: r.node_name ?? t('审批'), tag: t('自动跳过'),
+        state: 'skipped', note: r.opinion ?? undefined, time: r.created_time, at: ts(r.created_time),
+      })
+    } else if (r.action === 'auto_reject') {
+      items.push({
+        key: `r-${r.id}`, kind: 'system', title: r.node_name ?? t('审批'), tag: t('自动驳回'),
+        state: 'rejected', note: r.opinion ?? undefined, time: r.created_time, at: ts(r.created_time),
+      })
+    } else if (r.action === 'cc') {
+      items.push({
+        key: `r-${r.id}`, kind: 'cc', title: r.actor_type === 'system' ? (r.node_name ?? t('抄送')) : t('{{n}} 抄送了', { n: r.actor_name }),
+        state: 'done', people: (r.target_user_name ?? '').split('、').filter(Boolean).map((name) => ({ name })),
+        time: r.created_time, at: ts(r.created_time),
+      })
+    } else if (r.action === 'withdraw' || r.action === 'terminate') {
+      items.push({
+        key: `r-${r.id}`, kind: 'system', title: r.action === 'withdraw' ? t('发起人撤回') : t('管理员终止'),
+        state: r.action === 'withdraw' ? 'withdrawn' : 'rejected',
+        people: [{ name: r.actor_name ?? '—', opinion: r.opinion }],
+        time: r.created_time, at: ts(r.created_time),
+      })
+    }
+  }
+
+  items.sort((a, b) => a.at - b.at)
+  const out: TrackItem[] = items.map(({ at: _at, ...rest }) => rest)
+
+  if (d.instance.status === 'running') out.push(...forecastItems(d.forecast, t))
+  out.push({
+    key: 'end',
+    kind: 'end',
+    title: d.instance.status === 'running' ? t('结束') : t(END_TEXT[d.instance.status]),
+    state:
+      d.instance.status === 'approved' ? 'done'
+        : d.instance.status === 'running' ? 'future'
+          : d.instance.status === 'withdrawn' ? 'withdrawn' : 'rejected',
+    time: d.instance.finished_time,
+  })
+  return out
+}
+
+const END_TEXT: Record<string, string> = {
+  approved: '审批通过', rejected: '审批驳回', withdrawn: '已撤回', terminated: '已终止', running: '结束',
+}
+
+function findMode(d: InstanceDetail, nodeId: string): string | undefined {
+  let found: string | undefined
+  const visit = (n: unknown): void => {
+    if (!n || typeof n !== 'object' || found) return
+    const o = n as Record<string, unknown>
+    if (o.id === nodeId && typeof o.mode === 'string') found = o.mode
+    for (const v of Object.values(o)) if (v && typeof v === 'object') visit(v)
+  }
+  visit(d.model.root)
+  return found
+}
+
+export function _i18nExtractionAnchors(t: (k: string) => string) {
+  return [t('已同意'), t('已驳回'), t('已转交'), t('无需处理'), t('审批中'), t('审批通过'), t('审批驳回'), t('已撤回'), t('已终止'), t('结束')]
+}

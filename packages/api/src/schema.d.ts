@@ -1305,6 +1305,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/workflow/startable/{code}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发起页：按当前表单试算审批流程 */
+        post: operations["preview_start_api_v1_sys_workflow_startable__code__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/workflow/instances": {
         parameters: {
             query?: never;
@@ -5210,6 +5227,26 @@ export interface components {
          * @enum {string}
          */
         PluginType: "zip" | "git";
+        /**
+         * PreviewParam
+         * @description 发起页的流程预告：按当前填的表单试算
+         */
+        PreviewParam: {
+            /**
+             * Form
+             * @description 表单数据（可以没填完）
+             */
+            form?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Selected
+             * @description 已自选的审批人
+             */
+            selected?: {
+                [key: string]: string[];
+            };
+        };
         /**
          * RedisCommandStat
          * @description Redis 命令统计
@@ -10707,6 +10744,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_start_api_v1_sys_workflow_startable__code__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewParam"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -173,6 +173,18 @@ export type InstanceDetail = {
   my_task_id: string | null
   /** 流程图里出现的用户 / 角色 ID → 名字（看图的人不一定有权限查角色 / 用户接口） */
   names: ModelNames
+  /** 还没走到的步骤（服务端试算，和真实推进同一套规则） */
+  forecast: ForecastStep[]
+}
+
+export type ForecastStep = {
+  node_id: string
+  name: string
+  type: 'approval' | 'cc'
+  mode: 'any' | 'all'
+  users: { id: string; name: string }[]
+  /** ok 有人办 · pick 发起人自选还没选 · skip 跳过 · admin 转给管理员 · reject 将被自动驳回 */
+  outcome: 'ok' | 'pick' | 'skip' | 'admin' | 'reject'
 }
 
 export type ModelNames = { users: Record<string, string>; roles: Record<string, string> }
@@ -187,6 +199,8 @@ export type Definition = {
   description: string | null
   status: 'draft' | 'published' | 'disabled'
   current_version_id: string | null
+  /** 当前发布版本的版本号（只有列表接口带） */
+  version_no?: number | null
   sort: number
   created_time: string
   updated_time: string | null
@@ -424,4 +438,16 @@ export const directoryRolesQuery = () =>
     queryKey: [...workflowKeys.all, 'directory', 'roles'] as const,
     queryFn: () => api.GET<DirectoryRole[]>(`${BASE}/directory/roles`),
     staleTime: 60_000,
+  })
+
+/** 发起页的流程预告：按当前填的表单试算（不写库） */
+export const previewQuery = (code: string, form: FormData, selected: Record<string, string[]>) =>
+  queryOptions({
+    queryKey: [...workflowKeys.startForm(code), 'preview', form, selected] as const,
+    queryFn: () =>
+      api.POST<{ steps: ForecastStep[] }>(`${BASE}/startable/${encodeURIComponent(code)}/preview`, {
+        body: { form, selected },
+      }),
+    placeholderData: (prev) => prev,
+    staleTime: 10_000,
   })

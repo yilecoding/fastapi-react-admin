@@ -34,6 +34,13 @@ export const FIELD_TYPES: { type: FieldType; label: string; icon: React.Componen
   { type: 'description', label: '说明文字', icon: IconInfoCircle },
 ]
 
+const PALETTE_GROUPS: { label: string; types: FieldType[] }[] = [
+  { label: '文本与数字', types: ['text', 'textarea', 'number', 'amount'] },
+  { label: '日期与选项', types: ['date', 'daterange', 'select', 'multiselect'] },
+  { label: '人员与组织', types: ['user', 'dept'] },
+  { label: '其他', types: ['table', 'attachment', 'description'] },
+]
+
 /** 明细表里能放的列（与后端 `COLUMN_TYPES` 一致，不能 table 套 table） */
 const COLUMN_TYPES: FieldType[] = ['text', 'textarea', 'number', 'amount', 'date', 'select']
 
@@ -101,23 +108,29 @@ export function FormDesigner({
 
   return (
     <div className="grid min-h-[32rem] gap-4 lg:grid-cols-[11rem_minmax(0,1fr)_20rem]">
-      <aside className="flex flex-col gap-1" data-testid="fd-palette">
-        <p className="px-1 pb-1 text-xs text-muted-foreground">{t('点击添加控件')}</p>
-        {FIELD_TYPES.map((x) => (
-          <button
-            key={x.type}
-            type="button"
-            onClick={() => add(x.type, x.label)}
-            className="flex items-center gap-2 rounded-md border bg-card px-2 py-1.5 text-sm hover:border-primary/60"
-            data-testid={`fd-add-${x.type}`}
-          >
-            <x.icon className="size-4 text-muted-foreground" />
-            {t(x.label)}
-          </button>
+      <aside className="flex flex-col gap-4 rounded-xl border bg-card p-3 lg:sticky lg:top-4 lg:self-start" data-testid="fd-palette">
+        {PALETTE_GROUPS.map((g) => (
+          <div key={g.label} className="flex flex-col gap-1.5">
+            <p className="px-1 text-xs font-medium text-muted-foreground">{t(g.label)}</p>
+            <div className="grid grid-cols-2 gap-1.5 lg:grid-cols-1">
+              {FIELD_TYPES.filter((x) => g.types.includes(x.type)).map((x) => (
+                <button
+                  key={x.type}
+                  type="button"
+                  onClick={() => add(x.type, x.label)}
+                  className="flex items-center gap-2 rounded-md border border-transparent bg-muted/50 px-2.5 py-1.5 text-sm transition-colors hover:border-primary/40 hover:bg-primary/5"
+                  data-testid={`fd-add-${x.type}`}
+                >
+                  <x.icon className="size-4 text-muted-foreground" />
+                  {t(x.label)}
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </aside>
 
-      <section className="flex min-w-0 flex-col gap-2 rounded-lg border bg-muted/30 p-3">
+      <section className="flex min-w-0 flex-col gap-3 rounded-xl border bg-muted/40 p-4 sm:p-6">
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground">{t('共 {{n}} 个字段', { n: fields.length })}</span>
           <Button variant="outline" size="sm" onClick={() => setPreview(!preview)} data-testid="fd-preview">
@@ -125,41 +138,64 @@ export function FormDesigner({
           </Button>
         </div>
         {preview ? (
-          <div className="rounded-lg border bg-card p-4">
+          <div className="mx-auto w-full max-w-xl rounded-xl border bg-card p-5 shadow-sm">
             <FormRenderer schema={form} value={previewData} onChange={setPreviewData} mode="edit" />
           </div>
         ) : fields.length === 0 ? (
-          <p className="py-20 text-center text-sm text-muted-foreground">{t('从左边点一个控件开始')}</p>
+          <div className="mx-auto flex w-full max-w-xl flex-col items-center gap-2 rounded-xl border border-dashed bg-card py-20 text-center">
+            <p className="text-sm font-medium">{t('表单还是空的')}</p>
+            <p className="text-xs text-muted-foreground">{t('从左边点一个控件加进来，比如「单行文本」')}</p>
+          </div>
         ) : (
-          fields.map((f, i) => {
-            const meta = FIELD_TYPES.find((x) => x.type === f.type)
-            return (
-              <div
-                key={f.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelect(f.id)}
-                onKeyDown={(e) => e.key === 'Enter' && onSelect(f.id)}
-                className={cn(
-                  'group flex items-center gap-2 rounded-md border bg-card px-3 py-2',
-                  selected === f.id && 'border-primary ring-3 ring-primary/20',
-                  issueFields.has(f.id) && 'border-destructive'
-                )}
-                data-testid={`fd-field-${f.id}`}
-              >
-                {meta && <meta.icon className="size-4 shrink-0 text-muted-foreground" />}
-                <span className="truncate text-sm font-medium">{f.label}</span>
-                {f.required && <span className="text-destructive">*</span>}
-                <span className="truncate text-xs text-muted-foreground">{meta ? t(meta.label) : f.type}</span>
-                {usedByFlow.has(f.id) && <span className="text-xs text-emerald-700">{t('流程在用')}</span>}
-                <span className="ms-auto flex shrink-0 items-center opacity-0 group-hover:opacity-100 focus-within:opacity-100">
-                  <IconBtn label={t('上移')} onClick={() => move(i, -1)} disabled={i === 0}><IconArrowUp className="size-3.5" /></IconBtn>
-                  <IconBtn label={t('下移')} onClick={() => move(i, 1)} disabled={i === fields.length - 1}><IconArrowDown className="size-3.5" /></IconBtn>
-                  <IconBtn label={t('删除')} onClick={() => remove(f.id)} testId={`fd-remove-${f.id}`}><IconTrash className="size-3.5" /></IconBtn>
-                </span>
-              </div>
-            )
-          })
+          <div className="mx-auto flex w-full max-w-xl flex-col gap-1 rounded-xl border bg-card p-3 shadow-sm">
+            {fields.map((f, i) => {
+              const meta = FIELD_TYPES.find((x) => x.type === f.type)
+              return (
+                <div
+                  key={f.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelect(f.id)}
+                  onKeyDown={(e) => e.key === 'Enter' && onSelect(f.id)}
+                  className={cn(
+                    'group relative flex flex-col gap-1.5 rounded-lg border border-transparent px-3 py-2.5 transition-colors hover:bg-muted/50',
+                    selected === f.id && 'border-primary bg-primary/5 hover:bg-primary/5',
+                    issueFields.has(f.id) && 'border-destructive'
+                  )}
+                  data-testid={`fd-field-${f.id}`}
+                >
+                  <span className="flex items-center gap-1.5 text-sm">
+                    <span className="truncate font-medium">{f.label}</span>
+                    {f.required && <span className="text-destructive">*</span>}
+                    {usedByFlow.has(f.id) && (
+                      <span className="rounded bg-emerald-500/10 px-1.5 text-[11px] leading-5 text-emerald-700 dark:text-emerald-400">
+                        {t('流程在用')}
+                      </span>
+                    )}
+                    <span className="ms-auto flex shrink-0 items-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+                      <IconBtn label={t('上移')} onClick={() => move(i, -1)} disabled={i === 0}><IconArrowUp className="size-3.5" /></IconBtn>
+                      <IconBtn label={t('下移')} onClick={() => move(i, 1)} disabled={i === fields.length - 1}><IconArrowDown className="size-3.5" /></IconBtn>
+                      <IconBtn label={t('删除')} onClick={() => remove(f.id)} testId={`fd-remove-${f.id}`}><IconTrash className="size-3.5" /></IconBtn>
+                    </span>
+                  </span>
+                  {/* 只是示意它长什么样；真实效果点「预览」 */}
+                  {f.type === 'description' ? (
+                    <span className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">{f.content}</span>
+                  ) : (
+                    <span
+                      className={cn(
+                        'flex items-center gap-2 rounded-md border border-dashed bg-background px-3 text-xs text-muted-foreground',
+                        f.type === 'textarea' || f.type === 'table' ? 'h-14 items-start pt-2' : 'h-9'
+                      )}
+                    >
+                      {meta && <meta.icon className="size-3.5 shrink-0" />}
+                      {f.placeholder || t(meta?.label ?? f.type)}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         )}
       </section>
 
@@ -174,7 +210,7 @@ export function FormDesigner({
           setConfirmRemove(null)
         }}
       />
-      <aside className="rounded-lg border p-3" data-testid="fd-props">
+      <aside className="rounded-xl border bg-card p-4 lg:sticky lg:top-4 lg:self-start" data-testid="fd-props">
         {current ? (
           <FieldProps field={current} onChange={patch} />
         ) : (
@@ -387,5 +423,6 @@ export function _i18nExtractionAnchors(t: (k: string) => string) {
   return [
     t('单行文本'), t('多行文本'), t('数字'), t('金额'), t('日期'), t('日期区间'), t('单选'), t('多选'),
     t('人员'), t('部门'), t('明细表'), t('附件'), t('说明文字'),
+    t('文本与数字'), t('日期与选项'), t('人员与组织'), t('其他'),
   ]
 }

@@ -2,28 +2,32 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAlertTriangle, IconArrowLeft, IconCircleX, IconDeviceFloppy, IconLoader2, IconPlus, IconRocket,
+  IconAlertTriangle, IconArrowLeft, IconCircleX, IconDeviceFloppy, IconDots, IconHierarchy2, IconLoader2,
+  IconPencil, IconPlayerPause, IconPlayerPlay, IconPlus, IconRocket, IconSearch, IconTrash,
 } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@admin/ui/components/dialog'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@admin/ui/components/dropdown-menu'
 import { Input } from '@admin/ui/components/input'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@admin/ui/components/input-group'
 import { QueryError } from '@admin/ui/components/query-error'
 import { Skeleton } from '@admin/ui/components/skeleton'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@admin/ui/components/table'
-import { Tabs, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
 import { Textarea } from '@admin/ui/components/textarea'
 import { toast } from '@admin/ui/components/toast'
 import { cn } from '@admin/ui/lib/utils'
-import { formatDateTime } from '@admin/i18n'
+import { formatDateTimeShort } from '@admin/i18n'
 
 import { ApiError } from '../../api-client/errors'
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { FormField as Row } from '../_shared/form-fields'
+import { RefreshButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import { StatusPill, type Tone } from '../_shared/status'
 import {
@@ -32,6 +36,7 @@ import {
   type Definition, type FlowModel, type FormSchema, type Issue,
 } from '../workflow/api'
 import { EMPTY_MODEL, usedFields } from '../workflow/flow-edit'
+import { TemplateTile } from '../workflow/track'
 import { FlowDesigner } from './flow-designer'
 import { FormDesigner } from './form-designer'
 
@@ -40,6 +45,13 @@ export type WorkflowDefinitionSearch = {
   step?: 'basic' | 'form' | 'flow'
   sel?: string
 }
+
+/** 设计的三步本来就有先后（先有表单，流程里的条件和字段权限才有东西可选），所以带序号 */
+const STEPS: { value: 'basic' | 'form' | 'flow'; label: string }[] = [
+  { value: 'basic', label: '基础信息' },
+  { value: 'form', label: '表单设计' },
+  { value: 'flow', label: '流程设计' },
+]
 
 const STATUS: Record<Definition['status'], { label: string; tone: Tone }> = {
   draft: { label: '草稿', tone: 'muted' },
@@ -82,86 +94,155 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
   const { t } = useTranslation()
   const query = useQuery(definitionsQuery())
   const list = listState(query)
-  const rows = query.data ?? []
   const [creating, setCreating] = React.useState(false)
   const [deleting, setDeleting] = React.useState<Definition | null>(null)
+  const [keyword, setKeyword] = React.useState('')
   const del = useDeleteDefinition()
   const setStatus = useSetDefinitionStatus()
 
+  const groups = React.useMemo(() => {
+    const kw = keyword.trim().toLowerCase()
+    const m = new Map<string, Definition[]>()
+    for (const d of query.data ?? []) {
+      if (kw && !`${d.name} ${d.code} ${d.category ?? ''}`.toLowerCase().includes(kw)) continue
+      const k = d.category || t('未分组')
+      m.set(k, [...(m.get(k) ?? []), d])
+    }
+    return [...m.entries()]
+  }, [query.data, keyword, t])
+
+  const toggle = (d: Definition) =>
+    setStatus.mutate(
+      { id: d.id, enabled: d.status !== 'published' },
+      {
+        onSuccess: () => toast.success(d.status === 'published' ? t('已停用') : t('已启用')),
+        onError: (e) => toast.error(e instanceof ApiError ? e.message : t('操作失败，请稍后重试')),
+      }
+    )
+
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader title={t('流程定义')}>
-        <Can perm="workflow:definition:add">
-          <Button size="sm" onClick={() => setCreating(true)} data-testid="wfd-create">
-            <IconPlus className="size-4" />
-            {t('新建流程')}
-          </Button>
-        </Can>
-      </PageHeader>
-      <div className={cn('overflow-hidden rounded-lg border', list.busy && 'opacity-60')}>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('名称')}</TableHead>
-              <TableHead>{t('编码')}</TableHead>
-              <TableHead>{t('分组')}</TableHead>
-              <TableHead>{t('状态')}</TableHead>
-              <TableHead>{t('更新时间')}</TableHead>
-              <TableHead className="text-end">{t('操作')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {list.loading ? (
-              <TableRow><TableCell colSpan={6}><Skeleton className="h-6" /></TableCell></TableRow>
-            ) : list.error ? (
-              <TableRow><TableCell colSpan={6}><QueryError error={list.error} onRetry={list.onRetry} /></TableCell></TableRow>
-            ) : rows.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="py-12 text-center text-muted-foreground">{t('还没有流程，先新建一个')}</TableCell></TableRow>
-            ) : (
-              rows.map((d) => (
-                <TableRow key={d.id} data-testid={`wfd-row-${d.code}`}>
-                  <TableCell className="font-medium">{d.name}</TableCell>
-                  <TableCell className="font-mono text-xs">{d.code}</TableCell>
-                  <TableCell>{d.category ?? '—'}</TableCell>
-                  <TableCell>
-                    <StatusPill tone={STATUS[d.status].tone}>{t(STATUS[d.status].label)}</StatusPill>
-                  </TableCell>
-                  <TableCell className="tabular-nums">{formatDateTime(d.updated_time ?? d.created_time)}</TableCell>
-                  <TableCell className="text-end">
-                    <span className="inline-flex gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => onOpen(d.id)} data-testid={`wfd-open-${d.code}`}>
-                        {t('设计')}
-                      </Button>
-                      {d.status !== 'draft' && (
-                        <Can perm="workflow:definition:publish">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={setStatus.isPending}
-                            onClick={() =>
-                              setStatus.mutate(
-                                { id: d.id, enabled: d.status !== 'published' },
-                                { onError: (e) => toast.error(e instanceof ApiError ? e.message : t('操作失败')) }
-                              )
-                            }
-                          >
-                            {d.status === 'published' ? t('停用') : t('启用')}
-                          </Button>
-                        </Can>
-                      )}
-                      <Can perm="workflow:definition:del">
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleting(d)}>
-                          {t('删除')}
-                        </Button>
-                      </Can>
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+    <div className="flex flex-col gap-5">
+      <PageHeader title={t('流程定义')} />
+      <div className="flex flex-wrap items-center gap-2">
+        <InputGroup className="h-8 w-64">
+          <InputGroupAddon align="inline-start">
+            <IconSearch className="size-4 text-muted-foreground" />
+          </InputGroupAddon>
+          <InputGroupInput
+            value={keyword}
+            placeholder={t('搜索名称、编码或分组')}
+            onChange={(e) => setKeyword(e.target.value)}
+            data-testid="wfd-search"
+          />
+        </InputGroup>
+        <span className="ms-auto flex items-center gap-2">
+          <RefreshButton onClick={list.onRetry} busy={list.busy} />
+          <Can perm="workflow:definition:add">
+            <Button size="sm" onClick={() => setCreating(true)} data-testid="wfd-create">
+              <IconPlus className="size-4" />
+              {t('新建流程')}
+            </Button>
+          </Can>
+        </span>
       </div>
+
+      {list.loading ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
+        </div>
+      ) : list.error ? (
+        <QueryError error={list.error} onRetry={list.onRetry} />
+      ) : groups.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed py-20 text-center">
+          <span className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">
+            <IconHierarchy2 className="size-6" />
+          </span>
+          <p className="text-sm text-muted-foreground">
+            {keyword ? t('没有匹配「{{k}}」的流程', { k: keyword }) : t('还没有流程。新建一个：先搭表单，再画审批流程，最后发布')}
+          </p>
+          {!keyword && (
+            <Can perm="workflow:definition:add">
+              <Button size="sm" onClick={() => setCreating(true)}>
+                <IconPlus className="size-4" />
+                {t('新建流程')}
+              </Button>
+            </Can>
+          )}
+        </div>
+      ) : (
+        groups.map(([g, defs]) => (
+          <section key={g} className="flex flex-col gap-2.5">
+            <h3 className="flex items-baseline gap-2 text-sm font-medium">
+              {g}
+              <span className="text-xs font-normal text-muted-foreground tabular-nums">{defs.length}</span>
+            </h3>
+            <div className={cn('grid gap-3 sm:grid-cols-2 xl:grid-cols-3', list.busy && 'opacity-60')}>
+              {defs.map((d) => (
+                <article
+                  key={d.id}
+                  className="group flex flex-col gap-3 rounded-xl border bg-card p-4 transition-shadow hover:shadow-md"
+                  data-testid={`wfd-row-${d.code}`}
+                >
+                  <div className="flex items-start gap-3">
+                    <TemplateTile name={d.name} group={d.category} />
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate font-medium">{d.name}</span>
+                        <StatusPill tone={STATUS[d.status].tone}>{t(STATUS[d.status].label)}</StatusPill>
+                      </span>
+                      <span className="truncate font-mono text-xs text-muted-foreground">{d.code}</span>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button variant="ghost" size="icon" className="size-7" aria-label={t('更多操作')} data-testid={`wfd-more-${d.code}`} />
+                        }
+                      >
+                        <IconDots className="size-4" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {d.status !== 'draft' && (
+                          <Can perm="workflow:definition:publish">
+                            <DropdownMenuItem onClick={() => toggle(d)}>
+                              {d.status === 'published' ? <IconPlayerPause className="size-4" /> : <IconPlayerPlay className="size-4" />}
+                              {d.status === 'published' ? t('停用') : t('启用')}
+                            </DropdownMenuItem>
+                          </Can>
+                        )}
+                        <Can perm="workflow:definition:del">
+                          <DropdownMenuItem variant="destructive" onClick={() => setDeleting(d)}>
+                            <IconTrash className="size-4" />
+                            {t('删除')}
+                          </DropdownMenuItem>
+                        </Can>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
+                    {d.description || t('没有说明')}
+                  </p>
+                  <div className="flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
+                    <span className="tabular-nums">{d.version_no ? t('v{{n}}', { n: d.version_no }) : t('未发布')}</span>
+                    <span>·</span>
+                    <span className="tabular-nums">{t('{{at}} 更新', { at: formatDateTimeShort(d.updated_time ?? d.created_time) })}</span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ms-auto h-7"
+                      onClick={() => onOpen(d.id)}
+                      data-testid={`wfd-open-${d.code}`}
+                    >
+                      <IconPencil className="size-3.5" />
+                      {t('设计')}
+                    </Button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ))
+      )}
+
       <CreateDialog open={creating} onOpenChange={setCreating} onCreated={onOpen} />
       <ConfirmDialog
         open={!!deleting}
@@ -320,33 +401,69 @@ function Designer({
   return (
     <div className="flex flex-col gap-4" data-testid="wfd-designer">
       <PageHeader title={t('流程设计')} />
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => (dirty ? setLeaving(true) : onBack())} data-testid="wfd-back">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-3 py-2.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          aria-label={t('返回列表')}
+          title={t('返回列表')}
+          onClick={() => (dirty ? setLeaving(true) : onBack())}
+          data-testid="wfd-back"
+        >
           <IconArrowLeft className="size-4" />
-          {t('返回列表')}
         </Button>
-        <span className="font-medium" data-testid="wfd-title">{cur.name}</span>
-        <StatusPill tone={STATUS[d.status].tone}>{t(STATUS[d.status].label)}</StatusPill>
-        {dirty && <span className="text-xs text-amber-700" data-testid="wfd-dirty">{t('有未保存的修改')}</span>}
-        <Tabs value={step} onValueChange={(v) => onStep(v as 'basic' | 'form' | 'flow')} className="mx-auto">
-          <TabsList>
-            <TabsTrigger value="basic" data-testid="wfd-step-basic">{t('基础信息')}</TabsTrigger>
-            <TabsTrigger value="form" data-testid="wfd-step-form">{t('表单设计')}</TabsTrigger>
-            <TabsTrigger value="flow" data-testid="wfd-step-flow">{t('流程设计')}</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <Can perm="workflow:definition:edit">
-          <Button variant="outline" size="sm" onClick={doSave} disabled={!dirty || save.isPending} data-testid="wfd-save">
-            {save.isPending ? <IconLoader2 className="size-4 animate-spin" /> : <IconDeviceFloppy className="size-4" />}
-            {t('保存草稿')}
-          </Button>
-        </Can>
-        <Can perm="workflow:definition:publish">
-          <Button size="sm" onClick={doPublish} disabled={publish.isPending || save.isPending} data-testid="wfd-publish">
-            {publish.isPending ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
-            {t('发布')}
-          </Button>
-        </Can>
+        <TemplateTile name={cur.name || '?'} group={cur.category} />
+        <div className="flex min-w-0 flex-col">
+          <span className="flex items-center gap-2">
+            <span className="truncate font-medium" data-testid="wfd-title">{cur.name}</span>
+            <StatusPill tone={STATUS[d.status].tone}>{t(STATUS[d.status].label)}</StatusPill>
+          </span>
+          <span className="text-xs text-muted-foreground" data-testid={dirty ? 'wfd-dirty' : undefined}>
+            {dirty ? t('有未保存的修改') : t('草稿已保存')}
+          </span>
+        </div>
+        <ol className="mx-auto flex items-center gap-1" aria-label={t('设计步骤')}>
+          {STEPS.map((s, i) => (
+            <li key={s.value} className="flex items-center gap-1">
+              {i > 0 && <span aria-hidden className="h-px w-6 bg-border" />}
+              <button
+                type="button"
+                onClick={() => onStep(s.value)}
+                aria-current={step === s.value ? 'step' : undefined}
+                className={cn(
+                  'flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors',
+                  step === s.value ? 'bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:bg-muted'
+                )}
+                data-testid={`wfd-step-${s.value}`}
+              >
+                <span
+                  className={cn(
+                    'grid size-5 place-items-center rounded-full text-xs tabular-nums',
+                    step === s.value ? 'bg-primary text-primary-foreground' : 'bg-muted'
+                  )}
+                >
+                  {i + 1}
+                </span>
+                {t(s.label)}
+              </button>
+            </li>
+          ))}
+        </ol>
+        <span className="flex items-center gap-2">
+          <Can perm="workflow:definition:edit">
+            <Button variant="outline" size="sm" onClick={doSave} disabled={!dirty || save.isPending} data-testid="wfd-save">
+              {save.isPending ? <IconLoader2 className="size-4 animate-spin" /> : <IconDeviceFloppy className="size-4" />}
+              {t('保存草稿')}
+            </Button>
+          </Can>
+          <Can perm="workflow:definition:publish">
+            <Button size="sm" onClick={doPublish} disabled={publish.isPending || save.isPending} data-testid="wfd-publish">
+              {publish.isPending ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
+              {t('发布')}
+            </Button>
+          </Can>
+        </span>
       </div>
 
       {issues.length > 0 && (
@@ -433,5 +550,5 @@ function Designer({
 }
 
 export function _i18nExtractionAnchors(t: (k: string) => string) {
-  return [t('草稿'), t('已发布'), t('已停用')]
+  return [t('草稿'), t('已发布'), t('已停用'), t('基础信息'), t('表单设计'), t('流程设计')]
 }

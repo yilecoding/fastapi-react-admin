@@ -63,6 +63,7 @@ test("发起 → 主管在待办里同意并填备注 → 发起人看到已通�
   await initiator.goto("/workflow/inbox")
   const scopeA = initiator.locator('[data-tab="/_auth/workflow/inbox"]')
   await scopeA.getByTestId("wf-start-menu").click()
+  await initiator.getByTestId("wf-template-search").fill(CODE)
   await initiator.getByTestId(`wf-start-${CODE}`).click()
 
   const sheet = initiator.getByTestId("wf-start-sheet")
@@ -74,6 +75,8 @@ test("发起 → 主管在待办里同意并填备注 → 发起人看到已通�
   await sheet.getByTestId("wf-field-f_reason").locator("input").fill("年底盘点")
   await sheet.getByTestId("wf-field-f_days").locator("input").fill("2")
   await sheet.getByTestId("wf-field-f_secret").locator("input").fill("只有我能看")
+  // 右边的审批流程预告：发起人在市场运营中心 → 直属主管是赵磊
+  await expect(sheet.getByTestId("wf-start-track")).toContainText("赵磊")
   await sheet.getByTestId("wf-start-submit").click()
 
   // 提交后：抽屉换成详情，URL 带上 id（刷新还在，硬纪律 2）
@@ -107,9 +110,11 @@ test("发起 → 主管在待办里同意并填备注 → 发起人看到已通�
   await expect(sheetB.getByTestId("wf-field-f_reason")).toHaveAttribute("data-editable", "false")
 
   await sheetB.getByTestId("wf-field-f_note").locator("textarea").fill("同意，注意交接")
+  // 意见框就在底部，不弹窗；驳回不写意见会被当场拦住
+  await sheetB.getByTestId("wf-act-reject").click()
+  await expect(sheetB.getByText("驳回时请写明原因")).toBeVisible()
+  await sheetB.getByTestId("wf-action-opinion").fill("可以")
   await sheetB.getByTestId("wf-act-approve").click()
-  await approver.getByTestId("wf-action-opinion").fill("可以")
-  await approver.getByTestId("wf-action-submit").click()
   // 审批人办完抽屉关掉，待办里没了
   await expect(sheetB).toBeHidden()
   await expect(scopeB.getByTestId(`wf-row-${id}`)).toHaveCount(0)

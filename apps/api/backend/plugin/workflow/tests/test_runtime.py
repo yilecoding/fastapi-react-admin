@@ -284,3 +284,58 @@ def test_initiator_cannot_fill_fields_hidden_at_start(
     assert full['form_data']['f_reason'] == '家里有事'
     mine = detail(client, login('sunqiang'), pk)
     assert 'f_hr_note' not in {f['id'] for f in mine['form_schema']['fields']}
+
+
+def test_on_empty_admin_goes_to_superuser_but_never_back_to_the_initiator(
+    client: TestClient, login: Login, uid: Uid, token_headers: dict[str, str]
+) -> None:
+    """「请假」第一个节点是直属主管、找不到时转给管理员。
+
+    回归：`superusers()` 原来写 `is_superuser.is_(True)`，SQL Server 上编译成 `IS 1` → 500。
+    两个发起人各验一半：
+    - 周敏在总部（没配负责人）→ 转给管理员 admin
+    - admin 自己也在总部 → 找不到主管，也**不能**转回给他自己 → 没人可办，自动驳回
+    """
+    pk = start(client, login('zhoumin'), leave_form(uid))
+    d = detail(client, token_headers, pk)
+    assert [t['assignee_name'] for t in d['tasks'] if t['status'] == 'pending'] == ['系统管理员']
+
+    pk = start(client, token_headers, leave_form(uid))
+    d = detail(client, token_headers, pk)
+    assert d['instance']['status'] == 'rejected'
+    assert not [t for t in d['tasks'] if t['assignee_id'] == d['instance']['initiator_id']]
+    assert any(r['action'] == 'auto_reject' for r in d['records'])
+
+
+def test_preview_matches_what_actually_happens(client: TestClient, login: Login, uid: Uid) -> None:
+    """发起页的流程预告和真实推进必须一致（同一套规则，见 engine/simulate.py）。
+
+    刘洋请 5 天：直属主管 = 张伟（刘洋自己是后端组负责人，往上找）→ 超过 3 天走上级主管 →
+    第 2 级到总部、没负责人 → 跳过 → 人事备案（王芳）→ 抄送交接人（陈静）
+    """
+    form = leave_form(uid, days=5)
+    prev = ok(client.post('/sys/workflow/startable/LEAVE/preview', headers=login('liuyang'), json={'form': form}))
+    got = [(s['node_id'], s['outcome'], [u['name'] for u in s['users']]) for s in prev['steps']]
+    assert got == [
+        ('n_leader', 'ok', ['张伟']),
+        ('n_upper', 'skip', []),
+        ('n_hr', 'ok', ['王芳']),
+        ('cc_handover', 'ok', ['陈静']),
+    ]
+    # 改成 2 天：条件分支跟着变，不再有「上级主管」
+    form2 = leave_form(uid, days=2)
+    prev2 = ok(client.post('/sys/workflow/startable/LEAVE/preview', headers=login('liuyang'), json={'form': form2}))
+    assert [s['node_id'] for s in prev2['steps']] == ['n_leader', 'n_hr', 'cc_handover']
+
+    # 真走一遍：每一步的办理人和预告一致
+    pk = start(client, login('liuyang'), form)
+    d = detail(client, login('liuyang'), pk)
+    assert [(s['node_id'], [u['name'] for u in s['users']]) for s in d['forecast']] == [
+        ('n_upper', []),
+        ('n_hr', ['王芳']),
+        ('cc_handover', ['陈静']),
+    ]
+    ok(act(client, login('zhangwei'), pk, 'approve'))
+    d = detail(client, login('liuyang'), pk)
+    assert [t['assignee_name'] for t in d['tasks'] if t['status'] == 'pending'] == ['王芳']
+    assert [s['node_id'] for s in d['forecast']] == ['cc_handover']

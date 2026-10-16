@@ -164,8 +164,8 @@ function Card({ node }: { node: Exclude<FlowNode, { type: 'condition' }> }) {
       onClick={() => ctx.onSelect?.(node.id)}
       onKeyDown={(e) => e.key === 'Enter' && ctx.onSelect?.(node.id)}
       className={cn(
-        'group relative w-60 overflow-hidden rounded-lg border bg-card text-start shadow-xs',
-        ctx.editable && 'cursor-pointer hover:border-primary/60',
+        'group relative w-64 overflow-hidden rounded-xl border bg-card text-start shadow-sm transition-shadow',
+        ctx.editable && 'cursor-pointer hover:shadow-md',
         ctx.selected === node.id && 'border-primary ring-3 ring-primary/20',
         ctx.issues?.has(node.id) && 'border-destructive ring-3 ring-destructive/20',
         !ctx.editable && ctx.state && !state && 'opacity-50',
@@ -176,8 +176,8 @@ function Card({ node }: { node: Exclude<FlowNode, { type: 'condition' }> }) {
     >
       <div
         className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white',
-          isApproval ? 'bg-amber-500' : 'bg-sky-500'
+          'flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-white',
+          isApproval ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 'bg-gradient-to-r from-sky-500 to-blue-500'
         )}
       >
         {isApproval ? <IconUserCheck className="size-3.5" /> : <IconCopy className="size-3.5" />}
@@ -197,7 +197,7 @@ function Card({ node }: { node: Exclude<FlowNode, { type: 'condition' }> }) {
           </button>
         )}
       </div>
-      <p className={cn('px-3 py-2 text-sm', !isApproval || node.assignee ? '' : 'text-destructive')}>{summary}</p>
+      <p className={cn('flex min-h-11 items-center px-3.5 py-2.5 text-sm', !isApproval || node.assignee ? '' : 'text-destructive')}>{summary}</p>
     </div>
   )
 }
@@ -234,7 +234,7 @@ function ConditionBlock({ node }: { node: Extract<FlowNode, { type: 'condition' 
             </Button>
           </div>
         )}
-        <div className="flex items-stretch border-y border-border">
+        <div className="flex items-stretch">
           {node.branches.map((br, i) => (
             <BranchColumn
               key={br.id}
@@ -267,11 +267,10 @@ function BranchColumn({
   const selectKey = `${cond.id}:${branch.id}`
   return (
     <div className="relative flex flex-col items-center px-6">
-      {/* 顶部 / 底部横线在首尾列只画一半，拼出「凹」形的分叉 */}
-      {first && <div className="absolute -top-px left-0 h-px w-1/2 bg-background" />}
-      {last && <div className="absolute -top-px right-0 h-px w-1/2 bg-background" />}
-      {first && <div className="absolute -bottom-px left-0 h-px w-1/2 bg-background" />}
-      {last && <div className="absolute -bottom-px right-0 h-px w-1/2 bg-background" />}
+      {/* 分叉和汇合的横线：首列只画右半、末列只画左半，拼出「凹」形。
+          画真的线而不是用背景色盖掉一半 —— 画布是点阵底，盖上去会留一道白条 */}
+      <div aria-hidden className="absolute top-0 h-px bg-border" style={{ left: first ? '50%' : 0, right: last ? '50%' : 0 }} />
+      <div aria-hidden className="absolute bottom-0 h-px bg-border" style={{ left: first ? '50%' : 0, right: last ? '50%' : 0 }} />
       <div className="h-6 w-px bg-border" />
       <div
         role={ctx.editable ? 'button' : undefined}
@@ -279,7 +278,7 @@ function BranchColumn({
         onClick={() => ctx.onSelect?.(selectKey)}
         onKeyDown={(e) => e.key === 'Enter' && ctx.onSelect?.(selectKey)}
         className={cn(
-          'group w-56 rounded-lg border bg-card px-3 py-2 text-start shadow-xs',
+          'group w-60 rounded-xl border bg-card px-3.5 py-2.5 text-start shadow-sm',
           ctx.editable && 'cursor-pointer hover:border-emerald-500/60',
           ctx.selected === selectKey && 'border-emerald-500 ring-3 ring-emerald-500/20',
           ctx.issues?.has(cond.id) && 'border-destructive',

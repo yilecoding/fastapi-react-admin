@@ -52,6 +52,16 @@ async def list_all(db: AsyncSession, *, name: str | None, status: str | None) ->
     return list((await db.scalars(stmt.order_by(WfDefinition.sort, WfDefinition.id))).all())
 
 
+async def version_numbers(db: AsyncSession, version_ids: list[int]) -> dict[int, int]:
+    """当前发布版本的版本号（列表上显示 v3）"""
+    if not version_ids:
+        return {}
+    rows = await db.execute(
+        select(WfDefinitionVersion.id, WfDefinitionVersion.version_no).where(WfDefinitionVersion.id.in_(version_ids))
+    )
+    return dict(rows.all())
+
+
 async def create(db: AsyncSession, obj: CreateDefinitionParam) -> WfDefinition:
     if await db.scalar(select(WfDefinition.id).where(WfDefinition.code == obj.code, WfDefinition.deleted == 0)):
         raise errors.ConflictError(msg=t('error.workflow.definition_code_exists'))

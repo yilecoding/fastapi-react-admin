@@ -15,6 +15,7 @@ import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { monitorQuery, type InstanceStatus } from '../workflow/api'
 import { InstanceSheet } from '../workflow/instance-sheet'
 import { INSTANCE_STATUS, InstanceStatusPill } from '../workflow/status'
+import { PersonAvatar } from '../workflow/track'
 
 export type WorkflowMonitorSearch = {
   page?: number
@@ -68,7 +69,7 @@ export function WorkflowMonitorPage({
           <RefreshButton onClick={list.onRetry} busy={list.busy} />
         </span>
       </div>
-      <div className={cn('overflow-hidden rounded-lg border', list.busy && 'opacity-60')}>
+      <div className={cn('overflow-hidden rounded-xl border bg-card', list.busy && 'opacity-60')}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -99,7 +100,12 @@ export function WorkflowMonitorPage({
                 >
                   <TableCell className="max-w-72 truncate font-medium">{r.title}</TableCell>
                   <TableCell>{r.definition_name}</TableCell>
-                  <TableCell>{r.initiator_name ?? '—'}</TableCell>
+                  <TableCell>
+                    <span className="flex items-center gap-2">
+                      <PersonAvatar name={r.initiator_name ?? ''} />
+                      {r.initiator_name ?? '—'}
+                    </span>
+                  </TableCell>
                   <TableCell><InstanceStatusPill status={r.status} /></TableCell>
                   <TableCell className="tabular-nums">{formatDateTime(r.created_time)}</TableCell>
                   <TableCell className="tabular-nums">{formatDateTime(r.finished_time)}</TableCell>

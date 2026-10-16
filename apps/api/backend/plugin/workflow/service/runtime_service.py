@@ -351,7 +351,7 @@ async def _advance(ctx: _Ctx, inst: WfInstance, start_from: dict[str, Any] | Non
                 node = nodes[node['id']].after
                 continue
             if on_empty == OnEmpty.admin:
-                users = await assignee_rules.superusers(ctx.db)
+                users = await assignee_rules.superusers(ctx.db, initiator_id=inst.initiator_id)
             if not users:
                 reason = t('workflow.no_assignee_reject', node=node['name'])
                 _record(ctx, inst, 'auto_reject', actor_type=ActorType.system, node=node, opinion=reason)

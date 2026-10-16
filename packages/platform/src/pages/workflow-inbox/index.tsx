@@ -1,20 +1,18 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { IconChevronDown, IconPlus } from '@tabler/icons-react'
-
-import { Badge } from '@admin/ui/components/badge'
-import { Button } from '@admin/ui/components/button'
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@admin/ui/components/dropdown-menu'
+  IconChecklist, IconCircleCheck, IconCopy, IconInbox, IconPlus, IconSearch, IconSend,
+} from '@tabler/icons-react'
+
+import { Button } from '@admin/ui/components/button'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@admin/ui/components/dialog'
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@admin/ui/components/input-group'
 import { Pagination } from '@admin/ui/components/pagination'
 import { QueryError } from '@admin/ui/components/query-error'
 import { Skeleton } from '@admin/ui/components/skeleton'
-import { Tabs, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
 import { cn } from '@admin/ui/lib/utils'
-import { formatDateTime } from '@admin/i18n'
+import { formatDateTimeShort } from '@admin/i18n'
 
 import { PageHeader } from '../../shell/page-header'
 import { useSocketEvent } from '../../shell/socket-events'
@@ -28,6 +26,7 @@ import {
 import { InstanceSheet } from '../workflow/instance-sheet'
 import { StartSheet } from '../workflow/start-sheet'
 import { InstanceStatusPill } from '../workflow/status'
+import { PersonAvatar, TemplateTile } from '../workflow/track'
 
 export type WorkflowInboxSearch = {
   tab?: InboxTab
@@ -40,15 +39,15 @@ export type WorkflowInboxSearch = {
   start?: string
 }
 
-const TABS: { value: InboxTab; label: string }[] = [
-  { value: 'todo', label: '待我审批' },
-  { value: 'done', label: '我已审批' },
-  { value: 'initiated', label: '我发起的' },
-  { value: 'cc', label: '抄送我的' },
+const TABS: { value: InboxTab; label: string; icon: React.ComponentType<{ className?: string }>; empty: string }[] = [
+  { value: 'todo', label: '待我审批', icon: IconInbox, empty: '没有等你处理的审批' },
+  { value: 'done', label: '我已审批', icon: IconCircleCheck, empty: '你还没有处理过审批' },
+  { value: 'initiated', label: '我发起的', icon: IconSend, empty: '你还没有发起过审批' },
+  { value: 'cc', label: '抄送我的', icon: IconCopy, empty: '还没有抄送给你的审批' },
 ]
 
 /**
- * 审批中心（#107 阶段 2）：待我审批 / 我已审批 / 我发起的 / 抄送我的 + 发起入口。
+ * 审批中心（#107 阶段 2）。
  *
  * 🔴 只要登录就能进（路由守卫 `requireAuth`），不挂权限码 —— avc-bp 踩过：审批中心
  * 挂了权限码，普通员工进不去。
@@ -69,6 +68,7 @@ export function WorkflowInboxPage({
   const page = search.page ?? 1
   const size = search.size ?? DEFAULT_PAGE_SIZE
   const patch = (p: Partial<WorkflowInboxSearch>) => onSearchChange?.({ ...search, ...p })
+  const [picking, setPicking] = React.useState(false)
 
   const listQuery = useQuery(inboxQuery({ tab, page, size, keyword: search.keyword }))
   const list = listState(listQuery)
@@ -81,65 +81,126 @@ export function WorkflowInboxPage({
   })
 
   const rows = listQuery.data?.items ?? []
+  const current = TABS.find((x) => x.value === tab) ?? TABS[0]
   const badge = (v: InboxTab) => (v === 'todo' ? counts?.todo : v === 'cc' ? counts?.cc_unread : undefined)
 
   return (
-    <div className="flex flex-col gap-4">
-      <PageHeader title={t('审批中心')}>
-        <StartMenu onPick={(code) => patch({ start: code })} />
-      </PageHeader>
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+      <PageHeader title={t('审批中心')} />
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Tabs value={tab} onValueChange={(v) => patch({ tab: v as InboxTab, page: 1, keyword: undefined })}>
-          <TabsList>
-            {TABS.map((x) => (
-              <TabsTrigger key={x.value} value={x.value} data-testid={`wf-inbox-tab-${x.value}`}>
-                {t(x.label)}
-                {!!badge(x.value) && (
-                  <Badge variant="secondary" className="ms-1 h-4 min-w-4 px-1 text-[10px]" data-testid={`wf-badge-${x.value}`}>
-                    {badge(x.value)}
-                  </Badge>
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+      <nav className="flex shrink-0 flex-col gap-3 lg:sticky lg:top-4 lg:w-52" aria-label={t('审批中心')}>
+        <Button size="lg" className="justify-start gap-2" onClick={() => setPicking(true)} data-testid="wf-start-menu">
+          <IconPlus className="size-4" />
+          {t('发起申请')}
+        </Button>
+        <ul className="flex gap-1 overflow-x-auto lg:flex-col">
+          {TABS.map((x) => {
+            const n = badge(x.value)
+            const on = x.value === tab
+            return (
+              <li key={x.value}>
+                <button
+                  type="button"
+                  onClick={() => patch({ tab: x.value, page: 1, keyword: undefined })}
+                  className={cn(
+                    'flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm whitespace-nowrap transition-colors',
+                    on ? 'bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                  aria-current={on ? 'page' : undefined}
+                  data-testid={`wf-inbox-tab-${x.value}`}
+                >
+                  <x.icon className="size-4 shrink-0" />
+                  <span className="flex-1 text-start">{t(x.label)}</span>
+                  {!!n && (
+                    <span
+                      className={cn(
+                        'min-w-5 rounded-full px-1.5 text-center text-xs leading-5 tabular-nums',
+                        x.value === 'todo' ? 'bg-destructive text-white' : 'bg-primary/15 text-primary'
+                      )}
+                      data-testid={`wf-badge-${x.value}`}
+                    >
+                      {n > 99 ? '99+' : n}
+                    </span>
+                  )}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+
+      <section className="flex min-w-0 flex-1 flex-col gap-3">
         <div className="flex items-center gap-2">
-          <TextFilter
-            value={search.keyword ?? ''}
-            placeholder="搜索标题或摘要"
-            onCommit={(v) => patch({ keyword: v.trim() || undefined, page: 1 })}
-            testId="wf-inbox-search"
-          />
-          <RefreshButton onClick={list.onRetry} busy={list.busy} />
+          <h2 className="text-base font-semibold">{t(current.label)}</h2>
+          {listQuery.data && <span className="text-sm text-muted-foreground tabular-nums">{listQuery.data.total}</span>}
+          <span className="ms-auto flex items-center gap-2">
+            <TextFilter
+              value={search.keyword ?? ''}
+              placeholder="搜索标题或摘要"
+              onCommit={(v) => patch({ keyword: v.trim() || undefined, page: 1 })}
+              testId="wf-inbox-search"
+            />
+            <RefreshButton onClick={list.onRetry} busy={list.busy} />
+          </span>
         </div>
-      </div>
 
-      <div className={cn('flex flex-col overflow-hidden rounded-lg border', list.busy && 'opacity-60')} data-testid="wf-inbox-list">
-        {list.loading ? (
-          Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="m-3 h-12" />)
-        ) : list.error ? (
-          <QueryError error={list.error} onRetry={list.onRetry} className="m-4" />
-        ) : rows.length === 0 ? (
-          <p className="py-16 text-center text-sm text-muted-foreground" data-testid="wf-inbox-empty">
-            {tab === 'todo' ? t('没有待你审批的单据') : t('暂无数据')}
-          </p>
-        ) : (
-          rows.map((r) => <InboxRow key={`${r.id}:${r.task_id ?? r.cc_id ?? ''}`} row={r} tab={tab} onOpen={() => patch({ id: r.id })} />)
+        <div
+          className={cn('overflow-hidden rounded-xl border bg-card', list.busy && 'opacity-60')}
+          data-testid="wf-inbox-list"
+        >
+          {list.loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 border-b px-4 py-3.5 last:border-b-0">
+                <Skeleton className="size-9 rounded-full" />
+                <div className="flex flex-1 flex-col gap-2">
+                  <Skeleton className="h-4 w-1/3" />
+                  <Skeleton className="h-3 w-2/3" />
+                </div>
+              </div>
+            ))
+          ) : list.error ? (
+            <QueryError error={list.error} onRetry={list.onRetry} className="m-4" />
+          ) : rows.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-20 text-center" data-testid="wf-inbox-empty">
+              <span className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground">
+                <IconChecklist className="size-6" />
+              </span>
+              <p className="text-sm text-muted-foreground">
+                {search.keyword ? t('没有匹配「{{k}}」的审批', { k: search.keyword }) : t(current.empty)}
+              </p>
+              {tab === 'initiated' && !search.keyword && (
+                <Button variant="outline" size="sm" onClick={() => setPicking(true)}>
+                  {t('发起申请')}
+                </Button>
+              )}
+            </div>
+          ) : (
+            rows.map((r) => (
+              <InboxRow key={`${r.id}:${r.task_id ?? r.cc_id ?? ''}`} row={r} tab={tab} onOpen={() => patch({ id: r.id })} />
+            ))
+          )}
+        </div>
+
+        {(listQuery.data?.total ?? 0) > size && (
+          <Pagination
+            pageIndex={page - 1}
+            pageCount={Math.max(1, listQuery.data?.total_pages ?? 1)}
+            pageSize={size}
+            totalCount={listQuery.data?.total ?? 0}
+            onPageChange={(i) => patch({ page: i + 1 })}
+            onPageSizeChange={(s) => patch({ size: s, page: 1 })}
+          />
         )}
-      </div>
+      </section>
 
-      {(listQuery.data?.total ?? 0) > 0 && (
-        <Pagination
-          pageIndex={page - 1}
-          pageCount={Math.max(1, listQuery.data?.total_pages ?? 1)}
-          pageSize={size}
-          totalCount={listQuery.data?.total ?? 0}
-          onPageChange={(i) => patch({ page: i + 1 })}
-          onPageSizeChange={(s) => patch({ size: s, page: 1 })}
-        />
-      )}
-
+      <TemplatePicker
+        open={picking}
+        onOpenChange={setPicking}
+        onPick={(code) => {
+          setPicking(false)
+          patch({ start: code })
+        }}
+      />
       <InstanceSheet id={search.id ?? null} onClose={() => patch({ id: undefined })} />
       <StartSheet
         code={search.start ?? null}
@@ -158,75 +219,125 @@ function InboxRow({ row: r, tab, onOpen }: { row: InstanceRow; tab: InboxTab; on
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-start gap-3 border-b px-4 py-3 text-start last:border-b-0 hover:bg-muted/50"
+      className="group flex w-full items-start gap-3 border-b px-4 py-3.5 text-start transition-colors last:border-b-0 hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
       data-testid={`wf-row-${r.id}`}
     >
-      <span className={cn('mt-2 size-2 shrink-0 rounded-full', unread ? 'bg-primary' : 'bg-transparent')} />
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="relative">
+        <PersonAvatar name={r.initiator_name ?? ''} size="md" />
+        {unread && <span className="absolute -end-0.5 -top-0.5 size-2.5 rounded-full bg-primary ring-2 ring-card" />}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-2">
-          <span className="truncate font-medium">{r.title}</span>
+          <span className={cn('truncate', unread ? 'font-semibold' : 'font-medium')}>{r.title}</span>
           {tab === 'todo' ? (
-            <span className="shrink-0 text-xs text-amber-700 dark:text-amber-400">{r.node_name}</span>
+            <span className="shrink-0 rounded bg-amber-500/10 px-1.5 text-xs leading-5 text-amber-700 dark:text-amber-400">
+              {t('待 {{node}}', { node: r.node_name })}
+            </span>
           ) : (
             <InstanceStatusPill status={r.status} />
           )}
         </span>
-        {r.summary && <span className="truncate text-sm text-muted-foreground">{r.summary}</span>}
+        {r.summary && <span className="line-clamp-1 text-sm text-muted-foreground">{r.summary}</span>}
         <span className="text-xs text-muted-foreground">
-          {r.definition_name} · {t('发起人')} {r.initiator_name ?? '—'}
+          {r.definition_name}
+          {tab === 'done' && r.node_name ? ` · ${r.node_name}` : ''}
         </span>
       </span>
-      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{formatDateTime(time ?? null)}</span>
+      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{formatDateTimeShort(time ?? null)}</span>
     </button>
   )
 }
 
-/** 「发起审批」：已发布的表单审批，按分组列出 */
-function StartMenu({ onPick }: { onPick: (code: string) => void }) {
+/** 「发起申请」：已发布的表单审批，按分组排成磁贴，可搜 */
+function TemplatePicker({
+  open, onOpenChange, onPick,
+}: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  onPick: (code: string) => void
+}) {
   const { t } = useTranslation()
-  const { data, error, isPending } = useQuery(startableQuery())
+  const query = useQuery({ ...startableQuery(), enabled: open })
+  const [keyword, setKeyword] = React.useState('')
+  React.useEffect(() => {
+    if (open) setKeyword('')
+  }, [open])
   const groups = React.useMemo(() => {
+    const kw = keyword.trim().toLowerCase()
     const m = new Map<string, Definition[]>()
-    for (const d of data ?? []) {
+    for (const d of query.data ?? []) {
+      if (kw && !`${d.name} ${d.description ?? ''} ${d.category ?? ''}`.toLowerCase().includes(kw)) continue
       const k = d.category || t('其他')
       m.set(k, [...(m.get(k) ?? []), d])
     }
     return [...m.entries()]
-  }, [data, t])
+  }, [query.data, keyword, t])
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button size="sm" data-testid="wf-start-menu" />}>
-        <IconPlus className="size-4" />
-        {t('发起审批')}
-        <IconChevronDown className="size-3.5 opacity-70" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
-        {isPending ? (
-          <DropdownMenuLabel>{t('加载中…')}</DropdownMenuLabel>
-        ) : error ? (
-          <DropdownMenuLabel className="text-destructive">{t('加载失败，请重试')}</DropdownMenuLabel>
-        ) : groups.length === 0 ? (
-          <DropdownMenuLabel className="text-muted-foreground">{t('还没有可发起的审批')}</DropdownMenuLabel>
-        ) : (
-          groups.map(([g, defs], i) => (
-            <React.Fragment key={g}>
-              {i > 0 && <DropdownMenuSeparator />}
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>{g}</DropdownMenuLabel>
-                {defs.map((d) => (
-                  <DropdownMenuItem key={d.id} onClick={() => onPick(d.code)} data-testid={`wf-start-${d.code}`}>
-                    {d.name}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuGroup>
-            </React.Fragment>
-          ))
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl" data-testid="wf-template-picker">
+        <DialogHeader>
+          <DialogTitle>{t('发起申请')}</DialogTitle>
+          <DialogDescription>{t('选一个审批类型，填写后提交')}</DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4 px-4 pb-4">
+          <InputGroup className="h-9">
+            <InputGroupAddon align="inline-start">
+              <IconSearch className="size-4 text-muted-foreground" />
+            </InputGroupAddon>
+            <InputGroupInput
+              autoFocus
+              value={keyword}
+              placeholder={t('搜索审批类型')}
+              onChange={(e) => setKeyword(e.target.value)}
+              data-testid="wf-template-search"
+            />
+          </InputGroup>
+          <div className="flex max-h-[60svh] flex-col gap-5 overflow-y-auto">
+            {query.isPending ? (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16" />)}
+              </div>
+            ) : query.error ? (
+              <QueryError error={query.error} onRetry={() => query.refetch()} />
+            ) : groups.length === 0 ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                {keyword ? t('没有匹配的审批类型') : t('还没有可发起的审批，请联系管理员在「流程定义」里发布')}
+              </p>
+            ) : (
+              groups.map(([g, defs]) => (
+                <section key={g} className="flex flex-col gap-2">
+                  <h3 className="text-xs font-medium text-muted-foreground">{g}</h3>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3">
+                    {defs.map((d) => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => onPick(d.code)}
+                        className="flex items-center gap-3 rounded-lg border bg-card p-3 text-start transition-colors hover:border-primary/50 hover:bg-primary/5 focus-visible:border-primary focus-visible:outline-none"
+                        data-testid={`wf-start-${d.code}`}
+                      >
+                        <TemplateTile name={d.name} group={d.category} />
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate text-sm font-medium">{d.name}</span>
+                          {d.description && <span className="truncate text-xs text-muted-foreground">{d.description}</span>}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
 export function _i18nExtractionAnchors(t: (k: string) => string) {
-  return [t('待我审批'), t('我已审批'), t('我发起的'), t('抄送我的')]
+  return [
+    t('待我审批'), t('我已审批'), t('我发起的'), t('抄送我的'),
+    t('没有等你处理的审批'), t('你还没有处理过审批'), t('你还没有发起过审批'), t('还没有抄送给你的审批'),
+  ]
 }

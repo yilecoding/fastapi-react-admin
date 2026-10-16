@@ -53,14 +53,24 @@ export function FormRenderer({
           )
         }
         const editable = mode === 'edit' || perms?.[f.id] === 'editable'
+        if (!editable) {
+          // 只读：标签在左、值在右的紧凑行 —— 审批人主要是在「看」，竖排会把一屏只摆三四个字段
+          return (
+            <div
+              key={f.id}
+              className="grid grid-cols-[minmax(5rem,8rem)_minmax(0,1fr)] items-baseline gap-3 border-b border-dashed pb-2 last:border-b-0"
+              data-testid={`wf-field-${f.id}`}
+              data-editable={false}
+            >
+              <span className="text-sm text-muted-foreground">{f.label}</span>
+              <FieldDisplay field={f} value={value[f.id]} />
+            </div>
+          )
+        }
         return (
           <Row key={f.id} label={f.label} required={editable && f.required} error={errors?.[f.id]}>
             <div data-testid={`wf-field-${f.id}`} data-editable={editable}>
-              {editable ? (
-                <FieldInput field={f} value={value[f.id]} onChange={(v) => set(f.id, v)} />
-              ) : (
-                <FieldDisplay field={f} value={value[f.id]} />
-              )}
+              <FieldInput field={f} value={value[f.id]} onChange={(v) => set(f.id, v)} />
             </div>
           </Row>
         )
@@ -210,7 +220,7 @@ function TableInput({
 
 function FieldDisplay({ field: f, value }: { field: FormField; value: unknown }) {
   const { t } = useTranslation()
-  const text = 'min-h-9 py-2 text-sm whitespace-pre-wrap break-words'
+  const text = 'text-sm whitespace-pre-wrap break-words'
   if (empty(value)) return <p className={cn(text, 'text-muted-foreground')}>—</p>
   switch (f.type) {
     case 'select':

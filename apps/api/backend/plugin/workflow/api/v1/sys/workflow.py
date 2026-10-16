@@ -21,10 +21,12 @@ from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
 from backend.plugin.workflow.engine.flow import index_nodes
+from backend.plugin.workflow.engine.simulate import simulate
 from backend.plugin.workflow.model import WfDefinition, WfDefinitionVersion
 from backend.plugin.workflow.schema.workflow import (
     ActionParam,
     CreateDefinitionParam,
+    PreviewParam,
     SetDefinitionStatusParam,
     StartParam,
     UpdateDefinitionParam,
@@ -106,6 +108,25 @@ async def get_start_form(db: CurrentSession, code: Annotated[str, Path(max_lengt
             'names': await query_service.model_names(db, model),
         }
     )
+
+
+@router.post('/startable/{code}/preview', summary='发起页：按当前表单试算审批流程', dependencies=[DependsJwtAuth])
+async def preview_start(
+    request: Request, db: CurrentSession, code: Annotated[str, Path(max_length=64)], obj: PreviewParam
+) -> ResponseModel:
+    _, v = await runtime_service.published_definition(db, code)
+    model = json.loads(v.model_json)
+    actor = _actor(request)
+    steps = await simulate(
+        db,
+        model,
+        form_data=obj.form,
+        initiator_id=actor.id,
+        initiator_dept_id=actor.dept_id,
+        selected=obj.selected,
+        start_from=index_nodes(model)[model['root']['id']].after,
+    )
+    return response_base.success(data={'steps': steps})
 
 
 @router.post('/instances', summary='发起审批', dependencies=[DependsJwtAuth])
@@ -251,7 +272,10 @@ async def get_definitions(
     status: Annotated[str | None, Query(max_length=16)] = None,
 ) -> ResponseModel:
     rows = await definition_service.list_all(db, name=name, status=status)
-    return response_base.success(data=[_definition_row(d) for d in rows])
+    nos = await definition_service.version_numbers(db, [d.current_version_id for d in rows if d.current_version_id])
+    return response_base.success(
+        data=[{**_definition_row(d), 'version_no': nos.get(d.current_version_id)} for d in rows]
+    )
 
 
 @router.get(

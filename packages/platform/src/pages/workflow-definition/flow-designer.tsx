@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { IconPlus, IconTrash } from '@tabler/icons-react'
+import { IconMinus, IconPlus, IconTrash } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import { Input } from '@admin/ui/components/input'
@@ -49,6 +49,9 @@ export function FlowDesigner({
   const userName = React.useCallback((id: string) => users?.find((u) => u.id === id)?.nickname ?? '…', [users])
   const roleName = React.useCallback((id: string) => roles?.find((r) => r.id === id)?.name ?? id, [roles])
 
+  // 缩放用 CSS `zoom` 而不是 transform：transform 不改占位尺寸，缩小后滚动区还是原来那么大
+  const [zoom, setZoom] = React.useState(1)
+
   const onInsert = (at: InsertAt, type: 'approval' | 'cc' | 'condition') => {
     const node = blankNode(type)
     onChange('after' in at ? insertAfter(model, at.after, node) : insertBranchHead(model, at.cond, at.branch, node))
@@ -62,8 +65,14 @@ export function FlowDesigner({
   const branch = cond?.type === 'condition' ? cond.branches.find((b) => b.id === branchId) : undefined
 
   return (
-    <div className="grid min-h-[32rem] gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <div className="overflow-auto rounded-lg border bg-muted/30" data-testid="flow-canvas">
+    <div className="grid min-h-[36rem] gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="relative overflow-hidden rounded-xl border bg-muted/40">
+        <ZoomBar zoom={zoom} onZoom={setZoom} />
+        <div
+          className="h-full max-h-[calc(100svh-15rem)] min-h-[36rem] overflow-auto bg-[radial-gradient(var(--color-border)_1px,transparent_1px)] [background-size:18px_18px]"
+          data-testid="flow-canvas"
+        >
+          <div style={{ zoom }} className="flex justify-center">
         <FlowView
           model={model}
           form={form}
@@ -84,8 +93,13 @@ export function FlowDesigner({
           userName={userName}
           roleName={roleName}
         />
+          </div>
+        </div>
       </div>
-      <aside className="flex flex-col gap-4 rounded-lg border p-3" data-testid="flow-props">
+      <aside
+        className="flex max-h-[calc(100svh-15rem)] flex-col gap-4 overflow-y-auto rounded-xl border bg-card p-4 lg:sticky lg:top-4"
+        data-testid="flow-props"
+      >
         {isStart ? (
           <StartProps
             perms={model.root.fieldPerms ?? {}}
@@ -106,6 +120,29 @@ export function FlowDesigner({
           <p className="py-10 text-center text-sm text-muted-foreground">{t('点画布上的节点编辑它；点连线上的「+」添加节点；点「发起人」配发起人能填哪些字段')}</p>
         )}
       </aside>
+    </div>
+  )
+}
+
+function ZoomBar({ zoom, onZoom }: { zoom: number; onZoom: (z: number) => void }) {
+  const { t } = useTranslation()
+  const step = (d: number) => onZoom(Math.min(1.5, Math.max(0.5, Math.round((zoom + d) * 10) / 10)))
+  return (
+    <div className="absolute end-3 top-3 z-20 flex items-center rounded-lg border bg-background/90 shadow-xs backdrop-blur">
+      <Button type="button" variant="ghost" size="icon" className="size-7" aria-label={t('缩小')} onClick={() => step(-0.1)}>
+        <IconMinus className="size-3.5" />
+      </Button>
+      <button
+        type="button"
+        className="w-12 text-center text-xs tabular-nums text-muted-foreground hover:text-foreground"
+        onClick={() => onZoom(1)}
+        title={t('恢复 100%')}
+      >
+        {Math.round(zoom * 100)}%
+      </button>
+      <Button type="button" variant="ghost" size="icon" className="size-7" aria-label={t('放大')} onClick={() => step(0.1)}>
+        <IconPlus className="size-3.5" />
+      </Button>
     </div>
   )
 }

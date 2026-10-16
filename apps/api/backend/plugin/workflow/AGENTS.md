@@ -57,6 +57,22 @@
 反方向也有一个：接口层 `SchemaBase` 会把入参里的枚举还原成 `str`，
 `act()` 进来第一件事是 `Action(action)` 统一回枚举，否则 `.value` 直接 AttributeError。
 
+## 🔴 布尔列别写 `.is_(True)` —— SQL Server 上是语法错误
+
+`User.is_superuser.is_(True)` 在 SQL Server 上编译成 `is_superuser IS 1`（`IS` 后面只能跟 `NULL`），
+直接 500；PG / MySQL 认这个写法，所以本地跑 PG 的人永远看不到。实测踩到：发起人所在部门没配负责人、
+节点配了「转给管理员」时，用户在发起页拿到一整段裸 SQL 报错。写 `== true()`。
+`test_on_empty_admin_goes_to_superuser_but_never_back_to_the_initiator` 守着
+（把修复打回去，它报的正是那句 `Incorrect syntax near '1'`）。
+
+## 预告和真实推进必须是同一套规则
+
+发起页的「审批流程」和详情页「还没到的步骤」是 `engine/simulate.py` 试算出来的，不写库。
+它和 `runtime_service._advance` 用同一个 `pick_branch` / `assignee.resolve` / `onEmpty` ——
+**改推进逻辑时两边一起改**，否则用户看到「说好给张三审，结果到了李四那里」。
+`test_preview_matches_what_actually_happens` 先试算、再真走一遍，逐步比对办理人。
+试算吃的是**没校验过**的表单（填到一半），所以 ID 转换一律过 `_ids()`，非数字丢掉而不是 500。
+
 ## 字段权限只在服务端算数
 
 - 详情接口按查看人**裁掉** hidden 字段：schema 里删字段、数据里删值、**轨迹里的改动前后值也删**

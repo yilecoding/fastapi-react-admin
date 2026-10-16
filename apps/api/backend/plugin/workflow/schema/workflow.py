@@ -55,6 +55,13 @@ class StartParam(SchemaBase):
     key: str = IdempotencyKey
 
 
+class PreviewParam(SchemaBase):
+    """发起页的流程预告：按当前填的表单试算"""
+
+    form: dict[str, Any] = Field(default_factory=dict, description='表单数据（可以没填完）')
+    selected: dict[str, list[str]] = Field(default_factory=dict, description='已自选的审批人')
+
+
 class ActionParam(SchemaBase):
     """对实例执行一个动作"""
 

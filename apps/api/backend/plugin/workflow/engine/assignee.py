@@ -10,13 +10,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import select, true
 
 from backend.app.admin.model import Dept, User
 from backend.app.admin.model.m2m import user_role
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def _ids(values: Any) -> list[int]:
+    """把一串 ID 转成 int，不是纯数字的丢掉。
+
+    发起页的流程预告拿的是**还没校验**的表单（填到一半的人员字段可能是空串），
+    这里 `int()` 一个非数字就是 500 —— 预告是给人看的，宁可少算一个人也不能整个挂掉。
+    """
+    return [int(x) for x in values or [] if str(x).isdigit()]
 
 
 async def users_by_ids(db: AsyncSession, ids: list[int]) -> list[tuple[int, str]]:
@@ -80,12 +89,12 @@ async def resolve(  # ruff:ignore[complex-structure]
     ids: list[int] = []
     match kind:
         case 'user':
-            ids = [int(x) for x in rule.get('user_ids') or []]
+            ids = _ids(rule.get('user_ids'))
         case 'initiator':
             # 「确认」类节点：发起人自己办。这是唯一不去掉发起人的规则 —— 规则本身就是选他
             return await users_by_ids(db, [initiator_id])
         case 'role':
-            role_ids = [int(x) for x in rule.get('role_ids') or []]
+            role_ids = _ids(rule.get('role_ids'))
             if role_ids:
                 rows = await db.execute(
                     select(user_role.c.user_id).where(user_role.c.role_id.in_(role_ids)).order_by(user_role.c.user_id)
@@ -107,9 +116,9 @@ async def resolve(  # ruff:ignore[complex-structure]
                     break
         case 'var_user':
             v = form_data.get(rule.get('field') or '')
-            ids = [int(x) for x in (v if isinstance(v, list) else [v]) if x]
+            ids = _ids(v if isinstance(v, list) else [v])
         case 'select_on_start':
-            ids = [int(x) for x in selected.get(node_id) or []]
+            ids = _ids(selected.get(node_id))
 
     users = await users_by_ids(db, ids)
 
@@ -127,11 +136,19 @@ async def resolve(  # ruff:ignore[complex-structure]
     return [(u, n) for u, n in users if u != initiator_id]
 
 
-async def superusers(db: AsyncSession) -> list[tuple[int, str]]:
-    """onEmpty=admin 的去处"""
+async def superusers(db: AsyncSession, *, initiator_id: int) -> list[tuple[int, str]]:
+    """onEmpty=admin 的去处。
+
+    🔴 布尔列要写 `== true()`，**不能写 `.is_(True)`**：后者在 SQL Server 上编译成
+    `is_superuser IS 1`，那不是合法 T-SQL（`IS` 后面只能跟 `NULL`），直接 500。
+    PG / MySQL 认这个写法，所以只在 SQL Server 上炸 —— 实测踩过，发起人所在部门没配负责人、
+    节点配了「转给管理员」时触发。
+
+    同样去掉发起人：管理员自己发起的单子不能转回给他自己审批。
+    """
     rows = await db.execute(
         select(User.id, User.nickname)
-        .where(User.is_superuser.is_(True), User.deleted == 0, User.status == 1)
+        .where(User.is_superuser == true(), User.deleted == 0, User.status == 1)
         .order_by(User.id)
     )
-    return [(r[0], r[1]) for r in rows.all()]
+    return [(r[0], r[1]) for r in rows.all() if r[0] != initiator_id]

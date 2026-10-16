@@ -22,6 +22,7 @@ from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.plugin.workflow.engine.flow import index_nodes
 from backend.plugin.workflow.engine.form import hidden_fields_for, node_field_perm
+from backend.plugin.workflow.engine.simulate import simulate
 from backend.plugin.workflow.enums import PERM_TERMINATE, TaskStatus
 from backend.plugin.workflow.handler import get_handler
 from backend.plugin.workflow.model import WfActionRecord, WfCc, WfDefinition, WfInstance, WfTask
@@ -306,6 +307,20 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
         'ccs': [{'user_id': c.user_id, 'user_name': names.get(c.user_id), 'read_time': c.read_time} for c in ccs],
         'capabilities': [{'action': c.action, 'enabled': c.enabled, 'reason': c.reason} for c in caps],
         'names': await model_names(db, model),
+        # 还没走到的步骤（预告）。只在运行中时有；和真实推进同一套规则（engine/simulate.py）
+        'forecast': (
+            await simulate(
+                db,
+                model,
+                form_data=json.loads(inst.form_data),
+                initiator_id=inst.initiator_id,
+                initiator_dept_id=inst.initiator_dept_id,
+                selected=json.loads(inst.variables).get('selected') or {},
+                start_from=nodes[inst.current_node_id].after,
+            )
+            if inst.status == 'running' and inst.current_node_id in nodes
+            else []
+        ),
         'my_task_id': my_task.id if my_task else None,
     }
 
