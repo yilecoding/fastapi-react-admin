@@ -248,10 +248,8 @@ def test_handover_moves_everything_it_can_and_lists_the_rest(
     a = _start(client, login, 'PYTEST_HANDOVER', who='sunqiang')
     b = _start(client, login, 'PYTEST_HANDOVER', who='zhoumin')
     c = _start(client, login, 'PYTEST_HANDOVER', who='wangfang')  # 接手的人就是发起人：交不过去
-    assert (
-        ok(client.get('/sys/workflow/handover', headers=token_headers, params={'user_id': uid('liuyang')}))['count']
-        == 3
-    )
+    holders = {h['user_id']: h for h in ok(client.get('/sys/workflow/handover', headers=token_headers))}
+    assert holders[uid('liuyang')]['count'] == 3 and holders[uid('liuyang')]['active'] is True
     # 普通人调不了
     resp = client.post(
         '/sys/workflow/handover',
@@ -270,3 +268,25 @@ def test_handover_moves_everything_it_can_and_lists_the_rest(
     assert _todo(client, login, 'liuyang', c) is not None
     # 同一个键再点一次：交过的不会再交一遍
     assert ok(client.post('/sys/workflow/handover', headers=token_headers, json=body))['moved'] == 0
+
+
+def test_handover_lists_disabled_holders(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid
+) -> None:
+    """离职 = 账号停用。停用的人手上的待办也要列出来、交得出去（选人控件里根本选不到他）"""
+    from backend.plugin.workflow.tests.test_review_fixes import _drop_user_cache, _sql
+
+    node = _approval('n1', {'kind': 'user', 'user_ids': [uid('chenjing')]})
+    _publish(client, token_headers, 'PYTEST_HANDOVER2', FORM, _model(node))
+    pk = _start(client, login, 'PYTEST_HANDOVER2')
+    _sql("UPDATE sys_user SET status = 0 WHERE username = 'chenjing'")
+    _drop_user_cache(uid('chenjing'))
+    try:
+        holders = {h['user_id']: h for h in ok(client.get('/sys/workflow/handover', headers=token_headers))}
+        assert holders[uid('chenjing')]['active'] is False and holders[uid('chenjing')]['count'] >= 1
+        body = {'from_user_id': uid('chenjing'), 'to_user_id': uid('zhaolei'), 'key': key()}
+        assert ok(client.post('/sys/workflow/handover', headers=token_headers, json=body))['moved'] >= 1
+        assert _todo(client, login, 'zhaolei', pk) is not None
+    finally:
+        _sql("UPDATE sys_user SET status = 1 WHERE username = 'chenjing'")
+        _drop_user_cache(uid('chenjing'))

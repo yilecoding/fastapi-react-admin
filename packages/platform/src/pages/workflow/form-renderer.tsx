@@ -18,6 +18,7 @@ import {
   directoryDeptsQuery, directoryUsersQuery, downloadAttachment, uploadAttachment,
   type FieldPerm, type FileMeta, type FormData, type FormField, type FormSchema,
 } from './api'
+import { formRules } from './form-rules'
 import { DeptSelect, UserSelect } from './pickers'
 
 /**
@@ -30,6 +31,9 @@ import { DeptSelect, UserSelect } from './pickers'
  * 「只收可编辑字段」也是服务端拒的。前端藏起来不算权限。
  *
  * 值的形状和后端 `engine/form.py` 的表一致：金额是十进制**字符串**、人员 / 部门是 ID **字符串**。
+ *
+ * 联动（`form-rules.ts`）：显示条件不成立的字段不渲染；自动计算的字段只读，显示当场算出来的值。
+ * 父组件拿到的 `value` 里不含算出来的值 —— 提交时服务端自己算，前端算的只用来看。
  */
 export function FormRenderer({
   schema,
@@ -49,11 +53,14 @@ export function FormRenderer({
   /** 已有附件的文件名 / 大小（详情接口带的）。新上传的由附件控件自己记着 */
   files?: Record<string, FileMeta>
 }) {
+  const { t } = useTranslation()
   const set = (id: string, v: unknown) => onChange?.({ ...value, [id]: v })
+  const ruled = React.useMemo(() => formRules(schema, value), [schema, value])
   return (
     <FilesContext.Provider value={files ?? EMPTY_FILES}>
     <div className="flex flex-col gap-4" data-testid="wf-form">
       {schema.fields.map((f) => {
+        if (ruled.inactive.has(f.id)) return null
         if (f.type === 'description') {
           return (
             <p key={f.id} className="rounded-md bg-muted/50 px-3 py-2 text-sm whitespace-pre-wrap text-muted-foreground">
@@ -61,7 +68,22 @@ export function FormRenderer({
             </p>
           )
         }
-        const editable = mode === 'edit' || perms?.[f.id] === 'editable'
+        // 自动计算：在「填」的人那里显示成只读框 + 提示（他知道不用填）；只是看的人就是普通的一行
+        if (f.calc && (mode === 'edit' || perms?.[f.id] === 'editable')) {
+          return (
+            <Row key={f.id} label={f.label}>
+              <div
+                className="flex h-9 items-center justify-between rounded-md border border-dashed bg-muted/40 px-3 text-sm"
+                data-testid={`wf-field-${f.id}`}
+                data-editable={false}
+              >
+                <span className="tabular-nums">{empty(ruled.data[f.id]) ? '—' : String(ruled.data[f.id])}</span>
+                <span className="text-xs text-muted-foreground">{t('自动计算')}</span>
+              </div>
+            </Row>
+          )
+        }
+        const editable = !f.calc && (mode === 'edit' || perms?.[f.id] === 'editable')
         if (!editable) {
           // 只读：标签在左、值在右的紧凑行 —— 审批人主要是在「看」，竖排会把一屏只摆三四个字段
           return (
@@ -72,7 +94,7 @@ export function FormRenderer({
               data-editable={false}
             >
               <span className="text-sm text-muted-foreground">{f.label}</span>
-              <FieldDisplay field={f} value={value[f.id]} />
+              <FieldDisplay field={f} value={f.calc ? ruled.data[f.id] : value[f.id]} />
             </div>
           )
         }
@@ -412,8 +434,10 @@ function DeptName({ id, className }: { id: string; className?: string }) {
  */
 export function missingRequired(schema: FormSchema, value: FormData, only?: Set<string>): Record<string, string> {
   const out: Record<string, string> = {}
+  // 显示条件不成立的不算必填；自动计算的不归人填（同后端 validate_form_data）
+  const { inactive } = formRules(schema, value)
   for (const f of schema.fields) {
-    if (f.type === 'description' || !f.required) continue
+    if (f.type === 'description' || !f.required || f.calc || inactive.has(f.id)) continue
     if (only && !only.has(f.id)) continue
     if (empty(value[f.id])) out[f.id] = f.label
   }

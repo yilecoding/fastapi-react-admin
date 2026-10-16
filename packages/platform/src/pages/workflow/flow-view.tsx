@@ -153,7 +153,8 @@ function Card({ node }: { node: Exclude<FlowNode, { type: 'condition' }> }) {
   const state = ctx.state?.[node.id]
   const isApproval = node.type === 'approval'
   const summary = isApproval
-    ? describeRule(node.assignee, ctx, t) + (node.mode === 'all' ? ` · ${t('会签')}` : '')
+    ? describeRule(node.assignee, ctx, t) +
+      (node.mode === 'all' ? ` · ${t('会签')}` : node.mode === 'seq' ? ` · ${t('依次审批')}` : '')
     : node.targets.length
       ? node.targets.map((r) => describeRule(r, ctx, t)).join('、')
       : t('未设置抄送人')

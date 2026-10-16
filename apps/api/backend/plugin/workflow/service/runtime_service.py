@@ -1203,24 +1203,65 @@ async def _apply_form_patch(
 # ── 离职交接 ─────────────────────────────────────────────────────────────────
 
 
-async def handover_tasks(db: AsyncSession, user_id: int) -> list[tuple[int, int, str]]:
-    """这个人手上在办的待办：`(待办 ID, 实例 ID, 标题)`。
+async def _transferable(db: AsyncSession, user_id: int | None = None) -> list[tuple[int, int, str, int]]:
+    """在办、可以交给别人的待办：`(待办 ID, 实例 ID, 标题, 办理人)`。
 
-    不含「被退回、等他自己重新提交」的那种 —— 那是他自己的单，交给别人等于替他提交
+    不含「被退回、等发起人自己重新提交」的那种 —— 那是他自己的单，交给别人等于替他提交
     """
-    rows = (
-        await db.execute(
-            select(WfTask.id, WfTask.instance_id, WfInstance.title, WfTask.node_id, WfInstance.model_snapshot)
-            .join(WfInstance, WfInstance.id == WfTask.instance_id)
-            .where(
-                WfTask.assignee_id == user_id,
-                WfTask.status == TaskStatus.pending,
-                WfInstance.status == InstanceStatus.running,
-            )
-            .order_by(WfTask.id)
+    stmt = (
+        select(
+            WfTask.id,
+            WfTask.instance_id,
+            WfInstance.title,
+            WfTask.assignee_id,
+            WfTask.node_id,
+            WfInstance.model_snapshot,
         )
-    ).all()
-    return [(tid, iid, title) for tid, iid, title, nid, model in rows if nid != json.loads(model)['root']['id']]
+        .join(WfInstance, WfInstance.id == WfTask.instance_id)
+        .where(WfTask.status == TaskStatus.pending, WfInstance.status == InstanceStatus.running)
+        .order_by(WfTask.id)
+    )
+    if user_id is not None:
+        stmt = stmt.where(WfTask.assignee_id == user_id)
+    rows = (await db.execute(stmt)).all()
+    return [
+        (tid, iid, title, uid) for tid, iid, title, uid, nid, model in rows if nid != json.loads(model)['root']['id']
+    ]
+
+
+async def handover_tasks(db: AsyncSession, user_id: int) -> list[tuple[int, int, str]]:
+    return [(tid, iid, title) for tid, iid, title, _ in await _transferable(db, user_id)]
+
+
+async def handover_holders(db: AsyncSession) -> list[dict[str, Any]]:
+    """手上有在办待办的人，按条数从多到少。
+
+    🔴 **要包含停用 / 删除的账号**：离职的人账号通常已经停用了，而选人控件只列在职的人 ——
+    用选人控件选「交出待办的人」，恰恰选不到最需要交接的那一个
+    """
+    from backend.app.admin.model import User
+
+    counts: dict[int, int] = {}
+    for *_, uid in await _transferable(db):
+        counts[uid] = counts.get(uid, 0) + 1
+    if not counts:
+        return []
+    users = {
+        u: (n, s == 1 and d == 0)
+        for u, n, s, d in (
+            await db.execute(select(User.id, User.nickname, User.status, User.deleted).where(User.id.in_(counts)))
+        ).all()
+    }
+    out = [
+        {
+            'user_id': uid,
+            'name': users.get(uid, (str(uid), False))[0],
+            'active': users.get(uid, ('', False))[1],
+            'count': n,
+        }
+        for uid, n in counts.items()
+    ]
+    return sorted(out, key=lambda x: (-x['count'], x['name']))
 
 
 async def handover(db: AsyncSession, *, from_user_id: int, to_user_id: int, actor: Actor, key: str) -> dict[str, Any]:

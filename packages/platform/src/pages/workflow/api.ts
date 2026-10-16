@@ -44,7 +44,13 @@ export type FormField = {
   multiple?: boolean
   content?: string | null
   columns?: FormField[] | null
+  /** 显示条件：只能引用排在前面的字段。不成立时不显示、不校验、不保存 */
+  visibleWhen?: Cond | null
+  /** 自动计算（number / amount）：服务端算，填了也不收 */
+  calc?: Calc | null
 }
+
+export type Calc = { kind: 'days'; field: string } | { kind: 'sum'; field: string; column: string }
 
 export type FormSchema = { schemaVersion: 1; fields: FormField[] }
 
@@ -72,14 +78,19 @@ export type AssigneeRule = {
 
 export type FieldPerm = 'hidden' | 'readonly' | 'editable'
 
+export type ApprovalMode = 'any' | 'all' | 'seq'
+
+export type OptionalAction = 'transfer' | 'cc' | 'send_back'
+
 export type ApprovalNode = {
   type: 'approval'
   id: string
   name: string
-  mode: 'any' | 'all'
+  mode: ApprovalMode
   assignee?: AssigneeRule | null
   onEmpty: 'reject' | 'skip' | 'admin'
-  actions?: ('transfer' | 'cc')[] | null
+  /** null = 默认全开；[] = 只有同意 / 驳回 */
+  actions?: OptionalAction[] | null
   fieldPerms?: Record<string, FieldPerm>
   next: FlowNode | null
 }
@@ -101,7 +112,8 @@ export type FlowModel = { schemaVersion: 1; root: StartNode }
 
 export type InstanceStatus = 'running' | 'approved' | 'rejected' | 'withdrawn' | 'terminated'
 
-export type Action = 'approve' | 'reject' | 'withdraw' | 'transfer' | 'cc' | 'remind' | 'terminate'
+export type Action =
+  | 'approve' | 'reject' | 'withdraw' | 'transfer' | 'cc' | 'remind' | 'terminate' | 'send_back' | 'reassign'
 
 export type InstanceRow = {
   id: string
@@ -133,8 +145,11 @@ export type TaskRow = {
   assignee_id: string
   assignee_name: string
   origin_assignee_id: string | null
+  /** 第几轮进入这个节点：退回之后重走同一个节点时不同，进度按「节点 + 轮次」分组 */
+  batch: number
   status: 'pending' | 'done' | 'canceled' | 'transferred'
-  decision: 'approve' | 'reject' | null
+  /** resubmit = 被退回后发起人重新提交 */
+  decision: 'approve' | 'reject' | 'send_back' | 'resubmit' | null
   opinion: string | null
   created_time: string
   finished_time: string | null
@@ -142,6 +157,7 @@ export type TaskRow = {
 
 export type RecordRow = {
   id: string
+  task_id: string | null
   action: string
   actor_type: 'user' | 'system'
   actor_id: string | null
@@ -150,7 +166,16 @@ export type RecordRow = {
   node_name: string | null
   target_user_name: string | null
   opinion: string | null
-  detail: { branch?: string; name?: string; form_changes?: Record<string, { from: unknown; to: unknown }> } | null
+  detail: {
+    branch?: string
+    name?: string
+    form_changes?: Record<string, { from: unknown; to: unknown }>
+    /** 退回到哪 */
+    to?: string
+    to_name?: string
+    /** 改办理人：原来是谁 */
+    from?: string
+  } | null
   created_time: string
 }
 
@@ -177,13 +202,17 @@ export type InstanceDetail = {
   names: ModelNames
   /** 还没走到的步骤（服务端试算，和真实推进同一套规则） */
   forecast: ForecastStep[]
+  /** 能退回到哪（只有当前能「退回」的人有）：第一个是发起人 */
+  send_back_targets: { node_id: string; name: string }[]
+  /** 依次审批的当前节点上，排在后面还没轮到的人。`masked` = 来自看不到的人员字段 */
+  waiting: { id: string | null; name: string | null; masked?: boolean }[]
 }
 
 export type ForecastStep = {
   node_id: string
   name: string
   type: 'approval' | 'cc'
-  mode: 'any' | 'all'
+  mode: ApprovalMode
   users: { id: string; name: string }[]
   /** ok 有人办 · pick 发起人自选还没选 · skip 跳过 · admin 转给管理员 · reject 将被自动驳回 */
   outcome: 'ok' | 'pick' | 'skip' | 'admin' | 'reject'
@@ -365,6 +394,10 @@ export function useAct(instanceId: string) {
       opinion?: string
       target_user_ids?: string[]
       form?: FormData
+      /** 退回到哪个节点 */
+      target_node_id?: string
+      /** 改办理人：改哪一条待办 */
+      task_id?: string
     }) => api.POST<{ instance_id: string; replayed: boolean }>(`${BASE}/instances/${instanceId}/actions`, { body }),
     // 成功和失败都要重取：失败多半是「已被他人处理」，界面要跟上真实状态
     onSettled: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
@@ -483,3 +516,25 @@ export async function downloadAttachment(id: string, name: string): Promise<void
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+export type HandoverHolder = { user_id: string; name: string; active: boolean; count: number }
+
+/** 离职交接：手上有在办待办的人。🔴 含已停用的账号 —— 离职的人通常已经停用，选人控件里选不到 */
+export const handoverHoldersQuery = () =>
+  queryOptions({
+    queryKey: [...workflowKeys.all, 'handover'] as const,
+    queryFn: () => api.GET<HandoverHolder[]>(`${BASE}/handover`),
+  })
+
+export function useHandover() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { from_user_id: string; to_user_id: string; key: string }) =>
+      api.POST<{ moved: number; skipped: { instance_id: string; title: string; reason: string }[] }>(
+        `${BASE}/handover`,
+        { body }
+      ),
+    onSettled: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
+  })
+}
+

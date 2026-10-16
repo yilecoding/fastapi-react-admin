@@ -17,10 +17,13 @@ const DECISION: Record<string, { text: string; tone: Tone }> = {
   transferred: { text: '已转交', tone: 'muted' },
   canceled: { text: '无需处理', tone: 'muted' },
   pending: { text: '审批中', tone: 'pending' },
+  send_back: { text: '已退回', tone: 'bad' },
+  resubmit: { text: '已重新提交', tone: 'ok' },
 }
 
 function modeTag(mode: string | undefined, count: number, t: T): string | undefined {
   if (count < 2) return undefined
+  if (mode === 'seq') return t('依次审批 · 按顺序逐个同意')
   return mode === 'all' ? t('会签 · 需全部同意') : t('或签 · 一人同意即可')
 }
 
@@ -70,40 +73,50 @@ export function progressItems(d: InstanceDetail, t: T): TrackItem[] {
     at: ts(d.instance.created_time) - 1,
   })
 
-  // 待办按节点分组：同一个节点（含转交出来的那一条）是一步
+  // 待办按「节点 + 轮次」分组：同一次进入这个节点（含转交出来的、依次审批轮到的）是一步；
+  // 退回之后重走同一个节点是新的一步（`batch` 不同）—— 不分的话两轮的人挤在同一步里
   const groups = new Map<string, TaskRow[]>()
   for (const tk of d.tasks) {
-    // 现在一个节点只会走一次；以后做「退回到指定节点」时这里要按批次分开
-    groups.set(tk.node_id, [...(groups.get(tk.node_id) ?? []), tk])
+    const k = `${tk.node_id}:${tk.batch}`
+    groups.set(k, [...(groups.get(k) ?? []), tk])
   }
-  for (const [nodeId, tasks] of groups) {
+  const byTask = new Map(d.records.filter((r) => r.task_id).map((r) => [r.task_id as string, r]))
+  const atStart = (nodeId: string) => nodeId === d.model.root.id
+  for (const [k, tasks] of groups) {
+    const nodeId = tasks[0].node_id
     const pending = tasks.some((x) => x.status === 'pending')
     const rejected = tasks.some((x) => x.decision === 'reject')
     const lastDone = tasks.filter((x) => x.finished_time).map((x) => x.finished_time as string).sort().pop()
     const mode = findMode(d, nodeId)
+    const current = pending && d.instance.status === 'running'
+    // 依次审批：后面还没轮到的人也列在这一步里，标「等待中」
+    const waiting = current && mode === 'seq' ? d.waiting : []
+    const masked = waiting.some((w) => w.masked)
+    const people: TrackPerson[] = tasks.map((tk) => {
+      const key = tk.status === 'done' ? (tk.decision ?? 'approve') : tk.status
+      const meta = DECISION[key] ?? DECISION.pending
+      const rec = byTask.get(tk.id)
+      let text = t(meta.text)
+      if (tk.status === 'transferred' && rec?.target_user_name) {
+        text = rec.action === 'reassign'
+          ? t('管理员改给 {{n}}', { n: rec.target_user_name })
+          : t('转交给 {{n}}', { n: rec.target_user_name })
+      } else if (tk.decision === 'send_back' && rec?.detail?.to_name) {
+        text = t('退回给 {{n}}', { n: rec.detail.to_name })
+      }
+      return { name: tk.assignee_name, result: { text, tone: meta.tone }, time: tk.finished_time, opinion: tk.opinion }
+    })
+    if (!masked) {
+      for (const w of waiting) people.push({ name: w.name ?? '', result: { text: t('等待中'), tone: 'muted' } })
+    }
     items.push({
-      key: `n-${nodeId}`,
-      kind: 'approval',
+      key: `n-${k}`,
+      kind: atStart(nodeId) ? 'start' : 'approval',
       title: tasks[0].node_name,
-      tag: modeTag(mode, tasks.filter((x) => x.status !== 'transferred').length, t),
-      state: rejected ? 'rejected' : pending ? (d.instance.status === 'running' ? 'current' : 'skipped') : 'done',
-      people: tasks.map((tk) => {
-        const key = tk.status === 'done' ? (tk.decision ?? 'approve') : tk.status
-        const meta = DECISION[key] ?? DECISION.pending
-        const transferTo =
-          tk.status === 'transferred'
-            ? d.records.find((r) => r.action === 'transfer' && r.node_id === nodeId && r.actor_id === tk.assignee_id)
-            : undefined
-        return {
-          name: tk.assignee_name,
-          result: {
-            text: transferTo?.target_user_name ? t('转交给 {{n}}', { n: transferTo.target_user_name }) : t(meta.text),
-            tone: meta.tone,
-          },
-          time: tk.finished_time,
-          opinion: tk.opinion,
-        }
-      }),
+      tag: modeTag(mode, tasks.filter((x) => x.status !== 'transferred').length + waiting.length, t),
+      state: rejected ? 'rejected' : pending ? (current ? 'current' : 'skipped') : 'done',
+      people,
+      note: masked ? t('后面还有人，由申请内容里的人员决定') : undefined,
       time: pending ? null : lastDone,
       at: ts(tasks[0].created_time),
     })
@@ -170,5 +183,8 @@ function findMode(d: InstanceDetail, nodeId: string): string | undefined {
 }
 
 export function _i18nExtractionAnchors(t: (k: string) => string) {
-  return [t('已同意'), t('已驳回'), t('已转交'), t('无需处理'), t('审批中'), t('审批通过'), t('审批驳回'), t('已撤回'), t('已终止'), t('结束')]
+  return [
+    t('已同意'), t('已驳回'), t('已转交'), t('无需处理'), t('审批中'), t('审批通过'), t('审批驳回'), t('已撤回'),
+    t('已终止'), t('结束'), t('已退回'), t('已重新提交'),
+  ]
 }

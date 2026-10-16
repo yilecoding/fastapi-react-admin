@@ -13,7 +13,7 @@ import { FormField as Row } from '../_shared/form-fields'
 import {
   directoryRolesQuery, directoryUsersQuery,
   type ApprovalNode, type AssigneeRule, type Branch, type CcNode, type Cond, type CondOp, type FieldPerm,
-  type FlowModel, type FormSchema,
+  type ApprovalMode, type FlowModel, type FormSchema, type OptionalAction,
 } from '../workflow/api'
 import {
   addBranch, blankNode, findNode, insertAfter, insertBranchHead, patchBranch, patchNode, removeBranch, removeNode,
@@ -286,10 +286,10 @@ function ApprovalProps({
   const { t } = useTranslation()
   const actions = node.actions ?? null
   const fieldPerms = node.fieldPerms ?? {}
-  const toggleAction = (a: 'transfer' | 'cc', on: boolean) => {
-    const base = actions ?? ['transfer', 'cc']
+  const toggleAction = (a: OptionalAction, on: boolean) => {
+    const base = actions ?? OPTIONAL_ACTIONS.map(([x]) => x)
     const next = on ? [...new Set([...base, a])] : base.filter((x) => x !== a)
-    onChange({ actions: next as ('transfer' | 'cc')[] })
+    onChange({ actions: next })
   }
   return (
     <>
@@ -299,12 +299,13 @@ function ApprovalProps({
       <Row label={t('审批人')} required>
         <RuleEditor rule={node.assignee} form={form} onChange={(assignee) => onChange({ assignee })} testId="node-rule" />
       </Row>
-      <Row label={t('多人审批时')}>
+      <Row label={t('多人审批时')} hint={t(MODE_HINT[node.mode])}>
         <Segmented
           value={node.mode}
           items={[
-            { value: 'any', label: t('或签（一人同意即可）') },
-            { value: 'all', label: t('会签（全部同意）') },
+            { value: 'any', label: t('或签') },
+            { value: 'all', label: t('会签') },
+            { value: 'seq', label: t('依次审批') },
           ]}
           onChange={(mode) => onChange({ mode })}
           testId="node-mode"
@@ -324,10 +325,14 @@ function ApprovalProps({
       </Row>
       <Row label={t('允许的操作')} hint={t('同意 / 驳回始终可用，不能关掉')}>
         <div className="flex flex-col gap-2 text-sm">
-          {(['transfer', 'cc'] as const).map((a) => (
+          {OPTIONAL_ACTIONS.map(([a, label]) => (
             <label key={a} className="flex items-center justify-between">
-              {a === 'transfer' ? t('转交') : t('抄送')}
-              <Switch checked={actions === null || actions.includes(a)} onCheckedChange={(v) => toggleAction(a, v)} />
+              {t(label)}
+              <Switch
+                checked={actions === null || actions.includes(a)}
+                onCheckedChange={(v) => toggleAction(a, v)}
+                data-testid={`node-action-${a}`}
+              />
             </label>
           ))}
         </div>
@@ -436,9 +441,9 @@ function CcProps({ node, form, onChange }: { node: CcNode; form: FormSchema; onC
 
 // ── 条件 ─────────────────────────────────────────────────────────────────────
 
-type Leaf = { var: string; op: CondOp; value?: unknown }
+export type Leaf = { var: string; op: CondOp; value?: unknown }
 
-const OPS_BY_TYPE: Record<string, CondOp[]> = {
+export const OPS_BY_TYPE: Record<string, CondOp[]> = {
   number: ['gt', 'gte', 'lt', 'lte', 'eq', 'ne'],
   amount: ['gt', 'gte', 'lt', 'lte', 'eq', 'ne'],
   date: ['gt', 'gte', 'lt', 'lte', 'eq'],
@@ -531,19 +536,22 @@ function BranchProps({
   )
 }
 
-function LeafEditor({
-  leaf, form, onChange, onRemove, index,
+export function LeafEditor({
+  leaf, form, onChange, onRemove, index, builtins = true, testPrefix = 'cond',
 }: {
   leaf: Leaf
   form: FormSchema
   onChange: (l: Leaf) => void
   onRemove: () => void
   index: number
+  /** 「发起人部门」这种内置变量：表单的显示条件里没有（只认表单字段） */
+  builtins?: boolean
+  testPrefix?: string
 }) {
   const { t } = useTranslation()
   const fields = [
     ...form.fields.filter((f) => f.type in OPS_BY_TYPE).map((f) => ({ value: f.id, label: f.label, type: f.type as string })),
-    { value: '$initiator_dept', label: t('发起人部门'), type: '$initiator_dept' },
+    ...(builtins ? [{ value: '$initiator_dept', label: t('发起人部门'), type: '$initiator_dept' }] : []),
   ]
   const field = form.fields.find((f) => f.id === leaf.var)
   const type = leaf.var === '$initiator_dept' ? '$initiator_dept' : (field?.type ?? 'text')
@@ -551,7 +559,7 @@ function LeafEditor({
   const arr = (v: unknown) => (Array.isArray(v) ? (v as string[]) : v === undefined || v === null ? [] : [String(v)])
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border p-2" data-testid={`cond-${index}`}>
+    <div className="flex flex-col gap-2 rounded-md border p-2" data-testid={`${testPrefix}-${index}`}>
       <div className="flex items-center gap-1">
         <select
           className="h-8 min-w-0 flex-1 rounded-md border bg-transparent px-2 text-sm"
@@ -560,7 +568,7 @@ function LeafEditor({
             const nt = fields.find((f) => f.value === e.target.value)?.type ?? 'text'
             onChange({ var: e.target.value, op: (OPS_BY_TYPE[nt] ?? ['eq'])[0] })
           }}
-          data-testid={`cond-${index}-var`}
+          data-testid={`${testPrefix}-${index}-var`}
         >
           {fields.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
         </select>
@@ -568,7 +576,7 @@ function LeafEditor({
           className="h-8 rounded-md border bg-transparent px-2 text-sm"
           value={leaf.op}
           onChange={(e) => onChange({ ...leaf, op: e.target.value as CondOp })}
-          data-testid={`cond-${index}-op`}
+          data-testid={`${testPrefix}-${index}-op`}
         >
           {ops.map((o) => <option key={o} value={o}>{t(OP_LABEL[o])}</option>)}
         </select>
@@ -598,7 +606,7 @@ function LeafEditor({
             // 数字按数字存、金额按字符串存（后端统一转 Decimal 比较），日期按 YYYY-MM-DD
             onChange({ ...leaf, value: type === 'number' && raw !== '' && !Number.isNaN(Number(raw)) ? Number(raw) : raw })
           }}
-          data-testid={`cond-${index}-value`}
+          data-testid={`${testPrefix}-${index}-value`}
         />
       )}
     </div>
@@ -626,3 +634,25 @@ function DeptMulti({ value, onChange }: { value: string[]; onChange: (v: string[
 export function _i18nExtractionAnchors(t: (k: string) => string) {
   return [t('部门主管'), t('指定成员'), t('指定角色'), t('发起人自选'), t('表单里的人员'), t('发起人自己')]
 }
+
+/** 节点上能开关的动作（同意 / 驳回始终有）。和后端 `engine/flow.py: OPTIONAL_ACTIONS` 对应 */
+const OPTIONAL_ACTIONS: [OptionalAction, string][] = [
+  ['transfer', '转交'],
+  ['cc', '抄送'],
+  ['send_back', '退回'],
+]
+
+const MODE_HINT: Record<ApprovalMode, string> = {
+  any: '一人同意即可，其余人的待办自动结束',
+  all: '所有人都同意才通过，任何一人驳回整单结束',
+  seq: '按审批人的顺序一个一个来，前一个同意了才轮到下一个',
+}
+
+export function _i18nExtractionAnchorsFlowDesigner(t: (k: string) => string) {
+  return [
+    t('转交'), t('抄送'), t('退回'),
+    t('一人同意即可，其余人的待办自动结束'), t('所有人都同意才通过，任何一人驳回整单结束'),
+    t('按审批人的顺序一个一个来，前一个同意了才轮到下一个'),
+  ]
+}
+

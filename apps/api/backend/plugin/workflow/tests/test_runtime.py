@@ -13,6 +13,7 @@
 """
 
 from collections.abc import Callable
+from datetime import date, timedelta
 from typing import Any
 
 from starlette.testclient import TestClient
@@ -24,10 +25,11 @@ Uid = Callable[[str], str]
 
 
 def leave_form(uid: Uid, *, days: int = 2, handover: str | None = 'chenjing') -> dict[str, Any]:
+    # 请假天数是从请假时间自动算的（种子里 f_days 配了 calc）—— 要几天就给几天的区间
+    end = date(2026, 11, 2) + timedelta(days=days - 1)
     form: dict[str, Any] = {
         'f_type': 'annual',
-        'f_range': ['2026-11-02', '2026-11-03'],
-        'f_days': days,
+        'f_range': ['2026-11-02', end.isoformat()],
         'f_reason': '家里有事',
     }
     if handover:

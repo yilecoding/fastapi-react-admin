@@ -277,3 +277,157 @@ test("填到一半切走再切回来：草稿还在；后台的抽屉不挡前�
   await expect(sheet).toBeVisible()
   await expect(sheet.getByTestId("wf-field-f_reason").locator("input")).toHaveValue("填了一半的事由")
 })
+
+test("退回给发起人 → 发起人改好重新提交 → 回到主管手上", async ({ browser }) => {
+  const a = await browser.newPage()
+  await loginPageAs(a, "sunqiang", "123456")
+  await a.goto(`/workflow/inbox?start=${CODE}`)
+  const start = a.getByTestId("wf-start-sheet")
+  await start.getByTestId("wf-field-f_reason").locator("input").fill("第一版事由")
+  await start.getByTestId("wf-field-f_days").locator("input").fill("1")
+  await start.getByTestId("wf-start-submit").click()
+  await expect(a.getByTestId("wf-instance-sheet").getByTestId("wf-status")).toHaveText("审批中")
+  const id = new URL(a.url()).searchParams.get("id")
+
+  // 主管退回：选「发起人」、写原因
+  const b = await browser.newPage()
+  await loginPageAs(b, "zhaolei", "123456")
+  await b.goto(`/workflow/inbox?id=${id}`)
+  const sheetB = b.getByTestId("wf-instance-sheet")
+  await sheetB.getByTestId("wf-act-send_back").click()
+  const dialog = b.getByTestId("wf-action-dialog")
+  await expect(dialog.getByTestId("wf-back-start")).toBeVisible()
+  // 没写原因提交不了
+  await expect(dialog.getByTestId("wf-action-submit")).toBeDisabled()
+  await dialog.getByTestId("wf-back-start").click()
+  await dialog.getByTestId("wf-dialog-opinion").fill("事由写具体一点")
+  await dialog.getByTestId("wf-action-submit").click()
+  await expect(sheetB).toBeHidden()
+
+  // 发起人：单还在审批中，顶上写着谁退回、为什么；字段能改，按钮是「重新提交」，没有「驳回」
+  await a.reload()
+  const sheetA = a.getByTestId("wf-instance-sheet")
+  await expect(sheetA.getByTestId("wf-sent-back")).toContainText("事由写具体一点")
+  await expect(sheetA.getByTestId("wf-status")).toHaveText("审批中")
+  await expect(sheetA.getByTestId("wf-act-approve")).toHaveText("重新提交")
+  await expect(sheetA.getByTestId("wf-act-reject")).toHaveCount(0)
+  await expect(sheetA.getByTestId("wf-field-f_reason")).toHaveAttribute("data-editable", "true")
+  await sheetA.getByTestId("wf-field-f_reason").locator("input").fill("第二版：年底盘点三天")
+  await sheetA.getByTestId("wf-act-approve").click()
+  await expect(sheetA).toBeHidden()
+
+  // 又回到主管手上，看到的是改过的内容；进度里两轮各占一步
+  await b.goto(`/workflow/inbox?id=${id}`)
+  const again = b.getByTestId("wf-instance-sheet")
+  await expect(again.getByTestId("wf-field-f_reason")).toContainText("第二版：年底盘点三天")
+  await expect(again.getByTestId("wf-act-approve")).toBeVisible()
+  await expect(again.getByTestId("wf-timeline")).toContainText("退回给 发起人")
+  await expect(again.getByTestId("wf-timeline")).toContainText("已重新提交")
+  await a.close()
+  await b.close()
+})
+
+test("表单联动：按条件显示的字段、明细表合计（界面当场算，服务端存的是它自己算的）", async ({ browser }) => {
+  const code = `${CODE}R`
+  const { api, dispose } = await createApiClient()
+  const created = (await api.post("/api/v1/sys/workflow/definitions", {
+    code,
+    name: `E2E 联动 ${code}`,
+    category: "E2E",
+    form: {
+      schemaVersion: 1,
+      fields: [
+        { id: "f_n", type: "number", label: "人数", required: true },
+        {
+          id: "f_why", type: "text", label: "超员说明", required: true,
+          visibleWhen: { all: [{ var: "f_n", op: "gt", value: 3 }] },
+        },
+        { id: "f_items", type: "table", label: "费用明细", columns: [{ id: "amt", type: "amount", label: "金额" }] },
+        { id: "f_total", type: "amount", label: "合计", calc: { kind: "sum", field: "f_items", column: "amt" } },
+      ],
+    },
+    model: {
+      schemaVersion: 1,
+      root: {
+        type: "start", id: "start",
+        next: {
+          type: "approval", id: "n1", name: "直属主管", mode: "any",
+          assignee: { kind: "dept_leader", level: 1 }, onEmpty: "reject", next: null,
+        },
+      },
+    },
+  })) as { id: string }
+  const pub = (await api.post(`/api/v1/sys/workflow/definitions/${created.id}/publish`)) as { published: boolean }
+  expect(pub.published).toBe(true)
+  await dispose()
+
+  const page = await browser.newPage()
+  await loginPageAs(page, "sunqiang", "123456")
+  await page.goto(`/workflow/inbox?start=${code}`)
+  const sheet = page.getByTestId("wf-start-sheet")
+  await sheet.getByTestId("wf-field-f_n").locator("input").fill("2")
+  // 先断言「有」：人数字段在，再断言超员说明不在
+  await expect(sheet.getByTestId("wf-field-f_n")).toBeVisible()
+  await expect(sheet.getByTestId("wf-field-f_why")).toHaveCount(0)
+  await sheet.getByTestId("wf-field-f_n").locator("input").fill("5")
+  await expect(sheet.getByTestId("wf-field-f_why")).toBeVisible()
+
+  // 明细两行，合计当场算（0.10 + 0.20 不能变成 0.30000000000000004）
+  const items = sheet.getByTestId("wf-field-f_items")
+  await items.getByRole("button", { name: "添加一行" }).click()
+  await items.getByRole("button", { name: "添加一行" }).click()
+  const inputs = items.locator("input")
+  await inputs.nth(0).fill("0.10")
+  await inputs.nth(1).fill("0.20")
+  await expect(sheet.getByTestId("wf-field-f_total")).toContainText("0.30")
+  await expect(sheet.getByTestId("wf-field-f_total")).toContainText("自动计算")
+
+  // 超员说明是必填的：显示出来了就得填
+  await sheet.getByTestId("wf-start-submit").click()
+  await expect(sheet.getByText("请填写「超员说明」")).toBeVisible()
+  await sheet.getByTestId("wf-field-f_why").locator("input").fill("客户来访")
+  await sheet.getByTestId("wf-start-submit").click()
+  const detail = page.getByTestId("wf-instance-sheet")
+  await expect(detail.getByTestId("wf-status")).toHaveText("审批中")
+  await expect(detail.getByTestId("wf-field-f_total")).toContainText("0.30")
+  await expect(detail.getByTestId("wf-field-f_why")).toContainText("客户来访")
+  await page.close()
+})
+
+test("管理员改办理人：卡住的待办交给别人", async ({ browser }) => {
+  const a = await browser.newPage()
+  await loginPageAs(a, "sunqiang", "123456")
+  await a.goto(`/workflow/inbox?start=${CODE}`)
+  const start = a.getByTestId("wf-start-sheet")
+  await start.getByTestId("wf-field-f_reason").locator("input").fill("请人代审")
+  await start.getByTestId("wf-field-f_days").locator("input").fill("1")
+  await start.getByTestId("wf-start-submit").click()
+  await expect(a.getByTestId("wf-instance-sheet").getByTestId("wf-status")).toHaveText("审批中")
+  const id = new URL(a.url()).searchParams.get("id")
+  await a.close()
+
+  const admin = await browser.newPage()
+  await loginPageAs(admin, "admin", "123456")
+  await admin.goto(`/workflow/monitor?id=${id}`)
+  const sheet = admin.getByTestId("wf-instance-sheet")
+  await sheet.getByTestId("wf-act-reassign").click()
+  const dialog = admin.getByTestId("wf-action-dialog")
+  await expect(dialog).toContainText("当前办理人：赵磊")
+  await dialog.getByTestId("wf-action-users").click()
+  await admin.getByTestId("wf-action-users-search").fill("wangfang")
+  await admin.getByTestId("wf-action-users-search").press("Enter")
+  await admin.getByTestId("wf-action-users-opt-wangfang").click()
+  // 单选：选完浮层自己关。别按 Esc —— 那会连弹窗一起关掉
+  await expect(dialog.getByTestId("wf-action-users")).toContainText("王芳")
+  await dialog.getByTestId("wf-action-submit").click()
+  await expect(dialog).toBeHidden()
+  await expect(sheet.getByTestId("wf-timeline")).toContainText("管理员改给 王芳")
+
+  // 王芳的待办里有了
+  const w = await browser.newPage()
+  await loginPageAs(w, "wangfang", "123456")
+  await w.goto("/workflow/inbox")
+  await expect(w.locator('[data-tab="/_auth/workflow/inbox"]').getByTestId(`wf-row-${id}`)).toBeVisible()
+  await admin.close()
+  await w.close()
+})

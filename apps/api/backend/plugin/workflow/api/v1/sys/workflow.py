@@ -26,7 +26,7 @@ from backend.database.db import CurrentSession, CurrentSessionTransaction
 from backend.plugin.workflow.engine.flow import index_nodes
 from backend.plugin.workflow.engine.form import form_rules, is_bigint_id
 from backend.plugin.workflow.engine.simulate import simulate
-from backend.plugin.workflow.enums import FORM_BIZ_TYPE, PERM_REASSIGN
+from backend.plugin.workflow.enums import FORM_BIZ_TYPE
 from backend.plugin.workflow.model import WfDefinition, WfDefinitionVersion
 from backend.plugin.workflow.schema.workflow import (
     ActionParam,
@@ -301,17 +301,17 @@ async def get_monitor(
 
 @router.get(
     '/handover',
-    summary='离职交接：这个人手上有几条在办的待办',
-    dependencies=[Depends(RequestPermission(PERM_REASSIGN)), DependsRBAC],
+    summary='离职交接：手上有在办待办的人（含已停用的账号）',
+    dependencies=[Depends(RequestPermission('workflow:instance:reassign')), DependsRBAC],
 )
-async def get_handover(db: CurrentSession, user_id: Annotated[int, Query(description='用户 ID')]) -> ResponseModel:
-    return response_base.success(data={'count': len(await runtime_service.handover_tasks(db, user_id))})
+async def get_handover(db: CurrentSession) -> ResponseModel:
+    return response_base.success(data=await runtime_service.handover_holders(db))
 
 
 @router.post(
     '/handover',
     summary='离职交接：把一个人手上所有在办的待办交给另一个人',
-    dependencies=[Depends(RequestPermission(PERM_REASSIGN)), DependsRBAC],
+    dependencies=[Depends(RequestPermission('workflow:instance:reassign')), DependsRBAC],
 )
 async def do_handover(request: Request, db: CurrentSession, obj: HandoverParam) -> ResponseModel:
     data = await runtime_service.handover(

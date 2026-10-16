@@ -1,5 +1,9 @@
+import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
+import { IconUserShare } from '@tabler/icons-react'
+
+import { Button } from '@admin/ui/components/button'
 
 import { Pagination } from '@admin/ui/components/pagination'
 import { QueryError } from '@admin/ui/components/query-error'
@@ -8,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@admin/ui/lib/utils'
 import { formatDateTime } from '@admin/i18n'
 
+import { Can } from '../../auth/can'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, SelectFilter, TextFilter } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
@@ -16,6 +21,7 @@ import { monitorQuery, type InstanceStatus } from '../workflow/api'
 import { InstanceSheet } from '../workflow/instance-sheet'
 import { INSTANCE_STATUS, InstanceStatusPill } from '../workflow/status'
 import { PersonAvatar } from '../workflow/track'
+import { HandoverDialog } from './handover-dialog'
 
 export type WorkflowMonitorSearch = {
   page?: number
@@ -28,8 +34,8 @@ export type WorkflowMonitorSearch = {
 /**
  * 实例监控：管理员看全部审批单、终止在途的。
  *
- * 详情和审批中心是同一个抽屉 —— 终止按钮来自能力信封（有 `workflow:instance:terminate`
- * 才会出现），这里不额外判断。
+ * 详情和审批中心是同一个抽屉 —— 终止 / 改办理人按钮来自能力信封（有对应权限码才会出现），
+ * 这里不额外判断。「离职交接」是批量的改办理人，入口在页头（`workflow:instance:reassign`）。
  */
 export function WorkflowMonitorPage({
   search = {},
@@ -45,6 +51,7 @@ export function WorkflowMonitorPage({
   const query = useQuery(monitorQuery({ page, size, keyword: search.keyword, status: search.status }))
   const list = listState(query)
   const rows = query.data?.items ?? []
+  const [handover, setHandover] = React.useState(false)
   const statusItems = {
     all: t('全部状态'),
     ...Object.fromEntries(Object.entries(INSTANCE_STATUS).map(([k, v]) => [k, t(v.label)])),
@@ -65,7 +72,13 @@ export function WorkflowMonitorPage({
           items={statusItems}
           onChange={(v) => patch({ status: v === 'all' ? undefined : (v as InstanceStatus), page: 1 })}
         />
-        <span className="ms-auto">
+        <span className="ms-auto flex items-center gap-2">
+          <Can perm="workflow:instance:reassign">
+            <Button variant="outline" onClick={() => setHandover(true)} data-testid="wf-handover">
+              <IconUserShare className="size-4" />
+              {t('离职交接')}
+            </Button>
+          </Can>
           <RefreshButton onClick={list.onRetry} busy={list.busy} />
         </span>
       </div>
@@ -126,6 +139,7 @@ export function WorkflowMonitorPage({
         />
       )}
       <InstanceSheet id={search.id ?? null} onClose={() => patch({ id: undefined })} />
+      <HandoverDialog open={handover} onOpenChange={setHandover} />
     </div>
   )
 }

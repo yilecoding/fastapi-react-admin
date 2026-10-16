@@ -8,6 +8,7 @@ import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@admin/ui/components/dialog'
 import { QueryError } from '@admin/ui/components/query-error'
+import { RadioGroup, RadioGroupItem } from '@admin/ui/components/radio-group'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@admin/ui/components/sheet'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
@@ -138,6 +139,10 @@ function Detail({
   )
   const merged = React.useMemo(() => ({ ...d.form_data, ...patch }), [d.form_data, patch])
   const track = React.useMemo(() => progressItems(d, t), [d, t])
+  // 被退回到自己手上：最近那条退回记录说了什么
+  const sentBack = isResubmit(d)
+    ? [...d.records].reverse().find((r) => r.action === 'send_back' && r.detail?.to === d.model.root.id)
+    : undefined
 
   return (
     <>
@@ -166,6 +171,16 @@ function Detail({
         <TabsContent value="form" keepMounted className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid min-h-full lg:grid-cols-[minmax(0,1fr)_22rem]">
             <section className="flex flex-col gap-4 px-6 py-5">
+              {sentBack && (
+                <div
+                  className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                  data-testid="wf-sent-back"
+                >
+                  <p className="font-medium">{t('{{n}} 退回了你的申请', { n: sentBack.actor_name ?? '' })}</p>
+                  {sentBack.opinion && <p className="mt-0.5 whitespace-pre-wrap">{sentBack.opinion}</p>}
+                  <p className="mt-1 text-xs opacity-80">{t('改好之后点「重新提交」，审批从头开始')}</p>
+                </div>
+              )}
               <h3 className="text-xs font-medium tracking-wide text-muted-foreground">{t('申请内容')}</h3>
               <FormRenderer
                 schema={d.form_schema}
@@ -179,7 +194,8 @@ function Detail({
                   setPatch(next)
                 }}
               />
-              {editable.size > 0 && (
+              {/* 被退回的发起人：顶上的横幅已经说了怎么做，这句是给审批人的 */}
+              {editable.size > 0 && !sentBack && (
                 <p className="rounded-md border-s-2 border-primary bg-muted px-3 py-2 text-xs text-muted-foreground">
                   {t('带输入框的字段由你在这一步填写，同意时一起提交')}
                 </p>
@@ -228,6 +244,12 @@ function Detail({
 
 // ── 动作台 ───────────────────────────────────────────────────────────────────
 
+/** 单被退回到发起人：他的那条待办在开始节点上 */
+function isResubmit(d: InstanceDetail): boolean {
+  const mine = d.tasks.find((x) => x.id === d.my_task_id)
+  return !!mine && mine.node_id === d.model.root.id
+}
+
 const ACTION_TEXT: Record<Action, string> = {
   approve: '同意',
   reject: '驳回',
@@ -236,6 +258,8 @@ const ACTION_TEXT: Record<Action, string> = {
   cc: '抄送',
   remind: '催办',
   terminate: '终止',
+  send_back: '退回',
+  reassign: '改办理人',
 }
 
 const DONE_TEXT: Record<Action, string> = {
@@ -246,6 +270,8 @@ const DONE_TEXT: Record<Action, string> = {
   cc: '已抄送',
   remind: '已催办',
   terminate: '已终止',
+  send_back: '已退回',
+  reassign: '已改办理人',
 }
 
 const DIALOG_TEXT: Partial<Record<Action, string>> = {
@@ -253,15 +279,30 @@ const DIALOG_TEXT: Partial<Record<Action, string>> = {
   terminate: '终止后审批立即结束，发起人会收到通知。',
   transfer: '转交后这条待办交给对方处理，你的待办随之结束。',
   cc: '对方会收到通知，并能在「抄送我的」里看到这张单。',
+  send_back: '单子回到你选的那一步重新处理，这一步的待办随之结束。退回给发起人时，由发起人改好后重新提交。',
+  reassign: '把这条待办交给另一个人处理，不需要原办理人同意。适合办理人离职或长期不在。',
+}
+
+type DialogNeed = {
+  opinion?: 'optional' | 'required'
+  users?: 'one' | 'many'
+  /** 退回：选退到哪一步 */
+  node?: true
+  /** 改办理人：选改哪一条待办 */
+  task?: true
 }
 
 /** 要先在弹窗里选人 / 写原因的动作。同意 / 驳回的意见在底部输入框里，不弹窗 */
-const DIALOG: Partial<Record<Action, { opinion?: 'optional' | 'required'; users?: 'one' | 'many' }>> = {
+const DIALOG: Partial<Record<Action, DialogNeed>> = {
   transfer: { users: 'one', opinion: 'optional' },
   cc: { users: 'many' },
   withdraw: { opinion: 'required' },
   terminate: { opinion: 'required' },
+  send_back: { node: true, opinion: 'required' },
+  reassign: { task: true, users: 'one', opinion: 'optional' },
 }
+
+type Extra = { opinion?: string; target_user_ids?: string[]; target_node_id?: string; task_id?: string }
 
 function ActionBar({
   detail: d, patch, editable, onDone, onResetPatch,
@@ -278,10 +319,11 @@ function ActionBar({
   const [opinion, setOpinion] = React.useState('')
   const [opinionError, setOpinionError] = React.useState(false)
   const cap = (a: Action) => d.capabilities.find((c) => c.action === a)
+  const resubmit = isResubmit(d)
 
   if (d.capabilities.length === 0) return null
 
-  async function run(action: Action, extra: { opinion?: string; target_user_ids?: string[] } = {}) {
+  async function run(action: Action, extra: Extra = {}) {
     const body: Parameters<typeof act.mutateAsync>[0] = { action, key: idempotencyKey(), ...extra }
     if (action === 'approve') {
       const missing = missingRequired(d.form_schema, { ...d.form_data, ...patch }, editable)
@@ -293,11 +335,11 @@ function ActionBar({
     }
     try {
       await act.mutateAsync(body)
-      toast.success(t(DONE_TEXT[action]))
+      toast.success(resubmit && action === 'approve' ? t('已重新提交') : t(DONE_TEXT[action]))
       onResetPatch()
       setOpinion('')
-      // 审批人办完就关掉；发起人撤回 / 催办之后留在详情里看结果
-      if (action === 'approve' || action === 'reject' || action === 'transfer') onDone()
+      // 办完自己那一步就关掉；撤回 / 催办 / 管理员改办理人之后留在详情里看结果
+      if (['approve', 'reject', 'transfer', 'send_back'].includes(action)) onDone()
       return true
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : t('操作失败，请稍后重试'))
@@ -320,7 +362,7 @@ function ActionBar({
         data-testid={`wf-act-${a}`}
       >
         {act.isPending && act.variables?.action === a && <IconLoader2 className="size-4 animate-spin" />}
-        {t(ACTION_TEXT[a])}
+        {a === 'approve' && resubmit ? t('重新提交') : t(ACTION_TEXT[a])}
       </Button>
     )
   }
@@ -333,7 +375,7 @@ function ActionBar({
             rows={2}
             maxLength={512}
             value={opinion}
-            placeholder={t('审批意见（驳回时必填）')}
+            placeholder={resubmit ? t('补充说明（可选）') : t('审批意见（驳回时必填）')}
             aria-invalid={opinionError || undefined}
             onChange={(e) => {
               setOpinion(e.target.value)
@@ -347,10 +389,12 @@ function ActionBar({
       <div className="flex flex-wrap items-center gap-2">
         {btn('transfer', 'ghost', () => setDialog('transfer'))}
         {btn('cc', 'ghost', () => setDialog('cc'))}
+        {btn('reassign', 'ghost', () => setDialog('reassign'))}
         {btn('terminate', 'ghost', () => setDialog('terminate'))}
         <span className="ms-auto flex gap-2">
           {btn('remind', 'outline', () => run('remind'))}
           {btn('withdraw', 'outline', () => setDialog('withdraw'))}
+          {btn('send_back', 'outline', () => setDialog('send_back'))}
           {btn('reject', 'outline', () => {
             if (!opinion.trim()) {
               setOpinionError(true)
@@ -363,7 +407,7 @@ function ActionBar({
       </div>
       <ActionDialog
         action={dialog}
-        initiatorId={d.instance.initiator_id}
+        detail={d}
         pending={act.isPending}
         onClose={() => setDialog(null)}
         onSubmit={async (extra) => {
@@ -375,27 +419,40 @@ function ActionBar({
 }
 
 function ActionDialog({
-  action, initiatorId, pending, onClose, onSubmit,
+  action, detail: d, pending, onClose, onSubmit,
 }: {
   action: Action | null
-  initiatorId: string
+  detail: InstanceDetail
   pending: boolean
   onClose: () => void
-  onSubmit: (extra: { opinion?: string; target_user_ids?: string[] }) => void
+  onSubmit: (extra: Extra) => void
 }) {
   const { t } = useTranslation()
   const [opinion, setOpinion] = React.useState('')
   const [users, setUsers] = React.useState<string[]>([])
+  const [node, setNode] = React.useState<string | null>(null)
+  const [task, setTask] = React.useState<string | null>(null)
+  const pendingTasks = React.useMemo(() => d.tasks.filter((x) => x.status === 'pending'), [d.tasks])
   React.useEffect(() => {
     if (action) {
       setOpinion('')
       setUsers([])
+      // 默认选最近的那一步（列表最后一个）；改办理人只有一条待办时直接选上
+      setNode(d.send_back_targets.at(-1)?.node_id ?? null)
+      setTask(pendingTasks.length === 1 ? pendingTasks[0].id : null)
     }
-  }, [action])
+  }, [action, d.send_back_targets, pendingTasks])
   const need = action ? DIALOG[action] : undefined
   const okOpinion = need?.opinion !== 'required' || opinion.trim().length > 0
   const okUsers = !need?.users || users.length > 0
+  const okNode = !need?.node || !!node
+  const okTask = !need?.task || !!task
   const text = action ? DIALOG_TEXT[action] : undefined
+  // 转交 / 改办理人不能给发起人，也不能给这一步里已经有份的人（服务端同样会拒）
+  const exclude =
+    action === 'transfer' || action === 'reassign'
+      ? [d.instance.initiator_id, ...pendingTasks.map((x) => x.assignee_id)]
+      : undefined
 
   return (
     <Dialog open={!!action} onOpenChange={(o) => !o && onClose()}>
@@ -405,19 +462,59 @@ function ActionDialog({
           <DialogDescription>{text ? t(text) : ''}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 px-4">
+          {need?.node && (
+            <Row label={t('退回到')} required>
+              <RadioGroup value={node} onValueChange={(v) => setNode(String(v))} className="gap-2" data-testid="wf-back-targets">
+                {d.send_back_targets.map((x, i) => (
+                  <label
+                    key={x.node_id}
+                    className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm has-data-checked:border-primary has-data-checked:bg-primary/5"
+                  >
+                    <RadioGroupItem value={x.node_id} data-testid={`wf-back-${x.node_id}`} />
+                    <span>{x.name}</span>
+                    {i === 0 && <span className="ms-auto text-xs text-muted-foreground">{t('改好后重新提交')}</span>}
+                  </label>
+                ))}
+              </RadioGroup>
+            </Row>
+          )}
+          {need?.task && pendingTasks.length > 1 && (
+            <Row label={t('改哪一位的待办')} required>
+              <RadioGroup value={task} onValueChange={(v) => setTask(String(v))} className="gap-2">
+                {pendingTasks.map((x) => (
+                  <label
+                    key={x.id}
+                    className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm has-data-checked:border-primary has-data-checked:bg-primary/5"
+                  >
+                    <RadioGroupItem value={x.id} />
+                    <span>{x.assignee_name}</span>
+                    <span className="ms-auto text-xs text-muted-foreground">{x.node_name}</span>
+                  </label>
+                ))}
+              </RadioGroup>
+            </Row>
+          )}
+          {need?.task && pendingTasks.length === 1 && (
+            <p className="text-sm text-muted-foreground">
+              {t('当前办理人：{{n}}（{{node}}）', { n: pendingTasks[0].assignee_name, node: pendingTasks[0].node_name })}
+            </p>
+          )}
           {need?.users && (
-            <Row label={action === 'cc' ? t('抄送给') : t('转交给')} required>
+            <Row label={action === 'cc' ? t('抄送给') : action === 'reassign' ? t('改给') : t('转交给')} required>
               <UserSelect
                 value={users}
                 onChange={setUsers}
                 multiple={need.users === 'many'}
-                exclude={action === 'transfer' ? [initiatorId] : undefined}
+                exclude={exclude}
                 testId="wf-action-users"
               />
             </Row>
           )}
           {need?.opinion && (
-            <Row label={action === 'transfer' ? t('说明') : t('原因')} required={need.opinion === 'required'}>
+            <Row
+              label={action === 'transfer' || action === 'reassign' ? t('说明') : action === 'send_back' ? t('退回原因') : t('原因')}
+              required={need.opinion === 'required'}
+            >
               <Textarea
                 rows={3}
                 value={opinion}
@@ -432,9 +529,14 @@ function ActionDialog({
           <DialogClose render={<Button variant="outline" type="button" />}>{t('取消')}</DialogClose>
           <Button
             variant={action === 'terminate' || action === 'withdraw' ? 'destructive' : 'default'}
-            disabled={!okOpinion || !okUsers || pending}
+            disabled={!okOpinion || !okUsers || !okNode || !okTask || pending}
             onClick={() =>
-              onSubmit({ opinion: opinion.trim() || undefined, target_user_ids: users.length ? users : undefined })
+              onSubmit({
+                opinion: opinion.trim() || undefined,
+                target_user_ids: users.length ? users : undefined,
+                target_node_id: need?.node ? (node ?? undefined) : undefined,
+                task_id: need?.task ? (task ?? undefined) : undefined,
+              })
             }
             data-testid="wf-action-submit"
           >
@@ -449,9 +551,12 @@ function ActionDialog({
 
 export function _i18nExtractionAnchors(t: (k: string) => string) {
   return [
-    t('同意'), t('驳回'), t('撤回'), t('转交'), t('抄送'), t('催办'), t('终止'),
-    t('已同意'), t('已驳回'), t('已撤回'), t('已转交'), t('已抄送'), t('已催办'), t('已终止'),
+    t('同意'), t('驳回'), t('撤回'), t('转交'), t('抄送'), t('催办'), t('终止'), t('退回'), t('改办理人'),
+    t('已同意'), t('已驳回'), t('已撤回'), t('已转交'), t('已抄送'), t('已催办'), t('已终止'), t('已退回'),
+    t('已改办理人'),
     t('撤回后这张审批单作废，已经审批过的人会收到通知。'), t('终止后审批立即结束，发起人会收到通知。'),
     t('转交后这条待办交给对方处理，你的待办随之结束。'), t('对方会收到通知，并能在「抄送我的」里看到这张单。'),
+    t('单子回到你选的那一步重新处理，这一步的待办随之结束。退回给发起人时，由发起人改好后重新提交。'),
+    t('把这条待办交给另一个人处理，不需要原办理人同意。适合办理人离职或长期不在。'),
   ]
 }
