@@ -51,7 +51,7 @@ export function WorkflowMonitorPage({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 py-4 md:py-6">
       <PageHeader title={t('实例监控')} />
       <div className="flex flex-wrap items-center gap-2">
         <TextFilter

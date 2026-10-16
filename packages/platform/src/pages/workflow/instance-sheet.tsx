@@ -17,6 +17,7 @@ import { formatDateTime } from '@admin/i18n'
 
 import { ApiError } from '../../api-client/errors'
 import { meQuery } from '../../auth/queries'
+import { useTabVisible } from '../../shell/tab-outlet'
 import { FormField as Row } from '../_shared/form-fields'
 import {
   detailQuery, idempotencyKey, useAct, useMarkCcRead,
@@ -40,9 +41,14 @@ import { ApprovalTrack, PersonAvatar } from './track'
  */
 export function InstanceSheet({ id, onClose }: { id: string | null; onClose: () => void }) {
   const { t } = useTranslation()
+  // 抽屉开在 URL 上（`?id=`）：只在自己这个 tab 在前台时打开，见 `useTabVisible` 的注释
+  const visible = useTabVisible()
+  // 不在前台就**整个不渲染**，不能只传 open={false}：Base UI 关抽屉要等退场动画的 effect 跑完
+  // 才卸掉 portal，而后台 tab 的 effect 被 <Activity> 销毁了 —— 实测「关掉」的抽屉一直留在屏幕上
+  if (!visible) return null
   return (
     <Sheet open={!!id} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" className="gap-0 data-[side=right]:sm:max-w-5xl" data-testid="wf-instance-sheet">
+      <SheetContent side="right" className="gap-0 data-[side=right]:w-full data-[side=right]:sm:w-3/4 data-[side=right]:sm:max-w-5xl" data-testid="wf-instance-sheet">
         {id ? <Body id={id} onClose={onClose} /> : <SheetTitle className="sr-only">{t('审批详情')}</SheetTitle>}
       </SheetContent>
     </Sheet>
@@ -141,7 +147,7 @@ function Detail({ detail: d, onDone }: { detail: InstanceDetail; onDone: () => v
                 }}
               />
               {editable.size > 0 && (
-                <p className="rounded-md bg-primary/5 px-3 py-2 text-xs text-primary">
+                <p className="rounded-md border-s-2 border-primary bg-muted px-3 py-2 text-xs text-muted-foreground">
                   {t('带输入框的字段由你在这一步填写，同意时一起提交')}
                 </p>
               )}

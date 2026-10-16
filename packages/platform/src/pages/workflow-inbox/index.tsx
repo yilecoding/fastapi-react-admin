@@ -85,7 +85,7 @@ export function WorkflowInboxPage({
   const badge = (v: InboxTab) => (v === 'todo' ? counts?.todo : v === 'cc' ? counts?.cc_unread : undefined)
 
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+    <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 lg:flex-row lg:items-start">
       <PageHeader title={t('审批中心')} />
 
       <nav className="flex shrink-0 flex-col gap-3 lg:sticky lg:top-4 lg:w-52" aria-label={t('审批中心')}>
@@ -93,7 +93,7 @@ export function WorkflowInboxPage({
           <IconPlus className="size-4" />
           {t('发起申请')}
         </Button>
-        <ul className="flex gap-1 overflow-x-auto lg:flex-col">
+        <ul className="grid grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-1">
           {TABS.map((x) => {
             const n = badge(x.value)
             const on = x.value === tab
@@ -104,7 +104,7 @@ export function WorkflowInboxPage({
                   onClick={() => patch({ tab: x.value, page: 1, keyword: undefined })}
                   className={cn(
                     'flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-sm whitespace-nowrap transition-colors',
-                    on ? 'bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    on ? 'bg-primary/15 font-medium text-foreground [&>svg]:text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   )}
                   aria-current={on ? 'page' : undefined}
                   data-testid={`wf-inbox-tab-${x.value}`}
@@ -115,7 +115,7 @@ export function WorkflowInboxPage({
                     <span
                       className={cn(
                         'min-w-5 rounded-full px-1.5 text-center text-xs leading-5 tabular-nums',
-                        x.value === 'todo' ? 'bg-destructive text-white' : 'bg-primary/15 text-primary'
+                        x.value === 'todo' ? 'bg-destructive text-white' : 'bg-primary text-primary-foreground'
                       )}
                       data-testid={`wf-badge-${x.value}`}
                     >

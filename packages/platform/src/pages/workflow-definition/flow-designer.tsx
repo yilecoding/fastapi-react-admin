@@ -187,7 +187,7 @@ function Segmented<T extends string>({
           onClick={() => onChange(x.value)}
           className={cn(
             'rounded-md border px-2 py-1 text-xs',
-            value === x.value ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted'
+            value === x.value ? 'border-primary bg-primary/15 font-medium text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
           data-testid={testId ? `${testId}-${x.value}` : undefined}
         >

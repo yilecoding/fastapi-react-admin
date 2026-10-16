@@ -121,10 +121,10 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
     )
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5 py-4 md:py-6">
       <PageHeader title={t('流程定义')} />
       <div className="flex flex-wrap items-center gap-2">
-        <InputGroup className="h-8 w-64">
+        <InputGroup className="h-8 w-full sm:w-64">
           <InputGroupAddon align="inline-start">
             <IconSearch className="size-4 text-muted-foreground" />
           </InputGroupAddon>
@@ -399,7 +399,7 @@ function Designer({
   const used = usedFields(cur.model)
 
   return (
-    <div className="flex flex-col gap-4" data-testid="wfd-designer">
+    <div className="flex flex-col gap-4 py-4 md:py-6" data-testid="wfd-designer">
       <PageHeader title={t('流程设计')} />
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-3 py-2.5">
         <Button
@@ -433,7 +433,7 @@ function Designer({
                 aria-current={step === s.value ? 'step' : undefined}
                 className={cn(
                   'flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors',
-                  step === s.value ? 'bg-primary/10 font-medium text-primary' : 'text-muted-foreground hover:bg-muted'
+                  step === s.value ? 'bg-primary/15 font-medium text-foreground' : 'text-muted-foreground hover:bg-muted'
                 )}
                 data-testid={`wfd-step-${s.value}`}
               >

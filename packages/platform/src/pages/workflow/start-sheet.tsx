@@ -11,6 +11,7 @@ import { toast } from '@admin/ui/components/toast'
 
 import { ApiError } from '../../api-client/errors'
 import { meQuery } from '../../auth/queries'
+import { useTabVisible } from '../../shell/tab-outlet'
 import { FormField as Row } from '../_shared/form-fields'
 import {
   idempotencyKey, previewQuery, startFormQuery, useStartInstance,
@@ -36,9 +37,13 @@ export function StartSheet({
   onClose: () => void
   onStarted: (instanceId: string) => void
 }) {
+  // 同 InstanceSheet：开在 URL 上（`?start=`），只在自己这个 tab 在前台时打开
+  const visible = useTabVisible()
+  // 不在前台就整个不渲染，原因见 InstanceSheet
+  if (!visible) return null
   return (
     <Sheet open={!!code} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" className="gap-0 data-[side=right]:sm:max-w-4xl" data-testid="wf-start-sheet">
+      <SheetContent side="right" className="gap-0 data-[side=right]:w-full data-[side=right]:sm:w-3/4 data-[side=right]:sm:max-w-4xl" data-testid="wf-start-sheet">
         {code && <Body code={code} onStarted={onStarted} />}
       </SheetContent>
     </Sheet>

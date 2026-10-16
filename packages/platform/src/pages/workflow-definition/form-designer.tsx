@@ -321,7 +321,7 @@ function OptionsEditor({
               onChange={(e) => onChange(options.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
             />
             <Input
-              className="h-8 w-24 font-mono"
+              className="h-8 w-28 font-mono"
               value={o.value}
               placeholder={t('值')}
               onChange={(e) => onChange(options.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}

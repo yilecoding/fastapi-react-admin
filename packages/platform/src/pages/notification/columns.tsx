@@ -10,6 +10,7 @@ import { cn } from '@admin/ui/lib/utils'
 
 import { StatusPill } from '../_shared/status'
 import type { Notification } from './api'
+import type { NotificationLink } from './use-open'
 import { categoryMeta, type TFn } from './shared'
 import type { features } from './table-features'
 
@@ -17,7 +18,7 @@ const col = createColumnHelper<typeof features, Notification>()
 
 export function buildColumns(
   /** 可点就返回目标路由，不可点返回 null（见 `use-open.ts`） */
-  linkOf: (n: Notification) => string | null,
+  linkOf: (n: Notification) => NotificationLink | null,
   /** 未读才发已读请求 */
   readIfUnread: (n: Notification) => void,
   onMarkRead: (n: Notification) => void,
@@ -48,8 +49,8 @@ export function buildColumns(
         // 而 TanStack 的 `to` 类型是已知路由的字面量联合 —— 动态值只能断言过去
         return to ? (
           <Link
-            to={to as never}
-            search={{} as never}
+            to={to.to as never}
+            search={to.search as never}
             onClick={() => readIfUnread(n)}
             data-testid={`open-notification-${n.id}`}
             data-unread={!n.read_time}

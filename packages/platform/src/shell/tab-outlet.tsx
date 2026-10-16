@@ -22,6 +22,25 @@ import { useTabStore } from './tab-store'
  */
 export type PageRegistry = Record<string, ComponentType<any>>
 
+/**
+ * 「我这一页现在是不是前台的那个 tab」。
+ *
+ * 🔴 **由 URL 驱动打开的浮层（抽屉 / 弹窗）必须看它。** 浮层走 portal 挂在 `<body>` 下，
+ * 不在 `<Activity>` 隐藏的那棵 DOM 里 —— 实测：审批中心的详情抽屉开在 `?id=` 上，
+ * 刷新后那个 tab 在**后台**被恢复出来，抽屉照样渲染，压在前台的消息中心上面，把点击全挡住，
+ * 而前台那一页看起来像「点了没反应」。点出来的浮层（useState 开的）没这个问题 ——
+ * 切 tab 之前你已经在前台把它关了，或者它就开在前台。
+ *
+ * ⚠️ 用法是「不在前台就**整个不渲染**浮层」，不是传 `open={false}`：Base UI 关浮层要等
+ * 退场动画的 effect 跑完才卸掉 portal，而后台 tab 的 effect 已经被 `<Activity>` 销毁了 ——
+ * 实测只改 open 的话，那个「已经关掉」的抽屉一直留在屏幕上。
+ */
+const TabVisibleContext = React.createContext(true)
+
+export function useTabVisible(): boolean {
+  return React.useContext(TabVisibleContext)
+}
+
 export function TabOutlet({ registry }: { registry: PageRegistry }) {
   const tabs = useTabStore((s) => s.tabs)
   const activeKey = useTabStore((s) => s.activeKey)
@@ -96,7 +115,9 @@ function TabFrame({
       data-visible={visible}
       className="flex min-w-0 flex-1 flex-col content-scroll:min-h-0"
     >
-      <Page params={params} search={search} onSearchChange={onSearchChange} />
+      <TabVisibleContext.Provider value={visible}>
+        <Page params={params} search={search} onSearchChange={onSearchChange} />
+      </TabVisibleContext.Provider>
     </div>
   )
 }

@@ -214,7 +214,7 @@ function ConditionBlock({ node }: { node: Extract<FlowNode, { type: 'condition' 
               type="button"
               variant="outline"
               size="sm"
-              className="h-6 rounded-full bg-background px-2 text-xs text-emerald-700"
+              className="h-6 rounded-full bg-background px-2 text-xs text-emerald-700 dark:text-emerald-400"
               onClick={() => ctx.onAddBranch?.(node.id)}
               data-testid={`flow-add-branch-${node.id}`}
             >

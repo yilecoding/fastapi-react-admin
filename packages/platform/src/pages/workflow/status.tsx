@@ -15,7 +15,7 @@ export function InstanceStatusPill({ status }: { status: InstanceStatus }) {
   const { t } = useTranslation()
   const meta = INSTANCE_STATUS[status] ?? { label: status, tone: 'muted' as Tone }
   return (
-    <StatusPill tone={meta.tone} data-testid="wf-status">
+    <StatusPill tone={meta.tone} className="shrink-0 whitespace-nowrap" data-testid="wf-status">
       {t(meta.label)}
     </StatusPill>
   )

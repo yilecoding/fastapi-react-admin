@@ -44,7 +44,7 @@ const MARK: Record<TrackState, { cls: string; icon: React.ComponentType<{ classN
   current: { cls: 'bg-amber-500 text-white ring-4 ring-amber-500/20', icon: IconClockHour4 },
   rejected: { cls: 'bg-destructive text-white', icon: IconX },
   withdrawn: { cls: 'bg-muted-foreground text-white', icon: IconArrowForwardUp },
-  future: { cls: 'border-2 border-dashed border-border bg-background text-muted-foreground', icon: IconDots },
+  future: { cls: 'border border-dashed border-muted-foreground/50 bg-card text-muted-foreground', icon: IconDots },
   skipped: { cls: 'border border-border bg-muted text-muted-foreground', icon: IconPlayerSkipForward },
   warn: { cls: 'bg-destructive/10 text-destructive ring-1 ring-destructive/30', icon: IconUserQuestion },
 }

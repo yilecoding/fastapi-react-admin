@@ -127,9 +127,21 @@ test("发起 → 主管在待办里同意并填备注 → 发起人看到已通�
   await expect(detailA.getByTestId("wf-timeline")).toContainText("可以")
   await expect(detailA.getByTestId("wf-actions")).toHaveCount(0)
 
+  // 消息中心里的结果通知能点，点进去就是这张单（link 带 `?id=`，曾经整条变成不可点）
+  await initiator.goto("/notification")
+  const scopeN = initiator.locator('[data-tab="/_auth/notification"]')
+  const link = scopeN.locator(`[data-testid^="open-notification-"]`, { hasText: "已通过" }).first()
+  await expect(link).toBeVisible()
+  await link.click()
+  const reopened = initiator.getByTestId("wf-instance-sheet")
+  await expect(reopened.getByTestId("wf-title")).toBeVisible()
+  await expect(initiator).toHaveURL(new RegExp(`/workflow/inbox\\?id=${id}`))
+  await expect(reopened.getByTestId("wf-status")).toHaveText("已通过")
+  const detailA2 = reopened
+
   // 流程图：节点标成已办
-  await detailA.getByTestId("wf-tab-flow").click()
-  await expect(detailA.getByTestId("flow-node-n_leader")).toHaveAttribute("data-state", "done")
+  await detailA2.getByTestId("wf-tab-flow").click()
+  await expect(detailA2.getByTestId("flow-node-n_leader")).toHaveAttribute("data-state", "done")
 
   await initiator.close()
   await approver.close()

@@ -378,3 +378,22 @@ socket 这条通道也要做一遍「这个人能不能看这条」的权限判�
 E2E：`e2e/tests/tour.spec.ts`。**fixture 默认把外壳导览标成已看过**（`seedTourSeen`），
 否则每条落到 `/dashboard` 的用例首屏都是一层遮罩、所有点击被挡，整套一起红而报错各不相同。
 
+
+## 🔴 开在 URL 上的浮层，后台 tab 里要整个不渲染（`useTabVisible`）
+
+**症状**：审批中心的详情抽屉开在 `?id=` 上。刷新之后去别的页面，那个抽屉**压在前台页面上**，
+把点击全挡住 —— 前台那一页看起来像「点了没反应」。
+
+**根因两层**：
+
+1. 浮层走 portal 挂在 `<body>` 下，不在 `<Activity mode="hidden">` 隐藏的那棵 DOM 里。
+   刷新后后台 tab 从 sessionStorage 恢复出来，`search.id` 还在，抽屉照样以「打开」挂载
+2. 改成 `open={!!id && visible}` **也不行**：Base UI 关浮层要等退场动画的 effect 跑完才卸掉 portal，
+   而后台 tab 的 effect 已经被 `<Activity>` 销毁了 —— 实测那个「已经关掉」的抽屉一直留在屏幕上
+
+**修法**：`TabFrame` 用 context 下发 `visible`，页面里 `const visible = useTabVisible()`，
+不在前台就 `return null`（卸载组件会同步移除 portal，不依赖 effect）。
+
+只有**由 URL 驱动**打开的浮层需要这样做；点出来的（`useState` 开的）切 tab 之前就已经在前台关掉了。
+**实测证据**：`apps/web/e2e/tests/workflow.spec.ts` 第一条 —— 发起人开着详情抽屉的 `?id=`，
+`goto('/notification')` 后点通知；修之前点击被后台抽屉挡住，超时。
