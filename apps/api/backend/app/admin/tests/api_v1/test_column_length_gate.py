@@ -1,13 +1,14 @@
 """写入侧的字符串长度闸门。
 
-⚠️ **此前一个字都没限。** 前端限了长度（`dept/form.tsx` 的 `leader` 是
+⚠️ **此前一个字都没限。** 前端限了长度（`dept/form.tsx` 当时的 `leader` 是
 `max(20)`），后端 schema 没限，列是 `UniversalStr(32)` —— 三个数字互不相同，
 而超出列长度的表现是**裸 SQL 错误冒到 500**：
 
     pyodbc.ProgrammingError: ('42000', "... String or binary data would be
     truncated in table 'fba_test.dbo.sys_dept', column 'leader' ...")
 
-（实测，33 个字符就触发。）
+（实测，33 个字符就触发。`leader` 后来换成了 `leader_id`（#107），
+下面的测试改用同样是可写字符串列的 `name`（64）。）
 
 🔴 **这个洞盖不住的原因值得记**：`get_db_transaction` 是在 `begin()` 里
 `yield` 的，commit 发生在**依赖收尾**，那时已经出了异常处理器的覆盖范围 ——
@@ -83,25 +84,25 @@ def test_over_long_value_is_422_not_500(client: TestClient, token_headers: dict[
     resp = client.post(
         '/sys/depts',
         headers=token_headers,
-        json={'name': 'pytest-长度闸门', 'code': 'PYTESTLEN', 'leader': '字' * 40, 'sort': 0, 'status': 1},
+        json={'name': '字' * 70, 'code': 'PYTESTLEN', 'sort': 0, 'status': 1},
     )
     assert resp.status_code == 422, f'期望 422，实际 {resp.status_code}：{resp.text[:200]}'
     msg = resp.json()['msg']
-    assert 'leader' in msg, f'报错没点出是哪个字段：{msg}'
-    assert '32' in msg, f'报错没给出上限（列长度 32）：{msg}'
+    assert 'name' in msg, f'报错没点出是哪个字段：{msg}'
+    assert '64' in msg, f'报错没给出上限（列长度 64）：{msg}'
 
 
 def test_value_within_the_column_length_still_works(client: TestClient, token_headers: dict[str, str]) -> None:
     """列长度以内照旧能写 —— 只验「超长被拒」的话，全拒的实现也是绿的。
 
-    ⚠️ 用**正好 32 个**字符（列的上限），把边界钉在「等于上限要放过」这一侧：
+    ⚠️ 用**正好 64 个**字符（列的上限），把边界钉在「等于上限要放过」这一侧：
     判据写成 `>=` 会把恰好填满的值拒掉，而那种误杀在界面上表现为
     「明明没超还是存不下」。
     """
     resp = client.post(
         '/sys/depts',
         headers=token_headers,
-        json={'name': 'pytest-长度边界', 'code': 'PYTESTEDGE', 'leader': '字' * 32, 'sort': 0, 'status': 1},
+        json={'name': '字' * 64, 'code': 'PYTESTEDGE', 'sort': 0, 'status': 1},
     )
     assert resp.json()['code'] == 200, resp.text
 
@@ -118,7 +119,7 @@ def test_value_within_the_column_length_still_works(client: TestClient, token_he
 
     row = find(tree)
     assert row is not None, '写进去了却查不到'
-    assert len(row['leader']) == 32
+    assert len(row['name']) == 64
     # 清理交给 `_purge_probe_depts` —— 断言红了它照样跑
 
 
@@ -134,7 +135,7 @@ def test_mixin_ignores_fields_that_are_not_columns() -> None:
 
     assert CreateDeptParam.__sa_model__ is Dept
     # `parent_id` 是 BIGINT、`sort` 是 INT，都没有 length；不该被误伤
-    param = CreateDeptParam(name='x' * 10, code='OKCODE', leader=None, sort=0, status=1)
+    param = CreateDeptParam(name='x' * 10, code='OKCODE', leader_id=None, sort=0, status=1)
     assert param.name == 'x' * 10
 
 

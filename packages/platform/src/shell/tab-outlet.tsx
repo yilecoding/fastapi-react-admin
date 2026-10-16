@@ -22,6 +22,30 @@ import { useTabStore } from './tab-store'
  */
 export type PageRegistry = Record<string, ComponentType<any>>
 
+/**
+ * 本 tab 的根节点（`[data-tab]`）—— 由 URL 驱动打开的浮层把 portal 挂到这里。
+ *
+ * 🔴 **由 URL 驱动打开的浮层（抽屉 / 弹窗）必须用它。** 浮层走 portal 挂在 `<body>` 下，
+ * 不在 `<Activity>` 隐藏的那棵 DOM 里 —— 实测：审批中心的详情抽屉开在 `?id=` 上，
+ * 刷新后那个 tab 在**后台**被恢复出来，抽屉照样渲染，压在前台的消息中心上面，把点击全挡住，
+ * 而前台那一页看起来像「点了没反应」。点出来的浮层（useState 开的）没这个问题 ——
+ * 切 tab 之前你已经在前台把它关了，或者它就开在前台。
+ *
+ * 修法是把浮层的 portal 挂进**本 tab 的根节点**（`useTabPortalContainer()` → `SheetContent container`）：
+ * `<Activity>` 把后台 tab 的根节点 `display:none`，浮层跟着藏起来，而浮层里的状态（填了一半的表单、
+ * 写好的意见）原样保活 —— 切回来还在。
+ *
+ * ⚠️ 走过的两条弯路，都实测踩过：
+ * - 后台时传 `open={false}`：Base UI 关浮层要等退场动画的 effect 跑完才卸掉 portal，而后台 tab 的
+ *   effect 已经被 `<Activity>` 销毁了 —— 那个「已经关掉」的抽屉一直留在屏幕上
+ * - 后台时整个不渲染：挡不住了，但切一下 tab，填了一半的发起表单、写好的审批意见全没了（独立审查发现）
+ */
+const TabContainerContext = React.createContext<HTMLElement | null>(null)
+
+export function useTabPortalContainer(): HTMLElement | null {
+  return React.useContext(TabContainerContext)
+}
+
 export function TabOutlet({ registry }: { registry: PageRegistry }) {
   const tabs = useTabStore((s) => s.tabs)
   const activeKey = useTabStore((s) => s.activeKey)
@@ -70,6 +94,13 @@ function TabFrame({
   navigate: ReturnType<typeof useNavigate>
 }) {
   const pathname = React.useMemo(() => href.split('?')[0] ?? href, [href])
+  // 用 state 不用 ref：子树要在拿到节点后重新渲染一次，才能把 portal 挂进来。
+  // 🔴 回调里**忽略 null**：`<Activity>` 隐藏时会把 ref 解绑（传 null），而那个 DOM 节点其实还在。
+  // 跟着置 null 的话 portal 目标变回 <body>、浮层整个重挂 —— 实测切回来表单是空的
+  const [container, setContainer] = React.useState<HTMLElement | null>(null)
+  const keepContainer = React.useCallback((el: HTMLElement | null) => {
+    if (el) setContainer(el)
+  }, [])
 
   // 页面改筛选/分页 → 写进 URL（视图状态的持久层，刷新后可恢复）
   const onSearchChange = React.useCallback(
@@ -92,11 +123,14 @@ function TabFrame({
     // 页面里那些想变成定高视区的块（列表页的表格框）永远拿不到约束，
     // 于是外层内容区照旧整块滚 —— 看着像「设置没生效」。整页滚动模式下这条是空操作。
     <div
+      ref={keepContainer}
       data-tab={tabKey}
       data-visible={visible}
       className="flex min-w-0 flex-1 flex-col content-scroll:min-h-0"
     >
-      <Page params={params} search={search} onSearchChange={onSearchChange} />
+      <TabContainerContext.Provider value={container}>
+        <Page params={params} search={search} onSearchChange={onSearchChange} />
+      </TabContainerContext.Provider>
     </div>
   )
 }

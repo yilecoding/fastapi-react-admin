@@ -378,3 +378,29 @@ socket 这条通道也要做一遍「这个人能不能看这条」的权限判�
 E2E：`e2e/tests/tour.spec.ts`。**fixture 默认把外壳导览标成已看过**（`seedTourSeen`），
 否则每条落到 `/dashboard` 的用例首屏都是一层遮罩、所有点击被挡，整套一起红而报错各不相同。
 
+
+## 🔴 开在 URL 上的浮层，portal 要挂进本 tab 的根节点（`useTabPortalContainer`）
+
+**症状**：审批中心的详情抽屉开在 `?id=` 上。刷新之后去别的页面，那个抽屉**压在前台页面上**，
+把点击全挡住 —— 前台那一页看起来像「点了没反应」。
+
+**根因**：浮层走 portal 挂在 `<body>` 下，不在 `<Activity mode="hidden">` 隐藏的那棵 DOM 里。
+刷新后后台 tab 从 sessionStorage 恢复出来，`search.id` 还在，抽屉照样以「打开」挂载。
+
+**修法**：`TabFrame` 用 context 下发自己的根节点，浮层 `container={useTabPortalContainer()}`
+（`SheetContent` 透传给 `SheetPortal`）。tab 进后台时根节点 `display:none`，抽屉跟着藏；
+里面的 state 原样保活，切回来草稿还在。后台那个「开着」的抽屉不会把前台变成 inert
+（E2E 里切过去之后照样点得动标签条）。⚠️ 整页滚动模式下的滚动锁**没单独验过**。
+
+走过的三条弯路，全部实测踩过：
+
+| 做法 | 结果 |
+|---|---|
+| 后台时 `open={!!id && visible}` | Base UI 关浮层要等退场动画的 effect 跑完才卸 portal，而后台 effect 已被销毁 —— 「已经关掉」的抽屉一直留在屏幕上 |
+| 后台时整个 `return null` | 挡不住了，但切一下 tab，填了一半的发起表单、写好的审批意见**全没了** |
+| `ref={setContainer}` 直接存节点 | `<Activity>` 隐藏时把 ref **解绑成 null**（节点其实还在）→ portal 目标变回 `<body>` → 浮层整个重挂，切回来表单是空的。回调里要**忽略 null**（`keepContainer`） |
+
+只有**由 URL 驱动**打开的浮层需要这样做；点出来的（`useState` 开的）切 tab 之前就已经在前台关掉了。
+**实测证据**：`apps/web/e2e/tests/workflow.spec.ts` ——「填到一半切走再切回来」那条
+（应用内 `pushState` 切 tab：不能 `goto`，整页刷新本来就丢内存状态）。
+第三行的坑是它抓到的：切回来输入框是**新节点**，值为空。

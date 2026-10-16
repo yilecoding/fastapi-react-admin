@@ -81,7 +81,6 @@ class CRUDDept(DataScopedCRUD[Dept]):
         data_filter: ColumnElement[bool],
         name: str | None,
         code: str | None,
-        leader: str | None,
         phone: str | None,
         status: int | None,
     ) -> Sequence[Dept]:
@@ -92,7 +91,6 @@ class CRUDDept(DataScopedCRUD[Dept]):
         :param data_filter: 请求用户
         :param name: 部门名称
         :param code: 部门编码
-        :param leader: 负责人
         :param phone: 联系电话
         :param status: 部门状态
         :return:
@@ -103,8 +101,6 @@ class CRUDDept(DataScopedCRUD[Dept]):
             filters['name__like'] = f'%{name}%'
         if code is not None:
             filters['code__like'] = f'%{code.upper()}%'
-        if leader is not None:
-            filters['leader__like'] = f'%{leader}%'
         if phone is not None:
             filters['phone__startswith'] = phone
         if status is not None:

@@ -9,7 +9,10 @@ export type Dept = {
   name: string
   parent_id: string | null
   sort: number
-  leader: string | null
+  /** 负责人用户 ID（#107 前置改造：原来是自由文本 `leader`，程序没法拿名字找到人） */
+  leader_id: string | null
+  /** 只读，后端按 leader_id 回填；负责人被删除后为 null */
+  leader_name: string | null
   phone: string | null
   email: string | null
   status: number
@@ -17,7 +20,7 @@ export type Dept = {
   children: Dept[] | null
 }
 
-export type DeptFilters = { name?: string; code?: string; leader?: string; status?: number }
+export type DeptFilters = { name?: string; code?: string; status?: number }
 
 export const deptKeys = {
   all: ['sys', 'dept'] as const,
@@ -28,7 +31,6 @@ function qs(f: DeptFilters) {
   const s = new URLSearchParams()
   if (f.name) s.set('name', f.name)
   if (f.code) s.set('code', f.code)
-  if (f.leader) s.set('leader', f.leader)
   if (f.status !== undefined) s.set('status', String(f.status))
   const q = s.toString()
   return q ? `?${q}` : ''
@@ -46,7 +48,7 @@ export type DeptBody = {
   name: string
   parent_id?: string | null
   sort: number
-  leader?: string | null
+  leader_id?: string | null
   phone?: string | null
   email?: string | null
   status: number
