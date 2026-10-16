@@ -298,7 +298,8 @@ def test_on_empty_admin_goes_to_superuser_but_never_back_to_the_initiator(
     """
     pk = start(client, login('zhoumin'), leave_form(uid))
     d = detail(client, token_headers, pk)
-    assert [t['assignee_name'] for t in d['tasks'] if t['status'] == 'pending'] == ['系统管理员']
+    # 按 ID 比，不按昵称：三个方言的种子里 admin 的昵称不一样（PG 那份叫「用户88888」）
+    assert [t['assignee_id'] for t in d['tasks'] if t['status'] == 'pending'] == [uid('admin')]
 
     pk = start(client, token_headers, leave_form(uid))
     d = detail(client, token_headers, pk)
