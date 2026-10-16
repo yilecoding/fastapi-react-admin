@@ -128,6 +128,11 @@ class WfTask(DataClassBase, DateTimeMixin):
     decision: Mapped[str | None] = mapped_column(UniversalStr(16), default=None, comment='approve / reject')
     opinion: Mapped[str | None] = mapped_column(UniversalStr(512), default=None, comment='意见')
     version: Mapped[int] = mapped_column(default=0, comment='版本号（乐观锁）')
+    #: 同一个节点可能走不止一次（退回之后重走）。进入节点那一刻实例的 version 当轮次号：
+    #: 一次进入里建的待办（含之后转交 / 依次审批轮到的）都是同一个值。
+    #: 「这一步谁已经同意过」「这一步还剩几个人」都只能在同一轮里数 —— 不分的话，上一轮
+    #: 同意过的人会被当成这一轮已经表过态
+    batch: Mapped[int] = mapped_column(default=0, comment='进入节点的轮次（退回后重走同一节点时不同）')
     finished_time: Mapped[datetime | None] = mapped_column(TimeZone, default=None, comment='办结时间')
 
 

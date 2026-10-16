@@ -68,5 +68,15 @@ class ActionParam(SchemaBase):
     action: Action = Field(description='动作')
     key: str = IdempotencyKey
     opinion: str | None = Field(None, max_length=512, description='意见 / 原因')
-    target_user_ids: list[SnowflakeIdIn] | None = Field(None, description='转办 / 抄送的目标人')
+    target_user_ids: list[SnowflakeIdIn] | None = Field(None, description='转办 / 抄送 / 改办理人的目标人')
     form: dict[str, Any] | None = Field(None, description='审批时修改的表单字段（只收本节点可编辑的）')
+    target_node_id: str | None = Field(None, max_length=64, description='退回到哪个节点（发起人 = 开始节点 ID）')
+    task_id: SnowflakeIdIn | None = Field(None, description='改办理人：改哪一条待办')
+
+
+class HandoverParam(SchemaBase):
+    """离职交接：把一个人手上所有在办的待办交给另一个人"""
+
+    from_user_id: SnowflakeIdIn = Field(description='交出待办的人')
+    to_user_id: SnowflakeIdIn = Field(description='接手的人')
+    key: str = IdempotencyKey

@@ -128,7 +128,7 @@ def pick_branch(node: dict[str, Any], variables: dict[str, Any]) -> dict[str, An
 # ── 发布校验（#107 设计 9）──────────────────────────────────────────────────
 
 #: 能出现在节点 `actions` 里的动作（必备的 approve / reject 不在里面：不能配掉）
-OPTIONAL_ACTIONS = frozenset({'transfer', 'cc'})
+OPTIONAL_ACTIONS = frozenset({'transfer', 'cc', 'send_back'})
 
 #: 条件里可以用的内置变量（不是表单字段）
 BUILTIN_VARS = frozenset({'$initiator_dept'})
@@ -232,7 +232,53 @@ def validate_publish(form_json: dict[str, Any], model_json: dict[str, Any]) -> l
                         err('CONDITION_VAR_TYPE', f'「{f.label}」不能用作条件', nodeId=nid, fieldId=var)
     if approvals == 0:
         warn('NO_APPROVAL', '流程里一个审批节点都没有，发起即通过')
+    _check_form_rules(form_json, model_json, nodes, err)
     return issues
+
+
+def _check_form_rules(  # ruff:ignore[complex-structure]
+    form_json: dict[str, Any], model_json: dict[str, Any], nodes: dict[str, NodeRef], err: Callable[..., None]
+) -> None:
+    """字段联动（显示条件 / 自动计算）的语义检查"""
+    raw = form_json.get('fields') or []
+    order = {f['id']: i for i, f in enumerate(raw)}
+    by_id = {f['id']: f for f in raw}
+    # 对任何人 hidden 的字段：显示条件引用它，看得到「这个字段出没出现」就能推出它的值
+    hidden_any = {k for k, v in (model_json['root'].get('fieldPerms') or {}).items() if v == 'hidden'}
+    for ref in nodes.values():
+        hidden_any |= {k for k, v in (ref.node.get('fieldPerms') or {}).items() if v == 'hidden'}
+
+    for i, f in enumerate(raw):
+        label, fid = f.get('label') or f['id'], f['id']
+        for c in f.get('columns') or []:
+            if c.get('visibleWhen') or c.get('calc'):
+                err('COLUMN_RULE', f'明细表「{label}」的列不支持显示条件 / 自动计算', fieldId=fid)
+        for var in _vars(f.get('visibleWhen')):
+            src = by_id.get(var)
+            if src is None or order[var] >= i:
+                err('VISIBLE_WHEN_ORDER', f'「{label}」的显示条件只能用排在它前面的字段', fieldId=fid)
+            elif src['type'] not in CONDITION_TYPES:
+                err('VISIBLE_WHEN_TYPE', f'「{src.get("label")}」不能用作显示条件', fieldId=fid)
+            elif var in hidden_any:
+                err(
+                    'VISIBLE_WHEN_HIDDEN',
+                    f'「{label}」的显示条件用了对部分人隐藏的「{src.get("label")}」：看到这个字段出没出现，就能推出它的值',
+                    fieldId=fid,
+                )
+        calc = f.get('calc')
+        if not calc:
+            continue
+        src = by_id.get(calc.get('field') or '')
+        if f['type'] not in {'number', 'amount'}:
+            err('CALC_TYPE', f'「{label}」不是数字 / 金额，不能自动计算', fieldId=fid)
+        elif src is None or order[src['id']] >= i:
+            err('CALC_SOURCE', f'「{label}」要从排在它前面的字段算', fieldId=fid)
+        elif calc['kind'] == 'days' and (src['type'] != 'daterange' or f['type'] != 'number'):
+            err('CALC_SOURCE', f'「{label}」按天数算要选一个日期区间，自己得是数字', fieldId=fid)
+        elif calc['kind'] == 'sum':
+            col = next((c for c in src.get('columns') or [] if c['id'] == calc.get('column')), None)
+            if src['type'] != 'table' or col is None or col['type'] not in {'number', 'amount'}:
+                err('CALC_SOURCE', f'「{label}」要选明细表里的一列数字 / 金额来合计', fieldId=fid)
 
 
 def _count_nodes(node: dict[str, Any] | None) -> int:

@@ -43,6 +43,10 @@ class Action(StrEnum):
     cc = 'cc'
     remind = 'remind'
     terminate = 'terminate'
+    #: 退回到发起人或之前走过的某个审批节点（飞书的「退回」）。实例不结束，同一张单接着走
+    send_back = 'send_back'
+    #: 管理员改办理人：审批人离职 / 长期不在时把卡住的待办交给别人（不需要原办理人点头）
+    reassign = 'reassign'
 
 
 class ActorType(StrEnum):
@@ -63,6 +67,8 @@ class ApprovalMode(StrEnum):
     any = 'any'
     #: 会签：全部同意才通过；任何一人驳回整个实例结束
     all = 'all'
+    #: 依次审批：按审批人的顺序一个一个来，前一个同意了才轮到下一个
+    seq = 'seq'
 
 
 class OnEmpty(StrEnum):
@@ -89,3 +95,6 @@ FORM_BIZ_TYPE = 'form'
 
 #: 管理员终止在途实例要的权限码（菜单种子里挂在「实例监控」下面）
 PERM_TERMINATE = 'workflow:instance:terminate'
+
+#: 管理员改办理人 / 离职交接要的权限码。和「终止」分开：能把卡住的单交给别人，不等于能直接作废它
+PERM_REASSIGN = 'workflow:instance:reassign'

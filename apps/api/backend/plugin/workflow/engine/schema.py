@@ -52,6 +52,18 @@ class FieldOption(_Shape):
     value: str
 
 
+class Calc(_Shape):
+    """自动计算（只用在 number / amount 上）。值由服务端算，填了也不收。
+
+    - `days`：日期区间 `field` 的天数，含首尾（11-02 ~ 11-06 = 5 天）
+    - `sum`：明细表 `field` 里 `column` 那一列的合计
+    """
+
+    kind: Literal['days', 'sum']
+    field: str
+    column: str | None = None
+
+
 class FormField(_Shape):
     # 字段用生成的稳定 id 引用，不用 label：改标签不影响条件和历史数据
     id: str = Field(pattern=r'^[A-Za-z][A-Za-z0-9_]{0,63}$')
@@ -69,6 +81,10 @@ class FormField(_Shape):
     content: str | None = None
     #: table 的列
     columns: list[FormField] | None = None
+    #: 显示条件：不成立时这个字段不显示、不校验、值不保存（例：「请假类型 = 病假」才要「病假证明」）。
+    #: 只能引用排在它**前面**的字段（发布校验管），这样按顺序算一遍就定了，不会互相依赖
+    visibleWhen: Cond | None = None  # ruff:ignore[mixed-case-variable-in-class-scope]
+    calc: Calc | None = None
 
 
 class FormSchema(_Shape):
@@ -166,3 +182,8 @@ class FlowModel(_Shape):
 
 for _m in (FormField, Cond, StartNode, ApprovalNode, CcNode, Branch, ConditionNode, FlowModel):
     _m.model_rebuild()
+
+
+# FormField 里引用了后面才定义的 Cond
+FormField.model_rebuild()
+FormSchema.model_rebuild()

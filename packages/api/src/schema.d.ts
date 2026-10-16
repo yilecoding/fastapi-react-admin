@@ -1322,6 +1322,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/workflow/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 上传审批附件
+         * @description 审批里的附件上传。
+         *
+         *     `/sys/files/upload` 挂着 `sys:file:upload`，而且 RBAC 拒绝非员工账号的 POST ——
+         *     普通员工在审批里传不了附件。这里只要登录，复用同一套文件服务（同样的类型 / 大小 /
+         *     路径穿越校验、私有存储）。挂到单子上时服务端再核一次「是不是你自己传的」
+         *     （`runtime_service._check_attachments`）。
+         */
+        post: operations["upload_attachment_api_v1_sys_workflow_files_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/workflow/instances": {
         parameters: {
             query?: never;
@@ -1537,6 +1562,24 @@ export interface paths {
         get: operations["get_monitor_api_v1_sys_workflow_monitor_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/handover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 离职交接：这个人手上有几条在办的待办 */
+        get: operations["get_handover_api_v1_sys_workflow_handover_get"];
+        put?: never;
+        /** 离职交接：把一个人手上所有在办的待办交给另一个人 */
+        post: operations["do_handover_api_v1_sys_workflow_handover_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2092,7 +2135,7 @@ export interface components {
          * @description 动作。数值是前后端契约，能力信封里的 `action` 就是它
          * @enum {string}
          */
-        Action: "approve" | "reject" | "withdraw" | "transfer" | "cc" | "remind" | "terminate";
+        Action: "approve" | "reject" | "withdraw" | "transfer" | "cc" | "remind" | "terminate" | "send_back" | "reassign";
         /**
          * ActionParam
          * @description 对实例执行一个动作
@@ -2112,7 +2155,7 @@ export interface components {
             opinion?: string | null;
             /**
              * Target User Ids
-             * @description 转办 / 抄送的目标人
+             * @description 转办 / 抄送 / 改办理人的目标人
              */
             target_user_ids?: (string | number)[] | null;
             /**
@@ -2122,6 +2165,16 @@ export interface components {
             form?: {
                 [key: string]: unknown;
             } | null;
+            /**
+             * Target Node Id
+             * @description 退回到哪个节点（发起人 = 开始节点 ID）
+             */
+            target_node_id?: string | null;
+            /**
+             * Task Id
+             * @description 改办理人：改哪一条待办
+             */
+            task_id?: string | number | null;
         };
         /**
          * AddUserParam
@@ -2255,6 +2308,14 @@ export interface components {
              * @description IANA 时区标识，如 Asia/Shanghai
              */
             timezone: string;
+        };
+        /** Body_upload_attachment_api_v1_sys_workflow_files_post */
+        Body_upload_attachment_api_v1_sys_workflow_files_post: {
+            /**
+             * File
+             * @description 文件
+             */
+            file: string;
         };
         /** Body_upload_file_api_v1_sys_files_upload_post */
         Body_upload_file_api_v1_sys_files_upload_post: {
@@ -4657,6 +4718,27 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HandoverParam
+         * @description 离职交接：把一个人手上所有在办的待办交给另一个人
+         */
+        HandoverParam: {
+            /**
+             * From User Id
+             * @description 交出待办的人
+             */
+            from_user_id: string | number;
+            /**
+             * To User Id
+             * @description 接手的人
+             */
+            to_user_id: string | number;
+            /**
+             * Key
+             * @description 幂等键（每次提交一个新的 UUID）
+             */
+            key: string;
         };
         /**
          * ImportCommitDetail
@@ -10800,6 +10882,39 @@ export interface operations {
             };
         };
     };
+    upload_attachment_api_v1_sys_workflow_files_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_attachment_api_v1_sys_workflow_files_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_instance_api_v1_sys_workflow_instances_post: {
         parameters: {
             query?: never;
@@ -11190,6 +11305,71 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_handover_api_v1_sys_workflow_handover_get: {
+        parameters: {
+            query: {
+                /** @description 用户 ID */
+                user_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    do_handover_api_v1_sys_workflow_handover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HandoverParam"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

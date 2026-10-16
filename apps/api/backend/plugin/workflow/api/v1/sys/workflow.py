@@ -24,13 +24,14 @@ from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
 from backend.plugin.workflow.engine.flow import index_nodes
-from backend.plugin.workflow.engine.form import is_bigint_id
+from backend.plugin.workflow.engine.form import form_rules, is_bigint_id
 from backend.plugin.workflow.engine.simulate import simulate
-from backend.plugin.workflow.enums import FORM_BIZ_TYPE
+from backend.plugin.workflow.enums import FORM_BIZ_TYPE, PERM_REASSIGN
 from backend.plugin.workflow.model import WfDefinition, WfDefinitionVersion
 from backend.plugin.workflow.schema.workflow import (
     ActionParam,
     CreateDefinitionParam,
+    HandoverParam,
     PreviewParam,
     SetDefinitionStatusParam,
     StartParam,
@@ -131,10 +132,12 @@ async def preview_start(
     _form_only(d)
     model = json.loads(v.model_json)
     actor = _actor(request)
+    # 联动先算一遍：条件分支常按「请假天数」走，而天数是从日期区间算出来的
+    form_data, _ = form_rules(json.loads(v.form_json), obj.form)
     steps = await simulate(
         db,
         model,
-        form_data=obj.form,
+        form_data=form_data,
         initiator_id=actor.id,
         initiator_dept_id=actor.dept_id,
         selected=obj.selected,
@@ -235,6 +238,8 @@ async def do_action(request: Request, db: CurrentSession, pk: Pk, obj: ActionPar
         opinion=obj.opinion,
         target_user_ids=obj.target_user_ids,
         form_patch=obj.form,
+        target_node_id=obj.target_node_id,
+        task_id=obj.task_id,
     )
     return response_base.success(data=data)
 
@@ -292,6 +297,27 @@ async def get_monitor(
     return response_base.success(
         data=await query_service.monitor(db, keyword=keyword, status=status, page=page, size=size)
     )
+
+
+@router.get(
+    '/handover',
+    summary='离职交接：这个人手上有几条在办的待办',
+    dependencies=[Depends(RequestPermission(PERM_REASSIGN)), DependsRBAC],
+)
+async def get_handover(db: CurrentSession, user_id: Annotated[int, Query(description='用户 ID')]) -> ResponseModel:
+    return response_base.success(data={'count': len(await runtime_service.handover_tasks(db, user_id))})
+
+
+@router.post(
+    '/handover',
+    summary='离职交接：把一个人手上所有在办的待办交给另一个人',
+    dependencies=[Depends(RequestPermission(PERM_REASSIGN)), DependsRBAC],
+)
+async def do_handover(request: Request, db: CurrentSession, obj: HandoverParam) -> ResponseModel:
+    data = await runtime_service.handover(
+        db, from_user_id=obj.from_user_id, to_user_id=obj.to_user_id, actor=_actor(request), key=obj.key
+    )
+    return response_base.success(data=data)
 
 
 # ── 流程定义（管理端）──────────────────────────────────────────────────────

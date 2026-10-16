@@ -218,6 +218,9 @@ error:
     transfer_to_initiator: 不能转交给发起人
     transfer_to_existing: 对方已经是这个节点的审批人
     field_not_editable: '这些字段在当前节点不能修改：{fields}'
+    send_back_target_invalid: 不能退回到这个节点，请刷新后重新选择
+    task_not_pending: 这条待办已经处理过了，请刷新后查看
+    handover_same_user: 交出和接手的不能是同一个人
 
 # 上传校验报错要拼「人话名字」（图片/文档/…），标识用 FileType.value，
 # 文案查这张表——新增文件分类时两边（这里 + `common/enums.py` 的 FileType）
@@ -376,3 +379,8 @@ workflow:
     remind_title: '催办：{title}'
     remind_content: '{user}提醒你尽快处理这条审批'
     withdrawn_title: '已撤回：{title}'
+    sent_back_title: '被退回：{title}'
+    sent_back_content: '{user}退回了你的申请：{opinion}。修改后可以重新提交'
+  initiator: 发起人
+  resubmit_node: 发起人修改
+  handover_opinion: 离职交接

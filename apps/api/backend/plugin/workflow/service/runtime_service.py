@@ -54,6 +54,7 @@ from backend.plugin.workflow.engine.form import (
 from backend.plugin.workflow.engine.simulate import simulate
 from backend.plugin.workflow.enums import (
     FORM_BIZ_TYPE,
+    PERM_REASSIGN,
     PERM_TERMINATE,
     Action,
     ActorType,
@@ -268,6 +269,78 @@ def _record(
     )
 
 
+def _new_task(
+    ctx: _Ctx,
+    inst: WfInstance,
+    node_id: str,
+    node_name: str,
+    user: tuple[int, str],
+    *,
+    batch: int,
+    origin: int | None = None,
+) -> None:
+    ctx.db.add(
+        WfTask(
+            instance_id=inst.id,
+            node_id=node_id,
+            node_name=node_name,
+            assignee_id=user[0],
+            assignee_name=user[1],
+            origin_assignee_id=origin,
+            status=TaskStatus.pending,
+            batch=batch,
+        )
+    )
+
+
+def _set_var(inst: WfInstance, key: str, value: Any) -> None:
+    variables = _json(inst.variables)
+    variables[key] = value
+    inst.variables = json.dumps(variables, ensure_ascii=False)
+
+
+def _queue(inst: WfInstance, node_id: str) -> list[tuple[int, str]]:
+    """依次审批节点进入时排好的顺序（进入那一刻解析，之后不再重算 —— 中途改了角色成员不影响在途的单）"""
+    return [(int(u), n) for u, n in (_json(inst.variables).get('queue') or {}).get(node_id) or []]
+
+
+def _next_in_queue(inst: WfInstance, task: WfTask) -> tuple[int, str] | None:
+    """依次审批：这个人之后轮到谁。转交 / 改办理人出来的待办按**原办理人**在队列里的位置算"""
+    queue = _queue(inst, task.node_id)
+    ids = [u for u, _ in queue]
+    me = task.origin_assignee_id or task.assignee_id
+    if me not in ids:
+        return None
+    i = ids.index(me)
+    return queue[i + 1] if i + 1 < len(queue) else None
+
+
+async def _on_node(db: AsyncSession, inst: WfInstance, task: WfTask) -> set[int]:
+    """这一步（同一轮）里已经有份的人：还在办的、已经同意过的、依次审批还没轮到的。
+
+    转交 / 改办理人不能交给他们：会签就成了一个人投两票（A 同意 → B 转给 A → A 再同意，
+    三人会签只有两人表态）；依次审批里交给排在后面的人，他就要审两次。
+    🔴 只数**同一轮**（`batch`）：退回之后重走这个节点，上一轮同意过的人这一轮还没表态
+    """
+    ids = set(
+        (
+            await db.scalars(
+                select(WfTask.assignee_id).where(
+                    WfTask.instance_id == inst.id,
+                    WfTask.node_id == task.node_id,
+                    WfTask.batch == task.batch,
+                    (WfTask.status == TaskStatus.pending) | (WfTask.decision == 'approve'),
+                )
+            )
+        ).all()
+    )
+    return ids | {u for u, _ in _queue(inst, task.node_id)}
+
+
+def _root_id(inst: WfInstance) -> str:
+    return _json(inst.model_snapshot)['root']['id']
+
+
 # ── 推进 ─────────────────────────────────────────────────────────────────────
 
 
@@ -361,20 +434,18 @@ async def _advance(ctx: _Ctx, inst: WfInstance, start_from: dict[str, Any] | Non
                 await _finish(ctx, inst, InstanceStatus.rejected, reason)
                 return
 
-        for uid, name in users:
-            ctx.db.add(
-                WfTask(
-                    instance_id=inst.id,
-                    node_id=node['id'],
-                    node_name=node['name'],
-                    assignee_id=uid,
-                    assignee_name=name,
-                    origin_assignee_id=None,
-                    status=TaskStatus.pending,
-                )
-            )
+        # 轮次号 = 进入节点这一刻实例的 version（见 WfTask.batch）。一个事务里只会进入一个审批节点
+        batch = inst.version
+        first = users
+        if ApprovalMode(node.get('mode') or ApprovalMode.any) == ApprovalMode.seq:
+            # 依次审批：先只给第一个人建待办，顺序存进实例 —— 后面的人在前一个同意时才建
+            queue = (_json(inst.variables).get('queue') or {}) | {node['id']: [[u, n] for u, n in users]}
+            _set_var(inst, 'queue', queue)
+            first = users[:1]
+        for user in first:
+            _new_task(ctx, inst, node['id'], node['name'], user, batch=batch)
         inst.current_node_id = node['id']
-        ctx.push_todo([u for u, _ in users])
+        ctx.push_todo([u for u, _ in first])
         return
 
     await _finish(ctx, inst, InstanceStatus.approved, None)
@@ -409,7 +480,9 @@ class Capability:
     reason: str | None = None
 
 
-async def capabilities(db: AsyncSession, inst: WfInstance, actor: Actor) -> tuple[list[Capability], WfTask | None]:
+async def capabilities(  # ruff:ignore[complex-structure]
+    db: AsyncSession, inst: WfInstance, actor: Actor
+) -> tuple[list[Capability], WfTask | None]:
     """可用动作 = 平台支持 ∩ 业务默认集 ∩ 节点配置，再叠加：待办是否 pending · 我是谁。
 
     🔴 **详情接口和执行接口用的是同一个函数**（avc-bp：「配置天然有服务端强制力，不是隐藏按钮」）。
@@ -426,14 +499,18 @@ async def capabilities(db: AsyncSession, inst: WfInstance, actor: Actor) -> tupl
                 my_task = task
                 break
 
-    if my_task is not None:
+    at_start = inst.current_node_id == _root_id(inst)
+    if my_task is not None and at_start:
+        # 被退回到发起人：他的「同意」就是改完重新提交。不能驳回 / 转交自己的单
+        caps.append(Capability(Action.approve, True))
+    elif my_task is not None:
         caps += [Capability(Action.approve, True), Capability(Action.reject, True)]
         node = index_nodes(_json(inst.model_snapshot))[my_task.node_id].node
         configured = node.get('actions')
         allowed = get_handler(inst.biz_type).default_actions
         if configured is not None:
             allowed = allowed & {Action(a) for a in configured}
-        caps += [Capability(a, True) for a in (Action.transfer, Action.cc) if a in allowed]
+        caps += [Capability(a, True) for a in (Action.transfer, Action.cc, Action.send_back) if a in allowed]
 
     if inst.initiator_id == actor.id:
         caps.append(Capability(Action.withdraw, True))
@@ -444,7 +521,9 @@ async def capabilities(db: AsyncSession, inst: WfInstance, actor: Actor) -> tupl
                 WfActionRecord.result == 'ok',
             )
         )
-        if last is not None and timezone.now() - last < REMIND_INTERVAL:
+        if at_start:
+            pass  # 单在自己手上，没人可催
+        elif last is not None and timezone.now() - last < REMIND_INTERVAL:
             caps.append(Capability(Action.remind, False, t('error.workflow.remind_too_often')))
         else:
             caps.append(Capability(Action.remind, True))
@@ -452,6 +531,9 @@ async def capabilities(db: AsyncSession, inst: WfInstance, actor: Actor) -> tupl
     # avc-bp 的终止要求当前用户是办理人，管理员反而终止不了。这里改成管理员
     if actor.has(PERM_TERMINATE):
         caps.append(Capability(Action.terminate, True))
+    # 改办理人：单在发起人手上（被退回）时没有可改的 —— 那一步只能是发起人自己
+    if actor.has(PERM_REASSIGN) and not at_start:
+        caps.append(Capability(Action.reassign, True))
     return caps, my_task
 
 
@@ -770,6 +852,8 @@ async def act(  # ruff:ignore[complex-structure]
     opinion: str | None = None,
     target_user_ids: list[int] | None = None,
     form_patch: dict[str, Any] | None = None,
+    target_node_id: str | None = None,
+    task_id: int | None = None,
 ) -> dict[str, Any]:
     # 接口层的 SchemaBase 会把枚举还原成 str —— 这里统一回枚举，后面 match / .value 都按枚举写
     action = Action(action)
@@ -800,6 +884,27 @@ async def act(  # ruff:ignore[complex-structure]
         nodes = index_nodes(_json(inst.model_snapshot))
 
         match action:
+            case Action.approve if my_task is not None and my_task.node_id == _root_id(inst):
+                # 被退回之后发起人改完重新提交：按开始节点的字段权限收改动，然后从头往下走
+                root = nodes[my_task.node_id].node
+                detail = await _apply_form_patch(ctx.db, inst, root, form_patch or {}, actor.id)
+                await _close_task(ctx.db, my_task, TaskStatus.done, 'resubmit', opinion)
+                _record(
+                    ctx,
+                    inst,
+                    'resubmit',
+                    key=key,
+                    actor_id=actor.id,
+                    actor_name=actor.nickname,
+                    task=my_task,
+                    opinion=opinion,
+                    detail=detail,
+                )
+                form_schema, model = _json(inst.form_snapshot), _json(inst.model_snapshot)
+                inst.summary = _summary(form_schema, _json(inst.form_data), model)
+                await _advance(ctx, inst, nodes[my_task.node_id].after)
+                ctx.push_todo([actor.id])
+
             case Action.approve:
                 assert my_task is not None
                 node = nodes[my_task.node_id].node
@@ -819,12 +924,95 @@ async def act(  # ruff:ignore[complex-structure]
                 )
                 rest = await _pending_tasks(ctx.db, inst.id, my_task.node_id)
                 mode = ApprovalMode(node.get('mode') or ApprovalMode.any)
-                if mode == ApprovalMode.any or not rest:
+                nxt = _next_in_queue(inst, my_task) if mode == ApprovalMode.seq else None
+                if nxt is not None:
+                    # 依次审批：轮到下一个人，还在这一步、同一轮
+                    _new_task(ctx, inst, my_task.node_id, my_task.node_name, nxt, batch=my_task.batch)
+                    ctx.push_todo([nxt[0]])
+                elif mode == ApprovalMode.any or not rest:
                     for other in rest:
                         await _close_task(ctx.db, other, TaskStatus.canceled, None, None)
                         ctx.push_todo([other.assignee_id])
                     await _advance(ctx, inst, nodes[my_task.node_id].after)
                 ctx.push_todo([actor.id])
+
+            case Action.send_back:
+                assert my_task is not None
+                if not opinion:
+                    raise errors.RequestError(msg=t('error.workflow.opinion_required'))
+                targets = {x['node_id']: x['name'] for x in await send_back_targets(ctx.db, inst)}
+                if target_node_id not in targets:
+                    raise ActionRejected('send_back_target_invalid', instance_id=inst.id)
+                await _close_task(ctx.db, my_task, TaskStatus.done, 'send_back', opinion)
+                for other in await _pending_tasks(ctx.db, inst.id):
+                    await _close_task(ctx.db, other, TaskStatus.canceled, None, None)
+                    ctx.push_todo([other.assignee_id])
+                _record(
+                    ctx,
+                    inst,
+                    action,
+                    key=key,
+                    actor_id=actor.id,
+                    actor_name=actor.nickname,
+                    task=my_task,
+                    opinion=opinion,
+                    detail={'to': target_node_id, 'to_name': targets[target_node_id]},
+                )
+                ctx.push_todo([actor.id])
+                if target_node_id == _root_id(inst):
+                    # 回到发起人手里：给他建一条待办（改完重新提交），并且**发通知** ——
+                    # 审批人收待办只推角标，发起人不一样，他并不在等这张单回来
+                    names = await _user_names(ctx.db, [inst.initiator_id])
+                    _new_task(
+                        ctx,
+                        inst,
+                        target_node_id,
+                        t('workflow.resubmit_node'),
+                        (inst.initiator_id, names.get(inst.initiator_id, '')),
+                        batch=inst.version,
+                    )
+                    inst.current_node_id = target_node_id
+                    ctx.push_todo([inst.initiator_id])
+                    await ctx.notify(
+                        [inst.initiator_id],
+                        t('workflow.notify.sent_back_title', title=inst.title),
+                        t('workflow.notify.sent_back_content', user=actor.nickname, opinion=opinion),
+                        detail_link(inst.id),
+                    )
+                else:
+                    # 重新进入那个节点：审批人按规则**重新解析**（和第一次进入同一套逻辑）
+                    await _advance(ctx, inst, nodes[target_node_id].node)
+
+            case Action.reassign:
+                task = next(
+                    (x for x in await _pending_tasks(ctx.db, inst.id, inst.current_node_id) if x.id == task_id), None
+                )
+                if task is None:
+                    raise ActionRejected('task_not_pending', instance_id=inst.id)
+                target_id, target_name, users = await _handover_target(ctx, inst, task, target_user_ids)
+                await _close_task(ctx.db, task, TaskStatus.transferred, None, None)
+                _new_task(
+                    ctx,
+                    inst,
+                    task.node_id,
+                    task.node_name,
+                    (target_id, target_name),
+                    batch=task.batch,
+                    origin=task.origin_assignee_id or task.assignee_id,
+                )
+                _record(
+                    ctx,
+                    inst,
+                    action,
+                    key=key,
+                    actor_id=actor.id,
+                    actor_name=actor.nickname,
+                    task=task,
+                    target=users,
+                    opinion=opinion,
+                    detail={'from': task.assignee_name},
+                )
+                ctx.push_todo([task.assignee_id, target_id])
 
             case Action.reject:
                 assert my_task is not None
@@ -876,40 +1064,16 @@ async def act(  # ruff:ignore[complex-structure]
 
             case Action.transfer:
                 assert my_task is not None
-                if not target_user_ids or len(target_user_ids) != 1:
-                    raise errors.RequestError(msg=t('error.workflow.transfer_one'))
-                users = await assignee_rules.users_by_ids(ctx.db, target_user_ids)
-                if not users:
-                    raise errors.RequestError(msg=t('error.workflow.user_not_found'))
-                target_id, target_name = users[0]
-                if target_id == inst.initiator_id:
-                    raise ActionRejected('transfer_to_initiator', instance_id=inst.id)
-                # 本节点上还在办的、**已经同意过的**都算「已经在这一步里」：转给已同意的人，
-                # 会签就成了一个人投两票（A 同意 → B 转给 A → A 再同意，三人会签只有两人表态）
-                on_node = set(
-                    (
-                        await ctx.db.scalars(
-                            select(WfTask.assignee_id).where(
-                                WfTask.instance_id == inst.id,
-                                WfTask.node_id == my_task.node_id,
-                                (WfTask.status == TaskStatus.pending) | (WfTask.decision == 'approve'),
-                            )
-                        )
-                    ).all()
-                )
-                if target_id in on_node:
-                    raise ActionRejected('transfer_to_existing', instance_id=inst.id)
+                target_id, target_name, users = await _handover_target(ctx, inst, my_task, target_user_ids)
                 await _close_task(ctx.db, my_task, TaskStatus.transferred, None, opinion)
-                ctx.db.add(
-                    WfTask(
-                        instance_id=inst.id,
-                        node_id=my_task.node_id,
-                        node_name=my_task.node_name,
-                        assignee_id=target_id,
-                        assignee_name=target_name,
-                        origin_assignee_id=my_task.origin_assignee_id or actor.id,
-                        status=TaskStatus.pending,
-                    )
+                _new_task(
+                    ctx,
+                    inst,
+                    my_task.node_id,
+                    my_task.node_name,
+                    (target_id, target_name),
+                    batch=my_task.batch,
+                    origin=my_task.origin_assignee_id or actor.id,
                 )
                 _record(
                     ctx,
@@ -946,6 +1110,66 @@ async def act(  # ruff:ignore[complex-structure]
     return await execute(db, key=key, action=action.value, actor=actor, body=body)
 
 
+async def _handover_target(
+    ctx: _Ctx, inst: WfInstance, task: WfTask, target_user_ids: list[int] | None
+) -> tuple[int, str, list[tuple[int, str]]]:
+    """转交 / 改办理人的目标人校验（两个动作同一套规则）"""
+    if not target_user_ids or len(target_user_ids) != 1:
+        raise errors.RequestError(msg=t('error.workflow.transfer_one'))
+    users = await assignee_rules.users_by_ids(ctx.db, target_user_ids)
+    if not users:
+        raise errors.RequestError(msg=t('error.workflow.user_not_found'))
+    target_id, target_name = users[0]
+    if target_id == inst.initiator_id:
+        raise ActionRejected('transfer_to_initiator', instance_id=inst.id)
+    if target_id in await _on_node(ctx.db, inst, task):
+        raise ActionRejected('transfer_to_existing', instance_id=inst.id)
+    return target_id, target_name, users
+
+
+async def _user_names(db: AsyncSession, ids: list[int]) -> dict[int, str]:
+    """姓名快照。不过滤停用 —— 发起人账号停用了，他那条待办也得有个名字"""
+    from backend.app.admin.model import User
+
+    return dict((await db.execute(select(User.id, User.nickname).where(User.id.in_(ids)))).all())
+
+
+async def send_back_targets(db: AsyncSession, inst: WfInstance) -> list[dict[str, str]]:
+    """能退回到哪：发起人 + 当前节点**之前**、这张单真的经过（有人同意过）的审批节点。
+
+    「之前」按**现在的表单**沿树走一遍算（和推进同一个 `pick_branch`）：走到当前节点为止，
+    路上的审批节点才是「已经走过的」。只看历史记录不行 —— 退回过一次之后，历史里会有
+    排在当前节点后面的节点（A → B → C，C 退回到 A，现在在 B：C 不能当退回目标）。
+    """
+    model = _json(inst.model_snapshot)
+    nodes = index_nodes(model)
+    root = model['root']
+    variables = _json(inst.variables)
+    cond_vars = condition_variables({**(variables.get('biz') or {}), **_json(inst.form_data)}, inst.initiator_dept_id)
+    approved = set(
+        (
+            await db.scalars(select(WfTask.node_id).where(WfTask.instance_id == inst.id, WfTask.decision == 'approve'))
+        ).all()
+    )
+    before: list[dict[str, str]] = []
+    node = nodes[root['id']].after
+    reached = False
+    for _ in range(200):  # 防御：手改过的快照里有环
+        if node is None:
+            break
+        if node['id'] == inst.current_node_id:
+            reached = True
+            break
+        if node['type'] == 'condition':
+            node = pick_branch(node, cond_vars).get('child') or nodes[node['id']].after
+            continue
+        if node['type'] == 'approval' and node['id'] in approved:
+            before.append({'node_id': node['id'], 'name': node['name']})
+        node = nodes[node['id']].after
+    out = [{'node_id': root['id'], 'name': t('workflow.initiator')}]
+    return out + before if reached else out
+
+
 async def _apply_form_patch(
     db: AsyncSession, inst: WfInstance, node: dict[str, Any], patch: dict[str, Any], actor_id: int
 ) -> dict[str, Any]:
@@ -956,7 +1180,10 @@ async def _apply_form_patch(
     改它们的权利，也就不该因为它们挡住这一步。前后差异记进轨迹。
     """
     form_schema = _json(inst.form_snapshot)
-    allowed = editable_fields(form_schema, node)
+    # 开始节点（被退回后发起人重新提交）默认可填；审批节点默认只读
+    allowed = (
+        start_editable_fields(form_schema, node) if node['type'] == 'start' else editable_fields(form_schema, node)
+    )
     illegal = set(patch) - allowed
     if illegal:
         raise ActionRejected('field_not_editable', instance_id=inst.id, fields='、'.join(sorted(illegal)))
@@ -964,11 +1191,64 @@ async def _apply_form_patch(
         return {}
     before = _json(inst.form_data)
     try:
-        edited = validate_form_data(form_schema, {**before, **patch}, only=allowed)
+        data = validate_form_data(form_schema, {**before, **patch}, only=allowed, base=before)
     except FormDataError as e:
         raise errors.RequestError(msg=t('error.workflow.form_invalid', detail=str(e)), data=e.errors) from e
-    data = {**{k: v for k, v in before.items() if k not in allowed}, **edited}
     await _check_attachments(db, form_schema, before, data, actor_id)
     changes = {k: {'from': before.get(k), 'to': data.get(k)} for k in allowed if before.get(k) != data.get(k)}
     inst.form_data = json.dumps(data, ensure_ascii=False)
     return {'form_changes': changes} if changes else {}
+
+
+# ── 离职交接 ─────────────────────────────────────────────────────────────────
+
+
+async def handover_tasks(db: AsyncSession, user_id: int) -> list[tuple[int, int, str]]:
+    """这个人手上在办的待办：`(待办 ID, 实例 ID, 标题)`。
+
+    不含「被退回、等他自己重新提交」的那种 —— 那是他自己的单，交给别人等于替他提交
+    """
+    rows = (
+        await db.execute(
+            select(WfTask.id, WfTask.instance_id, WfInstance.title, WfTask.node_id, WfInstance.model_snapshot)
+            .join(WfInstance, WfInstance.id == WfTask.instance_id)
+            .where(
+                WfTask.assignee_id == user_id,
+                WfTask.status == TaskStatus.pending,
+                WfInstance.status == InstanceStatus.running,
+            )
+            .order_by(WfTask.id)
+        )
+    ).all()
+    return [(tid, iid, title) for tid, iid, title, nid, model in rows if nid != json.loads(model)['root']['id']]
+
+
+async def handover(db: AsyncSession, *, from_user_id: int, to_user_id: int, actor: Actor, key: str) -> dict[str, Any]:
+    """逐条改办理人。**每条一个事务**：一张单交不过去（接手的人就是发起人 / 已经在这一步里）
+    不影响其他单，结果里逐条列出没交过去的和原因。
+
+    幂等键按「这次交接的键 + 待办 ID」派生：重复点一次，已经交过的那些重放、不会再交一遍
+    """
+    import hashlib
+
+    if from_user_id == to_user_id:
+        raise errors.RequestError(msg=t('error.workflow.handover_same_user'))
+    moved = 0
+    skipped: list[dict[str, Any]] = []
+    for task_id, instance_id, title in await handover_tasks(db, from_user_id):
+        sub_key = 'ho:' + hashlib.sha256(f'{key}:{task_id}'.encode()).hexdigest()[:48]
+        try:
+            await act(
+                db,
+                instance_id=instance_id,
+                action=Action.reassign,
+                actor=actor,
+                key=sub_key,
+                opinion=t('workflow.handover_opinion'),
+                target_user_ids=[to_user_id],
+                task_id=task_id,
+            )
+            moved += 1
+        except (errors.BaseExceptionError, ActionRejected) as e:
+            skipped.append({'instance_id': instance_id, 'title': title, 'reason': e.msg})
+    return {'moved': moved, 'skipped': skipped}

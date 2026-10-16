@@ -217,6 +217,9 @@ error:
     transfer_to_initiator: Cannot transfer to the initiator
     transfer_to_existing: That person is already an approver of this step
     field_not_editable: 'These fields cannot be edited at this step: {fields}'
+    send_back_target_invalid: Cannot send back to this step. Refresh and choose again
+    task_not_pending: This task has already been handled. Refresh to see the latest
+    handover_same_user: The person handing over and the person taking over must be different
 
 file_type:
   archive: Archive
@@ -268,3 +271,8 @@ workflow:
     remind_title: 'Reminder: {title}'
     remind_content: '{user} asked you to handle this approval soon'
     withdrawn_title: 'Withdrawn: {title}'
+    sent_back_title: 'Sent back: {title}'
+    sent_back_content: '{user} sent your request back: {opinion}. Edit it and submit again'
+  initiator: Initiator
+  resubmit_node: Initiator revision
+  handover_opinion: Handover

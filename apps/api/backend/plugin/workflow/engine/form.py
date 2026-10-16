@@ -17,6 +17,12 @@ schema，但只有这一份算数。
 | attachment | 文件 ID 字符串数组 |
 | table | 行对象数组，每行按 `columns` 校验 |
 | description | 不收值 |
+
+## 联动（`visibleWhen` / `calc`）
+
+服务端按字段顺序算一遍（`form_rules`）：显示条件不成立的字段**去掉值、不算必填**；
+自动计算的字段**不收提交的值**，由这里算出来存进去（条件分支用的就是算出来的那个）。
+前端 `form-rules.ts` 是同一套规则的副本，只为了填的时候当场看到 —— 两边对不上时以这里为准。
 """
 
 from __future__ import annotations
@@ -25,6 +31,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from backend.plugin.workflow.engine.flow import evaluate
 from backend.plugin.workflow.enums import FieldPerm
 
 _BIGINT_MAX = 2**63 - 1
@@ -142,32 +149,106 @@ def _check(field: dict[str, Any], v: Any) -> tuple[Any, str | None]:  # ruff:ign
     return v, '不支持的控件'
 
 
-def validate_form_data(form_schema: dict[str, Any], data: dict[str, Any], *, only: set[str] | None = None) -> dict:
-    """按 schema 校验整份表单，返回归一后的数据（只保留 schema 里有的字段）。
+def validate_form_data(
+    form_schema: dict[str, Any],
+    data: dict[str, Any],
+    *,
+    only: set[str] | None = None,
+    base: dict[str, Any] | None = None,
+) -> dict:
+    """按 schema 校验，返回**整份**归一后的数据（只保留 schema 里有的字段，联动已经算过）。
 
-    :param only: 只校验这些字段（审批时合并可编辑字段用）；None = 全部
+    :param only: 只收这些字段（发起人能填的 / 本节点可编辑的）；None = 全部
+    :param base: 不在 `only` 里的字段从这里取（审批时 = 改之前的数据）。联动要看整份数据才算得对：
+        审批人改了「请假类型」，后面那个按类型显示的字段要跟着显示 / 消失
     """
     if not isinstance(data, dict):
         raise FormDataError({'_': '表单数据应为对象'})
+    fields = form_schema.get('fields') or []
     errors: dict[str, str] = {}
     out: dict[str, Any] = {}
-    for f in form_schema.get('fields') or []:
+    for f in fields:
         fid = f['id']
-        if f['type'] == 'description' or (only is not None and fid not in only):
+        # 自动计算的不收：填了也按算出来的存
+        if f['type'] == 'description' or f.get('calc') or (only is not None and fid not in only):
             continue
         v = data.get(fid)
         if _empty(v):
-            if f.get('required'):
-                errors[fid] = f'「{f["label"]}」必填'
             continue
         nv, e = _check(f, v)
         if e:
             errors[fid] = f'「{f["label"]}」{e}'
         else:
             out[fid] = nv
+    kept = {k: v for k, v in (base or {}).items() if only is not None and k not in only}
+    final, inactive = form_rules(form_schema, {**kept, **out})
+    for f in fields:
+        fid = f['id']
+        if (
+            f.get('required')
+            and f['type'] != 'description'
+            and not f.get('calc')
+            and (only is None or fid in only)
+            and fid not in inactive
+            and fid not in errors
+            and _empty(final.get(fid))
+        ):
+            errors[fid] = f'「{f["label"]}」必填'
     if errors:
         raise FormDataError(errors)
-    return out
+    return final
+
+
+def form_rules(form_schema: dict[str, Any], data: dict[str, Any]) -> tuple[dict[str, Any], set[str]]:
+    """按字段顺序算联动，返回 (数据, 不显示的字段)。
+
+    显示条件只引用前面的字段（发布校验管），所以一遍就定：前面的字段被藏了，值已经去掉，
+    后面依赖它的条件看到的就是「没填」。也接受没校验过的数据（试算用）—— 算不出来就当没有值
+    """
+    out = dict(data)
+    inactive: set[str] = set()
+    for f in form_schema.get('fields') or []:
+        fid = f['id']
+        if f.get('visibleWhen') and not evaluate(f['visibleWhen'], out):
+            out.pop(fid, None)
+            inactive.add(fid)
+            continue
+        if f.get('calc'):
+            v = _compute(f, out)
+            if v is None:
+                out.pop(fid, None)
+            else:
+                out[fid] = v
+    return out, inactive
+
+
+def _compute(field: dict[str, Any], data: dict[str, Any]) -> Any:
+    calc = field['calc']
+    src = data.get(calc.get('field') or '')
+    try:
+        if calc['kind'] == 'days':
+            if not isinstance(src, list) or len(src) != 2:
+                return None
+            a, b = date.fromisoformat(str(src[0])), date.fromisoformat(str(src[1]))
+            return (b - a).days + 1 if b >= a else None
+        if calc['kind'] == 'sum':
+            if not isinstance(src, list) or not src:
+                return None
+            total = Decimal(0)
+            for row in src:
+                v = row.get(calc.get('column') or '') if isinstance(row, dict) else None
+                if v is None or isinstance(v, bool) or (isinstance(v, str) and not v):
+                    continue
+                total += Decimal(str(v))
+            if not total.is_finite() or abs(total) >= Decimal(10) ** 15:
+                return None
+            if field['type'] == 'amount':
+                precision = field.get('precision')
+                return str(total.quantize(Decimal(1).scaleb(-(2 if precision is None else precision))))
+            return int(total) if total == total.to_integral_value() else float(total)
+    except (ValueError, InvalidOperation, TypeError):
+        return None
+    return None
 
 
 # ── 字段权限 ─────────────────────────────────────────────────────────────────

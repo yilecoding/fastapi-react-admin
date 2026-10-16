@@ -21,12 +21,17 @@ from backend.app.admin.model import Dept, File, Role, User
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.plugin.workflow.engine.flow import index_nodes
-from backend.plugin.workflow.engine.form import hidden_fields_for, is_bigint_id, node_field_perm
+from backend.plugin.workflow.engine.form import (
+    hidden_fields_for,
+    is_bigint_id,
+    node_field_perm,
+    start_editable_fields,
+)
 from backend.plugin.workflow.engine.simulate import simulate
-from backend.plugin.workflow.enums import PERM_TERMINATE, TaskStatus
+from backend.plugin.workflow.enums import PERM_TERMINATE, Action, ApprovalMode, FieldPerm, TaskStatus
 from backend.plugin.workflow.handler import get_handler
 from backend.plugin.workflow.model import WfActionRecord, WfCc, WfDefinition, WfInstance, WfTask
-from backend.plugin.workflow.service.runtime_service import Actor, capabilities
+from backend.plugin.workflow.service.runtime_service import Actor, capabilities, send_back_targets
 from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
@@ -229,7 +234,13 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
 
     caps, my_task = await capabilities(db, inst, actor)
     perms: dict[str, str] = {}
-    if my_task is not None:
+    if my_task is not None and my_task.node_id == model['root']['id']:
+        # 被退回到发起人：按开始节点的权限改（默认可填）
+        editable = start_editable_fields(form_schema, model['root'])
+        perms = {
+            f['id']: FieldPerm.editable if f['id'] in editable else FieldPerm.readonly for f in form_schema['fields']
+        }
+    elif my_task is not None:
         node = nodes[my_task.node_id].node
         perms = {f['id']: node_field_perm(node, f['id']) for f in form_schema['fields']}
 
@@ -295,6 +306,7 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
                 'assignee_id': tk.assignee_id,
                 'assignee_name': tk.assignee_name,
                 'origin_assignee_id': tk.origin_assignee_id,
+                'batch': tk.batch,
                 'status': tk.status,
                 'decision': tk.decision,
                 'opinion': tk.opinion,
@@ -306,6 +318,7 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
         'records': [
             {
                 'id': r.id,
+                'task_id': r.task_id,
                 'action': r.action,
                 'actor_type': r.actor_type,
                 'actor_id': r.actor_id,
@@ -340,7 +353,34 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
             hidden,
         ),
         'my_task_id': my_task.id if my_task else None,
+        # 退回能选哪些节点：只给有「退回」这个动作的人算（要沿树走一遍）
+        'send_back_targets': (
+            await send_back_targets(db, inst) if any(c.action == Action.send_back for c in caps) else []
+        ),
+        'waiting': _waiting(inst, nodes, tasks, hidden),
     }
+
+
+def _waiting(inst: WfInstance, nodes: dict[str, Any], tasks: list[WfTask], hidden: set[str]) -> list[dict[str, Any]]:
+    """依次审批的当前节点上，排在后面、还没轮到的人（按顺序）。
+
+    审批人来自查看人看不到的人员字段时不给名字（同预告的 `_mask_forecast`）
+    """
+    nid = inst.current_node_id
+    if inst.status != 'running' or nid not in nodes:
+        return []
+    node = nodes[nid].node
+    if node['type'] != 'approval' or node.get('mode') != ApprovalMode.seq:
+        return []
+    rule = node.get('assignee') or {}
+    if rule.get('kind') == 'var_user' and rule.get('field') in hidden:
+        return [{'id': None, 'name': None, 'masked': True}]
+    queue = (json.loads(inst.variables).get('queue') or {}).get(nid) or []
+    batch = max((tk.batch for tk in tasks if tk.node_id == nid), default=None)
+    reached = {tk.origin_assignee_id or tk.assignee_id for tk in tasks if tk.node_id == nid and tk.batch == batch}
+    ids = [u for u, _ in queue]
+    last = max((ids.index(u) for u in reached if u in ids), default=-1)
+    return [{'id': u, 'name': n} for u, n in queue[last + 1 :]]
 
 
 def _strip_hidden(detail: dict[str, Any], hidden: set[str]) -> dict[str, Any]:

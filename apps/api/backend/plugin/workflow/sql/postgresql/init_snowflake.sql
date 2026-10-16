@@ -31,6 +31,9 @@ values (2049629108266205209, '查询', 'QueryWorkflowInstance', null, 0, null, 2
 insert into sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
 values (2049629108266205210, '终止', 'TerminateWorkflowInstance', null, 1, null, 2, 'workflow:instance:terminate', 1, 0, '', null, 2049629108266205208, now(), null);
 
+insert into sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
+values (2049629108266205211, '改办理人', 'ReassignWorkflowInstance', null, 2, null, 2, 'workflow:instance:reassign', 1, 0, '', null, 2049629108266205208, now(), null);
+
 insert into sys_role_menu (id, role_id, menu_id)
 values
 (4000000000000000091, 2048601269345583104, 2049629108266205200),
