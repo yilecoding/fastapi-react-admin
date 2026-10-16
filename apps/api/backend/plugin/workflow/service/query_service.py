@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Select, func, or_, select
 
-from backend.app.admin.model import User
+from backend.app.admin.model import Dept, Role, User
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.plugin.workflow.engine.flow import index_nodes
@@ -213,10 +213,13 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
     nodes = index_nodes(model)
     approval_nodes = [r.node for r in nodes.values() if r.node['type'] == 'approval']
     participant_nodes = [nodes[tk.node_id].node for tk in my_tasks if tk.node_id in nodes]
+    # 发起人按开始节点的字段权限看（没配 = 看得到）；被设成 hidden 的是留给审批人的字段
+    if is_initiator:
+        participant_nodes.append(model['root'])
     hidden = hidden_fields_for(
         form_schema,
         approval_nodes,
-        see_all=is_initiator or is_monitor,
+        see_all=is_monitor,
         participant_nodes=participant_nodes,
     )
     # 🔴 隐藏字段在**服务端**裁掉：schema 里删字段、数据里删值。前端藏起来不算权限
@@ -302,6 +305,7 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
         ],
         'ccs': [{'user_id': c.user_id, 'user_name': names.get(c.user_id), 'read_time': c.read_time} for c in ccs],
         'capabilities': [{'action': c.action, 'enabled': c.enabled, 'reason': c.reason} for c in caps],
+        'names': await model_names(db, model),
         'my_task_id': my_task.id if my_task else None,
     }
 
@@ -317,3 +321,77 @@ async def mark_cc_read(db: AsyncSession, pk: int, user_id: int) -> None:
     cc = await db.scalar(select(WfCc).where(WfCc.instance_id == pk, WfCc.user_id == user_id))
     if cc is not None and cc.read_time is None:
         cc.read_time = timezone.now()
+
+
+# ── 通讯录（选人 / 选部门）──────────────────────────────────────────────────
+
+
+async def directory_users(db: AsyncSession, *, keyword: str | None, ids: list[int] | None) -> list[dict[str, Any]]:
+    """选人控件用的最小通讯录：只给 ID / 昵称 / 用户名 / 部门名。
+
+    审批里的选人（转交、抄送、发起人自选审批人、表单里的人员字段）是**所有登录用户**都要用的，
+    而 `/sys/users` 挂着 `sys:user:list` —— 普通员工调不了。这里只暴露选人需要的几列，
+    不给手机号 / 邮箱 / 状态这些。
+    """
+    stmt = (
+        select(User.id, User.nickname, User.username, Dept.name)
+        .outerjoin(Dept, Dept.id == User.dept_id)
+        .where(User.deleted == 0, User.status == 1)
+    )
+    if ids:
+        stmt = stmt.where(User.id.in_(ids[:100]))
+    elif keyword:
+        stmt = stmt.where(or_(User.nickname.like(f'%{keyword}%'), User.username.like(f'%{keyword}%')))
+    rows = (await db.execute(stmt.order_by(User.id).limit(100 if ids else 20))).all()
+    return [{'id': r[0], 'nickname': r[1], 'username': r[2], 'dept_name': r[3]} for r in rows]
+
+
+async def directory_depts(db: AsyncSession) -> list[dict[str, Any]]:
+    rows = (
+        await db.execute(
+            select(Dept.id, Dept.name, Dept.parent_id)
+            .where(Dept.deleted == 0, Dept.status == 1)
+            .order_by(Dept.sort, Dept.id)
+        )
+    ).all()
+    return [{'id': r[0], 'name': r[1], 'parent_id': r[2]} for r in rows]
+
+
+async def directory_roles(db: AsyncSession) -> list[dict[str, Any]]:
+    """设计器里「指定角色」的下拉。`/sys/roles/all` 要 `sys:role:list`，配流程的人不一定有"""
+    rows = (
+        await db.execute(
+            select(Role.id, Role.name, Role.code).where(Role.status == 1, Role.deleted == 0).order_by(Role.id)
+        )
+    ).all()
+    return [{'id': r[0], 'name': r[1], 'code': r[2]} for r in rows]
+
+
+async def model_names(db: AsyncSession, model: dict[str, Any]) -> dict[str, dict[str, str]]:
+    """流程模型里出现过的用户 / 角色 ID → 名字，给只读流程图显示用。
+
+    模型里只存 ID（名字会变）；而看流程图的人（发起人、审批人）不一定有权限调角色 / 用户接口，
+    所以由服务端顺手查好一起下发。ID 键是字符串（硬纪律 6）。
+    """
+    users: set[int] = set()
+    roles: set[int] = set()
+
+    def scan(o: Any) -> None:
+        if isinstance(o, dict):
+            users.update(int(x) for x in o.get('user_ids') or [] if str(x).isdigit())
+            roles.update(int(x) for x in o.get('role_ids') or [] if str(x).isdigit())
+            for v in o.values():
+                scan(v)
+        elif isinstance(o, list):
+            for v in o:
+                scan(v)
+
+    scan(model)
+    out: dict[str, dict[str, str]] = {'users': {}, 'roles': {}}
+    if users:
+        rows = await db.execute(select(User.id, User.nickname).where(User.id.in_(users)))
+        out['users'] = {str(k): v for k, v in rows.all()}
+    if roles:
+        rows = await db.execute(select(Role.id, Role.name).where(Role.id.in_(roles)))
+        out['roles'] = {str(k): v for k, v in rows.all()}
+    return out

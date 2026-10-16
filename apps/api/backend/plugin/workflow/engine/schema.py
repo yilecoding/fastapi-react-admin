@@ -113,6 +113,9 @@ class AssigneeRule(_Shape):
 class StartNode(_Shape):
     type: Literal['start']
     id: str
+    #: 发起人的字段权限：没配 = 可填。hidden = 发起人既不填也看不到（留给审批人填的那种），
+    #: readonly = 看得到不能填
+    fieldPerms: dict[str, FieldPerm] = Field(default_factory=dict)  # ruff:ignore[mixed-case-variable-in-class-scope]
     next: Node | None = None
 
 

@@ -194,6 +194,16 @@ def hidden_fields_for(
     return hidden
 
 
+def start_editable_fields(form_schema: dict[str, Any], root: dict[str, Any]) -> set[str]:
+    """发起人能填的字段。开始节点的默认是**可填**（审批节点默认只读），所以单独一个函数"""
+    perms = root.get('fieldPerms') or {}
+    return {
+        f['id']
+        for f in form_schema.get('fields') or []
+        if f['type'] != 'description' and perms.get(f['id'], FieldPerm.editable) == FieldPerm.editable
+    }
+
+
 def editable_fields(form_schema: dict[str, Any], node: dict[str, Any]) -> set[str]:
     return {
         f['id']

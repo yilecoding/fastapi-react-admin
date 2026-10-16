@@ -171,3 +171,81 @@ def test_definition_admin_needs_permission(client: TestClient, login: Callable[[
     assert 'LEAVE' in [d['code'] for d in startable]
     form = ok(client.get('/sys/workflow/startable/LEAVE', headers=login('sunqiang')))
     assert form['form']['fields'][0]['id'] == 'f_type'
+
+
+def test_directory_is_open_to_any_logged_in_user(
+    client: TestClient, login: Callable[[str], dict[str, str]], uid: Callable[[str], str]
+) -> None:
+    """普通员工调不了 `/sys/users`，但审批里要选人 —— 通讯录只给最小字段"""
+    assert client.get('/sys/users', headers=login('sunqiang')).json()['code'] == 403
+    rows = ok(client.get('/sys/workflow/directory/users', headers=login('sunqiang'), params={'keyword': '赵'}))
+    assert [r['nickname'] for r in rows] == ['赵磊']
+    assert set(rows[0]) == {'id', 'nickname', 'username', 'dept_name'}
+    rows = ok(
+        client.get(
+            '/sys/workflow/directory/users',
+            headers=login('sunqiang'),
+            params={'ids': f'{uid("zhaolei")},{uid("chenjing")}'},
+        )
+    )
+    assert {r['nickname'] for r in rows} == {'赵磊', '陈静'}
+    depts = ok(client.get('/sys/workflow/directory/depts', headers=login('sunqiang')))
+    assert {'总部', '技术中心'} <= {d['name'] for d in depts}
+
+
+def test_required_editable_field_must_be_filled_before_approving(
+    client: TestClient,
+    token_headers: dict[str, str],
+    login: Callable[[str], dict[str, str]],
+    uid: Callable[[str], str],
+) -> None:
+    """审批节点上「可编辑 + 必填」的字段：发起人不填（开始节点 hidden），审批人不填就不许同意"""
+    form = {
+        'schemaVersion': 1,
+        'fields': [
+            {'id': 'f_what', 'type': 'text', 'label': '事项', 'required': True},
+            {'id': 'f_no', 'type': 'text', 'label': '登记号', 'required': True},
+        ],
+    }
+    model = {
+        'schemaVersion': 1,
+        'root': {
+            'type': 'start',
+            'id': 'start',
+            'fieldPerms': {'f_no': 'hidden'},
+            'next': {
+                'type': 'approval',
+                'id': 'n1',
+                'name': '登记',
+                'mode': 'any',
+                'assignee': {'kind': 'user', 'user_ids': [uid('wangfang')]},
+                'onEmpty': 'reject',
+                'fieldPerms': {'f_no': 'editable'},
+                'next': None,
+            },
+        },
+    }
+    pk = ok(
+        client.post(
+            '/sys/workflow/definitions',
+            headers=token_headers,
+            json={'code': 'PYTEST_REQ', 'name': '登记', 'form': form, 'model': model},
+        )
+    )['id']
+    assert ok(client.post(f'/sys/workflow/definitions/{pk}/publish', headers=token_headers))['published']
+    # 发起时不用填 f_no（开始节点 hidden），也不会因为它必填被挡
+    inst = ok(
+        client.post(
+            '/sys/workflow/instances',
+            headers=login('sunqiang'),
+            json={'code': 'PYTEST_REQ', 'form': {'f_what': '入职'}, 'key': key()},
+        )
+    )['instance_id']
+    url = f'/sys/workflow/instances/{inst}/actions'
+    resp = client.post(url, headers=login('wangfang'), json={'action': 'approve', 'key': key()})
+    assert resp.json()['code'] == 400
+    assert 'f_no' in resp.json()['data']
+    ok(client.post(url, headers=login('wangfang'), json={'action': 'approve', 'key': key(), 'form': {'f_no': 'A-01'}}))
+    d = ok(client.get(f'/sys/workflow/instances/{inst}', headers=token_headers))
+    assert d['instance']['status'] == 'approved'
+    assert d['form_data'] == {'f_what': '入职', 'f_no': 'A-01'}

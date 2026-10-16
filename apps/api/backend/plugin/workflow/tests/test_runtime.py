@@ -92,13 +92,18 @@ def test_short_leave_runs_to_approved(client: TestClient, login: Login, uid: Uid
 
     final = detail(client, login('sunqiang'), pk)
     assert final['instance']['status'] == 'approved'
-    assert final['form_data']['f_hr_note'] == '已登记'
     assert final['form_data']['f_reason'] == '家里有事'
+    # 「人事备注」在开始节点上是 hidden：发起人自己也看不到（人事看得到）
+    assert 'f_hr_note' not in final['form_data']
+    assert detail(client, login('wangfang'), pk)['form_data']['f_hr_note'] == '已登记'
     actions = [r['action'] for r in final['records']]
     assert actions[:2] == ['start', 'approve']
     assert 'branch' in actions and 'cc' in actions
-    change = next(r for r in final['records'] if r['detail'] and 'form_changes' in r['detail'])
+    # 轨迹里的改动前后值也按字段权限裁：人事看得到，发起人看不到
+    hr_final = detail(client, login('wangfang'), pk)
+    change = next(r for r in hr_final['records'] if r['detail'] and r['detail'].get('form_changes'))
     assert change['detail']['form_changes']['f_hr_note'] == {'from': None, 'to': '已登记'}
+    assert not any(r['detail'] and r['detail'].get('form_changes') for r in final['records'])
 
     # 抄送到了交接人，并且发了站内通知
     cc_items = ok(client.get('/sys/workflow/inbox/cc', headers=login('chenjing')))['items']
@@ -263,3 +268,19 @@ def test_counts(client: TestClient, login: Login, uid: Uid) -> None:
     start(client, login('sunqiang'), leave_form(uid))
     after = ok(client.get('/sys/workflow/inbox/counts', headers=login('zhaolei')))['todo']
     assert after == before + 1
+
+
+def test_initiator_cannot_fill_fields_hidden_at_start(
+    client: TestClient, login: Login, uid: Uid, token_headers: dict[str, str]
+) -> None:
+    """开始节点上 hidden 的字段：发起人传了也不收（不报错，直接不要），详情里也看不到"""
+    form = leave_form(uid)
+    form['f_hr_note'] = '我自己写的人事备注'
+    pk = start(client, login('sunqiang'), form)
+    full = detail(client, token_headers, pk)
+    # 先断言「有」：管理员（看全部）那里这个字段在，只是没值 —— 发起人传的被丢掉了
+    assert 'f_hr_note' in {f['id'] for f in full['form_schema']['fields']}
+    assert 'f_hr_note' not in full['form_data']
+    assert full['form_data']['f_reason'] == '家里有事'
+    mine = detail(client, login('sunqiang'), pk)
+    assert 'f_hr_note' not in {f['id'] for f in mine['form_schema']['fields']}

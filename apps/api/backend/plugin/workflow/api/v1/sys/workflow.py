@@ -103,6 +103,7 @@ async def get_start_form(db: CurrentSession, code: Annotated[str, Path(max_lengt
             'form': json.loads(v.form_json),
             'model': model,
             'select_nodes': select_nodes,
+            'names': await query_service.model_names(db, model),
         }
     )
 
@@ -190,6 +191,30 @@ async def do_action(request: Request, db: CurrentSession, pk: Pk, obj: ActionPar
 async def mark_cc_read(request: Request, db: CurrentSessionTransaction, pk: Pk) -> ResponseModel:
     await query_service.mark_cc_read(db, pk, request.user.id)
     return response_base.success()
+
+
+@router.get('/directory/users', summary='通讯录：选人', dependencies=[DependsJwtAuth])
+async def get_directory_users(
+    db: CurrentSession,
+    keyword: Keyword = None,
+    ids: Annotated[str | None, Query(max_length=2200, description='逗号分隔的用户 ID（回显已选的人）')] = None,
+) -> ResponseModel:
+    id_list = [int(x) for x in (ids or '').split(',') if x.strip().isdigit()]
+    return response_base.success(data=await query_service.directory_users(db, keyword=keyword, ids=id_list))
+
+
+@router.get('/directory/depts', summary='通讯录：部门', dependencies=[DependsJwtAuth])
+async def get_directory_depts(db: CurrentSession) -> ResponseModel:
+    return response_base.success(data=await query_service.directory_depts(db))
+
+
+@router.get(
+    '/directory/roles',
+    summary='通讯录：角色（设计器用）',
+    dependencies=[Depends(RequestPermission('workflow:definition:list')), DependsRBAC],
+)
+async def get_directory_roles(db: CurrentSession) -> ResponseModel:
+    return response_base.success(data=await query_service.directory_roles(db))
 
 
 # ── 实例监控（管理端）──────────────────────────────────────────────────────

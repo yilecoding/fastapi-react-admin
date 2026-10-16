@@ -44,7 +44,12 @@ from backend.plugin.notification.enums import NotificationCategory
 from backend.plugin.notification.schema.notification import CreateNotificationParam
 from backend.plugin.workflow.engine import assignee as assignee_rules
 from backend.plugin.workflow.engine.flow import condition_variables, index_nodes, pick_branch
-from backend.plugin.workflow.engine.form import FormDataError, editable_fields, validate_form_data
+from backend.plugin.workflow.engine.form import (
+    FormDataError,
+    editable_fields,
+    start_editable_fields,
+    validate_form_data,
+)
 from backend.plugin.workflow.enums import (
     FORM_BIZ_TYPE,
     PERM_TERMINATE,
@@ -149,7 +154,7 @@ class _Ctx:
 
 
 def detail_link(instance_id: int) -> str:
-    return f'/workflow/instance?id={instance_id}'
+    return f'/workflow/inbox?id={instance_id}'
 
 
 async def _run_effects(effects: list[Callable[[], Awaitable[None]]]) -> None:
@@ -571,13 +576,15 @@ async def start_in_tx(
     handler = get_handler(definition.biz_type)
     await handler.assert_start_allowed(db, biz_id, actor.id)
     form_schema = _json(version.form_json)
+    model = _json(version.model_json)
+    nodes = index_nodes(model)
+    # 只收发起人能填的字段：开始节点上 hidden / readonly 的（留给审批人填的那种）直接不收，
+    # 必填校验也不算它们 —— 否则「人事备注」必填就没人发得起来
     try:
-        data = validate_form_data(form_schema, form_data)
+        data = validate_form_data(form_schema, form_data, only=start_editable_fields(form_schema, model['root']))
     except FormDataError as e:
         raise errors.RequestError(msg=t('error.workflow.form_invalid', detail=str(e)), data=e.errors) from e
 
-    model = _json(version.model_json)
-    nodes = index_nodes(model)
     # 自选审批人：只收「这个节点确实是 select_on_start」的，其余的丢掉
     clean_selected: dict[str, list[str]] = {}
     for nid, ids in (selected or {}).items():
@@ -730,9 +737,8 @@ async def act(  # ruff:ignore[complex-structure]
             case Action.approve:
                 assert my_task is not None
                 node = nodes[my_task.node_id].node
-                detail = None
-                if form_patch:
-                    detail = _apply_form_patch(inst, node, form_patch)
+                # 不传改动也要走一遍：这个节点上「可编辑 + 必填」的字段没填，不许同意
+                detail = _apply_form_patch(inst, node, form_patch or {})
                 await _close_task(ctx.db, my_task, TaskStatus.done, 'approve', opinion)
                 _record(
                     ctx,
@@ -864,19 +870,24 @@ async def act(  # ruff:ignore[complex-structure]
 
 def _apply_form_patch(inst: WfInstance, node: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     """审批时改表单：🔴 **只收这个节点上 editable 的字段**，其余的直接拒绝（不是静默丢掉 ——
-    静默丢掉的话前端以为改成功了）。合并后整份再校验一遍，前后差异记进轨迹。
+    静默丢掉的话前端以为改成功了）。
+
+    校验只针对本节点可编辑的字段（含必填）：别的字段是发起人 / 前面的节点填的，这里没有
+    改它们的权利，也就不该因为它们挡住这一步。前后差异记进轨迹。
     """
     form_schema = _json(inst.form_snapshot)
     allowed = editable_fields(form_schema, node)
     illegal = set(patch) - allowed
     if illegal:
         raise ActionRejected('field_not_editable', instance_id=inst.id, fields='、'.join(sorted(illegal)))
+    if not allowed:
+        return {}
     before = _json(inst.form_data)
-    merged = {**before, **patch}
     try:
-        data = validate_form_data(form_schema, merged)
+        edited = validate_form_data(form_schema, {**before, **patch}, only=allowed)
     except FormDataError as e:
         raise errors.RequestError(msg=t('error.workflow.form_invalid', detail=str(e)), data=e.errors) from e
+    data = {**{k: v for k, v in before.items() if k not in allowed}, **edited}
     changes = {k: {'from': before.get(k), 'to': data.get(k)} for k in allowed if before.get(k) != data.get(k)}
     inst.form_data = json.dumps(data, ensure_ascii=False)
     return {'form_changes': changes} if changes else {}

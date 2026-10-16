@@ -14,10 +14,26 @@ import {
   Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from '@admin/ui/components/sheet'
 
+import { api } from '../../api-client/client'
 import { ApiError } from '../../api-client/errors'
 import { useFieldError } from '../_shared/form-error'
 import { FormField } from '../_shared/form-fields'
+import { UserSelect, type PickUser, type UserSource } from '../_shared/user-select'
 import { parentOptions, useCreateDept, useUpdateDept, type Dept } from './api'
+
+/**
+ * 负责人从用户表里选（`/sys/users`，按用户名搜）。能编辑部门的人本来就在管理端，
+ * 不走审批插件的通讯录接口 —— 部门页是底座的一部分，不能依赖一个可以卸载的插件。
+ */
+const SYS_USERS: UserSource = {
+  key: ['sys', 'user', 'pick'],
+  search: async (keyword) => {
+    const q = new URLSearchParams({ page: '1', size: '20' })
+    if (keyword) q.set('username', keyword)
+    const res = await api.GET<{ items: (PickUser & { dept?: { name: string } | null })[] }>(`/api/v1/sys/users?${q}`)
+    return res.items.map((u) => ({ id: u.id, nickname: u.nickname, username: u.username, dept_name: u.dept?.name ?? null }))
+  },
+}
 
 const schema = z.object({
   name: z.string().min(1, '请输入部门名称').max(50),
@@ -26,7 +42,7 @@ const schema = z.object({
   code: z.string().regex(/^[A-Z][A-Z0-9_]{1,31}$/, '编码为 2–32 位大写字母、数字或下划线，且以字母开头'),
   parent_id: z.string().optional(),
   sort: z.coerce.number().int().min(0, '排序不能为负'),
-  leader: z.string().max(20).optional(),
+  leader_id: z.string().optional(),
   phone: z.union([z.string().regex(/^1[3-9]\d{9}$/, '手机号格式不正确'), z.literal('')]).optional(),
   email: z.union([z.email('邮箱格式不正确'), z.literal('')]).optional(),
   status: z.coerce.number().int(),
@@ -68,7 +84,7 @@ export function DeptFormSheet({
 
   const form = useForm<Values>({
     resolver: zodResolver(schema) as never,
-    defaultValues: { name: '', code: '', parent_id: ROOT, sort: 0, leader: '', phone: '', email: '', status: 1 },
+    defaultValues: { name: '', code: '', parent_id: ROOT, sort: 0, leader_id: '', phone: '', email: '', status: 1 },
   })
 
   React.useEffect(() => {
@@ -81,12 +97,12 @@ export function DeptFormSheet({
             code: editing.code,
             parent_id: editing.parent_id ?? ROOT,
             sort: editing.sort,
-            leader: editing.leader ?? '',
+            leader_id: editing.leader_id ?? '',
             phone: editing.phone ?? '',
             email: editing.email ?? '',
             status: editing.status,
           }
-        : { name: '', code: '', parent_id: presetParentId ?? ROOT, sort: 0, leader: '', phone: '', email: '', status: 1 }
+        : { name: '', code: '', parent_id: presetParentId ?? ROOT, sort: 0, leader_id: '', phone: '', email: '', status: 1 }
     )
   }, [open, editing, presetParentId, form])
 
@@ -98,7 +114,7 @@ export function DeptFormSheet({
       name: v.name.trim(),
       parent_id: v.parent_id === ROOT ? null : v.parent_id || null,
       sort: v.sort,
-      leader: v.leader?.trim() || null,
+      leader_id: v.leader_id || null,
       phone: v.phone?.trim() || null,
       email: v.email?.trim() || null,
       status: v.status,
@@ -168,8 +184,14 @@ export function DeptFormSheet({
             </FormField>
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField label={t("负责人")} error={fe(errs.leader?.message)}>
-                <Input {...form.register('leader')} data-testid="d-leader" autoComplete="off" />
+              <FormField label={t("负责人")} error={fe(errs.leader_id?.message)}>
+                <UserSelect
+                  source={SYS_USERS}
+                  value={form.watch('leader_id') ? [form.watch('leader_id') as string] : []}
+                  labels={editing?.leader_id && editing.leader_name ? { [editing.leader_id]: editing.leader_name } : undefined}
+                  onChange={(v) => form.setValue('leader_id', v[0] ?? '', { shouldDirty: true })}
+                  testId="d-leader"
+                />
               </FormField>
               <FormField label={t("排序")} error={fe(errs.sort?.message)}>
                 <Input type="number" min={0} {...form.register('sort')} data-testid="d-sort" />

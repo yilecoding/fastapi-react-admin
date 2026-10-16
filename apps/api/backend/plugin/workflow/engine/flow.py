@@ -171,6 +171,11 @@ def validate_publish(form_json: dict[str, Any], model_json: dict[str, Any]) -> l
         warn('FORM_EMPTY', '表单里没有可填写的字段')
 
     nodes = index_nodes(model_json)
+    for fid in model_json['root'].get('fieldPerms') or {}:
+        if fid not in fields:
+            err(
+                'FIELD_PERM_UNKNOWN', '发起人的字段权限引用了不存在的字段', nodeId=model_json['root']['id'], fieldId=fid
+            )
     if len(nodes) != _count_nodes(model_json['root']):
         err('NODE_DUPLICATE_ID', '流程里有重复的节点 ID')
     approvals = 0

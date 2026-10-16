@@ -24,6 +24,9 @@ import { PluginPage } from "@admin/platform/pages/plugin"
 import { DashboardPage } from "@admin/platform/pages/dashboard"
 import { SchedulerManagePage } from "@admin/platform/pages/scheduler-manage"
 import { SchedulerRecordPage } from "@admin/platform/pages/scheduler-record"
+import { WorkflowInboxPage } from "@admin/platform/pages/workflow-inbox"
+import { WorkflowDefinitionPage } from "@admin/platform/pages/workflow-definition"
+import { WorkflowMonitorPage } from "@admin/platform/pages/workflow-monitor"
 
 /**
  * routeId → 页面组件。
@@ -58,5 +61,8 @@ export const pageRegistry: PageRegistry = {
   "/_auth/profile": ProfilePage,
   "/_auth/plugins/notice": NoticePage,
   "/_auth/notification": NotificationPage,
+  "/_auth/workflow/inbox": WorkflowInboxPage,
+  "/_auth/workflow/definition": WorkflowDefinitionPage,
+  "/_auth/workflow/monitor": WorkflowMonitorPage,
   "/_auth/system/plugin": PluginPage,
 }

@@ -1,0 +1,427 @@
+import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
+
+import { api, type PageData } from '../../api-client/client'
+
+/**
+ * 审批流的接口与类型（issue #107）。
+ *
+ * ⚠️ 前缀是 **`/api/v1/sys/workflow`** —— 插件 `extend = "admin"`，路由被挂在 admin 的 sys 下
+ * （同消息中心那条）。
+ *
+ * ⚠️ 所有 ID 都是雪花**字符串**，不要 `Number()`（硬纪律 6）。表单里人员 / 部门字段的值
+ * 也是字符串，后端拿到数字会直接拒绝。
+ */
+const BASE = '/api/v1/sys/workflow'
+
+// ── 表单 schema ──────────────────────────────────────────────────────────────
+
+export type FieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'amount'
+  | 'date'
+  | 'daterange'
+  | 'select'
+  | 'multiselect'
+  | 'user'
+  | 'dept'
+  | 'attachment'
+  | 'description'
+  | 'table'
+
+export type FieldOption = { label: string; value: string }
+
+export type FormField = {
+  /** 生成的稳定 ID —— 条件和历史数据都按它引用，改标签不影响 */
+  id: string
+  type: FieldType
+  label: string
+  required?: boolean
+  placeholder?: string | null
+  options?: FieldOption[] | null
+  precision?: number | null
+  multiple?: boolean
+  content?: string | null
+  columns?: FormField[] | null
+}
+
+export type FormSchema = { schemaVersion: 1; fields: FormField[] }
+
+export type FormData = Record<string, unknown>
+
+// ── 流程模型（树）────────────────────────────────────────────────────────────
+
+export type Cond =
+  | { all: Cond[] }
+  | { any: Cond[] }
+  | { var: string; op: CondOp; value?: unknown }
+
+export type CondOp = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'not_in' | 'contains' | 'empty' | 'not_empty'
+
+export type AssigneeKind = 'user' | 'role' | 'dept_leader' | 'initiator' | 'var_user' | 'select_on_start'
+
+export type AssigneeRule = {
+  kind: AssigneeKind
+  user_ids?: string[]
+  role_ids?: string[]
+  level?: number
+  field?: string
+  scope?: 'none' | 'initiator_dept' | 'initiator_dept_tree'
+}
+
+export type FieldPerm = 'hidden' | 'readonly' | 'editable'
+
+export type ApprovalNode = {
+  type: 'approval'
+  id: string
+  name: string
+  mode: 'any' | 'all'
+  assignee?: AssigneeRule | null
+  onEmpty: 'reject' | 'skip' | 'admin'
+  actions?: ('transfer' | 'cc')[] | null
+  fieldPerms?: Record<string, FieldPerm>
+  next: FlowNode | null
+}
+
+export type CcNode = { type: 'cc'; id: string; name: string; targets: AssigneeRule[]; next: FlowNode | null }
+
+export type Branch = { id: string; name: string; default?: boolean; when?: Cond | null; child: FlowNode | null }
+
+export type ConditionNode = { type: 'condition'; id: string; name: string; branches: Branch[]; next: FlowNode | null }
+
+export type FlowNode = ApprovalNode | CcNode | ConditionNode
+
+/** 开始节点。`fieldPerms` 是**发起人**的字段权限，没配 = 可填（审批节点没配 = 只读） */
+export type StartNode = { type: 'start'; id: string; fieldPerms?: Record<string, FieldPerm>; next: FlowNode | null }
+
+export type FlowModel = { schemaVersion: 1; root: StartNode }
+
+// ── 实例 ─────────────────────────────────────────────────────────────────────
+
+export type InstanceStatus = 'running' | 'approved' | 'rejected' | 'withdrawn' | 'terminated'
+
+export type Action = 'approve' | 'reject' | 'withdraw' | 'transfer' | 'cc' | 'remind' | 'terminate'
+
+export type InstanceRow = {
+  id: string
+  title: string
+  summary: string | null
+  definition_id: string
+  definition_name: string | null
+  status: InstanceStatus
+  initiator_id: string
+  initiator_name: string | null
+  current_node_id: string | null
+  created_time: string
+  finished_time: string | null
+  // 各列表各自补的字段
+  task_id?: string
+  node_name?: string
+  arrived_time?: string
+  decision?: string
+  handled_time?: string | null
+  cc_id?: string
+  read_time?: string | null
+  cc_time?: string
+}
+
+export type TaskRow = {
+  id: string
+  node_id: string
+  node_name: string
+  assignee_id: string
+  assignee_name: string
+  origin_assignee_id: string | null
+  status: 'pending' | 'done' | 'canceled' | 'transferred'
+  decision: 'approve' | 'reject' | null
+  opinion: string | null
+  created_time: string
+  finished_time: string | null
+}
+
+export type RecordRow = {
+  id: string
+  action: string
+  actor_type: 'user' | 'system'
+  actor_id: string | null
+  actor_name: string | null
+  node_id: string | null
+  node_name: string | null
+  target_user_name: string | null
+  opinion: string | null
+  detail: { branch?: string; name?: string; form_changes?: Record<string, { from: unknown; to: unknown }> } | null
+  created_time: string
+}
+
+export type Capability = { action: Action; enabled: boolean; reason: string | null }
+
+export type InstanceDetail = {
+  instance: InstanceRow & { seq: number; biz_id: string | null }
+  /** 已经按当前查看人裁掉了隐藏字段（服务端做的） */
+  form_schema: FormSchema
+  form_data: FormData
+  /** 当前查看人若有待办：字段 ID → 权限；没有待办时为空 */
+  field_perms: Record<string, FieldPerm>
+  model: FlowModel
+  /** 节点 ID → done / current / rejected；`branch:<分支 ID>` → taken */
+  node_state: Record<string, string>
+  tasks: TaskRow[]
+  records: RecordRow[]
+  ccs: { user_id: string; user_name: string | null; read_time: string | null }[]
+  capabilities: Capability[]
+  my_task_id: string | null
+  /** 流程图里出现的用户 / 角色 ID → 名字（看图的人不一定有权限查角色 / 用户接口） */
+  names: ModelNames
+}
+
+export type ModelNames = { users: Record<string, string>; roles: Record<string, string> }
+
+export type Definition = {
+  id: string
+  code: string
+  name: string
+  biz_type: string
+  category: string | null
+  icon: string | null
+  description: string | null
+  status: 'draft' | 'published' | 'disabled'
+  current_version_id: string | null
+  sort: number
+  created_time: string
+  updated_time: string | null
+  form?: FormSchema
+  model?: FlowModel
+}
+
+export type Issue = { level: 'ERROR' | 'WARN'; code: string; message: string; nodeId?: string; fieldId?: string }
+
+export type DirectoryUser = { id: string; nickname: string; username: string; dept_name: string | null }
+export type DirectoryDept = { id: string; name: string; parent_id: string | null }
+
+// ── query keys ───────────────────────────────────────────────────────────────
+
+export type InboxTab = 'todo' | 'done' | 'initiated' | 'cc'
+
+export type InboxParams = { tab: InboxTab; page: number; size: number; keyword?: string; status?: string }
+
+export const workflowKeys = {
+  all: ['sys', 'workflow'] as const,
+  inbox: () => [...workflowKeys.all, 'inbox'] as const,
+  list: (p: InboxParams) => [...workflowKeys.inbox(), p] as const,
+  counts: () => [...workflowKeys.all, 'counts'] as const,
+  detail: (id: string) => [...workflowKeys.all, 'detail', id] as const,
+  startable: () => [...workflowKeys.all, 'startable'] as const,
+  startForm: (code: string) => [...workflowKeys.all, 'start-form', code] as const,
+  monitor: (p: object) => [...workflowKeys.all, 'monitor', p] as const,
+  definitions: () => [...workflowKeys.all, 'definitions'] as const,
+  definition: (id: string) => [...workflowKeys.all, 'definition', id] as const,
+  versions: (id: string) => [...workflowKeys.all, 'versions', id] as const,
+  users: (q: object) => [...workflowKeys.all, 'directory', 'users', q] as const,
+  depts: () => [...workflowKeys.all, 'directory', 'depts'] as const,
+}
+
+function qs(p: Record<string, string | number | boolean | undefined | null>): string {
+  const s = new URLSearchParams()
+  for (const [k, v] of Object.entries(p)) if (v !== undefined && v !== null && v !== '') s.set(k, String(v))
+  return s.toString()
+}
+
+export const inboxQuery = (p: InboxParams) =>
+  queryOptions({
+    queryKey: workflowKeys.list(p),
+    queryFn: () =>
+      api.GET<PageData<InstanceRow>>(
+        `${BASE}/inbox/${p.tab}?${qs({ page: p.page, size: p.size, keyword: p.keyword, status: p.status })}`
+      ),
+    placeholderData: (prev) => prev,
+  })
+
+/**
+ * 待办数。🔴 和铃铛未读数同一个口径：它必须能靠这条 REST 调用拿到正确值，
+ * socket 的 `workflow:todo` 只是让它早点重取，不是送达保证。
+ */
+export const countsQuery = () =>
+  queryOptions({
+    queryKey: workflowKeys.counts(),
+    queryFn: () => api.GET<{ todo: number; cc_unread: number }>(`${BASE}/inbox/counts`),
+  })
+
+export const detailQuery = (id: string) =>
+  queryOptions({
+    queryKey: workflowKeys.detail(id),
+    queryFn: () => api.GET<InstanceDetail>(`${BASE}/instances/${id}`),
+  })
+
+export const startableQuery = () =>
+  queryOptions({ queryKey: workflowKeys.startable(), queryFn: () => api.GET<Definition[]>(`${BASE}/startable`) })
+
+export type StartForm = {
+  definition: Definition
+  version_id: string
+  form: FormSchema
+  model: FlowModel
+  select_nodes: { id: string; name: string; mode: string }[]
+  names: ModelNames
+}
+
+export const startFormQuery = (code: string) =>
+  queryOptions({
+    queryKey: workflowKeys.startForm(code),
+    queryFn: () => api.GET<StartForm>(`${BASE}/startable/${encodeURIComponent(code)}`),
+  })
+
+export const monitorQuery = (p: { page: number; size: number; keyword?: string; status?: string }) =>
+  queryOptions({
+    queryKey: workflowKeys.monitor(p),
+    queryFn: () => api.GET<PageData<InstanceRow>>(`${BASE}/monitor?${qs(p)}`),
+    placeholderData: (prev) => prev,
+  })
+
+export const definitionsQuery = () =>
+  queryOptions({ queryKey: workflowKeys.definitions(), queryFn: () => api.GET<Definition[]>(`${BASE}/definitions`) })
+
+export const definitionQuery = (id: string) =>
+  queryOptions({
+    queryKey: workflowKeys.definition(id),
+    queryFn: () => api.GET<Definition>(`${BASE}/definitions/${id}`),
+  })
+
+export const versionsQuery = (id: string) =>
+  queryOptions({
+    queryKey: workflowKeys.versions(id),
+    queryFn: () =>
+      api.GET<{ id: string; version_no: number; published_by: string; created_time: string }[]>(
+        `${BASE}/definitions/${id}/versions`
+      ),
+  })
+
+export const directoryUsersQuery = (q: { keyword?: string; ids?: string[] }) =>
+  queryOptions({
+    queryKey: workflowKeys.users(q),
+    queryFn: () =>
+      api.GET<DirectoryUser[]>(`${BASE}/directory/users?${qs({ keyword: q.keyword, ids: q.ids?.join(',') })}`),
+    staleTime: 60_000,
+  })
+
+export const directoryDeptsQuery = () =>
+  queryOptions({
+    queryKey: workflowKeys.depts(),
+    queryFn: () => api.GET<DirectoryDept[]>(`${BASE}/directory/depts`),
+    staleTime: 60_000,
+  })
+
+// ── mutations ────────────────────────────────────────────────────────────────
+
+/**
+ * 幂等键。🔴 用 http 访问内网时（非安全上下文）**没有 `crypto.randomUUID`**
+ * （avc-bp `d694615c` 踩过），所以要有 fallback；后端只要求 8–64 位。
+ */
+export function idempotencyKey(): string {
+  const c = globalThis.crypto
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID()
+  if (c && typeof c.getRandomValues === 'function') {
+    const b = c.getRandomValues(new Uint8Array(16))
+    return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
+  }
+  return `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`
+}
+
+export function useStartInstance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { code: string; form: FormData; selected: Record<string, string[]>; key: string }) =>
+      api.POST<{ instance_id: string; replayed: boolean }>(`${BASE}/instances`, { body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
+  })
+}
+
+export function useAct(instanceId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: {
+      action: Action
+      key: string
+      opinion?: string
+      target_user_ids?: string[]
+      form?: FormData
+    }) => api.POST<{ instance_id: string; replayed: boolean }>(`${BASE}/instances/${instanceId}/actions`, { body }),
+    // 成功和失败都要重取：失败多半是「已被他人处理」，界面要跟上真实状态
+    onSettled: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
+  })
+}
+
+export function useMarkCcRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.PUT(`${BASE}/instances/${id}/cc-read`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: workflowKeys.counts() })
+      qc.invalidateQueries({ queryKey: workflowKeys.inbox() })
+    },
+  })
+}
+
+export function useCreateDefinition() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: Partial<Definition> & { code: string; name: string; form?: FormSchema; model?: FlowModel }) =>
+      api.POST<{ id: string }>(`${BASE}/definitions`, { body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.definitions() }),
+  })
+}
+
+export function useSaveDefinition() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: Partial<Pick<Definition, 'name' | 'category' | 'icon' | 'description' | 'sort'>> & { form?: FormSchema; model?: FlowModel } }) =>
+      api.PUT(`${BASE}/definitions/${id}`, { body }),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: workflowKeys.definitions() })
+      qc.invalidateQueries({ queryKey: workflowKeys.definition(v.id) })
+    },
+  })
+}
+
+export function useDeleteDefinition() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.DELETE(`${BASE}/definitions/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.definitions() }),
+  })
+}
+
+export function usePublishDefinition() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.POST<{ published: boolean; version: { version_no: number } | null; issues: Issue[] }>(
+        `${BASE}/definitions/${id}/publish`
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
+  })
+}
+
+export function useValidateDefinition() {
+  return useMutation({
+    mutationFn: (id: string) => api.POST<{ issues: Issue[] }>(`${BASE}/definitions/${id}/validate`),
+  })
+}
+
+export function useSetDefinitionStatus() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      api.PUT(`${BASE}/definitions/${id}/status`, { body: { enabled } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
+  })
+}
+
+export type DirectoryRole = { id: string; name: string; code: string }
+
+export const directoryRolesQuery = () =>
+  queryOptions({
+    queryKey: [...workflowKeys.all, 'directory', 'roles'] as const,
+    queryFn: () => api.GET<DirectoryRole[]>(`${BASE}/directory/roles`),
+    staleTime: 60_000,
+  })
