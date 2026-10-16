@@ -11,7 +11,7 @@ class NotificationSchemaBase(SchemaBase):
 
     title: str = Field(description='标题', max_length=128)
     content: str = Field(description='内容')
-    category: NotificationCategory = Field(description='分类（0：系统、1：公告、2：任务事件）')
+    category: NotificationCategory = Field(description='分类（0：系统、1：公告、2：任务事件、3：审批）')
     link: str | None = Field(None, description='点击跳转的前端路由', max_length=256)
 
 

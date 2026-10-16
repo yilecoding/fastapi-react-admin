@@ -1,0 +1,65 @@
+from typing import Any
+
+from pydantic import Field
+
+from backend.common.schema import ColumnLengthChecked, SchemaBase, SnowflakeIdIn
+from backend.plugin.workflow.enums import FORM_BIZ_TYPE, Action
+from backend.plugin.workflow.model import WfDefinition
+
+#: 幂等键：前端每次提交生成一个 UUID。⚠️ 用 http 访问内网时没有 `crypto.randomUUID`
+#: （avc-bp `d694615c`），前端要带 fallback —— 后端只要求长度
+IdempotencyKey = Field(min_length=8, max_length=64, description='幂等键（每次提交一个新的 UUID）')
+
+
+class CreateDefinitionParam(ColumnLengthChecked, SchemaBase):
+    """新建流程定义"""
+
+    __sa_model__ = WfDefinition
+
+    code: str = Field(pattern=r'^[A-Za-z][A-Za-z0-9_]{1,63}$', description='编码（创建后不可改）')
+    name: str = Field(min_length=1, description='名称')
+    biz_type: str = Field(FORM_BIZ_TYPE, description='业务类型，表单审批为 form')
+    category: str | None = Field(None, description='分组')
+    icon: str | None = Field(None, description='图标')
+    description: str | None = Field(None, description='说明')
+    sort: int = Field(0, ge=0, description='排序')
+    form: dict[str, Any] | None = Field(None, description='表单草稿')
+    model: dict[str, Any] | None = Field(None, description='流程草稿')
+
+
+class UpdateDefinitionParam(ColumnLengthChecked, SchemaBase):
+    """更新流程定义（草稿）。刻意不含 `code` 和 `biz_type`：前者是稳定引用键，后者换了在途实例的回调就错了"""
+
+    __sa_model__ = WfDefinition
+
+    name: str | None = Field(None, min_length=1, description='名称')
+    category: str | None = Field(None, description='分组')
+    icon: str | None = Field(None, description='图标')
+    description: str | None = Field(None, description='说明')
+    sort: int | None = Field(None, ge=0, description='排序')
+    form: dict[str, Any] | None = Field(None, description='表单草稿')
+    model: dict[str, Any] | None = Field(None, description='流程草稿')
+
+
+class SetDefinitionStatusParam(SchemaBase):
+    enabled: bool = Field(description='启用 / 停用')
+
+
+class StartParam(SchemaBase):
+    """发起表单审批"""
+
+    code: str = Field(description='流程定义编码')
+    form: dict[str, Any] = Field(default_factory=dict, description='表单数据')
+    #: 节点 ID → 自选的审批人 ID 列表（字符串，硬纪律 6）
+    selected: dict[str, list[str]] = Field(default_factory=dict, description='发起人自选的审批人')
+    key: str = IdempotencyKey
+
+
+class ActionParam(SchemaBase):
+    """对实例执行一个动作"""
+
+    action: Action = Field(description='动作')
+    key: str = IdempotencyKey
+    opinion: str | None = Field(None, max_length=512, description='意见 / 原因')
+    target_user_ids: list[SnowflakeIdIn] | None = Field(None, description='转办 / 抄送的目标人')
+    form: dict[str, Any] | None = Field(None, description='审批时修改的表单字段（只收本节点可编辑的）')

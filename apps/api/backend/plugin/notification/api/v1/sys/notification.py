@@ -40,7 +40,7 @@ async def get_my_notifications_paginated(
     request: Request,
     db: CurrentSession,
     title: Annotated[str | None, Query(description='标题')] = None,
-    category: Annotated[int | None, Query(description='分类（0：系统、1：公告、2：任务事件）')] = None,
+    category: Annotated[int | None, Query(description='分类（0：系统、1：公告、2：任务事件、3：审批）')] = None,
     unread: Annotated[bool | None, Query(description='只看未读 / 只看已读，不传则不筛')] = None,
 ) -> ResponseSchemaModel[PageData[GetNotificationDetail]]:
     page_data = await notification_service.get_list(
