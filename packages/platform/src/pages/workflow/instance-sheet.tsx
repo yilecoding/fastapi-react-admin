@@ -260,6 +260,8 @@ const ACTION_TEXT: Record<Action, string> = {
   terminate: '终止',
   send_back: '退回',
   reassign: '改办理人',
+  take_back: '拿回',
+  add_sign: '加签',
 }
 
 const DONE_TEXT: Record<Action, string> = {
@@ -272,6 +274,8 @@ const DONE_TEXT: Record<Action, string> = {
   terminate: '已终止',
   send_back: '已退回',
   reassign: '已改办理人',
+  take_back: '已拿回',
+  add_sign: '已加签',
 }
 
 const DIALOG_TEXT: Partial<Record<Action, string>> = {
@@ -281,6 +285,7 @@ const DIALOG_TEXT: Partial<Record<Action, string>> = {
   cc: '对方会收到通知，并能在「抄送我的」里看到这张单。',
   send_back: '单子回到你选的那一步重新处理，这一步的待办随之结束。退回给发起人时，由发起人改好后重新提交。',
   reassign: '把这条待办交给另一个人处理，不需要原办理人同意。适合办理人离职或长期不在。',
+  add_sign: '临时请别人一起审这一步，他们都同意才算数。',
 }
 
 type DialogNeed = {
@@ -290,6 +295,8 @@ type DialogNeed = {
   node?: true
   /** 改办理人：选改哪一条待办 */
   task?: true
+  /** 加签：在我之前 / 之后 */
+  sign?: true
 }
 
 /** 要先在弹窗里选人 / 写原因的动作。同意 / 驳回的意见在底部输入框里，不弹窗 */
@@ -300,9 +307,17 @@ const DIALOG: Partial<Record<Action, DialogNeed>> = {
   terminate: { opinion: 'required' },
   send_back: { node: true, opinion: 'required' },
   reassign: { task: true, users: 'one', opinion: 'optional' },
+  add_sign: { sign: true, users: 'many', opinion: 'optional' },
 }
 
-type Extra = { opinion?: string; target_user_ids?: string[]; target_node_id?: string; task_id?: string }
+type Extra = {
+  opinion?: string
+  target_user_ids?: string[]
+  target_node_id?: string
+  task_id?: string
+  resume?: boolean
+  sign_mode?: 'before' | 'after'
+}
 
 function ActionBar({
   detail: d, patch, editable, onDone, onResetPatch,
@@ -325,7 +340,8 @@ function ActionBar({
 
   async function run(action: Action, extra: Extra = {}) {
     const body: Parameters<typeof act.mutateAsync>[0] = { action, key: idempotencyKey(), ...extra }
-    if (action === 'approve') {
+    // 「在我之后」加签 = 我这一票是同意：和同意一样要过本节点的必填、带上我改的字段
+    if (action === 'approve' || (action === 'add_sign' && extra.sign_mode === 'after')) {
       const missing = missingRequired(d.form_schema, { ...d.form_data, ...patch }, editable)
       if (Object.keys(missing).length) {
         toast.error(t('请先填写：{{f}}', { f: Object.values(missing).join('、') }))
@@ -339,7 +355,7 @@ function ActionBar({
       onResetPatch()
       setOpinion('')
       // 办完自己那一步就关掉；撤回 / 催办 / 管理员改办理人之后留在详情里看结果
-      if (['approve', 'reject', 'transfer', 'send_back'].includes(action)) onDone()
+      if (['approve', 'reject', 'transfer', 'send_back', 'add_sign'].includes(action)) onDone()
       return true
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : t('操作失败，请稍后重试'))
@@ -389,9 +405,11 @@ function ActionBar({
       <div className="flex flex-wrap items-center gap-2">
         {btn('transfer', 'ghost', () => setDialog('transfer'))}
         {btn('cc', 'ghost', () => setDialog('cc'))}
+        {btn('add_sign', 'ghost', () => setDialog('add_sign'))}
         {btn('reassign', 'ghost', () => setDialog('reassign'))}
         {btn('terminate', 'ghost', () => setDialog('terminate'))}
         <span className="ms-auto flex gap-2">
+          {btn('take_back', 'outline', () => run('take_back'))}
           {btn('remind', 'outline', () => run('remind'))}
           {btn('withdraw', 'outline', () => setDialog('withdraw'))}
           {btn('send_back', 'outline', () => setDialog('send_back'))}
@@ -432,6 +450,8 @@ function ActionDialog({
   const [users, setUsers] = React.useState<string[]>([])
   const [node, setNode] = React.useState<string | null>(null)
   const [task, setTask] = React.useState<string | null>(null)
+  const [resume, setResume] = React.useState(false)
+  const [signMode, setSignMode] = React.useState<'before' | 'after'>('before')
   const pendingTasks = React.useMemo(() => d.tasks.filter((x) => x.status === 'pending'), [d.tasks])
   React.useEffect(() => {
     if (action) {
@@ -440,6 +460,8 @@ function ActionDialog({
       // 默认选最近的那一步（列表最后一个）；改办理人只有一条待办时直接选上
       setNode(d.send_back_targets.at(-1)?.node_id ?? null)
       setTask(pendingTasks.length === 1 ? pendingTasks[0].id : null)
+      setResume(false)
+      setSignMode('before')
     }
   }, [action, d.send_back_targets, pendingTasks])
   const need = action ? DIALOG[action] : undefined
@@ -450,7 +472,7 @@ function ActionDialog({
   const text = action ? DIALOG_TEXT[action] : undefined
   // 转交 / 改办理人不能给发起人，也不能给这一步里已经有份的人（服务端同样会拒）
   const exclude =
-    action === 'transfer' || action === 'reassign'
+    action === 'transfer' || action === 'reassign' || action === 'add_sign'
       ? [d.instance.initiator_id, ...pendingTasks.map((x) => x.assignee_id)]
       : undefined
 
@@ -478,6 +500,54 @@ function ActionDialog({
               </RadioGroup>
             </Row>
           )}
+          {need?.node && (
+            <Row label={t('重新处理之后')}>
+              <RadioGroup
+                value={resume ? 'me' : 'restart'}
+                onValueChange={(v) => setResume(v === 'me')}
+                className="gap-2"
+                data-testid="wf-back-resume"
+              >
+                {(
+                  [
+                    ['restart', t('照常往下走（后面的步骤再审一遍）')],
+                    ['me', t('直接回到我这一步')],
+                  ] as const
+                ).map(([v, label]) => (
+                  <label key={v} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <RadioGroupItem value={v} data-testid={`wf-back-resume-${v}`} />
+                    {label}
+                  </label>
+                ))}
+              </RadioGroup>
+            </Row>
+          )}
+          {need?.sign && (
+            <Row label={t('加在')} required>
+              <RadioGroup
+                value={signMode}
+                onValueChange={(v) => setSignMode(v as 'before' | 'after')}
+                className="gap-2"
+                data-testid="wf-sign-mode"
+              >
+                {(
+                  [
+                    ['before', t('我之前'), t('他们都同意后，回到我这里再审')],
+                    ['after', t('我之后'), t('我现在就同意，他们都同意后才往下走')],
+                  ] as const
+                ).map(([v, label, hint]) => (
+                  <label
+                    key={v}
+                    className="flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm has-data-checked:border-primary has-data-checked:bg-primary/5"
+                  >
+                    <RadioGroupItem value={v} data-testid={`wf-sign-${v}`} />
+                    <span>{label}</span>
+                    <span className="ms-auto text-xs text-muted-foreground">{hint}</span>
+                  </label>
+                ))}
+              </RadioGroup>
+            </Row>
+          )}
           {need?.task && pendingTasks.length > 1 && (
             <Row label={t('改哪一位的待办')} required>
               <RadioGroup value={task} onValueChange={(v) => setTask(String(v))} className="gap-2">
@@ -500,7 +570,10 @@ function ActionDialog({
             </p>
           )}
           {need?.users && (
-            <Row label={action === 'cc' ? t('抄送给') : action === 'reassign' ? t('改给') : t('转交给')} required>
+            <Row
+              label={action === 'cc' ? t('抄送给') : action === 'reassign' ? t('改给') : action === 'add_sign' ? t('请谁一起审') : t('转交给')}
+              required
+            >
               <UserSelect
                 value={users}
                 onChange={setUsers}
@@ -512,7 +585,7 @@ function ActionDialog({
           )}
           {need?.opinion && (
             <Row
-              label={action === 'transfer' || action === 'reassign' ? t('说明') : action === 'send_back' ? t('退回原因') : t('原因')}
+              label={action === 'transfer' || action === 'reassign' || action === 'add_sign' ? t('说明') : action === 'send_back' ? t('退回原因') : t('原因')}
               required={need.opinion === 'required'}
             >
               <Textarea
@@ -536,6 +609,8 @@ function ActionDialog({
                 target_user_ids: users.length ? users : undefined,
                 target_node_id: need?.node ? (node ?? undefined) : undefined,
                 task_id: need?.task ? (task ?? undefined) : undefined,
+                resume: need?.node ? resume : undefined,
+                sign_mode: need?.sign ? signMode : undefined,
               })
             }
             data-testid="wf-action-submit"
@@ -558,5 +633,6 @@ export function _i18nExtractionAnchors(t: (k: string) => string) {
     t('转交后这条待办交给对方处理，你的待办随之结束。'), t('对方会收到通知，并能在「抄送我的」里看到这张单。'),
     t('单子回到你选的那一步重新处理，这一步的待办随之结束。退回给发起人时，由发起人改好后重新提交。'),
     t('把这条待办交给另一个人处理，不需要原办理人同意。适合办理人离职或长期不在。'),
+    t('拿回'), t('加签'), t('已拿回'), t('已加签'), t('临时请别人一起审这一步，他们都同意才算数。'),
   ]
 }

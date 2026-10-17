@@ -431,3 +431,142 @@ test("管理员改办理人：卡住的待办交给别人", async ({ browser }) 
   await admin.close()
   await w.close()
 })
+
+/** 两步的流程：直属主管（赵磊）→ 王芳。退回直达 / 拿回要有「下一步」 */
+async function twoStepFlow(code: string): Promise<void> {
+  const { api, dispose } = await createApiClient()
+  const users = (await api.get("/api/v1/sys/workflow/directory/users?keyword=wangfang")) as { id: string }[]
+  const created = (await api.post("/api/v1/sys/workflow/definitions", {
+    code,
+    name: `E2E 两步 ${code}`,
+    category: "E2E",
+    form: { schemaVersion: 1, fields: [{ id: "f_reason", type: "text", label: "事由", required: true }] },
+    model: {
+      schemaVersion: 1,
+      root: {
+        type: "start", id: "start",
+        next: {
+          type: "approval", id: "n1", name: "直属主管", mode: "any",
+          assignee: { kind: "dept_leader", level: 1 }, onEmpty: "reject",
+          next: {
+            type: "approval", id: "n2", name: "复核", mode: "any",
+            assignee: { kind: "user", user_ids: [users[0].id] }, onEmpty: "reject", next: null,
+          },
+        },
+      },
+    },
+  })) as { id: string }
+  const pub = (await api.post(`/api/v1/sys/workflow/definitions/${created.id}/publish`)) as { published: boolean }
+  expect(pub.published).toBe(true)
+  await dispose()
+}
+
+async function startAs(browser: import("@playwright/test").Browser, code: string, reason: string) {
+  const a = await browser.newPage()
+  await loginPageAs(a, "sunqiang", "123456")
+  await a.goto(`/workflow/inbox?start=${code}`)
+  const sheet = a.getByTestId("wf-start-sheet")
+  await sheet.getByTestId("wf-field-f_reason").locator("input").fill(reason)
+  await sheet.getByTestId("wf-start-submit").click()
+  await expect(a.getByTestId("wf-instance-sheet").getByTestId("wf-status")).toHaveText("审批中")
+  return { page: a, id: new URL(a.url()).searchParams.get("id") as string }
+}
+
+test("拿回：同意之后、下一个人还没动之前，把单收回来", async ({ browser }) => {
+  const code = `${CODE}T`
+  await twoStepFlow(code)
+  const { page: a, id } = await startAs(browser, code, "点错了同意")
+  await a.close()
+
+  const z = await browser.newPage()
+  await loginPageAs(z, "zhaolei", "123456")
+  await z.goto(`/workflow/inbox?id=${id}`)
+  const sheet = z.getByTestId("wf-instance-sheet")
+  await expect(sheet.getByTestId("wf-act-take_back")).toHaveCount(0)
+  await sheet.getByTestId("wf-act-approve").click()
+  await expect(sheet).toBeHidden()
+  // 从「我已审批」里重新打开：多了「拿回」
+  await z.goto(`/workflow/inbox?id=${id}`)
+  await sheet.getByTestId("wf-act-take_back").click()
+  await expect(sheet.getByTestId("wf-act-approve")).toBeVisible()
+  await expect(sheet.getByTestId("wf-timeline")).toContainText("已拿回")
+  await z.close()
+})
+
+test("加签（在我之前）：先请陈静审，她同意后回到主管", async ({ browser }) => {
+  const code = `${CODE}S`
+  await twoStepFlow(code)
+  const { page: a, id } = await startAs(browser, code, "请财务也看看")
+  await a.close()
+
+  const z = await browser.newPage()
+  await loginPageAs(z, "zhaolei", "123456")
+  await z.goto(`/workflow/inbox?id=${id}`)
+  const sheet = z.getByTestId("wf-instance-sheet")
+  await sheet.getByTestId("wf-act-add_sign").click()
+  const dialog = z.getByTestId("wf-action-dialog")
+  await expect(dialog.getByTestId("wf-sign-before")).toBeVisible()
+  await dialog.getByTestId("wf-action-users").click()
+  await z.getByTestId("wf-action-users-search").fill("chenjing")
+  await z.getByTestId("wf-action-users-search").press("Enter")
+  await z.getByTestId("wf-action-users-opt-chenjing").click()
+  // 多选：浮层不会自己关，点弹窗标题收起来（别按 Esc —— 会连弹窗一起关）
+  await dialog.getByRole("heading").click()
+  await dialog.getByTestId("wf-action-submit").click()
+  await expect(sheet).toBeHidden()
+
+  const w = await browser.newPage()
+  await loginPageAs(w, "chenjing", "123456")
+  await w.goto(`/workflow/inbox?id=${id}`)
+  const sheetW = w.getByTestId("wf-instance-sheet")
+  // 加签进来的人只表态：有同意，没有加签 / 退回
+  await expect(sheetW.getByTestId("wf-act-approve")).toBeVisible()
+  await expect(sheetW.getByTestId("wf-act-add_sign")).toHaveCount(0)
+  await expect(sheetW.getByTestId("wf-act-send_back")).toHaveCount(0)
+  await sheetW.getByTestId("wf-act-approve").click()
+  await expect(sheetW).toBeHidden()
+
+  await z.goto(`/workflow/inbox?id=${id}`)
+  await expect(sheet.getByTestId("wf-act-approve")).toBeVisible()
+  await expect(sheet.getByTestId("wf-timeline")).toContainText("加签给 陈静")
+  await z.close()
+  await w.close()
+})
+
+test("退回时选「直接回到我这一步」：发起人重新提交后跳过主管，直接到复核", async ({ browser }) => {
+  const code = `${CODE}B`
+  await twoStepFlow(code)
+  const { page: a, id } = await startAs(browser, code, "第一版")
+
+  const z = await browser.newPage()
+  await loginPageAs(z, "zhaolei", "123456")
+  await z.goto(`/workflow/inbox?id=${id}`)
+  await z.getByTestId("wf-instance-sheet").getByTestId("wf-act-approve").click()
+  await z.close()
+
+  const w = await browser.newPage()
+  await loginPageAs(w, "wangfang", "123456")
+  await w.goto(`/workflow/inbox?id=${id}`)
+  const sheetW = w.getByTestId("wf-instance-sheet")
+  await sheetW.getByTestId("wf-act-send_back").click()
+  const dialog = w.getByTestId("wf-action-dialog")
+  await dialog.getByTestId("wf-back-start").click()
+  await dialog.getByTestId("wf-back-resume-me").click()
+  await dialog.getByTestId("wf-dialog-opinion").fill("补充一下")
+  await dialog.getByTestId("wf-action-submit").click()
+  await expect(sheetW).toBeHidden()
+
+  // 发起人：预告里下一步直接是「复核」，不是「直属主管」
+  await a.goto(`/workflow/inbox?id=${id}`)
+  const sheetA = a.getByTestId("wf-instance-sheet")
+  await expect(sheetA.getByTestId("wf-sent-back")).toBeVisible()
+  await sheetA.getByTestId("wf-field-f_reason").locator("input").fill("第二版")
+  await sheetA.getByTestId("wf-act-approve").click()
+  await expect(sheetA).toBeHidden()
+
+  await w.goto(`/workflow/inbox?id=${id}`)
+  await expect(sheetW.getByTestId("wf-act-approve")).toBeVisible()
+  await expect(sheetW.getByTestId("wf-timeline")).toContainText("直接回到「复核」")
+  await a.close()
+  await w.close()
+})

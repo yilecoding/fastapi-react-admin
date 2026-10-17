@@ -80,7 +80,7 @@ export type FieldPerm = 'hidden' | 'readonly' | 'editable'
 
 export type ApprovalMode = 'any' | 'all' | 'seq'
 
-export type OptionalAction = 'transfer' | 'cc' | 'send_back'
+export type OptionalAction = 'transfer' | 'cc' | 'send_back' | 'add_sign'
 
 export type ApprovalNode = {
   type: 'approval'
@@ -114,6 +114,7 @@ export type InstanceStatus = 'running' | 'approved' | 'rejected' | 'withdrawn' |
 
 export type Action =
   | 'approve' | 'reject' | 'withdraw' | 'transfer' | 'cc' | 'remind' | 'terminate' | 'send_back' | 'reassign'
+  | 'take_back' | 'add_sign'
 
 export type InstanceRow = {
   id: string
@@ -149,7 +150,7 @@ export type TaskRow = {
   batch: number
   status: 'pending' | 'done' | 'canceled' | 'transferred'
   /** resubmit = 被退回后发起人重新提交 */
-  decision: 'approve' | 'reject' | 'send_back' | 'resubmit' | null
+  decision: 'approve' | 'reject' | 'send_back' | 'resubmit' | 'add_sign' | 'take_back' | null
   opinion: string | null
   created_time: string
   finished_time: string | null
@@ -175,6 +176,10 @@ export type RecordRow = {
     to_name?: string
     /** 改办理人：原来是谁 */
     from?: string
+    /** 退回时选了「直接回到我这一步」 */
+    resume?: boolean
+    /** 加签：在我之前 / 之后 */
+    mode?: 'before' | 'after'
   } | null
   created_time: string
 }
@@ -398,6 +403,10 @@ export function useAct(instanceId: string) {
       target_node_id?: string
       /** 改办理人：改哪一条待办 */
       task_id?: string
+      /** 退回：重新提交后直接回到我这一步 */
+      resume?: boolean
+      /** 加签：在我之前 / 之后 */
+      sign_mode?: 'before' | 'after'
     }) => api.POST<{ instance_id: string; replayed: boolean }>(`${BASE}/instances/${instanceId}/actions`, { body }),
     // 成功和失败都要重取：失败多半是「已被他人处理」，界面要跟上真实状态
     onSettled: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),

@@ -19,6 +19,8 @@ const DECISION: Record<string, { text: string; tone: Tone }> = {
   pending: { text: '审批中', tone: 'pending' },
   send_back: { text: '已退回', tone: 'bad' },
   resubmit: { text: '已重新提交', tone: 'ok' },
+  add_sign: { text: '已加签', tone: 'muted' },
+  take_back: { text: '已拿回', tone: 'muted' },
 }
 
 function modeTag(mode: string | undefined, count: number, t: T): string | undefined {
@@ -85,6 +87,8 @@ export function progressItems(d: InstanceDetail, t: T): TrackItem[] {
   for (const [k, tasks] of groups) {
     const nodeId = tasks[0].node_id
     const pending = tasks.some((x) => x.status === 'pending')
+    // 整步的待办都被作废了（上一步拿回 / 被退回）：这一步等于没发生过
+    const voided = tasks.every((x) => x.status === 'canceled')
     const rejected = tasks.some((x) => x.decision === 'reject')
     const lastDone = tasks.filter((x) => x.finished_time).map((x) => x.finished_time as string).sort().pop()
     const mode = findMode(d, nodeId)
@@ -103,6 +107,11 @@ export function progressItems(d: InstanceDetail, t: T): TrackItem[] {
           : t('转交给 {{n}}', { n: rec.target_user_name })
       } else if (tk.decision === 'send_back' && rec?.detail?.to_name) {
         text = t('退回给 {{n}}', { n: rec.detail.to_name })
+      } else if (rec?.action === 'add_sign' && rec.target_user_name && tk.decision !== 'take_back') {
+        // 在我之前：这一票还没投，先请他们审；在我之后：这一票是同意，再请他们审
+        text = rec.detail?.mode === 'after'
+          ? t('同意并加签给 {{n}}', { n: rec.target_user_name })
+          : t('加签给 {{n}}，等他们审完', { n: rec.target_user_name })
       }
       return { name: tk.assignee_name, result: { text, tone: meta.tone }, time: tk.finished_time, opinion: tk.opinion }
     })
@@ -114,7 +123,7 @@ export function progressItems(d: InstanceDetail, t: T): TrackItem[] {
       kind: atStart(nodeId) ? 'start' : 'approval',
       title: tasks[0].node_name,
       tag: modeTag(mode, tasks.filter((x) => x.status !== 'transferred').length + waiting.length, t),
-      state: rejected ? 'rejected' : pending ? (current ? 'current' : 'skipped') : 'done',
+      state: rejected ? 'rejected' : pending ? (current ? 'current' : 'skipped') : voided ? 'skipped' : 'done',
       people,
       note: masked ? t('后面还有人，由申请内容里的人员决定') : undefined,
       time: pending ? null : lastDone,
@@ -127,6 +136,12 @@ export function progressItems(d: InstanceDetail, t: T): TrackItem[] {
       items.push({
         key: `r-${r.id}`, kind: 'system', title: r.node_name ?? t('审批'), tag: t('自动跳过'),
         state: 'skipped', note: r.opinion ?? undefined, time: r.created_time, at: ts(r.created_time),
+      })
+    } else if (r.action === 'resume') {
+      items.push({
+        key: `r-${r.id}`, kind: 'system', title: t('直接回到「{{n}}」', { n: r.detail?.to_name ?? '' }),
+        state: 'done', note: t('退回时选了重新处理后直接回到这一步，中间的步骤不再审'),
+        time: r.created_time, at: ts(r.created_time),
       })
     } else if (r.action === 'auto_reject') {
       items.push({
@@ -185,6 +200,6 @@ function findMode(d: InstanceDetail, nodeId: string): string | undefined {
 export function _i18nExtractionAnchors(t: (k: string) => string) {
   return [
     t('已同意'), t('已驳回'), t('已转交'), t('无需处理'), t('审批中'), t('审批通过'), t('审批驳回'), t('已撤回'),
-    t('已终止'), t('结束'), t('已退回'), t('已重新提交'),
+    t('已终止'), t('结束'), t('已退回'), t('已重新提交'), t('已加签'), t('已拿回'),
   ]
 }

@@ -640,6 +640,7 @@ const OPTIONAL_ACTIONS: [OptionalAction, string][] = [
   ['transfer', '转交'],
   ['cc', '抄送'],
   ['send_back', '退回'],
+  ['add_sign', '加签'],
 ]
 
 const MODE_HINT: Record<ApprovalMode, string> = {
@@ -650,7 +651,7 @@ const MODE_HINT: Record<ApprovalMode, string> = {
 
 export function _i18nExtractionAnchorsFlowDesigner(t: (k: string) => string) {
   return [
-    t('转交'), t('抄送'), t('退回'),
+    t('转交'), t('抄送'), t('退回'), t('加签'),
     t('一人同意即可，其余人的待办自动结束'), t('所有人都同意才通过，任何一人驳回整单结束'),
     t('按审批人的顺序一个一个来，前一个同意了才轮到下一个'),
   ]
