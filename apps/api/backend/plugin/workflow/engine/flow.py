@@ -128,7 +128,7 @@ def pick_branch(node: dict[str, Any], variables: dict[str, Any]) -> dict[str, An
 # ── 发布校验（#107 设计 9）──────────────────────────────────────────────────
 
 #: 能出现在节点 `actions` 里的动作（必备的 approve / reject 不在里面：不能配掉）
-OPTIONAL_ACTIONS = frozenset({'transfer', 'cc', 'send_back'})
+OPTIONAL_ACTIONS = frozenset({'transfer', 'cc', 'send_back', 'add_sign'})
 
 #: 条件里可以用的内置变量（不是表单字段）
 BUILTIN_VARS = frozenset({'$initiator_dept'})

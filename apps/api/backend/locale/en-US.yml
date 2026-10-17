@@ -220,6 +220,8 @@ error:
     send_back_target_invalid: Cannot send back to this step. Refresh and choose again
     task_not_pending: This task has already been handled. Refresh to see the latest
     handover_same_user: The person handing over and the person taking over must be different
+    sign_mode_invalid: Choose whether to add them before or after you
+    sign_users_invalid: Choose 1 to 10 people to add
 
 file_type:
   archive: Archive

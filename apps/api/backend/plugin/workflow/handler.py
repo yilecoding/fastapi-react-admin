@@ -56,7 +56,12 @@ class FormHandler:
     """表单审批：没有业务表，所以「开始 / 查看 / 结束」都没有额外判断"""
 
     biz_type: ClassVar[str] = FORM_BIZ_TYPE
-    default_actions: ClassVar[frozenset[Action]] = frozenset({Action.transfer, Action.cc, Action.send_back})
+    default_actions: ClassVar[frozenset[Action]] = frozenset({
+        Action.transfer,
+        Action.cc,
+        Action.send_back,
+        Action.add_sign,
+    })
 
     async def snapshot(self, db: AsyncSession, biz_id: int | None, form_data: dict[str, Any]) -> BizSnapshot:
         # 标题由运行时拼（定义名 + 发起人），这里只给变量

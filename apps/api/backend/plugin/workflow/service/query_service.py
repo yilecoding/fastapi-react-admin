@@ -31,7 +31,7 @@ from backend.plugin.workflow.engine.simulate import simulate
 from backend.plugin.workflow.enums import PERM_TERMINATE, Action, ApprovalMode, FieldPerm, TaskStatus
 from backend.plugin.workflow.handler import get_handler
 from backend.plugin.workflow.model import WfActionRecord, WfCc, WfDefinition, WfInstance, WfTask
-from backend.plugin.workflow.service.runtime_service import Actor, capabilities, send_back_targets
+from backend.plugin.workflow.service.runtime_service import Actor, capabilities, resume_jump, send_back_targets
 from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
@@ -345,7 +345,8 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
                 initiator_id=inst.initiator_id,
                 initiator_dept_id=inst.initiator_dept_id,
                 selected=json.loads(inst.variables).get('selected') or {},
-                start_from=nodes[inst.current_node_id].after,
+                # 退回时选了「直接回到我这一步」：这一步办完跳回去，预告也从那一步算（和 `_leave_node` 同一个判断）
+                start_from=resume_jump(inst, nodes, inst.current_node_id) or nodes[inst.current_node_id].after,
             )
             if inst.status == 'running' and inst.current_node_id in nodes and not sensitive_conds
             else [],

@@ -47,6 +47,10 @@ class Action(StrEnum):
     send_back = 'send_back'
     #: 管理员改办理人：审批人离职 / 长期不在时把卡住的待办交给别人（不需要原办理人点头）
     reassign = 'reassign'
+    #: 拿回：同意之后、下一步还没人动之前，把单收回到自己手上（点错了同意）
+    take_back = 'take_back'
+    #: 加签：临时拉人进这一步。「在我之前」= 他们都同意后回到我；「在我之后」= 我同意，他们都同意后才往下走
+    add_sign = 'add_sign'
 
 
 class ActorType(StrEnum):

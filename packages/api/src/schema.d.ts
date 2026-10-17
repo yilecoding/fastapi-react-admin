@@ -1575,7 +1575,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 离职交接：这个人手上有几条在办的待办 */
+        /** 离职交接：手上有在办待办的人（含已停用的账号） */
         get: operations["get_handover_api_v1_sys_workflow_handover_get"];
         put?: never;
         /** 离职交接：把一个人手上所有在办的待办交给另一个人 */
@@ -2135,7 +2135,7 @@ export interface components {
          * @description 动作。数值是前后端契约，能力信封里的 `action` 就是它
          * @enum {string}
          */
-        Action: "approve" | "reject" | "withdraw" | "transfer" | "cc" | "remind" | "terminate" | "send_back" | "reassign";
+        Action: "approve" | "reject" | "withdraw" | "transfer" | "cc" | "remind" | "terminate" | "send_back" | "reassign" | "take_back" | "add_sign";
         /**
          * ActionParam
          * @description 对实例执行一个动作
@@ -2175,6 +2175,17 @@ export interface components {
              * @description 改办理人：改哪一条待办
              */
             task_id?: string | number | null;
+            /**
+             * Resume
+             * @description 退回：重新提交 / 那一步办完之后直接回到退回的这一步
+             * @default false
+             */
+            resume: boolean;
+            /**
+             * Sign Mode
+             * @description 加签：在我之前 / 在我之后
+             */
+            sign_mode?: ("before" | "after") | null;
         };
         /**
          * AddUserParam
@@ -11328,10 +11339,7 @@ export interface operations {
     };
     get_handover_api_v1_sys_workflow_handover_get: {
         parameters: {
-            query: {
-                /** @description 用户 ID */
-                user_id: number;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -11345,15 +11353,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

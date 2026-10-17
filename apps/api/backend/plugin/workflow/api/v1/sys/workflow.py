@@ -240,6 +240,8 @@ async def do_action(request: Request, db: CurrentSession, pk: Pk, obj: ActionPar
         form_patch=obj.form,
         target_node_id=obj.target_node_id,
         task_id=obj.task_id,
+        resume=obj.resume,
+        sign_mode=obj.sign_mode,
     )
     return response_base.success(data=data)
 

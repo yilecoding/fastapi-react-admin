@@ -30,6 +30,7 @@ import uuid
 
 from dataclasses import dataclass, field
 from datetime import timedelta
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import false, func, select, update
@@ -133,6 +134,8 @@ class _Ctx:
     actor_id: int | None
     #: 提交之后才执行的副作用（socket 推送）。通知的**行**在事务里写 —— 回滚就一起没了
     effects: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
+    #: 这个事务里新建的待办（拿回要知道「我这次同意之后冒出来了哪些待办」）
+    spawned: list[WfTask] = field(default_factory=list)
 
     def push_todo(self, user_ids: list[int]) -> None:
         for uid in dict.fromkeys(user_ids):
@@ -246,27 +249,27 @@ def _record(
     target: list[tuple[int, str]] | None = None,
     opinion: str | None = None,
     detail: dict[str, Any] | None = None,
-) -> None:
-    ctx.db.add(
-        WfActionRecord(
-            instance_id=inst.id,
-            task_id=task.id if task else None,
-            node_id=(node or {}).get('id') or (task.node_id if task else None),
-            node_name=(node or {}).get('name') or (task.node_name if task else None),
-            action=action,
-            actor_type=actor_type,
-            actor_id=actor_id,
-            actor_name=actor_name,
-            target_user_id=target[0][0] if target and len(target) == 1 else None,
-            target_user_name='、'.join(n for _, n in target)[:256] if target else None,
-            opinion=opinion,
-            result='ok',
-            reject_reason=None,
-            # 系统动作没有客户端幂等键，生成一个占位 —— 列是 NOT NULL + 唯一
-            idempotency_key=key or f'sys:{uuid.uuid4().hex}',
-            detail=json.dumps(detail, ensure_ascii=False) if detail else None,
-        )
+) -> WfActionRecord:
+    rec = WfActionRecord(
+        instance_id=inst.id,
+        task_id=task.id if task else None,
+        node_id=(node or {}).get('id') or (task.node_id if task else None),
+        node_name=(node or {}).get('name') or (task.node_name if task else None),
+        action=action,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        actor_name=actor_name,
+        target_user_id=target[0][0] if target and len(target) == 1 else None,
+        target_user_name='、'.join(n for _, n in target)[:256] if target else None,
+        opinion=opinion,
+        result='ok',
+        reject_reason=None,
+        # 系统动作没有客户端幂等键，生成一个占位 —— 列是 NOT NULL + 唯一
+        idempotency_key=key or f'sys:{uuid.uuid4().hex}',
+        detail=json.dumps(detail, ensure_ascii=False) if detail else None,
     )
+    ctx.db.add(rec)
+    return rec
 
 
 def _new_task(
@@ -278,19 +281,20 @@ def _new_task(
     *,
     batch: int,
     origin: int | None = None,
-) -> None:
-    ctx.db.add(
-        WfTask(
-            instance_id=inst.id,
-            node_id=node_id,
-            node_name=node_name,
-            assignee_id=user[0],
-            assignee_name=user[1],
-            origin_assignee_id=origin,
-            status=TaskStatus.pending,
-            batch=batch,
-        )
+) -> WfTask:
+    task = WfTask(
+        instance_id=inst.id,
+        node_id=node_id,
+        node_name=node_name,
+        assignee_id=user[0],
+        assignee_name=user[1],
+        origin_assignee_id=origin,
+        status=TaskStatus.pending,
+        batch=batch,
     )
+    ctx.db.add(task)
+    ctx.spawned.append(task)
+    return task
 
 
 def _set_var(inst: WfInstance, key: str, value: Any) -> None:
@@ -339,6 +343,145 @@ async def _on_node(db: AsyncSession, inst: WfInstance, task: WfTask) -> set[int]
 
 def _root_id(inst: WfInstance) -> str:
     return _json(inst.model_snapshot)['root']['id']
+
+
+# ── 加签组 ───────────────────────────────────────────────────────────────────
+#
+# 加签拉进来的人是一「组」，存在 `inst.variables['signs']`：
+# `{id, node, batch, owner: [id, 名字], owner_origin, kind: before|after, members: [id…]}`。
+# 一条待办属于哪个组：同节点、同轮次、它的**原办理人**在 members 里（组员转交出去的待办仍然算组员的）。
+
+
+def _signs(inst: WfInstance) -> list[dict[str, Any]]:
+    return list(_json(inst.variables).get('signs') or [])
+
+
+def _sign_group(inst: WfInstance, task: WfTask) -> dict[str, Any] | None:
+    who = task.origin_assignee_id or task.assignee_id
+    for g in _signs(inst):
+        if g['node'] == task.node_id and g['batch'] == task.batch and who in g['members']:
+            return g
+    return None
+
+
+def _drop_signs(inst: WfInstance, node_id: str) -> None:
+    """离开这个节点（往下走 / 被退回 / 结束）时，这个节点上没收尾的加签组一并作废"""
+    signs = _signs(inst)
+    if any(g['node'] == node_id for g in signs):
+        _set_var(inst, 'signs', [g for g in signs if g['node'] != node_id])
+
+
+# ── 退回后重新提交：直达退回的那一步 ─────────────────────────────────────────
+
+
+def _on_path(nodes: dict[str, Any], start: dict[str, Any] | None, target_id: str, cond_vars: dict[str, Any]) -> bool:
+    """从 `start` 按当前表单沿树走，会不会经过 `target_id`（和推进同一个 `pick_branch`）"""
+    node = start
+    for _ in range(200):
+        if node is None:
+            return False
+        if node['id'] == target_id:
+            return True
+        if node['type'] == 'condition':
+            node = pick_branch(node, cond_vars).get('child') or nodes[node['id']].after
+            continue
+        node = nodes[node['id']].after
+    return False
+
+
+def resume_jump(inst: WfInstance, nodes: dict[str, Any], from_node_id: str) -> dict[str, Any] | None:
+    """`from_node_id` 这一步办完之后，是不是直接跳回当初退回它的那一步。
+
+    退回时选了「直接回到我这一步」才有。🔴 跳之前确认那一步**按现在的表单仍在路上**：
+    发起人改了金额，条件分支可能已经不走那一步了 —— 那就照常往下走，不能硬跳到一个不该经过的节点
+    """
+    resume = _json(inst.variables).get('resume')
+    if not resume or resume.get('from') != from_node_id or resume.get('to') not in nodes:
+        return None
+    variables = _json(inst.variables)
+    cond_vars = condition_variables({**(variables.get('biz') or {}), **_json(inst.form_data)}, inst.initiator_dept_id)
+    if not _on_path(nodes, nodes[from_node_id].after, resume['to'], cond_vars):
+        return None
+    return nodes[resume['to']].node
+
+
+async def _leave_node(ctx: _Ctx, inst: WfInstance, nodes: dict[str, Any], node_id: str) -> None:
+    """一个节点办完，往下走：先看要不要直达退回的那一步，再清掉这个节点的加签组"""
+    jump = resume_jump(inst, nodes, node_id)
+    if (_json(inst.variables).get('resume') or {}).get('from') == node_id:
+        _set_var(inst, 'resume', None)
+    _drop_signs(inst, node_id)
+    if jump is not None:
+        _record(
+            ctx,
+            inst,
+            'resume',
+            actor_type=ActorType.system,
+            node=jump,
+            detail={'to': jump['id'], 'to_name': jump['name']},
+        )
+        await _advance(ctx, inst, jump)
+    else:
+        await _advance(ctx, inst, nodes[node_id].after)
+
+
+# ── 拿回 ─────────────────────────────────────────────────────────────────────
+
+#: 推进流程的动作。「最近一次推进」只看这些（催办 / 手动抄送不算）
+_PROGRESS = ('start', 'approve', 'resubmit', 'reject', 'transfer', 'reassign', 'send_back', 'take_back', 'add_sign')
+
+
+async def _take_back_ctx(db: AsyncSession, inst: WfInstance, actor_id: int) -> dict[str, Any] | None:
+    """能不能拿回：这张单**最近一次推进**是我的同意，而且我同意之后新建的待办都还没人动。
+
+    同意时把「同意之前的实例变量」和「这次新建了哪些待办」记在 `variables['undo']`。
+    """
+    undo = _json(inst.variables).get('undo')
+    if not undo or undo.get('actor') != actor_id:
+        return None
+    last = await db.scalar(
+        select(WfActionRecord.id)
+        .where(
+            WfActionRecord.instance_id == inst.id,
+            WfActionRecord.result == 'ok',
+            WfActionRecord.actor_type == ActorType.user,
+            WfActionRecord.action.in_(_PROGRESS),
+        )
+        .order_by(WfActionRecord.created_time.desc(), WfActionRecord.id.desc())
+        .limit(1)
+    )
+    if last != undo.get('rec'):
+        return None
+    spawned = undo.get('spawned') or []
+    # 兜底：现有动作只要动了别人的待办都会落一条更新的推进记录，上面那条已经挡住了（变异验证：
+    # 去掉下面这段测试照样全绿）。留着是防以后加一个「改了待办却不落推进记录」的动作
+    if spawned:
+        untouched = await db.scalar(
+            select(func.count()).select_from(WfTask).where(WfTask.id.in_(spawned), WfTask.status == TaskStatus.pending)
+        )
+        if untouched != len(spawned):
+            return None
+    elif inst.current_node_id != undo.get('node'):
+        return None
+    return undo
+
+
+def _remember_undo(
+    inst: WfInstance, rec: WfActionRecord, task: WfTask, prev_vars: dict[str, Any], actor_id: int, spawned: list[WfTask]
+) -> None:
+    prev = {k: v for k, v in prev_vars.items() if k != 'undo'}
+    _set_var(
+        inst,
+        'undo',
+        {
+            'rec': rec.id,
+            'actor': actor_id,
+            'task': task.id,
+            'node': task.node_id,
+            'vars': prev,
+            'spawned': [x.id for x in spawned],
+        },
+    )
 
 
 # ── 推进 ─────────────────────────────────────────────────────────────────────
@@ -510,7 +653,14 @@ async def capabilities(  # ruff:ignore[complex-structure]
         allowed = get_handler(inst.biz_type).default_actions
         if configured is not None:
             allowed = allowed & {Action(a) for a in configured}
-        caps += [Capability(a, True) for a in (Action.transfer, Action.cc, Action.send_back) if a in allowed]
+        # 加签进来的人只表态（同意 / 驳回 / 转交 / 抄送）：不能再加签、也不能把整张单退回去
+        member = _sign_group(inst, my_task) is not None
+        optional = (
+            (Action.transfer, Action.cc) if member else (Action.transfer, Action.cc, Action.send_back, Action.add_sign)
+        )
+        caps += [Capability(a, True) for a in optional if a in allowed]
+    elif not at_start and await _take_back_ctx(db, inst, actor.id) is not None:
+        caps.append(Capability(Action.take_back, True))
 
     if inst.initiator_id == actor.id:
         caps.append(Capability(Action.withdraw, True))
@@ -854,6 +1004,8 @@ async def act(  # ruff:ignore[complex-structure]
     form_patch: dict[str, Any] | None = None,
     target_node_id: str | None = None,
     task_id: int | None = None,
+    resume: bool = False,
+    sign_mode: str | None = None,
 ) -> dict[str, Any]:
     # 接口层的 SchemaBase 会把枚举还原成 str —— 这里统一回枚举，后面 match / .value 都按枚举写
     action = Action(action)
@@ -902,16 +1054,18 @@ async def act(  # ruff:ignore[complex-structure]
                 )
                 form_schema, model = _json(inst.form_snapshot), _json(inst.model_snapshot)
                 inst.summary = _summary(form_schema, _json(inst.form_data), model)
-                await _advance(ctx, inst, nodes[my_task.node_id].after)
+                _set_var(inst, 'undo', None)
+                await _leave_node(ctx, inst, nodes, my_task.node_id)
                 ctx.push_todo([actor.id])
 
             case Action.approve:
                 assert my_task is not None
+                prev_vars = _json(inst.variables)
                 node = nodes[my_task.node_id].node
                 # 不传改动也要走一遍：这个节点上「可编辑 + 必填」的字段没填，不许同意
                 detail = await _apply_form_patch(ctx.db, inst, node, form_patch or {}, actor.id)
                 await _close_task(ctx.db, my_task, TaskStatus.done, 'approve', opinion)
-                _record(
+                rec = _record(
                     ctx,
                     inst,
                     action,
@@ -922,19 +1076,92 @@ async def act(  # ruff:ignore[complex-structure]
                     opinion=opinion,
                     detail=detail,
                 )
-                rest = await _pending_tasks(ctx.db, inst.id, my_task.node_id)
-                mode = ApprovalMode(node.get('mode') or ApprovalMode.any)
-                nxt = _next_in_queue(inst, my_task) if mode == ApprovalMode.seq else None
-                if nxt is not None:
-                    # 依次审批：轮到下一个人，还在这一步、同一轮
-                    _new_task(ctx, inst, my_task.node_id, my_task.node_name, nxt, batch=my_task.batch)
-                    ctx.push_todo([nxt[0]])
-                elif mode == ApprovalMode.any or not rest:
-                    for other in rest:
-                        await _close_task(ctx.db, other, TaskStatus.canceled, None, None)
-                        ctx.push_todo([other.assignee_id])
-                    await _advance(ctx, inst, nodes[my_task.node_id].after)
+                ctx.spawned.clear()
+                group = _sign_group(inst, my_task)
+                if group is not None:
+                    await _sign_member_done(ctx, inst, nodes, node, my_task, group)
+                else:
+                    await _after_approve(ctx, inst, nodes, node, my_task)
                 ctx.push_todo([actor.id])
+                await ctx.db.flush()  # 新待办 / 这条记录要有 ID，拿回靠它们
+                _remember_undo(inst, rec, my_task, prev_vars, actor.id, ctx.spawned)
+
+            case Action.take_back:
+                undo = await _take_back_ctx(ctx.db, inst, actor.id)
+                if undo is None:
+                    raise ActionRejected('action_not_allowed', instance_id=inst.id)
+                for tid in undo.get('spawned') or []:
+                    spawned = await ctx.db.get(WfTask, tid, populate_existing=True)
+                    if spawned is not None and spawned.status == TaskStatus.pending:
+                        await _close_task(ctx.db, spawned, TaskStatus.canceled, None, None)
+                        ctx.push_todo([spawned.assignee_id])
+                old = await ctx.db.get(WfTask, undo['task'], populate_existing=True)
+                assert old is not None
+                # 原来那条「已同意 / 已加签」改成「已拿回」：进度里不能还显示他同意过
+                old.decision = 'take_back'
+                # 实例变量（依次审批队列、加签组、直达标记）回到同意之前
+                inst.variables = json.dumps(undo['vars'], ensure_ascii=False)
+                _new_task(
+                    ctx,
+                    inst,
+                    old.node_id,
+                    old.node_name,
+                    (actor.id, old.assignee_name),
+                    batch=old.batch,
+                    origin=old.origin_assignee_id,
+                )
+                inst.current_node_id = old.node_id
+                _record(ctx, inst, action, key=key, actor_id=actor.id, actor_name=actor.nickname, task=old)
+                ctx.push_todo([actor.id])
+
+            case Action.add_sign:
+                assert my_task is not None
+                if sign_mode not in ('before', 'after'):
+                    raise errors.RequestError(msg=t('error.workflow.sign_mode_invalid'))
+                users = await _sign_targets(ctx, inst, my_task, target_user_ids, actor.id)
+                prev_vars = _json(inst.variables)
+                ctx.spawned.clear()
+                node = nodes[my_task.node_id].node
+                detail: dict[str, Any] = {'mode': sign_mode}
+                if sign_mode == 'after':
+                    # 在我之后：我这一票是同意（要过本节点的表单校验），他们都同意之后才往下走
+                    detail |= await _apply_form_patch(ctx.db, inst, node, form_patch or {}, actor.id)
+                    await _close_task(ctx.db, my_task, TaskStatus.done, 'approve', opinion)
+                else:
+                    await _close_task(ctx.db, my_task, TaskStatus.done, 'add_sign', opinion)
+                rec = _record(
+                    ctx,
+                    inst,
+                    action,
+                    key=key,
+                    actor_id=actor.id,
+                    actor_name=actor.nickname,
+                    task=my_task,
+                    target=users,
+                    opinion=opinion,
+                    detail=detail,
+                )
+                group = {
+                    'id': uuid.uuid4().hex[:8],
+                    'node': my_task.node_id,
+                    'batch': my_task.batch,
+                    'owner': [actor.id, my_task.assignee_name],
+                    'owner_origin': my_task.origin_assignee_id,
+                    'kind': sign_mode,
+                    'members': [u for u, _ in users],
+                }
+                _set_var(inst, 'signs', [*_signs(inst), group])
+                for user in users:
+                    _new_task(ctx, inst, my_task.node_id, my_task.node_name, user, batch=my_task.batch)
+                if sign_mode == 'after' and ApprovalMode(node.get('mode') or ApprovalMode.any) == ApprovalMode.any:
+                    # 或签：我已经同意了，同一步的其他人不用再办（加签的人除外）
+                    for other in await _pending_tasks(ctx.db, inst.id, my_task.node_id):
+                        if _sign_group(inst, other) is None:
+                            await _close_task(ctx.db, other, TaskStatus.canceled, None, None)
+                            ctx.push_todo([other.assignee_id])
+                ctx.push_todo([actor.id, *(u for u, _ in users)])
+                await ctx.db.flush()
+                _remember_undo(inst, rec, my_task, prev_vars, actor.id, ctx.spawned)
 
             case Action.send_back:
                 assert my_task is not None
@@ -947,6 +1174,9 @@ async def act(  # ruff:ignore[complex-structure]
                 for other in await _pending_tasks(ctx.db, inst.id):
                     await _close_task(ctx.db, other, TaskStatus.canceled, None, None)
                     ctx.push_todo([other.assignee_id])
+                _drop_signs(inst, my_task.node_id)
+                # 「重新提交 / 那一步办完之后直接回到我这一步」：记下来，`_leave_node` 用
+                _set_var(inst, 'resume', {'from': target_node_id, 'to': my_task.node_id} if resume else None)
                 _record(
                     ctx,
                     inst,
@@ -956,7 +1186,7 @@ async def act(  # ruff:ignore[complex-structure]
                     actor_name=actor.nickname,
                     task=my_task,
                     opinion=opinion,
-                    detail={'to': target_node_id, 'to_name': targets[target_node_id]},
+                    detail={'to': target_node_id, 'to_name': targets[target_node_id], 'resume': resume},
                 )
                 ctx.push_todo([actor.id])
                 if target_node_id == _root_id(inst):
@@ -1108,6 +1338,71 @@ async def act(  # ruff:ignore[complex-structure]
         return inst.id
 
     return await execute(db, key=key, action=action.value, actor=actor, body=body)
+
+
+async def _after_approve(ctx: _Ctx, inst: WfInstance, nodes: dict[str, Any], node: dict[str, Any], task: Any) -> None:
+    """一票同意之后这一步怎么走：依次审批轮到下一个 / 或签结束 / 会签等其他人。
+
+    `task` 只用到 `node_id` / `batch` / `origin_assignee_id` / `assignee_id` —— 「在我之后」加签收尾时
+    传的是加签发起人的替身（他的那一票当时就投了，现在才轮到它生效）
+    """
+    rest = await _pending_tasks(ctx.db, inst.id, task.node_id)
+    mode = ApprovalMode(node.get('mode') or ApprovalMode.any)
+    nxt = _next_in_queue(inst, task) if mode == ApprovalMode.seq else None
+    if nxt is not None:
+        # 依次审批：轮到下一个人，还在这一步、同一轮
+        _new_task(ctx, inst, task.node_id, node['name'], nxt, batch=task.batch)
+        ctx.push_todo([nxt[0]])
+    elif mode == ApprovalMode.any or not rest:
+        for other in rest:
+            await _close_task(ctx.db, other, TaskStatus.canceled, None, None)
+            ctx.push_todo([other.assignee_id])
+        await _leave_node(ctx, inst, nodes, task.node_id)
+
+
+async def _sign_member_done(
+    ctx: _Ctx, inst: WfInstance, nodes: dict[str, Any], node: dict[str, Any], task: WfTask, group: dict[str, Any]
+) -> None:
+    """加签组里的一个人同意了。组里还有人没办就等；都办完了：
+
+    - 在我之前：待办回到加签发起人手上
+    - 在我之后：发起人那一票当时就投了，现在按它刚生效来走（依次审批的下一个 / 或签结束 / 会签再数一遍）
+
+    🔴 组员的同意**本身不算这一步的一票**：或签节点上组员一同意就往下走的话，加签发起人还没表态单子就过了
+    """
+    for other in await _pending_tasks(ctx.db, inst.id, task.node_id):
+        g = _sign_group(inst, other)
+        if g is not None and g['id'] == group['id']:
+            return
+    _set_var(inst, 'signs', [g for g in _signs(inst) if g['id'] != group['id']])
+    owner = (int(group['owner'][0]), group['owner'][1])
+    if group['kind'] == 'before':
+        _new_task(ctx, inst, task.node_id, task.node_name, owner, batch=task.batch, origin=group['owner_origin'])
+        ctx.push_todo([owner[0]])
+        return
+    proxy = SimpleNamespace(
+        node_id=task.node_id, batch=task.batch, origin_assignee_id=group['owner_origin'], assignee_id=owner[0]
+    )
+    await _after_approve(ctx, inst, nodes, node, proxy)
+
+
+async def _sign_targets(
+    ctx: _Ctx, inst: WfInstance, task: WfTask, target_user_ids: list[int] | None, actor_id: int
+) -> list[tuple[int, str]]:
+    """加签的人：1–10 个、在职、不是发起人、不是这一步里已经有份的人（同转交那一条）"""
+    ids = list(dict.fromkeys(target_user_ids or []))
+    if not ids or len(ids) > 10:
+        raise errors.RequestError(msg=t('error.workflow.sign_users_invalid'))
+    users = await assignee_rules.users_by_ids(ctx.db, ids)
+    if len(users) != len(ids):
+        raise errors.RequestError(msg=t('error.workflow.user_not_found'))
+    on = await _on_node(ctx.db, inst, task)
+    for uid, _ in users:
+        if uid == inst.initiator_id:
+            raise ActionRejected('transfer_to_initiator', instance_id=inst.id)
+        if uid == actor_id or uid in on:
+            raise ActionRejected('transfer_to_existing', instance_id=inst.id)
+    return users
 
 
 async def _handover_target(

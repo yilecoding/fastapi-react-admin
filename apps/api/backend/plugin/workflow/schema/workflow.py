@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field
 
@@ -72,6 +72,8 @@ class ActionParam(SchemaBase):
     form: dict[str, Any] | None = Field(None, description='审批时修改的表单字段（只收本节点可编辑的）')
     target_node_id: str | None = Field(None, max_length=64, description='退回到哪个节点（发起人 = 开始节点 ID）')
     task_id: SnowflakeIdIn | None = Field(None, description='改办理人：改哪一条待办')
+    resume: bool = Field(False, description='退回：重新提交 / 那一步办完之后直接回到退回的这一步')
+    sign_mode: Literal['before', 'after'] | None = Field(None, description='加签：在我之前 / 在我之后')
 
 
 class HandoverParam(SchemaBase):

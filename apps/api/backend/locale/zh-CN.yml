@@ -221,6 +221,8 @@ error:
     send_back_target_invalid: 不能退回到这个节点，请刷新后重新选择
     task_not_pending: 这条待办已经处理过了，请刷新后查看
     handover_same_user: 交出和接手的不能是同一个人
+    sign_mode_invalid: 请选择加在你之前还是之后
+    sign_users_invalid: 加签要选 1 到 10 个人
 
 # 上传校验报错要拼「人话名字」（图片/文档/…），标识用 FileType.value，
 # 文案查这张表——新增文件分类时两边（这里 + `common/enums.py` 的 FileType）
