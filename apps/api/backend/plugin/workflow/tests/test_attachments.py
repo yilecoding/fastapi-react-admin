@@ -134,3 +134,75 @@ def test_attachments(
     assert dl('zhaolei', mine) == 200  # 审批人看得到的字段
     assert dl('zhaolei', secret) == 404  # 对审批人 hidden 的字段：详情里没有，下载也不行
     assert dl('zhoumin', mine) == 404  # 和这张单无关的人
+
+
+def test_removed_attachment_is_no_longer_readable_through_the_request(
+    client: TestClient,
+    token_headers: dict[str, str],
+    login: Callable[[str], dict[str, str]],
+    uid: Callable[[str], str],
+    isolated_upload_dir: Path,
+) -> None:
+    """审批人在可编辑的附件字段里删掉一个：这张单不再是读那个文件的理由（关联跟着删）"""
+    form = {'schemaVersion': 1, 'fields': [{'id': 'f_files', 'type': 'attachment', 'label': '附件'}]}
+    model = {
+        'schemaVersion': 1,
+        'root': {
+            'type': 'start',
+            'id': 'start',
+            'next': {
+                'type': 'approval',
+                'id': 'n1',
+                'name': '审批',
+                'mode': 'any',
+                'assignee': {'kind': 'user', 'user_ids': [uid('zhaolei')]},
+                'onEmpty': 'reject',
+                'fieldPerms': {'f_files': 'editable'},
+                'next': {
+                    'type': 'approval',
+                    'id': 'n2',
+                    'name': '复核',
+                    'mode': 'any',
+                    'assignee': {'kind': 'user', 'user_ids': [uid('zhoumin')]},
+                    'onEmpty': 'reject',
+                    'next': None,
+                },
+            },
+        },
+    }
+    pk = ok(
+        client.post(
+            '/sys/workflow/definitions',
+            headers=token_headers,
+            json={'code': 'PYTEST_FILES2', 'name': '附件2', 'form': form, 'model': model},
+        )
+    )['id']
+    assert ok(client.post(f'/sys/workflow/definitions/{pk}/publish', headers=token_headers))['published']
+    keep = _upload(client, login('sunqiang'), '留着.png')
+    drop = _upload(client, login('sunqiang'), '删掉.png')
+    inst = ok(
+        client.post(
+            '/sys/workflow/instances',
+            headers=login('sunqiang'),
+            json={
+                'code': 'PYTEST_FILES2',
+                'form': {'f_files': [str(keep['id']), str(drop['id'])]},
+                'key': key(),
+            },
+        )
+    )['instance_id']
+
+    def dl(who: str, f: dict[str, Any]) -> int:
+        return client.get(f'/sys/files/{f["id"]}/download', headers=login(who)).status_code
+
+    # 先断言「有」：当前审批人两个都下得到（复核人这时还没轮到，不是参与人，本来就 404）
+    assert dl('zhaolei', keep) == 200 and dl('zhaolei', drop) == 200
+    ok(
+        client.post(
+            f'/sys/workflow/instances/{inst}/actions',
+            headers=login('zhaolei'),
+            json={'action': 'approve', 'key': key(), 'form': {'f_files': [str(keep['id'])]}},
+        )
+    )
+    assert dl('zhoumin', keep) == 200
+    assert dl('zhoumin', drop) == 404

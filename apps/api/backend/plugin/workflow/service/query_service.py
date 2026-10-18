@@ -41,6 +41,7 @@ from backend.plugin.workflow.enums import (
 from backend.plugin.workflow.handler import get_handler
 from backend.plugin.workflow.model import WfActionRecord, WfCc, WfDefinition, WfDraft, WfInstance, WfTask
 from backend.plugin.workflow.service.runtime_service import (
+    FILE_TARGET,
     Actor,
     capabilities,
     due_time,
@@ -572,13 +573,22 @@ def _mask_forecast(steps: list[dict[str, Any]], nodes: dict[str, Any], hidden: s
 async def _workflow_file_access(db: AsyncSession, user: Any, file: Any) -> bool:
     """审批单上的附件：能看这张单、且那个附件字段对他不是 hidden，才能下载。
 
-    附件 ID 存在 `form_data` 的 JSON 里（不走 `sys_file_relation`），按字面量找候选单据，
-    再逐张过 `_viewer()`。⚠️ LIKE 走不了索引 —— 只在「上传人 / 文件管理员」都不是的时候才走到这里
+    「挂在哪几张单上」查 `sys_file_relation`（发起 / 审批改表单时同步，按 `file_id` 走索引）；
+    看不看得见逐张过 `_viewer()` —— 和详情接口同一个判断
     """
+    from backend.app.admin.model import FileRelation
+
     actor = Actor.from_user(user)
-    needle = f'"{file.id}"'
-    rows = (await db.scalars(select(WfInstance).where(WfInstance.form_data.contains(needle)).limit(50))).all()
-    for inst in rows:
+    ids = (
+        await db.scalars(
+            select(FileRelation.target_id)
+            .where(FileRelation.file_id == file.id, FileRelation.target_type == FILE_TARGET, FileRelation.deleted == 0)
+            .limit(50)
+        )
+    ).all()
+    if not ids:
+        return False
+    for inst in (await db.scalars(select(WfInstance).where(WfInstance.id.in_(ids)))).all():
         try:
             _, _, hidden = await _viewer(db, inst, actor)
         except errors.BaseExceptionError:

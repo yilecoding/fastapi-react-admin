@@ -260,6 +260,9 @@ socket 推送（`notification_new` / `workflow_todo_changed`）收集在 `_Ctx.e
 | 两个抄送节点抄同一个人（恰好是操作人自己）→ 提交撞唯一约束，**这张单永远推不过去** | 会话 `autoflush=False`，前一个抄送节点刚加的行查不到；平时靠发通知顺手 flush，抄送给操作人自己时不发通知。查之前先 flush |
 | 单选字段传数组 / 文本里填 `sNaN` → 500 | `list in set` 是 TypeError；`Decimal('sNaN')` 和数字比较抛 InvalidOperation。先判类型、非有限数当「不是数字」。⚠️ 第一版 NaN 测试拿它和字符串比，那不会抛，变异照样绿；改成和数字比才守得住 |
 
-⚠️ 已知没修：审批附件的下载权限按 `form_data LIKE '%"id"%'` 找候选单据（全表扫 TEXT 列），只在「不是上传人 /
-文件管理员 / 公告附件」时才走到。量大了要改成提交时把附件记进 `sys_file_relation`，`can_read` 走索引。
+审批附件的下载权限原来按 `form_data LIKE '%"id"%'` 找候选单据（全表扫 TEXT 列）。现在发起 / 审批改表单时把附件
+同步进 `sys_file_relation`（`target_type='WF_INSTANCE'`，`_sync_file_relations`），按 `file_id` 走索引。
+变异验证：发起时不同步 → `test_attachments` 红。⚠️ 关联只回答「挂在哪张单上」，**真正的闸门是「那个字段里还有没有它
++ 对查看人是不是 hidden」**：审批人删掉一个附件时关联跟着删，但去掉删关联那段 `test_removed_attachment…` 照样绿 ——
+字段里已经没有那个 ID 了。这次改动之前建的单没有关联（开发库实测 0 张带附件，没有生产数据，没做回填）。
 超时扫描已经在库里先筛掉没配超时的单（`model_snapshot LIKE '%"timeout"%'`）。

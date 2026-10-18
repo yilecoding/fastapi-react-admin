@@ -908,6 +908,7 @@ async def start_in_tx(
     )
     db.add(inst)
     await db.flush()
+    await _sync_file_relations(db, inst, form_schema, data, actor.id)
     _record(ctx, inst, 'start', key=key, actor_id=actor.id, actor_name=actor.nickname)
     await _advance(ctx, inst, nodes[model['root']['id']].after)
     return inst
@@ -946,6 +947,39 @@ async def _check_picks(
     for st in steps:
         if st['outcome'] == 'pick':
             raise errors.RequestError(msg=t('error.workflow.selected_required', node=st['name']))
+
+
+#: 审批单在 `sys_file_relation` 里的业务类型
+FILE_TARGET = 'WF_INSTANCE'
+
+
+async def _sync_file_relations(
+    db: AsyncSession, inst: WfInstance, form_schema: dict[str, Any], data: dict[str, Any], actor_id: int
+) -> None:
+    """表单里的附件同步一份到 `sys_file_relation`（发起 / 审批改表单之后）。
+
+    下载权限要回答「这个文件挂在哪张审批单上」：原来按 `form_data LIKE '%"<id>"%'` 找，是全表扫
+    TEXT 列。记一份关联之后按 `file_id` 走索引。⚠️ 关联只回答「在哪张单上」，看不看得见那个字段
+    仍由 `query_service._workflow_file_access` 按查看人判
+    """
+    from backend.app.admin.model import FileRelation
+
+    want = {
+        int(x) for f in form_schema.get('fields') or [] if f['type'] == 'attachment' for x in data.get(f['id']) or []
+    }
+    rows = (
+        await db.scalars(
+            select(FileRelation).where(
+                FileRelation.target_type == FILE_TARGET, FileRelation.target_id == inst.id, FileRelation.deleted == 0
+            )
+        )
+    ).all()
+    have = {r.file_id: r for r in rows}
+    for fid in want - have.keys():
+        db.add(FileRelation(file_id=fid, target_type=FILE_TARGET, target_id=inst.id, sort=0, created_by=actor_id))
+    gone = [r.id for fid, r in have.items() if fid not in want]
+    if gone:
+        await db.execute(delete(FileRelation).where(FileRelation.id.in_(gone)))
 
 
 async def _check_attachments(
@@ -1591,6 +1625,7 @@ async def _apply_form_patch(
     await _check_attachments(db, form_schema, before, data, actor_id)
     changes = {k: {'from': before.get(k), 'to': data.get(k)} for k in allowed if before.get(k) != data.get(k)}
     inst.form_data = json.dumps(data, ensure_ascii=False)
+    await _sync_file_relations(db, inst, form_schema, data, actor_id)
     return {'form_changes': changes} if changes else {}
 
 
