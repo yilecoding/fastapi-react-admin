@@ -86,6 +86,7 @@ function Body({ code, fromId, onStarted }: { code: string; fromId: string | null
       initialFiles={from.data?.files}
       restoredAt={fromId ? undefined : draft.data?.updated_time}
       draftError={!fromId && !!draft.error}
+      fromOld={!!fromId}
       onStarted={onStarted}
     />
   )
@@ -102,7 +103,7 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 function Filler({
-  code, sf, initial, initialFiles, restoredAt, draftError, onStarted,
+  code, sf, initial, initialFiles, restoredAt, draftError, fromOld, onStarted,
 }: {
   code: string
   sf: StartForm
@@ -114,6 +115,8 @@ function Filler({
   restoredAt?: string
   /** 草稿没读出来：照常能填，但要说一声（硬纪律 9） */
   draftError?: boolean
+  /** 「重新发起」：内容来自旧单。🔴 不碰这个流程的草稿 —— 那是另一张没写完的单，存进去会把它覆盖、提交会把它删掉 */
+  fromOld?: boolean
   onStarted: (id: string) => void
 }) {
   const { t } = useTranslation()
@@ -131,7 +134,7 @@ function Filler({
   const [selected, setSelected] = React.useState<Record<string, string[]>>({})
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const [urgent, setUrgent] = React.useState(false)
-  const draft = useDraftAutosave(code, form)
+  const draft = useDraftAutosave(code, form, !fromOld)
   const deleteDraft = useDeleteDraft()
   const [restored, setRestored] = React.useState(!!restoredAt)
   // 一次填写 = 一个幂等键：网络抖动重试 / 双击提交不会建出两张单
@@ -177,11 +180,13 @@ function Filler({
     for (const n of pickNodes) if (!selected[n.id]?.length) errs[`select:${n.id}`] = t('请选择审批人')
     setErrors(errs)
     if (Object.keys(errs).length) return
-    draft.stop() // 提交之后防抖里那次自动保存不能再把草稿存回去
+    // 提交之前：停掉自动保存，并**等正在路上的那次保存落地** —— 否则它可能在服务端删完草稿之后才提交，
+    // 把草稿又存回来（只拦没触发的防抖不够，已经发出去的 PUT 拦不住）
+    await draft.stop()
     try {
       // 走不到的节点上选过的人不带过去
       const picked = Object.fromEntries(pickNodes.filter((n) => selected[n.id]).map((n) => [n.id, selected[n.id]]))
-      const res = await start.mutateAsync({ code, form, selected: picked, key: key.current, urgent })
+      const res = await start.mutateAsync({ code, form, selected: picked, key: key.current, urgent, keep_draft: fromOld })
       toast.success(t('已提交'))
       key.current = idempotencyKey()
       onStarted(String(res.instance_id))
@@ -215,12 +220,16 @@ function Filler({
               <button
                 type="button"
                 className="ms-auto text-primary hover:underline"
-                onClick={() => {
-                  draft.stop()
-                  deleteDraft.mutate(code)
-                  setForm({})
-                  setRestored(false)
-                  draft.resume()
+                onClick={async () => {
+                  // 同提交：先等路上那次保存落地再删，不然它可能在删之后才到、把草稿又存回来
+                  await draft.stop()
+                  try {
+                    await deleteDraft.mutateAsync(code)
+                    setForm({})
+                    setRestored(false)
+                  } finally {
+                    draft.resume()
+                  }
                 }}
                 data-testid="wf-draft-clear"
               >
@@ -298,17 +307,23 @@ function Filler({
  * `stop()` / `resume()`：提交那一刻先停 —— 防抖里排着的那次保存要是在提交成功之后才发出去，
  * 服务端刚删掉的草稿又被存回来，下次打开「已恢复没提交的内容」，而那张单其实已经交了
  */
-function useDraftAutosave(code: string, form: FormData) {
+function useDraftAutosave(code: string, form: FormData, enabled: boolean) {
   const [status, setStatus] = React.useState<'idle' | 'saving' | 'error'>('idle')
   const [savedAt, setSavedAt] = React.useState<string | null>(null)
   const stopped = React.useRef(false)
+  const inflight = React.useRef<Promise<unknown> | null>(null)
   const last = React.useRef(JSON.stringify(form))
   React.useEffect(() => {
+    if (!enabled) return
     const raw = JSON.stringify(form)
     if (raw === last.current) return
     const h = setTimeout(async () => {
       if (stopped.current) return
       setStatus('saving')
+      let done: () => void = () => {}
+      inflight.current = new Promise<void>((r) => {
+        done = r
+      })
       try {
         // 全清空了：删草稿而不是存一份空的（否则下次打开是「已恢复你没提交的内容」+ 一张白表）
         const blank = Object.values(form).every((v) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0))
@@ -318,15 +333,20 @@ function useDraftAutosave(code: string, form: FormData) {
         setStatus('idle')
       } catch {
         setStatus('error')
+      } finally {
+        done()
+        inflight.current = null
       }
     }, 1500)
     return () => clearTimeout(h)
-  }, [code, form])
+  }, [code, form, enabled])
   return {
     status,
     savedAt,
-    stop: () => {
+    /** 停掉之后再触发的保存都不发；返回值等正在路上的那一次落地（成败都算落地） */
+    stop: async () => {
       stopped.current = true
+      await inflight.current
     },
     resume: () => {
       stopped.current = false

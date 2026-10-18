@@ -55,6 +55,7 @@ from backend.plugin.workflow.engine.form import (
 from backend.plugin.workflow.engine.simulate import simulate
 from backend.plugin.workflow.enums import (
     FORM_BIZ_TYPE,
+    PERM_MONITOR,
     PERM_REASSIGN,
     PERM_TERMINATE,
     Action,
@@ -625,6 +626,11 @@ async def _add_cc(
     """抄送并通知（avc-bp：抄送「此前 100% 静默」）。已经抄送过的人不重复"""
     if not users:
         return []
+    # 🔴 先 flush：会话是 autoflush=False，同一个事务里前一个抄送节点刚加的行查不到 ——
+    # 两个抄送节点抄同一个人时第二次照样插，提交时撞 uk_wf_cc_instance_user，这张单永远推不过去。
+    # 平时碰巧没事，是因为发通知（notification_dao.create）顺手 flush 了；抄送的人正好是操作人
+    # 自己时不发通知，就没人 flush
+    await ctx.db.flush()
     existing = set((await ctx.db.scalars(select(WfCc.user_id).where(WfCc.instance_id == inst.id))).all())
     added = [(u, n) for u, n in users if u not in existing and u != inst.initiator_id]
     for uid, _ in added:
@@ -849,14 +855,7 @@ async def start_in_tx(
         raise errors.RequestError(msg=t('error.workflow.form_invalid', detail=str(e)), data=e.errors) from e
     await _check_attachments(db, form_schema, {}, data, actor.id)
 
-    # 自选审批人：只收「这个节点确实是 select_on_start」的，其余的丢掉
-    clean_selected: dict[str, list[str]] = {}
-    for nid, ids in (selected or {}).items():
-        ref = nodes.get(nid)
-        if ref and ref.node['type'] == 'approval' and (ref.node.get('assignee') or {}).get('kind') == 'select_on_start':
-            if not isinstance(ids, list) or not all(isinstance(x, str) and is_bigint_id(x) for x in ids):
-                raise errors.RequestError(msg=t('error.workflow.selected_invalid'))
-            clean_selected[nid] = ids
+    clean_selected = _clean_selected(nodes, selected)
 
     snap = await handler.snapshot(db, biz_id, data)
     # 业务审批没有表单，条件变量来自 handler 的 snapshot；存进实例，推进 / 预告都要用
@@ -912,6 +911,41 @@ async def start_in_tx(
     _record(ctx, inst, 'start', key=key, actor_id=actor.id, actor_name=actor.nickname)
     await _advance(ctx, inst, nodes[model['root']['id']].after)
     return inst
+
+
+def _clean_selected(nodes: dict[str, Any], selected: dict[str, Any] | None) -> dict[str, list[str]]:
+    """自选审批人：只收「这个节点确实是 select_on_start」的，其余的丢掉；ID 必须是合法的字符串"""
+    out: dict[str, list[str]] = {}
+    for nid, ids in (selected or {}).items():
+        ref = nodes.get(nid)
+        if ref and ref.node['type'] == 'approval' and (ref.node.get('assignee') or {}).get('kind') == 'select_on_start':
+            if not isinstance(ids, list) or not all(isinstance(x, str) and is_bigint_id(x) for x in ids):
+                raise errors.RequestError(msg=t('error.workflow.selected_invalid'))
+            out[nid] = ids
+    return out
+
+
+async def _check_picks(
+    db: AsyncSession,
+    inst: WfInstance,
+    model: dict[str, Any],
+    selected: dict[str, list[str]],
+    start_from: dict[str, Any] | None,
+) -> None:
+    """按现在的表单试算一遍：路上的「发起人自选」节点都得选了人（发起和重新提交同一条规则）"""
+    biz = _json(inst.variables).get('biz') or {}
+    steps = await simulate(
+        db,
+        model,
+        form_data={**biz, **_json(inst.form_data)},
+        initiator_id=inst.initiator_id,
+        initiator_dept_id=inst.initiator_dept_id,
+        selected=selected,
+        start_from=start_from,
+    )
+    for st in steps:
+        if st['outcome'] == 'pick':
+            raise errors.RequestError(msg=t('error.workflow.selected_required', node=st['name']))
 
 
 async def _check_attachments(
@@ -983,6 +1017,7 @@ async def start_form(
     selected: dict[str, list[str]],
     key: str,
     urgent: bool = False,
+    keep_draft: bool = False,
 ) -> dict[str, Any]:
     async def body(ctx: _Ctx) -> int:
         d, v = await published_definition(ctx.db, code)
@@ -992,8 +1027,10 @@ async def start_form(
             ctx, definition=d, version=v, actor=actor, form_data=form_data, selected=selected, biz_id=None, key=key
         )
         inst.urgent = urgent
-        # 提交成功 = 草稿用完了。和发起同一个事务：发起失败草稿还在
-        await ctx.db.execute(delete(WfDraft).where(WfDraft.user_id == actor.id, WfDraft.code == code))
+        # 提交成功 = 草稿用完了。和发起同一个事务：发起失败草稿还在。
+        # 「重新发起」（内容来自旧单）不动草稿：那份草稿是另一张没写完的单
+        if not keep_draft:
+            await ctx.db.execute(delete(WfDraft).where(WfDraft.user_id == actor.id, WfDraft.code == code))
         return inst.id
 
     return await execute(db, key=key, action='start', actor=actor, body=body)
@@ -1035,6 +1072,7 @@ async def act(  # ruff:ignore[complex-structure]
     task_id: int | None = None,
     resume: bool = False,
     sign_mode: str | None = None,
+    selected: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     # 接口层的 SchemaBase 会把枚举还原成 str —— 这里统一回枚举，后面 match / .value 都按枚举写
     action = Action(action)
@@ -1042,6 +1080,11 @@ async def act(  # ruff:ignore[complex-structure]
 
     async def body(ctx: _Ctx) -> int:  # ruff:ignore[complex-structure]
         inst = await _load_instance(ctx.db, instance_id)
+        # 🔴 先判「看不看得见」，再判状态、再认领：和这张单无关的人一律 404、不落记录、不锁行。
+        # 原来先认领再判能力 —— 任何登录用户拿一个 ID 就能锁一下这张单、写一条 rejected 记录，
+        # 而 404 / 409 的区别等于告诉他「这个 ID 存在、结没结束」（详情接口那边看不见是 404）
+        if not await _can_view(ctx.db, inst, actor):
+            raise errors.NotFoundError(msg=t('error.workflow.instance_not_found'))
         if inst.status != InstanceStatus.running:
             raise ActionRejected('instance_finished', instance_id=inst.id)
 
@@ -1084,6 +1127,17 @@ async def act(  # ruff:ignore[complex-structure]
                 form_schema, model = _json(inst.form_snapshot), _json(inst.model_snapshot)
                 inst.summary = _summary(form_schema, _json(inst.form_data), model)
                 _set_var(inst, 'undo', None)
+                # 🔴 改了表单，路可能变了：新路上的「发起人自选」节点要有人。不查的话那个节点取人为空，
+                # 按 onEmpty（默认驳回）当场就被自动驳回 —— 而重新提交的正是发起人自己，他收不到通知
+                picks = {**(_json(inst.variables).get('selected') or {}), **_clean_selected(nodes, selected)}
+                _set_var(inst, 'selected', picks)
+                await _check_picks(
+                    ctx.db,
+                    inst,
+                    model,
+                    picks,
+                    resume_jump(inst, nodes, my_task.node_id) or nodes[my_task.node_id].after,
+                )
                 await _leave_node(ctx, inst, nodes, my_task.node_id)
                 ctx.push_todo([actor.id])
 
@@ -1434,6 +1488,22 @@ async def _sign_targets(
     return users
 
 
+async def _can_view(db: AsyncSession, inst: WfInstance, actor: Actor) -> bool:
+    """能不能对这张单做任何事：发起人 / 当过办理人 / 被抄送 / 有实例管理权限（同详情接口的 404 口径）"""
+    if inst.initiator_id == actor.id or any(actor.has(p) for p in (PERM_MONITOR, PERM_TERMINATE, PERM_REASSIGN)):
+        return True
+    involved = await db.scalar(
+        select(func.count()).select_from(WfTask).where(WfTask.instance_id == inst.id, WfTask.assignee_id == actor.id)
+    )
+    if involved:
+        return True
+    return bool(
+        await db.scalar(
+            select(func.count()).select_from(WfCc).where(WfCc.instance_id == inst.id, WfCc.user_id == actor.id)
+        )
+    )
+
+
 async def _handover_target(
     ctx: _Ctx, inst: WfInstance, task: WfTask, target_user_ids: list[int] | None
 ) -> tuple[int, str, list[tuple[int, str]]]:
@@ -1659,6 +1729,10 @@ async def apply_timeout(db: AsyncSession, instance_id: int, task_id: int, now: d
         if not cfg or due is None or due > now:
             return None
         action = cfg['action']
+        if action == 'approve' and not _approvable(inst, model, task):
+            # 🔴 这一步有「可编辑 + 必填」的字段还空着：人点同意都过不去（`_apply_form_patch` 校验），
+            # 超时也不能替他同意 —— 否则单子带着缺的数据「已通过」。退回成提醒，等人来填
+            action = 'remind'
 
         if action == 'remind':
             # 第 k 个周期该提醒第 k 次；已经提醒够了就不再发。不改实例状态，不用认领
@@ -1702,3 +1776,15 @@ async def apply_timeout(db: AsyncSession, instance_id: int, task_id: int, now: d
                 result = 'reject'
     await _run_effects(ctx.effects)
     return result
+
+
+def _approvable(inst: WfInstance, model: dict[str, Any], task: WfTask) -> bool:
+    """这条待办现在能不能「不改任何字段就同意」：本节点可编辑 + 必填的字段都有值"""
+    node = index_nodes(model)[task.node_id].node
+    form_schema = _json(inst.form_snapshot)
+    data = _json(inst.form_data)
+    try:
+        validate_form_data(form_schema, data, only=editable_fields(form_schema, node), base=data)
+    except FormDataError:
+        return False
+    return True

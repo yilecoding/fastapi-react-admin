@@ -127,7 +127,11 @@ class DeptService:
             parent_dept = await dept_dao.get(db, obj.parent_id)
             if not parent_dept:
                 raise errors.NotFoundError(msg=t('error.dept.parent_not_found'))
-        await _check_leader(db, obj.leader_id)
+        # 只在**换了**负责人时校验：负责人离职、账号停用之后，表单会把原来那个 ID 原样带回来 ——
+        # 无条件校验的话这个部门就再也改不了（改个名字也报「负责人不存在」）。审批那边把停用的负责人
+        # 当「没配」往上找，留着不影响流程
+        if obj.leader_id != dept.leader_id:
+            await _check_leader(db, obj.leader_id)
         if obj.parent_id == dept.id:
             raise errors.ForbiddenError(msg=t('error.dept.cannot_be_own_parent'))
         # 同级重名要按**目标**父级判：只挪了上级、名字没动，一样可能撞到新兄弟

@@ -81,6 +81,7 @@ export function WorkflowDefinitionPage({
       sel={search.sel ?? null}
       onStep={(step) => patch({ step, sel: undefined })}
       onSel={(sel) => patch({ sel: sel ?? undefined })}
+      onLocate={(step, sel) => patch({ step, sel })}
       onBack={() => onSearchChange?.({})}
     />
   ) : (
@@ -334,13 +335,18 @@ function CreateDialog({
 type Draft = { form: FormSchema; model: FlowModel; name: string; category: string | null; description: string | null }
 
 function Designer({
-  id, step, sel, onStep, onSel, onBack,
+  id, step, sel, onStep, onSel, onLocate, onBack,
 }: {
   id: string
   step: 'basic' | 'form' | 'flow'
   sel: string | null
   onStep: (s: 'basic' | 'form' | 'flow') => void
   onSel: (s: string | null) => void
+  /**
+   * 跳到某一步并选中某个节点 / 字段 —— 🔴 要一次改完。连着调 `onStep` 再 `onSel`，两次都是拿同一个旧的
+   * `search` 拼新地址（`replace` 导航），第二次把第一次的 `step` 写回去：点发布问题「没反应」
+   */
+  onLocate: (step: 'basic' | 'form' | 'flow', sel: string) => void
   onBack: () => void
 }) {
   const { t } = useTranslation()
@@ -477,13 +483,8 @@ function Designer({
                 type="button"
                 className="flex items-center gap-2 text-start hover:underline"
                 onClick={() => {
-                  if (i.nodeId) {
-                    onStep('flow')
-                    onSel(i.nodeId)
-                  } else if (i.fieldId) {
-                    onStep('form')
-                    onSel(i.fieldId)
-                  }
+                  if (i.nodeId) onLocate('flow', i.nodeId)
+                  else if (i.fieldId) onLocate('form', i.fieldId)
                 }}
               >
                 {i.level === 'ERROR' ? (

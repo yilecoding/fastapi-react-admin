@@ -219,6 +219,8 @@ export type InstanceDetail = {
   send_back_targets: { node_id: string; name: string }[]
   /** 依次审批的当前节点上，排在后面还没轮到的人。`masked` = 来自看不到的人员字段 */
   waiting: { id: string | null; name: string | null; masked?: boolean }[]
+  /** 被退回到发起人时：「发起人自选」节点和之前选的人。改了表单后新路上的这类节点必须选（服务端判） */
+  select_nodes: { id: string; name: string; selected: string[] }[]
 }
 
 export type ForecastStep = {
@@ -392,12 +394,16 @@ export function idempotencyKey(): string {
 export function useStartInstance() {
   const qc = useQueryClient()
   return useMutation({
+    // 调用处自己弹带上下文的错误：别让全局 MutationCache 再弹一条一样的（apps/web/src/app.tsx）
+    meta: { suppressErrorToast: true },
     mutationFn: (body: {
       code: string
       form: FormData
       selected: Record<string, string[]>
       key: string
       urgent?: boolean
+      /** 重新发起（内容来自旧单）：提交后别删这个流程的草稿 */
+      keep_draft?: boolean
     }) => api.POST<{ instance_id: string; replayed: boolean }>(`${BASE}/instances`, { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
   })
@@ -406,6 +412,8 @@ export function useStartInstance() {
 export function useAct(instanceId: string) {
   const qc = useQueryClient()
   return useMutation({
+    // 调用处自己弹带上下文的错误：别让全局 MutationCache 再弹一条一样的（apps/web/src/app.tsx）
+    meta: { suppressErrorToast: true },
     mutationFn: (body: {
       action: Action
       key: string
@@ -420,6 +428,8 @@ export function useAct(instanceId: string) {
       resume?: boolean
       /** 加签：在我之前 / 之后 */
       sign_mode?: 'before' | 'after'
+      /** 被退回后重新提交：发起人自选的审批人 */
+      selected?: Record<string, string[]>
     }) => api.POST<{ instance_id: string; replayed: boolean }>(`${BASE}/instances/${instanceId}/actions`, { body }),
     // 成功和失败都要重取：失败多半是「已被他人处理」，界面要跟上真实状态
     onSettled: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
@@ -482,6 +492,8 @@ export function useMarkCcRead() {
 export function useCreateDefinition() {
   const qc = useQueryClient()
   return useMutation({
+    // 调用处自己弹带上下文的错误：别让全局 MutationCache 再弹一条一样的（apps/web/src/app.tsx）
+    meta: { suppressErrorToast: true },
     mutationFn: (body: Partial<Definition> & { code: string; name: string; form?: FormSchema; model?: FlowModel }) =>
       api.POST<{ id: string }>(`${BASE}/definitions`, { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.definitions() }),
@@ -491,6 +503,8 @@ export function useCreateDefinition() {
 export function useSaveDefinition() {
   const qc = useQueryClient()
   return useMutation({
+    // 调用处自己弹带上下文的错误：别让全局 MutationCache 再弹一条一样的（apps/web/src/app.tsx）
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, body }: { id: string; body: Partial<Pick<Definition, 'name' | 'category' | 'icon' | 'description' | 'sort'>> & { form?: FormSchema; model?: FlowModel } }) =>
       api.PUT(`${BASE}/definitions/${id}`, { body }),
     // 🔴 要 return：`mutateAsync` 才会等重取完成。不等的话设计器清掉草稿那一刻显示的还是
@@ -506,6 +520,8 @@ export function useSaveDefinition() {
 export function useDeleteDefinition() {
   const qc = useQueryClient()
   return useMutation({
+    // 调用处自己弹带上下文的错误：别让全局 MutationCache 再弹一条一样的（apps/web/src/app.tsx）
+    meta: { suppressErrorToast: true },
     mutationFn: (id: string) => api.DELETE(`${BASE}/definitions/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.definitions() }),
   })
@@ -514,6 +530,8 @@ export function useDeleteDefinition() {
 export function usePublishDefinition() {
   const qc = useQueryClient()
   return useMutation({
+    // 调用处自己弹带上下文的错误：别让全局 MutationCache 再弹一条一样的（apps/web/src/app.tsx）
+    meta: { suppressErrorToast: true },
     mutationFn: (id: string) =>
       api.POST<{ published: boolean; new_version: boolean; version: { version_no: number } | null; issues: Issue[] }>(
         `${BASE}/definitions/${id}/publish`
@@ -531,6 +549,8 @@ export function useValidateDefinition() {
 export function useSetDefinitionStatus() {
   const qc = useQueryClient()
   return useMutation({
+    // 调用处自己弹带上下文的错误：别让全局 MutationCache 再弹一条一样的（apps/web/src/app.tsx）
+    meta: { suppressErrorToast: true },
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       api.PUT(`${BASE}/definitions/${id}/status`, { body: { enabled } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
@@ -593,6 +613,8 @@ export const handoverHoldersQuery = () =>
 export function useHandover() {
   const qc = useQueryClient()
   return useMutation({
+    // 调用处自己弹带上下文的错误：别让全局 MutationCache 再弹一条一样的（apps/web/src/app.tsx）
+    meta: { suppressErrorToast: true },
     mutationFn: (body: { from_user_id: string; to_user_id: string; key: string }) =>
       api.POST<{ moved: number; skipped: { instance_id: string; title: string; reason: string }[] }>(
         `${BASE}/handover`,

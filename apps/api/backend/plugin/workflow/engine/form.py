@@ -27,6 +27,8 @@ schema，但只有这一份算数。
 
 from __future__ import annotations
 
+import math
+
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -74,7 +76,7 @@ def _check(field: dict[str, Any], v: Any) -> tuple[Any, str | None]:  # ruff:ign
             return v, f'不能超过 {_MAX_TEXT} 个字'
         return v, None
     if t == 'number':
-        if isinstance(v, bool) or not isinstance(v, (int, float)):
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
             return v, '应为数字'
         return v, None
     if t == 'amount':
@@ -109,10 +111,11 @@ def _check(field: dict[str, Any], v: Any) -> tuple[Any, str | None]:  # ruff:ign
         return [a.isoformat(), b.isoformat()], None
     if t == 'select':
         allowed = {o['value'] for o in field.get('options') or []}
-        return (v, None) if v in allowed else (v, '不是可选值')
+        # 先判类型：`[...] in set` 是 TypeError（unhashable）→ 500，不是「不是可选值」
+        return (v, None) if isinstance(v, str) and v in allowed else (v, '不是可选值')
     if t == 'multiselect':
         allowed = {o['value'] for o in field.get('options') or []}
-        if not isinstance(v, list) or not all(x in allowed for x in v):
+        if not isinstance(v, list) or not all(isinstance(x, str) and x in allowed for x in v):
             return v, '不是可选值'
         return list(dict.fromkeys(v)), None
     if t in {'user', 'dept'}:

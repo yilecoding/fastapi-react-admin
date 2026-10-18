@@ -2239,6 +2239,13 @@ export interface components {
              * @description 加签：在我之前 / 在我之后
              */
             sign_mode?: ("before" | "after") | null;
+            /**
+             * Selected
+             * @description 被退回后重新提交：发起人自选的审批人
+             */
+            selected?: {
+                [key: string]: string[];
+            } | null;
         };
         /**
          * AddUserParam
@@ -6715,6 +6722,12 @@ export interface components {
              * @default false
              */
             urgent: boolean;
+            /**
+             * Keep Draft
+             * @description 提交后保留这个流程的草稿
+             * @default false
+             */
+            keep_draft: boolean;
         };
         /**
          * StatusType

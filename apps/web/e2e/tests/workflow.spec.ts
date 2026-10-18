@@ -616,3 +616,42 @@ test("草稿：关掉再打开内容还在；加急排在审批人列表里；�
   await a.close()
   await z.close()
 })
+
+test("附件上传期间在别的字段里打的字，传完不会被盖回去", async ({ browser }) => {
+  const code = `${CODE}F`  // 「附件」那条建的流程：事项 + 附件
+  const a = await browser.newPage()
+  await loginPageAs(a, "sunqiang", "123456")
+  // 让上传慢 1.5 秒：上传期间改别的字段（原来传完回调用的是开始上传那一刻的表单，把这段改动盖掉）
+  await a.route(/\/sys\/workflow\/files$/, async (route) => {
+    await new Promise((r) => setTimeout(r, 1500))
+    await route.continue()
+  })
+  await a.goto(`/workflow/inbox?start=${code}`)
+  const sheet = a.getByTestId("wf-start-sheet")
+  await sheet.getByTestId("wf-field-f_what").locator("input").fill("上传前")
+  await sheet.getByTestId("wf-files-f_files-input").setInputFiles({
+    name: `慢.txt`, mimeType: "text/plain", buffer: Buffer.from(`slow ${Date.now()}`),
+  })
+  await sheet.getByTestId("wf-field-f_what").locator("input").fill("上传期间改的")
+  await expect(sheet.getByTestId("wf-files-f_files")).toContainText("慢.txt")
+  await expect(sheet.getByTestId("wf-field-f_what").locator("input")).toHaveValue("上传期间改的")
+  await a.close()
+})
+
+test("设计器：在表单这一步点流程节点的发布问题，跳到流程设计并选中那个节点", async ({ page }) => {
+  await loginPageAs(page, "admin", "123456")
+  await page.goto("/workflow/definition")
+  const scope = page.locator('[data-tab="/_auth/workflow/definition"]')
+  await scope.getByTestId(`wfd-open-${CODE}`).click()
+  await scope.getByTestId("wfd-step-flow").click()
+  await scope.getByTestId("flow-add-after-start").click()
+  await page.getByTestId("flow-add-approval").click()
+  await scope.getByTestId("wfd-publish").click()
+  await expect(scope.getByTestId("wfd-issues")).toContainText("APPROVER_EMPTY")
+  // 回到表单这一步，再点那条问题（原来连着改 step 和 sel，第二次把 step 写回 form，看起来点了没反应）
+  await scope.getByTestId("wfd-step-form").click()
+  await expect(page).toHaveURL(/step=form/)
+  await scope.getByTestId("wfd-issues").getByRole("button", { name: /APPROVER_EMPTY/ }).first().click()
+  await expect(page).toHaveURL(/step=flow/)
+  await expect(scope.getByTestId("node-name")).toBeVisible()
+})

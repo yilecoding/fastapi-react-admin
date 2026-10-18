@@ -102,3 +102,6 @@ PERM_TERMINATE = 'workflow:instance:terminate'
 
 #: 管理员改办理人 / 离职交接要的权限码。和「终止」分开：能把卡住的单交给别人，不等于能直接作废它
 PERM_REASSIGN = 'workflow:instance:reassign'
+
+#: 实例监控（看全部实例）要的权限码
+PERM_MONITOR = 'workflow:instance:list'

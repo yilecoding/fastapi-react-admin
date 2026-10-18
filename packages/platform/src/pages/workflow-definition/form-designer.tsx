@@ -477,7 +477,14 @@ function OptionsEditor({
           variant="outline"
           size="sm"
           className="self-start"
-          onClick={() => onChange([...options, { label: t('选项 {{n}}', { n: options.length + 1 }), value: `opt${options.length + 1}` }])}
+          onClick={() => {
+            // 值不能按「个数 + 1」生成：删过一个再加，新值会和剩下的某个撞上（opt1/2/3 删 opt1 再加 → 又一个 opt3），
+            // 两个选项同一个值，存进去分不出来（发布校验 FIELD_OPTION_DUPLICATE 也会拦）
+            const used = new Set(options.map((o) => o.value))
+            let n = options.length + 1
+            while (used.has(`opt${n}`)) n += 1
+            onChange([...options, { label: t('选项 {{n}}', { n }), value: `opt${n}` }])
+          }}
         >
           <IconPlus className="size-4" />
           {t('添加选项')}

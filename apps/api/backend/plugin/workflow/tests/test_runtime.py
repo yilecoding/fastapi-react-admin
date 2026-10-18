@@ -218,7 +218,8 @@ def test_outsider_sees_404_and_cannot_act(client: TestClient, login: Login, uid:
     resp = client.get(f'/sys/workflow/instances/{pk}', headers=login('liuyang'))
     assert resp.json()['code'] == 404
     resp = act(client, login('liuyang'), pk, 'approve')
-    assert resp.json()['code'] == 409
+    # 动作接口和详情同一个口径：看不见就是 404（原来是 409，等于告诉对方这个 ID 存在，见 test_review_round2）
+    assert resp.json()['code'] == 404
     # 先断言「有」：真正的审批人看得到
     assert detail(client, login('zhaolei'), pk)['instance']['id']
 

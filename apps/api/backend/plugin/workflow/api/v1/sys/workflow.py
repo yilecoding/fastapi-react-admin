@@ -174,6 +174,7 @@ async def start_instance(request: Request, db: CurrentSession, obj: StartParam) 
         selected=obj.selected,
         key=obj.key,
         urgent=obj.urgent,
+        keep_draft=obj.keep_draft,
     )
     return response_base.success(data=data)
 
@@ -249,6 +250,7 @@ async def do_action(request: Request, db: CurrentSession, pk: Pk, obj: ActionPar
         task_id=obj.task_id,
         resume=obj.resume,
         sign_mode=obj.sign_mode,
+        selected=obj.selected,
     )
     return response_base.success(data=data)
 

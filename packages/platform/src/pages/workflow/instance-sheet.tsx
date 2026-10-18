@@ -145,6 +145,10 @@ function Detail({
     [d.field_perms]
   )
   const merged = React.useMemo(() => ({ ...d.form_data, ...patch }), [d.form_data, patch])
+  // 被退回后重新提交：「发起人自选」节点的人（预填上次选的）
+  const [picks, setPicks] = React.useState<Record<string, string[]>>(() =>
+    Object.fromEntries(d.select_nodes.map((n) => [n.id, n.selected]))
+  )
   const track = React.useMemo(() => progressItems(d, t), [d, t])
   // 被退回到自己手上：最近那条退回记录说了什么
   const sentBack = isResubmit(d)
@@ -202,6 +206,16 @@ function Detail({
                   setPatch(next)
                 }}
               />
+              {d.select_nodes.map((n) => (
+                <Row key={n.id} label={t('{{node}}：选择审批人', { node: n.name })}>
+                  <UserSelect
+                    value={picks[n.id] ?? []}
+                    multiple
+                    onChange={(v) => setPicks({ ...picks, [n.id]: v })}
+                    testId={`wf-resubmit-select-${n.id}`}
+                  />
+                </Row>
+              ))}
               {/* 被退回的发起人：顶上的横幅已经说了怎么做，这句是给审批人的 */}
               {editable.size > 0 && !sentBack && (
                 <p className="rounded-md border-s-2 border-primary bg-muted px-3 py-2 text-xs text-muted-foreground">
@@ -244,7 +258,14 @@ function Detail({
           </Button>
         </footer>
       ) : (
-        <ActionBar detail={d} patch={patch} editable={editable} onDone={onDone} onResetPatch={() => setPatch({})} />
+        <ActionBar
+          detail={d}
+          patch={patch}
+          picks={picks}
+          editable={editable}
+          onDone={onDone}
+          onResetPatch={() => setPatch({})}
+        />
       )}
     </>
   )
@@ -328,10 +349,11 @@ type Extra = {
 }
 
 function ActionBar({
-  detail: d, patch, editable, onDone, onResetPatch,
+  detail: d, patch, picks, editable, onDone, onResetPatch,
 }: {
   detail: InstanceDetail
   patch: FormData
+  picks: Record<string, string[]>
   editable: Set<string>
   onDone: () => void
   onResetPatch: () => void
@@ -356,6 +378,7 @@ function ActionBar({
         return false
       }
       if (Object.keys(patch).length) body.form = patch
+      if (action === 'approve' && resubmit && d.select_nodes.length) body.selected = picks
     }
     try {
       await act.mutateAsync(body)

@@ -55,7 +55,11 @@ export function FormRenderer({
   files?: Record<string, FileMeta>
 }) {
   const { t } = useTranslation()
-  const set = (id: string, v: unknown) => onChange?.({ ...value, [id]: v })
+  // 🔴 用最新的值合并，不用这次渲染闭包里的 `value`：附件上传是异步的，传完才回调 ——
+  // 用闭包里的旧值，上传期间在别的字段里打的字会被整个盖回去（自动保存再把盖回去的存成草稿）
+  const latest = React.useRef(value)
+  latest.current = value
+  const set = (id: string, v: unknown) => onChange?.({ ...latest.current, [id]: v })
   const ruled = React.useMemo(() => formRules(schema, value), [schema, value])
   return (
     <FilesContext.Provider value={files ?? EMPTY_FILES}>
@@ -326,7 +330,11 @@ function AttachmentRow({ id, meta: given, onRemove }: { id: string; meta?: FileM
     staleTime: Infinity,
   })
   const meta = given ?? fallback.data
-  const name = meta?.name ?? (fallback.isPending && !given ? '…' : t('（文件已删除）'))
+  // 只有 404 才是「真的没了」；网络抖动 / 500 要说「没取到」并给重试（硬纪律 9），
+  // 否则用户以为附件丢了、删掉重传
+  const gone = fallback.error instanceof ApiError && fallback.error.httpStatus === 404
+  const name =
+    meta?.name ?? (fallback.isPending && !given ? '…' : gone || !fallback.error ? t('（文件已删除）') : t('（文件信息没取到）'))
   return (
     <li className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 text-sm">
       <IconPaperclip className="size-4 shrink-0 text-muted-foreground" />
@@ -350,6 +358,11 @@ function AttachmentRow({ id, meta: given, onRemove }: { id: string; meta?: FileM
         {name}
       </button>
       {meta && <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{fmtSize(meta.size)}</span>}
+      {!meta && fallback.error && !gone && (
+        <button type="button" className="shrink-0 text-xs text-primary hover:underline" onClick={() => fallback.refetch()}>
+          {t('重试')}
+        </button>
+      )}
       {busy && <IconLoader2 className="size-3.5 animate-spin text-muted-foreground" />}
       {onRemove && (
         <Button type="button" variant="ghost" size="icon" className="size-6" aria-label={t('移除附件')} onClick={onRemove}>

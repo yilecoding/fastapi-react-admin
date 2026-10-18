@@ -189,3 +189,26 @@ def test_publish_rejects_rules_that_cannot_work() -> None:
         _issues(form({'id': 'd', 'type': 'number', 'label': 'd', 'calc': {'kind': 'days', 'field': 'r'}}), model)
         == set()
     )
+
+
+def test_publish_rejects_duplicate_option_values() -> None:
+    model = {'schemaVersion': 1, 'root': {'type': 'start', 'id': 'start', 'next': None}}
+    opts = [{'label': '甲', 'value': 'opt1'}, {'label': '乙', 'value': 'opt1'}]
+    form = {'schemaVersion': 1, 'fields': [{'id': 's', 'type': 'select', 'label': '类型', 'options': opts}]}
+    assert 'FIELD_OPTION_DUPLICATE' in _issues(form, model)
+    table = {
+        'schemaVersion': 1,
+        'fields': [
+            {
+                'id': 't',
+                'type': 'table',
+                'label': '明细',
+                'columns': [
+                    {'id': 'c', 'type': 'select', 'label': '列', 'options': opts},
+                ],
+            }
+        ],
+    }
+    assert 'FIELD_OPTION_DUPLICATE' in _issues(table, model)
+    ok_form = {'schemaVersion': 1, 'fields': [{'id': 's', 'type': 'select', 'label': '类型', 'options': opts[:1]}]}
+    assert 'FIELD_OPTION_DUPLICATE' not in _issues(ok_form, model)

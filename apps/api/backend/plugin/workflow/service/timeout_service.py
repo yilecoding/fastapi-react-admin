@@ -31,7 +31,12 @@ async def _candidates(db: AsyncSession, now: datetime) -> list[tuple[int, int]]:
         await db.execute(
             select(WfTask, WfInstance.model_snapshot)
             .join(WfInstance, WfInstance.id == WfTask.instance_id)
-            .where(WfTask.status == TaskStatus.pending, WfInstance.status == InstanceStatus.running)
+            .where(
+                WfTask.status == TaskStatus.pending,
+                WfInstance.status == InstanceStatus.running,
+                # 先在库里筛掉压根没配超时的单（绝大多数），不必每 5 分钟把全部在办待办连同快照都拉回来
+                WfInstance.model_snapshot.contains('"timeout"'),
+            )
         )
     ).all()
     out = []

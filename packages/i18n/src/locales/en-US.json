@@ -1926,6 +1926,7 @@
   "鼠标中键点标签即关闭，固定的标签不受影响": "Middle-click a tab to close it; pinned tabs are unaffected",
   "（已删除的用户）": "(deleted user)",
   "（已隐藏）": "(hidden)",
+  "（文件信息没取到）": "(couldn't load file info)",
   "（文件已删除）": "(file deleted)",
   "（明文）": " (plaintext)",
   "（空）": "(empty)",

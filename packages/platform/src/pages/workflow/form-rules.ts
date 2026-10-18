@@ -11,12 +11,50 @@ function isEmpty(v: unknown): boolean {
   return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
 }
 
-/** 和后端 `_cmp_value` 同口径：能当数字的按数字比，其余按原样（日期串 ISO 格式按字典序可比） */
-function cmpValue(v: unknown): unknown {
-  if (typeof v === 'boolean' || v === null || v === undefined) return v
-  if (typeof v === 'number') return v
-  if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v)
-  return v
+/**
+ * 数字按**十进制字符串**精确比，和后端 `Decimal` 同口径。
+ *
+ * 🔴 不能 `Number()`：人员 / 部门字段的值是雪花 ID 字符串（约 2^61），转成 double 会被舍入 ——
+ * `4000000000000000005` 和 `…006` 变成同一个数，「部门不属于 X」在前端成立、在后端不成立：
+ * 前端把字段藏了，后端说它必填，提交被一个看不见的字段挡住（硬纪律 6）
+ */
+type Dec = { neg: boolean; int: string; frac: string }
+
+const DEC_RE = /^\s*([+-]?)(\d+)(?:\.(\d+))?\s*$/
+
+export function toDec(v: unknown): Dec | null {
+  if (typeof v === 'boolean' || v === null || v === undefined) return null
+  if (typeof v === 'number') {
+    if (!Number.isFinite(v)) return null
+    // 表单里的数字字段是 JSON 数字，量级不大；toString 出科学计数法（1e21+）的当不是数字
+    return toDec(String(v))
+  }
+  if (typeof v !== 'string') return null
+  const m = DEC_RE.exec(v)
+  if (!m) return null
+  const int = m[2].replace(/^0+(?=\d)/, '')
+  const frac = (m[3] ?? '').replace(/0+$/, '')
+  return { neg: m[1] === '-' && (int !== '0' || frac !== ''), int, frac }
+}
+
+function cmpDec(a: Dec, b: Dec): number {
+  if (a.neg !== b.neg) return a.neg ? -1 : 1
+  const sign = a.neg ? -1 : 1
+  if (a.int.length !== b.int.length) return (a.int.length < b.int.length ? -1 : 1) * sign
+  if (a.int !== b.int) return (a.int < b.int ? -1 : 1) * sign
+  const len = Math.max(a.frac.length, b.frac.length)
+  const fa = a.frac.padEnd(len, '0')
+  const fb = b.frac.padEnd(len, '0')
+  return fa === fb ? 0 : (fa < fb ? -1 : 1) * sign
+}
+
+/** 等值：两边都是数字就按数值比（'1.0' == 1），否则原样比；一边数字一边不是 → 不等（同后端） */
+function same(x: unknown, y: unknown): boolean {
+  const a = toDec(x)
+  const b = toDec(y)
+  if (a && b) return cmpDec(a, b) === 0
+  if (a || b) return false
+  return x === y
 }
 
 /** 条件求值（`engine/flow.py: evaluate`）。取不到的变量当 None：除了 empty 之外都不成立 */
@@ -32,14 +70,14 @@ export function evaluate(cond: Cond | null | undefined, vars: FormData): boolean
   if (left === undefined || left === null || left === '') return false
   switch (cond.op) {
     case 'eq':
-      return cmpValue(left) === cmpValue(right)
+      return same(left, right)
     case 'ne':
-      return cmpValue(left) !== cmpValue(right)
+      return !same(left, right)
     case 'in':
     case 'not_in': {
-      const pool = (Array.isArray(right) ? right : [right]).map(cmpValue)
+      const pool = Array.isArray(right) ? right : [right]
       const lefts = Array.isArray(left) ? left : [left]
-      const hit = lefts.some((x) => pool.includes(cmpValue(x)))
+      const hit = lefts.some((x) => pool.some((y) => same(x, y)))
       return cond.op === 'in' ? hit : !hit
     }
     case 'contains':
@@ -48,12 +86,14 @@ export function evaluate(cond: Cond | null | undefined, vars: FormData): boolean
     case 'gte':
     case 'lt':
     case 'lte': {
-      const a = cmpValue(left)
-      const b = cmpValue(right)
-      if (typeof a !== typeof b || (typeof a !== 'number' && typeof a !== 'string')) return false
-      const x = a as number | string
-      const y = b as number | string
-      return cond.op === 'gt' ? x > y : cond.op === 'gte' ? x >= y : cond.op === 'lt' ? x < y : x <= y
+      // 都是数字按数值；都不是数字（日期串 YYYY-MM-DD）按字典序；一边一种 → 不成立（同后端）
+      const a = toDec(left)
+      const b = toDec(right)
+      let c: number
+      if (a && b) c = cmpDec(a, b)
+      else if (!a && !b && typeof left === 'string' && typeof right === 'string') c = left < right ? -1 : left > right ? 1 : 0
+      else return false
+      return cond.op === 'gt' ? c > 0 : cond.op === 'gte' ? c >= 0 : cond.op === 'lt' ? c < 0 : c <= 0
     }
     default:
       return false

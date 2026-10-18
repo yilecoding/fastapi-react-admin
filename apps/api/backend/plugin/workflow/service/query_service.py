@@ -29,7 +29,15 @@ from backend.plugin.workflow.engine.form import (
     start_editable_fields,
 )
 from backend.plugin.workflow.engine.simulate import simulate
-from backend.plugin.workflow.enums import PERM_TERMINATE, Action, ApprovalMode, FieldPerm, TaskStatus
+from backend.plugin.workflow.enums import (
+    PERM_MONITOR,
+    PERM_REASSIGN,
+    PERM_TERMINATE,
+    Action,
+    ApprovalMode,
+    FieldPerm,
+    TaskStatus,
+)
 from backend.plugin.workflow.handler import get_handler
 from backend.plugin.workflow.model import WfActionRecord, WfCc, WfDefinition, WfDraft, WfInstance, WfTask
 from backend.plugin.workflow.service.runtime_service import (
@@ -43,9 +51,6 @@ from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-
-#: 实例监控（看全部在途实例）要的权限码
-PERM_MONITOR = 'workflow:instance:list'
 
 
 def _page(items: list[dict[str, Any]], total: int, page: int, size: int) -> dict[str, Any]:
@@ -220,7 +225,8 @@ async def _viewer(db: AsyncSession, inst: WfInstance, actor: Actor) -> tuple[lis
     is_initiator = inst.initiator_id == actor.id
     my_tasks = [tk for tk in tasks if tk.assignee_id == actor.id]
     is_cc = any(c.user_id == actor.id for c in ccs)
-    is_monitor = actor.has(PERM_MONITOR) or actor.has(PERM_TERMINATE)
+    # 和 runtime_service._can_view 同一个口径：能管实例的（看 / 终止 / 改办理人）都看得到全部
+    is_monitor = any(actor.has(p) for p in (PERM_MONITOR, PERM_TERMINATE, PERM_REASSIGN))
     # 看不见的单据报 404 而不是 403：403 等于告诉对方「这个 ID 存在」
     if not (is_initiator or my_tasks or is_cc or is_monitor):
         raise errors.NotFoundError(msg=t('error.workflow.instance_not_found'))
@@ -385,6 +391,20 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
             await send_back_targets(db, inst) if any(c.action == Action.send_back for c in caps) else []
         ),
         'waiting': _waiting(inst, nodes, tasks, hidden),
+        # 被退回到发起人：重新提交时可以（也可能必须）为「发起人自选」节点选人。服务端按新的表单判哪些必选
+        'select_nodes': (
+            [
+                {
+                    'id': r.node['id'],
+                    'name': r.node['name'],
+                    'selected': (json.loads(inst.variables).get('selected') or {}).get(r.node['id'], []),
+                }
+                for r in nodes.values()
+                if r.node['type'] == 'approval' and (r.node.get('assignee') or {}).get('kind') == 'select_on_start'
+            ]
+            if my_task is not None and my_task.node_id == model['root']['id']
+            else []
+        ),
     }
 
 

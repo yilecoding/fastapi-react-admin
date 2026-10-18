@@ -54,6 +54,8 @@ class StartParam(SchemaBase):
     selected: dict[str, list[str]] = Field(default_factory=dict, description='发起人自选的审批人')
     key: str = IdempotencyKey
     urgent: bool = Field(False, description='加急')
+    #: 「重新发起」（内容来自旧单）时传 true：这次提交和这个流程的草稿无关，别把草稿删了
+    keep_draft: bool = Field(False, description='提交后保留这个流程的草稿')
 
 
 class PreviewParam(SchemaBase):
@@ -75,6 +77,7 @@ class ActionParam(SchemaBase):
     task_id: SnowflakeIdIn | None = Field(None, description='改办理人：改哪一条待办')
     resume: bool = Field(False, description='退回：重新提交 / 那一步办完之后直接回到退回的这一步')
     sign_mode: Literal['before', 'after'] | None = Field(None, description='加签：在我之前 / 在我之后')
+    selected: dict[str, list[str]] | None = Field(None, description='被退回后重新提交：发起人自选的审批人')
 
 
 class HandoverParam(SchemaBase):

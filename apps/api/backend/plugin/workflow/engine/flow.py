@@ -54,9 +54,12 @@ def _num(v: Any) -> Decimal | None:
     if v is None or isinstance(v, bool) or (isinstance(v, str) and not v):
         return None
     try:
-        return Decimal(str(v))
+        d = Decimal(str(v))
     except InvalidOperation:
         return None
+    # 'NaN' / 'sNaN' / 'Infinity' 也能变成 Decimal，但拿去比较会抛 InvalidOperation → 500。
+    # 条件里出现这种值（文本字段里打了个 NaN）只能当「不是数字」
+    return d if d.is_finite() else None
 
 
 def _cmp_value(v: Any) -> Any:
@@ -161,6 +164,11 @@ def validate_publish(form_json: dict[str, Any], model_json: dict[str, Any]) -> l
     for f in form.fields:
         if f.type in {'select', 'multiselect'} and not f.options:
             err('FIELD_NO_OPTIONS', f'「{f.label}」没有选项', fieldId=f.id)
+        # 选项的值存进数据、条件按值判：两个选项同一个值，选哪个存的都一样，显示永远落到第一个
+        for one in [f, *(f.columns or [])]:
+            values = [o.value for o in one.options or []]
+            if len(values) != len(set(values)):
+                err('FIELD_OPTION_DUPLICATE', f'「{one.label}」有两个选项的值一样', fieldId=f.id)
         if f.type == 'table':
             if not f.columns:
                 err('TABLE_NO_COLUMNS', f'明细表「{f.label}」没有列', fieldId=f.id)
