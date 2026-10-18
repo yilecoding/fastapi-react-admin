@@ -1,6 +1,7 @@
 """审批附件：普通员工能传、只能挂自己的、隐藏字段里的附件连名字都不下发"""
 
 import struct
+import uuid
 import zlib
 
 from collections.abc import Callable, Generator
@@ -39,7 +40,9 @@ def isolated_upload_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Gene
 
 
 def _upload(client: TestClient, headers: dict[str, str], name: str) -> dict[str, Any]:
-    resp = client.post('/sys/workflow/files', headers=headers, files={'file': (name, _png(), 'image/png')})
+    # 内容带随机尾巴：同一人同名同内容会秒传复用**上一轮**的记录，它指向的 tmp 目录早没了（下载 404）
+    content = _png() + uuid.uuid4().hex.encode()
+    resp = client.post('/sys/workflow/files', headers=headers, files={'file': (name, content, 'image/png')})
     return ok(resp)
 
 
@@ -122,3 +125,12 @@ def test_attachments(
     d = ok(client.get(f'/sys/workflow/instances/{inst}', headers=login('zhaolei')))
     assert 'f_secret_files' not in d['form_data']
     assert {v['name'] for v in d['files'].values()} == {'发票.png'}
+
+    # 下载权限跟着「看不看得见」走（原来只要登录、拿到 ID 就能下）
+    def dl(who: str, f: dict[str, Any]) -> int:
+        return client.get(f'/sys/files/{f["id"]}/download', headers=login(who)).status_code
+
+    assert dl('sunqiang', secret) == 200  # 上传人
+    assert dl('zhaolei', mine) == 200  # 审批人看得到的字段
+    assert dl('zhaolei', secret) == 404  # 对审批人 hidden 的字段：详情里没有，下载也不行
+    assert dl('zhoumin', mine) == 404  # 和这张单无关的人

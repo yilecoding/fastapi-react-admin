@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import Select, func, or_, select
 
 from backend.app.admin.model import Dept, File, Role, User
+from backend.app.admin.service.file_service import register_file_access
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.plugin.workflow.engine.flow import index_nodes
@@ -198,11 +199,13 @@ async def counts(db: AsyncSession, user_id: int) -> dict[str, int]:
 # ── 详情 ─────────────────────────────────────────────────────────────────────
 
 
-async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # ruff:ignore[complex-structure]
-    inst = await db.get(WfInstance, pk)
-    if inst is None:
-        raise errors.NotFoundError(msg=t('error.workflow.instance_not_found'))
+async def _viewer(db: AsyncSession, inst: WfInstance, actor: Actor) -> tuple[list[WfTask], list[WfCc], set[str]]:
+    """这个人能不能看这张单、看不到哪些字段。看不了报 404。
 
+    详情接口和「附件能不能下载」（`_workflow_file_access`）用的是这一个判断 ——
+    两边各算一遍的话，迟早出现「详情里看不到这个附件，却能按 ID 下载」
+    """
+    pk = inst.id
     tasks = list((await db.scalars(select(WfTask).where(WfTask.instance_id == pk).order_by(WfTask.id))).all())
     ccs = list((await db.scalars(select(WfCc).where(WfCc.instance_id == pk).order_by(WfCc.id))).all())
     is_initiator = inst.initiator_id == actor.id
@@ -228,6 +231,17 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
         see_all=is_monitor,
         participant_nodes=participant_nodes,
     )
+    return tasks, ccs, hidden
+
+
+async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # ruff:ignore[complex-structure]
+    inst = await db.get(WfInstance, pk)
+    if inst is None:
+        raise errors.NotFoundError(msg=t('error.workflow.instance_not_found'))
+    tasks, ccs, hidden = await _viewer(db, inst, actor)
+    form_schema = json.loads(inst.form_snapshot)
+    model = json.loads(inst.model_snapshot)
+    nodes = index_nodes(model)
     # 🔴 隐藏字段在**服务端**裁掉：schema 里删字段、数据里删值。前端藏起来不算权限
     form_data = {k: v for k, v in json.loads(inst.form_data).items() if k not in hidden}
     form_schema = {**form_schema, 'fields': [f for f in form_schema.get('fields') or [] if f['id'] not in hidden]}
@@ -518,3 +532,30 @@ def _mask_forecast(steps: list[dict[str, Any]], nodes: dict[str, Any], hidden: s
             st = {**st, 'users': [], 'masked': True}
         out.append(st)
     return out
+
+
+# ── 附件下载权限 ─────────────────────────────────────────────────────────────
+
+
+async def _workflow_file_access(db: AsyncSession, user: Any, file: Any) -> bool:
+    """审批单上的附件：能看这张单、且那个附件字段对他不是 hidden，才能下载。
+
+    附件 ID 存在 `form_data` 的 JSON 里（不走 `sys_file_relation`），按字面量找候选单据，
+    再逐张过 `_viewer()`。⚠️ LIKE 走不了索引 —— 只在「上传人 / 文件管理员」都不是的时候才走到这里
+    """
+    actor = Actor.from_user(user)
+    needle = f'"{file.id}"'
+    rows = (await db.scalars(select(WfInstance).where(WfInstance.form_data.contains(needle)).limit(50))).all()
+    for inst in rows:
+        try:
+            _, _, hidden = await _viewer(db, inst, actor)
+        except errors.BaseExceptionError:
+            continue
+        data = json.loads(inst.form_data)
+        for f in json.loads(inst.form_snapshot).get('fields') or []:
+            if f['type'] == 'attachment' and f['id'] not in hidden and str(file.id) in (data.get(f['id']) or []):
+                return True
+    return False
+
+
+register_file_access(_workflow_file_access)

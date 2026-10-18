@@ -210,3 +210,24 @@ typst(37MB) · cad(20MB) · iwork 全拷进 dist（实测 dist 60MB → 186MB）
 > 天然隔离是好事；代价是 `page.evaluate` 里的 `document.querySelector` 穿不进去 ——
 > 写 E2E 要用 Playwright 自己的 locator（它会自动穿透 shadow）。
 > 实测第一次探测时 host 的 `innerHTML` 只有 63 字符，差点误判成没渲染。
+
+## 🔴 私有文件谁能读：不是「登录了就行」
+
+`GET /sys/files/{id}/download`、`GET /sys/files/{id}`、`GET /sys/files/targets/...` 原来只要登录 ——
+雪花 ID 不是秘密（URL、日志、审批单的表单数据里都有），拿到 ID 就能下载任何人的私有文件。
+
+现在走 `file_service.can_read`：公开的 · 自己传的 · 文件管理员（`sys:file:list`）· **业务模块登记的判断**
+（`register_file_access`）任一成立才给，读不了一律 **404**（403 等于告诉对方 ID 存在）。
+文件模块是底座、不 import 业务插件：通知公告（挂在没删的公告上）和审批（能看这张单、且那个附件字段对他
+不是 hidden —— 和详情接口同一个 `_viewer()`）各自在自己的 service 里登记。
+
+🔴 **取文件要 `bypass_data_scope()`。** 这几个接口只挂登录，而 `CRUDFile` 按数据范围过滤 ——
+种子里 STAFF 那种「开了过滤、一个范围都没配」的角色**一个文件都看不见**：改之前普通员工就已经
+下不了公告附件（实测 404，只有管理员测过下载，所以一直没暴露）。能不能读由 `can_read` 决定。
+
+测试 `app/admin/tests/api_v1/test_file_access.py` + `plugin/workflow/tests/test_attachments.py` 末尾。
+变异验证：恢复「登录即可」/ 去掉 bypass / 审批那支不看 hidden，各自对应的测试红。
+
+⚠️ 写下载类测试时上传内容要带随机串：上传按「同一人 + 同名 + 同内容」秒传复用**上一轮**的记录，
+它指向的 tmp 目录早没了，下载 404 —— 看起来像是权限拦的。
+

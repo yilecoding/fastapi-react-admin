@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_file import file_relation_dao
+from backend.app.admin.service.file_service import register_file_access
 from backend.common.enums import StatusType
 from backend.common.exception import errors
 from backend.common.i18n import t
@@ -18,6 +19,29 @@ from backend.plugin.notification.service.notification_service import notificatio
 #: 公告删除时一并解除关联，否则 (issue #63) 已删除公告的图片仍能通过
 #: `GET /sys/files/targets/{target_type}/{target_id}` 被任意登录用户查到。
 _NOTICE_TARGET_TYPES = ('NOTICE', 'NOTICE_CONTENT')
+
+
+async def _notice_file_access(db: AsyncSession, user: Any, file: Any) -> bool:
+    """挂在一条（没删的）公告上的附件 / 正文图：公告详情所有登录用户都能看，附件跟着能下"""
+    from sqlalchemy import func, select
+
+    from backend.app.admin.model import FileRelation
+
+    n = await db.scalar(
+        select(func.count())
+        .select_from(FileRelation)
+        .join(Notice, Notice.id == FileRelation.target_id)
+        .where(
+            FileRelation.file_id == file.id,
+            FileRelation.deleted == 0,
+            FileRelation.target_type.in_(_NOTICE_TARGET_TYPES),
+            Notice.deleted == 0,
+        )
+    )
+    return bool(n)
+
+
+register_file_access(_notice_file_access)
 
 
 async def _broadcast(db: AsyncSession, notice: Notice, title: str | None = None) -> None:
