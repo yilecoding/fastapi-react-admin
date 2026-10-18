@@ -12,6 +12,7 @@ import { Textarea } from '@admin/ui/components/textarea'
 import { toast } from '@admin/ui/components/toast'
 import { cn } from '@admin/ui/lib/utils'
 
+import { api } from '../../api-client/client'
 import { ApiError } from '../../api-client/errors'
 import { FormField as Row } from '../_shared/form-fields'
 import {
@@ -310,10 +311,22 @@ function fmtSize(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
-function AttachmentRow({ id, meta, onRemove }: { id: string; meta?: FileMeta; onRemove?: () => void }) {
+function AttachmentRow({ id, meta: given, onRemove }: { id: string; meta?: FileMeta; onRemove?: () => void }) {
   const { t } = useTranslation()
   const [busy, setBusy] = React.useState(false)
-  const name = meta?.name ?? t('（文件已删除）')
+  // 手上只有 ID（从草稿恢复的附件）：按 ID 现查一次名字。读不到（被删了 / 不是他的）才显示「已删除」
+  const fallback = useQuery({
+    queryKey: ['sys', 'files', 'meta', id],
+    queryFn: () =>
+      api
+        .GET<{ original_name: string; size: number; ext: string; content_type: string | null }>(`/api/v1/sys/files/${id}`)
+        .then((f): FileMeta => ({ name: f.original_name, size: f.size, ext: f.ext, content_type: f.content_type })),
+    enabled: !given,
+    retry: false,
+    staleTime: Infinity,
+  })
+  const meta = given ?? fallback.data
+  const name = meta?.name ?? (fallback.isPending && !given ? '…' : t('（文件已删除）'))
   return (
     <li className="flex items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 text-sm">
       <IconPaperclip className="size-4 shrink-0 text-muted-foreground" />

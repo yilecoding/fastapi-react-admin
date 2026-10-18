@@ -139,6 +139,8 @@ export type InstanceRow = {
   cc_id?: string
   read_time?: string | null
   cc_time?: string
+  /** 发起人标了加急：待办列表排前面 */
+  urgent?: boolean
 }
 
 export type TaskRow = {
@@ -152,6 +154,8 @@ export type TaskRow = {
   batch: number
   /** 节点配了超时、待办还在办：什么时候会被提醒 / 自动处理 */
   due_time?: string | null
+  /** 办理人第一次打开这张单的时间（「已读」） */
+  read_time?: string | null
   status: 'pending' | 'done' | 'canceled' | 'transferred'
   /** resubmit = 被退回后发起人重新提交 */
   decision: 'approve' | 'reject' | 'send_back' | 'resubmit' | 'add_sign' | 'take_back' | null
@@ -388,8 +392,13 @@ export function idempotencyKey(): string {
 export function useStartInstance() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: { code: string; form: FormData; selected: Record<string, string[]>; key: string }) =>
-      api.POST<{ instance_id: string; replayed: boolean }>(`${BASE}/instances`, { body }),
+    mutationFn: (body: {
+      code: string
+      form: FormData
+      selected: Record<string, string[]>
+      key: string
+      urgent?: boolean
+    }) => api.POST<{ instance_id: string; replayed: boolean }>(`${BASE}/instances`, { body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
   })
 }
@@ -414,6 +423,48 @@ export function useAct(instanceId: string) {
     }) => api.POST<{ instance_id: string; replayed: boolean }>(`${BASE}/instances/${instanceId}/actions`, { body }),
     // 成功和失败都要重取：失败多半是「已被他人处理」，界面要跟上真实状态
     onSettled: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
+  })
+}
+
+/** 办理人打开了详情：记「已读」（接口只记第一次，重复调无害） */
+export function useMarkTaskRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.PUT(`${BASE}/instances/${id}/read`),
+    onSuccess: (_d, id) => qc.invalidateQueries({ queryKey: workflowKeys.detail(id) }),
+  })
+}
+
+// ── 发起草稿（服务端存：换台电脑 / 清了缓存还在）────────────────────────────
+
+export const draftsQuery = () =>
+  queryOptions({
+    queryKey: [...workflowKeys.all, 'drafts'] as const,
+    queryFn: () => api.GET<{ code: string; updated_time: string }[]>(`${BASE}/drafts`),
+  })
+
+export const draftQuery = (code: string) =>
+  queryOptions({
+    queryKey: [...workflowKeys.all, 'drafts', code] as const,
+    queryFn: () =>
+      api.GET<{ form: FormData; updated_time: string } | null>(`${BASE}/drafts/${encodeURIComponent(code)}`),
+    // 草稿只在打开抽屉时读一次：之后以手上正在填的为准，别让后台重取把它盖回去
+    staleTime: Infinity,
+  })
+
+export function saveDraft(code: string, form: FormData): Promise<unknown> {
+  return api.PUT(`${BASE}/drafts/${encodeURIComponent(code)}`, { body: { form } })
+}
+
+export function removeDraft(code: string): Promise<unknown> {
+  return api.DELETE(`${BASE}/drafts/${encodeURIComponent(code)}`)
+}
+
+export function useDeleteDraft() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (code: string) => api.DELETE(`${BASE}/drafts/${encodeURIComponent(code)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...workflowKeys.all, 'drafts'] }),
   })
 }
 

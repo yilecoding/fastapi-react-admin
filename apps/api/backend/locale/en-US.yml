@@ -222,6 +222,7 @@ error:
     handover_same_user: The person handing over and the person taking over must be different
     sign_mode_invalid: Choose whether to add them before or after you
     sign_users_invalid: Choose 1 to 10 people to add
+    draft_too_large: The draft is too large to save
 
 file_type:
   archive: Archive

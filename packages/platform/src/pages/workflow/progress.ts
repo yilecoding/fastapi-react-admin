@@ -102,7 +102,8 @@ export function progressItems(d: InstanceDetail, t: T): TrackItem[] {
       const key = tk.status === 'done' ? (tk.decision ?? 'approve') : tk.status
       const meta = DECISION[key] ?? DECISION.pending
       const rec = byTask.get(tk.id)
-      let text = t(meta.text)
+      // 还在办的：写上他打开看过没有 —— 「他看过了还没批」和「他根本没看到」是两回事
+      let text = tk.status === 'pending' ? (tk.read_time ? t('审批中 · 已读') : t('审批中 · 未读')) : t(meta.text)
       if (tk.status === 'transferred' && rec?.target_user_name) {
         text = rec.action === 'reassign'
           ? t('管理员改给 {{n}}', { n: rec.target_user_name })

@@ -15,7 +15,7 @@ from itertools import starmap
 from math import ceil
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, delete, func, or_, select
 
 from backend.app.admin.model import Dept, File, Role, User
 from backend.app.admin.service.file_service import register_file_access
@@ -31,7 +31,7 @@ from backend.plugin.workflow.engine.form import (
 from backend.plugin.workflow.engine.simulate import simulate
 from backend.plugin.workflow.enums import PERM_TERMINATE, Action, ApprovalMode, FieldPerm, TaskStatus
 from backend.plugin.workflow.handler import get_handler
-from backend.plugin.workflow.model import WfActionRecord, WfCc, WfDefinition, WfInstance, WfTask
+from backend.plugin.workflow.model import WfActionRecord, WfCc, WfDefinition, WfDraft, WfInstance, WfTask
 from backend.plugin.workflow.service.runtime_service import (
     Actor,
     capabilities,
@@ -80,13 +80,15 @@ def _instance_row(inst: WfInstance, definition_name: str | None) -> dict[str, An
         'current_node_id': inst.current_node_id,
         'created_time': inst.created_time,
         'finished_time': inst.finished_time,
+        'urgent': inst.urgent,
     }
 
 
 async def _paged(db: AsyncSession, stmt: Select, page: int, size: int, order_by: Any) -> tuple[list[Any], int]:
     total = await db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0
     # 分页必须带 ORDER BY（SQL Server 的 OFFSET FETCH 强制要求）；按雪花 ID 排，同一毫秒内也唯一
-    rows = (await db.execute(stmt.order_by(order_by).offset((page - 1) * size).limit(size))).all()
+    keys = order_by if isinstance(order_by, tuple) else (order_by,)
+    rows = (await db.execute(stmt.order_by(*keys).offset((page - 1) * size).limit(size))).all()
     return list(rows), total
 
 
@@ -116,7 +118,8 @@ async def todo(db: AsyncSession, user_id: int, *, keyword: str | None, page: int
         .join(WfDefinition, WfDefinition.id == WfInstance.definition_id)
         .where(WfTask.assignee_id == user_id, WfTask.status == TaskStatus.pending)
     )
-    rows, total = await _paged(db, _search(stmt, keyword), page, size, WfTask.id.desc())
+    # 加急的排前面（发起人标的），其余按到手时间倒序
+    rows, total = await _paged(db, _search(stmt, keyword), page, size, (WfInstance.urgent.desc(), WfTask.id.desc()))
     items = [
         {**_instance_row(i, n), 'task_id': tk.id, 'node_name': tk.node_name, 'arrived_time': tk.created_time}
         for tk, i, n in rows
@@ -327,6 +330,7 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
                 'assignee_name': tk.assignee_name,
                 'origin_assignee_id': tk.origin_assignee_id,
                 'batch': tk.batch,
+                'read_time': tk.read_time,
                 'status': tk.status,
                 # 节点配了超时：什么时候会被提醒 / 自动处理（前端在进度里写「X 点自动通过」）
                 'due_time': due_time(tk, model) if tk.status == TaskStatus.pending else None,
@@ -567,3 +571,53 @@ async def _workflow_file_access(db: AsyncSession, user: Any, file: Any) -> bool:
 
 
 register_file_access(_workflow_file_access)
+
+
+async def mark_task_read(db: AsyncSession, pk: int, user_id: int) -> None:
+    """办理人打开了这张单：他手上还在办的待办记一次「已读」（只记第一次）"""
+    for tk in (
+        await db.scalars(
+            select(WfTask).where(
+                WfTask.instance_id == pk,
+                WfTask.assignee_id == user_id,
+                WfTask.status == TaskStatus.pending,
+                WfTask.read_time.is_(None),
+            )
+        )
+    ).all():
+        tk.read_time = timezone.now()
+
+
+# ── 发起草稿 ─────────────────────────────────────────────────────────────────
+
+#: 草稿整份存一个 TEXT 列：给个上限，不让一份草稿塞几 MB
+DRAFT_MAX_BYTES = 200_000
+
+
+async def drafts(db: AsyncSession, user_id: int) -> list[dict[str, Any]]:
+    rows = (await db.scalars(select(WfDraft).where(WfDraft.user_id == user_id).order_by(WfDraft.id))).all()
+    return [{'code': d.code, 'updated_time': d.updated_time or d.created_time} for d in rows]
+
+
+async def get_draft(db: AsyncSession, user_id: int, code: str) -> dict[str, Any] | None:
+    d = await db.scalar(select(WfDraft).where(WfDraft.user_id == user_id, WfDraft.code == code))
+    if d is None:
+        return None
+    return {'form': json.loads(d.form_data), 'updated_time': d.updated_time or d.created_time}
+
+
+async def save_draft(db: AsyncSession, user_id: int, code: str, form: dict[str, Any]) -> None:
+    """存草稿。不校验内容（填到一半本来就不完整），只限大小；提交时照常完整校验"""
+    raw = json.dumps(form, ensure_ascii=False)
+    if len(raw.encode()) > DRAFT_MAX_BYTES:
+        raise errors.RequestError(msg=t('error.workflow.draft_too_large'))
+    d = await db.scalar(select(WfDraft).where(WfDraft.user_id == user_id, WfDraft.code == code))
+    if d is None:
+        db.add(WfDraft(user_id=user_id, code=code, form_data=raw))
+    else:
+        d.form_data = raw
+        d.updated_time = timezone.now()
+
+
+async def delete_draft(db: AsyncSession, user_id: int, code: str) -> None:
+    await db.execute(delete(WfDraft).where(WfDraft.user_id == user_id, WfDraft.code == code))

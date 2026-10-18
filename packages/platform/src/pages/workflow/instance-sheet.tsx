@@ -21,7 +21,7 @@ import { meQuery } from '../../auth/queries'
 import { useTabPortalContainer } from '../../shell/tab-outlet'
 import { FormField as Row } from '../_shared/form-fields'
 import {
-  detailQuery, idempotencyKey, useAct, useMarkCcRead,
+  detailQuery, idempotencyKey, useAct, useMarkCcRead, useMarkTaskRead,
   type Action, type FormData, type InstanceDetail,
 } from './api'
 import { FlowView } from './flow-view'
@@ -29,7 +29,7 @@ import { FormRenderer, missingRequired } from './form-renderer'
 import { UserSelect } from './pickers'
 import { progressItems } from './progress'
 import { InstanceStatusPill } from './status'
-import { ApprovalTrack, PersonAvatar } from './track'
+import { ApprovalTrack, PersonAvatar, UrgentTag } from './track'
 
 /**
  * 审批详情（右侧抽屉）。审批中心和实例监控共用。
@@ -86,6 +86,13 @@ function Body({
   React.useEffect(() => {
     if (unreadCc) markCcRead(id)
   }, [unreadCc, id, markCcRead])
+  // 办理人打开 = 已读（发起人在进度里看得到「已读 / 未读」）。同样只在自己有没读的待办时才发
+  const { mutate: markTaskRead } = useMarkTaskRead()
+  const unreadTask =
+    !!d && !!me && d.tasks.some((x) => x.assignee_id === me.id && x.status === 'pending' && !x.read_time)
+  React.useEffect(() => {
+    if (unreadTask) markTaskRead(id)
+  }, [unreadTask, id, markTaskRead])
 
   if (query.isPending) {
     return (
@@ -152,6 +159,7 @@ function Detail({
           <div className="flex items-center gap-2">
             <SheetTitle className="truncate text-lg" data-testid="wf-title">{d.instance.title}</SheetTitle>
             <InstanceStatusPill status={d.instance.status} />
+            {d.instance.urgent && <UrgentTag />}
           </div>
           <SheetDescription className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
             <span>{d.instance.definition_name}</span>

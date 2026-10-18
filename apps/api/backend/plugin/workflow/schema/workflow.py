@@ -53,6 +53,7 @@ class StartParam(SchemaBase):
     #: 节点 ID → 自选的审批人 ID 列表（字符串，硬纪律 6）
     selected: dict[str, list[str]] = Field(default_factory=dict, description='发起人自选的审批人')
     key: str = IdempotencyKey
+    urgent: bool = Field(False, description='加急')
 
 
 class PreviewParam(SchemaBase):
@@ -82,3 +83,9 @@ class HandoverParam(SchemaBase):
     from_user_id: SnowflakeIdIn = Field(description='交出待办的人')
     to_user_id: SnowflakeIdIn = Field(description='接手的人')
     key: str = IdempotencyKey
+
+
+class DraftParam(SchemaBase):
+    """存发起草稿（填到一半的表单，不校验内容）"""
+
+    form: dict[str, Any] = Field(default_factory=dict, description='表单数据')

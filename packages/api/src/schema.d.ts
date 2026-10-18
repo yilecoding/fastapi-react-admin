@@ -1483,6 +1483,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/workflow/instances/{pk}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 办理人已读 */
+        put: operations["mark_task_read_api_v1_sys_workflow_instances__pk__read_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我的发起草稿 */
+        get: operations["get_drafts_api_v1_sys_workflow_drafts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/drafts/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取一份发起草稿 */
+        get: operations["get_draft_api_v1_sys_workflow_drafts__code__get"];
+        /** 存发起草稿 */
+        put: operations["put_draft_api_v1_sys_workflow_drafts__code__put"];
+        post?: never;
+        /** 丢弃发起草稿 */
+        delete: operations["delete_draft_api_v1_sys_workflow_drafts__code__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/workflow/instances/{pk}/cc-read": {
         parameters: {
             query?: never;
@@ -3012,6 +3065,19 @@ export interface components {
              * @description 使用率（%）
              */
             usage: string;
+        };
+        /**
+         * DraftParam
+         * @description 存发起草稿（填到一半的表单，不校验内容）
+         */
+        DraftParam: {
+            /**
+             * Form
+             * @description 表单数据
+             */
+            form?: {
+                [key: string]: unknown;
+            };
         };
         /**
          * FileType
@@ -6643,6 +6709,12 @@ export interface components {
              * @description 幂等键（每次提交一个新的 UUID）
              */
             key: string;
+            /**
+             * Urgent
+             * @description 加急
+             * @default false
+             */
+            urgent: boolean;
         };
         /**
          * StatusType
@@ -11173,6 +11245,158 @@ export interface operations {
                 "application/json": components["schemas"]["ActionParam"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_task_read_api_v1_sys_workflow_instances__pk__read_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_drafts_api_v1_sys_workflow_drafts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    get_draft_api_v1_sys_workflow_drafts__code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 流程定义编码 */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_draft_api_v1_sys_workflow_drafts__code__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 流程定义编码 */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_draft_api_v1_sys_workflow_drafts__code__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 流程定义编码 */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

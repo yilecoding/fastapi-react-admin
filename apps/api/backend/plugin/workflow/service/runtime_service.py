@@ -33,7 +33,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import false, func, select, update
+from sqlalchemy import delete, false, func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from backend.common.exception import errors
@@ -66,7 +66,15 @@ from backend.plugin.workflow.enums import (
     TaskStatus,
 )
 from backend.plugin.workflow.handler import FinishEvent, get_handler
-from backend.plugin.workflow.model import WfActionRecord, WfCc, WfDefinition, WfDefinitionVersion, WfInstance, WfTask
+from backend.plugin.workflow.model import (
+    WfActionRecord,
+    WfCc,
+    WfDefinition,
+    WfDefinitionVersion,
+    WfDraft,
+    WfInstance,
+    WfTask,
+)
 from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
@@ -974,6 +982,7 @@ async def start_form(
     form_data: dict[str, Any],
     selected: dict[str, list[str]],
     key: str,
+    urgent: bool = False,
 ) -> dict[str, Any]:
     async def body(ctx: _Ctx) -> int:
         d, v = await published_definition(ctx.db, code)
@@ -982,6 +991,9 @@ async def start_form(
         inst = await start_in_tx(
             ctx, definition=d, version=v, actor=actor, form_data=form_data, selected=selected, biz_id=None, key=key
         )
+        inst.urgent = urgent
+        # 提交成功 = 草稿用完了。和发起同一个事务：发起失败草稿还在
+        await ctx.db.execute(delete(WfDraft).where(WfDraft.user_id == actor.id, WfDraft.code == code))
         return inst.id
 
     return await execute(db, key=key, action='start', actor=actor, body=body)

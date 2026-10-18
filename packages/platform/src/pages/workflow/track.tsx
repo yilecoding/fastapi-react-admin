@@ -174,3 +174,14 @@ export function TemplateTile({ name, group, size = 'md' }: { name: string; group
     </span>
   )
 }
+
+/** 加急标记：列表行和详情头部共用 */
+export function UrgentTag() {
+  const { t } = useTranslation()
+  return (
+    <span className="shrink-0 rounded bg-red-500/10 px-1.5 text-xs leading-5 font-medium text-red-600 dark:text-red-400" data-testid="wf-urgent">
+      {t('加急')}
+    </span>
+  )
+}
+

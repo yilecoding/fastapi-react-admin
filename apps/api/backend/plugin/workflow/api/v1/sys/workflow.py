@@ -31,6 +31,7 @@ from backend.plugin.workflow.model import WfDefinition, WfDefinitionVersion
 from backend.plugin.workflow.schema.workflow import (
     ActionParam,
     CreateDefinitionParam,
+    DraftParam,
     HandoverParam,
     PreviewParam,
     SetDefinitionStatusParam,
@@ -166,7 +167,13 @@ async def upload_attachment(
 @router.post('/instances', summary='发起审批', dependencies=[DependsJwtAuth])
 async def start_instance(request: Request, db: CurrentSession, obj: StartParam) -> ResponseModel:
     data = await runtime_service.start_form(
-        db, code=obj.code, actor=_actor(request), form_data=obj.form, selected=obj.selected, key=obj.key
+        db,
+        code=obj.code,
+        actor=_actor(request),
+        form_data=obj.form,
+        selected=obj.selected,
+        key=obj.key,
+        urgent=obj.urgent,
     )
     return response_base.success(data=data)
 
@@ -244,6 +251,39 @@ async def do_action(request: Request, db: CurrentSession, pk: Pk, obj: ActionPar
         sign_mode=obj.sign_mode,
     )
     return response_base.success(data=data)
+
+
+@router.put('/instances/{pk}/read', summary='办理人已读', dependencies=[DependsJwtAuth])
+async def mark_task_read(request: Request, db: CurrentSessionTransaction, pk: Pk) -> ResponseModel:
+    await query_service.mark_task_read(db, pk, request.user.id)
+    return response_base.success()
+
+
+# ── 发起草稿（只读写自己的，用户 ID 取自 request.user）────────────────────────
+
+Code = Annotated[str, Path(max_length=64, description='流程定义编码')]
+
+
+@router.get('/drafts', summary='我的发起草稿', dependencies=[DependsJwtAuth])
+async def get_drafts(request: Request, db: CurrentSession) -> ResponseModel:
+    return response_base.success(data=await query_service.drafts(db, request.user.id))
+
+
+@router.get('/drafts/{code}', summary='取一份发起草稿', dependencies=[DependsJwtAuth])
+async def get_draft(request: Request, db: CurrentSession, code: Code) -> ResponseModel:
+    return response_base.success(data=await query_service.get_draft(db, request.user.id, code))
+
+
+@router.put('/drafts/{code}', summary='存发起草稿', dependencies=[DependsJwtAuth])
+async def put_draft(request: Request, db: CurrentSessionTransaction, code: Code, obj: DraftParam) -> ResponseModel:
+    await query_service.save_draft(db, request.user.id, code, obj.form)
+    return response_base.success()
+
+
+@router.delete('/drafts/{code}', summary='丢弃发起草稿', dependencies=[DependsJwtAuth])
+async def delete_draft(request: Request, db: CurrentSessionTransaction, code: Code) -> ResponseModel:
+    await query_service.delete_draft(db, request.user.id, code)
+    return response_base.success()
 
 
 @router.put('/instances/{pk}/cc-read', summary='抄送标记已读', dependencies=[DependsJwtAuth])

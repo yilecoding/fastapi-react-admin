@@ -237,3 +237,14 @@ socket 推送（`notification_new` / `workflow_todo_changed`）收集在 `_Ctx.e
   认领失败（正好有人在办）就跳过，下一轮再判。条件在事务里重新判，同一个「现在」扫两遍不会重复处理
 - 测试控制时间而不是等待：`handle_timeouts(..., now=未来某刻)`（`tests/test_timeouts.py`）。
   变异验证：去掉提醒次数上限 / 每次扫都提醒，`test_timeout_remind_repeats_but_caps` 红
+
+## 草稿 · 加急 · 已读（迁移 `735d74e723c0`）
+
+- **草稿**存服务端 `wf_draft`（一人一流程一份，`uk_wf_draft_user_code`）：不校验内容（填到一半本来就不完整），
+  只限 200KB；**提交成功和发起同一个事务里删掉** —— 发起失败草稿还在
+- **加急**只是提示：待办列表排前面（`ORDER BY urgent DESC, id DESC`），不改流程
+- **已读**：办理人打开详情时前端调 `PUT /instances/{pk}/read`，只记第一次，只记**他自己还在办的**待办
+- 🔴 这条迁移里的 `wf_draft` 是手写的：开发服务器 `--reload` 一重启，lifespan 的 `create_all` 已经把表建进了
+  开发库，autogenerate 认为「没变化」，**只生成了两个加列**（和上面「跑过 pytest 之后」同一个坑，换了个触发方式）。
+  验证不能只跑 `upgrade`（表已经在就是 no-op）：`downgrade -1` 确认表没了 → `upgrade` → 查 `sys.identity_columns`
+  确认主键不是 IDENTITY（实测 0 行）

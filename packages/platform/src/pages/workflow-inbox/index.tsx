@@ -20,13 +20,13 @@ import { RefreshButton, TextFilter } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import {
-  countsQuery, inboxQuery, startableQuery, workflowKeys,
+  countsQuery, draftsQuery, inboxQuery, startableQuery, workflowKeys,
   type Definition, type InboxTab, type InstanceRow,
 } from '../workflow/api'
 import { InstanceSheet } from '../workflow/instance-sheet'
 import { StartSheet } from '../workflow/start-sheet'
 import { InstanceStatusPill } from '../workflow/status'
-import { PersonAvatar, TemplateTile } from '../workflow/track'
+import { PersonAvatar, TemplateTile, UrgentTag } from '../workflow/track'
 
 export type WorkflowInboxSearch = {
   tab?: InboxTab
@@ -236,6 +236,7 @@ function InboxRow({ row: r, tab, onOpen }: { row: InstanceRow; tab: InboxTab; on
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex items-center gap-2">
           <span className={cn('truncate', unread ? 'font-semibold' : 'font-medium')}>{r.title}</span>
+          {r.urgent && <UrgentTag />}
           {tab === 'todo' ? (
             <span className="shrink-0 rounded bg-amber-500/10 px-1.5 text-xs leading-5 text-amber-700 dark:text-amber-400">
               {t('待 {{node}}', { node: r.node_name })}
@@ -265,6 +266,9 @@ function TemplatePicker({
 }) {
   const { t } = useTranslation()
   const query = useQuery({ ...startableQuery(), enabled: open })
+  // 有没提交的草稿的，磁贴上标一下：用户知道点进去内容还在
+  const drafts = useQuery({ ...draftsQuery(), enabled: open })
+  const hasDraft = React.useMemo(() => new Set((drafts.data ?? []).map((x) => x.code)), [drafts.data])
   const [keyword, setKeyword] = React.useState('')
   React.useEffect(() => {
     if (open) setKeyword('')
@@ -326,7 +330,14 @@ function TemplatePicker({
                       >
                         <TemplateTile name={d.name} group={d.category} />
                         <span className="flex min-w-0 flex-col">
-                          <span className="truncate text-sm font-medium">{d.name}</span>
+                          <span className="flex items-center gap-1.5">
+                            <span className="truncate text-sm font-medium">{d.name}</span>
+                            {hasDraft.has(d.code) && (
+                              <span className="shrink-0 rounded bg-muted px-1 text-[11px] leading-4 text-muted-foreground" data-testid={`wf-has-draft-${d.code}`}>
+                                {t('草稿')}
+                              </span>
+                            )}
+                          </span>
                           {d.description && <span className="truncate text-xs text-muted-foreground">{d.description}</span>}
                         </span>
                       </button>

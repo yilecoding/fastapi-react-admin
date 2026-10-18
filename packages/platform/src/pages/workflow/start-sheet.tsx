@@ -1,9 +1,11 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
+import { formatDateTime } from '@admin/i18n'
 import { useQuery } from '@tanstack/react-query'
 import { IconLoader2 } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
+import { Checkbox } from '@admin/ui/components/checkbox'
 import { QueryError } from '@admin/ui/components/query-error'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle } from '@admin/ui/components/sheet'
 import { Skeleton } from '@admin/ui/components/skeleton'
@@ -14,7 +16,7 @@ import { meQuery } from '../../auth/queries'
 import { useTabPortalContainer } from '../../shell/tab-outlet'
 import { FormField as Row } from '../_shared/form-fields'
 import {
-  detailQuery, idempotencyKey, previewQuery, startFormQuery, useStartInstance,
+  detailQuery, draftQuery, idempotencyKey, previewQuery, removeDraft, saveDraft, startFormQuery, useDeleteDraft, useStartInstance,
   type FieldPerm, type FileMeta, type FormData, type StartForm,
 } from './api'
 import { FormRenderer, missingRequired } from './form-renderer'
@@ -28,7 +30,7 @@ import { ApprovalTrack, TemplateTile, type TrackItem } from './track'
  * 右边的「审批流程」是服务端按**当前填的内容**试算出来的（天数改成 5，就多出一个上级主管），
  * 提交之前就知道这张单会到谁手里 —— 飞书审批的那块预览。
  *
- * ⚠️ 表单草稿只在组件 state 里：抽屉关掉就没了。想要「草稿箱」得另做，这一版没有。
+ * 草稿存服务端（一个人、一个流程一份）：边填边自动存，关掉再打开还在，提交成功服务端顺手删掉。
  */
 export function StartSheet({
   code, fromId, onClose, onStarted,
@@ -57,7 +59,9 @@ function Body({ code, fromId, onStarted }: { code: string; fromId: string | null
   const { t } = useTranslation()
   const query = useQuery(startFormQuery(code))
   const from = useQuery({ ...detailQuery(fromId ?? ''), enabled: !!fromId })
-  if (query.isPending || (fromId && from.isPending)) {
+  // 重新发起时内容来自旧单，不读草稿
+  const draft = useQuery({ ...draftQuery(code), enabled: !fromId })
+  if (query.isPending || (fromId && from.isPending) || (!fromId && draft.isPending)) {
     return (
       <div className="flex flex-col gap-4 p-6">
         <SheetTitle className="sr-only">{t('发起审批')}</SheetTitle>
@@ -78,8 +82,10 @@ function Body({ code, fromId, onStarted }: { code: string; fromId: string | null
     <Filler
       code={code}
       sf={query.data}
-      initial={from.data?.form_data}
+      initial={fromId ? from.data?.form_data : draft.data?.form}
       initialFiles={from.data?.files}
+      restoredAt={fromId ? undefined : draft.data?.updated_time}
+      draftError={!fromId && !!draft.error}
       onStarted={onStarted}
     />
   )
@@ -96,7 +102,7 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 function Filler({
-  code, sf, initial, initialFiles, onStarted,
+  code, sf, initial, initialFiles, restoredAt, draftError, onStarted,
 }: {
   code: string
   sf: StartForm
@@ -104,6 +110,10 @@ function Filler({
   initial?: FormData
   /** 旧单上附件的文件名 / 大小 —— 不带的话复制过来的附件只剩 ID，显示成「文件已删除」 */
   initialFiles?: Record<string, FileMeta>
+  /** 恢复的草稿是什么时候存的（有值 = 这次是从草稿接着填） */
+  restoredAt?: string
+  /** 草稿没读出来：照常能填，但要说一声（硬纪律 9） */
+  draftError?: boolean
   onStarted: (id: string) => void
 }) {
   const { t } = useTranslation()
@@ -120,6 +130,10 @@ function Filler({
   })
   const [selected, setSelected] = React.useState<Record<string, string[]>>({})
   const [errors, setErrors] = React.useState<Record<string, string>>({})
+  const [urgent, setUrgent] = React.useState(false)
+  const draft = useDraftAutosave(code, form)
+  const deleteDraft = useDeleteDraft()
+  const [restored, setRestored] = React.useState(!!restoredAt)
   // 一次填写 = 一个幂等键：网络抖动重试 / 双击提交不会建出两张单
   const key = React.useRef(idempotencyKey())
 
@@ -163,10 +177,11 @@ function Filler({
     for (const n of pickNodes) if (!selected[n.id]?.length) errs[`select:${n.id}`] = t('请选择审批人')
     setErrors(errs)
     if (Object.keys(errs).length) return
+    draft.stop() // 提交之后防抖里那次自动保存不能再把草稿存回去
     try {
       // 走不到的节点上选过的人不带过去
       const picked = Object.fromEntries(pickNodes.filter((n) => selected[n.id]).map((n) => [n.id, selected[n.id]]))
-      const res = await start.mutateAsync({ code, form, selected: picked, key: key.current })
+      const res = await start.mutateAsync({ code, form, selected: picked, key: key.current, urgent })
       toast.success(t('已提交'))
       key.current = idempotencyKey()
       onStarted(String(res.instance_id))
@@ -176,6 +191,7 @@ function Filler({
         setErrors(e.detail as Record<string, string>)
       }
       toast.error(e instanceof ApiError ? e.message : t('提交失败，请稍后重试'))
+      draft.resume()
     }
   }
 
@@ -193,6 +209,30 @@ function Filler({
 
       <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_20rem]">
         <section className="flex flex-col gap-5 px-6 py-5">
+          {restored && restoredAt && (
+            <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground" data-testid="wf-draft-restored">
+              <span>{t('已恢复你 {{at}} 没提交的内容', { at: formatDateTime(restoredAt) })}</span>
+              <button
+                type="button"
+                className="ms-auto text-primary hover:underline"
+                onClick={() => {
+                  draft.stop()
+                  deleteDraft.mutate(code)
+                  setForm({})
+                  setRestored(false)
+                  draft.resume()
+                }}
+                data-testid="wf-draft-clear"
+              >
+                {t('清空重填')}
+              </button>
+            </div>
+          )}
+          {draftError && (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              {t('上次的草稿没读出来，可以照常填写')}
+            </p>
+          )}
           <FormRenderer
             schema={schema}
             value={form}
@@ -235,6 +275,13 @@ function Filler({
       </div>
 
       <footer className="flex items-center justify-end gap-2 border-t px-6 py-4">
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <Checkbox checked={urgent} onCheckedChange={(v) => setUrgent(!!v)} data-testid="wf-start-urgent" />
+          {t('加急')}
+        </label>
+        <span className="me-auto ms-3 text-xs text-muted-foreground" data-testid="wf-draft-status">
+          {draft.status === 'saving' ? t('草稿保存中…') : draft.status === 'error' ? t('草稿没存上，再改一下会重试') : draft.savedAt ? t('草稿已保存 {{at}}', { at: formatDateTime(draft.savedAt) }) : ''}
+        </span>
         <SheetClose render={<Button variant="outline" type="button" />}>{t('取消')}</SheetClose>
         <Button onClick={submit} disabled={start.isPending} data-testid="wf-start-submit">
           {start.isPending && <IconLoader2 className="size-4 animate-spin" />}
@@ -244,3 +291,46 @@ function Filler({
     </>
   )
 }
+
+/**
+ * 边填边存草稿：停手 1.5 秒存一次，内容没变不存。
+ *
+ * `stop()` / `resume()`：提交那一刻先停 —— 防抖里排着的那次保存要是在提交成功之后才发出去，
+ * 服务端刚删掉的草稿又被存回来，下次打开「已恢复没提交的内容」，而那张单其实已经交了
+ */
+function useDraftAutosave(code: string, form: FormData) {
+  const [status, setStatus] = React.useState<'idle' | 'saving' | 'error'>('idle')
+  const [savedAt, setSavedAt] = React.useState<string | null>(null)
+  const stopped = React.useRef(false)
+  const last = React.useRef(JSON.stringify(form))
+  React.useEffect(() => {
+    const raw = JSON.stringify(form)
+    if (raw === last.current) return
+    const h = setTimeout(async () => {
+      if (stopped.current) return
+      setStatus('saving')
+      try {
+        // 全清空了：删草稿而不是存一份空的（否则下次打开是「已恢复你没提交的内容」+ 一张白表）
+        const blank = Object.values(form).every((v) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0))
+        await (blank ? removeDraft(code) : saveDraft(code, form))
+        last.current = raw
+        setSavedAt(new Date().toISOString())
+        setStatus('idle')
+      } catch {
+        setStatus('error')
+      }
+    }, 1500)
+    return () => clearTimeout(h)
+  }, [code, form])
+  return {
+    status,
+    savedAt,
+    stop: () => {
+      stopped.current = true
+    },
+    resume: () => {
+      stopped.current = false
+    },
+  }
+}
+

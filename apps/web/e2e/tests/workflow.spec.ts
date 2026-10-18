@@ -570,3 +570,49 @@ test("退回时选「直接回到我这一步」：发起人重新提交后跳�
   await a.close()
   await w.close()
 })
+
+test("草稿：关掉再打开内容还在；加急排在审批人列表里；审批人打开后发起人看到「已读」", async ({ browser }) => {
+  const code = `${CODE}D`
+  await twoStepFlow(code)
+  const a = await browser.newPage()
+  await loginPageAs(a, "sunqiang", "123456")
+  await a.goto(`/workflow/inbox?start=${code}`)
+  const sheet = a.getByTestId("wf-start-sheet")
+  await sheet.getByTestId("wf-field-f_reason").locator("input").fill("写到一半")
+  await expect(sheet.getByTestId("wf-draft-status")).toContainText("草稿已保存")
+  // 关掉抽屉、整页刷新再打开：内容从服务端的草稿恢复
+  await a.goto("/workflow/inbox")
+  await a.goto(`/workflow/inbox?start=${code}`)
+  await expect(sheet.getByTestId("wf-draft-restored")).toBeVisible()
+  await expect(sheet.getByTestId("wf-field-f_reason").locator("input")).toHaveValue("写到一半")
+
+  // 标加急提交
+  await sheet.getByTestId("wf-start-urgent").click()
+  await sheet.getByTestId("wf-start-submit").click()
+  const detail = a.getByTestId("wf-instance-sheet")
+  await expect(detail.getByTestId("wf-urgent")).toBeVisible()
+  const id = new URL(a.url()).searchParams.get("id") as string
+  // 提交之后草稿没了：再打开是空的
+  await a.goto(`/workflow/inbox?start=${code}`)
+  await expect(sheet.getByTestId("wf-start-title")).toBeVisible()
+  await expect(sheet.getByTestId("wf-draft-restored")).toHaveCount(0)
+  await expect(sheet.getByTestId("wf-field-f_reason").locator("input")).toHaveValue("")
+
+  // 审批人：列表里带加急；打开 = 已读
+  const z = await browser.newPage()
+  await loginPageAs(z, "zhaolei", "123456")
+  await z.goto("/workflow/inbox")
+  const row = z.locator('[data-tab="/_auth/workflow/inbox"]').getByTestId(`wf-row-${id}`)
+  await expect(row.getByTestId("wf-urgent")).toBeVisible()
+  // 先断言「有」：打开之前发起人看到的是未读
+  await a.goto(`/workflow/inbox?id=${id}`)
+  await expect(detail.getByTestId("wf-timeline")).toContainText("未读")
+  await row.click()
+  await expect(z.getByTestId("wf-instance-sheet").getByTestId("wf-act-approve")).toBeVisible()
+  await expect.poll(async () => {
+    await a.reload()
+    return detail.getByTestId("wf-timeline").innerText()
+  }).toContain("已读")
+  await a.close()
+  await z.close()
+})

@@ -105,6 +105,8 @@ class WfInstance(DataClassBase, DateTimeMixin):
         UniversalStr(128), default=None, comment='运行中时 = biz_type:biz_id'
     )
     finished_time: Mapped[datetime | None] = mapped_column(TimeZone, default=None, comment='结束时间')
+    #: 发起人标的「加急」：待办列表排在前面、带标记。只是提示，不改流程
+    urgent: Mapped[bool] = mapped_column(default=False, comment='加急')
 
 
 class WfTask(DataClassBase, DateTimeMixin):
@@ -134,6 +136,8 @@ class WfTask(DataClassBase, DateTimeMixin):
     #: 同意过的人会被当成这一轮已经表过态
     batch: Mapped[int] = mapped_column(default=0, comment='进入节点的轮次（退回后重走同一节点时不同）')
     finished_time: Mapped[datetime | None] = mapped_column(TimeZone, default=None, comment='办结时间')
+    #: 办理人第一次打开这张单的时间（「已读」）。发起人能看出「他看过了还没批」和「他根本没看到」
+    read_time: Mapped[datetime | None] = mapped_column(TimeZone, default=None, comment='办理人已读时间')
 
 
 class WfActionRecord(DataClassBase):
@@ -184,3 +188,18 @@ class WfCc(DataClassBase):
     created_time: Mapped[datetime] = mapped_column(
         TimeZone, init=False, default_factory=timezone.now, comment='创建时间'
     )
+
+
+class WfDraft(DataClassBase, DateTimeMixin):
+    """发起草稿：一个人、一个流程一份。填一半关掉抽屉，下次打开还在；提交成功即删"""
+
+    __tablename__ = 'wf_draft'
+    __table_args__ = (
+        sa.UniqueConstraint('user_id', 'code', name='uk_wf_draft_user_code'),
+        {'comment': '发起草稿表'},
+    )
+
+    id: Mapped[id_key] = mapped_column(init=False)
+    user_id: Mapped[int] = mapped_column(sa.BigInteger, index=True, comment='谁的草稿')
+    code: Mapped[str] = mapped_column(UniversalStr(64), comment='流程定义编码')
+    form_data: Mapped[str] = mapped_column(UniversalText, comment='没提交的表单（JSON）')

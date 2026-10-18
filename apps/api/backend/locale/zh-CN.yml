@@ -223,6 +223,7 @@ error:
     handover_same_user: 交出和接手的不能是同一个人
     sign_mode_invalid: 请选择加在你之前还是之后
     sign_users_invalid: 加签要选 1 到 10 个人
+    draft_too_large: 草稿太大，存不下
 
 # 上传校验报错要拼「人话名字」（图片/文档/…），标识用 FileType.value，
 # 文案查这张表——新增文件分类时两边（这里 + `common/enums.py` 的 FileType）
