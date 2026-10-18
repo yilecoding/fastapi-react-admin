@@ -71,6 +71,7 @@ from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from datetime import datetime
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -123,6 +124,10 @@ class ActionRejected(errors.ConflictError):
 
 class _RetryError(Exception):
     """认领实例失败：别人刚改过。重读状态再来一遍"""
+
+
+#: 给 `timeout_service` 用的公开名字：定时任务撞上「有人正在办这张单」时跳过，下一轮再看
+RetryLater = _RetryError
 
 
 # ── 事务内的上下文 ───────────────────────────────────────────────────────────
@@ -428,7 +433,20 @@ async def _leave_node(ctx: _Ctx, inst: WfInstance, nodes: dict[str, Any], node_i
 # ── 拿回 ─────────────────────────────────────────────────────────────────────
 
 #: 推进流程的动作。「最近一次推进」只看这些（催办 / 手动抄送不算）
-_PROGRESS = ('start', 'approve', 'resubmit', 'reject', 'transfer', 'reassign', 'send_back', 'take_back', 'add_sign')
+_PROGRESS = (
+    'start',
+    'approve',
+    'resubmit',
+    'reject',
+    'transfer',
+    'reassign',
+    'send_back',
+    'take_back',
+    'add_sign',
+    # 超时自动处理也是推进：它之后「最近一次推进」就不是我了，不能再拿回
+    'timeout_approve',
+    'timeout_reject',
+)
 
 
 async def _take_back_ctx(db: AsyncSession, inst: WfInstance, actor_id: int) -> dict[str, Any] | None:
@@ -444,7 +462,6 @@ async def _take_back_ctx(db: AsyncSession, inst: WfInstance, actor_id: int) -> d
         .where(
             WfActionRecord.instance_id == inst.id,
             WfActionRecord.result == 'ok',
-            WfActionRecord.actor_type == ActorType.user,
             WfActionRecord.action.in_(_PROGRESS),
         )
         .order_by(WfActionRecord.created_time.desc(), WfActionRecord.id.desc())
@@ -453,8 +470,8 @@ async def _take_back_ctx(db: AsyncSession, inst: WfInstance, actor_id: int) -> d
     if last != undo.get('rec'):
         return None
     spawned = undo.get('spawned') or []
-    # 兜底：现有动作只要动了别人的待办都会落一条更新的推进记录，上面那条已经挡住了（变异验证：
-    # 去掉下面这段测试照样全绿）。留着是防以后加一个「改了待办却不落推进记录」的动作
+    # 第二道：新建的待办有没有人动过。和「最近一次推进」那道互为兜底 —— 超时自动同意那条测试里
+    # 去掉任何一道都还挡得住，两道一起去掉才红（`test_no_take_back_after_the_next_step_timed_out`）
     if spawned:
         untouched = await db.scalar(
             select(func.count()).select_from(WfTask).where(WfTask.id.in_(spawned), WfTask.status == TaskStatus.pending)
@@ -1588,3 +1605,88 @@ async def handover(db: AsyncSession, *, from_user_id: int, to_user_id: int, acto
         except (errors.BaseExceptionError, ActionRejected) as e:
             skipped.append({'instance_id': instance_id, 'title': title, 'reason': e.msg})
     return {'moved': moved, 'skipped': skipped}
+
+
+# ── 超时 ─────────────────────────────────────────────────────────────────────
+#
+# 由 `timeout_service.handle_timeouts` 每 5 分钟扫一遍调到这里。时钟从**待办到这个人手上**那一刻算
+# （`wf_task.created_time`）：依次审批轮到下一个人、转交出来的待办都重新计时。
+# 🔴 自动同意 / 驳回和人点按钮走同一条路：先认领实例再动待办，认领失败（有人正在办）就留给下一轮。
+# 不计工作日：「24 小时」就是自然时间的 24 小时。
+
+#: 提醒最多几次：到点提醒一次，之后每隔同样的时长再提醒，第 3 次之后不再打扰
+REMIND_MAX = 3
+
+
+def timeout_of(model: dict[str, Any], node_id: str) -> dict[str, Any] | None:
+    ref = index_nodes(model).get(node_id)
+    if ref is None or ref.node['type'] != 'approval':
+        return None
+    return ref.node.get('timeout') or None
+
+
+def due_time(task: WfTask, model: dict[str, Any]) -> datetime | None:
+    """这条待办什么时候算超时（没配超时 = None）。详情接口拿它给前端显示「X 点自动通过」"""
+    cfg = timeout_of(model, task.node_id)
+    if not cfg:
+        return None
+    return task.created_time + timedelta(hours=cfg['hours'])
+
+
+async def apply_timeout(db: AsyncSession, instance_id: int, task_id: int, now: datetime) -> str | None:
+    """处理一条到点的待办（`timeout_service` 逐条调）。条件在事务里重新判，返回做了什么（None = 不用处理）"""
+    ctx = _Ctx(db=db, actor_id=None)
+    async with db.begin():
+        inst = await _load_instance(db, instance_id)
+        task = await db.get(WfTask, task_id, populate_existing=True)
+        if inst.status != InstanceStatus.running or task is None or task.status != TaskStatus.pending:
+            return None
+        model = json.loads(inst.model_snapshot)
+        cfg = timeout_of(model, task.node_id)
+        due = due_time(task, model)
+        if not cfg or due is None or due > now:
+            return None
+        action = cfg['action']
+
+        if action == 'remind':
+            # 第 k 个周期该提醒第 k 次；已经提醒够了就不再发。不改实例状态，不用认领
+            periods = int((now - task.created_time) / timedelta(hours=cfg['hours']))
+            sent = await db.scalar(
+                select(func.count())
+                .select_from(WfActionRecord)
+                .where(WfActionRecord.task_id == task.id, WfActionRecord.action == 'timeout_remind')
+            )
+            if sent >= min(periods, REMIND_MAX):
+                return None
+            await ctx.notify(
+                [task.assignee_id],
+                t('workflow.notify.timeout_title', title=inst.title),
+                t('workflow.notify.timeout_content', hours=cfg['hours']),
+                detail_link(inst.id),
+            )
+            _record(ctx, inst, 'timeout_remind', actor_type=ActorType.system, task=task)
+            result = 'remind'
+        else:
+            await _claim(db, inst)
+            nodes = index_nodes(model)
+            node = nodes[task.node_id].node
+            if action == 'approve':
+                opinion = t('workflow.timeout_approved', hours=cfg['hours'])
+                await _close_task(db, task, TaskStatus.done, 'approve', opinion)
+                _record(ctx, inst, 'timeout_approve', actor_type=ActorType.system, task=task, opinion=opinion)
+                group = _sign_group(inst, task)
+                if group is not None:
+                    await _sign_member_done(ctx, inst, nodes, node, task, group)
+                else:
+                    await _after_approve(ctx, inst, nodes, node, task)
+                ctx.push_todo([task.assignee_id])
+                result = 'approve'
+            else:
+                opinion = t('workflow.timeout_rejected', hours=cfg['hours'])
+                await _close_task(db, task, TaskStatus.done, 'reject', opinion)
+                _record(ctx, inst, 'timeout_reject', actor_type=ActorType.system, task=task, opinion=opinion)
+                ctx.push_todo([task.assignee_id])
+                await _finish(ctx, inst, InstanceStatus.rejected, opinion)
+                result = 'reject'
+    await _run_effects(ctx.effects)
+    return result

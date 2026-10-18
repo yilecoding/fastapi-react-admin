@@ -32,7 +32,13 @@ from backend.plugin.workflow.engine.simulate import simulate
 from backend.plugin.workflow.enums import PERM_TERMINATE, Action, ApprovalMode, FieldPerm, TaskStatus
 from backend.plugin.workflow.handler import get_handler
 from backend.plugin.workflow.model import WfActionRecord, WfCc, WfDefinition, WfInstance, WfTask
-from backend.plugin.workflow.service.runtime_service import Actor, capabilities, resume_jump, send_back_targets
+from backend.plugin.workflow.service.runtime_service import (
+    Actor,
+    capabilities,
+    due_time,
+    resume_jump,
+    send_back_targets,
+)
 from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
@@ -322,6 +328,8 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
                 'origin_assignee_id': tk.origin_assignee_id,
                 'batch': tk.batch,
                 'status': tk.status,
+                # 节点配了超时：什么时候会被提醒 / 自动处理（前端在进度里写「X 点自动通过」）
+                'due_time': due_time(tk, model) if tk.status == TaskStatus.pending else None,
                 'decision': tk.decision,
                 'opinion': tk.opinion,
                 'created_time': tk.created_time,

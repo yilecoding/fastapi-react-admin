@@ -383,6 +383,10 @@ workflow:
     withdrawn_title: '已撤回：{title}'
     sent_back_title: '被退回：{title}'
     sent_back_content: '{user}退回了你的申请：{opinion}。修改后可以重新提交'
+    timeout_title: '待处理超时：{title}'
+    timeout_content: '这条审批在你这里已经超过 {hours} 小时，请尽快处理'
   initiator: 发起人
   resubmit_node: 发起人修改
   handover_opinion: 离职交接
+  timeout_approved: '超过 {hours} 小时未处理，已自动同意'
+  timeout_rejected: '超过 {hours} 小时未处理，已自动驳回'

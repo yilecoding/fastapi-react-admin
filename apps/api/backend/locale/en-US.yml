@@ -275,6 +275,10 @@ workflow:
     withdrawn_title: 'Withdrawn: {title}'
     sent_back_title: 'Sent back: {title}'
     sent_back_content: '{user} sent your request back: {opinion}. Edit it and submit again'
+    timeout_title: 'Overdue: {title}'
+    timeout_content: 'This approval has been waiting on you for over {hours} hours. Please handle it soon'
   initiator: Initiator
   resubmit_node: Initiator revision
   handover_opinion: Handover
+  timeout_approved: 'Not handled within {hours} hours; approved automatically'
+  timeout_rejected: 'Not handled within {hours} hours; rejected automatically'

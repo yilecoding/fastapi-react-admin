@@ -4,6 +4,8 @@
  * 详情页的轨道 = 发起 + 已经发生的（按时间）+ 正在等的 + 预告（服务端试算）+ 结束。
  * 发起页的轨道 = 发起 + 预告。两边的「预告」是同一个函数转出来的，长得一样。
  */
+import { formatDateTime } from '@admin/i18n'
+
 import type { ForecastStep, InstanceDetail, TaskRow } from './api'
 import type { TrackItem, TrackPerson } from './track'
 
@@ -113,7 +115,11 @@ export function progressItems(d: InstanceDetail, t: T): TrackItem[] {
           ? t('同意并加签给 {{n}}', { n: rec.target_user_name })
           : t('加签给 {{n}}，等他们审完', { n: rec.target_user_name })
       }
-      return { name: tk.assignee_name, result: { text, tone: meta.tone }, time: tk.finished_time, opinion: tk.opinion }
+      // 还在办、节点配了超时：写明什么时候会被提醒 / 自动处理（不写的话「突然被自动同意了」没人看得懂）
+      const due = tk.status === 'pending' && tk.due_time ? dueNote(tk.due_time, findTimeout(d, tk.node_id), t) : undefined
+      return {
+        name: tk.assignee_name, result: { text, tone: meta.tone }, time: tk.finished_time, opinion: tk.opinion ?? due,
+      }
     })
     if (!masked) {
       for (const w of waiting) people.push({ name: w.name ?? '', result: { text: t('等待中'), tone: 'muted' } })
@@ -183,6 +189,27 @@ export function progressItems(d: InstanceDetail, t: T): TrackItem[] {
 
 const END_TEXT: Record<string, string> = {
   approved: '审批通过', rejected: '审批驳回', withdrawn: '已撤回', terminated: '已终止', running: '结束',
+}
+
+function findTimeout(d: InstanceDetail, nodeId: string): string | undefined {
+  let found: string | undefined
+  const visit = (n: unknown): void => {
+    if (!n || typeof n !== 'object' || found) return
+    const o = n as Record<string, unknown>
+    const to = o.timeout as { action?: string } | undefined
+    if (o.id === nodeId && to?.action) found = to.action
+    for (const v of Object.values(o)) if (v && typeof v === 'object') visit(v)
+  }
+  visit(d.model.root)
+  return found
+}
+
+function dueNote(due: string, action: string | undefined, t: T): string | undefined {
+  const at = formatDateTime(due)
+  if (action === 'approve') return t('{{at}} 前未处理将自动同意', { at })
+  if (action === 'reject') return t('{{at}} 前未处理将自动驳回', { at })
+  if (action === 'remind') return t('{{at}} 起会收到超时提醒', { at })
+  return undefined
 }
 
 function findMode(d: InstanceDetail, nodeId: string): string | undefined {

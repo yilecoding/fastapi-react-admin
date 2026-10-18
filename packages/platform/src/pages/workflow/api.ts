@@ -91,6 +91,8 @@ export type ApprovalNode = {
   onEmpty: 'reject' | 'skip' | 'admin'
   /** null = 默认全开；[] = 只有同意 / 驳回 */
   actions?: OptionalAction[] | null
+  /** 待办到手上 `hours` 小时没办：提醒（每隔这么久一次，最多 3 次）/ 自动同意 / 自动驳回 */
+  timeout?: { hours: number; action: 'remind' | 'approve' | 'reject' } | null
   fieldPerms?: Record<string, FieldPerm>
   next: FlowNode | null
 }
@@ -148,6 +150,8 @@ export type TaskRow = {
   origin_assignee_id: string | null
   /** 第几轮进入这个节点：退回之后重走同一个节点时不同，进度按「节点 + 轮次」分组 */
   batch: number
+  /** 节点配了超时、待办还在办：什么时候会被提醒 / 自动处理 */
+  due_time?: string | null
   status: 'pending' | 'done' | 'canceled' | 'transferred'
   /** resubmit = 被退回后发起人重新提交 */
   decision: 'approve' | 'reject' | 'send_back' | 'resubmit' | 'add_sign' | 'take_back' | null

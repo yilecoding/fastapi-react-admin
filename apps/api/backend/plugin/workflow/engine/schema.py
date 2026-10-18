@@ -135,6 +135,14 @@ class StartNode(_Shape):
     next: Node | None = None
 
 
+class Timeout(_Shape):
+    """超时处理：待办到了这个人手上 `hours` 小时还没办"""
+
+    hours: int = Field(ge=1, le=720)
+    #: remind 每 `hours` 小时提醒一次（最多 3 次）· approve 自动同意 · reject 自动驳回整单
+    action: Literal['remind', 'approve', 'reject']
+
+
 class ApprovalNode(_Shape):
     type: Literal['approval']
     id: str
@@ -145,6 +153,7 @@ class ApprovalNode(_Shape):
     #: null = 继承业务默认集；[] = 只保留必备动作（同意 / 驳回）
     actions: list[str] | None = None
     fieldPerms: dict[str, FieldPerm] = Field(default_factory=dict)  # ruff:ignore[mixed-case-variable-in-class-scope]
+    timeout: Timeout | None = None
     next: Node | None = None
 
 

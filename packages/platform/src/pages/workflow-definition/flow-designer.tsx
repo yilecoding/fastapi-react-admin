@@ -311,6 +311,7 @@ function ApprovalProps({
           testId="node-mode"
         />
       </Row>
+      <TimeoutEditor value={node.timeout ?? null} onChange={(timeout) => onChange({ timeout })} />
       <Row label={t('找不到审批人时')} hint={t('必须显式选：发起人自己被去掉、部门没配负责人、角色里没人，都会走到这里')}>
         <Segmented
           value={node.onEmpty}
@@ -655,5 +656,58 @@ export function _i18nExtractionAnchorsFlowDesigner(t: (k: string) => string) {
     t('一人同意即可，其余人的待办自动结束'), t('所有人都同意才通过，任何一人驳回整单结束'),
     t('按审批人的顺序一个一个来，前一个同意了才轮到下一个'),
   ]
+}
+
+/** 超时处理：关 / N 小时后提醒 · 自动同意 · 自动驳回。按自然时间算，不计工作日 */
+function TimeoutEditor({
+  value, onChange,
+}: {
+  value: { hours: number; action: 'remind' | 'approve' | 'reject' } | null
+  onChange: (v: { hours: number; action: 'remind' | 'approve' | 'reject' } | null) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Row
+      label={t('超时处理')}
+      hint={value ? t('从待办到这个人手上开始算，按自然时间（不计工作日）') : t('不处理：待办一直等着')}
+    >
+      <div className="flex flex-col gap-2">
+        <label className="flex items-center justify-between text-sm">
+          {t('开启')}
+          <Switch
+            checked={!!value}
+            onCheckedChange={(on) => onChange(on ? { hours: 24, action: 'remind' } : null)}
+            data-testid="node-timeout"
+          />
+        </label>
+        {value && (
+          <>
+            <div className="flex items-center gap-2 text-sm">
+              <Input
+                type="number"
+                min={1}
+                max={720}
+                className="h-8 w-24"
+                value={value.hours}
+                onChange={(e) => onChange({ ...value, hours: Math.max(1, Math.min(720, Number(e.target.value) || 1)) })}
+                data-testid="node-timeout-hours"
+              />
+              <span className="text-muted-foreground">{t('小时没处理就')}</span>
+            </div>
+            <Segmented
+              value={value.action}
+              items={[
+                { value: 'remind', label: t('提醒他') },
+                { value: 'approve', label: t('自动同意') },
+                { value: 'reject', label: t('自动驳回') },
+              ]}
+              onChange={(action) => onChange({ ...value, action })}
+              testId="node-timeout-action"
+            />
+          </>
+        )}
+      </div>
+    </Row>
+  )
 }
 
