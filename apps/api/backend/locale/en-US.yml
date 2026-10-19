@@ -53,6 +53,7 @@ error:
     has_users: This department has users and cannot be deleted
     not_found: Department does not exist
     parent_not_found: Parent department does not exist
+    leader_not_found: Department leader does not exist
   dict:
     data_exists: Dict item already exists
     data_not_found: Dict item does not exist
@@ -189,6 +190,39 @@ error:
     self_permission_forbidden: You cannot change your own permissions
     username_registered: Username is already registered
     wrong_old_password: Current password is incorrect
+  workflow:
+    attachment_not_yours: You can only attach files you uploaded yourself
+    instance_not_found: Approval not found
+    instance_finished: This approval has already ended
+    action_disabled: 'This action is not available right now: {reason}'
+    action_not_allowed: You can't perform this action now, please refresh
+    remind_too_often: You can only send a reminder once every 5 minutes
+    idempotency_key_invalid: Invalid idempotency key
+    busy: Too many concurrent operations, please retry
+    definition_not_startable: This approval does not exist or is disabled
+    definition_not_found: Workflow definition not found
+    definition_code_exists: Workflow code already exists
+    definition_has_instances: This workflow already has approvals and cannot be deleted; disable it instead
+    definition_never_published: Not published yet, cannot be enabled
+    definition_too_large: Form or flow configuration is too large
+    biz_type_unknown: 'Unknown business type: {biz_type}'
+    not_form_definition: This workflow is not a form approval; start it from the business page
+    form_invalid: 'Invalid form data: {detail}'
+    selected_invalid: Invalid approver selection
+    selected_required: 'Please choose approvers for "{node}"'
+    opinion_required: Please enter a comment when rejecting
+    reason_required: Please enter a reason
+    transfer_one: You can only transfer to one person
+    user_not_found: The selected user does not exist or is disabled
+    transfer_to_initiator: Cannot transfer to the initiator
+    transfer_to_existing: That person is already an approver of this step
+    field_not_editable: 'These fields cannot be edited at this step: {fields}'
+    send_back_target_invalid: Cannot send back to this step. Refresh and choose again
+    task_not_pending: This task has already been handled. Refresh to see the latest
+    handover_same_user: The person handing over and the person taking over must be different
+    sign_mode_invalid: Choose whether to add them before or after you
+    sign_users_invalid: Choose 1 to 10 people to add
+    draft_too_large: The draft is too large to save
 
 file_type:
   archive: Archive
@@ -225,3 +259,27 @@ success:
 # `messages`/`message_templates`（按中文原文查表那一套）已经在这次治理里
 # 撤掉了——en-US 不需要「反向翻译」（那是 zh-CN.yml 独有的场景，见那边
 # 顶部注释），业务消息全部搬进了上面的 `error.*`。别再往这加东西。
+workflow:
+  default_title: '{name} from {user}'
+  no_assignee: No approver found, skipped automatically
+  no_assignee_reject: 'No approver found for "{node}", rejected automatically'
+  status:
+    running: In progress
+    approved: Approved
+    rejected: Rejected
+    withdrawn: Withdrawn
+    terminated: Terminated
+  notify:
+    cc_title: 'CC: {title}'
+    remind_title: 'Reminder: {title}'
+    remind_content: '{user} asked you to handle this approval soon'
+    withdrawn_title: 'Withdrawn: {title}'
+    sent_back_title: 'Sent back: {title}'
+    sent_back_content: '{user} sent your request back: {opinion}. Edit it and submit again'
+    timeout_title: 'Overdue: {title}'
+    timeout_content: 'This approval has been waiting on you for over {hours} hours. Please handle it soon'
+  initiator: Initiator
+  resubmit_node: Initiator revision
+  handover_opinion: Handover
+  timeout_approved: 'Not handled within {hours} hours; approved automatically'
+  timeout_rejected: 'Not handled within {hours} hours; rejected automatically'

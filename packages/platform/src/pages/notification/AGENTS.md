@@ -59,3 +59,15 @@
 **静默反转**。所以 route schema 里 `unread` 是 `coerce.number()`，
 页面里再映射成 `true/false/undefined`；`undefined` 必须保持 `undefined`
 （= 不筛），写成 `raw.unread === 1` 会把「不限」变成「只看已读」。
+
+## 🔴 `link` 可以带查询串，要拆成 `to` + `search`
+
+审批通知的 link 是 `/workflow/inbox?id=…`。原来两层都会把它静默弄坏：
+
+- `isValidPath` 拿**整串**比路由表 —— 带 `?` 永远比不中，整条通知变成「不可点」
+- 就算比中了，铃铛和列表的 `<Link>` 写着 `search={{}}`，`?id=` 被扔掉，点进去不是那一张单
+
+现在 `useNotificationOpen().linkOf` 返回 `{ to, search }`（`new URL(link)` 拆开，值保持字符串，
+硬纪律 6），`apps/web/src/lib/valid-paths.ts` 只比路径部分。
+**实测证据**：`workflow.spec.ts` 第一条点「已通过」那条通知应打开对应审批单；
+把这两处修复打回去，它报 `element(s) not found`（链接根本没渲染成可点的）。

@@ -107,7 +107,7 @@ async def _build(graph: Graph) -> None:
             'code': graph.code(key),
             'name': f'部门{key}',
             'sort': 0,
-            'leader': None,
+            'leader_id': None,
             'phone': None,
             'email': None,
             'status': status,

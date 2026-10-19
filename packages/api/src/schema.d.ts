@@ -1271,6 +1271,479 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/workflow/startable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 可发起的审批 */
+        get: operations["get_startable_api_v1_sys_workflow_startable_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/startable/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 发起页：表单与要自选审批人的节点 */
+        get: operations["get_start_form_api_v1_sys_workflow_startable__code__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/startable/{code}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发起页：按当前表单试算审批流程 */
+        post: operations["preview_start_api_v1_sys_workflow_startable__code__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 上传审批附件
+         * @description 审批里的附件上传。
+         *
+         *     `/sys/files/upload` 挂着 `sys:file:upload`，而且 RBAC 拒绝非员工账号的 POST ——
+         *     普通员工在审批里传不了附件。这里只要登录，复用同一套文件服务（同样的类型 / 大小 /
+         *     路径穿越校验、私有存储）。挂到单子上时服务端再核一次「是不是你自己传的」
+         *     （`runtime_service._check_attachments`）。
+         */
+        post: operations["upload_attachment_api_v1_sys_workflow_files_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/instances": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发起审批 */
+        post: operations["start_instance_api_v1_sys_workflow_instances_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/inbox/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 待办数 / 抄送未读数 */
+        get: operations["get_counts_api_v1_sys_workflow_inbox_counts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/inbox/todo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 待我审批 */
+        get: operations["get_todo_api_v1_sys_workflow_inbox_todo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/inbox/done": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我已审批 */
+        get: operations["get_done_api_v1_sys_workflow_inbox_done_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/inbox/initiated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我发起的 */
+        get: operations["get_initiated_api_v1_sys_workflow_inbox_initiated_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/inbox/cc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 抄送我的 */
+        get: operations["get_cc_api_v1_sys_workflow_inbox_cc_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/instances/{pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 审批详情 */
+        get: operations["get_instance_api_v1_sys_workflow_instances__pk__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/instances/{pk}/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 执行审批动作 */
+        post: operations["do_action_api_v1_sys_workflow_instances__pk__actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/instances/{pk}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 办理人已读 */
+        put: operations["mark_task_read_api_v1_sys_workflow_instances__pk__read_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我的发起草稿 */
+        get: operations["get_drafts_api_v1_sys_workflow_drafts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/drafts/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 取一份发起草稿 */
+        get: operations["get_draft_api_v1_sys_workflow_drafts__code__get"];
+        /** 存发起草稿 */
+        put: operations["put_draft_api_v1_sys_workflow_drafts__code__put"];
+        post?: never;
+        /** 丢弃发起草稿 */
+        delete: operations["delete_draft_api_v1_sys_workflow_drafts__code__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/instances/{pk}/cc-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 抄送标记已读 */
+        put: operations["mark_cc_read_api_v1_sys_workflow_instances__pk__cc_read_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/directory/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 通讯录：选人 */
+        get: operations["get_directory_users_api_v1_sys_workflow_directory_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/directory/depts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 通讯录：部门 */
+        get: operations["get_directory_depts_api_v1_sys_workflow_directory_depts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/directory/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 通讯录：角色（设计器用） */
+        get: operations["get_directory_roles_api_v1_sys_workflow_directory_roles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/monitor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 实例监控 */
+        get: operations["get_monitor_api_v1_sys_workflow_monitor_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/handover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 离职交接：手上有在办待办的人（含已停用的账号） */
+        get: operations["get_handover_api_v1_sys_workflow_handover_get"];
+        put?: never;
+        /** 离职交接：把一个人手上所有在办的待办交给另一个人 */
+        post: operations["do_handover_api_v1_sys_workflow_handover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 流程定义列表 */
+        get: operations["get_definitions_api_v1_sys_workflow_definitions_get"];
+        put?: never;
+        /** 新建流程定义 */
+        post: operations["create_definition_api_v1_sys_workflow_definitions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/definitions/{pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 流程定义详情（含草稿） */
+        get: operations["get_definition_api_v1_sys_workflow_definitions__pk__get"];
+        /** 保存流程定义草稿 */
+        put: operations["update_definition_api_v1_sys_workflow_definitions__pk__put"];
+        post?: never;
+        /** 删除流程定义 */
+        delete: operations["delete_definition_api_v1_sys_workflow_definitions__pk__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/definitions/{pk}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发布前校验草稿 */
+        post: operations["validate_definition_api_v1_sys_workflow_definitions__pk__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/definitions/{pk}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发布流程定义 */
+        post: operations["publish_definition_api_v1_sys_workflow_definitions__pk__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/definitions/{pk}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 启用 / 停用流程定义 */
+        put: operations["set_definition_status_api_v1_sys_workflow_definitions__pk__status_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/definitions/{pk}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 流程定义的版本历史 */
+        get: operations["get_versions_api_v1_sys_workflow_definitions__pk__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/logs/login": {
         parameters: {
             query?: never;
@@ -1711,6 +2184,70 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * Action
+         * @description 动作。数值是前后端契约，能力信封里的 `action` 就是它
+         * @enum {string}
+         */
+        Action: "approve" | "reject" | "withdraw" | "transfer" | "cc" | "remind" | "terminate" | "send_back" | "reassign" | "take_back" | "add_sign";
+        /**
+         * ActionParam
+         * @description 对实例执行一个动作
+         */
+        ActionParam: {
+            /** @description 动作 */
+            action: components["schemas"]["Action"];
+            /**
+             * Key
+             * @description 幂等键（每次提交一个新的 UUID）
+             */
+            key: string;
+            /**
+             * Opinion
+             * @description 意见 / 原因
+             */
+            opinion?: string | null;
+            /**
+             * Target User Ids
+             * @description 转办 / 抄送 / 改办理人的目标人
+             */
+            target_user_ids?: (string | number)[] | null;
+            /**
+             * Form
+             * @description 审批时修改的表单字段（只收本节点可编辑的）
+             */
+            form?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Target Node Id
+             * @description 退回到哪个节点（发起人 = 开始节点 ID）
+             */
+            target_node_id?: string | null;
+            /**
+             * Task Id
+             * @description 改办理人：改哪一条待办
+             */
+            task_id?: string | number | null;
+            /**
+             * Resume
+             * @description 退回：重新提交 / 那一步办完之后直接回到退回的这一步
+             * @default false
+             */
+            resume: boolean;
+            /**
+             * Sign Mode
+             * @description 加签：在我之前 / 在我之后
+             */
+            sign_mode?: ("before" | "after") | null;
+            /**
+             * Selected
+             * @description 被退回后重新提交：发起人自选的审批人
+             */
+            selected?: {
+                [key: string]: string[];
+            } | null;
+        };
+        /**
          * AddUserParam
          * @description 添加用户参数
          */
@@ -1843,6 +2380,14 @@ export interface components {
              */
             timezone: string;
         };
+        /** Body_upload_attachment_api_v1_sys_workflow_files_post */
+        Body_upload_attachment_api_v1_sys_workflow_files_post: {
+            /**
+             * File
+             * @description 文件
+             */
+            file: string;
+        };
         /** Body_upload_file_api_v1_sys_files_upload_post */
         Body_upload_file_api_v1_sys_files_upload_post: {
             /**
@@ -1967,6 +2512,63 @@ export interface components {
             status: components["schemas"]["StatusType"];
         };
         /**
+         * CreateDefinitionParam
+         * @description 新建流程定义
+         */
+        CreateDefinitionParam: {
+            /**
+             * Code
+             * @description 编码（创建后不可改）
+             */
+            code: string;
+            /**
+             * Name
+             * @description 名称
+             */
+            name: string;
+            /**
+             * Biz Type
+             * @description 业务类型，表单审批为 form
+             * @default form
+             */
+            biz_type: string;
+            /**
+             * Category
+             * @description 分组
+             */
+            category?: string | null;
+            /**
+             * Icon
+             * @description 图标
+             */
+            icon?: string | null;
+            /**
+             * Description
+             * @description 说明
+             */
+            description?: string | null;
+            /**
+             * Sort
+             * @description 排序
+             * @default 0
+             */
+            sort: number;
+            /**
+             * Form
+             * @description 表单草稿
+             */
+            form?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Model
+             * @description 流程草稿
+             */
+            model?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
          * CreateDeptParam
          * @description 创建部门参数
          */
@@ -1988,10 +2590,10 @@ export interface components {
              */
             sort: number;
             /**
-             * Leader
-             * @description 负责人
+             * Leader Id
+             * @description 负责人用户 ID
              */
-            leader?: string | null;
+            leader_id?: string | number | null;
             /**
              * Phone
              * @description 联系电话
@@ -2472,6 +3074,19 @@ export interface components {
             usage: string;
         };
         /**
+         * DraftParam
+         * @description 存发起草稿（填到一半的表单，不校验内容）
+         */
+        DraftParam: {
+            /**
+             * Form
+             * @description 表单数据
+             */
+            form?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * FileType
          * @description 文件分类
          *
@@ -2812,10 +3427,10 @@ export interface components {
              */
             sort: number;
             /**
-             * Leader
-             * @description 负责人
+             * Leader Id
+             * @description 负责人用户 ID
              */
-            leader?: string | null;
+            leader_id?: number | null;
             /**
              * Phone
              * @description 联系电话
@@ -2882,10 +3497,10 @@ export interface components {
              */
             sort: number;
             /**
-             * Leader
-             * @description 负责人
+             * Leader Id
+             * @description 负责人用户 ID
              */
-            leader?: string | null;
+            leader_id?: number | null;
             /**
              * Phone
              * @description 联系电话
@@ -2929,6 +3544,11 @@ export interface components {
              * @description 删除时间
              */
             deleted_time?: string | null;
+            /**
+             * Leader Name
+             * @description 负责人昵称（只读，按 leader_id 回填）
+             */
+            leader_name?: string | null;
             /**
              * Children
              * @description 子菜单
@@ -3479,7 +4099,7 @@ export interface components {
              * @description 内容
              */
             content: string;
-            /** @description 分类（0：系统、1：公告、2：任务事件） */
+            /** @description 分类（0：系统、1：公告、2：任务事件、3：审批） */
             category: components["schemas"]["NotificationCategory"];
             /**
              * Link
@@ -4184,6 +4804,27 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * HandoverParam
+         * @description 离职交接：把一个人手上所有在办的待办交给另一个人
+         */
+        HandoverParam: {
+            /**
+             * From User Id
+             * @description 交出待办的人
+             */
+            from_user_id: string | number;
+            /**
+             * To User Id
+             * @description 接手的人
+             */
+            to_user_id: string | number;
+            /**
+             * Key
+             * @description 幂等键（每次提交一个新的 UUID）
+             */
+            key: string;
+        };
+        /**
          * ImportCommitDetail
          * @description 提交结果
          */
@@ -4381,7 +5022,7 @@ export interface components {
          *     是可预期的下一步，而分类的数值一旦发出去就不该再改。
          * @enum {integer}
          */
-        NotificationCategory: 0 | 1 | 2;
+        NotificationCategory: 0 | 1 | 2 | 3;
         /** PageData[GetConfigDetail] */
         PageData_GetConfigDetail_: {
             /** Items */
@@ -4752,6 +5393,26 @@ export interface components {
          * @enum {string}
          */
         PluginType: "zip" | "git";
+        /**
+         * PreviewParam
+         * @description 发起页的流程预告：按当前填的表单试算
+         */
+        PreviewParam: {
+            /**
+             * Form
+             * @description 表单数据（可以没填完）
+             */
+            form?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Selected
+             * @description 已自选的审批人
+             */
+            selected?: {
+                [key: string]: string[];
+            };
+        };
         /**
          * RedisCommandStat
          * @description Redis 命令统计
@@ -5938,7 +6599,7 @@ export interface components {
              * @description 内容
              */
             content: string;
-            /** @description 分类（0：系统、1：公告、2：任务事件） */
+            /** @description 分类（0：系统、1：公告、2：任务事件、3：审批） */
             category: components["schemas"]["NotificationCategory"];
             /**
              * Link
@@ -6017,6 +6678,56 @@ export interface components {
              * @description 可用内存
              */
             mem_free: string;
+        };
+        /** SetDefinitionStatusParam */
+        SetDefinitionStatusParam: {
+            /**
+             * Enabled
+             * @description 启用 / 停用
+             */
+            enabled: boolean;
+        };
+        /**
+         * StartParam
+         * @description 发起表单审批
+         */
+        StartParam: {
+            /**
+             * Code
+             * @description 流程定义编码
+             */
+            code: string;
+            /**
+             * Form
+             * @description 表单数据
+             */
+            form?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Selected
+             * @description 发起人自选的审批人
+             */
+            selected?: {
+                [key: string]: string[];
+            };
+            /**
+             * Key
+             * @description 幂等键（每次提交一个新的 UUID）
+             */
+            key: string;
+            /**
+             * Urgent
+             * @description 加急
+             * @default false
+             */
+            urgent: boolean;
+            /**
+             * Keep Draft
+             * @description 提交后保留这个流程的草稿
+             * @default false
+             */
+            keep_draft: boolean;
         };
         /**
          * StatusType
@@ -6214,6 +6925,51 @@ export interface components {
             rules: number[];
         };
         /**
+         * UpdateDefinitionParam
+         * @description 更新流程定义（草稿）。刻意不含 `code` 和 `biz_type`：前者是稳定引用键，后者换了在途实例的回调就错了
+         */
+        UpdateDefinitionParam: {
+            /**
+             * Name
+             * @description 名称
+             */
+            name?: string | null;
+            /**
+             * Category
+             * @description 分组
+             */
+            category?: string | null;
+            /**
+             * Icon
+             * @description 图标
+             */
+            icon?: string | null;
+            /**
+             * Description
+             * @description 说明
+             */
+            description?: string | null;
+            /**
+             * Sort
+             * @description 排序
+             */
+            sort?: number | null;
+            /**
+             * Form
+             * @description 表单草稿
+             */
+            form?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Model
+             * @description 流程草稿
+             */
+            model?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
          * UpdateDeptParam
          * @description 更新部门参数
          *
@@ -6239,10 +6995,10 @@ export interface components {
              */
             sort: number;
             /**
-             * Leader
-             * @description 负责人
+             * Leader Id
+             * @description 负责人用户 ID
              */
-            leader?: string | null;
+            leader_id?: string | number | null;
             /**
              * Phone
              * @description 联系电话
@@ -6902,8 +7658,6 @@ export interface operations {
                 name?: string | null;
                 /** @description 部门编码 */
                 code?: string | null;
-                /** @description 部门负责人 */
-                leader?: string | null;
                 /** @description 联系电话 */
                 phone?: string | null;
                 /** @description 状态 */
@@ -9402,7 +10156,7 @@ export interface operations {
             query?: {
                 /** @description 标题 */
                 title?: string | null;
-                /** @description 分类（0：系统、1：公告、2：任务事件） */
+                /** @description 分类（0：系统、1：公告、2：任务事件、3：审批） */
                 category?: number | null;
                 /** @description 只看未读 / 只看已读，不传则不筛 */
                 unread?: boolean | null;
@@ -10117,6 +10871,1046 @@ export interface operations {
                 "application/json": components["schemas"]["DeleteDictTypeParam"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_startable_api_v1_sys_workflow_startable_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    get_start_form_api_v1_sys_workflow_startable__code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_start_api_v1_sys_workflow_startable__code__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_attachment_api_v1_sys_workflow_files_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_attachment_api_v1_sys_workflow_files_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_instance_api_v1_sys_workflow_instances_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_counts_api_v1_sys_workflow_inbox_counts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    get_todo_api_v1_sys_workflow_inbox_todo_get: {
+        parameters: {
+            query?: {
+                /** @description 标题 / 摘要关键字 */
+                keyword?: string | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_done_api_v1_sys_workflow_inbox_done_get: {
+        parameters: {
+            query?: {
+                /** @description 标题 / 摘要关键字 */
+                keyword?: string | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_initiated_api_v1_sys_workflow_inbox_initiated_get: {
+        parameters: {
+            query?: {
+                /** @description 标题 / 摘要关键字 */
+                keyword?: string | null;
+                status?: string | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_cc_api_v1_sys_workflow_inbox_cc_get: {
+        parameters: {
+            query?: {
+                /** @description 标题 / 摘要关键字 */
+                keyword?: string | null;
+                /** @description 只看未读 / 只看已读 */
+                unread?: boolean | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_instance_api_v1_sys_workflow_instances__pk__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    do_action_api_v1_sys_workflow_instances__pk__actions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActionParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_task_read_api_v1_sys_workflow_instances__pk__read_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_drafts_api_v1_sys_workflow_drafts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    get_draft_api_v1_sys_workflow_drafts__code__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 流程定义编码 */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_draft_api_v1_sys_workflow_drafts__code__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 流程定义编码 */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_draft_api_v1_sys_workflow_drafts__code__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 流程定义编码 */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_cc_read_api_v1_sys_workflow_instances__pk__cc_read_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_directory_users_api_v1_sys_workflow_directory_users_get: {
+        parameters: {
+            query?: {
+                /** @description 标题 / 摘要关键字 */
+                keyword?: string | null;
+                /** @description 逗号分隔的用户 ID（回显已选的人） */
+                ids?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_directory_depts_api_v1_sys_workflow_directory_depts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    get_directory_roles_api_v1_sys_workflow_directory_roles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    get_monitor_api_v1_sys_workflow_monitor_get: {
+        parameters: {
+            query?: {
+                /** @description 标题 / 摘要关键字 */
+                keyword?: string | null;
+                status?: string | null;
+                /** @description 流程定义 ID */
+                definition_id?: number | null;
+                /** @description 发起人姓名 / 用户名 */
+                initiator?: string | null;
+                /** @description 发起时间起 */
+                start_time?: string | null;
+                /** @description 发起时间止 */
+                end_time?: string | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_handover_api_v1_sys_workflow_handover_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    do_handover_api_v1_sys_workflow_handover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HandoverParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_definitions_api_v1_sys_workflow_definitions_get: {
+        parameters: {
+            query?: {
+                name?: string | null;
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_definition_api_v1_sys_workflow_definitions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDefinitionParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_definition_api_v1_sys_workflow_definitions__pk__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_definition_api_v1_sys_workflow_definitions__pk__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDefinitionParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_definition_api_v1_sys_workflow_definitions__pk__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_definition_api_v1_sys_workflow_definitions__pk__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_definition_api_v1_sys_workflow_definitions__pk__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_definition_status_api_v1_sys_workflow_definitions__pk__status_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetDefinitionStatusParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_versions_api_v1_sys_workflow_definitions__pk__versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

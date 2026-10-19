@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -13,11 +13,67 @@ from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
 from backend.common.pagination import paging_data
+from backend.common.security.data_scope import bypass_data_scope
 from backend.utils.file_ops import delete_file, get_file_ext, upload_file, upload_file_verify, upload_root
+
+#: 业务模块登记的「这个人能不能读这个文件」。签名：`(db, request.user, file) -> bool`
+FileAccessChecker = Callable[[AsyncSession, Any, File], Awaitable[bool]]
+_ACCESS_CHECKERS: list[FileAccessChecker] = []
+
+
+def register_file_access(checker: FileAccessChecker) -> None:
+    """业务模块在自己的模块里登记（通知公告、审批……）。
+
+    文件模块是底座，**不 import 任何业务插件**：「挂在一条公告上的附件谁能看」只有公告自己知道，
+    插件卸载了它的登记也就跟着没了
+    """
+    _ACCESS_CHECKERS.append(checker)
+
+
+def _has_perm(user: Any, code: str) -> bool:
+    """权限码的算法和 `rbac_verify` 一致：启用的角色 × 启用的菜单"""
+    if getattr(user, 'is_superuser', False):
+        return True
+    for role in getattr(user, 'roles', None) or []:
+        if role.status != 1:
+            continue
+        for menu in role.menus or []:
+            if menu.perms and menu.status == 1 and code in menu.perms.split(','):
+                return True
+    return False
 
 
 class FileService:
     """文件服务类"""
+
+    @staticmethod
+    async def can_read(*, db: AsyncSession, user: Any, file: File) -> bool:
+        """能不能读这个私有文件（下载 / 详情 / 附件列表都走这一个判断）。
+
+        🔴 原来只要登录就能按 ID 下载任何人的私有文件 —— 雪花 ID 不是秘密（URL、日志、
+        审批单的表单数据里都有）。现在：公开的 / 自己传的 / 文件管理员 / 业务模块说可以的，才给。
+        """
+        if file.is_public or file.created_by == user.id or _has_perm(user, 'sys:file:list'):
+            return True
+        for checker in _ACCESS_CHECKERS:
+            if await checker(db, user, file):
+                return True
+        return False
+
+    @staticmethod
+    async def get_readable(*, db: AsyncSession, user: Any, pk: int) -> File:
+        """取一个**这个人能读**的文件。读不了报 404 而不是 403：403 等于告诉对方「这个 ID 存在」
+
+        🔴 取文件要 `bypass_data_scope()`：下载 / 详情只挂登录，而 `CRUDFile` 是按数据范围过滤的 ——
+        种子里 STAFF 那种「开了过滤、一个范围都没配」的角色**一个文件都看不见**，连公告附件、
+        自己传的文件都下不了（security 分册「没有权限门禁的端点，绝不能挂 scoped 的 DAO」）。
+        能不能读由 `can_read` 说了算，不归数据范围管
+        """
+        with bypass_data_scope():
+            file = await file_dao.get(db, pk)
+        if not file or not await FileService.can_read(db=db, user=user, file=file):
+            raise errors.NotFoundError(msg=t('error.file.not_found'))
+        return file
 
     @staticmethod
     async def get(*, db: AsyncSession, pk: int) -> File:
@@ -152,17 +208,16 @@ class FileService:
         return await file_dao.get_by_sha256(db, sha256, user_id, name, is_public=public)
 
     @staticmethod
-    async def resolve_path(*, db: AsyncSession, pk: int) -> tuple[File, Path]:
+    async def resolve_path(*, db: AsyncSession, pk: int, user: Any) -> tuple[File, Path]:
         """
-        解析出可直接返回给客户端的磁盘路径
+        解析出可直接返回给客户端的磁盘路径（先过「这个人能不能读」）
 
         :param db: 数据库会话
         :param pk: 文件 ID
+        :param user: 当前用户（`request.user`）
         :return:
         """
-        file = await file_dao.get(db, pk)
-        if not file:
-            raise errors.NotFoundError(msg=t('error.file.not_found'))
+        file = await FileService.get_readable(db=db, user=user, pk=pk)
 
         # 根目录跟着 is_public 走 —— 两棵树里的相对路径长得一模一样，
         # 写死 UPLOAD_DIR 的话公开子树里的文件在这个接口上一律 404
@@ -246,7 +301,9 @@ class FileService:
         if not file_ids:
             return []
 
-        files = await file_dao.get_by_ids(db, list(file_ids))
+        # 同 `get_readable`：不按数据范围过滤，调用方（附件列表接口）逐个过 `can_read`
+        with bypass_data_scope():
+            files = await file_dao.get_by_ids(db, list(file_ids))
         # select_models 的返回顺序跟着数据库走，不保证和 file_ids 一致 ——
         # 附件的显示顺序是用户排过的，必须按关联表的顺序重排回来
         by_id = {file.id: file for file in files}

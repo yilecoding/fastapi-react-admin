@@ -42,13 +42,10 @@ async def get_dept_tree(
     data_filter: Annotated[ColumnElement[bool], Depends(DataPermissionFilter(Dept))],
     name: Annotated[str | None, Query(description='部门名称')] = None,
     code: Annotated[str | None, Query(description='部门编码')] = None,
-    leader: Annotated[str | None, Query(description='部门负责人')] = None,
     phone: Annotated[str | None, Query(description='联系电话')] = None,
     status: Annotated[int | None, Query(description='状态')] = None,
 ) -> ResponseSchemaModel[list[GetDeptTree]]:
-    dept = await dept_service.get_tree(
-        db=db, data_filter=data_filter, name=name, code=code, leader=leader, phone=phone, status=status
-    )
+    dept = await dept_service.get_tree(db=db, data_filter=data_filter, name=name, code=code, phone=phone, status=status)
     return response_base.success(data=dept)
 
 

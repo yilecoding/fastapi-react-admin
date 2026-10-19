@@ -265,7 +265,7 @@ function DeptRows({
         <TableCell>
           <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">{node.code}</code>
         </TableCell>
-        <TableCell className="text-sm">{node.leader || <span className="text-muted-foreground">—</span>}</TableCell>
+        <TableCell className="text-sm">{node.leader_name || <span className="text-muted-foreground">—</span>}</TableCell>
         <TableCell className="text-sm tabular-nums">{node.phone || <span className="text-muted-foreground">—</span>}</TableCell>
         <TableCell className="text-sm tabular-nums text-muted-foreground">{node.sort}</TableCell>
         <TableCell><StatusBadge value={node.status} /></TableCell>

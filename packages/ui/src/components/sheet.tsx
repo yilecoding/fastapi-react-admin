@@ -39,13 +39,19 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  container,
   ...props
 }: SheetPrimitive.Popup.Props & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
+  /**
+   * portal 挂到哪个节点下（默认 `<body>`）。宿主把浮层挂进某个会被整体隐藏的容器时用 ——
+   * 容器 `display:none` 时浮层跟着藏起来，而浮层里的状态不丢
+   */
+  container?: SheetPrimitive.Portal.Props["container"]
 }) {
   return (
-    <SheetPortal>
+    <SheetPortal container={container}>
       <SheetOverlay />
       <SheetPrimitive.Popup
         data-slot="sheet-content"

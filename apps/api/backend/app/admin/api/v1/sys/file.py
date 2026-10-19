@@ -102,19 +102,22 @@ async def check_file(
 
 @router.get('/targets/{target_type}/{target_id}', summary='获取业务对象的附件', dependencies=[DependsJwtAuth])
 async def get_target_files(
+    request: Request,
     db: CurrentSession,
     target_type: Annotated[str, Path(max_length=32, description='业务对象类型')],
     target_id: Annotated[int, Path(description='业务对象 ID')],
 ) -> ResponseSchemaModel[list[GetFileDetail]]:
     files = await file_service.get_by_target(db=db, target_type=target_type, target_id=target_id)
-    return response_base.success(data=files)
+    # 只列这个人读得了的：文件名 / 大小本身也是信息
+    readable = [f for f in files if await file_service.can_read(db=db, user=request.user, file=f)]
+    return response_base.success(data=readable)
 
 
 @router.get('/{pk}', summary='获取文件详情', dependencies=[DependsJwtAuth])
 async def get_file(
-    db: CurrentSession, pk: Annotated[int, Path(description='文件 ID')]
+    request: Request, db: CurrentSession, pk: Annotated[int, Path(description='文件 ID')]
 ) -> ResponseSchemaModel[GetFileDetail]:
-    file = await file_service.get(db=db, pk=pk)
+    file = await file_service.get_readable(db=db, user=request.user, pk=pk)
     return response_base.success(data=file)
 
 
@@ -125,6 +128,7 @@ async def get_file(
     response_class=FileResponse,
 )
 async def download_file(
+    request: Request,
     db: CurrentSession,
     pk: Annotated[int, Path(description='文件 ID')],
     # 直接用 Content-Disposition 的取值而不是 `download: bool` ——
@@ -133,7 +137,7 @@ async def download_file(
         Literal['inline', 'attachment'], Query(description='inline 浏览器内联显示，attachment 强制下载')
     ] = 'inline',
 ) -> FileResponse:
-    file, target = await file_service.resolve_path(db=db, pk=pk)
+    file, target = await file_service.resolve_path(db=db, pk=pk, user=request.user)
 
     # 原名可能带中文/空格，裸塞进 filename= 会被 header 编码规则截断或乱码。
     # RFC 6266 的两段式写法：ASCII 回退 + filename* 带 UTF-8

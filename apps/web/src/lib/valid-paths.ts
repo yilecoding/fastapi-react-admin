@@ -42,6 +42,8 @@ export function makeIsValidPath(router: AnyRouter) {
   let cache: Set<string> | null = null
   return (path: string) => {
     cache ??= buildValidPaths(router)
-    return cache.has(path.replace(/\/+$/, "") || "/")
+    // 只比路径：查询串 / hash 不影响「这个页面存不存在」（审批通知的 link 带 `?id=`）
+    const pathname = path.split(/[?#]/)[0]
+    return cache.has(pathname.replace(/\/+$/, "") || "/")
   }
 }

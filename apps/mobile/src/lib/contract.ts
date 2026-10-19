@@ -58,4 +58,5 @@ export const NOTIFICATION_CATEGORY = {
   0: '系统',
   1: '公告',
   2: '任务',
+  3: '审批',
 } as const

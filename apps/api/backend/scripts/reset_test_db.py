@@ -26,6 +26,7 @@ import backend.plugin.config.model  # ruff: ignore[unused-import]
 import backend.plugin.dict.model  # ruff: ignore[unused-import]
 import backend.plugin.notice.model  # ruff: ignore[unused-import]
 import backend.plugin.oauth2.model  # ruff: ignore[unused-import]
+import backend.plugin.workflow.model  # ruff: ignore[unused-import]
 
 from backend.cli import execute_sql_scripts, get_sql_scripts
 from backend.common.model import MappedBase

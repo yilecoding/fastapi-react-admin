@@ -20,7 +20,7 @@ class DeptSchemaBase(SchemaBase):
     name: str = Field(description='部门名称')
     parent_id: SnowflakeIdIn | None = Field(None, description='部门父级 ID')
     sort: int = Field(0, ge=0, description='排序')
-    leader: str | None = Field(None, description='负责人')
+    leader_id: SnowflakeIdIn | None = Field(None, description='负责人用户 ID')
     phone: CustomPhoneNumber | None = Field(None, description='联系电话')
     email: CustomEmailStr | None = Field(None, description='邮箱')
     status: StatusType = Field(description='状态')
@@ -61,4 +61,5 @@ class GetDeptDetail(DeptSchemaBase):
 class GetDeptTree(GetDeptDetail):
     """获取部门树"""
 
+    leader_name: str | None = Field(None, description='负责人昵称（只读，按 leader_id 回填）')
     children: list['GetDeptTree'] | None = Field(None, description='子菜单')

@@ -1,12 +1,12 @@
-insert into sys_dept (id, code, name, sort, leader, phone, email, status, deleted, parent_id, created_time, updated_time)
+insert into sys_dept (id, code, name, sort, leader_id, phone, email, status, deleted, parent_id, created_time, updated_time)
 values
 (2048601264366944256, 'HQ', '总部', 0, null, null, null, 1, 0, null, now(), null),
-(4000000000000000001, 'TECH', '技术中心', 1, '张伟', null, null, 1, 0, 2048601264366944256, now(), null),
-(4000000000000000002, 'TECH_BE', '后端组', 1, '刘洋', null, null, 1, 0, 4000000000000000001, now(), null),
-(4000000000000000003, 'TECH_FE', '前端组', 2, '陈静', null, null, 1, 0, 4000000000000000001, now(), null),
-(4000000000000000004, 'PRODUCT', '产品设计中心', 2, '李娜', null, null, 1, 0, 2048601264366944256, now(), null),
-(4000000000000000005, 'MARKETING', '市场运营中心', 3, '赵磊', null, null, 1, 0, 2048601264366944256, now(), null),
-(4000000000000000006, 'FINANCE', '财务人事中心', 4, '王芳', null, null, 1, 0, 2048601264366944256, now(), null);
+(4000000000000000001, 'TECH', '技术中心', 1, 4000000000000000041, null, null, 1, 0, 2048601264366944256, now(), null),
+(4000000000000000002, 'TECH_BE', '后端组', 1, 4000000000000000044, null, null, 1, 0, 4000000000000000001, now(), null),
+(4000000000000000003, 'TECH_FE', '前端组', 2, 4000000000000000045, null, null, 1, 0, 4000000000000000001, now(), null),
+(4000000000000000004, 'PRODUCT', '产品设计中心', 2, 4000000000000000042, null, null, 1, 0, 2048601264366944256, now(), null),
+(4000000000000000005, 'MARKETING', '市场运营中心', 3, 4000000000000000046, null, null, 1, 0, 2048601264366944256, now(), null),
+(4000000000000000006, 'FINANCE', '财务人事中心', 4, 4000000000000000043, null, null, 1, 0, 2048601264366944256, now(), null);
 
 insert into sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
 values

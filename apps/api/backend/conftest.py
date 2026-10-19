@@ -48,6 +48,7 @@ _PATCHED_SESSION_MODULES = (
     'backend.app.admin.service.login_log_service',
     'backend.middleware.opera_log_middleware',
     'backend.app.task.tasks.maintenance.tasks',
+    'backend.app.task.tasks.workflow.tasks',
 )
 
 

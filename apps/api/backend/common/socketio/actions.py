@@ -27,3 +27,16 @@ async def notification_new(user_id: int | None = None) -> None:
         await sio.emit('notification:new', {})
     else:
         await sio.emit('notification:new', {}, room=user_room(user_id))
+
+
+async def workflow_todo_changed(user_id: int) -> None:
+    """某人的审批待办变了（新来一条 / 被别人办掉 / 实例结束作废）。
+
+    和 `notification_new` 同一个口径：**不带内容**，前端收到后重新拉待办数和列表。
+    办理人不另收站内通知（#107 设计 7：同一件事不在铃铛上出现两次），
+    所以这条事件是待办数实时刷新的唯一来源 —— 推送失败也只是慢一点，下次拉取照样对。
+
+    :param user_id: 目标用户 ID
+    :return:
+    """
+    await sio.emit('workflow:todo', {}, room=user_room(user_id))

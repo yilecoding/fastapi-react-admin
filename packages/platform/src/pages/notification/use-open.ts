@@ -17,13 +17,28 @@ import { useMarkNotificationRead, type Notification } from './api'
  * 2. 已读只在**未读**时才发请求。接口本身是幂等的，但每点一条已读通知都发一次
  *    PUT 是纯噪音，而且会让全站的通知 query 白白失效一轮。
  */
+export type NotificationLink = { to: string; search: Record<string, string> }
+
 export function useNotificationOpen() {
   const { isValidPath } = usePlatform()
   const markRead = useMarkNotificationRead()
 
-  /** 可点就返回目标路由，不可点返回 `null` */
+  /**
+   * 可点就返回目标路由（路径 + search 拆开），不可点返回 `null`。
+   *
+   * 🔴 **link 里可以带查询串**（审批通知是 `/workflow/inbox?id=…`），要拆成 `to` + `search`
+   * 两半交给 `<Link>`。原来整串拿去 `isValidPath` 比路由表（带 `?` 永远比不中 → 整条通知
+   * 变成不可点），就算比中了，调用处还写着 `search={{}}`，`?id=` 也会被扔掉 ——
+   * 两层都是静默的：通知照样显示，只是点不动 / 点进去不是那一张单。
+   * 值一律保持字符串（雪花 ID 不能过 `JSON.parse`，硬纪律 6）。
+   */
   const linkOf = React.useCallback(
-    (n: Notification): string | null => (n.link && isValidPath(n.link) ? n.link : null),
+    (n: Notification): NotificationLink | null => {
+      if (!n.link) return null
+      const url = new URL(n.link, 'http://local')
+      if (!isValidPath(url.pathname)) return null
+      return { to: url.pathname, search: Object.fromEntries(url.searchParams) }
+    },
     [isValidPath]
   )
 
