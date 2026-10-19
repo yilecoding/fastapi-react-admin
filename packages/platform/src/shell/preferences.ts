@@ -168,6 +168,12 @@ export type Preferences = {
   /** 拖拽调整标签页顺序（固定与非固定分区互不跨越） */
   tabDraggable: boolean
   /**
+   * AI 抽屉的宽度（px）。按 shell 分册「设备 vs 人」那张表：宽度描述
+   * "这块屏幕上我想要多宽"，是**设备**属性 —— 换台机器重新拖一次很正常，
+   * 所以放这里而不是落服务端。开没开着是瞬时状态，在 `ai-chat/drawer-store.ts`。
+   */
+  aiDrawerWidth: number
+  /**
    * 看过的功能引导：`"<userId>:<tourId>" → 看过的版本号`。
    * 按 shell 分册「设备 vs 人」那张表它是**人**的属性、该落服务端；v1 先放这里，
    * key 带 userId 防公用机器串号。读写只走 `shell/tour/tour.ts` 的 `tourSeen` / `markTourSeen`。
@@ -188,6 +194,7 @@ export const PREF_DEFAULTS: Preferences = {
   tabMiddleClickClose: true,
   tabShowIcon: true,
   tabDraggable: true,
+  aiDrawerWidth: 420,
   toursSeen: {},
 }
 

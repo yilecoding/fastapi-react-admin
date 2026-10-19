@@ -37,6 +37,10 @@ EXEMPT: dict[str, str] = {
     'CRUDUserSocial': 'OAuth2 绑定在登录链路上读，那时没有当前用户',
     'CRUDNotification': '收件箱按 current_user.id 强制过滤，再叠部门维度会变成「我和我下属的通知」',
     'CRUDNotice': '公告是全局内容，表里没有归属维度，过滤只有 fail-closed 一种效果（实测受限用户看到 0 条）',
+    'CRUDAiProvider': '模型供应商是系统级配置（同 sys_config），不归属部门/人；靠 ai:provider:* 权限码',
+    'CRUDAiConversation': '会话按 current_user.id 强制过滤，再叠部门维度会变成「我和我下属的对话」',
+    'CRUDAiMessage': '消息的可见性完全由所属会话的所有权决定，这张表自己没有可过滤维度',
+    'CRUDAiToolInvocation': '审计表没有可过滤维度，挂上只有 fail-closed 一种效果；靠 ai:log:list 权限码',
 }
 
 

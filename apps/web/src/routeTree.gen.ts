@@ -17,6 +17,9 @@ import { Route as AuthDashboardRouteImport } from './routes/_auth/dashboard'
 import { Route as AuthNotificationRouteImport } from './routes/_auth/notification'
 import { Route as AuthProfileRouteImport } from './routes/_auth/profile'
 import { Route as GuestSignInRouteImport } from './routes/_guest/sign-in'
+import { Route as AuthAiChatRouteImport } from './routes/_auth/ai/chat'
+import { Route as AuthAiProviderRouteImport } from './routes/_auth/ai/provider'
+import { Route as AuthAiToolLogRouteImport } from './routes/_auth/ai/tool-log'
 import { Route as AuthEmbeddedNameRouteImport } from './routes/_auth/embedded/$name'
 import { Route as AuthLogLoginRouteImport } from './routes/_auth/log/login'
 import { Route as AuthLogOperaRouteImport } from './routes/_auth/log/opera'
@@ -79,6 +82,21 @@ const GuestSignInRoute = GuestSignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
   getParentRoute: () => GuestRoute,
+} as any)
+const AuthAiChatRoute = AuthAiChatRouteImport.update({
+  id: '/ai/chat',
+  path: '/ai/chat',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthAiProviderRoute = AuthAiProviderRouteImport.update({
+  id: '/ai/provider',
+  path: '/ai/provider',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthAiToolLogRoute = AuthAiToolLogRouteImport.update({
+  id: '/ai/tool-log',
+  path: '/ai/tool-log',
+  getParentRoute: () => AuthRoute,
 } as any)
 const AuthEmbeddedNameRoute = AuthEmbeddedNameRouteImport.update({
   id: '/embedded/$name',
@@ -209,6 +227,9 @@ export interface FileRoutesByFullPath {
   '/notification': typeof AuthNotificationRoute
   '/profile': typeof AuthProfileRoute
   '/sign-in': typeof GuestSignInRoute
+  '/ai/chat': typeof AuthAiChatRoute
+  '/ai/provider': typeof AuthAiProviderRoute
+  '/ai/tool-log': typeof AuthAiToolLogRoute
   '/embedded/$name': typeof AuthEmbeddedNameRoute
   '/log/login': typeof AuthLogLoginRoute
   '/log/opera': typeof AuthLogOperaRoute
@@ -241,6 +262,9 @@ export interface FileRoutesByTo {
   '/notification': typeof AuthNotificationRoute
   '/profile': typeof AuthProfileRoute
   '/sign-in': typeof GuestSignInRoute
+  '/ai/chat': typeof AuthAiChatRoute
+  '/ai/provider': typeof AuthAiProviderRoute
+  '/ai/tool-log': typeof AuthAiToolLogRoute
   '/embedded/$name': typeof AuthEmbeddedNameRoute
   '/log/login': typeof AuthLogLoginRoute
   '/log/opera': typeof AuthLogOperaRoute
@@ -276,6 +300,9 @@ export interface FileRoutesById {
   '/_auth/notification': typeof AuthNotificationRoute
   '/_auth/profile': typeof AuthProfileRoute
   '/_guest/sign-in': typeof GuestSignInRoute
+  '/_auth/ai/chat': typeof AuthAiChatRoute
+  '/_auth/ai/provider': typeof AuthAiProviderRoute
+  '/_auth/ai/tool-log': typeof AuthAiToolLogRoute
   '/_auth/embedded/$name': typeof AuthEmbeddedNameRoute
   '/_auth/log/login': typeof AuthLogLoginRoute
   '/_auth/log/opera': typeof AuthLogOperaRoute
@@ -310,6 +337,9 @@ export interface FileRouteTypes {
     | '/notification'
     | '/profile'
     | '/sign-in'
+    | '/ai/chat'
+    | '/ai/provider'
+    | '/ai/tool-log'
     | '/embedded/$name'
     | '/log/login'
     | '/log/opera'
@@ -342,6 +372,9 @@ export interface FileRouteTypes {
     | '/notification'
     | '/profile'
     | '/sign-in'
+    | '/ai/chat'
+    | '/ai/provider'
+    | '/ai/tool-log'
     | '/embedded/$name'
     | '/log/login'
     | '/log/opera'
@@ -376,6 +409,9 @@ export interface FileRouteTypes {
     | '/_auth/notification'
     | '/_auth/profile'
     | '/_guest/sign-in'
+    | '/_auth/ai/chat'
+    | '/_auth/ai/provider'
+    | '/_auth/ai/tool-log'
     | '/_auth/embedded/$name'
     | '/_auth/log/login'
     | '/_auth/log/opera'
@@ -465,6 +501,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/sign-in'
       preLoaderRoute: typeof GuestSignInRouteImport
       parentRoute: typeof GuestRoute
+    }
+    '/_auth/ai/chat': {
+      id: '/_auth/ai/chat'
+      path: '/ai/chat'
+      fullPath: '/ai/chat'
+      preLoaderRoute: typeof AuthAiChatRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/ai/provider': {
+      id: '/_auth/ai/provider'
+      path: '/ai/provider'
+      fullPath: '/ai/provider'
+      preLoaderRoute: typeof AuthAiProviderRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/ai/tool-log': {
+      id: '/_auth/ai/tool-log'
+      path: '/ai/tool-log'
+      fullPath: '/ai/tool-log'
+      preLoaderRoute: typeof AuthAiToolLogRouteImport
+      parentRoute: typeof AuthRoute
     }
     '/_auth/embedded/$name': {
       id: '/_auth/embedded/$name'
@@ -642,6 +699,9 @@ interface AuthRouteChildren {
   AuthDashboardRoute: typeof AuthDashboardRoute
   AuthNotificationRoute: typeof AuthNotificationRoute
   AuthProfileRoute: typeof AuthProfileRoute
+  AuthAiChatRoute: typeof AuthAiChatRoute
+  AuthAiProviderRoute: typeof AuthAiProviderRoute
+  AuthAiToolLogRoute: typeof AuthAiToolLogRoute
   AuthEmbeddedNameRoute: typeof AuthEmbeddedNameRoute
   AuthLogLoginRoute: typeof AuthLogLoginRoute
   AuthLogOperaRoute: typeof AuthLogOperaRoute
@@ -673,6 +733,9 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthDashboardRoute: AuthDashboardRoute,
   AuthNotificationRoute: AuthNotificationRoute,
   AuthProfileRoute: AuthProfileRoute,
+  AuthAiChatRoute: AuthAiChatRoute,
+  AuthAiProviderRoute: AuthAiProviderRoute,
+  AuthAiToolLogRoute: AuthAiToolLogRoute,
   AuthEmbeddedNameRoute: AuthEmbeddedNameRoute,
   AuthLogLoginRoute: AuthLogLoginRoute,
   AuthLogOperaRoute: AuthLogOperaRoute,

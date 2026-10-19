@@ -89,17 +89,19 @@ class DeptService:
         return tree_data
 
     @staticmethod
-    async def create(*, db: AsyncSession, obj: CreateDeptParam) -> None:
+    async def check_create(*, db: AsyncSession, obj: CreateDeptParam) -> Dept | None:
         """
-        创建部门
+        创建前的业务校验（只读）。`create` 和 AI 工具的预演共用这一份，
+        不要在别处另写一套 —— 两份校验迟早有一份漏掉新加的规则
 
         :param db: 数据库会话
         :param obj: 部门创建参数
-        :return:
+        :return: 上级部门（顶级部门为 None）
         """
         await _check_leader(db, obj.leader_id)
         if await dept_dao.get_by_code(db, obj.code):
             raise errors.ConflictError(msg=t('error.dept.code_exists'))
+        parent_dept = None
         if obj.parent_id is not None:
             parent_dept = await dept_dao.get(db, obj.parent_id)
             if not parent_dept:
@@ -107,18 +109,28 @@ class DeptService:
         # 名称只在同级里唯一 —— 不同上级下的同名部门是合法的
         if await dept_dao.get_sibling_by_name(db, obj.name, obj.parent_id):
             raise errors.ConflictError(msg=t('error.dept.duplicate_name_in_level'))
+        return parent_dept
+
+    async def create(self, *, db: AsyncSession, obj: CreateDeptParam) -> None:
+        """
+        创建部门
+
+        :param db: 数据库会话
+        :param obj: 部门创建参数
+        :return:
+        """
+        await self.check_create(db=db, obj=obj)
         await dept_dao.create(db, obj)
 
     @staticmethod
-    async def update(*, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateDeptParam) -> int:
+    async def check_update(*, db: AsyncSession, pk: int, obj: UpdateDeptParam) -> Dept:
         """
-        更新部门
+        更新前的业务校验（只读）。`update` 和 AI 工具的预演共用这一份
 
         :param db: 数据库会话
-        :param background_tasks: FastAPI 后台任务
         :param pk: 部门 ID
         :param obj: 部门更新参数
-        :return:
+        :return: 更新前的部门
         """
         dept = await dept_dao.get(db, pk)
         if not dept:
@@ -139,6 +151,21 @@ class DeptService:
             sibling = await dept_dao.get_sibling_by_name(db, obj.name, obj.parent_id)
             if sibling and sibling.id != dept.id:
                 raise errors.ConflictError(msg=t('error.dept.duplicate_name_in_level'))
+        return dept
+
+    async def update(
+        self, *, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateDeptParam
+    ) -> int:
+        """
+        更新部门
+
+        :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
+        :param pk: 部门 ID
+        :param obj: 部门更新参数
+        :return:
+        """
+        await self.check_update(db=db, pk=pk, obj=obj)
         count = await dept_dao.update(db, pk, obj)
         # (issue #58) 缓存的用户快照里嵌着整个 dept（含 status）——不清的话被禁用
         # 部门下的用户继续被当成"部门正常"放行，最长锁死一个 TOKEN_EXPIRE_SECONDS

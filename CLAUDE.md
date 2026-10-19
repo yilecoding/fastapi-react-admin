@@ -35,12 +35,12 @@
 | 动多页签 / 标签条 / 偏好设置 / 侧边栏 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
 | 动文件上传 / 预览 / 附件 | [`packages/platform/src/pages/file/AGENTS.md`](packages/platform/src/pages/file/AGENTS.md) |
 | 动消息通知 / 铃铛 / 收件箱 · **审批流** | [`notification`](packages/platform/src/pages/notification/AGENTS.md) · 审批后端 [`plugin/workflow`](apps/api/backend/plugin/workflow/AGENTS.md) · 审批前端 [`pages/workflow`](packages/platform/src/pages/workflow/AGENTS.md) |
+| 动 AI 对话页 / 侧滑抽屉 | [`packages/platform/src/pages/ai-chat/AGENTS.md`](packages/platform/src/pages/ai-chat/AGENTS.md) |
 | 动查询区 / 筛选条件 | [`packages/ui/src/components/query-bar/AGENTS.md`](packages/ui/src/components/query-bar/AGENTS.md) |
 | 动富文本 / 正文里的图片 | [`packages/ui/src/components/rich-text/AGENTS.md`](packages/ui/src/components/rich-text/AGENTS.md) |
 | 挑组件 / 改尺寸覆盖不生效 | [`packages/ui/AGENTS.md`](packages/ui/AGENTS.md) |
 | **把组件库搬进别的项目** | [`packages/ui/PORTING.md`](packages/ui/PORTING.md) |
-| 加文案 / 动多语言 | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) |
-| **显示时间 / 动时区** | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md) 的「服务端时间一律过 `src/datetime.ts`」 |
+| 加文案 / 动多语言 · **显示时间 / 动时区** | [`packages/i18n/AGENTS.md`](packages/i18n/AGENTS.md)（时间一律过 `src/datetime.ts`） |
 | **动请求客户端 / 后端契约 / 错误判定** | [`packages/api/AGENTS.md`](packages/api/AGENTS.md) |
 | 动后端模型 / 接口 / SQL · **解析上传的 xlsx** | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
 | 动公共层（校验 / 异常 / 缓存 / 分页） | [`apps/api/backend/common/AGENTS.md`](apps/api/backend/common/AGENTS.md) |

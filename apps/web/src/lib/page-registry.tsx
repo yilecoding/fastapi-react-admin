@@ -24,6 +24,9 @@ import { PluginPage } from "@admin/platform/pages/plugin"
 import { DashboardPage } from "@admin/platform/pages/dashboard"
 import { SchedulerManagePage } from "@admin/platform/pages/scheduler-manage"
 import { SchedulerRecordPage } from "@admin/platform/pages/scheduler-record"
+import { AiChatPage } from "@admin/platform/pages/ai-chat"
+import { AiProviderPage } from "@admin/platform/pages/ai-provider"
+import { AiToolLogPage } from "@admin/platform/pages/ai-tool-log"
 import { WorkflowInboxPage } from "@admin/platform/pages/workflow-inbox"
 import { WorkflowDefinitionPage } from "@admin/platform/pages/workflow-definition"
 import { WorkflowMonitorPage } from "@admin/platform/pages/workflow-monitor"
@@ -38,6 +41,9 @@ import { WorkflowMonitorPage } from "@admin/platform/pages/workflow-monitor"
  */
 export const pageRegistry: PageRegistry = {
   "/_auth/403": ForbiddenPage,
+  "/_auth/ai/chat": AiChatPage,
+  "/_auth/ai/provider": AiProviderPage,
+  "/_auth/ai/tool-log": AiToolLogPage,
   "/_auth/dashboard": DashboardPage,
   "/_auth/scheduler/manage": SchedulerManagePage,
   "/_auth/scheduler/record": SchedulerRecordPage,

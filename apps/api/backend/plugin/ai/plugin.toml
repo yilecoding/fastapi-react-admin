@@ -1,0 +1,31 @@
+[plugin]
+summary = "AI 助手"
+version = "0.0.1"
+description = "对话式 AI 助手：可插拔 agent 引擎 + 受 RBAC 约束的系统操作工具"
+author = "yile"
+tags = ["agent", "ai"]
+database = ["mysql", "postgresql", "sqlserver"]
+
+[app]
+router = ["v1"]
+
+[settings]
+# 引擎选择：native（进程内 OpenAI 兼容循环）。将来接 pi sidecar 等只改这个值。
+AI_AGENT_ENGINE = "native"
+# 变更类工具是否强制二次确认（关掉 = 模型说调用就直接执行，谨慎）
+AI_CONFIRM_MUTATING_TOOLS = true
+AI_CONFIRM_REDIS_PREFIX = "fba:ai:confirm"
+# 二次确认令牌的存活时间与 Redis 前缀
+AI_CONFIRM_TOKEN_EXPIRE_SECONDS = 300
+# 供应商密钥的落库加密密钥（32 字节 = 64 位十六进制字符串）。
+# 留空则「模型密钥管理」拒绝保存密钥并明确报错——不会静默存明文。
+# 生成：python -c "import os;print(os.urandom(32).hex())"
+AI_ENCRYPT_SECRET_KEY = ""
+# 外部 HTTP 工具（如天气）的超时与代理。
+# trust_env=true 表示"尊重环境里配了什么"：没配代理就直连，配了就走代理。
+AI_EXTERNAL_HTTP_TIMEOUT = 15
+AI_EXTERNAL_HTTP_USE_PROXY = true
+# 一轮对话里最多允许模型连续调用多少次工具，超过就收尾（防打转烧钱）
+AI_MAX_TOOL_ROUNDS = 5
+# 开放给 AI 的工具域；下游项目按需增删，注册了但不在这里的域不会出现在工具清单里
+AI_TOOL_DOMAINS = ["system", "role", "dept", "menu", "user", "log", "weather"]

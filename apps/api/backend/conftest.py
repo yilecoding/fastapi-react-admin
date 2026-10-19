@@ -48,6 +48,11 @@ _PATCHED_SESSION_MODULES = (
     'backend.app.admin.service.login_log_service',
     'backend.middleware.opera_log_middleware',
     'backend.app.task.tasks.maintenance.tasks',
+    # AI 对话的 SSE 生成器（issue #104）。它**必须**自己开会话：FastAPI 的 yield
+    # 依赖在 `StreamingResponse` 开始发送之前就被收尾了，拿注入进来的 session
+    # 在生成器里用会在流到一半时撞 "session is closed"。代价就是这一条 ——
+    # 它绕过了依赖注入，不补进这张表的话，跑测试会往**开发库**写对话和审计记录
+    'backend.plugin.ai.service.chat_service',
     'backend.app.task.tasks.workflow.tasks',
 )
 

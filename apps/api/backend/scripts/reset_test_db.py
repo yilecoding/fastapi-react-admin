@@ -93,7 +93,10 @@ def _stamp_head() -> None:
         'sqlalchemy.url',
         get_database_url(unittest=True).render_as_string(hide_password=False).replace('%', '%%'),
     )
-    command.stamp(cfg, 'head')
+    # `purge=True`：重建只删模型里的表，`alembic_version` 原样留着。里面若是一个本仓库
+    # 不认识的版本号（别的分支 / 实验留下的），不 purge 就当场
+    # `Can't locate revision`，整个重建白做 —— 本机实测踩过。重建之后旧版本号本来就没意义
+    command.stamp(cfg, 'head', purge=True)
     print(f'已把 {get_database_url(unittest=True).database} 标记到迁移 head')
 
 

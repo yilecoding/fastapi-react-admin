@@ -62,6 +62,29 @@ def set_current_user(user: Any | None) -> None:
 
 
 @contextmanager
+def scoped_to_user(user: Any) -> Iterator[None]:
+    """在这段代码里**把数据权限锚定到指定用户**，出去时还原。
+
+    🔴 给「不走 JWT 中间件的入口」用。`set_current_user()` 全仓只有
+    `middleware/jwt_auth_middleware.py` 调，而 `_current_user` 为 `None` 时
+    `_data_scope_condition()` 返回 `None` —— **不加任何过滤 = 看全部**。
+    那个 fail-open 对 Celery / CLI 是对的（没有「谁在看」这个概念），
+    但对「认证方式不是 JWT 的请求入口」就是静默越权：接口照样 200、
+    审计照样记成功，只是受限用户拿到了全量数据。
+
+    所以凡是自己解析出责任人、又要替他读业务数据的代码，用这个把上下文
+    显式建起来，不要依赖「反正中间件会设」—— 那是个**看不出来的**前提。
+
+    典型调用方：`plugin/ai/core/dispatcher.py`（工具调用的唯一通路）。
+    """
+    token = _current_user.set(user)
+    try:
+        yield
+    finally:
+        _current_user.reset(token)
+
+
+@contextmanager
 def bypass_data_scope() -> Iterator[None]:
     """在这段代码里关掉数据权限过滤
 
