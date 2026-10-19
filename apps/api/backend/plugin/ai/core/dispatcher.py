@@ -288,22 +288,28 @@ class ToolDispatcher:
         🔴 审计失败不能把业务也带崩：这里吞掉异常只记日志。
         代价是极端情况下会丢审计——但让一次数据库抖动把正在进行的对话整个打断，
         对用户是更糟的失败方式，而且丢的那条审计本来也写不进去。
+
+        🔴 **光吞异常不够，必须放进 SAVEPOINT。** flush 失败之后 SQLAlchemy 会把
+        整个事务标成待回滚，同一会话上后面的每个查询都是 `PendingRollbackError` ——
+        吞掉的只是这一次的异常，这一轮对话里后面所有工具都「执行失败」。
+        `begin_nested` 让失败只回滚审计这一行（`tests/test_ai_audit.py`，实测修复前红）。
         """
         from backend.plugin.ai.crud.crud_tool_invocation import ai_tool_invocation_dao
 
         try:
-            await ai_tool_invocation_dao.create(
-                ctx.db,
-                conversation_id=ctx.conversation_id,
-                user_id=ctx.user.id,
-                tool_name=call.name,
-                status=status.value,
-                params_redacted=json.dumps(_redact(call.arguments), ensure_ascii=False),
-                result_summary=result,
-                permission_code=perm,
-                error=error,
-                duration_ms=int((time.perf_counter() - started) * 1000),
-            )
+            async with ctx.db.begin_nested():
+                await ai_tool_invocation_dao.create(
+                    ctx.db,
+                    conversation_id=ctx.conversation_id,
+                    user_id=ctx.user.id,
+                    tool_name=call.name,
+                    status=status.value,
+                    params_redacted=json.dumps(_redact(call.arguments), ensure_ascii=False),
+                    result_summary=result,
+                    permission_code=perm,
+                    error=error,
+                    duration_ms=int((time.perf_counter() - started) * 1000),
+                )
         except Exception:
             log.exception('AI 工具审计落库失败（不影响本次调用结果）')
 
