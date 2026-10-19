@@ -18,6 +18,10 @@ annotated-types==0.8.0
 anyio==4.14.2
     # via
     #   httpx
+    #   httpx2
+    #   openai
+    #   pydantic-ai-slim
+    #   pydantic-graph
     #   starlette
     #   watchfiles
 asgiref==3.12.1
@@ -53,10 +57,13 @@ certifi==2026.7.22
     # via
     #   httpcore
     #   httpx
+    #   requests
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
     # via
     #   cryptography
     #   gevent
+charset-normalizer==3.5.2
+    # via requests
 click==8.4.2
     # via
     #   celery
@@ -94,6 +101,7 @@ exceptiongroup==1.3.1 ; python_full_version < '3.11'
     # via
     #   anyio
     #   celery
+    #   pydantic-ai-slim
     #   pytest
 fast-captcha==0.3.2
     # via fastapi-react-admin-api
@@ -109,6 +117,8 @@ fastapi-pagination==0.15.16
     # via fastapi-react-admin-api
 flower==2.0.1
     # via fastapi-react-admin-api
+genai-prices==0.1.13
+    # via pydantic-ai-slim
 gevent==26.8.0
     # via fastapi-react-admin-api
 googleapis-common-protos==1.75.1
@@ -119,23 +129,37 @@ greenlet==3.5.5
     # via
     #   gevent
     #   sqlalchemy
+griffelib==2.3.0 ; python_full_version < '3.11'
+    # via pydantic-ai-slim
+griffelib==2.3.2 ; python_full_version >= '3.11'
+    # via pydantic-ai-slim
 grpcio==1.83.0
     # via opentelemetry-exporter-otlp-proto-grpc
 h11==0.16.0
     # via
     #   httpcore
+    #   httpcore2
     #   uvicorn
     #   wsproto
 hiredis==3.4.1
     # via redis
 httpcore==1.0.9
     # via httpx
+httpcore2==2.14.0 ; sys_platform != 'emscripten'
+    # via httpx2
 httptools==0.8.0
     # via uvicorn
 httpx==0.28.1
     # via
     #   fastapi
     #   fastapi-oauth20
+httpx2==2.14.0
+    # via
+    #   genai-prices
+    #   openai
+    #   pydantic-ai-slim
+httpx2-jsfetch==1.0 ; python_full_version >= '3.12' and sys_platform == 'emscripten'
+    # via httpx2
 humanize==4.16.0
     # via flower
 idna==3.18
@@ -143,6 +167,8 @@ idna==3.18
     #   anyio
     #   email-validator
     #   httpx
+    #   httpx2
+    #   requests
 iniconfig==2.3.0
     # via pytest
 itsdangerous==2.2.0
@@ -151,8 +177,12 @@ jinja2==3.1.6
     # via
     #   fastapi
     #   fastapi-react-admin-api
+jiter==0.17.0
+    # via openai
 kombu==5.6.2
     # via celery
+logfire-api==5.2.0
+    # via pydantic-graph
 loguru==0.7.3
     # via fastapi-react-admin-api
 mako==1.4.1
@@ -167,6 +197,8 @@ mdurl==0.1.2
     # via markdown-it-py
 msgspec==0.21.1
     # via fastapi-react-admin-api
+openai==3.35.1
+    # via pydantic-ai-slim
 openpyxl==3.1.5
     # via fastapi-react-admin-api
 opentelemetry-api==1.44.0
@@ -183,6 +215,7 @@ opentelemetry-api==1.44.0
     #   opentelemetry-instrumentation-sqlalchemy
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
+    #   pydantic-ai-slim
 opentelemetry-exporter-otlp-proto-common==1.44.0
     # via opentelemetry-exporter-otlp-proto-grpc
 opentelemetry-exporter-otlp-proto-grpc==1.44.0
@@ -281,13 +314,25 @@ pydantic==2.13.4
     #   fastapi
     #   fastapi-pagination
     #   fastapi-react-admin-api
+    #   genai-prices
+    #   openai
+    #   pydantic-ai-slim
     #   pydantic-extra-types
+    #   pydantic-graph
     #   pydantic-settings
     #   sqlalchemy-crud-plus
+pydantic-ai-slim==2.54.0 ; python_full_version < '3.11'
+    # via fastapi-react-admin-api
+pydantic-ai-slim==2.57.0 ; python_full_version >= '3.11'
+    # via fastapi-react-admin-api
 pydantic-core==2.46.4
     # via pydantic
 pydantic-extra-types==2.11.1
     # via fastapi
+pydantic-graph==2.54.0 ; python_full_version < '3.11'
+    # via pydantic-ai-slim
+pydantic-graph==2.57.0 ; python_full_version >= '3.11'
+    # via pydantic-ai-slim
 pydantic-settings==2.15.0
     # via
     #   fastapi
@@ -327,6 +372,10 @@ pyyaml==6.0.3
     # via uvicorn
 redis==8.1.0
     # via fastapi-react-admin-api
+regex==2026.9.29
+    # via tiktoken
+requests==2.34.2
+    # via tiktoken
 rich==15.0.0
     # via
     #   cappa
@@ -346,6 +395,8 @@ six==1.17.0
     # via
     #   ecdsa
     #   python-dateutil
+sniffio==1.3.1
+    # via openai
 sqlakeyset==2.0.1775222100
     # via fastapi-pagination
 sqlalchemy==2.0.52
@@ -367,6 +418,8 @@ starlette-context==0.5.1
     # via fastapi-react-admin-api
 termcolor==3.3.0
     # via pytest-sugar
+tiktoken==0.14.0
+    # via pydantic-ai-slim
 tomli==2.4.1 ; python_full_version < '3.11'
     # via
     #   alembic
@@ -374,6 +427,10 @@ tomli==2.4.1 ; python_full_version < '3.11'
     #   pytest
 tornado==6.5.8
     # via flower
+truststore==0.10.5 ; sys_platform != 'emscripten'
+    # via
+    #   httpcore2
+    #   httpx2
 type-lens==0.2.6
     # via cappa
 typer==0.27.1
@@ -390,6 +447,8 @@ typing-extensions==4.16.0
     #   fastapi
     #   fastapi-pagination
     #   grpcio
+    #   httpx2
+    #   openai
     #   opentelemetry-api
     #   opentelemetry-exporter-otlp-proto-grpc
     #   opentelemetry-sdk
@@ -409,6 +468,8 @@ typing-inspection==0.4.3
     # via
     #   fastapi
     #   pydantic
+    #   pydantic-ai-slim
+    #   pydantic-graph
     #   pydantic-settings
 tzdata==2026.3
     # via
@@ -422,7 +483,9 @@ ua-parser==1.0.2
 ua-parser-builtins==202606
     # via ua-parser
 urllib3==2.7.0
-    # via dulwich
+    # via
+    #   dulwich
+    #   requests
 user-agents==2.2.0
     # via fastapi-react-admin-api
 uvicorn==0.52.1

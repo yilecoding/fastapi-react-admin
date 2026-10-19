@@ -218,3 +218,46 @@ mock 掉 Redis 就把窗口一起 mock 没了。
 
 ⚠️ 现在的预演是「会变成什么」的**一句话描述**，不是字段级 diff。改的字段多起来（改上级、改状态）
 时再考虑结构化预览。
+
+## 两个引擎：`native` / `pydantic_ai`
+
+`AI_AGENT_ENGINE` 切换，两者走同一个 dispatcher。`pydantic_ai` 把工具以 `ExternalToolset`
+交给框架（框架**执行不了**它们），模型提议的调用经 `HandleDeferredToolCalls` 交回
+`tool_dispatcher.dispatch`；`confirm_required` 不回填结果，框架冒泡结束这一轮。
+四个实测坑和对应处理写在 `engines/pydantic_ai_engine.py` 开头那张表里。
+
+**实测证据**（`tests/test_ai_pydantic_engine.py`，框架自带的 `FunctionModel`，不连网关）：
+11 条，其中「同一段对话两个引擎的事件序列一致」两条。**变异检验**：四个坑各撤掉一处
+处理，对应测试各自转红；在新引擎里写一句 `get_tool(...).handler(...)`，
+`TestEnginesNeverHoldExecutables` 当场红并指出行号。
+真实网关（Qwen3-VL，内网）上两个引擎各跑「查健康 + 部门」「在总部下新建部门」：
+工具调用序列逐条相同，新建都停在确认卡片上。
+
+⚠️ pydantic-ai 2.57 要求 Python ≥ 3.11，3.10 上 uv 会解析到 2.54（`pyproject` 下限因此是 2.54）。
+两版之间 `AgentRunResult.usage` 从方法改成了属性，适配器两种都接；**3.10 那条没有实跑过**
+（CI 和生产镜像都是 3.13）。
+
+## 🔴 只读工具要真跑一遍：service 签名会被别的 PR 改掉
+
+#108 删了 `DeptService.get_tree()` 的 `leader` 参数、把部门的 `leader` 改成 `leader_id`；
+#105 在它之后合并，两个 PR 各自 CI 全绿，合起来：
+
+| 工具 | 表现 |
+|---|---|
+| `dept_list` | 每次 `unexpected keyword argument 'leader'`。模型拿着参数错误重试到 5 轮上限，报「请把问题拆小一些」—— 像模型笨，不像代码坏 |
+| `dept_create` | **静默**：pydantic 丢掉未知字段 `leader`，确认卡片写着「负责人：张三」，建出来没有负责人 |
+
+`test_ai_read_tools.py` 把每个只读工具在真实测试库上跑一遍（修复前 `dept_list` 实测红）。
+`dept_create` 暂不收负责人（名字 → 用户 ID 要在数据范围里查、要处理重名，是另一件事）。
+⚠️ 「工具参数 → schema 字段名」这一类静默丢弃，只读冒烟测试抓不到 —— 写操作工具要像
+`test_ai_write_tools.py` 那样建完读回来断言。
+
+## 🔴 审计写失败，必须只坏审计那一行
+
+`_audit` 原来只 `try/except` 吞异常。吞掉的是 Python 异常，**会话已经坏了**：flush 失败后
+SQLAlchemy 把整个事务标成待回滚，这一轮对话里后面每个工具都 `PendingRollbackError` →「执行失败」。
+现在放进 `begin_nested()`（SAVEPOINT）。
+
+**实测证据**（`tests/test_ai_audit.py`）：用一个名字超过列宽的工具触发真实的数据库报错，
+修复前同一会话里下一个 `dept_list` 失败、连计数查询都 `PendingRollbackError`；修复后通过，
+且后面的审计照常写入。最早是脚本里没初始化雪花算法时撞到的（审计取不到 ID）。

@@ -10,7 +10,8 @@ database = ["mysql", "postgresql", "sqlserver"]
 router = ["v1"]
 
 [settings]
-# 引擎选择：native（进程内 OpenAI 兼容循环）。将来接 pi sidecar 等只改这个值。
+# 引擎选择：native（自写的 OpenAI 兼容循环，零额外依赖）/ pydantic_ai（需装 requirements.txt）。
+# 两者走同一个 dispatcher，权限 / 确认 / 审计不随引擎变。
 AI_AGENT_ENGINE = "native"
 # 变更类工具是否强制二次确认（关掉 = 模型说调用就直接执行，谨慎）
 AI_CONFIRM_MUTATING_TOOLS = true
