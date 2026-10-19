@@ -35,9 +35,7 @@ async def dept_list(
     少了它，一个只该看见本部门的人问"有哪些部门"会拿到整棵组织树。
     """
     data_filter = filter_data_permission_for_user(ctx.user, Dept)
-    return await dept_service.get_tree(
-        db=db, data_filter=data_filter, name=name, code=code, leader=None, phone=None, status=status
-    )
+    return await dept_service.get_tree(db=db, data_filter=data_filter, name=name, code=code, phone=None, status=status)
 
 
 # ---------------------------------------------------------------------------
@@ -54,8 +52,15 @@ async def dept_list(
 _DEPT_ID_HINT = '部门 ID 是字符串（雪花 ID），先用 dept_list 查到再传，不要自己编'
 
 
-def _create_param(name: str, code: str, parent_id: str | None, leader: str | None, sort: int) -> CreateDeptParam:
-    return CreateDeptParam(name=name, code=code, parent_id=parent_id, leader=leader, sort=sort, status=1)
+def _create_param(name: str, code: str, parent_id: str | None, sort: int) -> CreateDeptParam:
+    """⚠️ 刻意不收「负责人」。负责人是 `leader_id`（用户 ID），而人说的是名字 ——
+    名字 → 用户 ID 要在调用者的数据范围里查、还要处理重名，是另一件事。
+
+    🔴 原来这里收一个 `leader: str` 原样塞进 `CreateDeptParam`。#108 把那个字段改成了
+    `leader_id` 之后，pydantic **静默丢弃**了未知字段：预演卡片上写着「负责人：张三」，
+    人点了确认，建出来的部门没有负责人，不报错。
+    """
+    return CreateDeptParam(name=name, code=code, parent_id=parent_id, sort=sort, status=1)
 
 
 async def _preview_create(
@@ -63,14 +68,12 @@ async def _preview_create(
     name: str,
     code: str,
     parent_id: str | None = None,
-    leader: str | None = None,
     sort: int = 0,
 ) -> str:
-    obj = _create_param(name, code, parent_id, leader, sort)
+    obj = _create_param(name, code, parent_id, sort)
     parent = await dept_service.check_create(db=db, obj=obj)
     where = f'「{parent.name}」下' if parent else '顶级'
-    extra = f'，负责人：{leader}' if leader else ''
-    return f'将在{where}新建部门「{obj.name}」（编码 {obj.code}{extra}）'
+    return f'将在{where}新建部门「{obj.name}」（编码 {obj.code}）'
 
 
 @ai_tool(
@@ -78,7 +81,7 @@ async def _preview_create(
     description=(
         '新建一个部门。会先请用户确认再执行。'
         f'code 是部门编码（大写字母开头，只含大写字母、数字、下划线，2-32 位，创建后不可改）；'
-        f'parent_id 不传表示顶级部门。{_DEPT_ID_HINT}。'
+        f'parent_id 不传表示顶级部门。{_DEPT_ID_HINT}。暂不支持设置负责人，需要的话请用户到部门管理页设置。'
     ),
     domain='dept',
     perm='sys:dept:add',
@@ -90,10 +93,9 @@ async def dept_create(
     name: str,
     code: str,
     parent_id: str | None = None,
-    leader: str | None = None,
     sort: int = 0,
 ) -> dict[str, Any]:
-    obj = _create_param(name, code, parent_id, leader, sort)
+    obj = _create_param(name, code, parent_id, sort)
     await dept_service.create(db=db, obj=obj)
     return {'name': obj.name, 'code': obj.code, 'parent_id': parent_id}
 
