@@ -1,6 +1,6 @@
 # 打 tag 发桌面端安装包（三个平台）。
 #
-#   git tag v0.0.1 && git push origin v0.0.1
+#   git tag v0.1.0 && git push origin v0.1.0
 #
 # 跑完会在 GitHub 上留一个**草稿** release，人工确认后再发布 —— 安装包能不能装、
 # 能不能连上后端，机器判不了。
@@ -37,23 +37,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 校验 tag 与 brand.ts 一致
+      # 版本号的单一来源是 apps/web/package.json —— vite.config.ts 把它注入成
+      # VITE_APP_VERSION，brand.ts 和 /version.json 都读那个值。
+      # 🔴 这里原来是拿正则去 brand.ts 里抠 `version: "x.y.z"`，brand.ts 改成读
+      # import.meta.env 之后那个正则就再也匹配不上了，而 v0.0.1 之后没人打过 tag，
+      # 所以没人发现：下一次打 tag 会在第一个 job 上「找不到 version 字段」直接红掉
+      - name: 校验 tag 与 package.json 一致
         run: |
           VER="${GITHUB_REF_NAME#v}"
           node -e "
-            const fs = require('fs')
-            const s = fs.readFileSync('apps/web/src/lib/brand.ts', 'utf8')
-            const m = s.match(/version:\s*['\"]v?([^'\"]+)['\"]/)
-            if (!m) { console.error('brand.ts 里找不到 version 字段'); process.exit(2) }
-            const brand = m[1]
+            const pkg = require('./apps/web/package.json').version
             const tag = process.argv[1]
-            // 允许预发布后缀：brand.ts 是 0.0.1 时 v0.0.1 与 v0.0.1-rc.1 都算一致。
+            // 允许预发布后缀：package.json 是 0.0.1 时 v0.0.1 与 v0.0.1-rc.1 都算一致。
             // 「发到 Release」那一步没法本地验证，得留个能试的口子
-            if (!(brand === tag || tag.startsWith(brand + '-'))) {
-              console.error(\`不一致：brand.ts 是 v\${brand}，tag 是 v\${tag}。先改 brand.ts 再重新打 tag。\`)
+            if (!(pkg === tag || tag.startsWith(pkg + '-'))) {
+              console.error(\`不一致：apps/web/package.json 是 \${pkg}，tag 是 v\${tag}。先改 package.json 再重新打 tag。\`)
               process.exit(1)
             }
-            console.log(\`一致：brand.ts v\${brand} ← tag v\${tag}\`)
+            console.log(\`一致：package.json \${pkg} ← tag v\${tag}\`)
           " "$VER"
 
       - name: 建草稿（已存在就跳过）
