@@ -655,3 +655,25 @@ test("设计器：在表单这一步点流程节点的发布问题，跳到流�
   await expect(page).toHaveURL(/step=flow/)
   await expect(scope.getByTestId("node-name")).toBeVisible()
 })
+
+test("实例监控：和列表页同一套查询区；按发起人筛、刷新还在；点标题开详情", async ({ page }) => {
+  await loginPageAs(page, "admin", "123456")
+  await page.goto("/workflow/monitor")
+  const scope = page.locator('[data-tab="/_auth/workflow/monitor"]')
+  // 先断言「有」：表格里有行
+  await expect(scope.locator('[data-testid^="wf-monitor-row-"]').first()).toBeVisible()
+  await scope.getByTestId("qb-input-initiator").fill("孙强")
+  await scope.getByTestId("qb-search").click()
+  await expect(page).toHaveURL(/initiator=/)
+  const rows = scope.locator('[data-testid^="wf-monitor-row-"]')
+  await expect(rows.first()).toBeVisible()
+  // 每一行的发起人都是孙强
+  for (const text of await rows.allInnerTexts()) expect(text).toContain("孙强")
+  // 视图状态进 URL：刷新之后条件还在
+  await page.reload()
+  await expect(scope.getByTestId("qb-input-initiator")).toHaveValue("孙强")
+  // 点标题开详情
+  await rows.first().locator('[data-testid^="wf-monitor-open-"]').click()
+  await expect(page.getByTestId("wf-instance-sheet").getByTestId("wf-title")).toBeVisible()
+  await expect(page).toHaveURL(/[?&]id=\d+/)
+})

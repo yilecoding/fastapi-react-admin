@@ -141,6 +141,9 @@ export type InstanceRow = {
   cc_time?: string
   /** 发起人标了加急：待办列表排前面 */
   urgent?: boolean
+  /** 实例监控：在办的单子当前在哪一步、谁手上 */
+  current_node_name?: string | null
+  handlers?: string[]
 }
 
 export type TaskRow = {
@@ -335,7 +338,8 @@ export const startFormQuery = (code: string) =>
     queryFn: () => api.GET<StartForm>(`${BASE}/startable/${encodeURIComponent(code)}`),
   })
 
-export const monitorQuery = (p: { page: number; size: number; keyword?: string; status?: string }) =>
+/** 实例监控。入参由查询区出（keyword / status / definition_id / initiator / start_time / end_time）+ 分页 */
+export const monitorQuery = (p: { page: number; size: number } & Record<string, string | number | undefined>) =>
   queryOptions({
     queryKey: workflowKeys.monitor(p),
     queryFn: () => api.GET<PageData<InstanceRow>>(`${BASE}/monitor?${qs(p)}`),

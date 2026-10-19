@@ -11,6 +11,7 @@ avc-bp 踩过：审批中心挂了权限码，普通员工进不去，只好另�
 
 import json
 
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Path, Query, Request, UploadFile
@@ -335,11 +336,25 @@ async def get_monitor(
     db: CurrentSession,
     keyword: Keyword = None,
     status: Annotated[str | None, Query(max_length=16)] = None,
+    definition_id: Annotated[int | None, Query(description='流程定义 ID')] = None,
+    initiator: Annotated[str | None, Query(max_length=64, description='发起人姓名 / 用户名')] = None,
+    start_time: Annotated[datetime | None, Query(description='发起时间起')] = None,
+    end_time: Annotated[datetime | None, Query(description='发起时间止')] = None,
     page: Page = 1,
     size: Size = 20,
 ) -> ResponseModel:
     return response_base.success(
-        data=await query_service.monitor(db, keyword=keyword, status=status, page=page, size=size)
+        data=await query_service.monitor(
+            db,
+            keyword=keyword,
+            status=status,
+            definition_id=definition_id,
+            initiator=initiator,
+            start_time=start_time,
+            end_time=end_time,
+            page=page,
+            size=size,
+        )
     )
 
 

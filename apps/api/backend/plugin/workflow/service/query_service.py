@@ -51,6 +51,8 @@ from backend.plugin.workflow.service.runtime_service import (
 from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -191,12 +193,55 @@ async def cc_me(
     return _page(await _finish_rows(db, items), total, page, size)
 
 
-async def monitor(db: AsyncSession, *, keyword: str | None, status: str | None, page: int, size: int) -> dict[str, Any]:
+async def monitor(
+    db: AsyncSession,
+    *,
+    keyword: str | None,
+    status: str | None,
+    definition_id: int | None = None,
+    initiator: str | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
+    page: int,
+    size: int,
+) -> dict[str, Any]:
     stmt = select(WfInstance, WfDefinition.name).join(WfDefinition, WfDefinition.id == WfInstance.definition_id)
     if status:
         stmt = stmt.where(WfInstance.status == status)
+    if definition_id:
+        stmt = stmt.where(WfInstance.definition_id == definition_id)
+    if initiator:
+        # 按姓名 / 用户名模糊找发起人（离职停用的也算 —— 查的是历史单子）
+        like = f'%{initiator}%'
+        stmt = stmt.where(
+            WfInstance.initiator_id.in_(select(User.id).where(or_(User.nickname.like(like), User.username.like(like))))
+        )
+    if start_time:
+        stmt = stmt.where(WfInstance.created_time >= start_time)
+    if end_time:
+        stmt = stmt.where(WfInstance.created_time <= end_time)
     rows, total = await _paged(db, _search(stmt, keyword), page, size, WfInstance.id.desc())
-    return _page(await _finish_rows(db, list(starmap(_instance_row, rows))), total, page, size)
+    items = await _finish_rows(db, list(starmap(_instance_row, rows)))
+    # 监控最常问的一句「卡在谁手上」：在办的单子带上当前这一步和办理人（本页一次查完，不是 N+1）
+    pending = (
+        (
+            await db.execute(
+                select(WfTask.instance_id, WfTask.node_name, WfTask.assignee_name)
+                .where(WfTask.instance_id.in_([r['id'] for r in items]), WfTask.status == TaskStatus.pending)
+                .order_by(WfTask.id)
+            )
+        ).all()
+        if items
+        else []
+    )
+    by_inst: dict[int, tuple[str, list[str]]] = {}
+    for iid, node_name, who in pending:
+        by_inst.setdefault(iid, (node_name, []))[1].append(who)
+    for r in items:
+        node_name, handlers = by_inst.get(r['id'], (None, []))
+        r['current_node_name'] = node_name
+        r['handlers'] = handlers
+    return _page(items, total, page, size)
 
 
 async def counts(db: AsyncSession, user_id: int) -> dict[str, int]:

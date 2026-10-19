@@ -11543,6 +11543,14 @@ export interface operations {
                 /** @description 标题 / 摘要关键字 */
                 keyword?: string | null;
                 status?: string | null;
+                /** @description 流程定义 ID */
+                definition_id?: number | null;
+                /** @description 发起人姓名 / 用户名 */
+                initiator?: string | null;
+                /** @description 发起时间起 */
+                start_time?: string | null;
+                /** @description 发起时间止 */
+                end_time?: string | null;
                 /** @description 页码 */
                 page?: number;
                 /** @description 每页数量 */
