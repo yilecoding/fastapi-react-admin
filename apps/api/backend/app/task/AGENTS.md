@@ -199,3 +199,15 @@ pnpm test                       # 含本模块，见 pyproject 的 testpaths
   **单跑那个文件不会撞到，只有全量跑才会**
 - **任务里的 `async_db_session` 连的是开发库。** 不换会话，测试就是在 `fba` 上跑；
   更要紧的是反过来 —— 它真的会去删你的开发库
+
+## 🔴 Redis 和别的项目共用时，broker 要换一个没人用的库
+
+**症状**：worker 日志里刷 `Received unregistered task of type 'visitor.submit_eip'` ——
+一个本仓库根本没有的任务名；同时本仓库的任务时有时无地丢。
+
+**根因**：broker 默认是 Redis 的 `CELERY_BROKER_REDIS_DATABASE=1`（`core/conf.py`）。本机另一个项目的
+celery 也用 6380 上的 db 1，两边的 worker 消费的是**同一个队列**：对方的任务被这边收走（报未注册），
+这边的任务也会被对方的 worker 收走（**静默丢失**，这边日志里什么都没有）。
+
+**修法**：本地 `.env` 里把 `CELERY_BROKER_REDIS_DATABASE` 指到一个空库（本机用的是 `7`），改完重启 worker。
+先 `redis-cli -n <db> DBSIZE` 确认那个库是空的。生产的 Redis 是独占的，不受影响。

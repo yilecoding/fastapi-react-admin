@@ -27,6 +27,9 @@ import { SchedulerRecordPage } from "@admin/platform/pages/scheduler-record"
 import { AiChatPage } from "@admin/platform/pages/ai-chat"
 import { AiProviderPage } from "@admin/platform/pages/ai-provider"
 import { AiToolLogPage } from "@admin/platform/pages/ai-tool-log"
+import { WorkflowInboxPage } from "@admin/platform/pages/workflow-inbox"
+import { WorkflowDefinitionPage } from "@admin/platform/pages/workflow-definition"
+import { WorkflowMonitorPage } from "@admin/platform/pages/workflow-monitor"
 
 /**
  * routeId → 页面组件。
@@ -64,5 +67,8 @@ export const pageRegistry: PageRegistry = {
   "/_auth/profile": ProfilePage,
   "/_auth/plugins/notice": NoticePage,
   "/_auth/notification": NotificationPage,
+  "/_auth/workflow/inbox": WorkflowInboxPage,
+  "/_auth/workflow/definition": WorkflowDefinitionPage,
+  "/_auth/workflow/monitor": WorkflowMonitorPage,
   "/_auth/system/plugin": PluginPage,
 }

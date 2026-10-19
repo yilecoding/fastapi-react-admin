@@ -53,6 +53,7 @@ _PATCHED_SESSION_MODULES = (
     # 在生成器里用会在流到一半时撞 "session is closed"。代价就是这一条 ——
     # 它绕过了依赖注入，不补进这张表的话，跑测试会往**开发库**写对话和审计记录
     'backend.plugin.ai.service.chat_service',
+    'backend.app.task.tasks.workflow.tasks',
 )
 
 

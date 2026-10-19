@@ -41,6 +41,9 @@ import { Route as AuthSystemMenuRouteImport } from './routes/_auth/system/menu'
 import { Route as AuthSystemPluginRouteImport } from './routes/_auth/system/plugin'
 import { Route as AuthSystemRoleRouteImport } from './routes/_auth/system/role'
 import { Route as AuthSystemUserRouteImport } from './routes/_auth/system/user'
+import { Route as AuthWorkflowDefinitionRouteImport } from './routes/_auth/workflow/definition'
+import { Route as AuthWorkflowInboxRouteImport } from './routes/_auth/workflow/inbox'
+import { Route as AuthWorkflowMonitorRouteImport } from './routes/_auth/workflow/monitor'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -201,6 +204,21 @@ const AuthSystemUserRoute = AuthSystemUserRouteImport.update({
   path: '/system/user',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthWorkflowDefinitionRoute = AuthWorkflowDefinitionRouteImport.update({
+  id: '/workflow/definition',
+  path: '/workflow/definition',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthWorkflowInboxRoute = AuthWorkflowInboxRouteImport.update({
+  id: '/workflow/inbox',
+  path: '/workflow/inbox',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthWorkflowMonitorRoute = AuthWorkflowMonitorRouteImport.update({
+  id: '/workflow/monitor',
+  path: '/workflow/monitor',
+  getParentRoute: () => AuthRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -233,6 +251,9 @@ export interface FileRoutesByFullPath {
   '/system/plugin': typeof AuthSystemPluginRoute
   '/system/role': typeof AuthSystemRoleRoute
   '/system/user': typeof AuthSystemUserRoute
+  '/workflow/definition': typeof AuthWorkflowDefinitionRoute
+  '/workflow/inbox': typeof AuthWorkflowInboxRoute
+  '/workflow/monitor': typeof AuthWorkflowMonitorRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -265,6 +286,9 @@ export interface FileRoutesByTo {
   '/system/plugin': typeof AuthSystemPluginRoute
   '/system/role': typeof AuthSystemRoleRoute
   '/system/user': typeof AuthSystemUserRoute
+  '/workflow/definition': typeof AuthWorkflowDefinitionRoute
+  '/workflow/inbox': typeof AuthWorkflowInboxRoute
+  '/workflow/monitor': typeof AuthWorkflowMonitorRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -300,6 +324,9 @@ export interface FileRoutesById {
   '/_auth/system/plugin': typeof AuthSystemPluginRoute
   '/_auth/system/role': typeof AuthSystemRoleRoute
   '/_auth/system/user': typeof AuthSystemUserRoute
+  '/_auth/workflow/definition': typeof AuthWorkflowDefinitionRoute
+  '/_auth/workflow/inbox': typeof AuthWorkflowInboxRoute
+  '/_auth/workflow/monitor': typeof AuthWorkflowMonitorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -334,6 +361,9 @@ export interface FileRouteTypes {
     | '/system/plugin'
     | '/system/role'
     | '/system/user'
+    | '/workflow/definition'
+    | '/workflow/inbox'
+    | '/workflow/monitor'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -366,6 +396,9 @@ export interface FileRouteTypes {
     | '/system/plugin'
     | '/system/role'
     | '/system/user'
+    | '/workflow/definition'
+    | '/workflow/inbox'
+    | '/workflow/monitor'
   id:
     | '__root__'
     | '/'
@@ -400,6 +433,9 @@ export interface FileRouteTypes {
     | '/_auth/system/plugin'
     | '/_auth/system/role'
     | '/_auth/system/user'
+    | '/_auth/workflow/definition'
+    | '/_auth/workflow/inbox'
+    | '/_auth/workflow/monitor'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -634,6 +670,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSystemUserRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/workflow/definition': {
+      id: '/_auth/workflow/definition'
+      path: '/workflow/definition'
+      fullPath: '/workflow/definition'
+      preLoaderRoute: typeof AuthWorkflowDefinitionRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/workflow/inbox': {
+      id: '/_auth/workflow/inbox'
+      path: '/workflow/inbox'
+      fullPath: '/workflow/inbox'
+      preLoaderRoute: typeof AuthWorkflowInboxRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/workflow/monitor': {
+      id: '/_auth/workflow/monitor'
+      path: '/workflow/monitor'
+      fullPath: '/workflow/monitor'
+      preLoaderRoute: typeof AuthWorkflowMonitorRouteImport
+      parentRoute: typeof AuthRoute
+    }
   }
 }
 
@@ -666,6 +723,9 @@ interface AuthRouteChildren {
   AuthSystemPluginRoute: typeof AuthSystemPluginRoute
   AuthSystemRoleRoute: typeof AuthSystemRoleRoute
   AuthSystemUserRoute: typeof AuthSystemUserRoute
+  AuthWorkflowDefinitionRoute: typeof AuthWorkflowDefinitionRoute
+  AuthWorkflowInboxRoute: typeof AuthWorkflowInboxRoute
+  AuthWorkflowMonitorRoute: typeof AuthWorkflowMonitorRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
@@ -697,6 +757,9 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthSystemPluginRoute: AuthSystemPluginRoute,
   AuthSystemRoleRoute: AuthSystemRoleRoute,
   AuthSystemUserRoute: AuthSystemUserRoute,
+  AuthWorkflowDefinitionRoute: AuthWorkflowDefinitionRoute,
+  AuthWorkflowInboxRoute: AuthWorkflowInboxRoute,
+  AuthWorkflowMonitorRoute: AuthWorkflowMonitorRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)

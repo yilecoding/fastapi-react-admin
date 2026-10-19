@@ -247,8 +247,8 @@ export function NotificationBell() {
                   <li key={n.id}>
                     {to ? (
                       <Link
-                        to={to as never}
-                        search={{} as never}
+                        to={to.to as never}
+                        search={to.search as never}
                         onClick={onActivate}
                         data-testid="notification-item"
                         data-unread={!n.read_time}

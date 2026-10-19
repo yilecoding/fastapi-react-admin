@@ -54,6 +54,7 @@ error:
     has_users: 部门下存在用户，无法删除
     not_found: 部门不存在
     parent_not_found: 父级部门不存在
+    leader_not_found: 负责人不存在
   dict:
     data_exists: 字典数据已存在
     data_not_found: 字典数据不存在
@@ -190,6 +191,39 @@ error:
     self_permission_forbidden: 禁止修改自身权限
     username_registered: 用户名已注册
     wrong_old_password: 原密码错误
+  workflow:
+    attachment_not_yours: 只能添加你自己上传的附件
+    instance_not_found: 审批单不存在
+    instance_finished: 审批已经结束，不能再操作
+    action_disabled: '暂时不能执行这个操作：{reason}'
+    action_not_allowed: 你现在不能执行这个操作，请刷新后查看
+    remind_too_often: 5 分钟内只能催办一次
+    idempotency_key_invalid: 幂等键无效
+    busy: 操作太频繁，请稍后重试
+    definition_not_startable: 这个审批不存在或已停用
+    definition_not_found: 流程定义不存在
+    definition_code_exists: 流程编码已存在
+    definition_has_instances: 这个流程已经有审批单，不能删除，可以停用
+    definition_never_published: 还没发布过，不能启用
+    definition_too_large: 表单或流程配置过大
+    biz_type_unknown: '未知的业务类型：{biz_type}'
+    not_form_definition: 这个流程不是表单审批，要从业务页面发起
+    form_invalid: '表单填写有误：{detail}'
+    selected_invalid: 自选审批人格式不正确
+    selected_required: '请为「{node}」选择审批人'
+    opinion_required: 驳回时请填写意见
+    reason_required: 请填写原因
+    transfer_one: 转交只能选一个人
+    user_not_found: 选择的人不存在或已停用
+    transfer_to_initiator: 不能转交给发起人
+    transfer_to_existing: 对方已经是这个节点的审批人
+    field_not_editable: '这些字段在当前节点不能修改：{fields}'
+    send_back_target_invalid: 不能退回到这个节点，请刷新后重新选择
+    task_not_pending: 这条待办已经处理过了，请刷新后查看
+    handover_same_user: 交出和接手的不能是同一个人
+    sign_mode_invalid: 请选择加在你之前还是之后
+    sign_users_invalid: 加签要选 1 到 10 个人
+    draft_too_large: 草稿太大，存不下
 
 # 上传校验报错要拼「人话名字」（图片/文档/…），标识用 FileType.value，
 # 文案查这张表——新增文件分类时两边（这里 + `common/enums.py` 的 FileType）
@@ -333,3 +367,27 @@ messages:
   Method Not Allowed: 不支持的请求方法
   Not Found: 请求的资源不存在
   Internal Server Error: 服务器内部错误
+workflow:
+  default_title: '{user}提交的{name}'
+  no_assignee: 没有找到审批人，已自动跳过
+  no_assignee_reject: '「{node}」没有找到审批人，已自动驳回'
+  status:
+    running: 审批中
+    approved: 已通过
+    rejected: 已驳回
+    withdrawn: 已撤回
+    terminated: 已终止
+  notify:
+    cc_title: '抄送给你：{title}'
+    remind_title: '催办：{title}'
+    remind_content: '{user}提醒你尽快处理这条审批'
+    withdrawn_title: '已撤回：{title}'
+    sent_back_title: '被退回：{title}'
+    sent_back_content: '{user}退回了你的申请：{opinion}。修改后可以重新提交'
+    timeout_title: '待处理超时：{title}'
+    timeout_content: '这条审批在你这里已经超过 {hours} 小时，请尽快处理'
+  initiator: 发起人
+  resubmit_node: 发起人修改
+  handover_opinion: 离职交接
+  timeout_approved: '超过 {hours} 小时未处理，已自动同意'
+  timeout_rejected: '超过 {hours} 小时未处理，已自动驳回'

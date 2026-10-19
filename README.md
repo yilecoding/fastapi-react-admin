@@ -1,7 +1,7 @@
 # fastapi-react-admin
 
 **FastAPI + React 19 + shadcn/ui 中后台底座** —— 权限细到按钮和数据行，
-多页签切走真的保状态，原生跑 SQL Server。**372 条自动化测试全打真实依赖，不 mock。**
+多页签切走真的保状态，原生跑 SQL Server，自带飞书式审批流。**559 条自动化测试全打真实依赖，不 mock。**
 
 > 🚀 **在线演示 / Live demo：** https://fra.wubunan.com/sign-in
 > 账号 `admin` / 密码 `123456` —— 公开演示实例，任何人都能登录，数据会被访客改动/清空，
@@ -16,6 +16,10 @@
 <tr>
 <td width="50%"><img src="./docs/screenshots/role.png" alt="角色管理：功能权限矩阵"></td>
 <td width="50%"><img src="./docs/screenshots/data-permission.png" alt="数据权限：行级过滤规则"></td>
+</tr>
+<tr>
+<td width="50%"><img src="./docs/screenshots/workflow-inbox.png" alt="审批中心：待办 · 进度 · 能力信封"></td>
+<td width="50%"><img src="./docs/screenshots/workflow-designer.png" alt="审批设计器：表单 + 流程树"></td>
 </tr>
 </table>
 
@@ -57,7 +61,8 @@
 
 An admin foundation on **FastAPI + React 19 + shadcn/ui** — permissions down to buttons
 *and data rows*, multi-tab navigation that actually keeps state, first-class **SQL Server**,
-and **372 automated tests that run against real dependencies, with no mocks**.
+a built-in Feishu-style **approval workflow**, and **559 automated tests that run against
+real dependencies, with no mocks**.
 Optional **Electron** desktop shell and a native **Expo / React Native** mobile app share
 the backend contract and the request client, not the rendering.
 
@@ -77,17 +82,27 @@ code goes next to `packages/platform/src/pages/user/` and follows the same shape
 | **Multi-tab**         | free in Vue via `keep-alive`; usually absent in React, or loses state       | React 19 **`<Activity>`** — every open tab stays mounted; hidden ones drop effects but keep DOM and state |
 | **Component base**    | most templates still on the pre-migration shadcn/Radix combo               | already tracks shadcn's current default, **Base UI** — zero `@radix-ui` imports, plus an in-app sandbox with copy-paste code for all 28+ components |
 | **Database**          | MySQL / PostgreSQL                                                         | **native SQL Server** (`aioodbc`, NVARCHAR, filtered unique indexes, `OFFSET FETCH`); MySQL and PostgreSQL also supported |
-| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **372 tests against real dependencies, zero mocks** — 303 pytest against a real SQL Server, 69 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 68 dedicated security tests |
+| **Tests**             | templates usually ship none; when present, component unit tests over jsdom + mocked fetch | **559 tests against real dependencies, zero mocks** — 470 pytest against a real database (CI runs them on both SQL Server and PostgreSQL), 89 Playwright against a real browser hitting a real API and database. The row-level permission model is verified with **19 real accounts**, and the authorization layer (RBAC gates, permission-code drift, production config) is guarded by 84 dedicated security tests |
 
 **Status: 0.0.1, never released.** No production instance, no data to preserve — so the
 schema is still free to change. The backend is a **permanent fork** of
 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)
 (upstream declined to merge SQL Server support), tracking only its security patches.
 
-**Tests:** 303 pytest cases (real SQL Server) + 69 Playwright cases (isolated second
+**Tests:** 470 pytest cases (real database) + 89 Playwright cases (isolated second
 stack: web :1126 → api :8001 → `fba_test`). Data permissions are covered on both sides —
-22 accounts through the API, 19 through the browser. Neither suite runs in CI, because
-both need a live SQL Server instance; run them locally with `pnpm test` and `pnpm e2e`.
+22 accounts through the API, 19 through the browser. Both suites run in CI (GitHub Actions
+service containers: pytest against SQL Server and PostgreSQL in parallel, E2E against
+SQL Server); locally, `pnpm test` and `pnpm e2e`.
+
+**Approval workflow** (plugin `workflow`): a form designer (fields, show-when rules,
+computed day counts / column totals, per-node field permissions) and a flow tree
+(approval / CC / condition branches; or-sign, co-sign, sequential). At runtime: approve,
+reject, transfer, CC, send back (optionally jumping straight back to the sender), take
+back, add approvers, timeouts (remind / auto-approve / auto-reject via a Celery beat
+task), drafts, urgent flag and read receipts, plus an admin monitor with bulk handover
+for departing staff. Every state change claims the instance with a versioned UPDATE, and
+the buttons a user sees come from the same server function that executes the action.
 
 **Known gaps, stated up front:** no visual-regression tests, and data-permission filtering
 is currently wired to a single endpoint (`GET /sys/depts`) — the test suite pins that
@@ -145,7 +160,7 @@ language-independent.
 | **多页签** | Vue 靠 `keep-alive` 白送；React 侧大多没有，或者切走就丢状态 | React 19 的 **`<Activity>`**：所有已开页签同时挂载，隐藏时销毁 effects 但保留 DOM 与 state |
 | **组件基座** | 多数模板还在用 shadcn 迁移前的 Radix 版本 | 已跟进 shadcn 现在的默认底座 **Base UI**（`@radix-ui` 零引用），配一个能直接抄代码的组件沙箱 |
 | **数据库** | MySQL / PostgreSQL | **原生 SQL Server**（`aioodbc` + NVARCHAR / 筛选唯一索引 / `OFFSET FETCH` 适配），MySQL 与 PostgreSQL 也在 |
-| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **372 条打真实依赖、零 mock** —— pytest 303 条对真实 SQL Server，Playwright 69 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 68 条安全测试兜底 |
+| **测试** | 模板通常不带测试；带的多到组件单测为止（jsdom + mock fetch） | **559 条打真实依赖、零 mock** —— pytest 470 条对真实数据库（CI 上 SQL Server 与 PostgreSQL 各跑一遍），Playwright 89 条对真实浏览器 + 真实接口 + 真实库。数据权限是拿 **19 个真账号**跑出来的；授权层（RBAC 四道闸、权限码三方对账、生产配置校验）另有 84 条安全测试兜底 |
 
 它不是「拿来改改就交付」的模板，是**底座**：上面那三件事和下面几条纪律是它替你解决掉的部分，
 业务代码照 `packages/platform/src/pages/user/` 抄就行。
@@ -222,28 +237,35 @@ shadcn/ui 2026 年 7 月把默认底座从 Radix 换成了 **Base UI**——这�
 - **组织与用户**：部门树、用户、角色互绑。⚠️ 关联表写完**要记得**调 `user_cache_manager.clear*` 清 Redis —— 这是编码纪律，没有机制强制
 - **参数配置**：`sys_config` 的值会被 setattr 到 `settings` 上覆盖 `.env`（改验证码开关是真的生效），写入侧有跨字段校验兜底
 - **审计与监控**：登录日志（失败尝试的统计条）、操作日志（敏感请求头打码）、在线会话（可强制下线）、服务器 / Redis 现场指标
+- **审批流**（插件 `workflow`，飞书式）：表单设计器（字段 · 显示条件 · 天数 / 明细合计自动计算 · 每个节点的字段权限）+
+  流程树（审批 / 抄送 / 条件分支；或签 · 会签 · 依次审批）。运行时有同意 / 驳回 / 转交 / 抄送 / 催办 / 撤回、
+  **退回**（可选重新处理后直达退回人）、**拿回**、**加签**（之前 / 之后）、**超时**（提醒 / 自动同意 / 自动驳回，
+  Celery 定时扫）、发起草稿、加急、办理人已读；管理端有实例监控和离职交接。
+  所有改状态的动作先按版本号认领实例；界面上的按钮和执行接口出自同一个服务端函数（能力信封）；
+  hidden 字段在服务端裁掉，摘要 / 分支记录 / 预告 / 附件下载都不漏
 - **文件管理**：不是表格 —— 左栏分类 + 存储统计，右侧宫格卡片（图片出真实缩略图），可切列表；
   预览覆盖 pdf / docx / xlsx / 图片 / 文本 / 压缩包（`@file-viewer`，Apache-2.0）；
-  附件面板可嵌进任何页面（`sys_file_relation`），落盘按 `YYYY/MM/DD` 分目录，读取走带鉴权接口
+  附件面板可嵌进任何页面（`sys_file_relation`），落盘按 `YYYY/MM/DD` 分目录，读取走带鉴权接口；
+  私有文件只有上传人 / 有文件管理权限的人 / 业务模块登记过的读取规则（公告、审批附件）放行
 - **开发工具**：组件沙箱（26 个组件，铺开对比 + 旋钮 + 可抄的代码）、内嵌 iframe 宿主页、调色盘（读真实 token 值）
 - **国际化**：中文原文即 key，`zh-CN` 是恒等映射，漏条目只会回落到中文而不是露出 raw key
 - **偏好**：深浅色 / 主题色 / 圆角 / 页签外观，改完即时生效（无「保存」按钮）。⚠️ 登录页不在 `PlatformProvider` 下，**目前不跟随主题**
 
 ## 测试：打真实依赖，不打 mock
 
-**372 条自动化测试**，两边都不 mock 依赖 —— 后端对真实 SQL Server，
+**559 条自动化测试**，两边都不 mock 依赖 —— 后端对真实数据库（SQL Server / PostgreSQL），
 前端对真实浏览器 + 真实接口 + 真实数据库。
 
 | | 跑在哪 | 条数 | 覆盖 |
 |---|---|---|---|
-| **pytest** | 真实 SQL Server（`fba_test` 库，不碰开发库） | **303** | 安全（RBAC 门禁 / 权限码对账 / 数据权限 fail-closed / 规则校验 / 生产配置 / 健康检查 / 缓存失效）77 · 定时任务 75 · 文件模块 30 · 数据权限端到端 29 · 分页扇出 4 · 认证 11 · 自助改密码 4 · 冲突检查视角 5 · 公告可见性 1 · 个人中心信封契约 5 · 高危写接口 9 · 动态配置容灾 3 · 动态配置范围闸门 8 · 字符串长度闸门 5 · 消息通知 9 · 迁移守卫 7 · 种子方言一致性 7 · i18n 对称性 2 · 线上格式（ID 字符串 / 时区标记）2 · 角色菜单契约 3 · 其他 7 |
-| **Playwright** | 完全隔离的第二套实例：web :1126 → api :8001 → `fba_test` | **54** | 数据权限 29 · 定时任务（调度 + 执行记录 + cron 预览）9 · 部门 CRUD 2 · 登录 2 · 多页签保活 2 · 换身份 2 · 命令面板 2 · 列表刷新 2 · 列表报错 2 · 发新版提示 2 |
+| **pytest** | 真实数据库（`fba_test` 库，不碰开发库；CI 上 SQL Server / PostgreSQL 各一遍） | **470** | 安全（RBAC 门禁 / 权限码对账 / 数据权限 fail-closed / 规则校验 / 生产配置 / 健康检查 / 缓存失效 / 冲突检查视角）84 · **审批流 80** · 定时任务 75 · Excel 解析 50 · 文件模块（含私有文件读取权限）32 · 数据权限端到端 29 · 用户批量导入 20 · 操作日志脱敏 13 · 认证 11 · 高危写接口 9 · 消息通知 9 · 动态配置范围闸门 8 · 迁移守卫 7 · 种子方言一致性 7 · 字符串长度闸门 5 · 个人中心信封契约 5 · 分页扇出 4 · 自助改密码 4 · 动态配置容灾 3 · 角色菜单契约 3 · CLI 报错 3 · 邮件 2 · i18n 对称性 2 · 线上格式（ID 字符串 / 时区标记）2 · 脚本对账 2 · 公告可见性 1 |
+| **Playwright** | 完全隔离的第二套实例：web :1126 → api :8001 → `fba_test` | **89** | 数据权限 29 · **审批流 14** · 定时任务（调度 + 执行记录 + cron 预览）9 · 用户导入 3 · 功能引导 3 · 查询区 3 · 权限矩阵 3 · 消息通知 3 · 菜单死链 3 · 文件上传 3 · 部门 CRUD 2 · 登录 2 · 多页签保活 2 · 换身份 2 · 命令面板 2 · 列表刷新 2 · 列表报错 2 · 发新版提示 2 |
 
-> Playwright 那 69 条里有 1 条会按条件跳过（执行记录页要求库里真跑过一次 worker）。
+> Playwright 那 89 条里有 1 条会按条件跳过（执行记录页要求库里真跑过一次 worker）。
 
 ```bash
-pnpm test          # 后端 pytest（303 条，需要 fba_test 库）
-pnpm e2e           # 前端 Playwright（69 条，自动拉起隔离的 web+api 实例）
+pnpm test          # 后端 pytest（470 条，需要 fba_test 库）
+pnpm e2e           # 前端 Playwright（89 条，自动拉起隔离的 web+api 实例）
 ```
 
 **为什么不 mock**：中后台的 bug 几乎都长在边界上 —— SQL Server 的 NVARCHAR 截断、
@@ -346,8 +368,8 @@ docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 
 ```bash
 pnpm typecheck                                          # 全仓库 tsc
-pnpm test                                               # 后端 pytest（303 条）
-pnpm e2e                                                # 前端 Playwright（69 条）
+pnpm test                                               # 后端 pytest（470 条）
+pnpm e2e                                                # 前端 Playwright（89 条）
 pnpm i18n:check && pnpm i18n:jsx                        # 语言包校验 + 裸中文扫描
 pnpm ctx:check                                          # 工程文档里的死引用 / 死链接
 pnpm arch:check                                         # 依赖箭头有没有漂（import / paths / 方向）

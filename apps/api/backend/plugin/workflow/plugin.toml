@@ -1,0 +1,16 @@
+[plugin]
+summary = "审批流"
+version = "0.0.1"
+description = "飞书式审批：表单 + 树形流程 + 审批中心（issue #107）"
+author = "yile"
+tags = ["other"]
+database = ["mysql", "postgresql", "sqlserver"]
+# 抄送 / 催办 / 结果通知落在消息中心里（分类 WORKFLOW）
+depends_on = ["notification"]
+
+[app]
+extend = "admin"
+
+[api.workflow]
+prefix = "/workflow"
+tags = "审批流"
