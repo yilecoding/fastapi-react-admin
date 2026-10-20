@@ -465,6 +465,8 @@ class Settings(BaseSettings):
     # 每项 {id, token_sha256, act_as: [用户名 | "*"], allow_superuser?, tools?}，只存哈希。
     # 在 plugin 里按模型校验（这里 import 不了插件），校验不过一律拒绝
     AI_MCP_CLIENTS: list[dict[str, Any]]
+    # 每份凭据每分钟最多多少次请求（凭据里的 rate_per_minute 可单独覆盖）
+    AI_MCP_RATE_PER_MINUTE: int
 
     ##################################################
     # [ Plugin ] email

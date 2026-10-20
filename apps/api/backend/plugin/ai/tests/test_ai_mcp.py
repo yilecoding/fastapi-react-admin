@@ -12,6 +12,7 @@
 """
 
 import asyncio
+import uuid
 
 from collections.abc import Iterator
 from typing import Any
@@ -188,3 +189,50 @@ class TestCalls:
         assert result['isError'] is True
         assert '网页端' in result['content'][0]['text']
         assert (ToolInvocationStatus.DENIED.value, _CHANNEL) in _audit_rows('dept_create')
+
+
+class TestRateLimit:
+    """按凭据限流。用唯一的凭据 ID：Redis 里的计数窗口是一分钟，固定 ID 会让上一轮的计数漏进这一轮"""
+
+    @staticmethod
+    def _two_clients(monkeypatch: pytest.MonkeyPatch, rate: int) -> tuple[str, str]:
+        a, b = f'rl-{uuid.uuid4().hex[:8]}', f'rl-{uuid.uuid4().hex[:8]}'
+        monkeypatch.setattr(settings, 'AI_MCP_ENABLED', True)
+        monkeypatch.setattr(
+            settings,
+            'AI_MCP_CLIENTS',
+            [
+                {'id': a, 'token_sha256': hash_token(f'tok-{a}'), 'act_as': ['test', 'lina'], 'rate_per_minute': rate},
+                {'id': b, 'token_sha256': hash_token(f'tok-{b}'), 'act_as': ['test'], 'rate_per_minute': rate},
+            ],
+        )
+        return f'tok-{a}', f'tok-{b}'
+
+    def test_over_quota_is_429_with_retry_after(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, rate_limiter: None
+    ) -> None:
+        token, _ = self._two_clients(monkeypatch, rate=3)
+        codes = [_rpc(client, 'tools/list', user='test', token=token).status_code for _ in range(3)]
+        # 先断言「额度内都放行」：否则 429 可能只是因为别的原因一开始就全挡了
+        assert codes == [200, 200, 200]
+        over = _rpc(client, 'tools/list', user='test', token=token)
+        assert over.status_code == 429
+        assert int(over.headers['Retry-After']) > 0
+        assert 'jsonrpc' not in over.text, '被限流的请求不该进入 MCP 协议层'
+
+    def test_switching_acting_user_does_not_reset_quota(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, rate_limiter: None
+    ) -> None:
+        """额度按凭据算：一份凭据轮换着代表不同的人，不能换来新额度"""
+        token, _ = self._two_clients(monkeypatch, rate=2)
+        assert _rpc(client, 'tools/list', user='test', token=token).status_code == 200
+        assert _rpc(client, 'tools/list', user='lina', token=token).status_code == 200
+        assert _rpc(client, 'tools/list', user='lina', token=token).status_code == 429
+
+    def test_clients_have_separate_quotas(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, rate_limiter: None
+    ) -> None:
+        token_a, token_b = self._two_clients(monkeypatch, rate=1)
+        assert _rpc(client, 'tools/list', user='test', token=token_a).status_code == 200
+        assert _rpc(client, 'tools/list', user='test', token=token_a).status_code == 429
+        assert _rpc(client, 'tools/list', user='test', token=token_b).status_code == 200

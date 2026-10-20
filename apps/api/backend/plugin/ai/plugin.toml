@@ -34,5 +34,9 @@ AI_MCP_CLIENTS = []
 # MCP 网关（/api/v1/ai/mcp）。默认关：开之前先配好 AI_MCP_CLIENTS。
 # 第一版只开放只读工具；写操作在 MCP 上一律拒绝（要人确认的事回网页端做）。
 AI_MCP_ENABLED = false
+# 每份凭据每分钟的请求上限（凭据里写 rate_per_minute 可单独覆盖）。按凭据计，不按 IP：
+# 外部系统通常从一台机器、代表很多人来调，按 IP 限等于把所有人塞进一份额度，而按代理用户限
+# 又挡不住「一份泄露的凭据轮换着代表不同的人」
+AI_MCP_RATE_PER_MINUTE = 120
 # 开放给 AI 的工具域；下游项目按需增删，注册了但不在这里的域不会出现在工具清单里
 AI_TOOL_DOMAINS = ["system", "role", "dept", "menu", "user", "log", "weather"]

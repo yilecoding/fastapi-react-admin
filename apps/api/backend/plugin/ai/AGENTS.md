@@ -300,3 +300,18 @@ SQLAlchemy 把整个事务标成待回滚，这一轮对话里后面每个工具
   调 `dept_list` 被拒；白名单外的 `zhangwei` 在 HTTP 层 403。4 次调用对应 4 行 `channel=mcp:e2e` 审计
 - 装配坑也各撤一次验过：去掉插件 `lifespan` → `RuntimeError: Task group is not initialized`；
   打开 DNS rebinding 防护（只认 localhost）→ `421 Invalid Host header`
+
+### 限流：按凭据，不按 IP、不按代理用户
+
+`AI_MCP_RATE_PER_MINUTE`（默认 120），凭据里 `rate_per_minute` 可单独覆盖；超了在 HTTP 层 429 + `Retry-After`，
+不进协议层。复用全站的 `utils/limiter.py: RateLimiter`，所以同样受 `REQUEST_LIMITER_ENABLED` 管
+（测试里默认关，验 429 用 `rate_limiter` fixture）。
+
+| 按什么计 | 为什么不行 |
+|---|---|
+| IP | 外部系统从一台机器代表很多人来调，所有人挤一份额度 |
+| 代理用户 | 一份泄露的凭据轮换着代表不同的人，每换一个人就是一份新额度 |
+
+**实测证据**：`TestRateLimit` 3 条，**变异检验** 3 处各打红（不限流 · 按代理用户计 · 所有凭据共用一份）。
+真实 uvicorn 上额度 5：连发 7 个，5 × 200、2 × 429（`Retry-After: 60`）。
+⚠️ 测试要用唯一的凭据 ID：计数窗口在 Redis 里活一分钟，固定 ID 会让上一轮的计数漏进这一轮。
