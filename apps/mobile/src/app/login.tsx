@@ -321,7 +321,14 @@ function FieldRow({
 }) {
   return (
     <Row first={first} inset={20}>
-      <Text className="w-[62px] shrink-0 text-[15px]">{label}</Text>
+      {/*
+        🔴 **标签列用 `min-w-*`，不能用 `w-*`。**
+        写死 `w-[62px]` 在中文下正好（「用户名」3 个字约 45px，撑到 62 还整齐对齐），
+        **英文下必然换行** —— 实测截图里是 `Usernam` / `e` 和 `Passwor` / `d`
+        断成两行。中文开发看不到这个：只有把设备语言切成英文才现形。
+        `min-w-*` 两头都对：中文仍然都是 62px（对齐不变），英文按自身宽度撑开、不换行。
+      */}
+      <Text className="min-w-[62px] shrink-0 text-[15px]">{label}</Text>
       {children}
     </Row>
   )
@@ -380,7 +387,7 @@ function CaptchaRow({
   if (state.kind === 'loading') {
     return (
       <Row inset={20}>
-        <Text className="w-[62px] shrink-0 text-[15px]">{t('验证码')}</Text>
+        <Text className="min-w-[62px] shrink-0 text-[15px]">{t('验证码')}</Text>
         <ActivityIndicator size="small" />
         <Text variant="small" className="text-muted-foreground">
           {t('正在获取')}
@@ -392,7 +399,7 @@ function CaptchaRow({
   if (state.kind === 'error') {
     return (
       <Row inset={20} className="items-start">
-        <Text className="w-[62px] shrink-0 text-[15px]">{t('验证码')}</Text>
+        <Text className="min-w-[62px] shrink-0 text-[15px]">{t('验证码')}</Text>
         <View className="flex-1 gap-2 py-1">
           <Text variant="small" className="text-destructive">
             {state.rateLimited ? t('验证码请求太频繁，稍等一下再试') : state.msg}
@@ -407,7 +414,7 @@ function CaptchaRow({
 
   return (
     <Row inset={20}>
-      <Text className="w-[62px] shrink-0 text-[15px]">{t('验证码')}</Text>
+      <Text className="min-w-[62px] shrink-0 text-[15px]">{t('验证码')}</Text>
       <Input
         value={code}
         onChangeText={onChangeCode}

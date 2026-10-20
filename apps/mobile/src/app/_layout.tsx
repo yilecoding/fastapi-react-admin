@@ -12,6 +12,7 @@ import { useUniwind } from 'uniwind'
 
 import { appearanceStore } from '@/lib/appearance'
 import { setupI18n } from '@/lib/i18n'
+import { Toaster } from '@/components/ui/toast'
 import { QueryProvider } from '@/lib/query'
 import { useNavTheme } from '@/lib/theme'
 import { SessionProvider, useSession } from '@/lib/session'
@@ -87,6 +88,9 @@ export default function RootLayout() {
         </SessionProvider>
       </QueryProvider>
       <PortalHost />
+      {/* 🔴 `Toaster` 走 `<Portal>`，所以要在 `PortalHost` **之后**挂 ——
+          它渲染进那个容器，天然盖在所有屏之上。只能挂一个，挂两个每条 toast 会显示两遍 */}
+      <Toaster />
     </ThemeProvider>
   )
 }

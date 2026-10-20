@@ -8,6 +8,7 @@ import { BrandTop } from '@/components/brand-top'
 import { Chevron, DangerRow, Group, GroupHeader, PressRow, Row, RowIcon } from '@/components/grouped'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Text } from '@/components/ui/text'
 import { useSession } from '@/lib/session'
 
@@ -17,6 +18,13 @@ export default function ProfileScreen() {
   const router = useRouter()
   const [refreshing, setRefreshing] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  /*
+   * 🔴 退出登录**要确认**。这一行原来是 `onPress={() => void logout()}` ——
+   * 点到就走，而它在个人中心最底部、正是拇指划到底时容易蹭到的位置。
+   * 移动端在 `ui/confirm-dialog.tsx` 之前**没有任何确认框**，所以这类
+   * 破坏性动作一律是「点了就发生」。
+   */
+  const [confirmingLogout, setConfirmingLogout] = React.useState(false)
 
   async function onRefresh() {
     setRefreshing(true)
@@ -112,9 +120,23 @@ export default function ProfileScreen() {
       {/* 登出单独一个分组块 —— iOS 上「破坏性动作」就是这么放的 */}
       <View className="pt-4">
         <Group>
-          <DangerRow label={t('退出登录')} onPress={() => void logout()} testID="profile-logout" />
+          <DangerRow label={t('退出登录')} onPress={() => setConfirmingLogout(true)} testID="profile-logout" />
         </Group>
       </View>
+
+      <ConfirmDialog
+        open={confirmingLogout}
+        onOpenChange={setConfirmingLogout}
+        title={t('退出登录')}
+        description={t('下次进来要重新输入账号密码。')}
+        confirmLabel={t('退出')}
+        cancelLabel={t('取消')}
+        onConfirm={() => {
+          setConfirmingLogout(false)
+          void logout()
+        }}
+        testID="logout-confirm"
+      />
     </ScrollView>
   )
 }

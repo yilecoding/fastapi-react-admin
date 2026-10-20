@@ -36,6 +36,13 @@
 拿不到用户，条件为 `None`，不加任何过滤。所以那些路径不需要显式豁免。
 需要 `bypass_data_scope()` 的只有一种：**请求上下文里的系统内部读**
 （典型的是认证链路自己去查用户）。
+
+⚠️ **但「天然不过滤」只对「不代表任何人」的任务成立。** 一旦有任务是**代替
+某个人**读写业务数据（编排流程、浏览器自动化、以后的 AI 工具调用都是这种），
+同一个 `None` 默认值就从「合理的不过滤」变成**静默 fail-open** —— 那个人
+只该看到本部门的行，任务却查回了全库，而且不报错。这类路径必须用下面的
+`scoped_to_user(user)` 显式声明执行身份。判据是一句话：**这段代码的读，结果要给
+某个具体的人看或按他的权限写吗？** 要，就得 `scoped_to_user`。
 """
 
 from collections.abc import Iterator
@@ -76,7 +83,19 @@ def scoped_to_user(user: Any) -> Iterator[None]:
     显式建起来，不要依赖「反正中间件会设」—— 那是个**看不出来的**前提。
 
     典型调用方：`plugin/ai/core/dispatcher.py`（工具调用的唯一通路）。
+    Celery 任务 / CLI 里**代表某个人**读写业务数据时同样用它；不代表任何人的任务
+    （清日志那类）根本不要调 —— 默认的不过滤是刻意的。
+
+    🔴 **不接受 `None`。** 「不知道以谁的身份跑」不是一个可以继续执行的状态 ——
+    允许它就等于给 fail-open 开了个看起来合法的后门（调用方以为「我包了一层，
+    权限是继承的」，其实什么都没继承）。要跳过过滤用 `bypass_data_scope()`，那是显式的。
+
+    🔴 **必须成对 set / reset，不能退化成 `set_current_user`。** `celery_aio_pool`
+    把所有任务跑在同一个事件循环、同一个线程里，ContextVar 设了不还原，
+    下一个任务就顶着上一个任务的身份跑 —— 跨用户泄漏，而两个任务各自看都正常。
     """
+    if user is None:
+        raise ValueError('scoped_to_user() 不接受 None —— 执行身份必须确定；要跳过过滤请用 bypass_data_scope()')
     token = _current_user.set(user)
     try:
         yield

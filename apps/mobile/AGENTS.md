@@ -1,17 +1,25 @@
 # apps/mobile —— 移动端原生 App（issue #39 的 **C 路线**）
 
-> **路线已定：C（RN 原生 UI），不是 B（WebView 套现有 web）。**
-> 定这一条的理由不是技术偏好：移动端的交互逻辑是全新的一套，
-> **列表不能是表格**。B 路线的前提是「复用 PC 端渲染」，而那个前提在移动端不成立 ——
-> 所以 B 那半天的验收（浏览器代答五条、注入 token 免登录…）连同 `react-native-webview`
-> 一起删掉了，git 历史里还能翻到。
->
-> 现在的状态：**登录 + 个人中心 + 一个最小导航壳**。issue #39 的第 2/3 条
-> （要哪几个屏 / 导航形态）还没拍，所以壳是刻意做小的，见下面「导航壳」一节。
->
 > 这份文件是根 [`CLAUDE.md`](../../CLAUDE.md) 的**模块分册**，Claude Code 读到本目录下的文件时
-> 才把它加载进上下文（惰性加载），所以它可以写得比根文件细。跨模块的硬纪律只在根
-> `CLAUDE.md` 里有一份；**新增结论请追加到离代码最近的那一份**。
+> 才把它加载进上下文（惰性加载）。跨模块的硬纪律只在根 `CLAUDE.md` 里有一份；
+> **新增结论请追加到离代码最近的那一份**。
+>
+> **路线已定：C（RN 原生 UI），不是 B（WebView 套 web）** —— 移动端**列表不能是表格**，
+> 「复用 PC 端渲染」这个前提不成立。B 的 spike 已删，git 历史里还能翻到。
+>
+> **这个仓库只做模板，不做某家公司的业务。** 所以判据不是「有几个业务屏」，
+> 而是**下游一定会抄的范式，这里有没有一处可抄的**：鉴权 · 取数 · 权限门控 ·
+> 分页列表 · 详情 · 写操作的确认与反馈 · 表单的字段级错误。都有了一份，
+> 载体是「用户」模块（挑它没有业务含义，挑的是形状）——
+> 见 [`src/app/` 分册](src/app/AGENTS.md) 的「用户模块」与「权限」两节。
+> 导航形态：**Stack 套 Tabs**，同一份分册的「导航壳」一节。
+>
+> 图片上传（#96 最后一项）也有了：个人中心从相册选头像。socket 实时 / 系统推送 /
+> 扫码 / 静默打印都**明确不做**，理由在那条 issue 里。
+>
+> ✅ **登录 → 权限门控 → 列表翻页 → 详情 → 删除确认 → toast 这条链在 Android 上
+> 验收过了。** ⚠️ iOS 一次没跑过（#97），而且**移动端没有任何自动化测试** ——
+> 唯一的闸门是 `expo export` 打得出包，它挡不住「打出来了但登录坏了」。
 
 ## 按任务导航
 
@@ -149,12 +157,9 @@ expo-secure-store ~57.0.3），所以「Expo Go 就能跑、不用 prebuild」�
 
 ## 只出 ios / android，不出 web
 
-`app.json` 里写了 `"platforms": ["ios", "android"]`，`react-native-web` / `react-dom`
-**都没装**。不限制的话按 `w` 会去解析没装的包，打出一句
-
-    Unable to resolve "react-native-web/dist/exports/ActivityIndicator"
-
-—— 它和真正要排的问题毫无关系，但会混在同一屏日志里，白排查一轮。实测踩过。
+`app.json` 里写了 `"platforms": ["ios", "android"]`，`react-native-web` / `react-dom` **都没装**。
+不限制的话按 `w` 会打出 `Unable to resolve "react-native-web/dist/exports/ActivityIndicator"` ——
+和真正要排的问题毫无关系，但会混在同一屏日志里，白排查一轮。实测踩过。
 
 ## 🔴 `src/styles/global.css` 里那条 `@source` 不能省
 
@@ -417,6 +422,47 @@ await api.GET('/api/v1/sys/notifications', { params: { query: { page: 1, size: 5
 **绕过 TS 的多余属性检查**（实测：`unreadd` 经展开 0 错误，直接写 1 错误）。
 该省的传 `undefined`。
 
+### 🔴 查询参数名是严的，**路径参数完全不检查**
+
+实测结论和它的后果（雪花 ID 当路径参数时编译器两个方向都不管）记在
+[`packages/api` 分册](../../packages/api/AGENTS.md) 的同名一节 —— 那是共享客户端
+的性质，两端都适用。**一句话：`params.path` 里的 ID 原样传字符串，永远不要 `Number()`。**
+
+### 🔴 `/users` 列表和 `/users/me` 的 DTO **不是同一个形状**
+
+两个名字只差一截、字段几乎一样，但**关联字段完全不同**：
+
+| | `GetCurrentUserInfoWithRelationDetail`（`/me`） | `GetUserInfoWithRelationDetail`（列表 / 详情） |
+|---|---|---|
+| `dept` | `string \| null` —— 部门**名字** | `GetDeptDetail \| null` —— 整个**对象** |
+| `roles` | `string[]` —— 角色**名字** | `GetRoleWithRelationDetail[]` —— **对象数组** |
+
+`/me` 那份是后端 `model_validator` 摊平过的，列表这份没有。照着个人中心那屏抄
+`user.dept` / `user.roles.join('、')` 会渲染出 `[object Object]`。
+
+🔴 **给组件 props 写类型时从 `lib/contract.ts` 取别名，不要手写字段。**
+这个坑最后是 tsc 抓住的，但只因为 props 用了那个别名 —— 当初 `UserRow` 的 props
+是手写的行内类型（`{ dept?: string | null; roles: string[] }`），
+那份手写声明和真实契约分叉了，编译器只会说「数据不匹配这个组件」，
+不会说「你把契约记错了」。
+
+### 🔴 422 的**字段级**信息只在后端 `ENVIRONMENT == 'dev'` 时才有
+
+`src/lib/field-errors.ts` 把 422 拆成「哪个字段错了」+「一句通用的」。
+读 `common/exception/exception_handler.py` 的 `_validation_exception_handler`：
+
+| | dev | 非 dev（生产） |
+|---|---|---|
+| 信封 `data` | `{'errors': [...]}`（pydantic 原始错误，**带 `loc`**） | **`None`** |
+| 信封 `msg` | `f'{field} {error_msg}…'`（**带字段名**） | 只有 `error_msg` |
+
+所以那个函数在生产下**必然只返回 `general`**。
+⚠️ **不要把表单写成「只显示字段错误」** —— 那样生产上会变成「保存失败了，
+但屏上什么都没说」。两个都要渲染：有字段错就贴到那一格，`general` 始终显示。
+
+⚠️ `loc` 是路径数组（`['body','avatar']`、`['body','items',0,'name']`），
+取**最后一个字符串段**当字段名 —— 不跳过数组下标的话字段名会变成 `0`。
+
 ## 品牌图标还是模板的占位图
 
 `assets/images/` 下三张是 rnr 模板自带的占位图。
@@ -434,13 +480,12 @@ await api.GET('/api/v1/sys/notifications', { params: { query: { page: 1, size: 5
 `pnpm-workspace.yaml` 的 `allowBuilds`。为一套 lint 规则放行一个原生编译的
 postinstall 不划算，我们真正要的只有 `react-hooks`。
 
-三条和 web 那份不同的地方，都是踩出来的：
+两条和 web 那份不同的地方，都是踩出来的（原来还有第三条 `set-state-in-effect` 降 warn，接了 query 层后已恢复 error）：
 
 | | 为什么 |
 |---|---|
 | 文件名 `eslint.config.**mjs**` | RN 的 `package.json` **不能加 `type: "module"`**（`metro.config.js` / `babel.config.js` 是 CommonJS，加了当场坏）。`.js` 配置会先按 CJS 解析失败再重解析成 ESM，并打 MODULE_TYPELESS_PACKAGE_JSON 警告 |
 | `globals` 要 **^17** | `react-native` 那个预设**在 v17 才有**。装到 v16 的话 59 个 RN 全局量全没了，`languageOptions.globals` 收到 `undefined` 直接 `Expected an object` 报错 |
-| `react-hooks/set-state-in-effect` 降 `warn` | web 走 TanStack Query、压根没有「effect 里取数」这种代码；移动端**没有 query 层**，验证码 / 通知列表 / 未读数都是 effect 里发请求 + 同步先置 loading。那条规则是**性能**建议（多一次渲染），不是正确性问题。降成 warn 而不是 off：将来加了 query 层要能看见这 3 处 |
 
 ⚠️ 用 `globals['react-native']` 而不是 `globals.browser` 还有个护栏作用：
 往 RN 代码里写 `document.xxx` 会被 `no-undef` 抓住 —— 那正是 `packages/i18n`

@@ -135,12 +135,33 @@ const needsApiRebind = host !== HOST_LOOPBACK && host !== '127.0.0.1'
 // 而那个失败**要到你在 App 里点登录时才现形**，症状是 `Network request failed`，
 // 看着像后端挂了。从 WSL 这边探到的结果和设备上看到的一致（同一个地址、同一个绑定）。
 let apiReachable = null
+/**
+ * 打不通时**再往前走一步：把真凶指出来**，而不是只给一句通用建议。
+ *
+ * 🔴 这一步是踩两次之后补的。原来只打「它多半还绑在 127.0.0.1 上，换成 dev:host」——
+ * 而实测的失败方式是：人**确实重启了**后端，但重启用的还是 `pnpm dev`（手顺），
+ * 于是 App 里报的错**一字不变**，看起来像「按你说的做了但没用」。
+ * 通用建议和「你现在这个进程就是那个毛病，pid 在这」是两种可读性。
+ *
+ * 判据：`ps` 里找 uvicorn 且命令行里**没有** `--host`（缺省即 127.0.0.1）。
+ * ⚠️ 找不到也要照旧打建议 —— 后端压根没起时这里是空的，那时候「没在跑」本身就是答案。
+ */
+function loopbackApiCulprit() {
+  const line = sh(
+    "ps -eo pid,args | grep 'uvicorn backend.main:app' | grep -v grep | grep -v -- '--host' | head -1",
+  )
+  if (!line) return null
+  const pid = line.trim().split(/\s+/)[0]
+  return pid && /^\d+$/.test(pid) ? pid : null
+}
+
 if (needsApiRebind) {
   const code = sh(
     `curl -s -o /dev/null -w '%{http_code}' --max-time 3 '${apiBase}/api/v1/auth/captcha' 2>/dev/null`,
   )
   apiReachable = code === '200'
 }
+const culprit = apiReachable === false ? loopbackApiCulprit() : null
 
 console.log(
   [
@@ -156,8 +177,19 @@ console.log(
     apiReachable === true ? '   ✅ 后端在这个地址上通' : '',
     apiReachable === false
       ? [
-          '   ❌ **后端在这个地址上打不通** —— 它多半还绑在 127.0.0.1 上。',
-          '      换成：pnpm --filter api dev:host      （绑 0.0.0.0）',
+          '   ❌ **后端在这个地址上打不通。**',
+          ...(culprit
+            ? [
+                `      真凶找到了：pid ${culprit} 的 uvicorn 命令行里没有 --host，`,
+                '      所以它绑的是 127.0.0.1 —— 从上面那个地址打不进去。',
+                `      先停掉整个 pnpm dev（别单杀 ${culprit}，turbo 的 persistent 任务会连带崩），再：`,
+                '          pnpm --filter api dev:host        # 绑 0.0.0.0',
+                '      ⚠️ 重启时**别再敲 pnpm dev** —— 那条脚本没有 --host，报的错会一字不变。',
+              ]
+            : [
+                '      它多半还绑在 127.0.0.1 上（或者压根没起）。',
+                '      换成：pnpm --filter api dev:host      （绑 0.0.0.0）',
+              ]),
           '      不换的话：bundle 加载得动，一点登录就 Network request failed。',
         ].join('\n')
       : '',
