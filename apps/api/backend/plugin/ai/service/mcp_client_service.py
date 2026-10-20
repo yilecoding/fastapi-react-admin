@@ -26,7 +26,7 @@ async def _check(db: AsyncSession, obj: AiMcpClientSchemaBase) -> None:
 
     - `act_as` 里拼错一个用户名 → 外部系统代表他时一律 403，看起来像「凭据坏了」
     - `tools` 里拼错一个工具名 → 那个工具永远调不到，看起来像「权限不够」
-    - `tools` 里放写操作工具 → 这个入口只读，放进去也调不了，却让人以为能调
+    - 没开 `allow_write` 却在 `tools` 里放写操作工具 → 入口只读，放进去也调不了，却让人以为能调
     """
     names = [n for n in obj.act_as if n != '*']
     if names:
@@ -42,8 +42,11 @@ async def _check(db: AsyncSession, obj: AiMcpClientSchemaBase) -> None:
         unknown = [name for name in obj.tools if get_tool(name) is None]
         if unknown:
             raise errors.RequestError(msg=f'这些工具不存在：{"、".join(unknown)}')
-        if mutating := [name for name in obj.tools if get_tool(name).mutating]:  # type: ignore[union-attr]
-            raise errors.RequestError(msg=f'MCP 入口只开放查询，写操作工具不能放进白名单：{"、".join(mutating)}')
+        mutating = [name for name in obj.tools if get_tool(name).mutating]  # type: ignore[union-attr]
+        if mutating and not obj.allow_write:
+            raise errors.RequestError(
+                msg=f'这份凭据没有开「允许写操作」，写操作工具放进白名单也调不了：{"、".join(mutating)}'
+            )
 
 
 def _columns(obj: AiMcpClientSchemaBase) -> dict[str, Any]:

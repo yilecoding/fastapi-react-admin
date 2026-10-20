@@ -35,6 +35,7 @@ class McpClient(BaseModel):
     id: str
     act_as: list[str]
     allow_superuser: bool = False
+    allow_write: bool = False
     tools: list[str] | None = None
     rate_per_minute: int | None = None
 
@@ -87,6 +88,7 @@ async def _load_client(token: str) -> McpClient | None:
             id=row.client_id,
             act_as=json.loads(row.act_as),
             allow_superuser=row.allow_superuser,
+            allow_write=row.allow_write,
             tools=json.loads(row.tools) if row.tools else None,
             rate_per_minute=row.rate_per_minute,
         )

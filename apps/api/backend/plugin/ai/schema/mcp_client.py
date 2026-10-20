@@ -18,6 +18,9 @@ class AiMcpClientSchemaBase(SchemaBase):
     name: str = Field(min_length=1, max_length=64, description='外部系统名称')
     act_as: list[str] = Field(min_length=1, description='可代表的用户名；"*" 表示任何普通用户')
     allow_superuser: bool = Field(False, description='是否允许代表超级管理员（默认不允许）')
+    allow_write: bool = Field(
+        False, description='是否允许发起写操作（默认不允许；允许后也只预演，须被代表的人本人在网页确认）'
+    )
     tools: list[str] | None = Field(None, description='工具白名单；不填表示不限（只能收窄，不能放大）')
     rate_per_minute: int | None = Field(None, ge=1, le=10000, description='每分钟请求上限；不填用全局默认')
     status: int = Field(1, description='状态（0：停用、1：正常）')

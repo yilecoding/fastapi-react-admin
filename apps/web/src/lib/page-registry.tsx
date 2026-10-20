@@ -25,6 +25,7 @@ import { DashboardPage } from "@admin/platform/pages/dashboard"
 import { SchedulerManagePage } from "@admin/platform/pages/scheduler-manage"
 import { SchedulerRecordPage } from "@admin/platform/pages/scheduler-record"
 import { AiChatPage } from "@admin/platform/pages/ai-chat"
+import { AiConfirmPage } from "@admin/platform/pages/ai-confirm"
 import { AiMcpClientPage } from "@admin/platform/pages/ai-mcp-client"
 import { AiProviderPage } from "@admin/platform/pages/ai-provider"
 import { AiToolLogPage } from "@admin/platform/pages/ai-tool-log"
@@ -45,6 +46,7 @@ export const pageRegistry: PageRegistry = {
   "/_auth/ai/chat": AiChatPage,
   "/_auth/ai/provider": AiProviderPage,
   "/_auth/ai/mcp-client": AiMcpClientPage,
+  "/_auth/ai/confirm": AiConfirmPage,
   "/_auth/ai/tool-log": AiToolLogPage,
   "/_auth/dashboard": DashboardPage,
   "/_auth/scheduler/manage": SchedulerManagePage,

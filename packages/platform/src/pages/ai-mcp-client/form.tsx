@@ -33,6 +33,7 @@ const schema = z.object({
   name: z.string().min(1, '请输入名称').max(64, '名称不能超过 64 个字符'),
   act_as: z.string().refine((v) => splitList(v).length > 0, '至少填一个可代表的用户名'),
   allow_superuser: z.boolean(),
+  allow_write: z.boolean(),
   tools: z.string().optional(),
   rate_per_minute: z.string().regex(/^\d*$/, '请输入正整数').optional(),
   status: z.boolean(),
@@ -45,6 +46,7 @@ const EMPTY: Values = {
   name: '',
   act_as: '',
   allow_superuser: false,
+  allow_write: false,
   tools: '',
   rate_per_minute: '',
   status: true,
@@ -82,6 +84,7 @@ export function McpClientFormSheet({
             name: editing.name,
             act_as: editing.act_as.join('\n'),
             allow_superuser: editing.allow_superuser,
+            allow_write: editing.allow_write,
             tools: (editing.tools ?? []).join('\n'),
             rate_per_minute: editing.rate_per_minute === null ? '' : String(editing.rate_per_minute),
             status: editing.status === 1,
@@ -98,6 +101,7 @@ export function McpClientFormSheet({
       name: v.name.trim(),
       act_as: splitList(v.act_as),
       allow_superuser: v.allow_superuser,
+      allow_write: v.allow_write,
       // 空 = 不限。**不要传 []**：空白名单在语义上是「一个工具都不许用」，和「不限」正好相反
       tools: tools.length ? tools : null,
       rate_per_minute: v.rate_per_minute ? Number(v.rate_per_minute) : null,
@@ -160,6 +164,16 @@ export function McpClientFormSheet({
               <Switch
                 checked={form.watch('allow_superuser')}
                 onCheckedChange={(c) => form.setValue('allow_superuser', c, { shouldDirty: true })}
+              />
+            </FormField>
+
+            <FormField
+              label={t('允许写操作')}
+              hint={t('外部系统可以发起写操作，但不会直接执行：每次都要被代表的人本人登录网页点确认')}
+            >
+              <Switch
+                checked={form.watch('allow_write')}
+                onCheckedChange={(c) => form.setValue('allow_write', c, { shouldDirty: true })}
               />
             </FormField>
 

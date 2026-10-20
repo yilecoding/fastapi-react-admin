@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, Request
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, Path, Request
 from starlette.responses import StreamingResponse
 
+from backend.common.response.response_schema import ResponseSchemaModel, response_base
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.plugin.ai.schema.conversation import ChatParam, ConfirmToolParam
-from backend.plugin.ai.service.chat_service import chat_service
+from backend.plugin.ai.service.chat_service import chat_service, get_pending_confirm
 
 router = APIRouter()
 
@@ -46,3 +49,15 @@ async def confirm_tool(request: Request, obj: ConfirmToolParam) -> StreamingResp
         media_type='text/event-stream',
         headers=_SSE_HEADERS,
     )
+
+
+@router.get(
+    '/tools/confirm/{token}',
+    summary='查看一个待确认的变更（只读，不消费令牌）',
+    # 和确认同一个权限：看得到却点不了确认，等于一个死胡同
+    dependencies=[Depends(RequestPermission('ai:chat:use')), DependsRBAC],
+)
+async def get_pending(
+    request: Request, token: Annotated[str, Path(description='确认令牌')]
+) -> ResponseSchemaModel[dict[str, Any]]:
+    return response_base.success(data=await get_pending_confirm(user=request.user, token=token))

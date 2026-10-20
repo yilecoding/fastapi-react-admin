@@ -12,6 +12,8 @@
 """
 
 import asyncio
+import json
+import re
 import uuid
 
 from collections.abc import Iterator
@@ -22,8 +24,10 @@ import pytest
 from sqlalchemy import delete, or_, select
 from starlette.testclient import TestClient
 
+from backend.app.admin.model import Dept
 from backend.core.conf import settings
 from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+from backend.database.redis import RedisCli
 from backend.plugin.ai.enums import ToolInvocationStatus
 from backend.plugin.ai.hooks import MCP_PATH
 from backend.plugin.ai.model import AiMcpClient, AiToolInvocation
@@ -288,3 +292,94 @@ class TestRateLimit:
         assert _rpc(client, 'tools/list', user='test', token=token_a).status_code == 200
         assert _rpc(client, 'tools/list', user='test', token=token_a).status_code == 429
         assert _rpc(client, 'tools/list', user='test', token=token_b).status_code == 200
+
+
+class TestWriteViaWebConfirm:
+    """凭据开了 `allow_write`：写操作**只预演、不执行**，回网页由被代表的人本人确认。
+
+    外部系统声明的身份，要到「本人登录网页点确认」这一步才被兑现 —— 所以这里的要害是：
+    MCP 那一侧无论怎么调，库里都不能多出东西；只有网页确认之后才有。
+    """
+
+    _CODE = 'MCP_WRITE_PYTEST'
+
+    @pytest.fixture(autouse=True)
+    def _purge_dept(self) -> Iterator[None]:
+        yield
+
+        async def _do(db: Any) -> None:
+            await db.execute(delete(Dept).where(Dept.code == self._CODE))
+            await db.commit()
+
+        _run_db(_do)
+
+    def _stage(self, client: TestClient) -> tuple[dict[str, Any], str]:
+        result = _call(client, 'dept_create', {'name': 'MCP 写操作测试', 'code': self._CODE})
+        text = result['content'][0]['text']
+        match = re.search(r'/ai/confirm\?token=(\S+)', text)
+        return result, match.group(1) if match else ''
+
+    @staticmethod
+    def _dept_exists(code: str) -> bool:
+        async def _q(db: Any) -> bool:
+            return (await db.execute(select(Dept.id).where(Dept.code == code, Dept.deleted == 0))).first() is not None
+
+        return _run_db(_q)
+
+    def test_write_tools_listed_only_when_allowed(self, client: TestClient, gateway: Any) -> None:
+        assert 'dept_create' not in _tools(client)
+        gateway(allow_superuser=True, allow_write=True)
+        response = _rpc(client, 'tools/list')
+        tools = {t['name']: t for t in response.json()['result']['tools']}
+        assert 'dept_create' in tools
+        assert tools['dept_create']['annotations']['readOnlyHint'] is False
+
+    def test_mcp_only_stages_and_web_confirm_executes(
+        self, client: TestClient, token_headers: dict[str, str], gateway: Any
+    ) -> None:
+        gateway(allow_superuser=True, allow_write=True)
+        result, token = self._stage(client)
+        assert result['isError'] is False, result
+        assert '还没有执行' in result['content'][0]['text']
+        assert token.startswith('cf_'), f'令牌要带字母前缀，否则路由层可能把它 JSON.parse 成数字：{token}'
+        assert not self._dept_exists(self._CODE), 'MCP 一侧就把部门建出来了 —— 没等本人确认'
+
+        pending = client.get(f'/ai/chat/tools/confirm/{token}', headers=token_headers).json()
+        assert pending['code'] == 200, pending
+        assert pending['data']['channel'] == _CHANNEL
+        assert 'MCP 写操作测试' in pending['data']['preview']
+        assert not self._dept_exists(self._CODE), '查看预演不该消费令牌、更不该执行'
+
+        with client.stream('POST', '/ai/chat/tools/confirm', headers=token_headers, json={'token': token}) as r:
+            frames = [json.loads(line[6:]) for line in r.iter_lines() if line.startswith('data: ')]
+        assert any(f['type'] == 'tool_result' and f['ok'] for f in frames), frames
+        assert self._dept_exists(self._CODE)
+        # 执行那一行审计仍记作 MCP 发起（确认令牌把 channel 带过来了）
+        assert (ToolInvocationStatus.SUCCESS.value, _CHANNEL) in _audit_rows('dept_create')
+
+    def test_someone_elses_token_reveals_nothing(self, client: TestClient, token_headers: dict[str, str]) -> None:
+        """链接会经过外部系统、聊天记录 —— 别人拿到也看不到要改什么"""
+
+        async def _stage_for_other() -> str:
+            redis = RedisCli()
+            try:
+                token = f'cf_{uuid.uuid4().hex}'
+                payload = {'tool': 'dept_create', 'arguments': {}, 'user_id': '1', 'conversation_id': '0',
+                           'channel': _CHANNEL, 'preview': '机密的预演内容'}  # fmt: skip
+                await redis.set(f'{settings.AI_CONFIRM_REDIS_PREFIX}:{token}', json.dumps(payload), ex=60)
+                return token
+            finally:
+                await redis.aclose()
+
+        token = asyncio.run(_stage_for_other())
+        body = client.get(f'/ai/chat/tools/confirm/{token}', headers=token_headers).json()
+        assert body['code'] == 403, body
+        assert '机密的预演内容' not in json.dumps(body, ensure_ascii=False)
+
+    def test_acting_user_without_ai_permission_gets_no_dead_link(self, client: TestClient, gateway: Any) -> None:
+        """被代表的人没有 ai:chat:use 就点不了网页确认 —— 不发一个永远点不了的链接"""
+        gateway(allow_write=True)
+        result = _call(client, 'dept_create', {'name': 'x', 'code': self._CODE}, user='test')
+        assert result['isError'] is True
+        assert 'ai:chat:use' in result['content'][0]['text']
+        assert '/ai/confirm' not in result['content'][0]['text']

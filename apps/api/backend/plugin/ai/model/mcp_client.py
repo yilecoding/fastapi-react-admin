@@ -29,6 +29,9 @@ class AiMcpClient(Base):
     token_hint: Mapped[str] = mapped_column(UniversalStr(24), comment='令牌前几位（只用于辨认）')
     act_as: Mapped[str] = mapped_column(UniversalText, comment='可代表的用户名 JSON 数组（"*" = 任何普通用户）')
     allow_superuser: Mapped[bool] = mapped_column(default=False, comment='是否允许代表超级管理员')
+    # 🔴 默认只读。打开后写操作也**不会**由外部系统直接执行：网关只预演并返回一个确认链接，
+    # 必须由被代表的那个人本人登录网页点确认（`mcp_gateway/server.py` 那一段）
+    allow_write: Mapped[bool] = mapped_column(default=False, comment='是否允许发起写操作（仍需本人在网页确认）')
     tools: Mapped[str | None] = mapped_column(
         UniversalText, default=None, comment='工具白名单 JSON 数组（NULL = 不限）'
     )
