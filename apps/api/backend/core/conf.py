@@ -467,6 +467,8 @@ class Settings(BaseSettings):
     AI_MCP_ENABLED: bool
     # 每份凭据每分钟最多多少次请求（凭据里的 rate_per_minute 可单独覆盖）
     AI_MCP_RATE_PER_MINUTE: int
+    # 前端的访问地址：MCP 发起的写操作要拼一个「回网页确认」的链接
+    AI_WEB_BASE_URL: str
 
     ##################################################
     # [ Plugin ] email

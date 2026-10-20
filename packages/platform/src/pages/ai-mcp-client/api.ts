@@ -16,6 +16,8 @@ export type McpClient = {
   /** 可代表的用户名；`*` = 任何普通用户 */
   act_as: string[]
   allow_superuser: boolean
+  /** 允许发起写操作：仍不直接执行，每次都要被代表的人本人在网页确认 */
+  allow_write: boolean
   /** 工具白名单；null = 不限（只能收窄） */
   tools: string[] | null
   rate_per_minute: number | null
@@ -29,6 +31,7 @@ export type McpClientBody = {
   name: string
   act_as: string[]
   allow_superuser: boolean
+  allow_write: boolean
   tools: string[] | null
   rate_per_minute: number | null
   status: number

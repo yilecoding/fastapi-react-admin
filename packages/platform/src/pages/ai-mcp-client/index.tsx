@@ -70,6 +70,7 @@ export function AiMcpClientPage() {
                     <span className="truncate font-medium">{c.name}</span>
                     <StatusBadge value={c.status} />
                     {c.allow_superuser ? <Badge variant="destructive">{t('可代表超管')}</Badge> : null}
+                    {c.allow_write ? <Badge variant="secondary">{t('可发起写操作')}</Badge> : null}
                   </div>
                   <p className="mt-0.5 font-mono text-xs text-muted-foreground">mcp:{c.client_id}</p>
                 </div>
