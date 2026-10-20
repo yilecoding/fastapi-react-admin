@@ -39,7 +39,7 @@ from backend.plugin.workflow.schema.workflow import (
     StartParam,
     UpdateDefinitionParam,
 )
-from backend.plugin.workflow.service import definition_service, query_service, runtime_service
+from backend.plugin.workflow.service import ai_review_service, definition_service, query_service, runtime_service
 from backend.plugin.workflow.service.runtime_service import Actor
 
 router = APIRouter()
@@ -254,6 +254,18 @@ async def do_action(request: Request, db: CurrentSession, pk: Pk, obj: ActionPar
         selected=obj.selected,
     )
     return response_base.success(data=data)
+
+
+@router.get('/instances/{pk}/ai-review', summary='AI 预审结果', dependencies=[DependsJwtAuth])
+async def get_ai_review(request: Request, db: CurrentSession, pk: Pk) -> ResponseModel:
+    # 单开一个接口而不是塞进详情：预审中要轮询，不该每 3 秒重取整张单（含预告试算）
+    return response_base.success(data=await ai_review_service.get_for(db, pk, _actor(request)))
+
+
+@router.post('/instances/{pk}/ai-review/retry', summary='重试 AI 预审', dependencies=[DependsJwtAuth])
+async def retry_ai_review(request: Request, db: CurrentSession, pk: Pk) -> ResponseModel:
+    await ai_review_service.retry(db, pk, _actor(request))
+    return response_base.success()
 
 
 @router.put('/instances/{pk}/read', summary='办理人已读', dependencies=[DependsJwtAuth])

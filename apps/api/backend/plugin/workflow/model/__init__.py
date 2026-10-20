@@ -1,4 +1,5 @@
 from backend.plugin.workflow.model.workflow import WfActionRecord as WfActionRecord
+from backend.plugin.workflow.model.workflow import WfAiReview as WfAiReview
 from backend.plugin.workflow.model.workflow import WfCc as WfCc
 from backend.plugin.workflow.model.workflow import WfDefinition as WfDefinition
 from backend.plugin.workflow.model.workflow import WfDefinitionVersion as WfDefinitionVersion

@@ -76,6 +76,7 @@ from backend.plugin.workflow.model import (
     WfInstance,
     WfTask,
 )
+from backend.plugin.workflow.service import ai_review_service
 from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
@@ -911,6 +912,8 @@ async def start_in_tx(
     await _sync_file_relations(db, inst, form_schema, data, actor.id)
     _record(ctx, inst, 'start', key=key, actor_id=actor.id, actor_name=actor.nickname)
     await _advance(ctx, inst, nodes[model['root']['id']].after)
+    # 只插一行 pending，模型调用在事务提交之后的 Celery 里（#111 不变式 1）
+    await ai_review_service.queue_in_tx(ctx, inst)
     return inst
 
 
@@ -1173,6 +1176,8 @@ async def act(  # ruff:ignore[complex-structure]
                     resume_jump(inst, nodes, my_task.node_id) or nodes[my_task.node_id].after,
                 )
                 await _leave_node(ctx, inst, nodes, my_task.node_id)
+                # 改过的表单重新预审；旧结论随之作废（详情只看最新一次）
+                await ai_review_service.queue_in_tx(ctx, inst)
                 ctx.push_todo([actor.id])
 
             case Action.approve:
