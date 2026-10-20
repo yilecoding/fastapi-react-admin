@@ -9,6 +9,11 @@ import { API_BASE, createApiClient, expect, loginPageAs, loginToken, test } from
  * E2E 环境没有模型也不保证有 Celery worker，所以「有结论 / 失败」两种状态用 `page.route` 固定接口返回 ——
  * 这里验的是**界面把每种状态都画出来了**，尤其是失败不能长成「没有预审」（硬纪律 9）。
  * 发起人那条和「不 mock」那条打的是真接口。
+ *
+ * 🔴 **账号用 lina（发起）/ liuyang（审批），不要和 `workflow.spec.ts` 共用孙强 / 赵磊。**
+ * 演示账号都是 `is_multi_login = false`：每登录一次就删掉这个人所有旧 token。两个文件并行跑、
+ * 登同一个人，就互相把对方踢下线 —— 实测 CI 上 `workflow.spec.ts` 的主流程连挂两轮，
+ * 服务端日志里是孙强那几个请求突然全 401，而单跑哪个文件都是绿的。
  */
 const CODE = `E2EAI_${Date.now().toString(36).toUpperCase()}`
 let definitionId = ""
@@ -18,6 +23,9 @@ test.describe.configure({ mode: "serial" })
 
 test.beforeAll(async () => {
   const { api, dispose } = await createApiClient()
+  // 三个方言的种子 ID 不一样，现查
+  const users = (await api.get("/api/v1/sys/users?username=liuyang")) as { items: { id: string; username: string }[] }
+  const approverId = String(users.items.find((u) => u.username === "liuyang")!.id)
   const form = { schemaVersion: 1, fields: [{ id: "f_reason", type: "text", label: "事由", required: true }] }
   const model = {
     schemaVersion: 1,
@@ -27,9 +35,9 @@ test.beforeAll(async () => {
       next: {
         type: "approval",
         id: "n_leader",
-        name: "直属主管",
+        name: "审批人",
         mode: "any",
-        assignee: { kind: "dept_leader", level: 1 },
+        assignee: { kind: "user", user_ids: [approverId] },
         onEmpty: "reject",
         fieldPerms: {},
         next: null,
@@ -46,9 +54,8 @@ test.beforeAll(async () => {
   )
   await dispose()
 
-  // 发起人孙强，主管是赵磊
   const ctx = await request.newContext({ baseURL: API_BASE })
-  const { token } = await loginToken(ctx, "sunqiang", "123456")
+  const { token } = await loginToken(ctx, "lina", "123456")
   const res = await ctx.post(`${API_BASE}/api/v1/sys/workflow/instances`, {
     headers: { Authorization: `Bearer ${token}` },
     data: { code: CODE, form: { f_reason: "出差" }, key: `${CODE}-start` },
@@ -76,7 +83,7 @@ test("审批人：有结论时显示建议 + 理由，理由标着字段名", as
       })
     )
   )
-  await loginPageAs(page, "zhaolei", "123456")
+  await loginPageAs(page, "liuyang", "123456")
   await page.goto(`/workflow/inbox?id=${instanceId}`)
   const panel = page.getByTestId("wf-instance-sheet").getByTestId("wf-ai-review")
   await expect(panel.getByTestId("wf-ai-verdict")).toHaveText("需要留意")
@@ -96,7 +103,7 @@ test("审批人：失败显示原因 + 重新预审，点了之后变成预审�
   await page.route(/\/ai-review$/, (route) =>
     route.fulfill(fulfillReview({ visible: true, enabled: true, status: state, error: "网关 502（E2E 造的）", superseded: 0 }))
   )
-  await loginPageAs(page, "zhaolei", "123456")
+  await loginPageAs(page, "liuyang", "123456")
   await page.goto(`/workflow/inbox?id=${instanceId}`)
   const panel = page.getByTestId("wf-instance-sheet").getByTestId("wf-ai-review")
   await expect(panel.getByTestId("wf-ai-failed")).toContainText("网关 502")
@@ -106,7 +113,7 @@ test("审批人：失败显示原因 + 重新预审，点了之后变成预审�
 })
 
 test("真接口：审批人看得到预审面板（预审中或失败，总之不是没有）", async ({ page }) => {
-  await loginPageAs(page, "zhaolei", "123456")
+  await loginPageAs(page, "liuyang", "123456")
   await page.goto(`/workflow/inbox?id=${instanceId}`)
   const sheet = page.getByTestId("wf-instance-sheet")
   await expect(sheet.getByTestId("wf-field-f_reason")).toBeVisible()
@@ -115,7 +122,7 @@ test("真接口：审批人看得到预审面板（预审中或失败，总之�
 })
 
 test("真接口：发起人看不到预审", async ({ page }) => {
-  await loginPageAs(page, "sunqiang", "123456")
+  await loginPageAs(page, "lina", "123456")
   await page.goto(`/workflow/inbox?id=${instanceId}`)
   const sheet = page.getByTestId("wf-instance-sheet")
   await expect(sheet.getByTestId("wf-field-f_reason")).toBeVisible()

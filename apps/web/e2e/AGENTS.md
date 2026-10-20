@@ -296,6 +296,20 @@ await expect(page.locator('[data-visible="true"] table tbody tr').first()).toBeV
 在共享数据库 + 全并行的 E2E 里都是定时炸弹——数据会被同一时间窗口里跑的
 别的 spec 文件影响，且它们之间没有任何协作关系。
 
+### 🔴 两个 spec 文件不要登同一个演示账号 —— 会互相踢下线
+
+演示账号（孙强、赵磊……）都是 `is_multi_login = false`：**每登录一次，`create_access_token`
+就删掉这个人所有旧 token**。`serial` 只管同一个文件，两个文件被分到不同 worker 并行时，
+一边的 `loginPageAs` 就把另一边正拿着的登录态作废了。
+
+实测（`workflow-ai-review.spec.ts` 第一版和 `workflow.spec.ts` 都用孙强 / 赵磊）：CI 上
+`workflow.spec.ts` 的主流程连挂两轮（重试也挂），挂的位置每次不同（「已通过」通知找不到 /
+提交后详情不出现）；服务端日志里是孙强那几条审批请求突然**全部 401**。单跑哪个文件都绿，
+本地 `--workers=4` 两个文件一起跑能复现，换成没人用的 lina / liuyang 之后 19 条全过。
+
+判据：**新 spec 要登录哪个人，先 `grep` 一遍别的 spec 有没有在用他。** 要不就换个空闲账号，
+要不就把用例并进那个文件（同一个文件里是 serial 的）。admin 是 `is_multi_login = true`，不受影响。
+
 ### 🔴 守卫型用例写完要**故意打断一次**，确认它真的会红
 
 新加的用例如果是来守某条不变量的，「跑绿了」证明不了任何事 —— 它可能压根没走到
