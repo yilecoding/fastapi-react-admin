@@ -3,13 +3,16 @@ import { useTranslation } from 'react-i18next'
 import * as React from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
 
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Group, Row } from '@/components/grouped'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { toast } from '@/components/ui/toast'
 import { api } from '@/lib/api'
+import { pickAvatar, uploadAvatar } from '@/lib/avatar'
 import { parseFieldErrors, type FieldErrors } from '@/lib/field-errors'
+import { usePerm } from '@/lib/perm'
 import { useSession } from '@/lib/session'
 
 export default function EditProfileScreen() {
@@ -19,6 +22,8 @@ export default function EditProfileScreen() {
   const [nickname, setNickname] = React.useState(user?.nickname ?? '')
   const [avatar, setAvatar] = React.useState(user?.avatar ?? '')
   const [saving, setSaving] = React.useState(false)
+  const [uploading, setUploading] = React.useState(false)
+  const perm = usePerm()
   const [error, setError] = React.useState<string | null>(null)
   /*
    * 🔴 **字段级错误只在后端是 dev 时才有**（生产的 422 信封里 `data` 是 `null`，
@@ -32,6 +37,28 @@ export default function EditProfileScreen() {
   const nicknameChanged = nickname.trim() !== user.nickname
   const avatarChanged = avatar.trim() !== (user.avatar ?? '')
   const dirty = nicknameChanged || avatarChanged
+
+  /*
+   * 选图即上传、上传即生效 —— 不等「保存」按钮。和 web 个人中心同一个口径：
+   * 文件已经落到服务器上了，再让用户点一次保存只会多出「传了但没存」这种中间态。
+   */
+  async function upload() {
+    if (uploading || saving) return
+    const asset = await pickAvatar()
+    if (!asset) return
+    setUploading(true)
+    try {
+      const url = await uploadAvatar(asset)
+      await reload()
+      // 地址框跟着换成新地址，否则 `avatarChanged` 为真、保存按钮亮着，像是还有没存的改动
+      setAvatar(url)
+      toast.success(t('头像已更新'))
+    } catch (err) {
+      toast.error(t('头像上传失败'), { description: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setUploading(false)
+    }
+  }
 
   async function save() {
     if (saving || !user) return
@@ -70,6 +97,48 @@ export default function EditProfileScreen() {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="bg-background flex-1">
       <ScrollView contentContainerClassName="gap-4 py-4" keyboardShouldPersistTaps="handled">
         <Group>
+          <Row first className="gap-3.5 py-3">
+            <Avatar alt={user.nickname || user.username} className="size-[54px] rounded-[17px]">
+              {user.avatar ? <AvatarImage source={{ uri: user.avatar }} /> : null}
+              <AvatarFallback className="bg-primary rounded-[17px]">
+                <Text className="text-primary-foreground text-xl font-semibold">
+                  {(user.nickname || user.username).slice(0, 1).toUpperCase()}
+                </Text>
+              </AvatarFallback>
+            </Avatar>
+            <View className="flex-1 items-start gap-1">
+              {/*
+               * 🔴 上传接口挂着 `sys:file:upload`，而且是 POST —— 还要过 `is_staff` 那道闸
+               * （见 `lib/perm.ts`），所以用 `canWrite` 不是 `can`。没权限时**说出来**，
+               * 不要让按钮静默消失：那样用户只会以为移动端不支持传头像（硬纪律 9）。
+               * 权限码没问到（`known` 为假）时也不显示按钮，免得点了必然 403 —— 但要说清是
+               * 「还在问」还是「问失败了」，后者不能停在一句永远转不完的「正在确认」。
+               */}
+              {perm.canWrite('sys:file:upload') ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={uploading || saving}
+                  onPress={() => void upload()}
+                  testID="edit-avatar-pick"
+                >
+                  {uploading ? <ActivityIndicator size="small" /> : null}
+                  <Text>{uploading ? t('上传中…') : t('从相册选择')}</Text>
+                </Button>
+              ) : (
+                <Text className="text-muted-foreground text-xs leading-5" testID="edit-avatar-no-perm">
+                  {perm.known
+                    ? t('你没有上传文件的权限，只能在下面填图片地址')
+                    : perm.error
+                      ? t('没能确认上传权限：{{reason}}', { reason: perm.error })
+                      : t('正在确认上传权限…')}
+                </Text>
+              )}
+            </View>
+          </Row>
+        </Group>
+
+        <Group>
           <Row first>
             <Text className="min-w-[70px] shrink-0 text-[15px]">{t('昵称')}</Text>
             <Input
@@ -105,7 +174,7 @@ export default function EditProfileScreen() {
         </Group>
 
         <Text className="text-muted-foreground px-5 text-xs leading-5">
-          {t('头像留空表示清除。暂时只能填 URL —— 从相册选图要 expo-image-picker + 文件上传接口，还没接。')}
+          {t('头像地址留空表示清除；也可以直接粘贴一个已有的图片地址。')}
         </Text>
 
         {error ? (

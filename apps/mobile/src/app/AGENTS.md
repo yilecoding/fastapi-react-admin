@@ -42,7 +42,7 @@
 | 字段 | 能不能自己改 | 走哪个口 |
 |---|---|---|
 | 昵称 | ✅ | `PUT /sys/users/me/nickname` |
-| 头像 | ✅ 但**只能填 URL** | `PUT /sys/users/me/avatar` |
+| 头像 | ✅ 从相册选（要 `sys:file:upload` + `is_staff`）或填 URL | `POST /sys/files/upload?public=true` → `PUT /sys/users/me/avatar` |
 | 密码 | ✅ | `PUT /sys/users/me/password` |
 | 时区 | ✅ | `PUT /sys/users/me/timezone`，并 `setDisplayTimeZone()` |
 | **手机号** | ❌ | 后端**没有** `/me/phone`，只有超管的 `PUT /sys/users/{pk}` |
@@ -55,8 +55,24 @@
 （`url_parsing: input is empty`），连改坏它的人自己都登不回来。后端那个 handler
 上就记着这次实测。
 
-⚠️ 从相册选头像还没做 —— 要 `expo-image-picker`（Expo Go 自带）+ 文件上传接口，
-是独立一件事。
+### 头像上传（`src/lib/avatar.ts`）
+
+照 web 个人中心的 `useUploadAvatar` 抄：**必须 `?public=true`**（私有文件要鉴权头，
+进 `<Image>` 就是裂图）· 拿不到 `public_url` 就报错、不回落到下载地址 ·
+存**绝对地址**（后端 `avatar` 是 `HttpUrl`），前缀拼的是 `serverStore` 当前地址。
+
+- 🔴 **上传接口不在 `/me/*` 下**，挂的是 `sys:file:upload` + `DependsRBAC`，
+  所以下面那条「`is_staff` 不影响个人中心」**对上传不成立** —— 按钮用 `canWrite()`。
+  没权限时屏上写明「只能填地址」，不让按钮静默消失
+- 🔴 **后端只按文件名扩展名判类型**（`file_ops.upload_file_verify`，不看 MIME），所以
+  文件名按 `mimeType` 现生成、不用 `asset.fileName` —— iOS 原名常是 `.HEIC`（不在白名单），
+  安卓裁剪后可能是 null。不认识的 MIME 直接报错，**不要硬起 `.jpg` 蒙过去**（后端会收，
+  但 HEIC 内容进 `<img>` 是裂图）。RN 的 `FormData` 收 `{ uri, name, type }` 描述对象，不是 Blob
+- ⚠️ 不先请求相册权限：Android 13+ 的系统照片选择器、iOS 14+ 的 PHPicker 都不需要。
+  `app.json` 里插件把 `cameraPermission` / `microphonePermission` 显式关掉 ——
+  不关的话独立打包会凭空多申请相机和录音权限
+- ⚠️ **只验过打包（`expo export`）和类型，没在设备上跑过** —— 选图、裁剪、
+  multipart 实际发出去的样子都待真机验收
 
 ### `is_staff` 这道闸门**不影响**个人中心
 
