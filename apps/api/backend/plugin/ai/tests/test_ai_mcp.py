@@ -19,35 +19,71 @@ from typing import Any
 
 import pytest
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from starlette.testclient import TestClient
 
 from backend.core.conf import settings
 from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
 from backend.plugin.ai.enums import ToolInvocationStatus
 from backend.plugin.ai.hooks import MCP_PATH
-from backend.plugin.ai.mcp_gateway.auth import hash_token
-from backend.plugin.ai.model import AiToolInvocation
+from backend.plugin.ai.model import AiMcpClient, AiToolInvocation
 
 _URL = MCP_PATH.removeprefix(settings.FASTAPI_API_V1_PATH)  # client 的 base_url 已带 /api/v1
-_TOKEN = 'fra_mcp_pytest-token'
-_CHANNEL = 'mcp:pytest'
+_MGMT = '/ai/mcp-clients'
+_CLIENT_ID = 'pytest'
+_CHANNEL = f'mcp:{_CLIENT_ID}'
+# 当前这条用例的凭据（gateway fixture 经管理接口真实创建）
+_state: dict[str, Any] = {}
 
 
-def _client_cfg(**overrides: Any) -> dict[str, Any]:
-    return {'id': 'pytest', 'token_sha256': hash_token(_TOKEN), 'act_as': ['*'], **overrides}
+def _run_db(coro_fn: Any) -> Any:
+    async def _main() -> Any:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        try:
+            async with create_database_async_session(engine)() as db:
+                return await coro_fn(db)
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_main())
+
+
+def _purge_clients() -> None:
+    """凭据硬删：接口的删除是逻辑删除，`client_id` 又要在下一条用例里复用"""
+
+    async def _do(db: Any) -> None:
+        await db.execute(
+            delete(AiMcpClient).where(or_(AiMcpClient.client_id == _CLIENT_ID, AiMcpClient.client_id.like('rl-%')))
+        )
+        await db.commit()
+
+    _run_db(_do)
+
+
+def _create_client(client: TestClient, headers: dict[str, str], **cfg: Any) -> dict[str, Any]:
+    response = client.post(_MGMT, headers=headers, json={'name': cfg.get('client_id', 'pytest'), **cfg})
+    assert response.json()['code'] == 200, response.text
+    return response.json()['data']
 
 
 @pytest.fixture
-def gateway(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
-    """打开网关；返回一个可改凭据配置的函数"""
+def gateway(client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    """打开网关、经管理接口建一份凭据（可代表任何人含超管）；返回一个改这份凭据配置的函数"""
     monkeypatch.setattr(settings, 'AI_MCP_ENABLED', True)
-    monkeypatch.setattr(settings, 'AI_MCP_CLIENTS', [_client_cfg(allow_superuser=True)])
+    _purge_clients()
+    created = _create_client(client, token_headers, client_id=_CLIENT_ID, act_as=['*'], allow_superuser=True)
+    _state.update(token=created['mcp_token'], pk=created['id'])
 
     def configure(**overrides: Any) -> None:
-        monkeypatch.setattr(settings, 'AI_MCP_CLIENTS', [_client_cfg(**overrides)])
+        body = {'name': 'pytest', 'act_as': ['*'], **overrides}
+        response = client.put(f'{_MGMT}/{_state["pk"]}', headers=token_headers, json=body)
+        assert response.json()['code'] == 200, response.text
 
-    yield configure
+    try:
+        yield configure
+    finally:
+        _purge_clients()
+        _state.clear()
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -55,16 +91,11 @@ def _cleanup_audit() -> Iterator[None]:
     """审计行硬删 —— 走接口删不了，也不该留在测试库里越积越多"""
     yield
 
-    async def _purge() -> None:
-        engine = create_database_async_engine(get_database_url(unittest=True))
-        try:
-            async with create_database_async_session(engine)() as db:
-                await db.execute(delete(AiToolInvocation).where(AiToolInvocation.channel == _CHANNEL))
-                await db.commit()
-        finally:
-            await engine.dispose()
+    async def _do(db: Any) -> None:
+        await db.execute(delete(AiToolInvocation).where(AiToolInvocation.channel.like('mcp:%')))
+        await db.commit()
 
-    asyncio.run(_purge())
+    _run_db(_do)
 
 
 def _rpc(
@@ -73,8 +104,9 @@ def _rpc(
     params: dict[str, Any] | None = None,
     *,
     user: str | None = 'admin',
-    token: str = _TOKEN,
+    token: str | None = None,
 ) -> Any:
+    token = _state.get('token', '') if token is None else token
     headers = {'Accept': 'application/json, text/event-stream'}
     if token:
         headers['Authorization'] = f'Bearer {token}'
@@ -98,20 +130,15 @@ def _call(client: TestClient, name: str, arguments: dict[str, Any] | None = None
 
 
 def _audit_rows(tool: str) -> list[tuple[int, str | None]]:
-    async def _q() -> list[tuple[int, str | None]]:
-        engine = create_database_async_engine(get_database_url(unittest=True))
-        try:
-            async with create_database_async_session(engine)() as db:
-                rows = await db.execute(
-                    select(AiToolInvocation.status, AiToolInvocation.channel).where(
-                        AiToolInvocation.tool_name == tool, AiToolInvocation.channel == _CHANNEL
-                    )
-                )
-                return [tuple(r) for r in rows]
-        finally:
-            await engine.dispose()
+    async def _q(db: Any) -> list[tuple[int, str | None]]:
+        rows = await db.execute(
+            select(AiToolInvocation.status, AiToolInvocation.channel).where(
+                AiToolInvocation.tool_name == tool, AiToolInvocation.channel == _CHANNEL
+            )
+        )
+        return [tuple(r) for r in rows]
 
-    return asyncio.run(_q())
+    return _run_db(_q)
 
 
 class TestAuthentication:
@@ -145,8 +172,29 @@ class TestAuthentication:
         assert response.status_code == 403
         assert '超级管理员' in response.json()['error']
 
-    def test_broken_client_config_is_ignored_not_widened(self, client: TestClient, gateway: Any) -> None:
-        gateway(token_sha256='not-a-sha256')
+
+class TestCredentialLifecycle:
+    """凭据的停用 / 换令牌 / 删除都要**即刻**生效 —— 网关每个请求按哈希现查，不缓存"""
+
+    def test_disabled_credential_is_rejected_immediately(self, client: TestClient, gateway: Any) -> None:
+        assert _rpc(client, 'tools/list').status_code == 200
+        gateway(allow_superuser=True, status=0)
+        assert _rpc(client, 'tools/list').status_code == 401
+
+    def test_rotated_token_invalidates_the_old_one(
+        self, client: TestClient, token_headers: dict[str, str], gateway: Any
+    ) -> None:
+        old = _state['token']
+        response = client.post(f'{_MGMT}/{_state["pk"]}/rotate', headers=token_headers)
+        new = response.json()['data']['mcp_token']
+        assert new != old
+        assert _rpc(client, 'tools/list', token=old).status_code == 401
+        assert _rpc(client, 'tools/list', token=new).status_code == 200
+
+    def test_deleted_credential_is_rejected(
+        self, client: TestClient, token_headers: dict[str, str], gateway: Any
+    ) -> None:
+        assert client.delete(f'{_MGMT}/{_state["pk"]}', headers=token_headers).json()['code'] == 200
         assert _rpc(client, 'tools/list').status_code == 401
 
 
@@ -164,8 +212,8 @@ class TestToolsFollowTheActingUser:
         assert 'dept_list' not in staff_view
 
     def test_client_tool_allowlist_only_narrows(self, client: TestClient, gateway: Any) -> None:
-        gateway(allow_superuser=True, tools=['system_health_check', 'dept_create'])
-        # dept_create 写进了白名单也不出现：白名单不能把只读入口放大成可写
+        # 写操作工具连白名单都进不去（管理接口拒，见 test_ai_mcp_clients.py）；这里验的是收窄
+        gateway(allow_superuser=True, tools=['system_health_check'])
         assert _tools(client) == {'system_health_check'}
         result = _call(client, 'dept_list')
         assert result['isError'] is True
@@ -195,23 +243,27 @@ class TestRateLimit:
     """按凭据限流。用唯一的凭据 ID：Redis 里的计数窗口是一分钟，固定 ID 会让上一轮的计数漏进这一轮"""
 
     @staticmethod
-    def _two_clients(monkeypatch: pytest.MonkeyPatch, rate: int) -> tuple[str, str]:
-        a, b = f'rl-{uuid.uuid4().hex[:8]}', f'rl-{uuid.uuid4().hex[:8]}'
+    def _two_clients(
+        client: TestClient, headers: dict[str, str], monkeypatch: pytest.MonkeyPatch, rate: int
+    ) -> tuple[str, str]:
         monkeypatch.setattr(settings, 'AI_MCP_ENABLED', True)
-        monkeypatch.setattr(
-            settings,
-            'AI_MCP_CLIENTS',
-            [
-                {'id': a, 'token_sha256': hash_token(f'tok-{a}'), 'act_as': ['test', 'lina'], 'rate_per_minute': rate},
-                {'id': b, 'token_sha256': hash_token(f'tok-{b}'), 'act_as': ['test'], 'rate_per_minute': rate},
-            ],
+        a = _create_client(
+            client, headers, client_id=f'rl-{uuid.uuid4().hex[:8]}', act_as=['test', 'lina'], rate_per_minute=rate
         )
-        return f'tok-{a}', f'tok-{b}'
+        b = _create_client(
+            client, headers, client_id=f'rl-{uuid.uuid4().hex[:8]}', act_as=['test'], rate_per_minute=rate
+        )
+        return a['mcp_token'], b['mcp_token']
+
+    @pytest.fixture(autouse=True)
+    def _purge(self) -> Iterator[None]:
+        yield
+        _purge_clients()
 
     def test_over_quota_is_429_with_retry_after(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, rate_limiter: None
+        self, client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch, rate_limiter: None
     ) -> None:
-        token, _ = self._two_clients(monkeypatch, rate=3)
+        token, _ = self._two_clients(client, token_headers, monkeypatch, rate=3)
         codes = [_rpc(client, 'tools/list', user='test', token=token).status_code for _ in range(3)]
         # 先断言「额度内都放行」：否则 429 可能只是因为别的原因一开始就全挡了
         assert codes == [200, 200, 200]
@@ -221,18 +273,18 @@ class TestRateLimit:
         assert 'jsonrpc' not in over.text, '被限流的请求不该进入 MCP 协议层'
 
     def test_switching_acting_user_does_not_reset_quota(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, rate_limiter: None
+        self, client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch, rate_limiter: None
     ) -> None:
         """额度按凭据算：一份凭据轮换着代表不同的人，不能换来新额度"""
-        token, _ = self._two_clients(monkeypatch, rate=2)
+        token, _ = self._two_clients(client, token_headers, monkeypatch, rate=2)
         assert _rpc(client, 'tools/list', user='test', token=token).status_code == 200
         assert _rpc(client, 'tools/list', user='lina', token=token).status_code == 200
         assert _rpc(client, 'tools/list', user='lina', token=token).status_code == 429
 
     def test_clients_have_separate_quotas(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, rate_limiter: None
+        self, client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch, rate_limiter: None
     ) -> None:
-        token_a, token_b = self._two_clients(monkeypatch, rate=1)
+        token_a, token_b = self._two_clients(client, token_headers, monkeypatch, rate=1)
         assert _rpc(client, 'tools/list', user='test', token=token_a).status_code == 200
         assert _rpc(client, 'tools/list', user='test', token=token_a).status_code == 429
         assert _rpc(client, 'tools/list', user='test', token=token_b).status_code == 200
