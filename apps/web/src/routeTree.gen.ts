@@ -18,6 +18,7 @@ import { Route as AuthNotificationRouteImport } from './routes/_auth/notificatio
 import { Route as AuthProfileRouteImport } from './routes/_auth/profile'
 import { Route as GuestSignInRouteImport } from './routes/_guest/sign-in'
 import { Route as AuthAiChatRouteImport } from './routes/_auth/ai/chat'
+import { Route as AuthAiMcpClientRouteImport } from './routes/_auth/ai/mcp-client'
 import { Route as AuthAiProviderRouteImport } from './routes/_auth/ai/provider'
 import { Route as AuthAiToolLogRouteImport } from './routes/_auth/ai/tool-log'
 import { Route as AuthEmbeddedNameRouteImport } from './routes/_auth/embedded/$name'
@@ -86,6 +87,11 @@ const GuestSignInRoute = GuestSignInRouteImport.update({
 const AuthAiChatRoute = AuthAiChatRouteImport.update({
   id: '/ai/chat',
   path: '/ai/chat',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthAiMcpClientRoute = AuthAiMcpClientRouteImport.update({
+  id: '/ai/mcp-client',
+  path: '/ai/mcp-client',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthAiProviderRoute = AuthAiProviderRouteImport.update({
@@ -228,6 +234,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthProfileRoute
   '/sign-in': typeof GuestSignInRoute
   '/ai/chat': typeof AuthAiChatRoute
+  '/ai/mcp-client': typeof AuthAiMcpClientRoute
   '/ai/provider': typeof AuthAiProviderRoute
   '/ai/tool-log': typeof AuthAiToolLogRoute
   '/embedded/$name': typeof AuthEmbeddedNameRoute
@@ -263,6 +270,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthProfileRoute
   '/sign-in': typeof GuestSignInRoute
   '/ai/chat': typeof AuthAiChatRoute
+  '/ai/mcp-client': typeof AuthAiMcpClientRoute
   '/ai/provider': typeof AuthAiProviderRoute
   '/ai/tool-log': typeof AuthAiToolLogRoute
   '/embedded/$name': typeof AuthEmbeddedNameRoute
@@ -301,6 +309,7 @@ export interface FileRoutesById {
   '/_auth/profile': typeof AuthProfileRoute
   '/_guest/sign-in': typeof GuestSignInRoute
   '/_auth/ai/chat': typeof AuthAiChatRoute
+  '/_auth/ai/mcp-client': typeof AuthAiMcpClientRoute
   '/_auth/ai/provider': typeof AuthAiProviderRoute
   '/_auth/ai/tool-log': typeof AuthAiToolLogRoute
   '/_auth/embedded/$name': typeof AuthEmbeddedNameRoute
@@ -338,6 +347,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/sign-in'
     | '/ai/chat'
+    | '/ai/mcp-client'
     | '/ai/provider'
     | '/ai/tool-log'
     | '/embedded/$name'
@@ -373,6 +383,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/sign-in'
     | '/ai/chat'
+    | '/ai/mcp-client'
     | '/ai/provider'
     | '/ai/tool-log'
     | '/embedded/$name'
@@ -410,6 +421,7 @@ export interface FileRouteTypes {
     | '/_auth/profile'
     | '/_guest/sign-in'
     | '/_auth/ai/chat'
+    | '/_auth/ai/mcp-client'
     | '/_auth/ai/provider'
     | '/_auth/ai/tool-log'
     | '/_auth/embedded/$name'
@@ -507,6 +519,13 @@ declare module '@tanstack/react-router' {
       path: '/ai/chat'
       fullPath: '/ai/chat'
       preLoaderRoute: typeof AuthAiChatRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/ai/mcp-client': {
+      id: '/_auth/ai/mcp-client'
+      path: '/ai/mcp-client'
+      fullPath: '/ai/mcp-client'
+      preLoaderRoute: typeof AuthAiMcpClientRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/ai/provider': {
@@ -700,6 +719,7 @@ interface AuthRouteChildren {
   AuthNotificationRoute: typeof AuthNotificationRoute
   AuthProfileRoute: typeof AuthProfileRoute
   AuthAiChatRoute: typeof AuthAiChatRoute
+  AuthAiMcpClientRoute: typeof AuthAiMcpClientRoute
   AuthAiProviderRoute: typeof AuthAiProviderRoute
   AuthAiToolLogRoute: typeof AuthAiToolLogRoute
   AuthEmbeddedNameRoute: typeof AuthEmbeddedNameRoute
@@ -734,6 +754,7 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthNotificationRoute: AuthNotificationRoute,
   AuthProfileRoute: AuthProfileRoute,
   AuthAiChatRoute: AuthAiChatRoute,
+  AuthAiMcpClientRoute: AuthAiMcpClientRoute,
   AuthAiProviderRoute: AuthAiProviderRoute,
   AuthAiToolLogRoute: AuthAiToolLogRoute,
   AuthEmbeddedNameRoute: AuthEmbeddedNameRoute,
