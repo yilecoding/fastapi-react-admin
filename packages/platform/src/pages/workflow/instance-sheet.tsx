@@ -24,6 +24,7 @@ import {
   detailQuery, idempotencyKey, useAct, useMarkCcRead, useMarkTaskRead,
   type Action, type FormData, type InstanceDetail,
 } from './api'
+import { AiReviewPanel } from './ai-review-panel'
 import { FlowView } from './flow-view'
 import { FormRenderer, missingRequired } from './form-renderer'
 import { UserSelect } from './pickers'
@@ -193,6 +194,7 @@ function Detail({
                   <p className="mt-1 text-xs opacity-80">{t('改好之后点「重新提交」，审批从头开始')}</p>
                 </div>
               )}
+              <AiReviewPanel id={d.instance.id} schema={d.form_schema} />
               <h3 className="text-xs font-medium tracking-wide text-muted-foreground">{t('申请内容')}</h3>
               <FormRenderer
                 schema={d.form_schema}
