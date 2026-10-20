@@ -7,20 +7,21 @@ import asyncio
 import json
 
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import pytest
 
-from sqlalchemy import text
+from sqlalchemy import text, update
 from starlette.testclient import TestClient
 
 from backend.app.task.celery import celery_app
 from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+from backend.plugin.workflow.model import WfAiReview
 from backend.plugin.workflow.service import ai_review_service
 from backend.plugin.workflow.tests.conftest import key, ok
 from backend.plugin.workflow.tests.test_ops import _act, _detail
-from backend.plugin.workflow.tests.test_review_fixes import _approval, _model, _publish, _sql
+from backend.plugin.workflow.tests.test_review_fixes import _approval, _model, _publish
 from backend.plugin.workflow.tests.test_timeouts import (  # ruff: ignore[unused-import] —— _no_push 是 autouse fixture
     _no_push,
 )
@@ -108,6 +109,25 @@ def _count(instance_id: str) -> int:
             await engine.dispose()
 
     return asyncio.run(go())
+
+
+def _backdate(instance_id: int, at: datetime) -> None:
+    """把预审的创建时间往回拨。
+
+    🔴 走 ORM 的 `update()`，不写裸 SQL：时间要经过 `TimeZone.process_bind_param` 才和生产写入同一条路。
+    裸 `text()` 绑定带时区的 datetime，PostgreSQL 上是对的，SQL Server 上这条测试红了
+    （读回来仍是 pending —— 回拨没落到「10 分钟以前」）。
+    """
+
+    async def go() -> None:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        try:
+            async with create_database_async_session(engine).begin() as s:
+                await s.execute(update(WfAiReview).where(WfAiReview.instance_id == instance_id).values(created_time=at))
+        finally:
+            await engine.dispose()
+
+    asyncio.run(go())
 
 
 def _setup(client: TestClient, admin: dict[str, str], uid: Uid, code: str, *, enabled: bool = True) -> None:
@@ -247,11 +267,7 @@ def test_stuck_pending_reports_timeout(
     """worker 没起 / 任务丢了：pending 超过 10 分钟显示成超时（可重试），而不是永远「预审中」"""
     _setup(client, token_headers, uid, 'PYTEST_AI_STUCK')
     pk = _start(client, login, 'PYTEST_AI_STUCK')
-    _sql(
-        'UPDATE wf_ai_review SET created_time = :t WHERE instance_id = :i',
-        t=timezone.now() - ai_review_service.PENDING_TIMEOUT - timedelta(minutes=1),
-        i=int(pk),
-    )
+    _backdate(int(pk), timezone.now() - ai_review_service.PENDING_TIMEOUT - timedelta(minutes=1))
     assert _review(client, token_headers, pk)['status'] == 'timeout'
     ok(client.post(f'/sys/workflow/instances/{pk}/ai-review/retry', headers=token_headers))
     assert len(sent) == 2
