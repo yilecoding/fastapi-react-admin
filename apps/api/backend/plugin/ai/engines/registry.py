@@ -16,6 +16,11 @@ def build_engine(client: OpenAICompatClient) -> AgentRuntimePort:
     engine = settings.AI_AGENT_ENGINE
     if engine == 'native':
         return NativeLoopEngine(client)
-    # pi sidecar 等适配器在这里接。刻意 fail-fast 而不是"回落到 native"——
+    if engine == 'pydantic_ai':
+        # 延迟 import：pydantic-ai 连同 openai SDK 加载要几百毫秒，用 native 的部署不该为它付钱
+        from backend.plugin.ai.engines.pydantic_ai_engine import PydanticAIEngine
+
+        return PydanticAIEngine(client)
+    # 其它适配器在这里接。刻意 fail-fast 而不是"回落到 native"——
     # 静默回落会让"我明明配了 pi"和"pi 没生效"完全无法区分
     raise errors.ServerError(msg=f'未知的 AI 引擎：{engine}')

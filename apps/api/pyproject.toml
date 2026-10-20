@@ -62,6 +62,7 @@ dependencies = [
   "pwdlib>=0.3.0",
   "py-ip2region>=3.0.4",
   "pydantic>=2.13.4",
+  "pydantic-ai-slim[openai]>=2.54.0",  # plugin/ai（AI_AGENT_ENGINE = "pydantic_ai"）
   "pydantic-settings>=2.15.0",
   "pymysql>=1.1.2",
   "pyrate-limiter>=4.4.0",
