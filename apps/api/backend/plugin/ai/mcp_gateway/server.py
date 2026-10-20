@@ -21,13 +21,17 @@ import mcp_types as types
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPASGIApp, StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
-from starlette.responses import JSONResponse
+from pyrate_limiter import Duration, Rate
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from backend.common.exception import errors
 from backend.database.db import async_db_session
 from backend.plugin.ai.core.dispatcher import tool_dispatcher
 from backend.plugin.ai.core.ports import RunContext, ToolCallRequest
 from backend.plugin.ai.mcp_gateway.auth import McpAuthError, McpPrincipal, authenticate
+from backend.utils.limiter import RateLimiter
 
 _PRINCIPAL_KEY = 'ai_mcp_principal'
 
@@ -122,6 +126,31 @@ def build_session_manager() -> StreamableHTTPSessionManager:
     )
 
 
+def _client_identifier(request: Request) -> str:
+    return f'ai-mcp:{getattr(request.state, _PRINCIPAL_KEY).client.id}'
+
+
+# 一个额度一个限流器（RateLimiter 的桶键里带着额度，不同额度天然分开）
+_limiters: dict[int, RateLimiter] = {}
+
+
+async def _throttle(scope: Scope, receive: Receive, principal: McpPrincipal) -> int | None:
+    """按凭据限流。超了返回 Retry-After 秒数，没超返回 None。
+
+    复用全站的 `RateLimiter`（Redis 服务端时间、按标识分桶），所以它同样受
+    `REQUEST_LIMITER_ENABLED` 管 —— 测试里默认关着，要验 429 用 `rate_limiter` fixture。
+    """
+    rate = principal.client.effective_rate
+    limiter = _limiters.get(rate)
+    if limiter is None:
+        limiter = _limiters[rate] = RateLimiter(Rate(rate, Duration.MINUTE), identifier=_client_identifier)
+    try:
+        await limiter(Request(scope, receive), Response())
+    except errors.HTTPError as e:
+        return int((e.headers or {}).get('Retry-After', 60))
+    return None
+
+
 class McpAuthGate:
     """外层 ASGI：先鉴权，过了才交给 MCP；不过直接回 JSON 错误，不进协议层"""
 
@@ -144,6 +173,16 @@ class McpAuthGate:
             await response(scope, receive, send)
             return
         scope.setdefault('state', {})[_PRINCIPAL_KEY] = principal
+        # 限流在鉴权之后：要先知道是哪个系统才能按它计数；鉴权失败的请求本来就进不来
+        retry_after = await _throttle(scope, receive, principal)
+        if retry_after is not None:
+            response = JSONResponse(
+                {'error': f'请求过于频繁（每分钟 {principal.client.effective_rate} 次），请 {retry_after} 秒后再试'},
+                status_code=429,
+                headers={'Retry-After': str(retry_after)},
+            )
+            await response(scope, receive, send)
+            return
         await self.app(scope, receive, send)
 
 

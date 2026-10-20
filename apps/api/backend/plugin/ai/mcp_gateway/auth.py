@@ -39,6 +39,11 @@ class McpClient(BaseModel):
     act_as: list[str] = Field(min_length=1)
     allow_superuser: bool = False
     tools: list[str] | None = None
+    rate_per_minute: int | None = Field(None, ge=1)
+
+    @property
+    def effective_rate(self) -> int:
+        return self.rate_per_minute or settings.AI_MCP_RATE_PER_MINUTE
 
     def may_act_as(self, username: str) -> bool:
         return '*' in self.act_as or username in self.act_as
