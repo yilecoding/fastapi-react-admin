@@ -261,3 +261,42 @@ SQLAlchemy 把整个事务标成待回滚，这一轮对话里后面每个工具
 **实测证据**（`tests/test_ai_audit.py`）：用一个名字超过列宽的工具触发真实的数据库报错，
 修复前同一会话里下一个 `dept_list` 失败、连计数查询都 `PendingRollbackError`；修复后通过，
 且后面的审计照常写入。最早是脚本里没初始化雪花算法时撞到的（审计取不到 ID）。
+
+## MCP 网关（`/api/v1/ai/mcp`，只读）
+
+第二个入口：外部系统（pis-agent、Claude Desktop、Cursor…）以 MCP Streamable HTTP（无状态 + JSON）
+调 `@ai_tool`。**它不执行工具**：清单走 `visible_schemas()`，调用走 `dispatch()`，
+和网页对话同一份权限 / 数据范围 / 审计。配置、发凭据见 `plugin.toml` 末尾和 `mcp_gateway/gen_token.py`。
+
+🔴 **身份是外部系统声明的**（M2M 凭据 + `X-Acting-User`），所以只能信到「这个凭据被允许代表谁」：
+
+| 闸 | 在哪 | 不做的后果 |
+|---|---|---|
+| 凭据只存 sha256，常量时间逐项比对 | `auth.py` | 配置泄露 = 凭据泄露 |
+| `act_as` 白名单 | `auth.py` | 一份凭据能代表全公司任何人 |
+| **默认不能代表超管**（`allow_superuser` 显式开） | `auth.py` | 泄露的凭据 + `X-Acting-User: admin` = 整个系统 |
+| 用户走 `get_jwt_user()` | `auth.py` | 网页上登不进来的人（停用账号 / 部门 / 角色）经 MCP 照样能被代表 |
+| 写操作拒绝 —— **拦在 dispatcher**（`ctx.read_only`），不只拦在网关 | `core/dispatcher.py` | 清单里不出现不等于调不到：外部系统可以直接调名字；拦在网关的话下一个入口还得再记一遍，而且拒绝不进审计 |
+| 凭据级 `tools` 白名单只能收窄 | `server.py` | —— |
+| 审计带 `channel = mcp:<client>` | 迁移 `h0000000aichannel` | 出了事只查得到「张三调的」，查不到是哪个系统替他调的 |
+
+三条装配上的坑（都是实测出来的）：
+
+- 🔴 **必须进 JWT 中间件的放行名单**（`hooks.py`）。外部系统的 Bearer 不是 JWT，不放行会被中间件当坏
+  token 先拒掉（401「Token 无效」），请求到不了网关
+- 🔴 **用精确路径的 `Route`，不用 `app.mount`**：mount 下不带斜杠的 URL 被 307，MCP 客户端多数不跟重定向
+- 🔴 **会话管理器要由插件 `lifespan` 拉起**：mount / Route 进来的子应用的 lifespan 不会执行。
+  SDK 的 DNS rebinding 防护默认只认 localhost 的 Host 头，部署到域名会 421 —— 每个请求都要
+  Bearer，所以关掉
+- 鉴权在外层 ASGI 做完，结果放 `scope['state']`，处理函数读 `ctx.request.state`。不用 ContextVar：
+  MCP 处理函数跑在会话管理器自己的任务组里
+
+**实测证据**：
+- `tests/test_ai_mcp.py` 14 条，全走真实 HTTP + 测试库。**变异检验** 7 处各打红：dispatcher 不拦只读 ·
+  清单不滤写工具 · 网关 `read_only=False` · 调用不查凭据白名单 · 不拦超管 · 不查 `act_as` ·
+  不放行 JWT 中间件（这一条红 11 条）
+- 起真实 uvicorn（连 `fba_test`），用**官方 `mcp` Python 客户端**连：代理 `admin` 看到 9 个只读工具、
+  `dept_list` 返回真数据（ID 是字符串）、`dept_create` 被拒并提示回网页端；代理 `test`（STAFF）只有 3 个、
+  调 `dept_list` 被拒；白名单外的 `zhangwei` 在 HTTP 层 403。4 次调用对应 4 行 `channel=mcp:e2e` 审计
+- 装配坑也各撤一次验过：去掉插件 `lifespan` → `RuntimeError: Task group is not initialized`；
+  打开 DNS rebinding 防护（只认 localhost）→ `421 Invalid Host header`

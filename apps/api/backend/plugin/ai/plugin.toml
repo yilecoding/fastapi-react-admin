@@ -28,5 +28,11 @@ AI_EXTERNAL_HTTP_TIMEOUT = 15
 AI_EXTERNAL_HTTP_USE_PROXY = true
 # 一轮对话里最多允许模型连续调用多少次工具，超过就收尾（防打转烧钱）
 AI_MAX_TOOL_ROUNDS = 5
+# 外部系统凭据。只存 sha256，生成：uv run python -m backend.plugin.ai.mcp_gateway.gen_token <client-id>
+# 真值写进 .env（JSON），例：AI_MCP_CLIENTS='[{"id":"pis-agent","token_sha256":"…","act_as":["zhangsan"]}]'
+AI_MCP_CLIENTS = []
+# MCP 网关（/api/v1/ai/mcp）。默认关：开之前先配好 AI_MCP_CLIENTS。
+# 第一版只开放只读工具；写操作在 MCP 上一律拒绝（要人确认的事回网页端做）。
+AI_MCP_ENABLED = false
 # 开放给 AI 的工具域；下游项目按需增删，注册了但不在这里的域不会出现在工具清单里
 AI_TOOL_DOMAINS = ["system", "role", "dept", "menu", "user", "log", "weather"]

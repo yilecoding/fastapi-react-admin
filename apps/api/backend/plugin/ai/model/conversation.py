@@ -62,6 +62,10 @@ class AiToolInvocation(DataClassBase):
     permission_code: Mapped[str | None] = mapped_column(UniversalStr(64), default=None, comment='工具声明的权限码')
     error: Mapped[str | None] = mapped_column(UniversalText, default=None, comment='失败原因')
     duration_ms: Mapped[int | None] = mapped_column(default=None, comment='执行耗时（毫秒）')
+    # 调用从哪个入口进来。NULL = 网页对话（加这一列之前的存量行也是）；`mcp:<client id>` = 外部系统。
+    # 🔴 MCP 的身份是外部系统**声明**的，审计里必须看得出「这次是 X 系统替张三调的」，
+    # 否则出了事只能查到张三，查不到是谁替他发起的
+    channel: Mapped[str | None] = mapped_column(UniversalStr(64), default=None, comment='调用入口（NULL=网页对话）')
     created_time: Mapped[datetime] = mapped_column(
         TimeZone, init=False, default_factory=timezone.now, index=True, comment='创建时间'
     )

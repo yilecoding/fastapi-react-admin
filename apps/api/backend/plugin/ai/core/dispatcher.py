@@ -114,7 +114,7 @@ class ToolDispatcher:
         """交给引擎的那一份：同 `visible_tools`，但去掉了可执行体（见 `ToolSchema`）"""
         return [spec.schema for spec in self.visible_tools(user)]
 
-    async def dispatch(
+    async def dispatch(  # ruff: ignore[complex-structure]
         self,
         call: ToolCallRequest,
         ctx: RunContext,
@@ -157,6 +157,23 @@ class ToolDispatcher:
             )
 
         if spec.mutating:
+            # 只读入口（MCP 第一版）：写操作要人确认，而外部客户端那一侧的「确认」我们验证不了
+            # （客户端可以代答）。拦在这里而不是只拦在网关：以后加入口不用再记得这一条，且拒绝会进审计
+            if ctx.read_only:
+                await self._audit(
+                    ctx,
+                    call,
+                    ToolInvocationStatus.DENIED,
+                    perm=spec.perm,
+                    error='只读入口不允许写操作',
+                    started=started,
+                )
+                return DispatchOutcome(
+                    kind='denied',
+                    payload=f'{spec.name} 会改变系统数据，这个入口只开放查询；请到网页端的 AI 助手里操作。',
+                    summary='只读入口',
+                    perm=spec.perm,
+                )
             if not user_can_mutate(ctx.user):
                 await self._audit(
                     ctx, call, ToolInvocationStatus.DENIED, perm=spec.perm, error='非后台管理用户', started=started
@@ -309,6 +326,7 @@ class ToolDispatcher:
                     permission_code=perm,
                     error=error,
                     duration_ms=int((time.perf_counter() - started) * 1000),
+                    channel=ctx.channel,
                 )
         except Exception:
             log.exception('AI 工具审计落库失败（不影响本次调用结果）')
