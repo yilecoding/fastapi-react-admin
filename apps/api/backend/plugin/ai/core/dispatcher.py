@@ -202,10 +202,10 @@ class ToolDispatcher:
                         perm=spec.perm,
                         duration_ms=int((time.perf_counter() - started) * 1000),
                     )
-                token = await self._stage_confirm(spec, call, ctx)
                 if not preview:
                     safe_args = json.dumps(_redact(call.arguments), ensure_ascii=False)
                     preview = f'将执行：{spec.name}\n参数：{safe_args}'
+                token = await self._stage_confirm(spec, call, ctx, preview)
                 await self._audit(ctx, call, ToolInvocationStatus.PENDING_CONFIRM, perm=spec.perm, started=started)
                 return DispatchOutcome(
                     kind='confirm_required',
@@ -271,9 +271,16 @@ class ToolDispatcher:
         with scoped_to_user(ctx.user):
             return await fn(**kwargs)
 
-    async def _stage_confirm(self, spec: ToolSpec, call: ToolCallRequest, ctx: RunContext) -> str:
-        """把一次待确认的调用暂存到 Redis，返回一次性令牌"""
-        token = uuid.uuid4().hex
+    async def _stage_confirm(self, spec: ToolSpec, call: ToolCallRequest, ctx: RunContext, preview: str) -> str:
+        """把一次待确认的调用暂存到 Redis，返回一次性令牌。
+
+        `channel` / `preview` 一起存：MCP 发起的写操作要在**网页**上确认，确认页得能
+        读出「会变成什么」；执行时的审计也要还记得是哪个外部系统发起的。
+        """
+        # 🔴 带字母前缀：MCP 发起的写操作会把令牌放进网页链接（`/ai/confirm?token=…`），而路由层对
+        # search 值跑 JSON.parse（`apps/web/src/lib/search-params.ts`）。纯十六进制恰好只含数字和一个 e
+        # 时（`123e4567…`）会被解析成数字，确认页拿到的令牌就不对了 —— 表现是一句查不出原因的「已过期」
+        token = f'cf_{uuid.uuid4().hex}'
         await redis_client.set(
             f'{settings.AI_CONFIRM_REDIS_PREFIX}:{token}',
             json.dumps(
@@ -282,6 +289,8 @@ class ToolDispatcher:
                     'arguments': call.arguments,
                     'user_id': str(ctx.user.id),
                     'conversation_id': str(ctx.conversation_id),
+                    'channel': ctx.channel,
+                    'preview': preview,
                 },
                 ensure_ascii=False,
             ),

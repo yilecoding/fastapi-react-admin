@@ -80,6 +80,7 @@ export const ICON_MAP: Record<string, IconCmp> = {
   'mdi:robot-outline': IconRobot,
   'mdi:chat-processing-outline': IconMessageChatbot,
   'mdi:key-variant': IconKey,
+  'mdi:api': IconApi,
   'lucide:area-chart': IconChartArea,
   'lucide:book-open-text': IconBook,
   'lucide:files': IconFiles,

@@ -184,7 +184,10 @@ class ChatService:
 
         async with async_db_session() as db:
             conversation_id = int(staged['conversation_id'])
-            ctx = RunContext(user=user, conversation_id=conversation_id, db=db, provider=None)
+            # channel 原样带回：MCP 发起、网页确认的写操作，审计里仍记作 `mcp:<client>`
+            ctx = RunContext(
+                user=user, conversation_id=conversation_id, db=db, provider=None, channel=staged.get('channel')
+            )
             call = ToolCallRequest(call_id=token, name=staged['tool'], arguments=staged['arguments'])
             outcome = await tool_dispatcher.dispatch(call, ctx, pre_approved=True)
             await db.commit()
@@ -192,6 +195,27 @@ class ChatService:
 
         yield _sse(ToolResultEvent(call_id=token, name=call.name, ok=outcome.kind == 'ok', summary=outcome.summary))
         yield _sse(DoneEvent())
+
+
+async def get_pending_confirm(*, user: Any, token: str) -> dict[str, Any]:
+    """给网页确认页读一个待确认的调用（**只读，不消费令牌**）。
+
+    🔴 只给令牌的主人看：MCP 发起的确认链接会经过外部系统、聊天记录、邮件，
+    别人拿到链接也只能看到「这不是你的确认」，看不到要改什么。
+    """
+    key = f'{settings.AI_CONFIRM_REDIS_PREFIX}:{token}'
+    raw = await redis_client.get(key)
+    if not raw:
+        raise errors.NotFoundError(msg='确认已过期或已经处理过，请重新发起这个操作')
+    staged = json.loads(raw)
+    if staged['user_id'] != str(user.id):
+        raise errors.ForbiddenError(msg='这个确认不属于当前登录的用户')
+    return {
+        'tool': staged['tool'],
+        'preview': staged.get('preview') or '',
+        'channel': staged.get('channel'),
+        'expires_in': max(await redis_client.ttl(key), 0),
+    }
 
 
 async def _resolve_provider(db: Any, provider_id: int | None) -> Any:

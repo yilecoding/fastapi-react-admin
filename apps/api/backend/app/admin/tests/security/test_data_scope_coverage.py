@@ -41,6 +41,7 @@ EXEMPT: dict[str, str] = {
     'CRUDAiConversation': '会话按 current_user.id 强制过滤，再叠部门维度会变成「我和我下属的对话」',
     'CRUDAiMessage': '消息的可见性完全由所属会话的所有权决定，这张表自己没有可过滤维度',
     'CRUDAiToolInvocation': '审计表没有可过滤维度，挂上只有 fail-closed 一种效果；靠 ai:log:list 权限码',
+    'CRUDAiMcpClient': 'MCP 凭据是系统级配置（同模型供应商），且网关鉴权时还没有当前用户；靠 ai:mcp:* 权限码',
 }
 
 

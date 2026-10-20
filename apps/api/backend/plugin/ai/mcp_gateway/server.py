@@ -27,9 +27,12 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from backend.common.exception import errors
+from backend.core.conf import settings
 from backend.database.db import async_db_session
-from backend.plugin.ai.core.dispatcher import tool_dispatcher
+from backend.plugin.ai.core.dispatcher import DispatchOutcome, tool_dispatcher
+from backend.plugin.ai.core.permission import user_can
 from backend.plugin.ai.core.ports import RunContext, ToolCallRequest
+from backend.plugin.ai.core.registry import get_tool
 from backend.plugin.ai.mcp_gateway.auth import McpAuthError, McpPrincipal, authenticate
 from backend.utils.limiter import RateLimiter
 
@@ -53,7 +56,7 @@ def _visible(principal: McpPrincipal) -> list[Any]:
     return [
         schema
         for schema in tool_dispatcher.visible_schemas(principal.user)
-        if not schema.mutating and principal.client.allows_tool(schema.name)
+        if (not schema.mutating or principal.client.allow_write) and principal.client.allows_tool(schema.name)
     ]
 
 
@@ -64,7 +67,7 @@ async def _list_tools(ctx: Any, _params: Any) -> types.ListToolsResult:  # ruff:
                 name=schema.name,
                 description=schema.description,
                 input_schema=schema.parameters,
-                annotations=types.ToolAnnotations(read_only_hint=True),
+                annotations=types.ToolAnnotations(read_only_hint=not schema.mutating),
             )
             for schema in _visible(_principal(ctx))
         ]
@@ -80,6 +83,25 @@ async def _call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.Cal
             is_error=True,
         )
 
+    spec = get_tool(params.name)
+    if (
+        spec is not None
+        and spec.mutating
+        and principal.client.allow_write
+        and not user_can(principal.user, 'ai:chat:use')
+    ):
+        # 确认要在网页的 AI 助手里点，没有这个权限的人点不了 —— 发出去的链接会是一个死胡同
+        return types.CallToolResult(
+            content=[
+                types.TextContent(
+                    type='text',
+                    text=f'{params.name} 需要 {principal.user.username} 本人在网页确认，'
+                    '但他没有 AI 助手的使用权限（ai:chat:use），无法确认。请联系管理员授权。',
+                )
+            ],
+            is_error=True,
+        )
+
     async with async_db_session() as db:
         run_ctx = RunContext(
             user=principal.user,
@@ -87,7 +109,8 @@ async def _call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.Cal
             db=db,
             provider=None,
             channel=principal.channel,
-            read_only=True,
+            # 没开 allow_write 的凭据：dispatcher 直接拒绝写操作并审计。开了也只走到预演 + 确认令牌
+            read_only=not principal.client.allow_write,
         )
         outcome = await tool_dispatcher.dispatch(
             ToolCallRequest(call_id=f'mcp-{ctx.request_id}', name=params.name, arguments=params.arguments or {}),
@@ -97,9 +120,29 @@ async def _call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.Cal
         await db.commit()
         await run_ctx.background_tasks()
 
+    if outcome.kind == 'confirm_required':
+        return types.CallToolResult(content=[types.TextContent(type='text', text=_confirm_text(principal, outcome))])
     return types.CallToolResult(
         content=[types.TextContent(type='text', text=outcome.payload)],
         is_error=outcome.kind != 'ok',
+    )
+
+
+def _confirm_text(principal: McpPrincipal, outcome: DispatchOutcome) -> str:
+    """写操作只预演、不执行：把「会变成什么」和确认链接交给外部系统，由它转告用户。
+
+    🔴 **确认必须回到我们自己的网页、由被代表的那个人本人登录后点。** MCP 客户端那一侧的
+    确认（elicitation 的 form 模式）客户端可以代答，我们验证不了是人点的；而网页确认要求
+    那个人的登录会话 —— 外部系统声明的身份，到这一步才被本人兑现。
+    """
+    minutes = max(settings.AI_CONFIRM_TOKEN_EXPIRE_SECONDS // 60, 1)
+    link = f'{settings.AI_WEB_BASE_URL.rstrip("/")}/ai/confirm?token={outcome.confirm_token}'
+    return (
+        f'这个操作需要 {principal.user.username} 本人确认后才会执行，现在还没有执行。\n'
+        f'将要执行：{outcome.preview}\n'
+        f'请让 {principal.user.username} 在 {minutes} 分钟内打开下面的链接，登录后点「确认执行」：\n'
+        f'{link}\n'
+        '确认之前不要重复调用这个工具。'
     )
 
 

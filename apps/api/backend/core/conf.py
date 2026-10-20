@@ -354,6 +354,9 @@ class Settings(BaseSettings):
         'old_password',
         'new_password',
         'confirm_password',
+        # MCP 凭据新建 / 重新生成时的明文令牌（`plugin/ai/schema/mcp_client.py: IssuedAiMcpToken`）。
+        # 不进名单的话操作日志会把它原样落进 response_body —— 永久、且日志表有自己的查看权限
+        'mcp_token',
     ]
     OPERA_LOG_QUEUE_MAXSIZE: int = 100000
     OPERA_LOG_QUEUE_BATCH_CONSUME_SIZE: int = 100
@@ -462,11 +465,10 @@ class Settings(BaseSettings):
     AI_ENCRYPT_SECRET_KEY: str
     # MCP 网关：外部系统以「M2M 凭据 + 声明的代理用户」调只读工具（见 plugin/ai/AGENTS.md）
     AI_MCP_ENABLED: bool
-    # 每项 {id, token_sha256, act_as: [用户名 | "*"], allow_superuser?, tools?}，只存哈希。
-    # 在 plugin 里按模型校验（这里 import 不了插件），校验不过一律拒绝
-    AI_MCP_CLIENTS: list[dict[str, Any]]
     # 每份凭据每分钟最多多少次请求（凭据里的 rate_per_minute 可单独覆盖）
     AI_MCP_RATE_PER_MINUTE: int
+    # 前端的访问地址：MCP 发起的写操作要拼一个「回网页确认」的链接
+    AI_WEB_BASE_URL: str
 
     ##################################################
     # [ Plugin ] email

@@ -12,6 +12,8 @@
 """
 
 import asyncio
+import json
+import re
 import uuid
 
 from collections.abc import Iterator
@@ -19,35 +21,73 @@ from typing import Any
 
 import pytest
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from starlette.testclient import TestClient
 
+from backend.app.admin.model import Dept
 from backend.core.conf import settings
 from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+from backend.database.redis import RedisCli
 from backend.plugin.ai.enums import ToolInvocationStatus
 from backend.plugin.ai.hooks import MCP_PATH
-from backend.plugin.ai.mcp_gateway.auth import hash_token
-from backend.plugin.ai.model import AiToolInvocation
+from backend.plugin.ai.model import AiMcpClient, AiToolInvocation
 
 _URL = MCP_PATH.removeprefix(settings.FASTAPI_API_V1_PATH)  # client 的 base_url 已带 /api/v1
-_TOKEN = 'fra_mcp_pytest-token'
-_CHANNEL = 'mcp:pytest'
+_MGMT = '/ai/mcp-clients'
+_CLIENT_ID = 'pytest'
+_CHANNEL = f'mcp:{_CLIENT_ID}'
+# 当前这条用例的凭据（gateway fixture 经管理接口真实创建）
+_state: dict[str, Any] = {}
 
 
-def _client_cfg(**overrides: Any) -> dict[str, Any]:
-    return {'id': 'pytest', 'token_sha256': hash_token(_TOKEN), 'act_as': ['*'], **overrides}
+def _run_db(coro_fn: Any) -> Any:
+    async def _main() -> Any:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        try:
+            async with create_database_async_session(engine)() as db:
+                return await coro_fn(db)
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_main())
+
+
+def _purge_clients() -> None:
+    """凭据硬删：接口的删除是逻辑删除，`client_id` 又要在下一条用例里复用"""
+
+    async def _do(db: Any) -> None:
+        await db.execute(
+            delete(AiMcpClient).where(or_(AiMcpClient.client_id == _CLIENT_ID, AiMcpClient.client_id.like('rl-%')))
+        )
+        await db.commit()
+
+    _run_db(_do)
+
+
+def _create_client(client: TestClient, headers: dict[str, str], **cfg: Any) -> dict[str, Any]:
+    response = client.post(_MGMT, headers=headers, json={'name': cfg.get('client_id', 'pytest'), **cfg})
+    assert response.json()['code'] == 200, response.text
+    return response.json()['data']
 
 
 @pytest.fixture
-def gateway(monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
-    """打开网关；返回一个可改凭据配置的函数"""
+def gateway(client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> Iterator[Any]:
+    """打开网关、经管理接口建一份凭据（可代表任何人含超管）；返回一个改这份凭据配置的函数"""
     monkeypatch.setattr(settings, 'AI_MCP_ENABLED', True)
-    monkeypatch.setattr(settings, 'AI_MCP_CLIENTS', [_client_cfg(allow_superuser=True)])
+    _purge_clients()
+    created = _create_client(client, token_headers, client_id=_CLIENT_ID, act_as=['*'], allow_superuser=True)
+    _state.update(token=created['mcp_token'], pk=created['id'])
 
     def configure(**overrides: Any) -> None:
-        monkeypatch.setattr(settings, 'AI_MCP_CLIENTS', [_client_cfg(**overrides)])
+        body = {'name': 'pytest', 'act_as': ['*'], **overrides}
+        response = client.put(f'{_MGMT}/{_state["pk"]}', headers=token_headers, json=body)
+        assert response.json()['code'] == 200, response.text
 
-    yield configure
+    try:
+        yield configure
+    finally:
+        _purge_clients()
+        _state.clear()
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -55,16 +95,11 @@ def _cleanup_audit() -> Iterator[None]:
     """审计行硬删 —— 走接口删不了，也不该留在测试库里越积越多"""
     yield
 
-    async def _purge() -> None:
-        engine = create_database_async_engine(get_database_url(unittest=True))
-        try:
-            async with create_database_async_session(engine)() as db:
-                await db.execute(delete(AiToolInvocation).where(AiToolInvocation.channel == _CHANNEL))
-                await db.commit()
-        finally:
-            await engine.dispose()
+    async def _do(db: Any) -> None:
+        await db.execute(delete(AiToolInvocation).where(AiToolInvocation.channel.like('mcp:%')))
+        await db.commit()
 
-    asyncio.run(_purge())
+    _run_db(_do)
 
 
 def _rpc(
@@ -73,8 +108,9 @@ def _rpc(
     params: dict[str, Any] | None = None,
     *,
     user: str | None = 'admin',
-    token: str = _TOKEN,
+    token: str | None = None,
 ) -> Any:
+    token = _state.get('token', '') if token is None else token
     headers = {'Accept': 'application/json, text/event-stream'}
     if token:
         headers['Authorization'] = f'Bearer {token}'
@@ -98,20 +134,15 @@ def _call(client: TestClient, name: str, arguments: dict[str, Any] | None = None
 
 
 def _audit_rows(tool: str) -> list[tuple[int, str | None]]:
-    async def _q() -> list[tuple[int, str | None]]:
-        engine = create_database_async_engine(get_database_url(unittest=True))
-        try:
-            async with create_database_async_session(engine)() as db:
-                rows = await db.execute(
-                    select(AiToolInvocation.status, AiToolInvocation.channel).where(
-                        AiToolInvocation.tool_name == tool, AiToolInvocation.channel == _CHANNEL
-                    )
-                )
-                return [tuple(r) for r in rows]
-        finally:
-            await engine.dispose()
+    async def _q(db: Any) -> list[tuple[int, str | None]]:
+        rows = await db.execute(
+            select(AiToolInvocation.status, AiToolInvocation.channel).where(
+                AiToolInvocation.tool_name == tool, AiToolInvocation.channel == _CHANNEL
+            )
+        )
+        return [tuple(r) for r in rows]
 
-    return asyncio.run(_q())
+    return _run_db(_q)
 
 
 class TestAuthentication:
@@ -145,8 +176,29 @@ class TestAuthentication:
         assert response.status_code == 403
         assert '超级管理员' in response.json()['error']
 
-    def test_broken_client_config_is_ignored_not_widened(self, client: TestClient, gateway: Any) -> None:
-        gateway(token_sha256='not-a-sha256')
+
+class TestCredentialLifecycle:
+    """凭据的停用 / 换令牌 / 删除都要**即刻**生效 —— 网关每个请求按哈希现查，不缓存"""
+
+    def test_disabled_credential_is_rejected_immediately(self, client: TestClient, gateway: Any) -> None:
+        assert _rpc(client, 'tools/list').status_code == 200
+        gateway(allow_superuser=True, status=0)
+        assert _rpc(client, 'tools/list').status_code == 401
+
+    def test_rotated_token_invalidates_the_old_one(
+        self, client: TestClient, token_headers: dict[str, str], gateway: Any
+    ) -> None:
+        old = _state['token']
+        response = client.post(f'{_MGMT}/{_state["pk"]}/rotate', headers=token_headers)
+        new = response.json()['data']['mcp_token']
+        assert new != old
+        assert _rpc(client, 'tools/list', token=old).status_code == 401
+        assert _rpc(client, 'tools/list', token=new).status_code == 200
+
+    def test_deleted_credential_is_rejected(
+        self, client: TestClient, token_headers: dict[str, str], gateway: Any
+    ) -> None:
+        assert client.delete(f'{_MGMT}/{_state["pk"]}', headers=token_headers).json()['code'] == 200
         assert _rpc(client, 'tools/list').status_code == 401
 
 
@@ -164,8 +216,8 @@ class TestToolsFollowTheActingUser:
         assert 'dept_list' not in staff_view
 
     def test_client_tool_allowlist_only_narrows(self, client: TestClient, gateway: Any) -> None:
-        gateway(allow_superuser=True, tools=['system_health_check', 'dept_create'])
-        # dept_create 写进了白名单也不出现：白名单不能把只读入口放大成可写
+        # 写操作工具连白名单都进不去（管理接口拒，见 test_ai_mcp_clients.py）；这里验的是收窄
+        gateway(allow_superuser=True, tools=['system_health_check'])
         assert _tools(client) == {'system_health_check'}
         result = _call(client, 'dept_list')
         assert result['isError'] is True
@@ -195,23 +247,27 @@ class TestRateLimit:
     """按凭据限流。用唯一的凭据 ID：Redis 里的计数窗口是一分钟，固定 ID 会让上一轮的计数漏进这一轮"""
 
     @staticmethod
-    def _two_clients(monkeypatch: pytest.MonkeyPatch, rate: int) -> tuple[str, str]:
-        a, b = f'rl-{uuid.uuid4().hex[:8]}', f'rl-{uuid.uuid4().hex[:8]}'
+    def _two_clients(
+        client: TestClient, headers: dict[str, str], monkeypatch: pytest.MonkeyPatch, rate: int
+    ) -> tuple[str, str]:
         monkeypatch.setattr(settings, 'AI_MCP_ENABLED', True)
-        monkeypatch.setattr(
-            settings,
-            'AI_MCP_CLIENTS',
-            [
-                {'id': a, 'token_sha256': hash_token(f'tok-{a}'), 'act_as': ['test', 'lina'], 'rate_per_minute': rate},
-                {'id': b, 'token_sha256': hash_token(f'tok-{b}'), 'act_as': ['test'], 'rate_per_minute': rate},
-            ],
+        a = _create_client(
+            client, headers, client_id=f'rl-{uuid.uuid4().hex[:8]}', act_as=['test', 'lina'], rate_per_minute=rate
         )
-        return f'tok-{a}', f'tok-{b}'
+        b = _create_client(
+            client, headers, client_id=f'rl-{uuid.uuid4().hex[:8]}', act_as=['test'], rate_per_minute=rate
+        )
+        return a['mcp_token'], b['mcp_token']
+
+    @pytest.fixture(autouse=True)
+    def _purge(self) -> Iterator[None]:
+        yield
+        _purge_clients()
 
     def test_over_quota_is_429_with_retry_after(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, rate_limiter: None
+        self, client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch, rate_limiter: None
     ) -> None:
-        token, _ = self._two_clients(monkeypatch, rate=3)
+        token, _ = self._two_clients(client, token_headers, monkeypatch, rate=3)
         codes = [_rpc(client, 'tools/list', user='test', token=token).status_code for _ in range(3)]
         # 先断言「额度内都放行」：否则 429 可能只是因为别的原因一开始就全挡了
         assert codes == [200, 200, 200]
@@ -221,18 +277,109 @@ class TestRateLimit:
         assert 'jsonrpc' not in over.text, '被限流的请求不该进入 MCP 协议层'
 
     def test_switching_acting_user_does_not_reset_quota(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, rate_limiter: None
+        self, client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch, rate_limiter: None
     ) -> None:
         """额度按凭据算：一份凭据轮换着代表不同的人，不能换来新额度"""
-        token, _ = self._two_clients(monkeypatch, rate=2)
+        token, _ = self._two_clients(client, token_headers, monkeypatch, rate=2)
         assert _rpc(client, 'tools/list', user='test', token=token).status_code == 200
         assert _rpc(client, 'tools/list', user='lina', token=token).status_code == 200
         assert _rpc(client, 'tools/list', user='lina', token=token).status_code == 429
 
     def test_clients_have_separate_quotas(
-        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, rate_limiter: None
+        self, client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch, rate_limiter: None
     ) -> None:
-        token_a, token_b = self._two_clients(monkeypatch, rate=1)
+        token_a, token_b = self._two_clients(client, token_headers, monkeypatch, rate=1)
         assert _rpc(client, 'tools/list', user='test', token=token_a).status_code == 200
         assert _rpc(client, 'tools/list', user='test', token=token_a).status_code == 429
         assert _rpc(client, 'tools/list', user='test', token=token_b).status_code == 200
+
+
+class TestWriteViaWebConfirm:
+    """凭据开了 `allow_write`：写操作**只预演、不执行**，回网页由被代表的人本人确认。
+
+    外部系统声明的身份，要到「本人登录网页点确认」这一步才被兑现 —— 所以这里的要害是：
+    MCP 那一侧无论怎么调，库里都不能多出东西；只有网页确认之后才有。
+    """
+
+    _CODE = 'MCP_WRITE_PYTEST'
+
+    @pytest.fixture(autouse=True)
+    def _purge_dept(self) -> Iterator[None]:
+        yield
+
+        async def _do(db: Any) -> None:
+            await db.execute(delete(Dept).where(Dept.code == self._CODE))
+            await db.commit()
+
+        _run_db(_do)
+
+    def _stage(self, client: TestClient) -> tuple[dict[str, Any], str]:
+        result = _call(client, 'dept_create', {'name': 'MCP 写操作测试', 'code': self._CODE})
+        text = result['content'][0]['text']
+        match = re.search(r'/ai/confirm\?token=(\S+)', text)
+        return result, match.group(1) if match else ''
+
+    @staticmethod
+    def _dept_exists(code: str) -> bool:
+        async def _q(db: Any) -> bool:
+            return (await db.execute(select(Dept.id).where(Dept.code == code, Dept.deleted == 0))).first() is not None
+
+        return _run_db(_q)
+
+    def test_write_tools_listed_only_when_allowed(self, client: TestClient, gateway: Any) -> None:
+        assert 'dept_create' not in _tools(client)
+        gateway(allow_superuser=True, allow_write=True)
+        response = _rpc(client, 'tools/list')
+        tools = {t['name']: t for t in response.json()['result']['tools']}
+        assert 'dept_create' in tools
+        assert tools['dept_create']['annotations']['readOnlyHint'] is False
+
+    def test_mcp_only_stages_and_web_confirm_executes(
+        self, client: TestClient, token_headers: dict[str, str], gateway: Any
+    ) -> None:
+        gateway(allow_superuser=True, allow_write=True)
+        result, token = self._stage(client)
+        assert result['isError'] is False, result
+        assert '还没有执行' in result['content'][0]['text']
+        assert token.startswith('cf_'), f'令牌要带字母前缀，否则路由层可能把它 JSON.parse 成数字：{token}'
+        assert not self._dept_exists(self._CODE), 'MCP 一侧就把部门建出来了 —— 没等本人确认'
+
+        pending = client.get(f'/ai/chat/tools/confirm/{token}', headers=token_headers).json()
+        assert pending['code'] == 200, pending
+        assert pending['data']['channel'] == _CHANNEL
+        assert 'MCP 写操作测试' in pending['data']['preview']
+        assert not self._dept_exists(self._CODE), '查看预演不该消费令牌、更不该执行'
+
+        with client.stream('POST', '/ai/chat/tools/confirm', headers=token_headers, json={'token': token}) as r:
+            frames = [json.loads(line[6:]) for line in r.iter_lines() if line.startswith('data: ')]
+        assert any(f['type'] == 'tool_result' and f['ok'] for f in frames), frames
+        assert self._dept_exists(self._CODE)
+        # 执行那一行审计仍记作 MCP 发起（确认令牌把 channel 带过来了）
+        assert (ToolInvocationStatus.SUCCESS.value, _CHANNEL) in _audit_rows('dept_create')
+
+    def test_someone_elses_token_reveals_nothing(self, client: TestClient, token_headers: dict[str, str]) -> None:
+        """链接会经过外部系统、聊天记录 —— 别人拿到也看不到要改什么"""
+
+        async def _stage_for_other() -> str:
+            redis = RedisCli()
+            try:
+                token = f'cf_{uuid.uuid4().hex}'
+                payload = {'tool': 'dept_create', 'arguments': {}, 'user_id': '1', 'conversation_id': '0',
+                           'channel': _CHANNEL, 'preview': '机密的预演内容'}  # fmt: skip
+                await redis.set(f'{settings.AI_CONFIRM_REDIS_PREFIX}:{token}', json.dumps(payload), ex=60)
+                return token
+            finally:
+                await redis.aclose()
+
+        token = asyncio.run(_stage_for_other())
+        body = client.get(f'/ai/chat/tools/confirm/{token}', headers=token_headers).json()
+        assert body['code'] == 403, body
+        assert '机密的预演内容' not in json.dumps(body, ensure_ascii=False)
+
+    def test_acting_user_without_ai_permission_gets_no_dead_link(self, client: TestClient, gateway: Any) -> None:
+        """被代表的人没有 ai:chat:use 就点不了网页确认 —— 不发一个永远点不了的链接"""
+        gateway(allow_write=True)
+        result = _call(client, 'dept_create', {'name': 'x', 'code': self._CODE}, user='test')
+        assert result['isError'] is True
+        assert 'ai:chat:use' in result['content'][0]['text']
+        assert '/ai/confirm' not in result['content'][0]['text']
