@@ -50,6 +50,7 @@ const COLUMN_LABELS = {
   seq: '序号',
   created_time: '调用时间',
   tool_name: '工具',
+  channel: '入口',
   status: '结果',
   permission_code: '权限码',
   params_redacted: '入参（已脱敏）',
@@ -144,6 +145,14 @@ export function AiToolLogPage({
       col.accessor('tool_name', {
         header: t('工具'),
         cell: ({ getValue }) => <span className="font-mono text-xs">{getValue()}</span>,
+      }),
+      col.accessor('channel', {
+        header: t('入口'),
+        // 外部系统的调用身份是它**声明**的，这一列让「谁替谁调的」一眼可见
+        cell: ({ getValue }) => {
+          const v = getValue()
+          return v ? <span className="font-mono text-xs">{v}</span> : <span className="text-muted-foreground">{t('网页对话')}</span>
+        },
       }),
       col.accessor('status', {
         header: t('结果'),

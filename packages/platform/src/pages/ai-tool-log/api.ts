@@ -20,6 +20,8 @@ export type ToolInvocation = {
   permission_code: string | null
   error: string | null
   duration_ms: number | null
+  /** null = 网页对话；`mcp:<client id>` = 外部系统经 MCP 替某个用户调的 */
+  channel: string | null
   created_time: string
 }
 

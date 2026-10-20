@@ -460,6 +460,11 @@ class Settings(BaseSettings):
     AI_EXTERNAL_HTTP_USE_PROXY: bool
     # 模型密钥的落库加密密钥（64 位十六进制）。留空 = 拒绝保存密钥，不会静默存明文
     AI_ENCRYPT_SECRET_KEY: str
+    # MCP 网关：外部系统以「M2M 凭据 + 声明的代理用户」调只读工具（见 plugin/ai/AGENTS.md）
+    AI_MCP_ENABLED: bool
+    # 每项 {id, token_sha256, act_as: [用户名 | "*"], allow_superuser?, tools?}，只存哈希。
+    # 在 plugin 里按模型校验（这里 import 不了插件），校验不过一律拒绝
+    AI_MCP_CLIENTS: list[dict[str, Any]]
 
     ##################################################
     # [ Plugin ] email

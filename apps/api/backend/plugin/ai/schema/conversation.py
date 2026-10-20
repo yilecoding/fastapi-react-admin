@@ -81,4 +81,5 @@ class GetToolInvocationDetail(SchemaBase):
     permission_code: str | None = Field(None, description='权限码')
     error: str | None = Field(None, description='失败原因')
     duration_ms: int | None = Field(None, description='耗时（毫秒）')
+    channel: str | None = Field(None, description='调用入口（null = 网页对话，mcp:<client> = 外部系统）')
     created_time: datetime = Field(description='调用时间')

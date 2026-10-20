@@ -97,6 +97,10 @@ class RunContext:
     background_tasks: BackgroundTasks = field(default_factory=BackgroundTasks)
     """工具挂的**提交后**动作（如清用户缓存）。由开会话的那一方在 commit 之后执行 ——
     提交前清缓存，并发请求会在提交前把旧数据重新缓存回去。"""
+    channel: str | None = None
+    """调用入口，原样进审计（`None` = 网页对话，`mcp:<client id>` = 外部系统）"""
+    read_only: bool = False
+    """只读入口：dispatcher 直接拒绝变更类工具（并审计），不出预演、不发确认令牌"""
     extra: dict[str, Any] = field(default_factory=dict)
 
 
