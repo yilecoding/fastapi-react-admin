@@ -24,7 +24,7 @@ import pytest
 
 from sqlalchemy import select
 
-from backend.app.admin.model import Dept
+from backend.app.admin.model import Dept, User
 from backend.common.security.data_scope import _current_user
 from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
 from backend.database.redis import RedisCli
@@ -260,3 +260,117 @@ class TestDeptWriteTools:
 
         outcome = _run(monkeypatch, scenario)
         assert outcome.kind == 'failed', f'改名撞上同级兄弟却进了确认流程：{outcome}'
+
+
+class TestDeptLeader:
+    """负责人：人说名字，库里存用户 ID。
+
+    🔴 每条都要把建出来 / 改过的部门**读回来**断言 `leader_id` —— 上一次的 bug 恰恰是
+    预演卡片写着「负责人：张三」、确认成功、而库里没有负责人（pydantic 静默丢了未知字段）。
+    只断言预演文案和 `kind == 'ok'` 的测试，对那个 bug 是绿的。
+    """
+
+    @pytest.fixture(autouse=True)
+    def _tools(self) -> None:
+        load_builtin_tools()
+
+    ADMIN = staticmethod(lambda: _user(perms=['sys:dept:add', 'sys:dept:edit', 'sys:dept:list'], superuser=True))
+
+    @staticmethod
+    async def _user_by_name(db: Any, username: str) -> User:
+        user = (await db.execute(select(User).where(User.username == username))).scalars().one()
+        return user
+
+    @staticmethod
+    async def _create(ctx: RunContext, db: Any, *, leader: str | None, pre_approved: bool) -> tuple[Any, str]:
+        code = f'AI_{uuid.uuid4().hex[:8].upper()}'
+        outcome = await _dispatch(
+            ctx, 'dept_create', pre_approved=pre_approved, name=f'负责人测试{code}', code=code, leader=leader
+        )
+        return outcome, code
+
+    @pytest.mark.parametrize('leader', ['张伟', 'zhangwei'], ids=['by-nickname', 'by-username'])
+    def test_create_with_leader_is_really_saved(self, monkeypatch: pytest.MonkeyPatch, leader: str) -> None:
+        async def scenario(db: Any) -> dict[str, Any]:
+            ctx = _ctx(self.ADMIN(), db)
+            zhangwei = await self._user_by_name(db, 'zhangwei')
+            staged, _ = await self._create(ctx, db, leader=leader, pre_approved=False)
+            done, code = await self._create(ctx, db, leader=leader, pre_approved=True)
+            await db.flush()
+            dept = (await db.execute(select(Dept).where(Dept.code == code))).scalars().one()
+            return {'staged': staged, 'done': done, 'leader_id': dept.leader_id, 'expected': zhangwei.id}
+
+        r = _run(monkeypatch, scenario)
+        assert r['staged'].kind == 'confirm_required', r['staged']
+        assert '负责人 张伟（zhangwei）' in r['staged'].preview
+        assert r['done'].kind == 'ok', r['done']
+        assert r['leader_id'] == r['expected'], '预演说设了负责人，库里却不是这个人'
+
+    @pytest.mark.parametrize(
+        ('setup', 'leader', 'expect'),
+        [
+            (None, '查无此人', '找不到负责人'),
+            ('duplicate', '张伟', '对应多个用户'),
+            ('disabled', 'zhangwei', '找不到负责人'),
+        ],
+        ids=['unknown', 'ambiguous', 'disabled-account'],
+    )
+    def test_unusable_leader_fails_in_preview(
+        self, monkeypatch: pytest.MonkeyPatch, setup: str | None, leader: str, expect: str
+    ) -> None:
+        """找不到 / 重名 / 已停用，都要在弹确认卡片**之前**拦下 —— 重名尤其不能「挑一个」"""
+
+        async def scenario(db: Any) -> Any:
+            if setup == 'duplicate':
+                (await self._user_by_name(db, 'lina')).nickname = '张伟'  # 回滚时还原
+            elif setup == 'disabled':
+                (await self._user_by_name(db, 'zhangwei')).status = 0
+            await db.flush()
+            outcome, _ = await self._create(_ctx(self.ADMIN(), db), db, leader=leader, pre_approved=False)
+            return outcome
+
+        outcome = _run(monkeypatch, scenario)
+        assert outcome.kind == 'failed', outcome
+        assert outcome.confirm_token is None
+        assert expect in outcome.payload, outcome.payload
+        if setup == 'duplicate':
+            assert 'zhangwei' in outcome.payload and 'lina' in outcome.payload, '重名时要列出候选的用户名'
+
+    def test_leader_outside_data_scope_is_invisible(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """有建部门的权限、但数据范围看不见那个人 —— 对工具来说这个人就不存在"""
+        scoped = _user(perms=['sys:dept:add', 'sys:dept:list'], fail_closed_scope=True)
+
+        async def scenario(db: Any) -> Any:
+            outcome, _ = await self._create(_ctx(scoped, db), db, leader='zhangwei', pre_approved=False)
+            return outcome
+
+        outcome = _run(monkeypatch, scenario)
+        assert outcome.kind == 'failed', outcome
+        assert '找不到负责人' in outcome.payload
+
+    def test_set_leader_round_trip(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def scenario(db: Any) -> dict[str, Any]:
+            ctx = _ctx(self.ADMIN(), db)
+            created, code = await self._create(ctx, db, leader=None, pre_approved=True)
+            assert created.kind == 'ok', created
+            await db.flush()
+            dept = (await db.execute(select(Dept).where(Dept.code == code))).scalars().one()
+            before = dept.leader_id
+            staged = await _dispatch(ctx, 'dept_set_leader', dept_id=str(dept.id), leader='李娜')
+            done = await _dispatch(ctx, 'dept_set_leader', pre_approved=True, dept_id=str(dept.id), leader='李娜')
+            await db.flush()
+            await db.refresh(dept)
+            again = await _dispatch(ctx, 'dept_set_leader', dept_id=str(dept.id), leader='lina')
+            lina = await self._user_by_name(db, 'lina')
+            return {
+                'before': before, 'staged': staged, 'done': done, 'after': dept.leader_id,
+                'expected': lina.id, 'name': dept.name, 'again': again,
+            }  # fmt: skip
+
+        r = _run(monkeypatch, scenario)
+        assert r['before'] is None
+        assert r['staged'].kind == 'confirm_required', r['staged']
+        assert r['staged'].preview.endswith('的负责人从「未设置」改为 李娜（lina）'), r['staged'].preview
+        assert r['done'].kind == 'ok', r['done']
+        assert r['after'] == r['expected'], '确认之后库里的负责人不是李娜'
+        assert r['again'].kind == 'failed' and '不需要改' in r['again'].payload, r['again']
