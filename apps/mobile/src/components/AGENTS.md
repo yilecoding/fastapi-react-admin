@@ -191,10 +191,12 @@ toast 进了 store、屏上没有，纯静默。
 
 ## 确认框走 portal，不走 `Modal` —— 代价是返回键要自己接
 
-`ui/confirm-dialog.tsx` 的 props 形状照 `packages/ui` 的
-[confirm-dialog](../../../../packages/ui/src/components/confirm-dialog.tsx) 抄
+`ui/confirm-dialog.tsx` 的 props 形状照当时 `packages/ui` 那份抄
 （`open` / `onOpenChange` / `title` / `description` / `confirmLabel` /
 `cancelLabel` / `variant` / `onConfirm`），多一个 `busy`（确认后的请求还在飞）。
+⚠️ `packages/ui` 那份已在 #100 删掉，web 现在用的是
+[`shell/confirm-dialog.tsx`](../../../../packages/platform/src/shell/confirm-dialog.tsx)，
+字段名不同（`confirmText` / `destructive` / `pending`）—— 两边对照时别按名字找。
 
 **为什么不用 RN 的 `Modal`**：它把内容挂到**另一个原生根视图**上，而「样式在另一个
 原生根上失效」这一类问题**打包和 typecheck 全都不报**。所以选了已经在用的那条路：
