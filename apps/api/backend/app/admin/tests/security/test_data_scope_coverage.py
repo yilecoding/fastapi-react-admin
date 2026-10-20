@@ -23,7 +23,7 @@ from typing import Any
 
 from sqlalchemy_crud_plus import CRUDPlus
 
-from backend.common.security.data_scope import DataScopedCRUD, bypass_data_scope, run_as, set_current_user
+from backend.common.security.data_scope import DataScopedCRUD, bypass_data_scope, scoped_to_user, set_current_user
 from backend.core.path_conf import BASE_PATH
 
 #: 刻意豁免的 DAO 类名 → 理由。改动这份清单本身就该是一次有意识的决定
@@ -179,7 +179,7 @@ def test_the_three_hooks_are_all_overridden() -> None:
         assert name in vars(DataScopedCRUD), f'{name} 没有被覆盖'
 
 
-# ─── run_as：非请求上下文的执行身份 ──────────────────────────────────────────
+# ─── scoped_to_user：非请求上下文的执行身份 ──────────────────────────────────
 
 
 def _fake_scoped_user(uid: int = 1, dept_id: int = 1) -> Any:
@@ -195,11 +195,11 @@ def _fake_scoped_user(uid: int = 1, dept_id: int = 1) -> Any:
     )
 
 
-def test_run_as_makes_a_non_request_context_filter() -> None:
+def test_scoped_to_user_makes_a_non_request_context_filter() -> None:
     """🔴 编排 / 自动化任务能继承发起人的数据范围
 
     这条守的是那个「默认不过滤」在代表某个人执行时会变成 fail-open 的洞：
-    Celery 里裸跑查不到「谁在看」→ 条件为 None → 查回全库。`run_as()` 就是
+    Celery 里裸跑查不到「谁在看」→ 条件为 None → 查回全库。`scoped_to_user()` 就是
     在那种上下文里把身份显式补上，补上之后过滤必须真的生效。
     """
     from backend.app.admin.crud.crud_dept import dept_dao
@@ -207,11 +207,11 @@ def test_run_as_makes_a_non_request_context_filter() -> None:
     set_current_user(None)
     assert dept_dao._data_scope_condition() is None, '前提：裸的非请求上下文不过滤'
 
-    with run_as(_fake_scoped_user()):
-        assert dept_dao._data_scope_condition() is not None, 'run_as 里必须按该用户的范围过滤'
+    with scoped_to_user(_fake_scoped_user()):
+        assert dept_dao._data_scope_condition() is not None, 'scoped_to_user 里必须按该用户的范围过滤'
 
 
-def test_run_as_restores_identity_on_exit() -> None:
+def test_scoped_to_user_restores_identity_on_exit() -> None:
     """🔴 身份不能泄漏给下一个任务 —— 这是 `celery_aio_pool` 特有的风险
 
     这个 worker pool 把**所有任务跑在同一个事件循环、同一个线程**里
@@ -220,28 +220,30 @@ def test_run_as_restores_identity_on_exit() -> None:
     设了不还原，**下一个任务就会顶着上一个任务的身份跑** —— 那是跨用户
     数据泄漏，而且两个任务各自看都正常。
 
-    所以 `run_as` 必须是成对的（set → reset），不能退化成 `set_current_user`。
+    所以 `scoped_to_user` 必须是成对的（set → reset），不能退化成 `set_current_user`。
     """
     from backend.app.admin.crud.crud_dept import dept_dao
 
     set_current_user(None)
-    with run_as(_fake_scoped_user(uid=1)):
-        with run_as(_fake_scoped_user(uid=2)):
+    with scoped_to_user(_fake_scoped_user(uid=1)):
+        with scoped_to_user(_fake_scoped_user(uid=2)):
             assert dept_dao._data_scope_condition() is not None
         # 内层退出后仍应是外层身份（有过滤），不是 None、也不是内层那个
         assert dept_dao._data_scope_condition() is not None
     # 全部退出后回到「非请求上下文」的原状
-    assert dept_dao._data_scope_condition() is None, 'run_as 退出后身份必须还原，否则会泄漏给同循环里的下一个任务'
+    assert dept_dao._data_scope_condition() is None, (
+        'scoped_to_user 退出后身份必须还原，否则会泄漏给同循环里的下一个任务'
+    )
 
 
-def test_run_as_rejects_none() -> None:
-    """`run_as(None)` 必须报错，不能安静地变成「不过滤」
+def test_scoped_to_user_rejects_none() -> None:
+    """`scoped_to_user(None)` 必须报错，不能安静地变成「不过滤」
 
     允许 None 就等于给 fail-open 开了一个看起来合法的后门：调用方会以为
-    「我包了 run_as，权限是继承的」，而实际上什么都没继承。
+    「我包了一层，权限是继承的」，而实际上什么都没继承。
     """
     import pytest
 
-    with pytest.raises(ValueError, match='run_as'):
-        with run_as(None):
+    with pytest.raises(ValueError, match='scoped_to_user'):
+        with scoped_to_user(None):
             pass
