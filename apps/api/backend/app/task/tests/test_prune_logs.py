@@ -357,3 +357,52 @@ def test_prune_results_batches_until_drained(results_db):
     seed_result(results_db, days_ago=40, n=5)
     run_prune_results(days=30, batch=2)
     assert count_results(results_db) == 0
+
+
+# ── 能力开放插件的调用日志（open_api_log）：同一个保留期 ─────────────────────────
+
+
+def test_prunes_open_api_logs_with_the_same_retention(factory):
+    """调用日志和操作日志同口径（含请求 / 响应体），保留期也要一样 —— 漏接的话它会永久增长。
+
+    按业务时间（`request_time`）删，造数据时 `created_time` 故意错开（同 `test_uses_business_time_not_created_time`）。
+    """
+    from backend.plugin.open.model import OpenApiLog
+
+    def seed(days_ago: float) -> None:
+        with factory() as s:
+            s.execute(
+                OpenApiLog.__table__.insert().values(
+                    id=next(_next_id),
+                    trace_id=MARK,
+                    access_key=MARK,
+                    method='GET',
+                    title='t',
+                    path='/api/open/v1/t',
+                    ip='127.0.0.1',
+                    status=1,
+                    code='200',
+                    error_code='ok',
+                    cost_time=1.0,
+                    request_time=timezone.now() - timedelta(days=days_ago),
+                    created_time=timezone.now(),  # ← 故意错开
+                )
+            )
+            s.commit()
+
+    def remaining() -> int:
+        with factory() as s:
+            stmt = select(func.count()).select_from(OpenApiLog).where(OpenApiLog.access_key == MARK)
+            return s.execute(stmt).scalar_one()
+
+    try:
+        seed(40)
+        seed(40)
+        seed(1)
+        msg = run_prune(days=30)
+        assert '开放接口调用日志 2 条' in msg, msg
+        assert remaining() == 1
+    finally:
+        with factory() as s:
+            s.execute(delete(OpenApiLog).where(OpenApiLog.access_key == MARK))
+            s.commit()

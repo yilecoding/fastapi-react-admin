@@ -1,0 +1,32 @@
+{
+  "access_key": "fra_ak_TEST-ONLY",
+  "secret_key": "fra_sk_TEST-ONLY-do-not-use-in-production",
+  "timestamp": "1761009302000",
+  "nonce": "8f1c2a9e4b7d4e05",
+  "cases": [
+    {
+      "name": "GET 增量同步（时间里的 + 和 : 已编码）",
+      "method": "GET",
+      "url": "https://admin.example.com/api/open/v1/users?updated_since=2026-10-20T00%3A00%3A00%2B08%3A00&limit=500",
+      "body": "",
+      "string_to_sign": "GET\n/api/open/v1/users\nlimit=500&updated_since=2026-10-20T00%3A00%3A00%2B08%3A00\n1761009302000\n8f1c2a9e4b7d4e05\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sign": "16213dc8c58c28affdd4254a02626c39e0f05635f67a58312a86c9623b68b5fd"
+    },
+    {
+      "name": "GET 参数乱序、同名参数、空格与中文",
+      "method": "GET",
+      "url": "https://admin.example.com/api/open/v1/depts?name=%E5%BC%A0%20%E4%B8%89&b=1&a=2&a=1",
+      "body": "",
+      "string_to_sign": "GET\n/api/open/v1/depts\na=1&a=2&b=1&name=%E5%BC%A0%20%E4%B8%89\n1761009302000\n8f1c2a9e4b7d4e05\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sign": "2717e8c4f65ffb9b621cfd19ba928706143e5cec1e80bb4a15d7b4a35ff0aae0"
+    },
+    {
+      "name": "POST JSON 请求体（签实际发出的字节）",
+      "method": "POST",
+      "url": "https://admin.example.com/api/open/v1/echo",
+      "body": "{\"code\":\"FIN_SYS\",\"items\":[1,2,3]}",
+      "string_to_sign": "POST\n/api/open/v1/echo\n\n1761009302000\n8f1c2a9e4b7d4e05\naeee24dcf36860565553dfa2bc0b50b4212da8c0a658c3cedcb3f67b5bb70d2a",
+      "sign": "ed1172b1d94903a6d34c94de6c0ff25d9f4edc5dbcb74633a4dff6b5b8e9d119"
+    }
+  ]
+}
