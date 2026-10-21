@@ -11,7 +11,9 @@
 
 ⚠️ moto **不校验签名**，所以「错误的 SecretKey」在它上面测不出来（测试连接照样通过）。
 设了 `STORAGE_TEST_S3_ENDPOINT`（+ `_ACCESS_KEY` / `_SECRET_KEY`）就改打那台真实的 S3 兼容服务
-（RustFS / MinIO / …），全部用例照跑，并多出只在真服务上有意义的几条（凭据错误 / 桶不存在）：
+（RustFS / MinIO / …），全部用例照跑，并多出只在真服务上有意义的几条（凭据错误 / 桶不存在 / 预签名防篡改）。
+本机的那台：`docker compose -f docker-compose.dev.yml --profile s3 up -d rustfs`，
+账号 rustfsadmin / rustfs-secret-2026：
 
     STORAGE_TEST_S3_ENDPOINT=http://127.0.0.1:9100 STORAGE_TEST_S3_ACCESS_KEY=… STORAGE_TEST_S3_SECRET_KEY=… \
         uv run --no-sync pytest backend/app/admin/tests/api_v1/test_storage.py
