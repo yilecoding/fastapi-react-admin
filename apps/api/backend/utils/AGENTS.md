@@ -72,6 +72,12 @@ S3 上 writer 自己攒成 ≥5 MiB 的分片走 multipart（实测 12 MiB → 3
 - 🔴 **端点挡链路本地 / 未指定 / 组播地址**（含 `169.254.169.254`、`fd00:ec2::254`）：「测试连接」从服务器发请求，
   配成元数据地址就是 SSRF（Label Studio CVE-2025-25297、Coolify CVE-2026-42147）。⚠️ **刻意不挡私网** ——
   MinIO 跑在内网是这个功能最主要的用法。测试连接的失败原因只回归类后的人话，上游原文只进日志
+- 🔴 **公开件的 MIME 按扩展名定（`content_type_from_key`），不信 multipart 里声明的。** `x.png` 配 `text/html`
+  声明 + HTML 内容，无鉴权的 `/uploads/…/x.png` 就在应用自己的域上以 HTML 下发（原来的 StaticFiles 是按扩展名猜的，
+  换成路由时漏了；S3 上还会原样写进对象的 Content-Type、预签名的 response-content-type）。代码审查抓到的，
+  守卫 `test_file.py::test_public_uploads_ignore_client_content_type`
+- 🔴 `check_endpoint` 的 DNS 解析走 `loop.getaddrinfo`，不是同步的 `socket.getaddrinfo` —— 后者会把整个 worker
+  冻住，解析不了的主机名本机实测卡 10 秒，期间所有人的请求都停（代码审查抓到的）
 - 🔴 本地存储的根目录不能在 `STATIC_DIR` 下（`/static` 无鉴权挂出去，`UPLOAD_DIR` 当年就是这么被连带公开的）
 - 阿里 OSS（`SecondLevelDomainForbidden`）、腾讯 COS 新桶（`PathStyleDomainForbidden`）只认虚拟主机风格，
   OpenDAL 默认是路径风格 —— `addressing=auto` 按端点域名判。**这一条只看了文档、只离线生成过 URL，没对真账号发过请求**

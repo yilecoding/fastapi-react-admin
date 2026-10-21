@@ -164,8 +164,16 @@ def _create_s3(client: TestClient, headers: dict[str, str], endpoint: str, code:
     return next(r['id'] for r in rows if r['code'] == body['code'])
 
 
-def _upload(client: TestClient, headers: dict[str, str], name: str, content: bytes, **params: object) -> dict:
-    resp = client.post(f'{FILES}/upload', headers=headers, params=params, files={'file': (name, content)})
+def _upload(
+    client: TestClient,
+    headers: dict[str, str],
+    name: str,
+    content: bytes,
+    content_type: str | None = None,
+    **params: object,
+) -> dict:
+    files = {'file': (name, content, content_type) if content_type else (name, content)}
+    resp = client.post(f'{FILES}/upload', headers=headers, params=params, files=files)
     assert resp.status_code == 200, resp.text
     data = resp.json()['data']
     _UPLOADED.append(data['id'])
@@ -511,7 +519,7 @@ def test_public_upload_on_s3_redirects_to_presigned(
 ) -> None:
     pk = _create_s3(client, token_headers, s3_endpoint)
     client.put(f'{STORAGES}/default', headers=token_headers, json={'storage_id': pk})
-    data = _upload(client, token_headers, 'cover.png', _png(), public=True)
+    data = _upload(client, token_headers, 'cover.png', _png(), public=True, content_type='text/html')
     # URL 形状不随存储变 —— 已经存进富文本正文里的地址不用改
     assert data['public_url'].startswith('/uploads/')
 
@@ -521,6 +529,8 @@ def test_public_upload_on_s3_redirects_to_presigned(
     # 🔴 重定向的缓存必须短于签名有效期，否则浏览器会拿着过期的地址去请求
     max_age = int(resp.headers['cache-control'].split('max-age=')[1])
     assert max_age < settings.STORAGE_PRESIGN_EXPIRE_SECONDS
+    # 预签名里带的 response-content-type 是按扩展名定的，不是客户端声明的（这里故意声明成 text/html）
+    assert parse_qs(urlsplit(location).query)['response-content-type'] == ['image/png']
     assert httpx.get(location).content == _png()
 
 

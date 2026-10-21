@@ -14,6 +14,8 @@
 from typing import Annotated
 from urllib.parse import quote
 
+import anyio
+
 from fastapi import APIRouter, Path
 from fastapi.responses import FileResponse, RedirectResponse, Response
 
@@ -23,7 +25,7 @@ from backend.common.exception import errors
 from backend.common.log import log
 from backend.core.conf import settings
 from backend.database.db import CurrentSession
-from backend.utils.storage_ops import StorageError, check_key, presign_read
+from backend.utils.storage_ops import StorageError, check_key, content_type_from_key, presign_read
 
 router = APIRouter()
 
@@ -58,14 +60,20 @@ async def get_public_upload(db: CurrentSession, key: Annotated[str, Path()]) -> 
     except errors.BaseExceptionError:
         return _not_found()
 
+    # 🔴 MIME 按扩展名定，不用 `file.content_type`（客户端声明的）—— 这条路无鉴权、还在应用自己的域上
+    media_type = content_type_from_key(key)
     if target.local_root is not None:
         local = target.local_root / key
-        if not local.resolve().is_relative_to(target.local_root.resolve()) or not local.is_file():
+        root = target.local_root
+
+        def _ok() -> bool:
+            # 原来的 StaticFiles 也是在线程里做 realpath + stat 的：根目录在挂死的网络盘上时别把事件循环一起带走
+            return local.resolve().is_relative_to(root.resolve()) and local.is_file()
+
+        if not await anyio.to_thread.run_sync(_ok):
             return _not_found()
         return FileResponse(
-            local,
-            media_type=file.content_type or None,
-            headers={**_HARDENING_HEADERS, 'Cache-Control': _CACHE_PUBLIC},
+            local, media_type=media_type, headers={**_HARDENING_HEADERS, 'Cache-Control': _CACHE_PUBLIC}
         )
 
     if target.public_base_url:
@@ -77,9 +85,7 @@ async def get_public_upload(db: CurrentSession, key: Annotated[str, Path()]) -> 
 
     expire = settings.STORAGE_PRESIGN_EXPIRE_SECONDS
     try:
-        url = await presign_read(
-            target, key, expire=expire, content_disposition='inline', content_type=file.content_type
-        )
+        url = await presign_read(target, key, expire=expire, content_disposition='inline', content_type=media_type)
     except StorageError:
         log.warning(f'公开文件 {file.id} 签发地址失败')
         return _not_found()

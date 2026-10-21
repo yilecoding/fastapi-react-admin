@@ -13,9 +13,10 @@
   云主机的 169.254.169.254）。用户在界面上配的存储**必须**关掉这两条（见 `_s3_operator`）
 """
 
+import asyncio
 import dataclasses
 import ipaddress
-import socket
+import mimetypes
 
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -40,6 +41,22 @@ _VIRTUAL_HOST_DOMAINS = ('aliyuncs.com', 'myqcloud.com', 'qiniucs.com', 'myhuawe
 
 #: 流式读取一次要多少。`read(n)` 会短读，这只是上限
 READ_CHUNK = 1024 * 1024
+
+#: `mimetypes` 在部分系统上不认识的图片格式
+_IMAGE_MIME = {'avif': 'image/avif', 'webp': 'image/webp', 'ico': 'image/x-icon', 'svg': 'image/svg+xml'}
+
+
+def content_type_from_key(key: str) -> str:
+    """
+    按扩展名推 MIME 类型。
+
+    🔴 公开件（`/uploads`、S3 对象的 Content-Type、预签名的 response-content-type）**只认这个**，
+    不认客户端 multipart 里声明的类型：`UploadFile.content_type` 完全由客户端控制，
+    `x.png` 配一个 `text/html` 的声明就能让无鉴权的 `/uploads/…/x.png` 以 HTML 下发
+    （原来的 StaticFiles 挂载是按扩展名猜的，换成路由时漏了这一层 —— 代码审查抓到的）
+    """
+    ext = key.rsplit('.', 1)[-1].lower() if '.' in key else ''
+    return _IMAGE_MIME.get(ext) or mimetypes.guess_type(key)[0] or 'application/octet-stream'
 
 
 class StorageError(Exception):
@@ -109,7 +126,7 @@ def use_virtual_host(endpoint: str | None, addressing: str) -> bool:
     return any(host == d or host.endswith(f'.{d}') for d in _VIRTUAL_HOST_DOMAINS)
 
 
-def check_endpoint(endpoint: str) -> str:
+async def check_endpoint(endpoint: str) -> str:
     """
     校验 S3 端点，挡住 SSRF 里最危险的那一类。
 
@@ -131,8 +148,11 @@ def check_endpoint(endpoint: str) -> str:
     if parts.username or parts.password or parts.query or parts.fragment:
         raise StorageError('invalid_endpoint')
     try:
-        infos = socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == 'https' else 80))
-    except (socket.gaierror, UnicodeError):
+        # 🔴 走事件循环的 getaddrinfo（线程池）：同步的 `socket.getaddrinfo` 会把整个 worker 冻住，
+        # 解析不了的主机名在本机实测卡 10 秒，期间所有人的所有请求都停（代码审查抓到的）
+        loop = asyncio.get_running_loop()
+        infos = await loop.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == 'https' else 80))
+    except (OSError, UnicodeError):
         # 解析不了不是 SSRF，是配错了 —— 留给「测试连接」报「连不上」
         return value
     for info in infos:

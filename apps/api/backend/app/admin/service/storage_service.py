@@ -43,9 +43,9 @@ def _secret_hint(secret: str) -> str:
     return '*' * len(secret) if len(secret) <= 8 else f'{secret[:4]}{"*" * 6}'
 
 
-def _endpoint_or_raise(endpoint: str) -> str:
+async def _endpoint_or_raise(endpoint: str) -> str:
     try:
-        return check_endpoint(endpoint)
+        return await check_endpoint(endpoint)
     except StorageError as e:
         raise errors.RequestError(msg=t(f'error.storage.{e.reason}')) from e
 
@@ -107,7 +107,7 @@ class StorageService:
         return storage
 
     @staticmethod
-    def _normalize(storage_type: str, data: dict[str, Any], *, secret_required: bool) -> dict[str, Any]:
+    async def _normalize(storage_type: str, data: dict[str, Any], *, secret_required: bool) -> dict[str, Any]:
         """按类型收拾字段：本地的 S3 字段清空，S3 的必填项补齐校验"""
         if storage_type == 'local':
             data['root'] = _check_local_root(data.get('root') or '')
@@ -117,7 +117,7 @@ class StorageService:
             return data
         if not data.get('endpoint') or not data.get('bucket') or not data.get('access_key') or secret_required:
             raise errors.RequestError(msg=t('error.storage.s3_fields_required'))
-        data['endpoint'] = _endpoint_or_raise(data['endpoint'])
+        data['endpoint'] = await _endpoint_or_raise(data['endpoint'])
         data['root'] = (data.get('root') or '').strip('/')
         return data
 
@@ -127,7 +127,7 @@ class StorageService:
             raise errors.ConflictError(msg=t('error.storage.code_exists', code=obj.code))
         data = obj.model_dump(exclude={'secret_key'})
         secret = (obj.secret_key or '').strip()
-        data = StorageService._normalize(obj.type, data, secret_required=obj.type == 's3' and not secret)
+        data = await StorageService._normalize(obj.type, data, secret_required=obj.type == 's3' and not secret)
         if obj.type == 's3':
             data['secret_cipher'] = _cipher().encrypt(secret.encode()).hex()
             data['secret_hint'] = _secret_hint(secret)
@@ -141,7 +141,7 @@ class StorageService:
         storage = await StorageService.get(db=db, pk=pk)
         data = obj.model_dump(exclude={'secret_key'})
         secret = (obj.secret_key or '').strip()
-        data = StorageService._normalize(
+        data = await StorageService._normalize(
             storage.type, data, secret_required=storage.type == 's3' and not secret and not storage.secret_cipher
         )
         if storage.type == 's3' and secret:

@@ -820,3 +820,30 @@ def test_public_uploads_route_only_serves_public_records(
         assert client.get(_root_url('/uploads/..%2Fupload%2F' + data['path'].replace('/', '%2F'))).status_code == 404
     finally:
         client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})
+
+
+def test_public_uploads_ignore_client_content_type(client: TestClient, token_headers: dict[str, str]) -> None:
+    """🔴 公开件的 Content-Type 按扩展名定，不信 multipart 里声明的（代码审查抓到的回归）
+
+    原来的 StaticFiles 挂载按扩展名猜类型；换成路由时直接下发了 `sys_file.content_type` —— 而那是客户端
+    声明的。`x.png` 配 `text/html` 的声明 + HTML 内容，无鉴权的 `/uploads/…/x.png` 就在应用自己的域上
+    以 HTML 下发（CSP sandbox 挡住了脚本，但页面照样渲染成钓鱼页）；S3 上更是原样写进对象的 Content-Type。
+    """
+    html = b'<html><body><a href="https://evil.example">re-login</a></body></html>'
+    upload_resp = client.post(
+        f'{FILES}/upload',
+        headers=token_headers,
+        params={'public': True},
+        files={'file': ('innocent.png', html, 'text/html')},
+    )
+    assert upload_resp.status_code == 200, upload_resp.text
+    data = upload_resp.json()['data']
+    try:
+        # 落库的类型就已经是按扩展名的了，不只是下发时改一下
+        assert data['content_type'] == 'image/png'
+        resp = client.get(_root_url(data['public_url']))
+        assert resp.status_code == 200
+        assert resp.headers['content-type'].startswith('image/png'), resp.headers['content-type']
+        assert resp.headers['x-content-type-options'] == 'nosniff'
+    finally:
+        client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})

@@ -245,7 +245,14 @@ async def upload_file(file: UploadFile, *, public: bool = False, target: 'Storag
     :param target: 写到哪个存储的哪棵子树；不传 = 内置本地存储（按 `public` 选子树）
     :return:
     """
-    from backend.utils.storage_ops import READ_CHUNK, StorageError, builtin_target, delete_object, write_stream
+    from backend.utils.storage_ops import (
+        READ_CHUNK,
+        StorageError,
+        builtin_target,
+        content_type_from_key,
+        delete_object,
+        write_stream,
+    )
 
     if target is None:
         target = builtin_target(public=public)
@@ -261,6 +268,10 @@ async def upload_file(file: UploadFile, *, public: bool = False, target: 'Storag
         if not (root / relative).resolve().is_relative_to(root.resolve()):
             log.error(f'拒绝越界的上传路径：{file.filename!r} → {root / relative}')
             raise errors.RequestError(msg=t('error.file.invalid_filename'))
+
+    # 🔴 公开件的 MIME 按扩展名定，不信客户端声明的：它会原样成为无鉴权 `/uploads` 的 Content-Type
+    # 和 S3 对象的 Content-Type（见 storage_ops.content_type_from_key）
+    content_type = content_type_from_key(filename) if public else file.content_type
 
     digest = hashlib.sha256()
     size = 0
@@ -278,7 +289,7 @@ async def upload_file(file: UploadFile, *, public: bool = False, target: 'Storag
             yield content
 
     try:
-        await write_stream(target, relative, chunks(), content_type=file.content_type)
+        await write_stream(target, relative, chunks(), content_type=content_type)
     except StorageError as e:
         if e.reason == 'invalid_key':
             log.error(f'拒绝越界的上传路径：{file.filename!r} → {relative}')
@@ -294,7 +305,7 @@ async def upload_file(file: UploadFile, *, public: bool = False, target: 'Storag
         is_public=public,
         original_name=sanitize_display_name(strip_path(file.filename)),
         ext=get_file_ext(file),
-        content_type=file.content_type,
+        content_type=content_type,
         # 用实际写入的字节数，而不是 file.size —— 后者来自客户端声明，可以撒谎
         size=size,
         sha256=digest.hexdigest(),
