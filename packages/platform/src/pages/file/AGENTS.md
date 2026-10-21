@@ -9,8 +9,9 @@
 ## 文件管理与附件预览
 
 两张表：`sys_file`（物理文件）+ `sys_file_relation`（挂在谁身上）。
-**刻意没做**存储抽象（`sys_storage`，S3/MinIO）和个人云盘（目录树 / 分享 / 配额）——
-两者后加都不用改已有代码，所以也没留 `storage_id` 这种休眠字段。
+文件落在哪由 `sys_file.storage_id` 决定（`NULL` = 内置本地存储），存储本身在「存储管理」页
+（`pages/storage/`，#122）—— 后端那一层的约束见 [`backend/utils` 分册](../../../../../apps/api/backend/utils/AGENTS.md)
+的「存储抽象」一节。**刻意没做**个人云盘（目录树 / 分享 / 配额）。
 
 ### 🔴 这一页**刻意不用 `DataTable`**
 
@@ -88,6 +89,11 @@ pages/file/
   曾经只有上传/详情带它，列表接口返回不带的版本 →
   前端预览拼出 `http://127.0.0.1:8000undefined` → 弹窗「文件加载失败」。
   每个读取路径都要这个地址，那它就该长在唯一的详情模型上
+- **对象存储上的文件下载走 `/{pk}/link` 拿预签名地址**，浏览器原生下载（不经后端中转、不整块读进内存）；
+  本地存储那个接口返回 `url: null`，回落到下面这条。🔴 **不要**改成「fetch 带头去跟后端的 302」——
+  跨域重定向时浏览器剥掉 Authorization 头（Fetch 规范），不剥的老客户端会让 S3 收到两种鉴权直接 400
+  （这两条是规范和别人的案例，**没有实测**）。
+  预览仍走 `download_url`（后端流式代理），所以**桶不需要配 CORS**
 - **不能做成 `<a href={download_url} download>`** —— 那个地址要 Authorization 头，
   裸链接带不上，结果是把 401 的 JSON 当文件存下来。走 `fetchBytes` → Blob →
   临时 `<a>` 点一下 → **立刻 `revokeObjectURL`**（不 revoke 整个文件的字节会留在内存里）

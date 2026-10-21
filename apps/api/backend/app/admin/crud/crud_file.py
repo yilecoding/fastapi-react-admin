@@ -43,6 +43,7 @@ class CRUDFile(DataScopedCRUD[File]):
         original_name: str | None = None,
         *,
         is_public: bool = False,
+        storage_id: int | None = None,
     ) -> File | None:
         """
         按内容校验和获取**同一上传人**的文件，用于秒传探测
@@ -68,12 +69,23 @@ class CRUDFile(DataScopedCRUD[File]):
         :param created_by: 上传人 ID
         :param original_name: 原始文件名；传 None 表示只按内容匹配（/check 探测用）
         :param is_public: 只在同一棵子树里匹配
+        :param storage_id: 只在同一个存储里匹配（None = 内置本地存储）
         :return:
         """
-        filters = {'sha256': sha256, 'created_by': created_by, 'is_public': is_public, 'deleted': 0}
+        conditions = [
+            self.model.sha256 == sha256,
+            self.model.created_by == created_by,
+            self.model.is_public == is_public,
+            # 🔴 只在**同一个存储**里复用：跨存储命中会让新记录指向别的存储里的对象，
+            # 那个存储一删，这边就跟着 404。NULL（内置存储）必须写成 IS NULL，`= NULL` 永远不成立
+            self.model.storage_id.is_(None) if storage_id is None else self.model.storage_id == storage_id,
+            self.model.deleted == 0,
+        ]
         if original_name is not None:
-            filters['original_name'] = original_name
-        return await self.select_model_by_column(db, **filters)
+            conditions.append(self.model.original_name == original_name)
+        stmt = select(self.model).where(*self._scoped(tuple(conditions))).order_by(self.model.id).limit(1)
+        result = await db.execute(stmt)
+        return result.scalars().first()
 
     async def get_select(
         self,
@@ -166,6 +178,43 @@ class CRUDFile(DataScopedCRUD[File]):
         stmt = stmt.where(self.model.deleted == 0).group_by(self.model.type)
         result = await db.execute(stmt)
         return result.all()
+
+    async def get_public_by_path(self, db: AsyncSession, path: str) -> File | None:
+        """
+        按 key 找公开文件（`/uploads/{key}` 用，要先知道它在哪个存储才能去取）
+
+        **不按数据范围过滤**：这条路不登录，没有「当前用户的数据范围」可言
+
+        :param db: 数据库会话
+        :param path: 相对公开子树根的 key
+        :return:
+        """
+        stmt = (
+            select(self.model)
+            .where(self.model.path == path, self.model.is_public == True, self.model.deleted == 0)  # ruff: ignore[true-false-comparison]
+            .order_by(self.model.id)
+            .limit(1)
+        )
+        result = await db.execute(stmt)
+        return result.scalars().first()
+
+    async def get_storage_counts(self, db: AsyncSession) -> dict[int | None, int]:
+        """
+        每个存储下的文件数（None = 内置本地存储）。存储页显示、删存储前判断都用它
+
+        **不按数据范围过滤**（同 `get_statistics`）：「这个存储还有没有文件」是业务规则检查，
+        受限用户看不见的文件也是文件 —— 过滤了就会放行删除一个还有文件的存储
+
+        :param db: 数据库会话
+        :return:
+        """
+        stmt = (
+            select(self.model.storage_id, sa.func.count(self.model.id))
+            .where(self.model.deleted == 0)
+            .group_by(self.model.storage_id)
+        )
+        result = await db.execute(stmt)
+        return {row[0]: int(row[1]) for row in result.all()}
 
 
 class CRUDFileRelation(DataScopedCRUD[FileRelation]):

@@ -1,5 +1,4 @@
 from collections.abc import Awaitable, Callable, Sequence
-from pathlib import Path
 from typing import Any
 
 from fastapi import UploadFile
@@ -8,13 +7,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.admin.crud.crud_file import file_dao, file_relation_dao
 from backend.app.admin.model import File
 from backend.app.admin.schema.file import CreateFileRelationParam, DeleteFileRelationParam
+from backend.app.admin.service.storage_service import storage_service
 from backend.common.enums import FileType
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
 from backend.common.pagination import paging_data
 from backend.common.security.data_scope import bypass_data_scope
-from backend.utils.file_ops import delete_file, get_file_ext, upload_file, upload_file_verify, upload_root
+from backend.core.conf import settings
+from backend.utils.file_ops import get_file_ext, upload_file, upload_file_verify
+from backend.utils.storage_ops import StorageError, StorageTarget, delete_object, presign_read, stat_size
 
 #: 业务模块登记的「这个人能不能读这个文件」。签名：`(db, request.user, file) -> bool`
 FileAccessChecker = Callable[[AsyncSession, Any, File], Awaitable[bool]]
@@ -161,14 +163,18 @@ class FileService:
         if public:
             FileService.verify_public(file_type, get_file_ext(file))
 
-        saved = await upload_file(file, public=public)
+        # 落到**当前默认存储**（没有默认 = 内置本地存储）。之后读 / 删都按记录上的 storage_id 走
+        target = await storage_service.upload_target(db=db, public=public)
+        saved = await upload_file(file, public=public, target=target)
 
         # 秒传：同一个人传过**同名同内容**的文件就复用已有记录，把刚写的副本删掉。
         # 注意顺序 —— 必须先落盘才知道 sha256（流式算的），所以这里是「写完再回收」
         # 而不是「先查再写」。想省掉这次写盘得靠前端先调 /check 探测
-        existing = await file_dao.get_by_sha256(db, saved.sha256, user_id, saved.original_name, is_public=public)
+        existing = await file_dao.get_by_sha256(
+            db, saved.sha256, user_id, saved.original_name, is_public=public, storage_id=target.storage_id
+        )
         if existing:
-            delete_file(saved.path, public=public)
+            await delete_object(target, saved.path)
             return existing
 
         return await file_dao.create(
@@ -183,6 +189,7 @@ class FileService:
                 'type': file_type.value,
                 'path': saved.path,
                 'is_public': saved.is_public,
+                'storage_id': target.storage_id,
                 'created_by': user_id,
             },
         )
@@ -205,12 +212,14 @@ class FileService:
             否则「/check 说命中了、upload 还是重新传一份」
         :return:
         """
-        return await file_dao.get_by_sha256(db, sha256, user_id, name, is_public=public)
+        # 口径和 upload 一致：只在**新上传会落的那个存储**里找
+        target = await storage_service.upload_target(db=db, public=public)
+        return await file_dao.get_by_sha256(db, sha256, user_id, name, is_public=public, storage_id=target.storage_id)
 
     @staticmethod
-    async def resolve_path(*, db: AsyncSession, pk: int, user: Any) -> tuple[File, Path]:
+    async def resolve(*, db: AsyncSession, pk: int, user: Any) -> tuple[File, StorageTarget]:
         """
-        解析出可直接返回给客户端的磁盘路径（先过「这个人能不能读」）
+        找到文件和它所在的存储（先过「这个人能不能读」）。存储里没有这个对象时报「文件已丢失」
 
         :param db: 数据库会话
         :param pk: 文件 ID
@@ -218,25 +227,68 @@ class FileService:
         :return:
         """
         file = await FileService.get_readable(db=db, user=user, pk=pk)
+        target = await storage_service.target_for_file(db=db, file=file)
 
-        # 根目录跟着 is_public 走 —— 两棵树里的相对路径长得一模一样，
-        # 写死 UPLOAD_DIR 的话公开子树里的文件在这个接口上一律 404
-        root = upload_root(public=file.is_public)
-        target = root / file.path
-        # 库里的 path 理论上只由 build_filename 写入，但这里仍然要验 ——
-        # 它是「拼路径去读磁盘」的地方，一旦哪天有人往库里写了 `../`，
-        # 这个接口就成了任意文件读取
-        if not target.resolve().is_relative_to(root.resolve()):
-            log.error(f'拒绝越界的读取路径：{file.path!r} → {target}')
-            raise errors.NotFoundError(msg=t('error.file.not_found'))
+        if target.local_root is not None:
+            local = target.local_root / file.path
+            # 库里的 path 理论上只由 build_filename 写入，但这里仍然要验 ——
+            # 它是「拼路径去读磁盘」的地方，一旦哪天有人往库里写了 `../`，
+            # 这个接口就成了任意文件读取
+            if not local.resolve().is_relative_to(target.local_root.resolve()):
+                log.error(f'拒绝越界的读取路径：{file.path!r} → {local}')
+                raise errors.NotFoundError(msg=t('error.file.not_found'))
+            if not local.is_file():
+                # 库里有记录、盘上没文件：多半是手工清理过上传目录。
+                # 报「文件不存在」而不是 500 —— 这是数据状态问题，不是程序崩了
+                log.warning(f'文件记录 {file.id} 指向的磁盘文件缺失：{local}')
+                raise errors.NotFoundError(msg=t('error.file.missing'))
+            return file, target
 
-        if not target.is_file():
-            # 库里有记录、盘上没文件：多半是手工清理过 static/upload。
-            # 报「文件不存在」而不是 500 —— 这是数据状态问题，不是程序崩了
-            log.warning(f'文件记录 {file.id} 指向的磁盘文件缺失：{target}')
-            raise errors.NotFoundError(msg=t('error.file.missing'))
-
+        try:
+            await stat_size(target, file.path)
+        except StorageError as e:
+            if e.reason in ('not_found', 'invalid_key'):
+                log.warning(f'文件记录 {file.id} 指向的对象缺失：{target.storage_id}:{file.path}')
+                raise errors.NotFoundError(msg=t('error.file.missing')) from e
+            raise errors.ServerError(msg=t('error.storage.read_failed')) from e
         return file, target
+
+    @staticmethod
+    async def presign(*, db: AsyncSession, pk: int, user: Any, disposition: str) -> str | None:
+        """
+        短时效的直连下载地址。**只有对象存储有**，本地存储返回 None（前端回落到带鉴权的下载接口）
+
+        🔴 先过 `can_read` 再签：预签名 URL 签出去就撤不回来，有效期内谁拿到都能下
+
+        :param db: 数据库会话
+        :param pk: 文件 ID
+        :param user: 当前用户
+        :param disposition: Content-Disposition 头的完整取值
+        :return:
+        """
+        file = await FileService.get_readable(db=db, user=user, pk=pk)
+        target = await storage_service.target_for_file(db=db, file=file)
+        if not target.can_presign:
+            return None
+        try:
+            return await presign_read(
+                target,
+                file.path,
+                expire=settings.STORAGE_PRESIGN_EXPIRE_SECONDS,
+                content_disposition=disposition,
+                content_type=file.content_type or 'application/octet-stream',
+            )
+        except StorageError as e:
+            raise errors.ServerError(msg=t('error.storage.read_failed')) from e
+
+    @staticmethod
+    async def _target_or_none(*, db: AsyncSession, file: File) -> StorageTarget | None:
+        """删除用：存储已经没了就返回 None —— 记录照删，对象没处可删"""
+        try:
+            return await storage_service.target_for_file(db=db, file=file)
+        except errors.BaseExceptionError:
+            log.warning(f'删除文件 {file.id} 时找不到它的存储 {file.storage_id}，只删记录')
+            return None
 
     @staticmethod
     async def delete(*, db: AsyncSession, pks: list[int]) -> int:
@@ -252,10 +304,13 @@ class FileService:
             return 0
 
         found_ids = [file.id for file in files]
-        # 先记下**相对路径 + 落在哪棵树**再删记录 —— 删完就查不到这两个字段了。
-        # 传落盘名给 delete_file 是无效的，见那边的注释；
-        # 漏掉 is_public 的表现同样是静默留孤儿（missing_ok=True 不会报错）
-        targets = [(file.path, file.is_public) for file in files]
+        # 先解析出**每个文件自己的存储 + 子树**再删记录 —— 删完就查不到这几个字段了。
+        # 漏掉 is_public / storage_id 的表现都是静默留孤儿（删一个不存在的对象不报错）
+        targets: list[tuple[StorageTarget, str]] = []
+        for file in files:
+            target = await FileService._target_or_none(db=db, file=file)
+            if target is not None:
+                targets.append((target, file.path))
 
         await file_relation_dao.delete_by_file_ids(db, found_ids)
         count = await file_dao.delete(db, found_ids)
@@ -263,8 +318,8 @@ class FileService:
         # 磁盘删除放在最后，且失败不回滚事务（delete_file 内部只记 warning）：
         # 「库里删了、盘上留个孤儿」是可接受的；反过来「盘上删了、库里还在」
         # 会让列表里出现一批点开就 404 的行
-        for path, is_public in targets:
-            delete_file(path, public=is_public)
+        for target, path in targets:
+            await delete_object(target, path)
 
         return count
 

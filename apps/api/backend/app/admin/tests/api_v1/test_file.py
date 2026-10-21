@@ -756,27 +756,67 @@ def test_public_upload_still_accepts_png(client: TestClient, token_headers: dict
         client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})
 
 
-def test_public_uploads_static_mount_sets_hardening_headers(tmp_path: Path) -> None:
-    """`/uploads` 挂载必须带 `X-Content-Type-Options`/CSP —— 纵深防御的第二道闸
+def _root_url(path: str) -> str:
+    """`/uploads` 挂在站点根上，不在 `/api/v1` 下 —— `client` 的 base_url 带着 `/api/v1`，
+    裸传 `/uploads/…` 会被拼成 `/api/v1/uploads/…`，拿到的是**接口层**的 JSON 404（第一版就这么假红过）
+    """
+    return f'http://testserver{path}'
 
-    不经过完整 app（`app.mount` 在应用启动时就把目录烤进了 StaticFiles 实例，
-    没法用 `isolated_upload_dir` 那套 monkeypatch 顶替），直接单测
-    `_PublicUploadsStaticFiles` 这个类本身：即便以后有格式绕过了
+
+def test_public_uploads_route_sets_hardening_headers(client: TestClient, token_headers: dict[str, str]) -> None:
+    """`/uploads` 必须带 `X-Content-Type-Options`/CSP —— 纵深防御的第二道闸
+
+    原来 `/uploads` 是一条 `StaticFiles` 挂载，这条测试只能单测那个类；有了多存储之后
+    它是一个按 key 反查文件记录的路由（`app/admin/api/uploads.py`），走完整 app 测，
+    `isolated_upload_dir` 的 monkeypatch 也照样生效。即便以后有格式绕过了
     `verify_public`，这层头也是第二道防线。
     """
-    from backend.core.registrar import _PublicUploadsStaticFiles
+    upload_resp = client.post(
+        f'{FILES}/upload',
+        headers=token_headers,
+        params={'public': True},
+        files={'file': ('hardening.png', _png_bytes(), 'image/png')},
+    )
+    assert upload_resp.status_code == 200, upload_resp.text
+    data = upload_resp.json()['data']
+    try:
+        # 不带任何凭据 —— `<img src>` 就是这么请求的
+        resp = client.get(_root_url(data['public_url']))
+        assert resp.status_code == 200, resp.text
+        assert resp.content == _png_bytes()
+        assert resp.headers['x-content-type-options'] == 'nosniff'
+        assert 'content-security-policy' in resp.headers
+    finally:
+        client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})
 
-    (tmp_path / 'cover.png').write_bytes(_png_bytes())
-    app = _PublicUploadsStaticFiles(directory=tmp_path)
+    # 删掉之后就读不到了（记录没了，路由找不到它在哪个存储）
+    assert client.get(_root_url(data['public_url'])).status_code == 404
 
-    # ⚠️ 不能用 `with TestClient(app) as ...`——那会触发 lifespan 握手，
-    # 而 `StaticFiles.__call__` 只认 `scope["type"] == "http"`，会在
-    # lifespan scope 上直接 assert 失败。这个类只当 sub-app 被 `app.mount()`
-    # 挂在一个完整应用下面，lifespan 由外层应用接管；这里只测 HTTP 请求路径，
-    # 不进 `with` 块就不会有 lifespan 事件。
-    static_client = TestClient(app)
-    resp = static_client.get('/cover.png')
-    assert resp.status_code == 200
-    assert resp.content == _png_bytes()
-    assert resp.headers['x-content-type-options'] == 'nosniff'
-    assert 'content-security-policy' in resp.headers
+
+def test_public_uploads_route_only_serves_public_records(
+    client: TestClient, token_headers: dict[str, str], isolated_upload_dir: Path
+) -> None:
+    """🔴 `/uploads` 只认 `is_public` 的记录 —— 私有文件的 key 拿来也读不到
+
+    原来那条 `StaticFiles` 是按**目录**隔离的（只挂公开子树）。换成按 key 反查记录之后，
+    隔离靠的是查询里的 `is_public == True`：漏了它，私有文件只要知道 path 就能被无鉴权读走
+    （path 就在详情接口里）。私有子树里的文件、盘上有但库里没有的文件、带 `../` 的 key 都要 404
+    """
+    upload_resp = client.post(
+        f'{FILES}/upload', headers=token_headers, files={'file': ('secret.png', _png_bytes(), 'image/png')}
+    )
+    assert upload_resp.status_code == 200, upload_resp.text
+    data = upload_resp.json()['data']
+    try:
+        assert data['is_public'] is False
+        # 先断言「有」：私有文件确实落盘了，走带鉴权的接口读得到
+        assert (isolated_upload_dir / data['path']).is_file()
+        assert client.get(f'{FILES}/{data["id"]}/download', headers=token_headers).status_code == 200
+
+        assert client.get(_root_url(f'/uploads/{data["path"]}')).status_code == 404
+        # 盘上有、库里没有：路由不该退回「按目录直接读」
+        (isolated_upload_dir.parent / 'upload-public' / 'orphan.png').write_bytes(_png_bytes())
+        assert client.get(_root_url('/uploads/orphan.png')).status_code == 404
+        assert client.get(_root_url('/uploads/..%2Fupload%2F' + data['path'].replace('/', '%2F'))).status_code == 404
+    finally:
+        client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})

@@ -24,6 +24,7 @@ import {
   IconRobot,
   IconPuzzle,
   IconServer,
+  IconServer2,
   IconShieldLock,
   IconSitemap,
   IconClockHour4,
@@ -89,6 +90,8 @@ export const ICON_MAP: Record<string, IconCmp> = {
   'mdi:login': IconLogin,
   'mdi:monitor-eye': IconDeviceDesktopAnalytics,
   'mdi:server-outline': IconServer,
+  // 存储管理。和文件管理（IconFiles）同在「系统管理」下，用「机柜」而不是「云」：内置的本地盘也在这页里
+  'lucide:hard-drive': IconServer2,
   'mingcute:department-line': IconSitemap,
   'ph:puzzle-piece': IconPuzzle,
   'wpf:online': IconWorld,

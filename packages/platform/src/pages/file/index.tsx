@@ -19,6 +19,7 @@ import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton, TextFilter } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import {
+  fetchFileLink,
   filesQuery,
   formatBytes,
   useDeleteFiles,
@@ -116,6 +117,16 @@ export function FilePage({
     async (f: FileItem) => {
       setActionError(null)
       try {
+        // 对象存储：拿预签名地址让浏览器原生下载。🔴 不是 fetch 带 Authorization 头去跟后端的 302 ——
+        // 跨域重定向时浏览器会剥掉那个头，老客户端不剥的话 S3 收到两种鉴权直接 400
+        const link = await fetchFileLink(f.id)
+        if (link.url) {
+          const a = document.createElement('a')
+          a.href = link.url
+          a.rel = 'noopener'
+          a.click()
+          return
+        }
         const buffer = await fetchBytes(f.download_url)
         const url = URL.createObjectURL(
           new Blob([buffer], { type: f.content_type ?? 'application/octet-stream' })

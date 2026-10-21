@@ -38,6 +38,18 @@ export type FileItem = {
    * 塞进 `<img src>` 只会拿到 401。`null` 是明确的「这个文件没有直链」。
    */
   public_url: string | null
+  /** 所属存储（`sys_storage.id`）；`null` = 内置本地存储 */
+  storage_id: string | null
+}
+
+/**
+ * 短时效的直连下载地址。**只有对象存储有**，本地存储返回 `url: null`（回落到带鉴权的 `download_url`）。
+ *
+ * 直连的好处是大文件不经后端中转、浏览器原生下载（有进度条、不用先整块读进内存）。
+ * 文件名由后端签进 `response-content-disposition`，所以直接导航过去就是「下载」不是「打开」
+ */
+export function fetchFileLink(id: string): Promise<{ url: string | null; expires_in: number | null }> {
+  return api.GET(`/api/v1/sys/files/${id}/link?disposition=attachment`)
 }
 
 export type FileListParams = {
