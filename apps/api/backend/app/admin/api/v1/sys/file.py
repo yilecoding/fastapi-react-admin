@@ -22,7 +22,7 @@ from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.core.conf import settings
 from backend.database.db import CurrentSession, CurrentSessionTransaction
-from backend.utils.storage_ops import iter_read
+from backend.utils.storage_ops import content_type_from_key, iter_read
 
 router = APIRouter()
 
@@ -157,7 +157,8 @@ async def download_file(
     ] = 'inline',
 ) -> Response:
     file, target, size = await file_service.resolve(db=db, pk=pk, user=request.user)
-    media_type = file.content_type or 'application/octet-stream'
+    # 按扩展名现算而不用 `file.content_type`：老记录里存的是客户端声明的类型（新上传已经是按扩展名落库的）
+    media_type = content_type_from_key(file.path)
     headers = {'Content-Disposition': _content_disposition(file, disposition)}
     if target.local_root is not None:
         # 预览器会按 Range 拖进度（音视频），FileResponse 自带 Range，明确声明支持

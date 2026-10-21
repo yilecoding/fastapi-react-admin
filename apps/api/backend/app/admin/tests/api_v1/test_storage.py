@@ -253,6 +253,9 @@ def test_refuses_to_store_secret_without_encrypt_key(
         'http://0.0.0.0:9000',
         'ftp://minio:9000',
         'http://user:pass@minio:9000',
+        # `.port` 对这两种抛 ValueError，要翻成 400 而不是 500
+        'http://minio:9000x',
+        'http://minio:99999',
     ],
 )
 def test_rejects_dangerous_endpoints(client: TestClient, token_headers: dict[str, str], endpoint: str) -> None:
@@ -270,6 +273,23 @@ def test_rejects_dangerous_endpoints(client: TestClient, token_headers: dict[str
         },
     )
     assert resp.status_code != 200, endpoint
+
+
+def test_rotated_encrypt_key_is_a_visible_storage_error(
+    client: TestClient, token_headers: dict[str, str], s3_endpoint: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """换了 STORAGE_ENCRYPT_SECRET_KEY（或密文损坏）：AES 解填充抛裸 ValueError，
+    要翻成「存储不可用」/ 404，不能是裸 500"""
+    pk = _create_s3(client, token_headers, s3_endpoint)
+    client.put(f'{STORAGES}/default', headers=token_headers, json={'storage_id': pk})
+    data = _upload(client, token_headers, 'rotated.png', _png(), public=True)
+    monkeypatch.setattr(settings, 'STORAGE_ENCRYPT_SECRET_KEY', 'ff' * 32)
+    assert client.get(_root_url(data['public_url']), follow_redirects=False).status_code == 404
+    resp = client.get(f'{FILES}/{data["id"]}/download', headers=token_headers)
+    assert resp.status_code == 500 and resp.json()['msg'], resp.text
+    assert 'ValueError' not in resp.text and 'padding' not in resp.text.lower()
+    # 删记录照常，只是对象删不掉
+    assert client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]}).status_code == 200
 
 
 def test_private_network_endpoint_is_allowed(client: TestClient, token_headers: dict[str, str]) -> None:

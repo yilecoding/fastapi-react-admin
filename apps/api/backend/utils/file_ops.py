@@ -269,9 +269,10 @@ async def upload_file(file: UploadFile, *, public: bool = False, target: 'Storag
             log.error(f'拒绝越界的上传路径：{file.filename!r} → {root / relative}')
             raise errors.RequestError(msg=t('error.file.invalid_filename'))
 
-    # 🔴 公开件的 MIME 按扩展名定，不信客户端声明的：它会原样成为无鉴权 `/uploads` 的 Content-Type
-    # 和 S3 对象的 Content-Type（见 storage_ops.content_type_from_key）
-    content_type = content_type_from_key(filename) if public else file.content_type
+    # 🔴 MIME 一律按扩展名定，不信客户端声明的：它会原样成为 `/uploads`（无鉴权）和下载接口的 Content-Type、
+    # S3 对象的 Content-Type、预签名的 response-content-type。`report.pdf` 配 `text/html` 的声明就能让
+    # 带鉴权的预览（blob: URL 继承应用的源）把 HTML 跑起来（见 storage_ops.content_type_from_key）
+    content_type = content_type_from_key(filename)
 
     digest = hashlib.sha256()
     size = 0

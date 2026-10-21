@@ -11,7 +11,7 @@ from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
 from backend.core.conf import settings
-from backend.core.path_conf import STATIC_DIR
+from backend.core.path_conf import BASE_PATH, STATIC_DIR
 from backend.utils.encrypt import AESCipher
 from backend.utils.storage_ops import (
     StorageError,
@@ -52,16 +52,19 @@ async def _endpoint_or_raise(endpoint: str) -> str:
 
 def _check_local_root(root: str) -> str:
     """
-    本地存储的根目录：绝对路径，且不能在 `STATIC_DIR` 下面
+    本地存储的根目录：绝对路径，且不能在 `STATIC_DIR` 或应用自己的目录（`BASE_PATH`）下面
 
-    🔴 后一条不是洁癖：`/static` 是**无鉴权**挂出去的，根目录放进去 = 私有文件对任何人可读。
-    当初 `UPLOAD_DIR` 就是因为在 `STATIC_DIR` 里面才被连带公开过（见 registrar.py）
+    🔴 前一条不是洁癖：`/static` 是**无鉴权**挂出去的，根目录放进去 = 私有文件对任何人可读。
+    当初 `UPLOAD_DIR` 就是因为在 `STATIC_DIR` 里面才被连带公开过（见 registrar.py）。
+    后一条：根目录会被 `mkdir -p` 并写入用户上传的任意字节，指到源码 / `alembic/` / `plugin/` 下面没有任何正当用途。
+    ⚠️ 其余系统目录（`/etc`、`/var/www`…）**没有拦**：能配存储的是 `sys:storage:edit`（管理员级权限），
+    要收紧只能靠部署时的挂载点白名单，不在这一层猜
     """
     path = Path(root)
     if not root or not path.is_absolute():
         raise errors.RequestError(msg=t('error.storage.local_root_invalid'))
     resolved = path.resolve()
-    if resolved == Path('/') or resolved.is_relative_to(STATIC_DIR.resolve()):
+    if resolved == Path('/') or any(resolved.is_relative_to(d.resolve()) for d in (STATIC_DIR, BASE_PATH)):
         raise errors.RequestError(msg=t('error.storage.local_root_invalid'))
     return str(resolved)
 
@@ -193,14 +196,24 @@ class StorageService:
 
     @staticmethod
     def row_target(storage: Storage, *, public: bool) -> StorageTarget:
-        secret = None
-        if storage.type == 's3' and storage.secret_cipher:
-            secret = _cipher().decrypt(storage.secret_cipher)
         try:
+            # 解密也在 try 里：换过 STORAGE_ENCRYPT_SECRET_KEY / 密文损坏时 AES 解填充抛的是裸 ValueError，
+            # 放外面的话 /uploads、批量删除、上传全部 500 而不是「存储不可用」
+            secret = None
+            if storage.type == 's3' and storage.secret_cipher:
+                secret = _cipher().decrypt(storage.secret_cipher)
             return row_target(storage, public=public, secret_key=secret)
+        except errors.BaseExceptionError:
+            raise
         except Exception as e:
             log.error(f'构造存储 {storage.id} 失败：{e!s}')
             raise errors.ServerError(msg=t('error.storage.read_failed')) from e
+
+    @staticmethod
+    async def default_storage_id(*, db: AsyncSession) -> int | None:
+        """默认存储的 id（None = 内置本地存储）。只要 id 的地方用这个，别去建 operator"""
+        storage = await storage_dao.get_default(db)
+        return storage.id if storage else None
 
     @staticmethod
     async def upload_target(*, db: AsyncSession, public: bool) -> StorageTarget:

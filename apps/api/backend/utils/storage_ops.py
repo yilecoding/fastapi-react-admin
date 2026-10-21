@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+import anyio
 import opendal
 
 from backend.common.log import log
@@ -143,6 +144,11 @@ async def check_endpoint(endpoint: str) -> str:
     """
     value = (endpoint or '').strip().rstrip('/')
     parts = urlsplit(value)
+    try:
+        # `.port` 对 `:9000x` / `:99999` 抛 ValueError，要和「协议 / 主机不对」一样翻成 invalid_endpoint，不能漏成 500
+        port = parts.port
+    except ValueError as e:
+        raise StorageError('invalid_endpoint') from e
     if parts.scheme not in ('http', 'https') or not parts.hostname:
         raise StorageError('invalid_endpoint')
     if parts.username or parts.password or parts.query or parts.fragment:
@@ -151,7 +157,7 @@ async def check_endpoint(endpoint: str) -> str:
         # 🔴 走事件循环的 getaddrinfo（线程池）：同步的 `socket.getaddrinfo` 会把整个 worker 冻住，
         # 解析不了的主机名在本机实测卡 10 秒，期间所有人的所有请求都停（代码审查抓到的）
         loop = asyncio.get_running_loop()
-        infos = await loop.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == 'https' else 80))
+        infos = await loop.getaddrinfo(parts.hostname, port or (443 if parts.scheme == 'https' else 80))
     except (OSError, UnicodeError):
         # 解析不了不是 SSRF，是配错了 —— 留给「测试连接」报「连不上」
         return value
@@ -346,7 +352,8 @@ async def delete_object(target: StorageTarget, key: str) -> None:
     if target.local_root is not None:
         from backend.utils.file_ops import delete_local_file
 
-        delete_local_file(target.local_root, key)
+        # unlink + rmdir 放线程里：表里的本地存储多半是 NAS 挂载，挂死时别把事件循环带走
+        await anyio.to_thread.run_sync(delete_local_file, target.local_root, key)
         return
     try:
         await target.op.delete(check_key(key))

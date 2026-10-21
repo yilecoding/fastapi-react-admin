@@ -119,7 +119,8 @@ export function FilePage({
       try {
         // 对象存储：拿预签名地址让浏览器原生下载。🔴 不是 fetch 带 Authorization 头去跟后端的 302 ——
         // 跨域重定向时浏览器会剥掉那个头，老客户端不剥的话 S3 收到两种鉴权直接 400
-        const link = await fetchFileLink(f.id)
+        // 内置本地存储（storage_id 为 null）没有直连地址，别白跑一次 /link
+        const link = f.storage_id === null ? { url: null } : await fetchFileLink(f.id)
         if (link.url) {
           const a = document.createElement('a')
           a.href = link.url

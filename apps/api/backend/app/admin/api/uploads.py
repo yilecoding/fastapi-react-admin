@@ -11,13 +11,17 @@
   下载接口那种「Authorization 头 + 跨域重定向」的问题
 """
 
+import os
+
+from pathlib import Path as PathLib
 from typing import Annotated
 from urllib.parse import quote
 
 import anyio
 
-from fastapi import APIRouter, Path
+from fastapi import APIRouter, Path, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
+from starlette.staticfiles import NotModifiedResponse, StaticFiles
 
 from backend.app.admin.crud.crud_file import file_dao
 from backend.app.admin.service.storage_service import storage_service
@@ -45,8 +49,29 @@ def _not_found() -> Response:
     return Response('Not Found', status_code=404, media_type='text/plain', headers=_HARDENING_HEADERS)
 
 
+async def _serve_local(request: Request, root: PathLib, key: str, media_type: str) -> Response:
+    local = root / key
+
+    def _stat() -> os.stat_result | None:
+        # 原来的 StaticFiles 也是在线程里做 realpath + stat 的：根目录在挂死的网络盘上时别把事件循环一起带走
+        if not local.resolve().is_relative_to(root.resolve()) or not local.is_file():
+            return None
+        return local.stat()
+
+    stat = await anyio.to_thread.run_sync(_stat)
+    if stat is None:
+        return _not_found()
+    response = FileResponse(
+        local, stat_result=stat, media_type=media_type, headers={**_HARDENING_HEADERS, 'Cache-Control': _CACHE_PUBLIC}
+    )
+    # 同一张图重复浏览不重复传字节：StaticFiles 白给的 304 换成路由后要自己答（它的判定函数不依赖实例状态）
+    if StaticFiles.is_not_modified(None, response.headers, request.headers):  # type: ignore[arg-type]
+        return NotModifiedResponse(response.headers)
+    return response
+
+
 @router.api_route('/uploads/{key:path}', methods=['GET', 'HEAD'], include_in_schema=False)
-async def get_public_upload(db: CurrentSession, key: Annotated[str, Path()]) -> Response:
+async def get_public_upload(request: Request, db: CurrentSession, key: Annotated[str, Path()]) -> Response:
     try:
         key = check_key(key)
     except StorageError:
@@ -63,18 +88,7 @@ async def get_public_upload(db: CurrentSession, key: Annotated[str, Path()]) -> 
     # 🔴 MIME 按扩展名定，不用 `file.content_type`（客户端声明的）—— 这条路无鉴权、还在应用自己的域上
     media_type = content_type_from_key(key)
     if target.local_root is not None:
-        local = target.local_root / key
-        root = target.local_root
-
-        def _ok() -> bool:
-            # 原来的 StaticFiles 也是在线程里做 realpath + stat 的：根目录在挂死的网络盘上时别把事件循环一起带走
-            return local.resolve().is_relative_to(root.resolve()) and local.is_file()
-
-        if not await anyio.to_thread.run_sync(_ok):
-            return _not_found()
-        return FileResponse(
-            local, media_type=media_type, headers={**_HARDENING_HEADERS, 'Cache-Control': _CACHE_PUBLIC}
-        )
+        return await _serve_local(request, target.local_root, key, media_type)
 
     if target.public_base_url:
         return RedirectResponse(

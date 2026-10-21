@@ -847,3 +847,41 @@ def test_public_uploads_ignore_client_content_type(client: TestClient, token_hea
         assert resp.headers['x-content-type-options'] == 'nosniff'
     finally:
         client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})
+
+
+def test_private_download_content_type_comes_from_extension(client: TestClient, token_headers: dict[str, str]) -> None:
+    """带鉴权的下载 / 预览同样不信客户端声明的 MIME：`report.pdf` 配 `text/html` 的声明，预览走 blob: URL
+    （继承应用的源），以 HTML 下发就是在自己域上跑别人的 HTML（代码审查第二轮抓到的，第一轮只修了 /uploads）"""
+    html = b'<html><script>alert(1)</script></html>'
+    upload_resp = client.post(
+        f'{FILES}/upload', headers=token_headers, files={'file': ('report.pdf', html, 'text/html')}
+    )
+    assert upload_resp.status_code == 200, upload_resp.text
+    data = upload_resp.json()['data']
+    try:
+        assert data['content_type'] == 'application/pdf'
+        resp = client.get(f'{FILES}/{data["id"]}/download', headers=token_headers)
+        assert resp.status_code == 200
+        assert resp.headers['content-type'].startswith('application/pdf'), resp.headers['content-type']
+    finally:
+        client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})
+
+
+def test_public_uploads_answer_304(client: TestClient, token_headers: dict[str, str]) -> None:
+    """`/uploads` 换成路由后要自己答 304 —— 原来是 StaticFiles 白给的，漏了的话每次重新打开公告都整张图重传"""
+    upload_resp = client.post(
+        f'{FILES}/upload',
+        headers=token_headers,
+        params={'public': True},
+        files={'file': ('cached.png', _png_bytes(), 'image/png')},
+    )
+    assert upload_resp.status_code == 200, upload_resp.text
+    data = upload_resp.json()['data']
+    try:
+        first = client.get(_root_url(data['public_url']))
+        assert first.status_code == 200 and first.headers.get('etag')
+        again = client.get(_root_url(data['public_url']), headers={'If-None-Match': first.headers['etag']})
+        assert again.status_code == 304
+        assert again.content == b''
+    finally:
+        client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})

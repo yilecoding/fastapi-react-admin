@@ -61,10 +61,10 @@ async def set_default_storage(
 async def update_storage(
     db: CurrentSessionTransaction, pk: Annotated[int, Path(description='存储 ID')], obj: UpdateStorageParam
 ) -> ResponseModel:
-    count = await storage_service.update(db=db, pk=pk, obj=obj)
-    if count > 0:
-        return response_base.success()
-    return response_base.fail()
+    await storage_service.update(db=db, pk=pk, obj=obj)
+    # 不拿 rowcount 判成败：MySQL 数的是「改了的」行，原样保存一次就是 0（根 CLAUDE.md 那张表）；
+    # 记录不存在的情形 service 已经 404 了
+    return response_base.success()
 
 
 @router.put(

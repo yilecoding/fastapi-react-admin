@@ -1,6 +1,8 @@
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
+import anyio
+
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +18,14 @@ from backend.common.pagination import paging_data
 from backend.common.security.data_scope import bypass_data_scope
 from backend.core.conf import settings
 from backend.utils.file_ops import get_file_ext, upload_file, upload_file_verify
-from backend.utils.storage_ops import StorageError, StorageTarget, delete_object, presign_read, stat_size
+from backend.utils.storage_ops import (
+    StorageError,
+    StorageTarget,
+    content_type_from_key,
+    delete_object,
+    presign_read,
+    stat_size,
+)
 
 #: 业务模块登记的「这个人能不能读这个文件」。签名：`(db, request.user, file) -> bool`
 FileAccessChecker = Callable[[AsyncSession, Any, File], Awaitable[bool]]
@@ -212,9 +221,9 @@ class FileService:
             否则「/check 说命中了、upload 还是重新传一份」
         :return:
         """
-        # 口径和 upload 一致：只在**新上传会落的那个存储**里找
-        target = await storage_service.upload_target(db=db, public=public)
-        return await file_dao.get_by_sha256(db, sha256, user_id, name, is_public=public, storage_id=target.storage_id)
+        # 口径和 upload 一致：只在**新上传会落的那个存储**里找。只要 id，别为一次探测去解密密钥、建 operator
+        storage_id = await storage_service.default_storage_id(db=db)
+        return await file_dao.get_by_sha256(db, sha256, user_id, name, is_public=public, storage_id=storage_id)
 
     @staticmethod
     async def resolve(*, db: AsyncSession, pk: int, user: Any) -> tuple[File, StorageTarget, int]:
@@ -234,18 +243,25 @@ class FileService:
 
         if target.local_root is not None:
             local = target.local_root / file.path
-            # 库里的 path 理论上只由 build_filename 写入，但这里仍然要验 ——
-            # 它是「拼路径去读磁盘」的地方，一旦哪天有人往库里写了 `../`，
-            # 这个接口就成了任意文件读取
-            if not local.resolve().is_relative_to(target.local_root.resolve()):
+            root = target.local_root
+
+            def _probe() -> int:
+                # 在线程里做 realpath / stat（同 uploads.py）：表里的本地存储多半是 NAS 挂载，挂死时别把事件循环带走。
+                # 库里的 path 理论上只由 build_filename 写入，但这里仍然要验 ——
+                # 它是「拼路径去读磁盘」的地方，一旦哪天有人往库里写了 `../`，这个接口就成了任意文件读取
+                if not local.resolve().is_relative_to(root.resolve()):
+                    return -2
+                # 库里有记录、盘上没文件：多半是手工清理过上传目录。报「文件不存在」而不是 500
+                return local.stat().st_size if local.is_file() else -1
+
+            size = await anyio.to_thread.run_sync(_probe)
+            if size == -2:
                 log.error(f'拒绝越界的读取路径：{file.path!r} → {local}')
                 raise errors.NotFoundError(msg=t('error.file.not_found'))
-            if not local.is_file():
-                # 库里有记录、盘上没文件：多半是手工清理过上传目录。
-                # 报「文件不存在」而不是 500 —— 这是数据状态问题，不是程序崩了
+            if size == -1:
                 log.warning(f'文件记录 {file.id} 指向的磁盘文件缺失：{local}')
                 raise errors.NotFoundError(msg=t('error.file.missing'))
-            return file, target, local.stat().st_size
+            return file, target, size
 
         try:
             size = await stat_size(target, file.path)
@@ -278,7 +294,7 @@ class FileService:
                 file.path,
                 expire=settings.STORAGE_PRESIGN_EXPIRE_SECONDS,
                 content_disposition=disposition,
-                content_type=file.content_type or 'application/octet-stream',
+                content_type=content_type_from_key(file.path),
             )
         except StorageError as e:
             raise errors.ServerError(msg=t('error.storage.read_failed')) from e
@@ -308,9 +324,14 @@ class FileService:
         found_ids = [file.id for file in files]
         # 先解析出**每个文件自己的存储 + 子树**再删记录 —— 删完就查不到这几个字段了。
         # 漏掉 is_public / storage_id 的表现都是静默留孤儿（删一个不存在的对象不报错）
+        # 存储按 (storage_id, is_public) 只解析一次：200 个文件在同一个 S3 上就是 200 次查表 + 解密，没必要
+        resolved: dict[tuple[int | None, bool], StorageTarget | None] = {}
         targets: list[tuple[StorageTarget, str]] = []
         for file in files:
-            target = await FileService._target_or_none(db=db, file=file)
+            group = (file.storage_id, file.is_public)
+            if group not in resolved:
+                resolved[group] = await FileService._target_or_none(db=db, file=file)
+            target = resolved[group]
             if target is not None:
                 targets.append((target, file.path))
 
