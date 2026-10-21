@@ -239,13 +239,15 @@ def row_target(storage: 'Storage', *, public: bool, secret_key: str | None = Non
 
 def _reason(e: Exception) -> str:
     """把 OpenDAL 的异常归成稳定标识。🔴 原始消息**只进日志**：里面带着上游响应体（SSRF 回显面）"""
+    text = str(e)
     if isinstance(e, opendal.exceptions.NotFound):
         return 'not_found'
     if isinstance(e, opendal.exceptions.PermissionDenied):
         return 'permission_denied'
     if isinstance(e, opendal.exceptions.ConfigInvalid):
-        return 'config_invalid'
-    text = str(e)
+        # 桶不存在时 S3 回 NoSuchBucket，OpenDAL 把它归成 ConfigInvalid（RustFS 上实测）——
+        # 对用户来说那是「桶不存在」，不是「配置不合法」
+        return 'not_found' if 'NoSuchBucket' in text else 'config_invalid'
     if 'NotFound' in text:
         return 'not_found'
     if 'connect' in text.lower() or 'dns' in text.lower() or 'timed out' in text.lower():

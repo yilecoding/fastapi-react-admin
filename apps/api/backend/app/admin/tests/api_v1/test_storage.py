@@ -9,8 +9,14 @@
 - 公开件在 S3 上时 `/uploads/{key}` 还通不通，私有件会不会被它漏出去
 - 改了存储配置，进程里缓存的旧 operator 会不会继续用（多副本下 = 别的机器还连着旧桶）
 
-⚠️ moto **不校验签名**，所以「错误的 SecretKey」测不出来（测试连接照样通过）。
-凭据错误那一支只在真实 MinIO / OSS 上验过的才能写进分册的实测证据栏。
+⚠️ moto **不校验签名**，所以「错误的 SecretKey」在它上面测不出来（测试连接照样通过）。
+设了 `STORAGE_TEST_S3_ENDPOINT`（+ `_ACCESS_KEY` / `_SECRET_KEY`）就改打那台真实的 S3 兼容服务
+（RustFS / MinIO / …），全部用例照跑，并多出只在真服务上有意义的几条（凭据错误 / 桶不存在）：
+
+    STORAGE_TEST_S3_ENDPOINT=http://127.0.0.1:9100 STORAGE_TEST_S3_ACCESS_KEY=… STORAGE_TEST_S3_SECRET_KEY=… \
+        uv run --no-sync pytest backend/app/admin/tests/api_v1/test_storage.py
+
+🔴 它会在那台服务上建一个叫 `pytest-bucket` 的桶并**清空它** —— 别指到生产。
 """
 
 import asyncio
@@ -34,6 +40,13 @@ STORAGES = '/sys/storages'
 FILES = '/sys/files'
 _BUCKET = 'pytest-bucket'
 _CODE_PREFIX = 'PYTEST_'
+#: 真实 S3 兼容服务（见模块 docstring）；没设就用进程内的 moto
+_REAL_ENDPOINT = os.environ.get('STORAGE_TEST_S3_ENDPOINT', '').rstrip('/') or None
+_S3_ACCESS_KEY = os.environ.get('STORAGE_TEST_S3_ACCESS_KEY', 'pytest') if _REAL_ENDPOINT else 'pytest'
+_S3_SECRET_KEY = os.environ.get('STORAGE_TEST_S3_SECRET_KEY', 'pytest') if _REAL_ENDPOINT else 'pytest-secret-value'
+#: 本模块经接口传上去的文件 ID，收尾时硬删（接口的删除是逻辑删除，且 `_purge` 按存储删不到内置存储上的那些）
+_UPLOADED: list[str] = []
+real_s3_only = pytest.mark.skipif(_REAL_ENDPOINT is None, reason='moto 不校验签名 / 桶，这条只在真实 S3 服务上有意义')
 _KEY = '2a7e4a278dd16c4f2b28afabf54ad386b86c47b357a851b4f38297628b3e8db0'
 
 
@@ -45,10 +58,29 @@ def _root_url(path: str) -> str:
 # ─── fixtures ────────────────────────────────────────────────────────────────
 
 
+def _s3_resource(endpoint: str):
+    import boto3
+
+    return boto3.resource(
+        's3',
+        endpoint_url=endpoint,
+        aws_access_key_id=_S3_ACCESS_KEY,
+        aws_secret_access_key=_S3_SECRET_KEY,
+        region_name='us-east-1',
+    )
+
+
 @pytest.fixture(scope='module')
 def s3_endpoint() -> Iterator[str]:
-    """进程内起一个 moto S3（真 HTTP，OpenDAL 走的是和真桶一样的请求路径）"""
-    import boto3
+    """真实的 S3 兼容服务（环境变量指定），或进程内起一个 moto S3（真 HTTP，和真桶同一条请求路径）"""
+    if _REAL_ENDPOINT:
+        bucket = _s3_resource(_REAL_ENDPOINT).Bucket(_BUCKET)
+        if not any(b['Name'] == _BUCKET for b in bucket.meta.client.list_buckets().get('Buckets', [])):
+            bucket.create()
+        # 真服务上的对象跨轮次留着（_purge 只硬删记录），断言「桶里只有一个 pdf」会被上一轮污染
+        bucket.objects.all().delete()
+        yield _REAL_ENDPOINT
+        return
 
     from moto.server import ThreadedMotoServer
 
@@ -56,24 +88,14 @@ def s3_endpoint() -> Iterator[str]:
     server.start()
     host, port = server.get_host_and_port()
     endpoint = f'http://{host}:{port}'
-    boto3.client(
-        's3', endpoint_url=endpoint, aws_access_key_id='pytest', aws_secret_access_key='pytest', region_name='us-east-1'
-    ).create_bucket(Bucket=_BUCKET)
+    _s3_resource(endpoint).Bucket(_BUCKET).create()
     yield endpoint
     server.stop()
 
 
 @pytest.fixture
 def bucket(s3_endpoint: str):
-    import boto3
-
-    return boto3.resource(
-        's3',
-        endpoint_url=s3_endpoint,
-        aws_access_key_id='pytest',
-        aws_secret_access_key='pytest',
-        region_name='us-east-1',
-    ).Bucket(_BUCKET)
+    return _s3_resource(s3_endpoint).Bucket(_BUCKET)
 
 
 @pytest.fixture(autouse=True)
@@ -113,6 +135,9 @@ def _purge(client: TestClient, token_headers: dict[str, str]) -> Iterator[None]:
                 if ids:
                     await db.execute(delete(File).where(File.storage_id.in_(ids)))
                     await db.execute(delete(Storage).where(Storage.id.in_(ids)))
+                if _UPLOADED:
+                    await db.execute(delete(File).where(File.id.in_([int(i) for i in _UPLOADED])))
+                    _UPLOADED.clear()
                 await db.commit()
         finally:
             await engine.dispose()
@@ -129,8 +154,8 @@ def _create_s3(client: TestClient, headers: dict[str, str], endpoint: str, code:
         'bucket': _BUCKET,
         'region': 'us-east-1',
         'addressing': 'path',
-        'access_key': 'pytest',
-        'secret_key': 'pytest-secret-value',
+        'access_key': _S3_ACCESS_KEY,
+        'secret_key': _S3_SECRET_KEY,
         **extra,
     }
     resp = client.post(STORAGES, headers=headers, json=body)
@@ -142,7 +167,15 @@ def _create_s3(client: TestClient, headers: dict[str, str], endpoint: str, code:
 def _upload(client: TestClient, headers: dict[str, str], name: str, content: bytes, **params: object) -> dict:
     resp = client.post(f'{FILES}/upload', headers=headers, params=params, files={'file': (name, content)})
     assert resp.status_code == 200, resp.text
-    return resp.json()['data']
+    data = resp.json()['data']
+    _UPLOADED.append(data['id'])
+    return data
+
+
+def _unique(text: bytes) -> bytes:
+    """🔴 内置存储上的测试文件内容要带随机串：上传按「同一人 + 同名 + 同内容」秒传复用**上一轮**的记录，
+    它指向的 tmp 目录早没了，下载 404 —— 看起来像是按存储读的逻辑坏了（file 分册里那条，这里踩了第二次）"""
+    return text + b' ' + os.urandom(8).hex().encode()
 
 
 def _png() -> bytes:
@@ -172,10 +205,10 @@ def test_requires_permission(client: TestClient) -> None:
 def test_secret_never_leaves_the_server(client: TestClient, token_headers: dict[str, str], s3_endpoint: str) -> None:
     pk = _create_s3(client, token_headers, s3_endpoint)
     text = client.get(STORAGES, headers=token_headers).text
-    assert 'pytest-secret-value' not in text
+    assert _S3_SECRET_KEY not in text
     assert 'secret_cipher' not in text
     row = next(r for r in client.get(STORAGES, headers=token_headers).json()['data'] if r['id'] == pk)
-    assert row['secret_hint'] and 'pytest-secret-value' not in row['secret_hint']
+    assert row['secret_hint'] and _S3_SECRET_KEY not in row['secret_hint']
 
 
 def test_refuses_to_store_secret_without_encrypt_key(
@@ -271,7 +304,7 @@ def test_code_and_type_are_immutable(client: TestClient, token_headers: dict[str
             'type': 'local',
             'endpoint': s3_endpoint,
             'bucket': _BUCKET,
-            'access_key': 'pytest',
+            'access_key': _S3_ACCESS_KEY,
         },
     )
     assert resp.status_code == 200, resp.text
@@ -287,6 +320,67 @@ def test_probe_ok_and_cleans_up(client: TestClient, token_headers: dict[str, str
     data = client.post(f'{STORAGES}/{pk}/test', headers=token_headers).json()['data']
     assert data['ok'] is True, data
     assert not [o.key for o in bucket.objects.all() if o.key.endswith('.fra-probe')], '探测对象没删掉'
+
+
+@real_s3_only
+def test_probe_wrong_secret_is_permission_denied(
+    client: TestClient, token_headers: dict[str, str], s3_endpoint: str
+) -> None:
+    """🔴 凭据错误要报成「凭据无效」，不是「连不上」也不是 500 —— 且不回显上游原文（SignatureDoesNotMatch 那段 XML）"""
+    pk = _create_s3(client, token_headers, s3_endpoint, code='BADKEY', secret_key='definitely-wrong')
+    resp = client.post(f'{STORAGES}/{pk}/test', headers=token_headers)
+    assert resp.status_code == 200
+    data = resp.json()['data']
+    assert data['ok'] is False
+    assert 'SignatureDoesNotMatch' not in data['message'] and '<' not in data['message']
+    assert '凭据' in data['message'] or 'credentials' in data['message'].lower()
+
+
+@real_s3_only
+def test_probe_missing_bucket_is_reported_as_not_found(
+    client: TestClient, token_headers: dict[str, str], s3_endpoint: str
+) -> None:
+    """S3 的 NoSuchBucket 被 OpenDAL 归成 ConfigInvalid —— 要翻成「桶不存在」，不是「配置不合法」"""
+    pk = _create_s3(client, token_headers, s3_endpoint, code='NOBUCKET', bucket='pytest-no-such-bucket')
+    data = client.post(f'{STORAGES}/{pk}/test', headers=token_headers).json()['data']
+    assert data['ok'] is False
+    assert '<' not in data['message']
+    assert '桶不存在' in data['message'] or 'bucket does not exist' in data['message'].lower()
+
+
+@real_s3_only
+def test_presigned_link_cannot_be_tampered(client: TestClient, token_headers: dict[str, str], s3_endpoint: str) -> None:
+    """🔴 预签名地址里的 key / 有效期 / 文件名都在签名里：改任何一个都要 403（moto 不验签，这条只在真服务上成立）"""
+    import re
+
+    pk = _create_s3(client, token_headers, s3_endpoint)
+    client.put(f'{STORAGES}/default', headers=token_headers, json={'storage_id': pk})
+    data = _upload(client, token_headers, 'signed.txt', b'signed content')
+    url = client.get(f'{FILES}/{data["id"]}/link', headers=token_headers).json()['data']['url']
+    assert httpx.get(url).status_code == 200
+    suffix = data['name'].rsplit('_', 1)[1]  # `<stem>_<16 位 hex>.txt` 里的随机段，一定是 ASCII、一定在 URL 里
+    assert suffix in url
+    assert httpx.get(url.replace(suffix, 'x' * len(suffix))).status_code == 403, '换了 key 还能下'
+    sig = re.search(r'X-Amz-Signature=([0-9a-f]+)', url).group(1)
+    assert httpx.get(url.replace(sig, ('0' if sig[0] != '0' else '1') + sig[1:])).status_code == 403
+    assert httpx.get(re.sub(r'X-Amz-Expires=\d+', 'X-Amz-Expires=604800', url)).status_code == 403, '改了有效期还能下'
+
+
+@real_s3_only
+def test_upload_with_wrong_secret_fails_visibly(
+    client: TestClient, token_headers: dict[str, str], s3_endpoint: str
+) -> None:
+    """默认存储的凭据错了：上传必须报错，**不能**留下一条指向不存在对象的记录（硬纪律 9）"""
+    pk = _create_s3(client, token_headers, s3_endpoint, code='BADUP', secret_key='definitely-wrong')
+    client.put(f'{STORAGES}/default', headers=token_headers, json={'storage_id': pk})
+    payload = _unique(b'nope')
+    resp = client.post(f'{FILES}/upload', headers=token_headers, files={'file': ('x.txt', payload)})
+    assert resp.status_code != 200 or resp.json().get('code') != 200, resp.text
+    import hashlib
+
+    sha = hashlib.sha256(payload).hexdigest()
+    check = client.get(f'{FILES}/check', headers=token_headers, params={'sha256': sha, 'name': 'x.txt'})
+    assert check.json()['data'] is None
 
 
 def test_probe_unreachable_is_a_result_not_an_error(client: TestClient, token_headers: dict[str, str]) -> None:
@@ -321,6 +415,8 @@ def test_upload_to_s3_then_download_and_presign(
     assert resp.status_code == 200
     assert resp.content == content
     assert 'attachment' in resp.headers['content-disposition']
+    # 流式代理也要有 Content-Length（存储现查的大小）：没有它浏览器的下载条只会转圈
+    assert int(resp.headers['content-length']) == len(content)
 
     # 预签名直连：不带任何凭据就能取，文件名经 response-content-disposition 带过去
     link = client.get(f'{FILES}/{data["id"]}/link', headers=token_headers).json()['data']
@@ -328,7 +424,7 @@ def test_upload_to_s3_then_download_and_presign(
     query = parse_qs(urlsplit(link['url']).query)
     assert 'attachment' in query['response-content-disposition'][0]
     # 签名用的是存储里配的 key，不是环境变量里那把（_env 放了一把假的）
-    assert query['X-Amz-Credential'][0].startswith('pytest/')
+    assert query['X-Amz-Credential'][0].startswith(f'{_S3_ACCESS_KEY}/')
     direct = httpx.get(link['url'])
     assert direct.status_code == 200 and direct.content == content
 
@@ -340,7 +436,7 @@ def test_upload_to_s3_then_download_and_presign(
 
 
 def test_builtin_storage_has_no_presigned_link(client: TestClient, token_headers: dict[str, str]) -> None:
-    data = _upload(client, token_headers, 'a.txt', b'hello')
+    data = _upload(client, token_headers, 'a.txt', _unique(b'hello'))
     link = client.get(f'{FILES}/{data["id"]}/link', headers=token_headers)
     assert link.status_code == 200
     assert link.json()['data']['url'] is None
@@ -350,7 +446,8 @@ def test_switching_default_does_not_move_old_files(
     client: TestClient, token_headers: dict[str, str], s3_endpoint: str
 ) -> None:
     """🔴 切默认存储只影响新上传，老文件按**自己的** storage_id 读"""
-    old = _upload(client, token_headers, 'old.txt', b'on builtin')
+    old_content = _unique(b'on builtin')
+    old = _upload(client, token_headers, 'old.txt', old_content)
     assert old['storage_id'] is None
 
     pk = _create_s3(client, token_headers, s3_endpoint)
@@ -359,14 +456,14 @@ def test_switching_default_does_not_move_old_files(
     assert str(new['storage_id']) == str(pk)
 
     # 内置文件在 S3 为默认时照样能读，反过来也一样
-    assert client.get(f'{FILES}/{old["id"]}/download', headers=token_headers).content == b'on builtin'
+    assert client.get(f'{FILES}/{old["id"]}/download', headers=token_headers).content == old_content
     client.put(f'{STORAGES}/default', headers=token_headers, json={'storage_id': None})
     assert client.get(f'{FILES}/{new["id"]}/download', headers=token_headers).content == b'on s3'
 
 
 def test_dedup_never_crosses_storages(client: TestClient, token_headers: dict[str, str], s3_endpoint: str) -> None:
     """🔴 秒传只在同一个存储里复用：跨存储命中 = 新记录指向别的存储里的对象"""
-    content = b'same content, same name'
+    content = _unique(b'same content, same name')
     first = _upload(client, token_headers, 'dup.txt', content)
 
     pk = _create_s3(client, token_headers, s3_endpoint)

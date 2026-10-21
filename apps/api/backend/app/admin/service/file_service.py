@@ -217,9 +217,12 @@ class FileService:
         return await file_dao.get_by_sha256(db, sha256, user_id, name, is_public=public, storage_id=target.storage_id)
 
     @staticmethod
-    async def resolve(*, db: AsyncSession, pk: int, user: Any) -> tuple[File, StorageTarget]:
+    async def resolve(*, db: AsyncSession, pk: int, user: Any) -> tuple[File, StorageTarget, int]:
         """
-        找到文件和它所在的存储（先过「这个人能不能读」）。存储里没有这个对象时报「文件已丢失」
+        找到文件、它所在的存储和对象的实际大小（先过「这个人能不能读」）。存储里没有这个对象时报「文件已丢失」
+
+        大小从存储现查而不是拿 `sys_file.size`：代理下载要靠它发 Content-Length（浏览器才有进度条），
+        两边对不上时宁可报「文件已丢失」也不要发一个截断的响应
 
         :param db: 数据库会话
         :param pk: 文件 ID
@@ -242,31 +245,30 @@ class FileService:
                 # 报「文件不存在」而不是 500 —— 这是数据状态问题，不是程序崩了
                 log.warning(f'文件记录 {file.id} 指向的磁盘文件缺失：{local}')
                 raise errors.NotFoundError(msg=t('error.file.missing'))
-            return file, target
+            return file, target, local.stat().st_size
 
         try:
-            await stat_size(target, file.path)
+            size = await stat_size(target, file.path)
         except StorageError as e:
             if e.reason in ('not_found', 'invalid_key'):
                 log.warning(f'文件记录 {file.id} 指向的对象缺失：{target.storage_id}:{file.path}')
                 raise errors.NotFoundError(msg=t('error.file.missing')) from e
             raise errors.ServerError(msg=t('error.storage.read_failed')) from e
-        return file, target
+        return file, target, size
 
     @staticmethod
-    async def presign(*, db: AsyncSession, pk: int, user: Any, disposition: str) -> str | None:
+    async def presign(*, db: AsyncSession, file: File, disposition: str) -> str | None:
         """
         短时效的直连下载地址。**只有对象存储有**，本地存储返回 None（前端回落到带鉴权的下载接口）
 
-        🔴 先过 `can_read` 再签：预签名 URL 签出去就撤不回来，有效期内谁拿到都能下
+        🔴 调用方必须先过 `get_readable`（这里收的是已经判过「能读」的记录）：
+        预签名 URL 签出去就撤不回来，有效期内谁拿到都能下
 
         :param db: 数据库会话
-        :param pk: 文件 ID
-        :param user: 当前用户
+        :param file: 已经判过可读的文件记录
         :param disposition: Content-Disposition 头的完整取值
         :return:
         """
-        file = await FileService.get_readable(db=db, user=user, pk=pk)
         target = await storage_service.target_for_file(db=db, file=file)
         if not target.can_presign:
             return None

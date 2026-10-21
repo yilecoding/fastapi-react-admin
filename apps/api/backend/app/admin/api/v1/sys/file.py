@@ -156,7 +156,7 @@ async def download_file(
         Literal['inline', 'attachment'], Query(description='inline 浏览器内联显示，attachment 强制下载')
     ] = 'inline',
 ) -> Response:
-    file, target = await file_service.resolve(db=db, pk=pk, user=request.user)
+    file, target, size = await file_service.resolve(db=db, pk=pk, user=request.user)
     media_type = file.content_type or 'application/octet-stream'
     headers = {'Content-Disposition': _content_disposition(file, disposition)}
     if target.local_root is not None:
@@ -165,7 +165,9 @@ async def download_file(
         return FileResponse(target.local_root / file.path, media_type=media_type, headers=headers)
     # 对象存储：后端流式代理。**刻意不 302 到预签名地址** —— 前端是带 Authorization 头的 fetch，
     # 跨域重定向时浏览器会剥掉它（Fetch 规范），而老客户端不剥的话 S3 收到「头 + 查询串」两种鉴权直接 400。
-    # 走代理也就不需要给桶配 CORS。要直连（大文件 / 音视频拖进度）用 `/{pk}/link`
+    # 走代理也就不需要给桶配 CORS。要直连（大文件 / 音视频拖进度）用 `/{pk}/link`。
+    # Content-Length 用存储现查的大小：没有它浏览器下载条只会转圈
+    headers['Content-Length'] = str(size)
     return StreamingResponse(iter_read(target, file.path), media_type=media_type, headers=headers)
 
 
@@ -179,9 +181,7 @@ async def get_file_link(
     ] = 'attachment',
 ) -> ResponseSchemaModel[GetFileLinkDetail]:
     file = await file_service.get_readable(db=db, user=request.user, pk=pk)
-    url = await file_service.presign(
-        db=db, pk=pk, user=request.user, disposition=_content_disposition(file, disposition)
-    )
+    url = await file_service.presign(db=db, file=file, disposition=_content_disposition(file, disposition))
     # 本地存储没有预签名（url 为 null）：前端回落到带鉴权的下载接口。不是失败，不能 fail()
     return response_base.success(
         data=GetFileLinkDetail(url=url, expires_in=settings.STORAGE_PRESIGN_EXPIRE_SECONDS if url else None)

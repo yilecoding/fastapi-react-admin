@@ -78,10 +78,21 @@ S3 上 writer 自己攒成 ≥5 MiB 的分片走 multipart（实测 12 MiB → 3
 
 ### 实测证据
 
-- `app/admin/tests/api_v1/test_storage.py` 30 条，走进程内的 moto S3（真 HTTP）。**变异检验** 4 处各打红：
-  去掉 `disable_config_load`（红的是 `test_switching_default_does_not_move_old_files`，**为什么是这条没查**；
-  预签名那条的 `X-Amz-Credential` 断言反而是绿的 —— 因为配了 AK）· operator 只按 id 缓存 · 秒传不带 `storage_id` ·
-  `/uploads` 不判 `is_public`（这条连 `test_file.py` 的私有件那条一起红）
-- 两个 uvicorn 进程连同一个库 + 同一个 moto：A 传 12 MiB、B 下载字节一致；B 签的预签名地址直连取回、
-  中文文件名经 `response-content-disposition` 带过去；公开图片经 B 的 `/uploads` 302 到桶里
-- ⚠️ moto **不校验签名**，「错误的 SecretKey」在这套测试里测不出来（测试连接照样通过）
+- `app/admin/tests/api_v1/test_storage.py` 30 条，走进程内的 moto S3（真 HTTP）；设 `STORAGE_TEST_S3_ENDPOINT`
+  就改打真实服务，多 4 条只在真服务上成立的（凭据错误 · 桶不存在 · 凭据错时上传不留记录 · 预签名改 key / 签名 /
+  有效期一律 403）。**变异检验** 3 处各打红：operator 只按 id 缓存 · 秒传不带 `storage_id` · `/uploads` 不判
+  `is_public`（这条连 `test_file.py` 的私有件那条一起红）。
+  🔴 **去掉 `disable_config_load` 没有任何测试会红**（moto 和 RustFS 上都跑过，34 条照绿）：S3 存储的 AK 是必填的，
+  配了 AK 时环境凭据根本用不上。第一次写这段时说它打红了一条 —— 那是秒传复用上一轮记录的 flake，不是它。
+  这条防线只靠上面那张表里「AK 为空时签名用的是环境 key」的脚本实测 + 代码审读
+- 🔴 写这个文件的测试时踩了第二次「秒传复用上一轮记录」：内置存储上的文件内容要带随机串，否则同名同内容命中
+  上一轮指向已删 tmp 目录的记录，下载 404 —— 表现得像「按存储读」的逻辑坏了（跑两遍才会出现，第一遍永远绿）
+- **RustFS 1.0.3**（真实 S3 兼容服务，二进制跑在本机）：两个 uvicorn 进程连同一个库 + 同一个 RustFS，
+  A 传 12 MiB（multipart）、B 下载字节一致；B 签的预签名地址直连取回，中文文件名经
+  `response-content-disposition` 带过去；公开图片经 B 的 `/uploads` 302 到桶里；凭据错的存储测试连接报
+  「凭据无效」、上传报错且不留记录；桶不存在报「桶不存在」；删文件后桶里的对象真的没了。
+  浏览器全流程（表单建存储 → 测试连接 → 设默认 → 文件页 `<input type=file>` 传 6 MiB → ⋯ 菜单下载落到
+  RustFS 的预签名地址、字节一致 → 预览 → 还是默认时删被拦 → 切回内置 → 有文件时删被拦 → 停用后 B 实例照常读 →
+  删文件后删存储）全过，无 page error
+- ⚠️ moto **不校验签名**，「错误的 SecretKey」只能靠 `STORAGE_TEST_S3_ENDPOINT` 指到真服务测
+- ⚠️ 阿里 OSS / 腾讯 COS 仍然**没有**对真账号发过请求（见上面「配置校验」那条）
