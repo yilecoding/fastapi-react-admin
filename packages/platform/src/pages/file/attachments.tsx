@@ -8,7 +8,6 @@ import { Button } from '@admin/ui/components/button'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 import { useFilePicker } from '@admin/ui/components/uploader/dropzone'
-import { UploadList } from '@admin/ui/components/uploader/upload-list'
 
 import { Can } from '../../auth/can'
 import { fetchBytes } from '../../api-client/client'
@@ -22,6 +21,7 @@ import {
 } from './api'
 import { FilePreviewDialog } from './preview-dialog'
 import { useFileUploader } from './uploader'
+import { useUploadStore } from '../../shell/upload-store'
 
 /**
  * 业务对象的附件面板。**任何页面都能直接嵌**，只要给 `targetType` + `targetId`。
@@ -56,6 +56,7 @@ export function FileAttachments({
   // 每个文件传完（含秒传命中）就立刻挂到目标上 —— 挂载是幂等的（后端跳过已挂的），
   // 所以重试、重复选同一个文件都不会挂出重复行
   const uploader = useFileUploader({
+    source: t('附件'),
     onDone: (item) => {
       if (!item.result) return
       attach
@@ -127,16 +128,17 @@ export function FileAttachments({
         </Can>
       </div>
 
-      <UploadList
-        items={uploader.items}
-        onCancel={uploader.cancel}
-        onRetry={uploader.retry}
-        onRemove={uploader.remove}
-        onClear={uploader.clear}
-        compact
-        className="mt-2"
-        testId="attach-upload-list"
-      />
+      {uploader.pending > 0 && (
+        /* 进度在右下角的浮窗里；这里只留一句，点一下把折叠的浮窗展开 */
+        <button
+          type="button"
+          className="mt-2 w-full rounded-md border border-dashed px-3 py-1.5 text-start text-xs text-muted-foreground hover:bg-accent/40"
+          onClick={() => useUploadStore.getState().setCollapsed(false)}
+          data-testid="attach-uploading"
+        >
+          {t('{{n}} 个文件上传中，进度在右下角', { n: uploader.pending })}
+        </button>
+      )}
 
       {actionError && (
         <Alert tone="danger" data-testid="attach-error" className="mt-2 py-1.5 text-xs">

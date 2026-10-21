@@ -20,12 +20,17 @@ export function formatSpeed(bytesPerSecond: number | null): string {
   return `${formatBytes(bytesPerSecond)}/s`
 }
 
-/** 剩余秒数 → `12s` / `1m 05s`；算不出来返回空串 */
+/** 秒数 → `12s` / `1m 05s` / `1h 03m` */
+export function formatSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return ''
+  const s = Math.ceil(seconds)
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+  return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}m`
+}
+
+/** 剩余秒数 → 同上；算不出来返回空串 */
 export function formatEta(remainingBytes: number, bytesPerSecond: number | null): string {
   if (bytesPerSecond === null || bytesPerSecond <= 0 || remainingBytes <= 0) return ''
-  const seconds = Math.ceil(remainingBytes / bytesPerSecond)
-  if (seconds < 60) return `${seconds}s`
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  return `${m}m ${String(s).padStart(2, '0')}s`
+  return formatSeconds(remainingBytes / bytesPerSecond)
 }

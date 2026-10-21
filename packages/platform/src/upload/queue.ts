@@ -1,4 +1,4 @@
-import type { StepContext, UploadHooks, UploadItem, UploadTransport } from './types'
+import type { StepContext, UploadHooks, UploadItem, UploadItemOptions, UploadTransport } from './types'
 
 /**
  * 上传队列：headless 的状态机，不渲染、不知道接口。
@@ -13,7 +13,7 @@ import type { StepContext, UploadHooks, UploadItem, UploadTransport } from './ty
 export interface UploadQueue<R> {
   getItems: () => readonly UploadItem<R>[]
   subscribe: (listener: () => void) => () => void
-  add: (files: Iterable<File>) => UploadItem<R>[]
+  add: (files: Iterable<File>, opts?: UploadItemOptions<R>) => UploadItem<R>[]
   cancel: (id: string) => void
   retry: (id: string) => void
   remove: (id: string) => void
@@ -46,6 +46,13 @@ export function createUploadQueue<R>(transport: UploadTransport<R>, hooks: Uploa
   }
   const get = (id: string) => items.find((it) => it.id === id)
 
+  const finish = (id: string) => {
+    const done = get(id)!
+    // 先这一项自己的回调（附件面板的「挂载」），再全局的（刷新列表）
+    done.opts.onDone?.(done)
+    hooks.onDone?.(done)
+  }
+
   async function run(item: UploadItem<R>): Promise<void> {
     const controller = new AbortController()
     controllers.set(item.id, controller)
@@ -60,10 +67,10 @@ export function createUploadQueue<R>(transport: UploadTransport<R>, hooks: Uploa
       if (transport.hash && transport.check) {
         sha256 = await transport.hash(item.file, step('hashing'))
         patch(item.id, { status: 'checking', progress: 0 })
-        const existing = await transport.check(item.file, sha256, signal)
+        const existing = await transport.check(item.file, sha256, signal, item.opts)
         if (existing !== null) {
           patch(item.id, { status: 'done', progress: 1, loaded: item.size, result: existing, reused: true })
-          hooks.onDone?.(get(item.id)!)
+          finish(item.id)
           return
         }
       }
@@ -73,9 +80,11 @@ export function createUploadQueue<R>(transport: UploadTransport<R>, hooks: Uploa
       let lastAt = Date.now()
       let lastLoaded = 0
       let speed: number | null = null
-      const result = await transport.upload(item.file, {
-        ...ctx,
-        onBytes: (loaded, total) => {
+      const result = await transport.upload(
+        item.file,
+        {
+          ...ctx,
+          onBytes: (loaded, total) => {
           const now = Date.now()
           const dt = (now - lastAt) / 1000
           if (dt >= 0.25) {
@@ -84,18 +93,22 @@ export function createUploadQueue<R>(transport: UploadTransport<R>, hooks: Uploa
             lastAt = now
             lastLoaded = loaded
           }
-          patch(item.id, { loaded, progress: total > 0 ? loaded / total : 0, speed })
+            patch(item.id, { loaded, progress: total > 0 ? loaded / total : 0, speed })
+          },
         },
-      })
+        item.opts,
+      )
       patch(item.id, { status: 'done', progress: 1, loaded: item.size, speed: null, result })
-      hooks.onDone?.(get(item.id)!)
+      finish(item.id)
     } catch (err) {
       if (signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
         patch(item.id, { status: 'canceled', speed: null })
         return
       }
       patch(item.id, { status: 'failed', speed: null, error: err instanceof Error ? err.message : String(err) })
-      hooks.onError?.(get(item.id)!)
+      const failed = get(item.id)!
+      failed.opts.onError?.(failed)
+      hooks.onError?.(failed)
     } finally {
       controllers.delete(item.id)
     }
@@ -121,12 +134,13 @@ export function createUploadQueue<R>(transport: UploadTransport<R>, hooks: Uploa
       listeners.add(fn)
       return () => listeners.delete(fn)
     },
-    add: (files) => {
+    add: (files, opts = {}) => {
       const added: UploadItem<R>[] = []
       for (const file of files) {
         added.push({
           id: `u${++seq}`,
           file,
+          opts,
           name: file.name,
           size: file.size,
           status: 'queued',

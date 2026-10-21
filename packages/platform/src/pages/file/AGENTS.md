@@ -34,13 +34,16 @@ pages/file/
 ├─ file-menu.tsx      操作菜单，右键与 ⋯ 下拉共用一份条目定义
 ├─ detail-sheet.tsx   详情抽屉：落盘名 / MIME / 校验和 / 上传人这些排障字段
 ├─ preview-dialog.tsx 预览弹窗：取字节 → 交 viewer
-├─ uploader.ts        把 `platform/src/upload/` 的队列接到 /sys/files/*（sha256 → /check → /upload）
+├─ uploader.ts        往全局上传队列塞文件（`shell/upload-store.ts`），页面自己不画队列
 └─ attachments.tsx    **可复用的附件面板**，任何页面给 targetType + targetId 就能嵌
 ```
 
-### 上传走队列：`packages/platform/src/upload/`（引擎）+ `ui/components/uploader/`（展示）
+### 上传走全局队列：`packages/platform/src/upload/`（引擎）+ `shell/upload-store.ts`（队列）+ 右下角浮窗
 
-文件页和附件面板共用 `useFileUploader()`（`./uploader.ts`）。每个文件：浏览器端分块算 sha256
+文件页和附件面板共用 `useFileUploader({ source })`（`./uploader.ts`），它只是往 `shell/upload-store.ts`
+的**全局**队列 `enqueue`；进度在右下角的浮窗里（`shell/upload-tray.tsx`，见 [shell 分册](../../shell/AGENTS.md)）。
+队列不在页面里：关掉文件页签上传不会被取消，切到别的页面也看得见进度；附件面板的「传完就挂载」跟着那一项走
+（`opts.onDone` 存在队列里），面板关了也照常执行（实测）。每个文件：浏览器端分块算 sha256
 （`hash-wasm`，不是 `crypto.subtle` —— 后者一次性要整个文件进内存，而且局域网 http 下是 `undefined`）
 → `GET /sys/files/check`（同一人 + 同名 + 同内容传过就**不传**，直接复用旧记录）→ `POST /upload`
 走 XHR（`@admin/api` 的 `sendUpload`：fetch 拿不到上传进度）。串行、可取消、可重试，队列状态机在
@@ -51,16 +54,16 @@ pages/file/
   列表里显示「已存在同内容的文件，直接复用」
 - `/check` 的 `public` 参数要和上传的一致，否则「check 说命中了、upload 还是重传一份」（`uploader.ts` 里一处拼）
 - 上传中**不禁用**上传按钮：它是个队列，再选的排在后面。附件面板每个文件传完立刻挂载（挂载幂等，
-  同一个文件选两次只有一行）
+  同一个文件选两次只有一行）；面板里只留一句「N 个文件上传中，进度在右下角」，点它展开浮窗
 - `ui/components/uploader/dropzone.tsx` 的 `useFilePicker` 每次 change 后把 `input.value` 清掉 ——
   不清的话连续选同一个文件不触发 change（用户导入那边踩过）
 - 拖拽投放区包住整块内容区（`data-testid="file-dropzone"`），没有 `sys:file:upload` 的人拖进来不收
 - 浏览器 → 后端仍是**一个请求**，没有分片 / 断点续传（那是 #122 第三期）；后端 → S3 那段由 OpenDAL
   自动 multipart，对浏览器不可见
 
-实测（Playwright，上传限速 4 MB/s）：30 MB 的 zip 进度条走到 `9.9 MB · 4.0 MB/s · 6s · 33%`；
-同文件再传 0 次 `/upload` 请求、显示复用；取消 → 已取消 → 重试 → 已完成；拖拽投放进队列；
-附件面板传完即挂、重复选同一个文件列表仍只有一行。
+实测（Playwright，上传限速 3~4 MB/s）：30 MB 的 zip 进度走到 `9.9 MB · 4.0 MB/s · 33%`、浮窗副栏「还剩 8s」；
+同文件再传 0 次 `/upload` 请求、显示复用；取消 → 重试 → 完成；拖拽投放进队列；切到存储管理页浮窗还在、继续传；
+附件面板传完即挂、重复选同一个文件列表仍只有一行、**传到一半关掉详情抽屉照样挂上**。
 
 几条定下来的约定：
 

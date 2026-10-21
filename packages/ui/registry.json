@@ -973,7 +973,6 @@
         "button",
         "format",
         "i18n",
-        "progress",
         "tooltip",
         "utils"
       ],
@@ -983,7 +982,7 @@
           "type": "registry:ui"
         },
         {
-          "path": "src/components/uploader/upload-list.tsx",
+          "path": "src/components/uploader/upload-tray.tsx",
           "type": "registry:ui"
         }
       ]

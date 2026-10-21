@@ -11,7 +11,6 @@ import { Separator } from '@admin/ui/components/separator'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@admin/ui/components/toggle-group'
 import { Dropzone, useFilePicker } from '@admin/ui/components/uploader/dropzone'
-import { UploadList } from '@admin/ui/components/uploader/upload-list'
 import { cn } from '@admin/ui/lib/utils'
 
 import { Can } from '../../auth/can'
@@ -109,8 +108,8 @@ export function FilePage({
   const [bulkError, setBulkError] = React.useState<string | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const del = useDeleteFiles()
-  // 上传走队列：进度 / 取消 / 秒传预检都在里面（`./uploader.ts`）。没有上传权限的人拖文件进来也不收
-  const uploader = useFileUploader()
+  // 上传进全局队列（进度在右下角浮窗，`./uploader.ts`）。没有上传权限的人拖文件进来也不收
+  const uploader = useFileUploader({ source: t('文件管理') })
   const canUpload = usePerm().can('sys:file:upload')
   const picker = useFilePicker({ onFiles: uploader.add, disabled: !canUpload })
 
@@ -275,17 +274,6 @@ export function FilePage({
                 {actionError}
               </Alert>
             )}
-
-            {/* 上传队列：有项才显示（组件内部空数组返回 null）。放内容区上方而不是右下角浮窗 ——
-                多页签保活下全局浮窗要处理「切走了进度还在不在」，第一版不碰 */}
-            <UploadList
-              items={uploader.items}
-              onCancel={uploader.cancel}
-              onRetry={uploader.retry}
-              onRemove={uploader.remove}
-              onClear={uploader.clear}
-              className="shrink-0"
-            />
 
             {/* 内容区。后台取数时整块降透明，但**不换成骨架** ——
                 换掉会让工具栏和分页条在数据回来时凭空跳一下。
