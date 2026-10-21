@@ -100,6 +100,24 @@ error:
     state_invalid_or_missing: OAuth2 state is invalid or missing
     state_missing: OAuth2 state is missing
     username_exists: Username already exists, please try another one
+  open:
+    app_disabled: The application is disabled, please contact the administrator
+    app_expired: The application expired at {expire_time}, please contact the administrator
+    app_not_found: Application not found
+    bad_cursor: Invalid cursor, pass back the next_cursor from the previous page as is
+    code_exists: Application code {code} already exists
+    invalid_key: Invalid accessKey
+    ip_denied: Source IP {ip} is not in this application's whitelist
+    missing_param: 'Missing signature headers: {headers_missing}'
+    nonce_reused: Nonce has already been used, possible replay
+    rate_limited: Too many requests, please try again later
+    request_failed: Request failed
+    scope_denied: This application is not authorized to call this API ({scope})
+    scope_unknown: 'These APIs do not exist: {scopes}'
+    secret_key_invalid: OPEN_SECRET_KEY is not a valid hex key (32 bytes / 64 hex characters)
+    secret_key_missing: OPEN_SECRET_KEY is not configured, the Secret Key cannot be stored safely. Generate one with python -c "import os;print(os.urandom(32).hex())", put it in .env and restart
+    sign_mismatch: Signature mismatch, compare line by line against the returned string_to_sign
+    timestamp_expired: Timestamp is outside the allowed window (±{window} seconds), please sync the server clock
   password:
     max_length: Password must be at most {max_length} characters
     min_length: Password must be at least {min_length} characters

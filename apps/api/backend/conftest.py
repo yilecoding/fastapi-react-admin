@@ -57,6 +57,8 @@ _PATCHED_SESSION_MODULES = (
     # MCP 网关：鉴权要查用户、调用要开会话落审计，都不经过 FastAPI 的依赖注入
     'backend.plugin.ai.mcp_gateway.auth',
     'backend.plugin.ai.mcp_gateway.server',
+    # 能力开放的调用日志：响应发完之后在后台任务里落库，没有依赖注入可用
+    'backend.plugin.open.service.api_log_service',
 )
 
 

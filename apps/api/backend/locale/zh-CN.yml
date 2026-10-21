@@ -101,6 +101,24 @@ error:
     state_invalid_or_missing: OAuth2 状态信息无效或缺失
     state_missing: OAuth2 状态信息缺失
     username_exists: 用户名已存在，请重试
+  open:
+    app_disabled: 应用已停用，请联系管理员
+    app_expired: 应用已于 {expire_time} 过期，请联系管理员
+    app_not_found: 应用不存在
+    bad_cursor: cursor 无效，请原样带回上一页返回的 next_cursor
+    code_exists: 应用编码 {code} 已存在
+    invalid_key: accessKey 无效
+    ip_denied: 来源 IP {ip} 不在该应用的白名单内
+    missing_param: 缺少签名请求头：{headers_missing}
+    nonce_reused: nonce 已被使用过，疑似重放请求
+    rate_limited: 请求过于频繁，请稍后重试
+    request_failed: 请求处理失败
+    scope_denied: 该应用未被授权调用此接口（{scope}）
+    scope_unknown: 这些接口不存在：{scopes}
+    secret_key_invalid: OPEN_SECRET_KEY 不是合法的十六进制密钥（需 32 字节 / 64 位十六进制）
+    secret_key_missing: 未配置 OPEN_SECRET_KEY，无法安全保存 Secret Key。生成方式：python -c "import os;print(os.urandom(32).hex())"，写入 .env 后重启服务
+    sign_mismatch: 签名不匹配，请对照返回的 string_to_sign 逐行核对
+    timestamp_expired: 时间戳超出允许范围（±{window} 秒），请校准服务器时钟
   password:
     max_length: 密码长度不能超过 {max_length} 个字符
     min_length: 密码长度不能少于 {min_length} 个字符

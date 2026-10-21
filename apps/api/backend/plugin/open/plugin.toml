@@ -1,0 +1,27 @@
+[plugin]
+summary = "能力开放"
+version = "0.0.1"
+description = "给外部系统发 AK/SK，签名调用只读的开放接口（/api/open/v1）；调用全程留日志"
+author = "yile"
+tags = ["other"]
+database = ["mysql", "postgresql", "sqlserver"]
+
+[app]
+# v1 = 管理接口（/api/v1/open-apps…，走后台 JWT + RBAC）；
+# open_v1 = 开放接口（/api/open/v1/…，走 AK/SK 签名）。插件路由的前缀由各自的 APIRouter 定，
+# 主路由不再加前缀，所以两组能挂在不同的根下
+router = ["open_v1", "v1"]
+
+[settings]
+# 「最近调用时间」的写库节流：同一个应用这段时间内最多写一次（同步一跑就是一串翻页请求）
+OPEN_LAST_USED_REDIS_PREFIX = "fba:open:last_used"
+OPEN_NONCE_REDIS_PREFIX = "fba:open:nonce"
+# 应用没单独设限流时的默认值（每分钟请求数，按应用计，不按 IP）
+OPEN_RATE_PER_MINUTE = 120
+# SK 落库的加密密钥（32 字节 = 64 位十六进制）。验签要重算签名，SK 必须能还原，所以是加密不是哈希。
+# 🔴 留空则新建 / 重置密钥**拒绝**并明确报错 —— 不会静默存明文。真值放 .env。
+# 生成：python -c "import os;print(os.urandom(32).hex())"
+OPEN_SECRET_KEY = ""
+# 时间戳与服务端时间允许相差的秒数；nonce 在 Redis 里存它的 2 倍，
+# 保证窗口内重放一定撞上 nonce、窗口外重放一定撞上时间戳
+OPEN_SIGN_WINDOW_SECONDS = 300

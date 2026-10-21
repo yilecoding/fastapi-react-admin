@@ -79,11 +79,19 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
     # ⚠️ backend.utils.timezone 只有 now/from_str/to_str/to_utc 那几个，没有 timedelta
     cutoff = timezone.now() - timedelta(days=days)
 
+    # 能力开放插件的调用日志（`open_api_log`）同一个保留期：它和操作日志同口径（含请求 / 响应体），
+    # 保留期不一致的话「操作日志 30 天、调用日志永久」，同一份数据留存规则两套。插件删掉了就跳过
+    try:
+        from backend.plugin.open.model import OpenApiLog
+    except ImportError:
+        OpenApiLog = None  # ruff: ignore[non-lowercase-variable-in-function]
+
     async with async_db_session() as db:
         login = await _prune_table(db, LoginLog, LoginLog.login_time, cutoff, batch)
         opera = await _prune_table(db, OperaLog, OperaLog.opera_time, cutoff, batch)
+        open_api = await _prune_table(db, OpenApiLog, OpenApiLog.request_time, cutoff, batch) if OpenApiLog else 0
 
-    msg = f'清理 {days} 天前的日志：登录日志 {login} 条、操作日志 {opera} 条'
+    msg = f'清理 {days} 天前的日志：登录日志 {login} 条、操作日志 {opera} 条、开放接口调用日志 {open_api} 条'
     log.info(msg)
     return msg
 

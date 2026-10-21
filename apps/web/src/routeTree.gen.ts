@@ -28,6 +28,8 @@ import { Route as AuthLogOperaRouteImport } from './routes/_auth/log/opera'
 import { Route as AuthMonitorOnlineRouteImport } from './routes/_auth/monitor/online'
 import { Route as AuthMonitorRedisRouteImport } from './routes/_auth/monitor/redis'
 import { Route as AuthMonitorServerRouteImport } from './routes/_auth/monitor/server'
+import { Route as AuthOpenAppRouteImport } from './routes/_auth/open/app'
+import { Route as AuthOpenLogRouteImport } from './routes/_auth/open/log'
 import { Route as AuthPluginsConfigRouteImport } from './routes/_auth/plugins/config'
 import { Route as AuthPluginsDictRouteImport } from './routes/_auth/plugins/dict'
 import { Route as AuthPluginsNoticeRouteImport } from './routes/_auth/plugins/notice'
@@ -140,6 +142,16 @@ const AuthMonitorServerRoute = AuthMonitorServerRouteImport.update({
   path: '/monitor/server',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthOpenAppRoute = AuthOpenAppRouteImport.update({
+  id: '/open/app',
+  path: '/open/app',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthOpenLogRoute = AuthOpenLogRouteImport.update({
+  id: '/open/log',
+  path: '/open/log',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthPluginsConfigRoute = AuthPluginsConfigRouteImport.update({
   id: '/plugins/config',
   path: '/plugins/config',
@@ -250,6 +262,8 @@ export interface FileRoutesByFullPath {
   '/monitor/online': typeof AuthMonitorOnlineRoute
   '/monitor/redis': typeof AuthMonitorRedisRoute
   '/monitor/server': typeof AuthMonitorServerRoute
+  '/open/app': typeof AuthOpenAppRoute
+  '/open/log': typeof AuthOpenLogRoute
   '/plugins/config': typeof AuthPluginsConfigRoute
   '/plugins/dict': typeof AuthPluginsDictRoute
   '/plugins/notice': typeof AuthPluginsNoticeRoute
@@ -287,6 +301,8 @@ export interface FileRoutesByTo {
   '/monitor/online': typeof AuthMonitorOnlineRoute
   '/monitor/redis': typeof AuthMonitorRedisRoute
   '/monitor/server': typeof AuthMonitorServerRoute
+  '/open/app': typeof AuthOpenAppRoute
+  '/open/log': typeof AuthOpenLogRoute
   '/plugins/config': typeof AuthPluginsConfigRoute
   '/plugins/dict': typeof AuthPluginsDictRoute
   '/plugins/notice': typeof AuthPluginsNoticeRoute
@@ -327,6 +343,8 @@ export interface FileRoutesById {
   '/_auth/monitor/online': typeof AuthMonitorOnlineRoute
   '/_auth/monitor/redis': typeof AuthMonitorRedisRoute
   '/_auth/monitor/server': typeof AuthMonitorServerRoute
+  '/_auth/open/app': typeof AuthOpenAppRoute
+  '/_auth/open/log': typeof AuthOpenLogRoute
   '/_auth/plugins/config': typeof AuthPluginsConfigRoute
   '/_auth/plugins/dict': typeof AuthPluginsDictRoute
   '/_auth/plugins/notice': typeof AuthPluginsNoticeRoute
@@ -366,6 +384,8 @@ export interface FileRouteTypes {
     | '/monitor/online'
     | '/monitor/redis'
     | '/monitor/server'
+    | '/open/app'
+    | '/open/log'
     | '/plugins/config'
     | '/plugins/dict'
     | '/plugins/notice'
@@ -403,6 +423,8 @@ export interface FileRouteTypes {
     | '/monitor/online'
     | '/monitor/redis'
     | '/monitor/server'
+    | '/open/app'
+    | '/open/log'
     | '/plugins/config'
     | '/plugins/dict'
     | '/plugins/notice'
@@ -442,6 +464,8 @@ export interface FileRouteTypes {
     | '/_auth/monitor/online'
     | '/_auth/monitor/redis'
     | '/_auth/monitor/server'
+    | '/_auth/open/app'
+    | '/_auth/open/log'
     | '/_auth/plugins/config'
     | '/_auth/plugins/dict'
     | '/_auth/plugins/notice'
@@ -603,6 +627,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthMonitorServerRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/open/app': {
+      id: '/_auth/open/app'
+      path: '/open/app'
+      fullPath: '/open/app'
+      preLoaderRoute: typeof AuthOpenAppRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/open/log': {
+      id: '/_auth/open/log'
+      path: '/open/log'
+      fullPath: '/open/log'
+      preLoaderRoute: typeof AuthOpenLogRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/plugins/config': {
       id: '/_auth/plugins/config'
       path: '/plugins/config'
@@ -748,6 +786,8 @@ interface AuthRouteChildren {
   AuthMonitorOnlineRoute: typeof AuthMonitorOnlineRoute
   AuthMonitorRedisRoute: typeof AuthMonitorRedisRoute
   AuthMonitorServerRoute: typeof AuthMonitorServerRoute
+  AuthOpenAppRoute: typeof AuthOpenAppRoute
+  AuthOpenLogRoute: typeof AuthOpenLogRoute
   AuthPluginsConfigRoute: typeof AuthPluginsConfigRoute
   AuthPluginsDictRoute: typeof AuthPluginsDictRoute
   AuthPluginsNoticeRoute: typeof AuthPluginsNoticeRoute
@@ -784,6 +824,8 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthMonitorOnlineRoute: AuthMonitorOnlineRoute,
   AuthMonitorRedisRoute: AuthMonitorRedisRoute,
   AuthMonitorServerRoute: AuthMonitorServerRoute,
+  AuthOpenAppRoute: AuthOpenAppRoute,
+  AuthOpenLogRoute: AuthOpenLogRoute,
   AuthPluginsConfigRoute: AuthPluginsConfigRoute,
   AuthPluginsDictRoute: AuthPluginsDictRoute,
   AuthPluginsNoticeRoute: AuthPluginsNoticeRoute,

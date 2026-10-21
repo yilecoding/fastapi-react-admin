@@ -497,3 +497,4 @@ async_db_session`"，定时任务/脚本/CLI 命令这类不经过 FastAPI 依�
 | 解析上传的 xlsx | [`backend/utils` 分册](backend/utils/AGENTS.md) |
 | 用户批量导入 / 批量建号的性能 · **`sys_menu` 删掉的那两列** | [`backend/app/admin` 分册](backend/app/admin/AGENTS.md) |
 | 操作日志脱敏 / 中间件 | [`backend/middleware` 分册](backend/middleware/AGENTS.md) |
+| 能力开放 / 开放接口 / AK·SK 签名（对接方文档是同目录 `README.md`） | [`backend/plugin/open` 分册](backend/plugin/open/AGENTS.md) |

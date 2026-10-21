@@ -43,6 +43,8 @@ EXEMPT: dict[str, str] = {
     'CRUDAiMessage': '消息的可见性完全由所属会话的所有权决定，这张表自己没有可过滤维度',
     'CRUDAiToolInvocation': '审计表没有可过滤维度，挂上只有 fail-closed 一种效果；靠 ai:log:list 权限码',
     'CRUDAiMcpClient': 'MCP 凭据是系统级配置（同模型供应商），且网关鉴权时还没有当前用户；靠 ai:mcp:* 权限码',
+    'CRUDOpenApp': '能力开放应用是系统级配置（同 MCP 凭据），开放接口验签时没有当前用户；靠 open:app:* 权限码',
+    'CRUDOpenApiLog': '调用日志是系统级审计记录（同操作日志）；靠 open:log:list 权限码',
 }
 
 

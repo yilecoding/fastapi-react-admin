@@ -29,6 +29,8 @@ import { AiConfirmPage } from "@admin/platform/pages/ai-confirm"
 import { AiMcpClientPage } from "@admin/platform/pages/ai-mcp-client"
 import { AiProviderPage } from "@admin/platform/pages/ai-provider"
 import { AiToolLogPage } from "@admin/platform/pages/ai-tool-log"
+import { OpenAppPage } from "@admin/platform/pages/open-app"
+import { OpenLogPage } from "@admin/platform/pages/open-log"
 import { WorkflowInboxPage } from "@admin/platform/pages/workflow-inbox"
 import { WorkflowDefinitionPage } from "@admin/platform/pages/workflow-definition"
 import { WorkflowMonitorPage } from "@admin/platform/pages/workflow-monitor"
@@ -49,6 +51,8 @@ export const pageRegistry: PageRegistry = {
   "/_auth/ai/confirm": AiConfirmPage,
   "/_auth/ai/tool-log": AiToolLogPage,
   "/_auth/dashboard": DashboardPage,
+  "/_auth/open/app": OpenAppPage,
+  "/_auth/open/log": OpenLogPage,
   "/_auth/scheduler/manage": SchedulerManagePage,
   "/_auth/scheduler/record": SchedulerRecordPage,
   "/_auth/system/user": UserPage,

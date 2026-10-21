@@ -357,6 +357,8 @@ class Settings(BaseSettings):
         # MCP 凭据新建 / 重新生成时的明文令牌（`plugin/ai/schema/mcp_client.py: IssuedAiMcpToken`）。
         # 不进名单的话操作日志会把它原样落进 response_body —— 永久、且日志表有自己的查看权限
         'mcp_token',
+        # 能力开放应用新建 / 重置密钥时的明文 SK（`plugin/open/schema/app.py: IssuedOpenSecret`），同上
+        'secret_key',
     ]
     OPERA_LOG_QUEUE_MAXSIZE: int = 100000
     OPERA_LOG_QUEUE_BATCH_CONSUME_SIZE: int = 100
@@ -469,6 +471,19 @@ class Settings(BaseSettings):
     AI_MCP_RATE_PER_MINUTE: int
     # 前端的访问地址：MCP 发起的写操作要拼一个「回网页确认」的链接
     AI_WEB_BASE_URL: str
+
+    ##################################################
+    # [ Plugin ] open
+    ##################################################
+    # 🔴 这几项必须在这里声明成字段：只写在 plugin.toml 里的话它们是 extra，**进程环境变量覆盖不了**
+    # （env_settings 只认声明过的字段）—— 部署时用容器环境变量配 OPEN_SECRET_KEY 会被静默忽略。
+    # 基础配置（in plugin.toml）
+    # SK 落库的加密密钥（64 位十六进制）。留空 = 拒绝新建 / 重置密钥，不会静默存明文
+    OPEN_SECRET_KEY: str
+    OPEN_RATE_PER_MINUTE: int
+    OPEN_SIGN_WINDOW_SECONDS: int
+    OPEN_NONCE_REDIS_PREFIX: str
+    OPEN_LAST_USED_REDIS_PREFIX: str
 
     ##################################################
     # [ Plugin ] email
