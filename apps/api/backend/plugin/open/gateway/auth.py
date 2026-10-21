@@ -209,7 +209,11 @@ class DependsOpenApp:
         if app.status != 1:
             raise OpenApiError(401, 'open.app_disabled')
         if expired(app):
-            raise OpenApiError(401, 'open.app_expired', expire_time=timezone.to_str(app.expire_time))
+            # 🔴 先换算到服务端时区再格式化：库里读出来的可能是 UTC（PostgreSQL 实测），`to_str` 不带时区标记，
+            # 直接格式化的话提示里的时间差 8 小时（造验收数据时撞上：本地 17:13 过期，提示写 09:13）
+            raise OpenApiError(
+                401, 'open.app_expired', expire_time=timezone.to_str(timezone.from_datetime(app.expire_time))
+            )
         if not ctx.ip_whitelisted:
             raise OpenApiError(403, 'open.ip_denied', ip=get_request_ip(request))
 
