@@ -10,9 +10,12 @@ import { QueryError } from '@admin/ui/components/query-error'
 import { Separator } from '@admin/ui/components/separator'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@admin/ui/components/toggle-group'
+import { Dropzone, useFilePicker } from '@admin/ui/components/uploader/dropzone'
+import { UploadList } from '@admin/ui/components/uploader/upload-list'
 import { cn } from '@admin/ui/lib/utils'
 
 import { Can } from '../../auth/can'
+import { usePerm } from '../../auth/use-perm'
 import { fetchBytes } from '../../api-client/client'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
@@ -23,7 +26,6 @@ import {
   filesQuery,
   formatBytes,
   useDeleteFiles,
-  useUploadFile,
   type FileItem,
   type FileListParams,
   type FileType,
@@ -34,6 +36,7 @@ import { FileGrid } from './file-grid'
 import { FileList } from './file-list'
 import { FileRail } from './file-rail'
 import { FilePreviewDialog } from './preview-dialog'
+import { useFileUploader } from './uploader'
 import type { FileActions } from './file-menu'
 import { DEFAULT_GRID_PAGE_SIZE } from '../_shared/pagination'
 
@@ -106,8 +109,10 @@ export function FilePage({
   const [bulkError, setBulkError] = React.useState<string | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const del = useDeleteFiles()
-  const upload = useUploadFile()
-  const inputRef = React.useRef<HTMLInputElement>(null)
+  // 上传走队列：进度 / 取消 / 秒传预检都在里面（`./uploader.ts`）。没有上传权限的人拖文件进来也不收
+  const uploader = useFileUploader()
+  const canUpload = usePerm().can('sys:file:upload')
+  const picker = useFilePicker({ onFiles: uploader.add, disabled: !canUpload })
 
   /**
    * 下载。**不能**做成 `<a href={download_url} download>` —— 那个地址要
@@ -145,30 +150,6 @@ export function FilePage({
     [t]
   )
 
-  const handlePickFiles = React.useCallback(
-    async (picked: FileList | null) => {
-      if (!picked?.length) return
-      setActionError(null)
-      // 逐个串行传：并发上传会同时命中「整个 body 先收完才校验大小」那条，
-      // 几个大文件一起来会把内存顶起来（file_ops.py 的注释里写了）
-      for (const file of Array.from(picked)) {
-        try {
-          await upload.mutateAsync(file)
-        } catch (e) {
-          // 一个失败不该中断其余的，但必须让用户看见（硬纪律 9）
-          setActionError(
-            t('{{name}} 上传失败：{{err}}', {
-              name: file.name,
-              err: e instanceof Error ? e.message : t('未知错误'),
-            })
-          )
-        }
-      }
-      // 清掉 input 的值，否则连续选同一个文件不会触发 change
-      if (inputRef.current) inputRef.current.value = ''
-    },
-    [t, upload]
-  )
 
   const toggle = React.useCallback((id: string) => {
     setSelected((prev) => {
@@ -279,22 +260,11 @@ export function FilePage({
                 </ToggleGroup>
 
                 <Can perm="sys:file:upload">
-                  <input
-                    ref={inputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    data-testid="file-input"
-                    onChange={(e) => void handlePickFiles(e.target.files)}
-                  />
-                  <Button
-                    size="sm"
-                    disabled={upload.isPending}
-                    data-testid="upload-file"
-                    onClick={() => inputRef.current?.click()}
-                  >
+                  <input {...picker.inputProps} data-testid="file-input" />
+                  {/* 上传中也不禁用：这是个队列，再选的文件排在后面 */}
+                  <Button size="sm" data-testid="upload-file" onClick={picker.open}>
                     <IconUpload className="size-4" />
-                    {upload.isPending ? t('上传中…') : t('上传文件')}
+                    {uploader.busy ? t('上传中…') : t('上传文件')}
                   </Button>
                 </Can>
               </div>
@@ -306,8 +276,26 @@ export function FilePage({
               </Alert>
             )}
 
+            {/* 上传队列：有项才显示（组件内部空数组返回 null）。放内容区上方而不是右下角浮窗 ——
+                多页签保活下全局浮窗要处理「切走了进度还在不在」，第一版不碰 */}
+            <UploadList
+              items={uploader.items}
+              onCancel={uploader.cancel}
+              onRetry={uploader.retry}
+              onRemove={uploader.remove}
+              onClear={uploader.clear}
+              className="shrink-0"
+            />
+
             {/* 内容区。后台取数时整块降透明，但**不换成骨架** ——
-                换掉会让工具栏和分页条在数据回来时凭空跳一下 */}
+                换掉会让工具栏和分页条在数据回来时凭空跳一下。
+                整块是拖拽投放区：文件拖进来直接进上传队列 */}
+            <Dropzone
+              onFiles={uploader.add}
+              disabled={!canUpload}
+              className="flex min-h-0 flex-1 flex-col"
+              testId="file-dropzone"
+            >
             <div
               className={cn(
                 'flex-1',
@@ -345,6 +333,7 @@ export function FilePage({
                 <FileList files={files} selected={selected} onToggle={toggle} actions={actions} />
               )}
             </div>
+            </Dropzone>
 
             {/* 分页条复用 DataTable 的那一个，外观与全站一致 */}
             <DataTablePagination
