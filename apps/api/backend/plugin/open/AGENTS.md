@@ -47,13 +47,23 @@ sdk/                  对接方拷走的参考实现（Python / Node / Java）+ 
 重发，会被当成重放拒掉，对接时极难理解。真正的重放签名一定是对的，照样撞上 nonce 那一步。
 守卫：`test_bad_signature_does_not_burn_the_nonce`（变异检验：把消费 nonce 挪到验签前，红 11 条）。
 
-## 🔴 增量同步的两个静默漏数据点
+## 🔴 增量同步的静默坑
 
 - 变更时间用 `COALESCE(updated_time, created_time)`：`DateTimeMixin.updated_time` 可空，新插入的行是 NULL，
   只按它查会**漏掉所有新增**
 - 软删的行也要返回（`deleted: true`），所以 `service/sync_service.py` **直接写 select、不走 DAO**
   （DAO 的查询都带着 `deleted = 0`）
 - 游标比较展开成 `t > :t OR (t = :t AND id > :id)`，不写行值比较 —— SQL Server 不支持
+- 🔴 **SQL Server 上时间要先 `CAST(... AS DATETIMEOFFSET(6))` 再取、比、排**：`datetimeoffset(7)` 存到 100ns，
+  Python `datetime` 只到微秒。库里生成的时间（种子的 `GETDATE()`，1/300 秒一跳，`.3833333` 这种）读出来被截成
+  `.383333`，游标里的 `t` 比真值小一点点，`t > :t` 对**同一行**永远成立 —— 同一页、同一个 `next_cursor` 无限返回，
+  对方的同步循环停不下来。应用自己写的时间（`timezone.now()`）只到微秒，所以只有种子 / 库默认值踩得到；
+  `GETDATE()` 落在 `.xx0` 毫秒时恰好没有第 7 位，于是是**三分之二概率**的偶发
+
+**实测证据**（第 7 位那条）：CI 的 `pytest · SQL Server` 挂满超时三次，本地复现在 58%，faulthandler 栈停在
+`_drain` 的 `while True`；当时测试库里种子部门的时间是 `02:01:41.3833333`。`test_sub_microsecond_timestamps_do_not_stall_the_cursor`
+把三行写成同一个带第 7 位的时间、`limit=1` 翻页。变异检验：去掉 CAST，这条和 `test_paging_is_complete_and_has_no_duplicates`
+一起红（`_drain` 现在会断言游标前进，不再挂死）；加回来 SQL Server / PostgreSQL 各 43 条全过。
 
 **实测证据**：`TestIncrementalSync` 经真实接口建一个部门 → 从「当前末尾」游标往后同步能拿到它（`updated_time` 为空）→
 经真实接口删掉它 → 再往后同步拿到 `deleted: true`。变异检验：改成只按 `updated_time` 红 2 条、加上 `deleted == 0` 红 1 条。

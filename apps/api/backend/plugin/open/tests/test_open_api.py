@@ -9,7 +9,7 @@ from typing import Any
 
 import yaml
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, literal_column, select, update
 from starlette.testclient import TestClient
 
 from backend.app.admin.model import Dept
@@ -195,18 +195,28 @@ class TestSuccessLog:
 
 class TestIncrementalSync:
     def _drain(
-        self, client: TestClient, issued: dict, path: str, cursor: str | None, limit: int = 2
+        self,
+        client: TestClient,
+        issued: dict,
+        path: str,
+        cursor: str | None,
+        limit: int = 2,
+        since: str | None = None,
     ) -> tuple[list, str | None]:
-        """翻到底，返回所有条目和最后一个游标"""
+        """翻到底，返回所有条目和最后一个游标。游标不前进就当场红 —— 不加这一句，那个 bug 的表现是 CI 挂死"""
         items: list = []
         last = cursor
-        while True:
-            params = f'limit={limit}' + (f'&cursor={last}' if last else '')
+        for _ in range(500):
+            params = (
+                f'limit={limit}' + (f'&updated_since={since}' if since else '') + (f'&cursor={last}' if last else '')
+            )
             data = signed_get(client, issued, path, params=params).json()['data']
             items += data['items']
             if not data['has_more']:
                 return items, (data['next_cursor'] or last)
+            assert data['next_cursor'] != last, f'游标没有前进（同一页会被无限返回）：{last}'
             last = data['next_cursor']
+        raise AssertionError('翻了 500 页还没到底')
 
     def test_paging_is_complete_and_has_no_duplicates(self, client: TestClient, token_headers: dict) -> None:
         issued = create_app(client, token_headers)
@@ -217,6 +227,27 @@ class TestIncrementalSync:
         assert all(
             isinstance(d['id'], str) and (d['parent_id'] is None or isinstance(d['parent_id'], str)) for d in paged
         )
+
+    def test_sub_microsecond_timestamps_do_not_stall_the_cursor(self, client: TestClient, token_headers: dict) -> None:
+        """🔴 SQL Server 存到 100ns、Python 只到 µs：同一个时间戳上翻页，游标停在原地、同一页无限返回。
+
+        种子的 `GETDATE()` 落在 `.xx3` / `.xx7` 毫秒时才会这样（三分之二的概率），所以上面那条是**偶发**挂死的；
+        这里把三行的时间显式写成带第 7 位小数的同一个值，每次都踩得到。其他方言存不下那一位，这条照样要过。
+        """
+        issued = create_app(client, token_headers)
+        ids: list[int] = []
+        try:
+            for i in range(3):
+                code = f'{CODE_PREFIX}NS{i}'
+                body = {'code': code, 'name': f'{CODE_PREFIX}纳秒{i}', 'status': 1, 'sort': 0}
+                assert client.post('/sys/depts', headers=token_headers, json=body).json()['code'] == 200
+                ids.append(run_db(lambda db, code=code: _dept_id(db, code)))
+            run_db(lambda db: _stamp_sub_microsecond(db, ids))
+            paged, _ = self._drain(client, issued, '/depts', None, limit=1, since='2099-01-01T00:00:00Z')
+            assert [d['id'] for d in paged] == [str(pk) for pk in sorted(ids)]
+        finally:
+            for pk in ids:
+                run_db(lambda db, pk=pk: _hard_delete_dept(db, pk))
 
     def test_inserts_and_soft_deletes_show_up_after_the_cursor(self, client: TestClient, token_headers: dict) -> None:
         """🔴 新插入的行 updated_time 是 NULL（只按它查会漏掉）；软删的行要以 deleted=true 再出现一次"""
@@ -270,3 +301,12 @@ async def _dept_id(db: Any, code: str) -> int:
 
 async def _hard_delete_dept(db: Any, pk: int) -> None:
     await db.execute(delete(Dept).where(Dept.id == pk))
+
+
+async def _stamp_sub_microsecond(db: Any, pks: list[int]) -> None:
+    """三行写成同一个时间；SQL Server 上带第 7 位小数（Python 的 datetime 表达不了，只能在 SQL 里写）"""
+    if db.get_bind().dialect.name == 'mssql':
+        value: Any = literal_column("CAST('2099-01-01T00:00:00.1234567+00:00' AS DATETIMEOFFSET(7))")
+    else:
+        value = datetime.fromisoformat('2099-01-01T00:00:00.123456+00:00')
+    await db.execute(update(Dept).where(Dept.id.in_(pks)).values(created_time=value, updated_time=None))
