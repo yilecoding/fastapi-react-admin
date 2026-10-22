@@ -95,8 +95,12 @@ function Combobox({
       >
         {/* Value 不渲染自己的元素（也不吃 className），所以外面套一层 */}
         <span data-slot="combobox-value" className="line-clamp-1 flex-1 text-start">
-          <ComboboxPrimitive.Value placeholder={<span className="text-muted-foreground">{placeholder}</span>}>
-            {(v: string | null) => (v == null ? null : labelOf(v))}
+          {/* 🔴 空值时 render 函数要自己返回占位文案：给了 children 之后 Base UI 不再用 `placeholder`，
+              原来返回 null —— 全站所有 Combobox（含查询区超过 8 项的下拉）空着时都是一个白框 */}
+          <ComboboxPrimitive.Value>
+            {(v: string | null) =>
+              v == null ? <span className="text-muted-foreground">{placeholder}</span> : labelOf(v)
+            }
           </ComboboxPrimitive.Value>
         </span>
         <ComboboxPrimitive.Icon

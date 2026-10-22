@@ -3,7 +3,7 @@
 import re
 import time
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -310,3 +310,13 @@ async def _stamp_sub_microsecond(db: Any, pks: list[int]) -> None:
     else:
         value = datetime.fromisoformat('2099-01-01T00:00:00.123456+00:00')
     await db.execute(update(Dept).where(Dept.id.in_(pks)).values(created_time=value, updated_time=None))
+
+
+def test_expired_message_shows_server_local_time(client: TestClient, token_headers: dict) -> None:
+    """过期提示里的时间要按服务端时区显示 —— 库里读出来是 UTC，直接 to_str 会差 8 小时"""
+    from backend.core.conf import settings
+
+    expire = timezone.now() - timedelta(minutes=1)
+    issued = create_app(client, token_headers, suffix='TZ', expire_time=expire.astimezone(UTC).isoformat())
+    msg = signed_get(client, issued, '/users').json()['msg']
+    assert timezone.to_str(timezone.from_datetime(expire)) in msg, (msg, settings.DATETIME_TIMEZONE)
