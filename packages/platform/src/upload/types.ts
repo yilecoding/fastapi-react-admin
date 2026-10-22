@@ -6,6 +6,7 @@ export type UploadStatus =
   | 'hashing' // 浏览器端算 sha256（秒传预检要用）
   | 'checking' // 问后端「这份内容传过吗」
   | 'uploading' // 真正在传
+  | 'finalizing' // 分片都传完了，服务端在合并
   | 'done' // 成功（含秒传命中）
   | 'failed' // 失败，可重试
   | 'canceled' // 用户取消，可重试
@@ -57,7 +58,11 @@ export interface UploadTransport<R> {
   check?: (file: File, sha256: string, signal: AbortSignal, opts: UploadItemOptions<R>) => Promise<R | null>
   upload: (
     file: File,
-    ctx: StepContext & { onBytes: (loaded: number, total: number) => void },
+    ctx: StepContext & {
+      onBytes: (loaded: number, total: number) => void
+      /** 分片都传完、服务端开始合并（浮窗显示「正在合并…」） */
+      onFinalizing: () => void
+    },
     opts: UploadItemOptions<R>,
   ) => Promise<R>
 }

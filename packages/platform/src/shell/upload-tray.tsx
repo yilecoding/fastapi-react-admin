@@ -15,16 +15,22 @@ import { useUploadStore } from './upload-store'
  *
  * - 有活跃上传时点 × 先确认「取消全部并关闭」；没有就直接关
  * - 折叠时某个文件传完弹一条 toast —— 折叠着的浮窗不会自己说话，大文件传完了用户可能不知道
- * - 有活跃上传时离开页面（刷新 / 关标签页）弹浏览器的「确定离开」：没有断点续传，刷新就丢
+ * - 有活跃上传时离开页面（刷新 / 关标签页）弹浏览器的「确定离开」：小文件没有续传，刷新就丢；
+ *   大文件（分片）刷新后浮窗里列出「未传完」的，点「继续」重新选同一个文件从断点接着传
  */
 export function UploadTray() {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const items = useUploadStore((s) => s.items)
+  const resumable = useUploadStore((s) => s.resumable)
   const open = useUploadStore((s) => s.open)
   const collapsed = useUploadStore((s) => s.collapsed)
-  const { cancel, retry, remove, cancelAll, setCollapsed, close, bind } = useUploadStore.getState()
+  const { cancel, retry, remove, cancelAll, setCollapsed, close, bind, continueResumable, discardResumable } =
+    useUploadStore.getState()
   const [confirmClose, setConfirmClose] = React.useState(false)
+  // 「继续」一个没传完的：弹文件选择框，选中的必须是同一个文件（名字 + 大小 + 修改时间）
+  const resumeTarget = React.useRef<string | null>(null)
+  const resumeInput = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
     bind(() => void qc.invalidateQueries({ queryKey: fileKeys.all }))
@@ -52,12 +58,40 @@ export function UploadTray() {
     }
   }, [items, collapsed, t])
 
-  if (!open || items.length === 0) return null
+  if (!open || (items.length === 0 && resumable.length === 0)) return null
 
   return (
     <>
+      <input
+        ref={resumeInput}
+        type="file"
+        className="hidden"
+        data-testid="upload-tray-resume-input"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          const fp = resumeTarget.current
+          resumeTarget.current = null
+          if (!file || !fp) return
+          if (!continueResumable(fp, file)) {
+            toast.error(t('选的不是同一个文件（名字、大小、修改时间要一致），没法接着传'), { timeout: 6000 })
+          }
+        }}
+      />
       <UploadTrayView
         items={items.map((it) => ({ ...it, source: it.opts.source ?? null }))}
+        resumable={resumable.map((r) => ({
+          id: r.fp,
+          name: r.entry.name,
+          size: r.entry.size,
+          progress: r.progress,
+          source: r.entry.source ?? null,
+        }))}
+        onResume={(fp) => {
+          resumeTarget.current = fp
+          resumeInput.current?.click()
+        }}
+        onDiscard={discardResumable}
         collapsed={collapsed}
         etaSeconds={trayEta(items)}
         onToggle={() => setCollapsed(!collapsed)}

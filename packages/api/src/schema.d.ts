@@ -752,6 +752,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/files/upload-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取上传策略（分片阈值 / 分片大小） */
+        get: operations["get_upload_policy_api_v1_sys_files_upload_policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/files/multipart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 开始分片上传 */
+        post: operations["init_multipart_api_v1_sys_files_multipart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/files/multipart/{upload_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取分片上传进度（续传用） */
+        get: operations["get_multipart_api_v1_sys_files_multipart__upload_id__get"];
+        put?: never;
+        post?: never;
+        /** 取消分片上传（删掉已传的分片） */
+        delete: operations["abort_multipart_api_v1_sys_files_multipart__upload_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/files/multipart/{upload_id}/{part}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 上传一个分片 */
+        put: operations["put_multipart_part_api_v1_sys_files_multipart__upload_id___part__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/files/multipart/{upload_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 完成分片上传（合并、落库） */
+        post: operations["complete_multipart_api_v1_sys_files_multipart__upload_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/files": {
         parameters: {
             query?: never;
@@ -5132,6 +5218,58 @@ export interface components {
             created_time: string;
         };
         /**
+         * GetMultipartDetail
+         * @description 分片上传会话
+         */
+        GetMultipartDetail: {
+            /**
+             * Upload Id
+             * @description 会话 ID
+             */
+            upload_id: string;
+            /**
+             * Name
+             * @description 文件名
+             */
+            name: string;
+            /**
+             * Size
+             * @description 总字节数
+             */
+            size: number;
+            /**
+             * Chunk Size
+             * @description 每片字节数
+             */
+            chunk_size: number;
+            /**
+             * Total Parts
+             * @description 总片数
+             */
+            total_parts: number;
+            /**
+             * Uploaded Parts
+             * @description 已经传完的片号（续传时只补缺的）
+             */
+            uploaded_parts: number[];
+        };
+        /**
+         * GetMultipartPartDetail
+         * @description 写完的一片
+         */
+        GetMultipartPartDetail: {
+            /**
+             * Part
+             * @description 片号
+             */
+            part: number;
+            /**
+             * Size
+             * @description 收到的字节数
+             */
+            size: number;
+        };
+        /**
          * GetNewToken
          * @description 获取新令牌
          */
@@ -6219,6 +6357,22 @@ export interface components {
             created_time: string;
         };
         /**
+         * GetUploadPolicyDetail
+         * @description 上传策略：前端据此决定单次上传还是分片
+         */
+        GetUploadPolicyDetail: {
+            /**
+             * Chunk Threshold
+             * @description 不小于这个字节数的文件走分片上传
+             */
+            chunk_threshold: number;
+            /**
+             * Chunk Size
+             * @description 每片字节数（最后一片是余数）
+             */
+            chunk_size: number;
+        };
+        /**
          * GetUserInfoDetail
          * @description 用户信息详情
          */
@@ -6561,6 +6715,28 @@ export interface components {
              * @description 问题描述
              */
             msg: string;
+        };
+        /**
+         * InitMultipartParam
+         * @description 开始分片上传
+         */
+        InitMultipartParam: {
+            /**
+             * Name
+             * @description 文件名
+             */
+            name: string;
+            /**
+             * Size
+             * @description 总字节数（complete 时按实际收到的再核一次）
+             */
+            size: number;
+            /**
+             * Public
+             * @description 落公开子树，产出无鉴权直链（仅图片）
+             * @default false
+             */
+            public: boolean;
         };
         /**
          * IssuedAiMcpToken
@@ -7808,6 +7984,38 @@ export interface components {
             msg: string;
             data: components["schemas"]["GetMenuDetail"];
         };
+        /** ResponseSchemaModel[GetMultipartDetail] */
+        ResponseSchemaModel_GetMultipartDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetMultipartDetail"];
+        };
+        /** ResponseSchemaModel[GetMultipartPartDetail] */
+        ResponseSchemaModel_GetMultipartPartDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetMultipartPartDetail"];
+        };
         /** ResponseSchemaModel[GetNewToken] */
         ResponseSchemaModel_GetNewToken_: {
             /**
@@ -7919,6 +8127,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["GetTaskSchedulerDetail"];
+        };
+        /** ResponseSchemaModel[GetUploadPolicyDetail] */
+        ResponseSchemaModel_GetUploadPolicyDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetUploadPolicyDetail"];
         };
         /** ResponseSchemaModel[GetUserInfoWithRelationDetail] */
         ResponseSchemaModel_GetUserInfoWithRelationDetail_: {
@@ -12038,6 +12262,193 @@ export interface operations {
                 "multipart/form-data": components["schemas"]["Body_upload_file_api_v1_sys_files_upload_post"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetFileDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_upload_policy_api_v1_sys_files_upload_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetUploadPolicyDetail_"];
+                };
+            };
+        };
+    };
+    init_multipart_api_v1_sys_files_multipart_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitMultipartParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetMultipartDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_multipart_api_v1_sys_files_multipart__upload_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 会话 ID */
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetMultipartDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    abort_multipart_api_v1_sys_files_multipart__upload_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 会话 ID */
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_multipart_part_api_v1_sys_files_multipart__upload_id___part__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 会话 ID */
+                upload_id: string;
+                /** @description 片号，从 1 开始 */
+                part: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetMultipartPartDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    complete_multipart_api_v1_sys_files_multipart__upload_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 会话 ID */
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

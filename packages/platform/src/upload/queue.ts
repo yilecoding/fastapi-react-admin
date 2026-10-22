@@ -23,7 +23,7 @@ export interface UploadQueue<R> {
   destroy: () => void
 }
 
-const ACTIVE: ReadonlySet<UploadItem['status']> = new Set(['hashing', 'checking', 'uploading'])
+const ACTIVE: ReadonlySet<UploadItem['status']> = new Set(['hashing', 'checking', 'uploading', 'finalizing'])
 
 export function isActive(item: Pick<UploadItem, 'status'>): boolean {
   return ACTIVE.has(item.status)
@@ -95,6 +95,7 @@ export function createUploadQueue<R>(transport: UploadTransport<R>, hooks: Uploa
           }
             patch(item.id, { loaded, progress: total > 0 ? loaded / total : 0, speed })
           },
+          onFinalizing: () => patch(item.id, { status: 'finalizing', progress: 1, speed: null }),
         },
         item.opts,
       )

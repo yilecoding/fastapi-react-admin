@@ -171,6 +171,13 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
             args['body'] = self.build_truncated_body(None, settings.OPERA_LOG_BODY_MAX_SIZE)
             return args or None
 
+        # 🔴 二进制请求体（分片上传的 PUT）一律不读。分块传输时没有 Content-Length，上面那道挡不住，
+        # 读了就是在路由之前把整片收进内存（分片接口「边收边数、超了当场断」就白做了）；
+        # 带了 Content-Length 的小片又会被下面 `decode('utf-8', 'ignore')` 成乱码写进操作日志
+        if 'application/octet-stream' in content_types:
+            args['body'] = {'_binary': True, '_original_size': content_length}
+            return args or None
+
         # 请求体
         body_data = await request.body()
         if body_data and not is_form:

@@ -128,3 +128,37 @@ class DeleteFileRelationParam(SchemaBase):
     file_ids: list[int] = Field(description='文件 ID 列表')
     target_type: str = Field(max_length=32, description='业务对象类型')
     target_id: SnowflakeIdIn = Field(description='业务对象 ID')
+
+
+class GetUploadPolicyDetail(SchemaBase):
+    """上传策略：前端据此决定单次上传还是分片"""
+
+    chunk_threshold: int = Field(description='不小于这个字节数的文件走分片上传')
+    chunk_size: int = Field(description='每片字节数（最后一片是余数）')
+
+
+class InitMultipartParam(SchemaBase):
+    """开始分片上传"""
+
+    # 255 = sys_file.original_name 的列长度
+    name: str = Field(min_length=1, max_length=255, description='文件名')
+    size: int = Field(gt=0, description='总字节数（complete 时按实际收到的再核一次）')
+    public: bool = Field(default=False, description='落公开子树，产出无鉴权直链（仅图片）')
+
+
+class GetMultipartDetail(SchemaBase):
+    """分片上传会话"""
+
+    upload_id: str = Field(description='会话 ID')
+    name: str = Field(description='文件名')
+    size: int = Field(description='总字节数')
+    chunk_size: int = Field(description='每片字节数')
+    total_parts: int = Field(description='总片数')
+    uploaded_parts: list[int] = Field(description='已经传完的片号（续传时只补缺的）')
+
+
+class GetMultipartPartDetail(SchemaBase):
+    """写完的一片"""
+
+    part: int = Field(description='片号')
+    size: int = Field(description='收到的字节数')
