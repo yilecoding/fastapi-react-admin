@@ -1,0 +1,1185 @@
+{
+ "meta": {
+  "repo": "fastapi-react-admin",
+  "commit": "d760795",
+  "scope": null,
+  "generated_at": "2026-10-22T15:15:11+08:00",
+  "hotspot_anchor": "2026-10-22T14:27:53+08:00",
+  "summary": "中后台底座 monorepo：后端是 FastAPI（fork 自 FBA，三层 api → service → crud + 插件机制， 支持 SQL Server / PostgreSQL / MySQL），前端是 pnpm workspace，依赖方向 i18n / api 契约 ← ui ← platform ← web 严格单向；移动端（Expo）与桌面端（Electron）是 web 的兄弟。 前后端之间走 HTTP（/api/v1）与 socket.io，静态 import 看不到，只在核心流程里体现。"
+ },
+ "layers": [
+  "entry",
+  "feature",
+  "shared",
+  "foundation"
+ ],
+ "modules": [
+  {
+   "id": "http_api",
+   "paths": [
+    "apps/api/backend/app/*/api/**",
+    "apps/api/backend/app/router.py",
+    "apps/api/backend/middleware/**",
+    "apps/api/backend/core/registrar.py",
+    "apps/api/backend/main.py",
+    "apps/api/backend/run.py",
+    "apps/api/backend/cli.py"
+   ],
+   "layer": "entry",
+   "role": "后端 HTTP 路由 · 中间件 · 应用装配 · CLI",
+   "files": 36
+  },
+  {
+   "id": "data",
+   "paths": [
+    "apps/api/backend/app/*/crud/**",
+    "apps/api/backend/app/*/model/**",
+    "apps/api/backend/app/*/schema/**",
+    "apps/api/backend/app/task/enums.py"
+   ],
+   "layer": "shared",
+   "role": "ORM 模型 · CRUD · 出入参 schema",
+   "files": 47
+  },
+  {
+   "id": "services",
+   "paths": [
+    "apps/api/backend/app/*/service/**",
+    "apps/api/backend/app/admin/utils/**",
+    "apps/api/backend/app/__init__.py",
+    "apps/api/backend/app/admin/__init__.py"
+   ],
+   "layer": "feature",
+   "role": "后端业务逻辑（admin 与 task 的 service 层）",
+   "files": 19
+  },
+  {
+   "id": "plugins",
+   "paths": [
+    "apps/api/backend/plugin/**"
+   ],
+   "layer": "feature",
+   "role": "插件 ai · workflow · open · oauth2 · 通知等，含插件装载器",
+   "files": 135
+  },
+  {
+   "id": "worker",
+   "paths": [
+    "apps/api/backend/app/task/celery.py",
+    "apps/api/backend/app/task/tasks/**",
+    "apps/api/backend/app/task/*.py"
+   ],
+   "layer": "entry",
+   "role": "Celery worker 与 beat 调度",
+   "files": 9
+  },
+  {
+   "id": "core",
+   "paths": [
+    "apps/api/backend/common/**",
+    "apps/api/backend/core/**",
+    "apps/api/backend/database/**",
+    "apps/api/backend/utils/**",
+    "apps/api/backend/__init__.py"
+   ],
+   "layer": "foundation",
+   "role": "配置 · 鉴权与权限 · 异常与响应 · 数据库与 Redis 连接 · 工具",
+   "files": 56
+  },
+  {
+   "id": "web",
+   "paths": [
+    "apps/web/**"
+   ],
+   "layer": "entry",
+   "role": "Web 应用：路由声明与守卫 · 页面注册 · 构建注入",
+   "files": 61
+  },
+  {
+   "id": "mobile",
+   "paths": [
+    "apps/mobile/**"
+   ],
+   "layer": "entry",
+   "role": "移动端 App（Expo / React Native）",
+   "files": 55
+  },
+  {
+   "id": "desktop",
+   "paths": [
+    "apps/desktop/**"
+   ],
+   "layer": "entry",
+   "role": "桌面端外壳（Electron 主进程与 preload）",
+   "files": 13
+  },
+  {
+   "id": "platform_pages",
+   "paths": [
+    "packages/platform/src/pages/**"
+   ],
+   "layer": "feature",
+   "role": "业务页面（列表 · 设置 · 监控 · 审批 · AI 对话等）",
+   "files": 186
+  },
+  {
+   "id": "platform_shell",
+   "paths": [
+    "packages/platform/**"
+   ],
+   "layer": "shared",
+   "role": "平台能力：请求客户端 · 登录态 · 多页签外壳 · 上传队列 · 桌面桥接",
+   "files": 53
+  },
+  {
+   "id": "ui",
+   "paths": [
+    "packages/ui/**"
+   ],
+   "layer": "shared",
+   "role": "组件原语（shadcn / Base UI），零业务",
+   "files": 80
+  },
+  {
+   "id": "api_contract",
+   "paths": [
+    "packages/api/**"
+   ],
+   "layer": "foundation",
+   "role": "后端契约：生成的 schema.d.ts · 信封成败语义 · ApiError",
+   "files": 8
+  },
+  {
+   "id": "i18n",
+   "paths": [
+    "packages/i18n/**"
+   ],
+   "layer": "foundation",
+   "role": "语言包 · i18next 实例 · 时间格式化，框架无关",
+   "files": 7
+  }
+ ],
+ "externals": [
+  {
+   "id": "数据库",
+   "kind": "database",
+   "packages": [
+    "sqlalchemy",
+    "sqlalchemy_crud_plus"
+   ]
+  },
+  {
+   "id": "Redis",
+   "kind": "database",
+   "packages": [
+    "redis"
+   ]
+  },
+  {
+   "id": "对象存储",
+   "kind": "storage",
+   "packages": [
+    "opendal",
+    "boto3"
+   ]
+  },
+  {
+   "id": "LLM API",
+   "kind": "service",
+   "packages": [
+    "pydantic_ai",
+    "openai"
+   ]
+  },
+  {
+   "id": "MCP 工具服务",
+   "kind": "service",
+   "packages": [
+    "mcp",
+    "mcp_types"
+   ]
+  },
+  {
+   "id": "可观测性",
+   "kind": "service",
+   "packages": [
+    "opentelemetry",
+    "prometheus_client"
+   ]
+  },
+  {
+   "id": "SMTP 邮件",
+   "kind": "service",
+   "packages": [
+    "aiosmtplib"
+   ]
+  },
+  {
+   "id": "OAuth 提供方",
+   "kind": "service",
+   "packages": [
+    "fastapi_oauth20"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "from": "platform_pages",
+   "to": "ui",
+   "kind": "import",
+   "count": 573,
+   "evidence": [
+    "packages/platform/src/pages/_shared/clear-logs.tsx:6",
+    "packages/platform/src/pages/_shared/clear-logs.tsx:7",
+    "packages/platform/src/pages/_shared/detail-sheet.tsx:3",
+    "packages/platform/src/pages/_shared/detail-sheet.tsx:4",
+    "packages/platform/src/pages/_shared/filters.tsx:5"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "plugins",
+   "to": "core",
+   "kind": "import",
+   "count": 438,
+   "evidence": [
+    "apps/api/backend/plugin/ai/api/router.py:3",
+    "apps/api/backend/plugin/ai/api/v1/chat.py:6",
+    "apps/api/backend/plugin/ai/api/v1/chat.py:7",
+    "apps/api/backend/plugin/ai/api/v1/chat.py:8",
+    "apps/api/backend/plugin/ai/api/v1/conversation.py:5"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "http_api",
+   "to": "core",
+   "kind": "import",
+   "count": 256,
+   "evidence": [
+    "apps/api/backend/app/admin/api/router.py:7",
+    "apps/api/backend/app/admin/api/uploads.py:28",
+    "apps/api/backend/app/admin/api/uploads.py:29",
+    "apps/api/backend/app/admin/api/uploads.py:30",
+    "apps/api/backend/app/admin/api/uploads.py:31"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "platform_pages",
+   "to": "platform_shell",
+   "kind": "import",
+   "count": 182,
+   "evidence": [
+    "packages/platform/src/pages/_shared/clear-logs.tsx:9",
+    "packages/platform/src/pages/_shared/clear-logs.tsx:10",
+    "packages/platform/src/pages/_shared/clear-logs.tsx:11",
+    "packages/platform/src/pages/_shared/clear-logs.tsx:12",
+    "packages/platform/src/pages/_shared/master-list.tsx:13"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "data",
+   "to": "core",
+   "kind": "import",
+   "count": 150,
+   "evidence": [
+    "apps/api/backend/app/admin/crud/crud_data_rule.py:8",
+    "apps/api/backend/app/admin/crud/crud_data_rule.py:9",
+    "apps/api/backend/app/admin/crud/crud_data_scope.py:15",
+    "apps/api/backend/app/admin/crud/crud_data_scope.py:16",
+    "apps/api/backend/app/admin/crud/crud_data_scope.py:17"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "services",
+   "to": "core",
+   "kind": "import",
+   "count": 142,
+   "evidence": [
+    "apps/api/backend/app/admin/service/auth_service.py:15",
+    "apps/api/backend/app/admin/service/auth_service.py:16",
+    "apps/api/backend/app/admin/service/auth_service.py:17",
+    "apps/api/backend/app/admin/service/auth_service.py:18",
+    "apps/api/backend/app/admin/service/auth_service.py:19"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "plugins",
+   "to": "数据库",
+   "kind": "external",
+   "count": 127,
+   "evidence": [
+    "apps/api/backend/plugin/ai/core/ports.py:12",
+    "apps/api/backend/plugin/ai/crud/crud_conversation.py:3",
+    "apps/api/backend/plugin/ai/crud/crud_conversation.py:4",
+    "apps/api/backend/plugin/ai/crud/crud_mcp_client.py:3",
+    "apps/api/backend/plugin/ai/crud/crud_mcp_client.py:4"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "services",
+   "to": "data",
+   "kind": "import",
+   "count": 93,
+   "evidence": [
+    "apps/api/backend/app/admin/service/auth_service.py:7",
+    "apps/api/backend/app/admin/service/auth_service.py:8",
+    "apps/api/backend/app/admin/service/auth_service.py:9",
+    "apps/api/backend/app/admin/service/auth_service.py:10",
+    "apps/api/backend/app/admin/service/auth_service.py:11"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "http_api",
+   "to": "data",
+   "kind": "import",
+   "count": 87,
+   "evidence": [
+    "apps/api/backend/app/admin/api/uploads.py:26",
+    "apps/api/backend/app/admin/api/v1/auth/auth.py:8",
+    "apps/api/backend/app/admin/api/v1/auth/auth.py:9",
+    "apps/api/backend/app/admin/api/v1/auth/captcha.py:8",
+    "apps/api/backend/app/admin/api/v1/log/login_log.py:6"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "data",
+   "to": "数据库",
+   "kind": "external",
+   "count": 83,
+   "evidence": [
+    "apps/api/backend/app/admin/crud/crud_data_rule.py:3",
+    "apps/api/backend/app/admin/crud/crud_data_rule.py:4",
+    "apps/api/backend/app/admin/crud/crud_data_scope.py:4",
+    "apps/api/backend/app/admin/crud/crud_data_scope.py:5",
+    "apps/api/backend/app/admin/crud/crud_data_scope.py:6"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "web",
+   "to": "platform_shell",
+   "kind": "import",
+   "count": 61,
+   "evidence": [
+    "apps/web/src/app.tsx:5",
+    "apps/web/src/app.tsx:6",
+    "apps/web/src/app.tsx:8",
+    "apps/web/src/components/theme-menu.tsx:12",
+    "apps/web/src/components/user-menu.tsx:6"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "platform_pages",
+   "to": "i18n",
+   "kind": "import",
+   "count": 52,
+   "evidence": [
+    "packages/platform/src/pages/_shared/login-log.ts:1",
+    "packages/platform/src/pages/_shared/monitor.tsx:3",
+    "packages/platform/src/pages/ai-chat/api.ts:3",
+    "packages/platform/src/pages/ai-chat/conversation-list.tsx:5",
+    "packages/platform/src/pages/ai-chat/suggestions.ts:1"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "core",
+   "to": "数据库",
+   "kind": "external",
+   "count": 49,
+   "evidence": [
+    "apps/api/backend/__init__.py:1",
+    "apps/api/backend/common/exception/exception_handler.py:4",
+    "apps/api/backend/common/model.py:4",
+    "apps/api/backend/common/model.py:5",
+    "apps/api/backend/common/model.py:6"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "web",
+   "to": "platform_pages",
+   "kind": "import",
+   "count": 38,
+   "evidence": [
+    "apps/web/src/lib/page-registry.tsx:2",
+    "apps/web/src/lib/page-registry.tsx:3",
+    "apps/web/src/lib/page-registry.tsx:4",
+    "apps/web/src/lib/page-registry.tsx:5",
+    "apps/web/src/lib/page-registry.tsx:6"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "plugins",
+   "to": "data",
+   "kind": "import",
+   "count": 29,
+   "evidence": [
+    "apps/api/backend/plugin/ai/mcp_gateway/auth.py:98",
+    "apps/api/backend/plugin/ai/service/mcp_client_service.py:8",
+    "apps/api/backend/plugin/ai/tools/dept_tools.py:8",
+    "apps/api/backend/plugin/ai/tools/dept_tools.py:9",
+    "apps/api/backend/plugin/ai/tools/dept_tools.py:10"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "core",
+   "to": "可观测性",
+   "kind": "external",
+   "count": 28,
+   "evidence": [
+    "apps/api/backend/common/observability/otel.py:2",
+    "apps/api/backend/common/observability/otel.py:3",
+    "apps/api/backend/common/observability/otel.py:4",
+    "apps/api/backend/common/observability/otel.py:5",
+    "apps/api/backend/common/observability/otel.py:6"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "worker",
+   "to": "core",
+   "kind": "import",
+   "count": 26,
+   "evidence": [
+    "apps/api/backend/app/task/celery.py:25",
+    "apps/api/backend/app/task/celery.py:26",
+    "apps/api/backend/app/task/celery.py:27",
+    "apps/api/backend/app/task/celery.py:46",
+    "apps/api/backend/app/task/celery.py:47"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "http_api",
+   "to": "plugins",
+   "kind": "import",
+   "count": 25,
+   "evidence": [
+    "apps/api/backend/cli.py:50",
+    "apps/api/backend/cli.py:56",
+    "apps/api/backend/cli.py:57",
+    "apps/api/backend/cli.py:58",
+    "apps/api/backend/cli.py:59"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "platform_shell",
+   "to": "ui",
+   "kind": "import",
+   "count": 24,
+   "evidence": [
+    "packages/platform/src/shell/app-sidebar.tsx:8",
+    "packages/platform/src/shell/app-sidebar.tsx:13",
+    "packages/platform/src/shell/app-sidebar.tsx:26",
+    "packages/platform/src/shell/command-menu.tsx:10",
+    "packages/platform/src/shell/command-menu.tsx:11"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "services",
+   "to": "数据库",
+   "kind": "external",
+   "count": 24,
+   "evidence": [
+    "apps/api/backend/app/admin/service/auth_service.py:3",
+    "apps/api/backend/app/admin/service/data_rule_service.py:4",
+    "apps/api/backend/app/admin/service/data_rule_service.py:5",
+    "apps/api/backend/app/admin/service/data_scope_service.py:4",
+    "apps/api/backend/app/admin/service/dept_service.py:3"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "plugins",
+   "to": "LLM API",
+   "kind": "external",
+   "count": 22,
+   "evidence": [
+    "apps/api/backend/plugin/ai/engines/pydantic_ai_engine.py:33",
+    "apps/api/backend/plugin/ai/engines/pydantic_ai_engine.py:35",
+    "apps/api/backend/plugin/ai/engines/pydantic_ai_engine.py:36",
+    "apps/api/backend/plugin/ai/engines/pydantic_ai_engine.py:37",
+    "apps/api/backend/plugin/ai/engines/pydantic_ai_engine.py:38"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "web",
+   "to": "ui",
+   "kind": "import",
+   "count": 22,
+   "evidence": [
+    "apps/web/src/app.tsx:9",
+    "apps/web/src/components/github-link.tsx:4",
+    "apps/web/src/components/github-link.tsx:5",
+    "apps/web/src/components/github-link.tsx:6",
+    "apps/web/src/components/language-menu.tsx:5"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "http_api",
+   "to": "services",
+   "kind": "import",
+   "count": 19,
+   "evidence": [
+    "apps/api/backend/app/admin/api/uploads.py:27",
+    "apps/api/backend/app/admin/api/v1/auth/auth.py:10",
+    "apps/api/backend/app/admin/api/v1/log/login_log.py:7",
+    "apps/api/backend/app/admin/api/v1/log/opera_log.py:7",
+    "apps/api/backend/app/admin/api/v1/sys/data_rule.py:13"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "desktop",
+   "to": "platform_shell",
+   "kind": "import",
+   "count": 12,
+   "evidence": [
+    "apps/desktop/src/main/auth.ts:5",
+    "apps/desktop/src/main/config.ts:5",
+    "apps/desktop/src/main/devices/card-reader.ts:1",
+    "apps/desktop/src/main/devices/registry.ts:1",
+    "apps/desktop/src/main/devices/types.ts:1"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "worker",
+   "to": "数据库",
+   "kind": "external",
+   "count": 10,
+   "evidence": [
+    "apps/api/backend/app/task/database.py:6",
+    "apps/api/backend/app/task/database.py:7",
+    "apps/api/backend/app/task/sync_db.py:15",
+    "apps/api/backend/app/task/sync_db.py:16",
+    "apps/api/backend/app/task/tasks/base.py:8"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "mobile",
+   "to": "api_contract",
+   "kind": "import",
+   "count": 9,
+   "evidence": [
+    "apps/mobile/src/app/(app)/users/[id].tsx:7",
+    "apps/mobile/src/app/login.tsx:18",
+    "apps/mobile/src/lib/api.ts:1",
+    "apps/mobile/src/lib/api.ts:2",
+    "apps/mobile/src/lib/avatar.ts:1"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "platform_shell",
+   "to": "i18n",
+   "kind": "import",
+   "count": 9,
+   "evidence": [
+    "packages/platform/src/auth/guards.ts:3",
+    "packages/platform/src/auth/queries.ts:3",
+    "packages/platform/src/shell/app-sidebar.tsx:2",
+    "packages/platform/src/shell/command-menu.tsx:2",
+    "packages/platform/src/shell/nav-breadcrumb.tsx:2"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "worker",
+   "to": "data",
+   "kind": "import",
+   "count": 9,
+   "evidence": [
+    "apps/api/backend/app/task/database.py:9",
+    "apps/api/backend/app/task/tasks/maintenance/tasks.py:77",
+    "apps/api/backend/app/task/tasks/maintenance/tasks.py:119",
+    "apps/api/backend/app/task/tasks/maintenance/tasks.py:144",
+    "apps/api/backend/app/task/tasks/maintenance/tasks.py:179"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "http_api",
+   "to": "数据库",
+   "kind": "external",
+   "count": 8,
+   "evidence": [
+    "apps/api/backend/app/admin/api/v1/sys/dept.py:4",
+    "apps/api/backend/cli.py:21",
+    "apps/api/backend/cli.py:22",
+    "apps/api/backend/core/registrar.py:13",
+    "apps/api/backend/core/registrar.py:71"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "plugins",
+   "to": "services",
+   "kind": "import",
+   "count": 8,
+   "evidence": [
+    "apps/api/backend/plugin/ai/tools/dept_tools.py:11",
+    "apps/api/backend/plugin/ai/tools/menu_tools.py:7",
+    "apps/api/backend/plugin/ai/tools/role_tools.py:7",
+    "apps/api/backend/plugin/notice/service/notice_service.py:7",
+    "apps/api/backend/plugin/oauth2/service/oauth2_service.py:12"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "mobile",
+   "to": "i18n",
+   "kind": "import",
+   "count": 7,
+   "evidence": [
+    "apps/mobile/src/app/(app)/settings.tsx:9",
+    "apps/mobile/src/app/(app)/users/[id].tsx:8",
+    "apps/mobile/src/lib/api.ts:3",
+    "apps/mobile/src/lib/avatar.ts:2",
+    "apps/mobile/src/lib/datetime.ts:1"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "core",
+   "to": "Redis",
+   "kind": "external",
+   "count": 6,
+   "evidence": [
+    "apps/api/backend/common/observability/otel.py:19",
+    "apps/api/backend/common/observability/otel.py:20",
+    "apps/api/backend/database/redis.py:3",
+    "apps/api/backend/database/redis.py:4",
+    "apps/api/backend/utils/limiter.py:14"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "core",
+   "to": "plugins",
+   "kind": "import",
+   "count": 6,
+   "evidence": [
+    "apps/api/backend/common/security/rbac.py:79",
+    "apps/api/backend/core/conf.py:15",
+    "apps/api/backend/utils/dynamic_config.py:7",
+    "apps/api/backend/utils/dynamic_config.py:35",
+    "apps/api/backend/utils/dynamic_config.py:36"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "services",
+   "to": "plugins",
+   "kind": "import",
+   "count": 6,
+   "evidence": [
+    "apps/api/backend/app/admin/service/plugin_service.py:17",
+    "apps/api/backend/app/admin/service/plugin_service.py:18",
+    "apps/api/backend/app/admin/service/plugin_service.py:19"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "web",
+   "to": "i18n",
+   "kind": "import",
+   "count": 6,
+   "evidence": [
+    "apps/web/src/app.tsx:4",
+    "apps/web/src/components/language-menu.tsx:4",
+    "apps/web/src/i18n.ts:12",
+    "apps/web/src/i18n.ts:46",
+    "apps/web/src/i18n.ts:47"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "core",
+   "to": "data",
+   "kind": "import",
+   "count": 5,
+   "evidence": [
+    "apps/api/backend/common/security/jwt.py:15",
+    "apps/api/backend/common/security/jwt.py:16",
+    "apps/api/backend/common/security/jwt.py:247",
+    "apps/api/backend/common/security/permission.py:16",
+    "apps/api/backend/utils/storage_ops.py:32"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "plugins",
+   "to": "MCP 工具服务",
+   "kind": "external",
+   "count": 5,
+   "evidence": [
+    "apps/api/backend/plugin/ai/mcp_gateway/server.py:19",
+    "apps/api/backend/plugin/ai/mcp_gateway/server.py:21",
+    "apps/api/backend/plugin/ai/mcp_gateway/server.py:22",
+    "apps/api/backend/plugin/ai/mcp_gateway/server.py:23"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "platform_shell",
+   "to": "api_contract",
+   "kind": "import",
+   "count": 4,
+   "evidence": [
+    "packages/platform/src/api-client/client.ts:1",
+    "packages/platform/src/api-client/client.ts:2",
+    "packages/platform/src/api-client/client.ts:98",
+    "packages/platform/src/api-client/errors.ts:9"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "plugins",
+   "to": "OAuth 提供方",
+   "kind": "external",
+   "count": 4,
+   "evidence": [
+    "apps/api/backend/plugin/oauth2/api/v1/github.py:7",
+    "apps/api/backend/plugin/oauth2/api/v1/google.py:7"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "worker",
+   "to": "plugins",
+   "kind": "import",
+   "count": 4,
+   "evidence": [
+    "apps/api/backend/app/task/tasks/maintenance/tasks.py:85",
+    "apps/api/backend/app/task/tasks/notification/tasks.py:14",
+    "apps/api/backend/app/task/tasks/notification/tasks.py:15",
+    "apps/api/backend/app/task/tasks/workflow/tasks.py:7"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "worker",
+   "to": "services",
+   "kind": "import",
+   "count": 4,
+   "evidence": [
+    "apps/api/backend/app/task/tasks/maintenance/tasks.py:145",
+    "apps/api/backend/app/task/tasks/maintenance/tasks.py:180",
+    "apps/api/backend/app/task/tasks/maintenance/tasks.py:181"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "platform_shell",
+   "to": "platform_pages",
+   "kind": "import",
+   "count": 3,
+   "evidence": [
+    "packages/platform/src/shell/upload-store.ts:4",
+    "packages/platform/src/shell/upload-tray.tsx:8",
+    "packages/platform/src/shell/use-sidebar.ts:11"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "data",
+   "to": "plugins",
+   "kind": "import",
+   "count": 2,
+   "evidence": [
+    "apps/api/backend/app/admin/crud/crud_user.py:33",
+    "apps/api/backend/app/admin/crud/crud_user.py:471"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "plugins",
+   "to": "http_api",
+   "kind": "import",
+   "count": 2,
+   "evidence": [
+    "apps/api/backend/plugin/open/gateway/route.py:27",
+    "apps/api/backend/plugin/router.py:114"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "services",
+   "to": "worker",
+   "kind": "import",
+   "count": 2,
+   "evidence": [
+    "apps/api/backend/app/task/service/scheduler_service.py:57",
+    "apps/api/backend/app/task/service/scheduler_service.py:115"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "core",
+   "to": "对象存储",
+   "kind": "external",
+   "count": 1,
+   "evidence": [
+    "apps/api/backend/utils/storage_ops.py:27"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "data",
+   "to": "services",
+   "kind": "import",
+   "count": 1,
+   "evidence": [
+    "apps/api/backend/app/admin/crud/crud_user.py:28"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "http_api",
+   "to": "可观测性",
+   "kind": "external",
+   "count": 1,
+   "evidence": [
+    "apps/api/backend/core/registrar.py:12"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "plugins",
+   "to": "SMTP 邮件",
+   "kind": "external",
+   "count": 1,
+   "evidence": [
+    "apps/api/backend/plugin/email/utils/send.py:4"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "worker",
+   "to": "Redis",
+   "kind": "external",
+   "count": 1,
+   "evidence": [
+    "apps/api/backend/app/task/utils/schedulers.py:220"
+   ],
+   "confidence": "static"
+  },
+  {
+   "from": "worker",
+   "to": "Redis",
+   "kind": "inferred",
+   "count": 0,
+   "evidence": [
+    "apps/api/backend/app/task/celery.py:84",
+    "apps/api/backend/core/conf.py:449"
+   ],
+   "confidence": "inferred",
+   "reason": "Celery 的 broker 连接串按配置 CELERY_BROKER 拼出来交给 Celery，静态 import 看不到（调度器自己的 import redis 是另一条实线）"
+  }
+ ],
+ "entrypoints": [
+  {
+   "type": "http",
+   "module": "http_api",
+   "detail": "FastAPI /api/v1（JWT + 权限码）",
+   "evidence": [
+    "apps/api/backend/core/registrar.py:172"
+   ]
+  },
+  {
+   "type": "http",
+   "module": "plugins",
+   "detail": "开放接口 /api/open/v1（AK/SK 签名）",
+   "evidence": [
+    "apps/api/backend/plugin/open/api/router.py:15"
+   ]
+  },
+  {
+   "type": "websocket",
+   "module": "core",
+   "detail": "socket.io 推送（Redis 跨进程广播）",
+   "evidence": [
+    "apps/api/backend/common/socketio/server.py:14"
+   ]
+  },
+  {
+   "type": "worker",
+   "module": "worker",
+   "detail": "Celery worker + beat",
+   "evidence": [
+    "apps/api/backend/app/task/celery.py:127"
+   ]
+  },
+  {
+   "type": "cli",
+   "module": "http_api",
+   "detail": "fba CLI：起服务 / 起 worker / 迁移",
+   "evidence": [
+    "apps/api/backend/cli.py:422"
+   ]
+  }
+ ],
+ "flows": [
+  {
+   "name": "用户打开一个列表页",
+   "steps": [
+    "web: 路由守卫，TabOutlet 挂载页面",
+    "platform_pages: 列表页按 URL 里的筛选发起查询",
+    "platform_shell: 请求客户端带 JWT 调 /api/v1",
+    "http_api: JWT 中间件 + 路由 + 权限码校验",
+    "services: 业务逻辑",
+    "data: CRUD，按数据范围过滤",
+    "数据库: 查询"
+   ]
+  },
+  {
+   "name": "AI 助手调用写操作工具",
+   "steps": [
+    "platform_pages: AI 对话流式请求",
+    "http_api: 鉴权并转给插件路由",
+    "plugins: ai 插件编排对话",
+    "LLM API: 模型决定调用哪个工具",
+    "plugins: 写操作先出预览，等本人在网页确认",
+    "services: 按确认人的数据范围执行",
+    "数据库: 落库"
+   ]
+  },
+  {
+   "name": "外部系统增量同步（开放接口）",
+   "steps": [
+    "plugins: 网关验签 → nonce → scope → 限流",
+    "plugins: 按（变更时间，id）游标取一页",
+    "数据库: COALESCE(updated_time, created_time) 游标查询",
+    "plugins: 写调用日志"
+   ]
+  }
+ ],
+ "hotspots": [
+  {
+   "module": "plugins",
+   "commits_7d": 11,
+   "commits_prev_7d": 0,
+   "commits_30d": 11,
+   "trend": "+11"
+  },
+  {
+   "module": "core",
+   "commits_7d": 10,
+   "commits_prev_7d": 0,
+   "commits_30d": 10,
+   "trend": "+10"
+  },
+  {
+   "module": "i18n",
+   "commits_7d": 10,
+   "commits_prev_7d": 0,
+   "commits_30d": 10,
+   "trend": "+10"
+  },
+  {
+   "module": "platform_pages",
+   "commits_7d": 9,
+   "commits_prev_7d": 0,
+   "commits_30d": 9,
+   "trend": "+9"
+  },
+  {
+   "module": "web",
+   "commits_7d": 7,
+   "commits_prev_7d": 0,
+   "commits_30d": 7,
+   "trend": "+7"
+  },
+  {
+   "module": "api_contract",
+   "commits_7d": 6,
+   "commits_prev_7d": 0,
+   "commits_30d": 6,
+   "trend": "+6"
+  },
+  {
+   "module": "ui",
+   "commits_7d": 6,
+   "commits_prev_7d": 0,
+   "commits_30d": 6,
+   "trend": "+6"
+  },
+  {
+   "module": "platform_shell",
+   "commits_7d": 5,
+   "commits_prev_7d": 0,
+   "commits_30d": 5,
+   "trend": "+5"
+  },
+  {
+   "module": "services",
+   "commits_7d": 5,
+   "commits_prev_7d": 0,
+   "commits_30d": 5,
+   "trend": "+5"
+  },
+  {
+   "module": "data",
+   "commits_7d": 4,
+   "commits_prev_7d": 0,
+   "commits_30d": 4,
+   "trend": "+4"
+  },
+  {
+   "module": "http_api",
+   "commits_7d": 4,
+   "commits_prev_7d": 0,
+   "commits_30d": 4,
+   "trend": "+4"
+  },
+  {
+   "module": "worker",
+   "commits_7d": 4,
+   "commits_prev_7d": 0,
+   "commits_30d": 4,
+   "trend": "+4"
+  },
+  {
+   "module": "mobile",
+   "commits_7d": 2,
+   "commits_prev_7d": 0,
+   "commits_30d": 2,
+   "trend": "+2"
+  },
+  {
+   "module": "desktop",
+   "commits_7d": 1,
+   "commits_prev_7d": 0,
+   "commits_30d": 1,
+   "trend": "+1"
+  }
+ ],
+ "findings": [
+  {
+   "type": "layer_violation",
+   "edge": "core->plugins",
+   "detail": "foundation -> feature (向上 2 层, 6 处)",
+   "evidence": [
+    "apps/api/backend/common/security/rbac.py:79",
+    "apps/api/backend/core/conf.py:15",
+    "apps/api/backend/utils/dynamic_config.py:7"
+   ],
+   "source": "computed"
+  },
+  {
+   "type": "layer_violation",
+   "edge": "core->data",
+   "detail": "foundation -> shared (向上 1 层, 5 处)",
+   "evidence": [
+    "apps/api/backend/common/security/jwt.py:15",
+    "apps/api/backend/common/security/jwt.py:16",
+    "apps/api/backend/common/security/jwt.py:247"
+   ],
+   "source": "computed"
+  },
+  {
+   "type": "layer_violation",
+   "edge": "platform_shell->platform_pages",
+   "detail": "shared -> feature (向上 1 层, 3 处)",
+   "evidence": [
+    "packages/platform/src/shell/upload-store.ts:4",
+    "packages/platform/src/shell/upload-tray.tsx:8",
+    "packages/platform/src/shell/use-sidebar.ts:11"
+   ],
+   "source": "computed"
+  },
+  {
+   "type": "layer_violation",
+   "edge": "data->plugins",
+   "detail": "shared -> feature (向上 1 层, 2 处)",
+   "evidence": [
+    "apps/api/backend/app/admin/crud/crud_user.py:33",
+    "apps/api/backend/app/admin/crud/crud_user.py:471"
+   ],
+   "source": "computed"
+  },
+  {
+   "type": "layer_violation",
+   "edge": "plugins->http_api",
+   "detail": "feature -> entry (向上 1 层, 2 处)",
+   "evidence": [
+    "apps/api/backend/plugin/open/gateway/route.py:27",
+    "apps/api/backend/plugin/router.py:114"
+   ],
+   "source": "computed"
+  },
+  {
+   "type": "layer_violation",
+   "edge": "services->worker",
+   "detail": "feature -> entry (向上 1 层, 2 处)",
+   "evidence": [
+    "apps/api/backend/app/task/service/scheduler_service.py:57",
+    "apps/api/backend/app/task/service/scheduler_service.py:115"
+   ],
+   "source": "computed"
+  },
+  {
+   "type": "layer_violation",
+   "edge": "data->services",
+   "detail": "shared -> feature (向上 1 层, 1 处)",
+   "evidence": [
+    "apps/api/backend/app/admin/crud/crud_user.py:28"
+   ],
+   "source": "computed"
+  }
+ ],
+ "unmapped": {
+  "files": 0,
+  "sample": [],
+  "packages": {
+   "fastapi": 241,
+   "react": 215,
+   "@tabler/icons-react": 149,
+   "react-i18next": 142,
+   "@tanstack/react-query": 112,
+   "pydantic": 91,
+   "@tanstack/react-router": 58,
+   "starlette": 57,
+   "zod": 46,
+   "react-native": 31,
+   "@base-ui/react": 31,
+   "@tanstack/react-table": 30,
+   "pyrate_limiter": 20,
+   "celery": 18,
+   "lucide-react-native": 16,
+   "expo-router": 15,
+   "@hookform/resolvers": 14,
+   "react-hook-form": 14,
+   "anyio": 12,
+   "class-variance-authority": 12,
+   "rich": 11,
+   "electron": 10,
+   "fastapi_pagination": 9,
+   "node:fs": 9,
+   "node:path": 9,
+   "vitest": 8,
+   "starlette_context": 7,
+   "uniwind": 7,
+   "zustand": 7,
+   "cryptography": 5
+  }
+ }
+}
