@@ -36,10 +36,10 @@ def test_update_nickname_success_returns_code_200(
     assert client.get('/sys/users/me', headers=token_headers).json()['data']['nickname'] == '契约测试用昵称'
 
 
-def test_update_nickname_with_the_same_value_is_dialect_dependent(
+def test_update_nickname_with_the_same_value_still_succeeds(
     client: TestClient, token_headers: dict[str, str], restore_nickname: str
 ) -> None:
-    """🔴 把昵称设成**当前一样的值** —— 结果**取决于数据库方言**。
+    """🔴 把昵称设成**当前一样的值** —— 三个方言都**照样成功**。
 
     handler 是 `count > 0 ? success() : fail()`，而 `count` 一路下来就是
     `CursorResult.rowcount`（`sqlalchemy_crud_plus` 的 `update_model_by_column`
@@ -49,23 +49,20 @@ def test_update_nickname_with_the_same_value_is_dialect_dependent(
     |---|---|---|
     | SQL Server（aioodbc） | **匹配**行 = 1 | `code: 200` |
     | PostgreSQL（asyncpg） | 匹配行 = 1 | `code: 200` |
-    | MySQL（asyncmy，本仓库**没有**设 `CLIENT_FOUND_ROWS`） | **变更**行 = 0 | `code: 400` |
+    | MySQL（asyncmy） | 匹配行 = 1 | `code: 200` |
 
-    ⚠️ **同一个接口在三个方言上行为不同**，而本仓库宣称支持三种数据库。
-    `platform/src/pages/profile/api.ts` 里原来那句「提交一模一样的值 rowcount = 0，
-    接口会返回失败」是**只在 MySQL 上成立**的，已按这条测试的结果改成有条件的说法。
+    MySQL 那一行**原来写的是「变更行 = 0 → `code: 400`」**，理由是「本仓库没设
+    `CLIENT_FOUND_ROWS`」—— 那是推断。SQLAlchemy 的 MySQL 方言**自己默认就开着**
+    `CLIENT.FOUND_ROWS`（`dialects/mysql/asyncmy.py: _found_rows_client_flag`），
+    2026-10-22 在 MySQL 8.4 上实跑，这条测试原来的 MySQL 分支当场红（实际 `code: 200`）。
 
-    所以页面侧「值没变就禁用提交」那个做法**要保留**：在 MySQL 上它是正确性
-    要求，在另两个方言上是省一次无意义的请求。
+    页面侧「值没变就禁用提交」照样保留：省一次无意义的请求。
     """
     same = restore_nickname
     res = client.put('/sys/users/me/nickname', headers=token_headers, json={'nickname': same})
     http, code = _envelope(res)
     assert http == 200, '无论哪个方言，HTTP 层都是 200 —— 这正是客户端会读错的地方'
-    if settings.DATABASE_TYPE == 'mysql':
-        assert code == 400, 'MySQL 的 affected_rows 数变更行，设同值应当是 0 行 -> fail()'
-    else:
-        assert code == 200, f'{settings.DATABASE_TYPE} 的 rowcount 数匹配行，设同值应当仍成功'
+    assert code == 200, f'{settings.DATABASE_TYPE} 的 rowcount 数匹配行，设同值应当仍成功'
 
 
 def test_update_timezone_rejects_a_bogus_iana_name(client: TestClient, token_headers: dict[str, str]) -> None:

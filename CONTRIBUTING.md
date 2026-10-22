@@ -2,13 +2,12 @@
 
 先说清楚项目的状态，省得你白花时间：
 
-- **0.0.1，没有发过版**，也没有线上实例。所以**表结构可以直接改模型**，接口可以直接改，
-  不用为兼容性让设计将就（详见 [CLAUDE.md](./CLAUDE.md) 的「还没发版 —— 可以自由重构」）
-- **后端是 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) 的永久分叉**。
-  上游明确拒绝合并 SQL Server 支持，所以我们只 cherry-pick 上游安全补丁，功能更新不跟。
-  改 `apps/api/` 时不必考虑「怎么合回上游」
-- **前后端都有自动化测试，且都打真实依赖不 mock**：后端 194 条 pytest 对真实 SQL Server，
-  前端 44 条 Playwright 对真实浏览器 + 真实接口 + 真实库。改动涉及的模块**有对应测试的必须跑绿**，
+- **还在 0.x**（最新版见 [Releases](https://github.com/yilecoding/fastapi-react-admin/releases)）。
+  接口可以直接改、不留旧字段，不用为兼容性让设计将就；**表结构改动一律走 alembic 迁移**（见下文「后端」）
+- **后端最初基于 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) 构建，已经独立演进**：
+  只 cherry-pick 上游的安全补丁，功能更新不跟。改 `apps/api/` 时不必考虑「怎么合回上游」
+- **前后端都有自动化测试，且都打真实依赖不 mock**：后端 767 条 pytest 对真实数据库 + Redis，
+  前端 89 条 Playwright 对真实浏览器 + 真实接口 + 真实库。改动涉及的模块**有对应测试的必须跑绿**，
   没测试覆盖到的部分才退回 `pnpm typecheck` + 手动点
 
 ## 提 issue 之前
@@ -21,6 +20,59 @@
 2. **[SECURITY.md](./SECURITY.md)** —— 「已知的、尚未修复的问题」那张表。
    安全问题请走私密报告，不要开公开 issue
 
+## 本地开发
+
+**前置**：Node ≥ 22.13 · Python ≥ 3.10 · [uv](https://docs.astral.sh/uv/) · Docker。
+pnpm 版本由 `package.json` 的 `packageManager` 精确锁定（corepack 会自动装对应版本）。
+
+```bash
+# 1. 起依赖（PostgreSQL 16 + Redis）
+docker compose -f docker-compose.dev.yml up -d
+
+# 2. 装依赖（JS workspace、后端 Python 开发依赖、pre-commit 钩子、Playwright Chromium）
+pnpm install:all
+
+# 3. 配后端环境变量。模板默认值已经和上面那份 compose 对齐（postgres:5432 / redis:6380 / 雪花主键）
+cp apps/api/backend/.env.example apps/api/backend/.env
+
+# 4. 建表 + 灌种子数据 + 标记迁移版本（会先让你确认）
+#    ⚠️ 它会 DROP 并重建所有表，只在首次或想重置时跑；之后表结构变化用 pnpm db:upgrade
+pnpm db:init
+
+# 5. 起服务
+pnpm dev                                    # api :8088 · web :8888 · celery worker
+```
+
+账号 `admin` / `123456`。**登录默认要过图形验证码**；本地想省掉这一步，在「参数配置」里把
+`LOGIN_CAPTCHA_ENABLED` 改成 `false`（改完立即生效）。要照原样输验证码，先记下
+`GET /api/v1/auth/captcha` 响应里的 `uuid`，再查答案：
+
+```bash
+docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
+```
+
+### 换数据库 / 接对象存储
+
+可选的依赖都在同一份 `docker-compose.dev.yml` 里，按需打开，再改 `.env` 里的 `DATABASE_*`：
+
+| 要用 | 命令 | 备注 |
+|---|---|---|
+| **SQL Server** | `docker compose -f docker-compose.dev.yml --profile sqlserver up -d mssql` | 宿主机还要装 [Microsoft ODBC Driver 18](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server)（后端走 `aioodbc`，容器里那份驱动不算 —— 不装的表现是「库起来了、后端一连就报 `Can't open lib ... ODBC Driver 18`」） |
+| **MySQL** | 自备 MySQL 8.x（compose 里没有） | `DATABASE_TYPE='mysql'`，字符集用 `utf8mb4` |
+| **S3 兼容存储**（RustFS） | `docker compose -f docker-compose.dev.yml --profile s3 up -d rustfs` | 在「存储管理」里新建存储前，`.env` 里要配 `STORAGE_ENCRYPT_SECRET_KEY`（`openssl rand -hex 32`） |
+
+> ⚠️ `.env.example` 默认 `DATABASE_PK_MODE='snowflake'`，别改成 `autoincrement` ——
+> 种子数据只提供雪花版，自增模式下初始化会**静默跳过**种子，库建好了却没有 admin 账号。
+
+### 几个容易卡住的地方
+
+- **两套测试都跑在独立的 `fba_test` 库上**（E2E 连的也是它，只是走另一套端口和另一个 Redis db），
+  第一次要先建库：`pnpm --filter api test:db`，见 [`backend/tests/AGENTS.md`](./apps/api/backend/tests/AGENTS.md)
+- 后端开了 `--reload`，改 Python 代码会自动重启。但**改模型不等于改表** ——
+  表结构改动一律走 alembic，reload 只是重新 import 模型，不会去动库
+- 前端端口固定在 8888（`strictPort`，被占时直接报错而不是漂到 8889）。换端口要同时改四处，详见 [CLAUDE.md](./CLAUDE.md)
+- 后端契约改动后跑 `pnpm --filter @admin/api gen:api` 重新生成前端类型
+
 ## 分支模型：GitHub Flow
 
 `main` 上有分支保护（ruleset，2026-08-25 起生效），直接 push 会被拒绝——包括仓库
@@ -32,7 +84,7 @@ main（受保护，只能通过 PR 合入）
 ```
 
 - 分支名前缀对齐 commit 前缀（Conventional Commits 风格，`feat:`/`fix:`/`docs:`/`chore:`）
-- 合并前必须：CI 五个 job 全绿（见下）。**不要求人工 review**——单人维护，
+- 合并前必须：5 个必需检查全绿（见下；`pytest · PostgreSQL` 也会跑，但不在必需检查里）。**不要求人工 review**——单人维护，
   要求别人批准会直接把自己锁死；门槛全靠 CI
 - 三种合并方式（merge / squash / rebase）都开着，没有强制线性历史，看改动大小自己选
 
@@ -61,31 +113,32 @@ main（受保护，只能通过 PR 合入）
 
 ## 发版
 
-版本号的唯一真相是 `apps/web/src/lib/brand.ts` 的 `version`（改名字、改版本只动那一处）。
+**每合进一个大功能打一个 tag**：大功能升次版本号（0.1.0 → 0.2.0），只有修复升修订号。
+版本号的单一来源是 `apps/web/package.json` 的 `version`（`brand.ts` 和 `/version.json` 都读它，根 `package.json` 保持同值）。
 
 ```bash
-# 1. 改 brand.ts 的 version，正常走 PR 合进 main
-# 2. 在 main 上打 tag
-git tag v0.0.1 && git push origin v0.0.1
+# 1. 改 apps/web/package.json（和根 package.json）的 version，最好在那个大功能的 PR 里顺手改
+# 2. 合进 main、CI 绿了之后，在 main 上打带说明的 tag
+git tag -a v0.2.0 -m "v0.2.0 — 这一版的主要功能" && git push origin v0.2.0
 ```
 
 tag 推上去之后：
 
 | 谁 | 做什么 |
 |---|---|
-| `.github/workflows/release.yml` | Windows runner 出桌面端 NSIS 安装包 → 传成 GitHub Release **草稿** |
-| `.github/workflows/ci.yml` 的 `build-images` | 只在 **push 到 main** 时跑，推 `latest` + `sha-<短 SHA>` 两个镜像标签；**不跟 tag** |
+| `.github/workflows/release.yml` | Windows / macOS / Linux 各出一份桌面端安装包 → 传成 GitHub Release **草稿** |
+| `.github/workflows/ci.yml` 的 `build-images` | 只在 **push 到 main** 时跑，推 `latest` + `sha-<短 SHA>` + `sha-<完整 SHA>` 镜像标签；**不跟 tag** |
 
-- 🔴 **tag 和 `brand.ts` 不一致时 release 会直接失败**（故意的，见 `apps/desktop/README.md`）
+- 🔴 **tag 和 `apps/web/package.json` 的版本不一致时 release 会直接失败**（故意的）
 - 草稿 release 要人工确认后再发布：安装包能不能装、能不能连上后端，机器判不了
 - 想试这条流水线又不想留 tag：Actions → Release → Run workflow，出的包只作为 artifact
 - 桌面端出包 / 分发 / 自动更新的坑收在 [`apps/desktop/AGENTS.md`](apps/desktop/AGENTS.md)
 
 ## 提 PR 之前
 
-这几道门必须全绿，CI 五个 job 都跑（`typecheck · build · i18n · ctx` / `eslint` /
-`ruff` / `pytest · SQL Server` / `playwright · E2E`，后两个要真实 SQL Server，
-CI 里会自建库，不再是「本地才跑」）：
+这几道门必须全绿，CI 的 job 都跑（`typecheck · build · i18n` / `eslint` /
+`ruff` / `pytest · SQL Server` / `pytest · PostgreSQL` / `playwright · E2E`，数据库用
+GitHub Actions 的 service containers 自建，不是「本地才跑」）：
 
 ```bash
 pnpm typecheck --force          # 全仓库 tsc（不带 --force 会命中 turbo 缓存，见 CLAUDE.md 硬纪律 12）
@@ -94,7 +147,7 @@ pnpm build                      # web + mobile + desktop —— 前端唯一的�
 pnpm i18n:check && pnpm i18n:jsx
 pnpm ctx:check                  # 工程文档里的死引用 / 死链接 / 死脚本 / 死 testid
 pnpm arch:check                 # 依赖箭头：import / tsconfig paths / 方向
-pnpm test                       # 后端 pytest（470 条）；要先备好 fba_test 库
+pnpm test                       # 后端 pytest（767 条）；要先备好 fba_test 库
 pnpm e2e                        # 前端 Playwright（89 条）；自动拉起隔离的 web+api 实例
 ```
 

@@ -22,17 +22,18 @@
 （`/sys/users/me/nickname` · `/me/avatar` · `/me/timezone` · `/sys/configs/{pk}` …）。
 
 ⚠️ **一条需要纠正的说法。** 这里原来断言「设一个和库里一样的值 → 0 行 →
-`fail()`，界面上表现为『保存成功、页面退回、值没变』」。**在 SQL Server 上那是错的**：
+`fail()`，界面上表现为『保存成功、页面退回、值没变』」。**在三个方言上都是错的**：
 
 | 方言 | 设同值时的 rowcount | 接口返回 |
 |---|---|---|
 | SQL Server（aioodbc） | **匹配**行 = 1 | `code: 200` |
 | PostgreSQL（asyncpg） | 匹配行 = 1 | `code: 200` |
-| MySQL（asyncmy，本仓库**没**设 `CLIENT_FOUND_ROWS`） | **变更**行 = 0 | `code: 400` |
+| MySQL（asyncmy） | 匹配行 = 1 | `code: 200` |
 
-**同一个接口在三个方言上行为不同**，而本仓库宣称支持三种数据库。
-实测钉在 `backend/app/admin/tests/api_v1/test_me_envelope.py`（那条测试自己
-按 `DATABASE_TYPE` 分支，所以换方言跑也不会变成假失败）。
+三个方言行为一致。MySQL 那一行**原来写的是「变更行 = 0 → `code: 400`」**，理由是
+「本仓库没设 `CLIENT_FOUND_ROWS`」—— 可 SQLAlchemy 的 MySQL 方言**自己默认就开着**它
+（`dialects/mysql/asyncmy.py: _found_rows_client_flag`）。2026-10-22 在 MySQL 8.4 上
+实跑，`backend/app/admin/tests/api_v1/test_me_envelope.py` 原来的 MySQL 分支当场红，已改成三方言同一个断言。
 
 判定本身不受影响：`fail()` 该当成失败，无论它因为什么原因发生。
 

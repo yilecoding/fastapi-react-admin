@@ -16,9 +16,9 @@ import { ApiError, type Envelope, isEnvelope } from './errors'
  * fail()」，并说界面上表现为「保存成功、页面退回、值没变」。**在 SQL Server
  * 上那是错的** —— `rowcount` 数的是**匹配**行而不是**变更**行，设同值照样
  * 返回 `code: 200`（`backend/app/admin/tests/api_v1/test_me_envelope.py`
- * 实测钉住了）。那个说法只在 **MySQL** 上成立（asyncmy 默认报变更行，
- * 而本仓库没有设 `CLIENT_FOUND_ROWS`）—— 也就是说**同一个接口在三个方言上
- * 行为不同**。
+ * 实测钉住了）。MySQL 上也一样 —— SQLAlchemy 的 MySQL 方言默认开着
+ * `CLIENT.FOUND_ROWS`，同样报匹配行（2026-10-22 在 MySQL 8.4 上实跑确认；
+ * 这里原来写的「只在 MySQL 上成立」是推断，被实跑推翻了）。
  *
  * 判定本身不受影响：`fail()` 该当成失败，无论它因为什么原因发生。
  *

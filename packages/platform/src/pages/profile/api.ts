@@ -11,14 +11,12 @@ import { authKeys } from '../../auth/queries'
  * ⚠️ 后端这几个 handler 统一是 `count > 0 ? success() : fail()` —— `count` 是
  * **受影响行数**，不是成败。
  *
- * 🔴 **「提交同值会 rowcount = 0 从而假失败」这件事只在 MySQL 上成立。**
- * `rowcount` 是 DBAPI 报什么就是什么：SQL Server（aioodbc）和 PostgreSQL
- * （asyncpg）报的是**匹配**行，设同值照样是 1 行、照样成功；MySQL（asyncmy，
- * 本仓库没设 `CLIENT_FOUND_ROWS`）报的是**变更**行，才会是 0。
- * 实测见 `backend/app/admin/tests/api_v1/test_me_envelope.py`。
+ * 🔴 **「提交同值会 rowcount = 0 从而假失败」在三个方言上都不成立。**
+ * SQL Server（aioodbc）、PostgreSQL（asyncpg）、MySQL（asyncmy —— SQLAlchemy
+ * 默认开着 `CLIENT.FOUND_ROWS`）报的都是**匹配**行，设同值照样是 1 行、照样成功。
+ * 实测见 `backend/app/admin/tests/api_v1/test_me_envelope.py`（MySQL 那一支是 2026-10-22 实跑改对的）。
  *
- * 所以页面侧「值没变就禁用提交」**要保留**，但理由变了：在 MySQL 上它是
- * 正确性要求，在另两个方言上是省一次无意义的请求。
+ * 页面侧「值没变就禁用提交」照样保留：省一次无意义的请求。
  */
 
 /** 昵称：`PUT /sys/users/me/nickname`，body 是 embed 的 `{nickname}` */

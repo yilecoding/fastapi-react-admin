@@ -19,7 +19,7 @@ ID」一节，现在有 `test_seed_dialects.py` 守着）显示这套"SQL Server
 真出过事故。这次把"本地默认起哪个库"也一起翻了：三处默认值改指 PostgreSQL，
 文档「主线」字样跟着改，**但 CI 的 `test-backend`/`test-backend-postgres` job id
 没改名**（分支保护 required checks 认字面量，要动先去仓库设置确认），
-`test-e2e` 也仍连 SQL Server（换方言要真跑一轮 CI 验证，没跟这次揉一起）。
+`test-e2e` 也仍连 SQL Server（换方言要真跑一轮 CI 验证，没跟这次揉一起）。MySQL 不在 CI 里，真库实跑见 [`backend/tests` 分册](backend/tests/AGENTS.md)「MySQL」一节。
 
 **结论**：下面「后端约定」里那几条 SQL Server 专属约定依然要遵守——本地默认库
 变 PostgreSQL 后测不出来，只有 CI 的 `pytest · SQL Server` job 能拦住。
