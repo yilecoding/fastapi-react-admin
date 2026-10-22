@@ -73,7 +73,7 @@ class StorageService:
     """存储管理"""
 
     @staticmethod
-    def builtin_detail(*, is_default: bool, file_count: int) -> dict[str, Any]:
+    def builtin_detail(*, is_default: bool, file_count: int, recycled_count: int) -> dict[str, Any]:
         """内置本地存储在列表里的那一行"""
         return {
             'id': BUILTIN_ID,
@@ -86,6 +86,7 @@ class StorageService:
             'status': 1,
             'builtin': True,
             'file_count': file_count,
+            'recycled_count': recycled_count,
         }
 
     @staticmethod
@@ -94,11 +95,12 @@ class StorageService:
         rows = await storage_dao.get_all(db)
         counts = await file_dao.get_storage_counts(db)
         has_default = any(row.is_default for row in rows)
-        result = [StorageService.builtin_detail(is_default=not has_default, file_count=counts.get(None, 0))]
+        active, recycled = counts.get(None, (0, 0))
+        result = [StorageService.builtin_detail(is_default=not has_default, file_count=active, recycled_count=recycled)]
         for row in rows:
             detail = {c.name: getattr(row, c.name) for c in Storage.__table__.columns if c.name != 'secret_cipher'}
             detail['builtin'] = False
-            detail['file_count'] = counts.get(row.id, 0)
+            detail['file_count'], detail['recycled_count'] = counts.get(row.id, (0, 0))
             result.append(detail)
         return result
 
@@ -158,10 +160,11 @@ class StorageService:
         storage = await StorageService.get(db=db, pk=pk)
         if storage.is_default:
             raise errors.RequestError(msg=t('error.storage.default_cannot_delete'))
-        count = (await file_dao.get_storage_counts(db)).get(pk, 0)
-        if count:
-            # 🔴 删了存储，挂在它上面的文件就全读不到了 —— 而且是在别人打开时才 404
-            raise errors.RequestError(msg=t('error.storage.has_files', count=count))
+        active, recycled = (await file_dao.get_storage_counts(db)).get(pk, (0, 0))
+        if active or recycled:
+            # 🔴 删了存储，挂在它上面的文件就全读不到了 —— 而且是在别人打开时才 404。
+            # 回收站里的也算：对象还在这个存储里，删了存储就永远还原不回来
+            raise errors.RequestError(msg=t('error.storage.has_files', count=active + recycled))
         return await storage_dao.delete(db, pk)
 
     @staticmethod

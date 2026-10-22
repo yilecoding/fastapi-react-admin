@@ -125,3 +125,41 @@ async def prune_task_results(days: int = 30, batch: int = PRUNE_BATCH) -> str:
     msg = f'清理 {days} 天前的任务执行记录：{n} 条'
     log.info(msg)
     return msg
+
+
+@celery_app.task(name='maintenance.purge_recycled_files')
+@with_timeout()
+async def purge_recycled_files(batch: int = 200) -> str:
+    """彻底删除回收站里超过保留期（`FILE_RECYCLE_DAYS`，默认 30 天）的文件：删对象，记录留成墓碑。
+
+    保留期**刻意不做成任务参数**（`prune_logs` 那样的 `days`）：回收站列表上的「剩余 N 天」、删除确认框里的
+    「N 天后自动清除」也要读它，做成任务参数就有两个真相源，改了一边另一边照旧显示老数字。
+
+    分批、每批一个事务（同 `_prune_table` 的纪律）：每个文件都要删一次对象，S3 上是一个网络请求，
+    一个事务删几万个的话失败就全部回滚、白跑一趟。
+
+    ⚠️ 不经过 HTTP，没有「当前用户」，所以数据范围不过滤（`DataScopedCRUD` 在没有用户上下文时放行）——
+    要的就是全量
+    """
+    from backend.app.admin.crud.crud_file import file_dao
+    from backend.app.admin.service.file_service import file_service
+    from backend.core.conf import settings
+
+    cutoff = timezone.now() - timedelta(days=max(settings.FILE_RECYCLE_DAYS, 0))
+    total = 0
+    after_id = 0
+    async with async_db_session() as db:
+        while True:
+            ids = await file_dao.get_recycled_ids(db, before=cutoff, after_id=after_id, limit=batch)
+            if not ids:
+                break
+            total += await file_service.purge(db=db, pks=list(ids))
+            await db.commit()
+            # 按 ID 往后翻（keyset）：清不掉的那一行不会被下一批再取回来，循环不会原地打转
+            after_id = ids[-1]
+            if len(ids) < batch:
+                break
+
+    msg = f'彻底删除回收站里超过 {settings.FILE_RECYCLE_DAYS} 天的文件：{total} 个'
+    log.info(msg)
+    return msg

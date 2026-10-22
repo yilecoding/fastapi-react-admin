@@ -66,6 +66,7 @@ export const fileKeys = {
   all: ['sys', 'file'] as const,
   list: (p: FileListParams) => [...fileKeys.all, 'list', p] as const,
   statistics: () => [...fileKeys.all, 'statistics'] as const,
+  recycle: (p: RecycleParams) => [...fileKeys.all, 'recycle', p] as const,
   target: (targetType: string, targetId: string) => [...fileKeys.all, 'target', targetType, targetId] as const,
 }
 
@@ -94,6 +95,57 @@ export type FileStatistics = {
   total_size: number
   type_counts: Partial<Record<FileType, number>>
   type_sizes: Partial<Record<FileType, number>>
+  /** 回收站：对象还在存储里，空间还没释放，和上面的「已用空间」分开算 */
+  recycle_count: number
+  recycle_size: number
+  /** 回收站保留天数；0 = 没启用回收站，删除即彻底删除（文案要跟着变） */
+  recycle_days: number
+}
+
+/** 回收站里的一个文件 */
+export type RecycledFile = FileItem & {
+  deleted_time: string
+  /** 到期自动彻底删除的时间；null = 回收站已关闭，不会自动清除 */
+  purge_time: string | null
+}
+
+export type RecycleParams = { page: number; size: number; name?: string }
+
+export const recycleQuery = (p: RecycleParams) =>
+  queryOptions({
+    queryKey: fileKeys.recycle(p),
+    queryFn: () => {
+      const s = new URLSearchParams({ page: String(p.page), size: String(p.size) })
+      if (p.name) s.set('name', p.name)
+      return api.GET<PageData<RecycledFile>>(`/api/v1/sys/files/recycle?${s.toString()}`)
+    },
+    placeholderData: (prev) => prev,
+  })
+
+/** 还原（连带挂回删它那一次解开的附件关联）。列表、统计、附件面板都要刷新，所以失效整个 fileKeys */
+export function useRestoreFiles() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (pks: string[]) => api.PUT('/api/v1/sys/files/recycle/restore', { body: { pks } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: fileKeys.all }),
+  })
+}
+
+/** 从回收站彻底删除（删对象，不可恢复） */
+export function usePurgeFiles() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (pks: string[]) => api.DELETE('/api/v1/sys/files/recycle', { body: { pks } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: fileKeys.all }),
+  })
+}
+
+export function useEmptyRecycle() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.DELETE('/api/v1/sys/files/recycle/all'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: fileKeys.all }),
+  })
 }
 
 export const fileStatisticsQuery = () =>

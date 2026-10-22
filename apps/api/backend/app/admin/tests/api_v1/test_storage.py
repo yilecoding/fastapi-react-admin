@@ -518,7 +518,11 @@ def test_delete_file_removes_object(
     assert any(o.key.endswith(data['path']) for o in bucket.objects.all())
 
     assert client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]}).status_code == 200
-    assert not any(o.key.endswith(data['path']) for o in bucket.objects.all()), '库里删了、桶里留孤儿'
+    # 进回收站：对象还在（还原要靠它）
+    assert any(o.key.endswith(data['path']) for o in bucket.objects.all())
+    purge = client.request('DELETE', f'{FILES}/recycle', headers=token_headers, json={'pks': [data['id']]})
+    assert purge.status_code == 200
+    assert not any(o.key.endswith(data['path']) for o in bucket.objects.all()), '彻底删除了、桶里留孤儿'
 
 
 def test_missing_object_is_reported_as_missing(
@@ -610,8 +614,14 @@ def test_storage_with_files_cannot_be_deleted(
     row = next(r for r in client.get(STORAGES, headers=token_headers).json()['data'] if r['id'] == pk)
     assert row['file_count'] == 1
 
-    # 文件删掉之后才放行
+    # 🔴 删进回收站之后**仍然拦**：对象还在这个存储里，删了存储就永远还原不回来
     client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})
+    assert client.delete(f'{STORAGES}/{pk}', headers=token_headers).status_code != 200
+    row = next(r for r in client.get(STORAGES, headers=token_headers).json()['data'] if r['id'] == pk)
+    assert (row['file_count'], row['recycled_count']) == (0, 1)
+
+    # 彻底删除之后才放行
+    client.request('DELETE', f'{FILES}/recycle', headers=token_headers, json={'pks': [data['id']]})
     assert client.delete(f'{STORAGES}/{pk}', headers=token_headers).status_code == 200
 
 
