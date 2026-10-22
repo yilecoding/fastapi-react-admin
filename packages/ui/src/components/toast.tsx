@@ -99,17 +99,28 @@ type Options = {
 }
 
 function push(tone: ToastTone, title: React.ReactNode, opts: Options = {}) {
-  return manager.add({
+  const action = opts.action
+  const id: string = manager.add({
     title,
     description: opts.description,
     type: tone,
     // 错误和加载中默认不自动消失：一条自己溜走的报错等于没报，
     // 而 loading 要等调用方 update/close 才该走
     timeout: opts.timeout ?? (tone === "error" || tone === "loading" ? 0 : 4500),
-    ...(opts.action
-      ? { actionProps: { children: opts.action.label, onClick: opts.action.onClick } }
+    ...(action
+      ? {
+          actionProps: {
+            children: action.label,
+            // 点了动作就关掉这一条：「撤销」点完还挂在那儿，用户会以为没生效、再点一次
+            onClick: () => {
+              action.onClick()
+              manager.close(id)
+            },
+          },
+        }
       : {}),
   })
+  return id
 }
 
 export const toast = {

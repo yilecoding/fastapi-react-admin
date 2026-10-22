@@ -85,6 +85,7 @@ class GetStorageDetail(StorageSchemaBase):
     status: int = Field(description='状态（0：停用、1：正常）')
     builtin: bool = Field(False, description='是否内置本地存储（不可改、不可删）')
     file_count: int = Field(0, description='存储下的文件数')
+    recycled_count: int = Field(0, description='存储下在回收站里的文件数（对象还在，删存储时一样算）')
     created_time: datetime | None = Field(None, description='创建时间')
     updated_time: datetime | None = Field(None, description='更新时间')
 
