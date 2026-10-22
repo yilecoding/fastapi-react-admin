@@ -12,9 +12,14 @@ from backend.app.admin.schema.file import (
     GetFileDetail,
     GetFileLinkDetail,
     GetFileStatisticsDetail,
+    GetMultipartDetail,
+    GetMultipartPartDetail,
     GetRecycledFileDetail,
+    GetUploadPolicyDetail,
+    InitMultipartParam,
 )
 from backend.app.admin.service.file_service import file_service
+from backend.app.admin.service.multipart_service import multipart_service
 from backend.common.enums import FileType
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
@@ -50,6 +55,118 @@ async def upload_file(
 ) -> ResponseSchemaModel[GetFileDetail]:
     obj = await file_service.upload(db=db, file=file, user_id=request.user.id, public=public)
     return response_base.success(data=obj)
+
+
+# ─── 分片上传（#122 第三期）────────────────────────────────────────────────────
+# 🔴 五个接口全挂 sys:file:upload + DependsRBAC，和 `/upload` 一样 —— ContiNew 的 GHSA-j7qm-qprw-c53w
+# 就是分片接口漏了权限。会话还按上传人隔离（别人的 upload_id 一律 404，见 multipart_service._load）。
+# 都要声明在 `/{pk}` 之前，不然 `/multipart` 被当成 pk 吞掉
+
+
+@router.get(
+    '/upload-policy',
+    summary='获取上传策略（分片阈值 / 分片大小）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
+async def get_upload_policy() -> ResponseSchemaModel[GetUploadPolicyDetail]:
+    return response_base.success(data=multipart_service.policy())
+
+
+@router.post(
+    '/multipart',
+    summary='开始分片上传',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
+async def init_multipart(
+    request: Request, db: CurrentSession, obj: InitMultipartParam
+) -> ResponseSchemaModel[GetMultipartDetail]:
+    data = await multipart_service.init(db=db, user_id=request.user.id, name=obj.name, size=obj.size, public=obj.public)
+    return response_base.success(data=data)
+
+
+@router.get(
+    '/multipart/{upload_id}',
+    summary='获取分片上传进度（续传用）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
+async def get_multipart(
+    request: Request, upload_id: Annotated[str, Path(description='会话 ID')]
+) -> ResponseSchemaModel[GetMultipartDetail]:
+    data = await multipart_service.status(upload_id=upload_id, user_id=request.user.id)
+    return response_base.success(data=data)
+
+
+@router.put(
+    '/multipart/{upload_id}/{part}',
+    summary='上传一个分片',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+    # 请求体是裸字节（application/octet-stream），不走 FastAPI 的 body 解析 —— 这里手写进 OpenAPI
+    openapi_extra={
+        'requestBody': {
+            'required': True,
+            'content': {'application/octet-stream': {'schema': {'type': 'string', 'format': 'binary'}}},
+        }
+    },
+)
+async def put_multipart_part(
+    request: Request,
+    db: CurrentSession,
+    upload_id: Annotated[str, Path(description='会话 ID')],
+    part: Annotated[int, Path(description='片号，从 1 开始')],
+) -> ResponseSchemaModel[GetMultipartPartDetail]:
+    declared = request.headers.get('content-length')
+    data = await multipart_service.put_part(
+        db=db,
+        upload_id=upload_id,
+        part=part,
+        user_id=request.user.id,
+        # 边收边写，不先 `await request.body()`：超长的那一片收到一半就断
+        body=request.stream(),
+        content_length=int(declared) if declared and declared.isdigit() else None,
+    )
+    return response_base.success(data=data)
+
+
+@router.post(
+    '/multipart/{upload_id}/complete',
+    summary='完成分片上传（合并、落库）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
+async def complete_multipart(
+    request: Request, db: CurrentSessionTransaction, upload_id: Annotated[str, Path(description='会话 ID')]
+) -> ResponseSchemaModel[GetFileDetail]:
+    obj = await multipart_service.complete(db=db, upload_id=upload_id, user_id=request.user.id)
+    return response_base.success(data=obj)
+
+
+@router.delete(
+    '/multipart/{upload_id}',
+    summary='取消分片上传（删掉已传的分片）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
+async def abort_multipart(
+    request: Request, db: CurrentSession, upload_id: Annotated[str, Path(description='会话 ID')]
+) -> ResponseModel:
+    await multipart_service.abort(db=db, upload_id=upload_id, user_id=request.user.id)
+    return response_base.success()
 
 
 @router.get(

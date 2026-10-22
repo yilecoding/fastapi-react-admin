@@ -361,6 +361,45 @@ async def delete_object(target: StorageTarget, key: str) -> None:
         log.warning(f'删除存储 {target.storage_id}:{key} 失败：{e!s}')
 
 
+async def list_dirs(target: StorageTarget, prefix: str) -> list[str]:
+    """
+    `prefix/` 下一层的子目录名（S3 上是公共前缀）。前缀不存在 = 空列表
+
+    :param target: 目标子树
+    :param prefix: 目录 key，不带结尾的 `/`
+    :return:
+    """
+    base = check_key(prefix) + '/'
+    try:
+        # fs 后端会把目录自己也列出来（`base` 本身），跳过；只要下一层的目录
+        return [
+            entry.path[len(base) :].rstrip('/')
+            async for entry in await target.op.list(base)
+            if entry.path != base and entry.path.endswith('/')
+        ]
+    except Exception as e:
+        reason = _reason(e)
+        if reason == 'not_found':
+            return []
+        log.error(f'列出存储 {target.storage_id or "builtin"}:{base} 失败：{e!s}')
+        raise StorageError(reason) from e
+
+
+async def delete_prefix(target: StorageTarget, prefix: str) -> None:
+    """
+    删掉 `prefix/` 下的所有对象。失败只记日志不抛（同 `delete_object`）
+
+    :param target: 目标子树
+    :param prefix: 目录 key，不带结尾的 `/`
+    :return:
+    """
+    base = check_key(prefix) + '/'
+    try:
+        await target.op.remove_all(base)
+    except Exception as e:
+        log.warning(f'删除存储 {target.storage_id or "builtin"}:{base} 失败：{e!s}')
+
+
 async def presign_read(
     target: StorageTarget, key: str, *, expire: int, content_disposition: str, content_type: str | None
 ) -> str:

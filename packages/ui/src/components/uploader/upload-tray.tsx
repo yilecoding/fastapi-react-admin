@@ -4,6 +4,7 @@ import {
   IconChevronUp,
   IconCircleCheck,
   IconFile,
+  IconPlayerPause,
   IconRefresh,
   IconSparkles,
   IconX,
@@ -16,7 +17,25 @@ import { cn } from "../../lib/utils"
 import { Button } from "../button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "../tooltip"
 
-export type UploadTrayStatus = "queued" | "hashing" | "checking" | "uploading" | "done" | "failed" | "canceled"
+export type UploadTrayStatus =
+  | "queued"
+  | "hashing"
+  | "checking"
+  | "uploading"
+  | "finalizing"
+  | "done"
+  | "failed"
+  | "canceled"
+
+/** 刷新前没传完、还能接着传的大文件（分片上传）：要用户重新选一下同一个文件 */
+export interface UploadTrayResumable {
+  id: string
+  name: string
+  size: number
+  /** 已传的比例 0 ~ 1 */
+  progress: number
+  source?: string | null
+}
 
 /** 浮窗只认这一个形状；`platform/src/upload` 的 `UploadItem` 结构上兼容它（ui 不 import 那边） */
 export interface UploadTrayItem {
@@ -49,9 +68,17 @@ export function UploadTray({
   onCancel,
   onRetry,
   onRemove,
+  resumable = [],
+  onResume,
+  onDiscard,
   className,
 }: {
   items: readonly UploadTrayItem[]
+  resumable?: readonly UploadTrayResumable[]
+  /** 「继续」：调用方弹文件选择框，选中同一个文件后接着传 */
+  onResume?: (id: string) => void
+  /** 「放弃」：删掉服务端已经传上去的那些分片 */
+  onDiscard?: (id: string) => void
   collapsed: boolean
   /** 整个队列的剩余秒数；null = 还算不出来 */
   etaSeconds: number | null
@@ -73,7 +100,9 @@ export function UploadTray({
       ? t("正在上传 {{n}} 项内容", { n: active })
       : failed > 0
         ? t("{{n}} 项上传失败", { n: failed })
-        : t("已上传 {{n}} 项内容", { n: done })
+        : items.length === 0 && resumable.length > 0
+          ? t("{{n}} 项上传未完成", { n: resumable.length })
+          : t("已上传 {{n}} 项内容", { n: done })
 
   return (
     <section
@@ -114,6 +143,33 @@ export function UploadTray({
             </div>
           ) : null}
           <ul className="max-h-72 divide-y overflow-y-auto overflow-x-hidden">
+            {resumable.map((r) => (
+              <li
+                key={r.id}
+                className="flex items-center gap-2.5 bg-amber-50/60 px-3 py-2 dark:bg-amber-500/5"
+                data-testid={`upload-tray-resumable-${r.id}`}
+              >
+                <IconPlayerPause className="size-4 shrink-0 text-amber-600" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate" title={r.name}>
+                    {r.name}
+                  </p>
+                  {/* 不截断：「重新选择这个文件」是用户唯一要照做的那句，截掉就只剩一个看不懂的「继续」 */}
+                  <p className="text-xs text-muted-foreground">
+                    {r.source ? `${r.source} · ` : ""}
+                    {t("未传完（已传 {{pct}}%），重新选择这个文件即可接着传", { pct: Math.round(r.progress * 100) })}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button size="xs" variant="outline" onClick={() => onResume?.(r.id)} data-testid="upload-tray-resume">
+                    {t("继续")}
+                  </Button>
+                  <IconButton label={t("放弃")} onClick={() => onDiscard?.(r.id)}>
+                    <IconX className="size-3.5" />
+                  </IconButton>
+                </div>
+              </li>
+            ))}
             {items.map((it) => (
               <TrayRow key={it.id} item={it} onCancel={onCancel} onRetry={onRetry} onRemove={onRemove} />
             ))}
@@ -145,7 +201,9 @@ function TrayRow({
         ? t("计算校验和 {{pct}}%", { pct })
         : item.status === "checking"
           ? t("检查是否已上传…")
-          : item.status === "queued"
+          : item.status === "finalizing"
+            ? t("正在合并分片…")
+            : item.status === "queued"
             ? t("等待中")
             : item.status === "failed"
               ? (item.error ?? t("上传失败"))
@@ -189,7 +247,8 @@ function TrayRow({
           )}
         </span>
         <span className="hidden group-hover:flex">
-          {active ? (
+          {/* 合并中没有按钮：合并在服务端跑，取消拦不住它 —— 显示「已取消」而文件照样落库，比不给按钮更糟 */}
+          {item.status === "finalizing" ? null : active ? (
             <IconButton label={t("取消")} onClick={() => onCancel(item.id)}>
               <IconX className="size-3.5" />
             </IconButton>

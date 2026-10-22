@@ -108,7 +108,7 @@ export type ApiClient<Paths extends {}> = ApiMethods<Paths> & {
    * 走 `XMLHttpRequest` 而不是 fetch —— 后者拿不到上传进度事件（浏览器和 RN 都是）。
    * 鉴权头 / `Accept-Language` / 401 单飞刷新 + 重放一次 / 信封判定，和 `send()` 一致。
    */
-  sendUpload: <T>(path: string, body: FormData, options?: UploadOptions) => Promise<T>
+  sendUpload: <T>(path: string, body: FormData | Blob, options?: UploadOptions) => Promise<T>
 
   /** 会话失效回调可以在创建之后再注入（各端 auth 层的初始化顺序不同） */
   setSessionExpiredHandler: (fn: (() => void) | null) => void
@@ -126,6 +126,8 @@ export type ApiClient<Paths extends {}> = ApiMethods<Paths> & {
 
 /** `sendUpload` 的可选项：进度回调 + 取消信号 */
 export interface UploadOptions {
+  /** 默认 POST；分片上传是 PUT */
+  method?: 'POST' | 'PUT'
   /** 已发送 / 总字节数（来自 XHR 的 `upload.onprogress`，`lengthComputable` 时才调） */
   onProgress?: (loaded: number, total: number) => void
   /** 触发后 XHR 立即 abort，Promise 以 `UploadAbortedError`（`name === 'AbortError'`）拒绝 */
@@ -290,20 +292,22 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     return res
   }
 
-  function sendUpload<T>(path: string, body: FormData, options: UploadOptions = {}, retry = true): Promise<T> {
+  function sendUpload<T>(path: string, body: FormData | Blob, options: UploadOptions = {}, retry = true): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       if (options.signal?.aborted) {
         reject(new UploadAbortedError())
         return
       }
       const xhr = new XMLHttpRequest()
-      xhr.open('POST', `${config.getBaseUrl()}${path}`)
+      xhr.open(options.method ?? 'POST', `${config.getBaseUrl()}${path}`)
       // 同 sendRaw：带上 httpOnly 的 refresh cookie（RN 忽略）
       xhr.withCredentials = true
       // ⚠️ 同样不要手写 multipart 的 Content-Type，boundary 由 XHR 自己生成
       for (const [k, v] of Object.entries({ ...authHeaders(), Accept: 'application/json' })) {
         xhr.setRequestHeader(k, v)
       }
+      // 裸字节（分片）：显式声明成二进制 —— 后端操作日志据此不去读、不去记它
+      if (!(body instanceof FormData)) xhr.setRequestHeader('Content-Type', 'application/octet-stream')
       const onAbort = () => xhr.abort()
       options.signal?.addEventListener('abort', onAbort, { once: true })
       const cleanup = () => options.signal?.removeEventListener('abort', onAbort)

@@ -163,3 +163,51 @@ async def purge_recycled_files(batch: int = 200) -> str:
     msg = f'彻底删除回收站里超过 {settings.FILE_RECYCLE_DAYS} 天的文件：{total} 个'
     log.info(msg)
     return msg
+
+
+@celery_app.task(name='maintenance.purge_stale_multipart')
+@with_timeout()
+async def purge_stale_multipart() -> str:
+    """清掉过期分片会话留下的分片（`_multipart/{upload_id}/`）：Redis 里的会话已经没了，分片还在存储里。
+
+    会话过期 = 用户传到一半走了、`FILE_MULTIPART_EXPIRE_SECONDS` 里一片都没再传。**只动会话已经不在的那些**：
+    会话还活着的分片是「刷新后重新选文件就能接着传」的那份进度，删了等于让人从头传。
+
+    每个存储（内置本地 + `sys_storage` 里的每一行）的私有子树各扫一遍；某个存储连不上只记日志、接着扫下一个 ——
+    一个配错的 S3 不该让其他存储的垃圾一直留着
+    """
+    from backend.app.admin.crud.crud_storage import storage_dao
+    from backend.app.admin.service.multipart_service import PARTS_DIR, UPLOAD_ID_RE
+    from backend.app.admin.service.storage_service import storage_service
+    from backend.core.conf import settings
+    from backend.database import redis as redis_module
+    from backend.utils.storage_ops import StorageError, builtin_target, delete_prefix, list_dirs
+
+    targets = [builtin_target(public=False)]
+    async with async_db_session() as db:
+        for row in await storage_dao.get_all(db):
+            try:
+                targets.append(storage_service.row_target(row, public=False))
+            except Exception as e:  # ruff:ignore[try-except-in-loop]
+                log.warning(f'跳过存储 {row.id}：{e!s}')
+
+    total = 0
+    for target in targets:
+        try:
+            upload_ids = await list_dirs(target, PARTS_DIR)
+        except StorageError as e:
+            log.warning(f'扫描存储 {target.storage_id or "builtin"} 的分片目录失败：{e.reason}')
+            continue
+        for upload_id in upload_ids:
+            # 不是我们起的名字就不碰（有人手工往这个目录里放了东西）
+            if not UPLOAD_ID_RE.match(upload_id):
+                continue
+            # 按模块属性取：测试里要换成绑在自己事件循环上的那个
+            if await redis_module.redis_client.exists(f'{settings.FILE_MULTIPART_REDIS_PREFIX}:{upload_id}'):
+                continue
+            await delete_prefix(target, f'{PARTS_DIR}/{upload_id}')
+            total += 1
+
+    msg = f'清理过期分片上传留下的分片：{total} 个'
+    log.info(msg)
+    return msg

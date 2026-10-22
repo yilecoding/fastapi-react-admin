@@ -58,8 +58,8 @@ pages/file/
 - `ui/components/uploader/dropzone.tsx` 的 `useFilePicker` 每次 change 后把 `input.value` 清掉 ——
   不清的话连续选同一个文件不触发 change（用户导入那边踩过）
 - 拖拽投放区包住整块内容区（`data-testid="file-dropzone"`），没有 `sys:file:upload` 的人拖进来不收
-- 浏览器 → 后端仍是**一个请求**，没有分片 / 断点续传（那是 #122 第三期）；后端 → S3 那段由 OpenDAL
-  自动 multipart，对浏览器不可见
+- 小于 `chunk_threshold`（默认 16 MiB，`GET /sys/files/upload-policy` 下发）的文件浏览器 → 后端是**一个请求**；
+  大的走分片 + 断点续传，见下面「分片上传」一节。后端 → S3 那段一律由 OpenDAL 自动 multipart，对浏览器不可见
 
 实测（Playwright，上传限速 3~4 MB/s）：30 MB 的 zip 进度走到 `9.9 MB · 4.0 MB/s · 33%`、浮窗副栏「还剩 8s」；
 同文件再传 0 次 `/upload` 请求、显示复用；取消 → 重试 → 完成；拖拽投放进队列；切到存储管理页浮窗还在、继续传；
@@ -109,6 +109,49 @@ pages/file/
 up → down → up（开发库 11 条存量已删记录全变墓碑、回收站为 0）。浏览器：删除确认框写「移到回收站」→ toast「撤销」→
 批量删 3 个 → 左栏「回收站 3」→ 行上「30 天后清除」→ 还原 / 彻底删除 / 清空全过。
 ⚠️ 写还原的测试要用**随机的目标 ID**：还原回来的文件会一直挂在目标上，固定 ID 的话第二轮就看到上一轮那条（跑第二遍才红）
+
+### 分片上传 / 断点续传（#122 第三期）
+
+不小于 `FILE_CHUNK_THRESHOLD` 的文件，`upload-store.ts` 的 `upload` 换成 `packages/platform/src/upload/chunked.ts` 的 `uploadChunked`：
+`POST /multipart`（init）→ 并发 3 片 `PUT /multipart/{id}/{n}`（裸字节，`FILE_CHUNK_SIZE` 一片，默认 8 MiB）→
+`POST /multipart/{id}/complete`。sha256 预检（`/check`）照旧在前面，命中了一片都不传。
+会话在 Redis（24 小时没动静过期，每传一片续期），分片落在**目标存储的私有子树** `_multipart/{upload_id}/`，
+complete 按片号流式拼成最终对象、边拼边算 sha256、按普通上传的口径去重落库，再删分片。
+
+- 🔴 **五个接口全挂 `sys:file:upload` + `DependsRBAC`，init 和 complete 各过一遍和 `/upload` 同一份的校验**
+  （扩展名白名单 + 分类大小上限 + 公开件只收图片，`multipart_service.verify_upload`）。ContiNew 的 GHSA-j7qm-qprw-c53w
+  （CVSS 8.5）就是分片接口漏了权限和白名单。complete 再校验一次，挡的是「init 之后管理员调低了上限」
+- 🔴 **每一片边收边数**：除最后一片外必须正好 `chunk_size`，超了当场断开（不等收完），少了也不收。
+  会话按上传人隔离，别人的 `upload_id` 一律 404
+- 🔴 **`upload_id` 先过 `^[0-9a-f]{32}$`**：会话旁边就是 `:parts`（集合）和 `:lock` 两个 key，真实 id 拼上这两个后缀
+  不校验的话会被当会话读 —— 前者 WRONGTYPE、后者 json 解出来是个 int，都是 500
+- 🔴 **操作日志中间件不读 `application/octet-stream` 的请求体**（`opera_log_middleware.get_request_args`）。
+  它在路由之前跑：分块传输没有 Content-Length，原来那道「超过上限就不读」挡不住，会先把整片收进内存；
+  带 Content-Length 的小片又会被 `decode('utf-8', 'ignore')` 成乱码写进 `sys_opera_log`
+- 🔴 **同时两次 complete（双击、网络重试）只让一个去拼**（Redis `SET NX` 锁），另一个 409 —— 否则是两份对象、两条记录
+- **取消 = 放弃**（删服务端会话和分片、删续传记录）；**失败 = 留着**，浮窗里「重试」从断点接着传
+- **刷新 / 关掉标签页之后**：`File` 对象没了，只能让用户重新选。`packages/platform/src/upload/resume.ts` 在 localStorage 记
+  「指纹（名字 + 大小 + 修改时间）→ upload_id」，浮窗挂载时逐个 `GET /multipart/{id}` 核一遍（404 = 过期，丢掉），
+  活着的显示成「N 项上传未完成」+「继续 / 放弃」；点继续弹文件选择框，选的指纹对不上就 toast 报错、不传。
+  直接在文件页重新选同一个文件也会自己续上（`enqueue` 时顺手把那一行撤掉）
+- 过期会话留下的分片由 `maintenance.purge_stale_multipart`（每天 04:00）清：每个存储的 `_multipart/{upload_id}/` 里，
+  Redis 里已经没有会话的目录整个删掉；名字不像 upload_id 的不碰
+- 拼接的代价是对象存储上的字节读写两遍（同 Rails ActiveStorage 的 compose）：OpenDAL 没有暴露 UploadPart / ListParts，
+  所以不是 S3 原生的 multipart。上限由分类大小上限兜着（压缩包 100 MB），这个代价可接受
+
+实测：`app/admin/tests/api_v1/test_multipart.py` 26 条（PostgreSQL · moto · **RustFS** 真服务 63 条连同 test_storage；
+SQL Server 全套 762 条 + 迁移 upgrade）；
+**变异检验** 11 处各打红（init 不校验 · complete 不复查上限 · 不边收边断 · 不收短片 · 不查归属 · 没有锁 ·
+中间件读二进制 · 清理不看会话 · 清理不认名字 · PUT 漏权限 · upload_id 不校验形状）。
+⚠️ **「边收边断」只能经 service 测**：TestClient 会先把整个请求体读完再交给应用 —— 实测服务端第 3 块就判了 400，
+生成器照样被读完 50 块 —— 所以经 HTTP 写的测试分不出「当场断」和「收完再判」
+**两个后端进程交替接分片**（#122 的验收项）：A / B 两个 uvicorn 共用 `fba_test` + Redis，默认存储是 RustFS ——
+A init、片 1/3/5 打 A、2/4 打 B、B complete（两边的访问日志核过确实各自接了那几片），sha256 一致、经 A 下载字节一致、
+桶里只剩最终对象；取消也跨进程（B 开、A 传一片、B 取消）→ 桶里那一片被删、A 再查 404。
+浏览器（Playwright，上传限速 3 MiB/s，40 MiB = 5 片）：传到一半刷新 → 服务端有 `[1,2,3]`、浮窗「1 项上传未完成 · 已传 60%」→
+点继续选同一个文件 → **只 PUT 了 4、5 两片** + complete，sha256 与原文件一致；取消 → `DELETE` 会话；
+刷新后选错文件 → toast 报错、那一行原样留着、没有入队；放弃 → `DELETE` + localStorage 记录清空。
+⚠️ 前端：`packages/platform/src/upload/chunked.test.ts` 7 条（续传只补缺的片 · 会话过期重开 · 5xx 重试 4xx 不重试 · 取消删会话）
 
 ### 缩略图是「把原图当缩略图」，有闸门
 

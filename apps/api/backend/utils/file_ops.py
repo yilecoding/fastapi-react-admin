@@ -139,7 +139,17 @@ def get_file_ext(file: UploadFile) -> str:
     :param file: FastAPI 上传文件对象
     :return:
     """
-    name = strip_path(file.filename)
+    return ext_of(file.filename)
+
+
+def ext_of(filename: str | None) -> str:
+    """
+    按文件名取小写扩展名（分片上传没有 `UploadFile`，只有 init 时给的名字）
+
+    :param filename: 客户端给的文件名
+    :return:
+    """
+    name = strip_path(filename)
     # 原来这里写的是 `if not file_ext`，而 `'x'.split('.')[-1]` 永远非空 ——
     # 那条分支是死代码，没有扩展名的文件会一路走到「此文件格式 x 暂不支持」
     if '.' not in name.strip('.'):
@@ -160,8 +170,18 @@ def build_filename(file: UploadFile) -> str:
     :param file: FastAPI 上传文件对象
     :return:
     """
-    ext = get_file_ext(file)
-    stem = strip_path(file.filename).rsplit('.', 1)[0]
+    return build_stored_name(file.filename)
+
+
+def build_stored_name(filename: str | None) -> str:
+    """
+    按文件名构建落盘文件名（规则见 `build_filename`）
+
+    :param filename: 客户端给的文件名
+    :return:
+    """
+    ext = ext_of(filename)
+    stem = strip_path(filename).rsplit('.', 1)[0]
     # 原实现是 `filename.replace(f'.{ext}', ...)`，replace 是**全量**替换：
     # 'a.png.png' 会变成 'a_123_123.png'
     stem = _UNSAFE_CHARS.sub('_', stem).strip('._-')[:_STEM_MAX] or 'file'
@@ -212,14 +232,25 @@ def upload_file_verify(file: UploadFile) -> FileType:
     :param file: FastAPI 上传文件对象
     :return:
     """
-    file_ext = get_file_ext(file)
+    # file.size 在极少数客户端下会缺失（没送 Content-Length），
+    # 那种情况放过大小校验而不是拿 None 去比较
+    return verify_name_and_size(file.filename, file.size)
+
+
+def verify_name_and_size(filename: str | None, size: int | None) -> FileType:
+    """
+    按文件名 + 大小校验（扩展名白名单 + 分类大小上限），返回分类。普通上传和分片上传共用这一份
+
+    :param filename: 客户端给的文件名
+    :param size: 字节数；`None` = 不知道，放过大小校验
+    :return:
+    """
+    file_ext = ext_of(filename)
 
     for file_type, includes, size_max in _upload_rules():
         if file_ext not in includes:
             continue
-        # file.size 在极少数客户端下会缺失（没送 Content-Length），
-        # 那种情况放过大小校验而不是拿 None 去比较
-        if file.size is not None and file.size > size_max:
+        if size is not None and size > size_max:
             raise errors.RequestError(
                 msg=t(
                     'error.file.size_exceeded',

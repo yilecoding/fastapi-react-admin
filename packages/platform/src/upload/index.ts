@@ -1,4 +1,6 @@
+export { isRetryable, partRange, uploadChunked, type ChunkedApi, type MultipartSession } from './chunked'
 export { sha256File } from './hash'
+export { createResumeStore, fingerprint, type ResumeEntry, type ResumeStore } from './resume'
 export { createUploadQueue, isActive, type UploadQueue } from './queue'
 export { trayEta, traySummary, type TraySummary } from './tray'
 export type { StepContext, UploadHooks, UploadItem, UploadItemOptions, UploadStatus, UploadTransport } from './types'

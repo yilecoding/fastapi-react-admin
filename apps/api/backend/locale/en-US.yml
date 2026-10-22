@@ -62,15 +62,22 @@ error:
   email:
     send_failed: Failed to send email, please try again later or contact an administrator
   file:
+    empty: The file is empty
     invalid_filename: Invalid filename
     missing: File is missing, please upload it again
     not_found: File does not exist
+    part_out_of_range: Part number out of range ({total} parts in total)
+    part_size_mismatch: Part {part} has the wrong size, expected {expected} bytes
+    parts_missing: '{n} parts have not been uploaded yet'
     public_link_images_only: Public direct links only support images, use regular upload for other file types
     size_exceeded: '{label} exceeds the size limit of {size_mb} MB, please choose another one'
+    size_mismatch: 'File size mismatch: expected {expected} bytes, received {actual}'
     some_not_found: Some files do not exist
     unknown_type: Unknown file type
     unsupported_format: File format {file_ext} is not supported
     upload_failed: File upload failed
+    upload_finalizing: The upload is being finalized, please wait
+    upload_session_not_found: Upload session not found or expired, please upload again
   import:
     default_password_unset: No import default password is configured (USER_IMPORT_DEFAULT_PASSWORD), bulk import is off
     dept_code_not_found: Department code {code} does not exist
