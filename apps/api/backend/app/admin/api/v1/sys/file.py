@@ -12,6 +12,7 @@ from backend.app.admin.schema.file import (
     GetFileDetail,
     GetFileLinkDetail,
     GetFileStatisticsDetail,
+    GetRecycledFileDetail,
 )
 from backend.app.admin.service.file_service import file_service
 from backend.common.enums import FileType
@@ -102,6 +103,73 @@ async def check_file(
     # 没命中不是错误，是「这份文件还没传过」。
     # 返回 fail() 会让前端把正常的首次上传当成故障处理
     return response_base.success(data=obj)
+
+
+# ─── 回收站（#122 第二期）。⚠️ 都声明在 `/{pk}` 之前：一段的固定路径放后面会被 `{pk}` 吞掉（422）──
+
+
+@router.get(
+    '/recycle',
+    summary='分页获取回收站里的文件',
+    dependencies=[
+        Depends(RequestPermission('sys:file:list')),
+        DependsRBAC,
+        DependsPagination,
+    ],
+)
+async def get_recycled_files(
+    db: CurrentSession,
+    name: Annotated[str | None, Query(description='原始文件名')] = None,
+) -> ResponseSchemaModel[PageData[GetRecycledFileDetail]]:
+    page_data = await file_service.get_recycled_list(db=db, name=name)
+    return response_base.success(data=page_data)
+
+
+# 还原 / 彻底删除 / 清空复用 `sys:file:del`：能删文件的人管回收站 —— 回收站之前「删除」本来就是彻底删除，
+# 权限面没有变大。新开权限码要同时补种子菜单 + 前端 <Can> + 三方对账，没有换来任何东西
+@router.put(
+    '/recycle/restore',
+    summary='从回收站还原（连带挂回删它那一次解开的附件关联）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:del')),
+        DependsRBAC,
+    ],
+)
+async def restore_files(db: CurrentSessionTransaction, obj: DeleteFileParam) -> ResponseModel:
+    count = await file_service.restore(db=db, pks=obj.pks)
+    if count > 0:
+        return response_base.success()
+    # 一个都没还原 = 这些 ID 不在（这个人看得见的）回收站里
+    return response_base.fail()
+
+
+@router.delete(
+    '/recycle',
+    summary='从回收站彻底删除（删对象，不可恢复）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:del')),
+        DependsRBAC,
+    ],
+)
+async def purge_files(db: CurrentSessionTransaction, obj: DeleteFileParam) -> ResponseModel:
+    count = await file_service.purge(db=db, pks=obj.pks)
+    if count > 0:
+        return response_base.success()
+    return response_base.fail()
+
+
+@router.delete(
+    '/recycle/all',
+    summary='清空回收站（不可恢复）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:del')),
+        DependsRBAC,
+    ],
+)
+async def empty_recycle(db: CurrentSessionTransaction) -> ResponseModel:
+    # 回收站本来就是空的也算成功：「清空」这个动作的结果就是「是空的」
+    await file_service.empty_recycle(db=db)
+    return response_base.success()
 
 
 @router.get('/targets/{target_type}/{target_id}', summary='获取业务对象的附件', dependencies=[DependsJwtAuth])
