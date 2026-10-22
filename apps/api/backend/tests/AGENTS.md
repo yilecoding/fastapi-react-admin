@@ -302,7 +302,7 @@ handler 里到处是这个形状，很容易一看到就断言「这里会静默
 | 接口 | else 分支能到吗 |
 |---|---|
 | `PUT /sys/users/{pk}/password` | **到不了** —— `reset_password` 拿不到用户时先抛 `NotFoundError`，实测返回 **404** 而不是「200 + code 400」 |
-| `PUT /sys/users/me/nickname` | 看方言 —— SQL Server / PostgreSQL 的 rowcount 数**匹配**行，设同值也是 1；MySQL 数**变更**行才会是 0（见 `api_v1/test_me_envelope.py`） |
+| `PUT /sys/users/me/nickname` | **到不了** —— 三个方言的 rowcount 都数**匹配**行，设同值也是 1（MySQL 是因为 SQLAlchemy 默认开着 `CLIENT.FOUND_ROWS`；原来写的「MySQL 才是 0」是推断，2026-10-22 实跑推翻，见 `api_v1/test_me_envelope.py`） |
 
 结论不是「信封判定没必要」—— `fail()` 在别处是真会发生的，客户端只看 `!res.ok`
 依然是错的。结论是**别拿这个形状当「此处会静默失败」的证据**，要么读 service，
@@ -398,6 +398,18 @@ test_init_handles_every_seeded_account` 硬编码断言 `cli.py: _set_admin_pass
   **以后改这批演示数据，三份 `init_snowflake_test_data.sql` 一起改，
   改完跑一遍 `test_seeded_password_hashes_cover_every_seeded_account`
   只能保证 hash 有登记，保证不了三份"部门/角色长得一样"，这条得靠人记。**
+
+### MySQL：不在 CI 里，2026-10-22 第一次在真库上跑全套
+
+种子三方言各一份（`test_seed_dialects.py` 守一致性）、迁移有「三方言离线都能编译」的守卫，但**两者都不等于在真 MySQL 上跑过**。
+2026-10-22 起 MySQL 8.4 容器跑全套：763 条里 761 过、4 条跳过（只在真 S3 上跑的）、2 条红 ——
+
+- `api_v1/test_me_envelope.py` 的「设同值 MySQL 返回 0 行」是**测试和文档里的推断写错了**：SQLAlchemy 的 MySQL 方言默认开着
+  `CLIENT.FOUND_ROWS`，rowcount 和另两个方言一样数匹配行。已改成三方言同一个断言（同一个错的说法当时扩散到了 6 处文档）
+- 🔴 **`TimeZone` 在 MySQL 上建成 `DATETIME`（精度 0，只到秒）**，库里 99 个时间列全是。回收站「还原」按 `deleted_time` 相等认
+  「同一次删除」，同一秒内手动移除的附件会被误挂回去 → issue #132
+
+⚠️ 建测试库前要先手工 `CREATE DATABASE fba_test CHARACTER SET utf8mb4`（三个方言都是，`reset_test_db` 不建库）。
 
 ### 有测试的部分 / 没测试的部分
 

@@ -36,7 +36,7 @@
 
 并发测试是真并发：独立引擎、每个动作一个会话、`asyncio.gather`，socket 推送 monkeypatch 成
 空操作（不让共享 Redis 绑到临时事件循环上，见 [tests 分册](../../tests/AGENTS.md)）。
-**只在 SQL Server 上实跑过**；PG / MySQL 靠 CI 的对应 job。
+**只在 SQL Server 上实跑过**；PG 靠 CI 的对应 job。MySQL **没有** CI job —— 2026-10-22 本地跑全套时这几条在 MySQL 8.4 上是绿的。
 
 ## 🔴 被拒绝的动作也要落一条记录 —— 在另一个事务里
 

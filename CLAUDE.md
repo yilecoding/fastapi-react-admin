@@ -91,7 +91,7 @@ pnpm ctx:check          # 死引用 / 死链接 / 死脚本 / 死 testid / 行�
 
 | 写下的断言 | 实测 |
 |---|---|
-| 「`count > 0 ? success() : fail()`，设同值会 0 行 → 假成功」 | SQL Server / PostgreSQL 的 rowcount 数**匹配**行，设同值照样成功；只有 MySQL 才是 0。**同一接口三个方言行为不同** |
+| 「`count > 0 ? success() : fail()`，设同值会 0 行 → 假成功」 | 三个方言的 rowcount 都数**匹配**行，设同值照样成功。**连这一栏原来写的「只有 MySQL 才是 0」也是推断** —— SQLAlchemy 的 MySQL 方言默认开着 `CLIENT.FOUND_ROWS`，2026-10-22 第一次在真 MySQL 上跑才推翻 |
 | 「重置密码对不存在的用户会走 `fail()`」 | 返回 **404** —— service 先抛了 `NotFoundError`，那个分支走不到 |
 | 「接口覆盖率 55%」（grep 路径字面量算的） | 真记请求是 **47%**；换个 grep 判据还能算出 91%。**两个错数字都足够像结论** |
 
