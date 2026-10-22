@@ -67,6 +67,8 @@ mac 打包器的 `if (cscLink == null)` 跳过签名那一支于是走不到，�
 现在「出安装包」那一步先把空的签名变量 unset 掉。
 **实测证据**：v0.1.0 的 Release 运行（#47 接上签名之后第一次打 tag）mac job 在「出安装包」红，日志
 `empty password will be used for code signing` → `apps/desktop not a file`；v0.0.1（#47 之前）同一个 job 是绿的。
+修复后在分支上试跑（`workflow_dispatch`，不碰 Release）三个平台全绿，mac 日志变成
+`skipped macOS application code signing … 0 identities found`，arm64 / x64 的 dmg + zip 都出来了。
 
 ⚠️ **公证是按 `APPLE_TEAM_ID` 存在与否动态开的**（`--config.mac.notarize.teamId=...`），
 没写进 `electron-builder.yml`。写死的话，没凭据的构建会**直接失败** ——
