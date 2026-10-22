@@ -80,6 +80,11 @@ export async function uploadFile<T>(path: string, file: File, field = 'file', op
   return client.sendUpload<T>(path, form, options)
 }
 
+/** 传一段裸字节（分片上传的一片），同样有进度、可取消 */
+export async function uploadBlob<T>(path: string, blob: Blob, options?: UploadOptions): Promise<T> {
+  return client.sendUpload<T>(path, blob, { method: 'PUT', ...options })
+}
+
 /**
  * 取原始字节。给文件预览器用 —— 它要 ArrayBuffer，而这个请求必须带
  * Authorization 头（后端 `/static/upload` 那个无鉴权直链已经撤掉了）。

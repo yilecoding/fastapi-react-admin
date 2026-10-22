@@ -63,15 +63,22 @@ error:
   email:
     send_failed: 邮件发送失败，请稍后重试或联系管理员
   file:
+    empty: 文件是空的
     invalid_filename: 非法的文件名
     missing: 文件已丢失，请重新上传
     not_found: 文件不存在
+    part_out_of_range: 分片序号超出范围（共 {total} 片）
+    part_size_mismatch: 第 {part} 片大小不对，应为 {expected} 字节
+    parts_missing: 还有 {n} 个分片没传完
     public_link_images_only: 公开直链只支持图片，其他类型请走普通上传
     size_exceeded: '{label}超出最大限制 {size_mb} MB，请重新选择'
+    size_mismatch: 文件大小对不上：应为 {expected} 字节，实际收到 {actual} 字节
     some_not_found: 部分文件不存在
     unknown_type: 未知的文件类型
     unsupported_format: 此文件格式 {file_ext} 暂不支持
     upload_failed: 上传文件失败
+    upload_finalizing: 正在合并分片，请稍候
+    upload_session_not_found: 上传会话不存在或已过期，请重新上传
   import:
     default_password_unset: 系统未配置导入默认密码（USER_IMPORT_DEFAULT_PASSWORD），批量导入已关闭
     dept_code_not_found: 部门编码 {code} 不存在

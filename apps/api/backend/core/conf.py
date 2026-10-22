@@ -281,6 +281,15 @@ class Settings(BaseSettings):
     # 只有这一个真相源：清理任务、回收站列表上的「剩余 N 天」、删除确认框的文案都读它
     FILE_RECYCLE_DAYS: int = 30
 
+    # 分片上传（#122 第三期）：不小于 FILE_CHUNK_THRESHOLD 的文件，前端切成 FILE_CHUNK_SIZE 一片地传，可续传。
+    # 两个值由 `GET /sys/files/upload-policy` 下发给前端，前端不写死。
+    # 会话在 Redis 里 FILE_MULTIPART_EXPIRE_SECONDS 没动静就过期（每传一片续一次），
+    # 过期会话留下的分片由 `maintenance.purge_stale_multipart` 清掉
+    FILE_CHUNK_SIZE: int = 8 * 1024 * 1024  # 8 MiB
+    FILE_CHUNK_THRESHOLD: int = 16 * 1024 * 1024  # 16 MiB
+    FILE_MULTIPART_EXPIRE_SECONDS: int = 24 * 3600
+    FILE_MULTIPART_REDIS_PREFIX: str = 'fba:file:multipart'
+
     # 存储（本地 + S3 兼容，见 utils/storage_ops.py 与 sys_storage）
     #
     # 对象存储的 SecretKey 落库前用它加密（64 位十六进制）。🔴 留空 = 拒绝保存 S3 存储，
