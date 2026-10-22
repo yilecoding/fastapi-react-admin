@@ -1,0 +1,168 @@
+# arch-map 的判断入口：模块怎么分、哪层能依赖哪层写在这里，改它要在 MR 里说明理由。
+# 生成物（arch-map.md / snapshots/）由 ~/.claude/skills/arch-map 的脚本产出，不要手改。
+summary: >-
+  中后台底座 monorepo：后端是 FastAPI（fork 自 FBA，三层 api → service → crud + 插件机制，
+  支持 SQL Server / PostgreSQL / MySQL），前端是 pnpm workspace，依赖方向
+  i18n / api 契约 ← ui ← platform ← web 严格单向；移动端（Expo）与桌面端（Electron）是 web 的兄弟。
+  前后端之间走 HTTP（/api/v1）与 socket.io，静态 import 看不到，只在核心流程里体现。
+
+exclude:
+  - "**/tests/**"
+  - "**/e2e/**"
+  - "**/conftest.py"
+  - "apps/api/backend/alembic/**"
+  - "apps/api/backend/scripts/**"
+  - "apps/api/backend/sql/**"
+  - "apps/api/backend/plugin/open/sdk/**"   # 发给对接方的参考 SDK（含 Java），不是本系统代码
+  - "scripts/**"                            # 仓库级闸门脚本（arch-check / ctx-check 等）
+  - "apps/*/scripts/**"
+  - "**/*.config.*"
+  - "apps/desktop/vite.*"
+
+# 自上而下；向上的边 = 违规
+layers: [entry, feature, shared, foundation]
+
+modules:
+  # ---------------- 后端（apps/api）
+  http_api:
+    paths:
+      - "apps/api/backend/app/*/api/**"
+      - "apps/api/backend/app/router.py"
+      - "apps/api/backend/middleware/**"
+      - "apps/api/backend/core/registrar.py"
+      - "apps/api/backend/main.py"
+      - "apps/api/backend/run.py"
+      - "apps/api/backend/cli.py"
+    layer: entry
+    role: 后端 HTTP 路由 · 中间件 · 应用装配 · CLI
+  # ⚠️ 顺序即优先级，fnmatch 的 `*` 会跨目录：data 必须排在 services 前面，
+  # 否则 `app/*/__init__.py` 会吞掉 `app/admin/model/__init__.py`（实测踩过，造出 35 处假违规）
+  data:
+    paths:
+      - "apps/api/backend/app/*/crud/**"
+      - "apps/api/backend/app/*/model/**"
+      - "apps/api/backend/app/*/schema/**"
+      - "apps/api/backend/app/task/enums.py"
+    layer: shared
+    role: ORM 模型 · CRUD · 出入参 schema
+  services:
+    paths:
+      - "apps/api/backend/app/*/service/**"
+      - "apps/api/backend/app/admin/utils/**"
+      - "apps/api/backend/app/__init__.py"
+      - "apps/api/backend/app/admin/__init__.py"
+    layer: feature
+    role: 后端业务逻辑（admin 与 task 的 service 层）
+  plugins:
+    paths:
+      - "apps/api/backend/plugin/**"
+    layer: feature
+    role: 插件 ai · workflow · open · oauth2 · 通知等，含插件装载器
+  # worker 排在 data / services 之后：`app/task/*.py` 也会匹配 task 下的 service / crud / model
+  worker:
+    paths:
+      - "apps/api/backend/app/task/celery.py"
+      - "apps/api/backend/app/task/tasks/**"
+      - "apps/api/backend/app/task/*.py"
+    layer: entry
+    role: Celery worker 与 beat 调度
+  core:
+    paths:
+      - "apps/api/backend/common/**"
+      - "apps/api/backend/core/**"
+      - "apps/api/backend/database/**"
+      - "apps/api/backend/utils/**"
+      - "apps/api/backend/__init__.py"
+    layer: foundation
+    role: 配置 · 鉴权与权限 · 异常与响应 · 数据库与 Redis 连接 · 工具
+
+  # ---------------- 前端（pnpm workspace）
+  web:
+    paths:
+      - "apps/web/**"
+    layer: entry
+    role: Web 应用：路由声明与守卫 · 页面注册 · 构建注入
+  mobile:
+    paths:
+      - "apps/mobile/**"
+    layer: entry
+    role: 移动端 App（Expo / React Native）
+  desktop:
+    paths:
+      - "apps/desktop/**"
+    layer: entry
+    role: 桌面端外壳（Electron 主进程与 preload）
+  platform_pages:
+    paths:
+      - "packages/platform/src/pages/**"
+    layer: feature
+    role: 业务页面（列表 · 设置 · 监控 · 审批 · AI 对话等）
+  platform_shell:
+    paths:
+      - "packages/platform/**"
+    layer: shared
+    role: 平台能力：请求客户端 · 登录态 · 多页签外壳 · 上传队列 · 桌面桥接
+  ui:
+    paths:
+      - "packages/ui/**"
+    layer: shared
+    role: 组件原语（shadcn / Base UI），零业务
+  api_contract:
+    paths:
+      - "packages/api/**"
+    layer: foundation
+    role: 后端契约：生成的 schema.d.ts · 信封成败语义 · ApiError
+  i18n:
+    paths:
+      - "packages/i18n/**"
+    layer: foundation
+    role: 语言包 · i18next 实例 · 时间格式化，框架无关
+
+externals:
+  数据库: {kind: database, packages: [sqlalchemy, sqlalchemy_crud_plus]}
+  Redis: {kind: database, packages: [redis]}
+  对象存储: {kind: storage, packages: [opendal, boto3]}
+  LLM API: {kind: service, packages: [pydantic_ai, openai]}
+  MCP 工具服务: {kind: service, packages: [mcp, mcp_types]}
+  可观测性: {kind: service, packages: [opentelemetry, prometheus_client]}
+  SMTP 邮件: {kind: service, packages: [aiosmtplib]}
+  OAuth 提供方: {kind: service, packages: [fastapi_oauth20]}
+
+inferred_edges:
+  - from: worker
+    to: Redis
+    reason: Celery 的 broker 连接串按配置 CELERY_BROKER 拼出来交给 Celery，静态 import 看不到（调度器自己的 import redis 是另一条实线）
+    evidence: ["apps/api/backend/app/task/celery.py:84", "apps/api/backend/core/conf.py:449"]
+
+entrypoints:
+  - {type: http, module: http_api, detail: "FastAPI /api/v1（JWT + 权限码）", evidence: ["apps/api/backend/core/registrar.py:172"]}
+  - {type: http, module: plugins, detail: "开放接口 /api/open/v1（AK/SK 签名）", evidence: ["apps/api/backend/plugin/open/api/router.py:15"]}
+  - {type: websocket, module: core, detail: "socket.io 推送（Redis 跨进程广播）", evidence: ["apps/api/backend/common/socketio/server.py:14"]}
+  - {type: worker, module: worker, detail: "Celery worker + beat", evidence: ["apps/api/backend/app/task/celery.py:127"]}
+  - {type: cli, module: http_api, detail: "fba CLI：起服务 / 起 worker / 迁移", evidence: ["apps/api/backend/cli.py:422"]}
+
+flows:
+  - name: 用户打开一个列表页
+    steps:
+      - "web: 路由守卫，TabOutlet 挂载页面"
+      - "platform_pages: 列表页按 URL 里的筛选发起查询"
+      - "platform_shell: 请求客户端带 JWT 调 /api/v1"
+      - "http_api: JWT 中间件 + 路由 + 权限码校验"
+      - "services: 业务逻辑"
+      - "data: CRUD，按数据范围过滤"
+      - "数据库: 查询"
+  - name: AI 助手调用写操作工具
+    steps:
+      - "platform_pages: AI 对话流式请求"
+      - "http_api: 鉴权并转给插件路由"
+      - "plugins: ai 插件编排对话"
+      - "LLM API: 模型决定调用哪个工具"
+      - "plugins: 写操作先出预览，等本人在网页确认"
+      - "services: 按确认人的数据范围执行"
+      - "数据库: 落库"
+  - name: 外部系统增量同步（开放接口）
+    steps:
+      - "plugins: 网关验签 → nonce → scope → 限流"
+      - "plugins: 按（变更时间，id）游标取一页"
+      - "数据库: COALESCE(updated_time, created_time) 游标查询"
+      - "plugins: 写调用日志"
