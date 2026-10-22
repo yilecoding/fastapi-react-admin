@@ -164,7 +164,8 @@ autodiscover 拿到的包名是 `backendtask.tasks.maintenance`，worker/beat
 
 ## 写删除类任务的纪律
 
-`tasks/maintenance/` 里两个任务都会删数据，而且自动跑。三条：
+`tasks/maintenance/` 里三个任务都会删数据，而且自动跑（第三个是 `purge_recycled_files`：回收站到期清除，
+见 [file 分册](../../../../../packages/platform/src/pages/file/AGENTS.md)「回收站」）。三条：
 
 - **必须分批。** 日志表是全库长得最快的表。SQL Server 单表累计约 5000 个行锁就
   **升级成表锁**，于是清理期间所有写操作日志的请求都被阻塞 —— 而每个 API 请求
@@ -177,6 +178,10 @@ autodiscover 拿到的包名是 `backendtask.tasks.maintenance`，worker/beat
 
 分批用「先查 id 再按 id 删」，不用 `DELETE TOP (n)` —— 后者是 T-SQL 方言，
 本仓库还要跑 MySQL / PostgreSQL。
+
+🔴 **「处理完这一行它就不再匹配」不成立的任务，要按 `id > 上一批最后一个` 往后翻（keyset）。**
+`prune_logs` 删掉的行不会再被选中，从头取没问题；`purge_recycled_files` 是「标记 + 删对象」，
+只要有一行标不上（变异检验里让条件不看 `purged_time`），每批从头取都会把它拿回来 —— 死循环，挂到超时。
 
 ## 测试
 

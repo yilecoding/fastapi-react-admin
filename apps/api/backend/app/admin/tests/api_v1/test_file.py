@@ -497,7 +497,7 @@ def test_attach_rejects_unknown_file(client: TestClient, token_headers: dict[str
 def test_delete_cascades_relations_and_disk(
     client: TestClient, token_headers: dict[str, str], isolated_upload_dir: Path
 ) -> None:
-    """删文件要连带清掉关联和磁盘文件 —— 留下关联会让业务侧查到一批空洞"""
+    """删文件要连带清掉关联 —— 留下关联会让业务侧查到一批空洞。磁盘文件进回收站时还在，彻底删除才没"""
     created = client.post(
         f'{FILES}/upload',
         headers=token_headers,
@@ -516,6 +516,12 @@ def test_delete_cascades_relations_and_disk(
 
     assert client.get(f'{FILES}/{created["id"]}', headers=token_headers).status_code == 404
     assert client.get(f'{FILES}/targets/PYTEST/9003', headers=token_headers).json()['data'] == []
+    # 进回收站：对象不动（第二期之前这里就没了）
+    assert on_disk.is_file()
+    assert (
+        client.request('DELETE', f'{FILES}/recycle', headers=token_headers, json={'pks': [created['id']]}).status_code
+        == 200
+    )
     assert not on_disk.exists()
 
 
@@ -578,6 +584,12 @@ def test_delete_removes_nested_file_and_prunes_dirs(
     assert '/' in created['path']
 
     assert client.request('DELETE', FILES, headers=token_headers, json={'pks': [created['id']]}).status_code == 200
+    # 进回收站时还在；彻底删除走的是同一个 `delete_local_file`，这条回归测试要的就是那一段
+    assert on_disk.is_file()
+    assert (
+        client.request('DELETE', f'{FILES}/recycle', headers=token_headers, json={'pks': [created['id']]}).status_code
+        == 200
+    )
 
     assert not on_disk.exists()
     # 空掉的日期目录被回收，UPLOAD_DIR 自己保留
