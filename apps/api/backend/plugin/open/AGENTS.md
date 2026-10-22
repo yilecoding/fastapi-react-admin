@@ -87,3 +87,28 @@ SQL Server / MySQL 只过了离线编译守卫（`test_migrations_compile_offlin
 
 签名里的 PATH 是请求行里的原样路径。现在 `apps/web/nginx.conf` 的 `proxy_pass http://api:8000;` 不带 URI，
 路径原样透传；**谁给它加上 URI 或 rewrite，所有开放接口的签名都会对不上**，报的是一句看不出原因的「签名不匹配」。
+
+## 🔴 SQL Server 上增量同步的游标会原地打转（亚微秒精度）
+
+症状：CI 的 `pytest · SQL Server` 间歇性地停在 59% 不动，20 分钟后 job 被取消，日志里**没有任何报错**。
+对接方那边的表现一样：同步程序拿到 `has_more: true`，一页一页翻，每一页都是同样几行、同一个 `next_cursor`，永不结束。
+PostgreSQL / MySQL 从不出现。
+
+根因：SQL Server 的 `datetimeoffset(7)` 存到 100 纳秒，Python 的 `datetime` 只到微秒，pyodbc 读出来时**截掉**第 7 位。
+游标里带回去的是截短的值，于是 `changed > :t` 对已经返回过的那一行永远成立。种子数据用 `GETDATE()` 写时间，
+它只精确到 1/300 秒，毫秒尾数是 3、7 时会带上第 7 位（`.6566667`），尾数是 0 时正好整微秒 —— 所以是间歇的。
+
+修法：`service/sync_service.py` 的 `_ToMicrosecond` 先把变更时间截到微秒，排序、比较、编游标都用截过的值。
+它按方言编译，SQL Server 上是 `DATEADD(nanosecond, -(DATEPART(nanosecond, x) % 1000), x)`，其余方言原样输出。
+**不能用 `CAST(x AS datetimeoffset(6))`**：那是四舍五入，和 pyodbc 的截断对不上，照样打转。
+
+测试侧：`tests/test_open_api.py` 的 `_drain` 原来是 `while True`，游标不前进时测试不失败、只是挂住。
+现在有 `MAX_PAGES` 上限，并且同一个 `next_cursor` 出现两次就当场失败。
+`test_sub_microsecond_times_still_page_through` 直接写入带第 7 位的时间，不靠种子的运气（只在 SQL Server 上跑）。
+
+实测：
+- 本地临时 SQL Server（与 CI 同一个 digest）上，种子时间是 `02:43:59.6566667Z`，游标里是 `.656666`，
+  同一个 `next_cursor` 连续返回；2 核和 16 核都复现，和 CPU 无关
+- 同一个值：`CAST(… AS datetimeoffset(6))` 得到 `.656667`，`DATEADD` 截断得到 `.656666`
+- 撤掉修复后，两条同步测试都在第二页报「游标原地打转」，不再挂住
+- CI 上 storage 分支到 main、再到 #125，6 次运行里有 4 次停在 59%

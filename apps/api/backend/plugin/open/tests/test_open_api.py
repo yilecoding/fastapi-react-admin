@@ -7,12 +7,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import pytest
 import yaml
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 from starlette.testclient import TestClient
 
 from backend.app.admin.model import Dept
+from backend.core.conf import settings
 from backend.core.path_conf import BASE_PATH
 from backend.main import app
 from backend.plugin.open.gateway.auth import DependsOpenApp
@@ -193,20 +195,36 @@ class TestSuccessLog:
         assert isinstance(everything['items'][0]['id'], str), 'ID 一律字符串下发（硬纪律 6）'
 
 
+#: 翻页上限。🔴 游标不前进时 `_drain` 原来是 `while True`：测试不报错，而是把 CI 的 SQL Server job
+#: 卡满 20 分钟后被取消，日志里只有一个停在 59% 的进度条（实测踩过）。有上限才会当场失败、并说出原因
+MAX_PAGES = 200
+
+
 class TestIncrementalSync:
     def _drain(
-        self, client: TestClient, issued: dict, path: str, cursor: str | None, limit: int = 2
+        self,
+        client: TestClient,
+        issued: dict,
+        path: str,
+        cursor: str | None,
+        limit: int = 2,
+        *,
+        updated_since: str | None = None,
     ) -> tuple[list, str | None]:
         """翻到底，返回所有条目和最后一个游标"""
         items: list = []
         last = cursor
-        while True:
+        for _ in range(MAX_PAGES):
             params = f'limit={limit}' + (f'&cursor={last}' if last else '')
+            if updated_since:
+                params += f'&updated_since={updated_since}'
             data = signed_get(client, issued, path, params=params).json()['data']
             items += data['items']
             if not data['has_more']:
                 return items, (data['next_cursor'] or last)
+            assert data['next_cursor'] != last, f'游标原地打转：第二次拿到同一个 next_cursor {last}'
             last = data['next_cursor']
+        raise AssertionError(f'翻了 {MAX_PAGES} 页还没到底，游标没有前进')
 
     def test_paging_is_complete_and_has_no_duplicates(self, client: TestClient, token_headers: dict) -> None:
         issued = create_app(client, token_headers)
@@ -217,6 +235,30 @@ class TestIncrementalSync:
         assert all(
             isinstance(d['id'], str) and (d['parent_id'] is None or isinstance(d['parent_id'], str)) for d in paged
         )
+
+    @pytest.mark.skipif(settings.DATABASE_TYPE != 'sqlserver', reason='只有 SQL Server 存得下亚微秒（100 纳秒）')
+    def test_sub_microsecond_times_still_page_through(self, client: TestClient, token_headers: dict) -> None:
+        """🔴 库里 `.1234567`、Python 读到 `.123456`：不截齐的话 `changed > 游标` 对已返回的行永远成立
+
+        种子数据是 `GETDATE()` 写的：它只精确到 1/300 秒，转成 `datetimeoffset(7)` 后毫秒尾数是 3、7 的
+        都会带上第 7 位（`.6566667`），尾数是 0 的才正好整微秒 —— 所以 CI 上是间歇的（实测 6 次卡了 4 次）。
+        这里不赌运气：直接把三行写成同一个带第 7 位的时刻，再一行一页地翻
+        """
+        issued = create_app(client, token_headers)
+        codes = [f'{CODE_PREFIX}NS{i}' for i in range(3)]
+        for code in codes:
+            created = client.post(
+                '/sys/depts', headers=token_headers, json={'code': code, 'name': code, 'status': 1, 'sort': 0}
+            ).json()
+            assert created['code'] == 200, created
+        ids = [run_db(lambda db, c=code: _dept_id(db, c)) for code in codes]
+        try:
+            run_db(lambda db: _set_created_time(db, ids, '2099-01-01T00:00:00.1234567+08:00'))
+            items, _ = self._drain(client, issued, '/depts', None, limit=1, updated_since='2098-12-31T16:00:00Z')
+            assert [d['id'] for d in items] == [str(i) for i in sorted(ids)], '三行各出现一次，按 id 排'
+        finally:
+            for pk in ids:
+                run_db(lambda db, pk=pk: _hard_delete_dept(db, pk))
 
     def test_inserts_and_soft_deletes_show_up_after_the_cursor(self, client: TestClient, token_headers: dict) -> None:
         """🔴 新插入的行 updated_time 是 NULL（只按它查会漏掉）；软删的行要以 deleted=true 再出现一次"""
@@ -270,3 +312,14 @@ async def _dept_id(db: Any, code: str) -> int:
 
 async def _hard_delete_dept(db: Any, pk: int) -> None:
     await db.execute(delete(Dept).where(Dept.id == pk))
+
+
+async def _set_created_time(db: Any, ids: list[int], value: str) -> None:
+    """绕过 ORM 写一个带第 7 位小数的时间 —— Python 的 datetime 表达不了它，只能让 SQL Server 自己解析字符串"""
+    await db.execute(
+        text(
+            'UPDATE sys_dept SET created_time = CAST(:v AS datetimeoffset(7)), updated_time = NULL '
+            f'WHERE id IN ({", ".join(str(int(i)) for i in ids)})'
+        ),
+        {'v': value},
+    )
