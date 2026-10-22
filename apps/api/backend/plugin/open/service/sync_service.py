@@ -7,6 +7,10 @@
 - 🔴 软删的行也要返回（`deleted: true`），否则对方永远不知道哪条没了 —— 和平时 `deleted = 0` 正好相反，
   所以这里**直接写 select、不走 DAO**（DAO 的查询都带着 `deleted = 0`）
 - 游标比较不能写行值比较 `(t, id) > (:t, :id)`：SQL Server 不支持。展开成 `t > :t OR (t = :t AND id > :id)`
+- 🔴 SQL Server 的 `datetimeoffset(7)` 精确到 100ns，Python `datetime` 只到微秒：库里生成的时间（种子的 `GETDATE()`）
+  读出来被截掉一截，游标里的 `t` 比真值小一点点，`t > :t` 对**同一行**永远成立 —— 同一页、同一个 `next_cursor`
+  无限返回，对方的同步循环永远停不下来。所以 SQL Server 上先 `CAST(... AS DATETIMEOFFSET(6))`，
+  取值、比较、排序用的是同一个微秒精度的值
 
 用游标不用 offset：同步过程中数据还在变，offset 会漏或重。
 """
@@ -17,10 +21,13 @@ import json
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, cast, func, or_, select
+from sqlalchemy.dialects.mssql import DATETIMEOFFSET
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.model import Dept, User
+from backend.common.enums import DataBaseType
+from backend.core.conf import settings
 from backend.plugin.open.gateway.errors import OpenApiError
 
 
@@ -47,6 +54,8 @@ async def _sync(
     limit: int,
 ) -> tuple[list[Any], str | None, bool]:
     changed = func.coalesce(model.updated_time, model.created_time)
+    if DataBaseType.sqlserver == settings.DATABASE_TYPE:
+        changed = cast(changed, DATETIMEOFFSET(6))
     stmt = select(model, changed.label('changed'))
     if updated_since is not None:
         stmt = stmt.where(changed >= updated_since)
