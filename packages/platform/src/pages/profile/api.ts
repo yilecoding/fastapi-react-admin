@@ -230,7 +230,7 @@ type UploadedImage = { id: string; public_url: string | null; original_name: str
  * `download_url` 要 Authorization 头 —— 塞进 `<img>` 只会拿到 401 和一张裂图。
  * 公开子树落在后端 `/uploads` 那个无鉴权挂载上，直链不需要凭据。
  *
- * 🔴 **和 `pages/file` 的 `useUploadFile` 分开写是刻意的**（同 `uploadInlineImage`
+ * 🔴 **和 `pages/file` 的 `useFileUploader` 分开写是刻意的**（同 `uploadInlineImage`
  * 那条注释）：把 `public` 做成通用上传的一个可选参数，就只剩「谁记得别传 true」
  * 一道纪律在守着。拆成独立命名的函数之后，通用上传路径在类型上就产生不了公开文件。
  *

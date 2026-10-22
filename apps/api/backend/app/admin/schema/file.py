@@ -29,6 +29,8 @@ class GetFileDetail(SchemaBase):
     # 写 `int` 会让 openapi 生成 `number`，前端 tsc 以为能当数字用 —— 类型和运行时对不上。
     # （同样的账 `dept_id` / `parent_id` 也欠着，那是既有问题，不在本次范围）
     created_by: int | str = Field(description='上传人 ID')
+    # None = 内置本地存储。同 created_by 声明成 `int | str`（雪花 ID 下发成字符串）
+    storage_id: int | str | None = Field(None, description='所属存储 ID（null：内置本地存储）')
     created_time: datetime = Field(description='上传时间')
     updated_time: datetime | None = Field(None, description='更新时间')
 
@@ -69,6 +71,14 @@ class GetFileDetail(SchemaBase):
         if not self.is_public or not self.path:
             return None
         return f'/uploads/{quote(self.path, safe="/")}'
+
+
+class GetFileLinkDetail(SchemaBase):
+    """直连下载地址"""
+
+    # null = 这个文件所在的存储不支持直连（本地存储），用 `download_url` 走带鉴权的下载接口
+    url: str | None = Field(None, description='短时效的直连地址；null 表示不支持，回落到 download_url')
+    expires_in: int | None = Field(None, description='有效期（秒）')
 
 
 class DeleteFileParam(SchemaBase):

@@ -116,8 +116,41 @@ services:
       - rabbitmq_data:/var/lib/rabbitmq
     restart: unless-stopped
 
+  # RustFS —— S3 兼容对象存储，给「存储管理」（#122）当本机的 S3 目标。**默认不起**，需要时：
+  #
+  #     docker compose -f docker-compose.dev.yml --profile s3 up -d rustfs
+  #     # 再在「系统管理 → 存储管理」里新增一条：端点 http://127.0.0.1:9100、桶自己建一个、
+  #     # 寻址方式「路径风格」（RustFS 没配 server-domains 时只认路径风格）、AK/SK 见下
+  #
+  # 选 RustFS 而不是 MinIO：MinIO 的镜像在本机的镜像源上拉不下来（quay.io 401），而且它要校验
+  # 签名 —— moto 那种模拟器不校验，「错误的 SecretKey」测不出来。后端测试指到它：
+  #   STORAGE_TEST_S3_ENDPOINT=http://127.0.0.1:9100 STORAGE_TEST_S3_ACCESS_KEY=rustfsadmin \
+  #   STORAGE_TEST_S3_SECRET_KEY=rustfs-secret-2026 pnpm --filter api test backend/app/admin/tests/api_v1/test_storage.py
+  # （它会在上面建一个 `pytest-bucket` 并清空它）
+  rustfs:
+    # 钉 digest 的理由同上面的 mssql（issue #66）；升级时显式换这串，不要删掉它让标签重新浮动
+    image: rustfs/rustfs:1.0.3@sha256:9ca9559533b537d10482fe923288b676ad08f92a7069d9a17327fbae3cab688b
+    container_name: fba_rustfs
+    profiles: ["s3"]
+    environment:
+      RUSTFS_ACCESS_KEY: "${RUSTFS_ACCESS_KEY:-rustfsadmin}"
+      RUSTFS_SECRET_KEY: "${RUSTFS_SECRET_KEY:-rustfs-secret-2026}"
+    ports:
+      # 宿主机用 9100：9000 这一带常被别的服务占着（MinIO / 其它项目）
+      - "${RUSTFS_PORT:-9100}:9000"
+    volumes:
+      - rustfs_data:/data
+    healthcheck:
+      # 不带 -f：没签名的请求回 403，端口能答就是活了
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://127.0.0.1:9000/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
 volumes:
   mssql_data:
+  rustfs_data:
   redis_data:
   postgres_data:
   rabbitmq_data:

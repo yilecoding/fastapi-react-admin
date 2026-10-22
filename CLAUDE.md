@@ -149,7 +149,7 @@ import 都没有，所以 `packages/ui` 对 workspace 零依赖 —— 刻意的
 
 ```bash
 docker start fba_postgres fba_redis       # PostgreSQL :5432 / Redis :6380（2026-09-08 起默认库，换回 SQL Server 见 docker-compose.dev.yml 的 mssql 注释）
-pnpm dev                                  # api :8088 · web :8888 · celery worker（含内嵌 beat）
+pnpm dev                                  # api :8088 · web :8888 · celery worker（含内嵌 beat）；对象存储另起 `--profile s3 up -d rustfs`（见 compose 注释）
 ```
 
 `apps/api` 和 `apps/worker` 都是 pnpm workspace 成员（`package.json` 里只有一个

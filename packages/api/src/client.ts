@@ -13,7 +13,7 @@ import createOpenApiClient from 'openapi-fetch'
  * （`const E = new ApiError(...)`、或者给默认参数），环里后加载的那一侧会拿到
  * `undefined` —— 报的是 `undefined is not a constructor` 之类，和真因隔着两层。
  */
-import { ApiError } from './errors'
+import { ApiError, UploadAbortedError } from './errors'
 import { NETWORK_STATUS, resolveEnvelope } from './envelope'
 import type { ApiMethods } from './types'
 
@@ -102,6 +102,14 @@ export type ApiClient<Paths extends {}> = ApiMethods<Paths> & {
    */
   sendRaw: (method: Method, path: string, body: BodyInit | undefined, accept: string) => Promise<Response>
 
+  /**
+   * multipart 上传，**带上传进度、可取消**，返回拆过包封的裸 data。
+   *
+   * 走 `XMLHttpRequest` 而不是 fetch —— 后者拿不到上传进度事件（浏览器和 RN 都是）。
+   * 鉴权头 / `Accept-Language` / 401 单飞刷新 + 重放一次 / 信封判定，和 `send()` 一致。
+   */
+  sendUpload: <T>(path: string, body: FormData, options?: UploadOptions) => Promise<T>
+
   /** 会话失效回调可以在创建之后再注入（各端 auth 层的初始化顺序不同） */
   setSessionExpiredHandler: (fn: (() => void) | null) => void
 
@@ -114,6 +122,14 @@ export type ApiClient<Paths extends {}> = ApiMethods<Paths> & {
    * 请求 401 时被莫名其妙弹回登录页 —— 看起来像 bug，其实是预期行为。
    */
   endSession: () => void
+}
+
+/** `sendUpload` 的可选项：进度回调 + 取消信号 */
+export interface UploadOptions {
+  /** 已发送 / 总字节数（来自 XHR 的 `upload.onprogress`，`lengthComputable` 时才调） */
+  onProgress?: (loaded: number, total: number) => void
+  /** 触发后 XHR 立即 abort，Promise 以 `UploadAbortedError`（`name === 'AbortError'`）拒绝 */
+  signal?: AbortSignal
 }
 
 export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiClient<Paths> {
@@ -274,6 +290,67 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     return res
   }
 
+  function sendUpload<T>(path: string, body: FormData, options: UploadOptions = {}, retry = true): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      if (options.signal?.aborted) {
+        reject(new UploadAbortedError())
+        return
+      }
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${config.getBaseUrl()}${path}`)
+      // 同 sendRaw：带上 httpOnly 的 refresh cookie（RN 忽略）
+      xhr.withCredentials = true
+      // ⚠️ 同样不要手写 multipart 的 Content-Type，boundary 由 XHR 自己生成
+      for (const [k, v] of Object.entries({ ...authHeaders(), Accept: 'application/json' })) {
+        xhr.setRequestHeader(k, v)
+      }
+      const onAbort = () => xhr.abort()
+      options.signal?.addEventListener('abort', onAbort, { once: true })
+      const cleanup = () => options.signal?.removeEventListener('abort', onAbort)
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) options.onProgress?.(e.loaded, e.total)
+      }
+      xhr.onerror = () => {
+        cleanup()
+        reject(networkError(new Error('upload failed'), path))
+      }
+      xhr.onabort = () => {
+        cleanup()
+        reject(new UploadAbortedError())
+      }
+      xhr.onload = () => {
+        cleanup()
+        let parsed: unknown = null
+        try {
+          parsed = JSON.parse(xhr.responseText)
+        } catch {
+          // 不是 JSON（反代的 HTML 错误页之类）
+        }
+        const status = xhr.status
+        const outcome = resolveEnvelope<T>({ ok: status >= 200 && status < 300, status, statusText: xhr.statusText }, parsed)
+        if (outcome.ok) {
+          resolve(outcome.data)
+          return
+        }
+        if (outcome.error.isUnauthorized && retry) {
+          // 刷新成功就整个重放一次（FormData 可以重复发送）；失败走和 send() 相同的收尾
+          void refreshToken().then(async (ok) => {
+            if (ok) {
+              sendUpload<T>(path, body, options, false).then(resolve, reject)
+              return
+            }
+            await expire()
+            reject(outcome.error)
+          })
+          return
+        }
+        reject(outcome.error)
+      }
+      xhr.send(body)
+    })
+  }
+
   /*
    * ⚠️ 这里有一次**刻意的** `as`：`send()` 的运行时是按字符串路径转发的
    * （openapi-fetch 的实例也只能按方法名取），拿不到 `Paths` 的信息。
@@ -288,6 +365,7 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     DELETE: (path: string, init?: Record<string, unknown>) => send('DELETE', path, init),
     PATCH: (path: string, init?: Record<string, unknown>) => send('PATCH', path, init),
     sendRaw: (method, path, body, accept) => sendRaw(method, path, body, accept),
+    sendUpload: (path, body, options) => sendUpload(path, body, options),
     setSessionExpiredHandler: (fn) => {
       onSessionExpired = fn
     },

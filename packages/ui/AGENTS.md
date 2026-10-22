@@ -157,6 +157,7 @@ context** 里取翻译函数，而那个 i18next 实例是 `@admin/i18n` 建的�
 | 文件预览 | `ui/components/file-viewer` + `pages/file/preview-dialog`。喂 `buffer`（带鉴权取回的字节）不喂 url；只在 Dialog 里挂，别常驻页面。详见 [file 分册](../platform/src/pages/file/AGENTS.md) |
 | 业务对象附件 | `pages/file/attachments` 的 `<FileAttachments targetType targetId />`，别另写一套。`targetType` 走常量 |
 | 富文本 | `ui/components/rich-text`。图片能力由 `platform` 注入（`useRichTextImages()`），不传 `images` 就整块关掉。详见 [rich-text 分册](./src/components/rich-text/AGENTS.md) |
+| 选文件 / 拖拽投放 / 上传浮窗 | `ui/components/uploader/` 的 `useFilePicker`（隐藏 input + `open()`，change 后自动清 `value`）· `Dropzone`（包住任意内容，拖进来盖一层提示；不给 children 就是空态格子）· `UploadTray`（右下角浮窗：标题 / 剩余时间 / 取消全部 / 每行状态环，折叠态只剩标题栏）。它们只认一个 `UploadTrayItem` 形状，不发请求 —— 引擎在 `../platform/src/upload/`，队列和接线在 `../platform/src/shell/upload-store.ts`，页面只调 `pages/file/uploader.ts` |
 | 带鉴权的下载 | 不能用 `<a href download>`（带不上 Authorization 头，会把 401 的 JSON 存成文件）。走 `fetchBytes` → Blob → 临时 `<a>` → `revokeObjectURL` |
 
 ### 🔴 tooltip 的锚点不能是 `display:contents` 的包装元素

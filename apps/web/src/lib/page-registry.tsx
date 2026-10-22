@@ -8,6 +8,7 @@ import { DictPage } from "@admin/platform/pages/dict"
 import { DataPermissionPage } from "@admin/platform/pages/data-permission"
 import { MenuPage } from "@admin/platform/pages/menu"
 import { FilePage } from "@admin/platform/pages/file"
+import { StoragePage } from "@admin/platform/pages/storage"
 import { ConfigPage } from "@admin/platform/pages/config"
 import { LogOnlinePage } from "@admin/platform/pages/log-online"
 import { MonitorRedisPage } from "@admin/platform/pages/monitor-redis"
@@ -61,6 +62,7 @@ export const pageRegistry: PageRegistry = {
   "/_auth/system/dept": DeptPage,
   "/_auth/system/data-permission": DataPermissionPage,
   "/_auth/system/file": FilePage,
+  "/_auth/system/storage": StoragePage,
   "/_auth/log/login": LogLoginPage,
   "/_auth/log/opera": LogOperaPage,
   "/_auth/plugins/dict": DictPage,
