@@ -59,6 +59,17 @@ electron-builder 再据此生成 blockmap 与清单。
 | `CSC_LINK` / `CSC_KEY_PASSWORD` | 证书文件（.pfx / .p12，base64 或 URL）与密码，Windows 与 macOS 通用 |
 | `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | macOS 公证 |
 
+🔴 **「直通」有个前提：没配的 secret 必须是「没有这个变量」，而 Actions 给的是空串。**
+`CSC_LINK: ${{ secrets.CSC_LINK }}` 在没配 secret 时是 `CSC_LINK=""`，electron-builder 26 的 `getCscLink()`
+用 `chooseNotNull`（`v1 == null ? v2 : v1`，源码注释写着 allow to specify as empty string）把空串当成值，
+mac 打包器的 `if (cscLink == null)` 跳过签名那一支于是走不到，空路径解析成当前目录 →
+`⨯ …/apps/desktop not a file`。Windows / Linux 照常出包，所以表现是「三个平台只有 mac 红」。
+现在「出安装包」那一步先把空的签名变量 unset 掉。
+**实测证据**：v0.1.0 的 Release 运行（#47 接上签名之后第一次打 tag）mac job 在「出安装包」红，日志
+`empty password will be used for code signing` → `apps/desktop not a file`；v0.0.1（#47 之前）同一个 job 是绿的。
+修复后在分支上试跑（`workflow_dispatch`，不碰 Release）三个平台全绿，mac 日志变成
+`skipped macOS application code signing … 0 identities found`，arm64 / x64 的 dmg + zip 都出来了。
+
 ⚠️ **公证是按 `APPLE_TEAM_ID` 存在与否动态开的**（`--config.mac.notarize.teamId=...`），
 没写进 `electron-builder.yml`。写死的话，没凭据的构建会**直接失败** ——
 而「没有证书也能出包」是这个模板刻意保留的能力：先能跑，再谈签名。

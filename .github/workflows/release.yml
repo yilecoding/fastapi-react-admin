@@ -153,6 +153,13 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          # 🔴 没配的 secret 在这里是**空串**，不是「没有这个变量」—— 而 electron-builder 26 把空串的
+          # CSC_LINK 当成一个值（源码注释「allow to specify as empty string」），解析成当前目录，
+          # macOS 那一步当场 `apps/desktop not a file`。Windows / Linux 不走那条路，所以只有 mac 红。
+          # 没配就整个 unset 掉，让它回到「没有证书 → 出未签名包」
+          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            [ -z "${!v:-}" ] && unset "$v"
+          done
           EXTRA=""
           # 只有拿到 Apple 的凭据才开公证 —— 无条件写进 electron-builder.yml 的话，
           # 没凭据的构建会**直接失败**，而现在这种「没证书也能出包」是刻意保留的
