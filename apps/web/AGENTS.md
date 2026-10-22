@@ -60,3 +60,24 @@ E2E 靠 `page.route` 造一个不同的 `buildId` 来验，见
 ⚠️ 特征串判**过宽**的代价是把普通网络错误说成「发新版了」，所以只认那几条
 明确和模块加载相关的文案（Chrome / Firefox / Safari 各不相同，是一组不是一条），
 **不要**放宽到 `Failed to fetch`。
+
+## 登录页左栏的 3D 榫卯（`src/routes/_guest/-tenon-stage.tsx`）
+
+纯 CSS 3D：每片零件是 30 层 `clip-path` 薄片沿 Z 轴叠出来的，轮廓和侧边栏那枚
+`TenonMark` 共用 `src/components/tenon-outline.ts`。尺寸全走 `cqw`，舞台边长随左栏变。
+
+🔴 **`prefers-reduced-motion` 的覆盖规则，选择器必须和挂动画的那条一样具体。**
+症状：系统开了「减弱动态效果」，榫块照样来回滑，而且截图那一刻停在离卯最远的位置 ——
+看起来像两块不相干的方块，不像一枚标记。
+根因：动画挂在 `.tenon-piece--t .tenon-slide`（特异性 0,2,0）上，减弱动效里写的是裸
+`.tenon-slide { animation: none }`（0,1,0）。`@media` 不加特异性，于是输给了前者，
+`animation` 一个字都没被覆盖，`transform` 的静止值也就轮不到。
+修法：媒体查询里逐条写成同样的复合选择器（`.tenon-piece--t .tenon-slide, .tenon-piece--m .tenon-slide`）。
+**不要靠 `!important` 压**：以后有人给某一片加更具体的动画规则，`!important` 会把它也一起吃掉，
+而那正是这里要避免的「改一处、另一处静默跟着变」。
+实测：Playwright `reducedMotion: "reduce"` 截图，修前榫块停在 `translateX(-24%)`（动画起点），
+修后停在 `translateX(3%)`、光缝半亮，与设计一致。
+
+⚠️ 换主题、换语言都不用碰舞台：配色是 `.tenon-stage-box` / `.dark .tenon-stage-box` 上的一组
+自定义属性，文案在 `-sign-in-brand.tsx`。验收截图要覆盖 390 / 1024 / 1280 / 1440 / 1920 五档宽度、
+浅深两套、英文一套、减弱动效一套 —— 英文标题会换成三行，最容易在 1024 宽把舞台挤扁。

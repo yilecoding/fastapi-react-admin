@@ -2,10 +2,11 @@
 /**
  * 品牌图标生成器 —— 唯一真相源。
  *
- * 图形本身就是 `apps/web/src/components/tenon-mark.tsx` 那两片路径（榫 + 卯），
+ * 图形本身就是 `apps/web/src/components/tenon-outline.ts` 那两片轮廓（榫 + 卯），
  * 套进一个纯色圆形徽章里，给「没有周围主题面板可以贴色」的场合用：浏览器标签页、
- * 桌面端窗口图标/任务栏/安装包图标。TenonMark 组件本身继续用 currentColor 裸跑在
- * 侧边栏和登录页——那两处已经有背景色，不需要徽章。
+ * 桌面端窗口图标/任务栏/安装包图标。登录页左上角的 `TenonBadge` 直接引用这里生成的
+ * `favicon.svg`，所以改了配色跑一遍本脚本，登录页跟着变。TenonMark 组件本身继续用
+ * currentColor 裸跑在侧边栏 —— 那里已经有背景色，不需要徽章。
  *
  * 改了榫卯的路径或配色，改这一份的常量，跑：
  *     pnpm brand:icons
@@ -35,7 +36,7 @@ const MORTISE_OPACITY = 0.45
  *  1.6 是「墨迹宽度 ≈ 徽章直径的 67%」换算出来的缩放系数，见本文件下方 renderIcon 的推导。 */
 const GLYPH_SCALE_AT_D48 = 1.6
 
-// ---- 榫 / 卯的矩形分解（tenon-mark.tsx 的路径都是直角多边形，拆成矩形并/差最简单）----
+// ---- 榫 / 卯的矩形分解（tenon-outline.ts 的轮廓都是直角多边形，拆成矩形并/差最简单）----
 const inRect = (x, y, x0, x1, y0, y1) => x >= x0 && x <= x1 && y >= y0 && y <= y1
 const inTenon = (x, y) => inRect(x, y, 2, 10, 4, 20) || inRect(x, y, 10, 13, 9, 15)
 const inMortise = (x, y) =>

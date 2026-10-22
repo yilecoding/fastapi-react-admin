@@ -29,11 +29,11 @@ export const BRAND = {
    * identity 就是仓库名本身 —— 描述式命名的项目，缩写反而没意义
    * （试过 "FRA"，读起来像机场代码）。小写 + 等宽，看着就是个仓库名。
    *
-   * 这也是**唯一**在用的名字：挂在 TenonMark 旁边的地方（侧边栏顶部、
-   * 登录页角标、页脚落款）直接读它，不另设中文名字段——见上面的注释。
+   * 这也是**唯一**在用的名字：挂在榫卯标记旁边的地方（侧边栏顶部、
+   * 登录页左上角的徽章旁、页脚落款）直接读它，不另设中文名字段——见上面的注释。
    */
   wordmark: "fastapi-react-admin",
-  /** 一句话定位，含品类词。站点标题读它，登录页对比表旁边也会引用 */
+  /** 一句话定位，含品类词。站点标题读它，窄屏登录页的品牌条也挂着它 */
   tagline: "FastAPI + React 19 中后台底座",
   /**
    * 版本号**不在这里写死** —— 它来自 `package.json`，构建时注入成
@@ -45,8 +45,6 @@ export const BRAND = {
    * 显示一个明显不对的数比显示一个碰巧对的数好。
    */
   version: `v${import.meta.env.VITE_APP_VERSION ?? "0.0.0"}`,
-  /** 底座里真正承重的那几样，登录页会把它列出来。不摆 SQL SERVER——数据库是可换的实现细节，不是卖点 */
-  stack: ["REACT 19", "TANSTACK", "SHADCN", "TAILWIND", "FASTAPI"],
   /** 仓库地址。顶栏的 GitHub 图标（`components/github-link.tsx`）读它，fork 出去改这一处就行 */
   repoUrl: "https://github.com/yilecoding/fastapi-react-admin",
 } as const
