@@ -4,8 +4,8 @@ import re
 import uuid
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from anyio import open_file
 from fastapi import UploadFile
 
 from backend.common.enums import FileType
@@ -15,6 +15,9 @@ from backend.common.log import log
 from backend.core.conf import settings
 from backend.core.path_conf import PUBLIC_UPLOAD_DIR, UPLOAD_DIR
 from backend.utils.timezone import timezone
+
+if TYPE_CHECKING:
+    from backend.utils.storage_ops import StorageTarget
 
 # 允许留在落盘名里的字符。其余一律换成下划线 ——
 # 原文件名会直接出现在 URL 里，`#` `?` `%` 空格这些会把 URL 切断或改写
@@ -229,49 +232,71 @@ def upload_file_verify(file: UploadFile) -> FileType:
     raise errors.RequestError(msg=t('error.file.unsupported_format', file_ext=file_ext))
 
 
-async def upload_file(file: UploadFile, *, public: bool = False) -> SavedFile:
+async def upload_file(file: UploadFile, *, public: bool = False, target: 'StorageTarget | None' = None) -> SavedFile:
     """
-    上传文件，边写盘边算 SHA-256
+    上传文件，边写边算 SHA-256
 
-    校验和是**流式**算的：先落盘再读回来算会把大文件读两遍，
+    校验和是**流式**算的：先写完再读回来算会把大文件读两遍，
     而 `file.read()` 之后指针已经到尾，也不能重放。
 
     :param file: FastAPI 上传文件对象
     :param public: 落公开子树（不登录即可读），仅供富文本内联图使用；
         **是否允许公开由 service 层判定**，这里只负责按结论落盘
+    :param target: 写到哪个存储的哪棵子树；不传 = 内置本地存储（按 `public` 选子树）
     :return:
     """
+    from backend.utils.storage_ops import (
+        READ_CHUNK,
+        StorageError,
+        builtin_target,
+        content_type_from_key,
+        delete_object,
+        write_stream,
+    )
+
+    if target is None:
+        target = builtin_target(public=public)
     filename = build_filename(file)
     # 日期目录只由服务端拼，客户端的任何输入都进不了这一段
     relative = f'{build_date_dir()}/{filename}'
-    root = upload_root(public=public)
-    target = root / relative
 
     # 兜底：build_filename 已经把路径成分剥掉了，这里再确认落点没跑出根目录。
-    # 两道防线是刻意的 —— 这一条挡的是「将来有人改了 build_filename」
-    if not target.resolve().is_relative_to(root.resolve()):
-        log.error(f'拒绝越界的上传路径：{file.filename!r} → {target}')
-        raise errors.RequestError(msg=t('error.file.invalid_filename'))
+    # 两道防线是刻意的 —— 这一条挡的是「将来有人改了 build_filename」。
+    # 本地类存储按真实路径判；所有存储再过一遍 `check_key`（S3 上 `../` 不会被谁拦住）
+    if target.local_root is not None:
+        root = target.local_root
+        if not (root / relative).resolve().is_relative_to(root.resolve()):
+            log.error(f'拒绝越界的上传路径：{file.filename!r} → {root / relative}')
+            raise errors.RequestError(msg=t('error.file.invalid_filename'))
 
-    # 日期目录按需创建。`parents=True` 是必须的 —— 每月/每年第一次上传时
-    # 上两级也不存在
-    target.parent.mkdir(parents=True, exist_ok=True)
+    # 🔴 MIME 一律按扩展名定，不信客户端声明的：它会原样成为 `/uploads`（无鉴权）和下载接口的 Content-Type、
+    # S3 对象的 Content-Type、预签名的 response-content-type。`report.pdf` 配 `text/html` 的声明就能让
+    # 带鉴权的预览（blob: URL 继承应用的源）把 HTML 跑起来（见 storage_ops.content_type_from_key）
+    content_type = content_type_from_key(filename)
 
     digest = hashlib.sha256()
     size = 0
+
+    async def chunks():  # ruff: ignore[missing-return-type-private-function]
+        nonlocal size
+        while True:
+            # 不用 `UPLOAD_READ_SIZE`（1 KB）：每次 write 都要跨进 OpenDAL 的 Rust 层，
+            # 50 MB 的文档按 1 KB 切是五万次调用。1 MiB 一块，S3 那边 writer 自己再攒成 ≥5 MiB 的分片
+            content = await file.read(READ_CHUNK)
+            if not content:
+                break
+            digest.update(content)
+            size += len(content)
+            yield content
+
     try:
-        async with await open_file(target, mode='wb') as fb:
-            while True:
-                content = await file.read(settings.UPLOAD_READ_SIZE)
-                if not content:
-                    break
-                digest.update(content)
-                size += len(content)
-                await fb.write(content)
-    except Exception as e:
-        log.error(f'上传文件 {filename} 失败：{e!s}')
-        # 写失败会留下一个半截文件，不清掉就成了永远没人引用的垃圾
-        target.unlink(missing_ok=True)
+        await write_stream(target, relative, chunks(), content_type=content_type)
+    except StorageError as e:
+        if e.reason == 'invalid_key':
+            log.error(f'拒绝越界的上传路径：{file.filename!r} → {relative}')
+            raise errors.RequestError(msg=t('error.file.invalid_filename'))
+        # 写失败可能留下一个半截对象，不清掉就成了永远没人引用的垃圾
+        await delete_object(target, relative)
         raise errors.RequestError(msg=t('error.file.upload_failed'))
     await file.close()
 
@@ -281,7 +306,7 @@ async def upload_file(file: UploadFile, *, public: bool = False) -> SavedFile:
         is_public=public,
         original_name=sanitize_display_name(strip_path(file.filename)),
         ext=get_file_ext(file),
-        content_type=file.content_type,
+        content_type=content_type,
         # 用实际写入的字节数，而不是 file.size —— 后者来自客户端声明，可以撒谎
         size=size,
         sha256=digest.hexdigest(),
@@ -290,7 +315,8 @@ async def upload_file(file: UploadFile, *, public: bool = False) -> SavedFile:
 
 def delete_file(relative_path: str, *, public: bool = False) -> None:
     """
-    删除落盘文件。入参是 `sys_file.path`（**相对路径，含日期目录**）。
+    删除**内置本地存储**里的落盘文件。入参是 `sys_file.path`（**相对路径，含日期目录**）。
+    按存储删走 `storage_ops.delete_object`，本地类存储最终也落到 `delete_local_file`。
 
     ⚠️ `public` 必须跟着 `sys_file.is_public` 传 —— 两棵树里的相对路径长得一模一样，
     传错了就是在另一棵树上删一个不存在的文件：`missing_ok=True` 一声不响地成功，
@@ -308,12 +334,23 @@ def delete_file(relative_path: str, *, public: bool = False) -> None:
     :param public: 该文件是否落在公开子树
     :return:
     """
+    delete_local_file(upload_root(public=public), relative_path)
+
+
+def delete_local_file(root_dir: Path, relative_path: str) -> None:
+    """
+    删除本地根目录下的一个文件，并回收空掉的日期目录（`delete_file` 那段注释里的规矩全部适用）
+
+    :param root_dir: 子树根目录
+    :param relative_path: 相对根目录的路径
+    :return:
+    """
     value = (relative_path or '').strip()
     if not value:
         return
 
-    root = upload_root(public=public).resolve()
-    target = (upload_root(public=public) / value).resolve()
+    root = root_dir.resolve()
+    target = (root_dir / value).resolve()
     if not target.is_relative_to(root) or target == root:
         log.error(f'拒绝越界的删除路径：{relative_path!r} → {target}')
         return

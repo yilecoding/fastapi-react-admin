@@ -7,6 +7,7 @@ import { Alert } from '@admin/ui/components/alert'
 import { Button } from '@admin/ui/components/button'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
+import { useFilePicker } from '@admin/ui/components/uploader/dropzone'
 
 import { Can } from '../../auth/can'
 import { fetchBytes } from '../../api-client/client'
@@ -16,10 +17,11 @@ import {
   targetFilesQuery,
   useAttachFiles,
   useDetachFiles,
-  useUploadFile,
   type FileItem,
 } from './api'
 import { FilePreviewDialog } from './preview-dialog'
+import { useFileUploader } from './uploader'
+import { useUploadStore } from '../../shell/upload-store'
 
 /**
  * 业务对象的附件面板。**任何页面都能直接嵌**，只要给 `targetType` + `targetId`。
@@ -46,14 +48,31 @@ export function FileAttachments({
   const { data, isPending, isError, error, refetch } = useQuery(targetFilesQuery(targetType, targetId))
   const files = data ?? []
 
-  const upload = useUploadFile()
   const attach = useAttachFiles()
   const detach = useDetachFiles()
-  const inputRef = React.useRef<HTMLInputElement>(null)
   const [previewing, setPreviewing] = React.useState<FileItem | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
 
-  const busy = upload.isPending || attach.isPending || detach.isPending
+  // 每个文件传完（含秒传命中）就立刻挂到目标上 —— 挂载是幂等的（后端跳过已挂的），
+  // 所以重试、重复选同一个文件都不会挂出重复行
+  const uploader = useFileUploader({
+    source: t('附件'),
+    onDone: (item) => {
+      if (!item.result) return
+      attach
+        .mutateAsync({ file_ids: [item.result.id], target_type: targetType, target_id: targetId })
+        .catch((e: unknown) => {
+          // 上传成功但挂载失败：文件已经在文件管理里了，这里必须说清楚，
+          // 否则用户以为整个操作失败、重传一次又多一份
+          setActionError(
+            t('文件已上传但挂载失败：{{err}}', { err: e instanceof Error ? e.message : t('未知错误') })
+          )
+        })
+    },
+  })
+  const picker = useFilePicker({ onFiles: uploader.add })
+
+  const busy = uploader.busy || attach.isPending || detach.isPending
 
   /**
    * 下载。不能做成 `<a href>` —— `download_url` 要 Authorization 头，
@@ -77,41 +96,6 @@ export function FileAttachments({
     [t]
   )
 
-  const handlePick = React.useCallback(
-    async (picked: FileList | null) => {
-      if (!picked?.length) return
-      setActionError(null)
-      const ids: string[] = []
-      // 先逐个上传拿到 id，再一次性挂载 —— 挂载是幂等的（后端跳过已挂的），
-      // 所以中途失败重试不会挂出重复行
-      for (const file of Array.from(picked)) {
-        try {
-          const saved = await upload.mutateAsync(file)
-          ids.push(saved.id)
-        } catch (e) {
-          setActionError(
-            t('{{name}} 上传失败：{{err}}', {
-              name: file.name,
-              err: e instanceof Error ? e.message : t('未知错误'),
-            })
-          )
-        }
-      }
-      if (ids.length) {
-        try {
-          await attach.mutateAsync({ file_ids: ids, target_type: targetType, target_id: targetId })
-        } catch (e) {
-          // 上传成功但挂载失败：文件已经在文件管理里了，这里必须说清楚，
-          // 否则用户以为整个操作失败、重传一次又多一份
-          setActionError(
-            t('文件已上传但挂载失败：{{err}}', { err: e instanceof Error ? e.message : t('未知错误') })
-          )
-        }
-      }
-      if (inputRef.current) inputRef.current.value = ''
-    },
-    [attach, t, targetId, targetType, upload]
-  )
 
   const handleDetach = React.useCallback(
     async (f: FileItem) => {
@@ -136,26 +120,25 @@ export function FileAttachments({
           )}
         </p>
         <Can perm="sys:file:upload">
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            className="hidden"
-            data-testid="attach-input"
-            onChange={(e) => void handlePick(e.target.files)}
-          />
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            data-testid="attach-upload"
-            onClick={() => inputRef.current?.click()}
-          >
+          <input {...picker.inputProps} data-testid="attach-input" />
+          <Button size="sm" variant="outline" disabled={attach.isPending || detach.isPending} data-testid="attach-upload" onClick={picker.open}>
             <IconUpload className="size-4" />
-            {upload.isPending ? t('上传中…') : t('添加附件')}
+            {uploader.busy ? t('上传中…') : t('添加附件')}
           </Button>
         </Can>
       </div>
+
+      {uploader.pending > 0 && (
+        /* 进度在右下角的浮窗里；这里只留一句，点一下把折叠的浮窗展开 */
+        <button
+          type="button"
+          className="mt-2 w-full rounded-md border border-dashed px-3 py-1.5 text-start text-xs text-muted-foreground hover:bg-accent/40"
+          onClick={() => useUploadStore.getState().setCollapsed(false)}
+          data-testid="attach-uploading"
+        >
+          {t('{{n}} 个文件上传中，进度在右下角', { n: uploader.pending })}
+        </button>
+      )}
 
       {actionError && (
         <Alert tone="danger" data-testid="attach-error" className="mt-2 py-1.5 text-xs">

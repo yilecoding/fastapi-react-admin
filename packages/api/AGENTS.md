@@ -76,7 +76,12 @@ const client = createApiClient({
 | token      | `sessionStorage`             | `expo-secure-store` + 内存   |
 | 语言       | app 层 `setApiLanguage()`    | `currentLanguage()` 直接读   |
 | refresh    | `credentials: 'include'`     | RN 自带 cookie jar           |
-| 各自加的   | multipart 上传 / 字节下载    | 网络错误文案 i18n            |
+| 各自加的   | 字节下载                     | 网络错误文案 i18n            |
+
+multipart 上传也在这个包里：`sendUpload(path, formData, { onProgress, signal })`。走 `XMLHttpRequest`
+而不是 fetch —— **fetch 拿不到上传进度事件**（浏览器和 RN 都是）；鉴权头 / `Accept-Language` /
+401 单飞刷新 + 重放一次 / 信封判定和 `send()` 同一套。取消时以 `UploadAbortedError`
+（`name === 'AbortError'`，按 name 判，别 instanceof）拒绝。web 的 `uploadFile()` 是它的薄壳。
 
 **共享的是**：信封成败语义、`ApiError`、401 单飞刷新、`Accept-Language`、
 生成的接口类型、`PageData`。两端各自的文件（`packages/platform/src/api-client/client.ts`

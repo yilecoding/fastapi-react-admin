@@ -1,4 +1,4 @@
-import { createApiClient, resolveEnvelope, type Method } from '@admin/api'
+import { createApiClient, type Method, type UploadOptions } from '@admin/api'
 import type { paths } from '@admin/api/schema'
 
 import { tokenStore } from './token-store'
@@ -73,14 +73,11 @@ export const api = {
  * 现在 `/sys/files/upload` 恰好总走 `success()`，所以还没炸过，
  * 但下一个接了这条的接口就会。
  */
-export async function uploadFile<T>(path: string, file: File, field = 'file'): Promise<T> {
+export async function uploadFile<T>(path: string, file: File, field = 'file', options?: UploadOptions): Promise<T> {
   const form = new FormData()
   form.append(field, file)
-  const res = await client.sendRaw('POST', path, form, 'application/json')
-  const body: unknown = await res.json().catch(() => null)
-  const outcome = resolveEnvelope<T>(res, body)
-  if (!outcome.ok) throw outcome.error
-  return outcome.data
+  // 走 `sendUpload`（XHR）：有上传进度、可取消；信封判定、401 刷新都在 `@admin/api` 里做
+  return client.sendUpload<T>(path, form, options)
 }
 
 /**

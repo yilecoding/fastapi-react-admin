@@ -2,13 +2,15 @@ from typing import Annotated, Literal
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Path, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
+from backend.app.admin.model import File as FileRecord
 from backend.app.admin.schema.file import (
     CreateFileRelationParam,
     DeleteFileParam,
     DeleteFileRelationParam,
     GetFileDetail,
+    GetFileLinkDetail,
     GetFileStatisticsDetail,
 )
 from backend.app.admin.service.file_service import file_service
@@ -18,7 +20,9 @@ from backend.common.response.response_schema import ResponseModel, ResponseSchem
 from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
+from backend.core.conf import settings
 from backend.database.db import CurrentSession, CurrentSessionTransaction
+from backend.utils.storage_ops import content_type_from_key, iter_read
 
 router = APIRouter()
 
@@ -121,6 +125,21 @@ async def get_file(
     return response_base.success(data=file)
 
 
+def _content_disposition(file: FileRecord, disposition: str) -> str:
+    """
+    Content-Disposition 头：下载接口和预签名地址（`response-content-disposition`）共用这一份
+    """
+    # 原名可能带中文/空格，裸塞进 filename= 会被 header 编码规则截断或乱码。
+    # RFC 6266 的两段式写法：ASCII 回退 + filename* 带 UTF-8
+    ascii_name = file.original_name.encode('ascii', 'ignore').decode() or f'file.{file.ext}'
+    # (issue #62) RFC 6266 的 filename="..." 是 quoted-string，`"`/`\` 必须转义，
+    # 否则原名里带引号会破坏这段 header 的语法。新上传的文件在 sanitize_display_name()
+    # 那一步已经挡掉了控制字符，但这条防线独立存在——万一有旧数据、或者以后
+    # 又长出一条没走 sanitize_display_name() 的写入路径，这里仍然兜得住
+    ascii_name = ascii_name.replace('\\', '\\\\').replace('"', '\\"')
+    return f'{disposition}; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(file.original_name, safe="")}'
+
+
 @router.get(
     '/{pk}/download',
     summary='下载 / 预览文件',
@@ -136,27 +155,37 @@ async def download_file(
     disposition: Annotated[
         Literal['inline', 'attachment'], Query(description='inline 浏览器内联显示，attachment 强制下载')
     ] = 'inline',
-) -> FileResponse:
-    file, target = await file_service.resolve_path(db=db, pk=pk, user=request.user)
+) -> Response:
+    file, target, size = await file_service.resolve(db=db, pk=pk, user=request.user)
+    # 按扩展名现算而不用 `file.content_type`：老记录里存的是客户端声明的类型（新上传已经是按扩展名落库的）
+    media_type = content_type_from_key(file.path)
+    headers = {'Content-Disposition': _content_disposition(file, disposition)}
+    if target.local_root is not None:
+        # 预览器会按 Range 拖进度（音视频），FileResponse 自带 Range，明确声明支持
+        headers['Accept-Ranges'] = 'bytes'
+        return FileResponse(target.local_root / file.path, media_type=media_type, headers=headers)
+    # 对象存储：后端流式代理。**刻意不 302 到预签名地址** —— 前端是带 Authorization 头的 fetch，
+    # 跨域重定向时浏览器会剥掉它（Fetch 规范），而老客户端不剥的话 S3 收到「头 + 查询串」两种鉴权直接 400。
+    # 走代理也就不需要给桶配 CORS。要直连（大文件 / 音视频拖进度）用 `/{pk}/link`。
+    # Content-Length 用存储现查的大小：没有它浏览器下载条只会转圈
+    headers['Content-Length'] = str(size)
+    return StreamingResponse(iter_read(target, file.path), media_type=media_type, headers=headers)
 
-    # 原名可能带中文/空格，裸塞进 filename= 会被 header 编码规则截断或乱码。
-    # RFC 6266 的两段式写法：ASCII 回退 + filename* 带 UTF-8
-    ascii_name = file.original_name.encode('ascii', 'ignore').decode() or f'file.{file.ext}'
-    # (issue #62) RFC 6266 的 filename="..." 是 quoted-string，`"`/`\` 必须转义，
-    # 否则原名里带引号会破坏这段 header 的语法。新上传的文件在 sanitize_display_name()
-    # 那一步已经挡掉了控制字符，但这条防线独立存在——万一有旧数据、或者以后
-    # 又长出一条没走 sanitize_display_name() 的写入路径，这里仍然兜得住
-    ascii_name = ascii_name.replace('\\', '\\\\').replace('"', '\\"')
-    return FileResponse(
-        target,
-        media_type=file.content_type or 'application/octet-stream',
-        headers={
-            'Content-Disposition': (
-                f'{disposition}; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(file.original_name, safe="")}'
-            ),
-            # 预览器会按 Range 拖进度（音视频），明确声明支持
-            'Accept-Ranges': 'bytes',
-        },
+
+@router.get('/{pk}/link', summary='获取短时效的直连下载地址', dependencies=[DependsJwtAuth])
+async def get_file_link(
+    request: Request,
+    db: CurrentSession,
+    pk: Annotated[int, Path(description='文件 ID')],
+    disposition: Annotated[
+        Literal['inline', 'attachment'], Query(description='inline 浏览器内联显示，attachment 强制下载')
+    ] = 'attachment',
+) -> ResponseSchemaModel[GetFileLinkDetail]:
+    file = await file_service.get_readable(db=db, user=request.user, pk=pk)
+    url = await file_service.presign(db=db, file=file, disposition=_content_disposition(file, disposition))
+    # 本地存储没有预签名（url 为 null）：前端回落到带鉴权的下载接口。不是失败，不能 fail()
+    return response_base.success(
+        data=GetFileLinkDetail(url=url, expires_in=settings.STORAGE_PRESIGN_EXPIRE_SECONDS if url else None)
     )
 
 

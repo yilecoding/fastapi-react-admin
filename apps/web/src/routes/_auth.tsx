@@ -6,6 +6,7 @@ import { AppSidebar } from "@admin/platform/shell/app-sidebar"
 import { CommandMenu, CommandTrigger } from "@admin/platform/shell/command-menu"
 import { HelpMenu } from "@admin/platform/shell/help-menu"
 import { TourAutostart } from "@admin/platform/shell/tour/tour-autostart"
+import { UploadTray } from "@admin/platform/shell/upload-tray"
 import { TenonMark } from "@/components/tenon-mark"
 import { BRAND } from "@/lib/brand"
 import { NavBreadcrumb } from "@admin/platform/shell/nav-breadcrumb"
@@ -137,6 +138,8 @@ function AuthLayout() {
         <CommandMenu options={options} />
         {/* 首次登录在仪表盘自动弹一次外壳导览；之后从 ⌘K 的「功能引导」重放 */}
         <TourAutostart />
+        {/* 右下角上传浮窗。外壳家具：队列在 store 里，切 tab / 关 tab 都不影响 */}
+        <UploadTray />
       </SidebarInset>
     </SidebarProvider>
     </PlatformProvider>
