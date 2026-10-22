@@ -26,6 +26,7 @@ from backend.utils.storage_ops import (
     presign_read,
     stat_size,
 )
+from backend.utils.timezone import timezone
 
 #: 业务模块登记的「这个人能不能读这个文件」。签名：`(db, request.user, file) -> bool`
 FileAccessChecker = Callable[[AsyncSession, Any, File], Awaitable[bool]]
@@ -309,9 +310,30 @@ class FileService:
             return None
 
     @staticmethod
+    async def _purge_objects(*, db: AsyncSession, files: Sequence[File]) -> None:
+        """
+        删掉这批文件在存储里的对象。存储按 (storage_id, is_public) 只解析一次 ——
+        200 个文件在同一个 S3 上就是 200 次查表 + 解密，没必要
+
+        失败只记日志（`delete_object` 内部）：「库里标成已清除、存储里留个孤儿」是可接受的；
+        反过来「对象删了、记录还能还原」会还原出一批点开就 404 的文件
+        """
+        resolved: dict[tuple[int | None, bool], StorageTarget | None] = {}
+        for file in files:
+            group = (file.storage_id, file.is_public)
+            if group not in resolved:
+                resolved[group] = await FileService._target_or_none(db=db, file=file)
+            target = resolved[group]
+            if target is not None:
+                await delete_object(target, file.path)
+
+    @staticmethod
     async def delete(*, db: AsyncSession, pks: list[int]) -> int:
         """
-        批量删除文件（记录 + 关联 + 磁盘文件）
+        批量删除文件：**进回收站**（记录置删除标记、关联解开，对象不动）。
+
+        `FILE_RECYCLE_DAYS = 0` 时不启用回收站，紧接着彻底删除（对象一并删掉）。
+        回收站不移动对象（ContiNew 是挪到回收路径）：S3 上「移动」= 复制 + 删除，大文件很贵
 
         :param db: 数据库会话
         :param pks: 文件 ID 列表
@@ -322,29 +344,86 @@ class FileService:
             return 0
 
         found_ids = [file.id for file in files]
-        # 先解析出**每个文件自己的存储 + 子树**再删记录 —— 删完就查不到这几个字段了。
-        # 漏掉 is_public / storage_id 的表现都是静默留孤儿（删一个不存在的对象不报错）
-        # 存储按 (storage_id, is_public) 只解析一次：200 个文件在同一个 S3 上就是 200 次查表 + 解密，没必要
-        resolved: dict[tuple[int | None, bool], StorageTarget | None] = {}
-        targets: list[tuple[StorageTarget, str]] = []
-        for file in files:
-            group = (file.storage_id, file.is_public)
-            if group not in resolved:
-                resolved[group] = await FileService._target_or_none(db=db, file=file)
-            target = resolved[group]
-            if target is not None:
-                targets.append((target, file.path))
+        # 文件和关联用**同一个**删除时间：还原时靠它认出「这一次删除连带解开了哪些关联」
+        now = timezone.now()
+        await file_relation_dao.delete_by_file_ids(db, found_ids, at=now)
+        count = await file_dao.delete(db, found_ids, at=now)
 
-        await file_relation_dao.delete_by_file_ids(db, found_ids)
-        count = await file_dao.delete(db, found_ids)
-
-        # 磁盘删除放在最后，且失败不回滚事务（delete_file 内部只记 warning）：
-        # 「库里删了、盘上留个孤儿」是可接受的；反过来「盘上删了、库里还在」
-        # 会让列表里出现一批点开就 404 的行
-        for target, path in targets:
-            await delete_object(target, path)
-
+        if settings.FILE_RECYCLE_DAYS <= 0:
+            await file_dao.mark_purged(db, found_ids, at=now)
+            await FileService._purge_objects(db=db, files=files)
         return count
+
+    @staticmethod
+    async def get_recycled_list(*, db: AsyncSession, name: str | None) -> dict[str, Any]:
+        """
+        回收站列表
+
+        :param db: 数据库会话
+        :param name: 原始文件名（模糊）
+        :return:
+        """
+        return await paging_data(db, await file_dao.get_recycled_select(name))
+
+    @staticmethod
+    async def restore(*, db: AsyncSession, pks: list[int]) -> int:
+        """
+        从回收站还原。**连带把删它那一次解开的附件关联挂回去** —— 还原就是撤销那一次删除；
+        之前手动从附件面板「移除」的不会被挂回来
+
+        :param db: 数据库会话
+        :param pks: 文件 ID 列表
+        :return:
+        """
+        files = await file_dao.get_recycled_by_ids(db, pks)
+        if not files:
+            return 0
+        # 先记下删除时间再还原 —— 还原会把它清掉（「先改后读同一个 ORM 实例」那条坑）
+        deleted_at = {file.id: file.deleted_time for file in files}
+        count = await file_dao.restore(db, list(deleted_at))
+        for file_id, at in deleted_at.items():
+            if at is not None:
+                await file_relation_dao.restore_removed_with(db, file_id, at)
+        return count
+
+    @staticmethod
+    async def purge(*, db: AsyncSession, pks: list[int]) -> int:
+        """
+        从回收站彻底删除：删对象，记录留成墓碑（`purged_time`）
+
+        :param db: 数据库会话
+        :param pks: 文件 ID 列表
+        :return:
+        """
+        files = await file_dao.get_recycled_by_ids(db, pks)
+        if not files:
+            return 0
+        count = await file_dao.mark_purged(db, [file.id for file in files], at=timezone.now())
+        await FileService._purge_objects(db=db, files=files)
+        return count
+
+    #: 清空回收站 / 定时清理每批多少个。每个文件都要删一次对象（S3 上是一个请求），一批太大会把请求拖到超时
+    PURGE_BATCH = 200
+
+    @staticmethod
+    async def empty_recycle(*, db: AsyncSession) -> int:
+        """
+        清空回收站（这个人看得见的那些），分批
+
+        :param db: 数据库会话
+        :return:
+        """
+        total = 0
+        after_id = 0
+        while True:
+            ids = await file_dao.get_recycled_ids(db, after_id=after_id, limit=FileService.PURGE_BATCH)
+            if not ids:
+                return total
+            total += await FileService.purge(db=db, pks=list(ids))
+            # 按 ID 往后翻，一行最多被取到一次 —— 清不掉的行不会让循环原地打转
+            after_id = ids[-1]
+            if len(ids) < FileService.PURGE_BATCH:
+                return total
 
     @staticmethod
     async def get_statistics(*, db: AsyncSession) -> dict[str, Any]:
@@ -355,6 +434,7 @@ class FileService:
         :return:
         """
         rows = await file_dao.get_statistics(db)
+        recycle = await file_dao.get_recycle_statistics(db)
 
         type_counts = {row.type: int(row.count) for row in rows}
         type_sizes = {row.type: int(row.size) for row in rows}
@@ -363,6 +443,9 @@ class FileService:
             'total_size': sum(type_sizes.values()),
             'type_counts': type_counts,
             'type_sizes': type_sizes,
+            'recycle_count': int(recycle.count),
+            'recycle_size': int(recycle.size),
+            'recycle_days': max(settings.FILE_RECYCLE_DAYS, 0),
         }
 
     @staticmethod

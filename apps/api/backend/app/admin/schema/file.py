@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote
 
 from pydantic import ConfigDict, Field, computed_field
@@ -81,6 +81,20 @@ class GetFileLinkDetail(SchemaBase):
     expires_in: int | None = Field(None, description='有效期（秒）')
 
 
+class GetRecycledFileDetail(GetFileDetail):
+    """回收站里的文件"""
+
+    deleted_time: datetime = Field(description='删除时间')
+
+    @computed_field(description='到期自动彻底删除的时间；null = 回收站已关闭（FILE_RECYCLE_DAYS=0），不会自动清除')
+    @property
+    def purge_time(self) -> datetime | None:
+        # 和清理任务读同一个配置（`maintenance.purge_recycled_files`），界面上的「剩余 N 天」才对得上
+        if settings.FILE_RECYCLE_DAYS <= 0:
+            return None
+        return self.deleted_time + timedelta(days=settings.FILE_RECYCLE_DAYS)
+
+
 class DeleteFileParam(SchemaBase):
     """删除文件参数"""
 
@@ -94,6 +108,10 @@ class GetFileStatisticsDetail(SchemaBase):
     total_size: int = Field(description='占用总字节数')
     type_counts: dict[str, int] = Field(description='各分类的文件数')
     type_sizes: dict[str, int] = Field(description='各分类的占用字节数')
+    # 回收站：对象还在存储里，空间还没释放 —— 和上面的「已用空间」分开算
+    recycle_count: int = Field(0, description='回收站里的文件数')
+    recycle_size: int = Field(0, description='回收站里文件的占用字节数')
+    recycle_days: int = Field(0, description='回收站保留天数；0 = 未启用回收站，删除即彻底删除')
 
 
 class CreateFileRelationParam(SchemaBase):

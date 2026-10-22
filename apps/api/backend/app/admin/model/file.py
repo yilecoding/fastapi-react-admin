@@ -1,8 +1,10 @@
+from datetime import datetime
+
 import sqlalchemy as sa
 
 from sqlalchemy.orm import Mapped, mapped_column
 
-from backend.common.model import Base, UniversalStr, id_key
+from backend.common.model import Base, TimeZone, UniversalStr, id_key
 
 
 class File(Base):
@@ -16,6 +18,8 @@ class File(Base):
         sa.Index('ix_sys_file_type_deleted', 'type', 'deleted'),
         # `/uploads/{key}` 按 key 反查文件记录（才知道它在哪个存储），每张公开图片一次
         sa.Index('ix_sys_file_path', 'path'),
+        # 回收站列表 / 定时清理都按「已删除、未清除、按删除时间」查
+        sa.Index('ix_sys_file_recycle', 'deleted', 'purged_time', 'deleted_time'),
         {'comment': '系统文件表'},
     )
 
@@ -61,6 +65,19 @@ class File(Base):
     type: Mapped[str] = mapped_column(UniversalStr(16), default='other', comment='文件分类')
 
     created_by: Mapped[int] = mapped_column(sa.BigInteger, default=0, index=True, comment='上传人 ID')
+
+    # 回收站（#122 第二期）：「删除」只是 `deleted` 置位，对象**还在存储里**；彻底删除才删对象并写这一列。
+    #
+    #   deleted = 0                        → 正常文件
+    #   deleted ≠ 0 且 purged_time IS NULL → 在回收站里（可还原）
+    #   deleted ≠ 0 且 purged_time 有值    → 彻底删除过，只剩墓碑行（对象已删，留着是为了审计）
+    #
+    # 🔴 不能只靠 `deleted` 判「在回收站里」：这一列加进来之前删掉的记录对象早就没了，
+    # 迁移把它们的 purged_time 回填成 deleted_time —— 不回填的话它们会出现在回收站里，
+    # 而且一还原就是一批点开即「文件已丢失」的记录
+    purged_time: Mapped[datetime | None] = mapped_column(
+        TimeZone, init=False, default=None, comment='对象被彻底删除的时间（deleted≠0 且为空 = 在回收站里）'
+    )
 
 
 class FileRelation(Base):

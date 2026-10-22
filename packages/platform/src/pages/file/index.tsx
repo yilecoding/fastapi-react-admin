@@ -11,6 +11,7 @@ import { Separator } from '@admin/ui/components/separator'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@admin/ui/components/toggle-group'
 import { Dropzone, useFilePicker } from '@admin/ui/components/uploader/dropzone'
+import { toast } from '@admin/ui/components/toast'
 import { cn } from '@admin/ui/lib/utils'
 
 import { Can } from '../../auth/can'
@@ -22,9 +23,11 @@ import { RefreshButton, ResetButton, TextFilter } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import {
   fetchFileLink,
+  fileStatisticsQuery,
   filesQuery,
   formatBytes,
   useDeleteFiles,
+  useRestoreFiles,
   type FileItem,
   type FileListParams,
   type FileType,
@@ -35,6 +38,7 @@ import { FileGrid } from './file-grid'
 import { FileList } from './file-list'
 import { FileRail } from './file-rail'
 import { FilePreviewDialog } from './preview-dialog'
+import { RecycleBin } from './recycle-bin'
 import { useFileUploader } from './uploader'
 import type { FileActions } from './file-menu'
 import { DEFAULT_GRID_PAGE_SIZE } from '../_shared/pagination'
@@ -58,6 +62,8 @@ export type FilePageSearch = {
   type?: FileType
   /** 宫格 / 列表。进 URL，刷新后保持 */
   view?: FileView
+  /** `recycle` = 回收站视图（右侧换成回收站列表，分页 / 搜索复用 page / size / name） */
+  scope?: 'recycle'
 }
 
 export function FilePage({
@@ -93,7 +99,10 @@ export function FilePage({
     name: search.name || undefined,
     type: search.type,
   }
-  const listQuery = useQuery(filesQuery(params))
+  const inRecycle = search.scope === 'recycle'
+  const statistics = useQuery(fileStatisticsQuery()).data
+  const recycleDays = statistics?.recycle_days ?? 0
+  const listQuery = useQuery({ ...filesQuery(params), enabled: !inRecycle })
   const { data, isPending, isFetching } = listQuery
   // 刷新/重试前清掉选中：重取回来可能已经少了几个文件（见 list-query.ts）
   const list = listState(listQuery, { onBeforeRefetch: () => setSelected(new Set()) })
@@ -108,6 +117,16 @@ export function FilePage({
   const [bulkError, setBulkError] = React.useState<string | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const del = useDeleteFiles()
+  const restore = useRestoreFiles()
+
+  /** 删除成功后：进了回收站就给一条带「撤销」的提示（Drive 那种），没启用回收站就什么都不说 */
+  const afterDelete = (ids: string[]) => {
+    if (recycleDays <= 0) return
+    toast.success(t('已移到回收站（{{n}} 个文件）', { n: ids.length }), {
+      timeout: 6000,
+      action: { label: t('撤销'), onClick: () => void restore.mutateAsync(ids).catch(() => {}) },
+    })
+  }
   // 上传进全局队列（进度在右下角浮窗，`./uploader.ts`）。没有上传权限的人拖文件进来也不收
   const uploader = useFileUploader({ source: t('文件管理') })
   const canUpload = usePerm().can('sys:file:upload')
@@ -189,10 +208,20 @@ export function FilePage({
         <div className="flex min-w-0 flex-1 gap-4 md:gap-6 content-scroll:min-h-0">
           <FileRail
             value={search.type}
-            onChange={(next) => patch({ type: next, page: undefined })}
+            onChange={(next) => patch({ type: next, page: undefined, scope: undefined, name: undefined })}
+            recycle={inRecycle}
+            onRecycle={() => patch({ scope: 'recycle', type: undefined, page: undefined, name: undefined })}
             className="hidden w-52 shrink-0 md:flex lg:w-72"
           />
 
+          {inRecycle ? (
+            <RecycleBin
+              page={page}
+              size={size}
+              name={search.name}
+              onSearchChange={(next) => onSearchChange?.({ ...search, ...next })}
+            />
+          ) : (
           <div className="flex min-w-0 flex-1 flex-col gap-3 content-scroll:min-h-0">
             {/* 工具栏 */}
             <div className="flex flex-wrap items-center gap-2">
@@ -335,6 +364,7 @@ export function FilePage({
               onPageSizeChange={(s) => patch({ size: s, page: undefined })}
             />
           </div>
+          )}
         </div>
       </div>
 
@@ -360,9 +390,14 @@ export function FilePage({
         title={t('删除文件')}
         description={
           pendingDelete
-            ? t('确定删除「{{name}}」吗？磁盘文件与所有业务关联会一并删除，此操作不可撤销。', {
-                name: pendingDelete.original_name,
-              })
+            ? recycleDays > 0
+              ? t('「{{name}}」会移到回收站，{{days}} 天内可以还原（连同它挂在业务对象上的附件关联）。', {
+                  name: pendingDelete.original_name,
+                  days: recycleDays,
+                })
+              : t('确定删除「{{name}}」吗？磁盘文件与所有业务关联会一并删除，此操作不可撤销。', {
+                  name: pendingDelete.original_name,
+                })
             : ''
         }
         confirmText={t('删除')}
@@ -371,6 +406,7 @@ export function FilePage({
         onConfirm={async () => {
           if (!pendingDelete) return
           await del.mutateAsync([pendingDelete.id])
+          afterDelete([pendingDelete.id])
           setPendingDelete(null)
         }}
       />
@@ -382,10 +418,16 @@ export function FilePage({
         description={
           bulkError
             ? t('{{err}}（已删除的不会回滚）', { err: bulkError })
-            : t('确定删除选中的 {{n}} 个文件（共 {{size}}）吗？磁盘文件与业务关联会一并删除，此操作不可撤销。', {
-                n: selectedIds.length,
-                size: formatBytes(selectedSize),
-              })
+            : recycleDays > 0
+              ? t('选中的 {{n}} 个文件（共 {{size}}）会移到回收站，{{days}} 天内可以还原。', {
+                  n: selectedIds.length,
+                  size: formatBytes(selectedSize),
+                  days: recycleDays,
+                })
+              : t('确定删除选中的 {{n}} 个文件（共 {{size}}）吗？磁盘文件与业务关联会一并删除，此操作不可撤销。', {
+                  n: selectedIds.length,
+                  size: formatBytes(selectedSize),
+                })
         }
         confirmText={t('删除')}
         destructive
@@ -393,6 +435,7 @@ export function FilePage({
         onConfirm={async () => {
           try {
             await del.mutateAsync(selectedIds)
+            afterDelete(selectedIds)
             setSelected(new Set())
             setBulkOpen(false)
           } catch (e) {

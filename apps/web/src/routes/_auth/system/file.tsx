@@ -11,6 +11,8 @@ const searchSchema = z.object({
   type: z.enum(["image", "document", "video", "audio", "archive", "other"]).optional(),
   /** 宫格 / 列表。进 URL 才能刷新后保持 —— <Activity> 只在会话内保活 */
   view: z.enum(["grid", "list"]).optional(),
+  /** 回收站视图 */
+  scope: z.enum(["recycle"]).optional(),
 })
 
 /**

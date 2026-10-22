@@ -804,6 +804,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/files/recycle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页获取回收站里的文件 */
+        get: operations["get_recycled_files_api_v1_sys_files_recycle_get"];
+        put?: never;
+        post?: never;
+        /** 从回收站彻底删除（删对象，不可恢复） */
+        delete: operations["purge_files_api_v1_sys_files_recycle_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/files/recycle/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 从回收站还原（连带挂回删它那一次解开的附件关联） */
+        put: operations["restore_files_api_v1_sys_files_recycle_restore_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/files/recycle/all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 清空回收站（不可恢复） */
+        delete: operations["empty_recycle_api_v1_sys_files_recycle_all_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/files/targets/{target_type}/{target_id}": {
         parameters: {
             query?: never;
@@ -4763,6 +4815,24 @@ export interface components {
             type_sizes: {
                 [key: string]: number;
             };
+            /**
+             * Recycle Count
+             * @description 回收站里的文件数
+             * @default 0
+             */
+            recycle_count: number;
+            /**
+             * Recycle Size
+             * @description 回收站里文件的占用字节数
+             * @default 0
+             */
+            recycle_size: number;
+            /**
+             * Recycle Days
+             * @description 回收站保留天数；0 = 未启用回收站，删除即彻底删除
+             * @default 0
+             */
+            recycle_days: number;
         };
         /**
          * GetLoginLogDetail
@@ -5480,6 +5550,102 @@ export interface components {
             created_time: string;
         };
         /**
+         * GetRecycledFileDetail
+         * @description 回收站里的文件
+         */
+        GetRecycledFileDetail: {
+            /**
+             * Id
+             * @description 文件 ID
+             */
+            id: string | number;
+            /**
+             * Name
+             * @description 存储文件名
+             */
+            name: string;
+            /**
+             * Path
+             * @description 相对存储路径
+             */
+            path: string;
+            /**
+             * Is Public
+             * @description 是否落在公开子树（不鉴权可读）
+             * @default false
+             */
+            is_public: boolean;
+            /**
+             * Original Name
+             * @description 原始文件名
+             */
+            original_name: string;
+            /**
+             * Ext
+             * @description 扩展名
+             */
+            ext: string;
+            /**
+             * Content Type
+             * @description MIME 类型
+             */
+            content_type?: string | null;
+            /**
+             * Size
+             * @description 字节数
+             */
+            size: number;
+            /**
+             * Sha256
+             * @description 文件内容 SHA-256
+             */
+            sha256?: string | null;
+            /** @description 文件分类 */
+            type: components["schemas"]["FileType"];
+            /**
+             * Created By
+             * @description 上传人 ID
+             */
+            created_by: number | string;
+            /**
+             * Storage Id
+             * @description 所属存储 ID（null：内置本地存储）
+             */
+            storage_id?: number | string | null;
+            /**
+             * Created Time
+             * Format: date-time
+             * @description 上传时间
+             */
+            created_time: string;
+            /**
+             * Updated Time
+             * @description 更新时间
+             */
+            updated_time?: string | null;
+            /**
+             * Deleted Time
+             * Format: date-time
+             * @description 删除时间
+             */
+            deleted_time: string;
+            /**
+             * Download Url
+             * @description 带鉴权的下载/预览地址
+             */
+            readonly download_url: string;
+            /**
+             * Public Url
+             * @description 无鉴权的直链地址，仅公开子树的文件有
+             */
+            readonly public_url: string | null;
+            /**
+             * Purge Time
+             * @description 到期自动彻底删除的时间；null = 回收站已关闭（FILE_RECYCLE_DAYS=0），不会自动清除
+             */
+            readonly purge_time: string | null;
+        };
+        /**
          * GetRoleDetail
          * @description 角色详情
          */
@@ -5678,6 +5844,12 @@ export interface components {
              * @default 0
              */
             file_count: number;
+            /**
+             * Recycled Count
+             * @description 存储下在回收站里的文件数（对象还在，删存储时一样算）
+             * @default 0
+             */
+            recycled_count: number;
             /**
              * Created Time
              * @description 创建时间
@@ -7002,6 +7174,32 @@ export interface components {
             total_pages: number;
             links: components["schemas"]["_Links"];
         };
+        /** PageData[GetRecycledFileDetail] */
+        PageData_GetRecycledFileDetail_: {
+            /** Items */
+            items: components["schemas"]["GetRecycledFileDetail"][];
+            /**
+             * Total
+             * @description 数据总条数
+             */
+            total: number;
+            /**
+             * Page
+             * @description 当前页码
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页数量
+             */
+            size: number;
+            /**
+             * Total Pages
+             * @description 总页数
+             */
+            total_pages: number;
+            links: components["schemas"]["_Links"];
+        };
         /** PageData[GetRoleDetail] */
         PageData_GetRoleDetail_: {
             /** Items */
@@ -8041,6 +8239,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["PageData_GetOperaLogDetail_"];
+        };
+        /** ResponseSchemaModel[PageData[GetRecycledFileDetail]] */
+        ResponseSchemaModel_PageData_GetRecycledFileDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["PageData_GetRecycledFileDetail_"];
         };
         /** ResponseSchemaModel[PageData[GetRoleDetail]] */
         ResponseSchemaModel_PageData_GetRoleDetail__: {
@@ -11976,6 +12190,128 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_recycled_files_api_v1_sys_files_recycle_get: {
+        parameters: {
+            query?: {
+                /** @description 原始文件名 */
+                name?: string | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_PageData_GetRecycledFileDetail__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_files_api_v1_sys_files_recycle_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteFileParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_files_api_v1_sys_files_recycle_restore_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteFileParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    empty_recycle_api_v1_sys_files_recycle_all_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
                 };
             };
         };

@@ -276,6 +276,11 @@ class Settings(BaseSettings):
     UPLOAD_ARCHIVE_EXT_INCLUDE: list[str] = ['zip', 'rar', '7z', 'tar', 'gz']
     UPLOAD_ARCHIVE_SIZE_MAX: int = 100 * 1024 * 1024  # 100 MB
 
+    # 回收站（#122 第二期）：删除的文件在回收站里留几天，到期由 `maintenance.purge_recycled_files` 彻底删除。
+    # 0 = 不启用回收站，删除即彻底删除（对象一并删掉，和第二期之前一样）。
+    # 只有这一个真相源：清理任务、回收站列表上的「剩余 N 天」、删除确认框的文案都读它
+    FILE_RECYCLE_DAYS: int = 30
+
     # 存储（本地 + S3 兼容，见 utils/storage_ops.py 与 sys_storage）
     #
     # 对象存储的 SecretKey 落库前用它加密（64 位十六进制）。🔴 留空 = 拒绝保存 S3 存储，
