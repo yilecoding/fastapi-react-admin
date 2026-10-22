@@ -38,6 +38,18 @@ export type FileItem = {
    * 塞进 `<img src>` 只会拿到 401。`null` 是明确的「这个文件没有直链」。
    */
   public_url: string | null
+  /** 所属存储（`sys_storage.id`）；`null` = 内置本地存储 */
+  storage_id: string | null
+}
+
+/**
+ * 短时效的直连下载地址。**只有对象存储有**，本地存储返回 `url: null`（回落到带鉴权的 `download_url`）。
+ *
+ * 直连的好处是大文件不经后端中转、浏览器原生下载（有进度条、不用先整块读进内存）。
+ * 文件名由后端签进 `response-content-disposition`，所以直接导航过去就是「下载」不是「打开」
+ */
+export function fetchFileLink(id: string): Promise<{ url: string | null; expires_in: number | null }> {
+  return api.GET(`/api/v1/sys/files/${id}/link?disposition=attachment`)
 }
 
 export type FileListParams = {
@@ -97,14 +109,6 @@ export const targetFilesQuery = (targetType: string, targetId: string) =>
     queryFn: () => api.GET<FileItem[]>(`/api/v1/sys/files/targets/${targetType}/${targetId}`),
   })
 
-export function useUploadFile() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (file: File) => uploadFile<FileItem>('/api/v1/sys/files/upload', file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: fileKeys.all }),
-  })
-}
-
 /**
  * 富文本正文里内联图的体积上限。
  *
@@ -117,10 +121,11 @@ export const INLINE_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 /**
  * 上传一张**公开**图片，供富文本正文的 `<img src>` 直接加载。
  *
- * 🔴 和 `useUploadFile` 分成两个函数是刻意的，不是重复代码。
+ * 🔴 和文件页 / 附件面板用的 `useFileUploader`（`./uploader.ts`，带进度 / 秒传预检的队列）
+ * 分开是刻意的，不是重复代码。
  *
  * `?public=true` 会让文件落进后端那棵被 `/uploads` 无鉴权挂出去的子树 ——
- * 知道 URL 的人不登录也能读。把它做成 `useUploadFile` 的一个可选参数，
+ * 知道 URL 的人不登录也能读。把它做成通用上传器的一个可选参数，
  * 就只剩「谁记得别在文件管理页传 true」这一道纪律在守着；拆成两个名字之后，
  * 通用上传路径**在类型上就产生不了公开文件**。
  *

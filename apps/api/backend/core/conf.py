@@ -276,6 +276,15 @@ class Settings(BaseSettings):
     UPLOAD_ARCHIVE_EXT_INCLUDE: list[str] = ['zip', 'rar', '7z', 'tar', 'gz']
     UPLOAD_ARCHIVE_SIZE_MAX: int = 100 * 1024 * 1024  # 100 MB
 
+    # 存储（本地 + S3 兼容，见 utils/storage_ops.py 与 sys_storage）
+    #
+    # 对象存储的 SecretKey 落库前用它加密（64 位十六进制）。🔴 留空 = 拒绝保存 S3 存储，
+    # 不会静默存明文 —— 同 AI_ENCRYPT_SECRET_KEY / OPEN_SECRET_KEY 的 fail-closed 约定。
+    # 生成：python -c "import os;print(os.urandom(32).hex())"
+    STORAGE_ENCRYPT_SECRET_KEY: str = ''
+    # 预签名下载地址的有效期（秒）。预签名 URL 签出去就**撤不回来**，谁拿到都能下，所以宜短
+    STORAGE_PRESIGN_EXPIRE_SECONDS: int = 300
+
     # 表格导入（解析层见 utils/excel_ops.py）
     #
     # 刻意**不复用** UPLOAD_DOCUMENT_SIZE_MAX 那 50 MB：那是「存档一份文档」的

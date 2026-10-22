@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@admin/api": "workspace:*",
@@ -19,6 +20,7 @@
     "cron-parser": "^5.10.0",
     "cronstrue": "^3.24.0",
     "driver.js": "1.8.0",
+    "hash-wasm": "4.12.0",
     "react": "^19.2.6",
     "react-hook-form": "^7",
     "react-i18next": "^17.0.11",
@@ -33,12 +35,14 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17",
     "typescript": "~6",
-    "typescript-eslint": "^8"
+    "typescript-eslint": "^8",
+    "vitest": "^3.2.7"
   },
   "exports": {
     "./api-client/*": "./src/api-client/*.ts",
     "./auth/*": "./src/auth/*.tsx",
     "./shell/*": "./src/shell/*.tsx",
+    "./upload": "./src/upload/index.ts",
     "./desktop": "./src/desktop/index.ts",
     "./desktop/*": "./src/desktop/*.ts",
     "./pages/*": "./src/pages/*/index.tsx"

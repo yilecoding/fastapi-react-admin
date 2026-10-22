@@ -173,6 +173,26 @@ error:
   sql:
     illegal_operation: 'SQL script {filepath} contains an illegal operation, only allowed: {allowed}'
     script_not_found: SQL script file does not exist
+  storage:
+    code_exists: Storage code {code} already exists
+    default_cannot_delete: The default storage cannot be deleted, switch the default to another storage first
+    default_cannot_disable: The default storage cannot be disabled, switch the default to another storage first
+    disabled_cannot_default: A disabled storage cannot be set as default
+    encrypt_key_invalid: STORAGE_ENCRYPT_SECRET_KEY is not a valid hex key (32 bytes / 64 hex characters required)
+    encrypt_key_unset: 'STORAGE_ENCRYPT_SECRET_KEY is not configured, the object storage secret cannot be stored safely. Generate one with python -c "import os;print(os.urandom(32).hex())", put it in .env and restart'
+    forbidden_endpoint: The endpoint points to a link-local / cloud metadata address and was rejected
+    has_files: The storage still holds {count} files and cannot be deleted
+    invalid_endpoint: Invalid endpoint, expected http(s)://host[:port] without credentials or query string
+    local_root_invalid: The root directory of a local storage must be an absolute path outside the static directory
+    not_found: Storage does not exist
+    probe_config_invalid: The storage configuration is incomplete or invalid
+    probe_invalid_key: Invalid object key prefix
+    probe_not_found: The bucket does not exist, or the key prefix is not writable
+    probe_permission_denied: Invalid credentials, or no read/write permission
+    probe_unexpected: The storage returned an unexpected error, see the server log
+    probe_unreachable: Cannot reach the endpoint, check the address, port and network
+    read_failed: Failed to read the file (its storage is unavailable), see the server log
+    s3_fields_required: Object storage requires endpoint, bucket, Access Key and Secret Key
   table:
     bomb: The spreadsheet expands to more than {size_mb} MB when decompressed and was rejected
     cell_formula: Formulas are not supported, paste as values before uploading
@@ -301,3 +321,6 @@ workflow:
   handover_opinion: Handover
   timeout_approved: 'Not handled within {hours} hours; approved automatically'
   timeout_rejected: 'Not handled within {hours} hours; rejected automatically'
+storage:
+  builtin_name: Local storage (built-in)
+  probe_ok: 'Connection OK: write, read back and delete all succeeded'

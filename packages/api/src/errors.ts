@@ -7,6 +7,17 @@
  *
  * 结论：判断错误必须同时看 httpStatus 和 bizCode，只看其一会漏。
  */
+/**
+ * 上传被调用方取消（`UploadOptions.signal`）。`name` 用标准的 `AbortError`，
+ * 调用方按 `err.name === 'AbortError'` 判，不用 instanceof（跨包的 class 身份不可靠）
+ */
+export class UploadAbortedError extends Error {
+  constructor() {
+    super('upload aborted')
+    this.name = 'AbortError'
+  }
+}
+
 export class ApiError extends Error {
   readonly httpStatus: number
   readonly bizCode: number

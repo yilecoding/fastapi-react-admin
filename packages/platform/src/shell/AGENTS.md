@@ -379,6 +379,23 @@ E2E：`e2e/tests/tour.spec.ts`。**fixture 默认把外壳导览标成已看过*
 否则每条落到 `/dashboard` 的用例首屏都是一层遮罩、所有点击被挡，整套一起红而报错各不相同。
 
 
+## 右下角上传浮窗（`upload-store.ts` + `upload-tray.tsx`）
+
+Google Drive 那种：标题「正在上传 N 项内容」、副栏「还剩 X」+ 取消全部、每行文件名 / 来源 / 状态环。
+挂在 `_auth.tsx` 的壳层（页签之外），队列在 zustand store 里 —— 切 tab、关 tab 都不影响上传。
+页面只调 `pages/file/uploader.ts` 的 `useFileUploader({ source })` 往里塞文件，**不要在页面里再画一份队列**
+（两处显示同一份进度是噪音，第一版就是这么做的、撤了）。
+
+- 有活跃上传时点 × 先弹 `ConfirmDialog`「取消全部并关闭」；没有就直接关
+- **折叠着的时候某个文件传完弹一条 toast** —— 折叠的浮窗不会自己说话，大文件传完了用户不知道
+- 有活跃上传时 `beforeunload` 拦一下：没有断点续传（#122 第三期），刷新就丢
+- 完成后浮窗**留着**直到用户关掉；一有新文件入队就展开弹出
+- 列表刷新由浮窗组件挂载时 `bind()` 进 store（store 里没有 queryClient）
+- 窄屏贴底全宽；桌面端 `sm:w-[22rem]` 固定在右下，`z-40` 在 Dialog 之下
+
+⚠️ 写 E2E 时注意：**折叠态下行是不渲染的**，等「传完」要等 toast 或先展开，不要等行的 `data-status`
+（第一版脚本就这么等了 90 秒）。
+
 ## 🔴 开在 URL 上的浮层，portal 要挂进本 tab 的根节点（`useTabPortalContainer`）
 
 **症状**：审批中心的详情抽屉开在 `?id=` 上。刷新之后去别的页面，那个抽屉**压在前台页面上**，

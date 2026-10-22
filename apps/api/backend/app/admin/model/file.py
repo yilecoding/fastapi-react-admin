@@ -14,6 +14,8 @@ class File(Base):
         # 各自有独立的归属与删除权。去重只发生在「落盘」这一层（见 file_service）
         sa.Index('ix_sys_file_sha256', 'sha256'),
         sa.Index('ix_sys_file_type_deleted', 'type', 'deleted'),
+        # `/uploads/{key}` 按 key 反查文件记录（才知道它在哪个存储），每张公开图片一次
+        sa.Index('ix_sys_file_path', 'path'),
         {'comment': '系统文件表'},
     )
 
@@ -42,6 +44,14 @@ class File(Base):
     # 也不能靠 `type == 'image'` 推：图片**不都是**公开的（文件管理页正常上传的
     # 图片仍是私有的），公开性是上传时的显式选择，不是分类的推论。
     is_public: Mapped[bool] = mapped_column(default=False, comment='是否落在公开子树（不鉴权可读）')
+
+    # 文件落在哪个存储（`sys_storage.id`）。**NULL = 内置本地存储**（见 model/storage.py）。
+    #
+    # 🔴 读 / 删 / 拼地址一律按**这一列**走，不按「当前默认存储」走 —— 切默认存储只影响新上传，
+    # 老文件仍从它自己的存储读。不建外键：存储下还有文件时由 storage_service 拒绝删除
+    storage_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, default=None, index=True, comment='所属存储 ID（NULL：内置本地存储）'
+    )
 
     # 64 位 hex。用于「这个文件已经传过了」的探测，前端可据此跳过上传
     sha256: Mapped[str | None] = mapped_column(UniversalStr(64), default=None, comment='文件内容 SHA-256')

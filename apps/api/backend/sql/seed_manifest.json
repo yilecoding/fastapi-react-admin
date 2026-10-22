@@ -23,7 +23,7 @@
   "plugin/workflow/sql/mysql/init_snowflake.sql": "f92202ddbfbc4f59f3b8955b2db2cfa3f57a1dbba8c78ea04a3c46f0c20ea19d",
   "plugin/workflow/sql/postgresql/init_snowflake.sql": "b10a80e1ec0993b3894f1f5f5c6dbf504fe809e0b45f9a7a5dbcc2b5338074e3",
   "plugin/workflow/sql/sqlserver/init_snowflake.sql": "936b88bb5fdab2a04b347c2b5b0f834b5c8feb590c4de9fb0da8b0a902768b24",
-  "sql/mysql/init_snowflake_test_data.sql": "083cbb8a1949de4251415e39ef76e34a00fb2cea8a4ecaa2c263abe86074bd77",
-  "sql/postgresql/init_snowflake_test_data.sql": "dfa73bd26eb13e9a3713fd9b90527b354d805bd01d9626eb002a275778a36659",
-  "sql/sqlserver/init_snowflake_test_data.sql": "e180997043cfe919f01849252e3f0a5823b701d6668844ede9a64d57bc3ecf86"
+  "sql/mysql/init_snowflake_test_data.sql": "13930e7ddfb40c01e5380533dbb92eb6371bab48640c2bde7a2397156749a02b",
+  "sql/postgresql/init_snowflake_test_data.sql": "7df1e19a8764fbb0c26a154b32abf7de614e2e1673de1edc405ec46bb84ee0c2",
+  "sql/sqlserver/init_snowflake_test_data.sql": "ad12775b1e1fbd8c6fa1e7de499292e10f481a0d2ad8b7517eb80b3adca65ca2"
 }

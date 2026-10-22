@@ -11,12 +11,10 @@ from fastapi import Depends, FastAPI
 from fastapi_pagination import add_pagination
 from prometheus_client import make_asgi_app
 from sqlalchemy import text
-from starlette.datastructures import MutableHeaders
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
 from starlette.staticfiles import StaticFiles
-from starlette.types import Receive, Scope, Send
 from starlette_context.middleware import ContextMiddleware
 from starlette_context.plugins import RequestIdPlugin
 
@@ -260,27 +258,6 @@ def register_health(app: FastAPI) -> None:
         )
 
 
-class _PublicUploadsStaticFiles(StaticFiles):
-    """`/uploads` 公开子树的纵深防御：加 `X-Content-Type-Options` + 限制性 CSP
-
-    (issue #56) SVG 已经在 `FileService.verify_public()` 里被挡在准入门槛外，
-    这里不指望单一防线——万一以后有人往 `UPLOAD_IMAGE_EXT_INCLUDE` 加了别的
-    可执行图片格式，`nosniff` 挡掉 MIME 嗅探绕过，`script-src 'none'` 让即便
-    渗进来的文档也执行不了脚本。这棵子树只用来给 `<img src>` 加载，没有任何
-    功能需要内联脚本/样式，所以这条 CSP 可以直接锁到最紧。
-    """
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        async def send_wrapper(message: dict) -> None:
-            if message['type'] == 'http.response.start':
-                headers = MutableHeaders(raw=message['headers'])
-                headers['X-Content-Type-Options'] = 'nosniff'
-                headers['Content-Security-Policy'] = "default-src 'none'; sandbox"
-            await send(message)
-
-        await super().__call__(scope, receive, send_wrapper)
-
-
 def register_static_file(app: FastAPI) -> None:
     """
     注册静态资源服务
@@ -300,7 +277,7 @@ def register_static_file(app: FastAPI) -> None:
     if not os.path.exists(UPLOAD_DIR):
         os.makedirs(UPLOAD_DIR)
 
-    # 公开上传目录**是**静态资源 —— 富文本正文里的内联图走这里。
+    # 公开上传目录 —— 富文本正文里的内联图、头像走这里，**不鉴权**。
     #
     # 为什么必须有一条无鉴权的读取路径：正文存的是 HTML，里面是 `<img src="…">`。
     # 裸 `<img src>` 带不上 Authorization 头（access token 走 HTTPBearer，
@@ -308,14 +285,16 @@ def register_static_file(app: FastAPI) -> None:
     # 而 blob URL 活不过一次刷新，存进 NVARCHAR(MAX) 就是死链。
     #
     # 和当初撤掉的 `/static/upload` 的区别在于**范围**：那条 mount 把整个
-    # 上传目录（含别人的文档）公开了；这里公开的是一棵独立子树，
+    # 上传目录（含别人的文档）公开了；这里只认 `sys_file.is_public` 的记录，
     # 只有显式 `?public=true` 且分类为图片的上传物才进得来。
-    # 公告正文里的图本来就是给全体用户看的，暴露面基本等于零新增。
     #
-    # 顺带白拿 StaticFiles 的 ETag / Last-Modified —— 同一张图重复浏览不重复传字节。
+    # 原来是 `StaticFiles` 直接挂 `PUBLIC_UPLOAD_DIR`；有了多存储之后公开件可能在 S3 上，
+    # 改成路由按 key 反查文件记录再去它自己的存储取（`app/admin/api/uploads.py`），URL 形状不变
     if not os.path.exists(PUBLIC_UPLOAD_DIR):
         os.makedirs(PUBLIC_UPLOAD_DIR)
-    app.mount('/uploads', _PublicUploadsStaticFiles(directory=PUBLIC_UPLOAD_DIR), name='uploads')
+    from backend.app.admin.api.uploads import router as uploads_router
+
+    app.include_router(uploads_router)
 
     # 固有静态资源
     if settings.FASTAPI_STATIC_FILES:

@@ -964,6 +964,30 @@
       ]
     },
     {
+      "name": "uploader",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "button",
+        "format",
+        "i18n",
+        "tooltip",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/uploader/dropzone.tsx",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/uploader/upload-tray.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "utils",
       "type": "registry:lib",
       "dependencies": [

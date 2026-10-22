@@ -81,8 +81,8 @@ ID」一节，现在有 `test_seed_dialects.py` 守着）显示这套"SQL Server
   （随机后缀，不复用原名做唯一性）。
   ⚠️ 落盘分**两棵树，别把它们当成一回事**：私有件在 `UPLOAD_DIR`
   （`core/path_conf.py`，= `BASE_PATH / 'upload'`），**不挂静态**，只能走带 JWT 的
-  `GET /api/v1/sys/files/{pk}/download`；公开件在 `PUBLIC_UPLOAD_DIR`，由
-  `core/registrar.py: register_static_file` 挂在 `/uploads`，**设计上就不鉴权** ——
+  `GET /api/v1/sys/files/{pk}/download`；公开件在 `PUBLIC_UPLOAD_DIR`，经 `/uploads/{key}`
+  （`app/admin/api/uploads.py`：按 key 反查 `is_public` 的记录，再去它自己的存储取）读，**设计上就不鉴权** ——
   富文本正文里的 `<img src>` 带不上 Authorization 头，只能有这么一条。
   进那棵树要显式 `?public=true`，且服务端强制只收图片
   （`app/admin/service/file_service.py: verify_public`）。

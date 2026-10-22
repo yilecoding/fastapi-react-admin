@@ -52,7 +52,12 @@ values
 (2049629108253622300, '文件管理', 'SysFile', '/system/file', 6, 'lucide:files', 1, null, 1, 1, '', null, 2049629108245233667, '2025-06-26 20:29:06', null),
 (2049629108253622301, '查询', 'QuerySysFile', null, 0, null, 2, 'sys:file:list', 1, 0, '', null, 2049629108253622300, '2025-06-26 20:29:06', null),
 (2049629108253622302, '上传', 'UploadSysFile', null, 0, null, 2, 'sys:file:upload', 1, 0, '', null, 2049629108253622300, '2025-06-26 20:29:06', null),
-(2049629108253622303, '删除', 'DeleteSysFile', null, 0, null, 2, 'sys:file:del', 1, 0, '', null, 2049629108253622300, '2025-06-26 20:29:06', null);
+(2049629108253622303, '删除', 'DeleteSysFile', null, 0, null, 2, 'sys:file:del', 1, 0, '', null, 2049629108253622300, '2025-06-26 20:29:06', null),
+(2049629108253622304, '存储管理', 'SysStorage', '/system/storage', 7, 'lucide:hard-drive', 1, null, 1, 1, '', null, 2049629108245233667, '2026-10-21 18:00:00', null),
+(2049629108253622305, '查询', 'QuerySysStorage', null, 0, null, 2, 'sys:storage:list', 1, 0, '', null, 2049629108253622304, '2026-10-21 18:00:00', null),
+(2049629108253622306, '新增', 'AddSysStorage', null, 1, null, 2, 'sys:storage:add', 1, 0, '', null, 2049629108253622304, '2026-10-21 18:00:00', null),
+(2049629108253622307, '修改', 'EditSysStorage', null, 2, null, 2, 'sys:storage:edit', 1, 0, '', null, 2049629108253622304, '2026-10-21 18:00:00', null),
+(2049629108253622308, '删除', 'DeleteSysStorage', null, 3, null, 2, 'sys:storage:del', 1, 0, '', null, 2049629108253622304, '2026-10-21 18:00:00', null);
 
 insert into sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
 values
