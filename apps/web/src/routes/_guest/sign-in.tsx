@@ -182,10 +182,10 @@ function SignInPage() {
   }
 
   return (
-    <div className="min-h-svh bg-background lg:grid lg:h-svh lg:grid-cols-2 xl:grid-cols-[1.1fr_1fr]">
+    <div className="min-h-svh bg-background lg:grid lg:h-svh lg:grid-cols-2 xl:grid-cols-[1.15fr_1fr]">
       <SignInBrandPanel />
 
-      <main className="flex min-h-svh flex-col px-6 py-5 sm:px-10 lg:min-h-0 lg:overflow-y-auto">
+      <main className="flex min-h-svh flex-col px-6 py-5 sm:px-10 lg:min-h-0 lg:overflow-y-auto lg:border-l lg:border-border/60">
         <div className="flex shrink-0 items-center justify-end gap-1">
           <ThemeMenu />
           <LanguageMenu />
