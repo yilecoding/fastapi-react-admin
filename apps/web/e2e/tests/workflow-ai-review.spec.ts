@@ -94,6 +94,69 @@ test("审批人：有结论时显示建议 + 理由，理由标着字段名", as
   await expect(panel).toContainText("e2e-model")
 })
 
+test("审批人：点理由前的字段名，定位到申请内容里的那个字段；读了几份附件写在下面", async ({ page }) => {
+  await page.route(/\/ai-review$/, (route) =>
+    route.fulfill(
+      fulfillReview({
+        visible: true,
+        enabled: true,
+        status: "done",
+        verdict: "attention",
+        reasons: [{ field_id: "f_reason", text: "事由过于笼统" }],
+        model: "e2e-model",
+        finished_time: new Date().toISOString(),
+        superseded: 0,
+        attachments: [
+          { field_id: "f_reason", name: "发票.pdf", read: true },
+          { field_id: "f_reason", name: "扫描件.pdf", read: false },
+        ],
+      })
+    )
+  )
+  await loginPageAs(page, "liuyang", "123456")
+  await page.goto(`/workflow/inbox?id=${instanceId}`)
+  const sheet = page.getByTestId("wf-instance-sheet")
+  const panel = sheet.getByTestId("wf-ai-review")
+  await expect(panel.getByTestId("wf-ai-attachments")).toContainText("参考了 2 份附件")
+  await expect(panel.getByTestId("wf-ai-attachments")).toContainText("其中 1 份没读出内容")
+
+  const field = sheet.locator('[data-field-id="f_reason"]')
+  await expect(field).not.toHaveAttribute("data-flash", "true")
+  await panel.getByTestId("wf-ai-locate").click()
+  // 闪一下（1.6 秒后自己消失）：说明找到的是抽屉里的这个字段
+  await expect(field).toHaveAttribute("data-flash", "true")
+  await expect(field).toBeInViewport()
+})
+
+test("监控：AI 预审一致率按模型 × 流程列出来，口径写在顶上；真接口不报错", async ({ authedPage: page }) => {
+  await page.route(/\/monitor\/ai-review-stats$/, (route) =>
+    route.fulfill(
+      fulfillReview([
+        {
+          model: "e2e-model", code: CODE, name: "E2E 预审", total: 5, decided: 4, agreement: 0.75,
+          pass_approved: 1, pass_rejected: 0, reject_approved: 1, reject_rejected: 2,
+          attention_approved: 0, attention_rejected: 1,
+        },
+      ])
+    )
+  )
+  await page.goto("/workflow/monitor")
+  const scope = page.locator('[data-tab="/_auth/workflow/monitor"]')
+  await scope.getByTestId("wf-ai-stats-open").click()
+  await expect(page).toHaveURL(/[?&]stats=1/)
+  const sheet = page.getByTestId("wf-ai-stats")
+  await expect(sheet.getByTestId("wf-ai-stats-rules")).toContainText("每张单只看最后一次预审")
+  const row = sheet.getByTestId(`wf-ai-stats-row-${CODE}`)
+  await expect(row.getByTestId("wf-ai-stats-agreement")).toContainText("75.0%")
+  await expect(row.getByTestId("wf-ai-stats-agreement")).toContainText("4 张可比")
+
+  // 真接口：库里有没有可比的单都行，但不能是错误块
+  await page.unroute(/\/monitor\/ai-review-stats$/)
+  await page.reload()
+  await expect(sheet.getByTestId("wf-ai-stats-empty").or(sheet.locator("table"))).toBeVisible()
+  await expect(sheet.getByTestId("wf-ai-stats-error")).toHaveCount(0)
+})
+
 test("审批人：失败显示原因 + 重新预审，点了之后变成预审中", async ({ page }) => {
   let state: "failed" | "pending" = "failed"
   let retried = false

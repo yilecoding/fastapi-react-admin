@@ -6,6 +6,7 @@
 import asyncio
 import json
 import re
+import uuid
 
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -23,6 +24,7 @@ from backend.database.db import create_database_async_engine, create_database_as
 from backend.plugin.workflow.model import WfAiReview
 from backend.plugin.workflow.service import ai_review_service
 from backend.plugin.workflow.tests.conftest import key, ok
+from backend.plugin.workflow.tests.test_attachments import isolated_upload_dir  # ruff: ignore[unused-import] —— fixture
 from backend.plugin.workflow.tests.test_ops import _act, _detail
 from backend.plugin.workflow.tests.test_review_fixes import _approval, _model, _publish
 from backend.plugin.workflow.tests.test_timeouts import (  # ruff: ignore[unused-import] —— _no_push 是 autouse fixture
@@ -345,3 +347,115 @@ def test_every_stored_error_key_exists_in_both_languages() -> None:
     for lang in ('zh-CN', 'en-US'):
         missing = keys - set(i18n.locales[lang]['workflow']['ai_review'])
         assert not missing, f'{lang} 缺 {sorted(missing)}'
+
+
+@pytest.mark.usefixtures('isolated_upload_dir')
+def test_attachment_text_reaches_the_model_and_is_audited(
+    client: TestClient,
+    token_headers: dict[str, str],
+    login: Login,
+    uid: Uid,
+    sent: list[int],
+    model_reply: Any,
+) -> None:
+    """附件读成文字给模型（同样只进 user 消息）；读了哪几份、sha256 落库；隐藏字段里的文件名不下发给看不见它的人"""
+    form = {
+        'schemaVersion': 1,
+        'fields': [
+            {'id': 'f', 'type': 'text', 'label': '事由'},
+            {'id': 'f_att', 'type': 'attachment', 'label': '发票'},
+            {'id': 'f_att_secret', 'type': 'attachment', 'label': '内部附件'},
+        ],
+    }
+    model = _model(
+        _approval('n1', {'kind': 'user', 'user_ids': [uid('zhaolei')]}, perms={'f_att_secret': 'hidden'}),
+    )
+    model['aiReview'] = {'enabled': True, 'points': POINTS}
+    _publish(client, token_headers, 'PYTEST_AI_ATT', form, model)
+
+    def upload(name: str, content: bytes) -> str:
+        files = {'file': (name, content + f'\n{uuid.uuid4().hex}'.encode(), 'text/plain')}
+        return ok(client.post('/sys/workflow/files', headers=login('sunqiang'), files=files))['id']
+
+    invoice = upload('发票.txt', '增值税发票 金额 1280 元'.encode())
+    secret = upload('内部.txt', '内部评估：预算紧张'.encode())
+    pk = _start(client, login, 'PYTEST_AI_ATT', form={'f': '出差', 'f_att': [invoice], 'f_att_secret': [secret]})
+
+    fake = model_reply('{"verdict": "pass", "reasons": []}')
+    _run(sent[0])
+
+    user = json.loads(fake.messages[1]['content'])
+    att = {f['id']: f['value'] for f in user['fields'] if f['type'] == 'attachment'}
+    assert '金额 1280 元' in att['f_att'][0]['text'], att
+    assert att['f_att'][0]['name'] == '发票.txt'
+    assert '金额 1280 元' not in fake.messages[0]['content'], '附件内容进了 system —— 它是不可信输入'
+
+    audit = _attachment_audit(pk)
+    assert {a['file_id'] for a in audit} == {invoice, secret}
+    assert all(a['read'] and len(a['sha256'] or '') == 64 for a in audit), audit
+
+    # 审批人看不到「内部附件」：那一份的文件名也是内容，不下发
+    mine = _review(client, login('zhaolei'), pk)['attachments']
+    assert [a['name'] for a in mine] == ['发票.txt']
+    assert {a['name'] for a in _review(client, token_headers, pk)['attachments']} == {'发票.txt', '内部.txt'}
+
+
+def _attachment_audit(instance_id: str) -> list[dict[str, Any]]:
+    async def go() -> list[dict[str, Any]]:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        try:
+            async with create_database_async_session(engine)() as s:
+                raw = (
+                    await s.execute(
+                        text('SELECT attachments FROM wf_ai_review WHERE instance_id = :i'), {'i': int(instance_id)}
+                    )
+                ).scalar_one()
+                return json.loads(raw or '[]')
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(go())
+
+
+def test_agreement_counts_only_the_last_review_of_finished_requests(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid, sent: list[int], model_reply: Any
+) -> None:
+    """一致率的口径（`agreement_stats`）：每张单只看最后一次预审 · 只算通过 / 驳回的单 · 「需要留意」不进一致率"""
+    code = 'PYTEST_AI_STATS'
+    _setup(client, token_headers, uid, code)
+
+    def review(verdict: str) -> None:
+        model_reply(json.dumps({'verdict': verdict, 'reasons': []}))
+        assert _run(sent[-1]) == verdict
+
+    def one(verdict: str, action: str | None, **body: Any) -> str:
+        pk = _start(client, login, code)
+        review(verdict)
+        if action:
+            ok(_act(client, login('zhaolei'), pk, action, **body))
+        return pk
+
+    one('pass', 'approve')  # 一致
+    one('reject', 'approve')  # 不一致
+    one('reject', 'reject', opinion='不行')  # 一致
+    one('attention', 'reject', opinion='再看看')  # 不进一致率，单独计
+    one('pass', None)  # 还在审：不算
+    # 第一次「建议通过」随退回作废；重新提交后「建议驳回」、最后驳回 —— 只算后一次，一致
+    pk = one('pass', 'send_back', opinion='写清楚', target_node_id='start')  # `_model()` 的开始节点就叫 start
+    ok(_act(client, login('sunqiang'), pk, 'approve', form={'f': '去上海见客户'}))
+    review('reject')
+    ok(_act(client, login('zhaolei'), pk, 'reject', opinion='还是不行'))
+
+    rows = ok(client.get('/sys/workflow/monitor/ai-review-stats', headers=token_headers))
+    mine = [r for r in rows if r['code'] == code]
+    assert len(mine) == 1, rows
+    r = mine[0]
+    assert r['model'] == 'fake-model'
+    assert (r['pass_approved'], r['pass_rejected'], r['reject_approved'], r['reject_rejected']) == (1, 0, 1, 2)
+    assert (r['attention_approved'], r['attention_rejected']) == (0, 1)
+    assert (r['decided'], r['total'], r['agreement']) == (4, 5, 0.75)
+
+
+def test_agreement_stats_need_the_monitor_permission(client: TestClient, login: Login) -> None:
+    """只有计数，但仍是管理端的数：普通员工打不到"""
+    assert client.get('/sys/workflow/monitor/ai-review-stats', headers=login('sunqiang')).json()['code'] == 403

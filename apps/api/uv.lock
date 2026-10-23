@@ -3503,6 +3503,7 @@ dependencies = [
   },
   { name = "pydantic-settings" },
   { name = "pymysql" },
+  { name = "pypdf" },
   { name = "pyrate-limiter" },
   { name = "python-jose" },
   { name = "python-socketio" },
@@ -3598,6 +3599,7 @@ requires-dist = [
   { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=2.54.0" },
   { name = "pydantic-settings", specifier = ">=2.15.0" },
   { name = "pymysql", specifier = ">=1.1.2" },
+  { name = "pypdf", specifier = ">=5" },
   { name = "pyrate-limiter", specifier = ">=4.4.0" },
   { name = "python-jose", specifier = ">=3.5.0" },
   { name = "python-socketio", specifier = ">=5.16.4" },
@@ -10950,6 +10952,24 @@ wheels = [
   {
     url = "https://mirrors.aliyun.com/pypi/packages/38/bb/d215ee7c73b61497b28a5503f9f53523f294fcc936762b7caf90e0c1c2b5/pyparsing-3.3.3-py3-none-any.whl",
     hash = "sha256:ece8c00a69cf01b45d0b1dedabb469c90d8caf996d4fda40f147627a122849a4"
+  },
+]
+
+[[package]]
+name = "pypdf"
+version = "6.21.2"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
+dependencies = [
+  { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = {
+  url = "https://mirrors.aliyun.com/pypi/packages/06/28/081f1cbcca7042441dafc8de00f48ba60853f89e5bff92c5f26477346d81/pypdf-6.21.2.tar.gz",
+  hash = "sha256:0a3e1c5c886a1be03646c16a04827cc166c2a0575c971b26a4bf89686551c2d4"
+}
+wheels = [
+  {
+    url = "https://mirrors.aliyun.com/pypi/packages/1b/4d/c9d2d67f204eff463237a1a8f5e25a6923b7b1043982b91fcaf104c8ef60/pypdf-6.21.2-py3-none-any.whl",
+    hash = "sha256:1d44d1a3a200f25062adff0085b02040e4646431ac2ccac22e42679e91466084"
   },
 ]
 

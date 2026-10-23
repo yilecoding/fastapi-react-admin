@@ -11,6 +11,7 @@
 """
 
 import os
+import uuid
 
 from typing import Any
 
@@ -22,6 +23,7 @@ from backend.app.task.celery import celery_app
 from backend.common.i18n import i18n
 from backend.plugin.ai.llm.client import OpenAICompatClient
 from backend.plugin.workflow.service import ai_review_service
+from backend.plugin.workflow.tests.conftest import ok
 from backend.plugin.workflow.tests.test_ai_review import (  # ruff: ignore[unused-import] —— _no_push 是 autouse fixture
     Login,
     Uid,
@@ -31,6 +33,8 @@ from backend.plugin.workflow.tests.test_ai_review import (  # ruff: ignore[unuse
     _setup,
     _start,
 )
+from backend.plugin.workflow.tests.test_attachments import isolated_upload_dir  # ruff: ignore[unused-import] —— fixture
+from backend.plugin.workflow.tests.test_review_fixes import _approval, _model, _publish
 
 _BASE_URL = os.environ.get('AI_TEST_BASE_URL', '').strip()
 _API_KEY = os.environ.get('AI_TEST_API_KEY', '').strip()
@@ -123,3 +127,39 @@ def test_a_real_timeout_shows_up_as_a_failure_with_a_reason(
     r = _review(client, {**token_headers, 'Accept-Language': 'en-US'}, pk)
     assert r['status'] == 'failed'
     assert r['error'] == i18n.locales['en-US']['workflow']['ai_review']['model_timeout']
+
+
+@pytest.mark.usefixtures('isolated_upload_dir')
+def test_an_attachment_that_contradicts_the_form_is_noticed(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid, sent: list[int]
+) -> None:
+    """附件真的被读了：发票上是 9800 元、表单里填的是 1280 元，要点要求两者一致 —— 不该是「建议通过」。
+    假模型验不了这一条：它不读输入"""
+    form = {
+        'schemaVersion': 1,
+        'fields': [
+            {'id': 'f', 'type': 'text', 'label': '事由'},
+            {'id': 'f_amount', 'type': 'number', 'label': '报销金额'},
+            {'id': 'f_invoice', 'type': 'attachment', 'label': '发票'},
+        ],
+    }
+    model = _model(_approval('n1', {'kind': 'user', 'user_ids': [uid('zhaolei')]}))
+    model['aiReview'] = {'enabled': True, 'points': '报销金额要和发票上的价税合计一致'}
+    _publish(client, token_headers, 'PYTEST_AI_REAL_ATT', form, model)
+    invoice = '增值税电子普通发票\n货物名称：A4 打印纸\n价税合计（大写）玖仟捌佰元整  （小写）¥9800.00\n'
+    content = (invoice + uuid.uuid4().hex).encode()
+    file_id = ok(
+        client.post(
+            '/sys/workflow/files', headers=login('sunqiang'), files={'file': ('发票.txt', content, 'text/plain')}
+        )
+    )['id']
+    pk = _start(
+        client,
+        login,
+        'PYTEST_AI_REAL_ATT',
+        form={'f': '采购部门用的打印纸', 'f_amount': 1280, 'f_invoice': [file_id]},
+    )
+    _run(sent[0])
+    r = _done(client, token_headers, pk)
+    assert r['verdict'] != 'pass'
+    assert r['attachments'] == [{'field_id': 'f_invoice', 'name': '发票.txt', 'read': True}]

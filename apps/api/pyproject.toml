@@ -68,6 +68,7 @@ dependencies = [
   "pydantic-ai-slim[openai]>=2.54.0",  # plugin/ai（AI_AGENT_ENGINE = "pydantic_ai"）
   "pydantic-settings>=2.15.0",
   "pymysql>=1.1.2",
+  "pypdf>=5",
   "pyrate-limiter>=4.4.0",
   "python-jose>=3.5.0",
   "python-socketio>=5.16.4",

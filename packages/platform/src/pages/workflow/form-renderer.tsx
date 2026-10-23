@@ -78,8 +78,9 @@ export function FormRenderer({
           return (
             <Row key={f.id} label={f.label}>
               <div
-                className="flex h-9 items-center justify-between rounded-md border border-dashed bg-muted/40 px-3 text-sm"
+                className={cn('flex h-9 items-center justify-between rounded-md border border-dashed bg-muted/40 px-3 text-sm', LOCATE_FLASH)}
                 data-testid={`wf-field-${f.id}`}
+                data-field-id={f.id}
                 data-editable={false}
               >
                 <span className="tabular-nums">{empty(ruled.data[f.id]) ? '—' : String(ruled.data[f.id])}</span>
@@ -94,8 +95,12 @@ export function FormRenderer({
           return (
             <div
               key={f.id}
-              className="grid grid-cols-[minmax(5rem,8rem)_minmax(0,1fr)] items-baseline gap-3 border-b border-dashed pb-2 last:border-b-0"
+              className={cn(
+                'grid grid-cols-[minmax(5rem,8rem)_minmax(0,1fr)] items-baseline gap-3 border-b border-dashed pb-2 last:border-b-0',
+                LOCATE_FLASH
+              )}
               data-testid={`wf-field-${f.id}`}
+              data-field-id={f.id}
               data-editable={false}
             >
               <span className="text-sm text-muted-foreground">{f.label}</span>
@@ -105,7 +110,7 @@ export function FormRenderer({
         }
         return (
           <Row key={f.id} label={f.label} required={editable && f.required} error={errors?.[f.id]}>
-            <div data-testid={`wf-field-${f.id}`} data-editable={editable}>
+            <div className={LOCATE_FLASH} data-testid={`wf-field-${f.id}`} data-field-id={f.id} data-editable={editable}>
               <FieldInput field={f} value={value[f.id]} onChange={(v) => set(f.id, v)} />
             </div>
           </Row>
@@ -115,6 +120,10 @@ export function FormRenderer({
     </FilesContext.Provider>
   )
 }
+
+/** AI 预审里点了字段名（`instance-sheet.tsx: locateField`）：外框闪一下，告诉人「就是这一个」 */
+const LOCATE_FLASH =
+  'rounded-sm ring-offset-background transition-shadow duration-500 data-[flash=true]:ring-2 data-[flash=true]:ring-primary/60 data-[flash=true]:ring-offset-4'
 
 const EMPTY_FILES: Record<string, FileMeta> = {}
 const FilesContext = React.createContext<Record<string, FileMeta>>(EMPTY_FILES)

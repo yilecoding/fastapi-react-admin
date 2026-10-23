@@ -230,3 +230,6 @@ class WfAiReview(DataClassBase, DateTimeMixin):
     prompt_tokens: Mapped[int | None] = mapped_column(default=None, comment='输入 token')
     completion_tokens: Mapped[int | None] = mapped_column(default=None, comment='输出 token')
     finished_time: Mapped[datetime | None] = mapped_column(TimeZone, default=None, comment='完成时间')
+    attachments: Mapped[str | None] = mapped_column(
+        UniversalText, default=None, comment='给模型读了哪些附件（JSON：字段 · 文件 ID · sha256 · 读没读出来）'
+    )
