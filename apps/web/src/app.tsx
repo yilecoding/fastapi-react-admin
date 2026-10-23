@@ -5,6 +5,7 @@ import { t } from "@admin/i18n"
 import { ApiError } from "@admin/platform/api-client/errors"
 import { setSessionExpiredHandler } from "@admin/platform/api-client/client"
 import { installActivityTracker } from "@admin/platform/auth/activity"
+import { isSessionEndReason } from "@admin/platform/auth/session"
 import { installVersionWatch } from "@/lib/app-version"
 import { useApplyPreferences } from "@admin/platform/shell/use-apply-preferences"
 import { toast, Toaster } from "@admin/ui/components/toast"
@@ -49,7 +50,10 @@ const router = createAppRouter(queryClient)
 // 而不是一声不吭地回到登录页
 setSessionExpiredHandler((end) => {
   queryClient.clear()
-  void router.navigate({ to: "/sign-in", search: { redirect: undefined, reason: end.reason ?? undefined } })
+  void router.navigate({
+    to: "/sign-in",
+    search: { redirect: undefined, reason: isSessionEndReason(end.reason) ? end.reason : undefined },
+  })
 })
 
 // 「用户多少秒没操作了」随每个请求发给后端（`X-Client-Idle`），空闲超时靠它区分人和后台轮询

@@ -15,8 +15,8 @@ import {
   IconUser,
 } from "@tabler/icons-react"
 
-import { login } from "@admin/platform/auth/session"
 import { ApiError } from "@admin/platform/api-client/errors"
+import { isSessionEndReason, login, SESSION_END_MESSAGE, type SessionEndReason } from "@admin/platform/auth/session"
 import { Alert } from "@admin/ui/components/alert"
 import { Button } from "@admin/ui/components/button"
 import { Checkbox } from "@admin/ui/components/checkbox"
@@ -38,25 +38,25 @@ export const Route = createFileRoute("/_guest/sign-in")({
   validateSearch: (s: Record<string, unknown>) => ({
     redirect: typeof s.redirect === "string" ? s.redirect : undefined,
     // 会话为什么结束（后端 `EndReason`，#138）。不认识的值不显示提示，而不是显示一句错的
-    reason: typeof s.reason === "string" && s.reason in SESSION_END_NOTICE ? s.reason : undefined,
+    reason: isSessionEndReason(s.reason) ? s.reason : undefined,
   }),
   component: SignInPage,
 })
 
 /**
- * 被送回登录页的原因 → 提示文案（#138）。存的是 i18n key，渲染时再翻 ——
- * 模块作用域没有 `t`（`user/security-sheet.tsx` 里记过一次启动即 ReferenceError）
+ * 被送回登录页的原因 → 提示条的语气（#138）。文案和原因码表在 `@admin/api` 的 `SESSION_END_MESSAGE`，
+ * 和移动端共用一份；这里只决定颜色 —— 被踢 / 被挤是警告，疑似盗用 / 被停用是危险，其余是提示
  */
-const SESSION_END_NOTICE: Record<string, { tone: "warning" | "danger" | "info"; text: string }> = {
-  kicked: { tone: "warning", text: "你已被管理员强制下线，请重新登录" },
-  replaced: { tone: "warning", text: "账号已在其他设备登录，本设备已下线" },
-  idle: { tone: "info", text: "长时间未操作，已自动退出，请重新登录" },
-  expired: { tone: "info", text: "登录已过期，请重新登录" },
-  reuse: { tone: "danger", text: "检测到登录凭据被重复使用，已强制下线；如果不是你本人操作，请尽快修改密码" },
-  password_changed: { tone: "info", text: "密码已修改，请用新密码登录" },
-  disabled: { tone: "danger", text: "账号已被停用，请联系管理员" },
-  logout: { tone: "info", text: "已在其他标签页退出登录" },
-  invalid: { tone: "warning", text: "登录凭据无效，请重新登录" },
+const SESSION_END_TONE: Record<SessionEndReason, "warning" | "danger" | "info"> = {
+  kicked: "warning",
+  replaced: "warning",
+  idle: "info",
+  expired: "info",
+  reuse: "danger",
+  password_changed: "info",
+  disabled: "danger",
+  logout: "info",
+  invalid: "warning",
 }
 
 /** 「记住账号」只记账号，不记凭据 —— 密码和 token 不该落在 localStorage 里 */
@@ -335,8 +335,8 @@ function SignInPage() {
                   )}
 
                   {!error && search.reason && (
-                    <Alert tone={SESSION_END_NOTICE[search.reason].tone} data-testid="session-end-notice">
-                      {t(SESSION_END_NOTICE[search.reason].text)}
+                    <Alert tone={SESSION_END_TONE[search.reason]} data-testid="session-end-notice">
+                      {t(SESSION_END_MESSAGE[search.reason])}
                     </Alert>
                   )}
                   {error && (

@@ -1,6 +1,6 @@
 import * as React from 'react'
 
-import { ApiError } from '@admin/api'
+import { ApiError, isSessionEndReason, type SessionEndReason } from '@admin/api'
 import { setDisplayTimeZone } from '@admin/i18n'
 
 import { api, setSessionExpiredHandler } from '@/lib/api'
@@ -15,6 +15,11 @@ type Session = {
   user: CurrentUser | null
   /** 启动时那次 `/me` 失败的原因。`null` 表示「确实没登录」，非空表示「没问上」 */
   bootstrapError: string | null
+  /**
+   * 会话为什么结束（被管理员下线 / 被另一台手机挤掉 / 空闲 / 到期 …，#138）。
+   * 登录屏据此说一句为什么要重新登录；自己登出、或者压根没登录过时是 null
+   */
+  endReason: SessionEndReason | null
   login: (input: { username: string; password: string; uuid?: string; captcha?: string }) => Promise<void>
   logout: () => Promise<void>
   reload: () => Promise<void>
@@ -32,6 +37,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = React.useState<Status>('loading')
   const [user, setUser] = React.useState<CurrentUser | null>(null)
   const [bootstrapError, setBootstrapError] = React.useState<string | null>(null)
+  const [endReason, setEndReason] = React.useState<SessionEndReason | null>(null)
 
   /**
    * 🔴 **拿到 `/me` 就要把显示时区喂给 `@admin/i18n` 的 datetime 层。**
@@ -58,9 +64,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   // 401 且刷新失败时，api 层会回调这里 —— 这是**唯一**把会话判死的地方，
-  // 业务代码不要自己清 token。
+  // 业务代码不要自己清 token。回调带着服务端给的原因码（#138），留给登录屏说明
   React.useEffect(() => {
-    setSessionExpiredHandler(applyAnonymous)
+    setSessionExpiredHandler((end) => {
+      setEndReason(isSessionEndReason(end.reason) ? end.reason : null)
+      applyAnonymous()
+    })
     return () => setSessionExpiredHandler(null)
   }, [applyAnonymous])
 
@@ -88,6 +97,21 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // 🔴 顺序不能换：地址要先读出来，否则第一个请求打的是编译期默认地址
       await serverStore.hydrate()
       await tokenStore.hydrate()
+      // 🔴 SecureStore 里没有 token 时先**显式**静默恢复（cookie jar 跨冷启动是持久的）。
+      // 原来是「无条件打 `/me`，没 token 的 401 由 api 层刷新兜住」—— #138 之后 api 层对
+      // **没带 token** 的 401 不再刷新（那是「会话已经在本地结束了」，见 packages/api 分册），
+      // 这条路就断了：cookie 还有效的人会被当成没登录
+      if (!tokenStore.get()) {
+        const outcome = await api.restoreSession()
+        if (!alive) return
+        if (outcome.kind !== 'ok') {
+          // 「连不上」要带到登录屏上说清楚；「会话结束了」是正常的未登录，顺带说原因
+          setBootstrapError(outcome.kind === 'transient' ? outcome.error.message : null)
+          setEndReason(outcome.kind === 'ended' && isSessionEndReason(outcome.end.reason) ? outcome.end.reason : null)
+          applyAnonymous()
+          return
+        }
+      }
       try {
         const me = await api.GET('/api/v1/sys/users/me')
         if (!alive) return
@@ -123,6 +147,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         },
       })
       await tokenStore.set(result.access_token)
+      setEndReason(null)
       // 登录响应里的 user 是 `GetUserInfoDetail`，**没有 dept / roles 的名字**；
       // 个人中心要显示它们，所以再问一次 `/me` 拿摊平后的那份。
       await reload()
@@ -132,19 +157,21 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const logout = React.useCallback(async () => {
     try {
-      // 让服务端把这个会话真正作废（access + refresh + 用户缓存三组 key）。
+      // 让服务端把这个会话真正作废（#138 之后一个会话就是一个 key，`session_store.revoke`）。
       // 失败也要继续往下清本地 —— 否则用户会卡在一个「点了登出还登着」的状态。
       await api.POST('/api/v1/auth/logout')
     } catch {
       // 忽略：本地清干净才是登出的语义底线
     }
     await tokenStore.clear()
+    // 自己登出不需要「为什么」
+    setEndReason(null)
     applyAnonymous()
   }, [applyAnonymous])
 
   const value = React.useMemo<Session>(
-    () => ({ status, user, bootstrapError, login, logout, reload }),
-    [status, user, bootstrapError, login, logout, reload],
+    () => ({ status, user, bootstrapError, endReason, login, logout, reload }),
+    [status, user, bootstrapError, endReason, login, logout, reload],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>

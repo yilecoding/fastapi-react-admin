@@ -45,4 +45,5 @@ export {
   type SessionEnd,
   type UploadOptions,
 } from './client'
+export { isSessionEndReason, SESSION_END_MESSAGE, type SessionEndReason } from './session-end'
 export type { ApiMethod, ApiMethods, Payload } from './types'

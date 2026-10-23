@@ -4,6 +4,9 @@ import { ApiError } from '@admin/api'
 import { api, endSession, restoreSession } from '../api-client/client'
 import { tokenStore } from '../api-client/token-store'
 import { tryDesktop } from '../desktop'
+
+/** 会话结束的原因码与提示文案（和移动端共用的那一份在 `@admin/api`）。登录页从这里取，不直接依赖那个包 */
+export { isSessionEndReason, SESSION_END_MESSAGE, type SessionEndReason } from '@admin/api'
 import { useTabStore } from '../shell/tab-store'
 import { authKeys } from './queries'
 

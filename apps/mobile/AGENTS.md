@@ -269,8 +269,10 @@ root / 越狱设备直接可读，备份也会带走。这条**和 web 端不一
 
 ✅ **cookie jar 跨 App 冷启动是持久的**（实测：头一天探针登录留下的 refresh
 cookie，隔夜 + 多次 `am force-stop` + 重装 bundle 之后，冷启动仍然刷新成功）。
-所以「SecureStore 里没有 token」不等于「没登录」—— 冷启动流程是
-**先无条件打 `/me`**，401 由 api 层单飞刷新兜住，刷不动才判定未登录。
+所以「SecureStore 里没有 token」不等于「没登录」—— 🔴 冷启动时没有 token 要先显式
+`api.restoreSession()`（#138 之后 api 层对**没带 token** 的 401 不再刷新，见 [`packages/api` 分册](../../packages/api/AGENTS.md)，
+原来「无条件打 `/me`、401 刷新兜住」那条路断了）。结束原因交给登录屏，见 [`src/app/` 分册](src/app/AGENTS.md)「登录屏」。
+⚠️ refresh cookie 的 `Path` 在 #138 改成了 `/api/v1/auth`（上面实测输出里还是 `Path=/`），没在真机上重跑过。
 
 🔴 **`AuthGate` 用「渲染哪一棵树」切换登录态，不要用 `router.replace` 跳转。**
 在 effect 里跳转会有一帧渲染出已登录的界面（`user` 还是 `null`，各处崩或闪），
@@ -283,8 +285,8 @@ cookie，隔夜 + 多次 `am force-stop` + 重装 bundle 之后，冷启动仍�
 
 ### 改密码之后会话就死了，要主动收场
 
-`user_service.update_password` 会 `delete_by_prefix` 掉该用户的
-access / refresh / 用户缓存**三组** key。不主动登出的话，用户会在下一个请求 401 时
+`user_service.update_password` 会撤销该用户的**全部**会话（`session_store.revoke_user`，原因
+`password_changed`，#138）。不主动登出的话，用户会在下一个请求 401 时
 被莫名其妙弹回登录页 —— 看起来像 bug，其实是预期行为。
 所以 `src/app/(app)/profile/password.tsx` 成功后切到一屏「密码已修改，请重新登录」，明说一句再登出。
 
