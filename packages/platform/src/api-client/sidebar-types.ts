@@ -28,7 +28,7 @@ export type SidebarMeta = {
   /** type=4 外链时的地址，否则空串 */
   link: string
   hideInMenu: boolean
-  menuVisibleWithForbidden: boolean
+  // 没有 `status` / vben 的 `menuVisibleWithForbidden`：停用的连同下级在后端就不下发了（#143）
 }
 
 export type SidebarNode = {

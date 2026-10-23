@@ -152,6 +152,8 @@ def get_vben5_tree_data(
     # 这些列会被搬进 meta（并从顶层剔除）。
     # 'cache' 仍然留在这里 —— 它不再进 meta，但要靠这个集合把它从顶层剔掉：
     # React 侧用 <Activity> 一律保活，keepAlive 这个键没人读，下发就是噪音。
+    # 'status' 同理：停用的连同下级在 `menu_service.get_sidebar` 里就去掉了，到这里的全是生效的，
+    # vben 的 `menuVisibleWithForbidden`（显示但禁止访问）也就不再下发
     meta_keys = {'title', 'icon', 'link', 'cache', 'display', 'status'}
 
     vben5_nodes = [
@@ -163,7 +165,6 @@ def get_vben5_tree_data(
                 'iframeSrc': node['link'] if node['type'] == 3 else '',
                 'link': node['link'] if node['type'] == 4 else '',
                 'hideInMenu': not bool(node['display']),
-                'menuVisibleWithForbidden': not bool(node['status']),
             },
         }
         for node in get_tree_nodes(row, is_sort=is_sort, sort_key=sort_key)

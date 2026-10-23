@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { menuKey } from '@admin/i18n'
+import { menuTitle } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -321,10 +321,9 @@ function MenuRows({
               <span className="size-4 shrink-0" />
             )}
             {!isButton && <MenuIcon name={node.icon} />}
-            {/* 一级 key 用 path（稳定），二级回落到「标题本身即 key」——
-                后者覆盖按钮行（type=2 没有 path，标题是「新增」「修改」这类通用词） */}
+            {/* 和侧边栏同一个口径（`menuTitle`）：中文下就是库里的标题，改了名这里马上看得到 */}
             <span className={cn('text-sm', isButton ? 'text-muted-foreground' : 'font-medium')}>
-              {t(menuKey(node.path), { defaultValue: t(node.title) })}
+              {menuTitle(t, node.path, node.title)}
             </span>
           </div>
         </TableCell>

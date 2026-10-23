@@ -121,6 +121,8 @@ error:
     token_expired: 导入令牌已失效，请重新上传文件预览
   language_not_found: 当前语言包未初始化或不存在
   menu:
+    cannot_be_own_descendant: 不能把菜单挂到它自己的下级下面
+    cannot_be_own_parent: 禁止关联自身为父级
     has_children: 菜单下存在子菜单，无法删除
     not_found: 菜单不存在
     parent_not_found: 父级菜单不存在

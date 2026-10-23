@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.admin.crud.crud_menu import menu_dao
 from backend.app.admin.model import Menu
 from backend.app.admin.schema.menu import CreateMenuParam, UpdateMenuParam
 from backend.app.admin.service.menu_service import menu_service
@@ -30,10 +31,9 @@ async def menu_list(db: AsyncSession, title: str | None = None, status: int | No
 # ---------------------------------------------------------------------------
 # 变更类工具（约定同 `dept_tools.py` 那一段）
 #
-# 🔴 **刻意没有「改菜单名」**：界面上所有显示菜单名的地方（侧边栏 · 标签条 · 面包屑 · 命令面板 ·
-# 菜单管理 · 权限矩阵）都是 `t(menuKey(path), { defaultValue: title })` —— 先按路由地址查语言包，
-# 查不到才用库里的标题。内置菜单在两个语言包里都有翻译，改了库里的标题，界面上一个字都不会变；
-# 做成工具就是「确认卡片说改好了、界面上没变化」。删除也没开（不可逆，牵连子菜单和角色授权）。
+# 🔴 **刻意没有「改菜单名」**：中文界面显示的是库里的标题，但其它语言下内置菜单显示的是语言包里
+# 按路由地址预置的译名（`@admin/i18n: menuTitle`，#143）—— 改了库里的标题，英文界面一个字都不会变；
+# 做成工具就是「确认卡片说改好了、一半界面没变化」。删除也没开（不可逆，牵连子菜单和角色授权）。
 # ---------------------------------------------------------------------------
 
 _MENU_ID_HINT = '菜单 ID 是字符串，先用 menu_list 查到再传，不要自己编'
@@ -160,19 +160,29 @@ def _update_param(menu: Menu, **changes: Any) -> UpdateMenuParam:
 
 
 async def _status_param(db: AsyncSession, menu_id: str, *, enabled: bool) -> tuple[Menu, UpdateMenuParam]:
-    """🔴 只有带权限码的菜单项，停用才有效果：
-
-    权限码按菜单逐个算，停用的那一个不算（`rbac.collect_allowed_perms`），所以停用一个按钮 = 这个权限码对所有角色失效。
-    而侧边栏只跳过「不显示」的、不看停用（`use-sidebar.ts`），目录 / 页面又大多不带权限码 —— 停用它们**什么都不会变**。
-    与其执行一个看起来成功的空操作，不如当场说清楚该用什么
+    """🔴 上级停用着的不改：停用一个目录 / 页面是连同整棵下级一起关掉（`menu_dao.get_disabled_ids`，#143），
+    这时单独启停它自己，侧边栏和权限都看不出任何变化。与其执行一个看起来成功的空操作，不如当场说清楚
     """
     menu = await menu_service.get(db=db, pk=int(menu_id))
-    if not (menu.perms or '').strip():
+    ancestor_ids = (await menu_dao.get_ancestor_ids(db, menu.id))[1:]
+    off = next((m for m in await menu_dao.get_all_by_ids(db, ancestor_ids) if m.status != StatusType.enable), None)
+    if off:
         raise ValueError(
-            f'「{menu.title}」没有权限标识，停用它不会有任何效果（侧边栏照样显示，下面的按钮权限也不受影响）。'
-            '要从侧边栏隐藏，请在菜单管理里关掉「是否显示」；要收回某个角色的访问，用 role_update_menus'
+            f'「{menu.title}」的上级「{off.title}」停用着，它和整棵下级现在都不生效，单独启停它看不出任何变化。'
+            f'要恢复的话先启用「{off.title}」'
         )
     return menu, _update_param(menu, status=StatusType.enable if enabled else StatusType.disable)
+
+
+async def _affected(db: AsyncSession, menu: Menu) -> list[Menu]:
+    """启停这一项时跟着变的：它自己 + 下级里一路启用着的（中间某一级自己停用着的话，那一枝本来就不生效，不受影响）"""
+    children: dict[int | None, list[Menu]] = {}
+    for m in await menu_dao.get_all_by_ids(db, await menu_dao.get_subtree_ids(db, menu.id)):
+        children.setdefault(m.parent_id, []).append(m)
+    affected = [menu]
+    for m in affected:
+        affected.extend(c for c in children.get(m.id, []) if c.status == StatusType.enable and c not in affected)
+    return affected
 
 
 async def _preview_set_status(db: AsyncSession, menu_id: str, *, enabled: bool) -> str:
@@ -180,16 +190,24 @@ async def _preview_set_status(db: AsyncSession, menu_id: str, *, enabled: bool) 
     if menu.status == obj.status:
         raise ValueError(f'「{menu.title}」已经是{"启用" if enabled else "停用"}状态，不需要改')
     await menu_service.check_update(db=db, pk=menu.id, obj=obj)
+    affected = await _affected(db, menu)
+    scope = f'「{menu.title}」' + (f'和它下面的 {len(affected) - 1} 项' if len(affected) > 1 else '')
+    perms = sorted({p.strip() for m in affected for p in (m.perms or '').split(',') if p.strip()})
+    shown = any(m.type != MenuType.button and m.display == StatusType.enable for m in affected)
     if enabled:
-        return f'将启用「{menu.title}」：已经授给它的角色重新获得权限 {menu.perms}'
-    return f'将停用「{menu.title}」：权限 {menu.perms} 对所有角色失效，授过它的角色也一样，直到重新启用'
+        effects = ['回到已授权角色的侧边栏里'] if shown else []
+        effects += [f'已经授给它们的角色重新获得权限 {", ".join(perms)}'] if perms else []
+        return f'将启用{scope}' + (f'：{"，".join(effects)}' if effects else '')
+    effects = ['从侧边栏消失（超级管理员也看不到）'] if shown else []
+    effects += [f'权限 {", ".join(perms)} 对所有角色失效'] if perms else []
+    return f'将停用{scope}' + (f'：{"，".join(effects)}' if effects else '') + '，直到重新启用'
 
 
 @ai_tool(
     name='menu_set_status',
     description=(
-        '启用或停用一个带权限标识的菜单项（通常是按钮）：停用后这个权限码对所有角色失效。'
-        '没有权限标识的目录 / 页面停用没有效果，工具会说明原因。'
+        '启用或停用一个菜单项。停用按钮：它的权限码对所有角色失效；停用目录 / 页面：连同全部下级一起关掉 —— '
+        '侧边栏不再显示，下级按钮的权限码一并失效。上级停用着的菜单不能单独启停，工具会说明原因。'
         f'enabled=true 启用，false 停用。会先请用户确认再执行。{_MENU_ID_HINT}。'
     ),
     domain='menu',
@@ -199,7 +217,7 @@ async def _preview_set_status(db: AsyncSession, menu_id: str, *, enabled: bool) 
 )
 async def menu_set_status(db: AsyncSession, ctx: RunContext, menu_id: str, *, enabled: bool) -> dict[str, Any]:
     menu, obj = await _status_param(db, menu_id, enabled=enabled)
-    # 改菜单会清掉拥有它的角色下所有人的用户缓存 —— service 里挂在 background_tasks 上
+    # 改菜单会清掉拥有它（和它的下级）的角色下所有人的用户缓存 —— service 里挂在 background_tasks 上
     await menu_service.update(db=db, background_tasks=ctx.background_tasks, pk=menu.id, obj=obj)
     status = 'enabled' if enabled else 'disabled'
     return {'menu_id': menu_id, 'title': menu.title, 'perms': menu.perms, 'status': status}

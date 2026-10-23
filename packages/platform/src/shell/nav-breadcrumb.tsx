@@ -1,5 +1,5 @@
 import * as React from "react"
-import { menuKey } from "@admin/i18n"
+import { menuTitle } from "@admin/i18n"
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 
@@ -63,7 +63,7 @@ export function NavBreadcrumb({
       <BreadcrumbList className="flex-nowrap">
         {chain.map((node, i) => {
           const isLast = i === chain.length - 1
-          const label = t(menuKey(node.path), { defaultValue: t(node.title) })
+          const label = menuTitle(t, node.path, node.title)
           // 分组节点(有子级)本身进不去,和叶子的当前页一样只展示文字、不做链接
           const asPage = isLast || node.children.length > 0
           return (

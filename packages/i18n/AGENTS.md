@@ -58,16 +58,24 @@ GitLab（gettext，英文原文即 msgid）和 VS Code（`l10n.t()`）都是这�
 `zh-CN.json` 是**恒等映射**。放它的意义：文案有一处可集中修改；
 最坏情况（漏条目）也只是回落到 key，而 key 本身就是中文。
 
-### 菜单标题：key 用 **path**，不用标题
+### 菜单标题：中文用库里的标题，其它语言 key 用 **path**
 
 ```tsx
-t(menuKey(node.path), { defaultValue: node.title })
+menuTitle(t, node.path, node.title)   // 侧边栏 · 标签条 · 面包屑 · ⌘K · 菜单管理 · 权限矩阵全走它
 ```
 
-标题存在数据库里、管理员随时能改，用它当 key 改一次文案就失效；
-而 `path` 是菜单管理页从**前端真实路由下拉选**的，是这套数据里最稳的东西。
-`defaultValue` 回落库里的中文标题 —— 管理员新建的菜单**永远不会露 raw key**。
-`tab-item.tsx` 用 `href` 的 pathname 同理。
+- **基准语言下直接用库里的标题** —— 管理员在菜单管理里改的就是它
+- 其它语言下按 `menuKey(path)` 查内置译名，查不到回落 `t(title)`（**永远不会露 raw key**）。
+  key 用 path 不用标题：标题管理员随时能改，用它当 key 改一次译文就失效；path 是从**前端真实路由下拉选**的，最稳
+
+🔴 **原来所有语言都先按 path 查**（`t(menuKey(path), { defaultValue: title })`）。内置菜单两个语言包里都有 `menu:<path>`，
+于是改了库里的标题，**连中文界面都一个字不变**，接口 200、提示保存成功（#143）。
+现在的代价是英文界面里改过名的内置菜单仍显示内置译名，菜单表单用 `hasBuiltinMenuTranslation(path)` 提示这一点。
+
+⚠️ `hasBuiltinMenuTranslation` 用 `i18next.getResource(lng, …)`，**不能**用 `i18next.exists(key, { lng })`：
+后者会走 `fallbackLng`（= 基准语言），而基准语言里每个 `menu:*` 都在。实测（i18next 26.4.0）：只在 zh-CN 里有的 key，
+`exists(key, { lng: 'en-US' })` 是 `true`，`getResource('en-US', …)` 是 `undefined`。
+`packages/platform/src/pages/menu/menu-title.test.ts` 守着（换成 `exists` 那条红）。
 
 ### ⚠️ `menu:` 开头的 key，值必须是**标题**，不能是路径本身
 
@@ -75,11 +83,12 @@ t(menuKey(node.path), { defaultValue: node.title })
 是对的）。于是「无权访问」这个页面进标签条时，**中文界面上显示的是 `/403`**，
 英文界面正常 —— 而路由那边 `staticData.title` 明明写着「无权访问」。
 
-链路：标签条渲染的是 `t(menuKey(pathname), { defaultValue: t(tab.title) })`。
+链路（#143 之前）：标签条渲染的是 `t(menuKey(pathname), { defaultValue: t(tab.title) })`。
 key 存在就用 key 的值，`defaultValue` 根本轮不到 —— 所以「值写错成路径」这件事
 **不会**被 `i18n:check` 抓到（key 在、译文非空、占位符也一致），只能靠人看见。
 
 写 `menu:*` 条目时对着菜单标题写，别把回落用的那个字符串顺手填进去。
+（现在中文界面不再查 `menu:*`，但英文那份照样逐字显示 —— 规则不变。）
 
 ### 五条硬规则
 
@@ -394,8 +403,8 @@ FastAPI 的 `HTTPBearer` 抛 `Not authenticated`、starlette 抛 `Method Not All
 最后一次全站扫描（英文模式，逐页抓中文片段）剩 256 种，全部落在下面这几类：
 部门 63 · 角色 88 · 数据范围/规则 16 · 字典 33 · 公告 27 · 人名 —— 一条 UI 文案都没有。
 
-菜单表格标题用**两级回落**：`t(menuKey(node.path), { defaultValue: t(node.title) })`
-—— 一级用 path（稳定），按钮行没有 path 就回落到「标题本身即 key」。
+菜单表格标题走 `menuTitle()`（见上面「菜单标题」）：英文下一级用 path（稳定），
+按钮行没有 path 就回落到「标题本身即 key」。
 
 ### 布局提醒
 

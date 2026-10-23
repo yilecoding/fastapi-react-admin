@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { menuKey } from '@admin/i18n'
+import { menuTitle as displayMenuTitle } from '@admin/i18n'
 import {
   IconAlertTriangle, IconChevronDown, IconChevronRight, IconDeviceFloppy, IconFoldDown,
   IconFoldUp, IconLoader2, IconRotate, IconSearch,
@@ -81,13 +81,11 @@ export function PermMatrix({
   React.useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange])
 
   /**
-   * 菜单标题的翻译：key 用 **path**（库里的 title 管理员随时能改），
-   * 回落到「标题本身即 key」——按钮没有 path，走的就是这一级。
+   * 菜单标题：和侧边栏同一个口径（`@admin/i18n` 的 `menuTitle`）。
    * 搜索也要用它，否则英文界面下搜屏幕上显示的那串字搜不到。
    */
   const menuTitle = React.useCallback(
-    (title: string, path?: string | null) =>
-      path ? t(menuKey(path), { defaultValue: t(title) }) : t(title),
+    (title: string, path?: string | null) => displayMenuTitle(t, path, title),
     [t]
   )
 

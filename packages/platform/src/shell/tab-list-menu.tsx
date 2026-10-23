@@ -1,5 +1,5 @@
 import { IconCheck, IconChevronDown, IconPin, IconX } from '@tabler/icons-react'
-import { menuKey } from '@admin/i18n'
+import { menuTitle } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@admin/ui/components/button'
@@ -11,6 +11,7 @@ import { cn } from '@admin/ui/lib/utils'
 
 import { MenuIcon } from './icon-registry'
 import { isRemovable, type Tab } from './tab-store'
+import { useMenuTitles } from './use-menu-titles'
 
 /**
  * 已打开标签页的总览下拉。
@@ -33,6 +34,7 @@ export function TabListMenu({
   onClose: (key: string) => void
 }) {
   const { t } = useTranslation()
+  const menuTitles = useMenuTitles()
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -56,8 +58,8 @@ export function TabListMenu({
         {tabs.map((tab) => {
           const active = tab.key === activeKey
           const pathname = tab.href.split('?')[0] ?? tab.href
-          // 与 tab-item 同口径：key 用 pathname，回落到标题本身即 key
-          const label = t(menuKey(pathname), { defaultValue: t(tab.title) })
+          // 与 tab-item 同口径
+          const label = menuTitle(t, pathname, menuTitles(pathname) ?? tab.title)
           return (
             <DropdownMenuItem
               key={tab.key}

@@ -1,5 +1,5 @@
 import { IconPin, IconX } from '@tabler/icons-react'
-import { menuKey } from '@admin/i18n'
+import { menuTitle } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 
 import { cn } from '@admin/ui/lib/utils'
@@ -7,6 +7,7 @@ import { cn } from '@admin/ui/lib/utils'
 import { MenuIcon } from './icon-registry'
 import type { TabStyle } from './preferences'
 import type { Tab } from './tab-store'
+import { useMenuTitles } from './use-menu-titles'
 
 /**
  * 单个标签页。
@@ -96,12 +97,13 @@ export function TabItem({
   onDragEnd?: () => void
 }) {
   const { t } = useTranslation()
+  const menuTitles = useMenuTitles()
   /**
-   * tab 标题的翻译 key 用 **pathname**（`href` 去掉 search），
-   * 而不是标题本身 —— 标题来自路由 staticData 或后端菜单表，
-   * 管理员随时能改，改了译文就失效。查不到时 defaultValue 回落原标题。
+   * 和侧边栏同一个口径（`menuTitle`），按 **pathname**（`href` 去掉 search）认菜单。
+   * 标题先取菜单树里现在的那个，不取标签自己存的 —— 那是打开那一刻定下的，改了菜单名不会跟着变
    */
-  const tabLabel = t(menuKey(tab.href.split('?')[0]), { defaultValue: t(tab.title) })
+  const pathname = tab.href.split('?')[0] ?? tab.href
+  const tabLabel = menuTitle(t, pathname, menuTitles(pathname) ?? tab.title)
   return (
     <div
       role="tab"

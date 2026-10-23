@@ -1,10 +1,11 @@
 from collections.abc import Sequence
 
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.model import Menu, role_menu
 from backend.app.admin.schema.menu import CreateMenuParam, UpdateMenuParam
+from backend.common.enums import StatusType
 from backend.common.security.data_scope import DataScopedCRUD
 from backend.utils.timezone import timezone
 
@@ -131,6 +132,74 @@ class CRUDMenu(DataScopedCRUD[Menu]):
         :return:
         """
         return await self.select_models(db, parent_id=menu_id, deleted=0)
+
+    async def _parents(self, db: AsyncSession) -> dict[int, int | None]:
+        rows = await db.execute(select(self.model.id, self.model.parent_id).where(self.model.deleted == 0))
+        return dict(rows.tuples().all())
+
+    async def get_ancestor_ids(self, db: AsyncSession, menu_id: int) -> list[int]:
+        """
+        从 `menu_id` 往上一路到根的 ID（含它自己）
+
+        ⚠️ 带着「走过的」集合走：库里要是已经有环（修这个检查之前写进去的），不带它就是死循环
+
+        :param db: 数据库会话
+        :param menu_id: 菜单 ID
+        :return:
+        """
+        parents = await self._parents(db)
+        ids: list[int] = []
+        current: int | None = menu_id
+        while current is not None and current in parents and current not in ids:
+            ids.append(current)
+            current = parents[current]
+        return ids
+
+    async def get_subtree_ids(self, db: AsyncSession, menu_id: int) -> list[int]:
+        """
+        `menu_id` 和它的全部下级的 ID
+
+        :param db: 数据库会话
+        :param menu_id: 菜单 ID
+        :return:
+        """
+        children: dict[int, list[int]] = {}
+        for pk, parent_id in (await self._parents(db)).items():
+            if parent_id is not None:
+                children.setdefault(parent_id, []).append(pk)
+        ids = [menu_id]
+        for pk in ids:  # 边走边追加 = 广度优先；环上的节点不重复追加
+            ids.extend(c for c in children.get(pk, []) if c not in ids)
+        return ids
+
+    async def get_disabled_ids(self, db: AsyncSession) -> set[int]:
+        """
+        实际不生效的菜单：自己停用了，或者任何一级上级停用了
+
+        🔴 停用一个目录 / 页面 = 连同整棵下级一起关掉（#143）。原来权限码只看菜单自己的状态，
+        而目录 / 页面大多不带权限码 —— 停用它们侧边栏照常显示、下面按钮的权限照常生效，等于没停
+
+        :param db: 数据库会话
+        :return:
+        """
+        rows = (
+            await db.execute(
+                select(self.model.id, self.model.parent_id, self.model.status).where(self.model.deleted == 0)
+            )
+        ).all()
+        parents = {row.id: row.parent_id for row in rows}
+        off = {row.id for row in rows if row.status != StatusType.enable}
+        disabled: set[int] = set()
+        for pk in parents:
+            seen: set[int] = set()
+            current: int | None = pk
+            while current is not None and current not in seen:
+                if current in off:
+                    disabled.add(pk)
+                    break
+                seen.add(current)
+                current = parents.get(current)
+        return disabled
 
 
 menu_dao: CRUDMenu = CRUDMenu(Menu)

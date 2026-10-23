@@ -10,7 +10,8 @@
   挡着，测试断言的是读回来的结果，不管将来靠什么机制
 - **授予不带上级**：按钮的权限码生效了，页面却进不去（侧边栏挂不上孤儿）
 - **收回不带下级**：权限码按菜单逐个算，只收「用户管理」、留着下面的按钮，`sys:user:del` 照样生效
-- **停用一个没有权限码的菜单**：什么都不会变（侧边栏不看停用），要当场说清楚，而不是执行一个空操作
+- **停用目录 / 页面**：连同整棵下级一起关掉（#143），预演要把带走了哪些权限码说出来；
+  上级停用着的菜单单独启停看不出变化，要当场说清楚，而不是执行一个空操作
 """
 
 import uuid
@@ -21,6 +22,7 @@ import pytest
 
 from sqlalchemy import select
 
+from backend.app.admin.crud.crud_menu import menu_dao
 from backend.app.admin.crud.crud_role import role_dao
 from backend.app.admin.model import Menu, Role, User
 from backend.plugin.ai.core.registry import _REGISTRY, load_builtin_tools
@@ -265,18 +267,51 @@ class TestMenuWriteTools:
         assert name == f'AiTest{tail[:1].upper()}{tail[1:]}', f'路由名要从权限码推出来：{name}'
         assert (parent_id, title, status) == (r['page_id'], 'AI 导出', 0), '停用把没改的字段（上级 / 标题）也动了'
 
-    def test_disabling_a_menu_without_perms_is_refused(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """侧边栏不看停用、目录又没有权限码：停用它什么都不会变 —— 当场说清楚，不执行一个看起来成功的空操作"""
+    def test_disabling_a_folder_takes_its_subtree_with_it(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """目录本身没有权限码，停用它照样有效果：下面页面的按钮权限一起失效（#143）"""
 
-        async def scenario(db: Any) -> Any:
-            page = await db.get(Menu, (await _menu_by_perm(db, 'sys:user:del')).parent_id)
+        async def scenario(db: Any) -> dict[str, Any]:
+            ctx = _ctx(_admin(), db)
+            button = await _menu_by_perm(db, 'sys:user:del')
+            page = await db.get(Menu, button.parent_id)
             folder = await db.get(Menu, page.parent_id)
             assert not folder.perms, '前置：目录本身不带权限码'
-            return await _dispatch(_ctx(_admin(), db), 'menu_set_status', menu_id=str(folder.id), enabled=False)
+            stage = await _dispatch(ctx, 'menu_set_status', menu_id=str(folder.id), enabled=False)
+            tasks_before = len(ctx.background_tasks.tasks)
+            off = await _dispatch(ctx, 'menu_set_status', pre_approved=True, menu_id=str(folder.id), enabled=False)
+            await db.flush()
+            await db.refresh(folder)
+            await db.refresh(button)
+            return {
+                'stage': stage, 'off': off, 'queued': len(ctx.background_tasks.tasks) - tasks_before,
+                'folder_status': folder.status, 'button_status': button.status,
+                'disabled': await menu_dao.get_disabled_ids(db), 'button_id': button.id,
+            }  # fmt: skip
+
+        r = _run(monkeypatch, scenario)
+        assert r['stage'].kind == 'confirm_required', r['stage']
+        preview = r['stage'].preview
+        assert '和它下面的' in preview and '从侧边栏消失' in preview and 'sys:user:del' in preview, preview
+        assert r['off'].kind == 'ok', r['off']
+        assert r['queued'] >= 1, '停用目录没挂清用户缓存的任务 —— 下面按钮的权限码要等 token 过期才失效'
+        # 只改目录自己这一行；下级是「按上级算」不生效，不是被连带写成了停用（重新启用目录就整棵回来）
+        assert (r['folder_status'], r['button_status']) == (0, 1)
+        assert r['button_id'] in r['disabled']
+
+    def test_menus_under_a_disabled_parent_cannot_be_toggled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """上级停用着，单独启停它看不出任何变化 —— 当场说清楚，不执行一个看起来成功的空操作"""
+
+        async def scenario(db: Any) -> Any:
+            button = await _menu_by_perm(db, 'sys:user:del')
+            page = await db.get(Menu, button.parent_id)
+            folder = await db.get(Menu, page.parent_id)
+            folder.status = 0
+            await db.flush()
+            return await _dispatch(_ctx(_admin(), db), 'menu_set_status', menu_id=str(button.id), enabled=False)
 
         outcome = _run(monkeypatch, scenario)
-        assert outcome.kind == 'failed', outcome
-        assert '不会有任何效果' in outcome.payload and '是否显示' in outcome.payload, outcome.payload
+        assert outcome.kind == 'failed' and outcome.confirm_token is None, outcome
+        assert '停用着' in outcome.payload and '先启用' in outcome.payload, outcome.payload
 
     @pytest.mark.parametrize(
         ('args', 'expect'),
@@ -312,8 +347,8 @@ class TestMenuWriteTools:
 
 
 def test_no_menu_rename_tool() -> None:
-    """🔴 刻意不给「改菜单名」：界面上的菜单名先按路由地址查语言包，
-    内置菜单改了库里的标题界面上不会变（见 menu_tools.py）"""
+    """🔴 刻意不给「改菜单名」：其它语言下内置菜单显示的是按路由地址预置的译名，
+    改了库里的标题英文界面上不会变（见 menu_tools.py）"""
     load_builtin_tools()
     assert {'menu_create', 'menu_set_status'} <= _REGISTRY.keys()
     assert not any(name.startswith('menu_') and 'rename' in name for name in _REGISTRY)

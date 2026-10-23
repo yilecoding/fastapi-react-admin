@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { IconLoader2 } from '@tabler/icons-react'
+import { hasBuiltinMenuTranslation } from '@admin/i18n'
 
 import { Alert } from '@admin/ui/components/alert'
 import { Button } from '@admin/ui/components/button'
@@ -205,7 +206,14 @@ export function MenuFormSheet({
             </FormField>
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField label={t("菜单标题")} error={fe(errs.title?.message)} required>
+              {/* 内置菜单在其它语言下显示的是按路由地址预置的译名（`menuTitle`，#143）—— 不说的话，
+                  英文界面的管理员改完名看不到变化，会以为没保存上 */}
+              <FormField
+                label={t("菜单标题")} error={fe(errs.title?.message)} required
+                hint={!isButton && hasBuiltinMenuTranslation(path)
+                  ? t('内置菜单：其它语言界面显示内置译名，这里改的只影响中文界面')
+                  : undefined}
+              >
                 <Input {...form.register('title')} data-testid="m-title" autoComplete="off" />
               </FormField>
               <FormField label={t("菜单名称")} error={fe(errs.name?.message)} required>
@@ -307,7 +315,11 @@ export function MenuFormSheet({
               <FormField label={t("排序")} error={fe(errs.sort?.message)}>
                 <Input type="number" min={0} {...form.register('sort')} data-testid="m-sort" />
               </FormField>
-              <FormField label={t("状态")} required>
+              {/* 停用目录 / 页面 = 整棵关掉（后端按上级算，#143），和下面「在侧边栏显示」不是一回事 */}
+              <FormField
+                label={t("状态")} required
+                hint={isButton ? t('停用后这个权限码对所有角色失效') : t('停用会连同全部下级一起关掉：不再显示，下级的权限一并失效')}
+              >
                 <Select value={String(form.watch('status'))} items={statusItems}
                         onValueChange={(v) => form.setValue('status', Number(v), { shouldValidate: true })}>
                   <SelectTrigger className="w-full" data-testid="m-status"><SelectValue /></SelectTrigger>

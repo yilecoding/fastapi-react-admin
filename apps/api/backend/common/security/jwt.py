@@ -14,6 +14,7 @@ from backend.app.admin.model import User
 from backend.app.admin.schema.user import GetUserInfoWithRelationDetail
 from backend.common.context import ctx
 from backend.common.dataclasses import AccessToken, TokenPayload
+from backend.common.enums import StatusType
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.security.data_scope import bypass_data_scope
@@ -202,10 +203,20 @@ async def get_jwt_user(user_id: int) -> GetUserInfoWithRelationDetail:
         # 而是「弄清楚来的是谁」—— 按可见范围过滤会自锁：查不到自己 → 认证失败。
         # 多数时候这里 ContextVar 还是空的（用户还没解析出来），豁免是为了挡住
         # 「缓存恰好在一个已经设过用户的请求里过期并重建」这种时序。
+        from backend.app.admin.crud.crud_menu import menu_dao
+
         with bypass_data_scope():
             async with async_db_session() as db:
                 current_user = await get_current_user(db, user_id)
+                disabled_menus = await menu_dao.get_disabled_ids(db)
             user = GetUserInfoWithRelationDetail.model_validate(current_user)
+            # 🔴 快照里菜单的 `status` 是**生效状态**：任何一级上级停用了，它也算停用（#143）。
+            # 权限码的判定（`rbac_verify` / `collect_allowed_perms` / 文件 / 审批…）全读这一份、都只看
+            # 菜单自己的 `status`，在这里换掉一次，它们就都按「停用目录 = 整棵关掉」算了
+            for role in user.roles:
+                for menu in role.menus:
+                    if menu and menu.id in disabled_menus:
+                        menu.status = StatusType.disable
             await redis_client.set(
                 f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}',
                 user.model_dump_json(),
