@@ -73,7 +73,24 @@ class MenuService:
         return []
 
     @staticmethod
-    async def create(*, db: AsyncSession, obj: CreateMenuParam) -> None:
+    async def check_create(*, db: AsyncSession, obj: CreateMenuParam) -> Menu | None:
+        """
+        创建前的业务校验（只读）。`create` 和 AI 工具的预演共用这一份
+
+        :param db: 数据库会话
+        :param obj: 菜单创建参数
+        :return: 上级菜单（顶级为 None）
+        """
+        if await menu_dao.get_by_title(db, obj.title):
+            raise errors.ConflictError(msg=t('error.menu.title_exists'))
+        parent_menu = None
+        if obj.parent_id:
+            parent_menu = await menu_dao.get(db, obj.parent_id)
+            if not parent_menu:
+                raise errors.NotFoundError(msg=t('error.menu.parent_not_found'))
+        return parent_menu
+
+    async def create(self, *, db: AsyncSession, obj: CreateMenuParam) -> None:
         """
         创建菜单
 
@@ -82,27 +99,19 @@ class MenuService:
         :return:
         """
 
-        title = await menu_dao.get_by_title(db, obj.title)
-        if title:
-            raise errors.ConflictError(msg=t('error.menu.title_exists'))
-        if obj.parent_id:
-            parent_menu = await menu_dao.get(db, obj.parent_id)
-            if not parent_menu:
-                raise errors.NotFoundError(msg=t('error.menu.parent_not_found'))
+        await self.check_create(db=db, obj=obj)
         await menu_dao.create(db, obj)
 
     @staticmethod
-    async def update(*, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateMenuParam) -> int:
+    async def check_update(*, db: AsyncSession, pk: int, obj: UpdateMenuParam) -> Menu:
         """
-        更新菜单
+        更新前的业务校验（只读）。`update` 和 AI 工具的预演共用这一份
 
         :param db: 数据库会话
-        :param background_tasks: FastAPI 后台任务
         :param pk: 菜单 ID
         :param obj: 菜单更新参数
-        :return:
+        :return: 改之前的菜单
         """
-
         menu = await menu_dao.get(db, pk)
         if not menu:
             raise errors.NotFoundError(msg=t('error.menu.not_found'))
@@ -114,6 +123,22 @@ class MenuService:
                 raise errors.NotFoundError(msg=t('error.menu.parent_not_found'))
         if obj.parent_id == menu.id:
             raise errors.ForbiddenError(msg=t('error.dept.cannot_be_own_parent'))
+        return menu
+
+    async def update(
+        self, *, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateMenuParam
+    ) -> int:
+        """
+        更新菜单
+
+        :param db: 数据库会话
+        :param background_tasks: FastAPI 后台任务
+        :param pk: 菜单 ID
+        :param obj: 菜单更新参数
+        :return:
+        """
+
+        await self.check_update(db=db, pk=pk, obj=obj)
         count = await menu_dao.update(db, pk, obj)
         await user_cache_manager.clear_by_menu_id(db, background_tasks, [pk])
         return count
