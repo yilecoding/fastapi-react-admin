@@ -456,6 +456,7 @@ _PROGRESS = (
     # 超时自动处理也是推进：它之后「最近一次推进」就不是我了，不能再拿回
     'timeout_approve',
     'timeout_reject',
+    'ai_approve',
 )
 
 
@@ -1827,4 +1828,63 @@ def _approvable(inst: WfInstance, model: dict[str, Any], task: WfTask) -> bool:
         validate_form_data(form_schema, data, only=editable_fields(form_schema, node), base=data)
     except FormDataError:
         return False
+    return True
+
+
+# ── AI 自动同意（#111 第 5 条）────────────────────────────────────────────────
+#
+# 由 `ai_approve_service.maybe_approve` 在预审写完「建议通过」之后调（Celery 里、审批事务外）。
+# 放闸（开关 / 数据够不够）在那边判，这里只管「现在还能不能替人同意」，在事务里重新判一遍。
+
+
+async def apply_ai_approve(
+    db: AsyncSession,
+    instance_id: int,
+    *,
+    version: int,
+    node_id: str,
+    model_name: str | None,
+    opinion: str,
+    detail: dict[str, Any],
+) -> bool:
+    """替这一步同意。🔴 只在「提交之后谁都没动过」时做（`version` = 提交那一刻的版本号）：
+
+    预审审的是提交时的内容；之后有人改过字段 / 推进过 / 加签过，那个结论就不是针对现在这张单的了。
+    这一步上**所有人的待办都取消**（不是「替张三同意」：他没同意过，他的「我已审批」里不该有这张单），
+    记一条 `ai_approve`（`actor_type = ai`）。返回做没做
+    """
+    if db.in_transaction():
+        await db.rollback()
+    ctx = _Ctx(db=db, actor_id=None)
+    async with db.begin():
+        inst = await _load_instance(db, instance_id)
+        if inst.status != InstanceStatus.running or inst.version != version:
+            return False
+        pending = await _pending_tasks(db, inst.id)
+        if not pending or any(tk.node_id != node_id for tk in pending):
+            return False
+        model = json.loads(inst.model_snapshot)
+        nodes = index_nodes(model)
+        node = nodes[node_id].node
+        if node['type'] != 'approval' or (node.get('mode') or 'any') != 'any':
+            return False
+        if any(_sign_group(inst, tk) is not None for tk in pending) or not _approvable(inst, model, pending[0]):
+            # 加签组在：组员的意见还没回来；可编辑的必填字段还空着：人点同意都过不去（同超时自动同意）
+            return False
+        await _claim(db, inst)
+        for tk in pending:
+            await _close_task(db, tk, TaskStatus.canceled, None, None)
+            ctx.push_todo([tk.assignee_id])
+        _record(
+            ctx,
+            inst,
+            'ai_approve',
+            actor_type=ActorType.ai,
+            actor_name=(model_name or 'AI')[:64],
+            node=node,
+            opinion=opinion,
+            detail=detail,
+        )
+        await _leave_node(ctx, inst, nodes, node_id)
+    await _run_effects(ctx.effects)
     return True

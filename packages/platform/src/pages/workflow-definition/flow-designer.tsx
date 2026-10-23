@@ -12,7 +12,7 @@ import { cn } from '@admin/ui/lib/utils'
 import { FormField as Row } from '../_shared/form-fields'
 import {
   directoryRolesQuery, directoryUsersQuery,
-  type ApprovalNode, type AssigneeRule, type Branch, type CcNode, type Cond, type CondOp, type FieldPerm,
+  type AiApproveConfig, type ApprovalNode, type AssigneeRule, type Branch, type CcNode, type Cond, type CondOp, type FieldPerm,
   type ApprovalMode, type FlowModel, type FormSchema, type OptionalAction,
 } from '../workflow/api'
 import {
@@ -107,7 +107,12 @@ export function FlowDesigner({
             onChange={(fieldPerms) => onChange({ ...model, root: { ...model.root, fieldPerms } })}
           />
         ) : node?.type === 'approval' ? (
-          <ApprovalProps node={node} form={form} onChange={(p) => onChange(patchNode<ApprovalNode>(model, node.id, p))} />
+          <ApprovalProps
+            node={node}
+            form={form}
+            reviewOn={!!model.aiReview?.enabled}
+            onChange={(p) => onChange(patchNode<ApprovalNode>(model, node.id, p))}
+          />
         ) : node?.type === 'cc' ? (
           <CcProps node={node} form={form} onChange={(p) => onChange(patchNode<CcNode>(model, node.id, p))} />
         ) : branch && cond ? (
@@ -277,10 +282,12 @@ function RuleEditor({
 }
 
 function ApprovalProps({
-  node, form, onChange,
+  node, form, reviewOn, onChange,
 }: {
   node: ApprovalNode
   form: FormSchema
+  /** 流程开了 AI 预审没有（AI 自动同意的依据就是预审结论） */
+  reviewOn: boolean
   onChange: (p: Partial<ApprovalNode>) => void
 }) {
   const { t } = useTranslation()
@@ -312,6 +319,12 @@ function ApprovalProps({
         />
       </Row>
       <TimeoutEditor value={node.timeout ?? null} onChange={(timeout) => onChange({ timeout })} />
+      <AiApproveEditor
+        value={node.aiApprove ?? null}
+        orSign={(node.mode ?? 'any') === 'any'}
+        reviewOn={reviewOn}
+        onChange={(aiApprove) => onChange({ aiApprove })}
+      />
       <Row label={t('找不到审批人时')} hint={t('必须显式选：发起人自己被去掉、部门没配负责人、角色里没人，都会走到这里')}>
         <Segmented
           value={node.onEmpty}
@@ -656,6 +669,75 @@ export function _i18nExtractionAnchorsFlowDesigner(t: (k: string) => string) {
     t('一人同意即可，其余人的待办自动结束'), t('所有人都同意才通过，任何一人驳回整单结束'),
     t('按审批人的顺序一个一个来，前一个同意了才轮到下一个'),
   ]
+}
+
+/**
+ * AI 自动同意（#111 第 5 条）。🔴 开关是「允许」不是「立刻生效」：预审建议通过、而且这个流程 × 模型的「建议通过」里
+ * 人最后也通过的比例够高、样本够多，才真的替人同意；永远不自动驳回。只能配在或签上、要先开 AI 预审（发布校验也拦）
+ */
+function AiApproveEditor({
+  value, orSign, reviewOn, onChange,
+}: {
+  value: AiApproveConfig | null
+  orSign: boolean
+  reviewOn: boolean
+  onChange: (v: AiApproveConfig | null) => void
+}) {
+  const { t } = useTranslation()
+  const on = !!value?.enabled
+  const blocked = !orSign ? t('只有或签节点能开') : !reviewOn ? t('先在基础信息里开 AI 预审') : null
+  return (
+    <Row
+      label={t('AI 自动同意')}
+      hint={
+        on
+          ? t('预审建议通过、而且数据够了才替人同意；建议驳回或拿不准，照常给人审。永远不会自动驳回')
+          : (blocked ?? t('关：预审只给审批人参考'))
+      }
+    >
+      <div className="flex flex-col gap-2" data-testid="node-ai-approve">
+        <label className="flex items-center justify-between text-sm">
+          {t('开启')}
+          <Switch
+            checked={on}
+            disabled={!on && !!blocked}
+            onCheckedChange={(c) =>
+              onChange(c ? { enabled: true, minSamples: value?.minSamples ?? 30, minPrecision: value?.minPrecision ?? 0.95 } : null)
+            }
+            data-testid="node-ai-approve-switch"
+          />
+        </label>
+        {on && value && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span className="text-muted-foreground">{t('至少')}</span>
+            <Input
+              type="number"
+              min={20}
+              max={10000}
+              className="h-8 w-20"
+              value={value.minSamples}
+              onChange={(e) => onChange({ ...value, minSamples: Math.max(20, Math.min(10000, Number(e.target.value) || 20)) })}
+              data-testid="node-ai-approve-samples"
+            />
+            <span className="text-muted-foreground">{t('张「建议通过」的单里，人最后也通过的不低于')}</span>
+            <Input
+              type="number"
+              min={80}
+              max={100}
+              step={1}
+              className="h-8 w-16"
+              value={Math.round(value.minPrecision * 100)}
+              onChange={(e) =>
+                onChange({ ...value, minPrecision: Math.max(80, Math.min(100, Number(e.target.value) || 80)) / 100 })
+              }
+              data-testid="node-ai-approve-precision"
+            />
+            <span className="text-muted-foreground">%</span>
+          </div>
+        )}
+      </div>
+    </Row>
+  )
 }
 
 /** 超时处理：关 / N 小时后提醒 · 自动同意 · 自动驳回。按自然时间算，不计工作日 */

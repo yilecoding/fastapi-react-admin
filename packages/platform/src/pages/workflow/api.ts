@@ -82,6 +82,8 @@ export type ApprovalMode = 'any' | 'all' | 'seq'
 
 export type OptionalAction = 'transfer' | 'cc' | 'send_back' | 'add_sign'
 
+export type AiApproveConfig = { enabled: boolean; minSamples: number; minPrecision: number }
+
 export type ApprovalNode = {
   type: 'approval'
   id: string
@@ -93,6 +95,8 @@ export type ApprovalNode = {
   actions?: OptionalAction[] | null
   /** 待办到手上 `hours` 小时没办：提醒（每隔这么久一次，最多 3 次）/ 自动同意 / 自动驳回 */
   timeout?: { hours: number; action: 'remind' | 'approve' | 'reject' } | null
+  /** AI 自动同意（#111 第 5 条）：只同意不驳回，数据够了才真的做 */
+  aiApprove?: AiApproveConfig | null
   fieldPerms?: Record<string, FieldPerm>
   next: FlowNode | null
 }
@@ -219,7 +223,7 @@ export type RecordRow = {
   id: string
   task_id: string | null
   action: string
-  actor_type: 'user' | 'system'
+  actor_type: 'user' | 'system' | 'ai'
   actor_id: string | null
   actor_name: string | null
   node_id: string | null

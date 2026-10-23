@@ -152,3 +152,11 @@ E2E `workflow-ai-design.spec.ts`（`page.route` 固定生成接口的返回）�
 - 「清空重填」连标记一起清
 
 E2E `workflow-ai-fill.spec.ts`（`page.route` 固定填单接口）。变异各打红：覆盖已经填了的字段 · 标记不存草稿 · 提交不拦 · 改了字段不算核对。
+
+## AI 自动同意（设计器 `flow-designer.tsx: AiApproveEditor` · 进度 `progress.ts`）
+
+- 节点属性里的开关：没开 AI 预审 / 不是或签时**禁用**并说为什么（发布校验也拦）；开了之后两个门槛（单数 · 百分比）
+- 🔴 进度里那一步画成「AI 自动同意」、人那一栏写「没经手」，备注是模型名 + 依据。不能画成「某某 已同意」（他没同意过），
+  也不能画成「已跳过」（这一步是被同意了的）。判据：这组待办全部取消、而且这个节点上有一条之后的 `ai_approve` 记录
+
+E2E `workflow-ai-approve.spec.ts`（详情用 `route.fetch()` 取真接口再改成被 AI 同意过的形状）。变异各打红：那一步照普通分组画 · 没开预审也能开开关。

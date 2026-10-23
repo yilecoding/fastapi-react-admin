@@ -615,6 +615,7 @@ workflow:
   resubmit_node: 发起人修改
   handover_opinion: 离职交接
   timeout_approved: '超过 {hours} 小时未处理，已自动同意'
+  ai_approved: 'AI 预审建议通过；这个流程上它建议通过的 {n} 张单里，人最后通过了 {rate}，已自动同意'
   timeout_rejected: '超过 {hours} 小时未处理，已自动驳回'
   ai_fill:
     skip_calc: 自动计算，不用填

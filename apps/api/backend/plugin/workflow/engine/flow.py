@@ -197,6 +197,17 @@ def validate_publish(form_json: dict[str, Any], model_json: dict[str, Any]) -> l
                 err('APPROVER_EMPTY', f'「{n["name"]}」没配审批人', nodeId=nid)
             else:
                 _check_assignee(a, fields, nid, n['name'], err)
+            if (n.get('aiApprove') or {}).get('enabled'):
+                # 一票就能定这一步的只有或签：会签 / 依次审批上 AI 同意一票定不了，替所有人同意又等于把人都换掉
+                if (n.get('mode') or 'any') != 'any':
+                    err('AI_APPROVE_MODE', f'「{n["name"]}」不是或签，不能让 AI 自动同意', nodeId=nid)
+                # 依据是预审的结论：没开预审就没有结论可依
+                if not (model_json.get('aiReview') or {}).get('enabled'):
+                    err(
+                        'AI_APPROVE_NEEDS_REVIEW',
+                        f'「{n["name"]}」要 AI 自动同意，得先在基础信息里开 AI 预审',
+                        nodeId=nid,
+                    )
             for act in n.get('actions') or []:
                 if act not in OPTIONAL_ACTIONS:
                     err('ACTION_INVALID', f'「{n["name"]}」配置了不支持的动作 {act}', nodeId=nid)

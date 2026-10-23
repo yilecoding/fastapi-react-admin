@@ -125,6 +125,25 @@ export function progressItems(d: InstanceDetail, t: T): TrackItem[] {
     if (!masked) {
       for (const w of waiting) people.push({ name: w.name ?? '', result: { text: t('等待中'), tone: 'muted' } })
     }
+    // AI 自动同意（#111 第 5 条）：这一步人的待办都取消了、记录在节点上。画成一步「AI 自动同意」，人那一栏写「没经手」——
+    // 🔴 不能画成「张三 已同意」：他没同意过；也不能画成「已跳过」：这一步是被同意了的
+    const byAi = voided
+      ? d.records.find((r) => r.action === 'ai_approve' && r.node_id === nodeId && ts(r.created_time) >= ts(tasks[0].created_time))
+      : undefined
+    if (byAi) {
+      items.push({
+        key: `n-${k}`,
+        kind: 'approval',
+        title: tasks[0].node_name,
+        tag: t('AI 自动同意'),
+        state: 'done',
+        people: tasks.map((tk) => ({ name: tk.assignee_name, result: { text: t('没经手'), tone: 'muted' as const } })),
+        note: `${byAi.actor_name ?? 'AI'}：${byAi.opinion ?? ''}`,
+        time: byAi.created_time,
+        at: ts(tasks[0].created_time),
+      })
+      continue
+    }
     items.push({
       key: `n-${k}`,
       kind: atStart(nodeId) ? 'start' : 'approval',

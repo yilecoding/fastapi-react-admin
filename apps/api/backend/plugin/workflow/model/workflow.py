@@ -238,6 +238,9 @@ class WfAiReview(DataClassBase, DateTimeMixin):
     attachments: Mapped[str | None] = mapped_column(
         UniversalText, default=None, comment='给模型读了哪些附件（JSON：字段 · 文件 ID · sha256 · 读没读出来）'
     )
+    #: 提交那一刻实例的版本号（#111 第 5 条）。AI 自动同意只在「提交之后谁都没动过」时才做：
+    #: 预审审的是提交时的内容，之后有人改过 / 推进过，这个结论就不是针对现在这张单的了
+    instance_version: Mapped[int | None] = mapped_column(default=None, comment='提交时的实例版本号')
 
 
 class WfAiAssist(DataClassBase, DateTimeMixin):
