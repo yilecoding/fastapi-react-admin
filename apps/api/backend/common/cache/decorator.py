@@ -173,7 +173,31 @@ def cached(  # ruff:ignore[complex-structure]
     return decorator
 
 
-def cache_invalidate(  # ruff:ignore[complex-structure]
+async def invalidate_cache(key: str, *, prefix: bool) -> None:
+    """
+    让一个缓存键失效：本地 L1 + 广播给其他节点 + Redis L2（`cache_invalidate` 装饰器调的就是它）。
+
+    单独露出来是给「批量写完、**事务提交之后**清一次」用的：装饰器在被装饰的函数一返回就清，
+    那时事务还没提交 —— 导入一千行就是清一千次，而且每次清完到提交之间，别人的读会把旧值重新缓存回去
+
+    :param key: 缓存键；`prefix=True` 时是命名空间（按前缀整批删）
+    :param prefix: 是否按前缀删
+    :return:
+    """
+    if settings.CACHE_LOCAL_ENABLED:
+        if prefix:
+            local_cache_manager.delete_by_prefix(key)
+        else:
+            local_cache_manager.delete(key)
+        # 通知其他节点清掉它们自己的本地缓存
+        await cache_pubsub_manager.publish_invalidation(key, delete_by_prefix=prefix)
+    if prefix:
+        await redis_client.delete_by_prefix(key)
+    else:
+        await redis_client.delete(key)
+
+
+def cache_invalidate(
     namespace: str,
     *,
     key: str | None = None,
@@ -203,27 +227,7 @@ def cache_invalidate(  # ruff:ignore[complex-structure]
 
             try:
                 invalidate_key = await _build_cache_key(namespace, key, key_builder, *args, **kwargs)
-
-                # L1 缓存失效
-                if settings.CACHE_LOCAL_ENABLED:
-                    if invalidate_key == namespace:
-                        local_cache_manager.delete_by_prefix(invalidate_key)
-                    else:
-                        local_cache_manager.delete(invalidate_key)
-
-                # 广播失效消息（通知其他节点清除本地缓存）
-                if settings.CACHE_LOCAL_ENABLED:
-                    if invalidate_key == namespace:
-                        await cache_pubsub_manager.publish_invalidation(invalidate_key, delete_by_prefix=True)
-                    else:
-                        await cache_pubsub_manager.publish_invalidation(invalidate_key, delete_by_prefix=False)
-
-                # L2 缓存失效
-                if invalidate_key == namespace:
-                    await redis_client.delete_by_prefix(invalidate_key)
-                else:
-                    await redis_client.delete(invalidate_key)
-
+                await invalidate_cache(invalidate_key, prefix=invalidate_key == namespace)
             except Exception as e:
                 log.error(f'[Cache] INVALIDATE error: {e}')
                 invalidate_error = e

@@ -6,7 +6,7 @@ import {
   type ColumnVisibilityState, type RowSelectionState,
 } from '@tanstack/react-table'
 import {
-  IconDotsVertical, IconPencil, IconPlus, IconTrash,
+  IconDotsVertical, IconPencil, IconPlus, IconTrash, IconUpload,
 } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
@@ -31,6 +31,8 @@ import {
 import { DictDataSheet, DictTypeSheet } from './forms'
 import { listState } from '../_shared/list-query'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
+import { ExportButton } from '../_shared/data-io/export-button'
+import { ImportSheet } from '../_shared/data-io/import-sheet'
 
 /**
  * 数据字典 —— 左右主从布局。
@@ -135,6 +137,7 @@ export function DictPage({
   const [delType, setDelType] = React.useState<DictType | null>(null)
   const [delData, setDelData] = React.useState<DictData | null>(null)
   const [bulkOpen, setBulkOpen] = React.useState(false)
+  const [importOpen, setImportOpen] = React.useState(false)
   const rmType = useDeleteDictTypes()
   const rmData = useDeleteDictDatas()
   // 单条删除单独一个 mutation 实例——留在弹窗里原地重试，不指望全局兜底
@@ -302,13 +305,29 @@ export function DictPage({
                     {selected ? t('{{code}} · 共 {{n}} 项', { code: selected.code, n: datasPage?.total ?? 0 }) : t('先在左侧选一个类型')}
                   </span>
                 </div>
-                <div className="ms-auto">
+                <div className="ms-auto flex items-center gap-2">
                   <Can perm="dict:data:add">
                     <Button size="sm" variant="outline" disabled={!selected} data-testid="add-data"
                             onClick={() => { setEditingData(null); setDataSheet(true) }}>
                       <IconPlus className="size-4" />{t('新增字典项')}
                     </Button>
                   </Can>
+                  {/* 导入不限于当前类型：模板里每一行自己写类型编码，一份文件能填好几个字典 */}
+                  <Can perm="dict:data:import">
+                    <Button size="sm" variant="outline" data-testid="import-dict-data" onClick={() => setImportOpen(true)}>
+                      <IconUpload className="size-4" />{t('导入')}
+                    </Button>
+                  </Can>
+                  {selected ? (
+                    <Can perm="dict:data:export">
+                      <ExportButton
+                        path="/api/v1/sys/dict-datas/export"
+                        filters={{ type_id: selectedId, label: search.q || undefined }}
+                        selectedIds={selectedIds}
+                        total={datasPage?.total}
+                      />
+                    </Can>
+                  ) : null}
                 </div>
               </div>
 
@@ -377,6 +396,17 @@ export function DictPage({
       </div>
 
       <DictTypeSheet open={typeSheet} onOpenChange={setTypeSheet} editing={editingType} />
+      <ImportSheet
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        base="/api/v1/sys/dict-datas/import"
+        title={t('导入字典项')}
+        description={t('每一行写它所属的字典类型编码，按「类型 + 标签」判断是新增还是更新。')}
+        modes={['create', 'upsert', 'update']}
+        invalidate={dictKeys.all}
+        previewKeys={['type_code', 'label', 'value', 'status']}
+        testId="dict-import-sheet"
+      />
       <DictDataSheet
         open={dataSheet} onOpenChange={setDataSheet} editing={editingData}
         typeId={selected?.id ?? ''} typeName={selected?.name ?? ''}

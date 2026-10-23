@@ -10,7 +10,7 @@ from backend.common.pagination import paging_data
 from backend.core.conf import settings
 from backend.plugin.dict.crud.crud_dict_data import dict_data_dao
 from backend.plugin.dict.crud.crud_dict_type import dict_type_dao
-from backend.plugin.dict.model import DictData
+from backend.plugin.dict.model import DictData, DictType
 from backend.plugin.dict.schema.dict_data import CreateDictDataParam, DeleteDictDataParam, UpdateDictDataParam
 
 
@@ -92,6 +92,44 @@ class DictDataService:
         return await paging_data(db, dict_data_select)
 
     @staticmethod
+    async def check_create(*, db: AsyncSession, obj: CreateDictDataParam) -> DictType:
+        """
+        创建前的业务校验（只读）。`create` 和字典数据导入共用这一份
+
+        :param db: 数据库会话
+        :param obj: 字典数据创建参数
+        :return: 所属的字典类型
+        """
+        dict_type = await dict_type_dao.get(db, obj.type_id)
+        if not dict_type:
+            raise errors.NotFoundError(msg=t('error.dict.type_not_found'))
+        if await dict_data_dao.get_by_label_and_type_code(db, obj.label, dict_type.code):
+            raise errors.ConflictError(msg=t('error.dict.data_exists'))
+        return dict_type
+
+    @staticmethod
+    async def check_update(*, db: AsyncSession, pk: int, obj: UpdateDictDataParam) -> DictType:
+        """
+        更新前的业务校验（只读）。`update` 和字典数据导入共用这一份
+
+        :param db: 数据库会话
+        :param pk: 字典数据 ID
+        :param obj: 字典数据更新参数
+        :return: 改完之后所属的字典类型
+        """
+        dict_data = await dict_data_dao.get(db, pk)
+        if not dict_data:
+            raise errors.NotFoundError(msg=t('error.dict.data_not_found'))
+        dict_type = await dict_type_dao.get(db, obj.type_id)
+        if not dict_type:
+            raise errors.NotFoundError(msg=t('error.dict.type_not_found'))
+        if dict_data.label != obj.label or dict_data.type_code != dict_type.code:
+            new_dict_data = await dict_data_dao.get_by_label_and_type_code(db, obj.label, dict_type.code)
+            if new_dict_data and new_dict_data.id != pk:
+                raise errors.ConflictError(msg=t('error.dict.data_exists'))
+        return dict_type
+
+    @staticmethod
     @cache_invalidate(namespace=settings.CACHE_DICT_REDIS_PREFIX)
     async def create(*, db: AsyncSession, obj: CreateDictDataParam) -> None:
         """
@@ -101,12 +139,7 @@ class DictDataService:
         :param obj: 字典数据创建参数
         :return:
         """
-        dict_type = await dict_type_dao.get(db, obj.type_id)
-        if not dict_type:
-            raise errors.NotFoundError(msg=t('error.dict.type_not_found'))
-        dict_data = await dict_data_dao.get_by_label_and_type_code(db, obj.label, dict_type.code)
-        if dict_data:
-            raise errors.ConflictError(msg=t('error.dict.data_exists'))
+        dict_type = await DictDataService.check_create(db=db, obj=obj)
         await dict_data_dao.create(db, obj, dict_type.code)
 
     @staticmethod
@@ -120,16 +153,7 @@ class DictDataService:
         :param obj: 字典数据更新参数
         :return:
         """
-        dict_data = await dict_data_dao.get(db, pk)
-        if not dict_data:
-            raise errors.NotFoundError(msg=t('error.dict.data_not_found'))
-        dict_type = await dict_type_dao.get(db, obj.type_id)
-        if not dict_type:
-            raise errors.NotFoundError(msg=t('error.dict.type_not_found'))
-        if dict_data.label != obj.label or dict_data.type_code != dict_type.code:
-            new_dict_data = await dict_data_dao.get_by_label_and_type_code(db, obj.label, dict_type.code)
-            if new_dict_data and new_dict_data.id != pk:
-                raise errors.ConflictError(msg=t('error.dict.data_exists'))
+        dict_type = await DictDataService.check_update(db=db, pk=pk, obj=obj)
         count = await dict_data_dao.update(db, pk, obj, dict_type.code)
         return count
 

@@ -1,4 +1,5 @@
 import {
+  columnOrderingFeature,
   columnVisibilityFeature,
   rowPaginationFeature,
   rowSelectionFeature,
@@ -10,6 +11,7 @@ import {
  * 同样不注册 `rowSortingFeature` —— 后端没有 sort 入参，理由见 `user/table-features.ts`。
  */
 export const logFeatures = tableFeatures({
+  columnOrderingFeature,
   columnVisibilityFeature,
   rowPaginationFeature,
   rowSelectionFeature,

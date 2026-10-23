@@ -157,5 +157,43 @@ class NotificationService:
         await _push(None)
         return notification
 
+    @staticmethod
+    async def notify(
+        *,
+        db: AsyncSession,
+        user_id: int,
+        title: str,
+        content: str,
+        link: str | None = None,
+        category: NotificationCategory = NotificationCategory.SYSTEM,
+    ) -> Notification:
+        """
+        发给某一个人（给别的模块调用，比如后台导出完成）。
+
+        ⚠️ 调用方负责 commit，推送在这里立刻发 —— 所以要在**提交之后**调用，或者调用方自己的
+        会话马上提交：推送先到、行还没提交时，前端拉到的未读数是旧的（下一次拉取会对，只是慢一拍）
+
+        :param db: 数据库会话
+        :param user_id: 接收人
+        :param title: 标题
+        :param content: 内容
+        :param link: 点击跳转的前端路由
+        :param category: 分类
+        :return:
+        """
+        notification = await notification_dao.create(
+            db,
+            CreateNotificationParam(
+                title=title[:128],
+                content=content,
+                category=category,
+                link=link,
+                recipient_id=user_id,
+            ),
+        )
+        await db.commit()
+        await _push(user_id)
+        return notification
+
 
 notification_service: NotificationService = NotificationService()

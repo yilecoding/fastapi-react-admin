@@ -1,4 +1,5 @@
 import {
+  columnOrderingFeature,
   columnVisibilityFeature,
   rowPaginationFeature,
   rowSelectionFeature,
@@ -18,6 +19,7 @@ import {
  * 进过请求 —— 纯死代码。真要做服务端排序，得先给后端加入参。
  */
 export const features = tableFeatures({
+  columnOrderingFeature,
   columnVisibilityFeature,
   rowPaginationFeature,
   rowSelectionFeature,

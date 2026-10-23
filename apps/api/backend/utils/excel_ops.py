@@ -16,7 +16,7 @@ import io
 import zipfile
 
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import UploadFile
 from openpyxl import Workbook, load_workbook
@@ -25,6 +25,9 @@ from openpyxl.cell.read_only import EmptyCell
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.core.conf import settings
+
+if TYPE_CHECKING:
+    from fastapi.responses import Response
 
 #: 只认这一种扩展名。openpyxl **读不了 `.xls`**（老 BIFF 格式，要另装 xlrd），
 #: 硬拦在扩展名这一步是为了给一句人话，否则它会掉进 `zipfile.BadZipFile`
@@ -45,6 +48,9 @@ class TableColumn:
     required: bool = False
     #: 兼容的旧表头写法。比对前会统一 strip + 转小写，所以不用登记大小写变体
     aliases: tuple[str, ...] = ()
+    #: 报错时给用户看的列名（当前语言）。不给就用 `key` —— 表头是中文的模板，
+    #: 报「缺少 dept_code 列」用户对不上号
+    label: str | None = None
 
 
 @dataclasses.dataclass
@@ -89,6 +95,22 @@ class _CellError(Exception):
         super().__init__(msg)
 
 
+XLSX_MEDIA_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+
+def xlsx_attachment(raw: bytes, name: str) -> 'Response':
+    """把一份现生成的 xlsx（模板、错误报告）作为附件下发。文件名可以带中文（RFC 6266 两段式）"""
+    from fastapi.responses import Response
+
+    from backend.utils.file_ops import content_disposition
+
+    return Response(
+        content=raw,
+        media_type=XLSX_MEDIA_TYPE,
+        headers={'Content-Disposition': content_disposition(name, 'attachment', fallback='table.xlsx')},
+    )
+
+
 async def read_table_upload(file: UploadFile) -> bytes:
     """
     收下上传的表格文件并做进解析器**之前**的三道校验。
@@ -130,7 +152,8 @@ def _verify_archive(raw: bytes) -> None:
     """
     try:
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-            uncompressed = sum(info.file_size for info in zf.infolist())
+            entries = zf.infolist()
+            uncompressed = sum(info.file_size for info in entries)
     except zipfile.BadZipFile:
         # 走到这里通常是「后缀改成了 .xlsx 的别的东西」（csv / 空文件都会命中）。
         # 扩展名那道闸门只看名字，拦不住这个
@@ -140,6 +163,10 @@ def _verify_archive(raw: bytes) -> None:
         raise errors.RequestError(
             msg=t('error.table.bomb', size_mb=settings.TABLE_IMPORT_UNCOMPRESSED_MAX // 1024 // 1024)
         )
+    # 条目个数也要卡（ASVS 5.0 第 5.2.3 条：解压前查总大小**和**文件个数）。一份正常的 xlsx 是几十个条目；
+    # 几十万个空条目解压体积是 0，上面那道闸拦不住，而 openpyxl 打开时要逐个建对象
+    if len(entries) > settings.TABLE_IMPORT_MAX_ENTRIES:
+        raise errors.RequestError(msg=t('error.table.too_many_entries', limit=settings.TABLE_IMPORT_MAX_ENTRIES))
 
 
 def parse_table(
@@ -274,6 +301,7 @@ def _map_headers(header_cells: tuple[Any, ...], columns: list[TableColumn]) -> t
     :return: (列 key → 下标, 未被认领的表头文本)
     """
     lookup: dict[str, str] = {}
+    labels = {column.key: column.label or column.key for column in columns}
     for column in columns:
         for name in (column.key, *column.aliases):
             lookup[name.strip().lower()] = column.key
@@ -293,10 +321,10 @@ def _map_headers(header_cells: tuple[Any, ...], columns: list[TableColumn]) -> t
         # 同一列出现两次：后一列会静静盖掉前一列。宁可整份拒掉，
         # 也不要让用户以为自己填的是生效的那一列
         if key in index_of:
-            raise errors.RequestError(msg=t('error.table.header_duplicated', column=key))
+            raise errors.RequestError(msg=t('error.table.header_duplicated', column=labels[key]))
         index_of[key] = idx
 
-    missing = [c.key for c in columns if c.required and c.key not in index_of]
+    missing = [labels[c.key] for c in columns if c.required and c.key not in index_of]
     if missing:
         raise errors.RequestError(msg=t('error.table.header_missing', columns=', '.join(missing)))
 
@@ -382,36 +410,123 @@ def _normalize_number(value: float | Decimal) -> str:
     return str(value)
 
 
+@dataclasses.dataclass(frozen=True)
+class TemplateColumn:
+    """模板里的一列（文案都由调用方翻译好）"""
+
+    header: str
+    required: bool = False
+    note: str = ''
+    #: 可选值：说明页里列出来，`dropdown=True` 时数据表里还做成下拉。超过 Excel 内联列表的 255 字符上限时，
+    #: 下拉自动挪到一张隐藏表里引用
+    options: tuple[str, ...] = ()
+    dropdown: bool = True
+    width: int = 18
+
+
+#: Excel 数据有效性的内联列表（`"a,b,c"`）最多 255 个字符（XlsxWriter / Excel 文档同一个数）
+_INLINE_LIST_MAX = 255
+
+
+def _add_dropdown(
+    wb: Workbook, ws: Any, index: int, options: tuple[str, ...], *, last_row: int, invalid_hint: str
+) -> None:
+    """给第 `index` 列加下拉。选项拼起来超过内联列表上限就挪到隐藏表 `_options` 的同一列里引用"""
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    letter = get_column_letter(index)
+    inline = ','.join(options)
+    if len(inline) <= _INLINE_LIST_MAX - 2 and not any(',' in o or '"' in o for o in options):
+        formula = f'"{inline}"'
+    else:
+        hidden = wb['_options'] if '_options' in wb.sheetnames else wb.create_sheet('_options')
+        hidden.sheet_state = 'hidden'
+        for row, option in enumerate(options, start=1):
+            hidden.cell(row=row, column=index, value=option).data_type = 's'
+        formula = f"'_options'!${letter}$1:${letter}${len(options)}"
+    validation = DataValidation(
+        type='list', formula1=formula, allow_blank=True, showErrorMessage=True, errorStyle='warning'
+    )
+    validation.error = invalid_hint
+    validation.add(f'{letter}2:{letter}{last_row}')
+    ws.add_data_validation(validation)
+
+
+def _text_row(ws: Any, values: list[Any]) -> None:
+    """追加一行，字符串一律写成文本。
+
+    🔴 openpyxl 见到 `=` 开头的字符串就当公式写（实测）。说明页里的可选值来自库里（字典类型编码是自由文本），
+    不强制成文本的话，谁建一个 `=HYPERLINK(...)` 编码，下载模板的人一打开就在执行它
+    """
+    ws.append(values)
+    for cell in ws[ws.max_row]:
+        if isinstance(cell.value, str):
+            cell.data_type = 's'
+
+
 def build_template(
-    columns: list[TableColumn],
+    columns: list[TemplateColumn],
     *,
-    notes: dict[str, str] | None = None,
+    readme_header: tuple[str, str, str, str],
+    invalid_hint: str,
+    required_mark: str = 'Y',
+    extra_notes: tuple[str, ...] = (),
     sheet_title: str = 'data',
-    notes_title: str = 'README',
+    readme_title: str = 'README',
+    max_rows: int | None = None,
 ) -> bytes:
     """
-    生成一份只有表头的导入模板。
+    生成导入模板：数据表只有表头，第二张表是说明。
 
-    **说明文字放在第二个工作表，不放在第一个表的第二行。** 「表头 + 中文说明行 +
-    数据从第 3 行开始」这种排版看着友好，但它把「数据从第几行开始」变成了一个
-    约定 —— 用户删掉说明行（很多人会删）之后整份表就错位一行，而解析器无从分辨。
-    第一个表里只有表头和数据，说明单独一页，这个约定就不存在了。
+    **说明放在第二张表，不放在数据表的第二行。** 「表头 + 说明行 + 数据从第 3 行开始」看着友好，
+    但它把「数据从第几行开始」变成了一个约定 —— 用户删掉说明行（很多人会删）之后整份表就错位一行，
+    而解析器无从分辨。数据表里只有表头和数据，这个约定就不存在了。
 
-    :param columns: 列声明，顺序即表头顺序
-    :param notes: 列 key → 说明文字（由调用方过 i18n），缺的列不写说明
+    有选项的列做成下拉（数据有效性），**提示而不强拦**（`errorStyle='warning'`）：
+    编码类的选项是「库里现有的」，而同一份文件里新建的编码不在里面，强拦会让用户填不进去。
+
+    :param columns: 列，顺序即表头顺序
+    :param readme_header: 说明表的四个列名（列名 / 必填 / 说明 / 可选值）
+    :param invalid_hint: 填了下拉之外的值时 Excel 弹的提示
+    :param required_mark: 说明表「必填」一栏里打的标记（「是」/ Yes）
+    :param extra_notes: 说明表末尾的几句话
     :param sheet_title: 数据表名
-    :param notes_title: 说明表名
+    :param readme_title: 说明表名
+    :param max_rows: 下拉覆盖到第几行；不给用 `TABLE_IMPORT_MAX_ROWS`
     :return: xlsx 字节
     """
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    last_row = (settings.TABLE_IMPORT_MAX_ROWS if max_rows is None else max_rows) + 1
     wb = Workbook()
     ws = wb.active
     ws.title = sheet_title
-    ws.append([column.key for column in columns])
+    _text_row(ws, [column.header for column in columns])
+    ws.freeze_panes = 'A2'
+    required_font = Font(bold=True, color='C00000')
+    plain_font = Font(bold=True)
+    for index, column in enumerate(columns, start=1):
+        letter = get_column_letter(index)
+        ws.column_dimensions[letter].width = column.width
+        ws.cell(row=1, column=index).font = required_font if column.required else plain_font
+        if column.options and column.dropdown:
+            _add_dropdown(wb, ws, index, column.options, last_row=last_row, invalid_hint=invalid_hint)
 
-    readme = wb.create_sheet(notes_title)
-    readme.append(['column', 'required', 'note'])
+    readme = wb.create_sheet(readme_title)
+    _text_row(readme, list(readme_header))
+    for cell in readme[1]:
+        cell.font = plain_font
     for column in columns:
-        readme.append([column.key, 'Y' if column.required else '', (notes or {}).get(column.key, '')])
+        options = ', '.join(column.options[:50]) + (' …' if len(column.options) > 50 else '')
+        _text_row(readme, [column.header, required_mark if column.required else '', column.note, options])
+    if extra_notes:
+        readme.append([])
+        for note in extra_notes:
+            _text_row(readme, [note])
+    for letter, width in zip('ABCD', (18, 8, 60, 40), strict=True):
+        readme.column_dimensions[letter].width = width
 
     # 保存时把活动页签摆回数据表 —— 否则用户打开模板看到的是说明页，
     # 而且他若直接在这个状态下保存，`wb.active` 就指向说明页了（见 _pick_sheet）

@@ -1,6 +1,7 @@
 from backend.app.admin.model.data_rule import DataRule as DataRule
 from backend.app.admin.model.data_scope import DataScope as DataScope
 from backend.app.admin.model.dept import Dept as Dept
+from backend.app.admin.model.export_job import ExportJob as ExportJob
 from backend.app.admin.model.file import File as File
 from backend.app.admin.model.file import FileRelation as FileRelation
 from backend.app.admin.model.login_log import LoginLog as LoginLog

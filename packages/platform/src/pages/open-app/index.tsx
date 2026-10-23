@@ -38,6 +38,7 @@ import { logFeatures as features } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { StatusPill, type Tone } from '../_shared/status'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
+import { useUrlColumnOrder } from '../_shared/use-column-order'
 import { useQuerySearch } from '../_shared/use-query-search'
 import {
   downloadOpenApiDoc,
@@ -101,6 +102,8 @@ export type OpenAppSearch = {
   status?: number
   f?: string
   hide?: string
+  /** 可移动列的顺序（和默认一样时不写），逗号分隔 */
+  cols?: string
 }
 
 function buildQuery(params: Record<string, unknown>, page: number, size: number): string {
@@ -125,7 +128,7 @@ export function OpenAppPage({
     (n: Partial<OpenAppSearch>) => onSearchChange?.({ ...search, ...n }),
     [onSearchChange, search]
   )
-  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, refreshKey: openAppKeys.all, keep: ['hide'] })
+  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, refreshKey: openAppKeys.all, keep: ['hide', 'cols'] })
 
   const listQuery = useQuery(openAppsQuery(buildQuery(q.params, page, size)))
   const { data, isFetching } = listQuery
@@ -296,16 +299,24 @@ export function OpenAppPage({
     [t]
   )
 
+  // 列顺序进 URL（同列显隐）—— 走 onSearchChange 而不是 patch：换列序不该清勾选、也不该跳回第一页
+  const [columnOrder, setColumnOrder] = useUrlColumnOrder(
+    search.cols,
+    React.useCallback((cols) => onSearchChange?.({ ...search, cols }), [onSearchChange, search]),
+    columns
+  )
+
   const table = useTable({
     features,
     data: rows,
     columns: columns as never,
-    state: { columnVisibility },
+    state: { columnVisibility, columnOrder },
     getRowId: (r: OpenApp) => r.id,
     manualPagination: true,
     rowCount: data?.total ?? 0,
     enableRowSelection: false,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
   })
 
   const hasFilter = countActive(q.applied, FIELDS) > 0

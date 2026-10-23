@@ -6,7 +6,22 @@
 
 `schema` / `exception` / `response` / `cache` / `i18n` / `pagination` /
 `security` 都在这里。鉴权与数据权限单独一册：
-[`security/AGENTS.md`](security/AGENTS.md)。
+[`security/AGENTS.md`](security/AGENTS.md)；导入导出框架单独一册：
+[`dataio/AGENTS.md`](dataio/AGENTS.md)。
+
+## 🔴 `t()` 的 `key` / `default` 是仅位置参数 —— 文案占位符叫 `{key}` 是很自然的事
+
+**症状**：新建一个和已有键名重复的参数配置，接口返回 **500** 而不是 409。
+
+**根因**：`t(self, key, default=None, **kwargs)` —— 文案「参数配置 {key} 已存在」的占位符
+恰好叫 `key`，调用处 `t('error.config.key_exists', key=obj.key)` 直接
+`TypeError: got multiple values for argument 'key'`。只在**撞重复**那一刻才走到这行，
+平时的请求一条都碰不到它，所以一直没人发现（`config_service.py` 里三处同样的写法）。
+写导入框架时 `t('error.import.key_exists', key=…)` 又踩了一次。
+
+**修法**：`t(self, key, default=None, /, **kwargs)`。一处改动修掉这一整类，调用点不用动。
+
+**实测证据**：`plugin/config/tests/test_config_conflict.py` —— 去掉 `/` 是 `TypeError`，加上是 409。
 
 ## 写入侧的字符串长度：靠模型列长度校验，不逐个写 `max_length`
 
@@ -82,7 +97,7 @@ dict-data / dict-type / notice / config），三个插件端点实测都给出�
 并且在 fixture 里前置断言「真的挂上了两个」—— 否则它会因为「没造出扇出」而假绿。
 
 **修法**：分页的 Select 只留 m2o 的 join（部门那种，不增加行数），
-m2m 的关联在分页**之后**按本页 ID 批量补一次（`user_service._attach_roles`，
+m2m 的关联在分页**之后**按本页 ID 批量补一次（`user_service.attach_roles`，
 一条查询，不是 N+1）。按关联筛选用 `id.in_(子查询)`，不要 join + `where 中间表.列 == 值`
 —— 后者会把 join 出来的关联行一起筛掉，结果每条的关联列表里只剩被筛的那一个。
 

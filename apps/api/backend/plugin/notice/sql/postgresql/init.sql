@@ -9,7 +9,8 @@ begin
     values
     ('新增', 'AddNotice', null, 0, null, 2, 'sys:notice:add', 1, 0, '', null, notice_menu_id, now(), null),
 ('修改', 'EditNotice', null, 0, null, 2, 'sys:notice:edit', 1, 0, '', null, notice_menu_id, now(), null),
-('删除', 'DeleteNotice', null, 0, null, 2, 'sys:notice:del', 1, 0, '', null, notice_menu_id, now(), null);
+('删除', 'DeleteNotice', null, 0, null, 2, 'sys:notice:del', 1, 0, '', null, notice_menu_id, now(), null),
+('导出', 'ExportNotice', null, 0, null, 2, 'sys:notice:export', 1, 0, '', null, notice_menu_id, now(), null);
 end $$;
 
 select setval(pg_get_serial_sequence('sys_menu', 'id'), coalesce(max(id), 0) + 1, true) from sys_menu;

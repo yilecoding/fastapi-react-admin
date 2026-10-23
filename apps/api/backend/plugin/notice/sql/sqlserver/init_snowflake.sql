@@ -5,7 +5,8 @@ INSERT INTO sys_menu (id, title, name, path, sort, icon, type, perms, status, di
 VALUES
 (2049629108257816577, N'新增', 'AddNotice', NULL, 0, NULL, 2, 'sys:notice:add', 1, 0, '', NULL, 2049629108257816576, GETDATE(), NULL),
 (2049629108257816578, N'修改', 'EditNotice', NULL, 0, NULL, 2, 'sys:notice:edit', 1, 0, '', NULL, 2049629108257816576, GETDATE(), NULL),
-(2049629108257816579, N'删除', 'DeleteNotice', NULL, 0, NULL, 2, 'sys:notice:del', 1, 0, '', NULL, 2049629108257816576, GETDATE(), NULL);
+(2049629108257816579, N'删除', 'DeleteNotice', NULL, 0, NULL, 2, 'sys:notice:del', 1, 0, '', NULL, 2049629108257816576, GETDATE(), NULL),
+(2049629108253622357, N'导出', 'ExportNotice', NULL, 0, NULL, 2, 'sys:notice:export', 1, 0, '', NULL, 2049629108257816576, GETDATE(), NULL);
 
 INSERT INTO sys_notice (id, title, type, status, content, created_time, updated_time)
 VALUES

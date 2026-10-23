@@ -9,7 +9,8 @@ insert into sys_menu (title, name, path, sort, icon, type, perms, status, displa
 values
 ('新增', 'AddNotice', null, 0, null, 2, 'sys:notice:add', 1, 0, '', null, @notice_menu_id, now(), null),
 ('修改', 'EditNotice', null, 0, null, 2, 'sys:notice:edit', 1, 0, '', null, @notice_menu_id, now(), null),
-('删除', 'DeleteNotice', null, 0, null, 2, 'sys:notice:del', 1, 0, '', null, @notice_menu_id, now(), null);
+('删除', 'DeleteNotice', null, 0, null, 2, 'sys:notice:del', 1, 0, '', null, @notice_menu_id, now(), null),
+('导出', 'ExportNotice', null, 0, null, 2, 'sys:notice:export', 1, 0, '', null, @notice_menu_id, now(), null);
 
 insert into sys_notice (id, title, type, status, content, created_time, updated_time)
 values (1, 'hahahahahaahahaha', 0, 1, '你好😄

@@ -90,12 +90,13 @@ test.describe("用户批量导入", () => {
     // 任意一条坏掉，另外两条都能把计数凑够
     const row = (n: number) => page.locator(`[data-testid="import-preview-row"][data-row-no="${n}"]`)
     await expect(row(4)).toContainText("用户名已注册")
-    await expect(row(6)).toContainText("在文件里重复了")
+    // 文件内重复报的是「和第几行重复」：用户要回 Excel 里两行对着看
+    await expect(row(6)).toContainText("和第 5 行重复")
     await expect(row(7)).toContainText("NO_SUCH_DEPT")
 
     await page.getByTestId("confirm-import").click()
     await expect(page.getByTestId("import-result")).toBeVisible()
-    await expect(page.getByTestId("import-result")).toContainText("成功 3 个")
+    await expect(page.getByTestId("import-result")).toContainText("新增 3 条")
     // 没有强制首次改密的机制，这句提示是唯一的告知渠道
     await expect(page.getByTestId("import-result")).toContainText("系统默认密码")
 
@@ -138,7 +139,7 @@ test.describe("用户批量导入", () => {
 
     await expect(page.getByTestId("import-preview-table")).toBeVisible()
     await page.getByTestId("confirm-import").click()
-    await expect(page.getByTestId("import-result")).toContainText("成功 1 个")
+    await expect(page.getByTestId("import-result")).toContainText("新增 1 条")
 
     // 同一个 token 再打一次：必须被拒（`api.post` 对非 200 信封会抛）
     await expect(

@@ -25,15 +25,19 @@ _API_ROOT = Path(__file__).resolve().parents[2]
 _LOCALE_DIR = _API_ROOT / 'backend' / 'locale'
 _BACKEND_DIR = _API_ROOT / 'backend'
 
-# 只关心业务消息用的两个命名空间；pydantic/response/success/messages 那几段
+# 只关心业务消息用的这几个命名空间；pydantic/response/success/messages 那几段
 # 各自的对称规则不一样（结构性原因见 zh-CN.yml / en-US.yml 顶部注释），
-# 不纳入这条通用检查。
-_CHECKED_NAMESPACES = ('error', 'file_type')
+# 不纳入这条通用检查。`export` 是导出文件里的表头和取值（#11）：后台导出按发起人的
+# 语言出文件，一边缺键，那个语言的人拿到的表头就是一串键名；`import` 是导入模板的
+# 说明页和错误报告，同理。列名、说明这类键是以字符串写在导入导出定义里的（不是
+# `t('...')` 调用），这里的正则抓不到 —— 它们由 `test_export.py` / `test_import.py`
+# 遍历登记表逐个核对
+_CHECKED_NAMESPACES = ('error', 'file_type', 'export', 'import')
 
 # 源码里引用 t() 键的调用形式：`t('error.xxx')` / `t("file_type.xxx")`，
 # 也覆盖带 kwargs 的调用（`t('error.xxx', foo=bar)`）。第二个参数如果是
 # 位置参数字符串（`t(key, default)`）不会被误伤，因为那类调用本仓库没有用到。
-_T_CALL_PATTERN = re.compile(r"\bt\(\s*(['\"])((?:error|file_type)\.[\w.]+)\1")
+_T_CALL_PATTERN = re.compile(r"\bt\(\s*(['\"])((?:error|file_type|export|import)\.[\w.]+)\1")
 
 
 def _flatten(d: dict, prefix: str = '') -> set[str]:

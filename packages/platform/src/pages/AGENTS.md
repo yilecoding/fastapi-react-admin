@@ -35,6 +35,7 @@ pages/xxx/
 | `_shared/settings-rows.tsx` | `SettingRow`（`inline` / `stacked`）· `SwitchRow` · `SegmentedControl` · `ColorSwatches` |
 | `_shared/login-log.ts` | `LoginLog` 类型 + `formatLocation`（内网 IP 后端返 `Reserved`）。两个调用方：登录日志页、个人中心的「最近登录」 |
 | `_shared/use-query-search.ts` | `QueryBar` ↔ URL 的胶水：从地址栏恢复条件 · 本地编辑 · 搜索时写回 URL + 拼接口入参 + **跳回第一页**。两个日志页 + 用户管理页在用，见 [查询区分册](../../../ui/src/components/query-bar/AGENTS.md) |
+| `_shared/data-io/` | 导出按钮 · 导入抽屉 · 两者的接口层。所有资源共用一份，见 [`data-io` 分册](_shared/data-io/AGENTS.md) |
 
 ⚠️ 这里**没有**「只读列表工厂」了。`_shared` 下那个 `createListPage(cfg)`
 删掉了 —— 它写好之后一直**零调用方**（两个日志页长出
@@ -234,29 +235,25 @@ const submitQuery = React.useCallback((v) => { setRowSelection({}); q.submit(v) 
 服务端**没有排序入参**（各 `crud_*.py` 固定 `select_order('id')`），
 所以表格一律不注册 `rowSortingFeature`。要做排序得先改后端。
 
-## 批量导入（用户页的「导入」抽屉）
+## 导入导出（#11 · v0.4）
 
-`pages/user/import-sheet.tsx`。两阶段：预览只校验不落库 + 一个存 Redis 的短期
-token；提交带 token、允许部分成功。后端那一侧见
-[`apps/api/backend/app/admin` 分册](../../../../apps/api/backend/app/admin/AGENTS.md)。
+`_shared/data-io/` 下三件：`ExportButton`（导出）· `ImportSheet`（导入抽屉）· `api.ts`。
+所有资源共用一份，页面只传接口前缀。哪些页接了、每一条坑和为什么，见
+[`data-io` 分册](_shared/data-io/AGENTS.md)。
 
-- 🔴 **上传用 `uploadFile()` 不是 `api.POST`**（`api-client/client.ts`）。它是
-  multipart，而且成败判定过 `resolveEnvelope` —— FBA 的 `fail()` 是
-  **HTTP 200 + `code: 400`**，只看 `res.ok` 会把被拒的上传当成功
-- 🔴 **模板下载不能做成 `<a href>`**：那个地址要 Authorization 头，裸链接带不上，
-  存下来的是 401 的 JSON，而文件管理器只会说「文件已损坏」（同文件页的下载那条）
-- 🔴 **`import_token` 是一次性的**，服务端在建号**之前**就删掉它。所以提交失败后
-  不能原地重试 —— 界面要把用户送回「重新选文件」，而不是留一个点了没反应的按钮
-- 🔴 **「未识别的表头」必须显示出来。** `phone` 拼成 `phone_number` 时整份文件照样
-  解析成功，只是那一列的数据**全丢了** —— 不说的话没有任何现象
-- ⚠️ **换同一个文件要先清 `input.value`。** 用户改完 Excel 再选**同一个文件**不会
-  触发 change 事件，表现成「点了没反应」，而文件确实变了
-- ⚠️ **抽屉宽度要写 `data-[side=right]:sm:max-w-3xl`**，裸 `sm:max-w-3xl` 无效
-  （`cn()` 是 tailwind-merge，只在同一变体作用域内消解冲突，基础类
-  `data-[side=right]:sm:max-w-sm` 会赢）。**这条踩过**：类在、宽度没变，
-  「校验」那一列被挤出视口 —— 错误信息在 DOM 里，文本断言全绿，
-  只有截图才看得出用户根本看不见。规则见
-  [`packages/ui` 分册](../../../ui/AGENTS.md) 的「为什么有些覆盖有效、有些无声失效」
+## 批量操作：哪类列表页该有（#11）
+
+原来是每个页面各自决定，于是「有的有、有的没有」说不出道理。按页面类型定：
+
+| 类型 | 页面 | 批量操作 |
+|---|---|---|
+| **业务数据**：扁平、会持续增长、后端有批量接口 | 用户 · 通知公告 · 字典项 · 文件 · 在线用户 | 行选中 + `BulkBar`（删除 / 下线）+ 「只导出选中的」 |
+| **审计记录** | 登录日志 · 操作日志 · 任务执行记录 · 开放接口日志 · AI 工具日志 | **只读**，不给勾选删除 —— 删单条审计记录等于篡改审计。按条件导出、按策略清空（`ClearLogsButton`） |
+| **树** | 部门 · 菜单 | 不做多选：选了父节点算不算选了子树，两种答案都会让人删错。逐个节点操作 |
+| **主从页左栏** | 角色 · 数据范围 · 字典类型 | 它是选择器不是数据表，不做多选 |
+| **系统配置** | 存储 · 模型供应商 · MCP · 开放应用 · 插件 · 定时任务 | 条数少，而且每一条删除都有自己的前置检查（默认存储、还有文件……），逐条操作 |
+
+新加列表页先对这张表归类；归不进去的，在这里加一行再动手。
 
 ## 主从页（左列表 / 右详情）
 

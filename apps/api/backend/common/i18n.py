@@ -1,6 +1,9 @@
 import glob
 import json
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +14,9 @@ from starlette_context.errors import ContextDoesNotExistError
 from backend.common.context import ctx
 from backend.core.conf import settings
 from backend.core.path_conf import LOCALE_DIR
+
+#: `use_language()` 设的语言。优先于请求上下文 —— 见那个方法的说明
+_language_override: ContextVar[str | None] = ContextVar('i18n_language_override', default=None)
 
 
 class I18n:
@@ -23,10 +29,35 @@ class I18n:
     @property
     def current_language(self) -> str:
         """获取当前请求的语言"""
+        override = _language_override.get()
+        if override:
+            return override
         try:
             return ctx.language
         except (AttributeError, LookupError, ContextDoesNotExistError):
             return settings.I18N_DEFAULT_LANGUAGE
+
+    @contextmanager
+    def use_language(self, language: str | None) -> Iterator[None]:
+        """在这段代码里按指定语言翻译，出去时还原。
+
+        给**请求上下文之外**、却要产出给某个人看的文案的代码用（Celery 里生成的导出文件、
+        给导出人发的站内消息）。那里没有 starlette-context，`current_language` 的 setter
+        会直接抛 `ContextDoesNotExistError`，而 getter 静默回落默认语言 —— 英文界面的人
+        拿到一份中文表头的文件，不报错。
+
+        🔴 和 `scoped_to_user` 同一个理由必须成对 set / reset：`celery_aio_pool` 把所有任务跑在
+        同一个事件循环里，设了不还原，下一个任务就顶着上一个任务的语言跑。
+
+        :param language: 语言代码；不认识的 / 空的回落默认语言
+        """
+        if not language or language not in self.locales:
+            language = settings.I18N_DEFAULT_LANGUAGE
+        token = _language_override.set(language)
+        try:
+            yield
+        finally:
+            _language_override.reset(token)
 
     @current_language.setter
     def current_language(self, language: str) -> None:
@@ -56,9 +87,14 @@ class I18n:
                     case 'yaml' | 'yml':
                         self.locales[lang] = yaml.safe_load(f.read())
 
-    def t(self, key: str, default: Any | None = None, **kwargs) -> str:
+    def t(self, key: str, default: Any | None = None, /, **kwargs) -> str:
         """
         翻译函数
+
+        🔴 `key` / `default` 是**仅位置参数**（`/`）：文案里的占位符叫 `{key}` 是很自然的事
+        （「参数配置 {key} 已存在」），而原来的签名下 `t('error.config.key_exists', key=obj.key)`
+        直接 `TypeError: got multiple values for argument 'key'` —— 报 409 的地方变成了 500，
+        而且只在**撞重复**那一刻才炸，平时的请求一条都碰不到它
 
         :param key: 目标文本键，支持点分隔，例如 'response.success'
         :param default: 目标语言文本不存在时的默认文本

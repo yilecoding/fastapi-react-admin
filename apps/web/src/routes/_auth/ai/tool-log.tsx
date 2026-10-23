@@ -14,6 +14,8 @@ const searchSchema = z.object({
   f: z.string().optional(),
   /** 被隐藏的列 id，逗号分隔 */
   hide: z.string().optional(),
+  /** 可移动列的顺序，逗号分隔（`pages/_shared/use-column-order.ts`）；默认顺序不写 */
+  cols: z.string().optional(),
 })
 
 export const Route = createFileRoute("/_auth/ai/tool-log")({

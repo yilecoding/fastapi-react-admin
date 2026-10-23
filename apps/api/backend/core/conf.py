@@ -207,6 +207,10 @@ class Settings(BaseSettings):
     ]
     CORS_EXPOSE_HEADERS: list[str] = [
         'X-Request-ID',
+        # 下载的文件名在这个头里（导出文件、导入模板、错误报告都是后端按当前语言起的名）。
+        # 前后端跨源时（开发期 8888 → 8088、桌面端 app://local）不列在这里，前端 JS 读到的是 null，
+        # 只能退回一个写死的名字 —— 和后端那份翻译各说各的
+        'Content-Disposition',
     ]
 
     # 中间件配置
@@ -308,6 +312,8 @@ class Settings(BaseSettings):
     # 实测一个 199 KB 的上传能声明出 200 MB 的解压体积 —— 只看上传大小完全无感
     TABLE_IMPORT_SIZE_MAX: int = 5 * 1024 * 1024  # 5 MB
     TABLE_IMPORT_UNCOMPRESSED_MAX: int = 100 * 1024 * 1024  # 100 MB
+    # zip 里最多多少个条目。正常 xlsx 是几十个，见 `excel_ops._verify_archive`
+    TABLE_IMPORT_MAX_ENTRIES: int = 1000
     TABLE_IMPORT_MAX_ROWS: int = 1000
 
     # 用户批量导入
@@ -324,8 +330,28 @@ class Settings(BaseSettings):
     # 用户拿默认密码能登录，但他自己去改密码时被「必须含字母」挡住，
     # 而这两件事看不出是同一个原因。导入接口每次都现校验一遍
     USER_IMPORT_DEFAULT_PASSWORD: str = ''
-    USER_IMPORT_REDIS_PREFIX: str = 'fba:user:import'
-    USER_IMPORT_EXPIRE_SECONDS: int = 60 * 10  # 10 分钟
+
+    # 导入（#11 · v0.4，`common/dataio/importing.py` + `app/admin/service/import_service.py`）
+    # 预览把结果存 Redis、换一个一次性令牌；提交凭令牌取回。错误报告挂在同一个令牌上，提交之后还能下
+    IMPORT_REDIS_PREFIX: str = 'fba:import'
+    IMPORT_EXPIRE_SECONDS: int = 60 * 30  # 30 分钟
+
+    # 导出（#11 · v0.4，`common/dataio/` + `app/admin/service/export_service.py`）
+    #
+    # 行数不超过 SYNC 的在请求里当场生成，点完就下载；超过的进 Celery，生成完发站内消息。
+    # **两条路都落一条导出记录**（`sys_export_job`），文件只有发起人自己能下载
+    EXPORT_SYNC_MAX_ROWS: int = 5000
+    # 单次上限。超过直接拒绝并说清楚「共 N 条，超过上限」—— 不静默截断（原来前端拼 CSV
+    # 到 4000 条就悄悄停了，文件照常下载）
+    EXPORT_MAX_ROWS: int = 200_000
+    # keyset 分批取数，一批多少行
+    EXPORT_BATCH_SIZE: int = 1000
+    # 文件保留多久。到期由 `maintenance.purge_expired_exports` 删掉文件、记录改成「已过期」
+    EXPORT_FILE_RETENTION_HOURS: int = 72
+    # 记录（不是文件）保留多久。过了连记录一起删 —— 谁导过什么，操作日志里另有一份
+    EXPORT_RECORD_RETENTION_DAYS: int = 90
+    # 同一个人同时「排队 / 生成中」的导出上限。导出是全表扫 + 写文件，没有上限就是一个拒绝服务入口
+    EXPORT_MAX_CONCURRENT_PER_USER: int = 3
 
     # 演示模式配置（上游 FBA 自带：只读锁定，非 GET 请求一律 403）。
     # 🔴 与 ENVIRONMENT=prod 互斥（见 check_production_settings），只适合

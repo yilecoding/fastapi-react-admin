@@ -15,6 +15,7 @@ import { BulkBar, RefreshButton, ResetButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
+import { useUrlColumnOrder } from '../_shared/use-column-order'
 import {
   allRolesQuery,
   deptTreeQuery,
@@ -29,9 +30,10 @@ import {
 import { COLUMN_LABELS, buildColumns } from './columns'
 import { features } from './table-features'
 import { UserFormSheet } from './form'
-import { UserImportSheet } from './import-sheet'
 import { UserSecuritySheet } from './security-sheet'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
+import { ExportButton } from '../_shared/data-io/export-button'
+import { ImportSheet } from '../_shared/data-io/import-sheet'
 
 /**
  * 用户管理 —— **三件套模板的样板页**。
@@ -58,6 +60,8 @@ export type UserPageSearch = {
   f?: string
   /** 被隐藏的列 id，逗号分隔 */
   hide?: string
+  /** 可移动列的顺序（和默认一样时不写），逗号分隔 */
+  cols?: string
 }
 
 export function UserPage({
@@ -161,7 +165,7 @@ export function UserPage({
    * ⚠️ 搜索/重置时要**清掉选中行**：分页在服务端，换了筛选条件之后留着的选中项
    * 已经不在可见行里了，批量删除会打到用户看不见的记录上（原来 `patch` 里做的那件事）。
    */
-  const q = useQuerySearch({ fields, search, onSearchChange, keep: ['hide'], refreshKey: userKeys.all })
+  const q = useQuerySearch({ fields, search, onSearchChange, keep: ['hide', 'cols'], refreshKey: userKeys.all })
   const submitQuery = React.useCallback(
     (v: Parameters<typeof q.submit>[0]) => {
       setRowSelection({})
@@ -206,19 +210,27 @@ export function UserPage({
     [handleEdit, t]
   )
 
+  // 列顺序进 URL（同列显隐）—— 走 onSearchChange 而不是 patch：换列序不该清勾选、也不该跳回第一页
+  const [columnOrder, setColumnOrder] = useUrlColumnOrder(
+    search.cols,
+    React.useCallback((cols) => onSearchChange?.({ ...search, cols }), [onSearchChange, search]),
+    columns
+  )
+
   const table = useTable({
     features,
     data: rows,
     // TanStack Table v9 的列定义数组在混用不同 TValue 时会形成联合类型，
     // 与 useTable 期望的 ColumnDef<..., unknown>[] 不兼容（库的类型方差限制）
     columns: columns as never,
-    state: { columnVisibility, rowSelection },
+    state: { columnVisibility, columnOrder, rowSelection },
     getRowId: (row) => row.id,
     // 分页/筛选都在服务端 —— 关掉客户端分页，否则会出现「只筛当前页」
     manualPagination: true,
     rowCount: total,
     enableRowSelection: (row) => !row.original.is_superuser,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
     onRowSelectionChange: setRowSelection,
   })
 
@@ -266,7 +278,7 @@ export function UserPage({
                       <IconPlus className="size-4" />
                       {t('新增用户')}
                     </Button>
-                    {/* 导入同样是 DependsSuperUser（`user.py` 那三条 import 路由），
+                    {/* 导入同样是 DependsSuperUser（`user.py` 那三条 import 路由，批量建号的影响面比单条大），
                         次要动作所以是 outline —— 一行里主动作只能有一个 */}
                     <Button
                       size="sm"
@@ -278,6 +290,14 @@ export function UserPage({
                       {t('导入')}
                     </Button>
                   </SuperOnly>
+                  <Can perm="sys:user:export">
+                    <ExportButton
+                      path="/api/v1/sys/users/export"
+                      filters={q.params}
+                      selectedIds={selectedIds}
+                      total={total}
+                    />
+                  </Can>
                   {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
                   <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
@@ -337,7 +357,18 @@ export function UserPage({
       </div>
 
       <UserFormSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} />
-      <UserImportSheet open={importOpen} onOpenChange={setImportOpen} />
+      <ImportSheet
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        base="/api/v1/sys/users/import"
+        title={t('导入用户')}
+        description={t('上传 xlsx 表格，先预览校验结果，确认后再创建。部门和角色填编码，不是名称。')}
+        // 说清楚密码从哪来 —— 模板里没有密码列，不写的话管理员会以为漏了一列
+        hint={t('导入的账号统一使用系统默认密码，请导入后通知本人尽快修改。')}
+        invalidate={userKeys.all}
+        previewKeys={['username', 'nickname', 'dept_code', 'role_codes']}
+        testId="user-import-sheet"
+      />
       <UserSecuritySheet
         open={securityId !== null}
         onOpenChange={(o) => !o && setSecurityId(null)}

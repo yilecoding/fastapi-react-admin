@@ -5,6 +5,7 @@ import uuid
 
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 from fastapi import UploadFile
 
@@ -130,6 +131,27 @@ def sanitize_display_name(filename: str) -> str:
     :return:
     """
     return _CONTROL_CHARS.sub('', filename)
+
+
+def content_disposition(name: str, disposition: str, *, fallback: str) -> str:
+    """
+    Content-Disposition 头。文件下载、预签名地址、导出文件下载共用这一份
+
+    :param name: 给用户看的文件名（可以带中文 / 空格）
+    :param disposition: `inline` / `attachment`
+    :param fallback: 名字里一个 ASCII 字符都不剩时的回退名
+    :return:
+    """
+    # 原名可能带中文/空格，裸塞进 filename= 会被 header 编码规则截断或乱码。
+    # RFC 6266 的两段式写法：ASCII 回退 + filename* 带 UTF-8
+    name = sanitize_display_name(name)
+    ascii_name = name.encode('ascii', 'ignore').decode() or fallback
+    # (issue #62) RFC 6266 的 filename="..." 是 quoted-string，`"`/`\` 必须转义，
+    # 否则原名里带引号会破坏这段 header 的语法。新上传的文件在 sanitize_display_name()
+    # 那一步已经挡掉了控制字符，这里再过一遍是独立的防线 —— 旧数据、或者以后
+    # 又长出一条没走 sanitize_display_name() 的写入路径（导出文件名就是一条），仍然兜得住
+    ascii_name = ascii_name.replace('\\', '\\\\').replace('"', '\\"')
+    return f'{disposition}; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(name, safe="")}'
 
 
 def get_file_ext(file: UploadFile) -> str:

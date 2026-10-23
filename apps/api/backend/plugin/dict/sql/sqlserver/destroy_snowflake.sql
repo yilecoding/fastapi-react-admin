@@ -1,4 +1,4 @@
-DELETE FROM sys_menu WHERE name IN ('AddDictType', 'EditDictType', 'DeleteDictType', 'AddDictData', 'EditDictData', 'DeleteDictData');
+DELETE FROM sys_menu WHERE name IN ('AddDictType', 'EditDictType', 'DeleteDictType', 'AddDictData', 'EditDictData', 'DeleteDictData', 'QueryDictType', 'QueryDictData', 'ExportDictData', 'ImportDictData');
 
 DELETE FROM sys_menu WHERE name = 'PluginDict';
 

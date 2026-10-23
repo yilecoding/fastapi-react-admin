@@ -187,12 +187,9 @@ Python 依赖归 `uv` 管（`pyproject.toml` + `uv.lock`），pnpm 不知道它�
 
 ## 用户批量导入
 
-`POST /sys/users/import/{preview,commit}` + 模板下载。两阶段（预览只校验不落库
-+ Redis 短期 token；提交允许部分成功），明文密码在整条链路上一次都不出现。
-
-🔴 **批量建号不要循环调 `user_service.create()`** —— 每行一次 bcrypt，实测 87 行
-把事件循环占住 16.7 秒。这条和另外六条在
-[`backend/app/admin` 分册](backend/app/admin/AGENTS.md)。
+通用导入框架的一个资源（框架见 [`backend/common/dataio` 分册](backend/common/dataio/AGENTS.md)），
+明文密码在整条链路上一次都不出现。🔴 **批量建号不要循环调 `user_service.create()`** ——
+每行一次 bcrypt，实测 87 行把事件循环占住 16.7 秒（这条和另外六条在 [`backend/app/admin` 分册](backend/app/admin/AGENTS.md)）。
 
 ## 操作日志的脱敏
 
@@ -495,6 +492,7 @@ async_db_session`"，定时任务/脚本/CLI 命令这类不经过 FastAPI 依�
 | 动公共层（校验 / 异常 / 缓存 / 分页） | [`backend/common` 分册](backend/common/AGENTS.md) |
 | admin 模块的测试笔记（动态配置 / prod 检查 / 上传） | [`app/admin/tests` 分册](backend/app/admin/tests/AGENTS.md) |
 | 解析上传的 xlsx | [`backend/utils` 分册](backend/utils/AGENTS.md) |
+| **给一个资源加导出 / 导入** · 公式注入 · 后台导出 · 部门导入查环 | [`backend/common/dataio` 分册](backend/common/dataio/AGENTS.md) |
 | 用户批量导入 / 批量建号的性能 · **`sys_menu` 删掉的那两列** | [`backend/app/admin` 分册](backend/app/admin/AGENTS.md) |
 | 操作日志脱敏 / 中间件 | [`backend/middleware` 分册](backend/middleware/AGENTS.md) |
 | 能力开放 / 开放接口 / AK·SK 签名（对接方文档是同目录 `README.md`） | [`backend/plugin/open` 分册](backend/plugin/open/AGENTS.md) |

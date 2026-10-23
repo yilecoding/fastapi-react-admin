@@ -47,6 +47,7 @@ error:
   demo:
     forbidden: 演示环境下禁止执行此操作
   dept:
+    cannot_be_own_descendant: 不能把部门挂到它自己的下级部门下面
     cannot_be_own_parent: 禁止关联自身为父级
     code_exists: 部门编码已存在
     duplicate_name_in_level: 同级下已存在同名部门
@@ -62,6 +63,23 @@ error:
     type_not_found: 字典类型不存在
   email:
     send_failed: 邮件发送失败，请稍后重试或联系管理员
+  export:
+    bad_filter: 筛选条件 {field} 不合法（导出的筛选参数要和列表接口一致）
+    empty: 当前条件下没有数据，不用导出
+    expired: 这个文件已过保留期被删除，请重新导出
+    file_missing: 导出文件读不到了（所在存储可能已不可用），请重新导出
+    not_found: 导出记录不存在
+    not_ready: 文件还没生成好
+    permission_revoked: 你已经没有这项导出权限，导出已取消
+    queue_unavailable: 后台任务队列不可用，这次导出没能排上队，请稍后重试
+    resource_unavailable: 这类数据现在不能导出（对应的功能可能已卸载）
+    still_running: 导出还在进行中，结束后才能删除
+    storage_failed: 导出文件保存失败：{reason}
+    timeout: 导出超时未完成，已终止。请重试，或缩小筛选范围
+    too_many_rows: 共 {total} 条，超过单次导出上限 {limit} 条，请缩小筛选范围后再导出
+    too_many_running: 你已有 {limit} 个导出在进行中，请等它们完成后再导出
+    unexpected: 导出时发生了意外错误，详情见服务端日志
+    user_unavailable: 发起导出的账号已停用或不存在，导出已取消
   file:
     empty: 文件是空的
     invalid_filename: 非法的文件名
@@ -80,12 +98,28 @@ error:
     upload_finalizing: 正在合并分片，请稍候
     upload_session_not_found: 上传会话不存在或已过期，请重新上传
   import:
+    bad_choice: '{column}：只能填 {allowed}'
+    bad_email: 不是有效的邮箱地址
+    bad_format: 格式不对，填法见模板的「说明」页
     default_password_unset: 系统未配置导入默认密码（USER_IMPORT_DEFAULT_PASSWORD），批量导入已关闭
     dept_code_not_found: 部门编码 {code} 不存在
+    dict_type_not_found: 字典类型编码 {code} 不存在
     duplicated_email: 邮箱 {value} 在文件里重复了，第 {row_no} 行已经用过
-    duplicated_username: 用户名 {value} 在文件里重复了，第 {row_no} 行已经用过
-    nothing_to_create: 没有可创建的行，请检查排除项
+    duplicated_in_file: 和第 {row_no} 行重复
+    duplicated_name_in_level: 同一个上级下已经有同名部门（第 {row_no} 行）
+    key_exists: '{key} 已存在（当前是「只新增」模式）'
+    key_not_found: '{key} 不存在（当前是「只更新」模式）'
+    leader_not_found: 负责人 {username} 不存在或已停用
+    mode_unsupported: 这类数据不支持这种导入模式
+    not_an_integer: '{column}：要填整数'
+    nothing_to_commit: 没有可导入的行，请检查排除项
+    parent_cycle: 上级部门引用成环：{codes}
+    parent_not_found: 上级部门 {code} 不存在，或你没有权限在它下面建部门
+    parent_row_failed: 上级部门 {code} 没有导入成功
+    parent_row_invalid: 上级部门 {code} 那一行有问题，这一行也导不了
+    report_expired: 错误报告已过期，请重新上传文件预览
     role_code_not_found: 角色编码 {code} 不存在
+    row_unexpected: 这一行没有写进去，详情见服务端日志
     token_expired: 导入令牌已失效，请重新上传文件预览
   language_not_found: 当前语言包未初始化或不存在
   menu:
@@ -189,6 +223,7 @@ error:
     encrypt_key_invalid: STORAGE_ENCRYPT_SECRET_KEY 不是合法的十六进制密钥（需 32 字节 / 64 位十六进制）
     encrypt_key_unset: '未配置 STORAGE_ENCRYPT_SECRET_KEY，无法安全保存对象存储的密钥。生成方式：python -c "import os;print(os.urandom(32).hex())"，写入 .env 后重启服务'
     forbidden_endpoint: 端点指向链路本地 / 云主机元数据地址，已拒绝
+    has_exports: 存储里还有 {count} 个未过期的导出文件，它们会在 {hours} 小时内自动清理，清理之后才能删除
     has_files: 存储下还有 {count} 个文件，不能删除
     invalid_endpoint: 端点地址不合法，须为 http(s)://主机[:端口]，不能带账号、查询串
     local_root_invalid: 本地存储的根目录须为绝对路径，且不能放在静态资源目录下
@@ -214,6 +249,7 @@ error:
     not_xlsx: 只支持 xlsx 格式，当前是 {file_ext}
     sheet_not_found: 找不到名为 {sheet} 的工作表
     size_exceeded: 表格文件超出最大限制 {size_mb} MB
+    too_many_entries: 文件内部结构异常（压缩包条目超过 {limit} 个），已拒绝解析。请用 Excel 重新另存后上传
     too_many_rows: 单次最多导入 {max_rows} 行，请拆分后分批上传
   task:
     deadline_conflict: 截止时间与截止秒数只能设置一个
@@ -280,15 +316,137 @@ file_type:
   image: 图片
   video: 视频
 
-import:
-  # 导入模板 README 页里的列说明
+export:
+  # 导出文件里的表头、取值、「导出信息」页（`common/dataio/` + `app/admin/dataio.py`）。
+  # 🔴 两种语言的键必须一一对应：后台导出按发起人的语言出文件，缺键时表头就是一串键名
+  bool_no: 否
+  bool_yes: 是
+  cell_truncated: …（超出单元格 32,767 字符上限，已截断）
+  list_separator: '、'
   column:
-    dept_code: 部门编码（必填，例如 DEPT_0001）
-    email: 邮箱（可选，需全局唯一）
-    nickname: 昵称（可选，留空则与用户名相同）
-    phone: 手机号（可选，11 位；请把该列设置为「文本」格式）
-    role_codes: 角色编码（可选，多个用逗号分隔，例如 ROLE_0001,ROLE_0002）
-    username: 用户名（必填，需全局唯一）
+    browser: 浏览器
+    color: 颜色
+    content_text: 内容（纯文本）
+    cost_ms: 耗时（毫秒）
+    created_time: 创建时间
+    dept_code: 部门编码
+    dept_id: 部门 ID
+    dept_name: 部门名称
+    device: 设备
+    dict_data_id: 字典数据 ID
+    dict_label: 标签
+    dict_type_code: 字典类型编码
+    dict_value: 键值
+    email: 邮箱
+    ip: IP 地址
+    is_staff: 后台管理
+    is_superuser: 超级管理员
+    join_time: 注册时间
+    last_login_time: 最近登录
+    leader_username: 负责人用户名
+    leader: 负责人
+    location: 地点
+    login_account: 登录账号
+    login_time: 登录时间
+    message: 说明
+    method: 请求方法
+    nickname: 昵称
+    notice_id: 公告 ID
+    notice_title: 标题
+    notice_type: 类型
+    opera_time: 操作时间
+    opera_title: 操作内容
+    operator: 操作人
+    os: 终端系统
+    parent_code: 上级部门编码
+    parent_name: 上级部门
+    path: 接口
+    phone: 手机号
+    remark: 备注
+    result: 结果
+    role_codes: 角色编码
+    role_names: 角色
+    sort: 排序
+    status: 状态
+    status_code: 状态码
+    trace_id: Trace ID
+    updated_time: 更新时间
+    user_id: 用户 ID
+    user_uuid: 用户 UUID
+    username: 用户名
+  filter:
+    dept: 部门 ID
+    dict_type: 字典类型 ID
+    end_time: 时间止
+    role: 角色 ID
+    start_time: 时间起
+  info:
+    exported_at: 导出时间
+    exporter: 导出人
+    filters: 筛选条件
+    no_filter: 无（全部数据）
+    resource: 导出内容
+    rows: 行数
+    selected_rows: 只导出了选中的 {n} 行
+    sheet: 导出信息
+    timezone_note: 时间说明
+    timezone_value: 表里所有时间都按 {tz} 显示
+  notify:
+    done_content: 共 {rows} 行（{file}）。到「个人中心 → 导出记录」下载，文件保留期满后会自动删除。
+    done_title: 导出完成：{title}
+    failed_title: 导出失败：{title}
+  resource:
+    dept: 部门列表
+    dict_data: 字典数据
+    login_log: 登录日志
+    notice: 通知公告
+    opera_log: 操作日志
+    user: 用户列表
+  value:
+    announcement: 公告
+    disabled: 停用
+    enabled: 正常
+    failed: 失败
+    hidden: 隐藏
+    notice: 通知
+    shown: 显示
+    succeeded: 成功
+
+import:
+  # 导入模板、错误报告、说明页（`common/dataio/importing.py` + `app/admin/service/import_service.py`）。
+  # 两种语言的键要一一对应：模板和错误报告按当前语言出
+  cell_error: '{column}：{msg}'
+  error_separator: ；
+  note:
+    dept_code: 必填，部门编码（不是名称），例如 HQ
+    dept_code_key: 必填，全局唯一，按它判断新增还是更新（2–32 位，大写字母开头，只能有大写字母、数字、下划线）
+    dept_name: 新建时必填，同一个上级下不能重名；更新时留空表示不改名
+    dict_label: 必填，同一个字典类型下唯一，按「类型 + 标签」判断新增还是更新
+    dict_type_code: 必填，字典类型编码（不是名称）
+    dict_value: 新建时必填；更新时留空表示不改
+    email: 可选，全局唯一
+    leader: 可选，负责人的用户名（不是昵称）
+    nickname: 可选，留空则与用户名相同
+    parent_code: 可选，留空是顶级部门。可以填库里已有的部门，也可以填同一份文件里的另一行
+    phone: 可选，11 位手机号。请把这一列设成「文本」格式
+    role_codes: 可选，角色编码，多个用逗号分隔，例如 MANAGER,STAFF
+    update_keeps_blank: 更新已有数据时，空白单元格表示保持原值，不会把原值清空
+    user_default_password: 导入的账号统一使用系统默认密码，请导入后通知本人尽快修改
+    username: 必填，全局唯一
+  readme:
+    column: 列名
+    data_sheet: 数据
+    invalid_hint: 这个值不在下拉选项里，确定要填它吗？
+    note: 说明
+    options: 可选值
+    required: 必填
+    sheet: 说明
+  report:
+    errors: 错误原因
+    file_name: '{resource}导入错误报告_{stamp}.xlsx'
+    row_no: 原行号
+    sheet: 错误报告
+  template_name: '{resource}导入模板.xlsx'
 
 pydantic:
   # 自定义验证错误信息，参考：

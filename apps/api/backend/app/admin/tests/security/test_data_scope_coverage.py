@@ -46,6 +46,10 @@ EXEMPT: dict[str, str] = {
     'CRUDAiMcpClient': 'MCP 凭据是系统级配置（同模型供应商），且网关鉴权时还没有当前用户；靠 ai:mcp:* 权限码',
     'CRUDOpenApp': '能力开放应用是系统级配置（同 MCP 凭据），开放接口验签时没有当前用户；靠 open:app:* 权限码',
     'CRUDOpenApiLog': '调用日志是系统级审计记录（同操作日志）；靠 open:log:list 权限码',
+    'CRUDExportJob': (
+        '导出记录按 created_by == 当前用户强制过滤（同收件箱），接口只挂登录；'
+        '再叠部门维度会让受限用户连自己的导出都看不到'
+    ),
 }
 
 

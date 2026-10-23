@@ -14,6 +14,7 @@ import re
 import zipfile
 
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -24,6 +25,7 @@ from backend.common.exception import errors
 from backend.core.conf import settings
 from backend.utils.excel_ops import (
     TableColumn,
+    TemplateColumn,
     _CellError,
     _normalize_value,
     build_template,
@@ -398,10 +400,30 @@ def test_a_good_file_passes_every_gate():
 # --------------------------------------------------------------------------- 模板
 
 
+_README_HEADER = ('列名', '必填', '说明', '可选值')
+
+
+def _template(columns: list[TemplateColumn] | None = None, **kwargs: Any) -> bytes:
+    """表头直接用 key，这样解析时拿 `COLUMNS` 就认得（真实模板的表头是翻译过的列名，那条在接口测试里）"""
+    return build_template(
+        columns
+        or [
+            TemplateColumn(header='username', required=True, note='登录名，必填'),
+            TemplateColumn(header='phone'),
+            TemplateColumn(header='dept_code', required=True, options=('HQ', 'RD')),
+        ],
+        readme_header=_README_HEADER,
+        invalid_hint='不在下拉选项里',
+        required_mark='是',
+        sheet_title='data',
+        readme_title='README',
+        **kwargs,
+    )
+
+
 def test_template_round_trips_through_the_parser():
     """生成的模板必须能被自己的解析器读回来 —— 两边分叉是无声的"""
-    template = build_template(COLUMNS, notes={'username': '登录名，必填'})
-    wb_bytes = _fill(template, [['zhangsan', '13800138000', 'DEPT_0001']])
+    wb_bytes = _fill(_template(), [['zhangsan', '13800138000', 'HQ']])
     assert values_of(wb_bytes)[0]['username'] == 'zhangsan'
 
 
@@ -409,16 +431,69 @@ def test_template_leaves_the_data_sheet_active():
     """说明页在第二个表。如果模板保存时停在说明页，用户随手另存就会踩上面那条坑"""
     from openpyxl import load_workbook
 
-    wb = load_workbook(io.BytesIO(build_template(COLUMNS)))
+    wb = load_workbook(io.BytesIO(_template()))
     assert wb.active.title == wb.worksheets[0].title == 'data'
 
 
 def test_template_carries_the_notes_on_a_second_sheet():
     from openpyxl import load_workbook
 
-    wb = load_workbook(io.BytesIO(build_template(COLUMNS, notes={'username': '登录名，必填'})))
+    wb = load_workbook(io.BytesIO(_template(extra_notes=('导入的账号用默认密码',))))
     assert wb.sheetnames == ['data', 'README']
-    assert '登录名，必填' in [row[2] for row in wb['README'].iter_rows(min_row=2, values_only=True)]
+    rows = list(wb['README'].iter_rows(values_only=True))
+    assert rows[0] == _README_HEADER
+    assert rows[1][:3] == ('username', '是', '登录名，必填')
+    assert rows[3][3] == 'HQ, RD'
+    assert rows[-1][0] == '导入的账号用默认密码'
+
+
+def _validations(raw: bytes) -> list[tuple[str, str]]:
+    from openpyxl import load_workbook
+
+    ws = load_workbook(io.BytesIO(raw)).worksheets[0]
+    return [(str(dv.sqref), dv.formula1) for dv in ws.data_validations.dataValidation]
+
+
+def test_short_option_lists_are_inline_dropdowns():
+    [(where, formula)] = _validations(_template())
+    assert where.startswith('C2:')
+    assert formula == '"HQ,RD"'
+
+
+def test_long_or_comma_option_lists_move_to_a_hidden_sheet():
+    """Excel 的内联列表最多 255 个字符，超了**打不开**（不是截断）；选项里带逗号会被拆成两个选项"""
+    from openpyxl import load_workbook
+
+    many = tuple(f'DEPT_{i:04d}' for i in range(60))  # 60 × 10 字符，远超 255
+    raw = _template([TemplateColumn(header='dept_code', options=many), TemplateColumn(header='x', options=('a,b',))])
+    [(_, first), (_, second)] = _validations(raw)
+    assert first == "'_options'!$A$1:$A$60"
+    assert second == "'_options'!$B$1:$B$1"
+    hidden = load_workbook(io.BytesIO(raw))['_options']
+    assert hidden.sheet_state == 'hidden'
+    assert hidden['A60'].value == 'DEPT_0059'
+    assert hidden['B1'].value == 'a,b'
+
+
+def test_multi_value_columns_list_options_without_a_dropdown():
+    """一格填多个值的列（`A,B`）做成下拉的话，手填两个会被 Excel 弹「不在选项里」"""
+    from openpyxl import load_workbook
+
+    raw = _template([TemplateColumn(header='role_codes', options=('ADMIN', 'STAFF'), dropdown=False)])
+    assert _validations(raw) == []
+    readme = list(load_workbook(io.BytesIO(raw))['README'].iter_rows(values_only=True))
+    assert readme[1][3] == 'ADMIN, STAFF'
+
+
+def test_template_text_from_the_database_is_never_a_formula():
+    """🔴 说明页的「可选值」来自库里（字典类型编码是自由文本）。openpyxl 见到 `=` 开头就写成公式，
+    谁建一个 `=HYPERLINK(...)` 编码，下载模板的人一打开就在执行它"""
+    payload = '=HYPERLINK("http://evil.example","x")'
+    raw = _template([TemplateColumn(header=payload, note=payload, options=(payload,), dropdown=False)])
+    with zipfile.ZipFile(io.BytesIO(raw)) as zf:
+        sheets = [zf.read(name).decode() for name in zf.namelist() if name.startswith('xl/worksheets/sheet')]
+    assert len(sheets) == 2  # 先断言「有」：数据表和说明表都在
+    assert all('<f>' not in xml for xml in sheets)
 
 
 def _fill(template: bytes, rows: list[list]) -> bytes:

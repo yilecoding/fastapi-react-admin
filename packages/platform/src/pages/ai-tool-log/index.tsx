@@ -14,6 +14,7 @@ import { logFeatures as features } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { StatusPill } from '../_shared/status'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
+import { useUrlColumnOrder } from '../_shared/use-column-order'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { INVOCATION_STATUS, toolLogKeys, toolLogsQuery, type ToolInvocation } from './api'
 
@@ -68,6 +69,8 @@ export type AiToolLogSearch = {
   f?: string
   /** 被隐藏的列 id，逗号分隔 */
   hide?: string
+  /** 可移动列的顺序（和默认一样时不写），逗号分隔 */
+  cols?: string
 }
 
 function buildQuery(params: Record<string, unknown>, page: number | undefined, size: number | undefined): string {
@@ -111,7 +114,7 @@ export function AiToolLogPage({
     search,
     onSearchChange,
     refreshKey: toolLogKeys.all,
-    keep: ['hide'],
+    keep: ['hide', 'cols'],
   })
 
   const qs = buildQuery(q.params, search.page, search.size)
@@ -184,11 +187,18 @@ export function AiToolLogPage({
     [page, size, t],
   )
 
+  // 列顺序进 URL（同列显隐）—— 走 onSearchChange 而不是 patch：换列序不该清勾选、也不该跳回第一页
+  const [columnOrder, setColumnOrder] = useUrlColumnOrder(
+    search.cols,
+    React.useCallback((cols) => onSearchChange?.({ ...search, cols }), [onSearchChange, search]),
+    columns
+  )
+
   const table = useTable({
     features,
     data: rows,
     columns: columns as never,
-    state: { columnVisibility },
+    state: { columnVisibility, columnOrder },
     getRowId: (r: ToolInvocation) => r.id,
     manualPagination: true,
     rowCount: data?.total ?? 0,
@@ -196,6 +206,7 @@ export function AiToolLogPage({
     // 分页条上那句「已选 N 项」会永远显示 0）
     enableRowSelection: false,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
   })
 
   const hasFilter = countActive(q.applied, FIELDS) > 0

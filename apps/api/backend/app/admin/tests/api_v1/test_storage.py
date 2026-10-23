@@ -31,7 +31,7 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 import pytest
 
-from sqlalchemy import delete
+from sqlalchemy import delete, text
 from starlette.testclient import TestClient
 
 from backend.app.admin.model import File, Storage
@@ -623,6 +623,39 @@ def test_storage_with_files_cannot_be_deleted(
     # 彻底删除之后才放行
     client.request('DELETE', f'{FILES}/recycle', headers=token_headers, json={'pks': [data['id']]})
     assert client.delete(f'{STORAGES}/{pk}', headers=token_headers).status_code == 200
+
+
+def test_storage_with_live_exports_cannot_be_deleted(
+    client: TestClient, token_headers: dict[str, str], s3_endpoint: str, bucket
+) -> None:
+    """🔴 导出文件也落在存储里，但不进 `sys_file` —— 上面那条「有文件不能删」看不见它们。
+    删了存储，导出记录上的「下载」就全是 404，过期清理也找不到存储去删对象"""
+    pk = _create_s3(client, token_headers, s3_endpoint)
+    client.put(f'{STORAGES}/default', headers=token_headers, json={'storage_id': pk})
+    job = client.post('/sys/users/export', headers=token_headers, json={}).json()['data']
+    client.put(f'{STORAGES}/default', headers=token_headers, json={'storage_id': None})
+
+    async def _job_sql(statement: str) -> None:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(statement), {'pk': int(job['id'])})
+        finally:
+            await engine.dispose()
+
+    try:
+        # 先断言「有」：导出确实落在了这个存储里（否则「删不掉」可能是别的原因）
+        assert job['status'] == 2, job
+        assert any(obj.key.endswith(f'{job["id"]}.xlsx') for obj in bucket.objects.all())
+        resp = client.delete(f'{STORAGES}/{pk}', headers=token_headers).json()
+        assert resp['code'] != 200
+        assert '导出' in resp['msg'], resp['msg']
+
+        # 过期清理之后（状态变成「已过期」、对象已删）才放行
+        asyncio.run(_job_sql('UPDATE sys_export_job SET status = 4 WHERE id = :pk'))
+        assert client.delete(f'{STORAGES}/{pk}', headers=token_headers).json()['code'] == 200
+    finally:
+        asyncio.run(_job_sql('DELETE FROM sys_export_job WHERE id = :pk'))
 
 
 def test_disabled_storage_still_serves_its_files(

@@ -1,4 +1,3 @@
-
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.common.model import Base, UniversalStr, UniversalText, id_key

@@ -3,6 +3,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.admin.crud.crud_export_job import export_job_dao
 from backend.app.admin.crud.crud_file import file_dao
 from backend.app.admin.crud.crud_storage import storage_dao
 from backend.app.admin.model import File, Storage
@@ -165,6 +166,14 @@ class StorageService:
             # 🔴 删了存储，挂在它上面的文件就全读不到了 —— 而且是在别人打开时才 404。
             # 回收站里的也算：对象还在这个存储里，删了存储就永远还原不回来
             raise errors.RequestError(msg=t('error.storage.has_files', count=active + recycled))
+        # 导出文件也在这个存储里，但它们不进 `sys_file` —— 上面那道检查看不见。删了存储，导出记录上的
+        # 「下载」就全是 404，过期清理也找不到存储去删对象（桶里永远留一份）。它们最多留
+        # `EXPORT_FILE_RETENTION_HOURS`，等清理掉再删
+        exports = await export_job_dao.count_live_on_storage(db, pk)
+        if exports:
+            raise errors.RequestError(
+                msg=t('error.storage.has_exports', count=exports, hours=settings.EXPORT_FILE_RETENTION_HOURS)
+            )
         return await storage_dao.delete(db, pk)
 
     @staticmethod

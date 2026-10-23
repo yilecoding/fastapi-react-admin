@@ -3,15 +3,15 @@ import { z } from "zod"
 
 const searchSchema = z.object({
   /**
-   * 当前面板。前两个是账号相关，后四个来自偏好面板
-   * （`packages/platform/src/pages/_shared/preferences-panel.tsx`）。
+   * 当前面板。前三个是账号相关（`exports` 是后台导出完成的站内消息链过来的），
+   * 后四个来自偏好面板（`packages/platform/src/pages/_shared/preferences-panel.tsx`）。
    *
    * ⚠️ 新增偏好面板时这个枚举要一起加，否则链接会被 zod 挡掉、静默回落到 basic。
    * 原来的 `tab` 参数（basic/security/preferences）已删除 —— 那一层页签没了，
    * 不做兼容（见 CLAUDE.md「还没发版」）。
    */
   section: z
-    .enum(["basic", "security", "theme", "layout", "tabs", "reset"])
+    .enum(["basic", "security", "exports", "theme", "layout", "tabs", "reset"])
     .optional(),
 })
 
