@@ -90,6 +90,20 @@ class TestToolVisibility:
         # 不要求业务权限的工具对任何有菜单的用户都可见
         assert 'system_health_check' in visible
 
+    def test_every_tool_perm_is_a_guarded_api_code_in_the_seed(self) -> None:
+        """🔴 工具的权限码 = 界面上同一个操作的接口权限码（`test_permission_codes.py` 三方对账的第四方）
+
+        - 不是后端守卫过的码：工具自己发明了一个权限，和接口的门槛对不上（界面上做不了的，换成 AI 就能做，或者反过来）
+        - 种子菜单里没有：只有超管看得见这个工具，别人怎么授权都调不到，而清单里只是「少了一个工具」
+        """
+        from backend.app.admin.tests.security.test_permission_codes import _backend_codes, _seed_codes
+
+        perms = {spec.name: spec.perm for spec in all_tools() if spec.perm}
+        assert len(perms) >= 10, f'只扫到 {len(perms)} 个带权限码的工具，注册表可能没加载'
+        backend, seed = _backend_codes(), _seed_codes()
+        bad = {name: perm for name, perm in perms.items() if perm not in backend or perm not in seed}
+        assert not bad, f'这些工具的权限码不是「后端守卫过、种子里也有」的：{bad}'
+
     def test_superuser_sees_every_tool_in_enabled_domains(self) -> None:
         from backend.core.conf import settings
         from backend.plugin.ai.core.dispatcher import tool_dispatcher

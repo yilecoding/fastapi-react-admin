@@ -101,7 +101,21 @@ class RoleService:
         return scope_ids
 
     @staticmethod
-    async def create(*, db: AsyncSession, obj: CreateRoleParam) -> None:
+    async def check_create(*, db: AsyncSession, obj: CreateRoleParam) -> None:
+        """
+        创建前的业务校验（只读）。`create` 和 AI 工具的预演共用这一份，
+        不要在别处另写一套 —— 两份校验迟早有一份漏掉新加的规则
+
+        :param db: 数据库会话
+        :param obj: 角色创建参数
+        :return:
+        """
+        if await role_dao.get_by_code(db, obj.code):
+            raise errors.ConflictError(msg=t('error.role.code_exists'))
+        if await role_dao.get_by_name(db, obj.name):
+            raise errors.ConflictError(msg=t('error.role.already_exists'))
+
+    async def create(self, *, db: AsyncSession, obj: CreateRoleParam) -> None:
         """
         创建角色
 
@@ -110,14 +124,29 @@ class RoleService:
         :return:
         """
 
-        if await role_dao.get_by_code(db, obj.code):
-            raise errors.ConflictError(msg=t('error.role.code_exists'))
-        if await role_dao.get_by_name(db, obj.name):
-            raise errors.ConflictError(msg=t('error.role.already_exists'))
+        await self.check_create(db=db, obj=obj)
         await role_dao.create(db, obj)
 
     @staticmethod
-    async def update(*, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateRoleParam) -> int:
+    async def check_update(*, db: AsyncSession, pk: int, obj: UpdateRoleParam) -> Role:
+        """
+        更新前的业务校验（只读）。`update` 和 AI 工具的预演共用这一份
+
+        :param db: 数据库会话
+        :param pk: 角色 ID
+        :param obj: 角色更新参数
+        :return: 改之前的角色
+        """
+        role = await role_dao.get(db, pk)
+        if not role:
+            raise errors.NotFoundError(msg=t('error.role.not_found'))
+        if role.name != obj.name and await role_dao.get_by_name(db, obj.name):
+            raise errors.ConflictError(msg=t('error.role.already_exists'))
+        return role
+
+    async def update(
+        self, *, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateRoleParam
+    ) -> int:
         """
         更新角色
 
@@ -128,18 +157,32 @@ class RoleService:
         :return:
         """
 
-        role = await role_dao.get(db, pk)
-        if not role:
-            raise errors.NotFoundError(msg=t('error.role.not_found'))
-        if role.name != obj.name and await role_dao.get_by_name(db, obj.name):
-            raise errors.ConflictError(msg=t('error.role.already_exists'))
+        await self.check_update(db=db, pk=pk, obj=obj)
         count = await role_dao.update(db, pk, obj)
         await user_cache_manager.clear_by_role_id(db, background_tasks, [pk])
         return count
 
     @staticmethod
+    async def check_role_menu(*, db: AsyncSession, pk: int, menu_ids: UpdateRoleMenuParam) -> Role:
+        """
+        改角色菜单前的业务校验（只读）。`update_role_menu` 和 AI 工具的预演共用这一份
+
+        :param db: 数据库会话
+        :param pk: 角色 ID
+        :param menu_ids: 菜单 ID 列表
+        :return: 角色
+        """
+        role = await role_dao.get(db, pk)
+        if not role:
+            raise errors.NotFoundError(msg=t('error.role.not_found'))
+        if menu_ids.menus:
+            menus = await menu_dao.get_all_by_ids(db, list(set(menu_ids.menus)))
+            if {menu.id for menu in menus} != set(menu_ids.menus):
+                raise errors.NotFoundError(msg=t('error.menu.not_found'))
+        return role
+
     async def update_role_menu(
-        *, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, menu_ids: UpdateRoleMenuParam
+        self, *, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, menu_ids: UpdateRoleMenuParam
     ) -> int:
         """
         更新角色菜单
@@ -151,13 +194,7 @@ class RoleService:
         :return:
         """
 
-        role = await role_dao.get(db, pk)
-        if not role:
-            raise errors.NotFoundError(msg=t('error.role.not_found'))
-        if menu_ids.menus:
-            menus = await menu_dao.get_all_by_ids(db, list(set(menu_ids.menus)))
-            if {menu.id for menu in menus} != set(menu_ids.menus):
-                raise errors.NotFoundError(msg=t('error.menu.not_found'))
+        await self.check_role_menu(db=db, pk=pk, menu_ids=menu_ids)
         count = await role_dao.update_menus(db, pk, menu_ids)
         await user_cache_manager.clear_by_role_id(db, background_tasks, [pk])
         return count
