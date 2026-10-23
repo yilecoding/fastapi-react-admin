@@ -23,7 +23,6 @@ export type User = {
   status: number
   is_superuser: boolean
   is_staff: boolean
-  is_multi_login: boolean
   dept_id: string | null
   dept: UserDept
   roles: UserRole[]
@@ -189,7 +188,7 @@ export function flattenDepts(tree: Dept[], depth = 0): Array<{ id: string; label
  * ⚠️ 挂的是 `DependsSuperUser`，不是权限码；且服务端明确**禁止修改自身权限**
  * （`pk == request.user.id` 直接 403）。
  */
-export type UserPermissionType = 'superuser' | 'staff' | 'status' | 'multi_login'
+export type UserPermissionType = 'superuser' | 'staff' | 'status'
 
 export function useToggleUserPermission() {
   const qc = useQueryClient()

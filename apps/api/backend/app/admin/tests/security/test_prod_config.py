@@ -47,9 +47,11 @@ class _FakeSettings:
         # 雪花节点的心跳 / TTL —— 默认就是 conf.py 里那对合格值
         self.SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS = 30
         self.SNOWFLAKE_NODE_TTL_SECONDS = 60
-        # token 时长 —— 默认就是 conf.py 里那对（1 天 / 7 天）
-        self.TOKEN_EXPIRE_SECONDS = 60 * 60 * 24
-        self.TOKEN_REFRESH_EXPIRE_SECONDS = 60 * 60 * 24 * 7
+        # 会话（#138）—— 默认就是 conf.py 里那组合格值
+        self.SESSION_REFRESH_GRACE_SECONDS = 30
+        self.SESSION_WEB_OVERFLOW = 'evict_idle'
+        self.SESSION_DESKTOP_OVERFLOW = 'evict_idle'
+        self.SESSION_MOBILE_OVERFLOW = 'evict_idle'
         # 批量导入的默认密码 —— 默认空串（= 功能关闭），prod 下只在非空时才查
         self.USER_IMPORT_DEFAULT_PASSWORD = ''
         for k, v in overrides.items():
@@ -404,27 +406,22 @@ def test_snowflake_ttl_shorter_than_heartbeat_is_rejected() -> None:
     assert 'SNOWFLAKE_NODE_TTL_SECONDS=30' in msg, msg
 
 
-def test_refresh_token_not_outliving_access_token_is_rejected() -> None:
-    """🔴 refresh token 不比 access token 长 → 拒绝启动。
+def test_refresh_grace_shorter_than_client_timeout_is_rejected() -> None:
+    """🔴 宽限期短于客户端刷新超时（前端 10 秒）→ 拒绝启动。
 
-    access 过期时客户端拿 refresh 去换新的；refresh 不长于 access 时，
-    该换的时候换的凭据也死了 —— 用户在 access 过期那一刻被**硬登出**，
-    「记住我」形同虚设。
-
-    症状是「所有人整整 N 天后一起被登出，怎么都续不上」，而两个值单看都合理
-    （典型走法：有人把 access 调到 7 天做「免登录一周」，忘了 refresh 也是 7 天）。
+    刷新响应丢了、客户端拿旧 refresh token 重试时，宽限期已过就判成盗用、整个会话撤销 ——
+    用户什么都没做，看到的却是「检测到登录凭据被重复使用」。ContiNew 把这个值从 30 改成 5 就是这么栽的（#138）
     """
-    msg = _expect_rejected(TOKEN_EXPIRE_SECONDS=60 * 60 * 24 * 7)
-    assert 'TOKEN_REFRESH_EXPIRE_SECONDS' in msg
-    assert '硬登出' in msg, msg
+    msg = _expect_rejected(SESSION_REFRESH_GRACE_SECONDS=5)
+    assert 'SESSION_REFRESH_GRACE_SECONDS=5' in msg, msg
 
 
-def test_equal_token_lifetimes_are_rejected() -> None:
-    """两个值**相等**也不行 —— 边界要拦在「相等」这一侧。
+def test_refresh_grace_at_the_lower_bound_is_accepted() -> None:
+    """边界要放过：10 秒正好等于前端的刷新超时。只验「拦得住」的话，一个永远拦的实现也是绿的"""
+    check_production_settings(_FakeSettings(SESSION_REFRESH_GRACE_SECONDS=10))
 
-    相等时 refresh 和 access 同时过期，刷新窗口是 0。判据写成 `>` 而不是 `>=`
-    就是为了这个；写成 `>=` 会把这种配置放过去，而它和「refresh 更短」
-    的后果一模一样。
-    """
-    msg = _expect_rejected(TOKEN_REFRESH_EXPIRE_SECONDS=60 * 60 * 24)
-    assert 'TOKEN_REFRESH_EXPIRE_SECONDS=86400' in msg, msg
+
+def test_misspelled_overflow_mode_is_rejected() -> None:
+    """超限策略拼错一个字母不报错的话，配置写着「拒绝新登录」、实际在挤人"""
+    msg = _expect_rejected(SESSION_MOBILE_OVERFLOW='kick')
+    assert 'SESSION_MOBILE_OVERFLOW' in msg, msg

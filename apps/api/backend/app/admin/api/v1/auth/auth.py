@@ -23,8 +23,8 @@ router = APIRouter()
 # 静默持久化通道：
 #   - 无验证码、（原来）无限流
 #   - **不写登录日志** —— 成功失败都不写，事后查不到
-#   - `create_access_token(swagger=True)` 打的标记被 monitor/online.py 用来把这类
-#     会话**排除出「在线用户」列表** —— 管理员既看不见，也无法强制下线
+#   - 这类会话的端是 `SessionClient.swagger`，monitor/online.py 把它们
+#     **排除出「在线用户」列表** —— 管理员既看不见，也无法强制下线
 #   - 收 HTTP Basic / query param，凭据会进 nginx access log 和浏览器历史
 #
 # prod 下 `check_env()` 已经把 FASTAPI_OPENAPI_URL 置 None，Swagger UI 本就打不开，
@@ -55,11 +55,14 @@ if settings.ENVIRONMENT != 'prod':
 )
 async def login(
     db: CurrentSessionTransaction,
+    request: Request,
     response: Response,
     obj: AuthLoginParam,
     background_tasks: BackgroundTasks,
 ) -> ResponseSchemaModel[GetLoginToken]:
-    data = await auth_service.login(db=db, response=response, obj=obj, background_tasks=background_tasks)
+    data = await auth_service.login(
+        db=db, request=request, response=response, obj=obj, background_tasks=background_tasks
+    )
     return response_base.success(data=data)
 
 

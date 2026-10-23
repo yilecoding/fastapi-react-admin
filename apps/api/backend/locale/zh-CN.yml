@@ -10,11 +10,9 @@ error:
     admin_forbidden: 用户已被禁止后台管理操作，请联系系统管理员
     dept_locked: 用户所属部门已被锁定，请联系系统管理员
     dept_not_found: 用户所属部门不存在或已被删除，请联系系统管理员
-    duplicate_login: 此用户已在异地登录，请重新登录并及时修改密码
     invalid_credentials: 用户名或密码有误
     menu_not_assigned: 用户未分配菜单，请联系系统管理员
     password_expired: 密码已过期，请修改密码后重新登录
-    refresh_token_expired: Refresh Token 已过期，请重新登录
     role_locked: 用户所属角色已被锁定，请联系系统管理员
     temporarily_locked: 账号已被锁定，请在 {minutes} 分钟后重试
     too_many_failed_attempts: 登录失败次数过多，账号已被锁定
@@ -205,6 +203,18 @@ error:
     code_exists: 角色编码已存在
     none_available: 未找到可用角色，请联系系统管理员
     not_found: 角色不存在
+  session:
+    disabled: 账号已被停用，请联系管理员
+    expired: 登录已过期，请重新登录
+    idle: 长时间未操作，已自动退出，请重新登录
+    invalid: 登录凭据无效，请重新登录
+    kicked: 你已被管理员强制下线，请重新登录
+    limit_reached: "该账号在{client}上的登录设备已达上限（{n} 台），请先在其他设备上退出"
+    logout: 已退出登录
+    not_found: 会话不存在或已结束
+    password_changed: 密码已修改，请重新登录
+    replaced: 账号已在其他设备登录，本设备已下线
+    reuse: 检测到登录凭据被重复使用，已强制下线；如果不是你本人操作，请尽快修改密码
   snowflake:
     clock_moved_backwards: 雪花 ID 生成失败，时钟回拨超过 {ms} ms，请立即联系系统管理员
     config_failed: 雪花算法配置失败，请联系系统管理员
@@ -260,7 +270,6 @@ error:
   token:
     expired: Token 已过期
     invalid: Token 无效
-    no_longer_valid: Token 已失效
   user:
     cache_key_build_failed: 用户缓存键构建失败
     captcha_expired: 验证码已失效，请重新获取
@@ -605,3 +614,9 @@ workflow:
 storage:
   builtin_name: 本地存储（内置）
   probe_ok: 连接正常：写入、读回、删除都成功
+# 会话所属的端（#138），拼进 error.session.limit_reached
+session:
+  client:
+    web: 网页端
+    desktop: 桌面端
+    mobile: 移动端

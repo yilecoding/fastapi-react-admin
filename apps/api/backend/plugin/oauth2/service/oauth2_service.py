@@ -3,12 +3,13 @@ import json
 from typing import Any
 
 from fast_captcha import text_captcha
-from fastapi import BackgroundTasks, Response
+from fastapi import BackgroundTasks, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_user import user_dao
 from backend.app.admin.schema.token import GetLoginToken
 from backend.app.admin.schema.user import AddOAuth2UserParam
+from backend.app.admin.service.auth_service import auth_service, session_meta
 from backend.app.admin.service.login_log_service import login_log_service
 from backend.app.admin.service.user_password_history_service import password_security_service
 from backend.common.context import ctx
@@ -16,12 +17,14 @@ from backend.common.enums import LoginLogStatusType
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.security import jwt
+from backend.common.security.session import EndReason, SessionClient, session_store
 from backend.core.conf import settings
 from backend.database.redis import redis_client
 from backend.plugin.oauth2.crud.crud_user_social import user_social_dao
 from backend.plugin.oauth2.enums import UserSocialAuthType, UserSocialType
 from backend.plugin.oauth2.schema.user_social import CreateUserSocialParam
 from backend.plugin.oauth2.service.user_social_service import user_social_service
+from backend.utils.dynamic_config import load_session_config
 from backend.utils.timezone import timezone
 
 
@@ -32,6 +35,7 @@ class OAuth2Service:
     async def login(
         *,
         db: AsyncSession,
+        request: Request,
         response: Response,
         background_tasks: BackgroundTasks,
         sid: str,
@@ -45,7 +49,8 @@ class OAuth2Service:
         OAuth2 用户登录
 
         :param db: 数据库会话
-        :param response: FastAPI 响应对象
+        :param request: FastAPI 请求对象
+        :param response: FastAPI 响应对象（refresh cookie 设在它上面，回调路由要把它搬到重定向响应上）
         :param background_tasks: FastAPI 后台任务
         :param sid: 社交账号唯一编码
         :param source: 社交平台
@@ -104,24 +109,11 @@ class OAuth2Service:
         if lock_reason is not None:
             raise errors.AuthorizationError(msg=lock_reason)
 
-        # 创建 token
-        access_token_data = await jwt.create_access_token(
-            sys_user.id,
-            multi_login=sys_user.is_multi_login,
-            # extra info
-            username=sys_user.username,
-            nickname=sys_user.nickname,
-            last_login_time=timezone.to_iso(timezone.now()),
-            ip=ctx.ip,
-            os=ctx.os,
-            browser=ctx.browser,
-            device=ctx.device,
-        )
-        refresh_token_data = await jwt.create_refresh_token(
-            access_token_data.session_uuid,
-            sys_user.id,
-            multi_login=sys_user.is_multi_login,
-        )
+        # 创建会话（#138）。同一个浏览器里上一次的会话就地作废，同表单登录
+        await load_session_config(db)
+        await auth_service.end_current_session(request, sys_user.id, EndReason.replaced)
+        session = await session_store.create(user_id=sys_user.id, client=SessionClient.web, meta=session_meta(sys_user))
+        access_token_data = jwt.issue_access_token(sys_user.id, session.session_uuid, session.expire_at)
         await user_dao.update_login_time(db, sys_user.username)
         await db.refresh(sys_user)
         background_tasks.add_task(
@@ -133,7 +125,7 @@ class OAuth2Service:
             msg=t('success.login.oauth2_success'),
         )
         await redis_client.delete(f'{settings.LOGIN_CAPTCHA_REDIS_PREFIX}:{ctx.ip}')
-        jwt.set_refresh_cookie(response, refresh_token_data.refresh_token, refresh_token_data.refresh_token_expire_time)
+        jwt.set_refresh_cookie(response, request, session.refresh_token, session.expire_at)
         data = GetLoginToken(
             access_token=access_token_data.access_token,
             access_token_expire_time=access_token_data.access_token_expire_time,
@@ -146,6 +138,7 @@ class OAuth2Service:
         self,
         *,
         db: AsyncSession,
+        request: Request,
         response: Response,
         background_tasks: BackgroundTasks,
         user: dict[str, Any],
@@ -156,6 +149,7 @@ class OAuth2Service:
         OAuth2 登录或绑定
 
         :param db: 数据库会话
+        :param request: FastAPI 请求对象
         :param response: FastAPI 响应对象
         :param background_tasks: FastAPI 后台任务
         :param user: OAuth2 用户信息
@@ -212,6 +206,7 @@ class OAuth2Service:
 
         return await self.login(
             db=db,
+            request=request,
             response=response,
             background_tasks=background_tasks,
             sid=str(sid),

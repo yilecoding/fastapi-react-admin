@@ -1,4 +1,6 @@
 from backend.common.socketio.server import sio, user_room
+from backend.core.conf import settings
+from backend.database.redis import redis_client
 
 
 async def task_notification(msg: str) -> None:
@@ -40,3 +42,21 @@ async def workflow_todo_changed(user_id: int) -> None:
     :return:
     """
     await sio.emit('workflow:todo', {}, room=user_room(user_id))
+
+
+async def session_ended(session_uuid: str, reason: str) -> None:
+    """一个登录会话结束了（被踢 / 被挤掉 / 空闲 / 登出 …，#138）：告诉它的每条连接为什么，然后断开。
+
+    不等下一次请求撞上 401 才发现 —— 管理员点了强制下线，对方的页面当场就回登录页并说明原因。
+    同一个浏览器的多个标签页共用一个会话，所以一个标签页登出，其它标签页也在这里收到。
+
+    `disconnect` 碰到不在本进程的连接会经 Redis 转发（`AsyncRedisManager`），多副本下照样断得掉。
+
+    :param session_uuid: 会话 ID
+    :param reason: `common/security/session.py: EndReason`
+    :return:
+    """
+    sids = await redis_client.smembers(f'{settings.TOKEN_ONLINE_REDIS_PREFIX}:session:{session_uuid}')
+    for sid in sids:
+        await sio.emit('session:ended', {'reason': reason}, to=sid)
+        await sio.disconnect(sid)

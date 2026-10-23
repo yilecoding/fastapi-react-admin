@@ -64,7 +64,6 @@ class User(Base):
     status: Mapped[int] = mapped_column(default=1, index=True, comment='用户账号状态(0停用 1正常)')
     is_superuser: Mapped[bool] = mapped_column(default=False, comment='超级权限(0否 1是)')
     is_staff: Mapped[bool] = mapped_column(default=False, comment='后台管理登陆(0否 1是)')
-    is_multi_login: Mapped[bool] = mapped_column(default=False, comment='是否重复登陆(0否 1是)')
     join_time: Mapped[datetime] = mapped_column(TimeZone, init=False, default_factory=tz_helper.now, comment='注册时间')
     last_login_time: Mapped[datetime | None] = mapped_column(
         TimeZone, init=False, onupdate=tz_helper.now, comment='上次登录时间'

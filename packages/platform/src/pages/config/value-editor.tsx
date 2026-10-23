@@ -4,6 +4,7 @@ import { IconEye, IconEyeOff } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import { Input } from '@admin/ui/components/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@admin/ui/components/select'
 import { Switch } from '@admin/ui/components/switch'
 import { cn } from '@admin/ui/lib/utils'
 
@@ -88,6 +89,25 @@ export function ValueEditor({
         />
         {meta?.unit && <span className="w-6 text-xs text-muted-foreground">{t(meta.unit)}</span>}
       </div>
+    )
+  }
+
+  if (kind === 'select' && meta?.options) {
+    // 关闭态靠 items 映射显示标签 —— 不给的话触发器上显示的是库里的原始值（`evict_idle`）
+    const items = Object.fromEntries(meta.options.map((o) => [o.value, t(o.label)]))
+    return (
+      <Select value={value} items={items} disabled={disabled} onValueChange={(v) => onChange(String(v))}>
+        <SelectTrigger className={cn('h-9 w-60', ring)} data-testid={`v-${item.key}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {meta.options.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {t(o.label)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     )
   }
 

@@ -3,7 +3,7 @@ import uuid
 
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 from fastapi_oauth20 import FastAPIOAuth20, GoogleOAuth20
 from pyrate_limiter import Duration, Rate
 from starlette.responses import RedirectResponse
@@ -43,6 +43,7 @@ async def get_google_oauth2_url() -> ResponseSchemaModel[str]:
 )
 async def google_oauth2_callback(  # ruff:ignore[missing-return-type-undocumented-public-function]
     db: CurrentSessionTransaction,
+    request: Request,
     response: Response,
     background_tasks: BackgroundTasks,
     oauth2: Annotated[
@@ -55,6 +56,7 @@ async def google_oauth2_callback(  # ruff:ignore[missing-return-type-undocumente
     user = await google_client.get_userinfo(access_token)
     data = await oauth2_service.login_or_binding(
         db=db,
+        request=request,
         response=response,
         background_tasks=background_tasks,
         user=user,
@@ -67,6 +69,12 @@ async def google_oauth2_callback(  # ruff:ignore[missing-return-type-undocumente
         return RedirectResponse(url=settings.OAUTH2_FRONTEND_BINDING_REDIRECT_URI)
 
     # 登录流程
-    return RedirectResponse(
+    redirect = RedirectResponse(
         url=f'{settings.OAUTH2_FRONTEND_LOGIN_REDIRECT_URI}?access_token={data.access_token}&session_uuid={data.session_uuid}',
     )
+    # 🔴 refresh cookie 是 service 设在注入的 `response` 上的，而这里**直接返回了另一个 Response** ——
+    # FastAPI 只在「返回的不是 Response」时才把注入那份的头合并进去（`fastapi/routing.py`）。
+    # 不搬过来，第三方登录的人从来拿不到 refresh cookie：access token 一过期（30 分钟）就被登出
+    for cookie in response.headers.getlist('set-cookie'):
+        redirect.headers.append('set-cookie', cookie)
+    return redirect

@@ -39,6 +39,7 @@ class GetTokenDetail(SchemaBase):
 
     id: int = Field(description='用户 ID')
     session_uuid: str = Field(description='会话 UUID')
+    client: str = Field(description='登录端：web / desktop / mobile')
     username: str = Field(description='用户名')
     nickname: str = Field(description='昵称')
     ip: str = Field(description='IP 地址')
@@ -47,4 +48,5 @@ class GetTokenDetail(SchemaBase):
     device: str = Field(description='设备')
     status: StatusType = Field(description='状态')
     last_login_time: str = Field(description='最后登录时间')
-    expire_time: datetime = Field(description='过期时间')
+    last_active_time: datetime = Field(description='最后活跃时间（按用户操作算，后台轮询不算）')
+    expire_time: datetime = Field(description='会话到期时间：空闲上限和绝对有效期先到的那个')

@@ -27,7 +27,6 @@ export type CurrentUser = {
   status: number
   is_superuser: boolean
   is_staff: boolean
-  is_multi_login: boolean
   dept_id: string | null
   /** 部门名称，不是 ID */
   dept: string | null

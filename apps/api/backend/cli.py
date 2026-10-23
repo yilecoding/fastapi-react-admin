@@ -387,9 +387,11 @@ async def init(db: AsyncSession, redis: RedisCli) -> bool:
             console.note('清理 Redis 缓存')
             for prefix in [
                 settings.JWT_USER_REDIS_PREFIX,
-                settings.TOKEN_EXTRA_INFO_REDIS_PREFIX,
-                settings.TOKEN_REDIS_PREFIX,
-                settings.TOKEN_REFRESH_REDIS_PREFIX,
+                # 会话（#138）：前缀各不相同，按前缀删要一个个列出来
+                settings.SESSION_REDIS_PREFIX,
+                settings.SESSION_USER_INDEX_PREFIX,
+                settings.SESSION_ALL_INDEX_KEY,
+                settings.SESSION_END_REDIS_PREFIX,
             ]:
                 await redis.delete_by_prefix(prefix)
 

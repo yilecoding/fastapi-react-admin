@@ -20,3 +20,20 @@
 ⚠️ **给 `check_production_settings` 加检查时要同步 `test_prod_config.py` 的
 `_FakeSettings`**（它是最小配置对象，不是真的 `Settings`）。漏了会 `AttributeError`
 把那个文件里所有用例一起打红 —— 吵闹但不静默，照着补上那一行即可。
+
+## 🔴 重建响应时头要原样搬，不能 `dict(response.headers)`
+
+`capture_response_body` 读完 JSON 响应体之后要重建一个 Response（`body_iterator` 只能消费一次）。
+原来写的是 `headers=dict(response.headers)` —— `dict` 把**同名的头压成一个**（只留第一个），
+一个响应里的第二行 `Set-Cookie` 就静默没了，接口返回 200、界面一切正常。
+
+撞上它的是 #138：登录 / 刷新的响应里有两行 refresh cookie（真正下发的那个 + 清掉旧 `Path=/` 的那个），
+第二行被吞，浏览器里的旧 cookie 留着，刷新时它盖过新的那个 —— 用户每 30 分钟被登出一次
+（为什么旧的会赢见 [`common/security` 分册](../common/security/AGENTS.md)「refresh cookie 换了 Path」）。
+
+现在搬 `raw_headers`（去掉旧的 `content-length`、按重建后的 body 重算）。
+
+**实测证据**：`test_session.py::test_refresh_cookie_attributes` 第一次跑红在 `assert 1 == 2`，
+真实响应头里只有一行 `set-cookie`；同一个最小 FastAPI 应用（不过这个中间件）返回的是两行。
+变异检验：把 `raw_headers` 改回从 `dict(response.headers)` 构造，这条当场红。
+

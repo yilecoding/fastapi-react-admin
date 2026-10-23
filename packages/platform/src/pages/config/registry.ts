@@ -26,7 +26,7 @@ import { isGroupSwitch, isSecret, type ConfigItem } from './api'
  * 这一页是唯一会写这张表的界面，所以它必须自己兜住。
  */
 
-export type Widget = 'switch' | 'switch01' | 'int' | 'text' | 'secret'
+export type Widget = 'switch' | 'switch01' | 'int' | 'text' | 'secret' | 'select'
 
 export type SettingMeta = {
   /** 所属小节标题（分组页内的段落） */
@@ -43,6 +43,8 @@ export type SettingMeta = {
   widget?: Widget
   min?: number
   max?: number
+  /** `select` 控件的选项：值原样写回库里，label 给人看（会过 t()） */
+  options?: { value: string; label: string }[]
   /** 改动会放宽安全边界 —— 行上标记 + 保存确认框里单独列出 */
   danger?: boolean
   /**
@@ -53,6 +55,12 @@ export type SettingMeta = {
 }
 
 const int = (v: string) => Number.parseInt(v, 10)
+
+/** 会话超限策略（后端 `dynamic_config.SESSION_OVERFLOW_MODES`）。只有两种真正不同的行为 */
+const SESSION_OVERFLOW_OPTIONS = [
+  { value: 'evict_idle', label: '挤掉最久没活跃的那个' },
+  { value: 'deny', label: '拒绝新登录' },
+]
 
 export const REGISTRY: Record<string, SettingMeta> = {
   // ── 开发工具 ───────────────────────────────────────────────────────────────
@@ -179,6 +187,133 @@ export const REGISTRY: Record<string, SettingMeta> = {
     hint: '多数邮箱这里填的是「授权码」而不是登录密码',
   },
 
+  // ── 会话策略（#138）──────────────────────────────────────────────────────────
+  // 范围和 `dynamic_config.DYNAMIC_INT_BOUNDS` 对账（后端那条测试按 `KEY: { … min/max … }` 的字面量读，
+  // 所以三端各写一份，不能用循环生成）。这几项在登录时存进会话，改动只影响之后的登录
+  SESSION_WEB_IDLE_MINUTES: {
+    section: '网页端',
+    order: 1,
+    label: '空闲超时',
+    unit: '分钟',
+    widget: 'int',
+    min: 5,
+    max: 129600,
+    hint: '这么久没有键盘、鼠标或触屏操作就自动退出。页面后台轮询不算操作。等保项目通常要求 15–30 分钟',
+    danger: true,
+  },
+  SESSION_WEB_ABSOLUTE_DAYS: {
+    section: '网页端',
+    order: 2,
+    label: '最长登录',
+    unit: '天',
+    widget: 'int',
+    min: 1,
+    max: 365,
+    hint: '从登录那一刻起算，期间一直在用也不延长，到点必须重新登录',
+    danger: true,
+  },
+  SESSION_WEB_MAX: {
+    section: '网页端',
+    order: 3,
+    label: '会话上限',
+    unit: '个',
+    widget: 'int',
+    min: 0,
+    max: 100,
+    hint: '同一账号在这一端最多同时保持几个登录。0 表示不限；要「单设备登录」就填 1',
+  },
+  SESSION_WEB_OVERFLOW: {
+    section: '网页端',
+    order: 4,
+    label: '超限时',
+    widget: 'select',
+    options: SESSION_OVERFLOW_OPTIONS,
+    hint: '新登录撞上会话上限时怎么办。被挤掉的那台会看到「账号已在其他设备登录」',
+    disabledBy: (get) => (int(get('SESSION_WEB_MAX')) === 0 ? t('会话上限是 0（不限），这一项不起作用') : null),
+  },
+  SESSION_DESKTOP_IDLE_MINUTES: {
+    section: '桌面端',
+    order: 1,
+    label: '空闲超时',
+    unit: '分钟',
+    widget: 'int',
+    min: 5,
+    max: 129600,
+    hint: '这么久没有键盘、鼠标或触屏操作就自动退出。页面后台轮询不算操作。等保项目通常要求 15–30 分钟',
+    danger: true,
+  },
+  SESSION_DESKTOP_ABSOLUTE_DAYS: {
+    section: '桌面端',
+    order: 2,
+    label: '最长登录',
+    unit: '天',
+    widget: 'int',
+    min: 1,
+    max: 365,
+    hint: '从登录那一刻起算，期间一直在用也不延长，到点必须重新登录',
+    danger: true,
+  },
+  SESSION_DESKTOP_MAX: {
+    section: '桌面端',
+    order: 3,
+    label: '会话上限',
+    unit: '个',
+    widget: 'int',
+    min: 0,
+    max: 100,
+    hint: '同一账号在这一端最多同时保持几个登录。0 表示不限；要「单设备登录」就填 1',
+  },
+  SESSION_DESKTOP_OVERFLOW: {
+    section: '桌面端',
+    order: 4,
+    label: '超限时',
+    widget: 'select',
+    options: SESSION_OVERFLOW_OPTIONS,
+    hint: '新登录撞上会话上限时怎么办。被挤掉的那台会看到「账号已在其他设备登录」',
+    disabledBy: (get) => (int(get('SESSION_DESKTOP_MAX')) === 0 ? t('会话上限是 0（不限），这一项不起作用') : null),
+  },
+  SESSION_MOBILE_IDLE_MINUTES: {
+    section: '移动端',
+    order: 1,
+    label: '空闲超时',
+    unit: '分钟',
+    widget: 'int',
+    min: 5,
+    max: 129600,
+    hint: '这么久没有键盘、鼠标或触屏操作就自动退出。页面后台轮询不算操作。等保项目通常要求 15–30 分钟',
+    danger: true,
+  },
+  SESSION_MOBILE_ABSOLUTE_DAYS: {
+    section: '移动端',
+    order: 2,
+    label: '最长登录',
+    unit: '天',
+    widget: 'int',
+    min: 1,
+    max: 365,
+    hint: '从登录那一刻起算，期间一直在用也不延长，到点必须重新登录',
+    danger: true,
+  },
+  SESSION_MOBILE_MAX: {
+    section: '移动端',
+    order: 3,
+    label: '会话上限',
+    unit: '个',
+    widget: 'int',
+    min: 0,
+    max: 100,
+    hint: '同一账号在这一端最多同时保持几个登录。0 表示不限；要「单设备登录」就填 1',
+  },
+  SESSION_MOBILE_OVERFLOW: {
+    section: '移动端',
+    order: 4,
+    label: '超限时',
+    widget: 'select',
+    options: SESSION_OVERFLOW_OPTIONS,
+    hint: '新登录撞上会话上限时怎么办。被挤掉的那台会看到「账号已在其他设备登录」',
+    disabledBy: (get) => (int(get('SESSION_MOBILE_MAX')) === 0 ? t('会话上限是 0（不限），这一项不起作用') : null),
+  },
+
   // ── 文件上传 ───────────────────────────────────────────────────────────────
   // 库里按 MiB 存，后端 `load_file_config` 乘成字节；范围和 `dynamic_config.DYNAMIC_INT_BOUNDS` 对账
   FILE_CHUNK_THRESHOLD: {
@@ -252,6 +387,11 @@ export const RAIL: RailGroup[] = [
     items: [
       { id: 'LOGIN', label: '登录策略', desc: '登录流程的开关。改动立刻对所有人生效。' },
       { id: 'USER_SECURITY', label: '口令与锁定', desc: '口令强度、有效期与账号锁定策略。放宽会直接降低抗暴力破解能力。' },
+      {
+        id: 'SESSION',
+        label: '会话策略',
+        desc: '登录之后能保持多久、能在几台设备上同时登录。网页 / 桌面 / 移动三端分别设置；改动只影响之后的登录，已经登录的人按原来的规则走完。',
+      },
     ],
   },
   {
@@ -310,6 +450,10 @@ export function validateOne(item: ConfigItem, value: string): string | null {
     return null
   }
 
+  if (widget === 'select' && meta?.options && !meta.options.some((o) => o.value === value)) {
+    return t('只能从下拉里选')
+  }
+
   if (isGroupSwitch(item.key) && value !== '0' && value !== '1') return t('总开关只能是 0 或 1')
   if (value.length > 2000) return t('太长了（上限 2000 字符）')
   return null
@@ -359,6 +503,9 @@ export function validateCross(get: (key: string) => string | undefined): Record<
  * 我们的参数是策略型的，单个值回显没意义（输入框里就写着），
  * 组合起来的**效果**才是人要确认的东西。
  */
+/** 会话策略的小节 → 键里的端名 */
+const SESSION_SECTIONS: Record<string, string> = { 网页端: 'WEB', 桌面端: 'DESKTOP', 移动端: 'MOBILE' }
+
 export function sectionSummary(section: string, get: (key: string) => string | undefined): string | null {
   const n = (k: string) => {
     const v = get(k)
@@ -407,6 +554,27 @@ export function sectionSummary(section: string, get: (key: string) => string | u
     const size = n('FILE_CHUNK_SIZE')
     if (th === null || size === null) return null
     return t('≥ {{th}} MiB 的文件切成 {{size}} MiB 一片上传，可续传', { th, size })
+  }
+
+  const sessionClient = SESSION_SECTIONS[section]
+  if (sessionClient) {
+    const idle = n(`SESSION_${sessionClient}_IDLE_MINUTES`)
+    const days = n(`SESSION_${sessionClient}_ABSOLUTE_DAYS`)
+    const max = n(`SESSION_${sessionClient}_MAX`)
+    if (idle === null || days === null || max === null) return null
+    const idleText =
+      idle % 1440 === 0
+        ? t('{{n}} 天', { n: idle / 1440 })
+        : idle % 60 === 0
+          ? t('{{n}} 小时', { n: idle / 60 })
+          : t('{{n}} 分钟', { n: idle })
+    const limit =
+      max === 0
+        ? t('设备数不限')
+        : get(`SESSION_${sessionClient}_OVERFLOW`) === 'deny'
+          ? t('最多 {{n}} 个，超了拒绝新登录', { n: max })
+          : t('最多 {{n}} 个，超了挤掉最久没活跃的', { n: max })
+    return t('{{idle}}无操作退出 · 最长 {{days}} 天 · {{limit}}', { idle: idleText, days, limit })
   }
 
   if (section === '登录校验') {

@@ -208,7 +208,6 @@ def make_user(key: str, *, status: int = 1, dept_id: int | None = None) -> int:
                             'status': status,
                             'is_superuser': False,
                             'is_staff': True,
-                            'is_multi_login': True,
                             'join_time': now,
                             'last_login_time': now,
                             'last_password_changed_time': now,

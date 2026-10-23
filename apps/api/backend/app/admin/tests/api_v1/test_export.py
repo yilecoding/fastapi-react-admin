@@ -184,7 +184,6 @@ async def _build(graph: Graph) -> None:
             'status': 1,
             'is_superuser': False,
             'is_staff': True,
-            'is_multi_login': True,
             'join_time': now,
             'last_login_time': now,
             'last_password_changed_time': now,

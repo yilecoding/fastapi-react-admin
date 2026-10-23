@@ -123,7 +123,8 @@ export async function login(input: AuthLoginInput): Promise<AuthTokens> {
   const res = await fetch(`${baseUrl()}${ENDPOINTS.login}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
+    // 会话策略按端分（#138）。渲染层不知道自己跑在桌面端里，由主进程补上
+    body: JSON.stringify({ ...input, client: "desktop" }),
   })
   const raw = await unwrap(res)
   const refresh = extractRefreshCookie(res)

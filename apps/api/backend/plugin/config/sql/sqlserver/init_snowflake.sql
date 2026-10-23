@@ -30,4 +30,17 @@ VALUES
 (2202113487403094016, N'组件沙箱', 'DEV', 'DEV_SANDBOX_ENABLED', 'true', 1, NULL, GETDATE(), NULL),
 (2224875016875409408, N'状态', 'FILE', 'FILE_CONFIG_STATUS', '1', 0, NULL, GETDATE(), NULL),
 (2224875016875409409, N'分片阈值（MiB）', 'FILE', 'FILE_CHUNK_THRESHOLD', '16', 0, N'不小于这个大小的文件分片上传；须小于反代的 client_max_body_size', GETDATE(), NULL),
-(2224875016875409410, N'分片大小（MiB）', 'FILE', 'FILE_CHUNK_SIZE', '8', 0, N'只影响新开始的上传；.env 同名项的单位是字节', GETDATE(), NULL);
+(2224875016875409410, N'分片大小（MiB）', 'FILE', 'FILE_CHUNK_SIZE', '8', 0, N'只影响新开始的上传；.env 同名项的单位是字节', GETDATE(), NULL),
+(2224875016875409411, N'状态', 'SESSION', 'SESSION_CONFIG_STATUS', '1', 0, NULL, GETDATE(), NULL),
+(2224875016875409412, N'网页端空闲超时（分钟）', 'SESSION', 'SESSION_WEB_IDLE_MINUTES', '120', 0, N'这么久没有操作就自动退出；只影响之后的登录', GETDATE(), NULL),
+(2224875016875409413, N'网页端最长登录（天）', 'SESSION', 'SESSION_WEB_ABSOLUTE_DAYS', '7', 0, N'从登录那一刻起算，刷新不延长', GETDATE(), NULL),
+(2224875016875409414, N'网页端会话上限', 'SESSION', 'SESSION_WEB_MAX', '0', 0, N'同一账号在这一端最多几个会话，0 表示不限', GETDATE(), NULL),
+(2224875016875409415, N'网页端超限策略', 'SESSION', 'SESSION_WEB_OVERFLOW', 'evict_idle', 0, N'evict_idle 挤掉最久没活跃的；deny 拒绝新登录', GETDATE(), NULL),
+(2224875016875409416, N'桌面端空闲超时（分钟）', 'SESSION', 'SESSION_DESKTOP_IDLE_MINUTES', '120', 0, N'这么久没有操作就自动退出；只影响之后的登录', GETDATE(), NULL),
+(2224875016875409417, N'桌面端最长登录（天）', 'SESSION', 'SESSION_DESKTOP_ABSOLUTE_DAYS', '7', 0, N'从登录那一刻起算，刷新不延长', GETDATE(), NULL),
+(2224875016875409418, N'桌面端会话上限', 'SESSION', 'SESSION_DESKTOP_MAX', '0', 0, N'同一账号在这一端最多几个会话，0 表示不限', GETDATE(), NULL),
+(2224875016875409419, N'桌面端超限策略', 'SESSION', 'SESSION_DESKTOP_OVERFLOW', 'evict_idle', 0, N'evict_idle 挤掉最久没活跃的；deny 拒绝新登录', GETDATE(), NULL),
+(2224875016875409420, N'移动端空闲超时（分钟）', 'SESSION', 'SESSION_MOBILE_IDLE_MINUTES', '43200', 0, N'这么久没有操作就自动退出；只影响之后的登录', GETDATE(), NULL),
+(2224875016875409421, N'移动端最长登录（天）', 'SESSION', 'SESSION_MOBILE_ABSOLUTE_DAYS', '90', 0, N'从登录那一刻起算，刷新不延长', GETDATE(), NULL),
+(2224875016875409422, N'移动端会话上限', 'SESSION', 'SESSION_MOBILE_MAX', '1', 0, N'同一账号在这一端最多几个会话，0 表示不限', GETDATE(), NULL),
+(2224875016875409423, N'移动端超限策略', 'SESSION', 'SESSION_MOBILE_OVERFLOW', 'evict_idle', 0, N'evict_idle 挤掉最久没活跃的；deny 拒绝新登录', GETDATE(), NULL);

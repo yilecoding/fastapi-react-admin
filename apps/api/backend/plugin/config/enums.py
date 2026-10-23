@@ -10,3 +10,4 @@ class ConfigType(StrEnum):
     login = 'LOGIN'
     dev = 'DEV'
     file = 'FILE'
+    session = 'SESSION'

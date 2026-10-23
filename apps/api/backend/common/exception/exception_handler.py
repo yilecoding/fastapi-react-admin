@@ -7,7 +7,7 @@ from starlette.middleware.cors import CORSMiddleware
 from uvicorn.protocols.http.h11_impl import STATUS_PHRASES
 
 from backend.common.context import ctx
-from backend.common.exception.errors import BaseExceptionError
+from backend.common.exception.errors import BaseExceptionError, TokenError
 from backend.common.i18n import i18n, t, tm
 from backend.common.response.response_code import CustomResponseCode, StandardResponseCode
 from backend.common.response.response_schema import response_base
@@ -130,7 +130,12 @@ def register_exception(app: FastAPI) -> None:  # ruff:ignore[complex-structure]
         :param exc: HTTP 异常
         :return:
         """
-        if settings.ENVIRONMENT == 'dev':
+        if isinstance(exc, TokenError):
+            # 🔴 401 在任何环境都要原样下发文案和原因码（#138）。走下面 prod 那支的话，
+            # 刷新失败的响应体会被换成一句通用的「请求错误」—— 前端拿不到 `data.reason`，
+            # 被踢 / 空闲 / 盗用全都长成「莫名其妙跳回登录页」。文案本来就是给用户看的，没什么可藏
+            content = {'code': exc.status_code, 'msg': tm(str(exc.detail)), 'data': exc.data}
+        elif settings.ENVIRONMENT == 'dev':
             content = {
                 'code': exc.status_code,
                 'msg': tm(str(exc.detail)),

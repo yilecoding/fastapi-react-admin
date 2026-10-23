@@ -153,7 +153,6 @@ class UserPermissionType(StrEnum):
     superuser = 'superuser'
     staff = 'staff'
     status = 'status'
-    multi_login = 'multi_login'
 
 
 class DataBaseType(StrEnum):
