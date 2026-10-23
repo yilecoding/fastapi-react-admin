@@ -13,7 +13,7 @@ from backend.common.i18n import t
 from backend.utils.build_tree import get_tree_data
 
 
-async def _leader_names(db: AsyncSession, ids: set[int]) -> dict[str, str]:
+async def leader_names(db: AsyncSession, ids: set[int]) -> dict[str, str]:
     """负责人 ID → 昵称。键是**字符串**：树已经过了 `stringify_big_ids`，雪花 ID 在那边是字符串"""
     if not ids:
         return {}
@@ -84,7 +84,7 @@ class DeptService:
         """
         dept_select = await dept_dao.get_all(db, data_filter, name, code, phone, status)
         tree_data = get_tree_data(dept_select)
-        names = await _leader_names(db, {d.leader_id for d in dept_select if d.leader_id})
+        names = await leader_names(db, {d.leader_id for d in dept_select if d.leader_id})
         _fill_leader_name(tree_data, names)
         return tree_data
 
@@ -123,13 +123,16 @@ class DeptService:
         await dept_dao.create(db, obj)
 
     @staticmethod
-    async def check_update(*, db: AsyncSession, pk: int, obj: UpdateDeptParam) -> Dept:
+    async def check_update(*, db: AsyncSession, pk: int, obj: UpdateDeptParam, check_ancestry: bool = True) -> Dept:
         """
-        更新前的业务校验（只读）。`update` 和 AI 工具的预演共用这一份
+        更新前的业务校验（只读）。`update`、AI 工具的预演和部门导入共用这一份
 
         :param db: 数据库会话
         :param pk: 部门 ID
         :param obj: 部门更新参数
+        :param check_ancestry: 查不查「新上级是不是自己的下级」。只有导入预览传 False：它按
+            「整份文件导完之后的树」查环（`dataio._check_tree`），比按库里现在的树查准 ——
+            同一份文件里先把那个下级挪走了的话，按现在的树查会误报
         :return: 更新前的部门
         """
         dept = await dept_dao.get(db, pk)
@@ -146,6 +149,15 @@ class DeptService:
             await _check_leader(db, obj.leader_id)
         if obj.parent_id == dept.id:
             raise errors.ForbiddenError(msg=t('error.dept.cannot_be_own_parent'))
+        # 🔴 也不能挂到自己的下级下面：成环之后整棵子树从部门树里消失（找不到根），而每一行都还在。
+        # 原来只有前端拦（上级下拉里排除了自己那棵子树）；导入的「更新」模式能一次改很多行的上级
+        if (
+            check_ancestry
+            and obj.parent_id
+            and obj.parent_id != dept.parent_id
+            and dept.id in await dept_dao.get_ancestor_ids(db, obj.parent_id)
+        ):
+            raise errors.ForbiddenError(msg=t('error.dept.cannot_be_own_descendant'))
         # 同级重名要按**目标**父级判：只挪了上级、名字没动，一样可能撞到新兄弟
         if dept.name != obj.name or dept.parent_id != obj.parent_id:
             sibling = await dept_dao.get_sibling_by_name(db, obj.name, obj.parent_id)

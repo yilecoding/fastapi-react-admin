@@ -1,12 +1,15 @@
 from fastapi import APIRouter
 
+from backend.app.admin.api.v1.sys.data_import import router as data_import_router
 from backend.app.admin.api.v1.sys.data_rule import router as data_rule_router
 from backend.app.admin.api.v1.sys.data_scope import router as data_scope_router
 from backend.app.admin.api.v1.sys.dept import router as dept_router
+from backend.app.admin.api.v1.sys.export import router as export_router
 from backend.app.admin.api.v1.sys.file import router as file_router
 from backend.app.admin.api.v1.sys.menu import router as menu_router
 from backend.app.admin.api.v1.sys.plugin import router as plugin_router
 from backend.app.admin.api.v1.sys.role import router as role_router
+from backend.app.admin.api.v1.sys.storage import router as storage_router
 from backend.app.admin.api.v1.sys.user import router as user_router
 
 router = APIRouter(prefix='/sys')
@@ -18,4 +21,7 @@ router.include_router(user_router, prefix='/users', tags=['系统用户'])
 router.include_router(data_rule_router, prefix='/data-rules', tags=['系统数据规则'])
 router.include_router(data_scope_router, prefix='/data-scopes', tags=['系统数据范围'])
 router.include_router(file_router, prefix='/files', tags=['系统文件'])
+router.include_router(storage_router, prefix='/storages', tags=['系统存储'])
 router.include_router(plugin_router, prefix='/plugins', tags=['系统插件'])
+router.include_router(export_router, prefix='/exports', tags=['导出记录'])
+router.include_router(data_import_router, prefix='/imports', tags=['导入'])

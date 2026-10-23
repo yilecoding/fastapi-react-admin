@@ -28,6 +28,8 @@ import { Route as AuthLogOperaRouteImport } from './routes/_auth/log/opera'
 import { Route as AuthMonitorOnlineRouteImport } from './routes/_auth/monitor/online'
 import { Route as AuthMonitorRedisRouteImport } from './routes/_auth/monitor/redis'
 import { Route as AuthMonitorServerRouteImport } from './routes/_auth/monitor/server'
+import { Route as AuthOpenAppRouteImport } from './routes/_auth/open/app'
+import { Route as AuthOpenLogRouteImport } from './routes/_auth/open/log'
 import { Route as AuthPluginsConfigRouteImport } from './routes/_auth/plugins/config'
 import { Route as AuthPluginsDictRouteImport } from './routes/_auth/plugins/dict'
 import { Route as AuthPluginsNoticeRouteImport } from './routes/_auth/plugins/notice'
@@ -42,6 +44,7 @@ import { Route as AuthSystemFileRouteImport } from './routes/_auth/system/file'
 import { Route as AuthSystemMenuRouteImport } from './routes/_auth/system/menu'
 import { Route as AuthSystemPluginRouteImport } from './routes/_auth/system/plugin'
 import { Route as AuthSystemRoleRouteImport } from './routes/_auth/system/role'
+import { Route as AuthSystemStorageRouteImport } from './routes/_auth/system/storage'
 import { Route as AuthSystemUserRouteImport } from './routes/_auth/system/user'
 import { Route as AuthWorkflowDefinitionRouteImport } from './routes/_auth/workflow/definition'
 import { Route as AuthWorkflowInboxRouteImport } from './routes/_auth/workflow/inbox'
@@ -140,6 +143,16 @@ const AuthMonitorServerRoute = AuthMonitorServerRouteImport.update({
   path: '/monitor/server',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthOpenAppRoute = AuthOpenAppRouteImport.update({
+  id: '/open/app',
+  path: '/open/app',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthOpenLogRoute = AuthOpenLogRouteImport.update({
+  id: '/open/log',
+  path: '/open/log',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthPluginsConfigRoute = AuthPluginsConfigRouteImport.update({
   id: '/plugins/config',
   path: '/plugins/config',
@@ -211,6 +224,11 @@ const AuthSystemRoleRoute = AuthSystemRoleRouteImport.update({
   path: '/system/role',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthSystemStorageRoute = AuthSystemStorageRouteImport.update({
+  id: '/system/storage',
+  path: '/system/storage',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthSystemUserRoute = AuthSystemUserRouteImport.update({
   id: '/system/user',
   path: '/system/user',
@@ -250,6 +268,8 @@ export interface FileRoutesByFullPath {
   '/monitor/online': typeof AuthMonitorOnlineRoute
   '/monitor/redis': typeof AuthMonitorRedisRoute
   '/monitor/server': typeof AuthMonitorServerRoute
+  '/open/app': typeof AuthOpenAppRoute
+  '/open/log': typeof AuthOpenLogRoute
   '/plugins/config': typeof AuthPluginsConfigRoute
   '/plugins/dict': typeof AuthPluginsDictRoute
   '/plugins/notice': typeof AuthPluginsNoticeRoute
@@ -264,6 +284,7 @@ export interface FileRoutesByFullPath {
   '/system/menu': typeof AuthSystemMenuRoute
   '/system/plugin': typeof AuthSystemPluginRoute
   '/system/role': typeof AuthSystemRoleRoute
+  '/system/storage': typeof AuthSystemStorageRoute
   '/system/user': typeof AuthSystemUserRoute
   '/workflow/definition': typeof AuthWorkflowDefinitionRoute
   '/workflow/inbox': typeof AuthWorkflowInboxRoute
@@ -287,6 +308,8 @@ export interface FileRoutesByTo {
   '/monitor/online': typeof AuthMonitorOnlineRoute
   '/monitor/redis': typeof AuthMonitorRedisRoute
   '/monitor/server': typeof AuthMonitorServerRoute
+  '/open/app': typeof AuthOpenAppRoute
+  '/open/log': typeof AuthOpenLogRoute
   '/plugins/config': typeof AuthPluginsConfigRoute
   '/plugins/dict': typeof AuthPluginsDictRoute
   '/plugins/notice': typeof AuthPluginsNoticeRoute
@@ -301,6 +324,7 @@ export interface FileRoutesByTo {
   '/system/menu': typeof AuthSystemMenuRoute
   '/system/plugin': typeof AuthSystemPluginRoute
   '/system/role': typeof AuthSystemRoleRoute
+  '/system/storage': typeof AuthSystemStorageRoute
   '/system/user': typeof AuthSystemUserRoute
   '/workflow/definition': typeof AuthWorkflowDefinitionRoute
   '/workflow/inbox': typeof AuthWorkflowInboxRoute
@@ -327,6 +351,8 @@ export interface FileRoutesById {
   '/_auth/monitor/online': typeof AuthMonitorOnlineRoute
   '/_auth/monitor/redis': typeof AuthMonitorRedisRoute
   '/_auth/monitor/server': typeof AuthMonitorServerRoute
+  '/_auth/open/app': typeof AuthOpenAppRoute
+  '/_auth/open/log': typeof AuthOpenLogRoute
   '/_auth/plugins/config': typeof AuthPluginsConfigRoute
   '/_auth/plugins/dict': typeof AuthPluginsDictRoute
   '/_auth/plugins/notice': typeof AuthPluginsNoticeRoute
@@ -341,6 +367,7 @@ export interface FileRoutesById {
   '/_auth/system/menu': typeof AuthSystemMenuRoute
   '/_auth/system/plugin': typeof AuthSystemPluginRoute
   '/_auth/system/role': typeof AuthSystemRoleRoute
+  '/_auth/system/storage': typeof AuthSystemStorageRoute
   '/_auth/system/user': typeof AuthSystemUserRoute
   '/_auth/workflow/definition': typeof AuthWorkflowDefinitionRoute
   '/_auth/workflow/inbox': typeof AuthWorkflowInboxRoute
@@ -366,6 +393,8 @@ export interface FileRouteTypes {
     | '/monitor/online'
     | '/monitor/redis'
     | '/monitor/server'
+    | '/open/app'
+    | '/open/log'
     | '/plugins/config'
     | '/plugins/dict'
     | '/plugins/notice'
@@ -380,6 +409,7 @@ export interface FileRouteTypes {
     | '/system/menu'
     | '/system/plugin'
     | '/system/role'
+    | '/system/storage'
     | '/system/user'
     | '/workflow/definition'
     | '/workflow/inbox'
@@ -403,6 +433,8 @@ export interface FileRouteTypes {
     | '/monitor/online'
     | '/monitor/redis'
     | '/monitor/server'
+    | '/open/app'
+    | '/open/log'
     | '/plugins/config'
     | '/plugins/dict'
     | '/plugins/notice'
@@ -417,6 +449,7 @@ export interface FileRouteTypes {
     | '/system/menu'
     | '/system/plugin'
     | '/system/role'
+    | '/system/storage'
     | '/system/user'
     | '/workflow/definition'
     | '/workflow/inbox'
@@ -442,6 +475,8 @@ export interface FileRouteTypes {
     | '/_auth/monitor/online'
     | '/_auth/monitor/redis'
     | '/_auth/monitor/server'
+    | '/_auth/open/app'
+    | '/_auth/open/log'
     | '/_auth/plugins/config'
     | '/_auth/plugins/dict'
     | '/_auth/plugins/notice'
@@ -456,6 +491,7 @@ export interface FileRouteTypes {
     | '/_auth/system/menu'
     | '/_auth/system/plugin'
     | '/_auth/system/role'
+    | '/_auth/system/storage'
     | '/_auth/system/user'
     | '/_auth/workflow/definition'
     | '/_auth/workflow/inbox'
@@ -603,6 +639,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthMonitorServerRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/open/app': {
+      id: '/_auth/open/app'
+      path: '/open/app'
+      fullPath: '/open/app'
+      preLoaderRoute: typeof AuthOpenAppRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/open/log': {
+      id: '/_auth/open/log'
+      path: '/open/log'
+      fullPath: '/open/log'
+      preLoaderRoute: typeof AuthOpenLogRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/plugins/config': {
       id: '/_auth/plugins/config'
       path: '/plugins/config'
@@ -701,6 +751,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSystemRoleRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/system/storage': {
+      id: '/_auth/system/storage'
+      path: '/system/storage'
+      fullPath: '/system/storage'
+      preLoaderRoute: typeof AuthSystemStorageRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/system/user': {
       id: '/_auth/system/user'
       path: '/system/user'
@@ -748,6 +805,8 @@ interface AuthRouteChildren {
   AuthMonitorOnlineRoute: typeof AuthMonitorOnlineRoute
   AuthMonitorRedisRoute: typeof AuthMonitorRedisRoute
   AuthMonitorServerRoute: typeof AuthMonitorServerRoute
+  AuthOpenAppRoute: typeof AuthOpenAppRoute
+  AuthOpenLogRoute: typeof AuthOpenLogRoute
   AuthPluginsConfigRoute: typeof AuthPluginsConfigRoute
   AuthPluginsDictRoute: typeof AuthPluginsDictRoute
   AuthPluginsNoticeRoute: typeof AuthPluginsNoticeRoute
@@ -762,6 +821,7 @@ interface AuthRouteChildren {
   AuthSystemMenuRoute: typeof AuthSystemMenuRoute
   AuthSystemPluginRoute: typeof AuthSystemPluginRoute
   AuthSystemRoleRoute: typeof AuthSystemRoleRoute
+  AuthSystemStorageRoute: typeof AuthSystemStorageRoute
   AuthSystemUserRoute: typeof AuthSystemUserRoute
   AuthWorkflowDefinitionRoute: typeof AuthWorkflowDefinitionRoute
   AuthWorkflowInboxRoute: typeof AuthWorkflowInboxRoute
@@ -784,6 +844,8 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthMonitorOnlineRoute: AuthMonitorOnlineRoute,
   AuthMonitorRedisRoute: AuthMonitorRedisRoute,
   AuthMonitorServerRoute: AuthMonitorServerRoute,
+  AuthOpenAppRoute: AuthOpenAppRoute,
+  AuthOpenLogRoute: AuthOpenLogRoute,
   AuthPluginsConfigRoute: AuthPluginsConfigRoute,
   AuthPluginsDictRoute: AuthPluginsDictRoute,
   AuthPluginsNoticeRoute: AuthPluginsNoticeRoute,
@@ -798,6 +860,7 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthSystemMenuRoute: AuthSystemMenuRoute,
   AuthSystemPluginRoute: AuthSystemPluginRoute,
   AuthSystemRoleRoute: AuthSystemRoleRoute,
+  AuthSystemStorageRoute: AuthSystemStorageRoute,
   AuthSystemUserRoute: AuthSystemUserRoute,
   AuthWorkflowDefinitionRoute: AuthWorkflowDefinitionRoute,
   AuthWorkflowInboxRoute: AuthWorkflowInboxRoute,

@@ -15,6 +15,7 @@ import { listState } from '../_shared/list-query'
 import { logFeatures } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
+import { useUrlColumnOrder } from '../_shared/use-column-order'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { definitionsQuery, monitorQuery, workflowKeys, type InstanceStatus } from '../workflow/api'
 import { InstanceSheet } from '../workflow/instance-sheet'
@@ -33,6 +34,8 @@ export type WorkflowMonitorSearch = {
   time?: string
   f?: string
   hide?: string
+  /** 可移动列的顺序（和默认一样时不写），逗号分隔 */
+  cols?: string
   /** 打开的详情 */
   id?: string
 }
@@ -100,7 +103,7 @@ export function WorkflowMonitorPage({
     [defs.data, defs.isPending]
   )
 
-  const q = useQuerySearch({ fields, search, onSearchChange, keep: ['hide'], refreshKey: workflowKeys.all })
+  const q = useQuerySearch({ fields, search, onSearchChange, keep: ['hide', 'cols'], refreshKey: workflowKeys.all })
   const listQuery = useQuery(monitorQuery({ page, size, ...(q.params as Record<string, string | number | undefined>) }))
   const { data, isFetching } = listQuery
   const list = listState(listQuery)
@@ -108,15 +111,23 @@ export function WorkflowMonitorPage({
   const total = data?.total ?? 0
 
   const columns = React.useMemo(() => buildColumns((r) => patch({ id: r.id }), t), [patch, t])
+  // 列顺序进 URL（同列显隐）—— 走 onSearchChange 而不是 patch：换列序不该清勾选、也不该跳回第一页
+  const [columnOrder, setColumnOrder] = useUrlColumnOrder(
+    search.cols,
+    React.useCallback((cols) => onSearchChange?.({ ...search, cols }), [onSearchChange, search]),
+    columns
+  )
+
   const table = useTable({
     features: logFeatures,
     data: rows,
     columns: columns as never,
-    state: { columnVisibility },
+    state: { columnVisibility, columnOrder },
     getRowId: (row) => row.id,
     manualPagination: true,
     rowCount: total,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
   })
   const hasFilter = countActive(q.applied, fields) > 0
 

@@ -9,8 +9,9 @@
 ## 文件管理与附件预览
 
 两张表：`sys_file`（物理文件）+ `sys_file_relation`（挂在谁身上）。
-**刻意没做**存储抽象（`sys_storage`，S3/MinIO）和个人云盘（目录树 / 分享 / 配额）——
-两者后加都不用改已有代码，所以也没留 `storage_id` 这种休眠字段。
+文件落在哪由 `sys_file.storage_id` 决定（`NULL` = 内置本地存储），存储本身在「存储管理」页
+（`pages/storage/`，#122）—— 后端那一层的约束见 [`backend/utils` 分册](../../../../../apps/api/backend/utils/AGENTS.md)
+的「存储抽象」一节。**刻意没做**个人云盘（目录树 / 分享 / 配额）。
 
 ### 🔴 这一页**刻意不用 `DataTable`**
 
@@ -33,8 +34,36 @@ pages/file/
 ├─ file-menu.tsx      操作菜单，右键与 ⋯ 下拉共用一份条目定义
 ├─ detail-sheet.tsx   详情抽屉：落盘名 / MIME / 校验和 / 上传人这些排障字段
 ├─ preview-dialog.tsx 预览弹窗：取字节 → 交 viewer
+├─ uploader.ts        往全局上传队列塞文件（`shell/upload-store.ts`），页面自己不画队列
 └─ attachments.tsx    **可复用的附件面板**，任何页面给 targetType + targetId 就能嵌
 ```
+
+### 上传走全局队列：`packages/platform/src/upload/`（引擎）+ `shell/upload-store.ts`（队列）+ 右下角浮窗
+
+文件页和附件面板共用 `useFileUploader({ source })`（`./uploader.ts`），它只是往 `shell/upload-store.ts`
+的**全局**队列 `enqueue`；进度在右下角的浮窗里（`shell/upload-tray.tsx`，见 [shell 分册](../../shell/AGENTS.md)）。
+队列不在页面里：关掉文件页签上传不会被取消，切到别的页面也看得见进度；附件面板的「传完就挂载」跟着那一项走
+（`opts.onDone` 存在队列里），面板关了也照常执行（实测）。每个文件：浏览器端分块算 sha256
+（`hash-wasm`，不是 `crypto.subtle` —— 后者一次性要整个文件进内存，而且局域网 http 下是 `undefined`）
+→ `GET /sys/files/check`（同一人 + 同名 + 同内容传过就**不传**，直接复用旧记录）→ `POST /upload`
+走 XHR（`@admin/api` 的 `sendUpload`：fetch 拿不到上传进度）。串行、可取消、可重试，队列状态机在
+`packages/platform/src/upload/queue.ts`，有单测（`pnpm --filter @admin/platform test`）。
+
+- 🔴 **之前的「秒传」是先把整个文件传上去、后端算完 sha256 再发现重复** —— 99 MB 的 zip 重复传一次就是
+  99 MB 白跑，而且界面上什么都不说（用户以为「没反应」）。现在命中 `/check` 一个字节都不传，
+  列表里显示「已存在同内容的文件，直接复用」
+- `/check` 的 `public` 参数要和上传的一致，否则「check 说命中了、upload 还是重传一份」（`uploader.ts` 里一处拼）
+- 上传中**不禁用**上传按钮：它是个队列，再选的排在后面。附件面板每个文件传完立刻挂载（挂载幂等，
+  同一个文件选两次只有一行）；面板里只留一句「N 个文件上传中，进度在右下角」，点它展开浮窗
+- `ui/components/uploader/dropzone.tsx` 的 `useFilePicker` 每次 change 后把 `input.value` 清掉 ——
+  不清的话连续选同一个文件不触发 change（用户导入那边踩过）
+- 拖拽投放区包住整块内容区（`data-testid="file-dropzone"`），没有 `sys:file:upload` 的人拖进来不收
+- 小于 `chunk_threshold`（默认 16 MiB，`GET /sys/files/upload-policy` 下发）的文件浏览器 → 后端是**一个请求**；
+  大的走分片 + 断点续传，见下面「分片上传」一节。后端 → S3 那段一律由 OpenDAL 自动 multipart，对浏览器不可见
+
+实测（Playwright，上传限速 3~4 MB/s）：30 MB 的 zip 进度走到 `9.9 MB · 4.0 MB/s · 33%`、浮窗副栏「还剩 8s」；
+同文件再传 0 次 `/upload` 请求、显示复用；取消 → 重试 → 完成；拖拽投放进队列；切到存储管理页浮窗还在、继续传；
+附件面板传完即挂、重复选同一个文件列表仍只有一行、**传到一半关掉详情抽屉照样挂上**。
 
 几条定下来的约定：
 
@@ -52,6 +81,77 @@ pages/file/
   `display:none`（宽度 0），监控页的趋势线已经因为同一个原因换掉了 recharts
 - **列表视图不要退回 `DataTable`**。文件名要吃掉剩余宽度，其余属性靠右排成一条
   次要信息带；用表格会把它变回等宽列，一屏能看的文件数还少一半
+
+### 回收站（#122 第二期）
+
+「删除」= 进回收站：`sys_file.deleted` 置位、附件关联解开，**对象不动**；左栏「回收站」点进去
+（`?scope=recycle`，`recycle-bin.tsx`）可以还原 / 彻底删除 / 清空；到期由 `maintenance.purge_recycled_files`
+（每天 03:45）彻底删除。保留天数只有一个真相源：`FILE_RECYCLE_DAYS`（默认 30，0 = 不启用、删除即彻底删除），
+清理任务、行上的「N 天后清除」、删除确认框的文案都读它（统计接口下发 `recycle_days`）。
+
+- 🔴 **「在回收站里」= `deleted ≠ 0 且 purged_time IS NULL`**，不能只看 `deleted`：第二期之前删的记录对象早没了，
+  迁移把它们的 `purged_time` 回填成 `deleted_time` —— 不回填的话它们全进回收站，一还原就是一批「文件已丢失」
+- 🔴 **回收站里的文件一律读不到**（详情 / 下载 / `/link` / `/uploads` 都 404）—— 否则「删了」只是界面上看不见。
+  所以回收站视图没有预览和下载，要看先还原
+- 🔴 **还原 = 撤销那一次删除**：删除时文件和关联用**同一个** `deleted_time`，还原时把 `deleted_time` 相等的关联挂回去；
+  之前手动从附件面板「移除」的不挂。先查后改，不用 `UPDATE … WHERE NOT EXISTS(同表)`（MySQL error 1093）
+- 🔴 **清空 / 定时清理按 `id > 上一批最后一个` 往后翻（keyset），不能每批从头取。** 变异检验抓到的：让「在回收站里」
+  不看 `purged_time`，清空接口直接死循环挂到超时 —— 只要有一行清不掉，「从头取」每批都会把它取回来。
+  原来那句 `if purged == 0: break` 拦不住（更新照样「成功」）
+- 🔴 **存储页删存储时回收站里的也算**（`get_storage_counts` 返回 正常 / 回收站 两个数）：对象还在那个存储里，
+  删了存储它们就永远还原不回来
+- 秒传（`/check` 和上传去重）只看正常文件：回收站里的同名同内容不复用 —— 复用了就是「上传成功，但文件在回收站里」
+- 删除成功后弹一条带「撤销」的 toast（`ui/toast` 的 action 点完会自动关掉这一条，之前不会）
+- 还原 / 彻底删除 / 清空复用 `sys:file:del`（回收站之前「删除」本来就是彻底删除，权限面没变大）；列表要 `sys:file:list`
+
+实测：`app/admin/tests/api_v1/test_recycle.py` 12 条；**变异检验** 6 处各打红（还原不挂关联 · 还原把手动移除的也挂回去 ·
+存储计数不算回收站 · 回收站不看 purged_time · 清理任务不看保留期 · 删除时直接清除对象）。迁移在 PostgreSQL 上
+up → down → up（开发库 11 条存量已删记录全变墓碑、回收站为 0）。浏览器：删除确认框写「移到回收站」→ toast「撤销」→
+批量删 3 个 → 左栏「回收站 3」→ 行上「30 天后清除」→ 还原 / 彻底删除 / 清空全过。
+⚠️ 写还原的测试要用**随机的目标 ID**：还原回来的文件会一直挂在目标上，固定 ID 的话第二轮就看到上一轮那条（跑第二遍才红）
+
+### 分片上传 / 断点续传（#122 第三期）
+
+不小于 `FILE_CHUNK_THRESHOLD` 的文件，`upload-store.ts` 的 `upload` 换成 `packages/platform/src/upload/chunked.ts` 的 `uploadChunked`：
+`POST /multipart`（init）→ 并发 3 片 `PUT /multipart/{id}/{n}`（裸字节，`FILE_CHUNK_SIZE` 一片，默认 8 MiB）→
+`POST /multipart/{id}/complete`。sha256 预检（`/check`）照旧在前面，命中了一片都不传。
+会话在 Redis（24 小时没动静过期，每传一片续期），分片落在**目标存储的私有子树** `_multipart/{upload_id}/`，
+complete 按片号流式拼成最终对象、边拼边算 sha256、按普通上传的口径去重落库，再删分片。
+
+- 🔴 **五个接口全挂 `sys:file:upload` + `DependsRBAC`，init 和 complete 各过一遍和 `/upload` 同一份的校验**
+  （扩展名白名单 + 分类大小上限 + 公开件只收图片，`multipart_service.verify_upload`）。ContiNew 的 GHSA-j7qm-qprw-c53w
+  （CVSS 8.5）就是分片接口漏了权限和白名单。complete 再校验一次，挡的是「init 之后管理员调低了上限」
+- 🔴 **每一片边收边数**：除最后一片外必须正好 `chunk_size`，超了当场断开（不等收完），少了也不收。
+  会话按上传人隔离，别人的 `upload_id` 一律 404
+- 🔴 **`upload_id` 先过 `^[0-9a-f]{32}$`**：会话旁边就是 `:parts`（集合）和 `:lock` 两个 key，真实 id 拼上这两个后缀
+  不校验的话会被当会话读 —— 前者 WRONGTYPE、后者 json 解出来是个 int，都是 500
+- 🔴 **操作日志中间件不读 `application/octet-stream` 的请求体**（`opera_log_middleware.get_request_args`）。
+  它在路由之前跑：分块传输没有 Content-Length，原来那道「超过上限就不读」挡不住，会先把整片收进内存；
+  带 Content-Length 的小片又会被 `decode('utf-8', 'ignore')` 成乱码写进 `sys_opera_log`
+- 🔴 **同时两次 complete（双击、网络重试）只让一个去拼**（Redis `SET NX` 锁），另一个 409 —— 否则是两份对象、两条记录
+- **取消 = 放弃**（删服务端会话和分片、删续传记录）；**失败 = 留着**，浮窗里「重试」从断点接着传
+- **刷新 / 关掉标签页之后**：`File` 对象没了，只能让用户重新选。`packages/platform/src/upload/resume.ts` 在 localStorage 记
+  「指纹（名字 + 大小 + 修改时间）→ upload_id」，浮窗挂载时逐个 `GET /multipart/{id}` 核一遍（404 = 过期，丢掉），
+  活着的显示成「N 项上传未完成」+「继续 / 放弃」；点继续弹文件选择框，选的指纹对不上就 toast 报错、不传。
+  直接在文件页重新选同一个文件也会自己续上（`enqueue` 时顺手把那一行撤掉）
+- 过期会话留下的分片由 `maintenance.purge_stale_multipart`（每天 04:00）清：每个存储的 `_multipart/{upload_id}/` 里，
+  Redis 里已经没有会话的目录整个删掉；名字不像 upload_id 的不碰
+- 拼接的代价是对象存储上的字节读写两遍（同 Rails ActiveStorage 的 compose）：OpenDAL 没有暴露 UploadPart / ListParts，
+  所以不是 S3 原生的 multipart。上限由分类大小上限兜着（压缩包 100 MB），这个代价可接受
+
+实测：`app/admin/tests/api_v1/test_multipart.py` 26 条（PostgreSQL · moto · **RustFS** 真服务 63 条连同 test_storage；
+SQL Server 全套 762 条 + 迁移 upgrade）；
+**变异检验** 11 处各打红（init 不校验 · complete 不复查上限 · 不边收边断 · 不收短片 · 不查归属 · 没有锁 ·
+中间件读二进制 · 清理不看会话 · 清理不认名字 · PUT 漏权限 · upload_id 不校验形状）。
+⚠️ **「边收边断」只能经 service 测**：TestClient 会先把整个请求体读完再交给应用 —— 实测服务端第 3 块就判了 400，
+生成器照样被读完 50 块 —— 所以经 HTTP 写的测试分不出「当场断」和「收完再判」
+**两个后端进程交替接分片**（#122 的验收项）：A / B 两个 uvicorn 共用 `fba_test` + Redis，默认存储是 RustFS ——
+A init、片 1/3/5 打 A、2/4 打 B、B complete（两边的访问日志核过确实各自接了那几片），sha256 一致、经 A 下载字节一致、
+桶里只剩最终对象；取消也跨进程（B 开、A 传一片、B 取消）→ 桶里那一片被删、A 再查 404。
+浏览器（Playwright，上传限速 3 MiB/s，40 MiB = 5 片）：传到一半刷新 → 服务端有 `[1,2,3]`、浮窗「1 项上传未完成 · 已传 60%」→
+点继续选同一个文件 → **只 PUT 了 4、5 两片** + complete，sha256 与原文件一致；取消 → `DELETE` 会话；
+刷新后选错文件 → toast 报错、那一行原样留着、没有入队；放弃 → `DELETE` + localStorage 记录清空。
+⚠️ 前端：`packages/platform/src/upload/chunked.test.ts` 7 条（续传只补缺的片 · 会话过期重开 · 5xx 重试 4xx 不重试 · 取消删会话）
 
 ### 缩略图是「把原图当缩略图」，有闸门
 
@@ -88,6 +188,11 @@ pages/file/
   曾经只有上传/详情带它，列表接口返回不带的版本 →
   前端预览拼出 `http://127.0.0.1:8000undefined` → 弹窗「文件加载失败」。
   每个读取路径都要这个地址，那它就该长在唯一的详情模型上
+- **对象存储上的文件下载走 `/{pk}/link` 拿预签名地址**，浏览器原生下载（不经后端中转、不整块读进内存）；
+  本地存储那个接口返回 `url: null`，回落到下面这条。🔴 **不要**改成「fetch 带头去跟后端的 302」——
+  跨域重定向时浏览器剥掉 Authorization 头（Fetch 规范），不剥的老客户端会让 S3 收到两种鉴权直接 400
+  （这两条是规范和别人的案例，**没有实测**）。
+  预览仍走 `download_url`（后端流式代理），所以**桶不需要配 CORS**
 - **不能做成 `<a href={download_url} download>`** —— 那个地址要 Authorization 头，
   裸链接带不上，结果是把 401 的 JSON 当文件存下来。走 `fetchBytes` → Blob →
   临时 `<a>` 点一下 → **立刻 `revokeObjectURL`**（不 revoke 整个文件的字节会留在内存里）

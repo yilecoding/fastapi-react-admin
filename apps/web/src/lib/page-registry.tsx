@@ -8,6 +8,7 @@ import { DictPage } from "@admin/platform/pages/dict"
 import { DataPermissionPage } from "@admin/platform/pages/data-permission"
 import { MenuPage } from "@admin/platform/pages/menu"
 import { FilePage } from "@admin/platform/pages/file"
+import { StoragePage } from "@admin/platform/pages/storage"
 import { ConfigPage } from "@admin/platform/pages/config"
 import { LogOnlinePage } from "@admin/platform/pages/log-online"
 import { MonitorRedisPage } from "@admin/platform/pages/monitor-redis"
@@ -29,6 +30,8 @@ import { AiConfirmPage } from "@admin/platform/pages/ai-confirm"
 import { AiMcpClientPage } from "@admin/platform/pages/ai-mcp-client"
 import { AiProviderPage } from "@admin/platform/pages/ai-provider"
 import { AiToolLogPage } from "@admin/platform/pages/ai-tool-log"
+import { OpenAppPage } from "@admin/platform/pages/open-app"
+import { OpenLogPage } from "@admin/platform/pages/open-log"
 import { WorkflowInboxPage } from "@admin/platform/pages/workflow-inbox"
 import { WorkflowDefinitionPage } from "@admin/platform/pages/workflow-definition"
 import { WorkflowMonitorPage } from "@admin/platform/pages/workflow-monitor"
@@ -49,6 +52,8 @@ export const pageRegistry: PageRegistry = {
   "/_auth/ai/confirm": AiConfirmPage,
   "/_auth/ai/tool-log": AiToolLogPage,
   "/_auth/dashboard": DashboardPage,
+  "/_auth/open/app": OpenAppPage,
+  "/_auth/open/log": OpenLogPage,
   "/_auth/scheduler/manage": SchedulerManagePage,
   "/_auth/scheduler/record": SchedulerRecordPage,
   "/_auth/system/user": UserPage,
@@ -57,6 +62,7 @@ export const pageRegistry: PageRegistry = {
   "/_auth/system/dept": DeptPage,
   "/_auth/system/data-permission": DataPermissionPage,
   "/_auth/system/file": FilePage,
+  "/_auth/system/storage": StoragePage,
   "/_auth/log/login": LogLoginPage,
   "/_auth/log/opera": LogOperaPage,
   "/_auth/plugins/dict": DictPage,

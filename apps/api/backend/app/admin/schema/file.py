@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote
 
 from pydantic import ConfigDict, Field, computed_field
@@ -29,6 +29,8 @@ class GetFileDetail(SchemaBase):
     # 写 `int` 会让 openapi 生成 `number`，前端 tsc 以为能当数字用 —— 类型和运行时对不上。
     # （同样的账 `dept_id` / `parent_id` 也欠着，那是既有问题，不在本次范围）
     created_by: int | str = Field(description='上传人 ID')
+    # None = 内置本地存储。同 created_by 声明成 `int | str`（雪花 ID 下发成字符串）
+    storage_id: int | str | None = Field(None, description='所属存储 ID（null：内置本地存储）')
     created_time: datetime = Field(description='上传时间')
     updated_time: datetime | None = Field(None, description='更新时间')
 
@@ -71,6 +73,28 @@ class GetFileDetail(SchemaBase):
         return f'/uploads/{quote(self.path, safe="/")}'
 
 
+class GetFileLinkDetail(SchemaBase):
+    """直连下载地址"""
+
+    # null = 这个文件所在的存储不支持直连（本地存储），用 `download_url` 走带鉴权的下载接口
+    url: str | None = Field(None, description='短时效的直连地址；null 表示不支持，回落到 download_url')
+    expires_in: int | None = Field(None, description='有效期（秒）')
+
+
+class GetRecycledFileDetail(GetFileDetail):
+    """回收站里的文件"""
+
+    deleted_time: datetime = Field(description='删除时间')
+
+    @computed_field(description='到期自动彻底删除的时间；null = 回收站已关闭（FILE_RECYCLE_DAYS=0），不会自动清除')
+    @property
+    def purge_time(self) -> datetime | None:
+        # 和清理任务读同一个配置（`maintenance.purge_recycled_files`），界面上的「剩余 N 天」才对得上
+        if settings.FILE_RECYCLE_DAYS <= 0:
+            return None
+        return self.deleted_time + timedelta(days=settings.FILE_RECYCLE_DAYS)
+
+
 class DeleteFileParam(SchemaBase):
     """删除文件参数"""
 
@@ -84,6 +108,10 @@ class GetFileStatisticsDetail(SchemaBase):
     total_size: int = Field(description='占用总字节数')
     type_counts: dict[str, int] = Field(description='各分类的文件数')
     type_sizes: dict[str, int] = Field(description='各分类的占用字节数')
+    # 回收站：对象还在存储里，空间还没释放 —— 和上面的「已用空间」分开算
+    recycle_count: int = Field(0, description='回收站里的文件数')
+    recycle_size: int = Field(0, description='回收站里文件的占用字节数')
+    recycle_days: int = Field(0, description='回收站保留天数；0 = 未启用回收站，删除即彻底删除')
 
 
 class CreateFileRelationParam(SchemaBase):
@@ -100,3 +128,37 @@ class DeleteFileRelationParam(SchemaBase):
     file_ids: list[int] = Field(description='文件 ID 列表')
     target_type: str = Field(max_length=32, description='业务对象类型')
     target_id: SnowflakeIdIn = Field(description='业务对象 ID')
+
+
+class GetUploadPolicyDetail(SchemaBase):
+    """上传策略：前端据此决定单次上传还是分片"""
+
+    chunk_threshold: int = Field(description='不小于这个字节数的文件走分片上传')
+    chunk_size: int = Field(description='每片字节数（最后一片是余数）')
+
+
+class InitMultipartParam(SchemaBase):
+    """开始分片上传"""
+
+    # 255 = sys_file.original_name 的列长度
+    name: str = Field(min_length=1, max_length=255, description='文件名')
+    size: int = Field(gt=0, description='总字节数（complete 时按实际收到的再核一次）')
+    public: bool = Field(default=False, description='落公开子树，产出无鉴权直链（仅图片）')
+
+
+class GetMultipartDetail(SchemaBase):
+    """分片上传会话"""
+
+    upload_id: str = Field(description='会话 ID')
+    name: str = Field(description='文件名')
+    size: int = Field(description='总字节数')
+    chunk_size: int = Field(description='每片字节数')
+    total_parts: int = Field(description='总片数')
+    uploaded_parts: list[int] = Field(description='已经传完的片号（续传时只补缺的）')
+
+
+class GetMultipartPartDetail(SchemaBase):
+    """写完的一片"""
+
+    part: int = Field(description='片号')
+    size: int = Field(description='收到的字节数')

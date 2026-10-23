@@ -79,11 +79,19 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
     # ⚠️ backend.utils.timezone 只有 now/from_str/to_str/to_utc 那几个，没有 timedelta
     cutoff = timezone.now() - timedelta(days=days)
 
+    # 能力开放插件的调用日志（`open_api_log`）同一个保留期：它和操作日志同口径（含请求 / 响应体），
+    # 保留期不一致的话「操作日志 30 天、调用日志永久」，同一份数据留存规则两套。插件删掉了就跳过
+    try:
+        from backend.plugin.open.model import OpenApiLog
+    except ImportError:
+        OpenApiLog = None  # ruff: ignore[non-lowercase-variable-in-function]
+
     async with async_db_session() as db:
         login = await _prune_table(db, LoginLog, LoginLog.login_time, cutoff, batch)
         opera = await _prune_table(db, OperaLog, OperaLog.opera_time, cutoff, batch)
+        open_api = await _prune_table(db, OpenApiLog, OpenApiLog.request_time, cutoff, batch) if OpenApiLog else 0
 
-    msg = f'清理 {days} 天前的日志：登录日志 {login} 条、操作日志 {opera} 条'
+    msg = f'清理 {days} 天前的日志：登录日志 {login} 条、操作日志 {opera} 条、开放接口调用日志 {open_api} 条'
     log.info(msg)
     return msg
 
@@ -115,5 +123,116 @@ async def prune_task_results(days: int = 30, batch: int = PRUNE_BATCH) -> str:
         n = await _prune_table(db, Task, Task.date_done, cutoff, batch)
 
     msg = f'清理 {days} 天前的任务执行记录：{n} 条'
+    log.info(msg)
+    return msg
+
+
+@celery_app.task(name='maintenance.purge_recycled_files')
+@with_timeout()
+async def purge_recycled_files(batch: int = 200) -> str:
+    """彻底删除回收站里超过保留期（`FILE_RECYCLE_DAYS`，默认 30 天）的文件：删对象，记录留成墓碑。
+
+    保留期**刻意不做成任务参数**（`prune_logs` 那样的 `days`）：回收站列表上的「剩余 N 天」、删除确认框里的
+    「N 天后自动清除」也要读它，做成任务参数就有两个真相源，改了一边另一边照旧显示老数字。
+
+    分批、每批一个事务（同 `_prune_table` 的纪律）：每个文件都要删一次对象，S3 上是一个网络请求，
+    一个事务删几万个的话失败就全部回滚、白跑一趟。
+
+    ⚠️ 不经过 HTTP，没有「当前用户」，所以数据范围不过滤（`DataScopedCRUD` 在没有用户上下文时放行）——
+    要的就是全量
+    """
+    from backend.app.admin.crud.crud_file import file_dao
+    from backend.app.admin.service.file_service import file_service
+    from backend.core.conf import settings
+
+    cutoff = timezone.now() - timedelta(days=max(settings.FILE_RECYCLE_DAYS, 0))
+    total = 0
+    after_id = 0
+    async with async_db_session() as db:
+        while True:
+            ids = await file_dao.get_recycled_ids(db, before=cutoff, after_id=after_id, limit=batch)
+            if not ids:
+                break
+            total += await file_service.purge(db=db, pks=list(ids))
+            await db.commit()
+            # 按 ID 往后翻（keyset）：清不掉的那一行不会被下一批再取回来，循环不会原地打转
+            after_id = ids[-1]
+            if len(ids) < batch:
+                break
+
+    msg = f'彻底删除回收站里超过 {settings.FILE_RECYCLE_DAYS} 天的文件：{total} 个'
+    log.info(msg)
+    return msg
+
+
+@celery_app.task(name='maintenance.purge_stale_multipart')
+@with_timeout()
+async def purge_stale_multipart() -> str:
+    """清掉过期分片会话留下的分片（`_multipart/{upload_id}/`）：Redis 里的会话已经没了，分片还在存储里。
+
+    会话过期 = 用户传到一半走了、`FILE_MULTIPART_EXPIRE_SECONDS` 里一片都没再传。**只动会话已经不在的那些**：
+    会话还活着的分片是「刷新后重新选文件就能接着传」的那份进度，删了等于让人从头传。
+
+    每个存储（内置本地 + `sys_storage` 里的每一行）的私有子树各扫一遍；某个存储连不上只记日志、接着扫下一个 ——
+    一个配错的 S3 不该让其他存储的垃圾一直留着
+    """
+    from backend.app.admin.crud.crud_storage import storage_dao
+    from backend.app.admin.service.multipart_service import PARTS_DIR, UPLOAD_ID_RE
+    from backend.app.admin.service.storage_service import storage_service
+    from backend.core.conf import settings
+    from backend.database import redis as redis_module
+    from backend.utils.storage_ops import StorageError, builtin_target, delete_prefix, list_dirs
+
+    targets = [builtin_target(public=False)]
+    async with async_db_session() as db:
+        for row in await storage_dao.get_all(db):
+            try:
+                targets.append(storage_service.row_target(row, public=False))
+            except Exception as e:  # ruff:ignore[try-except-in-loop]
+                log.warning(f'跳过存储 {row.id}：{e!s}')
+
+    total = 0
+    for target in targets:
+        try:
+            upload_ids = await list_dirs(target, PARTS_DIR)
+        except StorageError as e:
+            log.warning(f'扫描存储 {target.storage_id or "builtin"} 的分片目录失败：{e.reason}')
+            continue
+        for upload_id in upload_ids:
+            # 不是我们起的名字就不碰（有人手工往这个目录里放了东西）
+            if not UPLOAD_ID_RE.match(upload_id):
+                continue
+            # 按模块属性取：测试里要换成绑在自己事件循环上的那个
+            if await redis_module.redis_client.exists(f'{settings.FILE_MULTIPART_REDIS_PREFIX}:{upload_id}'):
+                continue
+            await delete_prefix(target, f'{PARTS_DIR}/{upload_id}')
+            total += 1
+
+    msg = f'清理过期分片上传留下的分片：{total} 个'
+    log.info(msg)
+    return msg
+
+
+@celery_app.task(name='maintenance.purge_expired_exports')
+@with_timeout()
+async def purge_expired_exports(batch: int = 200) -> str:
+    """导出记录的定时清理（#11 · v0.4）：
+
+    - 过了保留期（`EXPORT_FILE_RETENTION_HOURS`）的文件删掉，记录改成「已过期」—— 记录留着，审计不跟着文件消失
+    - 卡在「排队 / 生成中」的结掉（worker 死了、消息丢了），否则界面上永远转圈
+    - 过了记录保留期（`EXPORT_RECORD_RETENTION_DAYS`）的记录删掉
+
+    保留期同样**不做成任务参数**（理由同 `purge_recycled_files`）：记录页上的「N 小时后过期」也要读它。
+    按 id 往后翻（keyset），每批一个事务；删对象失败只记日志，记录照样改成过期
+    """
+    from backend.app.admin.service.export_service import export_service
+
+    async with async_db_session() as db:
+        counts = await export_service.purge(db=db, batch=batch)
+
+    msg = (
+        f'导出清理：文件过期 {counts["expired"]} 个 · 卡住的结掉 {counts["settled"]} 个 · '
+        f'删除老记录 {counts["removed"]} 条'
+    )
     log.info(msg)
     return msg

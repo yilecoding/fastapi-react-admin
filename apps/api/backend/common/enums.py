@@ -103,6 +103,20 @@ class StatusType(IntEnum):
     enable = 1
 
 
+class ExportJobStatus(IntEnum):
+    """导出任务状态（`sys_export_job.status`）
+
+    只有 `succeeded` 能下载。`expired` 是「文件已按保留期删掉、记录还留着」，
+    和 `failed` 分开：前者是正常的生命周期终点，后者要让用户看到原因
+    """
+
+    pending = 0
+    running = 1
+    succeeded = 2
+    failed = 3
+    expired = 4
+
+
 class FileType(StrEnum):
     """文件分类
 

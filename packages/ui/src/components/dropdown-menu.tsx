@@ -104,6 +104,27 @@ function DropdownMenuItem({
   )
 }
 
+/**
+ * 菜单里的**导航**项（「去导出记录看看」那种），不是动作项。
+ *
+ * 和 `DropdownMenuItem` 长得一样，区别在语义：Base UI 的 `Menu.LinkItem` 渲染成 `<a>`、
+ * 不拦截点击，路由的 `<Link>` 走 `render` 传进来就是客户端跳转。拿 `Item` 硬套 `<a>`
+ * 的话读屏念的是「菜单项」而不是「链接」，中键 / Cmd+点击新开标签也不灵
+ */
+function DropdownMenuLinkItem({ className, inset, ...props }: MenuPrimitive.LinkItem.Props & { inset?: boolean }) {
+  return (
+    <MenuPrimitive.LinkItem
+      data-slot="dropdown-menu-link-item"
+      data-inset={inset}
+      className={cn(
+        "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:ps-8 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
 function DropdownMenuSub({ ...props }: MenuPrimitive.SubmenuRoot.Props) {
   return <MenuPrimitive.SubmenuRoot data-slot="dropdown-menu-sub" {...props} />
 }
@@ -266,6 +287,7 @@ export {
   DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuItem,
+  DropdownMenuLinkItem,
   DropdownMenuCheckboxItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,

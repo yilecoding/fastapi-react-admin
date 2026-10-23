@@ -13,9 +13,9 @@
 （组件 / 契约 / 页面），不靠胶水互相粘。登录页那枚咬合标记（`TenonMark`）
 表示的就是这个，不是项目名。
 
-同一枚榫卯套进纯色圆形徽章，就是浏览器标签页 / 桌面端窗口与安装包用的那个 logo ——
-`TenonMark` 本身留给有主题背景的场合（侧边栏、登录页）继续用 `currentColor` 裸跑。
-两者是同一份图形的两种呈现，唯一真相源是 `scripts/gen-brand-icons.mjs`；
+同一枚榫卯套进纯色圆形徽章，就是浏览器标签页 / 桌面端窗口与安装包用的那个 logo（登录页左上角 `TenonBadge` 直接引用它）——
+`TenonMark` 本身留给有主题背景的侧边栏，继续用 `currentColor` 裸跑；登录页左栏的立体榫卯和它共用轮廓 `tenon-outline.ts`。
+两者是同一份图形的两种呈现，徽章的唯一真相源是 `scripts/gen-brand-icons.mjs`；
 改了图形或配色，跑 `pnpm brand:icons` 重新生成 favicon 与桌面图标，不要手改生成产物。
 
 **这份文档是踩坑记录与硬纪律的唯一一份。** 全是实测出来的结论，
@@ -91,7 +91,7 @@ pnpm ctx:check          # 死引用 / 死链接 / 死脚本 / 死 testid / 行�
 
 | 写下的断言 | 实测 |
 |---|---|
-| 「`count > 0 ? success() : fail()`，设同值会 0 行 → 假成功」 | SQL Server / PostgreSQL 的 rowcount 数**匹配**行，设同值照样成功；只有 MySQL 才是 0。**同一接口三个方言行为不同** |
+| 「`count > 0 ? success() : fail()`，设同值会 0 行 → 假成功」 | 三个方言的 rowcount 都数**匹配**行，设同值照样成功。**连这一栏原来写的「只有 MySQL 才是 0」也是推断** —— SQLAlchemy 的 MySQL 方言默认开着 `CLIENT.FOUND_ROWS`，2026-10-22 第一次在真 MySQL 上跑才推翻 |
 | 「重置密码对不存在的用户会走 `fail()`」 | 返回 **404** —— service 先抛了 `NotFoundError`，那个分支走不到 |
 | 「接口覆盖率 55%」（grep 路径字面量算的） | 真记请求是 **47%**；换个 grep 判据还能算出 91%。**两个错数字都足够像结论** |
 
@@ -149,7 +149,7 @@ import 都没有，所以 `packages/ui` 对 workspace 零依赖 —— 刻意的
 
 ```bash
 docker start fba_postgres fba_redis       # PostgreSQL :5432 / Redis :6380（2026-09-08 起默认库，换回 SQL Server 见 docker-compose.dev.yml 的 mssql 注释）
-pnpm dev                                  # api :8088 · web :8888 · celery worker（含内嵌 beat）
+pnpm dev                                  # api :8088 · web :8888 · celery worker（含内嵌 beat）；对象存储另起 `--profile s3 up -d rustfs`（见 compose 注释）
 ```
 
 `apps/api` 和 `apps/worker` 都是 pnpm workspace 成员（`package.json` 里只有一个

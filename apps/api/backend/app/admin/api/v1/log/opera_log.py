@@ -1,9 +1,12 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
+from backend.app.admin.dataio import OPERA_LOG_EXPORT
+from backend.app.admin.schema.export_job import GetExportJobDetail, StartExportParam
 from backend.app.admin.schema.opera_log import DeleteOperaLogParam, GetOperaLogDetail
+from backend.app.admin.service.export_service import export_service
 from backend.app.admin.service.opera_log_service import opera_log_service
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
@@ -36,6 +39,19 @@ async def get_opera_logs_paginated(
     )
 
     return response_base.success(data=page_data)
+
+
+@router.post(
+    '/export',
+    summary='导出操作日志',
+    dependencies=[Depends(RequestPermission('log:opera:export')), DependsRBAC],
+)
+async def export_opera_logs(
+    request: Request, db: CurrentSession, obj: StartExportParam
+) -> ResponseSchemaModel[GetExportJobDetail]:
+    # 小批量当场生成完才返回（status=2，前端直接下载）；大批量返回排队（status=0），生成完发站内消息
+    data = await export_service.start(db=db, request=request, spec=OPERA_LOG_EXPORT, obj=obj)
+    return response_base.success(data=data)
 
 
 @router.delete(

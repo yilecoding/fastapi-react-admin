@@ -34,6 +34,7 @@ EXEMPT: dict[str, str] = {
     'CRUDDictType': '全局字典，前端下拉依赖',
     'CRUDDictData': '全局字典，前端下拉依赖',
     'CRUDConfig': '系统参数，且在启动 / 登录期读取',
+    'CRUDStorage': '存储是系统级配置（同 sys_config），不归属部门/人；读文件那条路不挂权限码，过滤了就读不到文件',
     'CRUDUserPasswordHistory': '改密时内部读，不对外展示',
     'CRUDUserSocial': 'OAuth2 绑定在登录链路上读，那时没有当前用户',
     'CRUDNotification': '收件箱按 current_user.id 强制过滤，再叠部门维度会变成「我和我下属的通知」',
@@ -43,6 +44,12 @@ EXEMPT: dict[str, str] = {
     'CRUDAiMessage': '消息的可见性完全由所属会话的所有权决定，这张表自己没有可过滤维度',
     'CRUDAiToolInvocation': '审计表没有可过滤维度，挂上只有 fail-closed 一种效果；靠 ai:log:list 权限码',
     'CRUDAiMcpClient': 'MCP 凭据是系统级配置（同模型供应商），且网关鉴权时还没有当前用户；靠 ai:mcp:* 权限码',
+    'CRUDOpenApp': '能力开放应用是系统级配置（同 MCP 凭据），开放接口验签时没有当前用户；靠 open:app:* 权限码',
+    'CRUDOpenApiLog': '调用日志是系统级审计记录（同操作日志）；靠 open:log:list 权限码',
+    'CRUDExportJob': (
+        '导出记录按 created_by == 当前用户强制过滤（同收件箱），接口只挂登录；'
+        '再叠部门维度会让受限用户连自己的导出都看不到'
+    ),
 }
 
 

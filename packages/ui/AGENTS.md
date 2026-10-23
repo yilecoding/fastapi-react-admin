@@ -141,6 +141,7 @@ context** 里取翻译函数，而那个 i18next 实例是 `@admin/i18n` 建的�
 | 分页 | 有 `page`/`size` 在 search schema 里，界面上就必须有分页条 —— 否则第 2 页不可达。默认每页走 `_shared/pagination.ts` 的 `DEFAULT_PAGE_SIZE`（宫格用 `DEFAULT_GRID_PAGE_SIZE`），**不要各页写 `search.size ?? 20`** —— 原来那个 `?? 10` 散在 8 处，改默认值必漏一处，而漏了只表现为「某一页跟别人不一样」。默认值刻意**不写进 URL**：写了就分不出「用户显式选了 20」和「没选、恰好是默认」 |
 | 「回第一页」 | 写 `page: undefined`，**不是 `page: 1`**。改筛选必须跳回第一页（第 5 页改条件、结果只剩 3 条 → 空页，看着像「什么都没查到」），但写字面量 1 会让 `?page=1` 出现在每个列表页的地址栏 —— 全仓踩了 59 处 + 8 处 `page: i + 1`（从第 2 页点回第 1 页）。见 `_shared/pagination.ts` |
 | 列显隐 | 用 `_shared/use-column-visibility`，URL 里存**被隐藏**的列 id（`hide=browser,os`）。默认全显示所以通常为空，加列也不会让老链接错位 |
+| 列顺序（#11） | 注册 `columnOrderingFeature` + `_shared/use-column-order`，「列」面板里就多出拖拽手柄（键盘也能拖：空格拿起、方向键挪）。URL 里只存可移动列的顺序（`cols=…`），默认顺序不写。🔴 **`cols` 要进 `useQuerySearch` 的 `keep`**，否则每点一次搜索列顺序就被冲掉 —— 实测：删掉路由 schema 里的 `cols` 列顺序照样保留（叶子路由的 search 合并了根上没校验的那一份），删掉 `keep` 里的才红（`e2e/tests/data-io.spec.ts`） |
 | 空列表 | `DataTable` 的 `emptyAction` 放「清除筛选」—— 空态最常见的成因就是筛选太窄，别逼用户回工具栏找 |
 | **取数失败** | 传 `DataTable` 的 `error` + `onRetry`（错误块横跨表体，还有旧行时改挂横幅），**不要**让它落进 `emptyMessage` —— 失败和空数据是两件事（硬纪律 9）。错误块本身是 `components/query-error.tsx` 的 `QueryError`，全站唯一一份；它认 `ApiError.httpStatus`，403 有专门文案。手写 `<TableBody>` 的表用 `DataTableErrorRow`，插在空态分支**之前** |
 | 树形展开状态 | 用 `useTreeFold`：65 个 19 位雪花 id 塞进 URL 不现实，所以粗粒度（全展开/全折叠）进 URL，细粒度靠 `<Activity>` 保会话 |
@@ -157,6 +158,7 @@ context** 里取翻译函数，而那个 i18next 实例是 `@admin/i18n` 建的�
 | 文件预览 | `ui/components/file-viewer` + `pages/file/preview-dialog`。喂 `buffer`（带鉴权取回的字节）不喂 url；只在 Dialog 里挂，别常驻页面。详见 [file 分册](../platform/src/pages/file/AGENTS.md) |
 | 业务对象附件 | `pages/file/attachments` 的 `<FileAttachments targetType targetId />`，别另写一套。`targetType` 走常量 |
 | 富文本 | `ui/components/rich-text`。图片能力由 `platform` 注入（`useRichTextImages()`），不传 `images` 就整块关掉。详见 [rich-text 分册](./src/components/rich-text/AGENTS.md) |
+| 选文件 / 拖拽投放 / 上传浮窗 | `ui/components/uploader/` 的 `useFilePicker`（隐藏 input + `open()`，change 后自动清 `value`）· `Dropzone`（包住任意内容，拖进来盖一层提示；不给 children 就是空态格子）· `UploadTray`（右下角浮窗：标题 / 剩余时间 / 取消全部 / 每行状态环，折叠态只剩标题栏）。它们只认一个 `UploadTrayItem` 形状，不发请求 —— 引擎在 `../platform/src/upload/`，队列和接线在 `../platform/src/shell/upload-store.ts`，页面只调 `pages/file/uploader.ts` |
 | 带鉴权的下载 | 不能用 `<a href download>`（带不上 Authorization 头，会把 401 的 JSON 存成文件）。走 `fetchBytes` → Blob → 临时 `<a>` → `revokeObjectURL` |
 
 ### 🔴 tooltip 的锚点不能是 `display:contents` 的包装元素

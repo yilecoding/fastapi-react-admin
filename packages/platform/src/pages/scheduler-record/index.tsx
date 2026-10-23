@@ -15,6 +15,7 @@ import { StatusPill } from '../_shared/status'
 import { listState } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
+import { useUrlColumnOrder } from '../_shared/use-column-order'
 import {
   RESULT_STATUS_FILTER_ITEMS,
   RESULT_STATUS_LABEL,
@@ -32,6 +33,8 @@ export type SchedulerRecordSearch = {
   task_id?: string
   status?: string
   hide?: string
+  /** 可移动列的顺序（和默认一样时不写），逗号分隔 */
+  cols?: string
 }
 
 /**
@@ -96,7 +99,7 @@ export function SchedulerRecordPage({
     [onSearchChange, search]
   )
 
-  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, keep: ['hide'], refreshKey: resultKeys.all })
+  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, keep: ['hide', 'cols'], refreshKey: resultKeys.all })
 
   const listQuery = useQuery(
     resultsQuery({ page, size, ...(q.params as Record<string, string>) })
@@ -197,17 +200,25 @@ export function SchedulerRecordPage({
 
   const hasFilter = countActive(q.applied, FIELDS) > 0
 
+  // 列顺序进 URL（同列显隐）—— 走 onSearchChange 而不是 patch：换列序不该清勾选、也不该跳回第一页
+  const [columnOrder, setColumnOrder] = useUrlColumnOrder(
+    search.cols,
+    React.useCallback((cols) => onSearchChange?.({ ...search, cols }), [onSearchChange, search]),
+    columns
+  )
+
   const table = useTable({
     features,
     data: rows,
     columns: columns as never,
-    state: { columnVisibility },
+    state: { columnVisibility, columnOrder },
     getRowId: (r: TaskResult) => String(r.id),
     manualPagination: true,
     rowCount: data?.total ?? 0,
     // 只读列表 —— 没开批量删除就不开行选中，否则分页条上「已选 N 项」永远是 0
     enableRowSelection: false,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
   })
 
   return (

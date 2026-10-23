@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { IconFiles } from '@tabler/icons-react'
+import { IconFiles, IconTrash } from '@tabler/icons-react'
 
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { cn } from '@admin/ui/lib/utils'
@@ -39,10 +39,15 @@ const TYPE_BAR: Record<FileType, string> = {
 export function FileRail({
   value,
   onChange,
+  recycle = false,
+  onRecycle,
   className,
 }: {
   value: FileType | undefined
   onChange: (next: FileType | undefined) => void
+  /** 当前在回收站视图 */
+  recycle?: boolean
+  onRecycle?: () => void
   className?: string
 }) {
   const { t } = useTranslation()
@@ -58,7 +63,7 @@ export function FileRail({
           icon={<IconFiles className="size-4 text-muted-foreground" aria-hidden />}
           label={t('全部')}
           count={total}
-          active={value === undefined}
+          active={!recycle && value === undefined}
           loading={isPending}
           testId="rail-all"
           onClick={() => onChange(undefined)}
@@ -71,13 +76,28 @@ export function FileRail({
               icon={<Icon className={cn('size-4', TYPE_TONE[type])} aria-hidden />}
               label={t(FILE_TYPE_LABEL[type])}
               count={data?.type_counts?.[type] ?? 0}
-              active={value === type}
+              active={!recycle && value === type}
               loading={isPending}
               testId={`rail-${type}`}
               onClick={() => onChange(type)}
             />
           )
         })}
+        {/* 回收站：回收站没启用（recycle_days = 0）且是空的就不显示 —— 一个永远空着的入口只会让人去点 */}
+        {onRecycle && (data?.recycle_days || data?.recycle_count) ? (
+          <>
+            <div className="my-1 border-t" />
+            <RailItem
+              icon={<IconTrash className="size-4 text-muted-foreground" aria-hidden />}
+              label={t('回收站')}
+              count={data?.recycle_count ?? 0}
+              active={recycle}
+              loading={isPending}
+              testId="rail-recycle"
+              onClick={onRecycle}
+            />
+          </>
+        ) : null}
       </nav>
 
       <div className="flex flex-col gap-2 rounded-lg border p-3">

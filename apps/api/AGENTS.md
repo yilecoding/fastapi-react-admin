@@ -19,7 +19,7 @@ ID」一节，现在有 `test_seed_dialects.py` 守着）显示这套"SQL Server
 真出过事故。这次把"本地默认起哪个库"也一起翻了：三处默认值改指 PostgreSQL，
 文档「主线」字样跟着改，**但 CI 的 `test-backend`/`test-backend-postgres` job id
 没改名**（分支保护 required checks 认字面量，要动先去仓库设置确认），
-`test-e2e` 也仍连 SQL Server（换方言要真跑一轮 CI 验证，没跟这次揉一起）。
+`test-e2e` 也仍连 SQL Server（换方言要真跑一轮 CI 验证，没跟这次揉一起）。MySQL 不在 CI 里，真库实跑见 [`backend/tests` 分册](backend/tests/AGENTS.md)「MySQL」一节。
 
 **结论**：下面「后端约定」里那几条 SQL Server 专属约定依然要遵守——本地默认库
 变 PostgreSQL 后测不出来，只有 CI 的 `pytest · SQL Server` job 能拦住。
@@ -81,8 +81,8 @@ ID」一节，现在有 `test_seed_dialects.py` 守着）显示这套"SQL Server
   （随机后缀，不复用原名做唯一性）。
   ⚠️ 落盘分**两棵树，别把它们当成一回事**：私有件在 `UPLOAD_DIR`
   （`core/path_conf.py`，= `BASE_PATH / 'upload'`），**不挂静态**，只能走带 JWT 的
-  `GET /api/v1/sys/files/{pk}/download`；公开件在 `PUBLIC_UPLOAD_DIR`，由
-  `core/registrar.py: register_static_file` 挂在 `/uploads`，**设计上就不鉴权** ——
+  `GET /api/v1/sys/files/{pk}/download`；公开件在 `PUBLIC_UPLOAD_DIR`，经 `/uploads/{key}`
+  （`app/admin/api/uploads.py`：按 key 反查 `is_public` 的记录，再去它自己的存储取）读，**设计上就不鉴权** ——
   富文本正文里的 `<img src>` 带不上 Authorization 头，只能有这么一条。
   进那棵树要显式 `?public=true`，且服务端强制只收图片
   （`app/admin/service/file_service.py: verify_public`）。
@@ -187,12 +187,9 @@ Python 依赖归 `uv` 管（`pyproject.toml` + `uv.lock`），pnpm 不知道它�
 
 ## 用户批量导入
 
-`POST /sys/users/import/{preview,commit}` + 模板下载。两阶段（预览只校验不落库
-+ Redis 短期 token；提交允许部分成功），明文密码在整条链路上一次都不出现。
-
-🔴 **批量建号不要循环调 `user_service.create()`** —— 每行一次 bcrypt，实测 87 行
-把事件循环占住 16.7 秒。这条和另外六条在
-[`backend/app/admin` 分册](backend/app/admin/AGENTS.md)。
+通用导入框架的一个资源（框架见 [`backend/common/dataio` 分册](backend/common/dataio/AGENTS.md)），
+明文密码在整条链路上一次都不出现。🔴 **批量建号不要循环调 `user_service.create()`** ——
+每行一次 bcrypt，实测 87 行把事件循环占住 16.7 秒（这条和另外六条在 [`backend/app/admin` 分册](backend/app/admin/AGENTS.md)）。
 
 ## 操作日志的脱敏
 
@@ -495,5 +492,7 @@ async_db_session`"，定时任务/脚本/CLI 命令这类不经过 FastAPI 依�
 | 动公共层（校验 / 异常 / 缓存 / 分页） | [`backend/common` 分册](backend/common/AGENTS.md) |
 | admin 模块的测试笔记（动态配置 / prod 检查 / 上传） | [`app/admin/tests` 分册](backend/app/admin/tests/AGENTS.md) |
 | 解析上传的 xlsx | [`backend/utils` 分册](backend/utils/AGENTS.md) |
+| **给一个资源加导出 / 导入** · 公式注入 · 后台导出 · 部门导入查环 | [`backend/common/dataio` 分册](backend/common/dataio/AGENTS.md) |
 | 用户批量导入 / 批量建号的性能 · **`sys_menu` 删掉的那两列** | [`backend/app/admin` 分册](backend/app/admin/AGENTS.md) |
 | 操作日志脱敏 / 中间件 | [`backend/middleware` 分册](backend/middleware/AGENTS.md) |
+| 能力开放 / 开放接口 / AK·SK 签名（对接方文档是同目录 `README.md`） | [`backend/plugin/open` 分册](backend/plugin/open/AGENTS.md) |

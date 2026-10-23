@@ -7,7 +7,7 @@
  * domain state out of this file.
  *
  * Exports:
- *   DataTableColumnVisibility  – "Columns" dropdown (hide/show columns)
+ *   DataTableColumnVisibility  – 「列」：显隐 + 拖拽排序（排序要注册 columnOrderingFeature）
  *   DataTableFacetedFilter     – multi-select faceted filter (status/plan, etc.)
  *   DataTablePagination        – rows-per-page select + page nav buttons
  *   DataTable                  – full shell: toolbar slot + table + pagination
@@ -16,20 +16,32 @@
  *                                （错误块本身在 components/query-error.tsx）
  */
 import * as React from "react"
-import { IconLayoutColumns, IconPlus } from "@tabler/icons-react"
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers"
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import { IconGripVertical, IconLayoutColumns, IconPlus, IconRotate } from "@tabler/icons-react"
 import { FlexRender } from "@tanstack/react-table"
 import { useT } from "../lib/i18n"
 import type { Row, RowData, Table, TableFeatures } from "@tanstack/react-table"
 
 import { Badge } from "@admin/ui/components/badge"
 import { Button } from "@admin/ui/components/button"
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuTrigger,
-} from "@admin/ui/components/dropdown-menu"
+import { Checkbox } from "@admin/ui/components/checkbox"
 import {
   Popover,
   PopoverContent,
@@ -48,6 +60,7 @@ import {
   TableHeader,
   TableRow,
 } from "@admin/ui/components/table"
+import { cn } from "@admin/ui/lib/utils"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,6 +88,21 @@ export interface DataTableColumnVisibilityProps<
   columnLabels?: ColumnLabelMap
 }
 
+/**
+ * 「列」：显隐 + 顺序（#11）。
+ *
+ * 顺序要调用方在 `tableFeatures()` 里注册 `columnOrderingFeature`；没注册的表只有显隐，
+ * 拖拽手柄不渲染 —— 而不是运行时炸掉（见 ui 分册「没注册的 TanStack 特性」）。
+ * 列表页把 `columnOrder` 接到 URL 上（`platform/pages/_shared/use-column-order.ts`），刷新还在。
+ *
+ * 只在**有 accessor、能隐藏**的那几列之间换位置：勾选列、序号、操作列留在自己的槽位上 ——
+ * 照 `data-grid` 那份把固定列一股脑放到最前面的话，操作列会被挪到第一列。
+ *
+ * **只留图标**，全站一致：「列」是次要的工具动作（一天点不了一次），和它同排的却是「新增 / 导出」。
+ *
+ * ⚠️ tooltip 的 `render` 必须**直接指向 trigger**，不能套一层 `<span className="contents">` ——
+ * `display:contents` 不生成布局盒，`getBoundingClientRect()` 全 0，气泡会飞到视口左上角（见 ui 分册）。
+ */
 export function DataTableColumnVisibility<
   TFeatures extends TableFeatures,
   TData extends RowData,
@@ -84,51 +112,142 @@ export function DataTableColumnVisibility<
 }: DataTableColumnVisibilityProps<TFeatures, TData>) {
   const t = useT()
   const table = tableProp as AnyTable
-  const hidableColumns = table
-    .getAllColumns()
-    .filter((col) => typeof col.accessorFn !== "undefined" && col.getCanHide())
+  // `getAllLeafColumns` 已经按当前的 columnOrder 排好了
+  const leaves = table.getAllLeafColumns()
+  const movable = leaves.filter((col) => typeof col.accessorFn !== "undefined" && col.getCanHide())
+  const ids = movable.map((col) => col.id)
+  const canOrder = typeof table.setColumnOrder === "function"
+  const shown = movable.filter((col) => col.getIsVisible()).length
 
-  /**
-   * **只留图标**，全站一致。
-   *
-   * 「列」是次要的工具动作（一天点不了一次），和它同排的却是「新增 / 导出」
-   * 这类主动作 —— 带文字之后每一页的工具行都被它多占一块。而且原来写的是
-   * `hidden lg:inline`：小屏本来就只剩图标，等于同一个控件有两种样子。
-   *
-   * ⚠️ tooltip 的 `render` 必须**直接指向 trigger**，不能套一层
-   * `<span className="contents">` —— `display:contents` 不生成布局盒，
-   * `getBoundingClientRect()` 全 0，而 Base UI 拿它当定位参照，气泡会飞到
-   * 视口左上角（见 `packages/ui/AGENTS.md`）。
-   */
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  function onDragEnd({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id) return
+    const next = arrayMove(ids, ids.indexOf(String(active.id)), ids.indexOf(String(over.id)))
+    const slots = new Set(ids)
+    let i = 0
+    table.setColumnOrder(leaves.map((col) => (slots.has(col.id) ? next[i++] : col.id)))
+  }
+
   const trigger = (
-    <DropdownMenuTrigger
-      render={<Button variant="outline" size="sm" className="size-8 p-0" aria-label={t("列")} />}
+    <PopoverTrigger
+      render={
+        <Button
+          variant="outline"
+          size="sm"
+          className="size-8 p-0"
+          aria-label={t("列")}
+          data-testid="column-settings"
+        />
+      }
     >
       <IconLayoutColumns className="size-4" />
-    </DropdownMenuTrigger>
+    </PopoverTrigger>
   )
 
   return (
-    <DropdownMenu>
+    <Popover>
       <Tooltip>
         <TooltipTrigger render={trigger} />
         <TooltipContent>{t("列")}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="w-44">
-        <DropdownMenuGroup>
-          {hidableColumns.map((col) => (
-            <DropdownMenuCheckboxItem
-              key={col.id}
-              className="capitalize"
-              checked={col.getIsVisible()}
-              onCheckedChange={(value) => col.toggleVisibility(!!value)}
-            >
-              {t(columnLabels[col.id] ?? col.id)}
-            </DropdownMenuCheckboxItem>
-          ))}
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      {/* `gap-0`：PopoverContent 的基础类是 `flex-col gap-4`，表头 / 分隔线 / 列表 / 底栏之间
+          会各空出 16px（截图看出来的，第一列上面一条空白带） */}
+      <PopoverContent align="end" className="w-60 gap-0 p-0">
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="text-sm font-medium">{t("列")}</span>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {shown} / {movable.length}
+          </span>
+        </div>
+        <Separator />
+        <div className="max-h-80 overflow-y-auto overflow-x-hidden p-1" data-testid="column-list">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+            onDragEnd={onDragEnd}
+          >
+            <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+              {movable.map((col) => (
+                <ColumnSettingRow
+                  key={col.id}
+                  column={col}
+                  label={t(columnLabels[col.id] ?? col.id)}
+                  canOrder={canOrder}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        </div>
+        <Separator />
+        <div className="flex items-center justify-between gap-2 p-2">
+          {canOrder ? (
+            <span className="text-xs text-muted-foreground">{t("拖动调整顺序")}</span>
+          ) : (
+            <span />
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            data-testid="columns-reset"
+            onClick={() => {
+              // 写空值而不是 reset*()：受控在 URL 上的表，reset 回的是 initialState，URL 不会跟着清
+              table.setColumnVisibility({})
+              if (canOrder) table.setColumnOrder([])
+            }}
+          >
+            <IconRotate className="size-3.5" />
+            {t("恢复默认")}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ColumnSettingRow({ column, label, canOrder }: { column: any; label: string; canOrder: boolean }) {
+  const t = useT()
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: column.id,
+    disabled: !canOrder,
+  })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={cn(
+        "flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60",
+        isDragging && "relative z-10 bg-muted shadow-sm"
+      )}
+      data-testid={`column-row-${column.id}`}
+    >
+      {canOrder ? (
+        <button
+          type="button"
+          className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+          aria-label={t("拖动调整「{{name}}」的位置", { name: label })}
+          data-testid={`column-drag-${column.id}`}
+          {...attributes}
+          {...listeners}
+        >
+          <IconGripVertical className="size-3.5" />
+        </button>
+      ) : null}
+      <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
+        <Checkbox
+          checked={column.getIsVisible()}
+          onCheckedChange={(v) => column.toggleVisibility(v === true)}
+          data-testid={`column-check-${column.id}`}
+        />
+        <span className="truncate">{label}</span>
+      </label>
+    </div>
   )
 }
 

@@ -207,6 +207,10 @@ class Settings(BaseSettings):
     ]
     CORS_EXPOSE_HEADERS: list[str] = [
         'X-Request-ID',
+        # 下载的文件名在这个头里（导出文件、导入模板、错误报告都是后端按当前语言起的名）。
+        # 前后端跨源时（开发期 8888 → 8088、桌面端 app://local）不列在这里，前端 JS 读到的是 null，
+        # 只能退回一个写死的名字 —— 和后端那份翻译各说各的
+        'Content-Disposition',
     ]
 
     # 中间件配置
@@ -276,6 +280,29 @@ class Settings(BaseSettings):
     UPLOAD_ARCHIVE_EXT_INCLUDE: list[str] = ['zip', 'rar', '7z', 'tar', 'gz']
     UPLOAD_ARCHIVE_SIZE_MAX: int = 100 * 1024 * 1024  # 100 MB
 
+    # 回收站（#122 第二期）：删除的文件在回收站里留几天，到期由 `maintenance.purge_recycled_files` 彻底删除。
+    # 0 = 不启用回收站，删除即彻底删除（对象一并删掉，和第二期之前一样）。
+    # 只有这一个真相源：清理任务、回收站列表上的「剩余 N 天」、删除确认框的文案都读它
+    FILE_RECYCLE_DAYS: int = 30
+
+    # 分片上传（#122 第三期）：不小于 FILE_CHUNK_THRESHOLD 的文件，前端切成 FILE_CHUNK_SIZE 一片地传，可续传。
+    # 两个值由 `GET /sys/files/upload-policy` 下发给前端，前端不写死。
+    # 会话在 Redis 里 FILE_MULTIPART_EXPIRE_SECONDS 没动静就过期（每传一片续一次），
+    # 过期会话留下的分片由 `maintenance.purge_stale_multipart` 清掉
+    FILE_CHUNK_SIZE: int = 8 * 1024 * 1024  # 8 MiB
+    FILE_CHUNK_THRESHOLD: int = 16 * 1024 * 1024  # 16 MiB
+    FILE_MULTIPART_EXPIRE_SECONDS: int = 24 * 3600
+    FILE_MULTIPART_REDIS_PREFIX: str = 'fba:file:multipart'
+
+    # 存储（本地 + S3 兼容，见 utils/storage_ops.py 与 sys_storage）
+    #
+    # 对象存储的 SecretKey 落库前用它加密（64 位十六进制）。🔴 留空 = 拒绝保存 S3 存储，
+    # 不会静默存明文 —— 同 AI_ENCRYPT_SECRET_KEY / OPEN_SECRET_KEY 的 fail-closed 约定。
+    # 生成：python -c "import os;print(os.urandom(32).hex())"
+    STORAGE_ENCRYPT_SECRET_KEY: str = ''
+    # 预签名下载地址的有效期（秒）。预签名 URL 签出去就**撤不回来**，谁拿到都能下，所以宜短
+    STORAGE_PRESIGN_EXPIRE_SECONDS: int = 300
+
     # 表格导入（解析层见 utils/excel_ops.py）
     #
     # 刻意**不复用** UPLOAD_DOCUMENT_SIZE_MAX 那 50 MB：那是「存档一份文档」的
@@ -285,6 +312,8 @@ class Settings(BaseSettings):
     # 实测一个 199 KB 的上传能声明出 200 MB 的解压体积 —— 只看上传大小完全无感
     TABLE_IMPORT_SIZE_MAX: int = 5 * 1024 * 1024  # 5 MB
     TABLE_IMPORT_UNCOMPRESSED_MAX: int = 100 * 1024 * 1024  # 100 MB
+    # zip 里最多多少个条目。正常 xlsx 是几十个，见 `excel_ops._verify_archive`
+    TABLE_IMPORT_MAX_ENTRIES: int = 1000
     TABLE_IMPORT_MAX_ROWS: int = 1000
 
     # 用户批量导入
@@ -301,8 +330,28 @@ class Settings(BaseSettings):
     # 用户拿默认密码能登录，但他自己去改密码时被「必须含字母」挡住，
     # 而这两件事看不出是同一个原因。导入接口每次都现校验一遍
     USER_IMPORT_DEFAULT_PASSWORD: str = ''
-    USER_IMPORT_REDIS_PREFIX: str = 'fba:user:import'
-    USER_IMPORT_EXPIRE_SECONDS: int = 60 * 10  # 10 分钟
+
+    # 导入（#11 · v0.4，`common/dataio/importing.py` + `app/admin/service/import_service.py`）
+    # 预览把结果存 Redis、换一个一次性令牌；提交凭令牌取回。错误报告挂在同一个令牌上，提交之后还能下
+    IMPORT_REDIS_PREFIX: str = 'fba:import'
+    IMPORT_EXPIRE_SECONDS: int = 60 * 30  # 30 分钟
+
+    # 导出（#11 · v0.4，`common/dataio/` + `app/admin/service/export_service.py`）
+    #
+    # 行数不超过 SYNC 的在请求里当场生成，点完就下载；超过的进 Celery，生成完发站内消息。
+    # **两条路都落一条导出记录**（`sys_export_job`），文件只有发起人自己能下载
+    EXPORT_SYNC_MAX_ROWS: int = 5000
+    # 单次上限。超过直接拒绝并说清楚「共 N 条，超过上限」—— 不静默截断（原来前端拼 CSV
+    # 到 4000 条就悄悄停了，文件照常下载）
+    EXPORT_MAX_ROWS: int = 200_000
+    # keyset 分批取数，一批多少行
+    EXPORT_BATCH_SIZE: int = 1000
+    # 文件保留多久。到期由 `maintenance.purge_expired_exports` 删掉文件、记录改成「已过期」
+    EXPORT_FILE_RETENTION_HOURS: int = 72
+    # 记录（不是文件）保留多久。过了连记录一起删 —— 谁导过什么，操作日志里另有一份
+    EXPORT_RECORD_RETENTION_DAYS: int = 90
+    # 同一个人同时「排队 / 生成中」的导出上限。导出是全表扫 + 写文件，没有上限就是一个拒绝服务入口
+    EXPORT_MAX_CONCURRENT_PER_USER: int = 3
 
     # 演示模式配置（上游 FBA 自带：只读锁定，非 GET 请求一律 403）。
     # 🔴 与 ENVIRONMENT=prod 互斥（见 check_production_settings），只适合
@@ -357,6 +406,8 @@ class Settings(BaseSettings):
         # MCP 凭据新建 / 重新生成时的明文令牌（`plugin/ai/schema/mcp_client.py: IssuedAiMcpToken`）。
         # 不进名单的话操作日志会把它原样落进 response_body —— 永久、且日志表有自己的查看权限
         'mcp_token',
+        # 能力开放应用新建 / 重置密钥时的明文 SK（`plugin/open/schema/app.py: IssuedOpenSecret`），同上
+        'secret_key',
     ]
     OPERA_LOG_QUEUE_MAXSIZE: int = 100000
     OPERA_LOG_QUEUE_BATCH_CONSUME_SIZE: int = 100
@@ -469,6 +520,19 @@ class Settings(BaseSettings):
     AI_MCP_RATE_PER_MINUTE: int
     # 前端的访问地址：MCP 发起的写操作要拼一个「回网页确认」的链接
     AI_WEB_BASE_URL: str
+
+    ##################################################
+    # [ Plugin ] open
+    ##################################################
+    # 🔴 这几项必须在这里声明成字段：只写在 plugin.toml 里的话它们是 extra，**进程环境变量覆盖不了**
+    # （env_settings 只认声明过的字段）—— 部署时用容器环境变量配 OPEN_SECRET_KEY 会被静默忽略。
+    # 基础配置（in plugin.toml）
+    # SK 落库的加密密钥（64 位十六进制）。留空 = 拒绝新建 / 重置密钥，不会静默存明文
+    OPEN_SECRET_KEY: str
+    OPEN_RATE_PER_MINUTE: int
+    OPEN_SIGN_WINDOW_SECONDS: int
+    OPEN_NONCE_REDIS_PREFIX: str
+    OPEN_LAST_USED_REDIS_PREFIX: str
 
     ##################################################
     # [ Plugin ] email

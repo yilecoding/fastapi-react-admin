@@ -1,24 +1,34 @@
 from typing import Annotated, Literal
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Path, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 
+from backend.app.admin.model import File as FileRecord
 from backend.app.admin.schema.file import (
     CreateFileRelationParam,
     DeleteFileParam,
     DeleteFileRelationParam,
     GetFileDetail,
+    GetFileLinkDetail,
     GetFileStatisticsDetail,
+    GetMultipartDetail,
+    GetMultipartPartDetail,
+    GetRecycledFileDetail,
+    GetUploadPolicyDetail,
+    InitMultipartParam,
 )
 from backend.app.admin.service.file_service import file_service
+from backend.app.admin.service.multipart_service import multipart_service
 from backend.common.enums import FileType
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
 from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
+from backend.core.conf import settings
 from backend.database.db import CurrentSession, CurrentSessionTransaction
+from backend.utils.file_ops import content_disposition
+from backend.utils.storage_ops import content_type_from_key, iter_read
 
 router = APIRouter()
 
@@ -45,6 +55,118 @@ async def upload_file(
 ) -> ResponseSchemaModel[GetFileDetail]:
     obj = await file_service.upload(db=db, file=file, user_id=request.user.id, public=public)
     return response_base.success(data=obj)
+
+
+# ─── 分片上传（#122 第三期）────────────────────────────────────────────────────
+# 🔴 五个接口全挂 sys:file:upload + DependsRBAC，和 `/upload` 一样 —— ContiNew 的 GHSA-j7qm-qprw-c53w
+# 就是分片接口漏了权限。会话还按上传人隔离（别人的 upload_id 一律 404，见 multipart_service._load）。
+# 都要声明在 `/{pk}` 之前，不然 `/multipart` 被当成 pk 吞掉
+
+
+@router.get(
+    '/upload-policy',
+    summary='获取上传策略（分片阈值 / 分片大小）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
+async def get_upload_policy() -> ResponseSchemaModel[GetUploadPolicyDetail]:
+    return response_base.success(data=multipart_service.policy())
+
+
+@router.post(
+    '/multipart',
+    summary='开始分片上传',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
+async def init_multipart(
+    request: Request, db: CurrentSession, obj: InitMultipartParam
+) -> ResponseSchemaModel[GetMultipartDetail]:
+    data = await multipart_service.init(db=db, user_id=request.user.id, name=obj.name, size=obj.size, public=obj.public)
+    return response_base.success(data=data)
+
+
+@router.get(
+    '/multipart/{upload_id}',
+    summary='获取分片上传进度（续传用）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
+async def get_multipart(
+    request: Request, upload_id: Annotated[str, Path(description='会话 ID')]
+) -> ResponseSchemaModel[GetMultipartDetail]:
+    data = await multipart_service.status(upload_id=upload_id, user_id=request.user.id)
+    return response_base.success(data=data)
+
+
+@router.put(
+    '/multipart/{upload_id}/{part}',
+    summary='上传一个分片',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+    # 请求体是裸字节（application/octet-stream），不走 FastAPI 的 body 解析 —— 这里手写进 OpenAPI
+    openapi_extra={
+        'requestBody': {
+            'required': True,
+            'content': {'application/octet-stream': {'schema': {'type': 'string', 'format': 'binary'}}},
+        }
+    },
+)
+async def put_multipart_part(
+    request: Request,
+    db: CurrentSession,
+    upload_id: Annotated[str, Path(description='会话 ID')],
+    part: Annotated[int, Path(description='片号，从 1 开始')],
+) -> ResponseSchemaModel[GetMultipartPartDetail]:
+    declared = request.headers.get('content-length')
+    data = await multipart_service.put_part(
+        db=db,
+        upload_id=upload_id,
+        part=part,
+        user_id=request.user.id,
+        # 边收边写，不先 `await request.body()`：超长的那一片收到一半就断
+        body=request.stream(),
+        content_length=int(declared) if declared and declared.isdigit() else None,
+    )
+    return response_base.success(data=data)
+
+
+@router.post(
+    '/multipart/{upload_id}/complete',
+    summary='完成分片上传（合并、落库）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
+async def complete_multipart(
+    request: Request, db: CurrentSessionTransaction, upload_id: Annotated[str, Path(description='会话 ID')]
+) -> ResponseSchemaModel[GetFileDetail]:
+    obj = await multipart_service.complete(db=db, upload_id=upload_id, user_id=request.user.id)
+    return response_base.success(data=obj)
+
+
+@router.delete(
+    '/multipart/{upload_id}',
+    summary='取消分片上传（删掉已传的分片）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:upload')),
+        DependsRBAC,
+    ],
+)
+async def abort_multipart(
+    request: Request, db: CurrentSession, upload_id: Annotated[str, Path(description='会话 ID')]
+) -> ResponseModel:
+    await multipart_service.abort(db=db, upload_id=upload_id, user_id=request.user.id)
+    return response_base.success()
 
 
 @router.get(
@@ -100,6 +222,73 @@ async def check_file(
     return response_base.success(data=obj)
 
 
+# ─── 回收站（#122 第二期）。⚠️ 都声明在 `/{pk}` 之前：一段的固定路径放后面会被 `{pk}` 吞掉（422）──
+
+
+@router.get(
+    '/recycle',
+    summary='分页获取回收站里的文件',
+    dependencies=[
+        Depends(RequestPermission('sys:file:list')),
+        DependsRBAC,
+        DependsPagination,
+    ],
+)
+async def get_recycled_files(
+    db: CurrentSession,
+    name: Annotated[str | None, Query(description='原始文件名')] = None,
+) -> ResponseSchemaModel[PageData[GetRecycledFileDetail]]:
+    page_data = await file_service.get_recycled_list(db=db, name=name)
+    return response_base.success(data=page_data)
+
+
+# 还原 / 彻底删除 / 清空复用 `sys:file:del`：能删文件的人管回收站 —— 回收站之前「删除」本来就是彻底删除，
+# 权限面没有变大。新开权限码要同时补种子菜单 + 前端 <Can> + 三方对账，没有换来任何东西
+@router.put(
+    '/recycle/restore',
+    summary='从回收站还原（连带挂回删它那一次解开的附件关联）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:del')),
+        DependsRBAC,
+    ],
+)
+async def restore_files(db: CurrentSessionTransaction, obj: DeleteFileParam) -> ResponseModel:
+    count = await file_service.restore(db=db, pks=obj.pks)
+    if count > 0:
+        return response_base.success()
+    # 一个都没还原 = 这些 ID 不在（这个人看得见的）回收站里
+    return response_base.fail()
+
+
+@router.delete(
+    '/recycle',
+    summary='从回收站彻底删除（删对象，不可恢复）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:del')),
+        DependsRBAC,
+    ],
+)
+async def purge_files(db: CurrentSessionTransaction, obj: DeleteFileParam) -> ResponseModel:
+    count = await file_service.purge(db=db, pks=obj.pks)
+    if count > 0:
+        return response_base.success()
+    return response_base.fail()
+
+
+@router.delete(
+    '/recycle/all',
+    summary='清空回收站（不可恢复）',
+    dependencies=[
+        Depends(RequestPermission('sys:file:del')),
+        DependsRBAC,
+    ],
+)
+async def empty_recycle(db: CurrentSessionTransaction) -> ResponseModel:
+    # 回收站本来就是空的也算成功：「清空」这个动作的结果就是「是空的」
+    await file_service.empty_recycle(db=db)
+    return response_base.success()
+
+
 @router.get('/targets/{target_type}/{target_id}', summary='获取业务对象的附件', dependencies=[DependsJwtAuth])
 async def get_target_files(
     request: Request,
@@ -121,6 +310,11 @@ async def get_file(
     return response_base.success(data=file)
 
 
+def _content_disposition(file: FileRecord, disposition: str) -> str:
+    """Content-Disposition 头：下载接口和预签名地址（`response-content-disposition`）共用这一份"""
+    return content_disposition(file.original_name, disposition, fallback=f'file.{file.ext}')
+
+
 @router.get(
     '/{pk}/download',
     summary='下载 / 预览文件',
@@ -136,27 +330,37 @@ async def download_file(
     disposition: Annotated[
         Literal['inline', 'attachment'], Query(description='inline 浏览器内联显示，attachment 强制下载')
     ] = 'inline',
-) -> FileResponse:
-    file, target = await file_service.resolve_path(db=db, pk=pk, user=request.user)
+) -> Response:
+    file, target, size = await file_service.resolve(db=db, pk=pk, user=request.user)
+    # 按扩展名现算而不用 `file.content_type`：老记录里存的是客户端声明的类型（新上传已经是按扩展名落库的）
+    media_type = content_type_from_key(file.path)
+    headers = {'Content-Disposition': _content_disposition(file, disposition)}
+    if target.local_root is not None:
+        # 预览器会按 Range 拖进度（音视频），FileResponse 自带 Range，明确声明支持
+        headers['Accept-Ranges'] = 'bytes'
+        return FileResponse(target.local_root / file.path, media_type=media_type, headers=headers)
+    # 对象存储：后端流式代理。**刻意不 302 到预签名地址** —— 前端是带 Authorization 头的 fetch，
+    # 跨域重定向时浏览器会剥掉它（Fetch 规范），而老客户端不剥的话 S3 收到「头 + 查询串」两种鉴权直接 400。
+    # 走代理也就不需要给桶配 CORS。要直连（大文件 / 音视频拖进度）用 `/{pk}/link`。
+    # Content-Length 用存储现查的大小：没有它浏览器下载条只会转圈
+    headers['Content-Length'] = str(size)
+    return StreamingResponse(iter_read(target, file.path), media_type=media_type, headers=headers)
 
-    # 原名可能带中文/空格，裸塞进 filename= 会被 header 编码规则截断或乱码。
-    # RFC 6266 的两段式写法：ASCII 回退 + filename* 带 UTF-8
-    ascii_name = file.original_name.encode('ascii', 'ignore').decode() or f'file.{file.ext}'
-    # (issue #62) RFC 6266 的 filename="..." 是 quoted-string，`"`/`\` 必须转义，
-    # 否则原名里带引号会破坏这段 header 的语法。新上传的文件在 sanitize_display_name()
-    # 那一步已经挡掉了控制字符，但这条防线独立存在——万一有旧数据、或者以后
-    # 又长出一条没走 sanitize_display_name() 的写入路径，这里仍然兜得住
-    ascii_name = ascii_name.replace('\\', '\\\\').replace('"', '\\"')
-    return FileResponse(
-        target,
-        media_type=file.content_type or 'application/octet-stream',
-        headers={
-            'Content-Disposition': (
-                f'{disposition}; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(file.original_name, safe="")}'
-            ),
-            # 预览器会按 Range 拖进度（音视频），明确声明支持
-            'Accept-Ranges': 'bytes',
-        },
+
+@router.get('/{pk}/link', summary='获取短时效的直连下载地址', dependencies=[DependsJwtAuth])
+async def get_file_link(
+    request: Request,
+    db: CurrentSession,
+    pk: Annotated[int, Path(description='文件 ID')],
+    disposition: Annotated[
+        Literal['inline', 'attachment'], Query(description='inline 浏览器内联显示，attachment 强制下载')
+    ] = 'attachment',
+) -> ResponseSchemaModel[GetFileLinkDetail]:
+    file = await file_service.get_readable(db=db, user=request.user, pk=pk)
+    url = await file_service.presign(db=db, file=file, disposition=_content_disposition(file, disposition))
+    # 本地存储没有预签名（url 为 null）：前端回落到带鉴权的下载接口。不是失败，不能 fail()
+    return response_base.success(
+        data=GetFileLinkDetail(url=url, expires_in=settings.STORAGE_PRESIGN_EXPIRE_SECONDS if url else None)
     )
 
 

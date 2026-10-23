@@ -6,9 +6,9 @@
 lifespan 的 `create_all` 已经在开发库里建好了这张表，autogenerate 认为「没变化」。
 主键写 `autoincrement=False`，否则 mssql 上建成 IDENTITY、一行都写不进去（alembic 分册）。
 
-Revision ID: k0000000wfaireview
-Revises: j0000000aimcpwrite
-Create Date: 2026-10-21 09:00:00
+Revision ID: p0000000wfaireview
+Revises: o0000000dataio
+Create Date: 2026-10-23 10:00:00
 
 """
 
@@ -19,8 +19,8 @@ from alembic import op
 import backend.common.model
 
 # revision identifiers, used by Alembic.
-revision = 'k0000000wfaireview'
-down_revision = 'j0000000aimcpwrite'
+revision = 'p0000000wfaireview'
+down_revision = 'o0000000dataio'
 branch_labels = None
 depends_on = None
 

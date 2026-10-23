@@ -38,6 +38,18 @@ export type FileItem = {
    * 塞进 `<img src>` 只会拿到 401。`null` 是明确的「这个文件没有直链」。
    */
   public_url: string | null
+  /** 所属存储（`sys_storage.id`）；`null` = 内置本地存储 */
+  storage_id: string | null
+}
+
+/**
+ * 短时效的直连下载地址。**只有对象存储有**，本地存储返回 `url: null`（回落到带鉴权的 `download_url`）。
+ *
+ * 直连的好处是大文件不经后端中转、浏览器原生下载（有进度条、不用先整块读进内存）。
+ * 文件名由后端签进 `response-content-disposition`，所以直接导航过去就是「下载」不是「打开」
+ */
+export function fetchFileLink(id: string): Promise<{ url: string | null; expires_in: number | null }> {
+  return api.GET(`/api/v1/sys/files/${id}/link?disposition=attachment`)
 }
 
 export type FileListParams = {
@@ -54,6 +66,7 @@ export const fileKeys = {
   all: ['sys', 'file'] as const,
   list: (p: FileListParams) => [...fileKeys.all, 'list', p] as const,
   statistics: () => [...fileKeys.all, 'statistics'] as const,
+  recycle: (p: RecycleParams) => [...fileKeys.all, 'recycle', p] as const,
   target: (targetType: string, targetId: string) => [...fileKeys.all, 'target', targetType, targetId] as const,
 }
 
@@ -82,6 +95,57 @@ export type FileStatistics = {
   total_size: number
   type_counts: Partial<Record<FileType, number>>
   type_sizes: Partial<Record<FileType, number>>
+  /** 回收站：对象还在存储里，空间还没释放，和上面的「已用空间」分开算 */
+  recycle_count: number
+  recycle_size: number
+  /** 回收站保留天数；0 = 没启用回收站，删除即彻底删除（文案要跟着变） */
+  recycle_days: number
+}
+
+/** 回收站里的一个文件 */
+export type RecycledFile = FileItem & {
+  deleted_time: string
+  /** 到期自动彻底删除的时间；null = 回收站已关闭，不会自动清除 */
+  purge_time: string | null
+}
+
+export type RecycleParams = { page: number; size: number; name?: string }
+
+export const recycleQuery = (p: RecycleParams) =>
+  queryOptions({
+    queryKey: fileKeys.recycle(p),
+    queryFn: () => {
+      const s = new URLSearchParams({ page: String(p.page), size: String(p.size) })
+      if (p.name) s.set('name', p.name)
+      return api.GET<PageData<RecycledFile>>(`/api/v1/sys/files/recycle?${s.toString()}`)
+    },
+    placeholderData: (prev) => prev,
+  })
+
+/** 还原（连带挂回删它那一次解开的附件关联）。列表、统计、附件面板都要刷新，所以失效整个 fileKeys */
+export function useRestoreFiles() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (pks: string[]) => api.PUT('/api/v1/sys/files/recycle/restore', { body: { pks } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: fileKeys.all }),
+  })
+}
+
+/** 从回收站彻底删除（删对象，不可恢复） */
+export function usePurgeFiles() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (pks: string[]) => api.DELETE('/api/v1/sys/files/recycle', { body: { pks } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: fileKeys.all }),
+  })
+}
+
+export function useEmptyRecycle() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.DELETE('/api/v1/sys/files/recycle/all'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: fileKeys.all }),
+  })
 }
 
 export const fileStatisticsQuery = () =>
@@ -97,14 +161,6 @@ export const targetFilesQuery = (targetType: string, targetId: string) =>
     queryFn: () => api.GET<FileItem[]>(`/api/v1/sys/files/targets/${targetType}/${targetId}`),
   })
 
-export function useUploadFile() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: (file: File) => uploadFile<FileItem>('/api/v1/sys/files/upload', file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: fileKeys.all }),
-  })
-}
-
 /**
  * 富文本正文里内联图的体积上限。
  *
@@ -117,10 +173,11 @@ export const INLINE_IMAGE_MAX_BYTES = 2 * 1024 * 1024
 /**
  * 上传一张**公开**图片，供富文本正文的 `<img src>` 直接加载。
  *
- * 🔴 和 `useUploadFile` 分成两个函数是刻意的，不是重复代码。
+ * 🔴 和文件页 / 附件面板用的 `useFileUploader`（`./uploader.ts`，带进度 / 秒传预检的队列）
+ * 分开是刻意的，不是重复代码。
  *
  * `?public=true` 会让文件落进后端那棵被 `/uploads` 无鉴权挂出去的子树 ——
- * 知道 URL 的人不登录也能读。把它做成 `useUploadFile` 的一个可选参数，
+ * 知道 URL 的人不登录也能读。把它做成通用上传器的一个可选参数，
  * 就只剩「谁记得别在文件管理页传 true」这一道纪律在守着；拆成两个名字之后，
  * 通用上传路径**在类型上就产生不了公开文件**。
  *

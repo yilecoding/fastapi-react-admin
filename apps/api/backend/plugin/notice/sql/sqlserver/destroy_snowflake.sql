@@ -1,4 +1,4 @@
-DELETE FROM sys_menu WHERE name IN ('AddNotice', 'EditNotice', 'DeleteNotice');
+DELETE FROM sys_menu WHERE name IN ('AddNotice', 'EditNotice', 'DeleteNotice', 'ExportNotice');
 
 DELETE FROM sys_menu WHERE name = 'PluginNotice';
 

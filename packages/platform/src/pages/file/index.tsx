@@ -10,19 +10,24 @@ import { QueryError } from '@admin/ui/components/query-error'
 import { Separator } from '@admin/ui/components/separator'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { ToggleGroup, ToggleGroupItem } from '@admin/ui/components/toggle-group'
+import { Dropzone, useFilePicker } from '@admin/ui/components/uploader/dropzone'
+import { toast } from '@admin/ui/components/toast'
 import { cn } from '@admin/ui/lib/utils'
 
 import { Can } from '../../auth/can'
+import { usePerm } from '../../auth/use-perm'
 import { fetchBytes } from '../../api-client/client'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton, TextFilter } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import {
+  fetchFileLink,
+  fileStatisticsQuery,
   filesQuery,
   formatBytes,
   useDeleteFiles,
-  useUploadFile,
+  useRestoreFiles,
   type FileItem,
   type FileListParams,
   type FileType,
@@ -33,6 +38,8 @@ import { FileGrid } from './file-grid'
 import { FileList } from './file-list'
 import { FileRail } from './file-rail'
 import { FilePreviewDialog } from './preview-dialog'
+import { RecycleBin } from './recycle-bin'
+import { useFileUploader } from './uploader'
 import type { FileActions } from './file-menu'
 import { DEFAULT_GRID_PAGE_SIZE } from '../_shared/pagination'
 
@@ -55,6 +62,8 @@ export type FilePageSearch = {
   type?: FileType
   /** 宫格 / 列表。进 URL，刷新后保持 */
   view?: FileView
+  /** `recycle` = 回收站视图（右侧换成回收站列表，分页 / 搜索复用 page / size / name） */
+  scope?: 'recycle'
 }
 
 export function FilePage({
@@ -90,7 +99,10 @@ export function FilePage({
     name: search.name || undefined,
     type: search.type,
   }
-  const listQuery = useQuery(filesQuery(params))
+  const inRecycle = search.scope === 'recycle'
+  const statistics = useQuery(fileStatisticsQuery()).data
+  const recycleDays = statistics?.recycle_days ?? 0
+  const listQuery = useQuery({ ...filesQuery(params), enabled: !inRecycle })
   const { data, isPending, isFetching } = listQuery
   // 刷新/重试前清掉选中：重取回来可能已经少了几个文件（见 list-query.ts）
   const list = listState(listQuery, { onBeforeRefetch: () => setSelected(new Set()) })
@@ -105,8 +117,20 @@ export function FilePage({
   const [bulkError, setBulkError] = React.useState<string | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const del = useDeleteFiles()
-  const upload = useUploadFile()
-  const inputRef = React.useRef<HTMLInputElement>(null)
+  const restore = useRestoreFiles()
+
+  /** 删除成功后：进了回收站就给一条带「撤销」的提示（Drive 那种），没启用回收站就什么都不说 */
+  const afterDelete = (ids: string[]) => {
+    if (recycleDays <= 0) return
+    toast.success(t('已移到回收站（{{n}} 个文件）', { n: ids.length }), {
+      timeout: 6000,
+      action: { label: t('撤销'), onClick: () => void restore.mutateAsync(ids).catch(() => {}) },
+    })
+  }
+  // 上传进全局队列（进度在右下角浮窗，`./uploader.ts`）。没有上传权限的人拖文件进来也不收
+  const uploader = useFileUploader({ source: t('文件管理') })
+  const canUpload = usePerm().can('sys:file:upload')
+  const picker = useFilePicker({ onFiles: uploader.add, disabled: !canUpload })
 
   /**
    * 下载。**不能**做成 `<a href={download_url} download>` —— 那个地址要
@@ -116,6 +140,17 @@ export function FilePage({
     async (f: FileItem) => {
       setActionError(null)
       try {
+        // 对象存储：拿预签名地址让浏览器原生下载。🔴 不是 fetch 带 Authorization 头去跟后端的 302 ——
+        // 跨域重定向时浏览器会剥掉那个头，老客户端不剥的话 S3 收到两种鉴权直接 400
+        // 内置本地存储（storage_id 为 null）没有直连地址，别白跑一次 /link
+        const link = f.storage_id === null ? { url: null } : await fetchFileLink(f.id)
+        if (link.url) {
+          const a = document.createElement('a')
+          a.href = link.url
+          a.rel = 'noopener'
+          a.click()
+          return
+        }
         const buffer = await fetchBytes(f.download_url)
         const url = URL.createObjectURL(
           new Blob([buffer], { type: f.content_type ?? 'application/octet-stream' })
@@ -133,30 +168,6 @@ export function FilePage({
     [t]
   )
 
-  const handlePickFiles = React.useCallback(
-    async (picked: FileList | null) => {
-      if (!picked?.length) return
-      setActionError(null)
-      // 逐个串行传：并发上传会同时命中「整个 body 先收完才校验大小」那条，
-      // 几个大文件一起来会把内存顶起来（file_ops.py 的注释里写了）
-      for (const file of Array.from(picked)) {
-        try {
-          await upload.mutateAsync(file)
-        } catch (e) {
-          // 一个失败不该中断其余的，但必须让用户看见（硬纪律 9）
-          setActionError(
-            t('{{name}} 上传失败：{{err}}', {
-              name: file.name,
-              err: e instanceof Error ? e.message : t('未知错误'),
-            })
-          )
-        }
-      }
-      // 清掉 input 的值，否则连续选同一个文件不会触发 change
-      if (inputRef.current) inputRef.current.value = ''
-    },
-    [t, upload]
-  )
 
   const toggle = React.useCallback((id: string) => {
     setSelected((prev) => {
@@ -197,10 +208,20 @@ export function FilePage({
         <div className="flex min-w-0 flex-1 gap-4 md:gap-6 content-scroll:min-h-0">
           <FileRail
             value={search.type}
-            onChange={(next) => patch({ type: next, page: undefined })}
+            onChange={(next) => patch({ type: next, page: undefined, scope: undefined, name: undefined })}
+            recycle={inRecycle}
+            onRecycle={() => patch({ scope: 'recycle', type: undefined, page: undefined, name: undefined })}
             className="hidden w-52 shrink-0 md:flex lg:w-72"
           />
 
+          {inRecycle ? (
+            <RecycleBin
+              page={page}
+              size={size}
+              name={search.name}
+              onSearchChange={(next) => onSearchChange?.({ ...search, ...next })}
+            />
+          ) : (
           <div className="flex min-w-0 flex-1 flex-col gap-3 content-scroll:min-h-0">
             {/* 工具栏 */}
             <div className="flex flex-wrap items-center gap-2">
@@ -267,22 +288,11 @@ export function FilePage({
                 </ToggleGroup>
 
                 <Can perm="sys:file:upload">
-                  <input
-                    ref={inputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    data-testid="file-input"
-                    onChange={(e) => void handlePickFiles(e.target.files)}
-                  />
-                  <Button
-                    size="sm"
-                    disabled={upload.isPending}
-                    data-testid="upload-file"
-                    onClick={() => inputRef.current?.click()}
-                  >
+                  <input {...picker.inputProps} data-testid="file-input" />
+                  {/* 上传中也不禁用：这是个队列，再选的文件排在后面 */}
+                  <Button size="sm" data-testid="upload-file" onClick={picker.open}>
                     <IconUpload className="size-4" />
-                    {upload.isPending ? t('上传中…') : t('上传文件')}
+                    {uploader.busy ? t('上传中…') : t('上传文件')}
                   </Button>
                 </Can>
               </div>
@@ -295,7 +305,14 @@ export function FilePage({
             )}
 
             {/* 内容区。后台取数时整块降透明，但**不换成骨架** ——
-                换掉会让工具栏和分页条在数据回来时凭空跳一下 */}
+                换掉会让工具栏和分页条在数据回来时凭空跳一下。
+                整块是拖拽投放区：文件拖进来直接进上传队列 */}
+            <Dropzone
+              onFiles={uploader.add}
+              disabled={!canUpload}
+              className="flex min-h-0 flex-1 flex-col"
+              testId="file-dropzone"
+            >
             <div
               className={cn(
                 'flex-1',
@@ -333,6 +350,7 @@ export function FilePage({
                 <FileList files={files} selected={selected} onToggle={toggle} actions={actions} />
               )}
             </div>
+            </Dropzone>
 
             {/* 分页条复用 DataTable 的那一个，外观与全站一致 */}
             <DataTablePagination
@@ -346,6 +364,7 @@ export function FilePage({
               onPageSizeChange={(s) => patch({ size: s, page: undefined })}
             />
           </div>
+          )}
         </div>
       </div>
 
@@ -371,9 +390,14 @@ export function FilePage({
         title={t('删除文件')}
         description={
           pendingDelete
-            ? t('确定删除「{{name}}」吗？磁盘文件与所有业务关联会一并删除，此操作不可撤销。', {
-                name: pendingDelete.original_name,
-              })
+            ? recycleDays > 0
+              ? t('「{{name}}」会移到回收站，{{days}} 天内可以还原（连同它挂在业务对象上的附件关联）。', {
+                  name: pendingDelete.original_name,
+                  days: recycleDays,
+                })
+              : t('确定删除「{{name}}」吗？磁盘文件与所有业务关联会一并删除，此操作不可撤销。', {
+                  name: pendingDelete.original_name,
+                })
             : ''
         }
         confirmText={t('删除')}
@@ -382,6 +406,7 @@ export function FilePage({
         onConfirm={async () => {
           if (!pendingDelete) return
           await del.mutateAsync([pendingDelete.id])
+          afterDelete([pendingDelete.id])
           setPendingDelete(null)
         }}
       />
@@ -393,10 +418,16 @@ export function FilePage({
         description={
           bulkError
             ? t('{{err}}（已删除的不会回滚）', { err: bulkError })
-            : t('确定删除选中的 {{n}} 个文件（共 {{size}}）吗？磁盘文件与业务关联会一并删除，此操作不可撤销。', {
-                n: selectedIds.length,
-                size: formatBytes(selectedSize),
-              })
+            : recycleDays > 0
+              ? t('选中的 {{n}} 个文件（共 {{size}}）会移到回收站，{{days}} 天内可以还原。', {
+                  n: selectedIds.length,
+                  size: formatBytes(selectedSize),
+                  days: recycleDays,
+                })
+              : t('确定删除选中的 {{n}} 个文件（共 {{size}}）吗？磁盘文件与业务关联会一并删除，此操作不可撤销。', {
+                  n: selectedIds.length,
+                  size: formatBytes(selectedSize),
+                })
         }
         confirmText={t('删除')}
         destructive
@@ -404,6 +435,7 @@ export function FilePage({
         onConfirm={async () => {
           try {
             await del.mutateAsync(selectedIds)
+            afterDelete(selectedIds)
             setSelected(new Set())
             setBulkOpen(false)
           } catch (e) {

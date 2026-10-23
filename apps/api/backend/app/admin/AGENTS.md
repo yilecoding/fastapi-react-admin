@@ -25,6 +25,9 @@
 ## 用户批量导入（`POST /sys/users/import/{preview,commit}`）
 
 两阶段：预览只校验不落库 + 一个存 Redis 的短期 token；提交带 token、允许部分成功。
+现在是通用导入框架的一个资源（定义在 `app/admin/dataio.py` 的 `USER_IMPORT`），框架那一层的坑
+（令牌、文件内重复、提交前重新校验、错误报告）见 [`common/dataio` 分册](../../common/dataio/AGENTS.md)；
+下面只记**建号**这一侧独有的。
 解析走 [`utils/excel_ops.py`](#上传的表格一律过-utilsexcel_opspy不要自己-load_workbook)。
 
 - 🔴 **明文密码在整条链路上一次都不出现**：模板里没有密码列（一律用系统默认

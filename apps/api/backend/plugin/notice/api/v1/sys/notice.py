@@ -1,13 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path, Query
+from fastapi import APIRouter, Depends, Path, Query, Request
 
+from backend.app.admin.schema.export_job import GetExportJobDetail, StartExportParam
+from backend.app.admin.service.export_service import export_service
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
 from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
+from backend.plugin.notice.dataio import NOTICE_EXPORT
 from backend.plugin.notice.schema.notice import (
     CreateNoticeParam,
     DeleteNoticeParam,
@@ -17,6 +20,19 @@ from backend.plugin.notice.schema.notice import (
 from backend.plugin.notice.service.notice_service import notice_service
 
 router = APIRouter()
+
+
+@router.post(
+    '/export',
+    summary='导出通知公告',
+    dependencies=[Depends(RequestPermission('sys:notice:export')), DependsRBAC],
+)
+async def export_notices(
+    request: Request, db: CurrentSession, obj: StartExportParam
+) -> ResponseSchemaModel[GetExportJobDetail]:
+    # 小批量当场生成完才返回（status=2，前端直接下载）；大批量返回排队（status=0），生成完发站内消息
+    data = await export_service.start(db=db, request=request, spec=NOTICE_EXPORT, obj=obj)
+    return response_base.success(data=data)
 
 
 @router.get('/{pk}', summary='获取通知公告详情', dependencies=[DependsJwtAuth])
@@ -53,9 +69,7 @@ async def get_notices_paginated(
         DependsRBAC,
     ],
 )
-async def create_notice(
-    db: CurrentSessionTransaction, obj: CreateNoticeParam
-) -> ResponseSchemaModel[GetNoticeDetail]:
+async def create_notice(db: CurrentSessionTransaction, obj: CreateNoticeParam) -> ResponseSchemaModel[GetNoticeDetail]:
     # 下发创建结果而不是空 success()：前端要用这个 id 把正文里的内联图
     # 挂到 `sys_file_relation` 上（见 pages/notice/api.ts 的 syncNoticeImages）。
     # 拿不到 id 的话，新建公告里的图就是一批没人认领的孤儿文件

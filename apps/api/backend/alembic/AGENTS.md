@@ -81,6 +81,21 @@ stamp 只是把这件事声明出来。
 > 两个库都有 `alembic_version` 表、看起来都正常，所以没有任何现象。
 > 现在 env.py 改成「调用方设过就不覆盖」，`_stamp_head` 显式写目标库。
 
+### 分叉了怎么接：没进 main 的那条改接到 head 后面，**revision ID 一起换**
+
+`test_single_head` 红的典型场景：两个分支各自从同一个 head 生了迁移（#119 的 AI 预审和 `k0000000openapp`
+都接在 `j0000000aimcpwrite` 后面）。还没合进 main 的那一条直接改 `down_revision`，接到现在的 head 后面 ——
+链保持线性，比补一条 merge revision 好读。
+
+🔴 **只改 `down_revision`、不换 ID 是错的。** `alembic_version` 里只存一个版本号，并且默认它的祖先全都跑过了。
+哪个库在分支上升级到过旧位置（比如开发那个 PR 时的本地库），ID 不换的话，它会被当成「已经在新位置」——
+接进来的那几条迁移一条都不跑，也没有任何报错。换了 ID，这种库在 `upgrade` 时会直接报「找不到 revision」，问题当场就暴露。
+#119 那条从 `k0000000wfaireview` 换成了 `p0000000wfaireview`，文件名里的日期也一起改了。
+
+**实测证据**（2026-10-23，PostgreSQL 临时库，`alembic_version` 先写成 `k0000000wfaireview`）：
+只改 `down_revision` → `upgrade head` 退出码 0、一条迁移都没执行、`alembic current` 显示 `k0000000wfaireview (head)`；
+换成新 ID 之后 → `FAILED: Can't locate revision identified by 'k0000000wfaireview'`。
+
 ## 种子的一致性有两维，行数/列清单只是其中一维
 
 `tests/test_seed_dialects.py` 原来查四件事：三份文件都在 · 表相同 ·
