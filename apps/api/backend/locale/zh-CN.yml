@@ -594,6 +594,14 @@ workflow:
   handover_opinion: 离职交接
   timeout_approved: '超过 {hours} 小时未处理，已自动同意'
   timeout_rejected: '超过 {hours} 小时未处理，已自动驳回'
+  ai_review:
+    dispatch_failed: 预审任务没能派发出去（任务队列不可用），可以稍后重试
+    bad_output: 模型返回的内容不是约定的格式，这次预审作废
+    no_ai_plugin: 没有安装 AI 助手插件，无法预审
+    no_provider: 没有可用的模型供应商，先在「AI 助手 → 模型」里配一个
+    not_for_initiator: 预审结果只给审批人看
+    retry_not_allowed: 只有失败或超时的预审可以重试
+    model_timeout: 模型太久没有返回，这次预审作废
 storage:
   builtin_name: 本地存储（内置）
   probe_ok: 连接正常：写入、读回、删除都成功

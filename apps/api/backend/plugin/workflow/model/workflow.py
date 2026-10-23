@@ -203,3 +203,30 @@ class WfDraft(DataClassBase, DateTimeMixin):
     user_id: Mapped[int] = mapped_column(sa.BigInteger, index=True, comment='谁的草稿')
     code: Mapped[str] = mapped_column(UniversalStr(64), comment='流程定义编码')
     form_data: Mapped[str] = mapped_column(UniversalText, comment='没提交的表单（JSON）')
+
+
+class WfAiReview(DataClassBase, DateTimeMixin):
+    """AI 预审（#111 第 2 条）：实例提交 / 重新提交后异步跑一次，只供审批人参考。
+
+    一次提交一行。重新提交会新建一行，界面只看最新那一行（旧的就是「已过期」）。
+    🔴 这张表只有预审自己写 —— 审批事务里只插一行 `pending`，模型调用在 Celery 里、事务外。
+    """
+
+    __tablename__ = 'wf_ai_review'
+    __table_args__ = {'comment': 'AI 预审表'}
+
+    id: Mapped[id_key] = mapped_column(init=False)
+    instance_id: Mapped[int] = mapped_column(sa.BigInteger, index=True, comment='实例 ID')
+    status: Mapped[str] = mapped_column(UniversalStr(16), comment='pending / done / failed')
+    #: 按哪一版审核要点审的（要点原文的 sha256 前 12 位）。定义改了要点，旧结论还能对上当时的依据
+    points_version: Mapped[str] = mapped_column(UniversalStr(16), comment='审核要点版本')
+    verdict: Mapped[str | None] = mapped_column(UniversalStr(16), default=None, comment='pass / attention / reject')
+    #: `[{field_id, text}]`。field_id 为空 = 不针对某个字段的整体意见
+    reasons: Mapped[str | None] = mapped_column(UniversalText, default=None, comment='理由（JSON）')
+    error: Mapped[str | None] = mapped_column(UniversalStr(512), default=None, comment='失败原因')
+    # 审计（#111 不变式 5）：能回答「这条建议是哪个模型、基于哪版要点、花了多少给的」
+    model: Mapped[str | None] = mapped_column(UniversalStr(128), default=None, comment='模型名')
+    duration_ms: Mapped[int | None] = mapped_column(default=None, comment='耗时（毫秒）')
+    prompt_tokens: Mapped[int | None] = mapped_column(default=None, comment='输入 token')
+    completion_tokens: Mapped[int | None] = mapped_column(default=None, comment='输出 token')
+    finished_time: Mapped[datetime | None] = mapped_column(TimeZone, default=None, comment='完成时间')

@@ -240,6 +240,10 @@ def validate_publish(form_json: dict[str, Any], model_json: dict[str, Any]) -> l
                         err('CONDITION_VAR_TYPE', f'「{f.label}」不能用作条件', nodeId=nid, fieldId=var)
     if approvals == 0:
         warn('NO_APPROVAL', '流程里一个审批节点都没有，发起即通过')
+    ai = model_json.get('aiReview') or {}
+    if ai.get('enabled') and not (ai.get('points') or '').strip():
+        # 不拦：没有要点模型也能审「填得像不像话」，只是给不出针对这个流程的意见
+        warn('AI_REVIEW_NO_POINTS', '开了 AI 预审但没写审核要点，预审只能给出泛泛的意见')
     _check_form_rules(form_json, model_json, nodes, err)
     return issues
 

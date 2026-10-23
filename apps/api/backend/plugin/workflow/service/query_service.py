@@ -295,6 +295,12 @@ async def _viewer(db: AsyncSession, inst: WfInstance, actor: Actor) -> tuple[lis
     return tasks, ccs, hidden
 
 
+async def viewer_scope(db: AsyncSession, inst: WfInstance, actor: Actor) -> set[str]:
+    """看不了报 404；看得了返回他看不到的字段。AI 预审的查看 / 重试用同一个口径（不另算一遍）"""
+    _, _, hidden = await _viewer(db, inst, actor)
+    return hidden
+
+
 async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # ruff:ignore[complex-structure]
     inst = await db.get(WfInstance, pk)
     if inst is None:

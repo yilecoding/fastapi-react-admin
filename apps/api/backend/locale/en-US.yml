@@ -486,6 +486,14 @@ workflow:
   handover_opinion: Handover
   timeout_approved: 'Not handled within {hours} hours; approved automatically'
   timeout_rejected: 'Not handled within {hours} hours; rejected automatically'
+  ai_review:
+    dispatch_failed: The pre-review task could not be queued (task queue unavailable). Try again later
+    bad_output: The model did not answer in the expected format, so this pre-review was discarded
+    no_ai_plugin: The AI assistant plugin is not installed, so pre-review is unavailable
+    no_provider: No model provider is available. Add one under AI Assistant → Models
+    not_for_initiator: Pre-review results are only shown to approvers
+    retry_not_allowed: Only a failed or timed-out pre-review can be retried
+    model_timeout: The model took too long to answer, so this pre-review was discarded
 storage:
   builtin_name: Local storage (built-in)
   probe_ok: 'Connection OK: write, read back and delete all succeeded'

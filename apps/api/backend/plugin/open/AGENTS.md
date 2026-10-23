@@ -87,8 +87,8 @@ sdk/                  对接方拷走的参考实现（Python / Node / Java）+ 
 - 🔴 **写了 `__table_args__` 就要显式带 `{'comment': …}`**：docstring 自动变表注释那一步会被它覆盖。
   实测：独立库上 `create_all` → 删表 → 跑迁移 → `compare_metadata`，报出 `remove_table_comment('open_app')`。
   comment-only 的差异 `test_model_matches_migrations` 是放过的，所以只有这样验才看得见
-- **迁移 `k0000000openapp` 和 PR #119 的 `k0000000wfaireview` 都从 `j0000000aimcpwrite` 分出**：后合并的那个要补一条
-  merge revision，否则 `test_single_head` 红
+- **迁移 `k0000000openapp` 和 PR #119 的 AI 预审迁移原来都从 `j0000000aimcpwrite` 分出**：#119 合并前改接到了当时的
+  head 后面，revision ID 也一起换了（现在是 `p0000000wfaireview`）。为什么要换 ID，见 [`alembic` 分册](../../alembic/AGENTS.md)
 
 **实测证据**：独立库 `fba_open_scratch`（PostgreSQL）上 up → 与模型比对零差异 → down（两张表和 8 条菜单都消失）→ up。
 SQL Server / MySQL 只过了离线编译守卫（`test_migrations_compile_offline_for_every_supported_dialect`），没在真库上跑。

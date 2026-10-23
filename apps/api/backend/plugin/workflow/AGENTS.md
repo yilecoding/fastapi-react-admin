@@ -266,3 +266,28 @@ socket 推送（`notification_new` / `workflow_todo_changed`）收集在 `_Ctx.e
 + 对查看人是不是 hidden」**：审批人删掉一个附件时关联跟着删，但去掉删关联那段 `test_removed_attachment…` 照样绿 ——
 字段里已经没有那个 ID 了。这次改动之前建的单没有关联（开发库实测 0 张带附件，没有生产数据，没做回填）。
 超时扫描已经在库里先筛掉没配超时的单（`model_snapshot LIKE '%"timeout"%'`）。
+
+## AI 预审（#111 第 2 条，`service/ai_review_service.py`）
+
+提交 / 重新提交 → 审批事务里只插一行 `wf_ai_review(pending)` → 提交后 `send_task('workflow.ai_review')` →
+Celery 里调 AI 插件的默认供应商、写结果。配置是流程模型里的 `aiReview: {enabled, points}`，跟着版本发布。
+
+- 🔴 **模型调用不进审批事务**：事务里只插行（回滚就一起没了，不留孤儿）；派发在 `ctx.effects` 里（提交之后，
+  否则 worker 可能先跑、读不到这一行）。派发失败**当场**标 `failed`；`pending` 超过 10 分钟按 `timeout` 下发 ——
+  两条都是为了不出现一个永远转不完的「预审中」（硬纪律 9）
+- 🔴 **`run_review` 读完数据再写结果前要先 rollback 那个 autobegin 的只读事务**，直接 `db.begin()` 报
+  「A transaction is already begun」→ 结论永远写不回去。实测：`test_ai_review.py` 第一次跑就红在这里
+- 🔴 **理由按查看人裁**（`for_viewer`）：引用他看不到的字段的去掉；`field_id` 为空的整体意见对**有任何隐藏字段**
+  的人也去掉（说不清是不是基于隐藏字段说的）。模型编出来的字段 ID 降级成整体意见
+- 🔴 **申请内容只进 user 消息、整体 JSON 编码**；审核要点和输出格式只在 system。输出按白名单解析
+  （verdict 三选一），不合格记 `failed` —— 绝不能把「解析不了」当成「没问题」
+- **发起人看不到预审**（有监控权限的除外）：能看到「建议驳回因为 X」，就能一遍遍改到模型说通过为止。
+  **成功的预审不许重跑**（那是在挑一个喜欢的结论），只有 `failed` / `timeout` 能重试
+- 附件内容**没有**给模型（提示词里写明了，免得它对附件下结论）。要做附件文本提取是下一步
+- 🔴 **失败原因存语言包的 key，读的时候按查看人的语言翻**（`_ReviewError` / `_error_text`）。写这一行的是 Celery worker
+  （没有请求语言）或发起人的请求 —— 存成文字，英文界面的审批人读到的是一句中文。模型 / 网络的原始报错原样存。
+  ⚠️ 模型超时（`asyncio.wait_for`）抛的 `TimeoutError` **没有消息**，原样存是空串，界面上只剩「预审失败：」——
+  单独给了一个 key。合并前复查时发现，测试原来只造过「带消息的报错」
+
+测试 `tests/test_ai_review.py`（10 条，假模型 + 假 `send_task`）。变异验证：去掉按人裁 / 去掉输出白名单 /
+让发起人可见，各自打红对应的那条；失败原因那条：读的时候不翻 / 写的时候就翻 / 去掉超时分支 / key 拼错，各自红。

@@ -184,9 +184,18 @@ class ConditionNode(_Shape):
 Node = Annotated[ApprovalNode | CcNode | ConditionNode, Field(discriminator='type')]
 
 
+class AiReviewConfig(_Shape):
+    """AI 预审（#111 第 2 条）。放在流程模型里、跟着版本一起发布 —— 在途的单按发起时的要点审"""
+
+    enabled: bool = False
+    #: 管理员用自然语言写的审核要点（「事由要写清楚具体原因」「病假超过 3 天要有证明」）
+    points: str = Field('', max_length=2000)
+
+
 class FlowModel(_Shape):
     schemaVersion: Literal[1] = 1  # ruff:ignore[mixed-case-variable-in-class-scope]
     root: StartNode
+    aiReview: AiReviewConfig | None = None  # ruff:ignore[mixed-case-variable-in-class-scope]
 
 
 for _m in (FormField, Cond, StartNode, ApprovalNode, CcNode, Branch, ConditionNode, FlowModel):

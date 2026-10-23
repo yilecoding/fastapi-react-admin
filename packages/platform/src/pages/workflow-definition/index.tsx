@@ -17,6 +17,7 @@ import { Input } from '@admin/ui/components/input'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@admin/ui/components/input-group'
 import { QueryError } from '@admin/ui/components/query-error'
 import { Skeleton } from '@admin/ui/components/skeleton'
+import { Switch } from '@admin/ui/components/switch'
 import { Textarea } from '@admin/ui/components/textarea'
 import { toast } from '@admin/ui/components/toast'
 import { cn } from '@admin/ui/lib/utils'
@@ -514,6 +515,38 @@ function Designer({
           <Row label={t('说明')}>
             <Textarea rows={3} maxLength={256} value={cur.description ?? ''} onChange={(e) => edit({ description: e.target.value || null })} />
           </Row>
+          {/*
+           * AI 预审存在流程模型里（`model.aiReview`），跟着版本发布：改了要点不影响在途的单。
+           * 关掉时保留要点原文 —— 只是不用，重新打开不必再写一遍
+           */}
+          <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium">{t('AI 预审')}</span>
+              <span className="text-xs text-muted-foreground">
+                {t('提交后由模型按下面的要点先看一遍，结果显示在审批详情顶部，只给审批人参考，不会自动通过或驳回。')}
+              </span>
+            </div>
+            <Switch
+              data-testid="wfd-ai-enabled"
+              checked={cur.model.aiReview?.enabled ?? false}
+              onCheckedChange={(c) =>
+                edit({ model: { ...cur.model, aiReview: { points: cur.model.aiReview?.points ?? '', enabled: Boolean(c) } } })
+              }
+            />
+          </div>
+          {cur.model.aiReview?.enabled && (
+            <Row label={t('审核要点')} hint={t('用大白话写，一行一条。例如：事由要写清楚具体原因；病假超过 3 天要有证明')}>
+              <Textarea
+                rows={5}
+                maxLength={2000}
+                data-testid="wfd-ai-points"
+                value={cur.model.aiReview.points}
+                onChange={(e) =>
+                  edit({ model: { ...cur.model, aiReview: { enabled: true, points: e.target.value } } })
+                }
+              />
+            </Row>
+          )}
         </div>
       )}
       {step === 'form' && (

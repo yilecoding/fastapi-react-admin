@@ -108,7 +108,33 @@ export type FlowNode = ApprovalNode | CcNode | ConditionNode
 /** 开始节点。`fieldPerms` 是**发起人**的字段权限，没配 = 可填（审批节点没配 = 只读） */
 export type StartNode = { type: 'start'; id: string; fieldPerms?: Record<string, FieldPerm>; next: FlowNode | null }
 
-export type FlowModel = { schemaVersion: 1; root: StartNode }
+/** AI 预审（#111）：跟着流程模型一起发布，在途的单按发起时的要点审 */
+export type AiReviewConfig = { enabled: boolean; points: string }
+
+export type FlowModel = { schemaVersion: 1; root: StartNode; aiReview?: AiReviewConfig | null }
+
+export type AiVerdict = 'pass' | 'attention' | 'reject'
+
+/**
+ * `GET /instances/{pk}/ai-review`。理由已经按查看人裁过（服务端），前端照着显示。
+ * `visible: false` = 这个人不该看（发起人）—— 那是服务端明确的「不给」，不是失败。
+ */
+export type AiReview =
+  | { visible: false; enabled: false }
+  | {
+      visible: true
+      enabled: boolean
+      /** null = 这张单没有预审过（定义没开，或者开之前发起的） */
+      status: 'pending' | 'done' | 'failed' | 'timeout' | null
+      verdict?: AiVerdict | null
+      reasons?: { field_id: string | null; text: string }[]
+      error?: string | null
+      model?: string | null
+      created_time?: string
+      finished_time?: string | null
+      /** 被退回重新提交过几次：之前的预审结论都作废了 */
+      superseded?: number
+    }
 
 // ── 实例 ─────────────────────────────────────────────────────────────────────
 
@@ -278,6 +304,7 @@ export const workflowKeys = {
   list: (p: InboxParams) => [...workflowKeys.inbox(), p] as const,
   counts: () => [...workflowKeys.all, 'counts'] as const,
   detail: (id: string) => [...workflowKeys.all, 'detail', id] as const,
+  aiReview: (id: string) => [...workflowKeys.all, 'detail', id, 'ai-review'] as const,
   startable: () => [...workflowKeys.all, 'startable'] as const,
   startForm: (code: string) => [...workflowKeys.all, 'start-form', code] as const,
   monitor: (p: object) => [...workflowKeys.all, 'monitor', p] as const,
@@ -318,6 +345,14 @@ export const detailQuery = (id: string) =>
   queryOptions({
     queryKey: workflowKeys.detail(id),
     queryFn: () => api.GET<InstanceDetail>(`${BASE}/instances/${id}`),
+  })
+
+/** 预审中每 3 秒问一次；出结果 / 失败就停。单开接口就是为了这个 —— 不该每 3 秒重取整张单 */
+export const aiReviewQuery = (id: string) =>
+  queryOptions({
+    queryKey: workflowKeys.aiReview(id),
+    queryFn: () => api.GET<AiReview>(`${BASE}/instances/${id}/ai-review`),
+    refetchInterval: (q) => (q.state.data && 'status' in q.state.data && q.state.data.status === 'pending' ? 3000 : false),
   })
 
 export const startableQuery = () =>
@@ -437,6 +472,16 @@ export function useAct(instanceId: string) {
     }) => api.POST<{ instance_id: string; replayed: boolean }>(`${BASE}/instances/${instanceId}/actions`, { body }),
     // 成功和失败都要重取：失败多半是「已被他人处理」，界面要跟上真实状态
     onSettled: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
+  })
+}
+
+/** 预审失败 / 超时之后重跑（成功的服务端不让重跑） */
+export function useRetryAiReview(instanceId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: () => api.POST(`${BASE}/instances/${instanceId}/ai-review/retry`),
+    onSettled: () => qc.invalidateQueries({ queryKey: workflowKeys.aiReview(instanceId) }),
   })
 }
 
