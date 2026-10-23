@@ -34,4 +34,17 @@ values
 (19, '组件沙箱', 'DEV', 'DEV_SANDBOX_ENABLED', 'true', true, null, now(), null),
 (20, '状态', 'FILE', 'FILE_CONFIG_STATUS', '1', false, null, now(), null),
 (21, '分片阈值（MiB）', 'FILE', 'FILE_CHUNK_THRESHOLD', '16', false, '不小于这个大小的文件分片上传；须小于反代的 client_max_body_size', now(), null),
-(22, '分片大小（MiB）', 'FILE', 'FILE_CHUNK_SIZE', '8', false, '只影响新开始的上传；.env 同名项的单位是字节', now(), null);
+(22, '分片大小（MiB）', 'FILE', 'FILE_CHUNK_SIZE', '8', false, '只影响新开始的上传；.env 同名项的单位是字节', now(), null),
+(23, '状态', 'SESSION', 'SESSION_CONFIG_STATUS', '1', false, null, now(), null),
+(24, '网页端空闲超时（分钟）', 'SESSION', 'SESSION_WEB_IDLE_MINUTES', '120', false, '这么久没有操作就自动退出；只影响之后的登录', now(), null),
+(25, '网页端最长登录（天）', 'SESSION', 'SESSION_WEB_ABSOLUTE_DAYS', '7', false, '从登录那一刻起算，刷新不延长', now(), null),
+(26, '网页端会话上限', 'SESSION', 'SESSION_WEB_MAX', '0', false, '同一账号在这一端最多几个会话，0 表示不限', now(), null),
+(27, '网页端超限策略', 'SESSION', 'SESSION_WEB_OVERFLOW', 'evict_idle', false, 'evict_idle 挤掉最久没活跃的；deny 拒绝新登录', now(), null),
+(28, '桌面端空闲超时（分钟）', 'SESSION', 'SESSION_DESKTOP_IDLE_MINUTES', '120', false, '这么久没有操作就自动退出；只影响之后的登录', now(), null),
+(29, '桌面端最长登录（天）', 'SESSION', 'SESSION_DESKTOP_ABSOLUTE_DAYS', '7', false, '从登录那一刻起算，刷新不延长', now(), null),
+(30, '桌面端会话上限', 'SESSION', 'SESSION_DESKTOP_MAX', '0', false, '同一账号在这一端最多几个会话，0 表示不限', now(), null),
+(31, '桌面端超限策略', 'SESSION', 'SESSION_DESKTOP_OVERFLOW', 'evict_idle', false, 'evict_idle 挤掉最久没活跃的；deny 拒绝新登录', now(), null),
+(32, '移动端空闲超时（分钟）', 'SESSION', 'SESSION_MOBILE_IDLE_MINUTES', '43200', false, '这么久没有操作就自动退出；只影响之后的登录', now(), null),
+(33, '移动端最长登录（天）', 'SESSION', 'SESSION_MOBILE_ABSOLUTE_DAYS', '90', false, '从登录那一刻起算，刷新不延长', now(), null),
+(34, '移动端会话上限', 'SESSION', 'SESSION_MOBILE_MAX', '1', false, '同一账号在这一端最多几个会话，0 表示不限', now(), null),
+(35, '移动端超限策略', 'SESSION', 'SESSION_MOBILE_OVERFLOW', 'evict_idle', false, 'evict_idle 挤掉最久没活跃的；deny 拒绝新登录', now(), null);

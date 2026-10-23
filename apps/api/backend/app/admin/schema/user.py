@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import ConfigDict, Field, HttpUrl, PlainSerializer, model_validator
 from typing_extensions import Self
@@ -31,6 +31,8 @@ class AuthLoginParam(AuthSchemaBase):
 
     uuid: str | None = Field(None, description='验证码 UUID')
     captcha: str | None = Field(None, description='验证码')
+    # 自报的登录端，只用来选会话时长和上限（参数配置「会话策略」），不决定任何安全相关的行为（#138）
+    client: Literal['web', 'desktop', 'mobile'] = Field('web', description='登录端')
 
 
 class AddUserParam(AuthSchemaBase):
@@ -97,7 +99,6 @@ class GetUserInfoDetail(UserInfoSchemaBase):
     status: StatusType = Field(description='状态')
     is_superuser: bool = Field(description='是否超级管理员')
     is_staff: bool = Field(description='是否管理员')
-    is_multi_login: bool = Field(description='是否允许多端登录')
     join_time: datetime = Field(description='加入时间')
     last_login_time: datetime | None = Field(None, description='最后登录时间')
     # 🔴 **必须带默认值，不能写成必填。** 这个 DTO 的子类

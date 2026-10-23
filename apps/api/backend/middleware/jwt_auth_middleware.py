@@ -25,6 +25,7 @@ class AuthenticationError(StarletteAuthenticationError):
         code: int | None = None,
         msg: str | None = None,
         headers: dict[str, Any] | None = None,
+        data: Any = None,
     ) -> None:
         """
         初始化认证错误类
@@ -32,11 +33,13 @@ class AuthenticationError(StarletteAuthenticationError):
         :param code: 错误码
         :param msg: 错误信息
         :param headers: 响应头
+        :param data: 响应体的 data（会话结束原因 `{'reason': ...}`，见 `TokenError.data`）
         :return:
         """
         self.code = code
         self.msg = msg
         self.headers = headers
+        self.data = data
 
 
 class JwtAuthMiddleware(AuthenticationBackend):
@@ -51,7 +54,7 @@ class JwtAuthMiddleware(AuthenticationBackend):
         :param exc: 认证错误对象
         :return:
         """
-        content = {'code': exc.code, 'msg': exc.msg, 'data': None}
+        content = {'code': exc.code, 'msg': exc.msg, 'data': exc.data}
         ctx.__request_authentication_exception__ = content
         return MsgSpecJSONResponse(content=content, status_code=exc.code)
 
@@ -80,6 +83,25 @@ class JwtAuthMiddleware(AuthenticationBackend):
 
         return token
 
+    @staticmethod
+    def client_idle(request: Request) -> int | None:
+        """客户端自报的「用户多少秒没操作了」（请求头 `X-Client-Idle`）
+
+        空闲超时按**人有没有在操作**算，不按请求算 —— 后台轮询（在线用户页 10 秒一次、监控页、
+        导出任务）会让「按请求算」永远不过期（#138）。web 端给每个请求带上这个头；
+        不带的端（移动端、桌面主进程）按「刚操作过」算。
+
+        这是客户端自报的值：空闲超时防的是「人走开了、浏览器还开着」，不是防攻击者 ——
+        拿着凭据的人本来就能自己发请求保活。看不懂的值一律当没带。
+
+        :param request: FastAPI 请求对象
+        :return: 秒数；没带 / 不合法时 None
+        """
+        raw = request.headers.get('X-Client-Idle')
+        if raw is None or not raw.isdigit():
+            return None
+        return int(raw)
+
     async def authenticate(self, request: Request) -> tuple[AuthCredentials, GetUserInfoWithRelationDetail] | None:
         """
         认证请求
@@ -92,10 +114,10 @@ class JwtAuthMiddleware(AuthenticationBackend):
             return None
 
         try:
-            user = await jwt_authentication(token)
+            user = await jwt_authentication(token, client_idle=self.client_idle(request))
         except TokenError as exc:
             if settings.TOKEN_REQUEST_UNDERLYING_SECURITY:
-                raise AuthenticationError(code=exc.code, msg=exc.detail, headers=exc.headers)
+                raise AuthenticationError(code=exc.code, msg=exc.detail, headers=exc.headers, data=exc.data)
             ctx.__request_jwt_authentication_exception__ = exc
             return None
         except Exception as e:

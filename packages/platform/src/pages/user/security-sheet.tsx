@@ -23,7 +23,8 @@ import {
  * 「权限与安全」抽屉 —— 两件**超管专属**的操作。
  *
  * 在这之前界面上没有任何入口：
- * - `PUT /users/{pk}/permissions` —— 停用账号、授予后台登录/超管、开关多端登录
+ * - `PUT /users/{pk}/permissions` —— 停用账号、授予后台登录/超管
+ *   （原来还有「多端登录」，#138 换成了参数配置里按端的会话上限）
  * - `PUT /users/{pk}/password` —— 用户忘了密码，管理员没法帮他重置
  *
  * 两个接口都挂 `DependsSuperUser`（不是权限码），所以入口按 `isSuperuser` 判，
@@ -58,12 +59,6 @@ const FLAGS: Flag[] = [
     label: '后台登录',
     desc: '允许登录管理后台。关掉后账号仍在，但进不了这个系统。',
     read: (u) => u.is_staff,
-  },
-  {
-    type: 'multi_login',
-    label: '多端登录',
-    desc: '允许同一账号在多处同时在线。关掉后新登录会踢掉旧会话。',
-    read: (u) => u.is_multi_login,
   },
   {
     type: 'superuser',

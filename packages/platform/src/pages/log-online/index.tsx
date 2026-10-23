@@ -47,7 +47,7 @@ export type LogOnlineSearch = {
 
 /**
  * 可筛字段。**这一页的筛选全在前端做** —— 接口一次把 Redis 里的
- * `fba:token:*` 全给（不分页，且它的 `username` 入参是全等匹配），
+ * 会话索引全给（不分页，且它的 `username` 入参是全等匹配），
  * 所以 `q.params` 不发给后端，直接喂给下面那个 `filtered`。
  * 游标照样进 URL（硬纪律 2）。
  */

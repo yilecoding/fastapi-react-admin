@@ -6,7 +6,9 @@
  *
  * 顺带存 **session_uuid**：登录接口会连同 token 一起下发，
  * 「在线用户」页要靠它认出哪一行是当前这个浏览器的会话（不然会把自己踢下线）。
- * 刷新 token 时 `create_new_token` 复用同一个 session_uuid，所以它在一次登录内是稳定的。
+ * 会话 ID 从登录到登出不变（#138，后端 `common/security/session.py`），刷新只换令牌不换它。
+ * ⚠️ #138 之前这句注释是**假的**：那时每刷新一次后端就换一个 session_uuid，而这里存的还是登录时那个 ——
+ * 在线用户页认不出当前会话、socket 把正连着的会话标成离线（实测：刷新前后 ID 不同）。
  */
 const KEY = 'admin:access-token'
 const SESSION_KEY = 'admin:session-uuid'

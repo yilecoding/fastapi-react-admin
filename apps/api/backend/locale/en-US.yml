@@ -9,11 +9,9 @@ error:
     admin_forbidden: This account is not allowed to perform admin operations, please contact the administrator
     dept_locked: The department of this account is disabled, please contact the administrator
     dept_not_found: The department of this account does not exist or has been deleted, please contact the administrator
-    duplicate_login: This account signed in from another location, please sign in again and change your password
     invalid_credentials: Incorrect username or password
     menu_not_assigned: No menu assigned to this account, please contact the administrator
     password_expired: Password has expired, please change it and sign in again
-    refresh_token_expired: Refresh token has expired, please sign in again
     role_locked: The role assigned to this account is disabled, please contact the administrator
     temporarily_locked: Account is locked, try again in {minutes} minutes
     too_many_failed_attempts: Too many failed sign-in attempts, the account has been locked
@@ -204,6 +202,18 @@ error:
     code_exists: Role code already exists
     none_available: No available role found, please contact the administrator
     not_found: Role does not exist
+  session:
+    disabled: Your account has been disabled, please contact the administrator
+    expired: Your session has expired, please sign in again
+    idle: You were signed out after a period of inactivity, please sign in again
+    invalid: Invalid sign-in credentials, please sign in again
+    kicked: You were signed out by an administrator, please sign in again
+    limit_reached: "This account has reached its device limit on {client} ({n}); sign out on another device first"
+    logout: You have signed out
+    not_found: The session does not exist or has already ended
+    password_changed: Your password was changed, please sign in again
+    replaced: Your account signed in on another device, so this device was signed out
+    reuse: "Your sign-in credentials were used more than once, so you were signed out; change your password if this wasn't you"
   snowflake:
     clock_moved_backwards: 'Snowflake ID generation failed: clock moved backwards by more than {ms} ms, contact the administrator immediately'
     config_failed: Invalid snowflake configuration, please contact the administrator
@@ -259,7 +269,6 @@ error:
   token:
     expired: Token has expired
     invalid: Invalid token
-    no_longer_valid: Token is no longer valid
   user:
     cache_key_build_failed: Failed to build the user cache key
     captcha_expired: Captcha is no longer valid, please get a new one
@@ -497,3 +506,9 @@ workflow:
 storage:
   builtin_name: Local storage (built-in)
   probe_ok: 'Connection OK: write, read back and delete all succeeded'
+# 会话所属的端（#138），拼进 error.session.limit_reached
+session:
+  client:
+    web: the web
+    desktop: the desktop app
+    mobile: the mobile app

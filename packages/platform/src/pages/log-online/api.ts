@@ -9,7 +9,7 @@ import { formatDuration, t, toEpochMs } from '@admin/i18n'
  *
  * 三个必须知道的事实：
  *
- * 1. **接口不分页**：它扫 Redis 里 `fba:token:*` 的全部 key 再逐个解 JWT，
+ * 1. **接口不分页**：它读后端的会话索引（#138，原来是扫 `fba:token:*` 再逐个解 JWT），
  *    一次性返回全量。所以分页、排序、搜索全在前端做（见 index.tsx）。
  * 2. **`id` 是用户 ID，会重复**：同一个人多端登录就有多条记录。
  *    表格的 `getRowId` 必须用 `session_uuid`，用 `id` 会让多行互相串选中态。

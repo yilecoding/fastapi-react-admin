@@ -128,7 +128,47 @@ DYNAMIC_INT_BOUNDS: dict[str, tuple[int, int]] = {
     'FILE_CHUNK_THRESHOLD': (1, 99),
     # 每一片也是一个请求，同样要小于 client_max_body_size；64 MiB 再往上，单片失败重传的代价就太大了
     'FILE_CHUNK_SIZE': (1, 64),
+    # 会话策略（#138）。空闲按分钟：下界 5 给等保那种「15 / 30 分钟无操作退出」留空间，上界 90 天；
+    # 绝对有效期按天；会话上限 0 = 不限
+    **{
+        key: bounds
+        for client in ('WEB', 'DESKTOP', 'MOBILE')
+        for key, bounds in (
+            (f'SESSION_{client}_IDLE_MINUTES', (5, 60 * 24 * 90)),
+            (f'SESSION_{client}_ABSOLUTE_DAYS', (1, 365)),
+            (f'SESSION_{client}_MAX', (0, 100)),
+        )
+    },
 }
+
+#: 会话超限策略：挤掉最久没活跃的 / 拒绝新登录（#138）
+SESSION_OVERFLOW_MODES = ('evict_idle', 'deny')
+
+
+#: 只认几个固定取值的动态配置（写入侧在 schema 上卡，读取侧对不上回落 .env）
+DYNAMIC_CHOICES: dict[str, tuple[str, ...]] = {
+    f'SESSION_{client}_OVERFLOW': SESSION_OVERFLOW_MODES for client in ('WEB', 'DESKTOP', 'MOBILE')
+}
+
+
+def session_overflow(value: str) -> str:
+    """会话超限策略：拼错一个字母不报错的话，界面上写着「拒绝新登录」、实际在挤人"""
+    if value not in SESSION_OVERFLOW_MODES:
+        raise ValueError(value)
+    return value
+
+
+def check_dynamic_choice(key: str, raw: str) -> str | None:
+    """校验一个只认固定取值的动态配置；不在 `DYNAMIC_CHOICES` 里的键直接放过
+
+    :param key: 配置键名
+    :param raw: 界面传上来的原始字符串值
+    :return: 不合格时返回给人看的原因，合格返回 None
+    """
+    choices = DYNAMIC_CHOICES.get(key)
+    if choices is None or raw in choices:
+        return None
+    return f'{key} 只能是 {" / ".join(choices)}，收到 {raw!r}'
 
 
 def check_dynamic_int_bounds(key: str, raw: str) -> str | None:
@@ -202,3 +242,22 @@ async def load_file_config(db: AsyncSession) -> None:
         'FILE_CHUNK_SIZE': mib_to_bytes,
     }
     await load_config(db, 'file', mapping, 'FILE_CONFIG_STATUS')
+
+
+async def load_session_config(db: AsyncSession) -> None:
+    """
+    获取会话策略（#138）：按端的空闲超时 / 绝对有效期 / 会话上限 / 超限策略
+
+    挂在登录上（表单 / oauth2）。这几项在建会话时就**存进会话里**了，所以改配置只影响之后的登录，
+    已经登录的人按登录那一刻的规则走完 —— 同分片上传的 `chunk_size`
+
+    :param db: 数据库会话
+    :return:
+    """
+    mapping: dict[str, Callable[[str], object]] = {}
+    for client in ('WEB', 'DESKTOP', 'MOBILE'):
+        mapping[f'SESSION_{client}_IDLE_MINUTES'] = int
+        mapping[f'SESSION_{client}_ABSOLUTE_DAYS'] = int
+        mapping[f'SESSION_{client}_MAX'] = int
+        mapping[f'SESSION_{client}_OVERFLOW'] = session_overflow
+    await load_config(db, 'session', mapping, 'SESSION_CONFIG_STATUS')

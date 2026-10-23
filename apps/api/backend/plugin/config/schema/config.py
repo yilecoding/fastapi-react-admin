@@ -5,7 +5,7 @@ from pydantic import ConfigDict, Field, model_validator
 
 from backend.common.schema import ColumnLengthChecked, SchemaBase
 from backend.plugin.config.model import Config
-from backend.utils.dynamic_config import check_dynamic_int_bounds
+from backend.utils.dynamic_config import check_dynamic_choice, check_dynamic_int_bounds
 
 
 class ConfigSchemaBase(SchemaBase):
@@ -30,7 +30,7 @@ class ConfigSchemaBase(SchemaBase):
         范围表和「为什么写入侧此前完全没有校验」见
         `backend/utils/dynamic_config.py: DYNAMIC_INT_BOUNDS`。
         """
-        problem = check_dynamic_int_bounds(self.key, self.value)
+        problem = check_dynamic_int_bounds(self.key, self.value) or check_dynamic_choice(self.key, self.value)
         if problem:
             raise ValueError(problem)
         return self

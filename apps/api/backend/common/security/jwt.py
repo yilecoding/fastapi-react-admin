@@ -1,7 +1,5 @@
-import json
-import uuid
+import time
 
-from datetime import datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import Depends, Request, Response
@@ -15,10 +13,11 @@ from starlette.authentication import UnauthenticatedUser
 from backend.app.admin.model import User
 from backend.app.admin.schema.user import GetUserInfoWithRelationDetail
 from backend.common.context import ctx
-from backend.common.dataclasses import AccessToken, NewToken, RefreshToken, TokenPayload
+from backend.common.dataclasses import AccessToken, TokenPayload
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.security.data_scope import bypass_data_scope
+from backend.common.security.session import session_store
 from backend.core.conf import settings
 from backend.database.db import async_db_session
 from backend.database.redis import redis_client
@@ -65,161 +64,89 @@ def jwt_decode(token: str) -> TokenPayload:
     )
 
 
-async def create_access_token(user_id: int, *, multi_login: bool, **kwargs) -> AccessToken:
+def issue_access_token(
+    user_id: int, session_uuid: str, session_expire_at: int, *, lifetime: int | None = None
+) -> AccessToken:
     """
-    生成加密 token
+    给一个会话签一枚 access token
+
+    它不进 Redis：撤销靠「每个请求都核对会话还在不在」（`session_store.check`），
+    不靠作废某一枚 token。所以同一个会话里可以同时有几枚有效的 access token（几个标签页各一枚），
+    刷新也不用作废上一枚 —— 它本来就只活 `TOKEN_EXPIRE_SECONDS`
 
     :param user_id: 用户 ID
-    :param multi_login: 是否允许多端登录
-    :param kwargs: token 额外信息
+    :param session_uuid: 会话 ID（整个会话不变）
+    :param session_expire_at: 会话的绝对到期（epoch 秒）—— access token 不能比会话活得长
+    :param lifetime: 有效期秒数，默认 `TOKEN_EXPIRE_SECONDS`
     :return:
     """
-    expire = timezone.now() + timedelta(seconds=settings.TOKEN_EXPIRE_SECONDS)
-    session_uuid = str(uuid.uuid4())
-    access_token = jwt_encode({
-        'session_uuid': session_uuid,
-        'exp': timezone.to_utc(expire).timestamp(),
-        'sub': str(user_id),
-    })
-
-    if not multi_login:
-        await redis_client.delete_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user_id}')
-
-    await redis_client.set(
-        f'{settings.TOKEN_REDIS_PREFIX}:{user_id}:{session_uuid}',
-        access_token,
-        ex=settings.TOKEN_EXPIRE_SECONDS,
+    expire_at = min(int(time.time()) + (lifetime or settings.TOKEN_EXPIRE_SECONDS), session_expire_at)
+    access_token = jwt_encode({'session_uuid': session_uuid, 'exp': expire_at, 'sub': str(user_id)})
+    return AccessToken(
+        access_token=access_token,
+        access_token_expire_time=timezone.from_datetime(timezone.to_utc(expire_at)),
+        session_uuid=session_uuid,
     )
 
-    # Token 附加信息单独存储
-    if kwargs:
-        await redis_client.set(
-            f'{settings.TOKEN_EXTRA_INFO_REDIS_PREFIX}:{user_id}:{session_uuid}',
-            json.dumps(kwargs, ensure_ascii=False),
-            ex=settings.TOKEN_EXPIRE_SECONDS,
-        )
 
-    return AccessToken(access_token=access_token, access_token_expire_time=expire, session_uuid=session_uuid)
+def _cookie_secure(request: Request) -> bool:
+    if settings.COOKIE_SECURE is not None:
+        return settings.COOKIE_SECURE
+    return request.url.scheme == 'https'
 
 
-async def create_refresh_token(session_uuid: str, user_id: int, *, multi_login: bool) -> RefreshToken:
+def _clear_legacy_refresh_cookie(response: Response) -> None:
+    """清掉 #138 之前那个 `Path=/` 的 refresh cookie
+
+    🔴 不清会怎样：浏览器访问 `/api/v1/auth/refresh` 时两个同名 cookie 都发（新的路径更长、排在前面），
+    Starlette 解析 Cookie 头时**后出现的覆盖先出现的** —— 赢的是那个旧格式的、早已失效的值，
+    于是每次刷新都 401，用户每 30 分钟被登出一次，持续到旧 cookie 自己过期（最长 7 天）。
+
+    ⚠️ 必须排在真正下发的那一行**之后**：桌面端主进程按名字取**第一个** Set-Cookie
+    （`apps/desktop/src/main/auth.ts: extractRefreshCookie`），排在前面它会存下一个空串。
     """
-    生成加密刷新 token，仅用于创建新的 token
-
-    :param session_uuid: 会话 UUID
-    :param user_id: 用户 ID
-    :param multi_login: 是否允许多端登录
-    :return:
-    """
-    expire = timezone.now() + timedelta(seconds=settings.TOKEN_REFRESH_EXPIRE_SECONDS)
-    refresh_token = jwt_encode({
-        'session_uuid': session_uuid,
-        'exp': timezone.to_utc(expire).timestamp(),
-        'sub': str(user_id),
-    })
-
-    if not multi_login:
-        await redis_client.delete_by_prefix(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}')
-
-    await redis_client.set(
-        f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}:{session_uuid}',
-        refresh_token,
-        ex=settings.TOKEN_REFRESH_EXPIRE_SECONDS,
-    )
-    return RefreshToken(refresh_token=refresh_token, refresh_token_expire_time=expire)
+    response.delete_cookie(key=settings.COOKIE_REFRESH_TOKEN_KEY, path='/')
 
 
-def set_refresh_cookie(response: Response, refresh_token: str, expire_time: datetime) -> None:
+def set_refresh_cookie(response: Response, request: Request, refresh_token: str, expire_at: int) -> None:
     """把 refresh token 写进 HttpOnly cookie。
 
-    🔴 **`max_age` 和 `expires` 必须来自同一个真相源。** 三个调用点
-    （`/auth/login`、`/auth/token/new`、oauth2 回调）原来各写一遍
-    `set_cookie(...)`，而 `max_age` 取的是一个**独立配置**
-    `COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS`、`expires` 取的是 refresh token 的
-    真实过期时间 —— 两个值可以不一致，而且**按 RFC 6265 §5.3，`Max-Age`
-    优先于 `Expires`**，所以赢的是那个可能配错的。
+    🔴 **`max_age` 和 `expires` 必须来自同一个真相源**（会话的绝对到期）。#138 之前曾有一个独立配置
+    `COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS` 给 `max_age`，而按 RFC 6265 §5.3 `Max-Age` 优先于 `Expires` ——
+    两个值配得不一致时，浏览器提前丢 cookie、服务端会话还在，静默早退。
 
-    实测（把那个配置改成 60、refresh token 保持 604800）：同一个响应头里
-    同时出现 `expires=Wed, 09 Sep 2026 ... GMT` 和 `Max-Age=60`。
-    浏览器 60 秒后丢掉 cookie，而服务端那份 refresh token 还有 7 天 ——
-    **静默早退，服务端完全观察不到**（Redis 里 token 还在、日志里什么都没有，
-    用户只是「又被登出了」）。
-
-    所以那个配置删了，`max_age` 直接从 `TOKEN_REFRESH_EXPIRE_SECONDS` 来 ——
-    和 `expires` 同源，不可能再对不上。收成一个函数也是刻意的：
-    三处各写一遍，迟早有一处和别人不一样（和 `file_ops.upload_root` 同一个理由）。
+    `Path` 限定在 `/api/v1/auth`：refresh token 只有登录 / 刷新 / 登出用得到，不该随每个请求一起发。
+    `Secure` 见 `COOKIE_SECURE`。
 
     :param response: FastAPI 响应对象
-    :param refresh_token: 刷新令牌
-    :param expire_time: 刷新令牌的过期时间（本地时区）
+    :param request: FastAPI 请求对象（判断是不是 HTTPS）
+    :param refresh_token: `{sid}.{secret}`
+    :param expire_at: 会话的绝对到期（epoch 秒）
     :return:
     """
     response.set_cookie(
         key=settings.COOKIE_REFRESH_TOKEN_KEY,
         value=refresh_token,
-        max_age=settings.TOKEN_REFRESH_EXPIRE_SECONDS,
-        expires=timezone.to_utc(expire_time),
+        max_age=max(expire_at - int(time.time()), 0),
+        expires=timezone.to_utc(expire_at),
+        path=settings.COOKIE_REFRESH_TOKEN_PATH,
+        secure=_cookie_secure(request),
         httponly=True,
+        samesite='lax',
     )
+    _clear_legacy_refresh_cookie(response)
 
 
-async def create_new_token(
-    refresh_token: str,
-    session_uuid: str,
-    user_id: int,
-    *,
-    multi_login: bool,
-    **kwargs,
-) -> NewToken:
-    """
-    生成新的 token
-
-    :param refresh_token: 刷新 token
-    :param session_uuid: 会话 UUID
-    :param user_id: 用户 ID
-    :param multi_login: 是否允许多端登录
-    :param kwargs: token 附加信息
-    :return:
-    """
-    redis_refresh_token = await redis_client.get(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}:{session_uuid}')
-    if not redis_refresh_token or redis_refresh_token != refresh_token:
-        raise errors.TokenError(msg=t('error.auth.refresh_token_expired'))
-
-    await redis_client.delete(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}:{session_uuid}')
-    await redis_client.delete(f'{settings.TOKEN_REDIS_PREFIX}:{user_id}:{session_uuid}')
-
-    new_access_token = await create_access_token(user_id, multi_login=multi_login, **kwargs)
-    new_refresh_token = await create_refresh_token(new_access_token.session_uuid, user_id, multi_login=multi_login)
-    return NewToken(
-        new_access_token=new_access_token.access_token,
-        new_access_token_expire_time=new_access_token.access_token_expire_time,
-        new_refresh_token=new_refresh_token.refresh_token,
-        new_refresh_token_expire_time=new_refresh_token.refresh_token_expire_time,
-        session_uuid=new_access_token.session_uuid,
+def clear_refresh_cookie(response: Response, request: Request) -> None:
+    """登出：新旧两个路径上的 refresh cookie 都清掉"""
+    response.delete_cookie(
+        key=settings.COOKIE_REFRESH_TOKEN_KEY,
+        path=settings.COOKIE_REFRESH_TOKEN_PATH,
+        secure=_cookie_secure(request),
+        httponly=True,
+        samesite='lax',
     )
-
-
-async def revoke_token(user_id: int, session_uuid: str) -> None:
-    """
-    撤销一个会话的**全部**凭据
-
-    🔴 **三个 key 必须一起删，尤其是 refresh key。**
-    原来这里只删 access（`TOKEN_REDIS_PREFIX`）和附加信息，漏了
-    `TOKEN_REFRESH_REDIS_PREFIX` —— 而 `create_new_token()` 只校验
-    「refresh key 存在且值相等」（jwt.py 里那两行），**从不检查 access key 还在不在**。
-    于是「强制下线」（`api/v1/monitor/online.py` 的 `delete_session`）踢掉的会话，
-    只要立刻打一次 `/auth/refresh` 就能换回一个全新的 access token；
-    而此时 `token_keys` 恰好是空的，`multi_login` 那道检查反而更不会拦。
-    表现是「在线用户页点了强制下线、那一行也消失了，人却还在」——
-    界面上没有任何异常，被踢的人也毫无感觉。
-
-    :param user_id: 用户 ID
-    :param session_uuid: 会话 ID
-    :return:
-    """
-    await redis_client.delete(f'{settings.TOKEN_REDIS_PREFIX}:{user_id}:{session_uuid}')
-    await redis_client.delete(f'{settings.TOKEN_EXTRA_INFO_REDIS_PREFIX}:{user_id}:{session_uuid}')
-    await redis_client.delete(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}:{session_uuid}')
+    _clear_legacy_refresh_cookie(response)
 
 
 def get_token(request: Request) -> str:
@@ -291,21 +218,25 @@ async def get_jwt_user(user_id: int) -> GetUserInfoWithRelationDetail:
     return user
 
 
-async def jwt_authentication(token: str) -> GetUserInfoWithRelationDetail:
+async def jwt_authentication(
+    token: str, *, client_idle: int | None = None, touch: bool = True
+) -> GetUserInfoWithRelationDetail:
     """
-    JWT 认证
+    JWT 认证：验签 → 核对会话（还在不在 / 到期 / 空闲，顺手续活跃）→ 取用户
 
-    :param token: JWT token
+    :param token: access token
+    :param client_idle: 客户端自报的「多少秒没操作了」（`X-Client-Idle`），见 `JwtAuthMiddleware.client_idle`
+    :param touch: 这次请求算不算用户在操作；socket 握手传 False
     :return:
     """
     token_payload = jwt_decode(token)
     ctx.user_id = token_payload.user_id
-    redis_token = await redis_client.get(f'{settings.TOKEN_REDIS_PREFIX}:{ctx.user_id}:{token_payload.session_uuid}')
-    if not redis_token:
-        raise errors.TokenError(msg=t('error.token.expired'))
-
-    if token != redis_token:
-        raise errors.TokenError(msg=t('error.token.no_longer_valid'))
+    await session_store.check(
+        user_id=token_payload.user_id,
+        session_uuid=token_payload.session_uuid,
+        client_idle=client_idle,
+        touch=touch,
+    )
 
     user = await get_jwt_user(ctx.user_id)
     ctx.is_superuser = user.is_superuser

@@ -19,18 +19,17 @@ from backend.common.i18n import t
 from backend.common.log import log
 from backend.common.response.response_code import CustomErrorCode
 from backend.common.security.jwt import (
-    create_access_token,
-    create_new_token,
-    create_refresh_token,
+    clear_refresh_cookie,
     get_token,
+    issue_access_token,
     jwt_decode,
-    revoke_token,
     set_refresh_cookie,
 )
+from backend.common.security.session import EndReason, SessionClient, ended_error, session_store
 from backend.core.conf import settings
 from backend.database.db import uuid4_str
 from backend.database.redis import redis_client
-from backend.utils.dynamic_config import load_login_config
+from backend.utils.dynamic_config import load_login_config, load_session_config
 from backend.utils.timezone import timezone
 
 # 用户不存在时拿它跑一次等价的 bcrypt 校验，把时间侧信道抹平。
@@ -112,18 +111,18 @@ class AuthService:
         """
         user, _ = await self.user_verify(db, obj.username, obj.password)
         await user_dao.update_login_time(db, obj.username)
-        access_token_data = await create_access_token(
-            user.id,
-            multi_login=user.is_multi_login,
-            # extra info
-            swagger=True,
+        # 只发 access token、不续期、不计入会话上限、不进在线列表（`SessionClient.swagger`）
+        session = await session_store.create(user_id=user.id, client=SessionClient.swagger, meta=session_meta(user))
+        access = issue_access_token(
+            user.id, session.session_uuid, session.expire_at, lifetime=settings.SESSION_SWAGGER_SECONDS
         )
-        return access_token_data.access_token, user
+        return access.access_token, user
 
     async def login(
         self,
         *,
         db: AsyncSession,
+        request: Request,
         response: Response,
         obj: AuthLoginParam,
         background_tasks: BackgroundTasks,
@@ -132,6 +131,7 @@ class AuthService:
         用户登录
 
         :param db: 数据库会话
+        :param request: 请求对象（取同一个浏览器里上一次登录的 refresh cookie）
         :param response: 响应对象
         :param obj: 登录参数
         :param background_tasks: 后台任务
@@ -151,26 +151,15 @@ class AuthService:
                 await redis_client.delete(f'{settings.LOGIN_CAPTCHA_REDIS_PREFIX}:{obj.uuid}')
 
             user, days_remaining = await self.user_verify(db, obj.username, obj.password)
+            await load_session_config(db)
+            # 同一个浏览器里重新登录：上一次的会话就地作废，不留一个没人用、却占着上限名额的会话
+            await self.end_current_session(request, user.id, EndReason.replaced)
+            # 准入在前：同一端会话数超限且策略是「拒绝」时，这次登录不该把最后登录时间改掉
+            session = await session_store.create(user_id=user.id, client=obj.client, meta=session_meta(user))
             await user_dao.update_login_time(db, obj.username)
             await db.refresh(user)
-            access_token_data = await create_access_token(
-                user.id,
-                multi_login=user.is_multi_login,
-                # extra info
-                username=user.username,
-                nickname=user.nickname,
-                last_login_time=timezone.to_iso(user.last_login_time),
-                ip=ctx.ip,
-                os=ctx.os,
-                browser=ctx.browser,
-                device=ctx.device,
-            )
-            refresh_token_data = await create_refresh_token(
-                access_token_data.session_uuid,
-                user.id,
-                multi_login=user.is_multi_login,
-            )
-            set_refresh_cookie(response, refresh_token_data.refresh_token, refresh_token_data.refresh_token_expire_time)
+            access_token_data = issue_access_token(user.id, session.session_uuid, session.expire_at)
+            set_refresh_cookie(response, request, session.refresh_token, session.expire_at)
         except errors.BaseExceptionError as e:
             # 记录**所有**登录失败。
             #
@@ -240,49 +229,42 @@ class AuthService:
     @staticmethod
     async def refresh_token(*, db: AsyncSession, request: Request, response: Response) -> GetNewToken:
         """
-        刷新令牌
+        刷新令牌：换一代 refresh token、签一枚新的 access token。会话 ID 不变（#138）
 
         :param db: 数据库会话
         :param request: FastAPI 请求对象
         :param response: FastAPI 响应对象
         :return:
         """
-        refresh_token = request.cookies.get(settings.COOKIE_REFRESH_TOKEN_KEY)
-        if not refresh_token:
-            raise errors.RequestError(msg=t('error.auth.refresh_token_expired'))
+        session = await session_store.rotate(request.cookies.get(settings.COOKIE_REFRESH_TOKEN_KEY))
+        user = await user_dao.get(db, session.user_id)
+        if not user or not user.status:
+            await session_store.revoke(session.session_uuid, EndReason.disabled)
+            raise ended_error(EndReason.disabled)
+        access = issue_access_token(user.id, session.session_uuid, session.expire_at)
+        set_refresh_cookie(response, request, session.refresh_token, session.expire_at)
+        return GetNewToken(
+            access_token=access.access_token,
+            access_token_expire_time=access.access_token_expire_time,
+            session_uuid=access.session_uuid,
+        )
 
-        token_payload = jwt_decode(refresh_token)
-        user = await user_dao.get(db, token_payload.user_id)
-        if not user:
-            raise errors.NotFoundError(msg=t('error.user.not_found'))
-        if not user.status:
-            raise errors.AuthorizationError(msg=t('error.auth.account_locked'))
-        token_keys = await redis_client.get_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user.id}')
-        if not user.is_multi_login and [
-            key for key in token_keys if not key.endswith(f':{token_payload.session_uuid}')
-        ]:
-            raise errors.ForbiddenError(msg=t('error.auth.duplicate_login'))
-        new_token = await create_new_token(
-            refresh_token,
-            token_payload.session_uuid,
-            user.id,
-            multi_login=user.is_multi_login,
-            # extra info
-            username=user.username,
-            nickname=user.nickname,
-            last_login_time=timezone.to_iso(user.last_login_time),
-            ip=ctx.ip,
-            os=ctx.os,
-            browser=ctx.browser,
-            device_type=ctx.device,
-        )
-        set_refresh_cookie(response, new_token.new_refresh_token, new_token.new_refresh_token_expire_time)
-        data = GetNewToken(
-            access_token=new_token.new_access_token,
-            access_token_expire_time=new_token.new_access_token_expire_time,
-            session_uuid=new_token.session_uuid,
-        )
-        return data
+    @staticmethod
+    async def end_current_session(request: Request, user_id: int, reason: str) -> None:
+        """
+        结束这个浏览器当前的会话（按 refresh cookie 认）
+
+        只认得出是**这个人**的才撤销：cookie 可能是上一个登录者留下的（同一台电脑换人登录），
+        那个会话不归这次登录管
+
+        :param request: FastAPI 请求对象
+        :param user_id: 这次登录的用户
+        :param reason: `EndReason`
+        :return:
+        """
+        owner = await session_store.owner_of(request.cookies.get(settings.COOKIE_REFRESH_TOKEN_KEY))
+        if owner is not None and owner[0] == user_id:
+            await session_store.revoke(owner[1], reason)
 
     @staticmethod
     async def logout(*, request: Request, response: Response) -> None:
@@ -297,8 +279,8 @@ class AuthService:
           不带 Authorization（access token 在渲染层的 sessionStorage 里，主进程手上没有）。
           它本地删了凭据、界面也回到登录页，但服务端三个 key 一个没删 ——
           那个会话的 refresh token 还能再活 7 天
-        refresh token 的 JWT 里同样带着 `sub` 和 `session_uuid`
-        （`create_refresh_token`），所以它自己就够定位一个会话。安全性不受影响：
+        refresh token 是 `{会话 ID}.{secret}`，它自己就够定位一个会话 —— 但要 secret
+        对得上才算数（`session_store.owner_of`）：会话 ID 不是秘密，光凭它就能撤销别人的会话。
         没有任何一种凭据时什么都不做，拿得出凭据才撤销**它自己那一个**会话。
 
         ⚠️ 只带 cookie、不带 Authorization 的请求**本来就过得了 JWT 中间件** ——
@@ -311,32 +293,42 @@ class AuthService:
         :return:
         """
         # 无论后面成不成，浏览器里那个 cookie 都要清掉
-        response.delete_cookie(settings.COOKIE_REFRESH_TOKEN_KEY)
+        clear_refresh_cookie(response, request)
 
         identity: tuple[int, str] | None = None
-        for candidate in (
-            # access token 优先：它是「当前这次请求」最直接的身份
-            lambda: get_token(request),
-            lambda: request.cookies.get(settings.COOKIE_REFRESH_TOKEN_KEY) or '',
-        ):
-            try:
-                payload = jwt_decode(candidate())
-            except errors.TokenError:
-                continue
+        # access token 优先：它是「当前这次请求」最直接的身份
+        try:
+            payload = jwt_decode(get_token(request))
             identity = (payload.user_id, payload.session_uuid)
-            break
+        except errors.TokenError:
+            # 没有 / 过期的 access token：退回 refresh cookie，但要 secret 对得上才算数（`owner_of`）
+            identity = await session_store.owner_of(request.cookies.get(settings.COOKIE_REFRESH_TOKEN_KEY))
 
         if identity is None:
             # 两种凭据都没有或都无效 —— 登出本来就该是幂等的，静默成功
             return
 
         user_id, session_uuid = identity
-        await revoke_token(user_id, session_uuid)
+        # 同一个浏览器的其它标签页共用这个会话，它们经 socket 收到 `logout`、一起回登录页
+        await session_store.revoke(session_uuid, EndReason.logout)
         # 🔴 见 issue #34：这份用户快照（menu_service.get_sidebar 用它筛菜单）原来
         # 只被 user_cache_manager.clear_* 显式作废，logout 从不碰它——一旦它被卡在
         # 旧值上（比如另一个管理员改权限的请求撞上了竞态），重新登录并不能重建它，
         # 用户能想到的所有恢复动作里，这是唯一真正有效的一个，必须补上。
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+
+
+def session_meta(user: User) -> dict[str, str]:
+    """存进会话、给在线用户页展示的那几样（登录那一刻的快照）"""
+    return {
+        'username': user.username,
+        'nickname': user.nickname,
+        'last_login_time': timezone.to_iso(timezone.now()),
+        'ip': ctx.ip,
+        'os': ctx.os,
+        'browser': ctx.browser,
+        'device': ctx.device,
+    }
 
 
 auth_service: AuthService = AuthService()

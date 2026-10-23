@@ -447,17 +447,6 @@ class CRUDUser(DataScopedCRUD[User]):
         """
         return await self.update_model_by_column(db, {'status': status}, id=user_id, deleted=0)
 
-    async def set_multi_login(self, db: AsyncSession, user_id: int, *, multi_login: bool) -> int:
-        """
-        设置用户多端登录状态
-
-        :param db: 数据库会话
-        :param user_id: 用户 ID
-        :param multi_login: 是否允许多端登录
-        :return:
-        """
-        return await self.update_model_by_column(db, {'is_multi_login': multi_login}, id=user_id, deleted=0)
-
     async def delete(self, db: AsyncSession, user_id: int) -> int:
         """
         删除用户

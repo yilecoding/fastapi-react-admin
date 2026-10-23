@@ -107,12 +107,23 @@ class AuthorizationError(BaseExceptionError):
 
 
 class TokenError(HTTPError):
-    """Token 异常"""
+    """Token 异常
+
+    `reason` 是会话为什么结束（被踢 / 空闲 / 到期 …，取值见 `common/security/session.py: EndReason`），
+    随响应体的 `data.reason` 下发 —— 前端据此告诉用户为什么要重新登录，而不是一声不吭跳回登录页（#138）。
+    """
 
     code = StandardResponseCode.HTTP_401
 
-    def __init__(self, *, msg: str = 'Not Authenticated', headers: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self, *, msg: str = 'Not Authenticated', headers: dict[str, Any] | None = None, reason: str | None = None
+    ) -> None:
         super().__init__(code=self.code, msg=msg, headers=headers or {'WWW-Authenticate': 'Bearer'})
+        self.reason = reason
+
+    @property
+    def data(self) -> dict[str, str] | None:
+        return {'reason': self.reason} if self.reason else None
 
 
 class ConflictError(BaseExceptionError):

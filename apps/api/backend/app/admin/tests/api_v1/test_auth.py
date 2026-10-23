@@ -183,8 +183,8 @@ def session(client: TestClient, no_captcha: None) -> Iterator[tuple[dict[str, st
     返回 `(auth_headers, session_uuid)`；refresh cookie 留在 client 的 jar 里，
     用例只要**不传 Authorization** 就等价于桌面端发出的那个请求。
 
-    ⚠️ 不能用 `/auth/login/swagger`：它只发 access token，`create_refresh_token`
-    根本没被调用（`auth_service.swagger_login`），拿它来测 refresh 撤销等于什么都没测。
+    ⚠️ 不能用 `/auth/login/swagger`：它只发 access token、不下发 refresh cookie
+    （`auth_service.swagger_login`），拿它来测 refresh 撤销等于什么都没测。
 
     🔴 **也不能自己再 `TestClient(app)` 开一个。** `TestClient` 作为上下文管理器会
     跑一遍应用的 lifespan，而 `conftest` 里那个 `client` 是 **session 级**、全程开着的 ——
@@ -211,8 +211,8 @@ def _keep_refresh_cookie(client: TestClient) -> str:
 
     🔴 **登出的响应带 `delete_cookie`，httpx 会照办**——直接在登出之后打
     `/auth/refresh`，失败的原因是「压根没带 cookie」，不是「服务端撤销了它」。
-    这条断言会**假绿**：把 `revoke_token()` 里删 refresh key 那行注释掉，它照样通过
-    （实测确认过）。真实客户端手里那份凭据不会因为服务端说一声就消失
+    这条断言会**假绿**：把撤销会话那一步注释掉（#138 之前是 `revoke_token()` 里删 refresh key 那行），
+    它照样通过（实测确认过）。真实客户端手里那份凭据不会因为服务端说一声就消失
     （桌面端就是自己存在磁盘上的），所以测试必须把它塞回去再验。
     """
     value = client.cookies.get(settings.COOKIE_REFRESH_TOKEN_KEY)
@@ -234,6 +234,8 @@ def test_force_offline_also_revokes_the_refresh_token(client: TestClient, sessio
     被踢的会话立刻打一次 `/auth/refresh` 就能换回全新的 access token，
     而此时 `token_keys` 恰好是空的，`multi_login` 那道检查反而更不会拦。
     在线用户页上那一行确实消失了，人却还在。
+
+    #138 之后撤销统一走 `session_store.revoke`（整个会话一个 key），这条照样守着。
     """
     headers, session_uuid = session
     user_id = _user_id(client, headers)

@@ -31,7 +31,7 @@ from backend.common.i18n import t
 from backend.common.pagination import paging_data
 from backend.common.response.response_code import CustomErrorCode
 from backend.common.security.data_scope import bypass_data_scope
-from backend.common.security.jwt import get_token, jwt_decode
+from backend.common.security.session import EndReason, session_store
 from backend.core.conf import settings
 from backend.database.redis import redis_client
 from backend.utils.serializers import select_join_serialize
@@ -219,35 +219,10 @@ class UserService:
                 if pk == request.user.id:
                     raise errors.ForbiddenError(msg=t('error.user.self_permission_forbidden'))
                 count = await user_dao.set_status(db, pk, 0 if user.status == 1 else 1)
-            case UserPermissionType.multi_login:
-                user = await user_dao.get(db, pk)
-                if not user:
-                    raise errors.NotFoundError(msg=t('error.user.not_found'))
-                # 判据必须是「改的是不是自己」= pk == request.user.id。
-                # 上游原本写的是 `pk != user.id` —— 而 user 就是按 pk 查出来的，
-                # 这个条件恒为 False，于是永远拿**操作者自己**的 is_multi_login 去取反，
-                # 改他人时接口返回 200 但值纹丝不动（实测：admin 的值是 True，
-                # 去切一个 False 的用户，算出 not True = False，写回去等于没改）。
-                # 下面 `if pk == user.id` 同理恒真，else 分支是死代码。
-                is_self = pk == request.user.id
-                multi_login = request.user.is_multi_login if is_self else user.is_multi_login
-                new_multi_login = not multi_login
-                count = await user_dao.set_multi_login(db, pk, multi_login=new_multi_login)
-                token = get_token(request)
-                token_payload = jwt_decode(token)
-                if is_self:
-                    # 修改自身时，除当前 token 外，其他 token 失效
-                    if not new_multi_login:
-                        key_prefix = f'{settings.TOKEN_REDIS_PREFIX}:{user.id}'
-                        await redis_client.delete_by_prefix(
-                            key_prefix,
-                            exclude_keys=f'{key_prefix}:{token_payload.session_uuid}',
-                        )
-                else:
-                    # 修改他人时，他人 token 全部失效
-                    if not new_multi_login:
-                        key_prefix = f'{settings.TOKEN_REDIS_PREFIX}:{user.id}'
-                        await redis_client.delete_by_prefix(key_prefix)
+                if user.status == 1:
+                    # 停用：会话当场结束并告诉对方原因（#138）。不撤的话请求会在取用户时 403，
+                    # 但会话还挂在在线列表上，refresh 也照样换得出新 token
+                    await session_store.revoke_user(pk, EndReason.disabled)
             case _:
                 raise errors.RequestError(msg=t('error.user.permission_type_not_found'))
 
@@ -284,8 +259,7 @@ class UserService:
         history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
-        await redis_client.delete_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user.id}')
-        await redis_client.delete_by_prefix(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user.id}')
+        await session_store.revoke_user(user.id, EndReason.password_changed)
         await redis_client.delete_by_prefix(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
         return count
 
@@ -403,8 +377,7 @@ class UserService:
         history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
-        await redis_client.delete_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user_id}')
-        await redis_client.delete_by_prefix(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user_id}')
+        await session_store.revoke_user(user_id, EndReason.password_changed)
         await redis_client.delete_by_prefix(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
         return count
 
@@ -421,8 +394,7 @@ class UserService:
         if not user:
             raise errors.NotFoundError(msg=t('error.user.not_found'))
         count = await user_dao.delete(db, user.id)
-        await redis_client.delete_by_prefix(f'{settings.TOKEN_REDIS_PREFIX}:{user.id}')
-        await redis_client.delete_by_prefix(f'{settings.TOKEN_REFRESH_REDIS_PREFIX}:{user.id}')
+        await session_store.revoke_user(user.id, EndReason.disabled)
         await redis_client.delete_by_prefix(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
         return count
 

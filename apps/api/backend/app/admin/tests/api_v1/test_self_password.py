@@ -8,9 +8,8 @@
 「我怀疑 token 泄了」。那三行 `delete_by_prefix` 一旦没跑，被盗的 token
 在受害者改完密码之后**照旧能用**，而界面上一切正常、日志里什么都没有。
 
-作废是真的生效而不是只删了个 key —— `jwt_authentication` 会拿
-`TOKEN_REDIS_PREFIX:{uid}:{session_uuid}` 现取一次，取不到就
-`TokenError`，取到但值不等也 `TokenError`（实测读过那段代码）。
+作废是真的生效而不是只删了个 key —— 每个请求都经 `session_store.check`
+现查一次会话（#138），会话不在就 `TokenError`，原因码是 `password_changed`。
 所以「旧 token 还能不能用」是可断言的。
 """
 

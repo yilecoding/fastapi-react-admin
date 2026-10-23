@@ -141,8 +141,9 @@ cookie 静默换一个新 access token（那个刷新逻辑只在请求收到 40
 两条凑在一起，「存好登录态复用」这条路完全走不通。
 
 `fixtures/base.ts` 的 `authedPage` 改成：每次都用 `/auth/login/swagger` 现登一次
-拿 token，再 `page.addInitScript()` 在导航前把它塞进 sessionStorage。access token
-一天才过期（`TOKEN_EXPIRE_SECONDS`），不用担心一次测试跑太久失效。
+拿 token，再 `page.addInitScript()` 在导航前把它塞进 sessionStorage。swagger 口签的
+access token 活一天（`SESSION_SWAGGER_SECONDS`；表单登录的只有 30 分钟，#138），
+不用担心一次测试跑太久失效。
 
 ### 🔴 `<Activity>` 会把 effect 整个销毁重建 —— 这条抓到了一个真 bug
 
@@ -296,9 +297,14 @@ await expect(page.locator('[data-visible="true"] table tbody tr').first()).toBeV
 在共享数据库 + 全并行的 E2E 里都是定时炸弹——数据会被同一时间窗口里跑的
 别的 spec 文件影响，且它们之间没有任何协作关系。
 
-### 🔴 两个 spec 文件不要登同一个演示账号 —— 会互相踢下线
+### 🔴 两个 spec 文件不要登同一个演示账号 —— 会互相踢下线（#138 之前）
 
-演示账号（孙强、赵磊……）都是 `is_multi_login = false`：**每登录一次，`create_access_token`
+> **#138 之后这个坑默认不在了**：`is_multi_login` 删掉了，换成按端的会话上限，网页端默认不限；
+> fixture 走的 `/auth/login/swagger` 建的是 `swagger` 端的会话，本来就不计入上限。
+> 但哪天有人把种子里的 `SESSION_WEB_MAX` 改成非 0，下面这条会原样回来 —— 那时在 `global-setup.ts`
+> 里把它写回 0（同验证码那条，无条件写）。下面是当时的记录。
+
+演示账号（孙强、赵磊……）原来都是 `is_multi_login = false`：**每登录一次，`create_access_token`
 就删掉这个人所有旧 token**。`serial` 只管同一个文件，两个文件被分到不同 worker 并行时，
 一边的 `loginPageAs` 就把另一边正拿着的登录态作废了。
 
@@ -308,7 +314,7 @@ await expect(page.locator('[data-visible="true"] table tbody tr').first()).toBeV
 本地 `--workers=4` 两个文件一起跑能复现，换成没人用的 lina / liuyang 之后 19 条全过。
 
 判据：**新 spec 要登录哪个人，先 `grep` 一遍别的 spec 有没有在用他。** 要不就换个空闲账号，
-要不就把用例并进那个文件（同一个文件里是 serial 的）。admin 是 `is_multi_login = true`，不受影响。
+要不就把用例并进那个文件（同一个文件里是 serial 的）。admin 那时是 `is_multi_login = true`，不受影响。
 
 ### 🔴 守卫型用例写完要**故意打断一次**，确认它真的会红
 

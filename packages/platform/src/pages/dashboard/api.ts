@@ -84,7 +84,7 @@ export const scaleStatsQuery = queryOptions({
  *
  * ⚠️ `/monitors/sessions` 是 `DependsSuperUser`，非超管会 403。
  * 调用方要按「没权限」而不是「出错」来展示 —— 见 index.tsx 里的 `enabled` 判断。
- * 这个接口不分页，一次扫完 Redis 的 `fba:token:*` 全给。
+ * 这个接口不分页，一次读完后端的会话索引全给（#138）。
  */
 export const onlineCountQuery = queryOptions({
   queryKey: dashKeys.online(),

@@ -11,9 +11,11 @@ import { API_BASE, createApiClient, expect, loginPageAs, loginToken, test } from
  * 发起人那条和「不 mock」那条打的是真接口。
  *
  * 🔴 **账号用 lina（发起）/ liuyang（审批），不要和 `workflow.spec.ts` 共用孙强 / 赵磊。**
- * 演示账号都是 `is_multi_login = false`：每登录一次就删掉这个人所有旧 token。两个文件并行跑、
+ * 写这条的时候演示账号都是 `is_multi_login = false`：每登录一次就删掉这个人所有旧 token。两个文件并行跑、
  * 登同一个人，就互相把对方踢下线 —— 实测 CI 上 `workflow.spec.ts` 的主流程连挂两轮，
  * 服务端日志里是孙强那几个请求突然全 401，而单跑哪个文件都是绿的。
+ * #138 之后网页端默认不限会话数、fixture 的 swagger 会话也不计入上限，这个坑默认不在了；
+ * 账号仍然分开用，免得哪天有人把会话上限改回 1（见 e2e 分册）。
  */
 const CODE = `E2EAI_${Date.now().toString(36).toUpperCase()}`
 let definitionId = ""

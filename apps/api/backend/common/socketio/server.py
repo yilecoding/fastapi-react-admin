@@ -6,7 +6,7 @@ import socketio
 from starlette_context import request_cycle_context
 
 from backend.common.log import log
-from backend.common.security.jwt import jwt_authentication
+from backend.common.security.jwt import jwt_authentication, jwt_decode
 from backend.core.conf import settings
 from backend.database.redis import redis_client
 
@@ -38,14 +38,17 @@ async def connect(sid, environ, auth) -> bool:
         log.error('WebSocket 连接失败：无授权')
         return False
 
-    session_uuid = auth.get('session_uuid')
     token = auth.get('token')
-    if not token or not session_uuid:
+    if not token:
         log.error('WebSocket 连接失败：授权失败，请检查')
         return False
 
     # 免授权直连
     if token == settings.WS_NO_AUTH_MARKER:
+        session_uuid = auth.get('session_uuid')
+        if not session_uuid:
+            log.error('WebSocket 连接失败：免授权直连要带 session_uuid')
+            return False
         if settings.ENVIRONMENT == 'prod':
             log.error('WebSocket 连接失败：生产环境禁止免授权直连')
             return False
@@ -56,10 +59,16 @@ async def connect(sid, environ, auth) -> bool:
 
     try:
         with request_cycle_context({settings.TRACE_ID_REQUEST_HEADER_KEY: uuid.uuid4().hex}):
-            user = await jwt_authentication(token)
+            # 握手不算「用户在操作」：页面挂着自动重连不该把一个空闲的会话续上
+            user = await jwt_authentication(token, touch=False)
     except Exception as e:
         log.info(f'WebSocket 连接失败：{e!s}')
         return False
+
+    # 🔴 会话 ID 从令牌里取，不信前端报上来的 `auth.session_uuid`（#138）。
+    # 原来用的是前端那一份：刷新之后前端存的还是旧 ID（那时每次刷新都换 ID），
+    # 于是在线用户页把**正连着的**会话显示成离线；而且任何人报一个别人的会话 ID 就能把它标成在线
+    session_uuid = jwt_decode(token).session_uuid
 
     # 定向推送的落点。没有房间的话 `sio.emit()` 只能广播给所有连接 ——
     # 「只发给某个人」这件事在传输层就没有地方可落，会被迫在业务层

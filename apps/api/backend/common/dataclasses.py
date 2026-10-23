@@ -41,21 +41,6 @@ class AccessToken:
 
 
 @dataclasses.dataclass
-class RefreshToken:
-    refresh_token: str
-    refresh_token_expire_time: datetime
-
-
-@dataclasses.dataclass
-class NewToken:
-    new_access_token: str
-    new_access_token_expire_time: datetime
-    new_refresh_token: str
-    new_refresh_token_expire_time: datetime
-    session_uuid: str
-
-
-@dataclasses.dataclass
 class TokenPayload:
     user_id: int
     session_uuid: str

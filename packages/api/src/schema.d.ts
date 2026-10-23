@@ -1696,6 +1696,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/workflow/instances/{pk}/ai-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** AI 预审结果 */
+        get: operations["get_ai_review_api_v1_sys_workflow_instances__pk__ai_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/instances/{pk}/ai-review/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 重试 AI 预审 */
+        post: operations["retry_ai_review_api_v1_sys_workflow_instances__pk__ai_review_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/workflow/instances/{pk}/read": {
         parameters: {
             query?: never;
@@ -2370,7 +2404,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 获取在线用户 */
+        /**
+         * 获取在线用户
+         * @description 全站还活着的会话（#138）
+         *
+         *     🔴 读的是会话索引，不再 SCAN access token 的 key。原来那样做，access token 一过期
+         *     （那时是 1 天）、refresh token 还活着（7 天）的会话就**从列表上消失**，管理员看不见也踢不掉，
+         *     而它随时能刷新复活（实测：删掉 access key 后列表里没了，refresh 之后又冒出来）
+         */
         get: operations["get_sessions_api_v1_monitors_sessions_get"];
         put?: never;
         post?: never;
@@ -3220,6 +3261,13 @@ export interface components {
              * @description 验证码
              */
             captcha?: string | null;
+            /**
+             * Client
+             * @description 登录端
+             * @default web
+             * @enum {string}
+             */
+            client: "web" | "desktop" | "mobile";
         };
         /** Body_install_plugin_api_v1_sys_plugins_post */
         Body_install_plugin_api_v1_sys_plugins_post: {
@@ -4639,11 +4687,6 @@ export interface components {
              * @description 是否管理员
              */
             is_staff: boolean;
-            /**
-             * Is Multi Login
-             * @description 是否允许多端登录
-             */
-            is_multi_login: boolean;
             /**
              * Join Time
              * Format: date-time
@@ -6584,6 +6627,11 @@ export interface components {
              */
             session_uuid: string;
             /**
+             * Client
+             * @description 登录端：web / desktop / mobile
+             */
+            client: string;
+            /**
              * Username
              * @description 用户名
              */
@@ -6621,9 +6669,15 @@ export interface components {
              */
             last_login_time: string;
             /**
+             * Last Active Time
+             * Format: date-time
+             * @description 最后活跃时间（按用户操作算，后台轮询不算）
+             */
+            last_active_time: string;
+            /**
              * Expire Time
              * Format: date-time
-             * @description 过期时间
+             * @description 会话到期时间：空闲上限和绝对有效期先到的那个
              */
             expire_time: string;
         };
@@ -6806,11 +6860,6 @@ export interface components {
              */
             is_staff: boolean;
             /**
-             * Is Multi Login
-             * @description 是否允许多端登录
-             */
-            is_multi_login: boolean;
-            /**
              * Join Time
              * Format: date-time
              * @description 加入时间
@@ -6885,11 +6934,6 @@ export interface components {
              * @description 是否管理员
              */
             is_staff: boolean;
-            /**
-             * Is Multi Login
-             * @description 是否允许多端登录
-             */
-            is_multi_login: boolean;
             /**
              * Join Time
              * Format: date-time
@@ -10717,7 +10761,7 @@ export interface components {
          * @description 用户权限类型
          * @enum {string}
          */
-        UserPermissionType: "superuser" | "staff" | "status" | "multi_login";
+        UserPermissionType: "superuser" | "staff" | "status";
         /**
          * UserSocialType
          * @description 用户社交类型
@@ -14869,6 +14913,70 @@ export interface operations {
                 "application/json": components["schemas"]["ActionParam"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_review_api_v1_sys_workflow_instances__pk__ai_review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_ai_review_api_v1_sys_workflow_instances__pk__ai_review_retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

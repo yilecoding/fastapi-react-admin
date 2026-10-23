@@ -102,12 +102,10 @@ class Settings(BaseSettings):
 
     # Token
     TOKEN_ALGORITHM: str = 'HS256'
-    TOKEN_EXPIRE_SECONDS: int = 60 * 60 * 24  # 1 天
-    TOKEN_REFRESH_EXPIRE_SECONDS: int = 60 * 60 * 24 * 7  # 7 天
-    TOKEN_REDIS_PREFIX: str = 'fba:token'
-    TOKEN_EXTRA_INFO_REDIS_PREFIX: str = 'fba:token_extra_info'
-    TOKEN_ONLINE_REDIS_PREFIX: str = 'fba:token_online'
-    TOKEN_REFRESH_REDIS_PREFIX: str = 'fba:refresh_token'
+    # access token 的有效期。撤销不靠它（每个请求都核对 Redis 里的会话还在不在），
+    # 它只限定「一枚泄漏出去的 access token 能用多久」。会话本身活多久见下面的 SESSION_*
+    TOKEN_EXPIRE_SECONDS: int = 60 * 30  # 30 分钟
+    TOKEN_ONLINE_REDIS_PREFIX: str = 'fba:token_online'  # socket 在线状态（按会话 ID）
     TOKEN_REQUEST_UNDERLYING_SECURITY: bool = True
     TOKEN_REQUEST_PATH_EXCLUDE: list[str] = [  # JWT / RBAC 路由白名单
         f'{FASTAPI_API_V1_PATH}/auth/login',
@@ -116,7 +114,7 @@ class Settings(BaseSettings):
         # 未认证，`opera_log_middleware` 的 `request.user.username` 走 AttributeError
         # 分支，**每一次登出的操作日志都记不下用户名**（那张表本来就是审计用的）。
         # 而它买到的只有那一种情况，且前端的 401 → 单飞刷新 → 重放已经覆盖了：
-        # 刷新时 `create_new_token()` 自己就会删掉旧会话的 access + refresh key。
+        # 刷新会换掉 refresh token 的 secret，会话本身的撤销走 `session_store`（#138）。
         # 只带 cookie、不带 Authorization 的请求（桌面端）本来就过得了中间件 ——
         # `extract_token()` 没有 Authorization 头时返回 None，是「未认证」不是「认证失败」。
     ]
@@ -154,13 +152,40 @@ class Settings(BaseSettings):
     RBAC_ROLE_MENU_MODE: bool = True
     RBAC_ROLE_MENU_EXCLUDE: list[str] = []
 
+    # 登录会话（#138）—— 存储与规则见 `common/security/session.py`
+    SESSION_REDIS_PREFIX: str = 'fba:session'  # 一个会话一个 hash
+    SESSION_USER_INDEX_PREFIX: str = 'fba:session_user'  # 每个用户的会话（ZSET，分值 = 最后活跃）
+    SESSION_ALL_INDEX_KEY: str = 'fba:session_all'  # 全站会话（在线用户页读它）
+    SESSION_END_REDIS_PREFIX: str = 'fba:session_end'  # 会话为什么结束（被踢 / 空闲 / …）
+    SESSION_END_REASON_TTL_SECONDS: int = 60 * 60 * 24  # 原因留多久；会话过期后也多留这么久，好报出准确原因
+    # 同一枚 refresh token 在这段时间里再出示一次 → 回放同一组新令牌（多标签页同时刷新、弱网重试）；
+    # 过了这段时间再出示 → 判盗用、撤销会话。🔴 不能短于客户端刷新请求的超时（前端是 10 秒）
+    SESSION_REFRESH_GRACE_SECONDS: int = 30
+    SESSION_ACTIVITY_WRITE_SECONDS: int = 60  # 最后活跃时间最多多久写一次 Redis
+    SESSION_SWAGGER_SECONDS: int = 60 * 60 * 24  # swagger 调试口（非 prod）的会话：只有 access，不续期
+    # 按端的策略。端是固定枚举（web / desktop / mobile），登录时客户端自报 ——
+    # 只用来选下面这组时长和上限，不决定任何安全相关的行为。参数配置「会话策略」组会在运行时覆盖
+    SESSION_WEB_IDLE_MINUTES: int = 120
+    SESSION_WEB_ABSOLUTE_DAYS: int = 7
+    SESSION_WEB_MAX: int = 0  # 0 = 不限
+    SESSION_WEB_OVERFLOW: str = 'evict_idle'  # 超限时：evict_idle 挤掉最久没活跃的 / deny 拒绝新登录
+    SESSION_DESKTOP_IDLE_MINUTES: int = 120
+    SESSION_DESKTOP_ABSOLUTE_DAYS: int = 7
+    SESSION_DESKTOP_MAX: int = 0
+    SESSION_DESKTOP_OVERFLOW: str = 'evict_idle'
+    SESSION_MOBILE_IDLE_MINUTES: int = 60 * 24 * 30
+    SESSION_MOBILE_ABSOLUTE_DAYS: int = 90
+    SESSION_MOBILE_MAX: int = 1
+    SESSION_MOBILE_OVERFLOW: str = 'evict_idle'
+
     # Cookie
     COOKIE_REFRESH_TOKEN_KEY: str = 'fba_refresh_token'
-    # ⚠️ 这里原来还有一个 `COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS`，已删。
-    # cookie 的 `max_age` 现在直接用 `TOKEN_REFRESH_EXPIRE_SECONDS` ——
-    # 两个独立的值可以配不一致，而 `Max-Age` 按 RFC 6265 优先于 `Expires`，
-    # 于是赢的是配错那个：浏览器提前丢 cookie、服务端 token 还在，静默早退。
-    # 详情见 `common/security/jwt.py: set_refresh_cookie`。
+    # 只在这个路径下发回来：refresh token 不该随每个 API 请求一起飞。
+    # 用到它的只有登录 / 刷新 / 登出（oauth2 回调是在别的路径上**设置**它，设置不受 Path 限制）
+    COOKIE_REFRESH_TOKEN_PATH: str = f'{FASTAPI_API_V1_PATH}/auth'
+    # None = 跟着请求走：HTTPS 请求下发 Secure cookie，HTTP 不带。
+    # 写死 True 的话，没上 HTTPS 的部署里浏览器直接不存这个 cookie —— 每 30 分钟被登出一次，日志里什么都没有
+    COOKIE_SECURE: bool | None = None
 
     # 数据权限
     DATA_PERMISSION_MODEL_EXCLUDE: list[str] = [  # 排除允许进行数据过滤的 SQLA 模型
@@ -661,29 +686,33 @@ def _check_connection_target(name: str, value: str | None) -> str | None:
     return None
 
 
-def _check_token_lifetimes(s: Settings) -> str | None:
-    """refresh token 必须活得比 access token 长
+def _check_session_settings(s: Settings) -> str | None:
+    """会话配置里两条「单看都合理、放一起就坏」的约束
 
-    access token 过期时，客户端拿 refresh token 去换新的。refresh 的有效期
-    **不长于** access 时，该换的时候换的凭据也已经死了 —— 用户在 access 过期
-    那一刻被硬登出，而「记住我」形同虚设。
+    - **宽限期不能短于客户端刷新请求的超时**（前端是 10 秒）。刷新响应丢了、客户端拿旧
+      refresh token 重试时，宽限期已过就会被判成盗用、整个会话撤销 —— 用户看到的是
+      「检测到登录凭据被重复使用」，而他什么都没做。ContiNew 把这个值从 30 改成 5 就是这么栽的
+    - **超限策略只认两个值**。拼错一个字母不会报错，读取侧会回落成默认策略，
+      配置文件上写着「拒绝新登录」、实际在挤人
 
-    症状是「所有人整整 N 天后一起被登出，怎么都续不上」，而两个值单看都合理
-    （比如有人把 access 调到 7 天做「免登录一周」，忘了 refresh 也是 7 天）。
-
-    ⚠️ 这条不能像 cookie 那个 `max_age` 一样靠「同源」消掉 —— 它们本来就是
-    两个独立的时长，关系型约束只能校验。
+    ⚠️ 原来这里校验的是「refresh token 必须比 access token 活得长」。会话模型换掉之后
+    （#138）不再有独立的 refresh 有效期：会话自己有空闲 / 绝对两道上限，access token
+    只是会话里的一枚短期凭据，两者没有先后关系要约束。
 
     :param s: 待校验的配置实例
     :return: 不合格时返回问题描述，合格返回 None
     """
-    if s.TOKEN_REFRESH_EXPIRE_SECONDS > s.TOKEN_EXPIRE_SECONDS:
-        return None
-    return (
-        f'TOKEN_REFRESH_EXPIRE_SECONDS={s.TOKEN_REFRESH_EXPIRE_SECONDS} 不长于 '
-        f'TOKEN_EXPIRE_SECONDS={s.TOKEN_EXPIRE_SECONDS} —— 刷新令牌活得不比访问令牌长，'
-        '该续期的时候续期凭据也已经过期，用户会被硬登出'
-    )
+    problems = []
+    if not 10 <= s.SESSION_REFRESH_GRACE_SECONDS <= 120:
+        problems.append(
+            f'SESSION_REFRESH_GRACE_SECONDS={s.SESSION_REFRESH_GRACE_SECONDS} 不在 10~120 之间 —— '
+            '短于客户端刷新超时会把弱网重试判成盗用、整个会话被撤销'
+        )
+    for client in ('WEB', 'DESKTOP', 'MOBILE'):
+        overflow = getattr(s, f'SESSION_{client}_OVERFLOW')
+        if overflow not in ('evict_idle', 'deny'):
+            problems.append(f'SESSION_{client}_OVERFLOW={overflow!r} 只能是 evict_idle 或 deny')
+    return '；'.join(problems) or None
 
 
 def _check_snowflake_node_lease(s: Settings) -> str | None:
@@ -788,7 +817,7 @@ def check_production_settings(s: Settings) -> None:
 
     problems.extend((
         _check_snowflake_node_lease(s),
-        _check_token_lifetimes(s),
+        _check_session_settings(s),
         _check_import_default_password(s),
     ))
 

@@ -325,12 +325,14 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
         ]
         raw = b''.join(chunks)
 
-        rebuilt = Response(
-            content=raw,
-            status_code=response.status_code,
-            headers=dict(response.headers),
-            media_type=response.media_type,
-        )
+        rebuilt = Response(content=raw, status_code=response.status_code, media_type=response.media_type)
+        # 🔴 头要**原样**搬过去，不能 `headers=dict(response.headers)`：dict 把同名的头压成一个
+        # （只留第一个），一个响应里的第二行 Set-Cookie 就静默没了。实测踩到：登录响应里
+        # 「清掉 #138 之前那个 Path=/ 的旧 refresh cookie」那一行被吞，浏览器里的旧 cookie 留着，
+        # 刷新时它盖过新的那个 —— 用户每 30 分钟被登出一次。content-length 按重建后的 body 重算
+        rebuilt.raw_headers = [(k, v) for k, v in response.raw_headers if k.lower() != b'content-length'] + [
+            (b'content-length', str(len(raw)).encode())
+        ]
         return rebuilt, OperaLogMiddleware.truncate_body(OperaLogMiddleware.redact_body(raw, content_type))
 
     @staticmethod

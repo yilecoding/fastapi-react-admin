@@ -152,44 +152,91 @@ return or_(and_(*where_and_list), or_(*where_or_list))
 19 个角色 / 22 个用户，每次跑带一个随机后缀），不依赖种子数据，
 teardown 里按 id 硬删干净 —— 因为 `fba_test` 同时也是 Playwright E2E 的库。
 
-## refresh cookie：`max_age` 和 `expires` 必须同源
+## 登录会话（#138）：`session.py`
 
-`set_cookie` 可以同时给 `max_age` 和 `expires`。三个调用点（`/auth/login`、
-`/auth/token/new`、oauth2 回调）原来各写一遍，`max_age` 取一个**独立配置**
-`COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS`、`expires` 取 refresh token 的真实过期
-时间 —— 两个值可以配不一致，而**按 RFC 6265 §5.3，`Max-Age` 优先于
-`Expires`**，所以赢的是那个可能配错的。
-
-实测（把那个配置改成 60、refresh token 保持 604800）同一个响应头：
+一次登录 = 一个会话，**会话 ID 从登录到结束不变**。存储形状、轮换规则、两道上限写在
+`session.py` 的模块注释里，这里只记「违反了会坏」的那几条。改会话相关的代码前先读这一节。
 
 ```
-Set-Cookie: fba_refresh_token=...; expires=Wed, 09 Sep 2026 20:36:40 GMT;
-            HttpOnly; Max-Age=60; Path=/; SameSite=lax
+session.py   会话的全部读写（建 / 轮换 / 核对 / 撤销 / 列表），Lua 原子脚本
+jwt.py       只签 access token、下发 / 清除 refresh cookie、每个请求调 session_store.check
 ```
 
-浏览器 60 秒后丢掉 cookie，而服务端那份 refresh token 还有 7 天 ——
-**静默早退，服务端完全观察不到**：Redis 里 token 还在、日志里什么都没有，
-用户只是「又被登出了」。
+### 🔴 撤销只走 `session_store.revoke` / `revoke_user`
 
-🔴 **修法是消掉重复的真相源，不是加校验。** 那个配置删了，`max_age` 直接用
-`TOKEN_REFRESH_EXPIRE_SECONDS`，和 `expires` 同源。三处收成
-`common/security/jwt.py: set_refresh_cookie()` —— 各写一遍迟早有一处不一样
-（和 `file_ops.upload_root` 同一个理由）。
+#138 之前有 7 个文件各自 `delete_by_prefix` 删 token key，其中「多端登录」开关改别人时只删了
+access 不删 refresh —— 被踢的人刷新一下就回来了（同 `apps/api` 分册「撤销一个会话 = 删三个 key」那次）。
+现在会话只有一个 key，撤销函数顺手写原因、推 socket、断连接。**新增「让某人下线」的入口时
+调这两个函数，不要自己删 `fba:session*`。**
 
-实测确认：只改 `TOKEN_REFRESH_EXPIRE_SECONDS=120`，`Max-Age=120` 和 `expires`
-（当前时间 +120 秒）**一起动**。
+### 🔴 空闲按「人有没有在操作」算，不按请求算
 
-## refresh token 必须活得比 access token 长
+后台轮询（在线用户页 10 秒一次、监控页、审批 AI 预审、导出任务）会让「按请求算」的空闲超时
+**永远不过期** —— 人走开了、浏览器开着，正是等保要防的那个场景。ContiNew 4.2 的 `active_timeout`
+就是这么被绕过去的（读源码，没跑）。
 
-这条**消不掉**（两个本来就独立的时长），只能校验。refresh 不长于 access 时，
-该续期的时候续期凭据也死了 —— 用户在 access 过期那一刻被硬登出、「记住我」
-形同虚设。症状是「所有人整整 N 天后一起被登出，怎么都续不上」，
-而两个值单看都合理（典型走法：把 access 调到 7 天做「免登录一周」，
-忘了 refresh 也是 7 天）。
+客户端每个请求带 `X-Client-Idle: 距上次键盘 / 鼠标 / 触屏操作的秒数`（`jwt_auth_middleware.client_idle`），
+服务端据此推算最后活跃时间，最多每分钟写一次。不带这个头的端（移动端、桌面主进程）按刚操作过算。
+socket 握手不算操作（`touch=False`）。
 
-`_check_token_lifetimes()` 拦这个，判据是 `>` 而**不是 `>=`** ——
-相等时刷新窗口是 0，后果和「refresh 更短」一模一样。两条守卫测试
-（更短 / 相等），双向验证过。
+**实测证据**：`test_session.py` 的 `test_background_polling_does_not_keep_the_session_alive`
+（带 `X-Client-Idle: 3600` 的请求不挪最后活跃时间）+ 反方向的 `test_user_activity_moves_last_active_forward`；
+变异检验：把 `active = max(last_active, now - client_idle)` 改成 `active = now`，前一条当场红。
+
+### 🔴 宽限期不能短于客户端刷新超时；对不上的 secret 不撤销
+
+- 宽限期内再出示上一代 refresh token → 回放**同一组**新令牌（多标签页同时刷新、弱网重试都靠它）；
+  宽限期外再出示 → 判盗用、撤销整个会话（`reuse`）。宽限期短于客户端超时的话，响应丢了之后的重试
+  会被当成盗用 —— ContiNew admin 把 starter 默认的 30 秒改成 5 秒就是这个坑（读源码）。
+  `_check_session_settings` 在 prod 拦 10 秒以下；前端刷新请求要配 10 秒超时（PR 2）
+- 出示的 secret 和会话对不上 → 只回 401，**不撤销**：会话 ID 写在 cookie 里、日志里都看得见，
+  凭它就能把人踢下线是送上门的 DoS。登出 / 同浏览器重登按 cookie 认会话时同理，要 secret 对得上
+  （`owner_of`）
+
+**实测证据**：`test_previous_token_within_grace_replays_the_same_pair` · `…_after_grace_revokes_the_whole_session` ·
+`test_unknown_secret_with_a_real_session_id_does_not_revoke`，三条各做过一次变异（不回放 / 期外不撤销 /
+对不上也撤销），都当场红。#138 之前的行为（并发刷新一个 200 一个 401）见 issue 正文 T4。
+
+### 🔴 本仓库的 `StrEnum` 用 `str()` / f-string 得到的是 `EndReason.idle`，不是 `idle`
+
+`common/enums.py` 的 `StrEnum` 是 `(str, Enum)` 那种老写法。往 Redis 写、拼 i18n key 时直接
+`str(reason)` / `f'...{reason}'`，写进去的是 `EndReason.idle`：回头查结束原因对不上、退回成
+笼统的「到期」，文案 key 拼成 `error.session.EndReason.expired`、界面上显示的就是那串 key。
+`session.py` 在边界上统一走 `_plain()`（取 `.value`）。**实测证据**：第一版没有 `_plain`，
+`test_idle_session_ends_with_reason_idle` 红在 `assert 'expired' == 'idle'`，日志里是
+`请求异常: error.session.EndReason.expired`。（比较 `==` 不受影响 —— 它比的是 value，所以只有落地 / 拼接时才露馅）
+
+### 🔴 refresh cookie 换了 Path，旧的那个必须显式清掉
+
+cookie 现在只发往 `/api/v1/auth`（`COOKIE_REFRESH_TOKEN_PATH`）。#138 之前是 `Path=/`。
+升级后浏览器里两个同名 cookie 并存，访问刷新接口时都带上（路径长的排前面），而 Starlette 解析
+Cookie 头时**后出现的覆盖先出现的** —— 赢的是旧的、早已失效的那个，于是每次刷新都 401，
+用户每 30 分钟被登出一次，持续到旧 cookie 过期（最长 7 天）。所以登录 / 刷新 / 登出的响应都带一行
+`Path=/` 的删除（`_clear_legacy_refresh_cookie`）。
+
+⚠️ 那一行要排在真正下发的 cookie **后面**：桌面端主进程按名字取第一个 Set-Cookie
+（`apps/desktop/src/main/auth.ts: extractRefreshCookie`）。
+
+**实测证据**：`Request` 收到 `fba_refresh_token=NEW-path-api-v1-auth; fba_refresh_token=OLD-path-root`，
+`request.cookies` 取到的是 `OLD-path-root`（2026-10-23，starlette 随 fastapi 0.141.1）。
+这一行还曾被操作日志中间件吞掉（`dict(response.headers)` 把同名头压成一个），见 [`middleware` 分册](../../middleware/AGENTS.md)。
+
+### `max_age` 和 `expires` 同源 · `Secure` 跟着请求走
+
+- `max_age` / `expires` 都来自会话的**绝对到期**（`set_refresh_cookie`）。#138 之前曾有一个独立配置
+  `COOKIE_REFRESH_TOKEN_EXPIRE_SECONDS` 给 `max_age`，而 RFC 6265 §5.3 下 `Max-Age` 优先 ——
+  配得不一致时浏览器提前丢 cookie、服务端会话还在，静默早退（当时实测过 `Max-Age=60` 与 7 天的 `expires` 并存）
+- `COOKIE_SECURE = None` = HTTPS 请求带 `Secure`、HTTP 不带。写死 `True` 的话没上 HTTPS 的部署里
+  浏览器不存这个 cookie，每 30 分钟被登出一次、日志里什么都没有。前面有反代终结 TLS、却把
+  `X-Forwarded-Proto` 改写成 `http` 的部署，`request.url.scheme` 会是 `http` —— 那种情况显式配 `COOKIE_SECURE=true`。
+  `test_refresh_cookie_attributes` / `test_plain_http_does_not_get_a_secure_cookie` 两个方向各一条
+
+### ⚠️ Lua 脚本按前缀拼 key —— 假设 Redis 是单实例
+
+准入 / 轮换 / 续活跃 / 撤销都是一段 `EVAL`，脚本里从 `ARGV` 的前缀拼出要碰的 key（用户索引要先读会话里的 uid
+才知道是哪个），没有在 `KEYS` 里声明。单实例 Redis 上没问题；Redis Cluster 要求脚本碰的 key 都声明过、
+且落在同一个 slot —— 这一点**没在 Cluster 上实测过**，到那天要给同一用户的 key 加 `{uid}` hash tag、
+会话 key 带上 uid、改成显式传 `KEYS`。
 
 ## 🔴 「非展示的读」必须 `bypass_data_scope()` —— 否则受限用户会自锁
 

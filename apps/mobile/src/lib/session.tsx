@@ -118,6 +118,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           password: input.password,
           uuid: input.uuid ?? null,
           captcha: input.captcha ?? null,
+          // 会话策略按端分（#138）：移动端默认 30 天空闲、同一账号只留 1 台手机
+          client: 'mobile',
         },
       })
       await tokenStore.set(result.access_token)
