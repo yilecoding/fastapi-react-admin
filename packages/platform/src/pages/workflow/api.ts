@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { api, fetchBytes, uploadFile, type PageData } from '../../api-client/client'
+import { api, fetchBytes, uploadFile, uploadForm, type PageData } from '../../api-client/client'
 
 /**
  * 审批流的接口与类型（issue #107）。
@@ -534,13 +534,37 @@ export const draftQuery = (code: string) =>
   queryOptions({
     queryKey: [...workflowKeys.all, 'drafts', code] as const,
     queryFn: () =>
-      api.GET<{ form: FormData; updated_time: string } | null>(`${BASE}/drafts/${encodeURIComponent(code)}`),
+      api.GET<{ form: FormData; ai_filled: string[]; updated_time: string } | null>(
+        `${BASE}/drafts/${encodeURIComponent(code)}`
+      ),
     // 草稿只在打开抽屉时读一次：之后以手上正在填的为准，别让后台重取把它盖回去
     staleTime: Infinity,
   })
 
-export function saveDraft(code: string, form: FormData): Promise<unknown> {
-  return api.PUT(`${BASE}/drafts/${encodeURIComponent(code)}`, { body: { form } })
+/** `aiFilled`：AI 填了、发起人还没核对的字段 —— 跟着草稿存，关掉再打开标记还在 */
+export function saveDraft(code: string, form: FormData, aiFilled: string[] = []): Promise<unknown> {
+  return api.PUT(`${BASE}/drafts/${encodeURIComponent(code)}`, { body: { form, ai_filled: aiFilled } })
+}
+
+export type AiFill = {
+  values: FormData
+  skipped: { field_id: string; label: string; reason: string }[]
+  note: string | null
+  model_name: string | null
+}
+
+/** 发起时 AI 填单（#111 第 3 条）：只回值，服务端不存。调用处只填进还空着的字段、标「AI 填的」 */
+export function useAiFill(code: string) {
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: ({ text, file }: { text: string; file: File | null }) => {
+      // 这个文件里的 `FormData` 是表单值的类型；multipart 要的是浏览器那个
+      const body = new globalThis.FormData()
+      if (text.trim()) body.append('text', text.trim())
+      if (file) body.append('file', file)
+      return uploadForm<AiFill>(`${BASE}/startable/${encodeURIComponent(code)}/ai-fill`, body)
+    },
+  })
 }
 
 export function removeDraft(code: string): Promise<unknown> {

@@ -1559,6 +1559,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/workflow/startable/{code}/ai-fill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发起页：AI 按一段话 / 一份文件填单（只回值，不存） */
+        post: operations["ai_fill_start_api_v1_sys_workflow_startable__code__ai_fill_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/workflow/files": {
         parameters: {
             query?: never;
@@ -3338,6 +3355,16 @@ export interface components {
              */
             client: "web" | "desktop" | "mobile";
         };
+        /** Body_ai_fill_start_api_v1_sys_workflow_startable__code__ai_fill_post */
+        Body_ai_fill_start_api_v1_sys_workflow_startable__code__ai_fill_post: {
+            /** Text */
+            text?: string | null;
+            /**
+             * File
+             * @description 发票图片 / PDF / Word / Excel / 文本
+             */
+            file?: string | null;
+        };
         /** Body_install_plugin_api_v1_sys_plugins_post */
         Body_install_plugin_api_v1_sys_plugins_post: {
             /** File */
@@ -4417,6 +4444,11 @@ export interface components {
             form?: {
                 [key: string]: unknown;
             };
+            /**
+             * Ai Filled
+             * @description AI 填了、还没核对的字段 ID
+             */
+            ai_filled?: string[];
         };
         /**
          * FileType
@@ -14699,6 +14731,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PreviewParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_fill_start_api_v1_sys_workflow_startable__code__ai_fill_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_ai_fill_start_api_v1_sys_workflow_startable__code__ai_fill_post"];
             };
         };
         responses: {

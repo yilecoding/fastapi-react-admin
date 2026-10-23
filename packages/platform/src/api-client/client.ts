@@ -99,6 +99,11 @@ export async function uploadFile<T>(path: string, file: File, field = 'file', op
   return client.sendUpload<T>(path, form, options)
 }
 
+/** 一个 multipart 表单（文件 + 别的字段一起），同 `uploadFile` 走 XHR */
+export async function uploadForm<T>(path: string, form: FormData, options?: UploadOptions): Promise<T> {
+  return client.sendUpload<T>(path, form, options)
+}
+
 /** 传一段裸字节（分片上传的一片），同样有进度、可取消 */
 export async function uploadBlob<T>(path: string, blob: Blob, options?: UploadOptions): Promise<T> {
   return client.sendUpload<T>(path, blob, { method: 'PUT', ...options })

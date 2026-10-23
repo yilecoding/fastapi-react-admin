@@ -17,9 +17,10 @@ import { useTabPortalContainer } from '../../shell/tab-outlet'
 import { FormField as Row } from '../_shared/form-fields'
 import {
   detailQuery, draftQuery, idempotencyKey, previewQuery, removeDraft, saveDraft, startFormQuery, useDeleteDraft, useStartInstance,
-  type FieldPerm, type FileMeta, type FormData, type StartForm,
+  type FieldPerm, type FileMeta, type AiFill, type FormData, type StartForm,
 } from './api'
-import { FormRenderer, missingRequired } from './form-renderer'
+import { AiFillPanel, AiMark, type AiFillOutcome } from './ai-fill-panel'
+import { FormRenderer, empty, missingRequired } from './form-renderer'
 import { UserSelect } from './pickers'
 import { forecastItems } from './progress'
 import { ApprovalTrack, TemplateTile, type TrackItem } from './track'
@@ -83,6 +84,7 @@ function Body({ code, fromId, onStarted }: { code: string; fromId: string | null
       code={code}
       sf={query.data}
       initial={fromId ? from.data?.form_data : draft.data?.form}
+      initialAiFilled={fromId ? undefined : draft.data?.ai_filled}
       initialFiles={from.data?.files}
       restoredAt={fromId ? undefined : draft.data?.updated_time}
       draftError={!fromId && !!draft.error}
@@ -103,12 +105,14 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 function Filler({
-  code, sf, initial, initialFiles, restoredAt, draftError, fromOld, onStarted,
+  code, sf, initial, initialAiFilled, initialFiles, restoredAt, draftError, fromOld, onStarted,
 }: {
   code: string
   sf: StartForm
   /** 重新发起时带过来的旧内容。只取当前表单里还在、发起人能填的字段 —— 流程改过版本的话旧字段可能已经没了 */
   initial?: FormData
+  /** 草稿里记着的「AI 填了、还没核对」的字段 */
+  initialAiFilled?: string[]
   /** 旧单上附件的文件名 / 大小 —— 不带的话复制过来的附件只剩 ID，显示成「文件已删除」 */
   initialFiles?: Record<string, FileMeta>
   /** 恢复的草稿是什么时候存的（有值 = 这次是从草稿接着填） */
@@ -131,10 +135,12 @@ function Filler({
         .map((f) => [f.id, initial[f.id]])
     )
   })
+  // AI 填了、还没核对的字段（#111 第 3 条）。🔴 跟着草稿存：只放在这里的话，关掉再打开值还在、标记没了
+  const [aiFilled, setAiFilled] = React.useState<string[]>(() => (initialAiFilled ?? []).filter((id) => initial && id in initial))
   const [selected, setSelected] = React.useState<Record<string, string[]>>({})
   const [errors, setErrors] = React.useState<Record<string, string>>({})
   const [urgent, setUrgent] = React.useState(false)
-  const draft = useDraftAutosave(code, form, !fromOld)
+  const draft = useDraftAutosave(code, form, aiFilled, !fromOld)
   const deleteDraft = useDeleteDraft()
   const [restored, setRestored] = React.useState(!!restoredAt)
   // 一次填写 = 一个幂等键：网络抖动重试 / 双击提交不会建出两张单
@@ -172,13 +178,41 @@ function Filler({
     return sf.select_nodes.filter((n) => onPath.has(n.id))
   }, [preview.data, sf.select_nodes])
 
+  // 人改了 AI 填的字段 = 核对过了，标记去掉
+  const changeForm = (next: FormData) => {
+    setAiFilled((marks) => marks.filter((id) => JSON.stringify(next[id]) === JSON.stringify(form[id])))
+    setForm(next)
+  }
+
+  /** AI 的值只填进**还空着**的字段：人已经填了的不替他改 */
+  function mergeAi(res: AiFill): AiFillOutcome {
+    const next = { ...form }
+    const filled: string[] = []
+    let kept = 0
+    for (const [id, v] of Object.entries(res.values)) {
+      if (!editable.has(id)) continue
+      if (!empty(form[id])) {
+        kept += 1
+        continue
+      }
+      next[id] = v
+      filled.push(id)
+    }
+    setForm(next)
+    setAiFilled((marks) => [...new Set([...marks, ...filled])])
+    return { filled: filled.length, kept, result: res }
+  }
+
   async function submit() {
     const errs: Record<string, string> = {}
+    // 🔴 AI 填的每一项都要人点过「没问题」（或者自己改过）才能提交 —— 不然「AI 填的」只是个装饰
+    for (const id of aiFilled) errs[id] = t('AI 填的，核对无误后点「没问题」')
     for (const [k, label] of Object.entries(missingRequired(schema, form, editable))) {
       errs[k] = t('请填写「{{f}}」', { f: label })
     }
     for (const n of pickNodes) if (!selected[n.id]?.length) errs[`select:${n.id}`] = t('请选择审批人')
     setErrors(errs)
+    if (aiFilled.length) toast.error(t('还有 {{n}} 项 AI 填的没核对', { n: aiFilled.length }))
     if (Object.keys(errs).length) return
     // 提交之前：停掉自动保存，并**等正在路上的那次保存落地** —— 否则它可能在服务端删完草稿之后才提交，
     // 把草稿又存回来（只拦没触发的防抖不够，已经发出去的 PUT 拦不住）
@@ -226,6 +260,7 @@ function Filler({
                   try {
                     await deleteDraft.mutateAsync(code)
                     setForm({})
+                    setAiFilled([])
                     setRestored(false)
                   } finally {
                     draft.resume()
@@ -242,14 +277,27 @@ function Filler({
               {t('上次的草稿没读出来，可以照常填写')}
             </p>
           )}
+          <AiFillPanel code={code} onResult={mergeAi} />
           <FormRenderer
             schema={schema}
             value={form}
-            onChange={setForm}
+            onChange={changeForm}
             mode="view"
             perms={perms}
             errors={errors}
             files={initialFiles}
+            marks={Object.fromEntries(
+              aiFilled.map((id) => [
+                id,
+                <AiMark
+                  key={id}
+                  onOk={() => {
+                    setAiFilled((marks) => marks.filter((m) => m !== id))
+                    setErrors(({ [id]: _, ...rest }) => rest)
+                  }}
+                />,
+              ])
+            )}
           />
           {pickNodes.map((n) => (
             <Row key={n.id} label={t('{{node}}：选择审批人', { node: n.name })} required error={errors[`select:${n.id}`]}>
@@ -307,15 +355,15 @@ function Filler({
  * `stop()` / `resume()`：提交那一刻先停 —— 防抖里排着的那次保存要是在提交成功之后才发出去，
  * 服务端刚删掉的草稿又被存回来，下次打开「已恢复没提交的内容」，而那张单其实已经交了
  */
-function useDraftAutosave(code: string, form: FormData, enabled: boolean) {
+function useDraftAutosave(code: string, form: FormData, aiFilled: string[], enabled: boolean) {
   const [status, setStatus] = React.useState<'idle' | 'saving' | 'error'>('idle')
   const [savedAt, setSavedAt] = React.useState<string | null>(null)
   const stopped = React.useRef(false)
   const inflight = React.useRef<Promise<unknown> | null>(null)
-  const last = React.useRef(JSON.stringify(form))
+  const last = React.useRef(JSON.stringify([form, aiFilled]))
   React.useEffect(() => {
     if (!enabled) return
-    const raw = JSON.stringify(form)
+    const raw = JSON.stringify([form, aiFilled])
     if (raw === last.current) return
     const h = setTimeout(async () => {
       if (stopped.current) return
@@ -327,7 +375,7 @@ function useDraftAutosave(code: string, form: FormData, enabled: boolean) {
       try {
         // 全清空了：删草稿而不是存一份空的（否则下次打开是「已恢复你没提交的内容」+ 一张白表）
         const blank = Object.values(form).every((v) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0))
-        await (blank ? removeDraft(code) : saveDraft(code, form))
+        await (blank ? removeDraft(code) : saveDraft(code, form, aiFilled))
         last.current = raw
         setSavedAt(new Date().toISOString())
         setStatus('idle')
@@ -339,7 +387,7 @@ function useDraftAutosave(code: string, form: FormData, enabled: boolean) {
       }
     }, 1500)
     return () => clearTimeout(h)
-  }, [code, form, enabled])
+  }, [code, form, aiFilled, enabled])
   return {
     status,
     savedAt,

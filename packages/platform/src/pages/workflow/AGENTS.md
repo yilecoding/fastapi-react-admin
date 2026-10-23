@@ -141,3 +141,14 @@ E2E（`workflow-ai-review.spec.ts`）变异：抽屉不传 `onLocate` · 定位�
 - 失败挂在弹窗里（`QueryError` + 重试），描述留着改一改再试（硬纪律 9）
 
 E2E `workflow-ai-design.spec.ts`（`page.route` 固定生成接口的返回）。变异各打红：关了弹窗照样用结果 · 生成结果把 `aiReview` 换掉 · 不列问题。
+
+## 发起页：AI 帮我填（`ai-fill-panel.tsx`）
+
+面板收材料（一段话 / 一份文件），服务端只回值；**合并在发起页**（`start-sheet.tsx: mergeAi`）：只填还空着的字段，已经有内容的不动、告诉人动了几项。
+填进去的字段下面挂「AI 填的，请核对 · 没问题」（`FormRenderer` 的 `marks`）。
+
+- 🔴 **没核对不许提交**：每个标记要么点「没问题」、要么人自己改过（改了就算核对过）。不拦的话「AI 填的」只是个装饰
+- 🔴 **标记跟着草稿存**（`saveDraft(code, form, aiFilled)`）：只放在组件状态里，关掉再打开值还在、标记没了
+- 「清空重填」连标记一起清
+
+E2E `workflow-ai-fill.spec.ts`（`page.route` 固定填单接口）。变异各打红：覆盖已经填了的字段 · 标记不存草稿 · 提交不拦 · 改了字段不算核对。
