@@ -169,6 +169,46 @@ def _verify_archive(raw: bytes) -> None:
         raise errors.RequestError(msg=t('error.table.too_many_entries', limit=settings.TABLE_IMPORT_MAX_ENTRIES))
 
 
+def _text_cell(value: Any) -> str:
+    try:
+        return _normalize_value(value) or ''
+    except _CellError:
+        return ''
+
+
+def xlsx_text(raw: bytes, *, max_chars: int) -> tuple[str, bool]:
+    """把一份 xlsx 读成给人（模型）看的纯文本：每张表一段，一行一行、格之间 Tab。返回（文本, 是否截断）
+
+    和 `parse_table` 不一样的两处，都是刻意的：
+    - **`data_only=True`**：这里要的是 Excel 存下的计算结果（报销单的「合计」），不是公式原文。
+      程序生成、没有缓存值的公式格会读成空 —— 对「给模型参考」可以接受，对导入不行（所以导入那边是 False）
+    - 读不懂的值**不报错**，原样跳过：读给模型看的东西少一格不致命，整份报错反而什么都给不了
+
+    解压炸弹的检查照旧（`_verify_archive`），超限抛 `errors.RequestError`
+    """
+    _verify_archive(raw)
+    wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    parts: list[str] = []
+    size = 0
+    try:
+        for ws in wb.worksheets:
+            lines = [f'# {ws.title}']
+            for row in ws.iter_rows(values_only=True):
+                line = '\t'.join(_text_cell(value) for value in row).rstrip('\t')
+                if line:
+                    lines.append(line)
+                    size += len(line) + 1
+                if size > max_chars:
+                    break
+            parts.append('\n'.join(lines))
+            if size > max_chars:
+                break
+    finally:
+        wb.close()
+    text = '\n\n'.join(parts)
+    return text[:max_chars], len(text) > max_chars or size > max_chars
+
+
 def parse_table(
     raw: bytes,
     columns: list[TableColumn],

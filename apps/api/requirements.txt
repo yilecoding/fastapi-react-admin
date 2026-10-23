@@ -452,6 +452,8 @@ pyodbc==5.3.0
     # via aioodbc
 pyparsing==3.3.3
     # via moto
+pypdf==6.21.2
+    # via fastapi-react-admin-api
 pyrate-limiter==4.4.0
     # via fastapi-react-admin-api
 pytest==9.1.1
@@ -614,6 +616,7 @@ typing-extensions==4.16.0
     #   pydantic-core
     #   pydantic-extra-types
     #   pyjwt
+    #   pypdf
     #   referencing
     #   rich-toolkit
     #   sqlakeyset

@@ -24,8 +24,18 @@ const VERDICT: Record<AiVerdict, { label: string; tone: Tone }> = {
  * 唯一什么都不显示的情况是服务端明确说的：`visible: false`（发起人不该看）或 `status: null`（没开 / 没审过）。
  *
  * 理由已经按查看人裁过（服务端）：引用了他看不到的字段的那几条根本不会下发。
+ *
+ * `onLocate`：点理由前面的字段名，滚到申请内容里的那个字段（宿主负责在**自己的**容器里找，硬纪律 5）。
  */
-export function AiReviewPanel({ id, schema }: { id: string; schema: FormSchema }) {
+export function AiReviewPanel({
+  id,
+  schema,
+  onLocate,
+}: {
+  id: string
+  schema: FormSchema
+  onLocate?: (fieldId: string) => void
+}) {
   const { t } = useTranslation()
   const q = useQuery(aiReviewQuery(id))
   const retry = useRetryAiReview(id)
@@ -44,8 +54,9 @@ export function AiReviewPanel({ id, schema }: { id: string; schema: FormSchema }
   const r = q.data
   if (!r.visible || r.status === null) return null
 
-  const label = (fieldId: string | null) =>
-    fieldId === null ? null : (schema.fields.find((f) => f.id === fieldId)?.label ?? fieldId)
+  const fieldOf = (fieldId: string | null) => (fieldId === null ? null : schema.fields.find((f) => f.id === fieldId))
+  const attachments = r.attachments ?? []
+  const unread = attachments.filter((a) => !a.read).length
 
   return (
     <section className="flex flex-col gap-2 rounded-md border bg-muted/30 px-4 py-3" data-testid="wf-ai-review">
@@ -92,20 +103,41 @@ export function AiReviewPanel({ id, schema }: { id: string; schema: FormSchema }
       {r.status === 'done' &&
         (r.reasons?.length ? (
           <ul className="flex flex-col gap-1 text-sm" data-testid="wf-ai-reasons">
-            {r.reasons.map((x, i) => (
-              <li key={i} className="flex gap-2">
-                {label(x.field_id) && (
-                  <span className="shrink-0 rounded bg-muted px-1.5 text-xs leading-5 text-muted-foreground">
-                    {label(x.field_id)}
-                  </span>
-                )}
-                <span className="whitespace-pre-wrap">{x.text}</span>
-              </li>
-            ))}
+            {r.reasons.map((x, i) => {
+              const field = fieldOf(x.field_id)
+              return (
+                <li key={i} className="flex gap-2">
+                  {field &&
+                    (onLocate ? (
+                      <button
+                        type="button"
+                        className="shrink-0 cursor-pointer rounded bg-muted px-1.5 text-xs leading-5 text-muted-foreground hover:bg-primary/10 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        title={t('定位到这个字段')}
+                        onClick={() => onLocate(field.id)}
+                        data-testid="wf-ai-locate"
+                      >
+                        {field.label}
+                      </button>
+                    ) : (
+                      <span className="shrink-0 rounded bg-muted px-1.5 text-xs leading-5 text-muted-foreground">
+                        {field.label}
+                      </span>
+                    ))}
+                  <span className="whitespace-pre-wrap">{x.text}</span>
+                </li>
+              )
+            })}
           </ul>
         ) : (
           <p className="text-sm text-muted-foreground">{t('没有需要特别说明的地方')}</p>
         ))}
+
+      {r.status === 'done' && attachments.length > 0 && (
+        <p className="text-xs text-muted-foreground" data-testid="wf-ai-attachments">
+          {t('参考了 {{n}} 份附件', { n: attachments.length })}
+          {unread > 0 && ` · ${t('其中 {{n}} 份没读出内容（扫描件、图片或不支持的格式），没有据此下结论', { n: unread })}`}
+        </p>
+      )}
 
       {r.status === 'done' && (
         <p className="text-xs text-muted-foreground">

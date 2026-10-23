@@ -114,3 +114,20 @@ E2E `workflow-ai-review.spec.ts` 用 `page.route` 固定「有结论 / 失败」
 `return null`，「失败显示原因 + 重新预审」那条当场红。
 
 设计器里的开关在「基础信息」这一步，写的是 `model.aiReview`；关掉时**保留要点原文**（重新打开不用重写）。
+
+### 点理由定位到字段 · 读了几份附件
+
+理由前面的字段名是按钮（`onLocate`），点了在**详情抽屉自己的滚动区**里找 `[data-field-id]`、手算 `scrollTop`、外框闪 1.6 秒
+（`instance-sheet.tsx: locateField`）。不用 `scrollIntoView`（会连外层能滚的祖先一起滚），不用 `document.querySelector`
+（硬纪律 5）。字段的锚点 `data-field-id` 在 `form-renderer.tsx` 的三种外框上都有，**不拿 testid 当业务锚点**。
+对查看人隐藏的字段服务端早就裁掉了，不在 schema 里的字段名不画成按钮。
+下面一行写「参考了 N 份附件 · 其中 M 份没读出内容」—— 让审批人知道模型的结论是基于哪些东西给的。
+
+E2E（`workflow-ai-review.spec.ts`）变异：抽屉不传 `onLocate` · 定位后不闪，各自红。
+
+## 实例监控：AI 预审一致率（`workflow-monitor/ai-review-stats.tsx`）
+
+工具行的按钮打开抽屉，开着写在 URL（`stats=1`）。🔴 **口径原样写在抽屉顶上**（和后端 `agreement_stats` 一字不差）：
+一个没写口径的百分比，每个人按自己的理解读，拿它决定要不要让 AI 自动同意就是在赌。按模型分行；没有可比的单显示「—」。
+390 宽下表格横向滚，但「一致率」在第三列、首屏就看得见。截图时注意抽屉有滑入动画，等它停了再截（中途截到的是半透明的）。
+

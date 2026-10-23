@@ -340,6 +340,16 @@ async def get_directory_roles(db: CurrentSession) -> ResponseModel:
 
 
 @router.get(
+    '/monitor/ai-review-stats',
+    summary='AI 预审一致率（按模型 × 流程）',
+    dependencies=[Depends(RequestPermission(query_service.PERM_MONITOR)), DependsRBAC],
+)
+async def get_ai_review_stats(db: CurrentSession) -> ResponseModel:
+    """口径见 `ai_review_service.agreement_stats`。第 5 条「AI 审批节点」要不要做，看的就是这个数"""
+    return response_base.success(data=await ai_review_service.agreement_stats(db))
+
+
+@router.get(
     '/monitor',
     summary='实例监控',
     dependencies=[Depends(RequestPermission(query_service.PERM_MONITOR)), DependsRBAC],

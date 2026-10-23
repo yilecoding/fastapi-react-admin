@@ -20,6 +20,8 @@ const searchSchema = z.object({
   /** 可移动列的顺序，逗号分隔（`pages/_shared/use-column-order.ts`）；默认顺序不写 */
   cols: z.string().optional(),
   id: z.string().optional(),
+  /** 1 = 打开着「AI 预审一致率」抽屉 */
+  stats: z.coerce.number().int().optional(),
 })
 
 /** 页面由 TabOutlet 挂载；这里只声明 search schema / staticData / 权限 */

@@ -134,7 +134,29 @@ export type AiReview =
       finished_time?: string | null
       /** 被退回重新提交过几次：之前的预审结论都作废了 */
       superseded?: number
+      /** 给模型读了哪些附件（只含查看人看得见的字段里的）；`read: false` = 没读出内容（扫描件 / 格式不支持…） */
+      attachments?: { field_id: string; name: string | null; read: boolean }[]
     }
+
+/**
+ * `GET /monitor/ai-review-stats` 的一行：一个模型 × 一个流程。口径见后端 `ai_review_service.agreement_stats`：
+ * 每张单只看最后一次预审、只算通过 / 驳回的单；`agreement` = （建议通过→通过 + 建议驳回→驳回）/ `decided`，
+ * 「需要留意」不进分母。`decided` 为 0 时 `agreement` 是 null（没有可比的单，不是 0%）
+ */
+export type AiReviewStat = {
+  model: string | null
+  code: string
+  name: string
+  total: number
+  decided: number
+  agreement: number | null
+  pass_approved: number
+  pass_rejected: number
+  reject_approved: number
+  reject_rejected: number
+  attention_approved: number
+  attention_rejected: number
+}
 
 // ── 实例 ─────────────────────────────────────────────────────────────────────
 
@@ -379,6 +401,12 @@ export const monitorQuery = (p: { page: number; size: number } & Record<string, 
     queryKey: workflowKeys.monitor(p),
     queryFn: () => api.GET<PageData<InstanceRow>>(`${BASE}/monitor?${qs(p)}`),
     placeholderData: (prev) => prev,
+  })
+
+export const aiReviewStatsQuery = () =>
+  queryOptions({
+    queryKey: [...workflowKeys.all, 'ai-review-stats'] as const,
+    queryFn: () => api.GET<AiReviewStat[]>(`${BASE}/monitor/ai-review-stats`),
   })
 
 export const definitionsQuery = () =>

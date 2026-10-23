@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTable } from '@tanstack/react-table'
 import { useQuery } from '@tanstack/react-query'
-import { IconUserShare } from '@tabler/icons-react'
+import { IconChartBar, IconUserShare } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
@@ -21,6 +21,7 @@ import { definitionsQuery, monitorQuery, workflowKeys, type InstanceStatus } fro
 import { InstanceSheet } from '../workflow/instance-sheet'
 import { INSTANCE_STATUS } from '../workflow/status'
 import { COLUMN_LABELS, buildColumns } from './columns'
+import { AiReviewStatsSheet } from './ai-review-stats'
 import { HandoverDialog } from './handover-dialog'
 
 export type WorkflowMonitorSearch = {
@@ -38,6 +39,8 @@ export type WorkflowMonitorSearch = {
   cols?: string
   /** 打开的详情 */
   id?: string
+  /** 1 = 打开着「AI 预审一致率」抽屉 */
+  stats?: number
 }
 
 /**
@@ -155,6 +158,10 @@ export function WorkflowMonitorPage({
                       {t('离职交接')}
                     </Button>
                   </Can>
+                  <Button size="sm" variant="outline" onClick={() => patch({ stats: 1 })} data-testid="wf-ai-stats-open">
+                    <IconChartBar className="size-4" />
+                    {t('AI 预审一致率')}
+                  </Button>
                   <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
                 </>
@@ -193,6 +200,7 @@ export function WorkflowMonitorPage({
       </div>
       <InstanceSheet id={search.id ?? null} onClose={() => patch({ id: undefined })} />
       <HandoverDialog open={handover} onOpenChange={setHandover} />
+      <AiReviewStatsSheet open={search.stats === 1} onOpenChange={(o) => patch({ stats: o ? 1 : undefined })} />
     </div>
   )
 }

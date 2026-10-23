@@ -139,6 +139,18 @@ function Detail({
 }) {
   const { t } = useTranslation()
   const [tab, setTab] = React.useState('form')
+  // AI 预审里点了字段名：在**这个**滚动区里找到那个字段、滚过去、闪一下。
+  // 不用 `scrollIntoView`（会连外层能滚的祖先一起滚），不用 `document.querySelector`（硬纪律 5：隐藏 tab 里也有同名字段）
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const locateField = React.useCallback((fieldId: string) => {
+    const box = scrollRef.current
+    const el = box?.querySelector<HTMLElement>(`[data-field-id="${CSS.escape(fieldId)}"]`)
+    if (!box || !el) return
+    const top = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop
+    box.scrollTo({ top: Math.max(0, top - box.clientHeight / 3), behavior: 'smooth' })
+    el.dataset.flash = 'true'
+    window.setTimeout(() => delete el.dataset.flash, 1600)
+  }, [])
   // 审批人可编辑的字段：草稿只存「改了的那几个」，同意时一起提交
   const [patch, setPatch] = React.useState<FormData>({})
   const editable = React.useMemo(
@@ -181,7 +193,7 @@ function Detail({
             <TabsTrigger value="flow" data-testid="wf-tab-flow">{t('流程图')}</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="form" keepMounted className="min-h-0 flex-1 overflow-y-auto">
+        <TabsContent ref={scrollRef} value="form" keepMounted className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid min-h-full lg:grid-cols-[minmax(0,1fr)_22rem]">
             <section className="flex flex-col gap-4 px-6 py-5">
               {sentBack && (
@@ -194,7 +206,7 @@ function Detail({
                   <p className="mt-1 text-xs opacity-80">{t('改好之后点「重新提交」，审批从头开始')}</p>
                 </div>
               )}
-              <AiReviewPanel id={d.instance.id} schema={d.form_schema} />
+              <AiReviewPanel id={d.instance.id} schema={d.form_schema} onLocate={locateField} />
               <h3 className="text-xs font-medium tracking-wide text-muted-foreground">{t('申请内容')}</h3>
               <FormRenderer
                 schema={d.form_schema}

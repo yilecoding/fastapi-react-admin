@@ -175,6 +175,8 @@ Excel 有一大票**「解析成功、有数据、就是错的」**的坑，一�
 workspace 成员纯粹为了让 `turbo dev` 给它一个日志窗格（同 `apps/worker`）。
 Python 依赖归 `uv` 管（`pyproject.toml` + `uv.lock`），pnpm 不知道它们存在。
 改了 `pyproject.toml` 要 `pnpm --filter api exec uv sync`（或 `pnpm install:all`）。
+⚠️ **加依赖用 pre-commit 钉的那个 uv 锁**（`uvx uv@<版本> lock`，版本见 `.pre-commit-config.yaml`），再 `prek run --files uv.lock pyproject.toml requirements.txt`：
+本机新版 uv（0.13）会把锁文件升成 revision 5、tombi 再改排版，加一个包 diff 近两万行（2026-10-24 加 pypdf 时实测，按这个做法是 20 行）。
 
 ⚠️ **「忘了同步」的表现取决于你跑哪个脚本**（空 venv 实测）：`dev` / `dev:host` /
 `db:init` / `db:reset` 是裸 `uv run`，**会自动同步**（当场装了 143 个包）；
