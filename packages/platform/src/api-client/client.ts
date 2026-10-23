@@ -1,6 +1,8 @@
-import { createApiClient, type Method, type UploadOptions } from '@admin/api'
+import { ApiError, createApiClient, type Method, type RefreshOutcome, type UploadOptions } from '@admin/api'
 import type { paths } from '@admin/api/schema'
 
+import { clientIdleSeconds } from '../auth/activity'
+import { tryDesktop } from '../desktop'
 import { tokenStore } from './token-store'
 
 export const API_BASE = import.meta.env?.VITE_API_BASE ?? 'http://127.0.0.1:8088'
@@ -15,11 +17,26 @@ export function setApiLanguage(lang: string): void {
   uiLanguage = lang
 }
 
+/**
+ * 桌面端的刷新交给主进程（`apps/desktop/src/main/auth.ts`）。
+ *
+ * 🔴 渲染层跑在 `app://local` 下，对后端是跨站请求，浏览器不带 `SameSite=Lax` 的 refresh cookie ——
+ * 默认的 cookie 刷新走不通（主进程 `auth.ts` 的注释里记着当时的现象：access 一过期就 401、refresh 也 401）。
+ * #138 之前 access token 活 1 天，表现成「每天要重登一次」；改成 30 分钟之后会变成每半小时被踢一次。
+ * 主进程自己发请求、手动带 Cookie 头，不受这套规则约束
+ */
+async function desktopRefresh(): Promise<RefreshOutcome> {
+  const result = await tryDesktop()!.auth.refresh()
+  if (result.ok) return { kind: 'ok', token: result.tokens.accessToken }
+  if (result.terminal) return { kind: 'ended', end: { reason: result.reason, message: result.message } }
+  return { kind: 'transient', error: new ApiError(0, 0, result.message) }
+}
+
 /*
  * 🔴 **传输层不在这里了 —— 信封判定、401 单飞刷新、Accept-Language 全在
  * `@admin/api` 的 `createApiClient` 里，与移动端共用一份。**
- * 这里只注入 web 特有的四件事：地址来自 Vite 环境变量、token 存在
- * localStorage（`tokenStore`）、语言来自上面那个注入点。
+ * 这里只注入 web 特有的几件事：地址来自 Vite 环境变量、token 只在内存（`tokenStore`）、
+ * 语言来自上面那个注入点、空闲秒数来自 `auth/activity.ts`、桌面端换一种刷新方式。
  * 想改重试/错误判定逻辑，去改那个包，不要在这里补一份。
  */
 const client = createApiClient<paths>({
@@ -28,9 +45,11 @@ const client = createApiClient<paths>({
   setToken: (t) => tokenStore.set(t),
   clearToken: () => tokenStore.clear(),
   getLanguage: () => uiLanguage,
+  getClientIdle: () => clientIdleSeconds(),
+  refresh: tryDesktop() ? desktopRefresh : undefined,
 })
 
-export const { setSessionExpiredHandler, endSession } = client
+export const { setSessionExpiredHandler, endSession, restoreSession } = client
 
 /**
  * ⚠️ **web 端目前用的是「松」的类型面：路径是 `string`、返回类型靠调用点手写 `<T>`。**

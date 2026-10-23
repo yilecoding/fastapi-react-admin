@@ -360,6 +360,10 @@ class SessionStore:
         :return: 新的 refresh token；宽限期内的重复出示拿到的是同一个
         :raises errors.TokenError: 会话结束 / 凭据不对，`reason` 说明为什么
         """
+        if not raw:
+            # 压根没带 cookie = 从没登录过（或已经登出），不是「会话结束」：不给原因码，
+            # 否则第一次打开页面的人也会在登录页上看到「登录已过期」
+            raise errors.TokenError(msg=t('error.session.expired'))
         parts = split_refresh_token(raw)
         if parts is None:
             raise ended_error(EndReason.expired)
@@ -424,13 +428,17 @@ class SessionStore:
         if now >= expire_at:
             await SessionStore.revoke(session_uuid, EndReason.expired)
             raise ended_error(EndReason.expired)
+        # 🔴 空闲只看**记录下来的**最后活跃，不看这次请求自报的。反过来的话，人走开三小时、
+        # 回来点一下，这个请求报「0 秒没操作」，会话就被续上了 —— 空闲超时只在「中途恰好有一次
+        # 后台轮询暴露了空闲」时才生效。自报值只决定这次请求算不算一次活跃（下面那段）。
+        # 看页面不发请求的人靠前端心跳保活（`POST /auth/heartbeat`，有操作时每 5 分钟一次）
+        if now - last_active > idle:
+            await SessionStore.revoke(session_uuid, EndReason.idle)
+            raise ended_error(EndReason.idle)
         active = last_active
         if touch:
             # 自报的空闲比会话还老也不会让 active 倒退到 last_active 之前（取 max）
             active = max(last_active, now - min(client_idle or 0, now))
-        if now - active > idle:
-            await SessionStore.revoke(session_uuid, EndReason.idle)
-            raise ended_error(EndReason.idle)
         if touch and active - last_active >= settings.SESSION_ACTIVITY_WRITE_SECONDS:
             await _run(_TOUCH, session_uuid, active, _key_ttl(now, active=active, idle=idle, expire_at=expire_at))
 

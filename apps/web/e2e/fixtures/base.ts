@@ -13,6 +13,32 @@ export async function loginToken(ctx: APIRequestContext, username = "admin", pas
   return { token: body.access_token, sessionUuid: body.session_uuid }
 }
 
+/**
+ * 走**真实** `/auth/login` 建一个会话，拿回浏览器要用的 refresh cookie（#138）。
+ *
+ * access token 只在页面内存里，页面加载时用 refresh cookie 静默恢复 —— 所以给页面「登录态」
+ * 就是往它的 context 里塞这个 cookie。swagger 口不下发 cookie，这里用不了它。
+ * 验证码由 `global-setup.ts` 在 fba_test 里关掉了；E2E 环境不限流（`.env.e2e`）。
+ */
+export async function loginSession(username = "admin", password = "123456") {
+  const ctx = await request.newContext({ baseURL: API_BASE })
+  try {
+    const res = await ctx.post("/api/v1/auth/login", { data: { username, password } })
+    const body = (await res.json().catch(() => null)) as {
+      code?: number
+      data?: { access_token: string; session_uuid: string }
+    } | null
+    if (!res.ok() || body?.code !== 200 || !body.data) {
+      throw new Error(`登录失败（HTTP ${res.status()}）：${JSON.stringify(body)}`)
+    }
+    const { cookies } = await ctx.storageState()
+    const userId = await fetchMeId(ctx, body.data.access_token)
+    return { cookies, token: body.data.access_token, sessionUuid: body.data.session_uuid, userId }
+  } finally {
+    await ctx.dispose()
+  }
+}
+
 /** 当前登录用户的 id（雪花 ID 字符串）。`seedTourSeen` 要按人写「看过了」 */
 async function fetchMeId(ctx: APIRequestContext, token: string): Promise<string> {
   const res = await ctx.get("/api/v1/sys/users/me", { headers: { Authorization: `Bearer ${token}` } })
@@ -93,8 +119,7 @@ export async function createApiClient(): Promise<{ api: ApiClient; dispose: () =
  * 把**指定账号**的登录态注入到一个干净的 page 上。
  *
  * `authedPage` 写死了 admin；测数据权限要的正是「换个账号看见的不一样」，
- * 所以需要一个能指定用户名的版本。注入方式同 `authedPage`（addInitScript +
- * sessionStorage），理由见本文件 `authedPage` 上的注释。
+ * 所以需要一个能指定用户名的版本。注入方式同 `authedPage`（往 context 里塞 refresh cookie）。
  */
 export async function loginPageAs(
   page: Page,
@@ -102,16 +127,10 @@ export async function loginPageAs(
   password: string,
   opts: { tourSeen?: boolean } = {}
 ): Promise<void> {
-  const ctx = await request.newContext({ baseURL: API_BASE })
-  const { token, sessionUuid } = await loginToken(ctx, username, password)
-  const userId = await fetchMeId(ctx, token)
-  await ctx.dispose()
-  await page.addInitScript(([t, u]) => {
-    sessionStorage.setItem("admin:access-token", t as string)
-    sessionStorage.setItem("admin:session-uuid", u as string)
-  }, [token, sessionUuid])
+  const session = await loginSession(username, password)
+  await page.context().addCookies(session.cookies)
   // 默认把外壳导览标成已看过，理由见 seedTourSeen；只有导览自己的用例关掉它
-  if (opts.tourSeen !== false) await seedTourSeen(page, userId)
+  if (opts.tourSeen !== false) await seedTourSeen(page, session.userId)
 }
 
 export const test = base.extend<{ authedPage: Page; api: ApiClient }>({
@@ -126,25 +145,15 @@ export const test = base.extend<{ authedPage: Page; api: ApiClient }>({
 
   // 已登录的页面。
   //
-  // 🔴 access token 存在 sessionStorage 里（`api-client/token-store.ts`），
-  // 不是 localStorage、也不是 cookie —— Playwright 的 `storageState` 机制只保存
-  // cookies 和 localStorage，**不包括 sessionStorage**，天然存不下这个 token。
-  // 而这个应用的路由守卫是纯同步读 sessionStorage（`isAuthenticated()`），
-  // 不会在页面启动时用 refresh cookie 静默换新 access token（那个刷新逻辑只在
-  // 请求收到 401 时才触发，不是启动时的机制）—— 所以 storageState 复用登录态
-  // 这条路对这个应用走不通，只能在每次导航前用 addInitScript 把 token 注入。
+  // access token 只在页面内存里（#138），页面加载时用 refresh cookie 静默恢复 ——
+  // 所以这里只往 context 里塞一个真实登录拿到的 cookie，和用户在浏览器里登录过一次之后的状态一样。
+  // ⚠️ #138 之前 token 在 sessionStorage、守卫只认它，这里只能 `addInitScript` 往每个页面里塞 token
+  //（Playwright 的 `storageState` 不存 sessionStorage）；现在 cookie 就是全部登录态。
   authedPage: async ({ page }, use) => {
-    const ctx = await request.newContext({ baseURL: API_BASE })
-    const { token, sessionUuid } = await loginToken(ctx)
-    const userId = await fetchMeId(ctx, token)
-    await ctx.dispose()
-
-    await page.addInitScript(([t, u]) => {
-      sessionStorage.setItem("admin:access-token", t as string)
-      sessionStorage.setItem("admin:session-uuid", u as string)
-    }, [token, sessionUuid])
+    const session = await loginSession()
+    await page.context().addCookies(session.cookies)
     // 外壳导览标成已看过，否则首屏就是一层遮罩 —— 见 seedTourSeen
-    await seedTourSeen(page, userId)
+    await seedTourSeen(page, session.userId)
 
     await use(page)
   },

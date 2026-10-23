@@ -27,7 +27,7 @@ export function UserMenu() {
 
   async function handleLogout() {
     await logout(qc)
-    await navigate({ to: "/sign-in", search: { redirect: undefined } })
+    await navigate({ to: "/sign-in", search: { redirect: undefined, reason: undefined } })
   }
 
   return (

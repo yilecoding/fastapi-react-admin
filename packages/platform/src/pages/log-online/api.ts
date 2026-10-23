@@ -29,9 +29,14 @@ export type OnlineSession = {
   os: string
   browser: string
   device: string
+  /** 登录端：web / desktop / mobile（#138，按端各有一套会话策略） */
+  client: string
   /** 1 = 有实时连接，0 = 仅 token 有效 */
   status: number
   last_login_time: string
+  /** 最后活跃：按用户操作算，后台轮询不算（#138） */
+  last_active_time: string
+  /** 会话到期：空闲上限和绝对有效期先到的那个 */
   expire_time: string
 }
 

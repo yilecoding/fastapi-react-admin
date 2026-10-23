@@ -81,6 +81,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/heartbeat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 会话心跳
+         * @description 什么都不做：续活跃这件事在 JWT 中间件里已经做完了（`session_store.check`，按 `X-Client-Idle`）。
+         *
+         *     给「一直在看页面、但不发请求」的人用。空闲只看记录下来的最后活跃（#138），
+         *     没有这一下的话，读一份长文档读了两小时的人，下一次点击会被当成空闲踢出去。
+         *     前端只在用户最近有操作时才发（`auth/activity.ts`）
+         */
+        post: operations["heartbeat_api_v1_auth_heartbeat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -10922,6 +10946,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseSchemaModel_GetNewToken_"];
+                };
+            };
+        };
+    };
+    heartbeat_api_v1_auth_heartbeat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
                 };
             };
         };

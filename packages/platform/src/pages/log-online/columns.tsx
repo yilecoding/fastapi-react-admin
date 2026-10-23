@@ -16,6 +16,9 @@ import type { features } from './table-features'
 
 const col = createColumnHelper<typeof features, OnlineSession>()
 
+/** 后端的登录端枚举 → 显示名（i18n key） */
+const CLIENT_LABELS: Record<string, string> = { web: '网页端', desktop: '桌面端', mobile: '移动端' }
+
 export function buildColumns({
   page,
   size,
@@ -65,6 +68,14 @@ export function buildColumns({
         )
       },
     }),
+    col.accessor('client', {
+      header: t('登录端'),
+      cell: ({ getValue }) => (
+        <Badge variant="outline" className="font-normal">
+          {t(CLIENT_LABELS[getValue()] ?? getValue())}
+        </Badge>
+      ),
+    }),
     col.accessor('status', {
       header: t('实时连接'),
       cell: ({ getValue }) => {
@@ -108,6 +119,17 @@ export function buildColumns({
       header: t('登录时间'),
       cell: ({ getValue }) => (
         <span className="font-mono text-xs tabular-nums text-muted-foreground">
+          {formatDateTime(getValue())}
+        </span>
+      ),
+    }),
+    col.accessor('last_active_time', {
+      header: t('最后活跃'),
+      cell: ({ getValue }) => (
+        <span
+          className="font-mono text-xs tabular-nums text-muted-foreground"
+          title={t('按用户操作算，页面的后台轮询不算')}
+        >
           {formatDateTime(getValue())}
         </span>
       ),
@@ -174,11 +196,13 @@ export function buildColumns({
 export const COLUMN_LABELS: Record<string, string> = {
   seq: '序号',
   username: '用户',
+  client: '登录端',
   status: '实时连接',
   ip: '登录 IP',
   browser: '浏览器',
   os: '终端系统',
   last_login_time: '登录时间',
+  last_active_time: '最后活跃',
   expire: '剩余有效期',
   session_uuid: '会话 UUID',
 }

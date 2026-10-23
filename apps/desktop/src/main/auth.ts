@@ -2,7 +2,7 @@ import { app, safeStorage } from "electron"
 import fs from "node:fs"
 import path from "node:path"
 
-import type { AuthLoginInput, AuthTokens } from "@admin/platform/desktop/contract"
+import type { AuthLoginInput, AuthRefreshResult, AuthTokens } from "@admin/platform/desktop/contract"
 
 import { readConfig } from "./config"
 
@@ -17,8 +17,8 @@ import { readConfig } from "./config"
  *    表现是：access token 一过期就 401，refresh 也 401，用户被踢回登录页。
  *    主进程自己发 HTTP 请求不经过浏览器那套 SameSite 规则，手动收发 Cookie 头即可。
  *
- * 2. 渲染层把 access token 放 sessionStorage（api-client/token-store.ts），
- *    窗口一关就没了 —— 终端机每天开机都要重新登录一次。
+ * 2. 渲染层的 access token 只在内存里（api-client/token-store.ts，#138），
+ *    窗口一关就没了 —— 不托管 refresh token 的话，终端机每天开机都要重新登录一次。
  *
  * 3. 凭据落在终端机器上，应该过 safeStorage（走 OS 的 DPAPI / Keychain），
  *    不该是明文 JSON。
@@ -132,41 +132,60 @@ export async function login(input: AuthLoginInput): Promise<AuthTokens> {
   return toTokens(raw)
 }
 
-export async function refresh(): Promise<AuthTokens> {
+/**
+ * 用存盘的 refresh token 换新的 access token。
+ *
+ * 只有 401 / 403 才删存盘凭据（会话真的结束了）；网络不通、5xx 只是这一次没刷成，
+ * 凭据留着 —— 以前任何失败都当成过期，后端重启那几秒里刷新的终端全被踢回登录页（#138）。
+ * 结果用返回值带回去而不是抛异常：IPC 只带得过 Error 的 message，原因码会丢。
+ */
+export async function refresh(): Promise<AuthRefreshResult> {
   const token = loadRefreshToken()
-  if (!token) throw new Error("没有可用的登录凭据，请重新登录")
-  const res = await fetch(`${baseUrl()}${ENDPOINTS.refresh}`, {
-    method: "POST",
-    // 手动带 Cookie —— 这正是绕开 SameSite 的地方
-    headers: { cookie: `${REFRESH_COOKIE_NAME}=${token}` },
-  })
+  if (!token) return { ok: false, terminal: true, reason: null, message: "没有可用的登录凭据，请重新登录" }
+  let res: Response
+  try {
+    res = await fetch(`${baseUrl()}${ENDPOINTS.refresh}`, {
+      method: "POST",
+      // 手动带 Cookie —— 这正是绕开 SameSite 的地方
+      headers: { cookie: `${REFRESH_COOKIE_NAME}=${token}` },
+      // 短于后端的宽限期（30 秒）：响应丢了之后的重试要落在宽限期里，否则会被判成盗用
+      signal: AbortSignal.timeout(10_000),
+    })
+  } catch (err) {
+    return { ok: false, terminal: false, reason: null, message: err instanceof Error ? err.message : String(err) }
+  }
   if (res.status === 401 || res.status === 403) {
     clearRefreshToken()
-    throw new Error("登录已过期，请重新登录")
+    const body = (await res.json().catch(() => null)) as Envelope<{ reason?: string } | null> | null
+    return {
+      ok: false,
+      terminal: true,
+      reason: typeof body?.data?.reason === "string" ? body.data.reason : null,
+      message: body?.msg || "登录已过期，请重新登录",
+    }
   }
-  const raw = await unwrap(res)
-  // 后端每次 refresh 会轮换 refresh token，必须把新的存回去，否则下一次必失败
-  const rotated = extractRefreshCookie(res)
-  if (rotated) saveRefreshToken(rotated)
-  return toTokens(raw)
+  try {
+    const raw = await unwrap(res)
+    // 后端每次 refresh 会轮换 refresh token，必须把新的存回去，否则下一次必失败
+    const rotated = extractRefreshCookie(res)
+    if (rotated) saveRefreshToken(rotated)
+    return { ok: true, tokens: toTokens(raw) }
+  } catch (err) {
+    return { ok: false, terminal: false, reason: null, message: err instanceof Error ? err.message : String(err) }
+  }
 }
 
-/** 冷启动恢复会话。没有凭据不算错误，返回 null 让界面走登录页 */
-export async function restore(): Promise<AuthTokens | null> {
-  if (!loadRefreshToken()) return null
-  try {
-    return await refresh()
-  } catch {
-    return null
-  }
+/** 冷启动恢复会话。没有凭据是 `terminal` 且不带原因码，让界面安静地走登录页 */
+export async function restore(): Promise<AuthRefreshResult> {
+  return refresh()
 }
 
 /**
  * 登出。
  *
  * 🔴 这里**只带 cookie、不带 `Authorization`** —— access token 在渲染层的
- * sessionStorage 里，主进程手上没有。这依赖后端 `auth_service.logout()` 能从
- * **refresh cookie** 里取出会话身份（`sub` + `session_uuid` 就在那个 JWT 里）。
+ * 内存里，主进程手上没有。这依赖后端 `auth_service.logout()` 能从
+ * **refresh cookie** 里认出会话（`{会话ID}.{secret}`，secret 对得上才算数，#138）。
  *
  * 后端曾经只认 access token（第一句 `get_token(request)` 拿不到 Bearer 就 `return`），
  * 于是这个请求是**彻底的空操作**：本地凭据删了、界面也回到登录页，而服务端三个 key

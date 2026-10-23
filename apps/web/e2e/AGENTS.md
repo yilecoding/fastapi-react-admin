@@ -130,20 +130,25 @@ aioodbc 报的会是 `pyodbc.OperationalError`。）
 `turbo.json` 的 `e2e` 任务补 `passThroughEnv` —— 那是另一个改动，
 做之前先想清楚它会不会连带影响 turbo 的缓存命中。
 
-### 🔴 `storageState` 在这个应用上走不通，登录态靠 `addInitScript` 注入
+### 登录态 = 一个 refresh cookie（#138）
 
-Playwright 常规的「登一次、存 `storageState.json`、后面测试全复用」这条路，在这个
-应用上失效：access token 存在 **sessionStorage**（`api-client/token-store.ts`，
-注释写着为什么不用 localStorage），而 Playwright 的 `storageState` 机制只保存
-cookies 和 localStorage，**不包括 sessionStorage**。而且这个应用的路由守卫
-（`isAuthenticated()`）是纯同步读 sessionStorage，不会在页面启动时用 refresh
-cookie 静默换一个新 access token（那个刷新逻辑只在请求收到 401 时才触发）——
-两条凑在一起，「存好登录态复用」这条路完全走不通。
+access token 只在页面内存里，页面加载时用 refresh cookie 静默恢复（`auth/guards.ts: requireAuth`）。
+所以给页面「登录态」就是往它的 context 里塞一个真实登录拿到的 cookie：`fixtures/base.ts` 的
+`loginSession()` 走真实 `/auth/login`（验证码由 `global-setup.ts` 关掉、E2E 环境不限流），
+`authedPage` / `loginPageAs` 把 `storageState().cookies` 加进 `page.context()`。
+新开的标签页（`page.context().newPage()`）共用 cookie，自己会恢复，不用再注入。
 
-`fixtures/base.ts` 的 `authedPage` 改成：每次都用 `/auth/login/swagger` 现登一次
-拿 token，再 `page.addInitScript()` 在导航前把它塞进 sessionStorage。swagger 口签的
-access token 活一天（`SESSION_SWAGGER_SECONDS`；表单登录的只有 30 分钟，#138），
-不用担心一次测试跑太久失效。
+⚠️ swagger 口（`/auth/login/swagger`）**不下发 cookie**，只适合给 `api` fixture 拿 token 调接口。
+
+> #138 之前 token 在 sessionStorage、路由守卫只认它，于是这里只能每次 `addInitScript` 往页面里塞
+> token（Playwright 的 `storageState` 不存 sessionStorage）。那段做法连同它的理由一起作废了。
+
+### 🔴 依赖 socket 推送的用例，先等 `<html data-presence="on">`
+
+「被踢 / 另一个标签页登出 → 这个页面当场回登录页」靠的是 socket 的 `session:ended`。socket 还没连上就
+动手的话推送落空，页面要等到下一次请求才发现 —— 用例只能猜一个 `waitForTimeout`。`use-presence.ts`
+在连上 / 断开时把状态写到 `<html data-presence>` 上，等它变成 `on` 再踢人 / 登出
+（`tests/session.spec.ts`）。
 
 ### 🔴 `<Activity>` 会把 effect 整个销毁重建 —— 这条抓到了一个真 bug
 
