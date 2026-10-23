@@ -233,3 +233,29 @@ class WfAiReview(DataClassBase, DateTimeMixin):
     attachments: Mapped[str | None] = mapped_column(
         UniversalText, default=None, comment='给模型读了哪些附件（JSON：字段 · 文件 ID · sha256 · 读没读出来）'
     )
+
+
+class WfAiAssist(DataClassBase, DateTimeMixin):
+    """设计器一句话生成 / 发起时自动填单（#111 第 1、3 条）的模型调用记录 —— 只为不变式 5（可审计）。
+
+    结果不存：生成的定义只进设计器草稿、填的值只进发起草稿，人确认之后才变成数据。
+    🔴 也**不存输入原文**：填单的输入是发票 / 一段话，可能带个人信息；这张表要回答的只是
+    「哪个模型、哪版提示词、花了多少、成没成」。
+    """
+
+    __tablename__ = 'wf_ai_assist'
+    __table_args__ = {'comment': 'AI 辅助调用记录'}
+
+    id: Mapped[id_key] = mapped_column(init=False)
+    kind: Mapped[str] = mapped_column(UniversalStr(16), comment='design / fill')
+    user_id: Mapped[int] = mapped_column(sa.BigInteger, index=True, comment='谁发起的')
+    definition_id: Mapped[int | None] = mapped_column(sa.BigInteger, comment='哪个流程定义')
+    status: Mapped[str] = mapped_column(UniversalStr(16), comment='done / failed')
+    prompt_version: Mapped[str] = mapped_column(UniversalStr(16), comment='提示词版本')
+    #: 调了几次模型（生成之后按校验结果回喂修一轮 = 2）
+    rounds: Mapped[int] = mapped_column(comment='调用轮数')
+    model: Mapped[str | None] = mapped_column(UniversalStr(128), default=None, comment='模型名')
+    duration_ms: Mapped[int | None] = mapped_column(default=None, comment='耗时（毫秒）')
+    prompt_tokens: Mapped[int | None] = mapped_column(default=None, comment='输入 token')
+    completion_tokens: Mapped[int | None] = mapped_column(default=None, comment='输出 token')
+    error: Mapped[str | None] = mapped_column(UniversalStr(512), default=None, comment='失败原因')

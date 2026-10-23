@@ -45,6 +45,10 @@ class SetDefinitionStatusParam(SchemaBase):
     enabled: bool = Field(description='启用 / 停用')
 
 
+class AiDesignParam(SchemaBase):
+    prompt: str = Field(min_length=2, max_length=2000, description='一句话描述要什么审批')
+
+
 class StartParam(SchemaBase):
     """发起表单审批"""
 

@@ -75,11 +75,14 @@ class OpenAICompatClient:
         tools: list[dict[str, Any]] | None = None,
         *,
         temperature: float = 0.3,
+        response_format: dict[str, Any] | None = None,
     ) -> AsyncIterator[StreamDelta]:
         """流式调用 `/chat/completions`。
 
         :param messages: OpenAI 形状的消息列表
         :param tools: OpenAI function-calling 形状的工具定义；为空则不带这个字段
+        :param response_format: 如 `{'type': 'json_object'}`（JSON 模式：服务端约束解码，输出一定是合法 JSON）；
+            为空则不带
         """
         payload: dict[str, Any] = {
             'model': self.model,
@@ -93,6 +96,8 @@ class OpenAICompatClient:
         if tools:
             payload['tools'] = tools
             payload['tool_choice'] = 'auto'
+        if response_format:
+            payload['response_format'] = response_format
 
         async with self._client() as client:
             try:

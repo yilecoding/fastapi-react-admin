@@ -31,7 +31,7 @@ def _purge() -> None:
         maker = create_database_async_session(engine)
         try:
             async with maker.begin() as s:
-                for table in ('wf_ai_review', 'wf_cc', 'wf_action_record', 'wf_task', 'wf_instance'):
+                for table in ('wf_ai_assist', 'wf_ai_review', 'wf_cc', 'wf_action_record', 'wf_task', 'wf_instance'):
                     await s.execute(text(f'DELETE FROM {table}'))
                 await s.execute(
                     text(

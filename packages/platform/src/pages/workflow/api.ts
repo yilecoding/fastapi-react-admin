@@ -617,6 +617,18 @@ export function usePublishDefinition() {
   })
 }
 
+export type AiDesign = { form: FormSchema; model: FlowModel; issues: Issue[]; model_name: string | null; rounds: number }
+
+/** 设计器一句话生成（#111 第 1 条）：只回结果，服务端不改草稿 —— 调用处把它放进 `draft` 那一层，人保存才算 */
+export function useAiGenerateDefinition() {
+  return useMutation({
+    // 调用处自己弹带上下文的错误：别让全局 MutationCache 再弹一条一样的（apps/web/src/app.tsx）
+    meta: { suppressErrorToast: true },
+    mutationFn: ({ id, prompt }: { id: string; prompt: string }) =>
+      api.POST<AiDesign>(`${BASE}/definitions/${id}/ai-generate`, { body: { prompt } }),
+  })
+}
+
 export function useValidateDefinition() {
   return useMutation({
     mutationFn: (id: string) => api.POST<{ issues: Issue[] }>(`${BASE}/definitions/${id}/validate`),

@@ -1875,6 +1875,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/workflow/monitor/ai-review-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * AI 预审一致率（按模型 × 流程）
+         * @description 口径见 `ai_review_service.agreement_stats`。第 5 条「AI 审批节点」要不要做，看的就是这个数
+         */
+        get: operations["get_ai_review_stats_api_v1_sys_workflow_monitor_ai_review_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/workflow/monitor": {
         parameters: {
             query?: never;
@@ -1942,6 +1962,23 @@ export interface paths {
         post?: never;
         /** 删除流程定义 */
         delete: operations["delete_definition_api_v1_sys_workflow_definitions__pk__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/workflow/definitions/{pk}/ai-generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** AI 一句话生成表单与流程（只回结果，不改草稿） */
+        post: operations["ai_generate_definition_api_v1_sys_workflow_definitions__pk__ai_generate_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -3259,6 +3296,14 @@ export interface components {
              * @description 角色 ID 列表
              */
             roles: number[];
+        };
+        /** AiDesignParam */
+        AiDesignParam: {
+            /**
+             * Prompt
+             * @description 一句话描述要什么审批
+             */
+            prompt: string;
         };
         /**
          * AuthLoginParam
@@ -15300,6 +15345,26 @@ export interface operations {
             };
         };
     };
+    get_ai_review_stats_api_v1_sys_workflow_monitor_ai_review_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
     get_monitor_api_v1_sys_workflow_monitor_get: {
         parameters: {
             query?: {
@@ -15542,6 +15607,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ai_generate_definition_api_v1_sys_workflow_definitions__pk__ai_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiDesignParam"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
