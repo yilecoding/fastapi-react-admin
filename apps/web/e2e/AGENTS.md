@@ -380,7 +380,7 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 **实测**：`data-io.spec.ts` 的列顺序那条，PR 上的 CI 绿、合进 main 后的那次 CI 首跑 + 重试都红；本地连跑、
 CPU 降速 6 倍各跑 4 次都复现不出来。人按不了这么快，所以这是测试的时序，不是功能的 bug。
 
-**写法**：先等「拿起来了」（拖着的手柄上有 `aria-pressed="true"`），再按方向键、等两帧看那一行的 `transform`
+**写法**：先等「拿起来了」（拖着的手柄上有 `aria-pressed="true"`），再按方向键、隔一会儿看那一行的 `transform`
 真的动了（没动就再按一次），最后才放下。不要靠 `waitForTimeout` 猜一个够用的毫秒数。
 
 ### 导入类用例的 xlsx 现造，不提交固件

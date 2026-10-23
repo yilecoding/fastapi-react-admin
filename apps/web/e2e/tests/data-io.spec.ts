@@ -146,13 +146,12 @@ test.describe("列顺序", () => {
     const row = page.getByTestId("column-row-ip")
     for (let attempt = 0; attempt < 5; attempt += 1) {
       await page.keyboard.press("ArrowDown")
-      // 等两帧再看：React 提交、dnd-kit 写上 transform 都在这之后
+      // 隔一会儿再看：React 提交、dnd-kit 写上 transform 都在这之后。
+      // （用 setTimeout 不用 requestAnimationFrame：e2e 的 tsconfig 没有 DOM 库，后者类型检查不过）
       const moved = await row.evaluate(
         (el) =>
           new Promise<boolean>((resolve) =>
-            requestAnimationFrame(() =>
-              requestAnimationFrame(() => resolve(/translate3d\(0px, [1-9]/.test(el.style.transform)))
-            )
+            setTimeout(() => resolve(/translate3d\(0px, [1-9]/.test(el.style.transform)), 100)
           )
       )
       if (moved) break
