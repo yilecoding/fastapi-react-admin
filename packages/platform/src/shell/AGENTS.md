@@ -296,6 +296,18 @@ i18n key（而不是随手起新字符串），两个语言的翻译已经现成
 一行都不用改，也就不会再出现「后端一直在发、前端谁也没接」那种死代码 ——
 `task_notification` 就这么当了很久的死代码（后端 `TaskBase` 从一开始就在发）。
 
+### 会话相关的两条（#138）
+
+- 🔴 **握手的 `auth` 要写成函数**：`auth: (cb) => cb({ token: tokenStore.get() })`。socket.io 每次
+  （重）连都调这个函数；写成对象的话断线重连带的永远是建连那一刻的 token，而它只活 30 分钟 ——
+  半小时后任何一次断线重连都握不上手，「在线用户」页上这个会话从此是离线。
+  （读 socket.io-client 的 `auth` 选项语义得出，没在浏览器里等满 30 分钟实测）
+- **`session:ended` 不进 `dispatchSocketEvent`**，直接交给 `auth/session.ts: handleSessionEnded`：
+  先试一次静默恢复（同一个浏览器的另一个标签页刚重新登录过，cookie 已经指向新会话），恢复出来的不是
+  同一个人就收尾、带原因码去登录页。这个标签页**自己**在登出时（`endingLocally`）忽略这条推送
+- `<html data-presence="on|off">` 反映这条连接的状态。E2E 要等它变成 `on` 再踢人 / 登出，
+  否则推送落空、页面要等下一次请求才发现（`e2e/tests/session.spec.ts`）
+
 ⚠️ 订阅口把 handler 存进 ref 再调用，所以调用方**不需要** `useCallback`。
 不这么写的话每次渲染都会退订再订阅一遍，而 socket 事件恰恰可能在渲染中途到达，
 那一瞬间没有任何订阅者，事件被静默丢掉。

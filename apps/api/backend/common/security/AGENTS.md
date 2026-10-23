@@ -179,9 +179,20 @@ access 不删 refresh —— 被踢的人刷新一下就回来了（同 `apps/ap
 服务端据此推算最后活跃时间，最多每分钟写一次。不带这个头的端（移动端、桌面主进程）按刚操作过算。
 socket 握手不算操作（`touch=False`）。
 
+🔴 **判空闲只看记录下来的最后活跃，自报值只决定「这次算不算一次活跃」。** 第一版是反过来的
+（先拿自报值往后挪，再判空闲）：人走开三小时、回来点一下，那个请求报「0 秒没操作」，会话就被续上了 ——
+空闲超时只在「中途恰好有一次后台轮询暴露了空闲」时才生效。顺序换过来之后，**看页面不发请求的人**
+会被误判，所以前端在用户最近 5 分钟有操作时每 5 分钟打一次 `POST /auth/heartbeat`
+（`platform/src/auth/activity.ts`）。
+
 **实测证据**：`test_session.py` 的 `test_background_polling_does_not_keep_the_session_alive`
-（带 `X-Client-Idle: 3600` 的请求不挪最后活跃时间）+ 反方向的 `test_user_activity_moves_last_active_forward`；
-变异检验：把 `active = max(last_active, now - client_idle)` 改成 `active = now`，前一条当场红。
+（带 `X-Client-Idle: 3600` 的请求不挪最后活跃时间）· 反方向的 `test_user_activity_moves_last_active_forward` ·
+`test_coming_back_after_the_idle_limit_does_not_revive_the_session` · `test_heartbeat_keeps_a_reading_user_alive`；
+变异检验：把 `active = max(…)` 改成 `active = now`，第一条红；把判空闲挪回自报值之后，第三条红。
+
+⚠️ **压根没带 refresh cookie 的刷新不给原因码**（`rotate(None)` 只回 401）：页面加载时守卫会先静默恢复，
+第一次打开页面的人也会走到这里 —— 带上 `expired` 的话，登录页上会对一个从没登录过的人说「登录已过期」
+（`test_refresh_without_any_cookie_has_no_reason`，变异检验打红过）。
 
 ### 🔴 宽限期不能短于客户端刷新超时；对不上的 secret 不撤销
 
