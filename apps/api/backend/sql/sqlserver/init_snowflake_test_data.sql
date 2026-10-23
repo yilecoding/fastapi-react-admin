@@ -77,6 +77,7 @@ VALUES
 (2049629108253622322, N'每日问候', 'notification.send_daily_greeting', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, '0 9 * * *', 0, 1, 0, NULL, N'每天 9:00 给全员发一条随机问候语，顺带验收消息中心链路（落库/未读数/socket 推送/前端红点）是否通畅', '2026-08-22 17:00:00', NULL, 0, NULL),
 (2049629108253622323, N'清理回收站', 'maintenance.purge_recycled_files', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, '45 3 * * *', 0, 1, 0, NULL, N'彻底删除回收站里超过保留期的文件（保留天数是 FILE_RECYCLE_DAYS，默认 30，不在这里配）', '2026-10-22 12:00:00', NULL, 0, NULL),
 (2049629108253622324, N'清理过期分片', 'maintenance.purge_stale_multipart', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, '0 4 * * *', 0, 1, 0, NULL, N'清掉过期分片上传（会话在 Redis 里 FILE_MULTIPART_EXPIRE_SECONDS 没动静就过期）留在存储里的分片', '2026-10-22 15:00:00', NULL, 0, NULL),
+(2049629108253622325, N'后台任务心跳', 'health.heartbeat', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 180, 0, 60, 'seconds', '* * * * *', 0, 1, 0, NULL, N'每 60 秒派一次，worker 执行时写心跳。外部监控探 /api/health/status 靠它判断 worker 是否在消费任务；停用或删除后 worker 一项会一直报 missing / stale', '2026-10-23 17:00:00', NULL, 0, NULL),
 (2049629108253622358, N'清理过期导出', 'maintenance.purge_expired_exports', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL, '20 * * * *', 0, 1, 0, NULL, N'导出文件过了保留期（EXPORT_FILE_RETENTION_HOURS）就删掉、记录改成已过期；卡住的导出记成失败；过了 EXPORT_RECORD_RETENTION_DAYS 的记录删掉', '2026-10-22 20:00:00', NULL, 0, NULL);
 
 INSERT INTO sys_role (id, code, name, status, is_filter_scopes, remark, created_time, updated_time)

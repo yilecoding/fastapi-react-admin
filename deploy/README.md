@@ -113,6 +113,72 @@ pnpm deploy:prod
 ⚠️ 和 `pull` 二选一，不要混用——否则 `up` 跑的到底是哪次构建的镜像，
 取决于哪条命令最后碰过本地镜像缓存。
 
+## 外部监控探哪几条
+
+外部监控**只探一条**：`https://<域名>/api/health/status`。一个地址列出每个服务的状态，
+全部正常回 **200**，任何一项不正常回 **503**。其余几条是给编排和部署脚本用的，语义各不相同，不要混用：
+
+| 地址 | 看什么 | 谁在用 |
+|---|---|---|
+| `https://<域名>/api/health/status` | api · 数据库 · Redis · 调度器（beat）· worker | **外部监控** |
+| `https://<域名>/api/health/ready` | 只看数据库 + Redis | `prod.sh up` 部署后的探活（必须 200，否则判部署失败） |
+| 容器内 `:8000/health/ready` | 同上 | compose 里 api 的 healthcheck（web / beat 都等它） |
+| `/healthz` | 只证明 web 容器里的 nginx 活着 | web 镜像的 `HEALTHCHECK` |
+
+🔴 **不要拿 `/healthz` 做外部监控。** 它是 nginx 自己 `return 200`，api、数据库全挂了照样绿。
+同理，经域名探任何一个不存在的路径（比如已经删掉的 `/health/live`）都会落到前端的 history fallback，
+回 200 + `index.html` —— **判定前先看一眼 body**。
+
+### 返回示例
+
+全部正常（200）：
+
+```json
+{"status":"ok","services":{"api":{"status":"ok"},"database":{"status":"ok"},"redis":{"status":"ok"},"scheduler":{"status":"ok","last_seen_seconds":12},"worker":{"status":"ok","last_seen_seconds":31}},"heartbeat_max_age_seconds":180}
+```
+
+worker 停了（503）：
+
+```json
+{"status":"degraded","services":{"api":{"status":"ok"},"database":{"status":"ok"},"redis":{"status":"ok"},"scheduler":{"status":"ok","last_seen_seconds":8},"worker":{"status":"stale","last_seen_seconds":187}},"heartbeat_max_age_seconds":180}
+```
+
+api 不在（发版换容器 / 进程停了），web 的 nginx 替它回（503，带 `X-FBA-Updating: 1` 头，**没有 `services`**）：
+
+```json
+{"status":"unavailable","msg":"系统正在更新或 api 已停止，请稍后再试"}
+```
+
+### 每一项的 status
+
+| 值 | 含义 |
+|---|---|
+| `ok` | 正常 |
+| `error` | 连不上，附 `"error":"<异常类型名>"`（只给类型名，不给异常信息） |
+| `stale` | 心跳超过 `heartbeat_max_age_seconds`（180 秒）没更新，`last_seen_seconds` 是停了多久 |
+| `missing` | 从来没写过心跳 —— 多半是「后台任务心跳」那条调度被停用或删了 |
+| `unknown` | 判断不了：调度器停了（worker 收不到心跳任务，看不出它停没停），或者心跳存储（Redis）读不到 |
+
+心跳的来路：调度器的心跳由 beat 的调度循环每 15～60 秒写一次；worker 的心跳靠「后台任务心跳」这条调度
+（`health.heartbeat`，每 60 秒一次）。🔴 **在「定时任务」页停用或删掉这条调度，worker 一项就会一直报异常。**
+
+### 给监控方的判定方法
+
+- **用 HTTP 状态码判定：200 = 正常，其余都是异常**（503、超时、连不上）
+- 🔴 **不要只匹配关键字 `"status":"ok"`** —— 降级时正常的那几项里也有这个子串，会被误判成正常。
+  要用关键字的话，匹配开头的 `{"status":"ok","services"`
+- 按服务分别告警：匹配 `"worker":{"status":"ok"`、`"scheduler":{"status":"ok"`、`"database":{"status":"ok"`、
+  `"redis":{"status":"ok"`，哪条匹配不上就是哪个服务坏了。字段顺序和紧凑格式是固定的
+- 频率与阈值：建议每分钟探一次、**连续 3 次失败才告警**，容得下一次发版。探针超时设 15 秒以上
+  （每项检查各自有超时、并发执行，最慢 5 秒）
+
+### 这一条覆盖不到的
+
+- 域名、证书、宝塔那一层反代本身（探针走域名的话能间接覆盖到「通不通」，证书快过期不会报）
+- 外部对接成不成功：邮件、对象存储、OAuth2、AI 服务商 —— 刻意不算进来，否则对方一抖这里就 503
+- 磁盘、内存、CPU；worker 多副本时挂了其中一个（剩下的还在消费，心跳照常）
+- 业务层面的「任务执行失败」—— 心跳只证明 worker 在消费，不证明每个任务都跑成功了，失败要看「执行记录」页
+
 ---
 
 真实的 `DATABASE_*`、`TOKEN_SECRET_KEY`、`REDIS_PASSWORD`、域名和代理网段由部署

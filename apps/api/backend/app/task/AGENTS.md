@@ -54,6 +54,38 @@ AttributeError，真因要往上翻十几行。
 不碰 lifespan 里属于 web 进程的东西（操作日志消费者、缓存 Pub/Sub 监听器）——
 那些在 worker 里跑起来只会重复消费。
 
+### 🔴 补完要把 Redis 连接池断开 —— 否则每个 worker 进程第一个用 Redis 的任务必失败
+
+**症状**：worker 刚起来（= 每次发版后）的第一个用到 `redis_client` 的任务报错，之后一切正常：
+
+```
+RuntimeError: Task <…> got Future <Future pending> attached to a different loop
+RuntimeError: Event loop is closed
+```
+
+**根因**：`worker_process_init` 是用 `asyncio.run()` 起的**临时**循环做初始化，
+`redis_client.init()` 的 ping 建了一条连接、放回池里，循环随即关闭；
+任务跑在 AsyncIOPool **自己的**循环里，从池里拿到这条绑着死循环的连接就炸。
+坏连接被丢掉后重建，所以第二次就好了 —— 只坏一次、只在进程刚起来时坏，很难被注意到。
+
+**修法**：`_init()` 最后 `await redis_client.connection_pool.disconnect()`，让任务在自己的循环里重新建连接。
+
+**实测证据**（2026-10-23，本机 worker / beat 分开起，临时库）：临时去掉那一行重启 worker，
+第一拍 `health.heartbeat` 是 `raised unexpected: RuntimeError('Event loop is closed')`；改回来再重启，
+第一拍 `succeeded`。单测 `test_health.py::test_worker_init_leaves_no_connection_bound_to_its_throwaway_loop`
+去掉那一行就报上面两条原文。
+
+### ⚠️ 同一个函数里的 `snowflake.init()` 有同类问题，**还没修**
+
+它在临时循环里 `create_task` 起了节点续期（`utils/snowflake.py: start_heartbeat`），`asyncio.run` 一结束就被取消 ——
+worker 占的雪花节点 key 过了 TTL 就没了，下一个起来的进程会拿到同一个节点号，两个进程用同一组
+datacenter / worker 发 ID。
+
+**实测证据**（同一次演练，`SNOWFLAKE_NODE_TTL_SECONDS=60`、续期间隔 30 秒）：worker 起来 4 秒时
+`fba:snowflake:nodes:0:1` TTL 56，40 秒时 TTL 20（api 那把 `0:0` 同期被续回 37 → 42），66 秒时 worker 还活着、
+它那把 key 已经没了；这时再起一个 worker，拿到的还是 `0:1`，两个 worker 同时活着。
+**这只证明了「节点号会重复」**，重复的 ID 本身没有实测（要两个进程在同一毫秒、同一序号上发号）。
+
 ## 🔴 `task_result` / `task_set_result` 不用雪花主键
 
 全仓唯一的例外。理由不是省事：让「记录一次失败」依赖雪花初始化成功，
@@ -216,3 +248,50 @@ celery 也用 6380 上的 db 1，两边的 worker 消费的是**同一个队列*
 
 **修法**：本地 `.env` 里把 `CELERY_BROKER_REDIS_DATABASE` 指到一个空库（本机用的是 `7`），改完重启 worker。
 先 `redis-cli -n <db> DBSIZE` 确认那个库是空的。生产的 Redis 是独占的，不受影响。
+
+## 调度器 / worker 心跳 → `/health/status`（#147）
+
+worker / beat 挂了网页照常能开、`/health/ready` 照常 200，只有定时清理、导出、通知、审批超时悄悄停 ——
+外部原来完全看不到。现在两个心跳各写各的 Redis 键（epoch 秒），`core/registrar.py` 的 `/health/status` 读它们，
+距今 ≤ 180 秒（`HEARTBEAT_MAX_AGE_SECONDS`）才算 ok：
+
+| | 谁写 | 多久一次 |
+|---|---|---|
+| scheduler | `utils/schedulers.py: DatabaseScheduler.tick` → `write_heartbeat` | 每拍，节流到 15 秒；没有调度到期时 tick 也最多 60 秒一拍（`max_interval`） |
+| worker | `tasks/health/tasks.py` 的 `health.heartbeat` | beat 每 60 秒派一次（`task_scheduler` 一行，种子 + 迁移 `u0000000health`） |
+
+🔴 **调度器的心跳必须写在调度循环里，不能也靠派任务**：派出去的任务要 worker 执行才落得了地，
+那样 beat 停了和 worker 停了看到的是同一个结果。反过来，beat 不在时 worker 收不到心跳任务，
+所以接口把这种情况下的 worker 报成 `unknown`，不报 `stale`。写调度器心跳失败只记日志 ——
+不能为了心跳让 beat 停摆。
+
+高频任务的两条纪律（每分钟一次就会显形）：
+
+| 不做会怎样 | 怎么挡 |
+|---|---|
+| 每次往 `task_result` 写一行 —— 一天 1440 行，「执行记录」页被淹没 | 装饰器上 `ignore_result=True` |
+| `TaskBase` 的开始 / 成功提示经 Redis 广播给**所有**在线页面 | 装饰器上 `notify=False`（`tasks/base.py` 认这个类属性；失败照推） |
+
+调度那一行的 `expire_seconds = 180`（= 阈值）：worker 停了很久再起来时，排队超过阈值的心跳直接丢掉。
+
+**实测证据**（2026-10-23，本机：临时库 + 空闲 Redis 库号，api / worker / beat 分开起，经 `nginx:1.27-alpine` 挂真实
+`apps/web/nginx.conf` 探 `/api/health/status`）：
+
+| 演练 | 结果 |
+|---|---|
+| 冷启动 | 65.8 秒到 200（beat 第一次派心跳要等一个 60 秒周期；在那之前 worker 报 `missing`） |
+| 停 worker | 181.0 秒后 503，`worker: stale`、`scheduler: ok` → 重启 3.2 秒恢复 200 |
+| 停 beat | 140.9 秒后 503，`scheduler: stale`、`worker: unknown`（停之前最后一拍已是 43 秒前）→ 重启 2.2 秒恢复 |
+| 停 api | 经 nginx 立刻 503 + `X-FBA-Updating: 1` → 重启 3.3 秒恢复 |
+| 收尾 | 三个进程的日志 0 行 ERROR；心跳执行 6 次，`task_result` 里 0 行是它的，同期 `workflow.handle_timeouts` 照常写了 1 行（对照） |
+
+⚠️ 调度器的 `last_seen_seconds` 在 beat 空闲时会涨到 60 左右再归零 —— tick 最多 60 秒一拍，节流 15 秒只在
+tick 更密时起作用。所以「停 beat 到报警」是 120～180 秒，不是固定 180 秒。
+
+🔴 **心跳不能并进 `/health/ready`**：api 容器的 healthcheck 用 ready，并进去 worker 一挂 api 也被判不健康，
+web / beat 又 `depends_on` api 健康 —— 一处故障连成一串。
+
+守卫在 `app/admin/tests/security/test_health.py`（24 条），做过 12 处变异验证（每处改坏都有对应的一条变红）：
+init 不断开连接池 · 调度器停了 worker 照报 stale · 心跳任务存结果 / 推送 · notify 开关对所有任务都关 ·
+三项检查串行 · worker 心跳写错键 · tick 不写心跳 · 写心跳失败往外抛 · 响应里带异常 message ·
+心跳并进 ready · 阈值失效。

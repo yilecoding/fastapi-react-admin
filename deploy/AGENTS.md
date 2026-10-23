@@ -191,3 +191,36 @@ CI 构建完镜像**不会**自动同步到服务器，同步是人明确决定�
 想减少手动同步的负担，优先选**不需要往 CI 里塞凭据**的那一侧：`prod.sh status`
 是拉取式的（服务器主动问 GitHub「main 是哪个提交」），挂进 cron 就能得到
 「落后了」的提醒，而不用把服务器的钥匙交出去。真要接自动部署再重新评估。
+
+## 健康检查：经域名能探到的地址，原来没有一条反映真实状态（#147）
+
+### 症状
+
+外部监控照常配一个「健康检查地址」就会一直是绿的，而 api、数据库、worker 哪个挂了都看不出来。
+
+### 根因
+
+链路是 宝塔站点（`location ^~ / → 127.0.0.1:8080`）→ web 容器 nginx → `api:8000`，三条看着像健康检查的地址，
+没有一条真的走到后端的依赖检查：
+
+| 经域名探 | 回什么 | 实际是谁在回答 |
+|---|---|---|
+| `/healthz` | 200 `ok` | web 的 nginx 自己 `return 200` |
+| `/health/live` | **200，body 是 `index.html`** | 前端的 history fallback（`location /` 的 `try_files … /index.html`） |
+| `/api/health/ready` | 404 | 通用的 `location /api/` 原样转成 `api:8000/api/health/ready`，后端的健康检查在 `/health/*`，没有这个路径 |
+
+**实测证据**（2026-10-23，`curl https://fra.wubunan.com<路径>`）：就是上表三行。第二行最危险 ——
+状态码是 200，只有看 body 才知道拿到的是前端页面。
+
+### 修法
+
+`apps/web/nginx.conf` 给 `/api/health/status`、`/api/health/ready` 各写一条 `location =` 精确匹配，
+`proxy_pass` 到后端的真实路径；api 不在时把 nginx 自己的 502 / 504 换成 503 + `X-FBA-Updating` 头。
+后端的 `/health/live` 一并删了：它唯一的调用方是 `Dockerfile.prod` 里的 HEALTHCHECK，而 compose 给每个服务都另配了
+healthcheck、把它盖掉了，实际没人用。镜像里的 HEALTHCHECK 也删了，健康检查只在 compose 里写一份。
+外部监控探哪条、怎么判，见 [`README.md`](./README.md)「外部监控探哪几条」。
+
+⚠️ 新加一条给外面探的后端路由时，**先经域名 curl 一次看 body**，别只看状态码。
+
+⚠️ **这个部署只有一个入口，而且是公网入口**（宝塔站点直通 web 容器），所以这两条对公网是开着的。
+body 里只有服务名、状态和异常类型名，不带主机、端口、连接串。要挡的话只能在宝塔那一层按 IP 白名单放监控方。

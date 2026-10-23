@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -205,6 +206,63 @@ def register_logger() -> None:
     set_custom_logfile()
 
 
+#: 健康检查里每项依赖的超时（秒）。三项并发，所以总耗时 ≈ 最大的那个，要小于监控方探针的超时
+_DB_TIMEOUT = 5
+_REDIS_TIMEOUT = 3
+
+
+async def _check_database() -> str | None:
+    """通了返回 None，不通返回异常**类型名** —— 不给 message，连接错误的 message 里有主机、端口和用户名"""
+    try:
+        async with asyncio.timeout(_DB_TIMEOUT), async_db_session() as db:
+            await db.execute(text('SELECT 1'))
+    except Exception as e:
+        return type(e).__name__
+    return None
+
+
+async def _check_redis() -> str | None:
+    try:
+        async with asyncio.timeout(_REDIS_TIMEOUT):
+            await redis_client.ping()
+    except Exception as e:
+        return type(e).__name__
+    return None
+
+
+async def _check_heartbeats() -> dict[str, dict[str, object]]:
+    """调度器（beat）/ worker 的心跳（`core/conf.py` 的 `*_HEARTBEAT_REDIS_KEY`）
+
+    `ok` 阈值内 · `stale` 超过阈值（停在那一刻）· `missing` 从没写过（调度那一行没种上 / Redis 被清过）·
+    `unknown` 判断不了：心跳读不到，或者调度器不在 —— 调度器不派发，worker 就收不到心跳任务，
+    它停没停看不出来，报成 `stale` 是冤枉它
+    """
+    max_age = settings.HEARTBEAT_MAX_AGE_SECONDS
+    try:
+        async with asyncio.timeout(_REDIS_TIMEOUT):
+            raws = await redis_client.mget(settings.SCHEDULER_HEARTBEAT_REDIS_KEY, settings.WORKER_HEARTBEAT_REDIS_KEY)
+        now = time.time()
+        ages = [None if raw is None else max(0, round(now - float(raw))) for raw in raws]
+    except Exception as e:
+        unknown = {'status': 'unknown', 'last_seen_seconds': None, 'error': type(e).__name__}
+        return {'scheduler': dict(unknown), 'worker': dict(unknown)}
+
+    scheduler, worker = (
+        {
+            'status': 'missing' if age is None else 'ok' if age <= max_age else 'stale',
+            'last_seen_seconds': age,
+        }
+        for age in ages
+    )
+    if scheduler['status'] != 'ok' and worker['status'] != 'ok':
+        worker['status'] = 'unknown'
+    return {'scheduler': scheduler, 'worker': worker}
+
+
+def _dependency(err: str | None) -> dict[str, object]:
+    return {'status': 'ok'} if err is None else {'status': 'error', 'error': err}
+
+
 def register_health(app: FastAPI) -> None:
     """注册健康检查端点
 
@@ -216,37 +274,33 @@ def register_health(app: FastAPI) -> None:
     就不带 `DependsJwtAuth` / `demo_site`；不加 `Depends(RateLimiter(...))` 就不受限流。
     两者都是 per-route 依赖，不挂就没有。
 
+    两条各管一件事，**不要互相合并**：
+
+    | 端点 | 看什么 | 谁在用 |
+    |---|---|---|
+    | ready | DB + Redis | compose 里 api 的 healthcheck（web / beat 都等它）· `prod.sh up` 的部署后探活 |
+    | status | 全部服务（含调度器 / worker 心跳） | 外部监控，经 web 的 nginx 探 `/api/health/status` |
+
+    原来还有一条只答「进程在不在」的 `/health/live`，唯一的调用方是镜像里的 HEALTHCHECK，
+    而 compose 给每个服务都另配了 healthcheck、把它盖掉了 —— 实际没人用，#147 删了。
+    将来上 K8s / Swarm 这类会按健康检查自动重启容器的编排时，再加回一条**不碰任何依赖**的存活探针：
+    拿 ready 顶替的话，数据库抖一下就会把所有副本一起重启。
+
+    ⚠️ ready / status 经 web 的 nginx 不鉴权地开着（`apps/web/nginx.conf`）——
+    响应里只放状态、检查项名、异常类型名，**不放异常 message**。
+
     :param app: FastAPI 应用实例
     :return:
     """
 
-    @app.get('/health/live', include_in_schema=False)
-    async def liveness() -> JSONResponse:
-        """存活探针 —— 刻意不碰任何外部依赖
-
-        探 DB 的话，数据库抖一下会让编排把**所有**副本一起 kill，
-        把一次短暂的依赖故障放大成全站雪崩。存活只回答「进程还在不在」。
-        """
-        return JSONResponse({'status': 'alive'})
-
     @app.get('/health/ready', include_in_schema=False)
     async def readiness() -> JSONResponse:
         """就绪探针 —— 探 DB + Redis，决定能不能进流量"""
-        checks: dict[str, str] = {}
-
-        try:
-            async with asyncio.timeout(5), async_db_session() as db:
-                await db.execute(text('SELECT 1'))
-            checks['database'] = 'ok'
-        except Exception as e:
-            checks['database'] = f'error: {type(e).__name__}'
-
-        try:
-            async with asyncio.timeout(3):
-                await redis_client.ping()
-            checks['redis'] = 'ok'
-        except Exception as e:
-            checks['redis'] = f'error: {type(e).__name__}'
+        db_err, redis_err = await asyncio.gather(_check_database(), _check_redis())
+        checks = {
+            'database': 'ok' if db_err is None else f'error: {db_err}',
+            'redis': 'ok' if redis_err is None else f'error: {redis_err}',
+        }
 
         ready = all(v == 'ok' for v in checks.values())
         # 🔴 不能用 ResponseModel 那层信封 —— 它永远是 HTTP 200，
@@ -255,6 +309,39 @@ def register_health(app: FastAPI) -> None:
         return JSONResponse(
             {'status': 'ready' if ready else 'degraded', 'checks': checks},
             status_code=200 if ready else 503,
+        )
+
+    @app.get('/health/status', include_in_schema=False)
+    async def status() -> JSONResponse:
+        """各服务的状态一页看全：api · database · redis · scheduler · worker，全部 ok 才 200
+
+        worker / 调度器挂了网页照常能开、ready 照常 200，只有后台任务悄悄停 —— 这里是唯一看得出来的地方。
+
+        🔴 **心跳不能并进 `/health/ready`。** compose 里 api 的 healthcheck 用的就是 ready，
+        并进去的话 worker 一挂 api 也被判不健康，web / beat 又 `depends_on` api 健康，连成一串。
+
+        🔴 **只列自己运维的组件。** 邮件、对象存储、OAuth2、AI 服务商这类外部对接坏了不能让这条 503 ——
+        那是对方的事，报进来就是天天误报，监控方很快就会把它静音。
+
+        字段顺序是契约的一部分：监控方会按 `{"status":"ok","services"` 这类关键字匹配。
+        """
+        # 三项并发，各自带超时：最慢的 DB 那项 5 秒封顶，不会叠加成 5 + 3 + 3
+        db_err, redis_err, heartbeats = await asyncio.gather(_check_database(), _check_redis(), _check_heartbeats())
+        services: dict[str, dict[str, object]] = {
+            # 这个请求能被回答，api 就是在的；api 不在时 nginx 替它回 503
+            'api': {'status': 'ok'},
+            'database': _dependency(db_err),
+            'redis': _dependency(redis_err),
+            **heartbeats,
+        }
+        ok = all(s['status'] == 'ok' for s in services.values())
+        return JSONResponse(
+            {
+                'status': 'ok' if ok else 'degraded',
+                'services': services,
+                'heartbeat_max_age_seconds': settings.HEARTBEAT_MAX_AGE_SECONDS,
+            },
+            status_code=200 if ok else 503,
         )
 
 

@@ -79,11 +79,17 @@ class TaskBase(Task):
     acks_late = True
     reject_on_worker_lost = True
 
+    #: 开始 / 成功时要不要推送。高频任务（`health.heartbeat`，每分钟一次）在装饰器上传
+    #: `notify=False` 关掉 —— 推送经 Redis 广播给**所有**在线页面。失败照推
+    notify: bool = True
+
     async def before_start(self, task_id: str, args, kwargs) -> None:  # ruff:ignore[missing-type-function-argument]
-        await task_notification(msg=f'任务 {self.name}（{task_id}）开始执行')
+        if self.notify:
+            await task_notification(msg=f'任务 {self.name}（{task_id}）开始执行')
 
     async def on_success(self, retval: Any, task_id: str, args, kwargs) -> None:  # ruff:ignore[missing-type-function-argument]
-        await task_notification(msg=f'任务 {self.name}（{task_id}）执行成功')
+        if self.notify:
+            await task_notification(msg=f'任务 {self.name}（{task_id}）执行成功')
 
     def on_failure(self, exc: Exception, task_id: str, args, kwargs, einfo) -> None:  # ruff:ignore[missing-type-function-argument]
         # 🔴 这个钩子是**同步**的（celery 只把 before_start/on_success 交给 aio pool），
