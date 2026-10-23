@@ -102,3 +102,39 @@ S3 上 writer 自己攒成 ≥5 MiB 的分片走 multipart（实测 12 MiB → 3
   删文件后删存储）全过，无 page error
 - ⚠️ moto **不校验签名**，「错误的 SecretKey」只能靠 `STORAGE_TEST_S3_ENDPOINT` 指到真服务测
 - ⚠️ 阿里 OSS / 腾讯 COS 仍然**没有**对真账号发过请求（见上面「配置校验」那条）
+
+## 动态配置的回落（`utils/dynamic_config.py` · #139）
+
+`load_config` 把 `sys_config` 的值 `setattr` 到 `settings` 上。**`settings` 是进程级单例** —— 写进去的值一直留着，
+直到下一次加载显式改掉它。这条事实踩出了两个静默的坑，都在给参数配置加「文件上传」组时撞见：
+
+### 🔴 关掉组总开关，进程里还是上一次的库值
+
+**症状**：参数配置页关掉某一组的总开关，横幅写着「后端整组不加载，回落 .env」，界面也降了透明 ——
+而接口给出的仍然是关之前的库值，要**重启**才回落。多副本时更糟：加载过的那台是库值、没加载过的那台是 `.env` 值。
+
+**根因**：原来关组时直接 `return`、行被删时 `continue`、值转换失败时 `continue` —— 三条路都**什么都不写**，
+于是留下的是「上一次加载的值」而不是「`.env` 的值」。转换失败那条的注释还写着「回落到 .env 默认值」，
+只在进程从没加载过时才成立。
+
+**修法**：import 时 `settings.model_copy(deep=True)` 存一份 `_ENV_DEFAULTS`，三条路都**显式写回**它。
+⚠️ 不能拿「当前的 `settings`」当回落值，那正是被污染的那份；也不要在第一次用到时才懒取 —— 测试会先 monkeypatch
+`settings` 再触发加载，懒取会把 monkeypatch 的值记成默认值，而且跨用例留着。
+
+### 🔴 读取侧只接住「转换失败」不够，范围也要卡
+
+**症状**：库里的 `FILE_CHUNK_SIZE` 被直接写成 `'0'`（写入侧的 422 闸门挡的只是接口，挡不住直接写库 / 迁移 / 闸门之前的历史行），
+之后**每一次**分片上传 init 都是 500。
+
+**根因**：`'0'` 过得了 `int()`，loader 照单全收，然后 `multipart_service.init` 里 `ceil(size / 0)`。
+`'-1'` / `'65'` 同样被收下（每片 -1 MiB / 65 MiB）。
+
+**修法**：`load_config` 读取时也过 `DYNAMIC_INT_BOUNDS`（`check_dynamic_int_bounds`），不合格的按键回落 `.env` + 一条 error 日志。
+口令策略那批键走的是同一条路，所以直接写库的 `USER_PASSWORD_MIN_LENGTH = 999` 也会回落（同一段代码推出来的，没单独测）。
+
+**实测**：`app/admin/tests/api_v1/test_upload_policy_config.py`。把 `load_config` 改回原样跑：
+`test_turning_the_group_off_falls_back_to_env` 报 `4194304 == 8388608`（关组之后还是 4 MiB）；
+`test_a_dirty_chunk_size_in_the_db_does_not_break_init` 的 `[0]` 报 `ZeroDivisionError`、`[-1]` 报 `-1048576`、`[65]` 报 `68157440`
+（`['']` / `['abc']` 两条旧代码下本来就绿 —— 转换失败那条路一直在）。
+
+⚠️ 写这类测试的回落真值用**重新构造的 `Settings()`**（重新读 `.env`），不要拿 `_ENV_DEFAULTS` 自己 —— 那是拿被测代码验被测代码。

@@ -287,6 +287,9 @@ class Settings(BaseSettings):
 
     # 分片上传（#122 第三期）：不小于 FILE_CHUNK_THRESHOLD 的文件，前端切成 FILE_CHUNK_SIZE 一片地传，可续传。
     # 两个值由 `GET /sys/files/upload-policy` 下发给前端，前端不写死。
+    # 🔴 参数配置页「文件上传」组（sys_config 的 FILE 组，#139）会**覆盖**这里：组开着且有那一行时库值生效，
+    # 这里只是默认值。⚠️ 库里按 **MiB** 存（界面上填 8），这里是**字节** —— 别把库里的数抄进 .env。
+    # 范围（每片 1–64 MiB、阈值 1–99 MiB，阈值要小于 nginx 的 client_max_body_size）见 dynamic_config.DYNAMIC_INT_BOUNDS
     # 会话在 Redis 里 FILE_MULTIPART_EXPIRE_SECONDS 没动静就过期（每传一片续一次），
     # 过期会话留下的分片由 `maintenance.purge_stale_multipart` 清掉
     FILE_CHUNK_SIZE: int = 8 * 1024 * 1024  # 8 MiB

@@ -153,6 +153,32 @@ A init、片 1/3/5 打 A、2/4 打 B、B complete（两边的访问日志核过�
 刷新后选错文件 → toast 报错、那一行原样留着、没有入队；放弃 → `DELETE` + localStorage 记录清空。
 ⚠️ 前端：`packages/platform/src/upload/chunked.test.ts` 7 条（续传只补缺的片 · 会话过期重开 · 5xx 重试 4xx 不重试 · 取消删会话）
 
+#### 阈值 / 每片大小在参数配置里改（#139）
+
+参数配置 → 文件 → 文件上传（`sys_config` 的 `FILE` 组）。`.env` 的 `FILE_CHUNK_THRESHOLD` / `FILE_CHUNK_SIZE` 只是默认值，
+`dynamic_config.load_file_config` 挂在 `GET /upload-policy` 和 init 上把库值读进来。会话在 init 时记下 `chunk_size`，
+改配置不影响传到一半的文件。
+
+- ⚠️ **库里按 MiB 存，`settings` 里是字节**（界面上填 `8`，不是 `8388608`）。别把库里的数抄进 `.env` ——
+  `FILE_CHUNK_SIZE=8` 在 `.env` 里是 8 **字节**一片
+- 🔴 **阈值的上界 99 是跟着 `apps/web/nginx.conf` 的 `client_max_body_size 100m` 定的**：小于阈值的文件是**一个请求**
+  传完的，阈值调过 100，100 MB 上下的文件就是 nginx 的 413，应用日志里什么都没有（ContiNew 栽的是同一个坑：Spring 的
+  `max-file-size` 和分片阈值不联动）。范围表 `DYNAMIC_INT_BOUNDS` 和前端 `registry.ts` 之间有对账测试，
+  **nginx 那个值没有** —— 改它的时候自己同步这两处
+- 阈值 < 每片大小时前端两行都报错、挡保存（那段文件会「分片上传但只有一片」，能用、白多两个请求）。
+  后端只卡单项范围，没做跨字段（同 `USER_PASSWORD_MIN/MAX_LENGTH`）
+- 前端 `upload-store.ts` 的策略**缓存 10 秒**，原来是整个页面会话只取一次 —— 管理员改完回文件页试传，拿到的还是改之前那份
+  （这一条是读代码得出的，没在浏览器里复现旧行为）
+- **不做按存储配置**：我们的分片是存储里的独立对象，不是 S3 原生 multipart，S3「每片 ≥ 5 MB」的约束不适用。
+  ContiNew 4.2 的其余几项（按文件名查重、文件名冲突自动重命名、浏览器直传）为什么不跟，见 issue #139 正文
+
+实测：`app/admin/tests/api_v1/test_upload_policy_config.py` 16 条（改了就生效 · 关组回落 · 库里脏值 · 写入侧范围与边界），
+其中关组回落和脏值那两组在旧的 `load_config` 上各自打红（见 [`backend/utils` 分册](../../../../../apps/api/backend/utils/AGENTS.md)
+「动态配置的回落」）。迁移在 PostgreSQL 上 up → down → up，先手工插一条同 key 的行：up 不重复插、不覆盖它的值，
+down 只删迁移自己那几个 ID。浏览器（Playwright）：阈值填 120 → 「不能大于 99」、填 4（每片 8）→ 两行都报、保存禁用；
+存 2 / 1 之后同时选 1.5 MiB 和 3.5 MiB 两个文件 → 前者一次 `POST /upload`，后者 init + 4 片 + complete，
+两个文件共用一次 `upload-policy`。⚠️ MySQL / SQL Server 上的种子和迁移只过了离线编译那条守卫，没在真库上灌过
+
 ### 缩略图是「把原图当缩略图」，有闸门
 
 后端**没有缩略图列**（ContiNew Admin 有 `thumbnail_name` / `thumbnail_size`），所以

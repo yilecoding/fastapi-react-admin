@@ -34,6 +34,9 @@ values
 (16, '状态', 'LOGIN', 'LOGIN_CONFIG_STATUS', '1', false, null, now(), null),
 (17, '验证码开关', 'LOGIN', 'LOGIN_CAPTCHA_ENABLED', 'true', false, null, now(), null),
 (18, '开发配置总开关', 'DEV', 'DEV_CONFIG_STATUS', '1', true, null, now(), null),
-(19, '组件沙箱', 'DEV', 'DEV_SANDBOX_ENABLED', 'true', true, null, now(), null);
+(19, '组件沙箱', 'DEV', 'DEV_SANDBOX_ENABLED', 'true', true, null, now(), null),
+(20, '状态', 'FILE', 'FILE_CONFIG_STATUS', '1', false, null, now(), null),
+(21, '分片阈值（MiB）', 'FILE', 'FILE_CHUNK_THRESHOLD', '16', false, '不小于这个大小的文件分片上传；须小于反代的 client_max_body_size', now(), null),
+(22, '分片大小（MiB）', 'FILE', 'FILE_CHUNK_SIZE', '8', false, '只影响新开始的上传；.env 同名项的单位是字节', now(), null);
 
 select setval(pg_get_serial_sequence('sys_config', 'id'),coalesce(max(id), 0) + 1, true) from sys_config;

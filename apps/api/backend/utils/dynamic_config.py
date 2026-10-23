@@ -7,10 +7,26 @@ from backend.core.conf import settings
 from backend.plugin.core import check_plugin_installed
 from backend.utils.serializers import select_list_serialize
 
+#: 动态配置覆盖之前的那份 settings（= `.env` / `conf.py` 给的值），回落时从这里取。
+#:
+#: 🔴 不能拿「当前的 `settings`」当回落值：`load_config` 是往**进程级单例**上 `setattr`，
+#: 上一次加载写进去的库值会一直留着。原来组总开关关掉时直接 `return`、行被删掉时 `continue`，
+#: 于是界面上写着「整组不加载，回落 .env」，进程里却还是上一次的库值，要重启才回落 ——
+#: 而多副本下没加载过的那台是 .env 值、加载过的那台是库值，两台机器给出不同的答案
+_ENV_DEFAULTS = settings.model_copy(deep=True)
+
 
 def str_to_bool(value: str) -> bool:
     """将字符串转换为布尔值"""
     return value == 'true'
+
+
+_MIB = 1024 * 1024
+
+
+def mib_to_bytes(value: str) -> int:
+    """库里按 MiB 存（界面上填 `8` 而不是 `8388608`），settings 里是字节"""
+    return int(value) * _MIB
 
 
 async def load_config(
@@ -39,18 +55,26 @@ async def load_config(
 
     config_type = getattr(ConfigType, config_type_attr)
     dynamic_config = await config_service.get_all(db=db, type=config_type)
-    if not dynamic_config:
-        return
-
-    config_list = select_list_serialize(dynamic_config) if hasattr(dynamic_config[0], '__table__') else dynamic_config
-    configs = {dc['key']: dc['value'] for dc in config_list}
-    if configs.get(status_key, '1') == '0':
-        return
+    configs: dict[str, str] = {}
+    if dynamic_config:
+        rows = select_list_serialize(dynamic_config) if hasattr(dynamic_config[0], '__table__') else dynamic_config
+        configs = {dc['key']: dc['value'] for dc in rows}
+    enabled = configs.get(status_key, '1') != '0'
 
     for config_key, converter in mapping.items():
-        if config_key not in configs:
+        # 组关了 / 这一行被删了 / 值是脏的，一律**显式**写回 .env 的值，见 `_ENV_DEFAULTS` 的注释
+        default = getattr(_ENV_DEFAULTS, config_key)
+        if not enabled or config_key not in configs:
+            setattr(settings, config_key, default)
             continue
         raw = configs[config_key]
+        # 读取侧也要卡范围：写入侧的闸门挡不住直接写库 / 迁移 / 闸门上线前的历史行。
+        # `FILE_CHUNK_SIZE = '0'` 能通过 int()，然后在 init 里 `ceil(size / 0)` —— 每次分片上传都 500
+        problem = check_dynamic_int_bounds(config_key, raw)
+        if problem:
+            log.error(f'参数配置 {problem}，已忽略并回落到默认值')
+            setattr(settings, config_key, default)
+            continue
         try:
             value = converter(raw)
         except (TypeError, ValueError):
@@ -64,10 +88,10 @@ async def load_config(
             # 包括改坏它的那个管理员自己。实测确认过。
             #
             # 现在退化成「这一个键回落到 .env 默认值 + 一条 error 日志」。
-            # 写入侧的校验在前端（pages/config/registry.ts），
+            # 写入侧现在有 `DYNAMIC_INT_BOUNDS` 闸门（schema 层），
             # 但读取侧不能依赖写入侧的自觉。
             log.error(f'参数配置 {config_key} 的值 {raw!r} 无法转换，已忽略并回落到默认值')
-            continue
+            value = default
         setattr(settings, config_key, value)
 
 
@@ -97,6 +121,13 @@ DYNAMIC_INT_BOUNDS: dict[str, tuple[int, int]] = {
     'USER_PASSWORD_HISTORY_CHECK_COUNT': (0, 24),
     'USER_PASSWORD_MIN_LENGTH': (1, 128),
     'USER_PASSWORD_MAX_LENGTH': (1, 128),
+    # 下面两个的单位是 MiB（见 `load_file_config`）。
+    # 🔴 阈值的上界跟着 `apps/web/nginx.conf` 的 `client_max_body_size 100m` 走：小于阈值的文件是
+    # **一个请求**传完的，阈值调到 100 以上，100 MB 上下的文件就是 nginx 的 413，而应用日志里什么都没有。
+    # 留 1 MiB 给 multipart 的边界和表头。改 nginx 那个值时同步改这里和前端 registry
+    'FILE_CHUNK_THRESHOLD': (1, 99),
+    # 每一片也是一个请求，同样要小于 client_max_body_size；64 MiB 再往上，单片失败重传的代价就太大了
+    'FILE_CHUNK_SIZE': (1, 64),
 }
 
 
@@ -154,3 +185,20 @@ async def load_login_config(db: AsyncSession) -> None:
         'LOGIN_CAPTCHA_ENABLED': str_to_bool,
     }
     await load_config(db, 'login', mapping, 'LOGIN_CONFIG_STATUS')
+
+
+async def load_file_config(db: AsyncSession) -> None:
+    """
+    获取文件上传配置（分片阈值 / 每片大小）
+
+    挂在 `GET /sys/files/upload-policy` 和分片 init 上。会话在 init 时就记下了 `chunk_size`
+    （`multipart_service.MultipartSession`），改配置不影响传到一半的文件
+
+    :param db: 数据库会话
+    :return:
+    """
+    mapping = {
+        'FILE_CHUNK_THRESHOLD': mib_to_bytes,
+        'FILE_CHUNK_SIZE': mib_to_bytes,
+    }
+    await load_config(db, 'file', mapping, 'FILE_CONFIG_STATUS')

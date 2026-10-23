@@ -71,8 +71,8 @@ async def upload_file(
         DependsRBAC,
     ],
 )
-async def get_upload_policy() -> ResponseSchemaModel[GetUploadPolicyDetail]:
-    return response_base.success(data=multipart_service.policy())
+async def get_upload_policy(db: CurrentSession) -> ResponseSchemaModel[GetUploadPolicyDetail]:
+    return response_base.success(data=await multipart_service.policy(db))
 
 
 @router.post(

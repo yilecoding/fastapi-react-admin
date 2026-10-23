@@ -36,6 +36,7 @@ from backend.common.i18n import t
 from backend.common.log import log
 from backend.core.conf import settings
 from backend.database.redis import redis_client
+from backend.utils.dynamic_config import load_file_config
 from backend.utils.file_ops import (
     build_date_dir,
     build_stored_name,
@@ -110,8 +111,9 @@ class MultipartService:
     """分片上传"""
 
     @staticmethod
-    def policy() -> dict[str, int]:
-        """前端据此决定走单次上传还是分片，以及每片多大"""
+    async def policy(db: AsyncSession) -> dict[str, int]:
+        """前端据此决定走单次上传还是分片，以及每片多大（参数配置「文件上传」组可改，`.env` 是默认值）"""
+        await load_file_config(db)
         return {'chunk_threshold': settings.FILE_CHUNK_THRESHOLD, 'chunk_size': settings.FILE_CHUNK_SIZE}
 
     @staticmethod
@@ -184,6 +186,8 @@ class MultipartService:
             raise errors.RequestError(msg=t('error.file.empty'))
         # 落哪个存储在 init 时就定下来：传到一半有人切了默认存储，这个文件仍然完整地落在原来那个里
         target = await storage_service.upload_target(db=db, public=public)
+        # 每片多大在这一刻定下来、记进会话：之后管理员改了配置，传到一半的文件照旧按原来的大小续传
+        await load_file_config(db)
         chunk = settings.FILE_CHUNK_SIZE
         session = MultipartSession(
             upload_id=uuid.uuid4().hex,
