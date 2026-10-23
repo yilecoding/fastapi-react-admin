@@ -106,8 +106,12 @@ test.describe("功能引导", () => {
     // 七步定义、一步目标缺失 → 进度从 1 / 6 起
     await expect(popover(page).locator(".driver-popover-progress-text")).toHaveText("1 / 6")
 
+    const progress = popover(page).locator(".driver-popover-progress-text")
     const titles: string[] = []
     for (let i = 0; i < 6; i += 1) {
+      // 🔴 先等进度走到这一步再读标题：点完「下一步」driver.js 要过渡一会儿才换内容，
+      // 立刻 `textContent()` 读到的还是上一步 —— CI 上实测读成了两个「侧边栏」、少了「帮助」，首跑 + 重试都红
+      await expect(progress).toHaveText(`${i + 1} / 6`)
       titles.push((await popover(page).locator(".driver-popover-title").textContent()) ?? "")
       if (i < 5) await popover(page).getByRole("button", { name: "下一步" }).click()
     }

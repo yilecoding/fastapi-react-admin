@@ -134,11 +134,28 @@ test.describe("列顺序", () => {
     expect(ip0).toBeGreaterThan(-1)
     expect(ip0).toBeLessThan(loc0)
 
-    // 键盘拖：dnd-kit 的 KeyboardSensor —— 空格拿起、方向键挪、空格放下
+    // 键盘拖：dnd-kit 的 KeyboardSensor —— 空格拿起、方向键挪、空格放下。
+    // 🔴 拿起之后它是在 `setTimeout` 里才开始听方向键（`@dnd-kit/core` 的 `KeyboardSensor.attach()`）：
+    // 脚本连着按，方向键比监听器先到，被静静吞掉 —— 合进 main 后的那次 CI 两次都红在这里，本地（含 CPU 降速 6 倍）
+    // 一次都复现不出来。人按不了这么快，所以只是测试的时序：先等「拿起来了」，方向键按到那一列真的动了为止
     await tab.getByTestId("column-settings").click()
-    await page.getByTestId("column-drag-ip").focus()
+    const handle = page.getByTestId("column-drag-ip")
+    await handle.focus()
     await page.keyboard.press("Space")
-    await page.keyboard.press("ArrowDown")
+    await expect(handle).toHaveAttribute("aria-pressed", "true")
+    const row = page.getByTestId("column-row-ip")
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await page.keyboard.press("ArrowDown")
+      // 隔一会儿再看：React 提交、dnd-kit 写上 transform 都在这之后。
+      // （用 setTimeout 不用 requestAnimationFrame：e2e 的 tsconfig 没有 DOM 库，后者类型检查不过）
+      const moved = await row.evaluate(
+        (el) =>
+          new Promise<boolean>((resolve) =>
+            setTimeout(() => resolve(/translate3d\(0px, [1-9]/.test(el.style.transform)), 100)
+          )
+      )
+      if (moved) break
+    }
     await page.keyboard.press("Space")
     await expect(page).toHaveURL(/[?&]cols=/)
     await expect.poll(async () => {

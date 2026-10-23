@@ -371,6 +371,22 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 （关闭其他 / 右侧 / 固定）、个人中心的时区与改密、富文本里的图片、字典与参数配置、
 监控页、后台导出（要起 worker，E2E 环境里没有）。
 
+### 🔴 键盘拖拽（dnd-kit）：脚本连按的方向键会被吞掉
+
+`@dnd-kit/core` 的 `KeyboardSensor` 在空格「拿起」之后，是在 **`setTimeout` 里**才开始监听方向键的
+（`KeyboardSensor.attach()`）。`keyboard.press("Space")` 紧跟 `press("ArrowDown")`，方向键可能比监听器先到 ——
+被静静吞掉，拖拽什么都没发生，测试红在下一句断言上，报错和拖拽无关。
+
+**实测**：`data-io.spec.ts` 的列顺序那条，PR 上的 CI 绿、合进 main 后的那次 CI 首跑 + 重试都红；本地连跑、
+CPU 降速 6 倍各跑 4 次都复现不出来。人按不了这么快，所以这是测试的时序，不是功能的 bug。
+
+**写法**：先等「拿起来了」（拖着的手柄上有 `aria-pressed="true"`），再按方向键、隔一会儿看那一行的 `transform`
+真的动了（没动就再按一次），最后才放下。不要靠 `waitForTimeout` 猜一个够用的毫秒数。
+
+同一个物种：`tour.spec.ts` 点完「下一步」立刻 `textContent()` 读 driver.js 气泡的标题 —— 它要过渡一会儿才换内容，
+CI 上读成了两个「侧边栏」（首跑 + 重试都红，本地一直绿）。**读之前先等一个会变的东西变到位**（这里是进度
+`2 / 6`），`textContent()` / `innerText()` 这类不重试的读法前面都要有这么一句。
+
 ### 导入类用例的 xlsx 现造，不提交固件
 
 `e2e/utils/xlsx.ts` 里有一个最小 xlsx 生成器（单表 + 内联字符串 + 数字格）。
