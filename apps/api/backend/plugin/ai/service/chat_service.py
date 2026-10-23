@@ -103,6 +103,7 @@ class ChatService:
                     db=db,
                     provider=provider,
                     max_tool_rounds=settings.AI_MAX_TOOL_ROUNDS,
+                    user_said=[m['content'] for m in history if m['role'] == MessageRole.USER.value],
                 )
 
                 assistant_parts: list[str] = []

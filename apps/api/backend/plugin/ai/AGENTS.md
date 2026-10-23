@@ -401,3 +401,18 @@ SQLAlchemy 把整个事务标成待回滚，这一轮对话里后面每个工具
 **变异检验** 5 处各打红：建部门丢 `leader_id` · 绕过数据范围查人 · 重名挑第一个 · 不排除停用账号 ·
 换负责人不写 `leader_id`。真实网关上「新建并指定张伟 → 换成李娜」两步，卡片文案和库里的值都对；
 加那半句描述之前，同一句话模型停在「用户张伟未找到」。
+
+## 业务插件自带的工具 · `self_authorized` · `user_said`（#111 第 4 条：在对话里审批）
+
+- **别的插件可以带自己的工具**：`load_builtin_tools` 除了 `tools/`，还 import 每个插件包下的 `ai_tools.py`（有才 import）。
+  依赖方向是业务插件 → ai，ai 不 import 业务插件的任何东西；卸掉 AI 插件，那个文件就没人 import
+- 🔴 **`self_authorized=True`：写工具不要求 `is_staff`**，授权由业务自己判（审批：`act()` 的能力信封，和网页上点按钮同一个函数）。
+  只给登记过的工具开：`test_ai_security.py::test_self_authorized_tools_are_an_explicit_list`（现在是审批的三个）——
+  随手给一个调 service 的写工具加上它，就是非员工经 AI 做了界面上做不了的写操作。另一条
+  `test_staff_gate_still_holds_for_other_mutating_tools`：变异（清单过滤对所有写工具放开 `is_staff`）当场红。
+  ⚠️ dispatch 那一侧的同一个变异（执行时不再查 `is_staff`）**一条都没红，是等价变异**：`dispatch()` 开头先判「在不在 `visible_tools` 里」，
+  非员工调 `dept_create` 在那一步就是 `denied`（变异下实测）。执行时那道是纵深，清单过滤才是承重的 —— 改 dispatcher 时两处一起改
+- 🔴 **`RunContext.user_said`：用户在这段对话里亲口说过的话**（`chat_service` 从历史里填）。给「参数必须是用户原话」的工具核对用
+  （审批意见）。只写进工具描述不够，真模型照样编（审批分册有原话）。`None` = 入口拿不到原话（MCP），那时网页确认页上原样显示的意见是兜底
+- `test_ai_read_tools.py` 对**要指向一条具体记录**的只读工具（`wf_instance_detail`）给格式对、但不存在的 ID，断言「查无此单」：
+  `'x'` 会在工具自己的格式检查里被拦下，等于什么都没测到

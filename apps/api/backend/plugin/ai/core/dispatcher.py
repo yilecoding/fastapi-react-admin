@@ -105,7 +105,7 @@ class ToolDispatcher:
         for spec in candidates:
             if not user_can(user, spec.perm):
                 continue
-            if spec.mutating and not user_can_mutate(user):
+            if spec.mutating and not spec.self_authorized and not user_can_mutate(user):
                 continue
             visible.append(spec)
         return visible
@@ -174,7 +174,7 @@ class ToolDispatcher:
                     summary='只读入口',
                     perm=spec.perm,
                 )
-            if not user_can_mutate(ctx.user):
+            if not spec.self_authorized and not user_can_mutate(ctx.user):
                 await self._audit(
                     ctx, call, ToolInvocationStatus.DENIED, perm=spec.perm, error='非后台管理用户', started=started
                 )

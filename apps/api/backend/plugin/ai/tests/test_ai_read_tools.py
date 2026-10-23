@@ -28,6 +28,10 @@ _NEEDS_NETWORK = {'weather'}
 load_builtin_tools()
 _READ_TOOLS = sorted(s.name for s in _REGISTRY.values() if not s.mutating and s.domain not in _NEEDS_NETWORK)
 
+# 必须指向一条具体记录的工具：给一个格式对、但不存在的 ID，「查无此单」就说明调用一路走到了 service
+# （签名漂移会在那之前就炸成参数错误）。`'x'` 会在工具自己的格式检查里被拦下，什么都没测到
+_POINTED = {'wf_instance_detail': ({'instance_id': '1'}, '审批单不存在')}
+
 
 async def _noop_audit(*_args: Any, **_kwargs: Any) -> None:  # ruff: ignore[unused-async]
     """审计不是这里要测的"""
@@ -38,6 +42,8 @@ def _minimal_args(name: str) -> dict[str, Any]:
     """只填必填参数。不填可选参数是刻意的：可选参数的默认值本身也要能跑通"""
     schema = _REGISTRY[name].parameters
     samples = {'string': 'x', 'integer': 1, 'number': 1, 'boolean': False}
+    if name in _POINTED:
+        return _POINTED[name][0]
     return {key: samples[schema['properties'][key].get('type', 'string')] for key in schema.get('required', [])}
 
 
@@ -50,7 +56,9 @@ def test_read_tools_are_found() -> None:
 def test_read_tool_runs(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
     monkeypatch.setattr(tool_dispatcher, '_audit', _noop_audit)
     # 字段照 JWT 中间件放进 request.user 的那份（GetUserInfoWithRelationDetail）里工具会读到的
-    superuser = SimpleNamespace(id=1, username='admin', dept_id=None, is_superuser=True, is_staff=True, roles=[])
+    superuser = SimpleNamespace(
+        id=1, username='admin', nickname='admin', dept_id=None, is_superuser=True, is_staff=True, roles=[]
+    )
 
     async def _main() -> Any:
         # 独立引擎：共享的 async_test_db_session 绑在 TestClient 的事件循环上
@@ -68,4 +76,7 @@ def test_read_tool_runs(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
             await engine.dispose()
 
     outcome = asyncio.run(_main())
+    if name in _POINTED:
+        assert outcome.kind == 'failed' and _POINTED[name][1] in outcome.payload, f'{name} 跑不通：{outcome.payload}'
+        return
     assert outcome.kind == 'ok', f'{name} 跑不通：{outcome.payload}'
