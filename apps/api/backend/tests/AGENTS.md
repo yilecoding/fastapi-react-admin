@@ -407,7 +407,13 @@ test_init_handles_every_seeded_account` 硬编码断言 `cli.py: _set_admin_pass
 - `api_v1/test_me_envelope.py` 的「设同值 MySQL 返回 0 行」是**测试和文档里的推断写错了**：SQLAlchemy 的 MySQL 方言默认开着
   `CLIENT.FOUND_ROWS`，rowcount 和另两个方言一样数匹配行。已改成三方言同一个断言（同一个错的说法当时扩散到了 6 处文档）
 - 🔴 **`TimeZone` 在 MySQL 上建成 `DATETIME`（精度 0，只到秒）**，库里 99 个时间列全是。回收站「还原」按 `deleted_time` 相等认
-  「同一次删除」，同一秒内手动移除的附件会被误挂回去 → issue #132
+  「同一次删除」，同一秒内手动移除的附件会被误挂回去 → issue #132。**已修**：`TimeZone.load_dialect_impl` 在 MySQL 上给
+  `DATETIME(6)`，已有的库走迁移 `q0000000mysqldt`（`MODIFY` 要把可空性和注释原样带上，见 [`alembic` 分册](../alembic/AGENTS.md)）
+
+**实测证据**（2026-10-23，MySQL 8.4，旧结构的 `fba_test` 迁上来）：全套 853 条，849 过、4 跳过、0 红。反向验证：
+`downgrade -1` 回到精度 0 之后，回收站那条连跑 3 次都红（红在「之前手动移除的关联不该被还原挂回去」）；
+升回精度 6 之后，连跑 3 次都绿。CI 上守着的是 `tests/test_timezone_type.py`：编译三个方言的 DDL，不用连 MySQL
+（变异：去掉 MySQL 分支，mysql 那一项红）。
 
 ⚠️ 建测试库前要先手工 `CREATE DATABASE fba_test CHARACTER SET utf8mb4`（三个方言都是，`reset_test_db` 不建库）。
 
