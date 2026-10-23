@@ -31,6 +31,7 @@ from backend.plugin.workflow.enums import FORM_BIZ_TYPE
 from backend.plugin.workflow.model import WfDefinition, WfDefinitionVersion
 from backend.plugin.workflow.schema.workflow import (
     ActionParam,
+    AiDesignParam,
     CreateDefinitionParam,
     DraftParam,
     HandoverParam,
@@ -39,7 +40,13 @@ from backend.plugin.workflow.schema.workflow import (
     StartParam,
     UpdateDefinitionParam,
 )
-from backend.plugin.workflow.service import ai_review_service, definition_service, query_service, runtime_service
+from backend.plugin.workflow.service import (
+    ai_design_service,
+    ai_review_service,
+    definition_service,
+    query_service,
+    runtime_service,
+)
 from backend.plugin.workflow.service.runtime_service import Actor
 
 router = APIRouter()
@@ -459,6 +466,18 @@ async def update_definition(db: CurrentSessionTransaction, pk: Pk, obj: UpdateDe
 async def delete_definition(db: CurrentSessionTransaction, pk: Pk) -> ResponseModel:
     await definition_service.delete(db, pk)
     return response_base.success()
+
+
+@router.post(
+    '/definitions/{pk}/ai-generate',
+    summary='AI 一句话生成表单与流程（只回结果，不改草稿）',
+    dependencies=[Depends(RequestPermission('workflow:definition:edit')), DependsRBAC],
+)
+async def ai_generate_definition(request: Request, db: CurrentSession, pk: Pk, obj: AiDesignParam) -> ResponseModel:
+    # 不用 CurrentSessionTransaction：模型调用要几十秒，不能开着事务等；调用记录自己开一个短事务写
+    await definition_service.get(db, pk)
+    data = await ai_design_service.generate(db, definition_id=pk, prompt=obj.prompt, user_id=request.user.id)
+    return response_base.success(data=data)
 
 
 @router.post(

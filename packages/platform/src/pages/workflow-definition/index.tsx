@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
   IconAlertTriangle, IconArrowLeft, IconCircleX, IconDeviceFloppy, IconDots, IconHierarchy2, IconLoader2,
-  IconPencil, IconPlayerPause, IconPlayerPlay, IconPlus, IconRocket, IconSearch, IconTrash,
+  IconPencil, IconPlayerPause, IconPlayerPlay, IconPlus, IconRocket, IconSearch, IconSparkles, IconTrash,
 } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
@@ -37,6 +37,7 @@ import {
   type Definition, type FlowModel, type FormSchema, type Issue,
 } from '../workflow/api'
 import { EMPTY_MODEL, usedFields } from '../workflow/flow-edit'
+import { AiDesignDialog } from './ai-design-dialog'
 import { TemplateTile } from '../workflow/track'
 import { FlowDesigner } from './flow-designer'
 import { FormDesigner } from './form-designer'
@@ -358,6 +359,7 @@ function Designer({
   const [draft, setDraft] = React.useState<Draft | null>(null)
   const [issues, setIssues] = React.useState<Issue[]>([])
   const [leaving, setLeaving] = React.useState(false)
+  const [aiOpen, setAiOpen] = React.useState(false)
 
   if (query.isPending) return <Skeleton className="h-96 w-full" />
   if (query.error || !query.data) return <QueryError error={query.error} onRetry={() => query.refetch()} />
@@ -461,6 +463,12 @@ function Designer({
           ))}
         </ol>
         <span className="flex items-center gap-2">
+          <Can perm="workflow:definition:edit">
+            <Button variant="ghost" size="sm" onClick={() => setAiOpen(true)} data-testid="wfd-ai-open">
+              <IconSparkles className="size-4 text-primary" />
+              {t('AI 生成')}
+            </Button>
+          </Can>
           <Can perm="workflow:definition:edit">
             <Button variant="outline" size="sm" onClick={doSave} disabled={!dirty || save.isPending} data-testid="wfd-save">
               {save.isPending ? <IconLoader2 className="size-4 animate-spin" /> : <IconDeviceFloppy className="size-4" />}
@@ -569,6 +577,21 @@ function Designer({
           issueNodes={issueNodes}
         />
       )}
+
+      <AiDesignDialog
+        id={id}
+        open={aiOpen}
+        onOpenChange={setAiOpen}
+        replaces={cur.form.fields.length > 0 || Boolean(cur.model.root.next)}
+        onResult={(res) => {
+          // 只换表单和流程：名称 / 分组 / AI 预审是管理员在「基础信息」里定的，生成的不该动它们
+          setDraft({ ...cur, form: res.form, model: { ...res.model, aiReview: cur.model.aiReview } })
+          // 发布校验的问题（多半是「没配审批人」：具体的人模型不知道）照常列出来，点一下定位
+          setIssues(res.issues)
+          onStep('form')
+          toast.success(t('已生成到草稿：检查之后再保存或发布'))
+        }}
+      />
 
       <ConfirmDialog
         open={leaving}

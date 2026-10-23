@@ -283,6 +283,10 @@ error:
     username_registered: Username is already registered
     wrong_old_password: Current password is incorrect
   workflow:
+    ai_no_plugin: The AI assistant plugin is not installed
+    ai_no_provider: 'No model provider is available. Add one under "AI assistant → Models" first'
+    ai_model_timeout: The model took too long to respond
+    ai_design_failed: 'The AI could not produce a usable workflow, so your design is unchanged. Reason: {reason}'
     attachment_not_yours: You can only attach files you uploaded yourself
     instance_not_found: Approval not found
     instance_finished: This approval has already ended

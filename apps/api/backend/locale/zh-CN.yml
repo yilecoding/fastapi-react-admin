@@ -284,6 +284,10 @@ error:
     username_registered: 用户名已注册
     wrong_old_password: 原密码错误
   workflow:
+    ai_no_plugin: 没有安装 AI 助手插件
+    ai_no_provider: 没有可用的模型供应商，先在「AI 助手 → 模型」里配一个
+    ai_model_timeout: 模型太久没有返回
+    ai_design_failed: 'AI 没能生成可用的流程定义，你的设计没有改动。原因：{reason}'
     attachment_not_yours: 只能添加你自己上传的附件
     instance_not_found: 审批单不存在
     instance_finished: 审批已经结束，不能再操作
