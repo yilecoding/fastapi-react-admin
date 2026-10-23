@@ -3,6 +3,7 @@ from typing import Annotated
 
 from sqlalchemy import BigInteger, DateTime, String, Text, TypeDecorator, Unicode
 from sqlalchemy.dialects.mssql import NVARCHAR as MSSQL_NVARCHAR
+from sqlalchemy.dialects.mysql import DATETIME as MYSQL_DATETIME
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.engine.interfaces import Dialect
 from sqlalchemy.ext.asyncio import AsyncAttrs
@@ -123,6 +124,14 @@ class TimeZone(TypeDecorator[datetime]):
     @property
     def python_type(self) -> type[datetime]:
         return datetime
+
+    def load_dialect_impl(self, dialect: Dialect) -> TypeEngine:
+        # 🔴 MySQL 的 DATETIME 不写精度就是 0、只到秒：同一秒内的两件事分不出先后，「按时间相等认同一批」
+        # 的逻辑会串（回收站还原把同一秒内手动移除的附件一起挂回去，#132）。另两个方言本来就到微秒以下
+        # （timestamptz / datetimeoffset(7)）。已有的库靠迁移 `q0000000mysqldt` 升上来
+        if dialect.name == 'mysql':
+            return dialect.type_descriptor(MYSQL_DATETIME(fsp=6))
+        return dialect.type_descriptor(self.impl)
 
     def process_bind_param(self, value: datetime | None, dialect) -> datetime | None:  # ruff:ignore[missing-type-function-argument]
         if value is not None and value.tzinfo is None:

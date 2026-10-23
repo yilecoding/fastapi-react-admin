@@ -96,6 +96,19 @@ stamp 只是把这件事声明出来。
 只改 `down_revision` → `upgrade head` 退出码 0、一条迁移都没执行、`alembic current` 显示 `k0000000wfaireview (head)`；
 换成新 ID 之后 → `FAILED: Can't locate revision identified by 'k0000000wfaireview'`。
 
+### 🔴 MySQL 上改列类型：`MODIFY` 会把没写上的属性丢掉
+
+MySQL 的 `ALTER TABLE … MODIFY` 是把整列**重新定义**一遍，不是「只改类型」：没写 `NOT NULL` 就变成可空，
+没写 `COMMENT` 注释就没了，两样都不报错。`q0000000mysqldt`（时间列升到 `DATETIME(6)`，#132）因此从
+`information_schema.COLUMNS` 读出每一列的可空性和注释，原样写回 `MODIFY`；带默认值或 `EXTRA`
+（`ON UPDATE …`）的时间列本仓库没有，碰到就抛错停下来，不去猜。同一张表的几列合成一条 `ALTER`，因为
+MySQL 改列类型要重建整张表，分开写的话，有三个时间列的大表就要重建三次。
+
+**实测证据**（MySQL 8.4，2026-10-23）：
+- 临时表 `a DATETIME NOT NULL COMMENT '创建时间'` 裸跑 `MODIFY a DATETIME(6)`，之后 `IS_NULLABLE=YES`、注释为空
+- 在旧结构的 `fba_test` 上（107 个时间列，精度全是 0）跑 `upgrade` 之后，107 列精度全是 6，名字、可空性、默认值、`EXTRA`、注释逐列一致
+- `downgrade -1` 之后，和最初的快照逐字节相同
+
 ## 种子的一致性有两维，行数/列清单只是其中一维
 
 `tests/test_seed_dialects.py` 原来查四件事：三份文件都在 · 表相同 ·

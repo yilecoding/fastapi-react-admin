@@ -94,7 +94,7 @@
 |---|---|---|
 | **PostgreSQL**（默认） | 新项目首选，本地 `docker compose up` 就有 | CI 每次跑后端全套 |
 | **SQL Server** | 已有微软技术栈的企业 | CI 每次跑后端全套 + 前端端到端 |
-| **MySQL** | 已有 MySQL 运维的团队 | 不在 CI 里，按需本地跑全套；最近一次只剩 1 条已知问题（[#132](https://github.com/yilecoding/fastapi-react-admin/issues/132)） |
+| **MySQL** | 已有 MySQL 运维的团队 | 不在 CI 里，按需本地跑全套；最近一次（2026-10-23）全部通过 |
 
 ## 快速开始
 
