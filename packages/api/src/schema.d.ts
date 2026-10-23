@@ -115,6 +115,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/depts/import/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下载部门导入模板 */
+        get: operations["download_dept_import_template_api_v1_sys_depts_import_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/depts/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 预览部门导入 */
+        post: operations["preview_dept_import_api_v1_sys_depts_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/depts/import/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 提交部门导入 */
+        post: operations["commit_dept_import_api_v1_sys_depts_import_commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/depts/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 导出部门 */
+        post: operations["export_depts_api_v1_sys_depts_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/depts/{pk}": {
         parameters: {
             query?: never;
@@ -379,6 +447,23 @@ export interface paths {
         put?: never;
         /** 提交用户导入 */
         post: operations["commit_user_import_api_v1_sys_users_import_commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/users/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 导出用户 */
+        post: operations["export_users_api_v1_sys_users_export_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1191,6 +1276,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 我的导出记录 */
+        get: operations["get_my_exports_api_v1_sys_exports_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/exports/{pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 导出记录详情（轮询进度用） */
+        get: operations["get_my_export_api_v1_sys_exports__pk__get"];
+        put?: never;
+        post?: never;
+        /** 删除导出记录（连同文件） */
+        delete: operations["delete_my_export_api_v1_sys_exports__pk__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/exports/{pk}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下载导出文件 */
+        get: operations["download_my_export_api_v1_sys_exports__pk__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/imports/{token}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下载导入错误报告 */
+        get: operations["download_import_report_api_v1_sys_imports__token__report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/notifications": {
         parameters: {
             query?: never;
@@ -1270,6 +1424,23 @@ export interface paths {
         put?: never;
         /** 发送站内通知 */
         post: operations["send_notification_api_v1_sys_notifications_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notices/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 导出通知公告 */
+        post: operations["export_notices_api_v1_sys_notices_export_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1803,6 +1974,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/dict-datas/import/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 下载字典数据导入模板 */
+        get: operations["download_dict_data_import_template_api_v1_sys_dict_datas_import_template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/dict-datas/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 预览字典数据导入 */
+        post: operations["preview_dict_data_import_api_v1_sys_dict_datas_import_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/dict-datas/import/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 提交字典数据导入 */
+        post: operations["commit_dict_data_import_api_v1_sys_dict_datas_import_commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/dict-datas/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 导出字典数据 */
+        post: operations["export_dict_datas_api_v1_sys_dict_datas_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/dict-datas/{pk}": {
         parameters: {
             query?: never;
@@ -2004,6 +2243,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/logs/login/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 导出登录日志 */
+        post: operations["export_login_logs_api_v1_logs_login_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/logs/login/all": {
         parameters: {
             query?: never;
@@ -2034,6 +2290,23 @@ export interface paths {
         post?: never;
         /** 批量删除操作日志 */
         delete: operations["delete_opera_logs_api_v1_logs_opera_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/logs/opera/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 导出操作日志 */
+        post: operations["export_opera_logs_api_v1_logs_opera_export_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2952,6 +3225,22 @@ export interface components {
         Body_install_plugin_api_v1_sys_plugins_post: {
             /** File */
             file?: string | null;
+        };
+        /** Body_preview_dept_import_api_v1_sys_depts_import_preview_post */
+        Body_preview_dept_import_api_v1_sys_depts_import_preview_post: {
+            /**
+             * File
+             * @description xlsx 文件
+             */
+            file: string;
+        };
+        /** Body_preview_dict_data_import_api_v1_sys_dict_datas_import_preview_post */
+        Body_preview_dict_data_import_api_v1_sys_dict_datas_import_preview_post: {
+            /**
+             * File
+             * @description xlsx 文件
+             */
+            file: string;
         };
         /** Body_preview_user_import_api_v1_sys_users_import_preview_post */
         Body_preview_user_import_api_v1_sys_users_import_preview_post: {
@@ -4772,6 +5061,93 @@ export interface components {
             updated_time?: string | null;
         };
         /**
+         * GetExportJobDetail
+         * @description 一条导出记录
+         */
+        GetExportJobDetail: {
+            /**
+             * Id
+             * @description 导出记录 ID
+             */
+            id: string | number;
+            /**
+             * Resource
+             * @description 导出的资源
+             */
+            resource: string;
+            /**
+             * Title
+             * @description 资源名
+             */
+            title: string;
+            /**
+             * Format
+             * @description 文件格式
+             */
+            format: string;
+            /**
+             * Status
+             * @description 状态（0：排队、1：生成中、2：完成、3：失败、4：已过期）
+             */
+            status: number;
+            /**
+             * Total
+             * @description 发起时按条件数出的行数
+             */
+            total: number;
+            /**
+             * Row Count
+             * @description 已写出的行数（生成中是进度，完成后是最终行数）
+             */
+            row_count?: number | null;
+            /**
+             * File Name
+             * @description 下载文件名
+             */
+            file_name: string;
+            /**
+             * File Size
+             * @description 文件字节数
+             */
+            file_size?: number | null;
+            /**
+             * File Sha256
+             * @description 文件 SHA-256
+             */
+            file_sha256?: string | null;
+            /**
+             * Error
+             * @description 失败原因
+             */
+            error?: string | null;
+            /**
+             * Download Count
+             * @description 下载次数
+             */
+            download_count: number;
+            /**
+             * Created Time
+             * Format: date-time
+             * @description 发起时间
+             */
+            created_time: string;
+            /**
+             * Started Time
+             * @description 开始生成的时间
+             */
+            started_time?: string | null;
+            /**
+             * Finished Time
+             * @description 结束时间
+             */
+            finished_time?: string | null;
+            /**
+             * Expire Time
+             * @description 文件过期时间
+             */
+            expire_time?: string | null;
+        };
+        /**
          * GetFileDetail
          * @description 文件详情
          */
@@ -6566,25 +6942,61 @@ export interface components {
             key: string;
         };
         /**
+         * ImportColumnDetail
+         * @description 预览表格的一列
+         */
+        ImportColumnDetail: {
+            /**
+             * Key
+             * @description 列 key
+             */
+            key: string;
+            /**
+             * Label
+             * @description 列名（当前语言）
+             */
+            label: string;
+            /**
+             * Required
+             * @description 是否必填
+             */
+            required: boolean;
+        };
+        /**
          * ImportCommitDetail
          * @description 提交结果
          */
         ImportCommitDetail: {
             /**
+             * Committed
+             * @description 是否已提交
+             */
+            committed: boolean;
+            /**
              * Created
-             * @description 成功创建的用户名
+             * @description 新增的（业务键）
              */
             created: string[];
+            /**
+             * Updated
+             * @description 更新的（业务键）
+             */
+            updated: string[];
             /**
              * Failed
              * @description 失败的行
              */
             failed: components["schemas"]["ImportRowError"][];
             /**
-             * Used Default Password
-             * @description 这批账号是否使用了系统默认密码
+             * Notes
+             * @description 需要提醒的事
              */
-            used_default_password: boolean;
+            notes?: string[];
+            /**
+             * Has Report
+             * @description 是否有错误报告可下载
+             */
+            has_report: boolean;
         };
         /**
          * ImportCommitParam
@@ -6601,6 +7013,12 @@ export interface components {
              * @description 要排除的 Excel 行号
              */
             exclude_rows?: number[];
+            /**
+             * Atomic
+             * @description 是否全部成功才提交
+             * @default false
+             */
+            atomic: boolean;
         };
         /**
          * ImportPreviewDetail
@@ -6609,7 +7027,7 @@ export interface components {
         ImportPreviewDetail: {
             /**
              * Import Token
-             * @description 导入令牌
+             * @description 导入令牌（一次性）
              */
             import_token: string;
             /**
@@ -6618,15 +7036,35 @@ export interface components {
              */
             expire_seconds: number;
             /**
+             * Mode
+             * @description 导入模式（create：只新增、upsert：新增并更新、update：只更新）
+             */
+            mode: string;
+            /**
+             * Columns
+             * @description 列
+             */
+            columns: components["schemas"]["ImportColumnDetail"][];
+            /**
              * Total
              * @description 解析出的数据行数
              */
             total: number;
             /**
              * Valid
-             * @description 其中可以建的行数
+             * @description 其中能导的行数
              */
             valid: number;
+            /**
+             * To Create
+             * @description 会新增的行数
+             */
+            to_create: number;
+            /**
+             * To Update
+             * @description 会更新的行数
+             */
+            to_update: number;
             /**
              * Rows
              * @description 逐行结果
@@ -6643,6 +7081,11 @@ export interface components {
              * @default 0
              */
             empty_rows: number;
+            /**
+             * Has Report
+             * @description 是否有错误报告可下载
+             */
+            has_report: boolean;
         };
         /**
          * ImportPreviewRow
@@ -6655,40 +7098,22 @@ export interface components {
              */
             row_no: number;
             /**
-             * Username
-             * @description 用户名
+             * Values
+             * @description 单元格原文
              */
-            username?: string | null;
-            /**
-             * Nickname
-             * @description 昵称
-             */
-            nickname?: string | null;
-            /**
-             * Email
-             * @description 邮箱
-             */
-            email?: string | null;
-            /**
-             * Phone
-             * @description 手机号
-             */
-            phone?: string | null;
-            /**
-             * Dept Code
-             * @description 部门编码
-             */
-            dept_code?: string | null;
-            /**
-             * Role Codes
-             * @description 角色编码
-             */
-            role_codes?: string[];
+            values: {
+                [key: string]: string | null;
+            };
             /**
              * Ok
-             * @description 这一行能不能建
+             * @description 这一行能不能导
              */
             ok: boolean;
+            /**
+             * Action
+             * @description 会做什么
+             */
+            action?: string | null;
             /**
              * Errors
              * @description 这一行的问题
@@ -6697,7 +7122,7 @@ export interface components {
         };
         /**
          * ImportRowError
-         * @description 一行里某一处的问题
+         * @description 一行里的问题
          */
         ImportRowError: {
             /**
@@ -6705,11 +7130,6 @@ export interface components {
              * @description Excel 行号
              */
             row_no: number;
-            /**
-             * Column
-             * @description 出问题的列，整行性问题为空
-             */
-            column?: string | null;
             /**
              * Msg
              * @description 问题描述
@@ -6833,9 +7253,9 @@ export interface components {
          * NotificationCategory
          * @description 站内通知分类
          *
-         *     ⚠️ `TASK` 目前**没有生产者**：任务执行事件走 socket.io 的瞬时 toast，不落库
-         *     （见 `app/task/tasks/base.py: TaskBase`）。留着这个取值是因为「任务失败要留痕」
-         *     是可预期的下一步，而分类的数值一旦发出去就不该再改。
+         *     `TASK` 的生产者是后台导出（`app/task/tasks/export/tasks.py`）：生成完 / 失败时给发起人发一条，
+         *     链到个人中心的「导出记录」。调度任务的执行事件仍然走 socket.io 的瞬时 toast，不落库
+         *     （见 `app/task/tasks/base.py: TaskBase`）。
          * @enum {integer}
          */
         NotificationCategory: 0 | 1 | 2 | 3;
@@ -7146,6 +7566,32 @@ export interface components {
         PageData_GetDictTypeDetail_: {
             /** Items */
             items: components["schemas"]["GetDictTypeDetail"][];
+            /**
+             * Total
+             * @description 数据总条数
+             */
+            total: number;
+            /**
+             * Page
+             * @description 当前页码
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页数量
+             */
+            size: number;
+            /**
+             * Total Pages
+             * @description 总页数
+             */
+            total_pages: number;
+            links: components["schemas"]["_Links"];
+        };
+        /** PageData[GetExportJobDetail] */
+        PageData_GetExportJobDetail_: {
+            /** Items */
+            items: components["schemas"]["GetExportJobDetail"][];
             /**
              * Total
              * @description 数据总条数
@@ -7904,6 +8350,22 @@ export interface components {
             msg: string;
             data: components["schemas"]["GetDictTypeDetail"];
         };
+        /** ResponseSchemaModel[GetExportJobDetail] */
+        ResponseSchemaModel_GetExportJobDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetExportJobDetail"];
+        };
         /** ResponseSchemaModel[GetFileDetail] */
         ResponseSchemaModel_GetFileDetail_: {
             /**
@@ -8351,6 +8813,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["PageData_GetDictTypeDetail_"];
+        };
+        /** ResponseSchemaModel[PageData[GetExportJobDetail]] */
+        ResponseSchemaModel_PageData_GetExportJobDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["PageData_GetExportJobDetail_"];
         };
         /** ResponseSchemaModel[PageData[GetFileDetail]] */
         ResponseSchemaModel_PageData_GetFileDetail__: {
@@ -9237,6 +9715,36 @@ export interface components {
              * @description 启用 / 停用
              */
             enabled: boolean;
+        };
+        /**
+         * StartExportParam
+         * @description 发起一次导出
+         */
+        StartExportParam: {
+            /**
+             * Format
+             * @description 文件格式
+             * @default xlsx
+             * @enum {string}
+             */
+            format: "xlsx" | "csv";
+            /**
+             * Columns
+             * @description 只导这些列（列 key，按这个顺序）；不给 = 全部列
+             */
+            columns?: string[] | null;
+            /**
+             * Ids
+             * @description 只导选中的行；不给 = 按筛选条件导
+             */
+            ids?: number[] | null;
+            /**
+             * Filters
+             * @description 筛选条件，和列表接口的查询参数同名
+             */
+            filters?: {
+                [key: string]: unknown;
+            };
         };
         /**
          * StartParam
@@ -10414,6 +10922,128 @@ export interface operations {
             };
         };
     };
+    download_dept_import_template_api_v1_sys_depts_import_template_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    preview_dept_import_api_v1_sys_depts_import_preview_post: {
+        parameters: {
+            query?: {
+                /** @description 导入模式（create：只新增、upsert：新增并更新、update：只更新） */
+                mode?: "create" | "upsert" | "update";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_dept_import_api_v1_sys_depts_import_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_ImportPreviewDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    commit_dept_import_api_v1_sys_depts_import_commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCommitParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_ImportCommitDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_depts_api_v1_sys_depts_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartExportParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetExportJobDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_dept_api_v1_sys_depts__pk__get: {
         parameters: {
             query?: never;
@@ -11216,7 +11846,10 @@ export interface operations {
     };
     preview_user_import_api_v1_sys_users_import_preview_post: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 导入模式（用户只支持 create） */
+                mode?: "create" | "upsert" | "update";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -11267,6 +11900,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseSchemaModel_ImportCommitDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_users_api_v1_sys_users_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartExportParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetExportJobDetail_"];
                 };
             };
             /** @description Validation Error */
@@ -13323,6 +13989,168 @@ export interface operations {
             };
         };
     };
+    get_my_exports_api_v1_sys_exports_get: {
+        parameters: {
+            query?: {
+                /** @description 状态（0：排队、1：生成中、2：完成、3：失败、4：已过期） */
+                status?: number | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_PageData_GetExportJobDetail__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_export_api_v1_sys_exports__pk__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 导出记录 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetExportJobDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_my_export_api_v1_sys_exports__pk__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 导出记录 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_my_export_api_v1_sys_exports__pk__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 导出记录 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_import_report_api_v1_sys_imports__token__report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 导入令牌 */
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_my_notifications_paginated_api_v1_sys_notifications_get: {
         parameters: {
             query?: {
@@ -13455,6 +14283,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_notices_api_v1_sys_notices_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartExportParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetExportJobDetail_"];
                 };
             };
             /** @description Validation Error */
@@ -14702,6 +15563,128 @@ export interface operations {
             };
         };
     };
+    download_dict_data_import_template_api_v1_sys_dict_datas_import_template_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    preview_dict_data_import_api_v1_sys_dict_datas_import_preview_post: {
+        parameters: {
+            query?: {
+                /** @description 导入模式（create：只新增、upsert：新增并更新、update：只更新） */
+                mode?: "create" | "upsert" | "update";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_preview_dict_data_import_api_v1_sys_dict_datas_import_preview_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_ImportPreviewDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    commit_dict_data_import_api_v1_sys_dict_datas_import_commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCommitParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_ImportCommitDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_dict_datas_api_v1_sys_dict_datas_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartExportParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetExportJobDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_dict_data_api_v1_sys_dict_datas__pk__get: {
         parameters: {
             query?: never;
@@ -15438,6 +16421,39 @@ export interface operations {
             };
         };
     };
+    export_login_logs_api_v1_logs_login_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartExportParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetExportJobDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_all_login_logs_api_v1_logs_login_all_delete: {
         parameters: {
             query?: never;
@@ -15522,6 +16538,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_opera_logs_api_v1_logs_opera_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartExportParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetExportJobDetail_"];
                 };
             };
             /** @description Validation Error */

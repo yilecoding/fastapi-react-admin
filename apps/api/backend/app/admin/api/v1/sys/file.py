@@ -1,5 +1,4 @@
 from typing import Annotated, Literal
-from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Path, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
@@ -28,6 +27,7 @@ from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.core.conf import settings
 from backend.database.db import CurrentSession, CurrentSessionTransaction
+from backend.utils.file_ops import content_disposition
 from backend.utils.storage_ops import content_type_from_key, iter_read
 
 router = APIRouter()
@@ -311,18 +311,8 @@ async def get_file(
 
 
 def _content_disposition(file: FileRecord, disposition: str) -> str:
-    """
-    Content-Disposition 头：下载接口和预签名地址（`response-content-disposition`）共用这一份
-    """
-    # 原名可能带中文/空格，裸塞进 filename= 会被 header 编码规则截断或乱码。
-    # RFC 6266 的两段式写法：ASCII 回退 + filename* 带 UTF-8
-    ascii_name = file.original_name.encode('ascii', 'ignore').decode() or f'file.{file.ext}'
-    # (issue #62) RFC 6266 的 filename="..." 是 quoted-string，`"`/`\` 必须转义，
-    # 否则原名里带引号会破坏这段 header 的语法。新上传的文件在 sanitize_display_name()
-    # 那一步已经挡掉了控制字符，但这条防线独立存在——万一有旧数据、或者以后
-    # 又长出一条没走 sanitize_display_name() 的写入路径，这里仍然兜得住
-    ascii_name = ascii_name.replace('\\', '\\\\').replace('"', '\\"')
-    return f'{disposition}; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(file.original_name, safe="")}'
+    """Content-Disposition 头：下载接口和预签名地址（`response-content-disposition`）共用这一份"""
+    return content_disposition(file.original_name, disposition, fallback=f'file.{file.ext}')
 
 
 @router.get(

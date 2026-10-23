@@ -1,9 +1,17 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, File, Path, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Path, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import HttpUrl
 
+from backend.app.admin.dataio import USER_EXPORT, USER_IMPORT
+from backend.app.admin.schema.data_import import (
+    ImportCommitDetail,
+    ImportCommitParam,
+    ImportModeParam,
+    ImportPreviewDetail,
+)
+from backend.app.admin.schema.export_job import GetExportJobDetail, StartExportParam
 from backend.app.admin.schema.role import GetRoleDetail
 from backend.app.admin.schema.user import (
     AddUserParam,
@@ -12,8 +20,8 @@ from backend.app.admin.schema.user import (
     ResetPasswordParam,
     UpdateUserParam,
 )
-from backend.app.admin.schema.user_import import ImportCommitDetail, ImportCommitParam, ImportPreviewDetail
-from backend.app.admin.service.user_import_service import user_import_service
+from backend.app.admin.service.export_service import export_service
+from backend.app.admin.service.import_service import import_service
 from backend.app.admin.service.user_service import user_service
 from backend.common.enums import UserPermissionType
 from backend.common.pagination import DependsPagination, PageData
@@ -23,7 +31,7 @@ from backend.common.security.jwt import DependsJwtAuth, DependsSuperUser
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
-from backend.utils.excel_ops import read_table_upload
+from backend.utils.excel_ops import read_table_upload, xlsx_attachment
 
 router = APIRouter()
 
@@ -44,32 +52,46 @@ async def get_current_user(request: Request) -> ResponseSchemaModel[GetCurrentUs
 
 
 @router.get('/import/template', summary='下载用户导入模板', dependencies=[DependsSuperUser])
-async def download_user_import_template() -> Response:
-    # 现生成、不落盘、不写 `sys_file` —— 模板是每次都一样的产物，
-    # 存档一份只会在文件管理页里多一条没人会点开的记录
-    return Response(
-        content=user_import_service.template(),
-        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        headers={'Content-Disposition': 'attachment; filename="user-import-template.xlsx"'},
-    )
+async def download_user_import_template(db: CurrentSession) -> Response:
+    # 现生成、不落盘、不写 `sys_file` —— 模板里的下拉（部门编码）随库变，存档一份反而会过期
+    raw, name = await import_service.template(db=db, spec=USER_IMPORT)
+    return xlsx_attachment(raw, name)
 
 
 @router.post('/import/preview', summary='预览用户导入', dependencies=[DependsSuperUser])
 async def preview_user_import(
+    request: Request,
     db: CurrentSession,
     file: Annotated[UploadFile, File(description='xlsx 文件')],
+    mode: Annotated[ImportModeParam, Query(description='导入模式（用户只支持 create）')] = 'create',
 ) -> ResponseSchemaModel[ImportPreviewDetail]:
-    # 只校验不落库，所以用 `CurrentSession` 而不是 `CurrentSessionTransaction`
+    # 只校验不落库
     raw = await read_table_upload(file)
-    data = await user_import_service.preview(db=db, raw=raw)
+    data = await import_service.preview(db=db, spec=USER_IMPORT, raw=raw, user=request.user, mode=mode)
     return response_base.success(data=data)
 
 
 @router.post('/import/commit', summary='提交用户导入', dependencies=[DependsSuperUser])
 async def commit_user_import(
-    db: CurrentSessionTransaction, obj: ImportCommitParam
+    request: Request, db: CurrentSession, background_tasks: BackgroundTasks, obj: ImportCommitParam
 ) -> ResponseSchemaModel[ImportCommitDetail]:
-    data = await user_import_service.commit(db=db, obj=obj)
+    # 不用 `CurrentSessionTransaction`：「全部成功才提交」要能整批回滚，事务由 service 自己收
+    data = await import_service.commit(
+        db=db, spec=USER_IMPORT, user=request.user, obj=obj, background_tasks=background_tasks
+    )
+    return response_base.success(data=data)
+
+
+@router.post(
+    '/export',
+    summary='导出用户',
+    dependencies=[Depends(RequestPermission('sys:user:export')), DependsRBAC],
+)
+async def export_users(
+    request: Request, db: CurrentSession, obj: StartExportParam
+) -> ResponseSchemaModel[GetExportJobDetail]:
+    # 小批量当场生成完才返回（status=2，前端直接下载）；大批量返回排队（status=0），生成完发站内消息
+    data = await export_service.start(db=db, request=request, spec=USER_EXPORT, obj=obj)
     return response_base.success(data=data)
 
 

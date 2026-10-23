@@ -12,6 +12,8 @@ const searchSchema = z.object({
   status: z.coerce.number().int().optional(),
   f: z.string().optional(),
   hide: z.string().optional(),
+  /** 可移动列的顺序，逗号分隔（`pages/_shared/use-column-order.ts`）；默认顺序不写 */
+  cols: z.string().optional(),
 })
 
 /** 页面由 TabOutlet 挂载；这里只声明 search schema / staticData / 权限 */

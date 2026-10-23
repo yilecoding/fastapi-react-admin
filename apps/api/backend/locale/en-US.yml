@@ -46,6 +46,7 @@ error:
   demo:
     forbidden: This operation is disabled in the demo environment
   dept:
+    cannot_be_own_descendant: A department cannot be moved under one of its own sub-departments
     cannot_be_own_parent: An item cannot be its own parent
     code_exists: Department code already exists
     duplicate_name_in_level: A department with the same name already exists at this level
@@ -61,6 +62,23 @@ error:
     type_not_found: Dict type does not exist
   email:
     send_failed: Failed to send email, please try again later or contact an administrator
+  export:
+    bad_filter: Invalid filter {field} (export filters must match the list endpoint's query parameters)
+    empty: Nothing matches the current filters, so there is nothing to export
+    expired: This file was deleted after its retention period. Please export again
+    file_missing: The export file can no longer be read (its storage may be unavailable). Please export again
+    not_found: Export record not found
+    not_ready: The file is not ready yet
+    permission_revoked: You no longer have permission for this export, so it was cancelled
+    queue_unavailable: The background task queue is unavailable and this export could not be queued. Please try again later
+    resource_unavailable: This kind of data cannot be exported right now (its feature may have been uninstalled)
+    still_running: The export is still running and can be deleted once it finishes
+    storage_failed: 'Failed to save the export file: {reason}'
+    timeout: The export did not finish in time and was stopped. Try again or narrow the filters
+    too_many_rows: '{total} rows match, which exceeds the per-export limit of {limit}. Narrow the filters and try again'
+    too_many_running: You already have {limit} exports in progress. Wait for them to finish before starting another
+    unexpected: Something unexpected went wrong during the export. See the server log for details
+    user_unavailable: The account that started this export is disabled or no longer exists, so it was cancelled
   file:
     empty: The file is empty
     invalid_filename: Invalid filename
@@ -79,12 +97,28 @@ error:
     upload_finalizing: The upload is being finalized, please wait
     upload_session_not_found: Upload session not found or expired, please upload again
   import:
+    bad_choice: '{column}: must be one of {allowed}'
+    bad_email: Not a valid email address
+    bad_format: Invalid format; see the Instructions sheet of the template
     default_password_unset: No import default password is configured (USER_IMPORT_DEFAULT_PASSWORD), bulk import is off
     dept_code_not_found: Department code {code} does not exist
+    dict_type_not_found: Dictionary type code {code} does not exist
     duplicated_email: Email {value} is duplicated in the file, already used on row {row_no}
-    duplicated_username: Username {value} is duplicated in the file, already used on row {row_no}
-    nothing_to_create: Nothing left to create, check the excluded rows
+    duplicated_in_file: Duplicates row {row_no}
+    duplicated_name_in_level: Another department under the same parent already has this name (row {row_no})
+    key_exists: '{key} already exists (mode is "create only")'
+    key_not_found: '{key} does not exist (mode is "update only")'
+    leader_not_found: Leader {username} does not exist or is disabled
+    mode_unsupported: This kind of data does not support that import mode
+    not_an_integer: '{column}: must be a whole number'
+    nothing_to_commit: There are no rows to import. Check the excluded rows
+    parent_cycle: 'Parent departments form a cycle: {codes}'
+    parent_not_found: Parent department {code} does not exist, or you are not allowed to add departments under it
+    parent_row_failed: Parent department {code} was not imported
+    parent_row_invalid: The row for parent department {code} has problems, so this row cannot be imported either
+    report_expired: The error report has expired. Upload the file again to preview it
     role_code_not_found: Role code {code} does not exist
+    row_unexpected: This row was not written. See the server log for details
     token_expired: The import token has expired, upload the file again to preview
   language_not_found: Current language pack is not initialized or does not exist
   menu:
@@ -188,6 +222,7 @@ error:
     encrypt_key_invalid: STORAGE_ENCRYPT_SECRET_KEY is not a valid hex key (32 bytes / 64 hex characters required)
     encrypt_key_unset: 'STORAGE_ENCRYPT_SECRET_KEY is not configured, the object storage secret cannot be stored safely. Generate one with python -c "import os;print(os.urandom(32).hex())", put it in .env and restart'
     forbidden_endpoint: The endpoint points to a link-local / cloud metadata address and was rejected
+    has_exports: The storage still holds {count} unexpired export files. They are cleaned up automatically within {hours} hours; delete the storage after that
     has_files: The storage still holds {count} files and cannot be deleted
     invalid_endpoint: Invalid endpoint, expected http(s)://host[:port] without credentials or query string
     local_root_invalid: The root directory of a local storage must be an absolute path outside the static directory
@@ -213,6 +248,7 @@ error:
     not_xlsx: Only xlsx is supported, got {file_ext}
     sheet_not_found: No worksheet named {sheet}
     size_exceeded: The spreadsheet exceeds the {size_mb} MB limit
+    too_many_entries: The file has an abnormal internal structure (more than {limit} archive entries) and was rejected. Re-save it with Excel and try again
     too_many_rows: At most {max_rows} rows per import, please split the file
   task:
     deadline_conflict: Only one of deadline and countdown seconds can be set
@@ -281,15 +317,137 @@ file_type:
 # `if i18n.current_language != 'en-US':` 已经把英文请求短路掉了，
 # 根本不会来查这张表。别看着 zh-CN.yml 有就照着补一份对称的过来。
 
-import:
-  # Column notes rendered on the import template's README sheet
+export:
+  # Headers, values and the "Export info" sheet of exported files (`common/dataio/` + `app/admin/dataio.py`).
+  # Keys must match zh-CN one to one: background exports render in the requester's language
+  bool_no: 'No'
+  bool_yes: 'Yes'
+  cell_truncated: '… (truncated: cells hold at most 32,767 characters)'
+  list_separator: ', '
   column:
-    dept_code: Department code (required, e.g. DEPT_0001)
-    email: Email (optional, must be globally unique)
-    nickname: Nickname (optional, defaults to the username)
-    phone: Phone (optional, 11 digits; format this column as text)
-    role_codes: Role codes (optional, comma separated, e.g. ROLE_0001,ROLE_0002)
-    username: Username (required, must be globally unique)
+    browser: Browser
+    color: Color
+    content_text: Content (plain text)
+    cost_ms: Duration (ms)
+    created_time: Created at
+    dept_code: Department code
+    dept_id: Department ID
+    dept_name: Department name
+    device: Device
+    dict_data_id: Dictionary data ID
+    dict_label: Label
+    dict_type_code: Dictionary type code
+    dict_value: Value
+    email: Email
+    ip: IP address
+    is_staff: Admin access
+    is_superuser: Superuser
+    join_time: Joined at
+    last_login_time: Last login
+    leader_username: Leader username
+    leader: Leader
+    location: Location
+    login_account: Login account
+    login_time: Login time
+    message: Message
+    method: Method
+    nickname: Nickname
+    notice_id: Announcement ID
+    notice_title: Title
+    notice_type: Type
+    opera_time: Time
+    opera_title: Operation
+    operator: Operator
+    os: OS
+    parent_code: Parent department code
+    parent_name: Parent department
+    path: Endpoint
+    phone: Phone
+    remark: Remark
+    result: Result
+    role_codes: Role codes
+    role_names: Roles
+    sort: Sort order
+    status: Status
+    status_code: Status code
+    trace_id: Trace ID
+    updated_time: Updated at
+    user_id: User ID
+    user_uuid: User UUID
+    username: Username
+  filter:
+    dept: Department ID
+    dict_type: Dictionary type ID
+    end_time: Time to
+    role: Role ID
+    start_time: Time from
+  info:
+    exported_at: Exported at
+    exporter: Exported by
+    filters: Filters
+    no_filter: None (all data)
+    resource: Content
+    rows: Rows
+    selected_rows: Only the {n} selected rows
+    sheet: Export info
+    timezone_note: Times
+    timezone_value: All times in this file are shown in {tz}
+  notify:
+    done_content: '{rows} rows ({file}). Download it from Profile → Exports. The file is deleted automatically after its retention period.'
+    done_title: 'Export ready: {title}'
+    failed_title: 'Export failed: {title}'
+  resource:
+    dept: Departments
+    dict_data: Dictionary data
+    login_log: Login logs
+    notice: Announcements
+    opera_log: Operation logs
+    user: Users
+  value:
+    announcement: Announcement
+    disabled: Disabled
+    enabled: Active
+    failed: Failed
+    hidden: Hidden
+    notice: Notice
+    shown: Shown
+    succeeded: Succeeded
+
+import:
+  # Import templates, error reports and the instructions sheet (`common/dataio/importing.py` + `app/admin/service/import_service.py`).
+  # Keys must match zh-CN one to one: templates and reports render in the current language
+  cell_error: '{column}: {msg}'
+  error_separator: '; '
+  note:
+    dept_code: Required. The department code (not its name), e.g. HQ
+    dept_code_key: Required and globally unique; decides between create and update (2–32 characters, starts with an uppercase letter, uppercase letters, digits and underscores only)
+    dept_name: Required when creating; must be unique among departments with the same parent. Leave blank when updating to keep the current name
+    dict_label: Required. Unique within a dictionary type; type + label decides between create and update
+    dict_type_code: Required. The dictionary type code (not its name)
+    dict_value: Required when creating. Leave blank when updating to keep the current value
+    email: Optional. Must be globally unique
+    leader: Optional. The leader's username (not the nickname)
+    nickname: Optional. Defaults to the username
+    parent_code: Optional; leave blank for a top-level department. Can be an existing department or another row in the same file
+    phone: Optional. 11-digit mobile number; format this column as text
+    role_codes: Optional. Role codes separated by commas, e.g. MANAGER,STAFF
+    update_keeps_blank: When updating existing data, a blank cell keeps the current value instead of clearing it
+    user_default_password: Imported accounts all use the system default password. Ask each person to change it soon
+    username: Required. Must be globally unique
+  readme:
+    column: Column
+    data_sheet: Data
+    invalid_hint: This value is not in the drop-down list. Use it anyway?
+    note: Notes
+    options: Allowed values
+    required: Required
+    sheet: Instructions
+  report:
+    errors: Errors
+    file_name: '{resource} import errors_{stamp}.xlsx'
+    row_no: Original row
+    sheet: Errors
+  template_name: '{resource} import template.xlsx'
 
 response:
   error: Request error

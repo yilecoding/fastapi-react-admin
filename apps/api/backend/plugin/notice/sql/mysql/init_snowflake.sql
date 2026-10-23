@@ -5,7 +5,8 @@ insert into sys_menu (id, title, name, path, sort, icon, type, perms, status, di
 values
 (2049629108257816577, '新增', 'AddNotice', null, 0, null, 2, 'sys:notice:add', 1, 0, '', null, 2049629108257816576, now(), null),
 (2049629108257816578, '修改', 'EditNotice', null, 0, null, 2, 'sys:notice:edit', 1, 0, '', null, 2049629108257816576, now(), null),
-(2049629108257816579, '删除', 'DeleteNotice', null, 0, null, 2, 'sys:notice:del', 1, 0, '', null, 2049629108257816576, now(), null);
+(2049629108257816579, '删除', 'DeleteNotice', null, 0, null, 2, 'sys:notice:del', 1, 0, '', null, 2049629108257816576, now(), null),
+(2049629108253622357, '导出', 'ExportNotice', null, 0, null, 2, 'sys:notice:export', 1, 0, '', null, 2049629108257816576, now(), null);
 
 insert into sys_notice (id, title, type, status, content, created_time, updated_time)
 values (2112248797756129280, 'hahahahahaahahaha', 0, 1, '你好😄

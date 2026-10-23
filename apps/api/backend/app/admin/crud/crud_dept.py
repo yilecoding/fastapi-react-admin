@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_
+from sqlalchemy import ColumnElement, Select, and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy_crud_plus import JoinConfig
 
@@ -75,6 +75,56 @@ class CRUDDept(DataScopedCRUD[Dept]):
         with bypass_data_scope():
             return await self.select_model_by_column(db, name=name, parent_id=parent_id, deleted=0)
 
+    async def get_ancestor_ids(self, db: AsyncSession, dept_id: int) -> list[int]:
+        """
+        从 `dept_id` 往上一路到根的 ID（含它自己）。结构检查用，不是展示读，所以不按数据范围过滤
+
+        ⚠️ 带着「走过的」集合走：库里要是已经有环（修这个检查之前写进去的），不带它就是死循环
+
+        :param db: 数据库会话
+        :param dept_id: 部门 ID
+        :return:
+        """
+        ids: list[int] = []
+        current: int | None = dept_id
+        while current is not None and current not in ids:
+            ids.append(current)
+            current = await db.scalar(
+                select(self.model.parent_id).where(self.model.id == current, self.model.deleted == 0)
+            )
+        return ids
+
+    async def get_select(
+        self,
+        data_filter: ColumnElement[bool],
+        name: str | None,
+        code: str | None,
+        phone: str | None,
+        status: int | None,
+    ) -> Select:
+        """
+        获取部门列表查询表达式（部门树和导出共用这一条，筛选语义只写一处）
+
+        :param data_filter: 数据权限条件
+        :param name: 部门名称
+        :param code: 部门编码
+        :param phone: 联系电话
+        :param status: 部门状态
+        :return:
+        """
+        filters = {'deleted': 0}
+
+        if name is not None:
+            filters['name__like'] = f'%{name}%'
+        if code is not None:
+            filters['code__like'] = f'%{code.upper()}%'
+        if phone is not None:
+            filters['phone__startswith'] = phone
+        if status is not None:
+            filters['status'] = status
+
+        return await self.select_order('sort', 'asc', data_filter, **filters)
+
     async def get_all(
         self,
         db: AsyncSession,
@@ -95,18 +145,8 @@ class CRUDDept(DataScopedCRUD[Dept]):
         :param status: 部门状态
         :return:
         """
-        filters = {'deleted': 0}
-
-        if name is not None:
-            filters['name__like'] = f'%{name}%'
-        if code is not None:
-            filters['code__like'] = f'%{code.upper()}%'
-        if phone is not None:
-            filters['phone__startswith'] = phone
-        if status is not None:
-            filters['status'] = status
-
-        return await self.select_models_order(db, 'sort', 'asc', data_filter, **filters)
+        stmt = await self.get_select(data_filter, name, code, phone, status)
+        return (await db.execute(stmt)).scalars().all()
 
     async def create(self, db: AsyncSession, obj: CreateDeptParam) -> None:
         """

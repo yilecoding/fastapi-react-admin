@@ -17,6 +17,8 @@ const searchSchema = z.object({
   time: z.string().optional(),
   f: z.string().optional(),
   hide: z.string().optional(),
+  /** 可移动列的顺序，逗号分隔（`pages/_shared/use-column-order.ts`）；默认顺序不写 */
+  cols: z.string().optional(),
 })
 
 /**

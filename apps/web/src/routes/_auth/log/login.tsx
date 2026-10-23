@@ -24,6 +24,8 @@ const searchSchema = z.object({
   f: z.string().optional(),
   /** 被隐藏的列 id，逗号分隔（视图状态进 URL） */
   hide: z.string().optional(),
+  /** 可移动列的顺序，逗号分隔（`pages/_shared/use-column-order.ts`）；默认顺序不写 */
+  cols: z.string().optional(),
   // 没有 `adv`：日志页没开 `advanced`（后端没有过滤 DSL），
   // 留一个用不上的字段只会让下一个人以为它有用（见「已经删掉的东西」那一节）
 })

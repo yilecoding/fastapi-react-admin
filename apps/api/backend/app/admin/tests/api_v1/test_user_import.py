@@ -17,7 +17,6 @@ from openpyxl import Workbook, load_workbook
 from starlette.testclient import TestClient
 
 from backend.core.conf import settings
-from backend.utils.excel_ops import parse_table
 
 #: 这批测试建出来的用户名前缀，收尾按它清
 PREFIX = 'pytest_imp_'
@@ -104,19 +103,32 @@ def upload(client: TestClient, headers: dict[str, str], raw: bytes, name: str = 
 
 
 def test_template_downloads_and_parses_back_through_our_own_parser(
-    client: TestClient, token_headers: dict[str, str]
+    client: TestClient, token_headers: dict[str, str], refs: dict
 ) -> None:
-    """模板和解析器分叉是无声的：下发一份自己都读不回来的模板，没有任何一处会报错"""
+    """模板和解析器分叉是无声的：下发一份自己都读不回来的模板，没有任何一处会报错。
+
+    所以不只看模板长什么样，而是**把下发的模板原样填一行、交回预览接口**：表头一个都不能落空
+    """
     res = client.get('/sys/users/import/template', headers=token_headers)
     assert res.status_code == 200
     assert 'attachment' in res.headers['content-disposition']
 
     wb = load_workbook(io.BytesIO(res.content))
-    assert wb.worksheets[0].title == 'data'
+    data, readme = wb.worksheets[0], wb.worksheets[1]
+    assert (data.title, readme.title) == ('数据', '说明')
     # 说明在第二页，而**活动页签必须是数据页** —— 否则用户随手另存之后
     # `wb.active` 就指向说明页了（见 excel_ops 里 `_pick_sheet` 那条）
-    assert wb.active.title == 'data'
-    assert 'README' in wb.sheetnames
+    assert wb.active.title == '数据'
+    header = [cell.value for cell in next(data.iter_rows(max_row=1))]
+    assert header == ['用户名', '昵称', '邮箱', '手机号', '部门编码', '角色编码']
+
+    data.append([f'{PREFIX}tpl', '', '', '', refs['dept_code'], refs['role_code']])
+    filled = io.BytesIO()
+    wb.save(filled)
+    preview = upload(client, token_headers, filled.getvalue())['data']
+    assert preview['ignored_headers'] == []
+    assert preview['rows'][0]['values']['username'] == f'{PREFIX}tpl'
+    assert preview['valid'] == 1, preview['rows']
 
 
 # --------------------------------------------------------------------------- 权限
@@ -175,7 +187,7 @@ def test_unknown_dept_code_marks_only_that_row(client: TestClient, token_headers
     ])
     data = upload(client, token_headers, raw)['data']
     assert (data['total'], data['valid']) == (2, 1)
-    bad = next(row for row in data['rows'] if row['username'] == f'{PREFIX}bad')
+    bad = next(row for row in data['rows'] if row['values']['username'] == f'{PREFIX}bad')
     assert not bad['ok'] and any('NO_SUCH_DEPT' in msg for msg in bad['errors'])
 
 
@@ -211,7 +223,8 @@ def test_duplicate_against_the_database_is_caught(
 def test_missing_required_header_is_rejected(client: TestClient, token_headers: dict[str, str]) -> None:
     body = upload(client, token_headers, build_xlsx([['x']], header=['username']))
     assert body['code'] != 200
-    assert 'dept_code' in body['msg']
+    # 报的是用户在表头里该写的那个**列名**，不是代码里的 key —— 他要拿着它回 Excel 里补
+    assert '部门编码' in body['msg'], body['msg']
 
 
 def test_unrecognized_header_is_surfaced(client: TestClient, token_headers: dict[str, str], refs: dict) -> None:
@@ -222,7 +235,7 @@ def test_unrecognized_header_is_surfaced(client: TestClient, token_headers: dict
     )
     data = upload(client, token_headers, raw)['data']
     assert data['ignored_headers'] == ['phone_number']
-    assert data['rows'][0]['phone'] is None
+    assert data['rows'][0]['values']['phone'] is None
 
 
 def test_non_xlsx_upload_is_rejected(client: TestClient, token_headers: dict[str, str]) -> None:
@@ -284,7 +297,8 @@ def test_commit_creates_the_users_and_they_can_sign_in(
     body = client.post('/sys/users/import/commit', headers=token_headers, json={'import_token': token}).json()
     assert body['code'] == 200, body
     assert body['data']['created'] == [username]
-    assert body['data']['used_default_password'] is True
+    # 提醒「这批人用的是默认密码」—— 只提醒这件事，不带密码本身（见下一条）
+    assert any('默认密码' in note for note in body['data']['notes']), body['data']['notes']
 
     login = client.post('/auth/login', json={'username': username, 'password': DEFAULT_PASSWORD})
     assert login.status_code == 200 and login.json()['code'] == 200, login.text
@@ -310,7 +324,7 @@ def test_excluded_rows_are_not_created(client: TestClient, token_headers: dict[s
         [f'{PREFIX}drop', '', '', '', refs['dept_code'], refs['role_code']],
     ])
     preview = upload(client, token_headers, raw)['data']
-    drop_row = next(row['row_no'] for row in preview['rows'] if row['username'] == f'{PREFIX}drop')
+    drop_row = next(row['row_no'] for row in preview['rows'] if row['values']['username'] == f'{PREFIX}drop')
 
     body = client.post(
         '/sys/users/import/commit',
@@ -351,17 +365,3 @@ def test_roles_are_actually_attached(client: TestClient, token_headers: dict[str
     pk = listed['data']['items'][0]['id']
     roles = client.get(f'/sys/users/{pk}/roles', headers=token_headers).json()
     assert [role['code'] for role in roles['data']] == [refs['role_code']]
-
-
-def test_parsed_template_columns_match_what_the_service_declares() -> None:
-    """模板列和解析器声明的列必须是同一份 —— 分叉了只会表现成「某列永远读不到」"""
-    from backend.app.admin.service.user_import_service import IMPORT_COLUMNS, user_import_service
-
-    wb = load_workbook(io.BytesIO(user_import_service.template()))
-    header = [cell.value for cell in next(wb.worksheets[0].iter_rows(max_row=1))]
-    assert header == [column.key for column in IMPORT_COLUMNS]
-    # 再走一遍自己的解析器，确认表头能被认全
-    filled = io.BytesIO()
-    wb.worksheets[0].append(['u', 'n', '', '', 'DEPT_0001', 'ROLE_0001'])
-    wb.save(filled)
-    assert parse_table(filled.getvalue(), IMPORT_COLUMNS).ignored_headers == []

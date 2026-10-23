@@ -94,6 +94,44 @@ export async function fetchBytes(path: string): Promise<ArrayBuffer> {
   return res.arrayBuffer()
 }
 
+/**
+ * 取一个要存成文件的响应：字节 + **后端起的文件名**（`Content-Disposition`）。
+ *
+ * 导出文件、导入模板、错误报告的名字都是后端按当前语言起的（「部门导入模板.xlsx」）。
+ * 前端自己再写一份就是两份翻译各说各的 —— 所以名字从响应头里读，读不到才用调用方给的兜底。
+ *
+ * ⚠️ 跨源时（开发期 8888 → 8088、桌面端 `app://local`）这个头要后端在
+ * `CORS_EXPOSE_HEADERS` 里列出来，否则 `headers.get()` 拿到的是 `null` —— 不报错，
+ * 只是静静地用了兜底名
+ */
+export async function fetchFile(path: string): Promise<{ buffer: ArrayBuffer; filename: string | null; type: string | null }> {
+  const res = await client.sendRaw('GET', path, undefined, '*/*')
+  return {
+    buffer: await res.arrayBuffer(),
+    filename: filenameOf(res.headers.get('content-disposition')),
+    type: res.headers.get('content-type'),
+  }
+}
+
+/**
+ * 从 `Content-Disposition` 里取文件名。后端写的是 RFC 6266 两段式：
+ * `attachment; filename="ascii.xlsx"; filename*=UTF-8''%E9%83%A8%E9%97%A8.xlsx` ——
+ * 优先 `filename*`（带中文的那个），没有才退回 ASCII 的 `filename`
+ */
+export function filenameOf(header: string | null): string | null {
+  if (!header) return null
+  const star = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header)
+  if (star) {
+    try {
+      return decodeURIComponent(star[1].trim())
+    } catch {
+      // 编码坏了就退回 ASCII 那一段
+    }
+  }
+  const plain = /filename\s*=\s*"((?:[^"\\]|\\.)*)"/i.exec(header)
+  return plain ? plain[1].replace(/\\(.)/g, '$1') : null
+}
+
 /** 分页结构在 `@admin/api` 里，这里 re-export 保持调用点不变 */
 export type { PageData } from '@admin/api'
 export type { Method }

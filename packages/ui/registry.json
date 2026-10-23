@@ -307,13 +307,17 @@
       "name": "data-table",
       "type": "registry:ui",
       "dependencies": [
+        "@dnd-kit/core",
+        "@dnd-kit/modifiers",
+        "@dnd-kit/sortable",
+        "@dnd-kit/utilities",
         "@tabler/icons-react",
         "@tanstack/react-table"
       ],
       "registryDependencies": [
         "badge",
         "button",
-        "dropdown-menu",
+        "checkbox",
         "i18n",
         "pagination",
         "popover",
@@ -321,7 +325,8 @@
         "separator",
         "skeleton",
         "table",
-        "tooltip"
+        "tooltip",
+        "utils"
       ],
       "files": [
         {

@@ -211,3 +211,28 @@ async def purge_stale_multipart() -> str:
     msg = f'清理过期分片上传留下的分片：{total} 个'
     log.info(msg)
     return msg
+
+
+@celery_app.task(name='maintenance.purge_expired_exports')
+@with_timeout()
+async def purge_expired_exports(batch: int = 200) -> str:
+    """导出记录的定时清理（#11 · v0.4）：
+
+    - 过了保留期（`EXPORT_FILE_RETENTION_HOURS`）的文件删掉，记录改成「已过期」—— 记录留着，审计不跟着文件消失
+    - 卡在「排队 / 生成中」的结掉（worker 死了、消息丢了），否则界面上永远转圈
+    - 过了记录保留期（`EXPORT_RECORD_RETENTION_DAYS`）的记录删掉
+
+    保留期同样**不做成任务参数**（理由同 `purge_recycled_files`）：记录页上的「N 小时后过期」也要读它。
+    按 id 往后翻（keyset），每批一个事务；删对象失败只记日志，记录照样改成过期
+    """
+    from backend.app.admin.service.export_service import export_service
+
+    async with async_db_session() as db:
+        counts = await export_service.purge(db=db, batch=batch)
+
+    msg = (
+        f'导出清理：文件过期 {counts["expired"]} 个 · 卡住的结掉 {counts["settled"]} 个 · '
+        f'删除老记录 {counts["removed"]} 条'
+    )
+    log.info(msg)
+    return msg

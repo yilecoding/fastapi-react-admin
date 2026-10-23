@@ -16,6 +16,7 @@ import { logFeatures as features } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { StatusPill } from '../_shared/status'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
+import { useUrlColumnOrder } from '../_shared/use-column-order'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { allOpenAppsQuery } from '../open-app/api'
 import { OpenApiLogDetailSheet } from './detail-sheet'
@@ -48,6 +49,8 @@ export type OpenLogSearch = {
   time?: string
   f?: string
   hide?: string
+  /** 可移动列的顺序（和默认一样时不写），逗号分隔 */
+  cols?: string
 }
 
 function buildQuery(params: Record<string, unknown>, page: number, size: number): string {
@@ -124,7 +127,7 @@ export function OpenLogPage({
     [appsQuery.data, appsQuery.isPending]
   )
 
-  const q = useQuerySearch({ fields, search, onSearchChange, refreshKey: LOG_KEY, keep: ['hide'] })
+  const q = useQuerySearch({ fields, search, onSearchChange, refreshKey: LOG_KEY, keep: ['hide', 'cols'] })
   const qs = buildQuery(q.params, page, size)
   const listQuery = useQuery({
     queryKey: [...LOG_KEY, qs],
@@ -218,16 +221,24 @@ export function OpenLogPage({
     [t]
   )
 
+  // 列顺序进 URL（同列显隐）—— 走 onSearchChange 而不是 patch：换列序不该清勾选、也不该跳回第一页
+  const [columnOrder, setColumnOrder] = useUrlColumnOrder(
+    search.cols,
+    React.useCallback((cols) => onSearchChange?.({ ...search, cols }), [onSearchChange, search]),
+    columns
+  )
+
   const table = useTable({
     features,
     data: rows,
     columns: columns as never,
-    state: { columnVisibility },
+    state: { columnVisibility, columnOrder },
     getRowId: (r: OpenApiLog) => r.id,
     manualPagination: true,
     rowCount: data?.total ?? 0,
     enableRowSelection: false,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
   })
 
   const hasFilter = countActive(q.applied, fields) > 0

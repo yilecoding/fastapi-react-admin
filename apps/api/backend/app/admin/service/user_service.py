@@ -88,19 +88,19 @@ class UserService:
         data = await paging_data(db, user_select)
         if data['items']:
             # ⚠️ `return_as_dict=True` 是必须的：这个函数默认返回 **namedtuple**，
-            # 而 namedtuple 不可变 —— 下面 `_attach_roles` 要往每条里塞 `roles`。
+            # 而 namedtuple 不可变 —— 下面 `attach_roles` 要往每条里塞 `roles`。
             # 响应模型是 `from_attributes=True`，dict 和 namedtuple 都能校验。
             serialized_items = select_join_serialize(
                 data['items'], relationships=['User-m2o-Dept'], return_as_dict=True
             )
             # 确保返回的是列表，即使只有一个元素
             items = [serialized_items] if not isinstance(serialized_items, list) else serialized_items
-            await UserService._attach_roles(db=db, items=items)
+            await UserService.attach_roles(db=db, items=items)
             data['items'] = items
         return data
 
     @staticmethod
-    async def _attach_roles(*, db: AsyncSession, items: list[dict[str, Any]]) -> None:
+    async def attach_roles(*, db: AsyncSession, items: list[dict[str, Any]]) -> None:
         """给本页的每个用户补上角色列表（原地改 `items`）
 
         🔴 **必须在分页之后做，不能把 `sys_user_role` join 进分页的那个 Select。**

@@ -20,6 +20,7 @@ import { NoticeDetailSheet } from './detail-sheet'
 import { features } from './table-features'
 import { NoticeFormSheet } from './form'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
+import { ExportButton } from '../_shared/data-io/export-button'
 
 /**
  * 通知公告。标准的三件套列表页，照 `pages/user/` 的模板。
@@ -203,6 +204,14 @@ export function NoticePage({
                       <IconPlus className="size-4" />
                       {t('新增公告')}
                     </Button>
+                  </Can>
+                  <Can perm="sys:notice:export">
+                    <ExportButton
+                      path="/api/v1/sys/notices/export"
+                      filters={q.params}
+                      selectedIds={selectedIds}
+                      total={total}
+                    />
                   </Can>
                   <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />

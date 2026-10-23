@@ -9,6 +9,7 @@ import {
   IconPencil,
   IconPlus,
   IconTrash,
+  IconUpload,
 } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
@@ -29,7 +30,9 @@ import { RefreshButton, ResetButton, StatusFilter, TextFilter } from '../_shared
 import { listState } from '../_shared/list-query'
 import { StatusBadge } from '../_shared/status'
 import { useTreeFold } from '../_shared/use-tree-fold'
-import { deptTreeQuery, useDeleteDept, type Dept } from './api'
+import { ExportButton } from '../_shared/data-io/export-button'
+import { ImportSheet } from '../_shared/data-io/import-sheet'
+import { deptKeys, deptTreeQuery, useDeleteDept, type Dept } from './api'
 import { DeptFormSheet } from './form'
 
 /**
@@ -69,6 +72,7 @@ export function DeptPage({
   const [editing, setEditing] = React.useState<Dept | null>(null)
   const [presetParent, setPresetParent] = React.useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<Dept | null>(null)
+  const [importOpen, setImportOpen] = React.useState(false)
   // 删除失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案
   const [deleteError, setDeleteError] = React.useState<string | null>(null)
   React.useEffect(() => setDeleteError(null), [pendingDelete])
@@ -132,6 +136,16 @@ export function DeptPage({
                 <IconPlus className="size-4" />
                 {t('新增部门')}
               </Button>
+            </Can>
+            {/* 导入能一次建一棵树、挪一批部门的上级 —— 次要动作，outline */}
+            <Can perm="sys:dept:import">
+              <Button size="sm" variant="outline" data-testid="import-depts" onClick={() => setImportOpen(true)}>
+                <IconUpload className="size-4" />
+                {t('导入')}
+              </Button>
+            </Can>
+            <Can perm="sys:dept:export">
+              <ExportButton path="/api/v1/sys/depts/export" filters={filters} total={total} />
             </Can>
             <RefreshButton busy={isFetching} onClick={list.onRetry} />
           </div>
@@ -198,6 +212,18 @@ export function DeptPage({
       <DeptFormSheet
         open={sheetOpen} onOpenChange={setSheetOpen}
         editing={editing} presetParentId={presetParent} tree={tree}
+      />
+
+      <ImportSheet
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        base="/api/v1/sys/depts/import"
+        title={t('导入部门')}
+        description={t('上级部门填编码，可以是系统里已有的部门，也可以是同一份文件里的另一行 —— 一份文件能建一整棵树。')}
+        modes={['create', 'upsert', 'update']}
+        invalidate={deptKeys.all}
+        previewKeys={['code', 'name', 'parent_code', 'leader']}
+        testId="dept-import-sheet"
       />
 
       <ConfirmDialog

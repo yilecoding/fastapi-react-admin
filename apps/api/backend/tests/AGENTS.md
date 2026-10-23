@@ -411,6 +411,23 @@ test_init_handles_every_seeded_account` 硬编码断言 `cli.py: _set_admin_pass
 
 ⚠️ 建测试库前要先手工 `CREATE DATABASE fba_test CHARACTER SET utf8mb4`（三个方言都是，`reset_test_db` 不建库）。
 
+### 🔴 测试里用 `text()` 写带时区的时间：SQL Server 上偏八小时
+
+**症状**：「把导出记录的过期时间改成一分钟前」→ 下载还是成功；「把开始时间改成一小时前」→ 卡住的任务没被结掉。
+PostgreSQL 上全绿，**只有 SQL Server 红**。
+
+**根因**：裸 `text('UPDATE … SET expire_time = :t')` 绕过了列类型 `TimeZone` 的绑定，aioodbc（pyodbc）把带时区的
+datetime 的**偏移丢掉**、按 `+00:00` 存进 `datetimeoffset`。实测：`20:16 +08:00` 写进去读回来是 `20:16 +00:00` ——
+「一分钟前」变成了八小时之后。走 Core（`update(Model.__table__)…values(t=…)`）就对，`TimeZone.process_bind_param` 会处理。
+
+**判据**：测试里改时间列一律走 Core / ORM；`text()` 只写不带时间的值（`test_export.py: _update_job`）。
+
+### ⚠️ 别让断言依赖「表里现在有多少行」—— E2E 和 pytest 共用 `fba_test`
+
+跑过一轮 E2E 之后，`fba_test` 的 `sys_opera_log` 有七千多行（每个请求都记一条）。导出 parity 那条原来不加筛选，
+行数一过「当场生成」的上限（5,000），导出转去后台，测试红在「状态是排队中」上 —— 和它要验的东西毫无关系。
+改成按夹具自己垫的那几行筛（`username=pytest-log-<RUN>`），结果确定、而且能比「相等」而不是「至少」。
+
 ### 有测试的部分 / 没测试的部分
 
 | | 状态 |

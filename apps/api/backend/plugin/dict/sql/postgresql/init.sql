@@ -12,7 +12,9 @@ begin
 ('删除类型', 'DeleteDictType', null, 0, null, 2, 'dict:type:del', 1, 0, '', null, dict_menu_id, now(), null),
 ('新增数据', 'AddDictData', null, 0, null, 2, 'dict:data:add', 1, 0, '', null, dict_menu_id, now(), null),
 ('修改数据', 'EditDictData', null, 0, null, 2, 'dict:data:edit', 1, 0, '', null, dict_menu_id, now(), null),
-('删除数据', 'DeleteDictData', null, 0, null, 2, 'dict:data:del', 1, 0, '', null, dict_menu_id, now(), null);
+('删除数据', 'DeleteDictData', null, 0, null, 2, 'dict:data:del', 1, 0, '', null, dict_menu_id, now(), null),
+('导出数据', 'ExportDictData', null, 0, null, 2, 'dict:data:export', 1, 0, '', null, dict_menu_id, now(), null),
+('导入数据', 'ImportDictData', null, 0, null, 2, 'dict:data:import', 1, 0, '', null, dict_menu_id, now(), null);
 end $$;
 
 select setval(pg_get_serial_sequence('sys_menu', 'id'), coalesce(max(id), 0) + 1, true) from sys_menu;

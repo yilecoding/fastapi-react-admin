@@ -76,7 +76,8 @@ values
 (2049629108253622321, '清理任务执行记录', 'maintenance.prune_task_results', null, '{"days": 30}', null, null, null, null, null, null, 1, null, null, '30 3 * * *', false, true, 0, null, '保留 30 天。celery 自带的 backend_cleanup 不会被装上（DatabaseScheduler 重写了 setup_schedule），必须自己排', '2026-08-22 17:00:00', null, 0, null),
 (2049629108253622322, '每日问候', 'notification.send_daily_greeting', null, null, null, null, null, null, null, null, 1, null, null, '0 9 * * *', false, true, 0, null, '每天 9:00 给全员发一条随机问候语，顺带验收消息中心链路（落库/未读数/socket 推送/前端红点）是否通畅', '2026-08-22 17:00:00', null, 0, null),
 (2049629108253622323, '清理回收站', 'maintenance.purge_recycled_files', null, null, null, null, null, null, null, null, 1, null, null, '45 3 * * *', false, true, 0, null, '彻底删除回收站里超过保留期的文件（保留天数是 FILE_RECYCLE_DAYS，默认 30，不在这里配）', '2026-10-22 12:00:00', null, 0, null),
-(2049629108253622324, '清理过期分片', 'maintenance.purge_stale_multipart', null, null, null, null, null, null, null, null, 1, null, null, '0 4 * * *', false, true, 0, null, '清掉过期分片上传（会话在 Redis 里 FILE_MULTIPART_EXPIRE_SECONDS 没动静就过期）留在存储里的分片', '2026-10-22 15:00:00', null, 0, null);
+(2049629108253622324, '清理过期分片', 'maintenance.purge_stale_multipart', null, null, null, null, null, null, null, null, 1, null, null, '0 4 * * *', false, true, 0, null, '清掉过期分片上传（会话在 Redis 里 FILE_MULTIPART_EXPIRE_SECONDS 没动静就过期）留在存储里的分片', '2026-10-22 15:00:00', null, 0, null),
+(2049629108253622358, '清理过期导出', 'maintenance.purge_expired_exports', null, null, null, null, null, null, null, null, 1, null, null, '20 * * * *', false, true, 0, null, '导出文件过了保留期（EXPORT_FILE_RETENTION_HOURS）就删掉、记录改成已过期；卡住的导出记成失败；过了 EXPORT_RECORD_RETENTION_DAYS 的记录删掉', '2026-10-22 20:00:00', null, 0, null);
 
 insert into sys_role (id, code, name, status, is_filter_scopes, remark, created_time, updated_time)
 values
@@ -168,4 +169,9 @@ values
 (2049629108253622335, '查询', 'QueryOperaLog', null, 3, null, 2, 'log:opera:list', 1, 0, '', null, 2049629108249427987, '2026-08-26 00:00:00', null),
 (2049629108253622336, '查询', 'QuerySysRole', null, 4, null, 2, 'sys:role:list', 1, 0, '', null, 2049629108245233674, '2026-08-30 00:00:00', null),
 (2049629108253622337, '查询', 'QuerySysDept', null, 2, null, 2, 'sys:dept:list', 1, 0, '', null, 2049629108245233668, '2026-08-30 00:00:00', null),
-(2049629108253622338, '查询', 'QuerySysDataScope', null, 5, null, 2, 'data:scope:list', 1, 0, '', null, 2049629108249427969, '2026-08-30 00:00:00', null);
+(2049629108253622338, '查询', 'QuerySysDataScope', null, 5, null, 2, 'data:scope:list', 1, 0, '', null, 2049629108249427969, '2026-08-30 00:00:00', null),
+(2049629108253622350, '导出', 'ExportSysUser', null, 2, null, 2, 'sys:user:export', 1, 0, '', null, 2049629108245233672, '2026-10-22 20:00:00', null),
+(2049629108253622351, '导出', 'ExportSysDept', null, 3, null, 2, 'sys:dept:export', 1, 0, '', null, 2049629108245233668, '2026-10-22 20:00:00', null),
+(2049629108253622352, '导入', 'ImportSysDept', null, 4, null, 2, 'sys:dept:import', 1, 0, '', null, 2049629108245233668, '2026-10-22 20:00:00', null),
+(2049629108253622353, '导出', 'ExportLoginLog', null, 3, null, 2, 'log:login:export', 1, 0, '', null, 2049629108249427984, '2026-10-22 20:00:00', null),
+(2049629108253622354, '导出', 'ExportOperaLog', null, 4, null, 2, 'log:opera:export', 1, 0, '', null, 2049629108249427987, '2026-10-22 20:00:00', null);

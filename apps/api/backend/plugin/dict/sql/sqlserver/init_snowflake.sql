@@ -10,7 +10,9 @@ VALUES
 (2049629108253622292, N'修改数据', 'EditDictData', NULL, 0, NULL, 2, 'dict:data:edit', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL),
 (2049629108253622293, N'删除数据', 'DeleteDictData', NULL, 0, NULL, 2, 'dict:data:del', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL),
 (2049629108253622339, N'查询类型', 'QueryDictType', NULL, 0, NULL, 2, 'dict:type:list', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL),
-(2049629108253622340, N'查询数据', 'QueryDictData', NULL, 0, NULL, 2, 'dict:data:list', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL);
+(2049629108253622340, N'查询数据', 'QueryDictData', NULL, 0, NULL, 2, 'dict:data:list', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL),
+(2049629108253622355, N'导出数据', 'ExportDictData', NULL, 0, NULL, 2, 'dict:data:export', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL),
+(2049629108253622356, N'导入数据', 'ImportDictData', NULL, 0, NULL, 2, 'dict:data:import', 1, 0, '', NULL, 2049629108253622287, GETDATE(), NULL);
 
 INSERT INTO sys_dict_type (id, name, code, remark, created_time, updated_time)
 VALUES

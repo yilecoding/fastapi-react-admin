@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAlertTriangle, IconAt, IconCheck, IconClock, IconExternalLink, IconIdBadge2,
+  IconAlertTriangle, IconAt, IconCheck, IconClock, IconExternalLink, IconFileExport, IconIdBadge2,
   IconInfoCircle, IconKey, IconLoader2, IconMail, IconPhoto, IconPlugConnected,
   IconShieldLock, IconSignature, IconUpload, IconUser,
 } from '@tabler/icons-react'
@@ -25,6 +25,7 @@ import { meQuery, type CurrentUser } from '../../auth/queries'
 import { PageHeader } from '../../shell/page-header'
 import { StatusBadge, StatusPill } from '../_shared/status'
 import { PasswordStrength } from './password-strength'
+import { ExportsPanel } from './exports-panel'
 import { RecentLogins } from './recent-logins'
 import {
   AVATAR_MAX_BYTES, SOCIAL_SOURCES, socialBindingsQuery, useSendEmailCaptcha,
@@ -67,8 +68,8 @@ export type ProfileSearch = {
   section?: ProfileSection
 }
 
-/** 前两项是账号相关，后四项来自 `usePreferencePanels()` */
-type ProfileSection = 'basic' | 'security' | 'theme' | 'layout' | 'tabs' | 'reset'
+/** 前三项是账号相关，后四项来自 `usePreferencePanels()` */
+type ProfileSection = 'basic' | 'security' | 'exports' | 'theme' | 'layout' | 'tabs' | 'reset'
 
 const errMsg = (e: unknown, fallback: string) =>
   e instanceof ApiError ? e.message : fallback
@@ -99,6 +100,14 @@ export function ProfilePage({
         label: t('安全'),
         icon: <IconShieldLock />,
         content: <SecurityPanel me={me} />,
+      },
+      {
+        // 后台导出生成完发的站内消息链到这里（`/profile?section=exports`，后端 `tasks/export/tasks.py`）
+        id: 'exports',
+        group: t('账户'),
+        label: t('导出记录'),
+        icon: <IconFileExport />,
+        content: <ExportsPanel />,
       },
       ...preferencePanels,
     ],
