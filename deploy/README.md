@@ -126,8 +126,8 @@ pnpm deploy:prod
 | 容器内 `:8000/health/live` | 进程在不在，不碰任何依赖 | api 镜像的 `HEALTHCHECK` |
 | `/healthz` | 只证明 web 容器里的 nginx 活着 | web 镜像的 `HEALTHCHECK` |
 
-🔴 **不要拿 `/healthz` 或经域名的 `/health/live` 做外部监控。** 前者是 nginx 自己 `return 200`，
-api、数据库全挂了照样绿；后者经域名会落到前端的 history fallback，回的是 `index.html`（也是 200）。
+🔴 **不要拿 `/healthz` 做外部监控。** 它是 nginx 自己 `return 200`，api、数据库全挂了照样绿。
+经域名的 `/health/live` 现在明确回 404（原来会落到前端的 history fallback，回 `index.html` 也是 200）。
 
 ### 返回示例
 

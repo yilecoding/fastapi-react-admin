@@ -216,6 +216,7 @@ CI 构建完镜像**不会**自动同步到服务器，同步是人明确决定�
 
 `apps/web/nginx.conf` 给 `/api/health/status`、`/api/health/ready` 各写一条 `location =` 精确匹配，
 `proxy_pass` 到后端的真实路径；api 不在时把 nginx 自己的 502 / 504 换成 503 + `X-FBA-Updating` 头。
+`/health/live` 单独一条 `return 404`，不再落进 SPA fallback 冒充「后端活着」（后端那条只给容器内 :8000 的 HEALTHCHECK 用）。
 外部监控探哪条、怎么判，见 [`README.md`](./README.md)「外部监控探哪几条」。
 
 ⚠️ 新加一条给外面探的后端路由时，**先经域名 curl 一次看 body**，别只看状态码。
