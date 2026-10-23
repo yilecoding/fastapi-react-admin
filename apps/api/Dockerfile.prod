@@ -96,10 +96,8 @@ RUN mkdir -p /app/backend/log /app/backend/upload /app/backend/upload-public \
 USER fba
 EXPOSE 8000
 
-# 存活探针刻意只用 /health/live（不碰 DB）—— 用 ready 的话数据库抖一下
-# 会让编排把所有副本一起 kill
-HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=4 \
-    CMD curl -fsS http://127.0.0.1:8000/health/live || exit 1
+# 刻意不写 HEALTHCHECK：同一个镜像要跑 api / worker / beat / migrate 四种进程，各自该探什么不一样，
+# 健康检查只在 docker-compose.prod.yml 里按服务写一份（原来这里那条会被 compose 盖掉，等于第二份真相）
 
 # ⚠️ --forwarded-allow-ips 不要写 `*`。它和 conf.py 的 TRUSTED_PROXIES 是同一件事的
 # 两层，写 `*` 等于在更底一层把「谁都信 X-Forwarded-For」重新打开，

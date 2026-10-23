@@ -216,7 +216,8 @@ CI 构建完镜像**不会**自动同步到服务器，同步是人明确决定�
 
 `apps/web/nginx.conf` 给 `/api/health/status`、`/api/health/ready` 各写一条 `location =` 精确匹配，
 `proxy_pass` 到后端的真实路径；api 不在时把 nginx 自己的 502 / 504 换成 503 + `X-FBA-Updating` 头。
-`/health/live` 单独一条 `return 404`，不再落进 SPA fallback 冒充「后端活着」（后端那条只给容器内 :8000 的 HEALTHCHECK 用）。
+后端的 `/health/live` 一并删了：它唯一的调用方是 `Dockerfile.prod` 里的 HEALTHCHECK，而 compose 给每个服务都另配了
+healthcheck、把它盖掉了，实际没人用。镜像里的 HEALTHCHECK 也删了，健康检查只在 compose 里写一份。
 外部监控探哪条、怎么判，见 [`README.md`](./README.md)「外部监控探哪几条」。
 
 ⚠️ 新加一条给外面探的后端路由时，**先经域名 curl 一次看 body**，别只看状态码。

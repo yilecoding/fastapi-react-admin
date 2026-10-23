@@ -274,13 +274,17 @@ def register_health(app: FastAPI) -> None:
     就不带 `DependsJwtAuth` / `demo_site`；不加 `Depends(RateLimiter(...))` 就不受限流。
     两者都是 per-route 依赖，不挂就没有。
 
-    三条各管一件事，**不要互相合并**：
+    两条各管一件事，**不要互相合并**：
 
     | 端点 | 看什么 | 谁在用 |
     |---|---|---|
-    | live | 进程在不在，不碰依赖 | `Dockerfile.prod` 的 HEALTHCHECK |
-    | ready | DB + Redis | compose 里 api 的 healthcheck（web / beat 都等它） |
+    | ready | DB + Redis | compose 里 api 的 healthcheck（web / beat 都等它）· `prod.sh up` 的部署后探活 |
     | status | 全部服务（含调度器 / worker 心跳） | 外部监控，经 web 的 nginx 探 `/api/health/status` |
+
+    原来还有一条只答「进程在不在」的 `/health/live`，唯一的调用方是镜像里的 HEALTHCHECK，
+    而 compose 给每个服务都另配了 healthcheck、把它盖掉了 —— 实际没人用，#147 删了。
+    将来上 K8s / Swarm 这类会按健康检查自动重启容器的编排时，再加回一条**不碰任何依赖**的存活探针：
+    拿 ready 顶替的话，数据库抖一下就会把所有副本一起重启。
 
     ⚠️ ready / status 经 web 的 nginx 不鉴权地开着（`apps/web/nginx.conf`）——
     响应里只放状态、检查项名、异常类型名，**不放异常 message**。
@@ -288,15 +292,6 @@ def register_health(app: FastAPI) -> None:
     :param app: FastAPI 应用实例
     :return:
     """
-
-    @app.get('/health/live', include_in_schema=False)
-    async def liveness() -> JSONResponse:
-        """存活探针 —— 刻意不碰任何外部依赖
-
-        探 DB 的话，数据库抖一下会让编排把**所有**副本一起 kill，
-        把一次短暂的依赖故障放大成全站雪崩。存活只回答「进程还在不在」。
-        """
-        return JSONResponse({'status': 'alive'})
 
     @app.get('/health/ready', include_in_schema=False)
     async def readiness() -> JSONResponse:

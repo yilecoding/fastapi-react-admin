@@ -123,11 +123,11 @@ pnpm deploy:prod
 | `https://<域名>/api/health/status` | api · 数据库 · Redis · 调度器（beat）· worker | **外部监控** |
 | `https://<域名>/api/health/ready` | 只看数据库 + Redis | `prod.sh up` 部署后的探活（必须 200，否则判部署失败） |
 | 容器内 `:8000/health/ready` | 同上 | compose 里 api 的 healthcheck（web / beat 都等它） |
-| 容器内 `:8000/health/live` | 进程在不在，不碰任何依赖 | api 镜像的 `HEALTHCHECK` |
 | `/healthz` | 只证明 web 容器里的 nginx 活着 | web 镜像的 `HEALTHCHECK` |
 
 🔴 **不要拿 `/healthz` 做外部监控。** 它是 nginx 自己 `return 200`，api、数据库全挂了照样绿。
-经域名的 `/health/live` 现在明确回 404（原来会落到前端的 history fallback，回 `index.html` 也是 200）。
+同理，经域名探任何一个不存在的路径（比如已经删掉的 `/health/live`）都会落到前端的 history fallback，
+回 200 + `index.html` —— **判定前先看一眼 body**。
 
 ### 返回示例
 

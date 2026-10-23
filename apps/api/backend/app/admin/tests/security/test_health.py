@@ -24,14 +24,7 @@ from backend.core.conf import settings
 
 # `client` fixture 的 base_url 带着 /api/v1 前缀，而健康检查刻意在前缀之外，
 # 所以这里用绝对地址访问
-_LIVE = 'http://testserver/health/live'
 _READY = 'http://testserver/health/ready'
-
-
-def test_liveness_needs_no_token(client: TestClient) -> None:
-    resp = client.get(_LIVE)
-    assert resp.status_code == 200
-    assert resp.json()['status'] == 'alive'
 
 
 def test_readiness_reports_dependencies(client: TestClient) -> None:
