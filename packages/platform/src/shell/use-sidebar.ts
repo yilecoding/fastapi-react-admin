@@ -58,7 +58,7 @@ function warnMissing(node: SidebarNode) {
 /**
  * 后端菜单树 → 前端导航树。
  *
- * 这里执行三条规则：
+ * 这里执行三条规则（**停用的**不在其中：后端连同整棵下级一起不下发，见 `menu_service.get_sidebar`）：
  * 1. **按钮(type=2)不进侧边栏** —— 它们只提供 perms 权限标识，由 <Can> 消费
  * 2. **hideInMenu 的跳过**
  * 3. **path 在前端路由里不存在的跳过 + 开发期告警** —— 后端菜单表和前端文件路由

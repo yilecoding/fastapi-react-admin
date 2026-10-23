@@ -136,6 +136,9 @@ inset（SidebarInset）       content-scroll:min-h-0
   所以 `py-1` 在 `[role=tablist]` 上而不是标签条上，标签条也**不能** `overflow-hidden`
 - 两端用 `mask-image` 渐隐（12px），被裁一半的 tab 淡出而不是被生生切断；
   配合 `scroll-mx-5`，活动 tab 滚进来时不会正好压在渐隐带上
+- 🔴 **标签上显示的名字不能直接用 `tab.title`**：它是打开那一刻定下的（`staticData.title` 优先），
+  管理员之后在菜单管理里改了名，侧边栏变了、已开着的标签不变。标签条 / 标签列表 / ⌘K 的「已打开」
+  都按 pathname 现查菜单树（`use-menu-titles.ts`）再交给 `menuTitle()`，查不到才用存的（#143，见 [menu 分册](../pages/menu/AGENTS.md)）
 
 ### 🔴 换身份必须清空标签页，而且清一次是不够的
 

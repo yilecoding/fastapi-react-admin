@@ -68,7 +68,10 @@ class MenuService:
                 menu_data = await menu_dao.get_sidebar(db, list(menu_ids))
 
         if menu_data:
-            return get_vben5_tree_data(menu_data)
+            # 停用的连同整棵下级一起不下发（`get_disabled_ids`）。整棵去掉、不会留下孤儿：
+            # 只去掉某一项的话，它的下级找不到上级，会被 `traversal_to_tree` 提到顶层
+            disabled = await menu_dao.get_disabled_ids(db)
+            return get_vben5_tree_data([menu for menu in menu_data if menu.id not in disabled])
 
         return []
 
@@ -122,7 +125,15 @@ class MenuService:
             if not parent_menu:
                 raise errors.NotFoundError(msg=t('error.menu.parent_not_found'))
         if obj.parent_id == menu.id:
-            raise errors.ForbiddenError(msg=t('error.dept.cannot_be_own_parent'))
+            raise errors.ForbiddenError(msg=t('error.menu.cannot_be_own_parent'))
+        # 🔴 也不能挂到自己的下级下面（同部门 #135）：成环之后那棵子树找不到根，从菜单树里整个消失，
+        # 而库里每一行都还在。前端的上级下拉排除了自己那棵子树，直接打接口 / AI 工具就绕过去了
+        if (
+            obj.parent_id
+            and obj.parent_id != menu.parent_id
+            and menu.id in await menu_dao.get_ancestor_ids(db, obj.parent_id)
+        ):
+            raise errors.ForbiddenError(msg=t('error.menu.cannot_be_own_descendant'))
         return menu
 
     async def update(
@@ -140,7 +151,9 @@ class MenuService:
 
         await self.check_update(db=db, pk=pk, obj=obj)
         count = await menu_dao.update(db, pk, obj)
-        await user_cache_manager.clear_by_menu_id(db, background_tasks, [pk])
+        # 整棵下级都要清：停用 / 挪到停用的目录下，影响的是下级按钮的权限码，
+        # 而持有那些按钮的角色未必持有这一项（用户缓存里的菜单状态是按上级算过的，见 `get_jwt_user`）
+        await user_cache_manager.clear_by_menu_id(db, background_tasks, await menu_dao.get_subtree_ids(db, pk))
         return count
 
     @staticmethod

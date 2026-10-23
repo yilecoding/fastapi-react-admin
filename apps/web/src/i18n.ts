@@ -43,5 +43,5 @@ const syncDocumentTitle = (): void => {
 onLanguageChange(syncDocumentTitle)
 syncDocumentTitle()
 
-export { LANGUAGES, changeLanguage, currentLanguage, menuKey } from '@admin/i18n'
+export { LANGUAGES, changeLanguage, currentLanguage, menuTitle } from '@admin/i18n'
 export type { Language } from '@admin/i18n'

@@ -213,8 +213,10 @@ class AuthService:
         codes = set()
         if request.user.is_superuser:
             menus = await menu_dao.get_all(db, None, None)
+            # 停用的目录 / 页面连带下级（非超管那一支读的是用户快照，`get_jwt_user` 里已经按上级算过）
+            disabled = await menu_dao.get_disabled_ids(db)
             for menu in menus:
-                if menu.status == StatusType.enable and menu.perms:
+                if menu.id not in disabled and menu.perms:
                     codes.update(menu.perms.split(','))
         else:
             roles = [role for role in request.user.roles if role.status == StatusType.enable]

@@ -310,3 +310,25 @@ dept / role / user / notice / file 这几个。
 ⚠️ 排查时容易误报的一条：`/auth/codes` 对 STAFF 返回 0 条，看着像同一个 bug ——
 但那是**对的**，STAFF 那三个菜单一个 `perms` 都没有（实测）。
 「受限用户看到的少」不等于「被错误地过滤了」。
+
+## 🔴 停用的菜单按上级算 —— 快照里的 `status` 是生效状态（#143）
+
+**症状**（修之前）：停用一个目录，接口 200，而侧边栏照常显示、下面按钮的权限码照常生效 —— 等于没停。
+权限码是逐个菜单算的，五处判定（`rbac_verify` · `collect_allowed_perms` · `/auth/codes` · 文件 `_has_perm` ·
+审批 `Actor.from_user`）都只看菜单**自己**的 `status`，而目录 / 页面大多不带权限码。
+
+**现在**：一个菜单生效 = 它和每一级上级都启用（`menu_dao.get_disabled_ids`）。落在三处，各有理由：
+
+| 哪里 | 怎么做 | 为什么在这 |
+|---|---|---|
+| `jwt.get_jwt_user` 建快照时 | 把停用那一枝的菜单 `status` 改写成 0 | 上面五处全读快照，换一次全都对了，不用逐处改 |
+| `auth_service.get_codes` 的超管分支 | 用 `get_disabled_ids` 滤 | 超管那一支直接查库，不读快照 |
+| `menu_service.get_sidebar` | 整枝不下发 | 只去掉某一项会留下孤儿，被 `traversal_to_tree` 提到顶层 |
+
+- 🔴 **新写「从库里查菜单算权限码」的代码，要过 `get_disabled_ids`**，不能只看 `menu.status`。只看自己的话停用目录对它不生效，
+  而别处都生效了 —— 同一个人在这条路上有权限、在界面上没有，不报错
+- 🔴 **改菜单要清整棵下级持有者的快照**（`menu_service.update` → `get_subtree_ids`）。只清「持有这一项的人」不够：
+  角色可以只有页面和按钮、没有它们的目录（接口允许这么授），停用目录时这些人的快照不清，权限要等 token 过期才失效
+- ⚠️ 只写目录自己那一行，不往下级写 —— 下级自己的状态保留着，重新启用目录就整棵原样回来
+
+**实测证据**：`app/admin/tests/api_v1/test_menu_disable.py`（变异记录见 [`pages/menu` 分册](../../../../../packages/platform/src/pages/menu/AGENTS.md)「三处『改了、保存成功、界面不变』」）。
