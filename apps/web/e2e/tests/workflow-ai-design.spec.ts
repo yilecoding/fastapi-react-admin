@@ -60,7 +60,7 @@ test.beforeAll(async () => {
   await dispose()
 })
 
-function generateRoute(page: import("@playwright/test").Page) {
+function generateRoute() {
   return `**/api/v1/sys/workflow/definitions/${definitionId}/ai-generate`
 }
 
@@ -74,7 +74,7 @@ async function openDialog(page: import("@playwright/test").Page) {
 }
 
 test("生成的结果只进草稿：表单 / 流程换掉、AI 预审设置不动、问题点一下定位，服务端草稿不变", async ({ page }) => {
-  await page.route(generateRoute(page), (route) =>
+  await page.route(generateRoute(), (route) =>
     route.fulfill({ json: { code: 200, msg: "请求成功", data: GENERATED } })
   )
   const scope = await openDialog(page)
@@ -106,7 +106,7 @@ test("生成的结果只进草稿：表单 / 流程换掉、AI 预审设置不�
 
 test("生成失败：错误挂在弹窗里，描述还在，可以重试", async ({ page }) => {
   let calls = 0
-  await page.route(generateRoute(page), (route) => {
+  await page.route(generateRoute(), (route) => {
     calls += 1
     return route.fulfill({
       status: 400,
@@ -123,7 +123,7 @@ test("生成失败：错误挂在弹窗里，描述还在，可以重试", async
 
 test("生成中关掉弹窗：不要这次的结果（人可能已经接着手动改了）", async ({ page }) => {
   let answered = false
-  await page.route(generateRoute(page), async (route) => {
+  await page.route(generateRoute(), async (route) => {
     await new Promise((r) => setTimeout(r, 1500))
     answered = true
     await route.fulfill({ json: { code: 200, msg: "请求成功", data: GENERATED } })
