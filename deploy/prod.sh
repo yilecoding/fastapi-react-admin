@@ -18,7 +18,7 @@
 #   config   展开并校验 compose，不启动任何东西
 #   build    在本机从源码构建（只有仓库在的时候能用，和 pull 二选一）
 #   pull     拉 CI 已经推到 GHCR 的镜像（配 FBA_PULL_MIRROR 时走加速器 + 自动 retag）
-#   up       启动（先跑 migrate，成功了才起 api/worker/beat/web）
+#   up       启动（先跑 migrate，成功了才起 api/worker/beat/web），再经 web 探 /api/health/ready
 #   down     停止容器。永远不带 -v —— 这个脚本不给传任何额外参数就是为了这个
 #   logs     跟踪最近 200 行
 #   status   在跑的是哪个提交、和 main 差多少
@@ -263,6 +263,27 @@ cmd_sync() {
   info "本机差异（端口 / .env.server 位置）应该写在 $project_dir/.env 里，不要改 compose"
 }
 
+# ── up 之后探活：经 web 的 nginx 探，外部监控走的也是这一层 ────────────────
+# ready（DB + Redis）必须 200，否则判部署失败 —— 容器全起来了、nginx 那条 location 写错了的话，
+# api 自己是好的，监控却一直红。status 只打印不卡：worker / 调度器刚换完，下一拍最多要等 60 秒，
+# 心跳阈值是 180 秒，旧进程留下的心跳通常还没过期，所以这里多半已经全是 ok
+probe_after_up() {
+  local base code=""
+  base="http://127.0.0.1:$(setting FBA_WEB_PORT 80)"
+  for _ in $(seq 1 20); do
+    code=$(curl -s -m 5 -o /dev/null -w '%{http_code}' "$base/api/health/ready" || true)
+    [ "$code" = 200 ] && break
+    sleep 3
+  done
+  [ "$code" = 200 ] || fail \
+    "经 web 探 $base/api/health/ready 60 秒内没有 200（最后一次：${code:-无响应}）" \
+    "容器起来了，但站点不可用。看日志：bash prod.sh logs" \
+    "503 + body 里列着 database / redis 哪项坏了；503 带 X-FBA-Updating 头 = api 没起来；404 = web 的 nginx 配置没跟上"
+  ok "经 web 探 /api/health/ready → 200"
+  info "各服务状态 /api/health/status → $(curl -s -m 10 "$base/api/health/status" || echo 无响应)"
+  info "scheduler / worker 不是 ok 的话过 3 分钟再看一次，还不是就查那个容器"
+}
+
 # ── 分发 ─────────────────────────────────────────────────────────────────
 require_docker
 info "compose: $compose"
@@ -283,6 +304,7 @@ case $command in
     check_env_file
     check_env_owner
     dc up -d
+    probe_after_up
     ;;
   down) dc down ;;
   logs) dc logs -f --tail=200 ;;

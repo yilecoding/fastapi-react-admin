@@ -51,6 +51,12 @@ def init_worker_runtime(*args, **kwargs) -> None:
         await redis_client.init()
         if _settings.SNOWFLAKE_ENABLED or _settings.DATABASE_PK_MODE == 'snowflake':
             await snowflake.init()
+        # 🔴 走之前把连接池断开。这里是 `asyncio.run` 起的**临时**循环，ping 建的连接留在池里
+        # 绑着它；任务跑在 AsyncIOPool 自己的循环里，拿到这条连接就
+        # `got Future attached to a different loop` / `Event loop is closed`。
+        # 坏连接被丢掉后第二次就好了，所以只表现为「每个 worker 进程第一个用 Redis 的任务必失败」
+        # （见 app/task/AGENTS.md「补完要把 Redis 连接池断开」）
+        await redis_client.connection_pool.disconnect()
 
     asyncio.run(_init())
 

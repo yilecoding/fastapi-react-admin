@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+import time
 
 from datetime import timedelta
 from typing import Any
@@ -161,6 +162,19 @@ class ModelEntry(ScheduleEntry):
     next = __next__  # celery 内部两种写法都用
 
 
+def _sync_redis() -> Any:
+    """beat 是同步进程，用同步客户端（应用那个 `redis_client` 是异步的）"""
+    import redis
+
+    return redis.Redis(
+        host=settings.REDIS_HOST,
+        port=settings.REDIS_PORT,
+        password=settings.REDIS_PASSWORD or None,
+        db=settings.REDIS_DATABASE,
+        socket_timeout=2,
+    )
+
+
 class DatabaseScheduler(Scheduler):
     """从数据库读调度的 beat 调度器"""
 
@@ -169,11 +183,35 @@ class DatabaseScheduler(Scheduler):
     #: 没有变更信号时，最多多久强制重读一次（秒）
     max_interval = 60
 
+    #: 调度器心跳最多多久写一次（秒）。tick 可能一秒好几次，没必要每拍都写
+    heartbeat_every = 15
+
     def __init__(self, *args, **kwargs) -> None:
         self._schedule: dict[str, ModelEntry] = {}
         self._last_seen_update: str | None = None
         self._dirty: set[str] = set()
+        self._last_heartbeat = 0.0
         super().__init__(*args, **kwargs)
+
+    def tick(self, *args, **kwargs) -> float:
+        self.write_heartbeat()
+        return super().tick(*args, **kwargs)
+
+    def write_heartbeat(self) -> None:
+        """往 Redis 写「调度器还在转」的时间戳，`/health/status` 读它（`core/registrar.py`）。
+
+        🔴 写在调度循环里，不能靠派一个任务：派出去的任务要 worker 执行才落得了地，
+        那样 beat 停了和 worker 停了看到的是同一个结果。`max_interval = 60`，
+        没有任何调度到期时 tick 也最多 60 秒一拍。写失败只记日志 —— 不能为了心跳让 beat 停摆
+        """
+        now = time.time()
+        if now - self._last_heartbeat < self.heartbeat_every:
+            return
+        self._last_heartbeat = now
+        try:
+            _sync_redis().set(settings.SCHEDULER_HEARTBEAT_REDIS_KEY, f'{now:.3f}')
+        except Exception as e:
+            logger.warning('写调度器心跳失败：%s', e)
 
     # -- 读 ----------------------------------------------------------------
 
@@ -217,17 +255,8 @@ class DatabaseScheduler(Scheduler):
 
     def _remote_last_update(self) -> str | None:
         """读「调度变过没有」的时间戳。Redis 不可用时返回 None = 不触发重载。"""
-        import redis
-
         try:
-            client = redis.Redis(
-                host=settings.REDIS_HOST,
-                port=settings.REDIS_PORT,
-                password=settings.REDIS_PASSWORD or None,
-                db=settings.REDIS_DATABASE,
-                socket_timeout=2,
-            )
-            value = client.get(f'{settings.CELERY_REDIS_PREFIX}:last_update')
+            value = _sync_redis().get(f'{settings.CELERY_REDIS_PREFIX}:last_update')
             return value.decode() if value else None
         except Exception as e:
             # Redis 挂了不该让 beat 停摆 —— 只是失去「改完立刻生效」的能力，

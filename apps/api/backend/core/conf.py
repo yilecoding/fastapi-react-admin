@@ -511,6 +511,14 @@ class Settings(BaseSettings):
     # 装饰器里用 asyncio.wait_for() 补，这个值就是喂给它的默认秒数
     CELERY_TASK_TIME_LIMIT: int = 1800
 
+    # 后台进程心跳，`/health/status` 读这两个键（见 core/registrar.py）。值是 epoch 秒：
+    #   scheduler —— beat 的调度循环每一拍写（`utils/schedulers.py: DatabaseScheduler.tick`），最长 60 秒一拍
+    #   worker    —— 执行 `health.heartbeat`（beat 每 60 秒派一次）时写
+    # 阈值 = 3 个周期：漏一两拍（重启、发版换容器）不报警，连续三拍没有才判死
+    SCHEDULER_HEARTBEAT_REDIS_KEY: str = 'fba:health:scheduler_heartbeat'
+    WORKER_HEARTBEAT_REDIS_KEY: str = 'fba:health:worker_heartbeat'
+    HEARTBEAT_MAX_AGE_SECONDS: int = 180
+
     ##################################################
     # [ Plugin ] oauth2
     ##################################################
