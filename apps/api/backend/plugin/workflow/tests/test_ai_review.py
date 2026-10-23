@@ -5,9 +5,11 @@
 
 import asyncio
 import json
+import re
 
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -16,6 +18,7 @@ from sqlalchemy import text, update
 from starlette.testclient import TestClient
 
 from backend.app.task.celery import celery_app
+from backend.common.i18n import i18n
 from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
 from backend.plugin.workflow.model import WfAiReview
 from backend.plugin.workflow.service import ai_review_service
@@ -308,3 +311,37 @@ def test_resubmit_queues_a_new_review_and_supersedes_the_old_one(
     r = _review(client, login('zhaolei'), pk)
     assert r['status'] == 'pending', '详情只看最新一次'
     assert r['superseded'] == 1
+
+
+def test_failure_reason_is_in_the_viewers_language_and_never_blank(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid, sent: list[int], model_reply: Any
+) -> None:
+    """🔴 失败原因读的时候才翻（见 `_ReviewError`）：写这一行的是 Celery worker，存成文字就定死成写入那一刻的语言。
+    模型超时抛的 TimeoutError 没有消息 —— 原样存的话界面上只剩「预审失败：」"""
+    _setup(client, token_headers, uid, 'PYTEST_AI_LANG')
+    pk = _start(client, login, 'PYTEST_AI_LANG')
+    model_reply('这不是 JSON')
+    _run(sent[0])
+
+    def error_in(lang: str) -> str:
+        return _review(client, {**token_headers, 'Accept-Language': lang}, pk)['error']
+
+    text = {lang: i18n.locales[lang]['workflow']['ai_review'] for lang in ('zh-CN', 'en-US')}
+    assert error_in('zh-CN') == text['zh-CN']['bad_output']
+    assert error_in('en-US') == text['en-US']['bad_output']
+
+    ok(client.post(f'/sys/workflow/instances/{pk}/ai-review/retry', headers=token_headers))
+    model_reply(TimeoutError())
+    _run(sent[1])
+    assert error_in('en-US') == text['en-US']['model_timeout']
+
+
+def test_every_stored_error_key_exists_in_both_languages() -> None:
+    """存进库的是 key：拼错一个字母，界面上就原样显示一串 `workflow.ai_review.xxx`。
+    `test_i18n.py` 只扫 `t('error.…')` 这种调用，这几个 key 是拼出来的，它看不见"""
+    src = Path(ai_review_service.__file__).read_text(encoding='utf-8')
+    keys = set(re.findall(r'\{_KEY_PREFIX\}(\w+)', src))
+    assert {'bad_output', 'dispatch_failed', 'model_timeout', 'no_ai_plugin', 'no_provider'} <= keys, keys
+    for lang in ('zh-CN', 'en-US'):
+        missing = keys - set(i18n.locales[lang]['workflow']['ai_review'])
+        assert not missing, f'{lang} 缺 {sorted(missing)}'

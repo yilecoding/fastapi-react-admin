@@ -57,6 +57,35 @@ _MAX_VALUE_CHARS = 2000
 _SKIP_TYPES = {'description'}
 
 
+_KEY_PREFIX = 'workflow.ai_review.'
+
+
+class _ReviewError(Exception):
+    """预审自己判定的失败（没装插件 / 没有供应商 / 格式不对 / 模型超时 / 派发不出去）。
+
+    🔴 库里存的是语言包的 **key**，读的时候（`get_for`）按查看人的语言翻。写这一行的是 Celery worker
+    （没有「请求的语言」）或发起人的请求，存成文字就定死成写入那一刻的语言 —— 英文界面的审批人读到一句中文。
+    模型 / 网络自己的报错原样存：那是对方的原文，翻不了。
+    """
+
+    def __init__(self, key: str) -> None:
+        super().__init__(key)
+        self.key = key
+
+
+def _error_of(e: Exception) -> str:
+    if isinstance(e, _ReviewError):
+        return e.key
+    if isinstance(e, TimeoutError):
+        # `asyncio.wait_for` 超时抛的 TimeoutError 没有消息：原样存是空串，界面上只剩「预审失败：」
+        return f'{_KEY_PREFIX}model_timeout'
+    return (getattr(e, 'msg', None) or str(e) or type(e).__name__)[:512]
+
+
+def _error_text(error: str | None) -> str | None:
+    return t(error) if error and error.startswith(_KEY_PREFIX) else error
+
+
 def ai_config(model: dict[str, Any]) -> dict[str, Any] | None:
     cfg = model.get('aiReview') or {}
     return cfg if cfg.get('enabled') else None
@@ -96,7 +125,7 @@ async def dispatch(db: AsyncSession, review_id: int) -> None:
         log.error(f'AI 预审派发失败（review={review_id}）：{e!s}')
         await _no_tx(db)
         async with db.begin():
-            await _finish(db, review_id, status='failed', error=t('workflow.ai_review.dispatch_failed'))
+            await _finish(db, review_id, status='failed', error=f'{_KEY_PREFIX}dispatch_failed')
 
 
 # ── Celery 里：调模型、写结果 ─────────────────────────────────────────────────
@@ -150,12 +179,12 @@ _FENCE = re.compile(r'^```(?:json)?\s*|\s*```$')
 
 
 def parse_output(text: str, field_ids: set[str]) -> _Output:
-    """按白名单解析模型输出。不合格抛 ValueError —— 调用方记成 `failed`，**不能**当成「通过」"""
+    """按白名单解析模型输出。不合格抛 `_ReviewError` —— 调用方记成 `failed`，**不能**当成「通过」"""
     raw = _FENCE.sub('', text.strip())
     try:
         out = _Output.model_validate_json(raw)
     except ValidationError as e:
-        raise ValueError(t('workflow.ai_review.bad_output')) from e
+        raise _ReviewError(f'{_KEY_PREFIX}bad_output') from e
     for r in out.reasons:
         # 模型编了一个不存在的字段 ID：降级成整体意见，而不是让它指向一个没有的字段
         if r.field_id is not None and r.field_id not in field_ids:
@@ -169,10 +198,10 @@ async def _build_client(db: AsyncSession) -> Any:
         from backend.plugin.ai.crud.crud_provider import ai_provider_dao
         from backend.plugin.ai.service.provider_service import ai_provider_service
     except ImportError as e:
-        raise errors.ServerError(msg=t('workflow.ai_review.no_ai_plugin')) from e
+        raise _ReviewError(f'{_KEY_PREFIX}no_ai_plugin') from e
     provider = await ai_provider_dao.get_default(db)
     if provider is None:
-        raise errors.ServerError(msg=t('workflow.ai_review.no_provider'))
+        raise _ReviewError(f'{_KEY_PREFIX}no_provider')
     return ai_provider_service.build_client(provider)
 
 
@@ -218,7 +247,7 @@ async def run_review(session_factory: Callable[[], Any], review_id: int) -> str:
                     db,
                     review_id,
                     status='failed',
-                    error=(getattr(e, 'msg', None) or str(e))[:512],
+                    error=_error_of(e),
                     model=getattr(client, 'model', None),
                     duration_ms=int((time.perf_counter() - started) * 1000),
                 )
@@ -315,7 +344,7 @@ async def get_for(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:
         'status': status,
         'verdict': review.verdict if status == 'done' else None,
         'reasons': for_viewer(review, hidden) if status == 'done' else [],
-        'error': review.error if status == 'failed' else None,
+        'error': _error_text(review.error) if status == 'failed' else None,
         'model': review.model,
         'points_version': review.points_version,
         'created_time': review.created_time,
