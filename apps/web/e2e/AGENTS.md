@@ -378,6 +378,7 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 | `query-bar.spec.ts` | 硬纪律 2：条件/布局写进 URL，`reload` 之后还在 | `<Activity>` 保活会盖住「其实没写进 URL」，只有刷新才现形 |
 | `notification.spec.ts` | 红点走 REST 不只靠 socket；取数失败显示 `!` | 断线期间的通知在红点上**永远看不见** |
 | `menu-dead-link.spec.ts` | 死链判定的漏报**和**误报（那 3 个假死链的回归） | 侧边栏静默跳过一条配好的菜单；或者反过来，人去修一个没坏的东西 |
+| `menu-rename-disable.spec.ts` | 改内置菜单名（含已经开着的标签）· 停用目录整枝消失（#143）。改的是种子里的真菜单，`finally` 改回去 | 保存成功、界面一个字不变。做过变异：标签不现查菜单树 / 侧边栏不滤停用的，各自当场红 |
 | `file-upload.spec.ts` | 上传闭环 + 未登录时两条读取路径都拿不到文件 | `UPLOAD_DIR` 挪回 `STATIC_DIR` 下的话功能全对，只是文件全公开了 |
 | `user-import.spec.ts` | 批量导入的预览三类问题 + token 一次性 + 非 xlsx 被挡 | 「导入成功了、人数对不上」——文件内重名 / 编码查不到 / 某列拼错整列丢数据，全都不报错 |
 | `data-io.spec.ts` | 导出的就是筛选的那批（CSV 带 BOM）· 导出记录能再下载 · 一份文件建一棵部门树 · 列顺序进 URL（刷新、搜索之后都还在） | 导出全表而用户以为是筛过的；拖完列顺序一刷新就没了。两条都做过变异：导出不传筛选 / `keep` 里去掉 `cols`，各自当场红 |

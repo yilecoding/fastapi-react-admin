@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { menuKey } from '@admin/i18n'
+import { menuTitle } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 import * as React from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
@@ -74,7 +74,7 @@ function NavItem({
         <Item>
           <ItemButton render={<a href={node.external} target="_blank" rel="noreferrer" />}>
             <MenuIcon name={node.icon} className={iconClass} />
-            <span>{t(menuKey(node.path), { defaultValue: t(node.title) })}</span>
+            <span>{menuTitle(t, node.path, node.title)}</span>
             <IconExternalLink className="ms-auto size-3 opacity-50" />
           </ItemButton>
         </Item>
@@ -88,7 +88,7 @@ function NavItem({
           render={<Link to={node.path as never} />}
         >
           <MenuIcon name={node.icon} className={iconClass} />
-          <span>{t(menuKey(node.path), { defaultValue: t(node.title) })}</span>
+          <span>{menuTitle(t, node.path, node.title)}</span>
         </ItemButton>
       </Item>
     )
@@ -107,7 +107,7 @@ function NavItem({
       <Item>
         <CollapsibleTrigger render={<ItemButton data-testid={`nav-group-${node.title}`} />}>
           <MenuIcon name={node.icon} className={iconClass} />
-          <span>{t(menuKey(node.path), { defaultValue: t(node.title) })}</span>
+          <span>{menuTitle(t, node.path, node.title)}</span>
           <IconChevronRight className="ms-auto size-4 shrink-0 transition-transform group-data-[panel-open]/collapsible:rotate-90" />
         </CollapsibleTrigger>
         <CollapsibleContent>

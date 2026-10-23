@@ -120,6 +120,8 @@ error:
     token_expired: The import token has expired, upload the file again to preview
   language_not_found: Current language pack is not initialized or does not exist
   menu:
+    cannot_be_own_descendant: A menu cannot be moved under one of its own sub-menus
+    cannot_be_own_parent: An item cannot be its own parent
     has_children: This menu has sub-menus and cannot be deleted
     not_found: Menu does not exist
     parent_not_found: Parent menu does not exist

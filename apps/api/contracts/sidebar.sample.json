@@ -20,8 +20,7 @@
         "icon": "ant-design:dashboard-outlined",
         "iframeSrc": "",
         "link": "",
-        "hideInMenu": false,
-        "menuVisibleWithForbidden": false
+        "hideInMenu": false
       }
     },
     {
@@ -42,8 +41,7 @@
         "icon": "eos-icons:admin",
         "iframeSrc": "",
         "link": "",
-        "hideInMenu": false,
-        "menuVisibleWithForbidden": false
+        "hideInMenu": false
       },
       "children": [
         {
@@ -64,8 +62,7 @@
             "icon": "mingcute:department-line",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -86,8 +83,7 @@
             "icon": "ant-design:user-outlined",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -108,8 +104,7 @@
             "icon": "carbon:user-role",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -130,8 +125,7 @@
             "icon": "ant-design:menu-outlined",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -152,8 +146,7 @@
             "icon": "icon-park-outline:permissions",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -174,8 +167,7 @@
             "icon": "lucide:files",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -196,8 +188,7 @@
             "icon": "codicon:symbol-parameter",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -218,8 +209,7 @@
             "icon": "fluent-mdl2:dictionary",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -240,8 +230,7 @@
             "icon": "clarity:plugin-line",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -262,8 +251,7 @@
             "icon": "fe:notice-push",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         }
       ]
@@ -286,8 +274,7 @@
         "icon": "carbon:cloud-logging",
         "iframeSrc": "",
         "link": "",
-        "hideInMenu": false,
-        "menuVisibleWithForbidden": false
+        "hideInMenu": false
       },
       "children": [
         {
@@ -308,8 +295,7 @@
             "icon": "mdi:login",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -330,8 +316,7 @@
             "icon": "carbon:operations-record",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         }
       ]
@@ -354,8 +339,7 @@
         "icon": "mdi:monitor-eye",
         "iframeSrc": "",
         "link": "",
-        "hideInMenu": false,
-        "menuVisibleWithForbidden": false
+        "hideInMenu": false
       },
       "children": [
         {
@@ -376,8 +360,7 @@
             "icon": "wpf:online",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -398,8 +381,7 @@
             "icon": "devicon:redis",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -420,8 +402,7 @@
             "icon": "mdi:server-outline",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         }
       ]
@@ -444,8 +425,7 @@
         "icon": "ant-design:profile-outlined",
         "iframeSrc": "",
         "link": "",
-        "hideInMenu": true,
-        "menuVisibleWithForbidden": false
+        "hideInMenu": true
       }
     },
     {
@@ -466,8 +446,7 @@
         "icon": "ant-design:experiment-outlined",
         "iframeSrc": "",
         "link": "",
-        "hideInMenu": false,
-        "menuVisibleWithForbidden": false
+        "hideInMenu": false
       },
       "children": [
         {
@@ -488,8 +467,7 @@
             "icon": "ph:puzzle-piece",
             "iframeSrc": "",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         },
         {
@@ -510,8 +488,7 @@
             "icon": "simple-icons:apifox",
             "iframeSrc": "http://127.0.0.1:8000/docs",
             "link": "",
-            "hideInMenu": false,
-            "menuVisibleWithForbidden": false
+            "hideInMenu": false
           }
         }
       ]

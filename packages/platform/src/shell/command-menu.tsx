@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { menuKey } from '@admin/i18n'
+import { menuTitle } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
@@ -19,6 +19,7 @@ import { isRemovable, useTabStore } from './tab-store'
 import { SHELL_TOUR } from './tour/shell-tour'
 import { startTour } from './tour/tour'
 import { useSidebar, type NavNode, type SidebarOptions } from './use-sidebar'
+import { useMenuTitles } from './use-menu-titles'
 import { tabCapabilities, useTabActions } from './use-tab-actions'
 
 /**
@@ -44,6 +45,7 @@ export function CommandMenu({ options }: { options: SidebarOptions }) {
 
   const navigate = useNavigate()
   const { nav } = useSidebar(options)
+  const menuTitles = useMenuTitles()
   const tabs = useTabStore((s) => s.tabs)
   const activeKey = useTabStore((s) => s.activeKey)
   const act = useTabActions()
@@ -87,8 +89,8 @@ export function CommandMenu({ options }: { options: SidebarOptions }) {
     () =>
       tabs.map((tab) => {
         const pathname = tab.href.split('?')[0] ?? tab.href
-        // 与 tab-item / tab-list-menu 同口径：key 用 pathname，回落标题本身即 key
-        const label = t(menuKey(pathname), { defaultValue: t(tab.title) })
+        // 与 tab-item / tab-list-menu 同口径
+        const label = menuTitle(t, pathname, menuTitles(pathname) ?? tab.title)
         return {
           id: `tab:${tab.key}`,
           group: t('已打开的标签页'),
@@ -105,7 +107,7 @@ export function CommandMenu({ options }: { options: SidebarOptions }) {
           onSelect: () => act.activate(tab),
         }
       }),
-    [tabs, activeKey, act, iconByPath, t]
+    [tabs, activeKey, act, iconByPath, menuTitles, t]
   )
 
   /** 页面组：导航树拍平成叶子，`hint` 是它的菜单层级链 */
@@ -116,7 +118,7 @@ export function CommandMenu({ options }: { options: SidebarOptions }) {
     const out: CommandItem[] = []
     const walk = (nodes: NavNode[], trail: string[]) => {
       for (const n of nodes) {
-        const label = t(menuKey(n.path), { defaultValue: t(n.title) })
+        const label = menuTitle(t, n.path, n.title)
         if (n.children.length) {
           // 目录本身不可跳转（它的 path 可能是空串），只贡献层级链
           walk(n.children, [...trail, label])

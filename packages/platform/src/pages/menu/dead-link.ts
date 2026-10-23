@@ -29,7 +29,9 @@ export function isBrokenMenu(m: Menu, isValidPath: (p: string) => boolean): bool
 
 /**
  * 有没有「进得了侧边栏」的子项 —— 与 `toNavTree` 的过滤口径一致：
- * 按钮不算、`display=0`（不在菜单显示）不算、自己也是死链的不算。
+ * 按钮不算、`display=0`（不在菜单显示）不算、**停用的不算**、自己也是死链的不算。
+ * 停用的那一枝后端整棵不下发（#143），`toNavTree` 根本见不到它 —— 子项全停用了的目录，
+ * 和子项全是死链的目录一样会降级成链接，没有有效 path 就从侧边栏消失。
  *
  * 必须**递归**：子项自己也可能是死链（比如指向一个已经被合并/下线的旧页面），
  * 这种子项不算「可见」——一个目录如果所有子项都这样，它自己也没有可导航的
@@ -40,6 +42,7 @@ export function hasVisibleChild(m: Menu, isValidPath: (p: string) => boolean): b
   return (m.children ?? []).some((c) => {
     if (c.type === MENU_TYPE.BUTTON) return false
     if (c.display === 0) return false
+    if (c.status === 0) return false
     if (c.type === MENU_TYPE.LINK || c.type === MENU_TYPE.IFRAME) return true
     return !isBrokenMenu(c, isValidPath)
   })

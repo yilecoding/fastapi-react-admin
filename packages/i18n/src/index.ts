@@ -143,11 +143,45 @@ export function currentLanguage(): Language {
  * 标题存在数据库里，管理员随时能改，改了英文条目就失效；
  * 而 path 是从前端真实路由下拉选的，是这套数据里最稳的东西。
  *
- * 用法：`t(menuKey(node.path), { defaultValue: node.title })`
- * —— 查不到就回落到库里的中文标题，**永远不会在界面上露出 raw key**。
+ * 界面上显示菜单名不要直接拿它查，走下面的 `menuTitle()`。
  */
 export function menuKey(path: string | null | undefined): string {
   return `menu:${path ?? ''}`
+}
+
+/**
+ * 界面上显示的菜单名（侧边栏 · 标签条 · 面包屑 · 命令面板 · 菜单管理 · 权限矩阵都走它）。
+ *
+ * - **基准语言下就是库里的标题** —— 管理员在菜单管理里改了名，界面上就是新名字
+ * - 其它语言下先按 path 查语言包里的内置译名，查不到再翻库里的标题（「标题本身即 key」，
+ *   按钮行没有 path 就靠这一级）—— **永远不会在界面上露出 raw key**
+ *
+ * 🔴 原来所有语言都先按 path 查（#143）：内置菜单两个语言包里都有 `menu:<path>`，
+ * 改了库里的标题，连菜单管理页自己都显示不出新名字 —— 接口 200、提示保存成功、界面不变。
+ * 留下的代价：其它语言下改过名的内置菜单仍显示内置译名（菜单表单里用 `hasBuiltinMenuTranslation` 提示）。
+ *
+ * `t` 由调用方传组件里 `useTranslation()` 的那个 —— 切语言时靠它重渲染。
+ */
+export function menuTitle(
+  t: (k: string, vars?: Record<string, unknown>) => string,
+  path: string | null | undefined,
+  title: string,
+): string {
+  if (currentLanguage() === BASE_LANGUAGE) return t(title)
+  return t(menuKey(path), { defaultValue: t(title) })
+}
+
+/**
+ * 这个 path 在基准语言之外有没有内置译名 —— 有的话，改库里的标题只影响基准语言的界面。
+ *
+ * ⚠️ 用 `getResource` 不用 `i18next.exists`：后者会走 `fallbackLng`（= 基准语言），
+ * 而基准语言里每个 `menu:*` 都在，于是对任何内置路径都返回 true
+ */
+export function hasBuiltinMenuTranslation(path: string | null | undefined): boolean {
+  if (!path) return false
+  return LANGUAGES.some(
+    (l) => l.value !== BASE_LANGUAGE && Boolean(i18next.getResource(l.value, 'translation', menuKey(path))),
+  )
 }
 
 // ─── 本地化格式化 ─────────────────────────────────────────────────────────────
