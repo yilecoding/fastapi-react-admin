@@ -5,6 +5,7 @@
 """
 
 import importlib
+import importlib.util
 import inspect
 import pkgutil
 
@@ -59,6 +60,7 @@ def ai_tool(
     perm: str | None = None,
     mutating: bool = False,
     preview: Callable[..., Awaitable[str]] | None = None,
+    self_authorized: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """把一个 async 函数注册成 AI 可调用的工具。
 
@@ -68,6 +70,7 @@ def ai_tool(
     :param perm: 权限码。复用现有 RBAC 权限码，**不要发明新的授权模型**
     :param mutating: 会不会改变系统状态。`True` 触发二次确认 + `is_staff` 校验
     :param preview: 变更类工具**必填**的预演函数（只读），返回「会变成什么」给人确认
+    :param self_authorized: 写操作的授权由业务自己判定、不要求 `is_staff`（见 `ToolSpec.self_authorized`）
     """
 
     def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -79,6 +82,8 @@ def ai_tool(
         # `dept_id: "2048601263515500544"` 对人来说什么都没说，「点头」就退化成了走过场
         if mutating and preview is None:
             raise TypeError(f'变更类 AI 工具 {name} 必须提供 preview（预演）')
+        if self_authorized and not mutating:
+            raise TypeError(f'AI 工具 {name}：self_authorized 只对写操作工具有意义')
         if preview is not None and not inspect.iscoroutinefunction(preview):
             raise TypeError(f'AI 工具 {name} 的 preview 必须是 async 函数')
 
@@ -91,6 +96,7 @@ def ai_tool(
             perm=perm,
             mutating=mutating,
             preview=preview,
+            self_authorized=self_authorized,
             wants_db='db' in inspect.signature(fn).parameters,
             wants_ctx='ctx' in inspect.signature(fn).parameters,
         )
@@ -128,5 +134,12 @@ def load_builtin_tools() -> None:
     for module in pkgutil.iter_modules(package.__path__):
         if not module.name.startswith('_'):
             importlib.import_module(f'{package.__name__}.{module.name}')
+
+    # 别的插件自己带的工具：`backend/plugin/<插件>/ai_tools.py`。放在插件自己那里，依赖方向是「插件 → ai」——
+    # 两个都能卸载，反过来放进 `tools/` 就成了 AI 插件依赖一个可能不存在的插件（审批的工具就是这么放的）
+    plugins = importlib.import_module('backend.plugin')
+    for module in pkgutil.iter_modules(plugins.__path__):
+        if module.ispkg and module.name != 'ai' and importlib.util.find_spec(f'backend.plugin.{module.name}.ai_tools'):
+            importlib.import_module(f'backend.plugin.{module.name}.ai_tools')
 
     log.debug(f'AI 工具注册完成，共 {len(_REGISTRY)} 个：{sorted(_REGISTRY)}')

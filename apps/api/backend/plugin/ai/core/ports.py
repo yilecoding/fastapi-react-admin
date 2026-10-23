@@ -59,6 +59,14 @@ class ToolSpec:
     mutating: bool = False
     """是否会改变系统状态。`True` 的工具走二次确认，且额外要求 `is_staff`。"""
 
+    self_authorized: bool = False
+    """写操作的授权**由业务自己判定**，不要求 `is_staff`（只对 `mutating=True` 有意义）。
+
+    给审批这类「普通员工本来就能做」的写操作用：审批中心的接口刻意不走 RBAC（挂了的话非员工连「同意」都点不了），
+    能不能做由能力信封判。照搬 `is_staff` 那道闸，就成了「只有员工能在对话里审批」。
+    🔴 声明了它的工具**自己**必须把授权判完（审批走 `execute()` 的能力信封），dispatcher 不再替它兜 ——
+    所以只给登记过的工具开（`test_ai_security.py::test_self_authorized_tools_are_an_explicit_list`）。"""
+
     preview: Callable[..., Awaitable[str]] | None = None
     """变更类工具的**预演**：入参同 handler（`db` / `ctx` 同样注入），只读不写，
     返回给人看的「会变成什么」。抛异常 = 这次调用在请人确认之前就被拒掉。"""
@@ -101,6 +109,10 @@ class RunContext:
     """调用入口，原样进审计（`None` = 网页对话，`mcp:<client id>` = 外部系统）"""
     read_only: bool = False
     """只读入口：dispatcher 直接拒绝变更类工具（并审计），不出预演、不发确认令牌"""
+    user_said: list[str] | None = None
+    """这段对话里用户**亲口**说过的话（网页对话从历史里取）。给「参数必须是用户原话」的工具核对用 ——
+    审批意见：工具描述里写了「不要替他拟」，真模型（Qwen3-VL）照样填了一句「用户未提供驳回理由」。
+    `None` = 这个入口拿不到原话（MCP：外部系统转述），那时靠网页确认页上原样显示的意见兜底"""
     extra: dict[str, Any] = field(default_factory=dict)
 
 

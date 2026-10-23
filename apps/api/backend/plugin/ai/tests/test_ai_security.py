@@ -104,6 +104,22 @@ class TestToolVisibility:
         bad = {name: perm for name, perm in perms.items() if perm not in backend or perm not in seed}
         assert not bad, f'这些工具的权限码不是「后端守卫过、种子里也有」的：{bad}'
 
+    def test_self_authorized_tools_are_an_explicit_list(self) -> None:
+        """🔴 `self_authorized` 让写工具跳过 `is_staff` 那道闸，所以只能是登记过的这几个。
+
+        新加一个就要在这里写进来 —— 写的时候回答一句「谁替它判授权」（审批：`execute()` 的能力信封）。
+        随手给一个调 service 的写工具加上它，就是非员工经 AI 做了界面上做不了的写操作。
+        """
+        assert {s.name for s in all_tools() if s.self_authorized} == {'wf_approve', 'wf_reject', 'wf_transfer'}
+
+    def test_staff_gate_still_holds_for_other_mutating_tools(self) -> None:
+        """有权限码、但不是员工：普通写工具照样不可见；登记过的审批工具可见"""
+        from backend.plugin.ai.core.dispatcher import tool_dispatcher
+
+        visible = {s.name for s in tool_dispatcher.visible_tools(_user(staff=False, perms=['sys:dept:add']))}
+        assert 'wf_approve' in visible, '先断言「有」：审批工具对非员工要可见'
+        assert 'dept_create' not in visible
+
     def test_superuser_sees_every_tool_in_enabled_domains(self) -> None:
         from backend.core.conf import settings
         from backend.plugin.ai.core.dispatcher import tool_dispatcher

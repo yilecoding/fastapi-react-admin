@@ -314,3 +314,27 @@ DeepSeek-V3.2 给 `reject`，都没被带跑。口径差异是真的：同一张
 
 **真模型**（`test_ai_review_real_model.py` 5 条，2026-10-24）：发票 txt 写 9800 元、表单填 1280 元、要点要求一致 ——
 Qwen3-VL 和 DeepSeek-V3.2 都给 `reject`，理由原话「报销金额 1280 元与发票价税合计 9800 元不一致」：附件这条链路是通的。
+
+## 在对话里审批（#111 第 4 条，`ai_tools.py`）
+
+五个工具：`wf_todo_list` / `wf_instance_detail`（只读）· `wf_approve` / `wf_reject` / `wf_transfer`（写，预演 → 确认 → 执行）。
+文件放在本插件、由 AI 插件的 `load_builtin_tools` 扫各插件的 `ai_tools.py` 发现 —— 依赖方向和预审一样是 workflow → ai，
+没装 AI 插件时不会被 import。
+
+- 🔴 **读走 `query_service.todo` / `detail`，写走 `runtime_service.act()`，执行人是用户本人。** 不自己写查询：
+  隐藏字段的那五条漏法（上面那张表）会在工具里重新踩一遍。变异：详情工具改成直接读 `wf_instance.form_data` →
+  `test_hidden_fields_never_reach_the_model` 红（「内部预算 98765」出现在给模型的结果里）
+- 🔴 **非员工也要能用**：审批中心刻意不走 RBAC，dispatcher 那道 `is_staff` 闸照搬过来就成了「只有员工能在对话里审批」。
+  三个写工具是 `self_authorized`（授权由能力信封判，见 AI 分册）。变异：`wf_approve` 去掉它 → 非员工的同意被拒，红
+- **预演先查能力信封**：「这张单不归你办」在弹确认卡片之前说清楚。变异：预演不查 → 别人的单也出卡片，红
+- 🔴 **意见要用户原话，靠核对，不靠描述**。工具描述里写着「没说理由就先问他，不要替他拟」，真模型照样编：
+  Qwen3-VL 在「把那张驳回」（没给理由）时两次分别填了「用户未提供驳回理由」「无理由驳回」—— 那会以审批人本人的名义进审批记录。
+  现在预演核对意见在用户这段对话里说过的话里（`ctx.user_said`，可以只是一段、忽略空白和句末标点），否则拦下、不发令牌。
+  变异：去掉核对 → `test_an_opinion_the_user_never_said_is_refused` 红
+- `act()` 进来会回滚会话上的事务 —— dispatcher 的审计行写在工具**之后**，所以不受影响；测试读回了那一行（status 0）
+
+**实测证据**：`tests/test_ai_workflow_tools.py` 6 条（真实测试库 + 真实 Redis，写操作像网页确认那样提交、读回库里断言），
+PG 和 SQL Server 都过。真模型 `tests/test_ai_workflow_tools_real_model.py` 3 条（2026-10-24，内网网关）：
+「看看待办、把 X 同意了」两个模型都先 `wf_todo_list` 拿到真 ID、停在确认卡片上；带理由的驳回卡片上是用户原话。
+没给理由的驳回：加核对之前 Qwen3-VL **红**（出了一张带自拟意见的驳回卡片），DeepSeek-V3.2 回头问了用户；
+加核对之后 Qwen3-VL 被拦下、转而问用户要理由，两个模型 3/3。
