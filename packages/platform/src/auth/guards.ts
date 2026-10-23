@@ -2,6 +2,7 @@ import { redirect } from '@tanstack/react-router'
 import type { QueryClient } from '@tanstack/react-query'
 import { t } from '@admin/i18n'
 
+import { restoreSession } from '../api-client/client'
 import { codesQuery, meQuery } from './queries'
 import { isAuthenticated } from './session'
 
@@ -15,10 +16,26 @@ import { isAuthenticated } from './session'
  */
 export type GuardContext = { queryClient: QueryClient }
 
-/** 未登录 → 踢去登录页 */
+/**
+ * 未登录 → 先静默恢复，恢复不了再去登录页。
+ *
+ * access token 只在内存里（#138），刷新页面、新开标签页时手里都没有 —— 用 refresh cookie
+ * （桌面端是主进程存的那份）换一枚。三种结果：
+ *  - 恢复了：接着往下走
+ *  - 会话结束了：去登录页，带上原因码（被踢 / 空闲 / 到期 …），登录页据此告诉用户为什么
+ *  - 暂时失败（后端重启、网络抖）：**不去登录页**，抛给路由的错误页，那里有重试 ——
+ *    这时候让人重新登录是错的，他的会话好好的
+ */
 export async function requireAuth({ context, location }: { context: GuardContext; location: { href: string } }) {
   if (!isAuthenticated()) {
-    throw redirect({ to: '/sign-in' as never, search: { redirect: location.href } as never })
+    const outcome = await restoreSession()
+    if (outcome.kind === 'transient') throw outcome.error
+    if (outcome.kind === 'ended') {
+      throw redirect({
+        to: '/sign-in' as never,
+        search: { redirect: location.href, reason: outcome.end.reason ?? undefined } as never,
+      })
+    }
   }
   // 拉一次当前用户，顺带验证 token 真的有效（失效会走 401 → 单飞刷新 → 失败则清会话）
   await context.queryClient.ensureQueryData(meQuery)

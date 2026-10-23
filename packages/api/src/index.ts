@@ -21,9 +21,9 @@
  * |            | web                          | mobile                       |
  * |------------|------------------------------|------------------------------|
  * | base URL   | `import.meta.env`（编译期）  | `serverStore`（运行时可改）  |
- * | token      | `sessionStorage`             | `expo-secure-store` + 内存   |
+ * | token      | 内存（#138，加载时静默恢复） | `expo-secure-store` + 内存   |
  * | 语言       | app 层 `setApiLanguage()`    | `currentLanguage()` 直接读   |
- * | refresh    | `credentials: 'include'`     | RN 自带 cookie jar           |
+ * | refresh    | cookie；桌面端注入主进程那份 | RN 自带 cookie jar           |
  * | 各自加的   | multipart 上传 / 字节下载    | 网络错误文案 i18n            |
  *
  * 共享的是：信封成败语义、`ApiError`、401 单飞刷新、`Accept-Language`、
@@ -35,5 +35,15 @@
 export { ApiError, UploadAbortedError, isEnvelope, type Envelope } from './errors'
 export { NETWORK_STATUS, resolveEnvelope, type EnvelopeResult } from './envelope'
 export type { PageData } from './page'
-export { createApiClient, type ApiClient, type ApiClientConfig, type Method, type UploadOptions } from './client'
+export {
+  createApiClient,
+  REFRESH_TIMEOUT_MS,
+  type ApiClient,
+  type ApiClientConfig,
+  type Method,
+  type RefreshOutcome,
+  type SessionEnd,
+  type UploadOptions,
+} from './client'
+export { isSessionEndReason, SESSION_END_MESSAGE, type SessionEndReason } from './session-end'
 export type { ApiMethod, ApiMethods, Payload } from './types'

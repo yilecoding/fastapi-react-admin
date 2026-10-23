@@ -78,6 +78,18 @@ async def refresh_token(db: CurrentSession, request: Request, response: Response
     return response_base.success(data=data)
 
 
+@router.post('/heartbeat', summary='会话心跳', dependencies=[DependsJwtAuth])
+async def heartbeat() -> ResponseModel:
+    """
+    什么都不做：续活跃这件事在 JWT 中间件里已经做完了（`session_store.check`，按 `X-Client-Idle`）。
+
+    给「一直在看页面、但不发请求」的人用。空闲只看记录下来的最后活跃（#138），
+    没有这一下的话，读一份长文档读了两小时的人，下一次点击会被当成空闲踢出去。
+    前端只在用户最近有操作时才发（`auth/activity.ts`）
+    """
+    return response_base.success()
+
+
 @router.post('/logout', summary='用户登出')
 async def logout(request: Request, response: Response) -> ResponseModel:
     await auth_service.logout(request=request, response=response)

@@ -15,8 +15,8 @@ import {
   IconUser,
 } from "@tabler/icons-react"
 
-import { login } from "@admin/platform/auth/session"
 import { ApiError } from "@admin/platform/api-client/errors"
+import { isSessionEndReason, login, SESSION_END_MESSAGE, type SessionEndReason } from "@admin/platform/auth/session"
 import { Alert } from "@admin/ui/components/alert"
 import { Button } from "@admin/ui/components/button"
 import { Checkbox } from "@admin/ui/components/checkbox"
@@ -37,9 +37,27 @@ import { SignInBrandPanel, SignInBrandStrip } from "@/routes/_guest/-sign-in-bra
 export const Route = createFileRoute("/_guest/sign-in")({
   validateSearch: (s: Record<string, unknown>) => ({
     redirect: typeof s.redirect === "string" ? s.redirect : undefined,
+    // 会话为什么结束（后端 `EndReason`，#138）。不认识的值不显示提示，而不是显示一句错的
+    reason: isSessionEndReason(s.reason) ? s.reason : undefined,
   }),
   component: SignInPage,
 })
+
+/**
+ * 被送回登录页的原因 → 提示条的语气（#138）。文案和原因码表在 `@admin/api` 的 `SESSION_END_MESSAGE`，
+ * 和移动端共用一份；这里只决定颜色 —— 被踢 / 被挤是警告，疑似盗用 / 被停用是危险，其余是提示
+ */
+const SESSION_END_TONE: Record<SessionEndReason, "warning" | "danger" | "info"> = {
+  kicked: "warning",
+  replaced: "warning",
+  idle: "info",
+  expired: "info",
+  reuse: "danger",
+  password_changed: "info",
+  disabled: "danger",
+  logout: "info",
+  invalid: "warning",
+}
 
 /** 「记住账号」只记账号，不记凭据 —— 密码和 token 不该落在 localStorage 里 */
 const REMEMBER_KEY = "admin:last-username"
@@ -316,6 +334,11 @@ function SignInPage() {
                     </div>
                   )}
 
+                  {!error && search.reason && (
+                    <Alert tone={SESSION_END_TONE[search.reason]} data-testid="session-end-notice">
+                      {t(SESSION_END_MESSAGE[search.reason])}
+                    </Alert>
+                  )}
                   {error && (
                     <Alert tone="danger" data-testid="login-error">
                       {error}

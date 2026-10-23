@@ -223,6 +223,36 @@ def test_clients_without_the_idle_header_count_as_active(client: TestClient, acc
     assert int(_session(client, a.sid)['last_active']) >= int(time.time()) - 5
 
 
+def test_coming_back_after_the_idle_limit_does_not_revive_the_session(client: TestClient, account: int) -> None:
+    """🔴 空闲只看记录下来的最后活跃：人走开超过上限、回来点一下（自报「0 秒没操作」）也续不上。
+
+    反过来写的话，空闲超时只在「中途恰好有一次后台轮询暴露了空闲」时才生效
+    """
+    a = _login(client)
+    idle = int(_session(client, a.sid)['idle'])
+    _patch(client, a.sid, last_active=int(time.time()) - idle - 5)
+    res = _me(client, a, **{'X-Client-Idle': '0'})
+    assert res.status_code == 401, '离开超过空闲上限的人回来点一下，会话就被续上了'
+    assert _reason(res) == EndReason.idle
+
+
+def test_heartbeat_keeps_a_reading_user_alive(client: TestClient, account: int) -> None:
+    """看页面不发请求的人靠心跳保活：有操作时前端每 5 分钟打一次"""
+    a = _login(client)
+    _patch(client, a.sid, last_active=int(time.time()) - 600)
+    res = client.post('/auth/heartbeat', headers={**a.headers, 'X-Client-Idle': '0'})
+    assert res.status_code == 200, res.text
+    assert int(_session(client, a.sid)['last_active']) >= int(time.time()) - 5
+
+
+def test_refresh_without_any_cookie_has_no_reason(client: TestClient) -> None:
+    """压根没登录过的人去刷新：401，但不带原因码 —— 否则第一次打开页面的人会在登录页看到「登录已过期」"""
+    client.cookies.clear()
+    res = client.post('/auth/refresh')
+    assert res.status_code == 401
+    assert res.json()['data'] is None
+
+
 # ─── 会话上限 + 按端计数 ─────────────────────────────────────────────────────
 
 

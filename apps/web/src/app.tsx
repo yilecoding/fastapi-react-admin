@@ -4,6 +4,8 @@ import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react
 import { t } from "@admin/i18n"
 import { ApiError } from "@admin/platform/api-client/errors"
 import { setSessionExpiredHandler } from "@admin/platform/api-client/client"
+import { installActivityTracker } from "@admin/platform/auth/activity"
+import { isSessionEndReason } from "@admin/platform/auth/session"
 import { installVersionWatch } from "@/lib/app-version"
 import { useApplyPreferences } from "@admin/platform/shell/use-apply-preferences"
 import { toast, Toaster } from "@admin/ui/components/toast"
@@ -43,11 +45,19 @@ const queryClient = new QueryClient({
 
 const router = createAppRouter(queryClient)
 
-// 401 且刷新失败 → 清空服务端状态缓存并跳登录页
-setSessionExpiredHandler(() => {
+// 会话结束（刷新也救不回来 / socket 推来的 `session:ended`）→ 清空服务端状态缓存并跳登录页，
+// 带上原因码 —— 登录页据此说清楚为什么要重新登录（被踢 / 空闲 / 到期 …，#138），
+// 而不是一声不吭地回到登录页
+setSessionExpiredHandler((end) => {
   queryClient.clear()
-  void router.navigate({ to: "/sign-in", search: { redirect: undefined } })
+  void router.navigate({
+    to: "/sign-in",
+    search: { redirect: undefined, reason: isSessionEndReason(end.reason) ? end.reason : undefined },
+  })
 })
+
+// 「用户多少秒没操作了」随每个请求发给后端（`X-Client-Idle`），空闲超时靠它区分人和后台轮询
+installActivityTracker()
 
 // 「服务端发新版了，请刷新」——多页签保活鼓励用户长时间不刷新，
 // 这条检测是它的配套（见 lib/app-version.ts）。装在模块级而不是组件里：

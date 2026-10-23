@@ -47,9 +47,12 @@ test.describe("换身份", () => {
       await page.getByTestId("submit").click()
       await expect(page).toHaveURL(/\/dashboard/)
 
-      await page.goto("/system/dept")
-      await page.goto("/plugins/config")
+      // 每一页都等它的标签出现再跳下一页：页面加载时要先用 refresh cookie 静默恢复（#138），
+      // 不等的话前一页还没来得及记进标签条就被跳走了 —— 人不会这么快，用例会
       const bar = page.getByTestId("tab-bar")
+      await page.goto("/system/dept")
+      await expect(bar).toContainText("部门管理")
+      await page.goto("/plugins/config")
       await expect(bar).toContainText("部门管理")
       await expect(bar).toContainText("参数配置")
 

@@ -63,8 +63,27 @@ export type ApiClientConfig = {
    */
   getLanguage: () => string
 
-  /** 刷新也救不回来时的收尾（清状态 + 跳登录页）。由各端 auth 层注入 */
-  onSessionExpired?: () => void
+  /**
+   * 刷新也救不回来时的收尾（清状态 + 跳登录页）。由各端 auth 层注入。
+   * 带上会话结束的原因（被踢 / 空闲 / 到期 …），登录页据此告诉用户为什么要重新登录（#138）
+   */
+  onSessionExpired?: (end: SessionEnd) => void
+
+  /**
+   * 换一枚新的 access token。**不传就走默认的 cookie 刷新**（web 靠 `credentials: 'include'`、
+   * RN 靠自带的 cookie jar）。桌面端传自己的：渲染层跑在 `app://local` 下，对后端是跨站，
+   * 浏览器压根不带 refresh cookie —— 只能交给主进程去刷（`apps/desktop/src/main/auth.ts`）
+   */
+  refresh?: () => Promise<RefreshOutcome>
+
+  /**
+   * 用户多少秒没碰键盘 / 鼠标 / 触屏了，发成 `X-Client-Idle`（#138）。
+   *
+   * 服务端的空闲超时按**人有没有在操作**算：后台轮询（在线用户页 10 秒一次、监控页…）
+   * 带着很大的空闲秒数，就不会把一个人已经走开的会话续上。不传 = 不带这个头，
+   * 服务端按「刚操作过」算（移动端就是这样）
+   */
+  getClientIdle?: () => number | null
 
   /**
    * 网络层失败（连不上 / DNS / TLS）时加工一下错误再抛。
@@ -79,6 +98,30 @@ export type ApiClientConfig = {
 }
 
 export type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
+
+/** 会话为什么结束。`reason` 是后端的原因码，说不出原因时是 null（见 `ApiError.sessionEndReason`） */
+export type SessionEnd = { reason: string | null; message: string | null }
+
+/**
+ * 一次刷新的结果，**分三种，不是成败两种**（#138）：
+ *
+ * - `ok`：拿到新 token
+ * - `ended`：会话真的结束了（401 / 403）—— 清登录态、回登录页
+ * - `transient`：5xx / 429 / 网络不通 / 超时 —— **不清登录态**，只把错误抛给这次请求。
+ *   以前任何失败都走「清登录态」，于是后端重启 / 发版的那几秒里 token 恰好到期的人全被踢回登录页
+ */
+export type RefreshOutcome =
+  | { kind: 'ok'; token: string }
+  | { kind: 'ended'; end: SessionEnd }
+  | { kind: 'transient'; error: ApiError }
+
+/**
+ * 刷新请求的超时。🔴 必须短于后端的宽限期（`SESSION_REFRESH_GRACE_SECONDS`，默认 30 秒）：
+ * 响应丢了之后拿旧 refresh token 重试，超过宽限期就会被判成盗用、整个会话撤销
+ */
+export const REFRESH_TIMEOUT_MS = 10_000
+
+const REFRESH_PATH = '/api/v1/auth/refresh'
 
 /**
  * 🔴 **`Paths` 就是生成的 `schema.d.ts` 里那个 `paths`。**
@@ -111,17 +154,24 @@ export type ApiClient<Paths extends {}> = ApiMethods<Paths> & {
   sendUpload: <T>(path: string, body: FormData | Blob, options?: UploadOptions) => Promise<T>
 
   /** 会话失效回调可以在创建之后再注入（各端 auth 层的初始化顺序不同） */
-  setSessionExpiredHandler: (fn: (() => void) | null) => void
+  setSessionExpiredHandler: (fn: ((end: SessionEnd) => void) | null) => void
 
   /**
    * 主动结束会话，走与 401 完全相同的收尾路径。
    *
-   * 用于「我们**知道**服务端已经把 token 作废了」的场景，典型是改密码：
-   * `user_service.update_password` 会 `delete_by_prefix` 掉该用户的
-   * access / refresh / 用户缓存三组 key。不主动收场的话，用户会在下一个
-   * 请求 401 时被莫名其妙弹回登录页 —— 看起来像 bug，其实是预期行为。
+   * 用于「我们**知道**服务端已经把会话作废了」的场景：改密码（服务端撤销该用户的全部会话）、
+   * socket 推来的 `session:ended`。不主动收场的话，用户会在下一个请求 401 时被莫名其妙
+   * 弹回登录页 —— 看起来像 bug，其实是预期行为。
    */
-  endSession: () => void
+  endSession: (end?: SessionEnd) => void
+
+  /**
+   * 用 refresh 凭据换一枚 access token（和 401 走的是**同一个单飞**）。
+   *
+   * access token 只放内存之后（#138），页面加载 / 新开标签页时手里没有 token，
+   * 路由守卫先调它静默恢复，失败再去登录页。成功时已经 `setToken` 过了
+   */
+  restoreSession: () => Promise<RefreshOutcome>
 }
 
 /** `sendUpload` 的可选项：进度回调 + 取消信号 */
@@ -135,7 +185,7 @@ export interface UploadOptions {
 }
 
 export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiClient<Paths> {
-  let onSessionExpired: (() => void) | null = config.onSessionExpired ?? null
+  let onSessionExpired: ((end: SessionEnd) => void) | null = config.onSessionExpired ?? null
 
   /*
    * 🔴 **不要把 `getBaseUrl()` 的结果传进 `createClient({ baseUrl })`。**
@@ -153,36 +203,69 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
 
   function authHeaders(): Record<string, string> {
     const token = config.getToken()
+    const idle = config.getClientIdle?.()
     return {
       'Accept-Language': config.getLanguage(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(idle != null && idle >= 0 ? { 'X-Client-Idle': String(Math.floor(idle)) } : {}),
     }
+  }
+
+  /** 默认的刷新：refresh token 在 httpOnly cookie 里，web 靠 `credentials: 'include'`、RN 靠 cookie jar */
+  async function cookieRefresh(): Promise<RefreshOutcome> {
+    // 手写超时而不是 `AbortSignal.timeout()`：RN（Hermes）上没有那个静态方法
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), REFRESH_TIMEOUT_MS)
+    let res: Response
+    let body: unknown = null
+    try {
+      res = await fetch(`${config.getBaseUrl()}${REFRESH_PATH}`, {
+        method: 'POST',
+        credentials: 'include',
+        // 刻意不设 Authorization：身份只认 refresh cookie
+        headers: { 'Accept-Language': config.getLanguage() },
+        signal: controller.signal,
+      })
+      try {
+        body = await res.json()
+      } catch {
+        // 不是 JSON（反代的 HTML 错误页之类）
+      }
+    } catch (err) {
+      return { kind: 'transient', error: networkError(err, REFRESH_PATH) }
+    } finally {
+      clearTimeout(timer)
+    }
+    const outcome = resolveEnvelope<{ access_token?: string }>(res, body)
+    if (outcome.ok) {
+      const token = outcome.data?.access_token
+      return token
+        ? { kind: 'ok', token }
+        : { kind: 'transient', error: new ApiError(res.status, res.status, 'refresh 响应里没有 access_token') }
+    }
+    // 401 / 403 才是「会话真的结束了」；5xx / 429 / 其它都只是这一次没刷成
+    if (outcome.error.httpStatus === 401 || outcome.error.httpStatus === 403) {
+      return { kind: 'ended', end: { reason: outcome.error.sessionEndReason, message: outcome.error.message || null } }
+    }
+    return { kind: 'transient', error: outcome.error }
   }
 
   // ─── 401 单飞刷新 ────────────────────────────────────────────────────────
   // 并发请求同时收到 401 时只允许一次 /auth/refresh 在途，其余排队等它的结果。
-  // 没有这层，token 过期瞬间会打出 N 个 refresh，后端会话表和 Redis 都会被打乱。
-  let refreshing: Promise<boolean> | null = null
+  // 没有这层，token 过期瞬间会打出 N 个 refresh —— 后端的宽限期回放兜得住（#138），
+  // 但没必要让它兜
+  let refreshing: Promise<RefreshOutcome> | null = null
 
-  async function refreshToken(): Promise<boolean> {
+  async function refreshToken(): Promise<RefreshOutcome> {
     if (refreshing) return refreshing
     refreshing = (async () => {
       try {
-        // refresh token 在 httpOnly cookie 里 —— web 靠 `credentials: 'include'`，
-        // RN 靠自带的 cookie jar。两边都**刻意不设 Authorization**。
-        const res = await fetch(`${config.getBaseUrl()}/api/v1/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Accept-Language': config.getLanguage() },
-        })
-        if (!res.ok) return false
-        const body = (await res.json()) as { code?: number; data?: { access_token?: string } }
-        const next = body?.data?.access_token
-        if (!next) return false
-        await config.setToken(next)
-        return true
-      } catch {
-        return false
+        const outcome = await (config.refresh ?? cookieRefresh)()
+        if (outcome.kind === 'ok') await config.setToken(outcome.token)
+        return outcome
+      } catch (err) {
+        // 注入的 refresh 自己炸了（桌面端 IPC 断了之类）：当成这一次没刷成，不清登录态
+        return { kind: 'transient', error: networkError(err, REFRESH_PATH) } as RefreshOutcome
       } finally {
         // 交给微任务队列，确保同批次的等待者都拿到同一个结果后再复位
         queueMicrotask(() => {
@@ -193,6 +276,28 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     return refreshing
   }
 
+  /**
+   * 401 之后：刷新成功 → 重放；会话结束 → 收尾；暂时失败 → 不清登录态，把那个错误抛给调用方。
+   * 返回 true 表示可以重放；否则抛出该抛的错误
+   *
+   * @param sentWithToken 这次请求发出去时带没带 token。🔴 **没带的 401 不刷新、不收尾**：
+   *   token 为空说明会话已经在本地结束了（页面加载时的恢复由守卫做，不走这里）。不拦的话：
+   *   收尾里 `queryClient.clear()` 一清缓存，还没卸载的组件立刻重新取数，这批不带 token 的请求
+   *   全部 401 → 又去刷新（cookie 已经删了）→ 拿到一个**不带原因**的 401 → 再收尾一次，
+   *   把「因为什么被登出」的那次跳转覆盖掉。实测：另一个标签页登出后，这个标签页先跳到
+   *   `/sign-in?reason=logout`、紧接着又被覆盖成 `/sign-in`，提示条没了
+   */
+  async function recover(original: ApiError, sentWithToken: boolean): Promise<true> {
+    if (!sentWithToken) throw original
+    const outcome = await refreshToken()
+    if (outcome.kind === 'ok') return true
+    if (outcome.kind === 'ended') {
+      await expire(outcome.end)
+      throw original
+    }
+    throw outcome.error
+  }
+
   /** 网络层就没走通。把地址带上 —— RN 只给一句 `Network request failed` */
   function networkError(err: unknown, path: string): ApiError {
     const reason = err instanceof Error ? err.message : String(err)
@@ -200,9 +305,9 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     return config.onNetworkError ? config.onNetworkError(base) : base
   }
 
-  async function expire(): Promise<void> {
+  async function expire(end: SessionEnd): Promise<void> {
     await config.clearToken()
-    onSessionExpired?.()
+    onSessionExpired?.(end)
   }
 
   /**
@@ -216,6 +321,7 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     retry = true,
   ): Promise<T> {
     const fn = (raw as unknown as Record<string, (p: string, i: unknown) => Promise<unknown>>)[method]
+    const sentWithToken = config.getToken() !== null
     const merged = {
       baseUrl: config.getBaseUrl(),
       ...init,
@@ -240,11 +346,10 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     const outcome = resolveEnvelope<T>(result.response, result.error ?? result.data)
 
     if (!outcome.ok) {
-      // 401 → 单飞刷新后重放一次；刷新失败则判定会话结束
+      // 401 → 单飞刷新后重放一次；会话结束才收尾，暂时失败只把错误抛出去
       if (outcome.error.isUnauthorized && retry) {
-        const ok = await refreshToken()
-        if (ok) return send<T>(method, path, init, false)
-        await expire()
+        await recover(outcome.error, sentWithToken)
+        return send<T>(method, path, init, false)
       }
       throw outcome.error
     }
@@ -262,6 +367,7 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     // ⚠️ 绝对不要给 FormData 手写 Content-Type —— multipart 的 boundary 是运行时
     // 生成并塞进 header 的，手写一个不带 boundary 的 'multipart/form-data'
     // 会让后端解析不出任何字段（表现为「文件不能为空」）
+    const sentWithToken = config.getToken() !== null
     const headers = { ...authHeaders(), Accept: accept }
 
     let res: Response
@@ -272,11 +378,6 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     }
 
     if (!res.ok) {
-      if (res.status === 401 && retry) {
-        const ok = await refreshToken()
-        if (ok) return sendRaw(method, path, body, accept, false)
-        await expire()
-      }
       // 错误响应仍然是 FBA 的 JSON 包封，尽量把 msg 捞出来给用户看。
       // ⚠️ 只能在这个分支里 `res.json()` —— 成功路径的 body 是二进制/multipart，
       // 不能提前消费掉。
@@ -287,7 +388,12 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
         // 不是 JSON（例如反代返回的 HTML 错误页）
       }
       const outcome = resolveEnvelope<never>(res, parsed)
-      throw outcome.ok ? new ApiError(res.status, res.status, res.statusText) : outcome.error
+      const error = outcome.ok ? new ApiError(res.status, res.status, res.statusText) : outcome.error
+      if (res.status === 401 && retry) {
+        await recover(error, sentWithToken)
+        return sendRaw(method, path, body, accept, false)
+      }
+      throw error
     }
     return res
   }
@@ -299,6 +405,7 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
         return
       }
       const xhr = new XMLHttpRequest()
+      const sentWithToken = config.getToken() !== null
       xhr.open(options.method ?? 'POST', `${config.getBaseUrl()}${path}`)
       // 同 sendRaw：带上 httpOnly 的 refresh cookie（RN 忽略）
       xhr.withCredentials = true
@@ -339,14 +446,10 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
         }
         if (outcome.error.isUnauthorized && retry) {
           // 刷新成功就整个重放一次（FormData 可以重复发送）；失败走和 send() 相同的收尾
-          void refreshToken().then(async (ok) => {
-            if (ok) {
-              sendUpload<T>(path, body, options, false).then(resolve, reject)
-              return
-            }
-            await expire()
-            reject(outcome.error)
-          })
+          recover(outcome.error, sentWithToken).then(
+            () => sendUpload<T>(path, body, options, false).then(resolve, reject),
+            reject,
+          )
           return
         }
         reject(outcome.error)
@@ -373,9 +476,10 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     setSessionExpiredHandler: (fn) => {
       onSessionExpired = fn
     },
-    endSession: () => {
+    endSession: (end = { reason: null, message: null }) => {
       void config.clearToken()
-      onSessionExpired?.()
+      onSessionExpired?.(end)
     },
+    restoreSession: () => refreshToken(),
   } as ApiClient<Paths>
 }

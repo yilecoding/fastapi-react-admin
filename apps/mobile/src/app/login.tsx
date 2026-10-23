@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { KeyRoundIcon, QrCodeIcon, SmartphoneIcon } from 'lucide-react-native'
+import { KeyRoundIcon, LogOutIcon, QrCodeIcon, SmartphoneIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -15,7 +15,7 @@ import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
-import { ApiError } from '@admin/api'
+import { ApiError, SESSION_END_MESSAGE } from '@admin/api'
 
 import { api } from '@/lib/api'
 import { BRAND } from '@/lib/brand'
@@ -61,7 +61,7 @@ type CaptchaState =
 
 export default function LoginScreen() {
   const { t } = useTranslation()
-  const { login, bootstrapError } = useSession()
+  const { login, bootstrapError, endReason } = useSession()
   const insets = useSafeAreaInsets()
 
   const [method, setMethod] = React.useState<Method>('password')
@@ -222,6 +222,17 @@ export default function LoginScreen() {
                     <Alert variant="destructive" icon={KeyRoundIcon}>
                       <AlertTitle>{t('启动时没能连上服务器')}</AlertTitle>
                       <AlertDescription>{bootstrapError}</AlertDescription>
+                    </Alert>
+                  </View>
+                ) : endReason ? (
+                  // 为什么回到了登录屏（#138）。疑似凭据被盗 / 账号被停用用醒目的样式，其余是提示
+                  <View className="px-4">
+                    <Alert
+                      variant={endReason === 'reuse' || endReason === 'disabled' ? 'destructive' : 'default'}
+                      icon={LogOutIcon}
+                      testID="session-end-notice"
+                    >
+                      <AlertDescription>{t(SESSION_END_MESSAGE[endReason])}</AlertDescription>
                     </Alert>
                   </View>
                 ) : null}

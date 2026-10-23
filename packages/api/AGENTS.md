@@ -74,9 +74,10 @@ const client = createApiClient({
 |            | web                          | mobile                       |
 |------------|------------------------------|------------------------------|
 | base URL   | `import.meta.env`（编译期）  | `serverStore`（运行时可改）  |
-| token      | `sessionStorage`             | `expo-secure-store` + 内存   |
+| token      | **只在内存**（#138）         | `expo-secure-store` + 内存   |
 | 语言       | app 层 `setApiLanguage()`    | `currentLanguage()` 直接读   |
-| refresh    | `credentials: 'include'`     | RN 自带 cookie jar           |
+| refresh    | `credentials: 'include'`；桌面端注入主进程那份（`refresh`） | RN 自带 cookie jar |
+| 空闲秒数   | `getClientIdle`（`X-Client-Idle`） | 不传（服务端按刚操作过算） |
 | 各自加的   | 字节下载                     | 网络错误文案 i18n            |
 
 multipart 上传也在这个包里：`sendUpload(path, formData, { onProgress, signal })`。走 `XMLHttpRequest`
@@ -300,6 +301,43 @@ api.GET('/api/v1/sys/users/{pk}', { params: { path: { pk: idStr } } })       // 
 api.GET('/api/v1/sys/users/{pk}', { params: { path: { pk: idUnion } } })     // ✅ 0 错误
 api.GET('/api/v1/sys/users', { params: { query: { usernamee: 'x' } } })     // ❌ TS2561
 ```
+
+## 🔴 刷新的结果分三种，不是成败两种（#138）
+
+`refreshToken()` 返回 `RefreshOutcome`：
+
+| | 什么时候 | 做什么 |
+|---|---|---|
+| `ok` | 拿到新 token | 重放原请求 |
+| `ended` | 刷新被 **401 / 403** 拒绝 | 清登录态、调 `onSessionExpired(end)`，`end.reason` 是后端的原因码（`ApiError.sessionEndReason`） |
+| `transient` | 5xx / 429 / 网络不通 / 超时 / 注入的 refresh 自己炸了 | **不清登录态**，把那个错误抛给这次请求 |
+
+#138 之前是 `if (!res.ok) return false` + `catch { return false }` —— 任何失败都走「清登录态」，
+后端重启 / 发版那几秒里 token 恰好到期的人全被踢回登录页。
+
+- 刷新请求有 **10 秒超时**（`REFRESH_TIMEOUT_MS`，手写 `AbortController` + `setTimeout`：
+  RN 的 Hermes 没有 `AbortSignal.timeout`）。🔴 它必须短于后端的宽限期（30 秒）—— 响应丢了之后拿旧
+  refresh token 重试，超过宽限期会被判成盗用、整个会话撤销
+- `restoreSession()` 和 401 走**同一个单飞**。web 的 access token 只在内存里，页面加载 / 新开标签页时
+  路由守卫先调它；它失败时**不**调 `onSessionExpired` —— 去不去登录页、带不带原因由守卫决定
+- 桌面端注入 `refresh`：渲染层跑在 `app://local` 下，对后端是跨站，浏览器不带 `SameSite=Lax`
+  的 refresh cookie，默认的 cookie 刷新在桌面端走不通 —— `apps/desktop/src/main/auth.ts` 的注释里记着
+  当时的现象（「access token 一过期就 401，refresh 也 401」），主进程那套托管早就写好了、渲染层一直没接。
+  #138 之前 access 活 1 天，表现成每天要重登；改成 30 分钟后会变成每半小时被踢，所以这次接上了。
+  ⚠️ 接上之后**没在打包的桌面端里实测过**，只过了类型检查
+
+- 🔴 **没带 token 发出去的请求撞上 401，不刷新、不收尾**（`recover` 的 `sentWithToken`）。
+  token 为空 = 会话已经在本地结束了。不拦的话：收尾里的 `queryClient.clear()` 一清缓存，
+  还没卸载的组件立刻重新取数，这批不带 token 的请求全部 401 → 又去刷新（cookie 已经删了）→
+  拿到一个**不带原因**的 401 → 再收尾一次，把「因为什么被登出」的那次跳转覆盖掉
+
+**实测证据**：`packages/platform/src/api-client/session-refresh.test.ts` 8 条（502 不清登录态 ·
+401 带原因码才收尾 · 网络不通同 502 · 三个并发 401 只刷一次 · 不带 token 的 401 不刷新 ·
+`X-Client-Idle` · 注入的 refresh · `restoreSession`）；变异检验 5 处各打红（暂时失败也清登录态 ·
+不带 `X-Client-Idle` · 无视注入的 refresh · 原因码不传给回调 · 去掉 `sentWithToken` 那一行）。
+最后那条是 E2E 先抓到的：`session.spec.ts`「一个标签页登出」第一次跑，另一个标签页先跳到
+`/sign-in?reason=logout`、紧接着被覆盖成 `/sign-in`（Playwright 记下的导航和请求顺序里看得到那批
+不带 token 的重新取数），提示条没了。
 
 ## 🔴 判断错误必须同时看 `httpStatus` 和 `bizCode`
 

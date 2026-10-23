@@ -235,3 +235,24 @@ electron-builder 从 `package.json` 的 `name`（`@admin/desktop`）推出来的
 服务器地址 / 打印机名 / 更新源全成孤儿，表现为「更新完又要重填一遍」而不是报错；
 `appId` 是 Windows 认「同一个应用的升级」的依据，改了会装出两份并存。
 **接新项目时第一件事就是改掉它们，且要在第一次发版之前改完。**
+
+## 登录态：refresh token 由主进程托管（#138 才接上渲染层）
+
+`src/main/auth.ts` 的那套（主进程发登录 / 刷新 / 登出、扣下 refresh cookie 用 `safeStorage` 加密存盘）
+**早就写好了，渲染层一直没调用** —— 渲染层走的是浏览器那条 cookie 刷新，而它跑在 `app://local` 下，
+对后端是跨站请求，`SameSite=Lax` 的 cookie 不会被带上（`auth.ts` 注释里记着当时的现象：access 一过期就 401、
+refresh 也 401）。#138 之前 access 活 1 天，表现成每天重登一次；#138 把 access 缩到 30 分钟，
+不接的话就是每半小时被踢。
+
+现在 `platform` 在 `tryDesktop()` 成立时：登录走 `desktop.auth.login`、401 之后的刷新走
+`desktop.auth.refresh`（注入给 `@admin/api` 的 `refresh`）、登出走 `desktop.auth.logout`。
+
+- 🔴 **刷新 / 恢复用返回值（`AuthRefreshResult`）而不是抛异常**：IPC 跨进程只带得过 Error 的 message，
+  会话结束的原因码会丢。`terminal: true`（401 / 403）时主进程删掉存盘凭据；网络不通 / 5xx 是
+  `terminal: false`，凭据留着 —— 原来任何失败都当成过期
+- 主进程的刷新请求 10 秒超时，同 `@admin/api` 的 `REFRESH_TIMEOUT_MS`（要短于后端 30 秒的宽限期）
+- 登录时主进程补上 `client: "desktop"`（会话策略按端分）
+
+⚠️ **只过了类型检查，没在打包出来的桌面端里实测过。** 第一次出包后要手验：登录 → 等 access 过期（或在
+「在线用户」页把这台踢掉）→ 看是续上了 / 回登录页并说明原因。
+

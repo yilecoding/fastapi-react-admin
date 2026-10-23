@@ -52,6 +52,16 @@ export class ApiError extends Error {
   }
 
   /**
+   * 会话为什么结束（后端 `EndReason`：`kicked` / `replaced` / `idle` / `expired` / `reuse` /
+   * `password_changed` / `disabled` / `logout`），随 401 的 `data.reason` 下发（#138）。
+   * 不是「会话结束」的 401（比如 access token 自然过期、等着刷新）这里是 null
+   */
+  get sessionEndReason(): string | null {
+    const detail = this.detail as { reason?: unknown } | null | undefined
+    return typeof detail?.reason === 'string' ? detail.reason : null
+  }
+
+  /**
    * 网络层就没走通（连不上 / DNS / TLS），**不是**服务端返回的错误。
    * 客户端构造时用 `httpStatus = 0` 表示这一类。
    */

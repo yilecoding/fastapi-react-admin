@@ -16,6 +16,8 @@ import { useTabStore } from "@admin/platform/shell/tab-store"
 import { useSyncTabs } from "@admin/platform/shell/use-sync-tabs"
 import { useSidebar } from "@admin/platform/shell/use-sidebar"
 import { usePresence } from "@admin/platform/shell/use-presence"
+import { useSessionHeartbeat } from "@admin/platform/auth/activity"
+import { sendHeartbeat } from "@admin/platform/auth/session"
 import { PlatformProvider } from "@admin/platform/shell/platform-context"
 import {
   SidebarInset,
@@ -64,6 +66,8 @@ function AuthLayout() {
   useSyncTabs(resolveTitle)
   // 向后端上报「这个会话还开着」——「在线用户」页的实时连接列靠它才有真值
   usePresence(true)
+  // 一直在看页面、不发请求的人靠它保活（空闲只看记录下来的最后活跃，#138）
+  useSessionHeartbeat(sendHeartbeat)
 
   // 顶栏面包屑：活动 tab 的 URL 决定链路,tab 自己的标题兜底
   // hideInMenu 的页面（个人中心那类)不进 nav 树,链路查不到时用它

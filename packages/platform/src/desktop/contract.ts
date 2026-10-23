@@ -98,8 +98,8 @@ export interface DesktopConfig {
  *  1. refresh token 在后端是 httpOnly cookie，且 `set_cookie` 没传 samesite
  *     → 默认 Lax。渲染层跑在 `app://` 源上时这是跨站，fetch 根本不带这个 cookie，
  *     表现为 access token 一过期就被踢回登录页。主进程自己发请求不受这套规则约束。
- *  2. 渲染层现在把 access token 放 sessionStorage，窗口一关就没
- *     → 终端每次开机都要重登。
+ *  2. 渲染层的 access token 只在内存里（#138），窗口一关就没
+ *     → 不托管 refresh token 的话，终端每次开机都要重登。
  *  3. token 落在终端机器上，应该过 safeStorage（OS 级加密），不该是明文。
  */
 export interface AuthTokens {
@@ -112,8 +112,20 @@ export interface AuthTokens {
 export interface AuthLoginInput {
   username: string
   password: string
+  uuid?: string
   captcha?: string
 }
+
+/**
+ * 刷新 / 恢复的结果。**用返回值而不是抛异常**：IPC 跨进程只会把 Error 的 message 带过来，
+ * 自定义字段（会话结束的原因码）全丢 —— 而渲染层要靠原因码告诉用户为什么要重新登录（#138）。
+ *
+ * `terminal` 区分「会话真的结束了」（401 / 403，主进程已经删掉存盘凭据）和「这一次没刷成」
+ * （网络不通 / 5xx，凭据留着，下一次再试）。后一种不能把人踢回登录页。
+ */
+export type AuthRefreshResult =
+  | { ok: true; tokens: AuthTokens }
+  | { ok: false; terminal: boolean; reason: string | null; message: string }
 
 // ── 打印 ────────────────────────────────────────────────────────────────────
 
@@ -237,9 +249,9 @@ export interface DesktopBridge {
     /** 主进程发登录请求、扣下 refresh cookie 加密存盘，只把 access token 递回来 */
     login(input: AuthLoginInput): Promise<AuthTokens>
     /** 用存盘的 refresh token 换新的 access token */
-    refresh(): Promise<AuthTokens>
-    /** 冷启动时恢复会话；没有存盘凭据则返回 null */
-    restore(): Promise<AuthTokens | null>
+    refresh(): Promise<AuthRefreshResult>
+    /** 冷启动时恢复会话；没有存盘凭据时是 `terminal` 且没有原因码 */
+    restore(): Promise<AuthRefreshResult>
     logout(): Promise<void>
   }
   print: {

@@ -1,7 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query'
+import { ApiError } from '@admin/api'
 
-import { api } from '../api-client/client'
+import { api, endSession, restoreSession } from '../api-client/client'
 import { tokenStore } from '../api-client/token-store'
+import { tryDesktop } from '../desktop'
+
+/** 会话结束的原因码与提示文案（和移动端共用的那一份在 `@admin/api`）。登录页从这里取，不直接依赖那个包 */
+export { isSessionEndReason, SESSION_END_MESSAGE, type SessionEndReason } from '@admin/api'
 import { useTabStore } from '../shell/tab-store'
 import { authKeys } from './queries'
 
@@ -42,22 +47,47 @@ type LoginResult = {
   user: unknown
 }
 
+/**
+ * 这个标签页自己在登出：服务端撤销会话后会经 socket 推 `session:ended` 回来，
+ * 那条推送不该再触发一遍「会话结束」的收尾（`handleSessionEnded`）
+ */
+let endingLocally = false
+
+/**
+ * 桌面端：登录请求由主进程发（它扣下 refresh cookie 加密存盘，见 `apps/desktop/src/main/auth.ts`）。
+ * 主进程抛的是普通 Error（IPC 只带得过 message），包成 ApiError —— 登录页只认 ApiError，
+ * 认不出就会把服务端的原话（「用户名或密码有误」）换成一句笼统的「登录失败」
+ */
+async function desktopLogin(param: LoginParam): Promise<string> {
+  try {
+    const tokens = await tryDesktop()!.auth.login(param)
+    return tokens.accessToken
+  } catch (err) {
+    throw new ApiError(400, 400, err instanceof Error ? err.message : String(err))
+  }
+}
+
 export async function login(qc: QueryClient, param: LoginParam) {
-  const res = await api.POST<LoginResult>('/api/v1/auth/login', { body: param })
-  tokenStore.set(res.access_token)
-  // 「在线用户」页要靠它认出当前会话那一行，免得管理员把自己踢下线
-  tokenStore.setSessionUuid(res.session_uuid)
+  const token = tryDesktop()
+    ? await desktopLogin(param)
+    : (await api.POST<LoginResult>('/api/v1/auth/login', { body: param })).access_token
+  // 会话 ID 在 token 的载荷里（`tokenStore.getSessionUuid`），不用另存
+  tokenStore.set(token)
+  endingLocally = false
   // 换了身份，整份服务端状态都要重取 —— 不能只失效 me
   qc.removeQueries({ queryKey: authKeys.all })
   // 上一个账号残留的标签页在这里清掉。**必须在 login 里也清**，不能只靠 logout：
   // 401 会话失效那条链（`setSessionExpiredHandler`）根本不走 logout
   clearClientSessionState()
-  return res
 }
 
 export async function logout(qc: QueryClient) {
+  endingLocally = true
   try {
-    await api.POST('/api/v1/auth/logout')
+    // 桌面端只有主进程手里有 refresh token；它只带 cookie 登出，后端按 cookie 认会话
+    const desktop = tryDesktop()
+    if (desktop) await desktop.auth.logout()
+    else await api.POST('/api/v1/auth/logout')
   } finally {
     tokenStore.clear()
     // 清全部缓存，避免下一个登录的人看到上一个人的数据
@@ -68,6 +98,28 @@ export async function logout(qc: QueryClient) {
   }
 }
 
+/**
+ * 服务端推来「你的会话结束了」（socket 的 `session:ended`，#138）：被管理员踢、被新登录挤掉、
+ * 同一个浏览器的另一个标签页登出了 ……
+ *
+ * 先试一次静默恢复再收尾：同一个浏览器里另一个标签页**重新登录了**的话，cookie 已经指向
+ * 新会话，这个标签页换一枚 token 接着用就行。恢复出来的是**另一个人**（换账号登录）就不能接着用 ——
+ * 页面上全是上一个人的数据。
+ *
+ * @param reason 后端的原因码，登录页据此出提示
+ */
+export async function handleSessionEnded(reason: string | null): Promise<void> {
+  if (endingLocally) return
+  const before = tokenStore.getUserId()
+  const outcome = await restoreSession()
+  if (outcome.kind === 'ok' && tokenStore.getUserId() === before) return
+  endSession({ reason, message: null })
+}
+
 export function isAuthenticated() {
   return tokenStore.get() !== null
 }
+
+/** 心跳（`auth/activity.ts` 的 `useSessionHeartbeat` 在用户最近有操作时定时调）。模块级常量，引用稳定 */
+export const sendHeartbeat = () => api.POST('/api/v1/auth/heartbeat')
+
