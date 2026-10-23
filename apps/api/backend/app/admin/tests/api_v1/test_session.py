@@ -134,7 +134,8 @@ def test_previous_token_within_grace_replays_the_same_pair(client: TestClient, a
     first = _refresh(client, a.refresh)
     again = _refresh(client, a.refresh)
     assert (first.status_code, again.status_code) == (200, 200), again.text
-    assert _issued_refresh(again) == _issued_refresh(first), '宽限期内的重复出示必须拿到同一个新令牌，否则两边又互相作废'
+    # 宽限期内的重复出示必须拿到同一个新令牌，否则两边又互相作废
+    assert _issued_refresh(again) == _issued_refresh(first)
 
 
 def test_previous_token_after_grace_revokes_the_whole_session(client: TestClient, account: int) -> None:
@@ -356,9 +357,7 @@ def test_logout_reason_reaches_the_other_tabs(client: TestClient, account: int) 
 
 def test_refresh_cookie_attributes(client: TestClient, account: int) -> None:
     """T6 回归：#138 之前是 `Path=/`、没有 `Secure`"""
-    res = client.post(
-        'https://testserver/api/v1/auth/login', json={'username': USERNAME, 'password': PASSWORD}
-    )
+    res = client.post('https://testserver/api/v1/auth/login', json={'username': USERNAME, 'password': PASSWORD})
     client.cookies.clear()
     assert res.status_code == 200, res.text
     lines = [line for line in res.headers.get_list('set-cookie') if line.startswith(f'{KEY}=')]
