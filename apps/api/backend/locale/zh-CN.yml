@@ -284,6 +284,13 @@ error:
     username_registered: 用户名已注册
     wrong_old_password: 原密码错误
   workflow:
+    ai_fill_nothing: 这张表单里没有 AI 能帮你填的字段
+    ai_fill_no_material: 先粘一段话或者传一份文件
+    ai_fill_bad_output: 模型返回的内容不是约定的格式
+    ai_fill_empty: 模型什么都没返回
+    ai_fill_empty_image: 模型什么都没返回 —— 材料是图片，当前的模型可能看不了图，换一个支持图片的模型（如 VL 系列）再试
+    ai_fill_failed: 'AI 没能填单，表单没有改动。原因：{reason}'
+    ai_fill_file_too_large: 文件太大（最大 10 MB）
     ai_no_plugin: 没有安装 AI 助手插件
     ai_no_provider: 没有可用的模型供应商，先在「AI 助手 → 模型」里配一个
     ai_model_timeout: 模型太久没有返回
@@ -609,6 +616,11 @@ workflow:
   handover_opinion: 离职交接
   timeout_approved: '超过 {hours} 小时未处理，已自动同意'
   timeout_rejected: '超过 {hours} 小时未处理，已自动驳回'
+  ai_fill:
+    skip_calc: 自动计算，不用填
+    skip_pick: 人员 / 部门要你自己选
+    skip_attachment: 附件要你自己传
+    skip_type: 这种控件 AI 填不了
   ai_review:
     dispatch_failed: 预审任务没能派发出去（任务队列不可用），可以稍后重试
     bad_output: 模型返回的内容不是约定的格式，这次预审作废

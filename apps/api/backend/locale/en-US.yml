@@ -283,6 +283,13 @@ error:
     username_registered: Username is already registered
     wrong_old_password: Current password is incorrect
   workflow:
+    ai_fill_nothing: There are no fields on this form that the AI can fill in
+    ai_fill_no_material: Paste some text or upload a file first
+    ai_fill_bad_output: The model's reply was not in the agreed format
+    ai_fill_empty: The model returned nothing
+    ai_fill_empty_image: The model returned nothing. The material is an image and the current model may not be able to read images; try one that can (such as a VL model)
+    ai_fill_failed: 'The AI could not fill in the form, so nothing was changed. Reason: {reason}'
+    ai_fill_file_too_large: The file is too large (10 MB max)
     ai_no_plugin: The AI assistant plugin is not installed
     ai_no_provider: 'No model provider is available. Add one under "AI assistant → Models" first'
     ai_model_timeout: The model took too long to respond
@@ -501,6 +508,11 @@ workflow:
   handover_opinion: Handover
   timeout_approved: 'Not handled within {hours} hours; approved automatically'
   timeout_rejected: 'Not handled within {hours} hours; rejected automatically'
+  ai_fill:
+    skip_calc: Calculated automatically, no need to fill in
+    skip_pick: People and departments must be picked by you
+    skip_attachment: Attachments must be uploaded by you
+    skip_type: The AI cannot fill in this kind of field
   ai_review:
     dispatch_failed: The pre-review task could not be queued (task queue unavailable). Try again later
     bad_output: The model did not answer in the expected format, so this pre-review was discarded

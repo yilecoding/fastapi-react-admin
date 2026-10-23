@@ -96,3 +96,4 @@ class DraftParam(SchemaBase):
     """存发起草稿（填到一半的表单，不校验内容）"""
 
     form: dict[str, Any] = Field(default_factory=dict, description='表单数据')
+    ai_filled: list[str] = Field(default_factory=list, max_length=200, description='AI 填了、还没核对的字段 ID')

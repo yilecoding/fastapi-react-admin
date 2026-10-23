@@ -152,6 +152,11 @@ def _check(field: dict[str, Any], v: Any) -> tuple[Any, str | None]:  # ruff:ign
     return v, '不支持的控件'
 
 
+def normalize_value(field: dict[str, Any], v: Any) -> tuple[Any, str | None]:
+    """一个字段的值：(归一后的值, 错误)。和提交时同一套规则 —— AI 填单用它逐个字段判，不合格的丢掉、不让整份失败"""
+    return _check(field, v)
+
+
 def validate_form_data(
     form_schema: dict[str, Any],
     data: dict[str, Any],

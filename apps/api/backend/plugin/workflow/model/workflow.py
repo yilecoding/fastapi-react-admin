@@ -203,6 +203,11 @@ class WfDraft(DataClassBase, DateTimeMixin):
     user_id: Mapped[int] = mapped_column(sa.BigInteger, index=True, comment='谁的草稿')
     code: Mapped[str] = mapped_column(UniversalStr(64), comment='流程定义编码')
     form_data: Mapped[str] = mapped_column(UniversalText, comment='没提交的表单（JSON）')
+    #: 哪些字段是 AI 填的、发起人还没核对（#111 第 3 条）。跟着草稿存：只放在界面状态里的话，关掉再打开
+    #: 值还在、标记没了 —— AI 填的值看起来就和自己填的一样
+    ai_filled: Mapped[str | None] = mapped_column(
+        UniversalText, default=None, comment='AI 填了、还没核对的字段 ID（JSON 数组）'
+    )
 
 
 class WfAiReview(DataClassBase, DateTimeMixin):

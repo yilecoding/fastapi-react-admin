@@ -14,7 +14,7 @@ import json
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Path, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Path, Query, Request, UploadFile
 
 from backend.app.admin.service.file_service import file_service
 from backend.common.exception import errors
@@ -42,12 +42,14 @@ from backend.plugin.workflow.schema.workflow import (
 )
 from backend.plugin.workflow.service import (
     ai_design_service,
+    ai_fill_service,
     ai_review_service,
     definition_service,
     query_service,
     runtime_service,
 )
 from backend.plugin.workflow.service.runtime_service import Actor
+from backend.utils.timezone import timezone
 
 router = APIRouter()
 
@@ -153,6 +155,40 @@ async def preview_start(
         start_from=index_nodes(model)[model['root']['id']].after,
     )
     return response_base.success(data={'steps': steps})
+
+
+@router.post(
+    '/startable/{code}/ai-fill',
+    summary='发起页：AI 按一段话 / 一份文件填单（只回值，不存）',
+    dependencies=[DependsJwtAuth],
+)
+async def ai_fill_start(
+    request: Request,
+    db: CurrentSession,
+    code: Annotated[str, Path(max_length=64)],
+    text: Annotated[str | None, Form(max_length=ai_fill_service.MAX_TEXT * 2)] = None,
+    file: Annotated[UploadFile | None, File(description='发票图片 / PDF / Word / Excel / 文本')] = None,
+) -> ResponseModel:
+    # 不用 CurrentSessionTransaction：模型调用要十几秒，不能开着事务等（同设计器生成）
+    d, v = await runtime_service.published_definition(db, code)
+    _form_only(d)
+    upload = None
+    if file is not None and file.filename:
+        raw = await file.read(ai_fill_service.MAX_FILE_BYTES + 1)
+        if len(raw) > ai_fill_service.MAX_FILE_BYTES:
+            raise errors.RequestError(msg=t('error.workflow.ai_fill_file_too_large'))
+        upload = (file.filename, raw)
+    data = await ai_fill_service.fill(
+        db,
+        definition_id=d.id,
+        form_schema=json.loads(v.form_json),
+        root=json.loads(v.model_json)['root'],
+        user_id=request.user.id,
+        today=timezone.now().date().isoformat(),
+        text=text,
+        file=upload,
+    )
+    return response_base.success(data=data)
 
 
 @router.post('/files', summary='上传审批附件', dependencies=[DependsJwtAuth])
@@ -298,7 +334,7 @@ async def get_draft(request: Request, db: CurrentSession, code: Code) -> Respons
 
 @router.put('/drafts/{code}', summary='存发起草稿', dependencies=[DependsJwtAuth])
 async def put_draft(request: Request, db: CurrentSessionTransaction, code: Code, obj: DraftParam) -> ResponseModel:
-    await query_service.save_draft(db, request.user.id, code, obj.form)
+    await query_service.save_draft(db, request.user.id, code, obj.form, obj.ai_filled)
     return response_base.success()
 
 

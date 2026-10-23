@@ -684,19 +684,27 @@ async def get_draft(db: AsyncSession, user_id: int, code: str) -> dict[str, Any]
     d = await db.scalar(select(WfDraft).where(WfDraft.user_id == user_id, WfDraft.code == code))
     if d is None:
         return None
-    return {'form': json.loads(d.form_data), 'updated_time': d.updated_time or d.created_time}
+    return {
+        'form': json.loads(d.form_data),
+        'ai_filled': json.loads(d.ai_filled) if d.ai_filled else [],
+        'updated_time': d.updated_time or d.created_time,
+    }
 
 
-async def save_draft(db: AsyncSession, user_id: int, code: str, form: dict[str, Any]) -> None:
+async def save_draft(
+    db: AsyncSession, user_id: int, code: str, form: dict[str, Any], ai_filled: list[str] | None = None
+) -> None:
     """存草稿。不校验内容（填到一半本来就不完整），只限大小；提交时照常完整校验"""
     raw = json.dumps(form, ensure_ascii=False)
     if len(raw.encode()) > DRAFT_MAX_BYTES:
         raise errors.RequestError(msg=t('error.workflow.draft_too_large'))
     d = await db.scalar(select(WfDraft).where(WfDraft.user_id == user_id, WfDraft.code == code))
+    marks = json.dumps(ai_filled, ensure_ascii=False) if ai_filled else None
     if d is None:
-        db.add(WfDraft(user_id=user_id, code=code, form_data=raw))
+        db.add(WfDraft(user_id=user_id, code=code, form_data=raw, ai_filled=marks))
     else:
         d.form_data = raw
+        d.ai_filled = marks
         d.updated_time = timezone.now()
 
 

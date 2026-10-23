@@ -44,6 +44,7 @@ export function FormRenderer({
   perms,
   errors,
   files,
+  marks,
 }: {
   schema: FormSchema
   value: FormData
@@ -53,6 +54,8 @@ export function FormRenderer({
   errors?: Record<string, string>
   /** 已有附件的文件名 / 大小（详情接口带的）。新上传的由附件控件自己记着 */
   files?: Record<string, FileMeta>
+  /** 字段下面挂的标记（发起页：「AI 填的，请核对」）。只挂在能填的字段上 */
+  marks?: Record<string, React.ReactNode>
 }) {
   const { t } = useTranslation()
   // 🔴 用最新的值合并，不用这次渲染闭包里的 `value`：附件上传是异步的，传完才回调 ——
@@ -113,6 +116,7 @@ export function FormRenderer({
             <div className={LOCATE_FLASH} data-testid={`wf-field-${f.id}`} data-field-id={f.id} data-editable={editable}>
               <FieldInput field={f} value={value[f.id]} onChange={(v) => set(f.id, v)} />
             </div>
+            {editable && marks?.[f.id]}
           </Row>
         )
       })}
@@ -128,7 +132,7 @@ const LOCATE_FLASH =
 const EMPTY_FILES: Record<string, FileMeta> = {}
 const FilesContext = React.createContext<Record<string, FileMeta>>(EMPTY_FILES)
 
-function empty(v: unknown): boolean {
+export function empty(v: unknown): boolean {
   return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
 }
 
