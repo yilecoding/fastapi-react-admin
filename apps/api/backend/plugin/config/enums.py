@@ -9,3 +9,4 @@ class ConfigType(StrEnum):
     user_security = 'USER_SECURITY'
     login = 'LOGIN'
     dev = 'DEV'
+    file = 'FILE'

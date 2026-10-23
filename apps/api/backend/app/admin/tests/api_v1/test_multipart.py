@@ -36,13 +36,22 @@ CHUNK = 64 * 1024  # 测试里把分片调小，几片就能覆盖「中间片 /
 
 @pytest.fixture(autouse=True)
 def isolated_upload_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[Path, None, None]:
-    """同 test_file.py：两棵落盘树顶到 tmp；分片调小"""
+    """同 test_file.py：两棵落盘树顶到 tmp；分片调小
+
+    ⚠️ 光设 `settings.FILE_CHUNK_SIZE` 不够：`policy()` / `init()` 第一句是 `load_file_config(db)`，
+    会把 sys_config 里 FILE 组的值（8 MiB）setattr 回来 —— 所以连那次加载一起顶掉（同 conftest 的 `no_captcha`）。
+    「界面上改了就生效」那一侧在 `test_upload_policy_config.py`
+    """
     from backend.utils import file_ops
+
+    async def _noop(_db: object) -> None:  # ruff: ignore[unused-async] - 顶掉的原函数是 async，签名要对上
+        return None
 
     (tmp_path / 'upload').mkdir()
     (tmp_path / 'upload-public').mkdir()
     monkeypatch.setattr(file_ops, 'UPLOAD_DIR', tmp_path / 'upload')
     monkeypatch.setattr(file_ops, 'PUBLIC_UPLOAD_DIR', tmp_path / 'upload-public')
+    monkeypatch.setattr('backend.app.admin.service.multipart_service.load_file_config', _noop)
     monkeypatch.setattr(settings, 'FILE_CHUNK_SIZE', CHUNK)
     yield tmp_path / 'upload'
 

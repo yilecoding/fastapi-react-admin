@@ -178,6 +178,29 @@ export const REGISTRY: Record<string, SettingMeta> = {
     widget: 'secret',
     hint: '多数邮箱这里填的是「授权码」而不是登录密码',
   },
+
+  // ── 文件上传 ───────────────────────────────────────────────────────────────
+  // 库里按 MiB 存，后端 `load_file_config` 乘成字节；范围和 `dynamic_config.DYNAMIC_INT_BOUNDS` 对账
+  FILE_CHUNK_THRESHOLD: {
+    section: '分片上传',
+    order: 1,
+    label: '分片阈值',
+    unit: 'MiB',
+    widget: 'int',
+    min: 1,
+    max: 99,
+    hint: '不小于这个大小的文件切成分片上传、可断点续传；更小的一个请求传完。上限 99 是因为那一个请求要过反代的 client_max_body_size（100m），调过它就是 413',
+  },
+  FILE_CHUNK_SIZE: {
+    section: '分片上传',
+    order: 2,
+    label: '每片大小',
+    unit: 'MiB',
+    widget: 'int',
+    min: 1,
+    max: 64,
+    hint: '越大请求越少，但一片失败要重传的也越多。只影响新开始的上传，传到一半的照旧按原来的大小续传',
+  },
 }
 
 export const metaOf = (key: string): SettingMeta | undefined => REGISTRY[key]
@@ -199,6 +222,7 @@ export const SECTION_ORDER: string[] = [
   '账号锁定',
   '服务器',
   '认证',
+  '分片上传',
 ]
 
 export function sectionRank(section: string): number {
@@ -233,6 +257,12 @@ export const RAIL: RailGroup[] = [
   {
     title: '通知与集成',
     items: [{ id: 'EMAIL', label: '邮件服务', desc: '系统发信用的 SMTP 服务器。密码以密文展示。' }],
+  },
+  {
+    title: '文件',
+    items: [
+      { id: 'FILE', label: '文件上传', desc: '大文件分片上传的阈值与每片大小。改完对新开始的上传生效，传到一半的不受影响。' },
+    ],
   },
   {
     title: '高级',
@@ -309,6 +339,14 @@ export function validateCross(get: (key: string) => string | undefined): Record<
     errs.USER_PASSWORD_REMINDER_DAYS = t('提前量不能超过有效期（{{n}} 天）', { n: expiry })
   }
 
+  // 阈值比每片还小时，阈值到每片大小之间的文件会「分片上传、但只有一片」—— 能用，只是白多两个请求
+  const threshold = num('FILE_CHUNK_THRESHOLD')
+  const chunk = num('FILE_CHUNK_SIZE')
+  if (threshold !== null && chunk !== null && threshold < chunk) {
+    errs.FILE_CHUNK_THRESHOLD = t('不能小于每片大小（{{n}} MiB）', { n: chunk })
+    errs.FILE_CHUNK_SIZE = t('不能大于分片阈值（{{n}} MiB）', { n: threshold })
+  }
+
   return errs
 }
 
@@ -362,6 +400,13 @@ export function sectionSummary(section: string, get: (key: string) => string | u
     const port = get('EMAIL_PORT')
     if (!host || !port) return null
     return `${host}:${port}${b('EMAIL_SSL') ? t('（SSL）') : t('（明文）')}`
+  }
+
+  if (section === '分片上传') {
+    const th = n('FILE_CHUNK_THRESHOLD')
+    const size = n('FILE_CHUNK_SIZE')
+    if (th === null || size === null) return null
+    return t('≥ {{th}} MiB 的文件切成 {{size}} MiB 一片上传，可续传', { th, size })
   }
 
   if (section === '登录校验') {

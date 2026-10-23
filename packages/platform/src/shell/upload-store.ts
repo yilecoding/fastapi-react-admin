@@ -60,12 +60,22 @@ const resume = createResumeStore()
 
 type Policy = { chunk_threshold: number; chunk_size: number }
 let policy: Promise<Policy> | null = null
-/** 分片阈值由服务端下发（和存储配置在一起），一个会话取一次；取失败就当「不分片」，下次再取 */
+let policyAt = 0
+/**
+ * 一批文件共用一次取到的策略，过了这么久就重取。
+ * 原来是「一个页面会话取一次」—— 而阈值现在能在参数配置页改（#139），管理员改完回文件页传一个试试，
+ * 拿到的还是改之前那份，看起来像「改了没生效」
+ */
+const POLICY_TTL_MS = 10_000
+/** 分片阈值由服务端下发（参数配置「文件上传」组，`.env` 是默认值）；取失败就当「不分片」，下次再取 */
 function getPolicy(): Promise<Policy> {
-  policy ??= api.GET<Policy>('/api/v1/sys/files/upload-policy').catch(() => {
-    policy = null
-    return { chunk_threshold: Number.POSITIVE_INFINITY, chunk_size: 0 }
-  })
+  if (!policy || Date.now() - policyAt > POLICY_TTL_MS) {
+    policyAt = Date.now()
+    policy = api.GET<Policy>('/api/v1/sys/files/upload-policy').catch(() => {
+      policy = null
+      return { chunk_threshold: Number.POSITIVE_INFINITY, chunk_size: 0 }
+    })
+  }
   return policy
 }
 
