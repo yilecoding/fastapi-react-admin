@@ -76,6 +76,15 @@ end
 return 1
 """
 
+#: KEYS: 配置日计数。确定没发出去时退还一次占位；计数已经是 0（键过期 / 跨天）就什么都不做，绝不减成负数
+_RELEASE_CONFIG = """
+local n = tonumber(redis.call('GET', KEYS[1]) or '0')
+if n > 0 then
+  return redis.call('DECR', KEYS[1])
+end
+return 0
+"""
+
 
 def _day() -> str:
     return timezone.now().strftime('%Y%m%d')
@@ -141,6 +150,15 @@ class SmsGuard:
                 _RESERVE_CONFIG, 1, config_daily_key(config_id), str(max(daily_max, 0)), str(_DAILY_TTL)
             )
         )
+
+    @staticmethod
+    async def release_config(config_id: int) -> None:
+        """确定没发出去（`UNSENT_KINDS`）：把 `reserve_config` 占的那一个名额还回去
+
+        和冷却位同一条判据：配置错 / 参数错 / 号码错 / 鉴权错 / 没连上，厂商一条都没收到，
+        不该算进「今日已发」，也不该消耗这条配置的 `daily_max`。「结果未知」（读超时）不退，可能已经发出去了。
+        """
+        await redis_client.eval(_RELEASE_CONFIG, 1, config_daily_key(config_id))
 
     @staticmethod
     async def today_sent(config_ids: list[int]) -> dict[int, int]:

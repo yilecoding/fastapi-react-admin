@@ -12,6 +12,9 @@ import pytest
 from backend.core.conf import settings
 from backend.database.redis import redis_client
 from backend.middleware.opera_log_middleware import OperaLogMiddleware
+from backend.plugin.sms.sdk.base import SmsErrorKind, SmsMessage, SmsProvider, SmsResult, TemplateMapping
+from backend.plugin.sms.sdk.console import ConsoleConfig
+from backend.plugin.sms.sdk.registry import register_provider, unregister_provider
 from backend.plugin.sms.tests.conftest import CONFIGS, LOGS, NAME_PREFIX, PHONE_A
 
 if TYPE_CHECKING:
@@ -268,6 +271,35 @@ class TestSendTest:
         # 「今日已发」跟着涨
         after = client.get(f'{CONFIGS}/{c["id"]}', headers=token_headers).json()['data']
         assert after['today_sent'] >= 1
+
+    def test_rejected_test_sms_does_not_count_as_sent(
+        self, client: TestClient, token_headers: dict[str, str], make_config: Callable[..., dict[str, Any]]
+    ) -> None:
+        """真发阿里云时填错模板 ID：厂商 `isv.SMS_TEMPLATE_ILLEGAL` 一条没发，卡片上「今日已发」却跳了。退还名额"""
+
+        class Rejecting(SmsProvider):
+            code, label, Config, template_mapping = 'pytest_reject', '拒收', ConsoleConfig, TemplateMapping.named
+
+            async def _send(self, msg: SmsMessage) -> SmsResult:
+                return SmsResult.failed(
+                    SmsErrorKind.config_error, provider_code='isv.SMS_TEMPLATE_ILLEGAL', provider_msg='模板不匹配'
+                )
+
+        register_provider(Rejecting)
+        try:
+            c = make_config('t1b', provider='pytest_reject')
+            res = client.post(
+                f'{CONFIGS}/{c["id"]}/test',
+                headers=token_headers,
+                json={'phone': PHONE_A, 'template_id': 'SMS_WRONG', 'params': {'code': '1'}},
+            )
+            data = res.json()['data']
+            assert res.json()['code'] == 200 and data['status'] == 'failed' and data['error_kind'] == 'config_error'
+            assert data['log_id'], '失败照样记日志'
+            after = client.get(f'{CONFIGS}/{c["id"]}', headers=token_headers).json()['data']
+            assert after['today_sent'] == 0
+        finally:
+            unregister_provider('pytest_reject')
 
     def test_params_shape_must_match_provider(
         self, client: TestClient, token_headers: dict[str, str], make_config: Callable[..., dict[str, Any]]
