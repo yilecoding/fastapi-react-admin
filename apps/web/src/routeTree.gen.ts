@@ -38,6 +38,8 @@ import { Route as AuthSandboxQueryRouteImport } from './routes/_auth/sandbox/que
 import { Route as AuthSandboxTableRouteImport } from './routes/_auth/sandbox/table'
 import { Route as AuthSchedulerManageRouteImport } from './routes/_auth/scheduler/manage'
 import { Route as AuthSchedulerRecordRouteImport } from './routes/_auth/scheduler/record'
+import { Route as AuthSmsConfigRouteImport } from './routes/_auth/sms/config'
+import { Route as AuthSmsLogRouteImport } from './routes/_auth/sms/log'
 import { Route as AuthSystemDataPermissionRouteImport } from './routes/_auth/system/data-permission'
 import { Route as AuthSystemDeptRouteImport } from './routes/_auth/system/dept'
 import { Route as AuthSystemFileRouteImport } from './routes/_auth/system/file'
@@ -193,6 +195,16 @@ const AuthSchedulerRecordRoute = AuthSchedulerRecordRouteImport.update({
   path: '/scheduler/record',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthSmsConfigRoute = AuthSmsConfigRouteImport.update({
+  id: '/sms/config',
+  path: '/sms/config',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthSmsLogRoute = AuthSmsLogRouteImport.update({
+  id: '/sms/log',
+  path: '/sms/log',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthSystemDataPermissionRoute =
   AuthSystemDataPermissionRouteImport.update({
     id: '/system/data-permission',
@@ -278,6 +290,8 @@ export interface FileRoutesByFullPath {
   '/sandbox/table': typeof AuthSandboxTableRoute
   '/scheduler/manage': typeof AuthSchedulerManageRoute
   '/scheduler/record': typeof AuthSchedulerRecordRoute
+  '/sms/config': typeof AuthSmsConfigRoute
+  '/sms/log': typeof AuthSmsLogRoute
   '/system/data-permission': typeof AuthSystemDataPermissionRoute
   '/system/dept': typeof AuthSystemDeptRoute
   '/system/file': typeof AuthSystemFileRoute
@@ -318,6 +332,8 @@ export interface FileRoutesByTo {
   '/sandbox/table': typeof AuthSandboxTableRoute
   '/scheduler/manage': typeof AuthSchedulerManageRoute
   '/scheduler/record': typeof AuthSchedulerRecordRoute
+  '/sms/config': typeof AuthSmsConfigRoute
+  '/sms/log': typeof AuthSmsLogRoute
   '/system/data-permission': typeof AuthSystemDataPermissionRoute
   '/system/dept': typeof AuthSystemDeptRoute
   '/system/file': typeof AuthSystemFileRoute
@@ -361,6 +377,8 @@ export interface FileRoutesById {
   '/_auth/sandbox/table': typeof AuthSandboxTableRoute
   '/_auth/scheduler/manage': typeof AuthSchedulerManageRoute
   '/_auth/scheduler/record': typeof AuthSchedulerRecordRoute
+  '/_auth/sms/config': typeof AuthSmsConfigRoute
+  '/_auth/sms/log': typeof AuthSmsLogRoute
   '/_auth/system/data-permission': typeof AuthSystemDataPermissionRoute
   '/_auth/system/dept': typeof AuthSystemDeptRoute
   '/_auth/system/file': typeof AuthSystemFileRoute
@@ -403,6 +421,8 @@ export interface FileRouteTypes {
     | '/sandbox/table'
     | '/scheduler/manage'
     | '/scheduler/record'
+    | '/sms/config'
+    | '/sms/log'
     | '/system/data-permission'
     | '/system/dept'
     | '/system/file'
@@ -443,6 +463,8 @@ export interface FileRouteTypes {
     | '/sandbox/table'
     | '/scheduler/manage'
     | '/scheduler/record'
+    | '/sms/config'
+    | '/sms/log'
     | '/system/data-permission'
     | '/system/dept'
     | '/system/file'
@@ -485,6 +507,8 @@ export interface FileRouteTypes {
     | '/_auth/sandbox/table'
     | '/_auth/scheduler/manage'
     | '/_auth/scheduler/record'
+    | '/_auth/sms/config'
+    | '/_auth/sms/log'
     | '/_auth/system/data-permission'
     | '/_auth/system/dept'
     | '/_auth/system/file'
@@ -709,6 +733,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSchedulerRecordRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/sms/config': {
+      id: '/_auth/sms/config'
+      path: '/sms/config'
+      fullPath: '/sms/config'
+      preLoaderRoute: typeof AuthSmsConfigRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/sms/log': {
+      id: '/_auth/sms/log'
+      path: '/sms/log'
+      fullPath: '/sms/log'
+      preLoaderRoute: typeof AuthSmsLogRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/system/data-permission': {
       id: '/_auth/system/data-permission'
       path: '/system/data-permission'
@@ -815,6 +853,8 @@ interface AuthRouteChildren {
   AuthSandboxTableRoute: typeof AuthSandboxTableRoute
   AuthSchedulerManageRoute: typeof AuthSchedulerManageRoute
   AuthSchedulerRecordRoute: typeof AuthSchedulerRecordRoute
+  AuthSmsConfigRoute: typeof AuthSmsConfigRoute
+  AuthSmsLogRoute: typeof AuthSmsLogRoute
   AuthSystemDataPermissionRoute: typeof AuthSystemDataPermissionRoute
   AuthSystemDeptRoute: typeof AuthSystemDeptRoute
   AuthSystemFileRoute: typeof AuthSystemFileRoute
@@ -854,6 +894,8 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthSandboxTableRoute: AuthSandboxTableRoute,
   AuthSchedulerManageRoute: AuthSchedulerManageRoute,
   AuthSchedulerRecordRoute: AuthSchedulerRecordRoute,
+  AuthSmsConfigRoute: AuthSmsConfigRoute,
+  AuthSmsLogRoute: AuthSmsLogRoute,
   AuthSystemDataPermissionRoute: AuthSystemDataPermissionRoute,
   AuthSystemDeptRoute: AuthSystemDeptRoute,
   AuthSystemFileRoute: AuthSystemFileRoute,

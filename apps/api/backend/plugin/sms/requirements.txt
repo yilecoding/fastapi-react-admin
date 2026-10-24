@@ -1,0 +1,3 @@
+alibabacloud-dysmsapi20170525>=4.6.0
+tencentcloud-sdk-python-common[async]>=3.1.153
+tencentcloud-sdk-python-sms>=3.1.153

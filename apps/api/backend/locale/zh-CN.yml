@@ -227,6 +227,37 @@ error:
   sql:
     illegal_operation: SQL 脚本 {filepath} 存在非法操作，仅允许：{allowed}
     script_not_found: SQL 脚本文件不存在
+  sms:
+    circuit_open: 短信发送量已达本小时全站上限，暂时无法发送，请联系管理员
+    config_disabled: 指定的短信配置已停用
+    config_invalid: 短信厂商配置不合法：{detail}
+    config_not_found: 短信配置不存在
+    credential_required: 该厂商需要填写凭据：{fields}
+    default_disabled: 停用的配置不能设为默认
+    encrypt_key_invalid: SMS_ENCRYPT_SECRET_KEY 不是合法的十六进制密钥（需 32 字节 / 64 位十六进制）
+    encrypt_key_unset: 未配置 SMS_ENCRYPT_SECRET_KEY，无法安全保存短信凭据。生成方式：python -c "import os;print(os.urandom(32).hex())"，写入 .env 后重启服务
+    invalid_phone: 手机号格式不正确（只支持中国大陆 11 位手机号）
+    log_not_found: 短信发送日志不存在
+    name_exists: 同名的短信配置已存在
+    no_config: 没有可用的短信配置：没有一条启用、配了业务模板 {template} 且今天未到日上限的配置
+    params_mismatch: 业务模板 {template} 的参数应为 {expected}，收到 {received}
+    provider_unknown: 短信厂商 {provider} 不存在（未注册，或在当前环境不可用）
+    send_failed:
+      account_error: 短信账号异常（余额 / 限额 / 账号状态），请联系管理员
+      bad_params: 短信模板参数不合规
+      config_error: 短信通道配置有误，请联系管理员
+      invalid_phone: 手机号无效，请检查后重试
+      network_unsent: 连接短信服务商失败，请稍后再试
+      provider_error: 短信服务商返回错误，请稍后再试
+      rate_limited: 短信发送太频繁，请稍后再试
+      unknown: 短信发送结果未知，请稍后在发送日志里查看
+    template_id_too_long: 业务模板 {template} 的厂商模板 ID 超过 {max} 个字符
+    template_mapping_invalid: 业务模板 {template} 的参数映射不合法：{detail}
+    template_not_configured: 配置「{name}」没有配业务模板 {template}
+    template_shape: 业务模板 {template} 的映射要同时给出 template_id（厂商模板 ID）和 mapping（参数对应）
+    template_unknown: 业务模板 {template} 未注册
+    test_params_shape: 该厂商按{shape}映射模板参数，测试参数要写成 {example}
+    too_frequent: 短信发送太频繁，请稍后再试
   storage:
     code_exists: 存储编码 {code} 已存在
     default_cannot_delete: 默认存储不能删除，请先把默认切到别的存储

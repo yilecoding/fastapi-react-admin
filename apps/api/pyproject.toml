@@ -21,6 +21,7 @@ dependencies = [
   # requirements.txt 保留不动：那是插件自己的清单，`fba add` 装第三方插件时要用。
   "aiosmtplib>=5.1.2",  # plugin/email
   "alembic>=1.19.1",
+  "alibabacloud-dysmsapi20170525>=4.6.0",  # plugin/sms（阿里云官方 SDK，异步接口走 aiohttp）
   "asgiref>=3.12.1",
   "asyncmy>=0.2.13",
   "asyncpg>=0.31.0",
@@ -78,6 +79,8 @@ dependencies = [
   "sqlalchemy[asyncio]>=2.0.52",
   "sqlparse>=0.5.5",
   "starlette-context>=0.5.1",
+  "tencentcloud-sdk-python-common[async]>=3.1.153",  # plugin/sms（异步客户端要这个 extra，带 httpx）
+  "tencentcloud-sdk-python-sms>=3.1.153",  # plugin/sms（腾讯云官方 SDK）
   "user-agents>=2.2.0",
 ]
 dynamic = ["version"]

@@ -226,6 +226,37 @@ error:
   sql:
     illegal_operation: 'SQL script {filepath} contains an illegal operation, only allowed: {allowed}'
     script_not_found: SQL script file does not exist
+  sms:
+    circuit_open: SMS sending has hit the site-wide hourly limit and is paused for now; please contact the administrator
+    config_disabled: The specified SMS configuration is disabled
+    config_invalid: "Invalid SMS provider configuration: {detail}"
+    config_not_found: SMS configuration not found
+    credential_required: "This provider requires credentials: {fields}"
+    default_disabled: A disabled configuration cannot be set as default
+    encrypt_key_invalid: SMS_ENCRYPT_SECRET_KEY is not a valid hex key (32 bytes / 64 hex characters required)
+    encrypt_key_unset: SMS_ENCRYPT_SECRET_KEY is not configured, so SMS credentials cannot be stored safely. Generate one with python -c "import os;print(os.urandom(32).hex())", put it in .env and restart the service
+    invalid_phone: Invalid phone number (only 11-digit mainland China numbers are supported)
+    log_not_found: SMS log not found
+    name_exists: An SMS configuration with the same name already exists
+    no_config: "No usable SMS configuration: none is enabled, maps the business template {template} and is under its daily limit today"
+    params_mismatch: "Business template {template} expects parameters {expected}, received {received}"
+    provider_unknown: SMS provider {provider} does not exist (not registered, or unavailable in this environment)
+    send_failed:
+      account_error: SMS account problem (balance / quota / account status), please contact the administrator
+      bad_params: SMS template parameters are not acceptable
+      config_error: The SMS channel is misconfigured, please contact the administrator
+      invalid_phone: Invalid phone number, please check and retry
+      network_unsent: Could not connect to the SMS provider, please retry later
+      provider_error: The SMS provider returned an error, please retry later
+      rate_limited: SMS sent too frequently, please retry later
+      unknown: The SMS result is unknown, please check the SMS logs later
+    template_id_too_long: The provider template ID for business template {template} exceeds {max} characters
+    template_mapping_invalid: "Invalid parameter mapping for business template {template}: {detail}"
+    template_not_configured: Configuration "{name}" has no mapping for business template {template}
+    template_shape: The mapping for business template {template} must provide both template_id (provider template ID) and mapping (parameter mapping)
+    template_unknown: Business template {template} is not registered
+    test_params_shape: This provider maps template parameters by {shape}; test parameters must be written as {example}
+    too_frequent: SMS sent too frequently, please retry later
   storage:
     code_exists: Storage code {code} already exists
     default_cannot_delete: The default storage cannot be deleted, switch the default to another storage first

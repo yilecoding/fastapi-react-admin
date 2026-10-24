@@ -2810,6 +2810,163 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sms/configs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页获取短信配置 */
+        get: operations["get_sms_configs_paginated_api_v1_sms_configs_get"];
+        put?: never;
+        /** 创建短信配置 */
+        post: operations["create_sms_config_api_v1_sms_configs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sms/configs/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取可用的短信厂商（SDK 注册表） */
+        get: operations["get_sms_providers_api_v1_sms_configs_providers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sms/configs/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取已注册的业务模板 */
+        get: operations["get_sms_templates_api_v1_sms_configs_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sms/configs/{pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取短信配置详情 */
+        get: operations["get_sms_config_api_v1_sms_configs__pk__get"];
+        /** 更新短信配置 */
+        put: operations["update_sms_config_api_v1_sms_configs__pk__put"];
+        post?: never;
+        /** 删除短信配置 */
+        delete: operations["delete_sms_config_api_v1_sms_configs__pk__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sms/configs/{pk}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 设为默认配置（同一时间只有一条） */
+        put: operations["set_default_sms_config_api_v1_sms_configs__pk__default_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sms/configs/{pk}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发测试短信（真发一条，绕过业务模板） */
+        post: operations["test_sms_config_api_v1_sms_configs__pk__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sms/logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页获取短信发送日志（手机号掩码） */
+        get: operations["get_sms_logs_paginated_api_v1_sms_logs_get"];
+        put?: never;
+        post?: never;
+        /** 批量删除短信发送日志 */
+        delete: operations["delete_sms_logs_api_v1_sms_logs_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sms/logs/{pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取短信发送日志详情（完整手机号） */
+        get: operations["get_sms_log_api_v1_sms_logs__pk__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sms/logs/all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 清空短信发送日志 */
+        delete: operations["delete_all_sms_logs_api_v1_sms_logs_all_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/chat/stream": {
         parameters: {
             query?: never;
@@ -4089,6 +4246,86 @@ export interface components {
             code: string;
         };
         /**
+         * CreateSmsConfigParam
+         * @description 创建短信配置参数
+         */
+        CreateSmsConfigParam: {
+            /**
+             * Name
+             * @description 配置名称
+             */
+            name: string;
+            /**
+             * Provider
+             * @description 厂商码（GET /sms/configs/providers 里的 code）
+             */
+            provider: string;
+            /**
+             * Sign Name
+             * @description 短信签名（须已审核通过；腾讯云填签名内容不是签名 ID）
+             */
+            sign_name: string;
+            /**
+             * Access Key Id
+             * @description 凭据 key（AccessKey ID / SecretId）；控制台厂商不填
+             */
+            access_key_id?: string | null;
+            /**
+             * Options
+             * @description 厂商独有配置，按厂商 Config 校验
+             */
+            options?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Templates
+             * @description 业务模板码 → 厂商模板，形如 {"captcha": {"template_id": "SMS_xxx", "mapping": {...} | [...]}}
+             */
+            templates?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Weight
+             * @description 权重；0 = 不参与自动选取，只能被指定使用
+             * @default 1
+             */
+            weight: number;
+            /**
+             * Daily Max
+             * @description 每个自然日的发送上限；0 = 不限
+             * @default 0
+             */
+            daily_max: number;
+            /**
+             * Timeout
+             * @description 请求超时（秒）
+             * @default 10
+             */
+            timeout: number;
+            /**
+             * Is Default
+             * @description 是否默认配置
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Status
+             * @description 状态（0：停用、1：正常）
+             * @default 1
+             */
+            status: number;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
+            /**
+             * Access Key Secret
+             * @description 凭据 secret（明文，只在这一次请求里出现，落库即加密）
+             */
+            access_key_secret?: string | null;
+        };
+        /**
          * CreateStorageParam
          * @description 创建存储参数
          */
@@ -4368,6 +4605,17 @@ export interface components {
              * @description 角色 ID 列表
              */
             pks: number[];
+        };
+        /**
+         * DeleteSmsLogParam
+         * @description 批量删除
+         */
+        DeleteSmsLogParam: {
+            /**
+             * Pks
+             * @description 日志 ID 列表
+             */
+            pks: (string | number)[];
         };
         /**
          * DeleteTaskResultParam
@@ -6406,6 +6654,257 @@ export interface components {
             scopes: (components["schemas"]["GetDataScopeWithRelationDetail"] | null)[];
         };
         /**
+         * GetSmsConfigDetail
+         * @description 短信配置详情
+         *
+         *     🔴 **这里没有 `access_key_secret` 也没有 `secret_cipher`，是刻意的。** 密文一旦出现在任何响应里，
+         *     它就和明文一样值钱了。前端只展示掩码（`TestSecretsNeverLeak` 同款守卫）。
+         */
+        GetSmsConfigDetail: {
+            /**
+             * Name
+             * @description 配置名称
+             */
+            name: string;
+            /**
+             * Provider
+             * @description 厂商码（GET /sms/configs/providers 里的 code）
+             */
+            provider: string;
+            /**
+             * Sign Name
+             * @description 短信签名（须已审核通过；腾讯云填签名内容不是签名 ID）
+             */
+            sign_name: string;
+            /**
+             * Access Key Id
+             * @description 凭据 key（AccessKey ID / SecretId）；控制台厂商不填
+             */
+            access_key_id?: string | null;
+            /**
+             * Options
+             * @description 厂商独有配置，按厂商 Config 校验
+             */
+            options?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Templates
+             * @description 业务模板码 → 厂商模板，形如 {"captcha": {"template_id": "SMS_xxx", "mapping": {...} | [...]}}
+             */
+            templates?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Weight
+             * @description 权重；0 = 不参与自动选取，只能被指定使用
+             * @default 1
+             */
+            weight: number;
+            /**
+             * Daily Max
+             * @description 每个自然日的发送上限；0 = 不限
+             * @default 0
+             */
+            daily_max: number;
+            /**
+             * Timeout
+             * @description 请求超时（秒）
+             * @default 10
+             */
+            timeout: number;
+            /**
+             * Is Default
+             * @description 是否默认配置
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Status
+             * @description 状态（0：停用、1：正常）
+             * @default 1
+             */
+            status: number;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
+            /**
+             * Id
+             * @description 配置 ID
+             */
+            id: string | number;
+            /**
+             * Secret Mask
+             * @description 凭据 secret 掩码（仅展示）
+             */
+            secret_mask?: string | null;
+            /**
+             * Today Sent
+             * @description 今天已通过这条配置发了多少条（Redis 计数）
+             * @default 0
+             */
+            today_sent: number;
+            /**
+             * Created Time
+             * Format: date-time
+             * @description 创建时间
+             */
+            created_time: string;
+            /**
+             * Updated Time
+             * @description 更新时间
+             */
+            updated_time?: string | null;
+        };
+        /**
+         * GetSmsLogDetail
+         * @description 详情：完整手机号（要 `sms:log:list`，和列表同一个码 —— 掩码挡的是「扫一眼列表」，不是权限边界）
+         */
+        GetSmsLogDetail: {
+            /**
+             * Id
+             * @description 日志 ID（也是传给厂商的流水号）
+             */
+            id: string | number;
+            /**
+             * Config Id
+             * @description 走的哪条配置
+             */
+            config_id?: string | null;
+            /**
+             * Provider
+             * @description 厂商码
+             */
+            provider: string;
+            /**
+             * Template
+             * @description 业务模板码（测试短信为 test）
+             */
+            template: string;
+            /**
+             * Template Id
+             * @description 厂商模板 ID
+             */
+            template_id?: string | null;
+            /**
+             * Params
+             * @description 厂商侧参数 JSON（敏感参数已打码）
+             */
+            params?: string | null;
+            /**
+             * Status
+             * @description 0 失败 · 1 已受理 · 2 结果未知 · 3 发送中
+             */
+            status: number;
+            /**
+             * Stale
+             * @description status=3 且超过 SMS_SENDING_STALE_SECONDS 仍未更新
+             * @default false
+             */
+            stale: boolean;
+            /** Error Kind */
+            error_kind?: string | null;
+            /** Provider Code */
+            provider_code?: string | null;
+            /** Provider Msg */
+            provider_msg?: string | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Biz Id */
+            biz_id?: string | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Created By */
+            created_by?: string | null;
+            /**
+             * Created Time
+             * Format: date-time
+             */
+            created_time: string;
+            /** Updated Time */
+            updated_time?: string | null;
+            /**
+             * Phone
+             * @description 手机号（完整）
+             */
+            phone: string;
+        };
+        /**
+         * GetSmsLogListItem
+         * @description 列表里的一行：**手机号掩码**
+         */
+        GetSmsLogListItem: {
+            /**
+             * Id
+             * @description 日志 ID（也是传给厂商的流水号）
+             */
+            id: string | number;
+            /**
+             * Config Id
+             * @description 走的哪条配置
+             */
+            config_id?: string | null;
+            /**
+             * Provider
+             * @description 厂商码
+             */
+            provider: string;
+            /**
+             * Template
+             * @description 业务模板码（测试短信为 test）
+             */
+            template: string;
+            /**
+             * Template Id
+             * @description 厂商模板 ID
+             */
+            template_id?: string | null;
+            /**
+             * Params
+             * @description 厂商侧参数 JSON（敏感参数已打码）
+             */
+            params?: string | null;
+            /**
+             * Status
+             * @description 0 失败 · 1 已受理 · 2 结果未知 · 3 发送中
+             */
+            status: number;
+            /**
+             * Stale
+             * @description status=3 且超过 SMS_SENDING_STALE_SECONDS 仍未更新
+             * @default false
+             */
+            stale: boolean;
+            /** Error Kind */
+            error_kind?: string | null;
+            /** Provider Code */
+            provider_code?: string | null;
+            /** Provider Msg */
+            provider_msg?: string | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Biz Id */
+            biz_id?: string | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Created By */
+            created_by?: string | null;
+            /**
+             * Created Time
+             * Format: date-time
+             */
+            created_time: string;
+            /** Updated Time */
+            updated_time?: string | null;
+            /**
+             * Phone
+             * @description 手机号（掩码）
+             */
+            phone: string;
+        };
+        /**
          * GetStorageDetail
          * @description 存储详情
          *
@@ -7993,6 +8492,58 @@ export interface components {
             total_pages: number;
             links: components["schemas"]["_Links"];
         };
+        /** PageData[GetSmsConfigDetail] */
+        PageData_GetSmsConfigDetail_: {
+            /** Items */
+            items: components["schemas"]["GetSmsConfigDetail"][];
+            /**
+             * Total
+             * @description 数据总条数
+             */
+            total: number;
+            /**
+             * Page
+             * @description 当前页码
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页数量
+             */
+            size: number;
+            /**
+             * Total Pages
+             * @description 总页数
+             */
+            total_pages: number;
+            links: components["schemas"]["_Links"];
+        };
+        /** PageData[GetSmsLogListItem] */
+        PageData_GetSmsLogListItem_: {
+            /** Items */
+            items: components["schemas"]["GetSmsLogListItem"][];
+            /**
+             * Total
+             * @description 数据总条数
+             */
+            total: number;
+            /**
+             * Page
+             * @description 当前页码
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页数量
+             */
+            size: number;
+            /**
+             * Total Pages
+             * @description 总页数
+             */
+            total_pages: number;
+            links: components["schemas"]["_Links"];
+        };
         /** PageData[GetTaskResultDetail] */
         PageData_GetTaskResultDetail_: {
             /** Items */
@@ -8703,6 +9254,38 @@ export interface components {
             msg: string;
             data: components["schemas"]["GetRoleWithRelationDetail"];
         };
+        /** ResponseSchemaModel[GetSmsConfigDetail] */
+        ResponseSchemaModel_GetSmsConfigDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetSmsConfigDetail"];
+        };
+        /** ResponseSchemaModel[GetSmsLogDetail] */
+        ResponseSchemaModel_GetSmsLogDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetSmsLogDetail"];
+        };
         /** ResponseSchemaModel[GetTaskResultDetail] */
         ResponseSchemaModel_GetTaskResultDetail_: {
             /**
@@ -9119,6 +9702,38 @@ export interface components {
             msg: string;
             data: components["schemas"]["PageData_GetRoleDetail_"];
         };
+        /** ResponseSchemaModel[PageData[GetSmsConfigDetail]] */
+        ResponseSchemaModel_PageData_GetSmsConfigDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["PageData_GetSmsConfigDetail_"];
+        };
+        /** ResponseSchemaModel[PageData[GetSmsLogListItem]] */
+        ResponseSchemaModel_PageData_GetSmsLogListItem__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["PageData_GetSmsLogListItem_"];
+        };
         /** ResponseSchemaModel[PageData[GetTaskResultDetail]] */
         ResponseSchemaModel_PageData_GetTaskResultDetail__: {
             /**
@@ -9214,6 +9829,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["ServerMonitorInfo"];
+        };
+        /** ResponseSchemaModel[SmsSendResultSchema] */
+        ResponseSchemaModel_SmsSendResultSchema_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["SmsSendResultSchema"];
         };
         /** ResponseSchemaModel[SyncPage[OpenDeptOut]] */
         ResponseSchemaModel_SyncPage_OpenDeptOut__: {
@@ -9653,6 +10284,40 @@ export interface components {
             /** Data */
             data: components["schemas"]["OpenScopeItem"][];
         };
+        /** ResponseSchemaModel[list[SmsProviderDescriptor]] */
+        ResponseSchemaModel_list_SmsProviderDescriptor__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["SmsProviderDescriptor"][];
+        };
+        /** ResponseSchemaModel[list[SmsTemplateDescriptor]] */
+        ResponseSchemaModel_list_SmsTemplateDescriptor__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["SmsTemplateDescriptor"][];
+        };
         /** ResponseSchemaModel[list[Union[dict[str, Any], NoneType]]] */
         ResponseSchemaModel_list_Union_dict_str__Any___NoneType___: {
             /**
@@ -9862,6 +10527,108 @@ export interface components {
             enabled: boolean;
         };
         /**
+         * SmsProviderCredentialDescriptor
+         * @description 厂商的凭据字段怎么叫（给配置页的两个输入框起标题）
+         */
+        SmsProviderCredentialDescriptor: {
+            /** Key Field */
+            key_field: string;
+            /** Key Label */
+            key_label: string;
+            /** Secret Field */
+            secret_field: string;
+            /** Secret Label */
+            secret_label: string;
+        };
+        /**
+         * SmsProviderDescriptor
+         * @description SDK 注册表里的一家厂商（配置页按它渲染表单）
+         */
+        SmsProviderDescriptor: {
+            /**
+             * Code
+             * @description 厂商码
+             */
+            code: string;
+            /**
+             * Label
+             * @description 厂商名
+             */
+            label: string;
+            /**
+             * Template Mapping
+             * @description 模板参数映射形状：named（按变量名）/ ordered（按位置）
+             */
+            template_mapping: string;
+            /**
+             * Template Id Hint
+             * @description 「厂商模板 ID」输入框的提示
+             * @default
+             */
+            template_id_hint: string;
+            /** @description 凭据字段；None = 这家不要凭据 */
+            credential?: components["schemas"]["SmsProviderCredentialDescriptor"] | null;
+            /**
+             * Options Schema
+             * @description 厂商独有配置的 JSON Schema（不含凭据字段）
+             */
+            options_schema: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * SmsSendResultSchema
+         * @description 一次发送的结果（测试短信接口返回；`sms_service.send()` 成功时也返回它）
+         */
+        SmsSendResultSchema: {
+            /**
+             * Status
+             * @description accepted / failed / unknown
+             */
+            status: string;
+            /**
+             * Error Kind
+             * @description SmsErrorKind
+             */
+            error_kind?: string | null;
+            /** Provider Code */
+            provider_code?: string | null;
+            /** Provider Msg */
+            provider_msg?: string | null;
+            /** Request Id */
+            request_id?: string | null;
+            /** Biz Id */
+            biz_id?: string | null;
+            /**
+             * Duration Ms
+             * @default 0
+             */
+            duration_ms: number;
+            /**
+             * Log Id
+             * @description sms_log 的 id（也是传给厂商的流水号）
+             */
+            log_id?: string | null;
+        };
+        /**
+         * SmsTemplateDescriptor
+         * @description 注册过的一个业务模板
+         */
+        SmsTemplateDescriptor: {
+            /** Code */
+            code: string;
+            /** Label */
+            label: string;
+            /** Params */
+            params: string[];
+            /** Sensitive */
+            sensitive: string[];
+            /** Cooldown Seconds */
+            cooldown_seconds: number;
+            /** Daily Max Per Phone */
+            daily_max_per_phone: number;
+        };
+        /**
          * StartExportParam
          * @description 发起一次导出
          */
@@ -10047,6 +10814,29 @@ export interface components {
              * @description 往返耗时（毫秒）
              */
             latency_ms?: number | null;
+        };
+        /**
+         * TestSmsParam
+         * @description 发测试短信：绕过业务模板，直接给厂商模板 ID 和厂商侧参数，真发一条
+         */
+        TestSmsParam: {
+            /**
+             * Phone
+             * @description 收件手机号（大陆 11 位）
+             */
+            phone: string;
+            /**
+             * Template Id
+             * @description 厂商模板 ID
+             */
+            template_id: string;
+            /**
+             * Params
+             * @description 厂商侧参数：按变量名的厂商给 {"code": "1234"}，按位置的给 ["1234", "5"]
+             */
+            params?: {
+                [key: string]: string;
+            } | string[];
         };
         /**
          * TestStorageResult
@@ -10650,6 +11440,86 @@ export interface components {
              * @description 用户 ID 列表
              */
             users: number[];
+        };
+        /**
+         * UpdateSmsConfigParam
+         * @description 更新短信配置参数
+         */
+        UpdateSmsConfigParam: {
+            /**
+             * Name
+             * @description 配置名称
+             */
+            name: string;
+            /**
+             * Provider
+             * @description 厂商码（GET /sms/configs/providers 里的 code）
+             */
+            provider: string;
+            /**
+             * Sign Name
+             * @description 短信签名（须已审核通过；腾讯云填签名内容不是签名 ID）
+             */
+            sign_name: string;
+            /**
+             * Access Key Id
+             * @description 凭据 key（AccessKey ID / SecretId）；控制台厂商不填
+             */
+            access_key_id?: string | null;
+            /**
+             * Options
+             * @description 厂商独有配置，按厂商 Config 校验
+             */
+            options?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Templates
+             * @description 业务模板码 → 厂商模板，形如 {"captcha": {"template_id": "SMS_xxx", "mapping": {...} | [...]}}
+             */
+            templates?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Weight
+             * @description 权重；0 = 不参与自动选取，只能被指定使用
+             * @default 1
+             */
+            weight: number;
+            /**
+             * Daily Max
+             * @description 每个自然日的发送上限；0 = 不限
+             * @default 0
+             */
+            daily_max: number;
+            /**
+             * Timeout
+             * @description 请求超时（秒）
+             * @default 10
+             */
+            timeout: number;
+            /**
+             * Is Default
+             * @description 是否默认配置
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Status
+             * @description 状态（0：停用、1：正常）
+             * @default 1
+             */
+            status: number;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
+            /**
+             * Access Key Secret
+             * @description 凭据 secret（留空表示不修改）
+             */
+            access_key_secret?: string | null;
         };
         /**
          * UpdateStorageParam
@@ -17782,6 +18652,420 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sms_configs_paginated_api_v1_sms_configs_get: {
+        parameters: {
+            query?: {
+                /** @description 配置名称（模糊） */
+                name?: string | null;
+                /** @description 厂商码 */
+                provider?: string | null;
+                /** @description 状态 */
+                status?: number | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_PageData_GetSmsConfigDetail__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_sms_config_api_v1_sms_configs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSmsConfigParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sms_providers_api_v1_sms_configs_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_SmsProviderDescriptor__"];
+                };
+            };
+        };
+    };
+    get_sms_templates_api_v1_sms_configs_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_SmsTemplateDescriptor__"];
+                };
+            };
+        };
+    };
+    get_sms_config_api_v1_sms_configs__pk__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 配置 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetSmsConfigDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_sms_config_api_v1_sms_configs__pk__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 配置 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSmsConfigParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_sms_config_api_v1_sms_configs__pk__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 配置 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_default_sms_config_api_v1_sms_configs__pk__default_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 配置 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_sms_config_api_v1_sms_configs__pk__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 配置 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TestSmsParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_SmsSendResultSchema_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sms_logs_paginated_api_v1_sms_logs_get: {
+        parameters: {
+            query?: {
+                /** @description 手机号（全等） */
+                phone?: string | null;
+                /** @description 配置 ID */
+                config_id?: number | null;
+                /** @description 业务模板码 */
+                template?: string | null;
+                /** @description 状态（0 失败 · 1 已受理 · 2 结果未知 · 3 发送中） */
+                status?: number | null;
+                /** @description 错误类型 */
+                error_kind?: string | null;
+                /** @description 创建时间起 */
+                start_time?: string | null;
+                /** @description 创建时间止 */
+                end_time?: string | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_PageData_GetSmsLogListItem__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_sms_logs_api_v1_sms_logs_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteSmsLogParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sms_log_api_v1_sms_logs__pk__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 日志 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetSmsLogDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_all_sms_logs_api_v1_sms_logs_all_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
                 };
             };
         };

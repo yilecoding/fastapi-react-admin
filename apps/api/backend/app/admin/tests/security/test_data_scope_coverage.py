@@ -45,6 +45,8 @@ EXEMPT: dict[str, str] = {
     'CRUDAiToolInvocation': '审计表没有可过滤维度，挂上只有 fail-closed 一种效果；靠 ai:log:list 权限码',
     'CRUDAiMcpClient': 'MCP 凭据是系统级配置（同模型供应商），且网关鉴权时还没有当前用户；靠 ai:mcp:* 权限码',
     'CRUDOpenApp': '能力开放应用是系统级配置（同 MCP 凭据），开放接口验签时没有当前用户；靠 open:app:* 权限码',
+    'CRUDSmsConfig': '短信配置是系统级配置（同模型供应商 / 存储）；靠 sms:config:* 权限码',
+    'CRUDSmsLog': '短信发送日志是审计记录（同操作日志），匿名接口发的短信也要记；靠 sms:log:* 权限码',
     'CRUDOpenApiLog': '调用日志是系统级审计记录（同操作日志）；靠 open:log:list 权限码',
     'CRUDExportJob': (
         '导出记录按 created_by == 当前用户强制过滤（同收件箱），接口只挂登录；'

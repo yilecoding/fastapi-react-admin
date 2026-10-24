@@ -23,14 +23,29 @@ import { ConfirmDialog } from '../../shell/confirm-dialog'
  * `DELETE /logs/{kind}/all` 是 `delete_all()`，不带任何 where。
  * 确认框里必须把这两点都说清楚：删的是全部，不是你现在筛出来的这些。
  */
+export type ClearLogsKind = 'login' | 'opera' | 'sms'
+
+/**
+ * 每种日志的接口路径 / 权限码 / 文案 / 要失效的 query 前缀。
+ * 短信那条的路径和权限码形状不同（插件自己的前缀、删除和清空共用 `sms:log:del`），所以不能再靠模板串拼
+ */
+const KINDS: Record<
+  ClearLogsKind,
+  { label: string; path: string; perm: string; queryKey: readonly string[]; feedsDashboard: boolean }
+> = {
+  login: { label: '登录日志', path: '/api/v1/logs/login/all', perm: 'log:login:clear', queryKey: ['logs', 'login'], feedsDashboard: true },
+  opera: { label: '操作日志', path: '/api/v1/logs/opera/all', perm: 'log:opera:clear', queryKey: ['logs', 'opera'], feedsDashboard: true },
+  sms: { label: '短信发送日志', path: '/api/v1/sms/logs/all', perm: 'sms:log:del', queryKey: ['sms-log'], feedsDashboard: false },
+}
+
 export function ClearLogsButton({
   kind,
   filtered,
   total,
   iconOnly,
 }: {
-  /** 'login' | 'opera' —— 同时决定接口路径、权限码和文案 */
-  kind: 'login' | 'opera'
+  /** 'login' | 'opera' | 'sms' —— 同时决定接口路径、权限码和文案（见 `KINDS`） */
+  kind: ClearLogsKind
   /** 当前是否有筛选条件（有的话要额外提醒「删的不只是这些」） */
   filtered: boolean
   /** 当前筛选下的条数，仅用于文案对比 */
@@ -42,15 +57,16 @@ export function ClearLogsButton({
   const qc = useQueryClient()
   const [open, setOpen] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const label = kind === 'login' ? t('登录日志') : t('操作日志')
+  const spec = KINDS[kind]
+  const label = t(spec.label)
 
   const clear = useMutation({
-    mutationFn: () => api.DELETE(`/api/v1/logs/${kind}/all`),
+    mutationFn: () => api.DELETE(spec.path),
     onSuccess: () => {
       // 列表、统计条、可疑 IP 都挂在同一个前缀下，一起失效
-      void qc.invalidateQueries({ queryKey: ['logs', kind] })
-      // 仪表盘的今日统计也是从这张表算的
-      void qc.invalidateQueries({ queryKey: ['dashboard'] })
+      void qc.invalidateQueries({ queryKey: spec.queryKey })
+      // 仪表盘的今日统计从登录 / 操作日志算，短信日志不在里面
+      if (spec.feedsDashboard) void qc.invalidateQueries({ queryKey: ['dashboard'] })
     },
   })
 
@@ -81,7 +97,7 @@ export function ClearLogsButton({
   )
 
   return (
-    <Can perm={`log:${kind}:clear`}>
+    <Can perm={spec.perm}>
       {iconOnly ? (
         <Tooltip>
           <TooltipTrigger render={trigger} />
