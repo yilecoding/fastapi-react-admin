@@ -149,7 +149,13 @@ export async function streamChat(
     // 不这么做的话表现是「点发送没反应」——硬纪律 9 说的正是这个。
     onEvent({
       type: 'error',
-      message: response.status === 401 ? t('登录已过期，请刷新页面重新登录') : t('请求失败（HTTP {{status}}）', { status: response.status }),
+      message:
+        response.status === 401
+          ? t('登录已过期，请刷新页面重新登录')
+          : response.status === 429
+            ? // 对话按人限流（`AI_CHAT_RATE_PER_MINUTE`）：说成「请求失败（HTTP 429）」的话，人会以为是系统坏了
+              t('发得太快了，请 {{seconds}} 秒后再发', { seconds: response.headers.get('Retry-After') ?? '60' })
+            : t('请求失败（HTTP {{status}}）', { status: response.status }),
       code: String(response.status),
     })
     return

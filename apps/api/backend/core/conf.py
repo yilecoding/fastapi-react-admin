@@ -236,6 +236,8 @@ class Settings(BaseSettings):
         # 前后端跨源时（开发期 8888 → 8088、桌面端 app://local）不列在这里，前端 JS 读到的是 null，
         # 只能退回一个写死的名字 —— 和后端那份翻译各说各的
         'Content-Disposition',
+        # 限流 429 的「多少秒后再试」。跨源时不列在这里，前端读到的是 null，只能说一个猜的秒数
+        'Retry-After',
     ]
 
     # 中间件配置
@@ -561,6 +563,8 @@ class Settings(BaseSettings):
     AI_MCP_ENABLED: bool
     # 每份凭据每分钟最多多少次请求（凭据里的 rate_per_minute 可单独覆盖）
     AI_MCP_RATE_PER_MINUTE: int
+    # 网页对话每人每分钟最多发多少句（每句都是一次或几次计费的模型请求）
+    AI_CHAT_RATE_PER_MINUTE: int
     # 前端的访问地址：MCP 发起的写操作要拼一个「回网页确认」的链接
     AI_WEB_BASE_URL: str
 
