@@ -336,3 +336,23 @@ def test_punctuation_and_negated_fragments_are_not_the_users_words(
     for o in (negated, blank):
         assert o.kind == 'failed' and o.confirm_token is None, o
     assert rephrased.kind == 'failed', '「同意，没问题」也不是原话（两句拼的）'
+
+
+def test_todo_search_takes_several_words(
+    client: TestClient, token_headers: dict[str, str], login: Any, uid: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """本地真跑时模型传的 keyword 是「孙强 苏州 演示：差旅报销」：整串当一个子串永远匹配不上，模型拿到 0 张就放弃了。
+    按空格拆开、每个词都要命中；一个都没中时告诉它一共有几张、可以不带 keyword 再查"""
+    _setup(client, token_headers, uid, 'PYTEST_AIWF_TODO_WORDS')
+    pk = _start(client, login, 'PYTEST_AIWF_TODO_WORDS', reason='去苏州见客户')
+    zhaolei = _person(uid('zhaolei'), '赵磊')
+    (several, none), _ = _run(
+        monkeypatch,
+        zhaolei,
+        [
+            ('wf_todo_list', {'keyword': '孙强 苏州 PYTEST_AIWF_TODO_WORDS'}, False),
+            ('wf_todo_list', {'keyword': '北京'}, False),
+        ],
+    )
+    assert pk in several.payload, several.payload
+    assert '"total": 0' in none.payload and '不带 keyword' in none.payload, none.payload

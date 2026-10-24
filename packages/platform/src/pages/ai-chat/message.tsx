@@ -20,7 +20,11 @@ export type Bubble = {
   content: string
   pending?: boolean
   tools?: ToolTrace[]
-  confirm?: { token: string; name: string; preview: string }
+  /**
+   * 写操作的确认卡片。`outcome`：点了确认之后的结果 —— 🔴 不记的话卡片原样留着、按钮又能点了，
+   * 再点一次只会拿到「已过期」（令牌是一次性的），看起来像「刚才没执行」
+   */
+  confirm?: { token: string; name: string; preview: string; outcome?: 'done' | 'failed' }
 }
 
 /**
@@ -139,9 +143,25 @@ export function MessageBubble({
                 <pre className="overflow-x-auto rounded bg-background/60 p-2 font-mono text-[11px] whitespace-pre-wrap">
                   {bubble.confirm.preview}
                 </pre>
-                <Button size="sm" disabled={confirming} onClick={() => onConfirm(bubble.confirm!.token)}>
-                  {t('确认执行')}
-                </Button>
+                {bubble.confirm.outcome === 'done' ? (
+                  <p className="flex items-center gap-1 text-sm text-emerald-700 dark:text-emerald-400" data-testid="ai-confirm-done">
+                    <IconCheck className="size-4" />
+                    {t('已执行')}
+                  </p>
+                ) : bubble.confirm.outcome === 'failed' ? (
+                  <p className="text-sm text-destructive" data-testid="ai-confirm-failed">
+                    {t('没执行成功，原因见上面的回复')}
+                  </p>
+                ) : (
+                  <Button
+                    size="sm"
+                    disabled={confirming}
+                    onClick={() => onConfirm(bubble.confirm!.token)}
+                    data-testid="ai-confirm"
+                  >
+                    {t('确认执行')}
+                  </Button>
+                )}
               </div>
             </div>
           </div>

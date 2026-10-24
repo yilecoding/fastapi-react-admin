@@ -78,18 +78,32 @@ def _when(value: Any) -> str | None:
     return value.isoformat() if value is not None else None
 
 
+#: 待办一次最多看多少张（按关键词在这里面筛）。审批人手上的待办通常就几张到几十张
+_TODO_SCAN = 100
+
+
 @ai_tool(
     name='wf_todo_list',
     description=(
         '列出「待我审批」的单：标题、摘要、发起人、当前步骤、是否加急。'
-        '用户问「我有哪些待办 / 有什么要我批的 / 张三那张请假在不在我这」时用它。keyword 按标题和摘要搜。'
+        '用户问「我有哪些待办 / 有什么要我批的 / 张三那张请假在不在我这」时用它。'
+        'keyword 可以是几个词、用空格分开（如「孙强 报销」），每个词都要在标题 / 摘要 / 发起人里出现；'
+        '拿不准就不带 keyword，看全部。'
     ),
     domain='workflow',
 )
 async def wf_todo_list(db: AsyncSession, ctx: RunContext, keyword: str | None = None) -> dict[str, Any]:
-    page = await query_service.todo(db, ctx.user.id, keyword=keyword, page=1, size=20)
-    return {
-        'total': page['total'],
+    # 🔴 关键词按空格拆开、每个词都要命中，在这里筛 —— 不交给查询层的整串 LIKE：本地真跑时模型传的是
+    # 「孙强 苏州 演示：差旅报销」，整串当一个子串永远匹配不上，模型拿到 0 张就放弃了，而那张单就在待办里
+    page = await query_service.todo(db, ctx.user.id, keyword=None, page=1, size=_TODO_SCAN)
+    terms = (keyword or '').split()
+    rows = [
+        r
+        for r in page['items']
+        if all(term in f'{r["title"]} {r["summary"] or ""} {r.get("initiator_name") or ""}' for term in terms)
+    ]
+    out: dict[str, Any] = {
+        'total': len(rows),
         'items': [
             {
                 'instance_id': str(r['id']),
@@ -100,9 +114,15 @@ async def wf_todo_list(db: AsyncSession, ctx: RunContext, keyword: str | None = 
                 'urgent': r['urgent'],
                 'arrived_time': _when(r.get('arrived_time')),
             }
-            for r in page['items']
+            for r in rows[:20]
         ],
     }
+    if terms and not rows and page['items']:
+        # 告诉模型还能怎么查，别让它拿着 0 张就跟用户说「没有」
+        out['hint'] = f'按这些词没找到；你一共有 {page["total"]} 张待办，不带 keyword 再查一次能看到全部'
+    if page['total'] > _TODO_SCAN:
+        out['note'] = f'待办超过 {_TODO_SCAN} 张，只在最近的 {_TODO_SCAN} 张里找了'
+    return out
 
 
 @ai_tool(
