@@ -261,6 +261,7 @@ class SmsService:
             log.error(f'短信全站熔断：本小时已达 {settings.SMS_GLOBAL_HOURLY_MAX} 条上限，拒绝发送（模板 {template}）')
             raise SmsSendError(kind=CIRCUIT_OPEN, msg=_t('error.sms.circuit_open'))
 
+        config: SmsConfig | None = None
         try:
             config = await cls._choose(template, config_id)
             provider_cls = provider_or_raise(config.provider)
@@ -280,12 +281,17 @@ class SmsService:
                 user_id=user_id,
             )
         except Exception:
-            # 还没发出去（没有可用配置 / 指定的配置不对 / 落日志那一步炸了）：冷却位还回去
+            # 还没发出去（没有可用配置 / 指定的配置不对 / 落日志那一步炸了）：冷却位还回去；
+            # `_choose` 已经给配置占了名额的话，那个名额也还回去
             await sms_guard.release_cooldown(tpl, phone, token)
+            if config is not None:
+                await sms_guard.release_config(config.id)
             raise
 
         if result.error_kind in UNSENT_KINDS:
+            # 厂商一条都没收到：冷却位和配置的日计数一起退还（「今日已发」只数真发出去的）
             await sms_guard.release_cooldown(tpl, phone, token)
+            await sms_guard.release_config(config.id)
         if result.ok:
             return _to_schema(result, log_id)
         kind = (result.error_kind or SmsErrorKind.unknown).value
@@ -310,18 +316,25 @@ class SmsService:
         provider_params: dict[str, str] | list[str] = (
             {str(k): str(v) for k, v in params.items()} if isinstance(params, Mapping) else [str(v) for v in params]
         )
-        # 测试短信照样计入这条配置的「今日已发」和全站熔断的计数口径之外 —— 它不走 acquire（人点一次发一次，
-        # 接口限流兜着），但配置的日计数要加，否则「今日已发」对不上账
+        # 测试短信不走 acquire（人点一次发一次，接口限流兜着），也不进全站熔断的计数；
+        # 但配置的日计数要加，否则「今日已发」对不上账
         await sms_guard.reserve_config(config.id, 0)
-        result, log_id = await cls._dispatch(
-            config=config,
-            phone=phone,
-            template_code=TEST_TEMPLATE_CODE,
-            template_id=template_id,
-            provider_params=provider_params,
-            logged_params=provider_params,
-            user_id=user_id,
-        )
+        try:
+            result, log_id = await cls._dispatch(
+                config=config,
+                phone=phone,
+                template_code=TEST_TEMPLATE_CODE,
+                template_id=template_id,
+                provider_params=provider_params,
+                logged_params=provider_params,
+                user_id=user_id,
+            )
+        except Exception:
+            await sms_guard.release_config(config.id)
+            raise
+        if result.error_kind in UNSENT_KINDS:
+            # 填错模板 ID 反复试的那种：每次都是 config_error，一条都没发出去，不该把「今日已发」刷上去
+            await sms_guard.release_config(config.id)
         return _to_schema(result, log_id)
 
 

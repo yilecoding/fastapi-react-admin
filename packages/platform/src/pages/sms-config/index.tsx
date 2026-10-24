@@ -18,6 +18,7 @@ import {
   useDeleteSmsConfig,
   useSetDefaultSmsConfig,
   type SmsConfig,
+  type TemplatePreset,
 } from './api'
 import { SmsConfigFormSheet } from './form'
 import { SmsTestDialog } from './test-dialog'
@@ -39,7 +40,12 @@ export function SmsConfigPage() {
 
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<SmsConfig | null>(null)
+  // 测试弹窗「用这个模板配 xx」带过来的预填，只活到编辑表单关掉
+  const [preset, setPreset] = React.useState<TemplatePreset | null>(null)
   const [testing, setTesting] = React.useState<SmsConfig | null>(null)
+  // 测试弹窗的「挂载」和「打开」分开管：正常关闭只翻 open（有退场动画）；从弹窗里跳去日志页时要在同一次
+  // 提交里把它卸掉 —— 这个 tab 马上进后台，退场动画的 effect 跑不完，弹窗会留在屏幕上（见 test-dialog.tsx）
+  const [testDialogMounted, setTestDialogMounted] = React.useState(false)
   const [pendingDelete, setPendingDelete] = React.useState<SmsConfig | null>(null)
   const [pendingDefault, setPendingDefault] = React.useState<SmsConfig | null>(null)
 
@@ -176,7 +182,16 @@ export function SmsConfigPage() {
                     </Can>
                   )}
                   <Can perm="sms:config:test">
-                    <Button size="sm" variant="outline" disabled={config.status !== 1} onClick={() => setTesting(config)} data-testid={`sms-config-test-${config.name}`}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={config.status !== 1}
+                      onClick={() => {
+                        setTestDialogMounted(true)
+                        setTesting(config)
+                      }}
+                      data-testid={`sms-config-test-${config.name}`}
+                    >
                       <IconSend className="size-4" />
                       {t('发测试短信')}
                     </Button>
@@ -208,13 +223,35 @@ export function SmsConfigPage() {
         </div>
       )}
 
-      <SmsConfigFormSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} />
-      <SmsTestDialog
-        open={testing !== null}
-        onOpenChange={(o) => !o && setTesting(null)}
-        config={testing}
-        provider={testing ? (providers.get(testing.provider) ?? null) : null}
+      <SmsConfigFormSheet
+        open={sheetOpen}
+        onOpenChange={(o) => {
+          setSheetOpen(o)
+          if (!o) setPreset(null)
+        }}
+        editing={editing}
+        preset={preset}
       />
+      {testDialogMounted ? (
+        <SmsTestDialog
+          open={testing !== null}
+          onOpenChange={(o) => !o && setTesting(null)}
+          onLeave={() => {
+            setTesting(null)
+            setTestDialogMounted(false)
+          }}
+          config={testing}
+          provider={testing ? (providers.get(testing.provider) ?? null) : null}
+          templates={templatesQuery.data ?? []}
+          onAdopt={(p) => {
+            // 测通 → 直接进这条配置的编辑表单，模板 ID 和变量名已经填好
+            setPreset(p)
+            setEditing(testing)
+            setTesting(null)
+            setSheetOpen(true)
+          }}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={pendingDefault !== null}

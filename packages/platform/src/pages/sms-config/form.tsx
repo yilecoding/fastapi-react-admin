@@ -34,6 +34,7 @@ import {
   type SmsConfig,
   type SmsProvider,
   type SmsTemplate,
+  type TemplatePreset,
   type TemplateSpec,
 } from './api'
 
@@ -90,6 +91,17 @@ function draftFromSpec(tpl: SmsTemplate, spec: TemplateSpec | undefined, mapping
   return { enabled: true, template_id: spec.template_id, named, ordered }
 }
 
+/** 测试弹窗带过来的预填盖在草稿上：启用这个模板、填上模板 ID，变量名对得上业务参数的就映射成同名 */
+function applyPreset(tpl: SmsTemplate, draft: TemplateDraft, preset: TemplatePreset, mapping: SmsProvider['template_mapping']): TemplateDraft {
+  if (mapping === 'ordered') {
+    const ordered = tpl.params.slice(0, preset.variables.length)
+    while (ordered.length < tpl.params.length) ordered.push('')
+    return { ...draft, enabled: true, template_id: preset.template_id, ordered }
+  }
+  const named = Object.fromEntries(tpl.params.map((p) => [p, preset.variables.includes(p) ? p : '']))
+  return { ...draft, enabled: true, template_id: preset.template_id, named }
+}
+
 function specFromDraft(draft: TemplateDraft, mapping: SmsProvider['template_mapping']): TemplateSpec {
   if (mapping === 'named') {
     const m: Record<string, string> = {}
@@ -116,10 +128,13 @@ export function SmsConfigFormSheet({
   open,
   onOpenChange,
   editing,
+  preset = null,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   editing: SmsConfig | null
+  /** 「发测试短信」测通后带进来的模板预填（见 `test-dialog.tsx`）*/
+  preset?: TemplatePreset | null
 }) {
   const { t } = useTranslation()
   const fe = useFieldError()
@@ -168,8 +183,15 @@ export function SmsConfigFormSheet({
   // 模板草稿：随厂商（映射形状）和模板清单变
   React.useEffect(() => {
     if (!open || !provider) return
-    setDrafts(Object.fromEntries(templates.map((tpl) => [tpl.code, draftFromSpec(tpl, editing?.templates[tpl.code], provider.template_mapping)])))
-  }, [open, provider, templates, editing])
+    setDrafts(
+      Object.fromEntries(
+        templates.map((tpl) => {
+          const draft = draftFromSpec(tpl, editing?.templates[tpl.code], provider.template_mapping)
+          return [tpl.code, preset?.code === tpl.code ? applyPreset(tpl, draft, preset, provider.template_mapping) : draft]
+        }),
+      ),
+    )
+  }, [open, provider, templates, editing, preset])
 
   const pending = create.isPending || update.isPending
   const errs = form.formState.errors

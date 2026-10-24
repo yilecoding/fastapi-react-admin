@@ -25,7 +25,7 @@ from backend.plugin.sms.model import SmsLog
 from backend.plugin.sms.sdk.base import SmsErrorKind, SmsMessage, SmsProvider, SmsResult, TemplateMapping
 from backend.plugin.sms.sdk.console import ConsoleConfig
 from backend.plugin.sms.sdk.registry import register_provider, unregister_provider
-from backend.plugin.sms.service.guard import cooldown_key, sms_guard
+from backend.plugin.sms.service.guard import config_daily_key, cooldown_key, sms_guard
 from backend.plugin.sms.service.sms_service import sms_service
 from backend.plugin.sms.templates import get_sms_template, register_sms_template
 from backend.plugin.sms.tests.conftest import PHONE_A, PHONE_B, PHONE_C, run_sync
@@ -257,6 +257,69 @@ class TestGuard:
         kept, gone = client.portal.call(_run)
         assert kept == 'new-token', '旧令牌的释放删掉了新请求的冷却位'
         assert gone is None, '持有正确令牌的释放要真删'
+
+
+class TestConfigDailyRefund:
+    """「今日已发」只数真发出去的：`UNSENT_KINDS` 退还配置名额，「结果未知」不退
+
+    真发阿里云时填错模板 ID 的那一轮踩出来的：卡片写「今日已发 2」，手机只收到 1 条。
+    """
+
+    def test_unsent_result_refunds_config_count_but_unknown_keeps_it(
+        self, client: TestClient, make_config: Callable[..., dict[str, Any]]
+    ) -> None:
+        class Failing(SmsProvider):
+            code, label, Config, template_mapping = 'pytest_refund', '必败', ConsoleConfig, TemplateMapping.named
+
+            async def _send(self, msg: SmsMessage) -> SmsResult:
+                return SmsResult.failed(
+                    SmsErrorKind.config_error, provider_code='isv.SMS_TEMPLATE_ILLEGAL', provider_msg='模板不匹配'
+                )
+
+        class Flaky(SmsProvider):
+            code, label, Config, template_mapping = (
+                'pytest_refund_flaky',
+                '读超时',
+                ConsoleConfig,
+                TemplateMapping.named,
+            )
+
+            async def _send(self, msg: SmsMessage) -> SmsResult:
+                raise TimeoutError('read timed out')
+
+        register_provider(Failing)
+        register_provider(Flaky)
+        try:
+            free = {'pytest_free': {'template_id': 'F', 'mapping': {'x': 'x'}}}
+            failing = make_config('refund', provider='pytest_refund', is_default=True, templates=free)
+            for _ in range(2):
+                _expect_error(client, 'config_error', phone=PHONE_B, template='pytest_free', params={'x': '1'})
+            counts = client.portal.call(sms_guard.today_sent, [int(failing['id'])])
+            assert counts[int(failing['id'])] == 0, '一条都没发出去，不该算进「今日已发」'
+            assert len(run_sync(_rows(PHONE_B))) == 2, '退名额不等于不记日志'
+
+            flaky = make_config('refund_flaky', provider='pytest_refund_flaky', is_default=True, templates=free)
+            _expect_error(client, 'unknown', phone=PHONE_C, template='pytest_free', params={'x': '1'})
+            counts = client.portal.call(sms_guard.today_sent, [int(flaky['id'])])
+            assert counts[int(flaky['id'])] == 1, '可能已发出 → 名额保留'
+        finally:
+            unregister_provider('pytest_refund')
+            unregister_provider('pytest_refund_flaky')
+
+    def test_release_config_never_goes_negative(self, client: TestClient) -> None:
+        async def _run() -> list[int]:
+            key = config_daily_key(424242)
+            await redis_client.delete(key)
+            await sms_guard.release_config(424242)  # 键不存在：什么都不做
+            fresh = (await sms_guard.today_sent([424242]))[424242]
+            await sms_guard.reserve_config(424242, 0)
+            await sms_guard.release_config(424242)
+            await sms_guard.release_config(424242)  # 多退一次（并发下两条都判 unsent）也到 0 为止
+            twice = (await sms_guard.today_sent([424242]))[424242]
+            await redis_client.delete(key)
+            return [fresh, twice]
+
+        assert client.portal.call(_run) == [0, 0]
 
 
 class TestRegistryOutsideWeb:

@@ -49,6 +49,12 @@ export type SmsTemplate = {
 /** `{ 业务模板码: { template_id, mapping } }`；mapping 按厂商 `template_mapping`：named 是 `{厂商变量名: 业务参数名}`，ordered 是 `[业务参数名]` */
 export type TemplateSpec = { template_id: string; mapping: Record<string, string> | string[] }
 
+/**
+ * 「发测试短信」测通之后一键带进编辑表单的预填：业务模板码 + 刚测过的厂商模板 ID + 测试时填的厂商变量名
+ * （按位置的厂商没有变量名，`variables` 是值的个数那么多个空串，只用来定位数）。
+ */
+export type TemplatePreset = { code: string; template_id: string; variables: string[] }
+
 export type SmsConfig = {
   id: string
   name: string

@@ -1,5 +1,6 @@
+import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { IconCheck, IconHelpCircle, IconPlus, IconSend, IconTrash, IconX } from '@tabler/icons-react'
+import { IconArrowRight, IconCheck, IconHelpCircle, IconPlus, IconSend, IconTrash, IconX } from '@tabler/icons-react'
 import * as React from 'react'
 
 import { Button } from '@admin/ui/components/button'
@@ -16,7 +17,15 @@ import { Input } from '@admin/ui/components/input'
 
 import { ApiError } from '../../api-client/errors'
 import { FormField } from '../_shared/form-fields'
-import { ERROR_KIND_LABELS, useTestSmsConfig, type SendResult, type SmsConfig, type SmsProvider } from './api'
+import {
+  ERROR_KIND_LABELS,
+  useTestSmsConfig,
+  type SendResult,
+  type SmsConfig,
+  type SmsProvider,
+  type SmsTemplate,
+  type TemplatePreset,
+} from './api'
 
 /**
  * 发测试短信：选配置 + 号码 + 厂商模板 ID + 厂商侧参数，绕过业务模板，**真发一条**。
@@ -24,17 +33,32 @@ import { ERROR_KIND_LABELS, useTestSmsConfig, type SendResult, type SmsConfig, t
  * 这是配置有没有填对的唯一快速验证手段。结果当场显示（状态 + 错误类型 + 厂商码 + 厂商原文），
  * 并写一条 `template = test` 的日志。连不通 / 被拒是**测试结果**不是接口失败 —— 后端照样 200，
  * 这里按 `status` 分三色显示。
+ *
+ * 测通之后流程不能断在这里：这条配置多半还「一个业务模板都没配」，所以受理成功时给一个
+ * 「用这个模板配 xx」按钮，把刚测过的模板 ID 和变量名带进编辑表单（`onAdopt`），先测再采用。
  */
 export function SmsTestDialog({
   open,
   onOpenChange,
   config,
   provider,
+  templates,
+  onAdopt,
+  onLeave,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   config: SmsConfig | null
   provider: SmsProvider | null
+  /** 业务模板目录：决定「用这个模板配 xx」指向哪个还没配的业务模板 */
+  templates: SmsTemplate[]
+  onAdopt: (preset: TemplatePreset) => void
+  /**
+   * 从结果块的日志链接跳走。🔴 不能只 `onOpenChange(false)`：关闭和切 tab 在同一次提交里发生，
+   * 这个 tab 立刻进后台、effect 被 `<Activity>` 销毁，Base UI 等不到退场动画结束，「已经关掉」的弹窗
+   * 就留在屏幕上（shell 分册「开在 URL 上的浮层」那条的变体）。调用方要把弹窗**整个卸载**。
+   */
+  onLeave: () => void
 }) {
   const { t } = useTranslation()
   const test = useTestSmsConfig()
@@ -75,6 +99,17 @@ export function SmsTestDialog({
   }
 
   const phoneOk = /^1[3-9]\d{9}$/.test(phone.trim())
+
+  // 受理成功才给「采用」：挑一个这条配置还没配的业务模板，优先参数名正好盖住刚才填的变量名的那个
+  const adoptable = React.useMemo(() => {
+    if (!config || result?.status !== 'accepted') return null
+    const variables = ordered ? params.map(() => '') : params.map(([k]) => k.trim()).filter(Boolean)
+    const unconfigured = templates.filter((tpl) => !(tpl.code in config.templates))
+    const covering = ordered ? null : unconfigured.find((tpl) => variables.every((v) => tpl.params.includes(v)))
+    const target = covering ?? unconfigured[0]
+    if (!target) return null
+    return { template: target, preset: { code: target.code, template_id: templateId.trim(), variables } satisfies TemplatePreset }
+  }, [config, result, ordered, params, templates, templateId])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -146,14 +181,25 @@ export function SmsTestDialog({
               {error}
             </p>
           ) : null}
-          {result ? <ResultBlock result={result} /> : null}
+          {result ? (
+            <ResultBlock
+              result={result}
+              phone={phone.trim()}
+              onNavigate={onLeave}
+              adopt={
+                adoptable
+                  ? { label: t('用这个模板配{{label}}', { label: t(adoptable.template.label) }), onClick: () => onAdopt(adoptable.preset) }
+                  : null
+              }
+            />
+          ) : null}
         </div>
 
         <DialogFooter>
           <DialogClose render={<Button variant="outline" type="button" />}>{t('关闭')}</DialogClose>
           <Button type="button" disabled={!phoneOk || !templateId.trim() || test.isPending} onClick={() => void send()} data-testid="sms-test-send">
             <IconSend className="size-4" />
-            {test.isPending ? t('发送中…') : t('发送')}
+            {test.isPending ? t('发送中…') : result ? t('再发一条') : t('发送')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -161,7 +207,18 @@ export function SmsTestDialog({
   )
 }
 
-function ResultBlock({ result }: { result: SendResult }) {
+function ResultBlock({
+  result,
+  phone,
+  onNavigate,
+  adopt,
+}: {
+  result: SendResult
+  phone: string
+  /** 点了跳日志页的链接：让调用方卸载弹窗（见 `SmsTestDialog` 的 `onLeave`）*/
+  onNavigate: () => void
+  adopt: { label: string; onClick: () => void } | null
+}) {
   const { t } = useTranslation()
   const tone =
     result.status === 'accepted'
@@ -186,7 +243,8 @@ function ResultBlock({ result }: { result: SendResult }) {
       {result.provider_code ? (
         <div className="font-mono">
           {result.provider_code}
-          {result.provider_msg ? ` · ${result.provider_msg}` : ''}
+          {/* 阿里云成功时码和原文都是 OK，写两遍没有信息量 */}
+          {result.provider_msg && result.provider_msg !== result.provider_code ? ` · ${result.provider_msg}` : ''}
         </div>
       ) : result.provider_msg ? (
         <div className="font-mono">{result.provider_msg}</div>
@@ -194,8 +252,25 @@ function ResultBlock({ result }: { result: SendResult }) {
       <div className="flex flex-wrap gap-x-3 font-mono opacity-80">
         {result.request_id ? <span>RequestId {result.request_id}</span> : null}
         {result.biz_id ? <span>BizId {result.biz_id}</span> : null}
-        {result.log_id ? <span>{t('日志')} {result.log_id}</span> : null}
+        {result.log_id ? (
+          // 直接跳到发送日志页、筛到这条测试：裸给一串雪花 ID 没人会去抄
+          <Link
+            to="/sms/log"
+            search={{ template: 'test', phone }}
+            onClick={onNavigate}
+            className="underline underline-offset-2 hover:opacity-100"
+            data-testid="sms-test-log-link"
+          >
+            {t('日志')} {result.log_id}
+          </Link>
+        ) : null}
       </div>
+      {adopt ? (
+        <Button type="button" size="sm" variant="outline" className="mt-1 self-start" onClick={adopt.onClick} data-testid="sms-test-adopt">
+          {adopt.label}
+          <IconArrowRight className="size-4" />
+        </Button>
+      ) : null}
     </div>
   )
 }

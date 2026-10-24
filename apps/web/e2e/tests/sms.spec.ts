@@ -3,8 +3,10 @@ import { expect, test } from "../fixtures/base"
 /**
  * 短信（issue #153）：「配置一下就能用」的端到端回归。
  *
- * 用**控制台**厂商（不真发）在界面上走完整条路：新建配置 → 勾上验证码模板 → 保存 → 发一条测试短信 →
- * 结果块显示「已受理」→ 发送日志页出现那一条（手机号掩码）→ 详情里是完整号。
+ * 用**控制台**厂商（不真发）在界面上走完整条路，顺序是真实的接入顺序「先测再采用」：
+ * 新建配置（一个业务模板都不配）→ 发一条测试短信 → 结果块「已受理」→ 点「用这个模板配验证码」→
+ * 编辑表单里模板 ID 已填好 → 保存 → 卡片上有了模板 → 再测一条（模板 ID 自动带出）→ 点结果块里的日志链接 →
+ * 发送日志页筛到这两条（手机号掩码）→ 详情里是完整号。
  *
  * ⚠️ 定位一律按 routeId 收窄：隐藏 tab 的 DOM 也在文档树里（根 CLAUDE.md 硬纪律 5）。
  */
@@ -13,7 +15,7 @@ const LOG_PAGE = '[data-tab="/_auth/sms/log"]'
 const PHONE = "19900009999"
 
 test.describe("短信配置与发送日志", () => {
-  test("建一条控制台配置、发测试短信、日志里能看到", async ({ authedPage: page, api }) => {
+  test("建一条控制台配置、测通后一键配上模板、日志里能看到", async ({ authedPage: page, api }) => {
     const name = `E2E短信${Date.now().toString(36)}`
 
     await page.goto("/sms/config")
@@ -23,29 +25,48 @@ test.describe("短信配置与发送日志", () => {
     await page.getByRole("combobox").first().click()
     await page.getByRole("option", { name: /控制台/ }).click()
     await page.getByTestId("sms-sign").fill("E2E签名")
-    await page.getByTestId("sms-tpl-enable-captcha").click()
-    await page.getByTestId("sms-tpl-id-captcha").fill("DEV_CAPTCHA")
     await page.getByTestId("sms-submit").click()
 
     const card = page.locator(`${CONFIG_PAGE} [data-testid="sms-config-card-${name}"]`)
     await expect(card).toBeVisible()
-    await expect(card).toContainText("DEV_CAPTCHA")
+    await expect(card).toContainText("一个都没配")
 
-    // 发测试短信：结果块必须说「已受理」，并带日志 ID
+    // 先测：手填厂商模板 ID，结果块必须说「已受理」；发过之后按钮变成「再发一条」
     await card.getByTestId(`sms-config-test-${name}`).click()
     await page.getByTestId("sms-test-phone").fill(PHONE)
-    await expect(page.getByTestId("sms-test-template")).toHaveValue("DEV_CAPTCHA")
+    await expect(page.getByTestId("sms-test-template")).toHaveValue("")
+    await page.getByTestId("sms-test-template").fill("DEV_CAPTCHA")
     await page.getByTestId("sms-test-send").click()
     const result = page.getByTestId("sms-test-result")
     await expect(result).toContainText("已受理")
-    await page.getByRole("button", { name: "关闭" }).click()
+    await expect(page.getByTestId("sms-test-send")).toHaveText(/再发一条/)
+
+    // 再采用：一键带进编辑表单 —— 验证码模板已勾上、模板 ID 已填、变量 code 映射成同名
+    await page.getByTestId("sms-test-adopt").click()
+    await expect(page.getByTestId("sms-test-dialog")).toBeHidden()
+    await expect(page.getByTestId("sms-tpl-id-captcha")).toHaveValue("DEV_CAPTCHA")
+    await expect(page.getByTestId("sms-tpl-captcha").getByRole("textbox").nth(1)).toHaveValue("code")
+    await page.getByTestId("sms-submit").click()
+    await expect(card).toContainText("DEV_CAPTCHA")
+    await expect(card).not.toContainText("一个都没配")
 
     // 「今日已发」跟着涨
     await expect(card).toContainText("今日已发")
     await expect(card.getByText(/1 \//)).toBeVisible()
 
+    // 配好之后再测：模板 ID 自动带出；结果块里的日志链接直接跳到筛好的日志页
+    await card.getByTestId(`sms-config-test-${name}`).click()
+    await page.getByTestId("sms-test-phone").fill(PHONE)
+    await expect(page.getByTestId("sms-test-template")).toHaveValue("DEV_CAPTCHA")
+    await page.getByTestId("sms-test-send").click()
+    await expect(result).toContainText("已受理")
+    await page.getByTestId("sms-test-log-link").click()
+    await expect(page.getByTestId("sms-test-dialog")).toBeHidden()
+    await expect(page).toHaveURL(/\/sms\/log\?.*template=test/)
+    // 纯数字的字符串在地址栏里带引号保类型（lib/search-params.ts，硬纪律 6 那条）
+    await expect(page).toHaveURL(new RegExp(`phone=(%22)?${PHONE}`))
+
     // 日志页：掩码行 → 详情完整号
-    await page.goto(`/sms/log?phone=${PHONE}`)
     const table = page.locator(`${LOG_PAGE} [data-testid="sms-log-table"]`)
     await expect(table).toContainText("199****9999")
     await expect(table).not.toContainText(PHONE)

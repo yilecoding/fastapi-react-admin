@@ -438,3 +438,16 @@ Google Drive 那种：标题「正在上传 N 项内容」、副栏「还剩 X�
 **实测证据**：`apps/web/e2e/tests/workflow.spec.ts` ——「填到一半切走再切回来」那条
 （应用内 `pushState` 切 tab：不能 `goto`，整页刷新本来就丢内存状态）。
 第三行的坑是它抓到的：切回来输入框是**新节点**，值为空。
+
+### 🔴 从浮层里 `<Link>` 跳走：关闭和切 tab 在同一次提交里，退场动画照样跑不完
+
+上面第一行那条弯路的变体，**点出来的浮层也会踩**。短信配置页「发测试短信」的结果块里有一个
+`<Link to="/sms/log">`，`onClick={() => onOpenChange(false)}` —— 看起来就是「切 tab 之前先关掉」。
+但 Link 的导航和这次 `onOpenChange(false)` 在**同一次 React 提交**里落地：弹窗刚翻成 `data-closed`，
+这个 tab 就进了后台、effect 被 `<Activity>` 销毁，Base UI 等不到退场动画结束 ——
+E2E 实测弹窗带着 `data-closed` 在屏幕上停了 5 秒还 visible。
+
+修法：跳走时把浮层**整个卸载**（挂载和打开分开管：`mounted` + `open` 两个 state，正常关闭只翻 `open`
+留退场动画；跳走时两个一起清）。React 卸载节点是同步的，不等任何 effect。
+`pages/sms-config/index.tsx` 的 `testDialogMounted` 就是这个形状。
+**实测证据**：`apps/web/e2e/tests/sms.spec.ts` 点日志链接那一步，修前 `toBeHidden` 超时，修后过。

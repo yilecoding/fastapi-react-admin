@@ -32,9 +32,9 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 ⚠️ aiohttp 的 `ConnectionTimeoutError` 和 `SocketTimeoutError` **都是 `ServerTimeoutError` 的子类**：
 `sdk/base.py` 按 MRO **名字**认，只认前者，绝不认父类。按父类判会把读超时误判成未发出。
 
-⚠️ 错误码表里除 `AuthFailure.SecretIdNotFound` / `InvalidAccessKeyId.NotFound` / `InvalidCredentials`
-之外**都没实际触发过**（文档原文），实现按码前缀兜底（`LimitExceeded.PhoneNumber*` → `rate_limited`）。
-真发验收时补测能造出来的几个（签名错、模板错、号码错）。
+⚠️ 错误码表里实际触发过的只有 `AuthFailure.SecretIdNotFound` / `InvalidAccessKeyId.NotFound` / `InvalidCredentials`
+和阿里云的 `isv.SMS_TEMPLATE_ILLEGAL`（2026-10-24 真发时填错模板 ID → `config_error`，原文「请检查模板内容与模板参数是否匹配」），
+其余是文档原文，实现按码前缀兜底（`LimitExceeded.PhoneNumber*` → `rate_limited`）。签名错、号码错还没造出来过。
 
 ## 🔴 发送日志：独立会话，两段式（`service/sms_service.py`）
 
@@ -56,8 +56,14 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 ## 🔴 频率防护：一段 Lua 占位，发送之前（`service/guard.py`）
 
 冷却（`SET NX EX`）· 号码日上限 · 全站小时熔断三项检查和占位在同一段 Lua 里完成。「先查再发再写」是读写分离的，
-并发能同时穿过（AI 确认令牌那条：修复前 5 个并发执行了 5 次）。日上限和全站计数**不退还**；
-冷却位只在 `UNSENT_KINDS` 时释放。
+并发能同时穿过（AI 确认令牌那条：修复前 5 个并发执行了 5 次）。号码日上限和全站计数**不退还**；
+冷却位和**配置的日计数**只在 `UNSENT_KINDS` 时退还（`release_cooldown` / `release_config`）。
+
+🔴 **配置的日计数要退还，判据和冷却位同一组。** 第一版写的是「日上限不退还」，真发阿里云那一轮当场对不上账：
+填错模板 ID 发了一条（`isv.SMS_TEMPLATE_ILLEGAL`，厂商一条没收），改对再发一条，卡片上「今日已发 2」、手机收到 1 条。
+而且填错的每次重试都在消耗这条配置的 `daily_max`。`release_config` 是一段 Lua：计数 > 0 才 `DECR`，键过期 / 跨天
+/ 并发多退一次都停在 0。「结果未知」（读超时）不退 —— 可能已经发出去了。测试短信走同一条路。
+守卫：`test_sms_send.py::TestConfigDailyRefund` · `test_sms_config_api.py::TestSendTest::test_rejected_test_sms_does_not_count_as_sent`。
 
 **实测证据**：`TestGuard::test_concurrent_sends_let_exactly_one_through` —— 5 个并发同一号码，恰好 1 条通过、4 条 `rate_limited`、
 库里 1 行。🔴 **先预热连接池**（`redis_client.ping()` 几次），冷池会假绿。
@@ -101,6 +107,7 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 
 ## 实测证据
 
-- `tests/` 116 条：SDK 契约 39（两家各一套行为矩阵 + 基类契约 + 模板映射）· 守卫 · 配置接口 · 发送链路（真 Redis + 测试库）· 日志接口
+- `tests/` 119 条：SDK 契约 39（两家各一套行为矩阵 + 基类契约 + 模板映射）· 守卫 · 配置接口 · 发送链路（真 Redis + 测试库）· 日志接口
 - 迁移 `z0000000sms` 在临时 PostgreSQL 库上 up → 与模型比对零差异 → down（两张表和 10 条菜单消失）→ up。SQL Server / MySQL 只过了离线编译守卫
-- ⚠️ **两家真实接入点没有用真凭据发过**（签名 / 模板要先过审核）。代码用 `console` 跑通了全部流程，端到端验收等账号就绪
+- 阿里云 2026-10-24 用真凭据发过（签名 / 模板从 avcp 的种子拿的）：验证码模板一条「已受理」、手机收到；填错模板 ID 那条
+  被归成 `config_error` 并进了日志。腾讯云**还没用真凭据发过**，代码靠契约测试里的假服务器
