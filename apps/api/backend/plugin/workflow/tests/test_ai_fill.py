@@ -243,3 +243,27 @@ def test_ai_marks_are_saved_with_the_draft(client: TestClient, login: Any, flow:
     assert d['ai_filled'] == ['f_reason', 'f_amount']
     ok(client.put(f'/sys/workflow/drafts/{flow}', headers=headers, json={'form': body['form']}))
     assert ok(client.get(f'/sys/workflow/drafts/{flow}', headers=headers))['ai_filled'] == []
+
+
+def test_files_are_parsed_off_the_event_loop(
+    client: TestClient, login: Any, flow: str, model: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PDF / xlsx 解析是 CPU 活：放在事件循环上，10 MB 的文件解析多久，这个进程里别人的请求就卡多久"""
+    from backend.utils.doc_text import DocText
+
+    seen: list[bool] = []
+
+    def fake_extract(raw: bytes, ext: str, *, max_chars: int) -> DocText:
+        # ⚠️ 不能判「是不是主线程」：TestClient 本来就把应用跑在另一个线程上，那样判永远是「不在主线程」。
+        # 判「这个线程里有没有正在跑的事件循环」
+        try:
+            asyncio.get_running_loop()
+            seen.append(True)
+        except RuntimeError:
+            seen.append(False)
+        return DocText('发票：金额 86.50')
+
+    monkeypatch.setattr(ai_fill_service, 'extract_text', fake_extract)
+    model()
+    ok(_fill(client, login('sunqiang'), flow, file=('发票.pdf', b'%PDF-1.4', 'application/pdf')))
+    assert seen == [False], '要在线程里解析（不能在事件循环上）'

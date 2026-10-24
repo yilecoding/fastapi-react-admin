@@ -22,6 +22,7 @@ import pytest
 from sqlalchemy import text
 from starlette.testclient import TestClient
 
+from backend.common.exception import errors
 from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
 from backend.plugin.workflow.engine.flow import validate_publish
 from backend.plugin.workflow.engine.schema import AssigneeKind, FieldType
@@ -270,3 +271,26 @@ def test_a_model_that_hangs_fails_visibly(
     assert res.status_code == 400 and '太久' in res.json()['msg'], res.text
     (row,) = _calls(pk)
     assert row['status'] == 'failed'
+
+
+def test_a_gateway_error_is_recorded_too(
+    client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """网关报的错（401 / 429…）是业务异常：原来直接往外抛、跳过了记录 —— 失败的调用最要留痕"""
+    pk = _definition(client, token_headers, 'PYTEST_AID_GATEWAY')
+
+    class _Down:
+        model = 'fake-model'
+
+        async def stream_chat(self, *_: Any, **__: Any) -> Any:
+            raise errors.ServerError(msg='模型网关拒绝了请求（429）：请求太频繁')
+            yield  # pragma: no cover —— 让它是个异步生成器
+
+    async def build(_db: Any) -> _Down:  # ruff: ignore[unused-async] —— 顶掉的原函数是 async
+        return _Down()
+
+    monkeypatch.setattr(ai_design_service, 'build_client', build)
+    res = _generate(client, token_headers, pk)
+    assert res.status_code == 400 and '429' in res.json()['msg'], res.text
+    (row,) = _calls(pk)
+    assert row['status'] == 'failed' and '429' in row['error']

@@ -23,6 +23,9 @@ test.beforeAll(async () => {
       { id: "f_reason", type: "text", label: "事由", required: true },
       { id: "f_amount", type: "amount", label: "金额", precision: 2 },
       { id: "f_dest", type: "text", label: "目的地" },
+      // 目的地是上海才出现：AI 填了它、人又把目的地改掉 → 它被隐藏，「没问题」画不出来，不能拦着提交
+      { id: "f_proof", type: "text", label: "上海出差证明", visibleWhen: { var: "f_dest", op: "eq", value: "上海" } },
+      { id: "f_files", type: "attachment", label: "附件" },
     ],
   }
   const model = {
@@ -118,3 +121,57 @@ test("填单失败：错误挂在面板里，材料还在", async ({ page }) => 
   await expect(page.getByTestId("wf-ai-fill-text")).toHaveValue("见客户")
   await expect(page.getByTestId("wf-ai-mark")).toHaveCount(0)
 })
+
+test("填单要等十几秒：这期间打的字不会被冲掉；AI 填的字段被条件隐藏了，不拦提交", async ({ page }) => {
+  await page.route(`**/api/v1/sys/workflow/startable/${CODE}/ai-fill`, async (route) => {
+    await new Promise((r) => setTimeout(r, 1500))
+    await route.fulfill({
+      json: {
+        code: 200,
+        msg: "请求成功",
+        data: { ...FILLED, values: { ...FILLED.values, f_proof: "客户邀请函" } },
+      },
+    })
+  })
+  await openStart(page)
+  await page.getByTestId("wf-ai-fill-toggle").click()
+  await page.getByTestId("wf-ai-fill-text").fill("下周一去上海见客户，车票 553 元")
+  await page.getByTestId("wf-ai-fill-submit").click()
+  // 模型还没回来，人先填了金额（原来回来时按点「开始填」那一刻的表单合并，这一下被冲掉）
+  await field(page, "f_amount").fill("999")
+  await expect(page.getByTestId("wf-ai-fill-summary")).toContainText("已经有内容的 1 项没动")
+  await expect(field(page, "f_amount")).toHaveValue("999")
+  await expect(field(page, "f_reason")).toHaveValue("去上海见客户")
+  await expect(field(page, "f_proof")).toHaveValue("客户邀请函")
+  await expect(page.getByTestId("wf-ai-mark")).toHaveCount(3)
+
+  // 目的地改成杭州：它自己的标记去掉（改过 = 核对过），「上海出差证明」被隐藏 —— 它的标记不能再拦提交
+  await field(page, "f_dest").fill("杭州")
+  await expect(page.getByTestId("wf-field-f_proof")).toHaveCount(0)
+  await page.getByTestId("wf-field-f_reason").locator("..").getByRole("button", { name: "没问题" }).click()
+  await expect(page.getByTestId("wf-ai-mark")).toHaveCount(0)
+  await page.getByTestId("wf-start-submit").click()
+  await expect(page).toHaveURL(/id=\d+/)
+})
+
+test("附件传完才回调：AI 在上传期间填的那几项，标记不会被那次回调冲掉", async ({ page }) => {
+  await page.route(`**/api/v1/sys/workflow/startable/${CODE}/ai-fill`, (route) =>
+    route.fulfill({ json: { code: 200, msg: "请求成功", data: FILLED } })
+  )
+  // 上传慢 2 秒：回调用的是选文件那一刻的 onChange（原来拿那一刻的表单比，AI 填的值全被当成「人改过」）
+  await page.route(/\/sys\/workflow\/files$/, async (route) => {
+    await new Promise((r) => setTimeout(r, 2000))
+    await route.continue()
+  })
+  await openStart(page)
+  await page.getByTestId("wf-files-f_files-input").setInputFiles({
+    name: "慢.txt", mimeType: "text/plain", buffer: Buffer.from(`slow ${Date.now()}`),
+  })
+  await page.getByTestId("wf-ai-fill-toggle").click()
+  await page.getByTestId("wf-ai-fill-text").fill("去上海见客户")
+  await page.getByTestId("wf-ai-fill-submit").click()
+  await expect(page.getByTestId("wf-ai-mark")).toHaveCount(3)
+  await expect(page.getByTestId("wf-files-f_files")).toContainText("慢.txt")
+  await expect(page.getByTestId("wf-ai-mark")).toHaveCount(3)
+})
+

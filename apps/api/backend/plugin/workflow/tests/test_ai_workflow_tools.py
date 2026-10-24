@@ -250,3 +250,89 @@ def test_transfer_by_name(
     (mine,), _ = _run(monkeypatch, zhaolei, [('wf_todo_list', {}, False)])
     (hers,), _ = _run(monkeypatch, _person(uid('wangfang'), '王芳'), [('wf_todo_list', {}, False)])
     assert pk in hers.payload and pk not in mine.payload
+
+
+@pytest.fixture
+def namesakes(client: TestClient, token_headers: dict[str, str]) -> Any:
+    """21 个昵称**含**「PYTEST同名」的人排在前面，最后建两个昵称**就是**「PYTEST同名」的。用完硬删。
+
+    模糊搜索按 ID 截在 20 条：原来的查法前 20 条全是「PYTEST同名X…」，两个真同名的都被截掉
+    """
+    roles = client.get('/sys/roles/all', headers=token_headers).json()['data']
+    dept_id = client.get('/sys/depts', headers=token_headers).json()['data'][0]['id']
+    made: list[str] = []
+    names = [f'PYTEST同名X{i:02d}' for i in range(21)] + ['PYTEST同名', 'PYTEST同名']
+    for i, nickname in enumerate(names):
+        body = {
+            'username': f'pytest_same_{i:02d}',
+            'password': 'Tmp@123456',
+            'nickname': nickname,
+            'dept_id': dept_id,
+            'roles': [roles[0]['id']],
+        }
+        res = client.post('/sys/users', headers=token_headers, json=body)
+        assert res.status_code == 200 and res.json()['code'] == 200, res.text
+        made.append(str(res.json()['data']['id']))
+    yield made
+
+    async def purge() -> None:
+        engine = create_database_async_engine(get_database_url(unittest=True))
+        try:
+            async with create_database_async_session(engine).begin() as s:
+                for pk in made:
+                    await s.execute(text('DELETE FROM sys_user_role WHERE user_id = :pk'), {'pk': int(pk)})
+                    await s.execute(text('DELETE FROM sys_user WHERE id = :pk'), {'pk': int(pk)})
+        finally:
+            await engine.dispose()
+
+    asyncio.run(purge())
+
+
+def test_two_people_with_the_same_name_are_never_guessed_between(
+    client: TestClient,
+    token_headers: dict[str, str],
+    login: Any,
+    uid: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    namesakes: Any,
+) -> None:
+    """🔴 重名不猜：哪怕模糊搜索能命中几十个人、两个真同名的排在第 20 条之后"""
+    _setup(client, token_headers, uid, 'PYTEST_AIWF_SAME')
+    pk = _start(client, login, 'PYTEST_AIWF_SAME')
+    (staged,), _ = _run(
+        monkeypatch,
+        _person(uid('zhaolei'), '赵磊'),
+        [('wf_transfer', {'instance_id': pk, 'to_user': 'PYTEST同名'}, False)],
+    )
+    assert staged.kind == 'failed' and '对应多个人' in staged.payload, staged
+    assert staged.confirm_token is None
+
+
+def test_punctuation_and_negated_fragments_are_not_the_users_words(
+    client: TestClient, token_headers: dict[str, str], login: Any, uid: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """「。」压完是空串（空串是任何话的子串）；用户说「我不同意」时，「同意」也是它的一段 —— 两种都不能当原话"""
+    _setup(client, token_headers, uid, 'PYTEST_AIWF_NEG')
+    pk = _start(client, login, 'PYTEST_AIWF_NEG')
+    outcomes, _ = _run(
+        monkeypatch,
+        _person(uid('zhaolei'), '赵磊'),
+        [
+            ('wf_approve', {'instance_id': pk, 'opinion': '同意，没问题'}, False),
+            ('wf_approve', {'instance_id': pk, 'opinion': '同意'}, False),
+            ('wf_reject', {'instance_id': pk, 'opinion': '。'}, False),
+        ],
+        said=['这张我不同意', '先别同意，没问题的话我自己批'],
+    )
+    rephrased, negated, blank = outcomes
+    # 先断言「有」：同一句里没被否定的那一段照样算（「没问题的话我自己批」里的「我自己批」）
+    (ok_words,), _ = _run(
+        monkeypatch,
+        _person(uid('zhaolei'), '赵磊'),
+        [('wf_approve', {'instance_id': pk, 'opinion': '我自己批'}, False)],
+        said=['先别同意，没问题的话我自己批'],
+    )
+    assert ok_words.kind == 'confirm_required', ok_words
+    for o in (negated, blank):
+        assert o.kind == 'failed' and o.confirm_token is None, o
+    assert rephrased.kind == 'failed', '「同意，没问题」也不是原话（两句拼的）'
