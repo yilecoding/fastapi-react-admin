@@ -274,8 +274,9 @@ async def generate(db: AsyncSession, *, definition_id: int, prompt: str, user_id
             error = feedback
     except TimeoutError:
         error = t('error.workflow.ai_model_timeout')
-    except errors.BaseExceptionError:
-        raise
+    except errors.BaseExceptionError as e:
+        # 网关报的错（401 / 429 / 404…，`_explain_http_error` 已经翻成人话）：照样记一行 —— 失败的调用最要留痕
+        error = e.msg
     except Exception as e:
         log.exception('设计器 AI 生成调用模型失败')
         error = str(e) or type(e).__name__

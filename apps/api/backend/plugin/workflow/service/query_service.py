@@ -518,6 +518,24 @@ async def directory_users(db: AsyncSession, *, keyword: str | None, ids: list[in
     return [{'id': r[0], 'nickname': r[1], 'username': r[2], 'dept_name': r[3]} for r in rows]
 
 
+async def users_named(db: AsyncSession, name: str) -> list[dict[str, Any]]:
+    """用户名或昵称**精确**等于 `name` 的在职账号（AI 转交按名字找人用）。
+
+    🔴 不能拿 `directory_users` 的模糊搜索再筛：那个结果按 ID 截在 20 条，「张伟」能模糊命中几十个人
+    （张伟东、张伟明…），第二个同名的「张伟」排在 20 条之后就被截掉 —— 重名不猜那条规则静默失效
+    """
+    rows = (
+        await db.execute(
+            select(User.id, User.nickname, User.username, Dept.name)
+            .outerjoin(Dept, Dept.id == User.dept_id)
+            .where(User.deleted == 0, User.status == 1, or_(User.username == name, User.nickname == name))
+            .order_by(User.id)
+            .limit(50)
+        )
+    ).all()
+    return [{'id': r[0], 'nickname': r[1], 'username': r[2], 'dept_name': r[3]} for r in rows]
+
+
 async def directory_depts(db: AsyncSession) -> list[dict[str, Any]]:
     rows = (
         await db.execute(

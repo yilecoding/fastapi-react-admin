@@ -44,12 +44,30 @@ def _squash(text: str) -> str:
     return ''.join(text.split()).strip('。.！!')
 
 
+#: 紧挨在前面就把意思反过来的字：用户说「我不同意」，「同意」也是它的一段
+_NEGATIONS = frozenset('不没别未非勿莫')
+
+
+def _quoted(words: str, message: str) -> bool:
+    """`words` 是 `message` 里的一段，而且不是被否定的那一段（「我不同意」里的「同意」不算）"""
+    start = message.find(words)
+    while start >= 0:
+        if start == 0 or message[start - 1] not in _NEGATIONS:
+            return True
+        start = message.find(words, start + 1)
+    return False
+
+
 def _own_words(ctx: RunContext, opinion: str | None) -> str | None:
-    """意见必须是用户说过的话（允许是其中一段）。改写过的、编出来的，预演就拦下 —— 它会以用户本人的名义记进审批记录"""
+    """意见必须是用户说过的话（允许是其中一段）。改写过的、编出来的，预演就拦下 —— 它会以用户本人的名义记进审批记录。
+
+    🔴 两个边界：只剩标点的（「。」压完是空串，空串是任何字符串的子串）不算；被否定的那一段不算
+    """
     if not opinion or not opinion.strip():
         return None
     said = ctx.user_said
-    if said is not None and not any(_squash(opinion) in _squash(m) for m in said):
+    words = _squash(opinion)
+    if said is not None and (not words or not any(_quoted(words, _squash(m)) for m in said)):
         raise ValueError(
             f'意见「{opinion.strip()}」不是用户的原话。请先问用户想写什么，再把他的原话原样传进来，不要替他拟或改写'
         )
@@ -184,8 +202,7 @@ async def wf_reject(db: AsyncSession, ctx: RunContext, instance_id: str, opinion
 async def _resolve_user(db: AsyncSession, name: str) -> dict[str, Any]:
     """转交给谁：人说的是名字。按用户名或昵称**精确**匹配，重名不猜（同部门负责人那条，见 AI 分册）"""
     wanted = name.strip()
-    rows = await query_service.directory_users(db, keyword=wanted, ids=None)
-    hits = [r for r in rows if wanted in {r.get('username'), r.get('nickname')}]
+    hits = await query_service.users_named(db, wanted)
     if not hits:
         raise ValueError(f'找不到「{wanted}」：按用户名或昵称精确匹配，必须是在职的账号')
     if len(hits) > 1:

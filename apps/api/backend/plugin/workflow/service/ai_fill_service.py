@@ -103,7 +103,7 @@ def split_fields(form_schema: dict[str, Any], root: dict[str, Any]) -> tuple[lis
     return fillable, skipped
 
 
-def _material(text: str | None, file: tuple[str, bytes] | None) -> tuple[list[dict[str, Any]], str | None]:
+async def _material(text: str | None, file: tuple[str, bytes] | None) -> tuple[list[dict[str, Any]], str | None]:
     """（user 消息里材料那几段，给人看的说明）。图片走 image_url，别的读成文字"""
     parts: list[dict[str, Any]] = []
     note = None
@@ -115,7 +115,8 @@ def _material(text: str | None, file: tuple[str, bytes] | None) -> tuple[list[di
         if ext in IMAGE_TYPES:
             parts.append({'kind': 'image', 'url': f'data:{IMAGE_TYPES[ext]};base64,{base64.b64encode(raw).decode()}'})
         else:
-            doc = extract_text(raw, ext, max_chars=MAX_FILE_TEXT)
+            # CPU 活（PDF / xlsx 解析），放线程里：10 MB 的文件在事件循环上解析，这个进程里别人的请求全卡住
+            doc = await asyncio.to_thread(extract_text, raw, ext, max_chars=MAX_FILE_TEXT)
             if doc.text:
                 parts.append({'kind': 'file', 'name': name, 'content': doc.text})
             note = doc.note
@@ -180,7 +181,7 @@ async def fill(
     fillable, skipped = split_fields(form_schema, root)
     if not fillable:
         raise errors.RequestError(msg=t('error.workflow.ai_fill_nothing'))
-    parts, note = _material(text, file)
+    parts, note = await _material(text, file)
     if not parts:
         # 文件读不出文字（扫描件 PDF / 老格式）也走到这里：把原因说出来
         raise errors.RequestError(msg=note or t('error.workflow.ai_fill_no_material'))

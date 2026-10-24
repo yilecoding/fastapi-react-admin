@@ -21,6 +21,7 @@ import {
 } from './api'
 import { AiFillPanel, AiMark, type AiFillOutcome } from './ai-fill-panel'
 import { FormRenderer, empty, missingRequired } from './form-renderer'
+import { formRules } from './form-rules'
 import { UserSelect } from './pickers'
 import { forecastItems } from './progress'
 import { ApprovalTrack, TemplateTile, type TrackItem } from './track'
@@ -178,41 +179,56 @@ function Filler({
     return sf.select_nodes.filter((n) => onPath.has(n.id))
   }, [preview.data, sf.select_nodes])
 
+  // 🔴 下面两个回调都可能被**旧的闭包**调到：AI 填单要等十几秒（点「开始填」那一刻的 `onResult`），
+  // 附件上传完才回调（选文件那一刻的 `onChange`）。拿闭包里的 `form` 比 / 合并，会把这期间打的字冲掉、
+  // 把刚标上的「AI 填的」当成「人改过」去掉 —— 一律读这个 ref（每次渲染和每次改都更新）
+  const formRef = React.useRef(form)
+  formRef.current = form
+
   // 人改了 AI 填的字段 = 核对过了，标记去掉
   const changeForm = (next: FormData) => {
-    setAiFilled((marks) => marks.filter((id) => JSON.stringify(next[id]) === JSON.stringify(form[id])))
+    const prev = formRef.current
+    formRef.current = next
+    setAiFilled((marks) => marks.filter((id) => JSON.stringify(next[id]) === JSON.stringify(prev[id])))
     setForm(next)
   }
 
   /** AI 的值只填进**还空着**的字段：人已经填了的不替他改 */
   function mergeAi(res: AiFill): AiFillOutcome {
-    const next = { ...form }
+    const latest = formRef.current
+    const next = { ...latest }
     const filled: string[] = []
     let kept = 0
     for (const [id, v] of Object.entries(res.values)) {
       if (!editable.has(id)) continue
-      if (!empty(form[id])) {
+      if (!empty(latest[id])) {
         kept += 1
         continue
       }
       next[id] = v
       filled.push(id)
     }
+    formRef.current = next
     setForm(next)
     setAiFilled((marks) => [...new Set([...marks, ...filled])])
     return { filled: filled.length, kept, result: res }
   }
 
+  // 现在显示着的那几个标记（按条件隐藏的字段不算，见 submit）
+  const inactive = React.useMemo(() => formRules(schema, form).inactive, [schema, form])
+  const pendingMarks = aiFilled.filter((id) => !inactive.has(id))
+
   async function submit() {
     const errs: Record<string, string> = {}
-    // 🔴 AI 填的每一项都要人点过「没问题」（或者自己改过）才能提交 —— 不然「AI 填的」只是个装饰
-    for (const id of aiFilled) errs[id] = t('AI 填的，核对无误后点「没问题」')
+    // 🔴 AI 填的每一项都要人点过「没问题」（或者自己改过）才能提交 —— 不然「AI 填的」只是个装饰。
+    // 按条件不显示的字段除外：它的「没问题」画不出来，拦着就是一个永远交不了的单（它的值服务端也不存）
+    for (const id of pendingMarks) errs[id] = t('AI 填的，核对无误后点「没问题」')
     for (const [k, label] of Object.entries(missingRequired(schema, form, editable))) {
       errs[k] = t('请填写「{{f}}」', { f: label })
     }
     for (const n of pickNodes) if (!selected[n.id]?.length) errs[`select:${n.id}`] = t('请选择审批人')
     setErrors(errs)
-    if (aiFilled.length) toast.error(t('还有 {{n}} 项 AI 填的没核对', { n: aiFilled.length }))
+    if (pendingMarks.length) toast.error(t('还有 {{n}} 项 AI 填的没核对', { n: pendingMarks.length }))
     if (Object.keys(errs).length) return
     // 提交之前：停掉自动保存，并**等正在路上的那次保存落地** —— 否则它可能在服务端删完草稿之后才提交，
     // 把草稿又存回来（只拦没触发的防抖不够，已经发出去的 PUT 拦不住）
