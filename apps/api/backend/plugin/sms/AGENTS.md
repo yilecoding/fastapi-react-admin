@@ -102,5 +102,5 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 ## 实测证据
 
 - `tests/` 116 条：SDK 契约 39（两家各一套行为矩阵 + 基类契约 + 模板映射）· 守卫 · 配置接口 · 发送链路（真 Redis + 测试库）· 日志接口
-- 迁移 `y0000000sms` 在临时 PostgreSQL 库上 up → 与模型比对零差异 → down（两张表和 10 条菜单消失）→ up。SQL Server / MySQL 只过了离线编译守卫
+- 迁移 `z0000000sms` 在临时 PostgreSQL 库上 up → 与模型比对零差异 → down（两张表和 10 条菜单消失）→ up。SQL Server / MySQL 只过了离线编译守卫
 - ⚠️ **两家真实接入点没有用真凭据发过**（签名 / 模板要先过审核）。代码用 `console` 跑通了全部流程，端到端验收等账号就绪

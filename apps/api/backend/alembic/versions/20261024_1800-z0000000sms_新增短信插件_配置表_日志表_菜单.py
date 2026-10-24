@@ -1,8 +1,8 @@
 """新增短信插件：配置表（sms_config）、发送日志表（sms_log），补齐已存在库缺的「短信」菜单
 
-Revision ID: y0000000sms
-Revises: x0000000wfdraftai
-Create Date: 2026-10-24 16:00:00
+Revision ID: z0000000sms
+Revises: y0000000aireviewver
+Create Date: 2026-10-24 18:00:00
 
 issue #153。两张表 + 10 条菜单放在一条里，是因为它们一起才构成「功能可用」：只建表不补菜单，表现是
 **功能装好了但侧边栏里找不到入口**（`f0000000aimenu` 记过同一条）。
@@ -21,8 +21,8 @@ from backend.plugin.core import check_plugin_installed
 from backend.utils.data_migration import add_menu, delete_by_key, seeded_pk_mode
 
 # revision identifiers, used by Alembic.
-revision = 'y0000000sms'
-down_revision = 'x0000000wfdraftai'
+revision = 'z0000000sms'
+down_revision = 'y0000000aireviewver'
 branch_labels = None
 depends_on = None
 
