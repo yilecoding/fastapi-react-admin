@@ -611,6 +611,7 @@
   "发布": "Published",
   "发布失败": "Publish failed",
   "发布系统通知与公告，状态控制是否对外展示。": "Publish system notices; status controls whether they are visible.",
+  "发得太快了，请 {{seconds}} 秒后再发": "Too many messages. Try again in {{seconds}} seconds",
   "发起人": "Initiator",
   "发起人撤回": "Withdrawn by initiator",
   "发起人本部门": "Initiator's department",

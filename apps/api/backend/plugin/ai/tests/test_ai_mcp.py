@@ -170,6 +170,35 @@ class TestAuthentication:
         assert _rpc(client, 'tools/list', user='test').status_code == 200
         assert _rpc(client, 'tools/list', user='zhangwei').status_code == 403
 
+    def test_disabled_ai_plugin_closes_the_gateway(self, client: TestClient, gateway: Any) -> None:
+        """🔴 网关是 `hooks.py` 直接挂在主应用上的 Route，不经过插件路由那道 `PluginStatusChecker` ——
+        原来在插件管理里停用 AI 插件，网页对话关掉了，外部系统经 MCP 照样能调工具"""
+        gateway(act_as=['test'])
+        assert _rpc(client, 'tools/list', user='test').status_code == 200, '启用时要通（先断言「有」）'
+        key = f'{settings.PLUGIN_REDIS_PREFIX}:ai'
+
+        async def flip(value: str | None, before: str | None = None) -> str | None:
+            redis = RedisCli()
+            try:
+                current = await redis.get(key)
+                if value is None:
+                    await (redis.set(key, before) if before is not None else redis.delete(key))
+                else:
+                    info = json.loads(current) if current else {'plugin': {}}
+                    info['plugin']['enable'] = value
+                    await redis.set(key, json.dumps(info, ensure_ascii=False))
+                return current
+            finally:
+                await redis.aclose()
+
+        original = asyncio.run(flip('0'))
+        try:
+            response = _rpc(client, 'tools/list', user='test')
+            assert response.status_code == 404, response.text
+            assert 'jsonrpc' not in response.text
+        finally:
+            asyncio.run(flip(None, original))
+
     def test_superuser_needs_explicit_permission(self, client: TestClient, gateway: Any) -> None:
         gateway()  # allow_superuser 默认 False
         response = _rpc(client, 'tools/list', user='admin')

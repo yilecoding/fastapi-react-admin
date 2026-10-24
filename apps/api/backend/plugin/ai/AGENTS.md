@@ -431,7 +431,9 @@ SQLAlchemy 把整个事务标成待回滚，这一轮对话里后面每个工具
 - ⚠️ 只查一个而不是全查，是因为 dispatch 每次都要过这里：全查的话**每一次**工具调用（包括 AI 插件自己的只读工具）都要打 Redis，
   而单测里用 `asyncio.run` 调 dispatch 的那批没顶掉 Redis 客户端，会撞「attached to a different loop」。
   调 dispatch 跑别的插件工具的测试，要像 `test_ai_read_tools.py` 那样把 `dispatcher_module.redis_client` 换成新建的
-- ⚠️ MCP 网关有没有跟着 AI 插件的启用状态走，**没查过**
+- 🔴 **MCP 网关原来也不跟着 AI 插件的启用状态走**：它是 `hooks.py` 直接挂在主应用上的 `Route`，不经过插件路由。
+  停用 AI 插件之后网页对话关了，外部系统经 MCP 照样能列工具、调工具（`test_disabled_ai_plugin_closes_the_gateway`
+  修之前实测 200）。现在 `mcp_gateway/auth.py: authenticate` 第一步就查，停用回 404，不进协议层
 
 **实测证据**：`test_ai_workflow_tools.py::test_a_disabled_plugin_takes_its_tools_with_it`（在 Redis 里把审批插件改成停用）。
 变异：执行时不查 → 单子被同意了（`'ok' == 'denied'` 红）；清单不滤 → `wf_approve` 还在清单里，红。
@@ -441,3 +443,17 @@ SQLAlchemy 把整个事务标成待回滚，这一轮对话里后面每个工具
 确认卡片上写的是预演那一刻解析出来的结果，令牌里存的却只是模型给的参数。执行时再解析一遍，令牌有效的这几分钟里数据变了，
 执行的就不是人确认的那件事。预演把解析结果放进 `ctx.pinned`，`_stage_confirm` 存进令牌，`chat_service.confirm_tool` 原样带回。
 目前只有 `wf_transfer` 用（钉住被转交人的 ID）。⚠️ 只能放 JSON 能存的值。
+
+## 网页对话按人限流（`AI_CHAT_RATE_PER_MINUTE`，默认每分钟 20 句）
+
+原来只要有 `ai:chat:use` 就能无限循环地发，每一句都是一次或几次（工具轮）计费的模型请求。现在 `/ai/chat/stream` 前面挂一道按人
+（用户 ID，不按 IP）的限流，额度在请求时读（同 MCP 的 `_throttle`）。确认接口不限：它不调模型，执行的是人已经确认的那一件事。
+
+- 🔴 **超了要在开始流之前回 429**：SSE 的状态码在第一个字节发出时就定死了，流里再报只能是一个 error 事件
+- 🔴 **`Retry-After` 要进 `CORS_EXPOSE_HEADERS`**：开发期（8888 → 8088）和桌面端（`app://local`）都是跨源，不列在里面的话
+  前端读到的是 `null`，只能说一个猜的秒数。E2E 第一版就是这样：假接口给 42，页面上写的是 60
+- 前端把 429 说成「发得太快了，请 N 秒后再发」，不说「请求失败（HTTP 429）」—— 后者读起来像系统坏了
+
+**实测证据**：`tests/test_ai_chat_limit.py`（额度 3，连发 4 次：3 × 200、1 × 429，且 429 暴露了 `Retry-After`）；
+变异：去掉限流 → 第 4 次是 200；`Retry-After` 不进暴露列表 → 红。E2E `ai-chat-limit.spec.ts`：去掉前端的 429 分支 → 红。
+

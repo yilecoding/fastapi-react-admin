@@ -19,12 +19,15 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from backend.common.enums import StatusType
 from backend.common.exception import errors
 from backend.common.security.data_scope import bypass_data_scope
 from backend.common.security.jwt import get_jwt_user
 from backend.core.conf import settings
 from backend.database.db import async_db_session
+from backend.database.redis import redis_client
 from backend.plugin.ai.mcp_gateway.tokens import hash_token
+from backend.plugin.status import get_plugin_enable
 
 ACTING_USER_HEADER = 'x-acting-user'
 
@@ -114,6 +117,11 @@ async def authenticate(headers: Any) -> McpPrincipal:
     """从请求头解析出身份；任何一步不通过都抛 `McpAuthError`"""
     if not settings.AI_MCP_ENABLED:
         raise McpAuthError(404, 'MCP 网关未开启')
+    # 🔴 网关是 `hooks.py` 直接挂在主应用上的 Route，不经过插件路由那道 `PluginStatusChecker`：
+    # 不在这里判，插件管理里停用了 AI 插件（网页对话已经关了），外部系统经 MCP 照样能调工具
+    plugin_info = await redis_client.get(f'{settings.PLUGIN_REDIS_PREFIX}:ai')
+    if get_plugin_enable(plugin_info, StatusType.enable.value) != str(StatusType.enable.value):
+        raise McpAuthError(404, 'AI 插件已停用')
 
     scheme, _, token = (headers.get('authorization') or '').partition(' ')
     if scheme.lower() != 'bearer' or not token.strip():
