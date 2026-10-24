@@ -160,10 +160,25 @@ export function useChatSession(
     [applyEvent, bubbles.length, conversationId, ensureConversation, qc, rename],
   )
 
+  // 确认之后把结果记到那张卡片上（见 `Bubble.confirm.outcome`）：成功 = 工具结果 ok；
+  // 失败 = 工具结果不 ok、流里报了错（令牌过期 / 不是你的），或者请求本身失败
+  const settle = React.useCallback((token: string, outcome: 'done' | 'failed') => {
+    setBubbles((prev) =>
+      prev.map((b) => (b.confirm?.token === token ? { ...b, confirm: { ...b.confirm, outcome } } : b)),
+    )
+  }, [])
   const confirmTool = useMutation({
     mutationFn: async (token: string) => {
-      await streamChat('/api/v1/ai/chat/tools/confirm', { token }, applyEvent)
+      let outcome: 'done' | 'failed' = 'failed'
+      await streamChat('/api/v1/ai/chat/tools/confirm', { token }, (event) => {
+        if (event.type === 'tool_result') outcome = event.ok ? 'done' : 'failed'
+        if (event.type === 'error') outcome = 'failed'
+        applyEvent(event)
+      })
+      return outcome
     },
+    onSuccess: (outcome, token) => settle(token, outcome),
+    onError: (_e, token) => settle(token, 'failed'),
   })
 
   return { bubbles, streaming, send, confirmTool, historyQuery }

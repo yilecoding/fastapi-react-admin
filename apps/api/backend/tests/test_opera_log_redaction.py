@@ -91,3 +91,37 @@ def test_redaction_happens_before_truncation():
     body = M.truncate_body(M.redact_body(json.dumps(payload).encode(), 'application/json'))
     assert 'plain' not in body
     assert '已截断' in body
+
+
+def test_a_client_that_left_before_the_body_arrived_is_not_a_server_error():
+    """浏览器在请求体还没传完时走了（跳页 / 关标签页会取消在途的 POST）：原来读请求体抛 `ClientDisconnect`，
+    没人接，记成一条 ERROR + 几百行的栈、按 500 处理 —— 本地真跑（2026-10-24，登录后立刻跳页）时撞到的。
+    客户端已经不在了，回什么它都收不到：按 499（client closed request）收掉，不记错误"""
+    import asyncio
+
+    from starlette.requests import Request
+
+    async def receive():  # ruff: ignore[unused-async] —— ASGI 的 receive 必须是 async
+        return {'type': 'http.disconnect'}
+
+    scope = {
+        'type': 'http',
+        'method': 'POST',
+        'path': '/api/v1/sys/workflow/instances',
+        'raw_path': b'/api/v1/sys/workflow/instances',
+        'query_string': b'',
+        'headers': [(b'content-type', b'application/json'), (b'content-length', b'20')],
+        'path_params': {},
+        'client': ('127.0.0.1', 1),
+        'server': ('127.0.0.1', 8000),
+        'scheme': 'http',
+    }
+    called: list[bool] = []
+
+    async def call_next(_request):  # ruff: ignore[unused-async] —— 中间件按 await 调它
+        called.append(True)
+        raise AssertionError('客户端都走了，不该再往下调路由')
+
+    response = asyncio.run(M(app=None).dispatch(Request(scope, receive), call_next))
+    assert response.status_code == 499
+    assert called == []

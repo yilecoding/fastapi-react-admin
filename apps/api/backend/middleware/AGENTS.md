@@ -37,3 +37,15 @@
 真实响应头里只有一行 `set-cookie`；同一个最小 FastAPI 应用（不过这个中间件）返回的是两行。
 变异检验：把 `raw_headers` 改回从 `dict(response.headers)` 构造，这条当场红。
 
+
+## 🔴 客户端半路走了：`ClientDisconnect` 按 499 收掉，不是 500
+
+浏览器跳页 / 关标签页会取消在途的 POST。请求体还没传完时读它，Starlette 抛 `ClientDisconnect`；原来没人接，
+每次都记一条 ERROR + 几百行的栈、按 500 处理 —— 而客户端早就不在了，什么都收不到。日志里一片「请求异常」，
+真正的错误被淹在里面。现在 `dispatch` 读请求参数和调路由时都接这个异常，回 499（nginx 的 client closed request），
+记一行 INFO，不写操作日志（请求根本没执行）。
+
+**实测证据**：本地真跑（2026-10-24）时 api 日志里撞到一次 `Exception in ASGI application … ClientDisconnect()`，
+时间点紧挨着 Playwright 登录之后的跳页（是哪个请求日志里看不出来 —— 那条错误只带了 request id，没有路径，这是推断）；
+`tests/test_opera_log_redaction.py::test_a_client_that_left_before_the_body_arrived_is_not_a_server_error`
+构造一个 `receive()` 直接返回 `http.disconnect` 的请求，修之前当场抛 `ClientDisconnect`。

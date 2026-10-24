@@ -1617,6 +1617,7 @@
   "比较运算": "Operator",
   "永不过期": "Never expires",
   "没保存成功": "Couldn't save",
+  "没执行成功，原因见上面的回复": "Not carried out. See the reply above for why",
   "没有上传文件的权限（sys:file:upload）": "You do not have the file upload permission (sys:file:upload)",
   "没有匹配「{{k}}」的审批": "No approvals match \"{{k}}\"",
   "没有匹配「{{k}}」的流程": "No workflows match \"{{k}}\"",

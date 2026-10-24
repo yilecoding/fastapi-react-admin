@@ -273,6 +273,12 @@ async def generate(db: AsyncSession, *, definition_id: int, prompt: str, user_id
             if shape_error is None:
                 best = (candidate, issues)
             feedback = _feedback(shape_error, issues)
+            # 每一轮的问题记一行日志：本地真跑时有一次两轮都没修好「分支用了不存在的字段」，而单独把那个问题
+            # 回喂给同一个模型，6 次都修好了 —— 没有每轮的记录，就查不出那次第一轮到底是什么问题
+            log.info(
+                f'设计器 AI 生成 第 {rounds} 轮（定义 {definition_id}）：'
+                f'{"形状不对" if shape_error else [i["code"] for i in issues if i["level"] == "ERROR"]}'
+            )
             if feedback is None:
                 break
             messages += [

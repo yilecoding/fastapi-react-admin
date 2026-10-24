@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import Response
 from starlette.datastructures import UploadFile
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
+from starlette.requests import ClientDisconnect, Request
 
 from backend.app.admin.schema.opera_log import CreateOperaLogParam
 from backend.app.admin.service.opera_log_service import opera_log_service
@@ -42,7 +42,10 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
         """
         path = request.url.path
         method = request.method
-        args = await self.get_request_args(request)
+        try:
+            args = await self.get_request_args(request)
+        except ClientDisconnect:
+            return self.client_gone(method, path)
         code = 200
         msg = 'Success'
         status = StatusType.enable
@@ -63,6 +66,8 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
             if should_log_opera and method != 'OPTIONS':
                 response_headers = self.collect_headers(response.headers)
                 response, response_body = await self.capture_response_body(response)
+        except ClientDisconnect:
+            return self.client_gone(method, path)
         except Exception as e:
             elapsed = round((time.perf_counter() - ctx.perf_time) * 1000, 3)
             log.error(f'请求异常: {e!s}')
@@ -137,6 +142,16 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
                     observe_queue_size(self.opera_log_queue, queue_name=self.opera_log_queue_name)
 
         return response
+
+    @staticmethod
+    def client_gone(method: str, path: str) -> Response:
+        """客户端在请求体传完之前走了（跳页 / 关标签页会取消在途的 POST）。
+
+        🔴 原来没人接 `ClientDisconnect`：每次都记一条 ERROR + 几百行的栈、按 500 处理，而客户端早就不在了、
+        什么都收不到。按 499（client closed request，nginx 的约定）收掉；不记操作日志 —— 请求根本没执行
+        """
+        log.info(f'客户端在请求体传完之前断开：{method} {path}')
+        return Response(status_code=499)
 
     async def get_request_args(self, request: Request) -> dict[str, Any] | None:  # ruff:ignore[complex-structure]
         """
