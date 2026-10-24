@@ -630,6 +630,7 @@ workflow:
     not_for_initiator: 预审结果只给审批人看
     retry_not_allowed: 只有失败或超时的预审可以重试
     model_timeout: 模型太久没有返回，这次预审作废
+    attachment_timeout: 附件读得太久，这次预审作废
 storage:
   builtin_name: 本地存储（内置）
   probe_ok: 连接正常：写入、读回、删除都成功

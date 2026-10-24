@@ -18,6 +18,8 @@ from typing import Any
 import pytest
 
 from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+from backend.database.redis import RedisCli
+from backend.plugin.ai.core import dispatcher as dispatcher_module
 from backend.plugin.ai.core.dispatcher import tool_dispatcher
 from backend.plugin.ai.core.ports import RunContext, ToolCallRequest
 from backend.plugin.ai.core.registry import _REGISTRY, load_builtin_tools
@@ -61,8 +63,11 @@ def test_read_tool_runs(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
     )
 
     async def _main() -> Any:
-        # 独立引擎：共享的 async_test_db_session 绑在 TestClient 的事件循环上
+        # 独立引擎：共享的 async_test_db_session 绑在 TestClient 的事件循环上。Redis 同理 ——
+        # 别的插件带来的工具（`wf_todo_list`）执行前要查那个插件停没停用
         engine = create_database_async_engine(get_database_url(unittest=True))
+        redis = RedisCli()
+        monkeypatch.setattr(dispatcher_module, 'redis_client', redis)
         try:
             async with create_database_async_session(engine)() as db:
                 ctx = RunContext(user=superuser, conversation_id=1, db=db, provider=None)
@@ -74,6 +79,7 @@ def test_read_tool_runs(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
                     await db.rollback()
         finally:
             await engine.dispose()
+            await redis.aclose()
 
     outcome = asyncio.run(_main())
     if name in _POINTED:

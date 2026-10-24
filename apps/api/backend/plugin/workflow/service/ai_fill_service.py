@@ -31,7 +31,7 @@ from backend.common.i18n import t
 from backend.common.log import log
 from backend.plugin.workflow.engine.form import normalize_value, start_editable_fields
 from backend.plugin.workflow.engine.schema import COLUMN_TYPES
-from backend.plugin.workflow.service.ai_assist import build_client, complete, record
+from backend.plugin.workflow.service.ai_assist import build_client, complete, record, release
 from backend.utils.doc_text import extract_text
 
 if TYPE_CHECKING:
@@ -186,6 +186,7 @@ async def fill(
         # 文件读不出文字（扫描件 PDF / 老格式）也走到这里：把原因说出来
         raise errors.RequestError(msg=note or t('error.workflow.ai_fill_no_material'))
     client = await build_client(db)
+    await release(db)
     model_name = getattr(client, 'model', None)
     started = time.perf_counter()
     usage: dict[str, int] | None = None

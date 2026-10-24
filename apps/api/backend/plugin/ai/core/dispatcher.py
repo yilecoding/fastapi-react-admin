@@ -24,14 +24,16 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from backend.common.enums import StatusType
 from backend.common.log import log
 from backend.common.security.data_scope import scoped_to_user
 from backend.core.conf import settings
 from backend.database.redis import redis_client
 from backend.plugin.ai.core.permission import user_can, user_can_mutate
 from backend.plugin.ai.core.ports import RunContext, ToolCallRequest, ToolSchema, ToolSpec
-from backend.plugin.ai.core.registry import get_tool, tools_in_domains
+from backend.plugin.ai.core.registry import all_tools, get_tool, tools_in_domains
 from backend.plugin.ai.enums import ToolInvocationStatus
+from backend.plugin.status import get_plugin_enable
 
 # 结果摘要落库/回给模型时的长度上限。工具可能返回几百行数据，
 # 原样塞回对话历史会把上下文撑爆（而且下一轮还要再发一遍）。
@@ -93,8 +95,24 @@ def _stringify(result: Any) -> str:
 class ToolDispatcher:
     """工具可见性过滤 + 执行闸门 + 审计"""
 
-    def visible_tools(self, user: Any) -> list[ToolSpec]:
-        """这个用户能看到哪些工具。
+    @staticmethod
+    async def off_plugins(owners: set[str] | None = None) -> frozenset[str]:
+        """带了工具、但现在被停用的插件（见 `ToolSpec.plugin`）。和 `PluginStatusChecker` 同一个判据；缓存丢了按启用算
+        （检查器那边同样会把它修复成启用）。
+
+        状态在 Redis 里、管理员随时能切，所以每次现查、不缓存；`visible_tools` 是同步的，由调用方查好传进去
+
+        :param owners: 只查这几个；不传 = 所有带了工具的插件
+        """
+        owners = sorted(owners if owners is not None else {spec.plugin for spec in all_tools() if spec.plugin})
+        infos = await redis_client.mget([f'{settings.PLUGIN_REDIS_PREFIX}:{p}' for p in owners]) if owners else []
+        on = str(StatusType.enable.value)
+        return frozenset(
+            p for p, info in zip(owners, infos, strict=True) if get_plugin_enable(info, StatusType.enable.value) != on
+        )
+
+    def visible_tools(self, user: Any, off_plugins: frozenset[str] = frozenset()) -> list[ToolSpec]:
+        """这个用户能看到哪些工具。`off_plugins` 是停用了的插件（`off_plugins()`），它们的工具整个不出现。
 
         🔴 **过滤发生在把工具清单交给引擎之前**——模型压根不知道存在它无权调用的工具。
         这不是为了省 token：让模型看见一个它调不动的工具，它会反复尝试并向用户解释
@@ -103,6 +121,8 @@ class ToolDispatcher:
         candidates = tools_in_domains(settings.AI_TOOL_DOMAINS)
         visible = []
         for spec in candidates:
+            if spec.plugin in off_plugins:
+                continue
             if not user_can(user, spec.perm):
                 continue
             if spec.mutating and not spec.self_authorized and not user_can_mutate(user):
@@ -110,9 +130,9 @@ class ToolDispatcher:
             visible.append(spec)
         return visible
 
-    def visible_schemas(self, user: Any) -> list[ToolSchema]:
+    def visible_schemas(self, user: Any, off_plugins: frozenset[str] = frozenset()) -> list[ToolSchema]:
         """交给引擎的那一份：同 `visible_tools`，但去掉了可执行体（见 `ToolSchema`）"""
-        return [spec.schema for spec in self.visible_tools(user)]
+        return [spec.schema for spec in self.visible_tools(user, off_plugins)]
 
     async def dispatch(  # ruff: ignore[complex-structure]
         self,
@@ -132,7 +152,9 @@ class ToolDispatcher:
 
         # 模型给的工具名不可信：它会幻觉出不存在的工具。这不是异常，是一次失败的调用，
         # 要把失败**告诉模型**让它改口，而不是让整个对话 500。
-        if spec is None or spec not in self.visible_tools(ctx.user):
+        # 插件状态在这里现查（只查这个工具的）：清单是上一轮给的，确认令牌也可能是插件停用之前发的
+        off = await self.off_plugins({spec.plugin}) if spec is not None and spec.plugin else frozenset()
+        if spec is None or spec not in self.visible_tools(ctx.user, off):
             await self._audit(
                 ctx, call, ToolInvocationStatus.DENIED, perm=None, error='工具不存在或无权调用', started=started
             )
@@ -291,6 +313,7 @@ class ToolDispatcher:
                     'conversation_id': str(ctx.conversation_id),
                     'channel': ctx.channel,
                     'preview': preview,
+                    'pinned': ctx.pinned,
                 },
                 ensure_ascii=False,
             ),

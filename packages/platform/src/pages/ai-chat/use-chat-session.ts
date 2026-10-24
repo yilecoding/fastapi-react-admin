@@ -1,8 +1,9 @@
+import { t } from '@admin/i18n'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
 
 import { aiKeys, messagesQuery, streamChat, useRenameConversation, type AgentEvent } from './api'
-import type { Bubble, ToolTrace } from './message'
+import type { Bubble, ConfirmOutcome, ToolTrace } from './message'
 
 /** 解析落库的执行轨迹。坏数据一律当成"没有轨迹"，不能让它把整条历史渲染崩掉 */
 function parseTraces(raw: string | null): ToolTrace[] | undefined {
@@ -10,11 +11,11 @@ function parseTraces(raw: string | null): ToolTrace[] | undefined {
   try {
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return undefined
-    return parsed.map((t) => ({
-      name: String(t.name ?? ''),
-      ok: !!t.ok,
-      perm: t.perm ?? null,
-      durationMs: typeof t.duration_ms === 'number' ? t.duration_ms : null,
+    return parsed.map((trace) => ({
+      name: String(trace.name ?? ''),
+      ok: !!trace.ok,
+      perm: trace.perm ?? null,
+      durationMs: typeof trace.duration_ms === 'number' ? trace.duration_ms : null,
     }))
   } catch {
     return undefined
@@ -160,25 +161,34 @@ export function useChatSession(
     [applyEvent, bubbles.length, conversationId, ensureConversation, qc, rename],
   )
 
-  // 确认之后把结果记到那张卡片上（见 `Bubble.confirm.outcome`）：成功 = 工具结果 ok；
-  // 失败 = 工具结果不 ok、流里报了错（令牌过期 / 不是你的），或者请求本身失败
-  const settle = React.useCallback((token: string, outcome: 'done' | 'failed') => {
+  // 确认之后把结果记到那张卡片上（见 `Bubble.confirm.outcome`）：只记**服务端给了结论**的那几种 ——
+  // 成功 = 工具结果 ok；失败 = 工具结果不 ok、流里报了错；过期 = 令牌用过了或过期了（不一定没执行）。
+  // 🔴 请求没送到（断网 / HTTP 层就被拒了：401 / 429 / 网关 5xx）不记：令牌还没动过，按钮要留着让人再点。
+  // 原来一律记成「没执行成功」、按钮也没了，令牌明明还能用，只能让 AI 重新发起一次
+  const settle = React.useCallback((token: string, outcome: ConfirmOutcome) => {
     setBubbles((prev) =>
       prev.map((b) => (b.confirm?.token === token ? { ...b, confirm: { ...b.confirm, outcome } } : b)),
     )
   }, [])
   const confirmTool = useMutation({
     mutationFn: async (token: string) => {
-      let outcome: 'done' | 'failed' = 'failed'
+      let outcome: ConfirmOutcome | undefined
       await streamChat('/api/v1/ai/chat/tools/confirm', { token }, (event) => {
         if (event.type === 'tool_result') outcome = event.ok ? 'done' : 'failed'
-        if (event.type === 'error') outcome = 'failed'
+        // `streamChat` 把 HTTP 层的失败也报成 error 事件，code 是状态码 —— 那是没送到，不是结论
+        if (event.type === 'error' && !/^\d+$/.test(event.code ?? '')) {
+          outcome = event.code === 'confirm_expired' ? 'expired' : 'failed'
+        }
         applyEvent(event)
       })
       return outcome
     },
-    onSuccess: (outcome, token) => settle(token, outcome),
-    onError: (_e, token) => settle(token, 'failed'),
+    onSuccess: (outcome, token) => {
+      if (outcome) settle(token, outcome)
+    },
+    // 连接断了：可能根本没送到，也可能执行到一半断开。再点一次是安全的 —— 令牌一次性，执行过的只会回「已经用过」
+    onError: () =>
+      applyEvent({ type: 'error', message: t('连接断了，可以再点一次确认（执行过的不会重复执行）'), code: 'network' }),
   })
 
   return { bubbles, streaming, send, confirmTool, historyQuery }

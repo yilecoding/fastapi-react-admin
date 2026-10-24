@@ -96,7 +96,7 @@ class ChatService:
                 await db.commit()
 
                 history = await _build_history(db, conversation_id)
-                tools = tool_dispatcher.visible_schemas(user)
+                tools = tool_dispatcher.visible_schemas(user, await tool_dispatcher.off_plugins())
                 ctx = RunContext(
                     user=user,
                     conversation_id=conversation_id,
@@ -187,7 +187,12 @@ class ChatService:
             conversation_id = int(staged['conversation_id'])
             # channel 原样带回：MCP 发起、网页确认的写操作，审计里仍记作 `mcp:<client>`
             ctx = RunContext(
-                user=user, conversation_id=conversation_id, db=db, provider=None, channel=staged.get('channel')
+                user=user,
+                conversation_id=conversation_id,
+                db=db,
+                provider=None,
+                channel=staged.get('channel'),
+                pinned=staged.get('pinned') or {},
             )
             call = ToolCallRequest(call_id=token, name=staged['tool'], arguments=staged['arguments'])
             outcome = await tool_dispatcher.dispatch(call, ctx, pre_approved=True)

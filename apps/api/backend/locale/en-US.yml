@@ -522,6 +522,7 @@ workflow:
     not_for_initiator: Pre-review results are only shown to approvers
     retry_not_allowed: Only a failed or timed-out pre-review can be retried
     model_timeout: The model took too long to answer, so this pre-review was discarded
+    attachment_timeout: Reading the attachments took too long, so this pre-review was discarded
 storage:
   builtin_name: Local storage (built-in)
   probe_ok: 'Connection OK: write, read back and delete all succeeded'

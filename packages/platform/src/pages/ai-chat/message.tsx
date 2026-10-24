@@ -24,8 +24,12 @@ export type Bubble = {
    * 写操作的确认卡片。`outcome`：点了确认之后的结果 —— 🔴 不记的话卡片原样留着、按钮又能点了，
    * 再点一次只会拿到「已过期」（令牌是一次性的），看起来像「刚才没执行」
    */
-  confirm?: { token: string; name: string; preview: string; outcome?: 'done' | 'failed' }
+  confirm?: { token: string; name: string; preview: string; outcome?: ConfirmOutcome }
 }
+
+/** `expired`：令牌用过了或过期了 —— 可能是别处已经执行过，所以不说「没执行」 */
+export type ConfirmOutcome = 'done' | 'failed' | 'expired'
+
 
 /**
  * 执行轨迹 —— 这一页的**签名元素**。
@@ -151,6 +155,10 @@ export function MessageBubble({
                 ) : bubble.confirm.outcome === 'failed' ? (
                   <p className="text-sm text-destructive" data-testid="ai-confirm-failed">
                     {t('没执行成功，原因见上面的回复')}
+                  </p>
+                ) : bubble.confirm.outcome === 'expired' ? (
+                  <p className="text-sm text-muted-foreground" data-testid="ai-confirm-expired">
+                    {t('这个确认已经用过或过期了，结果以单据 / 页面上的为准')}
                   </p>
                 ) : (
                   <Button

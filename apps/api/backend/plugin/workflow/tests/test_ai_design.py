@@ -98,11 +98,14 @@ class _Model:
         self.replies = replies
         self.delay = delay
         self.seen: list[list[dict[str, str]]] = []
+        self.db: Any = None
 
     async def stream_chat(
         self, messages: list[dict[str, str]], temperature: float = 0, response_format: dict | None = None
     ) -> Any:
         assert response_format == {'type': 'json_object'}, '要开 JSON 模式（见 `complete()`）'
+        # 🔴 等模型时不许占着连接（见 `ai_assist.release`）：会话里还开着事务 = 这几十秒一直占着池子里的一个连接
+        assert self.db is None or not self.db.in_transaction(), '等模型时会话里还开着事务'
         self.seen.append([dict(m) for m in messages])
         if self.delay:
             await asyncio.sleep(self.delay)
@@ -115,7 +118,8 @@ def model(monkeypatch: pytest.MonkeyPatch) -> Any:
     def install(*replies: Any, delay: float = 0) -> _Model:
         fake = _Model([r if isinstance(r, str) else json.dumps(r, ensure_ascii=False) for r in replies], delay)
 
-        async def build(_db: Any) -> _Model:  # ruff: ignore[unused-async] —— 顶掉的原函数是 async
+        async def build(db: Any) -> _Model:  # ruff: ignore[unused-async] —— 顶掉的原函数是 async
+            fake.db = db
             return fake
 
         monkeypatch.setattr(ai_design_service, 'build_client', build)

@@ -13,6 +13,7 @@
 """
 
 import asyncio
+import json
 import uuid
 
 from types import SimpleNamespace
@@ -23,6 +24,7 @@ import pytest
 from sqlalchemy import text
 from starlette.testclient import TestClient
 
+from backend.core.conf import settings
 from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
 from backend.database.redis import RedisCli
 from backend.plugin.ai.core import dispatcher as dispatcher_module
@@ -338,6 +340,25 @@ def test_punctuation_and_negated_fragments_are_not_the_users_words(
     assert rephrased.kind == 'failed', '「同意，没问题」也不是原话（两句拼的）'
 
 
+@pytest.mark.parametrize(
+    ('said', 'counts'),
+    [
+        ('这张我不太同意', False),
+        ('我不能同意', False),
+        ('不是很同意', False),
+        ('先别急，同意', True),
+        ('同意', True),
+    ],
+    ids=['不太', '不能', '不是很', '隔着标点', '原话'],
+)
+def test_a_negation_a_word_or_two_away_still_negates(*, said: str, counts: bool) -> None:
+    """🔴 原来只看紧挨着的前一个字：「我不太同意」「我不能同意」里的「同意」都当成了用户原话 ——
+    它会以审批人本人的名义写进审批记录。否定隔着一两个字照样算；隔着标点不算（那是另一句）"""
+    from backend.plugin.workflow.ai_tools import _quoted, _squash
+
+    assert _quoted('同意', _squash(said)) is counts
+
+
 def test_todo_search_takes_several_words(
     client: TestClient, token_headers: dict[str, str], login: Any, uid: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -356,3 +377,113 @@ def test_todo_search_takes_several_words(
     )
     assert pk in several.payload, several.payload
     assert '"total": 0' in none.payload and '不带 keyword' in none.payload, none.payload
+
+
+def _set_plugin_enable(value: str | None) -> str | None:
+    """改 Redis 里审批插件的启用状态（`None` = 原样写回前一个值），返回改之前的原值"""
+    name = f'{settings.PLUGIN_REDIS_PREFIX}:workflow'
+
+    async def go() -> str | None:
+        redis = RedisCli()
+        try:
+            before = await redis.get(name)
+            if value is not None:
+                info = json.loads(before) if before else {'plugin': {}}
+                info['plugin']['enable'] = value
+                await redis.set(name, json.dumps(info, ensure_ascii=False))
+            return before
+        finally:
+            await redis.aclose()
+
+    return asyncio.run(go())
+
+
+def test_a_disabled_plugin_takes_its_tools_with_it(
+    client: TestClient, token_headers: dict[str, str], login: Any, uid: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 停用审批插件只拦得住插件自己的路由；工具是 AI 插件直接调的 —— 原来停用之后，对话里照样能同意 / 驳回 / 转交。
+    确认令牌也可能是停用之前发的，所以执行那一刻要再查一次"""
+    _setup(client, token_headers, uid, 'PYTEST_AIWF_OFF')
+    pk = _start(client, login, 'PYTEST_AIWF_OFF')
+    zhaolei = _person(uid('zhaolei'), '赵磊')
+    assert 'wf_approve' in {s.name for s in tool_dispatcher.visible_tools(zhaolei)}, '启用时要看得到（先断言「有」）'
+
+    original = _set_plugin_enable('0')
+    try:
+        off = asyncio.run(_off_plugins(monkeypatch))
+        assert 'workflow' in off
+        assert not {s.name for s in tool_dispatcher.visible_tools(zhaolei, off)} & {'wf_todo_list', 'wf_approve'}
+        (done,), _ = _run(
+            monkeypatch, zhaolei, [('wf_approve', {'instance_id': pk, 'opinion': '同意'}, True)], said=['同意']
+        )
+        assert done.kind == 'denied', done
+    finally:
+        _restore_plugin(original)
+    assert _detail(client, token_headers, pk)['instance']['status'] == 'running', '停用期间不该被同意'
+
+
+async def _off_plugins(monkeypatch: pytest.MonkeyPatch) -> frozenset[str]:
+    redis = RedisCli()
+    monkeypatch.setattr(dispatcher_module, 'redis_client', redis)
+    try:
+        return await tool_dispatcher.off_plugins()
+    finally:
+        await redis.aclose()
+
+
+def _restore_plugin(original: str | None) -> None:
+    async def go() -> None:
+        redis = RedisCli()
+        try:
+            name = f'{settings.PLUGIN_REDIS_PREFIX}:workflow'
+            await (redis.set(name, original) if original is not None else redis.delete(name))
+        finally:
+            await redis.aclose()
+
+    asyncio.run(go())
+
+
+def test_transfer_goes_to_the_person_on_the_card(
+    client: TestClient, token_headers: dict[str, str], login: Any, uid: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 卡片上写「转交给 王芳（wangfang）」，令牌里只存了模型给的名字「王芳」。原来点确认时再按名字找一遍：
+    这几分钟里多了一个同名的「王芳」，确认就报「对应多个人」（改了名 / 停了号时还可能转给别人）。
+    现在预演把解析出来的人钉进令牌，确认走真实的确认接口（`chat_service.confirm_tool`）"""
+    model = _model(_approval('n1', {'kind': 'user', 'user_ids': [uid('admin')]}))
+    _publish(client, token_headers, 'PYTEST_AIWF_PIN', FORM, model)
+    pk = _start(client, login, 'PYTEST_AIWF_PIN')
+    admin = SimpleNamespace(
+        id=int(uid('admin')), nickname='admin', dept_id=None, is_superuser=True, is_staff=True, roles=[]
+    )
+    (staged,), _ = _run(monkeypatch, admin, [('wf_transfer', {'instance_id': pk, 'to_user': '王芳'}, False)])
+    assert staged.kind == 'confirm_required' and '王芳（wangfang）' in staged.preview, staged
+
+    roles = client.get('/sys/roles/all', headers=token_headers).json()['data']
+    dept_id = client.get('/sys/depts', headers=token_headers).json()['data'][0]['id']
+    body = {
+        'username': 'pytest_wf_pin_dup',
+        'password': 'Tmp@123456',
+        'nickname': '王芳',
+        'dept_id': dept_id,
+        'roles': [roles[0]['id']],
+    }
+    res = client.post('/sys/users', headers=token_headers, json=body)
+    assert res.json()['code'] == 200, res.text
+    dup = int(res.json()['data']['id'])
+    try:
+        stream = client.post('/ai/chat/tools/confirm', headers=token_headers, json={'token': staged.confirm_token})
+        assert '"ok":true' in stream.text, stream.text
+    finally:
+
+        async def purge() -> None:
+            engine = create_database_async_engine(get_database_url(unittest=True))
+            try:
+                async with create_database_async_session(engine).begin() as s:
+                    await s.execute(text('DELETE FROM sys_user_role WHERE user_id = :pk'), {'pk': dup})
+                    await s.execute(text('DELETE FROM sys_user WHERE id = :pk'), {'pk': dup})
+            finally:
+                await engine.dispose()
+
+        asyncio.run(purge())
+    (hers,), _ = _run(monkeypatch, _person(uid('wangfang'), '王芳'), [('wf_todo_list', {}, False)])
+    assert pk in hers.payload, '转给的应该是卡片上那个王芳'

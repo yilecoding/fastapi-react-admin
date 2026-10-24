@@ -418,3 +418,26 @@ SQLAlchemy 把整个事务标成待回滚，这一轮对话里后面每个工具
   `'x'` 会在工具自己的格式检查里被拦下，等于什么都没测到
 - `OpenAICompatClient.stream_chat(response_format=...)`：要结构化输出的调用方（审批设计器生成）开 JSON 模式。内网网关上 Qwen3-VL / DeepSeek-V3.2 都认
   `{'type': 'json_object'}`（2026-10-24 实测）。⚠️ 不认这个字段的网关会怎样**没测过**（报错还是忽略都有可能），接新网关时先跑一遍真模型测试
+
+## 🔴 插件停用，它带来的工具要一起消失（`ToolSpec.plugin` · `off_plugins`）
+
+停用插件只拦得住插件自己的路由（`PluginStatusChecker`）。别的插件的 `ai_tools.py` 是 AI 插件直接调的 ——
+停用审批插件之后，对话里照样能同意 / 驳回 / 转交（代码审查翻出来的）。
+
+- registry 按模块路径填 `ToolSpec.plugin`（`backend.plugin.workflow.ai_tools` → `workflow`；AI 插件自己的工具是 `None`，
+  它停用时对话入口本身就被拦了）
+- 清单：`visible_tools(user, off_plugins)`，三个列清单的入口（对话 / 工具清单接口 / MCP）先 `await off_plugins()` 再传进去
+- 🔴 **执行时只查这个工具所属的那一个插件**，在 `dispatch()` 里现查 —— 清单是上一轮给的，确认令牌也可能是停用之前发的
+- ⚠️ 只查一个而不是全查，是因为 dispatch 每次都要过这里：全查的话**每一次**工具调用（包括 AI 插件自己的只读工具）都要打 Redis，
+  而单测里用 `asyncio.run` 调 dispatch 的那批没顶掉 Redis 客户端，会撞「attached to a different loop」。
+  调 dispatch 跑别的插件工具的测试，要像 `test_ai_read_tools.py` 那样把 `dispatcher_module.redis_client` 换成新建的
+- ⚠️ MCP 网关有没有跟着 AI 插件的启用状态走，**没查过**
+
+**实测证据**：`test_ai_workflow_tools.py::test_a_disabled_plugin_takes_its_tools_with_it`（在 Redis 里把审批插件改成停用）。
+变异：执行时不查 → 单子被同意了（`'ok' == 'denied'` 红）；清单不滤 → `wf_approve` 还在清单里，红。
+
+## 预演钉住的东西跟着令牌走（`RunContext.pinned`）
+
+确认卡片上写的是预演那一刻解析出来的结果，令牌里存的却只是模型给的参数。执行时再解析一遍，令牌有效的这几分钟里数据变了，
+执行的就不是人确认的那件事。预演把解析结果放进 `ctx.pinned`，`_stage_confirm` 存进令牌，`chat_service.confirm_tool` 原样带回。
+目前只有 `wf_transfer` 用（钉住被转交人的 ID）。⚠️ 只能放 JSON 能存的值。

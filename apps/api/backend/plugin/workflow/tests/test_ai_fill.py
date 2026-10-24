@@ -70,11 +70,14 @@ class _Model:
         self.reply = reply if isinstance(reply, str) else json.dumps(reply, ensure_ascii=False)
         self.fail = fail
         self.seen: list[list[dict[str, Any]]] = []
+        self.db: Any = None
 
     async def stream_chat(
         self, messages: list[dict[str, Any]], temperature: float = 0, response_format: dict | None = None
     ) -> Any:
         assert response_format == {'type': 'json_object'}
+        # 🔴 等模型时不许占着连接（见 `ai_assist.release`）：会话里还开着事务 = 这几十秒一直占着池子里的一个连接
+        assert self.db is None or not self.db.in_transaction(), '等模型时会话里还开着事务'
         self.seen.append(messages)
         if self.fail:
             raise self.fail
@@ -86,7 +89,8 @@ def model(monkeypatch: pytest.MonkeyPatch) -> Any:
     def install(reply: Any = None, fail: Exception | None = None) -> _Model:
         fake = _Model(reply if reply is not None else {'values': {}}, fail)
 
-        async def build(_db: Any) -> _Model:  # ruff: ignore[unused-async] —— 顶掉的原函数是 async
+        async def build(db: Any) -> _Model:  # ruff: ignore[unused-async] —— 顶掉的原函数是 async
+            fake.db = db
             return fake
 
         monkeypatch.setattr(ai_fill_service, 'build_client', build)
@@ -267,3 +271,27 @@ def test_files_are_parsed_off_the_event_loop(
     model()
     ok(_fill(client, login('sunqiang'), flow, file=('发票.pdf', b'%PDF-1.4', 'application/pdf')))
     assert seen == [False], '要在线程里解析（不能在事件循环上）'
+
+
+def test_ai_fill_is_rate_limited_per_person(
+    client: TestClient, login: Any, flow: str, model: Any, rate_limiter: None
+) -> None:
+    """🔴 每次都是一次计费的模型请求：原来登录了就能无限循环地调。现在按人每分钟 10 次（设计器生成共用这份额度）"""
+    from backend.core.conf import settings
+    from backend.database.redis import RedisCli
+
+    async def clear() -> None:
+        redis = RedisCli()
+        try:
+            async for k in redis.scan_iter(f'{settings.REQUEST_LIMITER_REDIS_PREFIX}*'):
+                await redis.delete(k)
+        finally:
+            await redis.aclose()
+
+    asyncio.run(clear())  # 上一次运行留下的额度
+    model({'values': {'f_reason': '见客户'}})
+    headers = login('sunqiang')
+    codes = [_fill(client, headers, flow, words='见客户').status_code for _ in range(11)]
+    assert codes[:10] == [200] * 10, codes
+    assert codes[10] == 429, codes
+    asyncio.run(clear())

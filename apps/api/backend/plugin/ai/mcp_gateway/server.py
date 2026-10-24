@@ -51,16 +51,17 @@ def _principal(ctx: Any) -> McpPrincipal:
     return principal
 
 
-def _visible(principal: McpPrincipal) -> list[Any]:
+async def _visible(principal: McpPrincipal) -> list[Any]:
     """调用者能看到的、这个入口开放的、这份凭据允许的 —— 三者取交集，只会越来越少"""
+    off = await tool_dispatcher.off_plugins()
     return [
         schema
-        for schema in tool_dispatcher.visible_schemas(principal.user)
+        for schema in tool_dispatcher.visible_schemas(principal.user, off)
         if (not schema.mutating or principal.client.allow_write) and principal.client.allows_tool(schema.name)
     ]
 
 
-async def _list_tools(ctx: Any, _params: Any) -> types.ListToolsResult:  # ruff: ignore[unused-async]  SDK 要 async
+async def _list_tools(ctx: Any, _params: Any) -> types.ListToolsResult:
     return types.ListToolsResult(
         tools=[
             types.Tool(
@@ -69,7 +70,7 @@ async def _list_tools(ctx: Any, _params: Any) -> types.ListToolsResult:  # ruff:
                 input_schema=schema.parameters,
                 annotations=types.ToolAnnotations(read_only_hint=not schema.mutating),
             )
-            for schema in _visible(_principal(ctx))
+            for schema in await _visible(_principal(ctx))
         ]
     )
 

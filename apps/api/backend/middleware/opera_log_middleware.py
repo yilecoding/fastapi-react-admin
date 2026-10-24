@@ -67,6 +67,11 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
                 response_headers = self.collect_headers(response.headers)
                 response, response_body = await self.capture_response_body(response)
         except ClientDisconnect:
+            # 🔴 `return` 在 try 里，下面的 finally 照样跑：不在这里改掉，它按默认值记一条 200 / Success 的操作日志 ——
+            # 一个根本没执行的请求在审计里成了「成功」
+            code = 499
+            should_log_opera = False
+            elapsed = round((time.perf_counter() - ctx.perf_time) * 1000, 3)
             return self.client_gone(method, path)
         except Exception as e:
             elapsed = round((time.perf_counter() - ctx.perf_time) * 1000, 3)

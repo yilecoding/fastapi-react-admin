@@ -176,6 +176,11 @@ def _text_cell(value: Any) -> str:
         return ''
 
 
+#: `xlsx_text` 最多扫这么多行（**空行也算**，所有表合计）、每行最多读这么多列。见那里的 🔴
+_TEXT_MAX_ROWS = 5000
+_TEXT_MAX_COLS = 100
+
+
 def xlsx_text(raw: bytes, *, max_chars: int) -> tuple[str, bool]:
     """把一份 xlsx 读成给人（模型）看的纯文本：每张表一段，一行一行、格之间 Tab。返回（文本, 是否截断）
 
@@ -185,28 +190,37 @@ def xlsx_text(raw: bytes, *, max_chars: int) -> tuple[str, bool]:
     - 读不懂的值**不报错**，原样跳过：读给模型看的东西少一格不致命，整份报错反而什么都给不了
 
     解压炸弹的检查照旧（`_verify_archive`），超限抛 `errors.RequestError`
+
+    🔴 **按字数截断拦不住空行**：read-only 模式按文件声明的范围把空行、空格补齐，空行不加字数。实测一份 5 KB 的文件只在
+    A1 和 XFD1048576 各写一格，要遍历约 100 万行 × 16384 格，两分钟没读完 —— 任何能上传附件的人都能卡住一个线程。
+    所以行数（空行也算）和列数各自封顶，超了算截断
     """
     _verify_archive(raw)
     wb = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
     parts: list[str] = []
     size = 0
+    scanned = 0
+    cut = False
     try:
         for ws in wb.worksheets:
             lines = [f'# {ws.title}']
-            for row in ws.iter_rows(values_only=True):
+            cut = cut or (ws.max_column or 0) > _TEXT_MAX_COLS
+            for row in ws.iter_rows(values_only=True, max_col=_TEXT_MAX_COLS):
+                scanned += 1
                 line = '\t'.join(_text_cell(value) for value in row).rstrip('\t')
                 if line:
                     lines.append(line)
                     size += len(line) + 1
-                if size > max_chars:
+                if size > max_chars or scanned >= _TEXT_MAX_ROWS:
                     break
             parts.append('\n'.join(lines))
-            if size > max_chars:
+            if size > max_chars or scanned >= _TEXT_MAX_ROWS:
+                cut = True
                 break
     finally:
         wb.close()
     text = '\n\n'.join(parts)
-    return text[:max_chars], len(text) > max_chars or size > max_chars
+    return text[:max_chars], cut or len(text) > max_chars
 
 
 def parse_table(

@@ -56,7 +56,24 @@ test("确认成功：卡片换成「已执行」，按钮没了", async ({ page 
   await expect(page.getByTestId("ai-confirm")).toHaveCount(0)
 })
 
-test("确认失败（令牌过期）：卡片说没执行成功，不再给一个点了也没用的按钮", async ({ page }) => {
+test("执行失败：卡片说没执行成功，不再给一个点了也没用的按钮", async ({ page }) => {
+  await page.route("**/api/v1/ai/chat/tools/confirm", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: sse([
+        { type: "tool_result", call_id: "c2", name: "wf_approve", ok: false, summary: "wf_approve 执行失败", perm: null, duration_ms: 30 },
+        { type: "done" },
+      ]),
+    })
+  )
+  await propose(page)
+  await page.getByTestId("ai-confirm").click()
+  await expect(page.getByTestId("ai-confirm-failed")).toBeVisible()
+  await expect(page.getByTestId("ai-confirm")).toHaveCount(0)
+})
+
+test("令牌用过了 / 过期了：不说「没执行」（可能别处已经执行过），按钮也没了", async ({ page }) => {
   await page.route("**/api/v1/ai/chat/tools/confirm", (route) =>
     route.fulfill({
       status: 200,
@@ -66,7 +83,43 @@ test("确认失败（令牌过期）：卡片说没执行成功，不再给一�
   )
   await propose(page)
   await page.getByTestId("ai-confirm").click()
-  await expect(page.getByTestId("ai-confirm-failed")).toBeVisible()
+  await expect(page.getByTestId("ai-confirm-expired")).toBeVisible()
   await expect(page.getByText("这个确认已经过期或处理过了")).toBeVisible()
   await expect(page.getByTestId("ai-confirm")).toHaveCount(0)
+})
+
+/**
+ * 🔴 请求没送到：令牌还没动过。原来一律记成「没执行成功」、按钮没了 —— 只能让 AI 重新发起一次。
+ * 现在按钮留着、说一句为什么，再点一次就能成（第一次断网、第二次 502、第三次成功）
+ */
+test("没送到（断网 / 网关 502）：按钮留着，再点一次就能执行", async ({ page }) => {
+  let calls = 0
+  await page.route("**/api/v1/ai/chat/tools/confirm", (route) => {
+    calls += 1
+    if (calls === 1) return route.abort("internetdisconnected")
+    if (calls === 2) return route.fulfill({ status: 502, body: "Bad Gateway" })
+    return route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: sse([
+        { type: "tool_result", call_id: "c2", name: "wf_approve", ok: true, summary: "已同意", perm: null, duration_ms: 30 },
+        { type: "done" },
+      ]),
+    })
+  })
+  await propose(page)
+  const confirm = page.getByTestId("ai-confirm")
+
+  await confirm.click()
+  await expect(page.getByText("连接断了，可以再点一次确认")).toBeVisible()
+  await expect(confirm).toBeEnabled()
+  await expect(page.getByTestId("ai-confirm-failed")).toHaveCount(0)
+
+  await confirm.click()
+  await expect(page.getByText("请求失败（HTTP 502）")).toBeVisible()
+  await expect(confirm).toBeEnabled()
+
+  await confirm.click()
+  await expect(page.getByTestId("ai-confirm-done")).toBeVisible()
+  expect(calls).toBe(3)
 })

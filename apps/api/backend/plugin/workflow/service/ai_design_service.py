@@ -36,7 +36,7 @@ from backend.common.i18n import t
 from backend.common.log import log
 from backend.plugin.workflow.engine.flow import index_nodes, validate_publish
 from backend.plugin.workflow.engine.schema import FlowModel, FormSchema
-from backend.plugin.workflow.service.ai_assist import build_client, complete, record
+from backend.plugin.workflow.service.ai_assist import build_client, complete, record, release
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -252,6 +252,7 @@ async def generate(db: AsyncSession, *, definition_id: int, prompt: str, user_id
     roles = await _roles(db)
     allowed = {r['id'] for r in roles}
     client = await build_client(db)
+    await release(db)
     model_name = getattr(client, 'model', None)
     messages = [
         {'role': 'system', 'content': SYSTEM_PROMPT},

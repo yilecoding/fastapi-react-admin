@@ -1,4 +1,4 @@
-"""AI 辅助（#111 第 1、3 条：设计器生成 · 发起时填单）共用的三件事：取客户端、调一次模型、记一行调用。
+"""AI 辅助（#111 第 1、3 条：设计器生成 · 发起时填单）共用的几件事：取客户端、等模型前还连接、调一次模型、记一行调用。
 
 和预审（`ai_review_service`）分开：预审在 Celery 里跑、失败原因要存语言包 key 留到读的时候翻；
 这两个是同步接口，失败当场翻成当前请求的语言抛给前端。
@@ -27,6 +27,17 @@ async def build_client(db: AsyncSession) -> Any:
     if provider is None:
         raise errors.RequestError(msg=t('error.workflow.ai_no_provider'))
     return ai_provider_service.build_client(provider)
+
+
+async def release(db: AsyncSession) -> None:
+    """等模型之前把连接还回池。
+
+    🔴 「接口用 `CurrentSession`、不开着事务等模型」只做了一半：前面读角色 / 供应商 / 流程定义时会话已经 autobegin 了，
+    不收掉的话这个事务（和它占着的连接）一直开到模型回来 —— 设计器两轮最多 180 秒、填单 90 秒。池子一共 30 个连接，
+    十几个人同时点「AI 生成」，别的接口就开始等连接超时。读到的东西都已经在局部变量里了，回滚不丢任何东西
+    """
+    if db.in_transaction():
+        await db.rollback()
 
 
 async def complete(client: Any, messages: list[dict[str, Any]]) -> tuple[str, dict[str, int] | None]:
