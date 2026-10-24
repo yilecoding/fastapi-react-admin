@@ -5,11 +5,12 @@
 | 冷却 | `fba:sms:cooldown:<template>:<phone>` | 模板声明的 `cooldown_seconds`，`SET NX EX` |
 | 号码日上限 | `fba:sms:daily:<template>:<phone>:<yyyymmdd>` | 模板声明的 `daily_max_per_phone` |
 | 全站熔断 | `fba:sms:global:<yyyymmddhh>` | `SMS_GLOBAL_HOURLY_MAX`（0 = 不限） |
-| 配置日上限 | `fba:sms:config:<id>:<yyyymmdd>` | 配置的 `daily_max`（0 = 不限，但照样计数给「今日已发」用） |
+| 配置日上限 | `fba:sms:config:<id>:<yyyymmdd>` | 配置的 `daily_max`（0 = 不限，照样计数）；`UNSENT_KINDS` 退还 |
 
 🔴 **三项检查和占位在同一段 Lua 里完成，发送之前占位。** 「先查再发再写」是读写分离的，并发能同时穿过
-（AI 确认令牌那条：修复前 5 个并发确认执行了 5 次）。日上限和全站计数**不退还**（发送失败也算一次）；
-冷却位只在「确定没发出去」时释放（`UNSENT_KINDS`），`rate_limited` / `unknown` 保留。
+（AI 确认令牌那条：修复前 5 个并发确认执行了 5 次）。号码日上限和全站计数**不退还**（发送失败也算一次）；
+冷却位和配置日计数只在「确定没发出去」时退还（`UNSENT_KINDS`），`rate_limited` / `unknown` 保留。
+退还要对着**占位时的那个键**（`reserve_config` 返回它）：跨过零点再按「今天」算键，退的就是第二天别人那一条。
 
 日期按 `DATETIME_TIMEZONE` 算（`timezone.now()`），不按 UTC —— 「自然日」是用户所在时区的那一天。
 """
@@ -143,22 +144,26 @@ class SmsGuard:
             await redis_client.eval(_RELEASE, 1, cooldown_key(template.code, phone), token)
 
     @staticmethod
-    async def reserve_config(config_id: int, daily_max: int) -> bool:
-        """给这条配置今天的计数 +1；到了 `daily_max` 就退回并返回 False（调用方换下一个候选）"""
-        return bool(
-            await redis_client.eval(
-                _RESERVE_CONFIG, 1, config_daily_key(config_id), str(max(daily_max, 0)), str(_DAILY_TTL)
-            )
-        )
+    async def reserve_config(config_id: int, daily_max: int) -> str | None:
+        """给这条配置今天的计数 +1，返回占到的键（交给 `release_config`）
+
+        到了 `daily_max` 就退回并返回 None（调用方换下一个候选）。
+        """
+        key = config_daily_key(config_id)
+        ok = await redis_client.eval(_RESERVE_CONFIG, 1, key, str(max(daily_max, 0)), str(_DAILY_TTL))
+        return key if ok else None
 
     @staticmethod
-    async def release_config(config_id: int) -> None:
+    async def release_config(slot: str) -> None:
         """确定没发出去（`UNSENT_KINDS`）：把 `reserve_config` 占的那一个名额还回去
 
         和冷却位同一条判据：配置错 / 参数错 / 号码错 / 鉴权错 / 没连上，厂商一条都没收到，
         不该算进「今日已发」，也不该消耗这条配置的 `daily_max`。「结果未知」（读超时）不退，可能已经发出去了。
+
+        `slot` 是 `reserve_config` 返回的键，**不在这里重算**：23:59:59 占的位、00:00:00 判定没发出去，
+        按「今天」重算就退到了第二天的键上 —— 把别人那条成功的减掉，自己那天还多留一个幻影计数。
         """
-        await redis_client.eval(_RELEASE_CONFIG, 1, config_daily_key(config_id))
+        await redis_client.eval(_RELEASE_CONFIG, 1, slot)
 
     @staticmethod
     async def today_sent(config_ids: list[int]) -> dict[int, int]:

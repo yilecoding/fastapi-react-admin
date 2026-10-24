@@ -27,6 +27,9 @@ import {
   type TemplatePreset,
 } from './api'
 
+/** 发送那一刻的请求：手机号 · 厂商模板 ID · 厂商变量名（按位置的厂商没有变量名，按值的个数留空串） */
+type SentSnapshot = { phone: string; template_id: string; variables: string[] }
+
 /**
  * 发测试短信：选配置 + 号码 + 厂商模板 ID + 厂商侧参数，绕过业务模板，**真发一条**。
  *
@@ -66,7 +69,8 @@ export function SmsTestDialog({
   const [templateId, setTemplateId] = React.useState('')
   // 按变量名的厂商：[变量名, 值]；按位置的厂商：只用值那一列
   const [params, setParams] = React.useState<[string, string][]>([['code', '123456']])
-  const [result, setResult] = React.useState<SendResult | null>(null)
+  // 结果和**发送时的请求快照**绑在一起：发完之后人还能改表单里的字段，采用按钮和日志链接要用测过的那份，不是当前输入
+  const [result, setResult] = React.useState<{ res: SendResult; sent: SentSnapshot } | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const ordered = provider?.template_mapping === 'ordered'
 
@@ -91,8 +95,13 @@ export function SmsTestDialog({
       template_id: templateId.trim(),
       params: ordered ? params.map(([, v]) => v) : Object.fromEntries(params.filter(([k]) => k.trim()).map(([k, v]) => [k.trim(), v])),
     }
+    const sent: SentSnapshot = {
+      phone: body.phone,
+      template_id: body.template_id,
+      variables: ordered ? params.map(() => '') : params.map(([k]) => k.trim()).filter(Boolean),
+    }
     try {
-      setResult(await test.mutateAsync({ id: config.id, body }))
+      setResult({ res: await test.mutateAsync({ id: config.id, body }), sent })
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t('发送失败，请稍后重试'))
     }
@@ -100,16 +109,21 @@ export function SmsTestDialog({
 
   const phoneOk = /^1[3-9]\d{9}$/.test(phone.trim())
 
-  // 受理成功才给「采用」：挑一个这条配置还没配的业务模板，优先参数名正好盖住刚才填的变量名的那个
+  // 受理成功才给「采用」，而且只在能**确定**对应哪个业务模板时给：
+  // - 按变量名的厂商：参数名正好盖住测过的变量名的那个还没配的模板（对不上就不推 —— 推了映射是空的，保存会 400）
+  // - 按位置的厂商：没有变量名可对，只有「还没配的业务模板只剩一个」时才推
   const adoptable = React.useMemo(() => {
-    if (!config || result?.status !== 'accepted') return null
-    const variables = ordered ? params.map(() => '') : params.map(([k]) => k.trim()).filter(Boolean)
+    if (!config || result?.res.status !== 'accepted') return null
+    const { variables, template_id } = result.sent
     const unconfigured = templates.filter((tpl) => !(tpl.code in config.templates))
-    const covering = ordered ? null : unconfigured.find((tpl) => variables.every((v) => tpl.params.includes(v)))
-    const target = covering ?? unconfigured[0]
+    const target = ordered
+      ? unconfigured.length === 1
+        ? unconfigured[0]
+        : undefined
+      : unconfigured.find((tpl) => variables.length > 0 && variables.every((v) => tpl.params.includes(v)))
     if (!target) return null
-    return { template: target, preset: { code: target.code, template_id: templateId.trim(), variables } satisfies TemplatePreset }
-  }, [config, result, ordered, params, templates, templateId])
+    return { template: target, preset: { code: target.code, template_id, variables } satisfies TemplatePreset }
+  }, [config, result, ordered, templates])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -183,8 +197,8 @@ export function SmsTestDialog({
           ) : null}
           {result ? (
             <ResultBlock
-              result={result}
-              phone={phone.trim()}
+              result={result.res}
+              phone={result.sent.phone}
               onNavigate={onLeave}
               adopt={
                 adoptable
