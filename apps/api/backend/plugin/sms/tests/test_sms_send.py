@@ -25,8 +25,9 @@ from backend.plugin.sms.model import SmsLog
 from backend.plugin.sms.sdk.base import SmsErrorKind, SmsMessage, SmsProvider, SmsResult, TemplateMapping
 from backend.plugin.sms.sdk.console import ConsoleConfig
 from backend.plugin.sms.sdk.registry import register_provider, unregister_provider
+from backend.plugin.sms.service.guard import cooldown_key, sms_guard
 from backend.plugin.sms.service.sms_service import sms_service
-from backend.plugin.sms.templates import register_sms_template
+from backend.plugin.sms.templates import get_sms_template, register_sms_template
 from backend.plugin.sms.tests.conftest import PHONE_A, PHONE_B, PHONE_C, run_sync
 
 if TYPE_CHECKING:
@@ -235,6 +236,49 @@ class TestGuard:
         blocked = [o for o in outcomes if isinstance(o, SmsSendError) and o.kind == 'rate_limited']
         assert len(ok) == 1 and len(blocked) == 4, outcomes
         assert len(run_sync(_rows(PHONE_A))) == 1
+
+    def test_release_only_deletes_own_cooldown_slot(self, client: TestClient) -> None:
+        """🔴 慢请求（连接超时最长 60 秒 = 冷却时长）判定「没连上」时自己占的位早已过期、别人已重新占上：
+        它的释放不能把别人的冷却位删掉，否则第三条短信就穿过去了"""
+        tpl = get_sms_template('captcha')
+        assert tpl is not None and tpl.cooldown_seconds > 0
+
+        async def _run() -> tuple[str | None, str | None]:
+            assert await sms_guard.acquire(tpl, PHONE_C, 'old-token') == 'ok'
+            # 模拟旧位过期、新请求重新占上
+            await redis_client.delete(cooldown_key('captcha', PHONE_C))
+            assert await sms_guard.acquire(tpl, PHONE_C, 'new-token') == 'ok'
+            await sms_guard.release_cooldown(tpl, PHONE_C, 'old-token')
+            kept = await redis_client.get(cooldown_key('captcha', PHONE_C))
+            await sms_guard.release_cooldown(tpl, PHONE_C, 'new-token')
+            gone = await redis_client.get(cooldown_key('captcha', PHONE_C))
+            return kept, gone
+
+        kept, gone = client.portal.call(_run)
+        assert kept == 'new-token', '旧令牌的释放删掉了新请求的冷却位'
+        assert gone is None, '持有正确令牌的释放要真删'
+
+
+class TestRegistryOutsideWeb:
+    def test_send_registers_builtin_templates_without_router_import(
+        self, client: TestClient, make_config: Callable[..., dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """🔴 Celery worker 不 import 任何路由：注册表只在 `api/router.py` 装的话，定时任务里 `send()` 报
+        「模板未注册」"""
+        from backend.plugin.sms import extensions, templates
+        from backend.plugin.sms.sdk import registry
+
+        make_config('wk', is_default=True)
+        monkeypatch.setattr(extensions, '_loaded', False)
+        saved_templates, saved_providers = dict(templates._TEMPLATES), dict(registry._PROVIDERS)
+        templates._TEMPLATES.clear()
+        registry._PROVIDERS.clear()
+        try:
+            result = _send(client, phone=PHONE_A, template='captcha', params={'code': '1', 'minutes': '5'})
+            assert result.status == 'accepted'
+        finally:
+            templates._TEMPLATES.update(saved_templates)
+            registry._PROVIDERS.update(saved_providers)
 
 
 class TestChooseConfig:

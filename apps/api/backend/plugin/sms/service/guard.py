@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 _DAILY_TTL = 2 * 24 * 3600
 _HOURLY_TTL = 2 * 3600
 
-#: KEYS: 冷却 · 号码日计数 · 全站小时计数；ARGV: 冷却秒数 · 号码日上限 · 全站小时上限 · 日 TTL · 小时 TTL
+#: KEYS: 冷却 · 号码日计数 · 全站小时计数；ARGV: 冷却秒数 · 号码日上限 · 全站小时上限 · 日 TTL · 小时 TTL · 本次的令牌
 _ACQUIRE = """
 local cooldown, daily_max, global_max = tonumber(ARGV[1]), tonumber(ARGV[2]), tonumber(ARGV[3])
 if cooldown > 0 and redis.call('EXISTS', KEYS[1]) == 1 then
@@ -43,7 +43,7 @@ if global_max > 0 and tonumber(redis.call('GET', KEYS[3]) or '0') >= global_max 
   return 'circuit'
 end
 if cooldown > 0 then
-  redis.call('SET', KEYS[1], '1', 'EX', cooldown)
+  redis.call('SET', KEYS[1], ARGV[6], 'EX', cooldown)
 end
 if redis.call('INCR', KEYS[2]) == 1 then
   redis.call('EXPIRE', KEYS[2], tonumber(ARGV[4]))
@@ -52,6 +52,14 @@ if redis.call('INCR', KEYS[3]) == 1 then
   redis.call('EXPIRE', KEYS[3], tonumber(ARGV[5]))
 end
 return 'ok'
+"""
+
+#: KEYS: 冷却；ARGV: 令牌。只删自己占的那一位：冷却位过期后被别的请求重新占上时，旧请求的释放不能把新位删掉
+_RELEASE = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
 """
 
 #: KEYS: 配置日计数；ARGV: 日上限（0 = 不限）· 日 TTL。超了就退回去，返回 0
@@ -97,7 +105,8 @@ class SmsGuard:
     """防刷：占位在发送之前，一段 Lua 原子完成"""
 
     @staticmethod
-    async def acquire(template: SmsTemplate, phone: str) -> SmsGuardVerdict:
+    async def acquire(template: SmsTemplate, phone: str, token: str) -> SmsGuardVerdict:
+        """占位。`token` 是本次发送的标识，冷却位里存它，释放时只认它（见 `release_cooldown`）"""
         verdict = await redis_client.eval(
             _ACQUIRE,
             3,
@@ -109,14 +118,20 @@ class SmsGuard:
             str(max(settings.SMS_GLOBAL_HOURLY_MAX, 0)),
             str(_DAILY_TTL),
             str(_HOURLY_TTL),
+            token,
         )
         return SmsGuardVerdict(verdict)
 
     @staticmethod
-    async def release_cooldown(template: SmsTemplate, phone: str) -> None:
-        """确定没发出去：把冷却位还回去，用户马上能再试"""
+    async def release_cooldown(template: SmsTemplate, phone: str, token: str) -> None:
+        """确定没发出去：把冷却位还回去，用户马上能再试
+
+        🔴 不能无条件 `DEL`：连接超时（最长 = 配置的 `timeout`，上限 60 秒）可能和冷却时长一样长，
+        等它判定「没连上」时自己占的位早已过期、另一条请求已经重新占上 —— 裸删等于把别人的冷却位删掉，
+        第三条就能穿过去。只删值等于本次令牌的那一位（compare-and-delete，Lua 原子）。
+        """
         if template.cooldown_seconds > 0:
-            await redis_client.delete(cooldown_key(template.code, phone))
+            await redis_client.eval(_RELEASE, 1, cooldown_key(template.code, phone), token)
 
     @staticmethod
     async def reserve_config(config_id: int, daily_max: int) -> bool:

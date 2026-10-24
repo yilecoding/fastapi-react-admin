@@ -250,6 +250,7 @@ error:
       provider_error: The SMS provider returned an error, please retry later
       rate_limited: SMS sent too frequently, please retry later
       unknown: The SMS result is unknown, please check the SMS logs later
+    template_id_too_long: The provider template ID for business template {template} exceeds {max} characters
     template_mapping_invalid: "Invalid parameter mapping for business template {template}: {detail}"
     template_not_configured: Configuration "{name}" has no mapping for business template {template}
     template_shape: The mapping for business template {template} must provide both template_id (provider template ID) and mapping (parameter mapping)

@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import random
 import re
+import uuid
 
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -28,8 +29,10 @@ from backend.plugin.sms.crud.crud_config import sms_config_dao
 from backend.plugin.sms.crud.crud_log import sms_log_dao
 from backend.plugin.sms.enums import CIRCUIT_OPEN, SmsGuardVerdict, SmsLogStatus
 from backend.plugin.sms.errors import SmsSendError
+from backend.plugin.sms.extensions import load_sms_extensions
 from backend.plugin.sms.model import SmsConfig, SmsLog
 from backend.plugin.sms.schema.config import SmsSendResultSchema
+from backend.plugin.sms.schema.log import mask_phone
 from backend.plugin.sms.sdk.base import (
     UNSENT_KINDS,
     SmsErrorKind,
@@ -108,6 +111,9 @@ class SmsService:
 
     @staticmethod
     def _validate(phone: str, template_code: str, params: Mapping[str, Any]) -> SmsTemplate:
+        # 🔴 注册表不能只靠路由装配时装（`api/router.py`）：Celery worker 不 import 任何路由，定时任务里
+        # 调 `send()` 会报「业务模板未注册」/「厂商不存在」。这里再装一次是幂等的（一个布尔判断）
+        load_sms_extensions()
         template = get_sms_template(template_code)
         if template is None:
             raise SmsSendError(
@@ -245,10 +251,11 @@ class SmsService:
         """
         tpl = cls._validate(phone, template, params)
 
-        verdict = await sms_guard.acquire(tpl, phone)
+        token = uuid.uuid4().hex
+        verdict = await sms_guard.acquire(tpl, phone, token)
         if verdict in (SmsGuardVerdict.cooldown, SmsGuardVerdict.phone_daily):
             # 被我们自己拦下的**不写 sms_log**（否则刷接口就是刷日志表），只写应用日志
-            log.info(f'短信被拦（{verdict.value}）：模板 {template} 号码 {phone[:3]}****{phone[-4:]}')
+            log.info(f'短信被拦（{verdict.value}）：模板 {template} 号码 {mask_phone(phone)}')
             raise SmsSendError(kind=SmsErrorKind.rate_limited.value, msg=_t('error.sms.too_frequent'))
         if verdict is SmsGuardVerdict.circuit:
             log.error(f'短信全站熔断：本小时已达 {settings.SMS_GLOBAL_HOURLY_MAX} 条上限，拒绝发送（模板 {template}）')
@@ -272,17 +279,13 @@ class SmsService:
                 logged_params=logged,
                 user_id=user_id,
             )
-        except SmsSendError:
-            # 还没发出去（没有可用配置 / 指定的配置不对）：冷却位还回去
-            await sms_guard.release_cooldown(tpl, phone)
-            raise
         except Exception:
-            # 落日志那一步炸了也算没发出去
-            await sms_guard.release_cooldown(tpl, phone)
+            # 还没发出去（没有可用配置 / 指定的配置不对 / 落日志那一步炸了）：冷却位还回去
+            await sms_guard.release_cooldown(tpl, phone, token)
             raise
 
         if result.error_kind in UNSENT_KINDS:
-            await sms_guard.release_cooldown(tpl, phone)
+            await sms_guard.release_cooldown(tpl, phone, token)
         if result.ok:
             return _to_schema(result, log_id)
         kind = (result.error_kind or SmsErrorKind.unknown).value

@@ -110,6 +110,7 @@ class TestValidationAtSave:
             ({'templates': {'captcha': {'template_id': 'S', 'mapping': {'code': 'cdoe'}}}}, 'cdoe'),  # 参数名拼错
             ({'templates': {'captcha': {'template_id': 'S', 'mapping': ['code']}}}, '变量名'),  # 阿里云要按变量名
             ({'templates': {'captcha': {'template_id': '', 'mapping': {'code': 'code'}}}}, 'template_id'),
+            ({'templates': {'captcha': {'template_id': 'S' * 65, 'mapping': {'code': 'code'}}}}, '64'),  # 超过列宽
             ({'access_key_secret': None}, '凭据'),  # 凭据为空
             ({'status': 0, 'is_default': True}, '默认'),
         ],
@@ -198,6 +199,30 @@ class TestDefaultAndUpdate:
         assert client.put(f'{CONFIGS}/{item["id"]}', headers=token_headers, json=body).json()['code'] == 200
         rotated = client.get(f'{CONFIGS}/{item["id"]}', headers=token_headers).json()['data']['secret_mask']
         assert rotated != before and rotated.startswith('anot')
+
+    def test_switching_provider_requires_a_new_secret(
+        self, client: TestClient, token_headers: dict[str, str], encrypt_key: str
+    ) -> None:
+        """🔴 换厂商不给新密钥 → 400。否则存下来的是「厂商是腾讯云、密钥是阿里云的」，每次发送都鉴权失败"""
+        client.post(CONFIGS, headers=token_headers, json=ALIYUN_BODY)
+        item = next(
+            i
+            for i in client.get(CONFIGS, headers=token_headers, params={'name': ALIYUN_BODY['name']}).json()['data'][
+                'items'
+            ]
+        )
+        body = {k: v for k, v in ALIYUN_BODY.items() if k != 'access_key_secret'} | {
+            'provider': 'tencent',
+            'options': {'sdk_app_id': '1400000000'},
+            'templates': {'captcha': {'template_id': '100001', 'mapping': ['code', 'minutes']}},
+        }
+        res = client.put(f'{CONFIGS}/{item["id"]}', headers=token_headers, json=body)
+        assert res.json()['code'] == 400 and 'secret_key' in res.json()['msg'], res.text
+        # 同厂商不给密钥照旧允许（留空 = 不改）
+        same = {k: v for k, v in ALIYUN_BODY.items() if k != 'access_key_secret'}
+        assert client.put(f'{CONFIGS}/{item["id"]}', headers=token_headers, json=same).json()['code'] == 200
+        body['access_key_secret'] = 'tencent-secret-key-0123456789'
+        assert client.put(f'{CONFIGS}/{item["id"]}', headers=token_headers, json=body).json()['code'] == 200
 
     def test_update_validates_like_create(
         self, client: TestClient, token_headers: dict[str, str], make_config: Callable[..., dict[str, Any]]

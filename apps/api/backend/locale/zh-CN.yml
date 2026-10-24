@@ -251,6 +251,7 @@ error:
       provider_error: 短信服务商返回错误，请稍后再试
       rate_limited: 短信发送太频繁，请稍后再试
       unknown: 短信发送结果未知，请稍后在发送日志里查看
+    template_id_too_long: 业务模板 {template} 的厂商模板 ID 超过 {max} 个字符
     template_mapping_invalid: 业务模板 {template} 的参数映射不合法：{detail}
     template_not_configured: 配置「{name}」没有配业务模板 {template}
     template_shape: 业务模板 {template} 的映射要同时给出 template_id（厂商模板 ID）和 mapping（参数对应）

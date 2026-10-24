@@ -6,7 +6,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from backend.common.model import DataClassBase, TimeZone, UniversalStr, UniversalText, id_key
 from backend.utils.timezone import timezone
 
-
 # 发送日志（对标 ContiNew 的 `sys_sms_log`，但**失败也记**：ContiNew 只在 SMS4J 的成功钩子里写日志，
 # 网络失败不落日志）。两段式：发送前插一行「发送中」并提交，发完更新成终态（`service/sms_service.py`）。
 #
@@ -17,6 +16,10 @@ from backend.utils.timezone import timezone
 # - 不走软删除（`DataClassBase`）：审计记录只按保留期清理
 #
 # ⚠️ 类 docstring 保持一行（表注释）。
+#: 厂商模板 ID 的列宽；保存配置和发测试短信时都按它拦（超了会在插日志那一步 DataError）
+TEMPLATE_ID_MAX_LEN = 64
+
+
 class SmsLog(DataClassBase):
     """短信发送日志表"""
 
@@ -28,7 +31,9 @@ class SmsLog(DataClassBase):
     template: Mapped[str] = mapped_column(UniversalStr(64), index=True, comment='业务模板码（测试短信为 test）')
     status: Mapped[int] = mapped_column(index=True, comment='状态（0 失败 · 1 已受理 · 2 结果未知 · 3 发送中）')
     config_id: Mapped[int | None] = mapped_column(BigInteger, index=True, default=None, comment='走的哪条配置')
-    template_id: Mapped[str | None] = mapped_column(UniversalStr(64), default=None, comment='厂商模板 ID')
+    template_id: Mapped[str | None] = mapped_column(
+        UniversalStr(TEMPLATE_ID_MAX_LEN), default=None, comment='厂商模板 ID'
+    )
     params: Mapped[str | None] = mapped_column(UniversalText, default=None, comment='厂商侧参数 JSON（敏感参数已打码）')
     error_kind: Mapped[str | None] = mapped_column(
         UniversalStr(32), index=True, default=None, comment='错误类型（SmsErrorKind）'

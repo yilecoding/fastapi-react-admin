@@ -45,6 +45,9 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 
 - 🔴 **`send()` 不参与调用方的事务**。调用方要在自己的写操作**提交之后**再发，否则「短信发了、业务回滚了」
 - 🔴 模块顶层 import 了 `async_db_session`，**登记在 `backend/conftest.py: _PATCHED_SESSION_MODULES`**，否则跑测试往开发库写日志
+- 🔴 **注册表不能只在 `api/router.py` 装**：Celery worker 不 import 任何路由，定时任务里调 `send()` 会报「业务模板未注册」/
+  「厂商不存在」，而同一段代码在 uvicorn 里是好的。`SmsService._validate` 再调一次 `load_sms_extensions()`（幂等）。
+  守卫：`test_sms_send.py::TestRegistryOutsideWeb`（清空两个注册表再发，必须成功）
 - 进程在两步之间崩溃 → 那一行停在「发送中」；接口按 `SMS_SENDING_STALE_SECONDS` 标 `stale`，日志页显示成「结果未知」。**库里的行不改**
 
 **实测证据**：`tests/test_sms_send.py` 用**另一个**引擎读 `sms_log`：失败 / 未知 / 成功三种结果的那一行都在，
@@ -59,6 +62,10 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 **实测证据**：`TestGuard::test_concurrent_sends_let_exactly_one_through` —— 5 个并发同一号码，恰好 1 条通过、4 条 `rate_limited`、
 库里 1 行。🔴 **先预热连接池**（`redis_client.ping()` 几次），冷池会假绿。
 
+🔴 **释放冷却位是 compare-and-delete，不是裸 `DEL`。** 连接超时最长 = 配置的 `timeout`（上限 60 秒），和验证码的冷却一样长：
+慢请求判定「没连上」时自己占的位早已过期、下一条已经重新占上，裸删等于删掉别人的冷却位，第三条就穿过去了。
+`acquire` 把本次令牌写进冷却位，`release_cooldown` 只删值等于令牌的那一位（`TestGuard::test_release_only_deletes_own_cooldown_slot`）。
+
 ## 选配置（`pick_config` + `_choose`）
 
 指定 `config_id` → 只用它（必须启用且配了这个模板）。否则候选 = 启用 ∧ 配了模板 ∧ 今天没到 `daily_max`：
@@ -71,6 +78,10 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 `options` 里**不认识的键也 400**（pydantic 默认忽略 extra，这里自己比一遍）。凭据不能从 `options` 里绕进来（会明文落库）。
 
 - `SMS_ENCRYPT_SECRET_KEY` 没配就拒绝保存带凭据的厂商，不静默存明文；独立于 `AI_ENCRYPT_SECRET_KEY`（两个插件可以单独装卸）
+- 🔴 **编辑时换了厂商就必须给新密钥**（400 `credential_required`）。「留空 = 不改」只对同厂商成立：旧密钥是上一家的，
+  形状校验照样过，存下来就是「厂商是腾讯云、密钥是阿里云的」—— 卡片上看着正常，每次发送都鉴权失败
+- 厂商模板 ID 限 64 字符（`model/log.py: TEMPLATE_ID_MAX_LEN`，= `sms_log.template_id` 列宽）：保存配置和测试短信都在入口拦，
+  否则到插「发送中」日志那一步才 `DataError` 500
 - 🔴 入参字段名 `access_key_secret` 在 `OPERA_LOG_REDACT_KEYS` 里（精确匹配）；响应 schema 里既无明文也无密文，只有 `secret_mask`
 - 🔴 `console` 厂商 `ENVIRONMENT == 'prod'` 时**不在注册表里**（`extensions.console_provider_allowed`）：库里留着一条也会报「厂商不存在」。
   不能只靠 `check_production_settings`，它看不到库里的行
@@ -90,6 +101,6 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 
 ## 实测证据
 
-- `tests/` 112 条：SDK 契约 39（两家各一套行为矩阵 + 基类契约 + 模板映射）· 守卫 · 配置接口 · 发送链路（真 Redis + 测试库）· 日志接口
+- `tests/` 116 条：SDK 契约 39（两家各一套行为矩阵 + 基类契约 + 模板映射）· 守卫 · 配置接口 · 发送链路（真 Redis + 测试库）· 日志接口
 - 迁移 `y0000000sms` 在临时 PostgreSQL 库上 up → 与模型比对零差异 → down（两张表和 10 条菜单消失）→ up。SQL Server / MySQL 只过了离线编译守卫
 - ⚠️ **两家真实接入点没有用真凭据发过**（签名 / 模板要先过审核）。代码用 `console` 跑通了全部流程，端到端验收等账号就绪

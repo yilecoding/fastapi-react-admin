@@ -29,10 +29,13 @@ export type ClearLogsKind = 'login' | 'opera' | 'sms'
  * 每种日志的接口路径 / 权限码 / 文案 / 要失效的 query 前缀。
  * 短信那条的路径和权限码形状不同（插件自己的前缀、删除和清空共用 `sms:log:del`），所以不能再靠模板串拼
  */
-const KINDS: Record<ClearLogsKind, { label: string; path: string; perm: string; queryKey: readonly string[] }> = {
-  login: { label: '登录日志', path: '/api/v1/logs/login/all', perm: 'log:login:clear', queryKey: ['logs', 'login'] },
-  opera: { label: '操作日志', path: '/api/v1/logs/opera/all', perm: 'log:opera:clear', queryKey: ['logs', 'opera'] },
-  sms: { label: '短信发送日志', path: '/api/v1/sms/logs/all', perm: 'sms:log:del', queryKey: ['sms-log'] },
+const KINDS: Record<
+  ClearLogsKind,
+  { label: string; path: string; perm: string; queryKey: readonly string[]; feedsDashboard: boolean }
+> = {
+  login: { label: '登录日志', path: '/api/v1/logs/login/all', perm: 'log:login:clear', queryKey: ['logs', 'login'], feedsDashboard: true },
+  opera: { label: '操作日志', path: '/api/v1/logs/opera/all', perm: 'log:opera:clear', queryKey: ['logs', 'opera'], feedsDashboard: true },
+  sms: { label: '短信发送日志', path: '/api/v1/sms/logs/all', perm: 'sms:log:del', queryKey: ['sms-log'], feedsDashboard: false },
 }
 
 export function ClearLogsButton({
@@ -62,8 +65,8 @@ export function ClearLogsButton({
     onSuccess: () => {
       // 列表、统计条、可疑 IP 都挂在同一个前缀下，一起失效
       void qc.invalidateQueries({ queryKey: spec.queryKey })
-      // 仪表盘的今日统计也是从这张表算的
-      void qc.invalidateQueries({ queryKey: ['dashboard'] })
+      // 仪表盘的今日统计从登录 / 操作日志算，短信日志不在里面
+      if (spec.feedsDashboard) void qc.invalidateQueries({ queryKey: ['dashboard'] })
     },
   })
 

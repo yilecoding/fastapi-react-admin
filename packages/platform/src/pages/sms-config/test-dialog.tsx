@@ -95,7 +95,7 @@ export function SmsTestDialog({
             <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="13800000000" inputMode="numeric" autoComplete="off" data-testid="sms-test-phone" />
           </FormField>
           <FormField label={t('厂商模板 ID')} required hint={provider ? t(provider.template_id_hint) : undefined}>
-            <Input value={templateId} onChange={(e) => setTemplateId(e.target.value)} autoComplete="off" data-testid="sms-test-template" />
+            <Input value={templateId} onChange={(e) => setTemplateId(e.target.value)} autoComplete="off" maxLength={64} data-testid="sms-test-template" />
           </FormField>
 
           <FormField

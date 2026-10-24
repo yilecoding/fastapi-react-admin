@@ -7,6 +7,7 @@ from pydantic import ConfigDict, Field, field_validator
 
 from backend.common.schema import ColumnLengthChecked, CustomPhoneNumber, SchemaBase
 from backend.plugin.sms.model import SmsConfig
+from backend.plugin.sms.model.log import TEMPLATE_ID_MAX_LEN
 
 
 class SmsConfigSchemaBase(SchemaBase):
@@ -116,7 +117,7 @@ class TestSmsParam(SchemaBase):
     """发测试短信：绕过业务模板，直接给厂商模板 ID 和厂商侧参数，真发一条"""
 
     phone: CustomPhoneNumber = Field(description='收件手机号（大陆 11 位）')
-    template_id: str = Field(min_length=1, description='厂商模板 ID')
+    template_id: str = Field(min_length=1, max_length=TEMPLATE_ID_MAX_LEN, description='厂商模板 ID')
     params: dict[str, str] | list[str] = Field(
         default_factory=dict, description='厂商侧参数：按变量名的厂商给 {"code": "1234"}，按位置的给 ["1234", "5"]'
     )

@@ -19,6 +19,7 @@ from backend.common.pagination import paging_data
 from backend.core.conf import settings
 from backend.plugin.sms.crud.crud_config import sms_config_dao
 from backend.plugin.sms.model import SmsConfig
+from backend.plugin.sms.model.log import TEMPLATE_ID_MAX_LEN
 from backend.plugin.sms.sdk.base import SmsProvider, TemplateMapping, validate_template_mapping
 from backend.plugin.sms.sdk.registry import get_provider, list_providers, provider_descriptor
 from backend.plugin.sms.service.guard import sms_guard
@@ -105,6 +106,9 @@ def validate_templates(provider_cls: type[SmsProvider], templates: Mapping[str, 
         template_id = str(spec.get('template_id') or '').strip()
         if not template_id:
             raise errors.RequestError(msg=t('error.sms.template_shape', template=code))
+        if len(template_id) > TEMPLATE_ID_MAX_LEN:
+            # 和 `sms_log.template_id` 的列宽一致；超了不拦在这里，就是发送时插日志那一步 DataError 500
+            raise errors.RequestError(msg=t('error.sms.template_id_too_long', template=code, max=TEMPLATE_ID_MAX_LEN))
         try:
             mapping = validate_template_mapping(provider_cls.template_mapping, spec.get('mapping'), template.params)
         except ValueError as e:
@@ -218,9 +222,15 @@ class SmsConfigService:
         if existing and existing.id != pk:
             raise errors.ConflictError(msg=t('error.sms.name_exists'))
 
-        # 留空 = 不动密钥；校验用解密后的旧值（发送时用的也是它）。换了厂商而没给新密钥的话，旧密钥
-        # 对新厂商多半没意义 —— 但形状校验仍然成立，真错会在「发测试短信」那一刻报出来
+        # 留空 = 不动密钥；校验用解密后的旧值（发送时用的也是它）。
+        # 🔴 换了厂商就必须给新密钥：旧密钥是上一家的，形状校验照样能过，存下来的是「厂商是腾讯云、密钥是阿里云的」
+        # 这种每次发送都鉴权失败、界面上又看不出来的配置
         secret = obj.access_key_secret or None
+        provider_cls = provider_or_raise(obj.provider)
+        if not secret and obj.provider != config.provider and provider_cls.credential_fields is not None:
+            raise errors.RequestError(
+                msg=t('error.sms.credential_required', fields=' / '.join(provider_cls.credential_fields))
+            )
         if not secret and config.secret_cipher:
             secret = _cipher().decrypt(config.secret_cipher)
         provider_cls, templates = cls._validate(obj, secret=secret)

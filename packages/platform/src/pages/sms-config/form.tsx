@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { Button } from '@admin/ui/components/button'
 import { Checkbox } from '@admin/ui/components/checkbox'
 import { Input } from '@admin/ui/components/input'
+import { QueryError } from '@admin/ui/components/query-error'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@admin/ui/components/select'
 import {
   Sheet,
@@ -95,7 +96,20 @@ function specFromDraft(draft: TemplateDraft, mapping: SmsProvider['template_mapp
     for (const [param, variable] of Object.entries(draft.named)) if (variable.trim()) m[variable.trim()] = param
     return { template_id: draft.template_id.trim(), mapping: m }
   }
-  return { template_id: draft.template_id.trim(), mapping: draft.ordered.filter((p) => p) }
+  return { template_id: draft.template_id.trim(), mapping: trimTrailingBlanks(draft.ordered) }
+}
+
+function trimTrailingBlanks(ordered: string[]): string[] {
+  const out = [...ordered]
+  while (out.length > 0 && !out[out.length - 1]) out.pop()
+  return out
+}
+
+/** 按位置映射里夹在中间的空位：后端的列表表达不了「这一位空着」，静默过滤会让后面的参数前移一位 */
+function firstInteriorBlank(ordered: string[]): number | null {
+  const trimmed = trimTrailingBlanks(ordered)
+  const i = trimmed.findIndex((p) => !p)
+  return i === -1 ? null : i + 1
 }
 
 export function SmsConfigFormSheet({
@@ -185,6 +199,11 @@ export function SmsConfigFormSheet({
         setServerError(t('业务模板「{{code}}」还没填厂商模板 ID', { code }))
         return
       }
+      const blank = provider.template_mapping === 'ordered' ? firstInteriorBlank(d.ordered) : null
+      if (blank !== null) {
+        setServerError(t('业务模板「{{code}}」第 {{n}} 位空着，但后面还有位在用 —— 只有末尾的位可以留空', { code, n: blank }))
+        return
+      }
     }
     const body = {
       name: v.name.trim(),
@@ -229,6 +248,10 @@ export function SmsConfigFormSheet({
               <Input {...form.register('name')} autoComplete="off" maxLength={64} data-testid="sms-name" />
             </FormField>
 
+            {providersQuery.error ? (
+              // 厂商目录拉不下来 = 一个都选不了、保存按钮永远灰：要显示成错误而不是「没有厂商」（硬纪律 9）
+              <QueryError error={providersQuery.error} onRetry={() => providersQuery.refetch()} />
+            ) : null}
             <div className="grid grid-cols-2 gap-4">
               <FormField label={t('厂商')} error={fe(errs.provider?.message)} required>
                 <Select value={providerCode} items={providerItems} onValueChange={(v) => switchProvider(String(v))}>
@@ -288,10 +311,11 @@ export function SmsConfigFormSheet({
             <FormSection title={t('业务模板映射')}>
               <p className="text-xs text-muted-foreground">
                 {provider?.template_mapping === 'ordered'
-                  ? t('这家厂商按位置填模板变量：按厂商模板里 {1}、{2} 的顺序挑业务参数，用不到的位留空。')
+                  ? t('这家厂商按位置填模板变量：按厂商模板里 {1}、{2} 的顺序挑业务参数，末尾用不到的位留空。')
                   : t('这家厂商按变量名填模板变量：写出每个业务参数在厂商模板里的变量名，不需要的留空（阿里云验证码模板只认一个变量）。')}
               </p>
               {templatesQuery.isPending ? <p className="text-xs text-muted-foreground">{t('加载中…')}</p> : null}
+              {templatesQuery.error ? <QueryError error={templatesQuery.error} onRetry={() => templatesQuery.refetch()} /> : null}
               {templates.map((tpl) => {
                 const d = drafts[tpl.code]
                 if (!d) return null
@@ -309,7 +333,7 @@ export function SmsConfigFormSheet({
                     {d.enabled ? (
                       <>
                         <FormField label={t('厂商模板 ID')} required hint={provider ? t(provider.template_id_hint) : undefined}>
-                          <Input value={d.template_id} onChange={(e) => patch({ template_id: e.target.value })} autoComplete="off" data-testid={`sms-tpl-id-${tpl.code}`} />
+                          <Input value={d.template_id} onChange={(e) => patch({ template_id: e.target.value })} autoComplete="off" maxLength={64} data-testid={`sms-tpl-id-${tpl.code}`} />
                         </FormField>
                         {provider?.template_mapping === 'ordered' ? (
                           <div className="grid gap-2 sm:grid-cols-2">
