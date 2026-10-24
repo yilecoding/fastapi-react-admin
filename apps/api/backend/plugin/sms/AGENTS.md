@@ -62,8 +62,10 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 🔴 **配置的日计数要退还，判据和冷却位同一组。** 第一版写的是「日上限不退还」，真发阿里云那一轮当场对不上账：
 填错模板 ID 发了一条（`isv.SMS_TEMPLATE_ILLEGAL`，厂商一条没收），改对再发一条，卡片上「今日已发 2」、手机收到 1 条。
 而且填错的每次重试都在消耗这条配置的 `daily_max`。`release_config` 是一段 Lua：计数 > 0 才 `DECR`，键过期 / 跨天
-/ 并发多退一次都停在 0。「结果未知」（读超时）不退 —— 可能已经发出去了。测试短信走同一条路。
-守卫：`test_sms_send.py::TestConfigDailyRefund` · `test_sms_config_api.py::TestSendTest::test_rejected_test_sms_does_not_count_as_sent`。
+/ 并发多退一次都停在 0。「结果未知」（读超时）不退 —— 可能已经发出去了。测试短信走同一条路，退还逻辑只在
+`_dispatch_counted` 一处。⚠️ **退要对着占位时返回的那个键**（`reserve_config` 返回它），不能退还时再按「今天」算：
+23:59:59 占的位、00:00:00 判定没发出去，重算就退到了第二天的键上，减掉的是别人那条成功的。
+守卫：`test_sms_send.py::TestConfigDailyRefund`（含跨零点那条）· `test_sms_config_api.py::TestSendTest::test_rejected_test_sms_does_not_count_as_sent`。
 
 **实测证据**：`TestGuard::test_concurrent_sends_let_exactly_one_through` —— 5 个并发同一号码，恰好 1 条通过、4 条 `rate_limited`、
 库里 1 行。🔴 **先预热连接池**（`redis_client.ping()` 几次），冷池会假绿。
@@ -107,7 +109,7 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 
 ## 实测证据
 
-- `tests/` 119 条：SDK 契约 39（两家各一套行为矩阵 + 基类契约 + 模板映射）· 守卫 · 配置接口 · 发送链路（真 Redis + 测试库）· 日志接口
+- `tests/` 120 条：SDK 契约 39（两家各一套行为矩阵 + 基类契约 + 模板映射）· 守卫 · 配置接口 · 发送链路（真 Redis + 测试库）· 日志接口
 - 迁移 `z0000000sms` 在临时 PostgreSQL 库上 up → 与模型比对零差异 → down（两张表和 10 条菜单消失）→ up。SQL Server / MySQL 只过了离线编译守卫
 - 阿里云 2026-10-24 用真凭据发过（签名 / 模板从 avcp 的种子拿的）：验证码模板一条「已受理」、手机收到；填错模板 ID 那条
   被归成 `config_error` 并进了日志。腾讯云**还没用真凭据发过**，代码靠契约测试里的假服务器

@@ -310,16 +310,43 @@ class TestConfigDailyRefund:
         async def _run() -> list[int]:
             key = config_daily_key(424242)
             await redis_client.delete(key)
-            await sms_guard.release_config(424242)  # 键不存在：什么都不做
+            await sms_guard.release_config(key)  # 键不存在：什么都不做
             fresh = (await sms_guard.today_sent([424242]))[424242]
-            await sms_guard.reserve_config(424242, 0)
-            await sms_guard.release_config(424242)
-            await sms_guard.release_config(424242)  # 多退一次（并发下两条都判 unsent）也到 0 为止
+            slot = await sms_guard.reserve_config(424242, 0)
+            assert slot == key
+            await sms_guard.release_config(slot)
+            await sms_guard.release_config(slot)  # 多退一次（并发下两条都判 unsent）也到 0 为止
             twice = (await sms_guard.today_sent([424242]))[424242]
             await redis_client.delete(key)
             return [fresh, twice]
 
         assert client.portal.call(_run) == [0, 0]
+
+    def test_release_after_midnight_refunds_the_day_it_was_reserved_on(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """🔴 23:59:59 占位、00:00:00 判定没发出去：退的必须是昨天那个键，不是按「今天」重算出来的键"""
+        from backend.plugin.sms.service import guard as guard_module
+
+        async def _run() -> tuple[str | None, str | None]:
+            yesterday = config_daily_key(424243)
+            await redis_client.delete(yesterday)
+            slot = await sms_guard.reserve_config(424243, 0)
+            assert slot == yesterday
+            # 跨过零点：另一条今天的发送占了今天的键
+            monkeypatch.setattr(guard_module, '_day', lambda: '20991231')
+            today = config_daily_key(424243)
+            await redis_client.delete(today)
+            await sms_guard.reserve_config(424243, 0)
+            # 昨天那条现在才判定「没发出去」
+            await sms_guard.release_config(slot)
+            y, t = await redis_client.get(yesterday), await redis_client.get(today)
+            await redis_client.delete(yesterday, today)
+            return y, t
+
+        y, t = client.portal.call(_run)
+        assert y == '0', '昨天的占位要退掉'
+        assert t == '1', '今天别人那条成功的不能被减掉'
 
 
 class TestRegistryOutsideWeb:

@@ -19,7 +19,7 @@ import random
 import re
 import uuid
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from backend.common.log import log
@@ -46,6 +46,9 @@ from backend.plugin.sms.service.config_service import parse_templates, provider_
 from backend.plugin.sms.service.guard import sms_guard
 from backend.plugin.sms.templates import SmsTemplate, get_sms_template
 from backend.utils.snowflake import snowflake
+
+#: 厂商侧参数：按变量名的厂商是 dict，按位置的是 list
+ProviderParams = Mapping[str, str] | Sequence[str]
 
 # 第一期只收大陆号（和 `common/schema.py: CustomPhoneNumber` 同一条正则）
 _PHONE_RE = re.compile(r'^1[3-9]\d{9}$')
@@ -135,8 +138,8 @@ class SmsService:
         return template
 
     @staticmethod
-    async def _choose(template_code: str, config_id: int | None) -> SmsConfig:
-        """第二节第 4 条。每次**现查**，不缓存"""
+    async def _choose(template_code: str, config_id: int | None) -> tuple[SmsConfig, str]:
+        """第二节第 4 条。每次**现查**，不缓存。返回 (配置, 占到的日计数键) —— 键交给 `_dispatch_counted` 退还"""
         async with async_db_session() as db:
             if config_id is not None:
                 config = await sms_config_dao.get(db, config_id)
@@ -149,9 +152,10 @@ class SmsService:
                         kind=SmsErrorKind.config_error.value,
                         msg=_t('error.sms.template_not_configured', name=config.name, template=template_code),
                     )
-                # 指定了就只用它：日上限照样计数，但不拦（指定是调用方的明确意图）
-                await sms_guard.reserve_config(config.id, 0)
-                return config
+                # 指定了就只用它：日上限照样计数，但不拦（指定是调用方的明确意图；daily_max=0 永远占得到）
+                slot = await sms_guard.reserve_config(config.id, 0)
+                assert slot is not None
+                return config, slot
             configs = list(await sms_config_dao.get_enabled(db))
 
         candidates = [c for c in configs if template_code in parse_templates(c)]
@@ -159,12 +163,49 @@ class SmsService:
             chosen = pick_config(candidates)
             if chosen is None:
                 break
-            if await sms_guard.reserve_config(chosen.id, chosen.daily_max):
-                return chosen
+            slot = await sms_guard.reserve_config(chosen.id, chosen.daily_max)
+            if slot is not None:
+                return chosen, slot
             # 到了日上限：退出自动选取，换下一个候选
             candidates = [c for c in candidates if c.id != chosen.id]
         # 一个候选都没有 → 明确报错，**不静默跳过**
         raise SmsSendError(kind=SmsErrorKind.config_error.value, msg=_t('error.sms.no_config', template=template_code))
+
+    @classmethod
+    async def _dispatch_counted(
+        cls,
+        *,
+        config: SmsConfig,
+        slot: str,
+        phone: str,
+        template_code: str,
+        user_id: int | None,
+        build: Callable[[], tuple[str, ProviderParams, ProviderParams]],
+    ) -> tuple[SmsResult, int]:
+        """占了配置名额之后的发送。**退名额的规则只在这里一处**（业务发送和测试短信共用）：
+
+        - `build()`（渲染参数）或 `_dispatch`（落日志 / 调 SDK）抛异常 → 还没发出去，退
+        - 结果是 `UNSENT_KINDS`（配置错 / 参数错 / 号码错 / 鉴权错 / 没连上）→ 厂商一条没收，退。
+          填错模板 ID 反复试的那种每次都是 `config_error`，不该把「今日已发」刷上去
+        - 「结果未知」（读超时）不退：可能已经发出去了
+        """
+        try:
+            template_id, provider_params, logged_params = build()
+            result, log_id = await cls._dispatch(
+                config=config,
+                phone=phone,
+                template_code=template_code,
+                template_id=template_id,
+                provider_params=provider_params,
+                logged_params=logged_params,
+                user_id=user_id,
+            )
+        except Exception:
+            await sms_guard.release_config(slot)
+            raise
+        if result.error_kind in UNSENT_KINDS:
+            await sms_guard.release_config(slot)
+        return result, log_id
 
     @staticmethod
     async def _dispatch(
@@ -261,37 +302,30 @@ class SmsService:
             log.error(f'短信全站熔断：本小时已达 {settings.SMS_GLOBAL_HOURLY_MAX} 条上限，拒绝发送（模板 {template}）')
             raise SmsSendError(kind=CIRCUIT_OPEN, msg=_t('error.sms.circuit_open'))
 
-        config: SmsConfig | None = None
         try:
-            config = await cls._choose(template, config_id)
-            provider_cls = provider_or_raise(config.provider)
-            spec = parse_templates(config)[template]
-            mapping = spec['mapping']
-            rendered = render_template_params(
-                provider_cls.template_mapping, mapping, {k: str(v) for k, v in params.items()}
-            )
-            logged = mask_params(provider_cls.template_mapping, mapping, rendered, tpl.sensitive)
-            result, log_id = await cls._dispatch(
-                config=config,
-                phone=phone,
-                template_code=template,
-                template_id=spec['template_id'],
-                provider_params=rendered,
-                logged_params=logged,
-                user_id=user_id,
+            config, slot = await cls._choose(template, config_id)
+
+            def build() -> tuple[str, ProviderParams, ProviderParams]:
+                provider_cls = provider_or_raise(config.provider)
+                spec = parse_templates(config)[template]
+                rendered = render_template_params(
+                    provider_cls.template_mapping, spec['mapping'], {k: str(v) for k, v in params.items()}
+                )
+                logged = mask_params(provider_cls.template_mapping, spec['mapping'], rendered, tpl.sensitive)
+                return spec['template_id'], rendered, logged
+
+            result, log_id = await cls._dispatch_counted(
+                config=config, slot=slot, phone=phone, template_code=template, user_id=user_id, build=build
             )
         except Exception:
             # 还没发出去（没有可用配置 / 指定的配置不对 / 落日志那一步炸了）：冷却位还回去；
-            # `_choose` 已经给配置占了名额的话，那个名额也还回去
+            # 配置的名额由 `_dispatch_counted` 自己退
             await sms_guard.release_cooldown(tpl, phone, token)
-            if config is not None:
-                await sms_guard.release_config(config.id)
             raise
 
         if result.error_kind in UNSENT_KINDS:
-            # 厂商一条都没收到：冷却位和配置的日计数一起退还（「今日已发」只数真发出去的）
+            # 厂商一条都没收到：冷却位也还回去（配置的日计数已在 `_dispatch_counted` 里退了）
             await sms_guard.release_cooldown(tpl, phone, token)
-            await sms_guard.release_config(config.id)
         if result.ok:
             return _to_schema(result, log_id)
         kind = (result.error_kind or SmsErrorKind.unknown).value
@@ -317,24 +351,17 @@ class SmsService:
             {str(k): str(v) for k, v in params.items()} if isinstance(params, Mapping) else [str(v) for v in params]
         )
         # 测试短信不走 acquire（人点一次发一次，接口限流兜着），也不进全站熔断的计数；
-        # 但配置的日计数要加，否则「今日已发」对不上账
-        await sms_guard.reserve_config(config.id, 0)
-        try:
-            result, log_id = await cls._dispatch(
-                config=config,
-                phone=phone,
-                template_code=TEST_TEMPLATE_CODE,
-                template_id=template_id,
-                provider_params=provider_params,
-                logged_params=provider_params,
-                user_id=user_id,
-            )
-        except Exception:
-            await sms_guard.release_config(config.id)
-            raise
-        if result.error_kind in UNSENT_KINDS:
-            # 填错模板 ID 反复试的那种：每次都是 config_error，一条都没发出去，不该把「今日已发」刷上去
-            await sms_guard.release_config(config.id)
+        # 但配置的日计数要加，否则「今日已发」对不上账（daily_max=0 永远占得到）
+        slot = await sms_guard.reserve_config(config.id, 0)
+        assert slot is not None
+        result, log_id = await cls._dispatch_counted(
+            config=config,
+            slot=slot,
+            phone=phone,
+            template_code=TEST_TEMPLATE_CODE,
+            user_id=user_id,
+            build=lambda: (template_id, provider_params, provider_params),
+        )
         return _to_schema(result, log_id)
 
 

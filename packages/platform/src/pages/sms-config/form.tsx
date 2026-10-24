@@ -91,15 +91,17 @@ function draftFromSpec(tpl: SmsTemplate, spec: TemplateSpec | undefined, mapping
   return { enabled: true, template_id: spec.template_id, named, ordered }
 }
 
-/** 测试弹窗带过来的预填盖在草稿上：启用这个模板、填上模板 ID，变量名对得上业务参数的就映射成同名 */
-function applyPreset(tpl: SmsTemplate, draft: TemplateDraft, preset: TemplatePreset, mapping: SmsProvider['template_mapping']): TemplateDraft {
-  if (mapping === 'ordered') {
-    const ordered = tpl.params.slice(0, preset.variables.length)
-    while (ordered.length < tpl.params.length) ordered.push('')
-    return { ...draft, enabled: true, template_id: preset.template_id, ordered }
-  }
-  const named = Object.fromEntries(tpl.params.map((p) => [p, preset.variables.includes(p) ? p : '']))
-  return { ...draft, enabled: true, template_id: preset.template_id, named }
+/** 测试弹窗带过来的预填：先拼成接口形状的 spec，再走和「编辑已有配置」同一条 `draftFromSpec`，草稿长什么样只有一处在定 */
+function applyPreset(tpl: SmsTemplate, preset: TemplatePreset, mapping: SmsProvider['template_mapping']): TemplateDraft {
+  const spec: TemplateSpec =
+    mapping === 'ordered'
+      ? { template_id: preset.template_id, mapping: tpl.params.slice(0, preset.variables.length) }
+      : {
+          template_id: preset.template_id,
+          // 接口的 named 是 {厂商变量名: 业务参数名}；测试弹窗只在变量名正好是业务参数名时才会给预填（见 test-dialog.tsx）
+          mapping: Object.fromEntries(preset.variables.filter((v) => tpl.params.includes(v)).map((v) => [v, v])),
+        }
+  return draftFromSpec(tpl, spec, mapping)
 }
 
 function specFromDraft(draft: TemplateDraft, mapping: SmsProvider['template_mapping']): TemplateSpec {
@@ -186,8 +188,11 @@ export function SmsConfigFormSheet({
     setDrafts(
       Object.fromEntries(
         templates.map((tpl) => {
-          const draft = draftFromSpec(tpl, editing?.templates[tpl.code], provider.template_mapping)
-          return [tpl.code, preset?.code === tpl.code ? applyPreset(tpl, draft, preset, provider.template_mapping) : draft]
+          const draft =
+            preset?.code === tpl.code
+              ? applyPreset(tpl, preset, provider.template_mapping)
+              : draftFromSpec(tpl, editing?.templates[tpl.code], provider.template_mapping)
+          return [tpl.code, draft]
         }),
       ),
     )
