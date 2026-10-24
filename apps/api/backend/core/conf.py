@@ -438,6 +438,8 @@ class Settings(BaseSettings):
         'mcp_token',
         # 能力开放应用新建 / 重置密钥时的明文 SK（`plugin/open/schema/app.py: IssuedOpenSecret`），同上
         'secret_key',
+        # 短信配置新建 / 编辑时的厂商凭据 secret（`plugin/sms/schema/config.py`），按键名精确匹配
+        'access_key_secret',
     ]
     OPERA_LOG_QUEUE_MAXSIZE: int = 100000
     OPERA_LOG_QUEUE_BATCH_CONSUME_SIZE: int = 100
@@ -580,6 +582,19 @@ class Settings(BaseSettings):
     OPEN_SIGN_WINDOW_SECONDS: int
     OPEN_NONCE_REDIS_PREFIX: str
     OPEN_LAST_USED_REDIS_PREFIX: str
+
+    ##################################################
+    # [ Plugin ] sms
+    ##################################################
+    # 🔴 同 open：只写在 plugin.toml 里的配置是 extra，容器环境变量覆盖不了，必须在这里声明成字段
+    # 基础配置（in plugin.toml）
+    # 凭据 secret 的落库加密密钥（64 位十六进制）。留空 = 拒绝保存带凭据的配置，不会静默存明文
+    SMS_ENCRYPT_SECRET_KEY: str
+    # 全站每小时发送上限（0 = 不限），防使用方写错循环把余额刷光
+    SMS_GLOBAL_HOURLY_MAX: int
+    # 「发送中」停留超过多少秒算「结果未知」（进程在两步式日志之间崩溃）
+    SMS_SENDING_STALE_SECONDS: int
+    SMS_REDIS_PREFIX: str
 
     ##################################################
     # [ Plugin ] email

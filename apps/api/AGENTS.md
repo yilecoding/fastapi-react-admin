@@ -497,4 +497,4 @@ async_db_session`"，定时任务/脚本/CLI 命令这类不经过 FastAPI 依�
 | **给一个资源加导出 / 导入** · 公式注入 · 后台导出 · 部门导入查环 | [`backend/common/dataio` 分册](backend/common/dataio/AGENTS.md) |
 | 用户批量导入 / 批量建号的性能 · **`sys_menu` 删掉的那两列** | [`backend/app/admin` 分册](backend/app/admin/AGENTS.md) |
 | 操作日志脱敏 / 中间件 | [`backend/middleware` 分册](backend/middleware/AGENTS.md) |
-| 能力开放 / 开放接口 / AK·SK 签名（对接方文档是同目录 `README.md`） | [`backend/plugin/open` 分册](backend/plugin/open/AGENTS.md) |
+| 能力开放 / 开放接口 / AK·SK 签名（对接方文档是同目录 `README.md`）· **短信**（SDK 契约 / 接新厂商 / 两段式日志 / 频率防护） | [`backend/plugin/open` 分册](backend/plugin/open/AGENTS.md) · [`backend/plugin/sms` 分册](backend/plugin/sms/AGENTS.md) |
