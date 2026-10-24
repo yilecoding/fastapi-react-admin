@@ -92,6 +92,34 @@ def test_xlsx_reads_every_sheet() -> None:
     assert '# 明细' in text and '# 备注' in text and '华东文具' in text
 
 
+def test_xlsx_with_a_far_corner_cell_is_read_in_bounded_work(monkeypatch) -> None:
+    """🔴 只在 A1 和 XFD1048576 各写一格的 5 KB 文件：read-only 模式按声明的范围补齐空行空格，空行又不加字数，
+    原来要遍历约 100 万行 × 16384 格（实测两分钟没读完）—— 能上传附件的人就能卡住一个线程。
+    数格子而不是掐秒表：超过上限就当场抛，旧代码在这里红得很快，而不是把 CI 卡住"""
+    from backend.utils import excel_ops
+
+    budget = excel_ops._TEXT_MAX_ROWS * excel_ops._TEXT_MAX_COLS + 1000
+    seen = 0
+    real = excel_ops._text_cell
+
+    def counted(value):
+        nonlocal seen
+        seen += 1
+        if seen > budget:
+            raise AssertionError(f'读了超过 {budget} 格还没停')
+        return real(value)
+
+    monkeypatch.setattr(excel_ops, '_text_cell', counted)
+    wb = Workbook()
+    wb.active['A1'] = '头'
+    wb.active['XFD1048576'] = '尾'
+    buf = io.BytesIO()
+    wb.save(buf)
+    got = extract_text(buf.getvalue(), 'xlsx', max_chars=4000)
+    assert '头' in (got.text or '')
+    assert got.truncated, '没读完的要说没读完'
+
+
 def test_docx_keeps_paragraphs_before_the_table() -> None:
     text = extract_text(_docx(['第一段', '第二段'], [['甲', '乙']]), 'docx', max_chars=4000).text or ''
     assert text.index('第一段') < text.index('第二段') < text.index('甲\t乙')

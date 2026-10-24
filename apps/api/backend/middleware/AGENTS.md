@@ -49,3 +49,9 @@
 时间点紧挨着 Playwright 登录之后的跳页（是哪个请求日志里看不出来 —— 那条错误只带了 request id，没有路径，这是推断）；
 `tests/test_opera_log_redaction.py::test_a_client_that_left_before_the_body_arrived_is_not_a_server_error`
 构造一个 `receive()` 直接返回 `http.disconnect` 的请求，修之前当场抛 `ClientDisconnect`。
+
+🔴 **第二个接法（路由跑到一半客户端走了）第一版写错了**：那个 `return` 在 `try` 里，`finally` 照样跑，按默认值
+（`code=200` / `Success`）往操作日志里记了一条 —— 一个没执行完的请求在审计里成了「成功」。第一版测试只断言了 499，
+没断言「没写日志」，所以是代码审查翻出来的。现在 except 里先把 `code` 改成 499、关掉 `should_log_opera` 再返回：
+访问日志那一行照常记（显示 499），操作日志不写。
+`test_a_client_that_left_while_the_route_ran_is_not_logged_as_a_success` 在旧代码上红：队列里是一条 `code='200' msg='Success'`。

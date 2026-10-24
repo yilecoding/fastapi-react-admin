@@ -24,7 +24,7 @@ async def get_my_tools(request: Request) -> ResponseSchemaModel[list[GetToolDeta
     第一步就是看这里有没有那个工具——分不清是"没注册"、"域没开"还是"没权限"
     的话，这类问题只能靠猜。
     """
-    tools = tool_dispatcher.visible_tools(request.user)
+    tools = tool_dispatcher.visible_tools(request.user, await tool_dispatcher.off_plugins())
     data = [
         GetToolDetail(
             name=spec.name,

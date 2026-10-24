@@ -52,6 +52,10 @@ TASK_NAME = 'workflow.ai_review'
 PENDING_TIMEOUT = timedelta(minutes=10)
 #: 一次预审最多等模型多久（任务外层是 300 秒）
 MODEL_TIMEOUT_SECONDS = 240
+#: 读附件最多多久。🔴 和上一个加起来要小于任务外层的 300 秒：原来读附件（下载 + 抽文字）不在任何内层超时里，
+#: 附件慢的时候外层先到点、整个协程被取消（`CancelledError` 不是 `Exception`，接不住），这一行停在 pending 上，
+#: 要等 `PENDING_TIMEOUT` 才显示超时，自动同意也不会跑。⚠️ 超时只是不等了，线程里正在抽的那份文件照样跑完
+ATTACHMENT_TIMEOUT_SECONDS = 50
 #: 给模型的字段值截断长度。一个多行文本塞几万字进去，费用和延迟都失控
 _MAX_VALUE_CHARS = 2000
 _SKIP_TYPES = {'description'}
@@ -323,7 +327,12 @@ async def run_review(session_factory: Callable[[], Any], review_id: int) -> str:
         client = None
         audit: list[dict[str, Any]] = []
         try:
-            attachments, audit = await _read_attachments(db, form_schema, form_data)
+            try:
+                attachments, audit = await asyncio.wait_for(
+                    _read_attachments(db, form_schema, form_data), timeout=ATTACHMENT_TIMEOUT_SECONDS
+                )
+            except TimeoutError as e:
+                raise _ReviewError(f'{_KEY_PREFIX}attachment_timeout') from e
             client = await _build_client(db)
             # 比任务外层的 `with_timeout(300)` 早：外层一超时整个协程被取消，这一行就停在 pending 上
             text, usage = await asyncio.wait_for(

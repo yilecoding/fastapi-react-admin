@@ -71,6 +71,13 @@ class ToolSpec:
     """变更类工具的**预演**：入参同 handler（`db` / `ctx` 同样注入），只读不写，
     返回给人看的「会变成什么」。抛异常 = 这次调用在请人确认之前就被拒掉。"""
 
+    plugin: str | None = None
+    """工具是哪个**别的**插件带来的（registry 按模块路径 `backend.plugin.<插件>.ai_tools` 填；AI 插件自己的是 `None`）。
+
+    🔴 插件被停用时它的工具要一起消失：停用只拦得住插件自己的路由（`PluginStatusChecker`），
+    而工具是 AI 插件直接调的 —— 原来停用了审批插件，对话里照样能同意 / 驳回 / 转交。
+    dispatcher 按这个字段查插件状态（`ToolDispatcher.off_plugins`）"""
+
     wants_db: bool = False
     """handler 是否声明了 `db` 参数（由 registry 检测，dispatcher 据此注入会话）。"""
 
@@ -114,6 +121,12 @@ class RunContext:
     审批意见：工具描述里写了「不要替他拟」，真模型（Qwen3-VL）照样填了一句「用户未提供驳回理由」。
     `None` = 这个入口拿不到原话（MCP：外部系统转述），那时靠网页确认页上原样显示的意见兜底"""
     extra: dict[str, Any] = field(default_factory=dict)
+    pinned: dict[str, Any] = field(default_factory=dict)
+    """预演时**钉住**的东西，跟着确认令牌存、确认后执行时原样带回（只放 JSON 能存的值）。
+
+    🔴 确认卡片上写的是预演那一刻解析出来的结果（「转交给 张伟（zhangwei）」），而令牌里只存了模型给的参数（「张伟」）。
+    执行时再按名字解析一遍，令牌有效的这几分钟里有人改了名 / 停了号，转给的就不是卡片上那个人了。
+    预演把解析结果放进这里，执行时用它 —— 人确认的是什么就执行什么"""
 
 
 @dataclass(frozen=True, slots=True)

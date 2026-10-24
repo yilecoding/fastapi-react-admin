@@ -44,15 +44,29 @@ def _squash(text: str) -> str:
     return ''.join(text.split()).strip('。.！!')
 
 
-#: 紧挨在前面就把意思反过来的字：用户说「我不同意」，「同意」也是它的一段
+#: 出现在前面就把意思反过来的字：用户说「我不同意」，「同意」也是它的一段
 _NEGATIONS = frozenset('不没别未非勿莫')
+#: 往前看几个字找否定：「我不同意」「我不太同意」「我不能同意」「不是很同意」—— 否定和被否定的词之间常隔一两个字。
+#: 🔴 原来只看紧挨着的那一个字，后三种都当成了原话。看太远会误伤（「没问题的话我自己批」里「没」离「我自己批」五个字），
+#: 而且只往前看到标点为止（「先别急，同意」里的「同意」不受前一句管）
+_NEGATION_REACH = 3
+_CLAUSE_BREAKS = frozenset('，。！？；、,.!?;:：')
+
+
+def _negated(message: str, start: int) -> bool:
+    for ch in reversed(message[max(0, start - _NEGATION_REACH) : start]):
+        if ch in _CLAUSE_BREAKS:
+            return False
+        if ch in _NEGATIONS:
+            return True
+    return False
 
 
 def _quoted(words: str, message: str) -> bool:
-    """`words` 是 `message` 里的一段，而且不是被否定的那一段（「我不同意」里的「同意」不算）"""
+    """`words` 是 `message` 里的一段，而且不是被否定的那一段（「我不同意」「我不太同意」里的「同意」不算）"""
     start = message.find(words)
     while start >= 0:
-        if start == 0 or message[start - 1] not in _NEGATIONS:
+        if not _negated(message, start):
             return True
         start = message.find(words, start + 1)
     return False
@@ -236,6 +250,8 @@ async def _preview_transfer(
 ) -> str:
     d = await _doable(db, ctx, instance_id, Action.transfer)
     who = await _resolve_user(db, to_user)
+    # 卡片上写的是这个人，执行时就转给这个人（见 `RunContext.pinned`），不再按名字重新找
+    ctx.pinned['to_user_id'] = str(who['id'])
     words = _own_words(ctx, opinion)
     tail = f'，附言：「{words}」' if words else ''
     return f'将把「{d["instance"]["title"]}」转交给 {who.get("nickname")}（{who.get("username")}）{tail}'
@@ -256,5 +272,6 @@ async def _preview_transfer(
 async def wf_transfer(
     db: AsyncSession, ctx: RunContext, instance_id: str, to_user: str, opinion: str | None = None
 ) -> dict[str, Any]:
-    who = await _resolve_user(db, to_user)
-    return await _act(db, ctx, instance_id, Action.transfer, opinion=opinion, target_user_ids=[int(who['id'])])
+    pinned = ctx.pinned.get('to_user_id')
+    target = int(pinned) if pinned else int((await _resolve_user(db, to_user))['id'])
+    return await _act(db, ctx, instance_id, Action.transfer, opinion=opinion, target_user_ids=[target])

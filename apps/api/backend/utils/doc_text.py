@@ -100,8 +100,9 @@ def _pdf(raw: bytes, max_chars: int) -> DocText:
     pages = reader.pages
     parts: list[str] = []
     size = 0
-    for page in list(pages)[:PDF_MAX_PAGES]:
-        text = page.extract_text() or ''
+    # 按下标取前几页：`list(pages)` 会先把每一页都建成对象（几千页的文件白白多花时间和内存），只为了读前 20 页
+    for i in range(min(len(pages), PDF_MAX_PAGES)):
+        text = pages[i].extract_text() or ''
         parts.append(text)
         size += len(text)
         if size > max_chars:

@@ -125,3 +125,64 @@ def test_a_client_that_left_before_the_body_arrived_is_not_a_server_error():
     response = asyncio.run(M(app=None).dispatch(Request(scope, receive), call_next))
     assert response.status_code == 499
     assert called == []
+
+
+def test_a_client_that_left_while_the_route_ran_is_not_logged_as_a_success(monkeypatch):
+    """另一条路：参数读完了、路由跑到一半客户端走了（`call_next` 抛 `ClientDisconnect`）。
+    🔴 那个 `return` 在 try 里，finally 照样跑 —— 原来按默认值记了一条 code 200 / Success 的操作日志，
+    审计里一个根本没执行完的请求成了「成功」"""
+    import asyncio
+    import time
+
+    from types import SimpleNamespace
+
+    from starlette.requests import ClientDisconnect, Request
+
+    import backend.middleware.opera_log_middleware as mod
+
+    from backend.utils.timezone import timezone
+
+    monkeypatch.setattr(
+        mod,
+        'ctx',
+        SimpleNamespace(
+            perf_time=time.perf_counter(),
+            start_time=timezone.now(),
+            ip='127.0.0.1',
+            country=None,
+            region=None,
+            city=None,
+            user_agent=None,
+            os=None,
+            browser=None,
+            device=None,
+            get=lambda _key: None,
+        ),
+    )
+    monkeypatch.setattr(mod, 'get_request_trace_id', lambda: 'trace')
+    queue = asyncio.Queue()
+    monkeypatch.setattr(M, 'opera_log_queue', queue)
+
+    async def receive():  # ruff: ignore[unused-async] —— ASGI 的 receive 必须是 async
+        return {'type': 'http.request', 'body': b'', 'more_body': False}
+
+    scope = {
+        'type': 'http',
+        'method': 'GET',
+        'path': f'{settings.FASTAPI_API_V1_PATH}/sys/workflow/todo',
+        'raw_path': b'',
+        'query_string': b'',
+        'headers': [],
+        'path_params': {},
+        'client': ('127.0.0.1', 1),
+        'server': ('127.0.0.1', 8000),
+        'scheme': 'http',
+        'user': SimpleNamespace(username='admin'),
+    }
+
+    async def call_next(_request):  # ruff: ignore[unused-async] —— 中间件按 await 调它
+        raise ClientDisconnect
+
+    response = asyncio.run(M(app=None).dispatch(Request(scope, receive), call_next))
+    assert response.status_code == 499
+    assert queue.empty(), f'没执行完的请求不该进操作日志：{queue.get_nowait()}'

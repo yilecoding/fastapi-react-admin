@@ -52,6 +52,14 @@ def _schema_from_signature(fn: Callable[..., Any], name: str) -> dict[str, Any]:
     return schema
 
 
+def _owner_plugin(module: str) -> str | None:
+    """`backend.plugin.workflow.ai_tools` → `workflow`。AI 插件自己的工具不算（它停用时对话入口本身就被拦了），
+    不在插件目录下的也没有归属"""
+    parts = module.split('.')
+    owner = parts[2] if len(parts) > 3 and parts[:2] == ['backend', 'plugin'] else None
+    return None if owner == 'ai' else owner
+
+
 def ai_tool(
     *,
     name: str,
@@ -97,6 +105,7 @@ def ai_tool(
             mutating=mutating,
             preview=preview,
             self_authorized=self_authorized,
+            plugin=_owner_plugin(fn.__module__),
             wants_db='db' in inspect.signature(fn).parameters,
             wants_ctx='ctx' in inspect.signature(fn).parameters,
         )

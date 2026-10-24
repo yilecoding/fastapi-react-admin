@@ -338,12 +338,46 @@ def test_failure_reason_is_in_the_viewers_language_and_never_blank(
     assert error_in('en-US') == text['en-US']['model_timeout']
 
 
+def test_slow_attachments_fail_visibly_instead_of_hanging_in_pending(
+    client: TestClient,
+    token_headers: dict[str, str],
+    login: Login,
+    uid: Uid,
+    sent: list[int],
+    model_reply: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """🔴 读附件原来不在任何内层超时里：慢的时候任务外层的 300 秒先到点、协程被取消，这一行停在 pending 上 ——
+    要等 10 分钟才显示超时，自动同意也不跑。现在读附件自己有一个超时，超了当场记失败、说清楚是附件慢"""
+    _setup(client, token_headers, uid, 'PYTEST_AI_SLOWATT')
+    pk = _start(client, login, 'PYTEST_AI_SLOWATT')
+    model_reply('{"verdict": "pass", "reasons": []}')
+
+    async def slow(*_args: Any) -> Any:
+        await asyncio.sleep(1)
+        return [], []
+
+    monkeypatch.setattr(ai_review_service, '_read_attachments', slow)
+    monkeypatch.setattr(ai_review_service, 'ATTACHMENT_TIMEOUT_SECONDS', 0.1)
+    assert _run(sent[0]) == 'failed'
+    got = _review(client, token_headers, pk)
+    assert got['status'] == 'failed', got
+    assert got['error'] == i18n.locales['zh-CN']['workflow']['ai_review']['attachment_timeout'], got
+
+
 def test_every_stored_error_key_exists_in_both_languages() -> None:
     """存进库的是 key：拼错一个字母，界面上就原样显示一串 `workflow.ai_review.xxx`。
     `test_i18n.py` 只扫 `t('error.…')` 这种调用，这几个 key 是拼出来的，它看不见"""
     src = Path(ai_review_service.__file__).read_text(encoding='utf-8')
     keys = set(re.findall(r'\{_KEY_PREFIX\}(\w+)', src))
-    assert {'bad_output', 'dispatch_failed', 'model_timeout', 'no_ai_plugin', 'no_provider'} <= keys, keys
+    assert {
+        'attachment_timeout',
+        'bad_output',
+        'dispatch_failed',
+        'model_timeout',
+        'no_ai_plugin',
+        'no_provider',
+    } <= keys, keys
     for lang in ('zh-CN', 'en-US'):
         missing = keys - set(i18n.locales[lang]['workflow']['ai_review'])
         assert not missing, f'{lang} 缺 {sorted(missing)}'

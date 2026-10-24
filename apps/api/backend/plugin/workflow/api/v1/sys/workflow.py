@@ -15,6 +15,7 @@ from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, Path, Query, Request, UploadFile
+from pyrate_limiter import Duration, Rate
 
 from backend.app.admin.service.file_service import file_service
 from backend.common.exception import errors
@@ -49,7 +50,18 @@ from backend.plugin.workflow.service import (
     runtime_service,
 )
 from backend.plugin.workflow.service.runtime_service import Actor
+from backend.utils.limiter import RateLimiter
 from backend.utils.timezone import timezone
+
+
+def _per_person(request: Request) -> str:
+    return f'workflow-ai:{request.user.id}'
+
+
+#: 设计器生成和发起填单共用一份额度、按人算（不按 IP：一个出口 IP 后面可能是整个公司）。
+#: 🔴 每次都是一次计费的模型请求（填单还能带 10 MB 的图）：原来登录了就能无限循环地调，
+#: 花钱，还会把网关的额度用光、挤掉真在用的人
+_AI_ASSIST_LIMIT = Depends(RateLimiter(Rate(10, Duration.MINUTE), identifier=_per_person))
 
 router = APIRouter()
 
@@ -160,7 +172,7 @@ async def preview_start(
 @router.post(
     '/startable/{code}/ai-fill',
     summary='发起页：AI 按一段话 / 一份文件填单（只回值，不存）',
-    dependencies=[DependsJwtAuth],
+    dependencies=[DependsJwtAuth, _AI_ASSIST_LIMIT],
 )
 async def ai_fill_start(
     request: Request,
@@ -507,7 +519,7 @@ async def delete_definition(db: CurrentSessionTransaction, pk: Pk) -> ResponseMo
 @router.post(
     '/definitions/{pk}/ai-generate',
     summary='AI 一句话生成表单与流程（只回结果，不改草稿）',
-    dependencies=[Depends(RequestPermission('workflow:definition:edit')), DependsRBAC],
+    dependencies=[Depends(RequestPermission('workflow:definition:edit')), DependsRBAC, _AI_ASSIST_LIMIT],
 )
 async def ai_generate_definition(request: Request, db: CurrentSession, pk: Pk, obj: AiDesignParam) -> ResponseModel:
     # 不用 CurrentSessionTransaction：模型调用要几十秒，不能开着事务等；调用记录自己开一个短事务写
