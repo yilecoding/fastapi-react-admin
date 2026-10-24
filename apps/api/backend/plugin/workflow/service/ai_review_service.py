@@ -470,7 +470,13 @@ async def retry(db: AsyncSession, pk: int, actor: Actor) -> None:
         review, _ = await _latest(db, pk)
         if cfg is None or review is None or _effective_status(review) not in {'failed', 'timeout'}:
             raise errors.RequestError(msg=t('workflow.ai_review.retry_not_allowed'))
-        new = WfAiReview(instance_id=pk, status='pending', points_version=points_version(cfg.get('points') or ''))
+        # 版本号照抄失败的那一次：重试审的还是同一次提交。之后有人动过，自动同意那边的版本号检查照样拦
+        new = WfAiReview(
+            instance_id=pk,
+            status='pending',
+            points_version=points_version(cfg.get('points') or ''),
+            instance_version=review.instance_version,
+        )
         db.add(new)
         await db.flush()
         new_id = new.id

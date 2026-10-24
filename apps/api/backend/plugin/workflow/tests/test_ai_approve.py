@@ -318,3 +318,29 @@ def test_publish_rules() -> None:
     assert not [
         i for i in validate_publish(form, model) if i['level'] == 'ERROR' and i['code'].startswith('AI_APPROVE')
     ]
+
+
+def test_a_retried_review_can_still_approve(
+    client: TestClient,
+    token_headers: dict[str, str],
+    login: Login,
+    uid: Uid,
+    sent: list[int],
+    model_reply: Any,
+    data: Any,
+) -> None:
+    """预审第一次超时 / 失败、点了重试：重试审的还是同一次提交。
+
+    原来新的那一行没带版本号，「建议通过」也永远不会自动同意
+    """
+    from backend.common.exception import errors as errs
+
+    _define(client, token_headers, 'PYTEST_AIA_RETRY', _flow(uid))
+    pk = _start(client, login, 'PYTEST_AIA_RETRY')
+    model_reply(errs.ServerError(msg='网关抖了一下'))
+    assert _after(sent[-1]) == 'failed'
+    ok(client.post(f'/sys/workflow/instances/{pk}/ai-review/retry', headers=login('zhaolei')))
+    model_reply(_reply('pass'))
+    data(40, 40)
+    assert _after(sent[-1]) == 'pass:approved'
+    assert _current(client, token_headers, pk) == ['n2']

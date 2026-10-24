@@ -710,33 +710,80 @@ function AiApproveEditor({
         {on && value && (
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
             <span className="text-muted-foreground">{t('至少')}</span>
-            <Input
-              type="number"
+            <BoundedNumber
+              value={value.minSamples}
               min={20}
               max={10000}
               className="h-8 w-20"
-              value={value.minSamples}
-              onChange={(e) => onChange({ ...value, minSamples: Math.max(20, Math.min(10000, Number(e.target.value) || 20)) })}
-              data-testid="node-ai-approve-samples"
+              onCommit={(minSamples) => onChange({ ...value, minSamples })}
+              testId="node-ai-approve-samples"
             />
             <span className="text-muted-foreground">{t('张「建议通过」的单里，人最后也通过的不低于')}</span>
-            <Input
-              type="number"
+            <BoundedNumber
+              value={Math.round(value.minPrecision * 100)}
               min={80}
               max={100}
-              step={1}
               className="h-8 w-16"
-              value={Math.round(value.minPrecision * 100)}
-              onChange={(e) =>
-                onChange({ ...value, minPrecision: Math.max(80, Math.min(100, Number(e.target.value) || 80)) / 100 })
-              }
-              data-testid="node-ai-approve-precision"
+              onCommit={(pct) => onChange({ ...value, minPrecision: pct / 100 })}
+              testId="node-ai-approve-precision"
             />
             <span className="text-muted-foreground">%</span>
           </div>
         )}
       </div>
     </Row>
+  )
+}
+
+/**
+ * 有上下限的整数框。🔴 不能每敲一个键就夹到范围里：清空后打「95」，「9」先被夹成 80，再敲「5」成了「805」→ 100，
+ * 门槛被静默设成了 100%。打字时只把落在范围里的值交出去，失焦再夹
+ */
+function BoundedNumber({
+  value, min, max, className, onCommit, testId,
+}: {
+  value: number
+  min: number
+  max: number
+  className?: string
+  onCommit: (v: number) => void
+  testId: string
+}) {
+  const [text, setText] = React.useState(String(value))
+  const [shown, setShown] = React.useState(value)
+  if (shown !== value) {
+    // 外面改了（换了节点 / 重新载入）：跟着换。渲染期比对，不用 effect —— `<Activity>` 切回页签时会把 effect
+    // 重建、无条件跑一次（e2e 分册「Activity 会把 effect 整个销毁重建」），会把正在打的字冲掉
+    setShown(value)
+    setText(String(value))
+  }
+  const parse = (s: string) => (s.trim() === '' || !Number.isFinite(Number(s)) ? null : Math.round(Number(s)))
+  return (
+    <Input
+      type="number"
+      min={min}
+      max={max}
+      className={className}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value)
+        const n = parse(e.target.value)
+        if (n !== null && n >= min && n <= max && n !== value) {
+          setShown(n)
+          onCommit(n)
+        }
+      }}
+      onBlur={() => {
+        const n = parse(text)
+        const v = n === null ? value : Math.max(min, Math.min(max, n))
+        setText(String(v))
+        if (v !== value) {
+          setShown(v)
+          onCommit(v)
+        }
+      }}
+      data-testid={testId}
+    />
   )
 }
 

@@ -63,13 +63,21 @@ test("设计器：没开 AI 预审时开不了；开了之后能开、门槛存�
   await expect(scope.getByTestId("node-ai-approve-switch")).toBeEnabled()
   await scope.getByTestId("node-ai-approve-switch").click()
   await expect(scope.getByTestId("node-ai-approve-samples")).toHaveValue("30")
-  await scope.getByTestId("node-ai-approve-samples").fill("50")
+  // 像人一样一个键一个键地打：原来每敲一键就夹到范围里，「95」会变成 9→80→805→100
+  for (const [id, typed] of [["node-ai-approve-samples", "50"], ["node-ai-approve-precision", "90"]] as const) {
+    const box = scope.getByTestId(id)
+    await box.click()
+    await box.press("ControlOrMeta+a")
+    await box.press("Backspace")
+    await box.pressSequentially(typed, { delay: 50 })
+    await expect(box).toHaveValue(typed)
+  }
   await scope.getByTestId("wfd-save").click()
   await expect(scope.getByTestId("wfd-save")).toBeDisabled()
 
   await page.reload()
   await expect(scope.getByTestId("node-ai-approve-samples")).toHaveValue("50")
-  await expect(scope.getByTestId("node-ai-approve-precision")).toHaveValue("95")
+  await expect(scope.getByTestId("node-ai-approve-precision")).toHaveValue("90")
 })
 
 test("审批进度：AI 自动同意的那一步画成「AI 自动同意」、人那一栏是「没经手」，不是「已同意」", async ({ page }) => {

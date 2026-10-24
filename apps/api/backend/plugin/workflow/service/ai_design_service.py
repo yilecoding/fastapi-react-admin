@@ -70,7 +70,7 @@ _RULES = """\
    - "initiator"（发起人自己）· "select_on_start"（发起人提交时自选）· "var_user" + field（取某个 user 字段里的人）
    - 用户点名了**具体某个人**（「交给张三审」）：你不知道他的 ID，把 assignee 写成 null，管理员会在设计器里选
 8. 条件分支之后的节点挂在条件节点的 next 上；每个分支自己的节点挂在 branch 的 child 上
-9. 不要输出 aiReview
+9. 不要输出 aiReview，节点上也不要输出 aiApprove：AI 预审 / AI 自动同意只能由管理员自己开
 """
 
 # 这个示例本身要过发布校验（`test_ai_design.py` 守着）：示例自相矛盾，模型照着学就是错的
@@ -191,6 +191,14 @@ def extract_json(text: str) -> tuple[dict[str, Any] | None, str | None]:
     return out, None
 
 
+def _strip_ai_switches(model: dict[str, Any]) -> None:
+    """🔴 AI 的开关只能由管理员亲手开：生成的流程里带着 `aiApprove`（目录是从 schema 生成的，里面就有这个字段），
+    管理员不碰那个开关就能把「AI 自动同意」发布出去，而且是模型挑的门槛"""
+    model.pop('aiReview', None)
+    for ref in index_nodes(model).values():
+        ref.node.pop('aiApprove', None)
+
+
 def _strip_unknown_roles(model: dict[str, Any], allowed: set[str]) -> None:
     """不在清单里的角色 ID 是模型编的：丢掉。丢空了就是「没配审批人」，发布校验会指到那个节点"""
     try:
@@ -217,11 +225,11 @@ def check(candidate: dict[str, Any], allowed_roles: set[str]) -> tuple[str | Non
     form, model = candidate['form'], candidate['model']
     form.setdefault('schemaVersion', 1)
     model.setdefault('schemaVersion', 1)
-    model.pop('aiReview', None)
     # 两棵树分开校验、路径带上树名：只说 `fields.0.type`，模型分不清是哪棵树
     lines = _shape_errors('form', FormSchema, form) + _shape_errors('model', FlowModel, model)
     if lines:
         return '形状校验没过：\n' + '\n'.join(lines), []
+    _strip_ai_switches(model)
     _strip_unknown_roles(model, allowed_roles)
     return None, validate_publish(form, model)
 
