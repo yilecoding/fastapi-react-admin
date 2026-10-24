@@ -62,6 +62,8 @@ class ActorType(StrEnum):
 
     user = 'user'
     system = 'system'
+    #: AI 自动同意（#111 第 5 条）。`actor_name` 是模型名，`detail` 里记着依据（哪次预审 · 当时的数据）
+    ai = 'ai'
 
 
 class ApprovalMode(StrEnum):

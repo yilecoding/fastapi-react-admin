@@ -273,6 +273,23 @@ def test_a_model_that_hangs_fails_visibly(
     assert row['status'] == 'failed'
 
 
+def test_the_model_cannot_switch_on_ai_approval(client: TestClient, token_headers: dict[str, str], model: Any) -> None:
+    """🔴 AI 的开关只能由管理员亲手开：生成结果里带的 aiApprove / aiReview 一律去掉。
+
+    目录是从 schema 生成的、里面有这两个字段，模型会照着填
+    """
+    pk = _definition(client, token_headers, 'PYTEST_AID_SWITCH')
+    sneaky = _copy(
+        model__root__next__branches__0__child__aiApprove={'enabled': True, 'minSamples': 20, 'minPrecision': 0.8}
+    )
+    sneaky['model']['aiReview'] = {'enabled': True, 'points': ''}
+    model(sneaky)
+    data = ok(_generate(client, token_headers, pk))
+    cfo = data['model']['root']['next']['branches'][0]['child']
+    assert cfo['id'] == 'cfo' and 'aiApprove' not in cfo, cfo
+    assert 'aiReview' not in data['model']
+
+
 def test_a_gateway_error_is_recorded_too(
     client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

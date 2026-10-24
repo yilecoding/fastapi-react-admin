@@ -507,6 +507,7 @@ workflow:
   resubmit_node: Initiator revision
   handover_opinion: Handover
   timeout_approved: 'Not handled within {hours} hours; approved automatically'
+  ai_approved: 'The AI pre-review suggested approval. Of the {n} requests on this workflow it suggested approving, people finally approved {rate}, so this step was approved automatically'
   timeout_rejected: 'Not handled within {hours} hours; rejected automatically'
   ai_fill:
     skip_calc: Calculated automatically, no need to fill in

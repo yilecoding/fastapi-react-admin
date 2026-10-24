@@ -30,13 +30,13 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import func, select, update
+from sqlalchemy import exists, func, select, update
 
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
 from backend.plugin.workflow.enums import PERM_MONITOR, PERM_REASSIGN, PERM_TERMINATE, InstanceStatus
-from backend.plugin.workflow.model import WfAiReview, WfDefinition, WfInstance
+from backend.plugin.workflow.model import WfActionRecord, WfAiReview, WfDefinition, WfInstance
 from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
@@ -114,7 +114,12 @@ async def queue_in_tx(ctx: _Ctx, inst: WfInstance) -> None:
     cfg = ai_config(json.loads(inst.model_snapshot))
     if cfg is None:
         return
-    review = WfAiReview(instance_id=inst.id, status='pending', points_version=points_version(cfg.get('points') or ''))
+    review = WfAiReview(
+        instance_id=inst.id,
+        status='pending',
+        points_version=points_version(cfg.get('points') or ''),
+        instance_version=inst.version,
+    )
     ctx.db.add(review)
     await ctx.db.flush()
     db = ctx.db
@@ -465,7 +470,13 @@ async def retry(db: AsyncSession, pk: int, actor: Actor) -> None:
         review, _ = await _latest(db, pk)
         if cfg is None or review is None or _effective_status(review) not in {'failed', 'timeout'}:
             raise errors.RequestError(msg=t('workflow.ai_review.retry_not_allowed'))
-        new = WfAiReview(instance_id=pk, status='pending', points_version=points_version(cfg.get('points') or ''))
+        # 版本号照抄失败的那一次：重试审的还是同一次提交。之后有人动过，自动同意那边的版本号检查照样拦
+        new = WfAiReview(
+            instance_id=pk,
+            status='pending',
+            points_version=points_version(cfg.get('points') or ''),
+            instance_version=review.instance_version,
+        )
         db.add(new)
         await db.flush()
         new_id = new.id
@@ -478,6 +489,28 @@ _DECIDED = (InstanceStatus.approved.value, InstanceStatus.rejected.value)
 _VERDICTS = ('pass', 'attention', 'reject')
 
 
+def decided_reviews(*columns: Any) -> Any:
+    """一致率的口径（见 `agreement_stats`）：每张已有结论的单最后一次 done 的预审，AI 自动同意过的不算。
+    `ai_approve_service` 放闸用的是同一个口径，所以单独一个函数"""
+    latest = (
+        select(WfAiReview.instance_id, func.max(WfAiReview.id).label('rid')).group_by(WfAiReview.instance_id).subquery()
+    )
+    by_ai = exists().where(WfActionRecord.instance_id == WfInstance.id, WfActionRecord.action == 'ai_approve')
+    return (
+        select(*columns)
+        .select_from(latest)
+        .join(WfAiReview, WfAiReview.id == latest.c.rid)
+        .join(WfInstance, WfInstance.id == WfAiReview.instance_id)
+        .join(WfDefinition, WfDefinition.id == WfInstance.definition_id)
+        .where(
+            WfAiReview.status == 'done',
+            WfInstance.status.in_(_DECIDED),
+            WfAiReview.verdict.in_(_VERDICTS),
+            ~by_ai,
+        )
+    )
+
+
 async def agreement_stats(db: AsyncSession) -> list[dict[str, Any]]:
     """AI 建议和人的最终决定对不对得上，按「模型 × 流程」分组。口径：
 
@@ -487,22 +520,14 @@ async def agreement_stats(db: AsyncSession) -> list[dict[str, Any]]:
     - **按模型分开**：同一张单不同模型松紧不一样（真模型实测：DeepSeek-V3.2 给 pass、Qwen3-VL 给 attention），
       混在一起算出来的数谁的都不是
 
+    - 🔴 **AI 自动同意过的单不算**（#111 第 5 条）：那一步是 AI 定的，不是人的决定 —— 算进来就是 AI 自己给自己打分，
+      自动同意得越多一致率越高
+
     只返回计数，不返回任何单据内容，所以不用按查看人裁字段；接口挂的是实例监控的权限码
     """
-    latest = (
-        select(WfAiReview.instance_id, func.max(WfAiReview.id).label('rid')).group_by(WfAiReview.instance_id).subquery()
-    )
-    stmt = (
-        select(
-            WfAiReview.model, WfDefinition.code, WfDefinition.name, WfAiReview.verdict, WfInstance.status, func.count()
-        )
-        .select_from(latest)
-        .join(WfAiReview, WfAiReview.id == latest.c.rid)
-        .join(WfInstance, WfInstance.id == WfAiReview.instance_id)
-        .join(WfDefinition, WfDefinition.id == WfInstance.definition_id)
-        .where(WfAiReview.status == 'done', WfInstance.status.in_(_DECIDED), WfAiReview.verdict.in_(_VERDICTS))
-        .group_by(WfAiReview.model, WfDefinition.code, WfDefinition.name, WfAiReview.verdict, WfInstance.status)
-    )
+    stmt = decided_reviews(
+        WfAiReview.model, WfDefinition.code, WfDefinition.name, WfAiReview.verdict, WfInstance.status, func.count()
+    ).group_by(WfAiReview.model, WfDefinition.code, WfDefinition.name, WfAiReview.verdict, WfInstance.status)
     groups: dict[tuple[str | None, str], dict[str, Any]] = {}
     for model, code, name, verdict, status, n in (await db.execute(stmt)).all():
         row = groups.setdefault(

@@ -12,7 +12,7 @@ import { cn } from '@admin/ui/lib/utils'
 import { FormField as Row } from '../_shared/form-fields'
 import {
   directoryRolesQuery, directoryUsersQuery,
-  type ApprovalNode, type AssigneeRule, type Branch, type CcNode, type Cond, type CondOp, type FieldPerm,
+  type AiApproveConfig, type ApprovalNode, type AssigneeRule, type Branch, type CcNode, type Cond, type CondOp, type FieldPerm,
   type ApprovalMode, type FlowModel, type FormSchema, type OptionalAction,
 } from '../workflow/api'
 import {
@@ -107,7 +107,12 @@ export function FlowDesigner({
             onChange={(fieldPerms) => onChange({ ...model, root: { ...model.root, fieldPerms } })}
           />
         ) : node?.type === 'approval' ? (
-          <ApprovalProps node={node} form={form} onChange={(p) => onChange(patchNode<ApprovalNode>(model, node.id, p))} />
+          <ApprovalProps
+            node={node}
+            form={form}
+            reviewOn={!!model.aiReview?.enabled}
+            onChange={(p) => onChange(patchNode<ApprovalNode>(model, node.id, p))}
+          />
         ) : node?.type === 'cc' ? (
           <CcProps node={node} form={form} onChange={(p) => onChange(patchNode<CcNode>(model, node.id, p))} />
         ) : branch && cond ? (
@@ -277,10 +282,12 @@ function RuleEditor({
 }
 
 function ApprovalProps({
-  node, form, onChange,
+  node, form, reviewOn, onChange,
 }: {
   node: ApprovalNode
   form: FormSchema
+  /** 流程开了 AI 预审没有（AI 自动同意的依据就是预审结论） */
+  reviewOn: boolean
   onChange: (p: Partial<ApprovalNode>) => void
 }) {
   const { t } = useTranslation()
@@ -312,6 +319,12 @@ function ApprovalProps({
         />
       </Row>
       <TimeoutEditor value={node.timeout ?? null} onChange={(timeout) => onChange({ timeout })} />
+      <AiApproveEditor
+        value={node.aiApprove ?? null}
+        orSign={(node.mode ?? 'any') === 'any'}
+        reviewOn={reviewOn}
+        onChange={(aiApprove) => onChange({ aiApprove })}
+      />
       <Row label={t('找不到审批人时')} hint={t('必须显式选：发起人自己被去掉、部门没配负责人、角色里没人，都会走到这里')}>
         <Segmented
           value={node.onEmpty}
@@ -656,6 +669,122 @@ export function _i18nExtractionAnchorsFlowDesigner(t: (k: string) => string) {
     t('一人同意即可，其余人的待办自动结束'), t('所有人都同意才通过，任何一人驳回整单结束'),
     t('按审批人的顺序一个一个来，前一个同意了才轮到下一个'),
   ]
+}
+
+/**
+ * AI 自动同意（#111 第 5 条）。🔴 开关是「允许」不是「立刻生效」：预审建议通过、而且这个流程 × 模型的「建议通过」里
+ * 人最后也通过的比例够高、样本够多，才真的替人同意；永远不自动驳回。只能配在或签上、要先开 AI 预审（发布校验也拦）
+ */
+function AiApproveEditor({
+  value, orSign, reviewOn, onChange,
+}: {
+  value: AiApproveConfig | null
+  orSign: boolean
+  reviewOn: boolean
+  onChange: (v: AiApproveConfig | null) => void
+}) {
+  const { t } = useTranslation()
+  const on = !!value?.enabled
+  const blocked = !orSign ? t('只有或签节点能开') : !reviewOn ? t('先在基础信息里开 AI 预审') : null
+  return (
+    <Row
+      label={t('AI 自动同意')}
+      hint={
+        on
+          ? t('预审建议通过、而且数据够了才替人同意；建议驳回或拿不准，照常给人审。永远不会自动驳回')
+          : (blocked ?? t('关：预审只给审批人参考'))
+      }
+    >
+      <div className="flex flex-col gap-2" data-testid="node-ai-approve">
+        <label className="flex items-center justify-between text-sm">
+          {t('开启')}
+          <Switch
+            checked={on}
+            disabled={!on && !!blocked}
+            onCheckedChange={(c) =>
+              onChange(c ? { enabled: true, minSamples: value?.minSamples ?? 30, minPrecision: value?.minPrecision ?? 0.95 } : null)
+            }
+            data-testid="node-ai-approve-switch"
+          />
+        </label>
+        {on && value && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span className="text-muted-foreground">{t('至少')}</span>
+            <BoundedNumber
+              value={value.minSamples}
+              min={20}
+              max={10000}
+              className="h-8 w-20"
+              onCommit={(minSamples) => onChange({ ...value, minSamples })}
+              testId="node-ai-approve-samples"
+            />
+            <span className="text-muted-foreground">{t('张「建议通过」的单里，人最后也通过的不低于')}</span>
+            <BoundedNumber
+              value={Math.round(value.minPrecision * 100)}
+              min={80}
+              max={100}
+              className="h-8 w-16"
+              onCommit={(pct) => onChange({ ...value, minPrecision: pct / 100 })}
+              testId="node-ai-approve-precision"
+            />
+            <span className="text-muted-foreground">%</span>
+          </div>
+        )}
+      </div>
+    </Row>
+  )
+}
+
+/**
+ * 有上下限的整数框。🔴 不能每敲一个键就夹到范围里：清空后打「95」，「9」先被夹成 80，再敲「5」成了「805」→ 100，
+ * 门槛被静默设成了 100%。打字时只把落在范围里的值交出去，失焦再夹
+ */
+function BoundedNumber({
+  value, min, max, className, onCommit, testId,
+}: {
+  value: number
+  min: number
+  max: number
+  className?: string
+  onCommit: (v: number) => void
+  testId: string
+}) {
+  const [text, setText] = React.useState(String(value))
+  const [shown, setShown] = React.useState(value)
+  if (shown !== value) {
+    // 外面改了（换了节点 / 重新载入）：跟着换。渲染期比对，不用 effect —— `<Activity>` 切回页签时会把 effect
+    // 重建、无条件跑一次（e2e 分册「Activity 会把 effect 整个销毁重建」），会把正在打的字冲掉
+    setShown(value)
+    setText(String(value))
+  }
+  const parse = (s: string) => (s.trim() === '' || !Number.isFinite(Number(s)) ? null : Math.round(Number(s)))
+  return (
+    <Input
+      type="number"
+      min={min}
+      max={max}
+      className={className}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value)
+        const n = parse(e.target.value)
+        if (n !== null && n >= min && n <= max && n !== value) {
+          setShown(n)
+          onCommit(n)
+        }
+      }}
+      onBlur={() => {
+        const n = parse(text)
+        const v = n === null ? value : Math.max(min, Math.min(max, n))
+        setText(String(v))
+        if (v !== value) {
+          setShown(v)
+          onCommit(v)
+        }
+      }}
+      data-testid={testId}
+    />
+  )
 }
 
 /** 超时处理：关 / N 小时后提醒 · 自动同意 · 自动驳回。按自然时间算，不计工作日 */

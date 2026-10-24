@@ -14,3 +14,8 @@ extend = "admin"
 [api.workflow]
 prefix = "/workflow"
 tags = "审批流"
+
+[settings]
+# AI 自动同意的总闸（#111 第 5 条，见 plugin/workflow/AGENTS.md）。false = 所有流程的 AI 自动同意都停，
+# 预审照常给建议。开着也只是「允许」：节点要自己开、这个流程 × 模型的数据够了才会真的替人同意
+WORKFLOW_AI_APPROVE_ENABLED = true

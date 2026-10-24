@@ -143,6 +143,20 @@ class Timeout(_Shape):
     action: Literal['remind', 'approve', 'reject']
 
 
+class AiApproveConfig(_Shape):
+    """AI 自动同意（#111 第 5 条）。🔴 只有同意、永远不自动驳回；拿不准（预审不是「建议通过」）就照常给人。
+
+    按数据放闸：这个流程 × 这个模型的「建议通过」里，人最后也通过的比例够高、样本够多，才真的替人同意。
+    数据不够时这个开关开着也什么都不做 —— 开关是「允许」，不是「立刻生效」
+    """
+
+    enabled: bool = False
+    #: 至少要有多少张「AI 建议通过、而且已经有了最终结论」的单
+    minSamples: int = Field(30, ge=20, le=10000)  # ruff:ignore[mixed-case-variable-in-class-scope]
+    #: 这些单里人最后也通过的比例至少多少
+    minPrecision: float = Field(0.95, ge=0.8, le=1.0)  # ruff:ignore[mixed-case-variable-in-class-scope]
+
+
 class ApprovalNode(_Shape):
     type: Literal['approval']
     id: str
@@ -154,6 +168,7 @@ class ApprovalNode(_Shape):
     actions: list[str] | None = None
     fieldPerms: dict[str, FieldPerm] = Field(default_factory=dict)  # ruff:ignore[mixed-case-variable-in-class-scope]
     timeout: Timeout | None = None
+    aiApprove: AiApproveConfig | None = None  # ruff:ignore[mixed-case-variable-in-class-scope]
     next: Node | None = None
 
 
