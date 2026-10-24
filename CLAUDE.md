@@ -36,6 +36,7 @@
 | 动文件上传 / 预览 / 附件 | [`packages/platform/src/pages/file/AGENTS.md`](packages/platform/src/pages/file/AGENTS.md) |
 | 动消息通知 / 铃铛 / 收件箱 · **审批流** | [`notification`](packages/platform/src/pages/notification/AGENTS.md) · 审批后端 [`plugin/workflow`](apps/api/backend/plugin/workflow/AGENTS.md) · 审批前端 [`pages/workflow`](packages/platform/src/pages/workflow/AGENTS.md) |
 | 动 AI 对话页 / 侧滑抽屉 | [`packages/platform/src/pages/ai-chat/AGENTS.md`](packages/platform/src/pages/ai-chat/AGENTS.md) |
+| 动短信 · 接新的短信厂商 · 调 `sms_service.send()` | [`apps/api/backend/plugin/sms/AGENTS.md`](apps/api/backend/plugin/sms/AGENTS.md) |
 | 动查询区 / 筛选条件 | [`packages/ui/src/components/query-bar/AGENTS.md`](packages/ui/src/components/query-bar/AGENTS.md) |
 | 动富文本 / 正文里的图片 | [`packages/ui/src/components/rich-text/AGENTS.md`](packages/ui/src/components/rich-text/AGENTS.md) |
 | 挑组件 / 改尺寸覆盖不生效 | [`packages/ui/AGENTS.md`](packages/ui/AGENTS.md) |
