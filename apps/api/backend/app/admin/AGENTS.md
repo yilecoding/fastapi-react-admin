@@ -50,6 +50,19 @@
 - ⚠️ **没有强制首次改密的机制**。`last_password_changed_time` 建号时就是当下，
   所以导入的账号在 `USER_PASSWORD_EXPIRY_DAYS`（默认 365 天）内不会被要求改掉默认密码
 
+## 手机号：唯一约束 + 「本人验证过」才算数（issue #168）
+
+`sys_user.phone` 有唯一约束 `uk_sys_user_phone_deleted`（形状同 email：`(phone, deleted)`，SQL Server 走筛选唯一索引让 NULL 互不冲突），
+所以**三条管理员写路径都要先查重**：`user_service.create` / `update`（`user_dao.check_phone`，豁免数据范围的理由同 `check_email`）、
+批量导入（`dataio._user_validate` 文件内 + 库内两维，同邮箱）。漏一条的表现是 IntegrityError → 500，而不是干净的 409。
+
+🔴 **`phone_verified_time` 为空 = 管理员录入 / 导入的，没经过本人验证 —— 这种号不能用来登录。** 打错一位，号码的主人就能登进别人的账号。
+只有本人在个人中心用验证码绑定（`PUT /sys/users/me/phone`）才写这个时间；**管理员改了号码就清掉它**（`user_service.update` 里
+`obj.phone != user.phone` 那一句），否则「验证」会跟着一个换过的号继续算数。
+
+**实测证据**：`tests/api_v1/test_user_phone_unique.py` —— 新建 / 编辑撞号 409、空号互不冲突、管理员改号后 `phone_verified_time` 变空、
+导入文件内两行同号第二行红 + 库里已有的号那一行红。迁移 `aa000000userphone` 在开发库 up → down → up 验过，加约束前先查重、有重复就报出是哪几个号。
+
 ## 已经删掉的东西，不要照上游加回来
 
 `sys_menu` 的两列已从**模型、DTO、种子 SQL 和数据库**里彻底删除：

@@ -93,6 +93,39 @@ export function useSendEmailCaptcha() {
   })
 }
 
+/**
+ * 给要绑定的手机号发短信验证码：`POST /sys/users/me/phone/captcha`（issue #168）。
+ *
+ * 真发一条短信（扣费）；按操作人 5 分钟 3 次限流，`captcha` 业务模板自己还有 60 秒冷却。
+ * 已经是别人的号直接 409，不发。失败要显示出来 —— 没配短信通道时这里就是报错的地方（硬纪律 9）。
+ */
+export function useSendPhoneCaptcha() {
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: (phone: string) => api.POST<null>('/api/v1/sys/users/me/phone/captcha', { body: { phone } }),
+  })
+}
+
+/** 绑定手机号：`PUT /sys/users/me/phone`，号码 + 发到它上面的验证码。成功后 `phone_verified_time` 有值 */
+export function useUpdatePhone() {
+  const qc = useQueryClient()
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: (v: { phone: string; captcha: string }) => api.PUT<null>('/api/v1/sys/users/me/phone', { body: v }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: authKeys.me() }),
+  })
+}
+
+/** 解绑手机号：`DELETE /sys/users/me/phone`，号码和验证时间一起清 */
+export function useUnbindPhone() {
+  const qc = useQueryClient()
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: () => api.DELETE<null>('/api/v1/sys/users/me/phone'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: authKeys.me() }),
+  })
+}
+
 /** 换邮箱：`PUT /sys/users/me/email`，要带上面发到新邮箱的验证码 */
 export function useUpdateEmail() {
   const qc = useQueryClient()

@@ -101,6 +101,7 @@ class GetUserInfoDetail(UserInfoSchemaBase):
     is_staff: bool = Field(description='是否管理员')
     join_time: datetime = Field(description='加入时间')
     last_login_time: datetime | None = Field(None, description='最后登录时间')
+    phone_verified_time: datetime | None = Field(None, description='手机号验证时间（空 = 管理员录入、未经本人验证）')
     # 🔴 **必须带默认值，不能写成必填。** 这个 DTO 的子类
     # `GetUserInfoWithRelationDetail` 整份序列化后存在 `fba:user:<id>`，
     # 而旧缓存里没有这个字段 —— 写成必填的话每个已登录用户的每个请求都会

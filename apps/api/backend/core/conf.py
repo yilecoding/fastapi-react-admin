@@ -595,6 +595,9 @@ class Settings(BaseSettings):
     # 「发送中」停留超过多少秒算「结果未知」（进程在两步式日志之间崩溃）
     SMS_SENDING_STALE_SECONDS: int
     SMS_REDIS_PREFIX: str
+    # 手机验证码：有效期（秒）· 同一个码最多试错几次（issue #168）
+    SMS_CAPTCHA_EXPIRE_SECONDS: int
+    SMS_CAPTCHA_MAX_ATTEMPTS: int
 
     ##################################################
     # [ Plugin ] email

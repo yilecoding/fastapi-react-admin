@@ -102,6 +102,7 @@ error:
     dept_code_not_found: Department code {code} does not exist
     dict_type_not_found: Dictionary type code {code} does not exist
     duplicated_email: Email {value} is duplicated in the file, already used on row {row_no}
+    duplicated_phone: Phone {value} is duplicated in the file; row {row_no} already uses it
     duplicated_in_file: Duplicates row {row_no}
     duplicated_name_in_level: Another department under the same parent already has this name (row {row_no})
     key_exists: '{key} already exists (mode is "create only")'
@@ -306,11 +307,13 @@ error:
     cache_key_build_failed: Failed to build the user cache key
     captcha_expired: Captcha is no longer valid, please get a new one
     email_bound: This email is already bound
+    phone_bound: This phone number is already bound to another account
     not_found: User does not exist
     password_mismatch: The two passwords do not match
     password_required: Password cannot be empty
     permission_type_not_found: Permission type does not exist
     self_permission_forbidden: You cannot change your own permissions
+    sms_plugin_required: The SMS plugin is not installed, so a verification code cannot be sent
     username_registered: Username is already registered
     wrong_old_password: Current password is incorrect
   workflow:

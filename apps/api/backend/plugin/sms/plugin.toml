@@ -19,3 +19,6 @@ SMS_GLOBAL_HOURLY_MAX = 500
 # 「发送中」停留超过多少秒就在日志页显示成「结果未知」（进程在「插日志」和「更新终态」之间崩溃了）
 SMS_SENDING_STALE_SECONDS = 180
 SMS_REDIS_PREFIX = "fba:sms"
+# 手机验证码（个人中心绑定手机号 / 手机验证码登录，issue #168）：有效期（秒）和同一个码最多试错几次
+SMS_CAPTCHA_EXPIRE_SECONDS = 300
+SMS_CAPTCHA_MAX_ATTEMPTS = 5
