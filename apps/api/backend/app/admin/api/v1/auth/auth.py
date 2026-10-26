@@ -6,7 +6,7 @@ from pyrate_limiter import Duration, Rate
 from starlette.background import BackgroundTasks
 
 from backend.app.admin.schema.token import GetLoginToken, GetNewToken, GetSwaggerToken
-from backend.app.admin.schema.user import AuthLoginParam
+from backend.app.admin.schema.user import AuthLoginParam, AuthPhoneCaptchaParam, AuthPhoneLoginParam
 from backend.app.admin.service.auth_service import auth_service
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
 from backend.common.security.jwt import DependsJwtAuth
@@ -61,6 +61,35 @@ async def login(
     background_tasks: BackgroundTasks,
 ) -> ResponseSchemaModel[GetLoginToken]:
     data = await auth_service.login(
+        db=db, request=request, response=response, obj=obj, background_tasks=background_tasks
+    )
+    return response_base.success(data=data)
+
+
+@router.post(
+    '/phone/captcha',
+    summary='手机验证码登录：发送验证码',
+    description='图形验证码开着时要带 uuid + captcha。没注册 / 没验证过的号也返回成功（不真发）—— 防号码枚举',
+    dependencies=[Depends(RateLimiter(Rate(5, Duration.MINUTE)))],
+)
+async def send_phone_login_captcha(db: CurrentSession, obj: AuthPhoneCaptchaParam) -> ResponseModel:
+    await auth_service.send_phone_captcha(db=db, obj=obj)
+    return response_base.success()
+
+
+@router.post(
+    '/phone/login',
+    summary='手机验证码登录',
+    dependencies=[Depends(RateLimiter(Rate(5, Duration.MINUTE)))],
+)
+async def phone_login(
+    db: CurrentSessionTransaction,
+    request: Request,
+    response: Response,
+    obj: AuthPhoneLoginParam,
+    background_tasks: BackgroundTasks,
+) -> ResponseSchemaModel[GetLoginToken]:
+    data = await auth_service.phone_login(
         db=db, request=request, response=response, obj=obj, background_tasks=background_tasks
     )
     return response_base.success(data=data)

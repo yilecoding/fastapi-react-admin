@@ -109,6 +109,9 @@ class Settings(BaseSettings):
     TOKEN_REQUEST_UNDERLYING_SECURITY: bool = True
     TOKEN_REQUEST_PATH_EXCLUDE: list[str] = [  # JWT / RBAC 路由白名单
         f'{FASTAPI_API_V1_PATH}/auth/login',
+        # 手机验证码登录的两个匿名接口（issue #168）。精确匹配，不要写成前缀
+        f'{FASTAPI_API_V1_PATH}/auth/phone/captcha',
+        f'{FASTAPI_API_V1_PATH}/auth/phone/login',
         # ⚠️ **不要**把 `/auth/logout` 加进来。曾经加过，为的是让「access token 已过期
         # 时点登出」不被中间件 401 挡住 —— 但代价是 `request.user` 在这条路由上变成
         # 未认证，`opera_log_middleware` 的 `request.user.username` 走 AttributeError

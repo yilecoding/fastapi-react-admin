@@ -16,7 +16,14 @@ import {
 } from "@tabler/icons-react"
 
 import { ApiError } from "@admin/platform/api-client/errors"
-import { isSessionEndReason, login, SESSION_END_MESSAGE, type SessionEndReason } from "@admin/platform/auth/session"
+import {
+  isSessionEndReason,
+  login,
+  loginByPhone,
+  sendPhoneCaptcha,
+  SESSION_END_MESSAGE,
+  type SessionEndReason,
+} from "@admin/platform/auth/session"
 import { Alert } from "@admin/ui/components/alert"
 import { Button } from "@admin/ui/components/button"
 import { Checkbox } from "@admin/ui/components/checkbox"
@@ -108,6 +115,20 @@ function SignInPage() {
   const [captchaError, setCaptchaError] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [pending, setPending] = React.useState(false)
+  // 手机验证码登录（issue #168 第二步）。图形验证码和密码页签**共用**同一张：服务端校验后消费掉，
+  // 发完码要重新拉一张 —— 所以发码成功 / 失败（非限流）都 loadCaptcha()
+  const [phone, setPhone] = React.useState("")
+  const [smsCode, setSmsCode] = React.useState("")
+  const [smsCooldown, setSmsCooldown] = React.useState(0)
+  const [smsSent, setSmsSent] = React.useState(false)
+  const [phoneError, setPhoneError] = React.useState<string | null>(null)
+  const [phonePending, setPhonePending] = React.useState(false)
+  React.useEffect(() => {
+    if (smsCooldown <= 0) return
+    const timer = window.setTimeout(() => setSmsCooldown((c) => c - 1), 1000)
+    return () => window.clearTimeout(timer)
+  }, [smsCooldown])
+  const phoneOk = /^1[3-9]\d{9}$/.test(phone.trim())
 
   // 单飞：/auth/captcha 限流 5 次 / 30 秒，而 StrictMode 开发期会把 effect 跑两遍。
   // 不去重的话每次开页要吃掉 2 次配额，刷新三次就把自己限流锁死。
@@ -197,6 +218,89 @@ function SignInPage() {
     } finally {
       setPending(false)
     }
+  }
+
+  async function sendSmsCode() {
+    setPhoneError(null)
+    setSmsSent(false)
+    try {
+      await sendPhoneCaptcha({
+        phone: phone.trim(),
+        ...(captchaUuid ? { uuid: captchaUuid, captcha } : {}),
+      })
+      setSmsSent(true)
+      // 和 `captcha` 业务模板的 60 秒冷却对齐；倒计时只是 UX，真正的闸在服务端
+      setSmsCooldown(60)
+    } catch (err) {
+      setPhoneError(err instanceof ApiError ? err.message : t("验证码发送失败，请稍后重试"))
+    } finally {
+      // 图形验证码已被服务端消费（对了就消费，错了也要换一张）；命中限流时它没被消费，继续用旧的（同密码登录那条注释）
+      if (captchaUuid) void loadCaptcha()
+    }
+  }
+
+  async function handlePhoneSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setPhoneError(null)
+    setPhonePending(true)
+    try {
+      await loginByPhone(qc, { phone: phone.trim(), code: smsCode.trim() })
+      await router.invalidate()
+      await navigate({ to: search.redirect ?? "/dashboard" })
+    } catch (err) {
+      setPhoneError(err instanceof ApiError ? err.message : t("登录失败，请稍后重试"))
+    } finally {
+      setPhonePending(false)
+    }
+  }
+
+  /** 图形验证码那一块。两个页签各渲染一份（id 不同），状态共用 */
+  function renderGraphicCaptcha(idPrefix: string) {
+    if (captchaState === "off") return null
+    return (
+      <div className="grid gap-2">
+        <Label htmlFor={`${idPrefix}captcha`} className="text-sm">{t("验证码")}</Label>
+        <div className="flex items-center gap-2">
+          <InputGroup className="h-11 flex-1">
+            <InputGroupAddon align="inline-start">
+              <IconShieldCheck />
+            </InputGroupAddon>
+            <InputGroupInput
+              id={`${idPrefix}captcha`}
+              data-testid={`${idPrefix}captcha`}
+              data-captcha-uuid={captchaUuid ?? ""}
+              placeholder={t("请输入图形验证码")}
+              value={captcha}
+              onChange={(e) => setCaptcha(e.target.value)}
+              disabled={captchaState !== "ready"}
+              autoComplete="off"
+            />
+          </InputGroup>
+          <button
+            type="button"
+            onClick={() => void loadCaptcha()}
+            data-testid={`${idPrefix}captcha-refresh`}
+            disabled={captchaState === "loading"}
+            // 验证码图本身是白底 —— 深色下强行反色会压掉某些字色的对比度，所以底一律留白，靠描边让它看起来是一块「纸样」而不是漏出来的白块
+            className="flex h-11 w-[108px] shrink-0 items-center justify-center overflow-hidden rounded-md bg-white ring-1 ring-border text-xs text-muted-foreground transition-opacity hover:opacity-90 disabled:opacity-60 dark:text-neutral-600"
+            title={t("点击刷新")}
+          >
+            {captchaState === "ready" && captchaImg ? (
+              <img src={captchaImg} alt={t("验证码")} className="h-full w-full object-contain" />
+            ) : captchaState === "loading" ? (
+              <IconLoader2 className="size-4 animate-spin" />
+            ) : (
+              t("点击重试")
+            )}
+          </button>
+        </div>
+        {captchaState === "error" && (
+          <p data-testid={`${idPrefix}captcha-error`} className="text-sm text-destructive">
+            {captchaError}
+          </p>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -289,50 +393,7 @@ function SignInPage() {
                     </InputGroup>
                   </div>
 
-                  {captchaState !== "off" && (
-                    <div className="grid gap-2">
-                      <Label htmlFor="captcha" className="text-sm">{t("验证码")}</Label>
-                      <div className="flex items-center gap-2">
-                        <InputGroup className="h-11 flex-1">
-                          <InputGroupAddon align="inline-start">
-                            <IconShieldCheck />
-                          </InputGroupAddon>
-                          <InputGroupInput
-                            id="captcha"
-                            data-testid="captcha"
-                            data-captcha-uuid={captchaUuid ?? ""}
-                            placeholder={t("请输入图形验证码")}
-                            value={captcha}
-                            onChange={(e) => setCaptcha(e.target.value)}
-                            disabled={captchaState !== "ready"}
-                            autoComplete="off"
-                          />
-                        </InputGroup>
-                        <button
-                          type="button"
-                          onClick={() => void loadCaptcha()}
-                          data-testid="captcha-refresh"
-                          disabled={captchaState === "loading"}
-                          // 验证码图本身是白底 —— 深色下强行反色会压掉某些字色的对比度，所以底一律留白，靠描边让它看起来是一块「纸样」而不是漏出来的白块
-                          className="flex h-11 w-[108px] shrink-0 items-center justify-center overflow-hidden rounded-md bg-white ring-1 ring-border text-xs text-muted-foreground transition-opacity hover:opacity-90 disabled:opacity-60 dark:text-neutral-600"
-                          title={t("点击刷新")}
-                        >
-                          {captchaState === "ready" && captchaImg ? (
-                            <img src={captchaImg} alt={t("验证码")} className="h-full w-full object-contain" />
-                          ) : captchaState === "loading" ? (
-                            <IconLoader2 className="size-4 animate-spin" />
-                          ) : (
-                            t("点击重试")
-                          )}
-                        </button>
-                      </div>
-                      {captchaState === "error" && (
-                        <p data-testid="captcha-error" className="text-sm text-destructive">
-                          {captchaError}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  {renderGraphicCaptcha("")}
 
                   {!error && search.reason && (
                     <Alert tone={SESSION_END_TONE[search.reason]} data-testid="session-end-notice">
@@ -369,12 +430,87 @@ function SignInPage() {
               </TabsContent>
 
               <TabsContent value="phone" className="min-h-[22.5rem]">
-                <NotWired
-                  icon={IconDeviceMobile}
-                  title={t("手机验证码登录还没接入")}
-                  hint={t("后端目前只开了账号密码这一条登录路径，手机号验证码要等短信通道接进来。")}
-                  onUsePassword={() => setMethod("password")}
-                />
+                <form onSubmit={handlePhoneSubmit} className="mt-6 flex flex-col gap-4">
+                  <div className="grid gap-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <Label htmlFor="phone" className="text-sm">{t("手机号")}</Label>
+                      <span className="text-xs text-muted-foreground">{t("只认在个人中心验证过的手机号")}</span>
+                    </div>
+                    <InputGroup className="h-11">
+                      <InputGroupAddon align="inline-start">
+                        <IconDeviceMobile />
+                      </InputGroupAddon>
+                      <InputGroupInput
+                        id="phone"
+                        data-testid="phone"
+                        placeholder={t("请输入手机号")}
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        required
+                        inputMode="numeric"
+                        maxLength={11}
+                        autoComplete="tel"
+                      />
+                    </InputGroup>
+                  </div>
+
+                  {renderGraphicCaptcha("phone-")}
+
+                  <div className="grid gap-2">
+                    <Label htmlFor="sms-code" className="text-sm">{t("短信验证码")}</Label>
+                    <div className="flex items-center gap-2">
+                      <InputGroup className="h-11 flex-1">
+                        <InputGroupAddon align="inline-start">
+                          <IconShieldCheck />
+                        </InputGroupAddon>
+                        <InputGroupInput
+                          id="sms-code"
+                          data-testid="sms-code"
+                          placeholder={t("请输入短信验证码")}
+                          value={smsCode}
+                          onChange={(e) => setSmsCode(e.target.value)}
+                          required
+                          inputMode="numeric"
+                          maxLength={6}
+                          autoComplete="one-time-code"
+                        />
+                      </InputGroup>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 w-[108px] shrink-0"
+                        data-testid="sms-send"
+                        disabled={!phoneOk || smsCooldown > 0 || captchaState === "loading" || captchaState === "error"}
+                        onClick={() => void sendSmsCode()}
+                      >
+                        {smsCooldown > 0 ? t("{{n}} 秒", { n: smsCooldown }) : t("发送验证码")}
+                      </Button>
+                    </div>
+                    {smsSent && !phoneError && (
+                      <p className="text-sm text-muted-foreground" data-testid="sms-sent">
+                        {t("验证码已发送，5 分钟内有效。没收到？核对号码是否在个人中心验证过。")}
+                      </p>
+                    )}
+                  </div>
+
+                  {phoneError && (
+                    <Alert tone="danger" data-testid="phone-login-error">
+                      {phoneError}
+                    </Alert>
+                  )}
+
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="mt-2 h-11 w-full text-base"
+                    disabled={phonePending || !phoneOk || smsCode.trim().length === 0}
+                    data-testid="phone-submit"
+                  >
+                    {phonePending && <IconLoader2 className="size-4 animate-spin" />}
+                    {t("登录")}
+                    <IconArrowRight className="transition-transform group-hover/button:translate-x-0.5" />
+                  </Button>
+                </form>
               </TabsContent>
 
               <TabsContent value="qrcode" className="min-h-[22.5rem]">

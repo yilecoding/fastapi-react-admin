@@ -76,7 +76,7 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 
 ## 手机验证码（`service/captcha_service.py`，issue #168）
 
-第一个使用方。个人中心绑定手机号（`scene=bind`，按操作人隔离）和手机验证码登录（`scene=login`，第二步）共用，
+两个使用方：个人中心绑定手机号（`scene=bind`，按操作人隔离）和手机验证码登录（`scene=login`，按号码；防枚举那几条在 app/admin 分册）共用，
 路由在 `app/admin`（`/sys/users/me/phone*`），那边 **lazy import + `check_plugin_installed('sms')`**（同 crud_user 对 oauth2 的做法），
 短信插件卸了用户接口照常能 import。
 
@@ -126,7 +126,7 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 
 ## 实测证据
 
-- `tests/` 125 条：SDK 契约 39（两家各一套行为矩阵 + 基类契约 + 模板映射）· 守卫 · 配置接口 · 发送链路（真 Redis + 测试库）· 日志接口
+- `tests/` 133 条：SDK 契约 39（两家各一套行为矩阵 + 基类契约 + 模板映射）· 守卫 · 配置接口 · 发送链路（真 Redis + 测试库）· 日志接口
 - 迁移 `z0000000sms` 在临时 PostgreSQL 库上 up → 与模型比对零差异 → down（两张表和 10 条菜单消失）→ up。SQL Server / MySQL 只过了离线编译守卫
 - 阿里云 2026-10-24 用真凭据发过（签名 / 模板从 avcp 的种子拿的）：验证码模板一条「已受理」、手机收到；填错模板 ID 那条
   被归成 `config_error` 并进了日志。腾讯云**还没用真凭据发过**，代码靠契约测试里的假服务器

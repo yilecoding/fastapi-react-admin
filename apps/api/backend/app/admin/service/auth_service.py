@@ -1,3 +1,6 @@
+import asyncio
+import random
+
 from fastapi import Request, Response
 from fastapi.security import HTTPBasicCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,7 +11,7 @@ from backend.app.admin.crud.crud_menu import menu_dao
 from backend.app.admin.crud.crud_user import user_dao
 from backend.app.admin.model import User
 from backend.app.admin.schema.token import GetLoginToken, GetNewToken
-from backend.app.admin.schema.user import AuthLoginParam
+from backend.app.admin.schema.user import AuthLoginParam, AuthPhoneCaptchaParam, AuthPhoneLoginParam
 from backend.app.admin.service.login_log_service import login_log_service
 from backend.app.admin.service.user_password_history_service import password_security_service
 from backend.app.admin.utils.password_security import get_hash_password, password_verify
@@ -19,6 +22,7 @@ from backend.common.i18n import t
 from backend.common.log import log
 from backend.common.response.response_code import CustomErrorCode
 from backend.common.security.jwt import (
+    AccessToken,
     clear_refresh_cookie,
     get_token,
     issue_access_token,
@@ -29,6 +33,7 @@ from backend.common.security.session import EndReason, SessionClient, ended_erro
 from backend.core.conf import settings
 from backend.database.db import uuid4_str
 from backend.database.redis import redis_client
+from backend.plugin.core import check_plugin_installed
 from backend.utils.dynamic_config import load_login_config, load_session_config
 from backend.utils.timezone import timezone
 
@@ -40,6 +45,23 @@ from backend.utils.timezone import timezone
 #
 # 🔴 导入期算一次。放进请求路径就是每次多付 190ms，而且那正是它要抹掉的那个数。
 _DUMMY_PASSWORD_HASH = get_hash_password('fba::dummy::never-matches', None)
+
+#: 手机号发码的冷却 / 日上限（和 `captcha` 业务模板同口径，但对没注册的号也记）。
+#: KEYS: 冷却键 · 日计数键；ARGV: 冷却秒数 · 日上限（0 = 不限）· 日计数 TTL。返回 ok / cooldown / daily
+_PHONE_GUARD = """
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  return 'cooldown'
+end
+local n = redis.call('INCR', KEYS[2])
+if n == 1 then
+  redis.call('EXPIRE', KEYS[2], tonumber(ARGV[3]))
+end
+if tonumber(ARGV[2]) > 0 and n > tonumber(ARGV[2]) then
+  return 'daily'
+end
+redis.call('SET', KEYS[1], '1', 'EX', tonumber(ARGV[1]))
+return 'ok'
+"""
 
 
 class AuthService:
@@ -140,26 +162,11 @@ class AuthService:
         user = None
         try:
             await load_login_config(db)
-            if settings.LOGIN_CAPTCHA_ENABLED:
-                if not obj.uuid or not obj.captcha:
-                    raise errors.RequestError(msg=t('error.captcha.invalid'))
-                captcha_code = await redis_client.get(f'{settings.LOGIN_CAPTCHA_REDIS_PREFIX}:{obj.uuid}')
-                if not captcha_code:
-                    raise errors.RequestError(msg=t('error.captcha.expired'))
-                if captcha_code.lower() != obj.captcha.lower():
-                    raise errors.CustomError(error=CustomErrorCode.CAPTCHA_ERROR)
-                await redis_client.delete(f'{settings.LOGIN_CAPTCHA_REDIS_PREFIX}:{obj.uuid}')
-
+            await self._verify_graphical_captcha(obj.uuid, obj.captcha)
             user, days_remaining = await self.user_verify(db, obj.username, obj.password)
-            await load_session_config(db)
-            # 同一个浏览器里重新登录：上一次的会话就地作废，不留一个没人用、却占着上限名额的会话
-            await self.end_current_session(request, user.id, EndReason.replaced)
-            # 准入在前：同一端会话数超限且策略是「拒绝」时，这次登录不该把最后登录时间改掉
-            session = await session_store.create(user_id=user.id, client=obj.client, meta=session_meta(user))
-            await user_dao.update_login_time(db, obj.username)
-            await db.refresh(user)
-            access_token_data = issue_access_token(user.id, session.session_uuid, session.expire_at)
-            set_refresh_cookie(response, request, session.refresh_token, session.expire_at)
+            access_token_data = await self._open_session(
+                db=db, request=request, response=response, user=user, client=obj.client
+            )
         except errors.BaseExceptionError as e:
             # 记录**所有**登录失败。
             #
@@ -200,6 +207,177 @@ class AuthService:
                 user=user,  # type: ignore
             )
             return data
+
+    @staticmethod
+    async def _verify_graphical_captcha(uuid: str | None, captcha: str | None) -> None:
+        """图形验证码开着时校验并消费。密码登录和手机号发码两个匿名接口共用（后者不过它就是免费的短信轰炸入口）"""
+        if not settings.LOGIN_CAPTCHA_ENABLED:
+            return
+        if not uuid or not captcha:
+            raise errors.RequestError(msg=t('error.captcha.invalid'))
+        key = f'{settings.LOGIN_CAPTCHA_REDIS_PREFIX}:{uuid}'
+        captcha_code = await redis_client.get(key)
+        if not captcha_code:
+            raise errors.RequestError(msg=t('error.captcha.expired'))
+        if captcha_code.lower() != captcha.lower():
+            raise errors.CustomError(error=CustomErrorCode.CAPTCHA_ERROR)
+        await redis_client.delete(key)
+
+    async def _open_session(
+        self, *, db: AsyncSession, request: Request, response: Response, user: User, client: str
+    ) -> AccessToken:
+        """身份已确认之后开会话：密码登录和手机验证码登录的收尾是同一段"""
+        await load_session_config(db)
+        # 同一个浏览器里重新登录：上一次的会话就地作废，不留一个没人用、却占着上限名额的会话
+        await self.end_current_session(request, user.id, EndReason.replaced)
+        # 准入在前：同一端会话数超限且策略是「拒绝」时，这次登录不该把最后登录时间改掉
+        session = await session_store.create(user_id=user.id, client=client, meta=session_meta(user))
+        await user_dao.update_login_time(db, user.username)
+        await db.refresh(user)
+        access_token_data = issue_access_token(user.id, session.session_uuid, session.expire_at)
+        set_refresh_cookie(response, request, session.refresh_token, session.expire_at)
+        return access_token_data
+
+    @staticmethod
+    async def _phone_captcha_guard(phone: str) -> None:
+        """发码前的冷却 / 日上限，**对所有号码一视同仁**（issue #168）
+
+        🔴 防枚举：短信插件自己的频率防护只会作用在真发了的号上 —— 没注册的号永远不会「太频繁」，
+        于是「第二次发返回 400 还是 200」就把注册状态泄漏出去了。这里在决定发不发之前，
+        先按 `captcha` 模板同样的冷却 / 日上限记一笔，两种号的表现才一致。一段 Lua 原子完成。
+        """
+        from backend.plugin.sms.extensions import load_sms_extensions
+        from backend.plugin.sms.templates import get_sms_template
+
+        load_sms_extensions()
+        tpl = get_sms_template('captcha')
+        cooldown = tpl.cooldown_seconds if tpl else 60
+        daily_max = tpl.daily_max_per_phone if tpl else 10
+        prefix = f'{settings.LOGIN_CAPTCHA_REDIS_PREFIX}:phone'
+        verdict = await redis_client.eval(
+            _PHONE_GUARD,
+            2,
+            f'{prefix}:cooldown:{phone}',
+            f'{prefix}:daily:{phone}:{timezone.now().strftime("%Y%m%d")}',
+            str(cooldown),
+            str(daily_max),
+            str(2 * 24 * 3600),
+        )
+        if verdict != 'ok':
+            raise errors.RequestError(msg=t('error.sms.too_frequent'))
+
+    async def send_phone_captcha(self, *, db: AsyncSession, obj: AuthPhoneCaptchaParam) -> None:
+        """
+        手机验证码登录：给这个号发验证码（issue #168 第二步）
+
+        🔴 **没注册 / 没经本人验证的号也返回成功，只是不真发。** 状态码、文案、冷却、日上限、耗时都不能区分
+        「这个号有没有账号」—— 否则这个匿名接口就是一张号码表的核对器。耗时那一维：真发要等厂商
+        几百毫秒，不发的那条随机睡一段补齐。
+
+        :param db: 数据库会话
+        :param obj: 手机号 + 图形验证码
+        """
+        await load_login_config(db)
+        await self._verify_graphical_captcha(obj.uuid, obj.captcha)
+        if not check_plugin_installed('sms'):
+            raise errors.RequestError(msg=t('error.user.sms_plugin_required'))
+        await self._phone_captcha_guard(obj.phone)
+        user = await user_dao.check_phone(db, obj.phone)
+        if user is None or user.phone_verified_time is None:
+            await asyncio.sleep(random.uniform(0.3, 0.8))
+            return
+        from backend.plugin.sms.service.captcha_service import sms_captcha_service
+
+        await sms_captcha_service.send(scene='login', subject=obj.phone, phone=obj.phone, user_id=user.id)
+
+    async def phone_login(
+        self,
+        *,
+        db: AsyncSession,
+        request: Request,
+        response: Response,
+        obj: AuthPhoneLoginParam,
+        background_tasks: BackgroundTasks,
+    ) -> GetLoginToken:
+        """
+        手机验证码登录（issue #168 第二步）
+
+        只认 `phone_verified_time` 非空的号（本人在个人中心用验证码绑过的）。管理员录入 / 导入的号不算 ——
+        打错一位，号码的主人就能登进别人的账号。
+
+        🔴 **不能只复用「开会话」那段。** `user_verify` 在验密码之外还做了 IP 锁定、停用 / 锁定判定、
+        密码过期、成败计数，这里逐条照做；验证码替代的只是「密码对不对」那一步。
+        没注册 / 没验证 / 码错 / 码过期一律同一句「手机号或验证码有误」+ 403 —— 分开说就是号码枚举。
+
+        :param db: 数据库会话
+        :param request: 请求对象
+        :param response: 响应对象
+        :param obj: 手机号 + 短信验证码
+        :param background_tasks: 后台任务（写登录日志）
+        :return:
+        """
+        user: User | None = None
+        try:
+            if not check_plugin_installed('sms'):
+                raise errors.RequestError(msg=t('error.user.sms_plugin_required'))
+            from backend.plugin.sms.service.captcha_service import sms_captcha_service
+
+            ip = ctx.ip
+            await password_security_service.check_ip_lock(ip)
+            user = await user_dao.check_phone(db, obj.phone)
+            eligible = user is not None and user.phone_verified_time is not None
+            # 同 user_verify：只取原因、先不抛 —— 抛在验码之前，攻击者不用验证码就能区分「有账号且被锁」
+            lock_reason = (
+                await password_security_service.peek_lock_reason(user.id, user.status) if eligible and user else None
+            )
+            verdict = await sms_captcha_service.verify(scene='login', subject=obj.phone, phone=obj.phone, code=obj.code)
+            if not eligible or verdict != 'ok' or user is None:
+                if user is not None and eligible and lock_reason is None:
+                    await password_security_service.handle_login_failure(db, user.id)
+                await password_security_service.handle_ip_login_failure(ip)
+                raise errors.AuthorizationError(msg=t('error.auth.invalid_phone_credentials'))
+            # 码对了 —— 到这里才可以如实告知状态
+            if lock_reason is not None:
+                raise errors.AuthorizationError(msg=lock_reason)
+            days_remaining = await password_security_service.check_password_expiry_status(
+                db, user.last_password_changed_time
+            )
+            await password_security_service.handle_login_success(user.id)
+            await password_security_service.handle_ip_login_success(ip)
+            access_token_data = await self._open_session(
+                db=db, request=request, response=response, user=user, client=obj.client
+            )
+        except errors.BaseExceptionError as e:
+            log.error(f'手机登录错误: {e.msg}')
+            e.background = BackgroundTask(
+                login_log_service.create,
+                user_uuid=user.uuid if user else uuid4_str(),
+                # 没对上账号时记掩码号：登录日志是审计用的，但不该成为一张明文号码表
+                username=user.username if user else f'{obj.phone[:3]}****{obj.phone[-4:]}',
+                login_time=timezone.now(),
+                status=LoginLogStatusType.fail.value,
+                msg=e.msg,
+            )
+            raise
+        except Exception as e:
+            log.error(f'手机登录错误: {e}')
+            raise
+        else:
+            background_tasks.add_task(
+                login_log_service.create,
+                user_uuid=user.uuid,
+                username=user.username,
+                login_time=timezone.now(),
+                status=LoginLogStatusType.success.value,
+                msg=t('success.login.success'),
+            )
+            return GetLoginToken(
+                access_token=access_token_data.access_token,
+                access_token_expire_time=access_token_data.access_token_expire_time,
+                session_uuid=access_token_data.session_uuid,
+                password_expire_days_remaining=days_remaining,
+                user=user,  # type: ignore
+            )
 
     @staticmethod
     async def get_codes(*, db: AsyncSession, request: Request) -> list[str]:

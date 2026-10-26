@@ -11,6 +11,7 @@ error:
     dept_locked: 用户所属部门已被锁定，请联系系统管理员
     dept_not_found: 用户所属部门不存在或已被删除，请联系系统管理员
     invalid_credentials: 用户名或密码有误
+    invalid_phone_credentials: 手机号或验证码有误
     menu_not_assigned: 用户未分配菜单，请联系系统管理员
     password_expired: 密码已过期，请修改密码后重新登录
     role_locked: 用户所属角色已被锁定，请联系系统管理员

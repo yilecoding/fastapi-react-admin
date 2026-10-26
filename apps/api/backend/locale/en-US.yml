@@ -10,6 +10,7 @@ error:
     dept_locked: The department of this account is disabled, please contact the administrator
     dept_not_found: The department of this account does not exist or has been deleted, please contact the administrator
     invalid_credentials: Incorrect username or password
+    invalid_phone_credentials: Incorrect phone number or verification code
     menu_not_assigned: No menu assigned to this account, please contact the administrator
     password_expired: Password has expired, please change it and sign in again
     role_locked: The role assigned to this account is disabled, please contact the administrator
