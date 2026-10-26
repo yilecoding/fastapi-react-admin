@@ -1526,6 +1526,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/notification-channels/prefs/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取我的通知偏好 */
+        get: operations["get_my_prefs_api_v1_sys_notification_channels_prefs_me_get"];
+        /** 更新我的通知偏好 */
+        put: operations["update_my_prefs_api_v1_sys_notification_channels_prefs_me_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notification-channels/policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取通知渠道系统策略 */
+        get: operations["get_policies_api_v1_sys_notification_channels_policies_get"];
+        /** 更新通知渠道系统策略 */
+        put: operations["update_policies_api_v1_sys_notification_channels_policies_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notification-channels/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页获取通知投递记录（地址掩码） */
+        get: operations["get_deliveries_paginated_api_v1_sys_notification_channels_deliveries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notification-channels/deliveries/{pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取通知投递记录详情（完整地址） */
+        get: operations["get_delivery_api_v1_sys_notification_channels_deliveries__pk__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notification-channels/deliveries/{pk}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 重发一条通知投递 */
+        post: operations["resend_delivery_api_v1_sys_notification_channels_deliveries__pk__resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/notices/export": {
         parameters: {
             query?: never;
@@ -4777,6 +4864,12 @@ export interface components {
             pks: number[];
         };
         /**
+         * DeliveryStatus
+         * @description `sys_notification_delivery.status`（#166 第四节）
+         * @enum {string}
+         */
+        DeliveryStatus: "pending" | "sending" | "sent" | "failed" | "exhausted" | "skipped" | "unknown";
+        /**
          * DiskInfo
          * @description 磁盘信息
          */
@@ -5347,6 +5440,52 @@ export interface components {
              * @default []
              */
             rules: (components["schemas"]["GetDataRuleDetail"] | null)[];
+        };
+        /**
+         * GetDeliveryDetail
+         * @description 投递记录。列表接口的 `address` 是掩码，详情接口给完整值
+         */
+        GetDeliveryDetail: {
+            /** Id */
+            id: string | number;
+            /** Notification Id */
+            notification_id?: number | null;
+            /** User Id */
+            user_id: string | number;
+            /** Kind */
+            kind: string;
+            /** Channel */
+            channel: string;
+            /** Address */
+            address?: string | null;
+            /** Title */
+            title: string;
+            /** Content */
+            content: string;
+            /** Link */
+            link?: string | null;
+            status: components["schemas"]["DeliveryStatus"];
+            /** Reason */
+            reason?: string | null;
+            /** Attempts */
+            attempts: number;
+            /** Next Attempt Time */
+            next_attempt_time?: string | null;
+            /** Last Error */
+            last_error?: string | null;
+            /** Provider Ref */
+            provider_ref?: string | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Sent Time */
+            sent_time?: string | null;
+            /**
+             * Created Time
+             * Format: date-time
+             */
+            created_time: string;
+            /** Updated Time */
+            updated_time?: string | null;
         };
         /**
          * GetDeptDetail
@@ -6178,6 +6317,21 @@ export interface components {
              * @description 收到的字节数
              */
             size: number;
+        };
+        /** GetMyPrefsDetail */
+        GetMyPrefsDetail: {
+            /** Items */
+            items: components["schemas"]["PrefRow"][];
+            /**
+             * Has Email
+             * @description 有没有绑定邮箱（没有就收不到邮件通知）
+             */
+            has_email: boolean;
+            /**
+             * Has Phone
+             * @description 有没有绑定手机号（没有就收不到短信通知）
+             */
+            has_phone: boolean;
         };
         /**
          * GetNewToken
@@ -8055,6 +8209,12 @@ export interface components {
          * @enum {integer}
          */
         NotificationCategory: 0 | 1 | 2 | 3;
+        /**
+         * NotificationChannel
+         * @description 通知渠道（#166）。值是契约：策略表 / 偏好表 / 投递表都存它，前端矩阵的列也按它排
+         * @enum {string}
+         */
+        NotificationChannel: "inapp" | "email" | "sms";
         /** OpenDeptOut */
         OpenDeptOut: {
             /**
@@ -8310,6 +8470,32 @@ export interface components {
         PageData_GetDataScopeDetail_: {
             /** Items */
             items: components["schemas"]["GetDataScopeDetail"][];
+            /**
+             * Total
+             * @description 数据总条数
+             */
+            total: number;
+            /**
+             * Page
+             * @description 当前页码
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页数量
+             */
+            size: number;
+            /**
+             * Total Pages
+             * @description 总页数
+             */
+            total_pages: number;
+            links: components["schemas"]["_Links"];
+        };
+        /** PageData[GetDeliveryDetail] */
+        PageData_GetDeliveryDetail_: {
+            /** Items */
+            items: components["schemas"]["GetDeliveryDetail"][];
             /**
              * Total
              * @description 数据总条数
@@ -8806,6 +8992,123 @@ export interface components {
          * @enum {string}
          */
         PluginType: "zip" | "git";
+        /** PolicyCell */
+        PolicyCell: {
+            /** @description 渠道 */
+            channel: components["schemas"]["NotificationChannel"];
+            /** @description 当前生效的策略 */
+            mode: components["schemas"]["PolicyMode"];
+            /** @description 注册表里的默认策略 */
+            default: components["schemas"]["PolicyMode"];
+            /**
+             * Editable
+             * @description 能不能改（站内固定 forced）
+             */
+            editable: boolean;
+        };
+        /** PolicyItem */
+        PolicyItem: {
+            /**
+             * Kind
+             * @description 通知类型码
+             */
+            kind: string;
+            /** @description 渠道 */
+            channel: components["schemas"]["NotificationChannel"];
+            /** @description 策略 */
+            mode: components["schemas"]["PolicyMode"];
+        };
+        /**
+         * PolicyMode
+         * @description 系统策略：某个通知类型 × 某条渠道（#166 第二节）
+         * @enum {string}
+         */
+        PolicyMode: "off" | "default_on" | "default_off" | "forced";
+        /** PolicyRow */
+        PolicyRow: {
+            /**
+             * Kind
+             * @description 通知类型码
+             */
+            kind: string;
+            /**
+             * Label
+             * @description 通知类型名称
+             */
+            label: string;
+            /**
+             * Category
+             * @description 所属分类（NotificationCategory）
+             */
+            category: number;
+            /**
+             * Broadcast
+             * @description 是否全员广播（广播只走站内）
+             */
+            broadcast: boolean;
+            /**
+             * User Configurable
+             * @description 用户能不能在个人中心自己设
+             */
+            user_configurable: boolean;
+            /**
+             * Cells
+             * @description 支持的渠道（没出现的渠道 = 这个类型不支持）
+             */
+            cells: components["schemas"]["PolicyCell"][];
+        };
+        /** PrefCell */
+        PrefCell: {
+            /** @description 渠道 */
+            channel: components["schemas"]["NotificationChannel"];
+            /** @description 管理员定的策略 */
+            mode: components["schemas"]["PolicyMode"];
+            /**
+             * Configurable
+             * @description 自己能不能改（forced / off / 站内不能）
+             */
+            configurable: boolean;
+            /**
+             * Enabled
+             * @description 现在收不收
+             */
+            enabled: boolean;
+        };
+        /** PrefItem */
+        PrefItem: {
+            /**
+             * Kind
+             * @description 通知类型码
+             */
+            kind: string;
+            /** @description 渠道 */
+            channel: components["schemas"]["NotificationChannel"];
+            /**
+             * Enabled
+             * @description 是否接收
+             */
+            enabled: boolean;
+        };
+        /** PrefRow */
+        PrefRow: {
+            /**
+             * Kind
+             * @description 通知类型码
+             */
+            kind: string;
+            /**
+             * Label
+             * @description 通知类型名称
+             */
+            label: string;
+            /**
+             * Category
+             * @description 所属分类
+             */
+            category: number;
+            /** Cells */
+            cells: components["schemas"]["PrefCell"][];
+        };
         /**
          * PreviewParam
          * @description 发起页的流程预告：按当前填的表单试算
@@ -9150,6 +9453,22 @@ export interface components {
             msg: string;
             data: components["schemas"]["GetDataScopeWithRelationDetail"];
         };
+        /** ResponseSchemaModel[GetDeliveryDetail] */
+        ResponseSchemaModel_GetDeliveryDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetDeliveryDetail"];
+        };
         /** ResponseSchemaModel[GetDeptDetail] */
         ResponseSchemaModel_GetDeptDetail_: {
             /**
@@ -9325,6 +9644,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["GetMultipartPartDetail"];
+        };
+        /** ResponseSchemaModel[GetMyPrefsDetail] */
+        ResponseSchemaModel_GetMyPrefsDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetMyPrefsDetail"];
         };
         /** ResponseSchemaModel[GetNewToken] */
         ResponseSchemaModel_GetNewToken_: {
@@ -9661,6 +9996,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["PageData_GetDataScopeDetail_"];
+        };
+        /** ResponseSchemaModel[PageData[GetDeliveryDetail]] */
+        ResponseSchemaModel_PageData_GetDeliveryDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["PageData_GetDeliveryDetail_"];
         };
         /** ResponseSchemaModel[PageData[GetDictDataDetail]] */
         ResponseSchemaModel_PageData_GetDictDataDetail__: {
@@ -10435,6 +10786,23 @@ export interface components {
             msg: string;
             /** Data */
             data: components["schemas"]["OpenScopeItem"][];
+        };
+        /** ResponseSchemaModel[list[PolicyRow]] */
+        ResponseSchemaModel_list_PolicyRow__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["PolicyRow"][];
         };
         /** ResponseSchemaModel[list[SmsProviderDescriptor]] */
         ResponseSchemaModel_list_SmsProviderDescriptor__: {
@@ -11532,6 +11900,22 @@ export interface components {
              * @description 备注
              */
             remark?: string | null;
+        };
+        /** UpdatePoliciesParam */
+        UpdatePoliciesParam: {
+            /**
+             * Items
+             * @description 要改的格子
+             */
+            items: components["schemas"]["PolicyItem"][];
+        };
+        /** UpdatePrefsParam */
+        UpdatePrefsParam: {
+            /**
+             * Items
+             * @description 要改的格子
+             */
+            items: components["schemas"]["PrefItem"][];
         };
         /**
          * UpdateRoleMenuParam
@@ -15614,6 +15998,222 @@ export interface operations {
                 "application/json": components["schemas"]["SendNotificationParam"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_prefs_api_v1_sys_notification_channels_prefs_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetMyPrefsDetail_"];
+                };
+            };
+        };
+    };
+    update_my_prefs_api_v1_sys_notification_channels_prefs_me_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePrefsParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_policies_api_v1_sys_notification_channels_policies_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_PolicyRow__"];
+                };
+            };
+        };
+    };
+    update_policies_api_v1_sys_notification_channels_policies_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePoliciesParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_deliveries_paginated_api_v1_sys_notification_channels_deliveries_get: {
+        parameters: {
+            query?: {
+                /** @description 通知类型码 */
+                kind?: string | null;
+                /** @description 渠道 */
+                channel?: components["schemas"]["NotificationChannel"] | null;
+                /** @description 状态 */
+                status?: components["schemas"]["DeliveryStatus"] | null;
+                /** @description 接收人 ID */
+                user_id?: number | null;
+                /** @description 创建时间起 */
+                start_time?: string | null;
+                /** @description 创建时间止 */
+                end_time?: string | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_PageData_GetDeliveryDetail__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_delivery_api_v1_sys_notification_channels_deliveries__pk__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 投递记录 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetDeliveryDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_delivery_api_v1_sys_notification_channels_deliveries__pk__resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 投递记录 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

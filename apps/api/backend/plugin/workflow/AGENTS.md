@@ -84,10 +84,16 @@
 
 ## 通知：行在事务里写，推送在提交之后
 
-站内通知的行是 `notification_dao.create` 在审批事务里写的（回滚就一起没了），
-socket 推送（`notification_new` / `workflow_todo_changed`）收集在 `_Ctx.effects`、**提交之后**才发。
-`notification_service.send()` 是「落库后立刻推」，推的时候事务还没提交 —— 审批这里不用它。
-办理人**不**发站内通知，只推 `workflow:todo` 让前端重取待办数（#107 设计 7）。
+站内通知的行和外部渠道的投递行都是 `notification_service.create_in_tx` 在审批事务里写的（回滚就一起没了，#166），
+socket 推送（`notification_new` / `workflow_todo_changed`）和「踢投递 worker」收集在 `_Ctx.effects`、**提交之后**才跑。
+`_Ctx.notify` 每处调用都要给 `kind`（类型在 `notification_kinds.py`），渠道由通知插件的策略 × 个人偏好决定，见
+[`notification` 分册](../notification/AGENTS.md)。
+
+办理人**不**发站内通知，只推 `workflow:todo` 让前端重取待办数（#107 设计 7）。但「你有新的待办」
+（`workflow.task_assigned`）会走本人开了的外部渠道：`_new_task` 记下来，**每个事务出口提交前**调一次
+`ctx.flush_assigned()`（`execute` · `start_for_biz` · `apply_timeout` · `apply_ai_approve` 四处）。
+新加一个开 `_Ctx` 的入口时这一行要一起加，漏了不报错，只是那条路上冒出来的待办没人收到邮件。
+变异：去掉 `execute` 里那一行 → `tests/test_notification_channels.py` 第一条红。
 
 ## 迁移与种子
 

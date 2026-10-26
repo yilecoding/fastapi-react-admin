@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }}</title>
+</head>
+<!-- 通知渠道路由（#166）发的通知邮件。样式全部内联：多数邮件客户端会剥掉 <style>。
+     jinja2 的 Template 默认不转义 —— title / content 来自业务数据（审批标题是用户填的），必须显式 |e -->
+<body style="margin:0;padding:0;background-color:#f5f7fa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+<div style="max-width:600px;margin:24px auto;padding:24px;background-color:#ffffff;border-radius:8px;">
+    <div style="font-size:18px;font-weight:bold;color:#1f2329;line-height:1.5;">{{ title | e }}</div>
+    <div style="margin-top:12px;font-size:14px;color:#4e5969;line-height:1.7;white-space:pre-wrap;">{{ content | e }}</div>
+    {% if link %}
+    <div style="margin-top:24px;">
+        <a href="{{ link | e }}" style="display:inline-block;padding:10px 20px;background-color:#2f54eb;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;">去处理</a>
+    </div>
+    {% endif %}
+    <div style="margin-top:32px;font-size:12px;color:#86909c;">这封邮件由系统自动发送。不想再收这一类通知，可以在个人中心的「通知偏好」里关掉。</div>
+</div>
+</body>
+</html>

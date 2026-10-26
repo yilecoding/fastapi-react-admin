@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAlertTriangle, IconAt, IconCheck, IconClock, IconDeviceMobile, IconExternalLink, IconFileExport, IconIdBadge2,
+  IconAlertTriangle, IconAt, IconBellRinging, IconCheck, IconClock, IconDeviceMobile, IconExternalLink, IconFileExport, IconIdBadge2,
   IconInfoCircle, IconKey, IconLoader2, IconMail, IconPhoto, IconPlugConnected,
   IconShieldLock, IconSignature, IconUpload, IconUser,
 } from '@tabler/icons-react'
@@ -26,6 +26,7 @@ import { PageHeader } from '../../shell/page-header'
 import { StatusBadge, StatusPill } from '../_shared/status'
 import { PasswordStrength } from './password-strength'
 import { ExportsPanel } from './exports-panel'
+import { NotifyPrefsPanel } from './notify-prefs-panel'
 import { RecentLogins } from './recent-logins'
 import {
   AVATAR_MAX_BYTES, SOCIAL_SOURCES, socialBindingsQuery, useSendEmailCaptcha,
@@ -72,7 +73,7 @@ export type ProfileSearch = {
 }
 
 /** 前三项是账号相关，后四项来自 `usePreferencePanels()` */
-type ProfileSection = 'basic' | 'security' | 'exports' | 'theme' | 'layout' | 'tabs' | 'reset'
+type ProfileSection = 'basic' | 'security' | 'exports' | 'notify' | 'theme' | 'layout' | 'tabs' | 'reset'
 
 const errMsg = (e: unknown, fallback: string) =>
   e instanceof ApiError ? e.message : fallback
@@ -111,6 +112,14 @@ export function ProfilePage({
         label: t('导出记录'),
         icon: <IconFileExport />,
         content: <ExportsPanel />,
+      },
+      {
+        // 通知渠道路由（#166）：每一类通知收不收邮件 / 短信。通知邮件底部的「不想再收」链到这里
+        id: 'notify',
+        group: t('账户'),
+        label: t('通知偏好'),
+        icon: <IconBellRinging />,
+        content: <NotifyPrefsPanel />,
       },
       ...preferencePanels,
     ],

@@ -1,6 +1,6 @@
 import type * as React from 'react'
 import {
-  IconAdjustments, IconCircleFilled, IconCode, IconDevices, IconFileUpload, IconLogin, IconMail,
+  IconAdjustments, IconBellRinging, IconCircleFilled, IconCode, IconDevices, IconFileUpload, IconLogin, IconMail,
   IconPlugConnectedX, IconShieldLock, IconSparkles,
 } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
@@ -22,6 +22,7 @@ const RAIL_ICONS: Record<string, React.ReactNode> = {
   USER_SECURITY: <IconShieldLock />,
   SESSION: <IconDevices />,
   EMAIL: <IconMail />,
+  NOTIFICATION: <IconBellRinging />,
   AI: <IconSparkles />,
   DEV: <IconCode />,
   FILE: <IconFileUpload />,

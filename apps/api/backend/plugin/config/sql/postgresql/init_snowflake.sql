@@ -43,4 +43,8 @@ values
 (2224875016875409420, '移动端空闲超时（分钟）', 'SESSION', 'SESSION_MOBILE_IDLE_MINUTES', '43200', false, '这么久没有操作就自动退出；只影响之后的登录', now(), null),
 (2224875016875409421, '移动端最长登录（天）', 'SESSION', 'SESSION_MOBILE_ABSOLUTE_DAYS', '90', false, '从登录那一刻起算，刷新不延长', now(), null),
 (2224875016875409422, '移动端会话上限', 'SESSION', 'SESSION_MOBILE_MAX', '1', false, '同一账号在这一端最多几个会话，0 表示不限', now(), null),
-(2224875016875409423, '移动端超限策略', 'SESSION', 'SESSION_MOBILE_OVERFLOW', 'evict_idle', false, 'evict_idle 挤掉最久没活跃的；deny 拒绝新登录', now(), null);
+(2224875016875409423, '移动端超限策略', 'SESSION', 'SESSION_MOBILE_OVERFLOW', 'evict_idle', false, 'evict_idle 挤掉最久没活跃的；deny 拒绝新登录', now(), null),
+(2224875016875409424, '状态', 'NOTIFICATION', 'NOTIFICATION_CONFIG_STATUS', '1', false, null, now(), null),
+(2224875016875409425, '外部渠道总开关', 'NOTIFICATION', 'NOTIFICATION_EXTERNAL_ENABLED', 'true', false, '关掉后只写站内通知，邮件 / 短信一条都不发（已经在排队的照常发完）', now(), null),
+(2224875016875409426, '失败重试次数', 'NOTIFICATION', 'NOTIFICATION_RETRY_MAX', '4', false, '不含第一次；结果未知的不重试', now(), null),
+(2224875016875409427, '投递记录保留（天）', 'NOTIFICATION', 'NOTIFICATION_DELIVERY_RETENTION_DAYS', '30', false, '每天凌晨的日志清理一起删', now(), null);

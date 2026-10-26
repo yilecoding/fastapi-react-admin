@@ -132,6 +132,12 @@ error:
     not_found: Notice does not exist
   notification:
     not_found: Notification does not exist
+    delivery_not_found: Delivery record does not exist
+    delivery_not_resendable: Only failed or unknown deliveries can be resent (skipped ones lack an address; add it first)
+    kind_not_found: Notification type {kind} does not exist
+    channel_not_supported: Notification type {kind} does not support the {channel} channel
+    inapp_fixed: The in-app channel cannot be changed; the inbox is the source of truth
+    pref_not_configurable: The {channel} channel for {kind} is set by the administrator and cannot be changed
   oauth2:
     account_bound: This account is already bound to {source}
     account_bound_to_other: This {source} account is already bound to another user
@@ -531,6 +537,7 @@ workflow:
     terminated: Terminated
   notify:
     cc_title: 'CC: {title}'
+    assigned_title: 'New task: {title}'
     remind_title: 'Reminder: {title}'
     remind_content: '{user} asked you to handle this approval soon'
     withdrawn_title: 'Withdrawn: {title}'

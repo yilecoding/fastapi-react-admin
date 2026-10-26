@@ -133,6 +133,12 @@ error:
     not_found: 通知公告不存在
   notification:
     not_found: 通知不存在
+    delivery_not_found: 投递记录不存在
+    delivery_not_resendable: 只有失败 / 结果未知的投递能重发（没发出去是因为缺地址的，先补地址）
+    kind_not_found: 通知类型 {kind} 不存在
+    channel_not_supported: 通知类型 {kind} 不支持 {channel} 渠道
+    inapp_fixed: 站内渠道不能修改：站内收件箱是通知的事实来源
+    pref_not_configurable: 通知类型 {kind} 的 {channel} 渠道由管理员统一设置，个人不能修改
   oauth2:
     account_bound: 用户已绑定 {source} 账号
     account_bound_to_other: 该 {source} 账号已被其他用户绑定
@@ -639,6 +645,7 @@ workflow:
     terminated: 已终止
   notify:
     cc_title: '抄送给你：{title}'
+    assigned_title: '新的待办：{title}'
     remind_title: '催办：{title}'
     remind_content: '{user}提醒你尽快处理这条审批'
     withdrawn_title: '已撤回：{title}'

@@ -1,7 +1,7 @@
 [plugin]
 summary = "消息通知中心"
-version = "0.0.1"
-description = "站内消息收件箱：公告推送、未读红点、已读标记"
+version = "0.0.2"
+description = "站内消息收件箱 + 通知渠道路由（站内 / 邮件 / 短信 · 系统策略 × 个人偏好 · 事务内投递，issue #166）"
 author = "yile"
 tags = ["other"]
 database = ["mysql", "postgresql", "sqlserver"]
@@ -12,3 +12,16 @@ extend = "admin"
 [api.notification]
 prefix = "/notifications"
 tags = "系统消息通知"
+
+[api.notification_channel]
+prefix = "/notification-channels"
+tags = "通知渠道"
+
+[settings]
+NOTIFICATION_DELIVERY_BATCH = 200
+NOTIFICATION_DELIVERY_RETENTION_DAYS = 30
+NOTIFICATION_EXTERNAL_ENABLED = true
+NOTIFICATION_RETRY_BACKOFF_SECONDS = "60,300,1800,7200"
+NOTIFICATION_RETRY_MAX = 4
+NOTIFICATION_SENDING_STALE_SECONDS = 600
+NOTIFICATION_WEB_BASE_URL = "http://localhost:8888"

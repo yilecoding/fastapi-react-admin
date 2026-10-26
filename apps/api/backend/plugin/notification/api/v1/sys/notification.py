@@ -85,6 +85,8 @@ async def mark_read(
         DependsRBAC,
     ],
 )
-async def send_notification(db: CurrentSessionTransaction, obj: SendNotificationParam) -> ResponseModel:
+async def send_notification(db: CurrentSession, obj: SendNotificationParam) -> ResponseModel:
+    # 不用 CurrentSessionTransaction：提交要在 service 里、推送和踢投递 worker 之前（#166 `Dispatch`）。
+    # 依赖收尾才提交的话，worker 被踢醒时读不到投递行
     await notification_service.send(db=db, obj=obj)
     return response_base.success()

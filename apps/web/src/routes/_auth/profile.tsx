@@ -3,7 +3,7 @@ import { z } from "zod"
 
 const searchSchema = z.object({
   /**
-   * 当前面板。前三个是账号相关（`exports` 是后台导出完成的站内消息链过来的），
+   * 当前面板。前四个是账号相关（`exports` 是后台导出完成的站内消息链过来的，`notify` 是通知偏好 #166），
    * 后四个来自偏好面板（`packages/platform/src/pages/_shared/preferences-panel.tsx`）。
    *
    * ⚠️ 新增偏好面板时这个枚举要一起加，否则链接会被 zod 挡掉、静默回落到 basic。
@@ -11,7 +11,7 @@ const searchSchema = z.object({
    * 不做兼容（见 CLAUDE.md「还没发版」）。
    */
   section: z
-    .enum(["basic", "security", "exports", "theme", "layout", "tabs", "reset"])
+    .enum(["basic", "security", "exports", "notify", "theme", "layout", "tabs", "reset"])
     .optional(),
 })
 

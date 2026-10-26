@@ -40,9 +40,7 @@ from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
 from backend.common.socketio.actions import notification_new, workflow_todo_changed
-from backend.plugin.notification.crud.crud_notification import notification_dao
-from backend.plugin.notification.enums import NotificationCategory
-from backend.plugin.notification.schema.notification import CreateNotificationParam
+from backend.plugin.notification.service.notification_service import create_in_tx
 from backend.plugin.workflow.engine import assignee as assignee_rules
 from backend.plugin.workflow.engine.flow import condition_variables, index_nodes, pick_branch
 from backend.plugin.workflow.engine.form import (
@@ -156,22 +154,54 @@ class _Ctx:
         for uid in dict.fromkeys(user_ids):
             self.effects.append(lambda uid=uid: workflow_todo_changed(uid))
 
-    async def notify(self, user_ids: list[int], title: str, content: str, link: str) -> None:
-        """站内通知。🔴 **自己的动作不通知自己**（avc-bp：「用户点的是『取消会议』，收到的却是『已撤回』」）"""
-        for uid in dict.fromkeys(user_ids):
-            if uid == self.actor_id:
-                continue
-            await notification_dao.create(
-                self.db,
-                CreateNotificationParam(
-                    title=title[:128],
-                    content=content,
-                    category=NotificationCategory.WORKFLOW,
-                    link=link,
-                    recipient_id=uid,
-                ),
+    #: 这个事务里冒出新待办的人（`_new_task` 记，`flush_assigned` 在提交前统一发「你有新的待办」）。
+    #: 和 `spawned` 分开：`spawned` 在同意 / 加签时会被清掉重记（拿回要用），这里只管通知
+    assigned: list[tuple[int, WfInstance]] = field(default_factory=list)
+    #: 这个事务里写过待发的投递行 —— 提交后踢一次 worker 就够，不用每条通知踢一次
+    _kicked: bool = False
+
+    async def notify(self, user_ids: list[int], title: str, content: str, link: str, *, kind: str) -> None:
+        """站内通知 + 按策略走外部渠道（#166）。
+
+        🔴 **自己的动作不通知自己**（avc-bp：「用户点的是『取消会议』，收到的却是『已撤回』」）。
+
+        行在事务里写（回滚就一起没了），推送和踢 worker 挂进 `effects`、提交后才跑。
+        """
+        uids = [uid for uid in dict.fromkeys(user_ids) if uid != self.actor_id]
+        if not uids:
+            return
+        dispatch = await create_in_tx(self.db, kind=kind, user_ids=uids, title=title, content=content, link=link)
+        for uid in dispatch.push_user_ids:
+            self.effects.append(lambda uid=uid: _push_notification(uid))
+        if dispatch.pending and not self._kicked:
+            self._kicked = True
+            self.effects.append(_kick_delivery)
+
+    async def flush_assigned(self) -> None:
+        """「你有新的待办」：每个事务出口提交前调一次。站内不写行（靠待办数红点），只走本人开了的外部渠道"""
+        by_instance: dict[int, tuple[WfInstance, list[int]]] = {}
+        for uid, inst in self.assigned:
+            by_instance.setdefault(inst.id, (inst, []))[1].append(uid)
+        self.assigned.clear()
+        for inst, uids in by_instance.values():
+            await self.notify(
+                uids,
+                t('workflow.notify.assigned_title', title=inst.title),
+                inst.summary or inst.title,
+                detail_link(inst.id),
+                kind='workflow.task_assigned',
             )
-            self.effects.append(lambda uid=uid: notification_new(uid))
+
+
+async def _push_notification(uid: int | None) -> None:
+    # 走模块级的 `notification_new`：并发 / 超时那几个测试 monkeypatch 的就是这个名字
+    await notification_new(uid)
+
+
+async def _kick_delivery() -> None:
+    from backend.plugin.notification.service.delivery_service import kick
+
+    await kick()
 
 
 def detail_link(instance_id: int) -> str:
@@ -309,6 +339,7 @@ def _new_task(
     )
     ctx.db.add(task)
     ctx.spawned.append(task)
+    ctx.assigned.append((user[0], inst))
     return task
 
 
@@ -534,6 +565,7 @@ async def _finish(ctx: _Ctx, inst: WfInstance, status: InstanceStatus, opinion: 
             f'{inst.title}：{word}',
             opinion or word,
             detail_link(inst.id),
+            kind='workflow.result',
         )
 
 
@@ -642,6 +674,7 @@ async def _add_cc(
         t('workflow.notify.cc_title', title=inst.title),
         inst.summary or inst.title,
         detail_link(inst.id),
+        kind='workflow.cc',
     )
     return added
 
@@ -798,6 +831,7 @@ async def execute(  # ruff:ignore[complex-structure]
                 if replay is not None:
                     return replay
                 instance_id = await body(ctx)
+                await ctx.flush_assigned()
         except _RetryError:
             continue
         except ActionRejected as e:
@@ -1087,6 +1121,7 @@ async def start_for_biz(
     inst = await start_in_tx(
         ctx, definition=d, version=v, actor=actor, form_data={}, selected={}, biz_id=biz_id, key=None
     )
+    await ctx.flush_assigned()
     return inst, ctx.effects
 
 
@@ -1136,6 +1171,7 @@ async def act(  # ruff:ignore[complex-structure]
                 t('workflow.notify.remind_title', title=inst.title),
                 t('workflow.notify.remind_content', user=actor.nickname),
                 detail_link(inst.id),
+                kind='workflow.remind',
             )
             _record(ctx, inst, action, key=key, actor_id=actor.id, actor_name=actor.nickname)
             return inst.id
@@ -1331,6 +1367,7 @@ async def act(  # ruff:ignore[complex-structure]
                         t('workflow.notify.sent_back_title', title=inst.title),
                         t('workflow.notify.sent_back_content', user=actor.nickname, opinion=opinion),
                         detail_link(inst.id),
+                        kind='workflow.result',
                     )
                 else:
                     # 重新进入那个节点：审批人按规则**重新解析**（和第一次进入同一套逻辑）
@@ -1407,6 +1444,7 @@ async def act(  # ruff:ignore[complex-structure]
                     t('workflow.notify.withdrawn_title', title=inst.title),
                     opinion,
                     detail_link(inst.id),
+                    kind='workflow.withdrawn',
                 )
 
             case Action.terminate:
@@ -1790,6 +1828,7 @@ async def apply_timeout(db: AsyncSession, instance_id: int, task_id: int, now: d
                 t('workflow.notify.timeout_title', title=inst.title),
                 t('workflow.notify.timeout_content', hours=cfg['hours']),
                 detail_link(inst.id),
+                kind='workflow.timeout',
             )
             _record(ctx, inst, 'timeout_remind', actor_type=ActorType.system, task=task)
             result = 'remind'
@@ -1815,6 +1854,7 @@ async def apply_timeout(db: AsyncSession, instance_id: int, task_id: int, now: d
                 ctx.push_todo([task.assignee_id])
                 await _finish(ctx, inst, InstanceStatus.rejected, opinion)
                 result = 'reject'
+        await ctx.flush_assigned()
     await _run_effects(ctx.effects)
     return result
 
@@ -1886,5 +1926,6 @@ async def apply_ai_approve(
             detail=detail,
         )
         await _leave_node(ctx, inst, nodes, node_id)
+        await ctx.flush_assigned()
     await _run_effects(ctx.effects)
     return True

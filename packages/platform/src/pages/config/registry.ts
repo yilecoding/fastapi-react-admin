@@ -336,6 +336,34 @@ export const REGISTRY: Record<string, SettingMeta> = {
     max: 64,
     hint: '越大请求越少，但一片失败要重传的也越多。只影响新开始的上传，传到一半的照旧按原来的大小续传',
   },
+
+  // ── 通知推送（#166）。范围和后端 `dynamic_config.DYNAMIC_INT_BOUNDS` 对账（`test_dynamic_config_bounds.py`）──
+  NOTIFICATION_EXTERNAL_ENABLED: {
+    section: '外部渠道',
+    order: 1,
+    label: '外部渠道总开关',
+    hint: '关掉后只写站内通知，邮件 / 短信一条都不再排队；已经在排队的照常发完。哪类通知走哪条渠道在「消息推送 → 通知策略」里设',
+  },
+  NOTIFICATION_RETRY_MAX: {
+    section: '外部渠道',
+    order: 2,
+    label: '失败重试次数',
+    unit: '次',
+    widget: 'int',
+    min: 0,
+    max: 10,
+    hint: '不含第一次。间隔依次是 1 分钟、5 分钟、30 分钟、2 小时，之后每 2 小时一次。「结果未知」的（可能已经发出去了）永远不重试',
+  },
+  NOTIFICATION_DELIVERY_RETENTION_DAYS: {
+    section: '投递记录',
+    order: 1,
+    label: '保留天数',
+    unit: '天',
+    widget: 'int',
+    min: 1,
+    max: 365,
+    hint: '每天凌晨的日志清理一起删。和登录 / 操作日志的保留期分开设',
+  },
 }
 
 export const metaOf = (key: string): SettingMeta | undefined => REGISTRY[key]
@@ -396,7 +424,14 @@ export const RAIL: RailGroup[] = [
   },
   {
     title: '通知与集成',
-    items: [{ id: 'EMAIL', label: '邮件服务', desc: '系统发信用的 SMTP 服务器。密码以密文展示。' }],
+    items: [
+      { id: 'EMAIL', label: '邮件服务', desc: '系统发信用的 SMTP 服务器。密码以密文展示。' },
+      {
+        id: 'NOTIFICATION',
+        label: '通知推送',
+        desc: '站内通知之外的邮件 / 短信：总开关、失败重试、投递记录保留多久。哪类通知走哪条渠道在「消息推送 → 通知策略」里设。',
+      },
+    ],
   },
   {
     title: '文件',

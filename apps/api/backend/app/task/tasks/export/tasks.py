@@ -65,6 +65,8 @@ async def _notify(job: ExportJob) -> None:
                 content=content,
                 link=EXPORTS_LINK,
                 category=NotificationCategory.TASK,
+                # 站内 + 按策略和本人偏好走邮件（#166）。投递在通知插件的 worker 里异步发，不拖这个任务
+                kind='export.done' if ok else 'export.failed',
             )
     except Exception as e:
         log.warning(f'导出 {job.id} 的完成通知没发出去（不影响结果）：{e!s}')

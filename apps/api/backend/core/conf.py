@@ -587,6 +587,25 @@ class Settings(BaseSettings):
     OPEN_LAST_USED_REDIS_PREFIX: str
 
     ##################################################
+    # [ Plugin ] notification
+    ##################################################
+    # 🔴 同 open / sms：只写在 plugin.toml 里的配置是 extra，容器环境变量覆盖不了，必须在这里声明成字段（#166）
+    # 外部渠道（邮件 / 短信）总闸。关 = 只写站内行、不写投递行。参数配置「通知推送」组可覆盖
+    NOTIFICATION_EXTERNAL_ENABLED: bool
+    # 重试次数（不含第一次）。参数配置可覆盖
+    NOTIFICATION_RETRY_MAX: int
+    # 每次失败之后等多久（秒，逗号分隔）；次数比这张表长就一直用最后一档
+    NOTIFICATION_RETRY_BACKOFF_SECONDS: str
+    # worker 每一批取多少行
+    NOTIFICATION_DELIVERY_BATCH: int
+    # 停在「发送中」超过多少秒归为「结果未知」（worker 在发到一半时被杀）
+    NOTIFICATION_SENDING_STALE_SECONDS: int
+    # 投递记录保留天数（`maintenance.prune_logs` 按 created_time 分批删）。参数配置可覆盖
+    NOTIFICATION_DELIVERY_RETENTION_DAYS: int
+    # 前端的访问地址：邮件里的「去处理」要拼绝对地址（和 AI 插件的 AI_WEB_BASE_URL 分开：两个插件可以单独装卸）
+    NOTIFICATION_WEB_BASE_URL: str
+
+    ##################################################
     # [ Plugin ] sms
     ##################################################
     # 🔴 同 open：只写在 plugin.toml 里的配置是 extra，容器环境变量覆盖不了，必须在这里声明成字段

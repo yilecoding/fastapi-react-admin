@@ -54,6 +54,9 @@ _PATCHED_SESSION_MODULES = (
     # 它绕过了依赖注入，不补进这张表的话，跑测试会往**开发库**写对话和审计记录
     'backend.plugin.ai.service.chat_service',
     'backend.app.task.tasks.workflow.tasks',
+    # 通知渠道路由（#166）：投递 worker 和渠道发送都自己开短会话（不在调用方事务里），跑测试要连测试库
+    'backend.plugin.notification.service.delivery_service',
+    'backend.plugin.notification.service.senders',
     # MCP 网关：鉴权要查用户、调用要开会话落审计，都不经过 FastAPI 的依赖注入
     'backend.plugin.ai.mcp_gateway.auth',
     'backend.plugin.ai.mcp_gateway.server',

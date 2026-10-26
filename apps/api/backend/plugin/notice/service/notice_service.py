@@ -62,6 +62,7 @@ async def _broadcast(db: AsyncSession, notice: Notice, title: str | None = None)
         title=subject,
         content=f'公告《{subject}》已发布，点击查看详情。',
         link='/plugins/notice',
+        kind='announcement',
     )
 
 
