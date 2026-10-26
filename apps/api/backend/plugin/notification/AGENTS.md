@@ -41,6 +41,12 @@
 
 ## 写测试时踩的
 
+- 🔴 **日志清理任务里不要调 `load_notification_config`**（它经 `config_service.get_all` 走 Redis 缓存）。
+  `test_prune_logs.py` 在 `asyncio.run()` 开的一次性循环里跑清理任务，共享的 `redis_client` 连接池被绑到那个随即关掉的循环上，
+  **下一个文件**里第一条走 TestClient 的用例在 setup 就 `Event loop is closed`。红的是 `test_result_columns.py`，
+  和通知毫无关系，单独跑还是绿的。保留天数改成 `service/config.py: delivery_retention_days` 直接查 `sys_config`。
+  **实测证据**：PR #169 第一次 CI，PostgreSQL / SQL Server 两个 pytest job 都只红这一条；改完本地 `app/task/tests` 189 条全过
+
 - 🔴 **两遍完整的 `deliver_pending()` 并发，验不出抢占。** 第一版并发测试是 `gather(deliver_pending(), deliver_pending())`，
   把抢占条件删掉（变异）**照样绿**：在同一个事件循环里，两遍几乎不会在「取一批」和「抢占」之间交错 —— 后一遍取批时
   前一遍已经把那行改成 `sending` 了。改成两个 `_deliver_one(pk)` 直接抢同一行之后，同一个变异当场红
