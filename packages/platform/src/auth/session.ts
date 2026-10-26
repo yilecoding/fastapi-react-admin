@@ -67,10 +67,43 @@ async function desktopLogin(param: LoginParam): Promise<string> {
   }
 }
 
+async function desktopLoginByPhone(param: PhoneLoginParam): Promise<string> {
+  try {
+    const tokens = await tryDesktop()!.auth.loginByPhone(param)
+    return tokens.accessToken
+  } catch (err) {
+    throw new ApiError(400, 400, err instanceof Error ? err.message : String(err))
+  }
+}
+
 export async function login(qc: QueryClient, param: LoginParam) {
   const token = tryDesktop()
     ? await desktopLogin(param)
     : (await api.POST<LoginResult>('/api/v1/auth/login', { body: param })).access_token
+  afterLogin(qc, token)
+}
+
+export type PhoneCaptchaParam = { phone: string; uuid?: string; captcha?: string }
+export type PhoneLoginParam = { phone: string; code: string }
+
+/**
+ * 手机验证码登录：发码（issue #168 第二步）。匿名接口，桌面端也直接走渲染层的 api 客户端 ——
+ * 只有「换会话」那一步要主进程接管（它要扣下 refresh cookie），发码不涉及会话。
+ * 图形验证码开着时要带 uuid + captcha，服务端校验后**消费掉**，发完要重新拉一张。
+ */
+export async function sendPhoneCaptcha(param: PhoneCaptchaParam) {
+  await api.POST<null>('/api/v1/auth/phone/captcha', { body: param })
+}
+
+/** 手机验证码登录：换会话。收尾和密码登录同一段 */
+export async function loginByPhone(qc: QueryClient, param: PhoneLoginParam) {
+  const token = tryDesktop()
+    ? await desktopLoginByPhone(param)
+    : (await api.POST<LoginResult>('/api/v1/auth/phone/login', { body: param })).access_token
+  afterLogin(qc, token)
+}
+
+function afterLogin(qc: QueryClient, token: string) {
   // 会话 ID 在 token 的载荷里（`tokenStore.getSessionUuid`），不用另存
   tokenStore.set(token)
   endingLocally = false

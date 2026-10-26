@@ -18,6 +18,7 @@ export const IPC = {
   configSet: 'config:set',
 
   authLogin: 'auth:login',
+  authLoginByPhone: 'auth:login-by-phone',
   authRefresh: 'auth:refresh',
   authLogout: 'auth:logout',
   authRestore: 'auth:restore',
@@ -114,6 +115,12 @@ export interface AuthLoginInput {
   password: string
   uuid?: string
   captcha?: string
+}
+
+/** 手机验证码登录（issue #168）：验证码在渲染层已经发过了，主进程只负责换会话那一步 */
+export interface AuthPhoneLoginInput {
+  phone: string
+  code: string
 }
 
 /**
@@ -248,6 +255,8 @@ export interface DesktopBridge {
   auth: {
     /** 主进程发登录请求、扣下 refresh cookie 加密存盘，只把 access token 递回来 */
     login(input: AuthLoginInput): Promise<AuthTokens>
+    /** 手机验证码登录，同 `login`：主进程发请求、扣下 refresh cookie，只把 access token 递回来 */
+    loginByPhone(input: AuthPhoneLoginInput): Promise<AuthTokens>
     /** 用存盘的 refresh token 换新的 access token */
     refresh(): Promise<AuthRefreshResult>
     /** 冷启动时恢复会话；没有存盘凭据时是 `terminal` 且没有原因码 */

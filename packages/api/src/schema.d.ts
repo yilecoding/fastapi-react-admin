@@ -44,6 +44,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/phone/captcha": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 手机验证码登录：发送验证码
+         * @description 图形验证码开着时要带 uuid + captcha。没注册 / 没验证过的号也返回成功（不真发）—— 防号码枚举
+         */
+        post: operations["send_phone_login_captcha_api_v1_auth_phone_captcha_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/phone/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 手机验证码登录 */
+        post: operations["phone_login_api_v1_auth_phone_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/codes": {
         parameters: {
             query?: never;
@@ -3539,6 +3576,50 @@ export interface components {
              * @description 验证码
              */
             captcha?: string | null;
+            /**
+             * Client
+             * @description 登录端
+             * @default web
+             * @enum {string}
+             */
+            client: "web" | "desktop" | "mobile";
+        };
+        /**
+         * AuthPhoneCaptchaParam
+         * @description 手机验证码登录：发送验证码（issue #168 第二步）
+         */
+        AuthPhoneCaptchaParam: {
+            /**
+             * Phone
+             * @description 手机号
+             */
+            phone: string;
+            /**
+             * Uuid
+             * @description 图形验证码 UUID
+             */
+            uuid?: string | null;
+            /**
+             * Captcha
+             * @description 图形验证码
+             */
+            captcha?: string | null;
+        };
+        /**
+         * AuthPhoneLoginParam
+         * @description 手机验证码登录
+         */
+        AuthPhoneLoginParam: {
+            /**
+             * Phone
+             * @description 手机号
+             */
+            phone: string;
+            /**
+             * Code
+             * @description 短信验证码
+             */
+            code: string;
             /**
              * Client
              * @description 登录端
@@ -11905,6 +11986,72 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AuthLoginParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetLoginToken_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_phone_login_captcha_api_v1_auth_phone_captcha_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthPhoneCaptchaParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    phone_login_api_v1_auth_phone_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthPhoneLoginParam"];
             };
         };
         responses: {

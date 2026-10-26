@@ -2,7 +2,7 @@ import { app, safeStorage } from "electron"
 import fs from "node:fs"
 import path from "node:path"
 
-import type { AuthLoginInput, AuthRefreshResult, AuthTokens } from "@admin/platform/desktop/contract"
+import type { AuthLoginInput, AuthPhoneLoginInput, AuthRefreshResult, AuthTokens } from "@admin/platform/desktop/contract"
 
 import { readConfig } from "./config"
 
@@ -26,6 +26,7 @@ import { readConfig } from "./config"
 
 const ENDPOINTS = {
   login: "/api/v1/auth/login",
+  loginByPhone: "/api/v1/auth/phone/login",
   refresh: "/api/v1/auth/refresh",
   logout: "/api/v1/auth/logout",
 } as const
@@ -120,7 +121,16 @@ function toTokens(raw: RawTokens): AuthTokens {
 }
 
 export async function login(input: AuthLoginInput): Promise<AuthTokens> {
-  const res = await fetch(`${baseUrl()}${ENDPOINTS.login}`, {
+  return postLogin(ENDPOINTS.login, input)
+}
+
+/** 手机验证码登录（issue #168）。验证码是渲染层发的，这里只做「换会话 + 扣 cookie」那一步，和密码登录同一条收尾 */
+export async function loginByPhone(input: AuthPhoneLoginInput): Promise<AuthTokens> {
+  return postLogin(ENDPOINTS.loginByPhone, input)
+}
+
+async function postLogin(path: string, input: object): Promise<AuthTokens> {
+  const res = await fetch(`${baseUrl()}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     // 会话策略按端分（#138）。渲染层不知道自己跑在桌面端里，由主进程补上

@@ -35,6 +35,23 @@ class AuthLoginParam(AuthSchemaBase):
     client: Literal['web', 'desktop', 'mobile'] = Field('web', description='登录端')
 
 
+class AuthPhoneCaptchaParam(SchemaBase):
+    """手机验证码登录：发送验证码（issue #168 第二步）"""
+
+    phone: CustomPhoneNumber = Field(description='手机号')
+    # 图形验证码开着时必填：否则这个匿名接口就是免费的短信轰炸入口
+    uuid: str | None = Field(None, description='图形验证码 UUID')
+    captcha: str | None = Field(None, description='图形验证码')
+
+
+class AuthPhoneLoginParam(SchemaBase):
+    """手机验证码登录"""
+
+    phone: CustomPhoneNumber = Field(description='手机号')
+    code: str = Field(min_length=1, max_length=8, description='短信验证码')
+    client: Literal['web', 'desktop', 'mobile'] = Field('web', description='登录端')
+
+
 class AddUserParam(AuthSchemaBase):
     """添加用户参数"""
 
