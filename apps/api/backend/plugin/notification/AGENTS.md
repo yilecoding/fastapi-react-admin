@@ -61,7 +61,7 @@
 `tests/test_channels.py` 41 条 + `plugin/workflow/tests/test_notification_channels.py` 3 条，真实测试库 + 真实 Redis，
 PostgreSQL 和 SQL Server 都过（2026-10-26，本机）。MySQL 没跑。
 变异各打红一条：抢占不看状态 · 结果未知当失败重试 · 个人偏好收下 forced 的格子 · 缺地址静默跳过 · 审批事务出口不发「新的待办」。
-迁移 `a1000000notifych` 在两个方言的 `fba_test` 上 `downgrade -1` → 三张表 / 7 条菜单 / 4 行参数 / 1 行调度全部消失 →
+迁移 `ab000000notifych` 在两个方言的 `fba_test` 上 `downgrade -1` → 三张表 / 7 条菜单 / 4 行参数 / 1 行调度全部消失 →
 `upgrade head` → 全部回来、SQL Server 上 `sys.identity_columns` 里这三张表 0 行（雪花主键没被建成 IDENTITY）→
 `test_model_matches_migrations` 绿。
 E2E `apps/web/e2e/tests/notify-channels.spec.ts` 2 条；变异（个人中心不看 `configurable`）→ 锁那一条红。

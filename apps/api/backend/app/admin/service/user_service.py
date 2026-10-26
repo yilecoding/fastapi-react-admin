@@ -34,7 +34,9 @@ from backend.common.security.data_scope import bypass_data_scope
 from backend.common.security.session import EndReason, session_store
 from backend.core.conf import settings
 from backend.database.redis import redis_client
+from backend.plugin.core import check_plugin_installed
 from backend.utils.serializers import select_join_serialize
+from backend.utils.timezone import timezone
 
 
 class UserService:
@@ -145,6 +147,8 @@ class UserService:
             raise errors.ConflictError(msg=t('error.user.username_registered'))
         if obj.email and await user_dao.check_email(db, obj.email):
             raise errors.ConflictError(msg=t('error.user.email_bound'))
+        if obj.phone and await user_dao.check_phone(db, obj.phone):
+            raise errors.ConflictError(msg=t('error.user.phone_bound'))
         if not obj.password:
             raise errors.RequestError(msg=t('error.user.password_required'))
         await validate_password_strength(db, obj.password)
@@ -176,6 +180,8 @@ class UserService:
             email_user = await user_dao.check_email(db, obj.email)
             if email_user:
                 raise errors.ConflictError(msg=t('error.user.email_bound'))
+        if obj.phone and obj.phone != user.phone and await user_dao.check_phone(db, obj.phone):
+            raise errors.ConflictError(msg=t('error.user.phone_bound'))
         if obj.dept_id and obj.dept_id != user.dept_id and not await dept_dao.get(db, dept_id=obj.dept_id):
             raise errors.NotFoundError(msg=t('error.dept.not_found'))
         if obj.roles:
@@ -183,6 +189,9 @@ class UserService:
             if {role.id for role in roles} != set(obj.roles):
                 raise errors.NotFoundError(msg=t('error.role.not_found'))
         count = await user_dao.update(db, user.id, obj)
+        if obj.phone != user.phone:
+            # 管理员改的号码没经过本人验证：原来那次验证不再算数（issue #168）
+            await user_dao.clear_phone_verification(db, user.id)
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
         return count
 
@@ -333,6 +342,60 @@ class UserService:
             raise errors.ConflictError(msg=t('error.user.email_bound'))
         await redis_client.delete(f'{settings.EMAIL_CAPTCHA_REDIS_PREFIX}:{ctx.ip}')
         count = await user_dao.update_email(db, user_id, email)
+        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+        return count
+
+    @staticmethod
+    async def send_phone_captcha(*, db: AsyncSession, user_id: int, phone: str) -> None:
+        """
+        给要绑定的手机号发验证码（issue #168）
+
+        :param db: 数据库会话
+        :param user_id: 操作人（验证码按操作人 + 号码隔离）
+        :param phone: 要绑定的手机号（schema 已校验格式）
+        """
+        if not check_plugin_installed('sms'):
+            raise errors.RequestError(msg=t('error.user.sms_plugin_required'))
+        # 已经是别人的号就不发了：发了也绑不上，白扣一条钱。登录态下说清楚「被占用」是可以的 ——
+        # 要防枚举的是匿名的登录发码接口（第二步），不是这里
+        other = await user_dao.check_phone(db, phone)
+        if other and other.id != user_id:
+            raise errors.ConflictError(msg=t('error.user.phone_bound'))
+        from backend.plugin.sms.service.captcha_service import sms_captcha_service
+
+        await sms_captcha_service.send(scene='bind', subject=str(user_id), phone=phone, user_id=user_id)
+
+    @staticmethod
+    async def update_phone(*, db: AsyncSession, user_id: int, captcha: str, phone: str) -> int:
+        """
+        用验证码绑定手机号（issue #168）：验证通过才写，并记下验证时间
+
+        :param db: 数据库会话
+        :param user_id: 用户 ID
+        :param captcha: 发到这个号上的验证码
+        :param phone: 手机号
+        :return:
+        """
+        if not check_plugin_installed('sms'):
+            raise errors.RequestError(msg=t('error.user.sms_plugin_required'))
+        from backend.plugin.sms.service.captcha_service import sms_captcha_service
+
+        verdict = await sms_captcha_service.verify(scene='bind', subject=str(user_id), phone=phone, code=captcha)
+        if verdict == 'expired':
+            raise errors.RequestError(msg=t('error.user.captcha_expired'))
+        if verdict != 'ok':
+            raise errors.CustomError(error=CustomErrorCode.CAPTCHA_ERROR)
+        other = await user_dao.check_phone(db, phone)
+        if other and other.id != user_id:
+            raise errors.ConflictError(msg=t('error.user.phone_bound'))
+        count = await user_dao.update_phone(db, user_id, phone, verified_time=timezone.now())
+        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+        return count
+
+    @staticmethod
+    async def unbind_phone(*, db: AsyncSession, user_id: int) -> int:
+        """解绑手机号：号码和验证时间一起清掉"""
+        count = await user_dao.update_phone(db, user_id, None, verified_time=None)
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
         return count
 

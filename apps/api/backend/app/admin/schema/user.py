@@ -35,6 +35,23 @@ class AuthLoginParam(AuthSchemaBase):
     client: Literal['web', 'desktop', 'mobile'] = Field('web', description='登录端')
 
 
+class AuthPhoneCaptchaParam(SchemaBase):
+    """手机验证码登录：发送验证码（issue #168 第二步）"""
+
+    phone: CustomPhoneNumber = Field(description='手机号')
+    # 图形验证码开着时必填：否则这个匿名接口就是免费的短信轰炸入口
+    uuid: str | None = Field(None, description='图形验证码 UUID')
+    captcha: str | None = Field(None, description='图形验证码')
+
+
+class AuthPhoneLoginParam(SchemaBase):
+    """手机验证码登录"""
+
+    phone: CustomPhoneNumber = Field(description='手机号')
+    code: str = Field(min_length=1, max_length=8, description='短信验证码')
+    client: Literal['web', 'desktop', 'mobile'] = Field('web', description='登录端')
+
+
 class AddUserParam(AuthSchemaBase):
     """添加用户参数"""
 
@@ -101,6 +118,7 @@ class GetUserInfoDetail(UserInfoSchemaBase):
     is_staff: bool = Field(description='是否管理员')
     join_time: datetime = Field(description='加入时间')
     last_login_time: datetime | None = Field(None, description='最后登录时间')
+    phone_verified_time: datetime | None = Field(None, description='手机号验证时间（空 = 管理员录入、未经本人验证）')
     # 🔴 **必须带默认值，不能写成必填。** 这个 DTO 的子类
     # `GetUserInfoWithRelationDetail` 整份序列化后存在 `fba:user:<id>`，
     # 而旧缓存里没有这个字段 —— 写成必填的话每个已登录用户的每个请求都会

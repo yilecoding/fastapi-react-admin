@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from "electron"
 import { IPC } from "@admin/platform/desktop/contract"
 import type {
   AuthLoginInput,
+  AuthPhoneLoginInput,
   DesktopBridge,
   DesktopConfig,
   DeviceEvent,
@@ -56,6 +57,7 @@ const bridge: DesktopBridge = {
   },
   auth: {
     login: (input: AuthLoginInput) => call(IPC.authLogin, input),
+    loginByPhone: (input: AuthPhoneLoginInput) => call(IPC.authLoginByPhone, input),
     refresh: () => call(IPC.authRefresh),
     restore: () => call(IPC.authRestore),
     logout: () => call(IPC.authLogout),

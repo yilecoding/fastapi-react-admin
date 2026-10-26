@@ -24,6 +24,8 @@ export type CurrentUser = {
   email: string | null
   avatar: string | null
   phone: string | null
+  /** 手机号验证时间。空 = 管理员录入 / 导入的，没经过本人验证（这种号不能用来登录，issue #168） */
+  phone_verified_time: string | null
   status: number
   is_superuser: boolean
   is_staff: boolean

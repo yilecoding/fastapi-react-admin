@@ -31,6 +31,19 @@ _EMAIL_UNIQUE = (
     else sa.UniqueConstraint('email', 'deleted', name='uk_sys_user_email_deleted')
 )
 
+# 手机号同理（issue #168）：绑定 / 手机登录都要求一个号只属于一个账号。空号码的用户互不冲突
+_PHONE_UNIQUE = (
+    sa.Index(
+        'uk_sys_user_phone_deleted',
+        'phone',
+        'deleted',
+        unique=True,
+        mssql_where=sa.text('phone IS NOT NULL'),
+    )
+    if DataBaseType.sqlserver == settings.DATABASE_TYPE
+    else sa.UniqueConstraint('phone', 'deleted', name='uk_sys_user_phone_deleted')
+)
+
 
 class User(Base):
     """用户表"""
@@ -39,6 +52,7 @@ class User(Base):
     __table_args__ = (
         sa.UniqueConstraint('username', 'deleted', name='uk_sys_user_username_deleted'),
         _EMAIL_UNIQUE,
+        _PHONE_UNIQUE,
         {'comment': '用户表'},
     )
 
@@ -50,6 +64,11 @@ class User(Base):
     salt: Mapped[bytes | None] = mapped_column(sa.LargeBinary(256), comment='加密盐')
     email: Mapped[str | None] = mapped_column(UniversalStr(256), default=None, index=True, comment='邮箱')
     phone: Mapped[str | None] = mapped_column(UniversalStr(11), default=None, comment='手机号')
+    # 空 = 管理员录入 / 导入的，没经过本人验证 —— 这种号**不能**用来登录（打错一位，号码的主人就能登进别人的账号）。
+    # 本人在个人中心用验证码绑定时写入；管理员改了号码就清空
+    phone_verified_time: Mapped[datetime | None] = mapped_column(
+        TimeZone, default=None, comment='手机号验证时间(空=未经本人验证)'
+    )
     avatar: Mapped[str | None] = mapped_column(UniversalStr(256), default=None, comment='头像')
     # 显示时区（IANA 标识，如 Asia/Shanghai）。**只影响前端怎么显示时间**——
     # 存储、Celery 调度、日志全都按进程级的 settings.DATETIME_TIMEZONE 走，

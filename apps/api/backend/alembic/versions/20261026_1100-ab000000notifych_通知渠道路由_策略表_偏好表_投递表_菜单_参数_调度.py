@@ -1,8 +1,8 @@
 """通知渠道路由：策略表 · 偏好表 · 投递表，补齐已存在库缺的菜单 / 参数配置组 / 投递调度
 
-Revision ID: a1000000notifych
-Revises: z0000000sms
-Create Date: 2026-10-26 10:00:00
+Revision ID: ab000000notifych
+Revises: aa000000userphone
+Create Date: 2026-10-26 11:00:00
 
 issue #166。三张表 + 7 条菜单 + 「通知推送」参数组 4 行 + 投递调度 1 行放在一条里：它们一起才构成「功能可用」。
 只建表不补调度，表现是**投递行一直停在「待发」**（提交后那一脚踢醒的只有在跑的 worker，安全网没有），
@@ -23,8 +23,8 @@ from backend.utils.data_migration import add_menu, delete_by_key, insert_if_abse
 from backend.utils.timezone import timezone
 
 # revision identifiers, used by Alembic.
-revision = 'a1000000notifych'
-down_revision = 'z0000000sms'
+revision = 'ab000000notifych'
+down_revision = 'aa000000userphone'
 branch_labels = None
 depends_on = None
 

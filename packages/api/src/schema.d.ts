@@ -44,6 +44,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/phone/captcha": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 手机验证码登录：发送验证码
+         * @description 图形验证码开着时要带 uuid + captcha。没注册 / 没验证过的号也返回成功（不真发）—— 防号码枚举
+         */
+        post: operations["send_phone_login_captcha_api_v1_auth_phone_captcha_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/phone/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 手机验证码登录 */
+        post: operations["phone_login_api_v1_auth_phone_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/codes": {
         parameters: {
             query?: never;
@@ -662,6 +699,41 @@ export interface paths {
         put: operations["update_user_email_api_v1_sys_users_me_email_put"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/users/me/phone/captcha": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 给要绑定的手机号发验证码 */
+        post: operations["send_phone_captcha_api_v1_sys_users_me_phone_captcha_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/users/me/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 用验证码绑定当前用户的手机号 */
+        put: operations["update_user_phone_api_v1_sys_users_me_phone_put"];
+        post?: never;
+        /** 解绑当前用户的手机号 */
+        delete: operations["unbind_user_phone_api_v1_sys_users_me_phone_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3599,6 +3671,50 @@ export interface components {
              */
             client: "web" | "desktop" | "mobile";
         };
+        /**
+         * AuthPhoneCaptchaParam
+         * @description 手机验证码登录：发送验证码（issue #168 第二步）
+         */
+        AuthPhoneCaptchaParam: {
+            /**
+             * Phone
+             * @description 手机号
+             */
+            phone: string;
+            /**
+             * Uuid
+             * @description 图形验证码 UUID
+             */
+            uuid?: string | null;
+            /**
+             * Captcha
+             * @description 图形验证码
+             */
+            captcha?: string | null;
+        };
+        /**
+         * AuthPhoneLoginParam
+         * @description 手机验证码登录
+         */
+        AuthPhoneLoginParam: {
+            /**
+             * Phone
+             * @description 手机号
+             */
+            phone: string;
+            /**
+             * Code
+             * @description 短信验证码
+             */
+            code: string;
+            /**
+             * Client
+             * @description 登录端
+             * @default web
+             * @enum {string}
+             */
+            client: "web" | "desktop" | "mobile";
+        };
         /** Body_ai_fill_start_api_v1_sys_workflow_startable__code__ai_fill_post */
         Body_ai_fill_start_api_v1_sys_workflow_startable__code__ai_fill_post: {
             /** Text */
@@ -3654,6 +3770,14 @@ export interface components {
              */
             recipients: string | string[];
         };
+        /** Body_send_phone_captcha_api_v1_sys_users_me_phone_captcha_post */
+        Body_send_phone_captcha_api_v1_sys_users_me_phone_captcha_post: {
+            /**
+             * Phone
+             * @description 要绑定的手机号
+             */
+            phone: string;
+        };
         /** Body_set_default_storage_api_v1_sys_storages_default_put */
         Body_set_default_storage_api_v1_sys_storages_default_put: {
             /**
@@ -3690,6 +3814,19 @@ export interface components {
              * @description 用户昵称
              */
             nickname: string;
+        };
+        /** Body_update_user_phone_api_v1_sys_users_me_phone_put */
+        Body_update_user_phone_api_v1_sys_users_me_phone_put: {
+            /**
+             * Captcha
+             * @description 短信验证码
+             */
+            captcha: string;
+            /**
+             * Phone
+             * @description 手机号
+             */
+            phone: string;
         };
         /** Body_update_user_timezone_api_v1_sys_users_me_timezone_put */
         Body_update_user_timezone_api_v1_sys_users_me_timezone_put: {
@@ -5140,6 +5277,11 @@ export interface components {
              * @description 最后登录时间
              */
             last_login_time?: string | null;
+            /**
+             * Phone Verified Time
+             * @description 手机号验证时间（空 = 管理员录入、未经本人验证）
+             */
+            phone_verified_time?: string | null;
             /**
              * Timezone
              * @description 显示时区(IANA 标识)
@@ -7625,6 +7767,11 @@ export interface components {
              */
             last_login_time?: string | null;
             /**
+             * Phone Verified Time
+             * @description 手机号验证时间（空 = 管理员录入、未经本人验证）
+             */
+            phone_verified_time?: string | null;
+            /**
              * Timezone
              * @description 显示时区(IANA 标识)
              * @default Asia/Shanghai
@@ -7699,6 +7846,11 @@ export interface components {
              * @description 最后登录时间
              */
             last_login_time?: string | null;
+            /**
+             * Phone Verified Time
+             * @description 手机号验证时间（空 = 管理员录入、未经本人验证）
+             */
+            phone_verified_time?: string | null;
             /**
              * Timezone
              * @description 显示时区(IANA 标识)
@@ -12241,6 +12393,72 @@ export interface operations {
             };
         };
     };
+    send_phone_login_captcha_api_v1_auth_phone_captcha_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthPhoneCaptchaParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    phone_login_api_v1_auth_phone_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthPhoneLoginParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetLoginToken_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_codes_api_v1_auth_codes_get: {
         parameters: {
             query?: never;
@@ -13806,6 +14024,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_phone_captcha_api_v1_sys_users_me_phone_captcha_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_send_phone_captcha_api_v1_sys_users_me_phone_captcha_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_user_phone_api_v1_sys_users_me_phone_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Body_update_user_phone_api_v1_sys_users_me_phone_put"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unbind_user_phone_api_v1_sys_users_me_phone_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
                 };
             };
         };

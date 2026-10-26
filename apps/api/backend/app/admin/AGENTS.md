@@ -50,6 +50,40 @@
 - ⚠️ **没有强制首次改密的机制**。`last_password_changed_time` 建号时就是当下，
   所以导入的账号在 `USER_PASSWORD_EXPIRY_DAYS`（默认 365 天）内不会被要求改掉默认密码
 
+## 手机号：唯一约束 + 「本人验证过」才算数（issue #168）
+
+`sys_user.phone` 有唯一约束 `uk_sys_user_phone_deleted`（形状同 email：`(phone, deleted)`，SQL Server 走筛选唯一索引让 NULL 互不冲突），
+所以**三条管理员写路径都要先查重**：`user_service.create` / `update`（`user_dao.check_phone`，豁免数据范围的理由同 `check_email`）、
+批量导入（`dataio._user_validate` 文件内 + 库内两维，同邮箱）。漏一条的表现是 IntegrityError → 500，而不是干净的 409。
+
+🔴 **`phone_verified_time` 为空 = 管理员录入 / 导入的，没经过本人验证 —— 这种号不能用来登录。** 打错一位，号码的主人就能登进别人的账号。
+只有本人在个人中心用验证码绑定（`PUT /sys/users/me/phone`）才写这个时间；**管理员改了号码就清掉它**（`user_service.update` 里
+`obj.phone != user.phone` 那一句），否则「验证」会跟着一个换过的号继续算数。
+
+**实测证据**：`tests/api_v1/test_user_phone_unique.py` —— 新建 / 编辑撞号 409、空号互不冲突、管理员改号后 `phone_verified_time` 变空、
+导入文件内两行同号第二行红 + 库里已有的号那一行红。迁移 `aa000000userphone` 在开发库 up → down → up 验过，加约束前先查重、有重复就报出是哪几个号。
+
+## 手机验证码登录（`auth_service.send_phone_captcha` / `phone_login`，issue #168 第二步）
+
+两个匿名接口 `/auth/phone/captcha` · `/auth/phone/login`（都在 `TOKEN_REQUEST_PATH_EXCLUDE`，精确匹配）。
+只认 `phone_verified_time` 非空的号（上一节）。
+
+🔴 **发码接口对「没注册 / 没验证 / 验证过」三种号的表现必须一致，只有第三种真发。** 一致的维度有四个，漏哪个都是一张号码核对器：
+
+| 维度 | 怎么做到一致 |
+|---|---|
+| 状态码 / 文案 | 不发的那两种也返回 200「成功」 |
+| 冷却 / 日上限 | 短信插件自己的防护只作用在真发了的号上，没注册的号永远不会「太频繁」→ 在决定发不发**之前**先用 `_PHONE_GUARD`（一段 Lua）按 `captcha` 模板同样的口径记一笔 |
+| 耗时 | 真发要等厂商几百毫秒，不发的那条随机睡 0.3～0.8 秒 |
+| 图形验证码 | 开着时两种号都要过（否则这个匿名接口就是免费的短信轰炸入口） |
+
+登录接口：没注册 / 没验证 / 码错 / 码过期一律「手机号或验证码有误」+ 403；锁定原因**码对了才说**（同 `user_verify` 的顺序）。
+IP 锁定、停用 / 锁定判定、密码过期、成败计数、登录日志逐条照 `user_verify` 做，验证码替代的只是「密码对不对」那一步；
+开会话那段抽成了 `_open_session`，两种登录共用。登录日志里对不上账号的那次记**掩码号**，不留明文号码表。
+
+**实测证据**：`plugin/sms/tests/test_phone_login.py` —— 没注册的号 200 且 Redis 无码且耗时 ≥ 250ms；
+没注册 / 没验证两种号第二次都是同一句 400；码错 / 没注册 / 管理员录的号拿着对的码三者 403 同文案；对的码开会话一次、cookie 下发、第二次 403。
+
 ## 已经删掉的东西，不要照上游加回来
 
 `sys_menu` 的两列已从**模型、DTO、种子 SQL 和数据库**里彻底删除：
