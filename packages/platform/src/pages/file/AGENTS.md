@@ -34,6 +34,7 @@ pages/file/
 ├─ file-menu.tsx      操作菜单，右键与 ⋯ 下拉共用一份条目定义
 ├─ detail-sheet.tsx   详情抽屉：落盘名 / MIME / 校验和 / 上传人这些排障字段
 ├─ preview-dialog.tsx 预览弹窗：取字节 → 交 viewer
+├─ image-dimensions.ts 从文件头读图片宽高（不解码），挡像素过多的图
 ├─ uploader.ts        往全局上传队列塞文件（`shell/upload-store.ts`），页面自己不画队列
 └─ attachments.tsx    **可复用的附件面板**，任何页面给 targetType + targetId 就能嵌
 ```
@@ -195,6 +196,10 @@ down 只删迁移自己那几个 ID。浏览器（Playwright）：阈值填 120 
 **真正的解法是后端出缩略图**（Pillow + 一列 `thumbnail_name`），那时把
 `canThumbnail` / `fileThumbQuery` 一起删掉。
 
+缩略图**不需要**像素上限（预览需要，见下面「预览器」那节）：实测 48MP / 144MP / 400MP 的图在宫格里
+主线程最长 18–40ms —— `<img>` 按显示尺寸解码。但浏览器**不肯解**的图（实测 30000×30000 的 PNG，
+`naturalWidth` 是 0）原来显示成一个破图标，像文件坏了；现在 `onError` 退回类型图标。
+
 ### 菜单图标要在 `icon-registry.tsx` 里登记
 
 菜单表的 `icon` 是 Iconify 命名，而 UI 包用 Tabler —— 没登记的会**静默回落成
@@ -307,18 +312,39 @@ openapi 生成 `number`，而编码层 `stringify_unsafe_ints` 运行时下发�
 ### 预览器是第三方包 `@file-viewer`（Apache-2.0）
 
 我们只写了一层壳（`packages/ui/src/components/file-viewer/`），渲染 pdf / docx /
-xlsx / 图片 / 文本 / 压缩包的是 `@file-viewer/renderer-*`。React 19 + Vite 8 实测无摩擦
-（peer 分别是 `react >=17 <20`、`vite >=5 <9`，零 peer warning）。
+xlsx / pptx / 图片 / 文本 / 压缩包 / 音视频的是 `@file-viewer/renderer-*`（3.x）。
+React 19 + Vite 8 实测无摩擦（peer 分别是 `react >=17 <20`、`vite >=5 <9`）。
 
 **喂 `buffer` 而不是 `url`** —— 字节由调用方带 JWT 取回，viewer 只管渲染。
 所以不需要「Redis 票据 + 短时效公开 URL」那一套，后端也没有无鉴权直链可给。
-（例外：音视频要 Range 拖进度，整块 ArrayBuffer 拖不动，那类得走真实 URL。）
+**音视频也走这条**：media renderer 把 buffer 转成对象 URL 交给 `<video>` / `<audio>`，
+拖进度没问题（实测 wav / mp3 / mp4），代价是播放前要整块下载 —— 所以
+`preview-dialog.tsx` 给音视频另设了 100MB 的硬上限（`MEDIA_MAX`），超过只给下载。
+后端默认只收 20MB 以内的音视频，这条线是给 `.env` 调大上限之后兜底的。
+真要边下边播得做带票据的 Range URL，还没做。
+
+🔴 **图片按像素数拦，不按字节数拦。** 76KB 的 PNG 可以是 20000×20000，后端 5MB 的图片上限挡不住，
+解码出来是 1.6GB。实测（Playwright · 生产构建）交给 viewer 时主线程最长卡顿：
+
+| 样本 | 卡顿 |
+|---|---|
+| 图片 8000×6000（48MP，手机原图量级） | 191ms |
+| 图片 12000×12000（144MP） | 548ms |
+| 图片 20000×20000（400MP） | **5232ms** |
+| 图片 30000×30000 | 浏览器解不了，renderer 自己报「预览失败」（不卡） |
+| 日志 5 / 20 / 45MB | 79 / 65 / 72ms，1.7 秒内全部显示（3.x 的文本 renderer 是虚拟滚动） |
+
+所以 `preview-dialog` 取回字节后先过 `image-dimensions.ts`（只读文件头），超过 150MP 只给下载。
+线画在 144MP 之上 —— Orca 那条 32MP 照抄会把手机原图也挡掉。
+**文本不需要另设门槛**：最初的计划是「按类型分档」，实测 45MB 日志都不卡，那一项删了。
+单测用 Pillow 真编码的样本（`image-dimensions.test.ts`，变异过：JPEG 宽高读反当场红），
+E2E 现造一张 20000×20000 的 PNG（`file-preview.spec.ts`）。
 
 **只在可见处挂载** —— 放 Dialog / Sheet 里，别常驻页面。多页签用 `<Activity>` 保活，
 隐藏 tab 是 `display:none`（宽度 0），而 renderer 要测容器尺寸（recharts 栽过同一个坑）。
 关闭即卸载，**不要** `keepMounted`，顺带把 ArrayBuffer 让给 GC。
 
-四个只有实测才知道的坑：
+五个只有实测才知道的坑：
 
 | 坑 | 症状 | 修法 |
 |---|---|---|
@@ -326,6 +352,7 @@ xlsx / 图片 / 文本 / 压缩包的是 `@file-viewer/renderer-*`。React 19 + 
 | `inject: true` | 注册模块被注入 HTML 入口 → 每个 renderer 一条 `modulepreload`，**登录页预下载约 2.5MB** | `inject: false`，注册改在 `file-viewer/viewer.tsx` 里手动做，靠 `lazy(() => import('./viewer'))` 关进懒加载分片 |
 | `chunkStrategy` 用默认的 `'renderer'` | JSZip / libarchive 被归进 `file-viewer-archive` 分片，入口用到一个共享符号就得拉整个 250KB | `chunkStrategy: 'none'`，交给 rolldown 自己分片（入口只静态 import 一个 4KB runtime） |
 | `toolbar.position` 写了非法值 | **不报错**、运行时静默回落到默认位置 —— 看着像生效其实是巧合（`top-right` 踩过） | 只有 `auto｜top｜top-center｜bottom-right` 四个。表格类要用 `top-center`：底部有工作表页签，`bottom-right` 会把 `Print` 裁成 `…rt` |
+| 🔴 3.x 下没设资源根目录 | **预览看起来全是好的**：PDF 照样画出来（pdf.worker 404 → 退回主线程跑 PDF.js，控制台一条 warning）；压缩包照样列目录（libarchive worker 404 → ZIP/TAR 兼容模式，界面一行小字）—— 只有 rar / 7z 打不开。2.3 → 3.2 升级时两处同时出现 | 3.x 的资产地址由插件**注入的运行时代码**调 `setDefaultFileViewerAssetBaseUrl` 设置，而我们 `inject: false`，没人调 → renderer 去站点根目录取 `/vendor/...`。`viewer.tsx` 里手动设，`"file-viewer"` 要和 `copyAssets.baseDir` 一致。守卫：`e2e/tests/file-preview.spec.ts`（断言资产请求都在 `/file-viewer/vendor/` 下 —— 只看「画出来没有」是假绿，兜底也画得出来；做过变异，去掉那行当场红） |
 
 **不要换成 `preset-all` / `@file-viewer/*-full` 包。** 那会把 drawio(66MB) ·
 typst(37MB) · cad(20MB) · iwork 全拷进 dist（实测 dist 60MB → 186MB），
@@ -335,12 +362,28 @@ typst(37MB) · cad(20MB) · iwork 全拷进 dist（实测 dist 60MB → 186MB）
 **增删 renderer 要动三处**，少一处就出错：
 `file-viewer/viewer.tsx` 的 import + 数组 · `apps/web/vite.config.ts` 的 `renderers`
 （决定 copyAssets 发布哪些资产）· `pages/file/api.ts` 的 `PREVIEWABLE`
-（决定界面上哪些能点预览）。
+（决定界面上哪些能点预览）。三处的名字还不是一套：
 
-> viewer 渲染在 **Shadow DOM** 里（`.file-viewer-web-shell`）。样式与 Tailwind
-> 天然隔离是好事；代价是 `page.evaluate` 里的 `document.querySelector` 穿不进去 ——
+- `viewer.tsx` 一律**具名**导入插件（`pptxRenderer`…）。`renderer-pptx` 的默认导出是渲染函数
+  `renderPptx`，不是插件 —— 其余几个包的默认导出才恰好是插件，照着抄就中招
+- `vite.config.ts` 写的是插件自己的 id：pptx 那条叫 `presentation-openxml`
+  （写 `presentation` 会连旧版 .ppt 的 WASM 和字体一起拉进来）
+- 3.x 把几样东西改成了**另装的 capability**，没装时 renderer 只显示一行安装命令：
+  RTF（`capability-rtf`）、Mermaid、HLS（`.m3u8`）、MIDI。所以 `PREVIEWABLE` 里刻意没有 `rtf`，
+  后端白名单里的 `ppt` / `mov` / `avi` / `flv` / `mkv` 也没列（理由写在 `PREVIEWABLE` 上面）
+
+> 插件 3.x 默认开着 `stabilizeInteropChunks`：入口里那 1.5KB 的 `w3c-keyname` 被拆成独立的
+> `vendor-codemirror` 分片、多一条 modulepreload。**字节没变**（入口 chunk 实测 -454B），
+> 只是多一个请求 —— 别以为是 renderer 漏进了入口。
+
+> viewer 渲染在 **Shadow DOM** 里（3.x 由 `styleIsolation: "shadow"` 决定，外壳里写死了；
+> shadow root 挂在 viewer 自己的根节点上，2.x 的 `.file-viewer-web-shell` 宿主类名已经没了）。
+> 样式与 Tailwind 天然隔离是好事；代价是 `page.evaluate` 里的 `document.querySelector` 穿不进去 ——
 > 写 E2E 要用 Playwright 自己的 locator（它会自动穿透 shadow）。
 > 实测第一次探测时 host 的 `innerHTML` 只有 63 字符，差点误判成没渲染。
+>
+> 工具栏语言由 `FileViewer` 的 `locale` prop 决定，不传是 `auto`（跟浏览器走）。
+> 用户在系统里选的语言可能和浏览器不同，所以 `preview-dialog` 把 `i18n.language` 传进去。
 
 ## 🔴 私有文件谁能读：不是「登录了就行」
 

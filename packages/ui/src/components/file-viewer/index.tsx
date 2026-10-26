@@ -8,7 +8,7 @@ import { Skeleton } from "@admin/ui/components/skeleton"
  * 文件预览器外壳（零业务）。
  *
  * 真正干活的是第三方包 `@file-viewer/*`（Flyfish File Viewer，Apache-2.0）——
- * pdf / docx / xlsx / 图片 / 文本 / 压缩包各有一个 renderer，自带工具栏
+ * pdf / docx / xlsx / pptx / 图片 / 文本 / 压缩包 / 音视频各有一个 renderer，自带工具栏
  * （搜索 · 缩放 · 旋转 · 页面缩略图 · 下载 · 打印 · 明暗切换）。
  *
  * 三条硬约束，改这个文件前务必读完：
@@ -20,14 +20,18 @@ import { Skeleton } from "@admin/ui/components/skeleton"
  * 2. **喂 `buffer` 而不是 `url`**。字节由调用方用 api-client 取（带 JWT），
  *    viewer 只负责渲染。这样就不需要「Redis 票据 + 短时效公开 URL」那一套——
  *    后端也不再有无鉴权直链可给。
- *    ⚠️ 例外：音视频要 Range 拖进度，整块 ArrayBuffer 拖不动，那类得走真实 URL。
+ *    音视频也走这条：media renderer 把 buffer 转成对象 URL 交给 `<video>`，
+ *    拖进度没问题，代价是要先整块下载 —— 所以调用方要给音视频设体积上限，
+ *    超过就只给下载（真要边下边播得走带票据的 Range URL，还没做）。
  *
  * 3. **只在可见处挂载**（放 Dialog / Sheet 里，别常驻页面）。
  *    多页签用 `<Activity>` 保活，隐藏 tab 是 `display:none` → 宽度 0，
  *    而 renderer 要测容器尺寸（CLAUDE.md 里 recharts 已经栽过同一个坑）。
  *    真要在隐藏处挂，可在转可见时调 `handle.fitToView()` 补救。
  *
- * 另外：它渲染在 **Shadow DOM** 里（`.file-viewer-web-shell`）。
+ * 另外：它渲染在 **Shadow DOM** 里 —— 3.x 起这是 `styleIsolation` 选项决定的，
+ * 下面显式写死 `'shadow'`，不跟默认值走。shadow root 挂在 viewer 自己的根节点上
+ * （2.x 那个 `.file-viewer-web-shell` 宿主类名没了，别再按它找）。
  * 好处是样式与 Tailwind 天然隔离；代价是 `document.querySelector` 穿不进去，
  * 写 E2E 要用 Playwright 自己的 locator（它会自动穿透 shadow）。
  */
@@ -42,6 +46,12 @@ export type FileViewerProps = {
   /** 带扩展名的文件名 —— renderer 靠它选谁来渲染，**不能省** */
   filename: string
   className?: string
+  /**
+   * 工具栏语言（`zh-CN` / `en-US`…）。不传 = `auto`，跟浏览器语言走 ——
+   * 而用户在系统里选的语言可能和浏览器不同，所以调用方应该把当前界面语言传进来。
+   * 本包不接 i18n 实例（零业务，见 PORTING.md），这一项只能由外面给。
+   */
+  locale?: string
   ref?: React.Ref<FileViewerHandle | null>
 }
 
@@ -66,7 +76,7 @@ function toolbarPosition(filename: string): FileViewerToolbarPosition {
   return BOTTOM_OCCUPIED.has(ext) ? "top-center" : "bottom-right"
 }
 
-export function FileViewer({ buffer, filename, className, ref }: FileViewerProps) {
+export function FileViewer({ buffer, filename, className, locale = "auto", ref }: FileViewerProps) {
   return (
     <Suspense fallback={<Skeleton className="size-full" />}>
       <Viewer
@@ -75,6 +85,8 @@ export function FileViewer({ buffer, filename, className, ref }: FileViewerProps
         filename={filename}
         className={cn("size-full", className)}
         options={{
+          styleIsolation: "shadow",
+          locale,
           toolbar: { position: toolbarPosition(filename), exportHtml: false },
         }}
       />

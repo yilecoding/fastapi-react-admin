@@ -52,15 +52,16 @@ const CRC_TABLE = (() => {
   return table
 })()
 
-function crc32(buf: Buffer): number {
+export function crc32(buf: Buffer): number {
   let c = -1
   for (let i = 0; i < buf.length; i += 1) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8)
   return (c ^ -1) >>> 0
 }
 
-type Entry = { name: string; data: Buffer }
+export type Entry = { name: string; data: Buffer }
 
-function zipStore(entries: Entry[]): Buffer {
+/** STORE（不压缩）的 zip。xlsx 之外，预览用例也拿它造压缩包样本（`file-preview.spec.ts`） */
+export function zipStore(entries: Entry[]): Buffer {
   const locals: Buffer[] = []
   const centrals: Buffer[] = []
   let offset = 0

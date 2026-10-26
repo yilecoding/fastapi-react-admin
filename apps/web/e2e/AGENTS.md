@@ -385,6 +385,7 @@ await page.route(/\/api\/v1\/sys\/users\?/, (route) => route.fulfill({ status: 5
 | `menu-dead-link.spec.ts` | 死链判定的漏报**和**误报（那 3 个假死链的回归） | 侧边栏静默跳过一条配好的菜单；或者反过来，人去修一个没坏的东西 |
 | `menu-rename-disable.spec.ts` | 改内置菜单名（含已经开着的标签）· 停用目录整枝消失（#143）。改的是种子里的真菜单，`finally` 改回去 | 保存成功、界面一个字不变。做过变异：标签不现查菜单树 / 侧边栏不滤停用的，各自当场红 |
 | `file-upload.spec.ts` | 上传闭环 + 未登录时两条读取路径都拿不到文件 | `UPLOAD_DIR` 挪回 `STATIC_DIR` 下的话功能全对，只是文件全公开了 |
+| `file-preview.spec.ts` | 预览器的 worker / wasm 真从 `/file-viewer/vendor/` 取到 · 音频用 buffer 播得起来 · 超限音视频连字节都不取 · 20000×20000 的 PNG 不交给 viewer · 解不了的图缩略图退回图标。样本（PDF / zip / wav / png）全部现造 | 资源根目录没设时 PDF 退回主线程、压缩包退回 ZIP 模式，**画面照样出来** —— 只看「渲染出来没有」是假绿。做过变异：去掉 `setDefaultFileViewerAssetBaseUrl` / 去掉 `MEDIA_MAX` 判断，各自当场红；后两条在不含修复的构建上跑过、当场红。缩略图那条要**先等取字节的响应**再断言「没有 img」—— 取之前卡片上本来就是图标，直接断言是假绿。⚠️ 记资产请求要排除 dev 的 `/@fs/…`、`/node_modules/…`，那些路径里也带 `/vendor/` |
 | `user-import.spec.ts` | 批量导入的预览三类问题 + token 一次性 + 非 xlsx 被挡 | 「导入成功了、人数对不上」——文件内重名 / 编码查不到 / 某列拼错整列丢数据，全都不报错 |
 | `data-io.spec.ts` | 导出的就是筛选的那批（CSV 带 BOM）· 导出记录能再下载 · 一份文件建一棵部门树 · 列顺序进 URL（刷新、搜索之后都还在） | 导出全表而用户以为是筛过的；拖完列顺序一刷新就没了。两条都做过变异：导出不传筛选 / `keep` 里去掉 `cols`，各自当场红 |
 | `notify-channels.spec.ts` | 通知策略改一格 → 保存 → 刷新还是新值 · 管理员设成「必发」的格子在个人中心是锁（#166） | 保存成功、界面没变；或者一个「显示已关闭、实际照发」的开关。做过变异：个人中心不看 `configurable` → 锁那一条红 |

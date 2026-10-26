@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10",
-    "@file-viewer/vite-plugin": "^2.3.0",
+    "@file-viewer/vite-plugin": "^3.2.3",
     "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "^4",
     "@tanstack/router-plugin": "^1.168.30",

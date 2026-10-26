@@ -88,7 +88,9 @@ export default defineConfig({
     // 实测 dist 从 60MB 涨到 186MB，而且在插件里 narrow formats 是**无效**的
     // （-full 包静态依赖 preset-all，整个 renderer 图已经在模块图里）。
     fileViewerRenderers({
-      renderers: ["pdf", "word", "spreadsheet", "image", "text", "archive"],
+      // 这里写的是插件自己的 id，不是包名：pptx 那条叫 `presentation-openxml`
+      // （`presentation` 会连旧版 .ppt 的 WASM 和字体一起拉进来）
+      renderers: ["pdf", "word", "spreadsheet", "presentation-openxml", "image", "text", "archive", "media"],
       autoPresets: false,
       copyAssets: { baseDir: "file-viewer" },
       inject: false,
