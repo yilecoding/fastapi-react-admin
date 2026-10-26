@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any
 
 import bcrypt
@@ -113,6 +114,11 @@ class CRUDUser(DataScopedCRUD[User]):
         # 逐个调用点包的话，下一个新调用点会漏。
         with bypass_data_scope():
             return await self.select_model_by_column(db, email=email, deleted=0)
+
+    async def check_phone(self, db: AsyncSession, phone: str) -> User | None:
+        """检查手机号是否已被绑定（issue #168）。豁免数据范围的理由同 `check_email`"""
+        with bypass_data_scope():
+            return await self.select_model_by_column(db, phone=phone, deleted=0)
 
     async def get_select(
         self,
@@ -233,6 +239,14 @@ class CRUDUser(DataScopedCRUD[User]):
             return set()
         with bypass_data_scope():
             stmt = select(User.email).where(User.email.in_(emails), User.deleted == 0)
+            return set((await db.execute(stmt)).scalars().all())
+
+    async def get_existing_phones(self, db: AsyncSession, phones: list[str]) -> set[str]:
+        """一次查出这批手机号里哪些已经被绑定。理由同 `get_existing_emails`"""
+        if not phones:
+            return set()
+        with bypass_data_scope():
+            stmt = select(User.phone).where(User.phone.in_(phones), User.deleted == 0)
             return set((await db.execute(stmt)).scalars().all())
 
     async def bulk_add(self, db: AsyncSession, rows: list[dict[str, Any]], password: str) -> list[str]:
@@ -389,6 +403,18 @@ class CRUDUser(DataScopedCRUD[User]):
         :return:
         """
         return await self.update_model_by_column(db, {'timezone': tz}, id=user_id, deleted=0)
+
+    async def update_phone(
+        self, db: AsyncSession, user_id: int, phone: str | None, verified_time: datetime | None
+    ) -> int:
+        """绑定 / 解绑手机号：号码和验证时间一起写（issue #168）。本人验证过的传 `timezone.now()`，解绑两个都传 None"""
+        return await self.update_model_by_column(
+            db, {'phone': phone, 'phone_verified_time': verified_time}, id=user_id, deleted=0
+        )
+
+    async def clear_phone_verification(self, db: AsyncSession, user_id: int) -> int:
+        """管理员改了号码：原来的验证不再算数"""
+        return await self.update_model_by_column(db, {'phone_verified_time': None}, id=user_id, deleted=0)
 
     async def update_email(self, db: AsyncSession, user_id: int, email: str) -> int:
         """

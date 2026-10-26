@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAlertTriangle, IconAt, IconCheck, IconClock, IconExternalLink, IconFileExport, IconIdBadge2,
+  IconAlertTriangle, IconAt, IconCheck, IconClock, IconDeviceMobile, IconExternalLink, IconFileExport, IconIdBadge2,
   IconInfoCircle, IconKey, IconLoader2, IconMail, IconPhoto, IconPlugConnected,
   IconShieldLock, IconSignature, IconUpload, IconUser,
 } from '@tabler/icons-react'
@@ -31,6 +31,9 @@ import {
   AVATAR_MAX_BYTES, SOCIAL_SOURCES, socialBindingsQuery, useSendEmailCaptcha,
   useSaveTimeZone, useSocialBindingUrl, useUnbindSocial, useUpdateAvatar, useUpdateEmail,
   useUpdateNickname, useUpdatePassword, useUploadAvatar, type SocialSource,
+  useSendPhoneCaptcha,
+  useUnbindPhone,
+  useUpdatePhone,
 } from './api'
 
 /**
@@ -320,6 +323,7 @@ function BasicPanel({ me, loading }: { me?: CurrentUser; loading: boolean }) {
       <NicknameBlock me={me} />
       <AvatarBlock me={me} />
       <EmailBlock me={me} />
+      <PhoneBlock me={me} />
       <TimeZoneBlock me={me} />
       <ReadOnlyBlock me={me} loading={loading} />
     </>
@@ -442,9 +446,6 @@ function ReadOnlyBlock({ me, loading }: { me?: CurrentUser; loading: boolean }) 
         <p className="text-sm text-muted-foreground">{t('加载中…')}</p>
       ) : (
         <div className="flex flex-col">
-          <InfoRow label={t('手机号')}>
-            {me.phone || <span className="text-muted-foreground">—</span>}
-          </InfoRow>
           <InfoRow label={t('注册时间')}>
             <span className="font-mono text-xs tabular-nums">{formatDateTime(me.join_time)}</span>
           </InfoRow>
@@ -750,6 +751,158 @@ function EmailBlock({ me }: { me?: CurrentUser }) {
         {same && <p className="text-sm text-muted-foreground">{t('与当前邮箱一致')}</p>}
         <StatusLine state={sent} okText={t('验证码已发往该邮箱，10 分钟内有效')} />
         <StatusLine state={state} okText={t('邮箱已更新')} />
+      </form>
+    </Block>
+  )
+}
+
+/* ────────────────────────── 手机号 ────────────────────────── */
+
+/**
+ * 绑定手机号（issue #168 第一步）。和邮箱块同形：新号码 · 发送验证码 · 验证码 · 绑定。
+ *
+ * 多出来的是**验证状态**：管理员在「用户管理」里录的号、批量导入的号都没经过本人验证
+ * （`phone_verified_time` 为空），这种号登录时不认 —— 所以当前号后面要写明「已验证 / 未验证」，
+ * 未验证的提示本人用验证码重新绑一次（同一个号也可以）。
+ *
+ * 发送按钮按住 60 秒倒计时：`captcha` 业务模板的冷却就是 60 秒，倒计时没结束就点等于必拿一个
+ * 「操作太频繁」。倒计时只是 UX，真正的闸在服务端。
+ */
+function PhoneBlock({ me }: { me?: CurrentUser }) {
+  const { t } = useTranslation()
+  const [phone, setPhone] = React.useState('')
+  const [captcha, setCaptcha] = React.useState('')
+  const [state, setState] = React.useState<CardState>(IDLE)
+  const [sent, setSent] = React.useState<CardState>(IDLE)
+  const [cooldown, setCooldown] = React.useState(0)
+  const send = useSendPhoneCaptcha()
+  const bind = useUpdatePhone()
+  const unbind = useUnbindPhone()
+
+  React.useEffect(() => {
+    if (cooldown <= 0) return
+    const timer = window.setTimeout(() => setCooldown((c) => c - 1), 1000)
+    return () => window.clearTimeout(timer)
+  }, [cooldown])
+
+  const trimmed = phone.trim()
+  const phoneOk = /^1[3-9]\d{9}$/.test(trimmed)
+  const verified = Boolean(me?.phone && me.phone_verified_time)
+
+  async function sendCode() {
+    setSent(IDLE)
+    setState(IDLE)
+    try {
+      await send.mutateAsync(trimmed)
+      setSent({ kind: 'ok' })
+      setCooldown(60)
+    } catch (err) {
+      // 没配短信通道 / 号码被别人占了 / 太频繁 —— 都要显示出来，否则用户对着永远填不对的验证码框发呆
+      setSent({ kind: 'error', msg: errMsg(err, t('验证码发送失败，请检查短信配置')) })
+    }
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setState(IDLE)
+    try {
+      await bind.mutateAsync({ phone: trimmed, captcha: captcha.trim() })
+      setPhone('')
+      setCaptcha('')
+      setSent(IDLE)
+      setCooldown(0)
+      setState({ kind: 'ok' })
+    } catch (err) {
+      setState({ kind: 'error', msg: errMsg(err, t('手机号绑定失败')) })
+    }
+  }
+
+  async function remove() {
+    setState(IDLE)
+    try {
+      await unbind.mutateAsync()
+      setState({ kind: 'ok' })
+    } catch (err) {
+      setState({ kind: 'error', msg: errMsg(err, t('解绑失败')) })
+    }
+  }
+
+  return (
+    <Block
+      title={t('手机号')}
+      description={
+        <>
+          {t('当前：')}
+          <span className="font-mono" data-testid="p-phone-current">
+            {me?.phone || t('未绑定')}
+          </span>
+          {me?.phone ? (
+            <span className="ms-2" data-testid="p-phone-verified">
+              {verified ? (
+                <Badge variant="secondary">{t('已验证')}</Badge>
+              ) : (
+                <Badge variant="outline" className="text-amber-700 dark:text-amber-300">
+                  {t('管理员录入，未验证')}
+                </Badge>
+              )}
+            </span>
+          ) : null}
+          {me?.phone && !verified ? (
+            <>
+              {' '}
+              {t('未验证的号不能用来登录，用验证码重新绑一次即可（填同一个号也行）。')}
+            </>
+          ) : null}
+        </>
+      }
+      icon={<IconDeviceMobile />}
+      testId="profile-phone"
+    >
+      <form onSubmit={submit} className="flex flex-col gap-3">
+        <div className="grid grid-cols-[minmax(0,1fr)_8.5rem] items-end gap-x-2 gap-y-1.5">
+          <Label htmlFor="p-phone" className="col-span-2">{t('新手机号')}</Label>
+          <Input
+            id="p-phone" data-testid="p-phone" value={phone}
+            placeholder="13800000000" inputMode="numeric" autoComplete="tel" maxLength={11}
+            onChange={(e) => { setPhone(e.target.value); setState(IDLE); setSent(IDLE) }}
+          />
+          <Button
+            type="button" variant="outline" size="sm" className="w-full"
+            data-testid="p-phone-send"
+            disabled={!phoneOk || send.isPending || cooldown > 0}
+            onClick={() => void sendCode()}
+          >
+            {send.isPending ? <IconLoader2 className="size-4 animate-spin" /> : <IconDeviceMobile className="size-4" />}
+            {cooldown > 0 ? t('{{n}} 秒后可重发', { n: cooldown }) : t('发送验证码')}
+          </Button>
+
+          <Label htmlFor="p-phone-captcha" className="col-span-2 mt-1.5">{t('短信验证码')}</Label>
+          <Input
+            id="p-phone-captcha" data-testid="p-phone-captcha" value={captcha} maxLength={6}
+            inputMode="numeric" autoComplete="one-time-code" className="w-36 font-mono tracking-widest"
+            onChange={(e) => { setCaptcha(e.target.value); setState(IDLE) }}
+          />
+          <SubmitButton
+            pending={bind.isPending}
+            disabled={!phoneOk || captcha.trim().length === 0}
+            testid="p-phone-save"
+            className="w-full"
+          >
+            {t('绑定手机号')}
+          </SubmitButton>
+        </div>
+        <StatusLine state={sent} okText={t('验证码已发往该手机号，5 分钟内有效')} />
+        <StatusLine state={state} okText={t('手机号已更新')} />
+        {me?.phone ? (
+          <div>
+            <Button
+              type="button" variant="ghost" size="sm" className="text-muted-foreground"
+              disabled={unbind.isPending} onClick={() => void remove()} data-testid="p-phone-unbind"
+            >
+              {t('解绑当前手机号')}
+            </Button>
+          </div>
+        ) : null}
       </form>
     </Block>
   )

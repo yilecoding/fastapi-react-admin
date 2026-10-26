@@ -74,6 +74,23 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 慢请求判定「没连上」时自己占的位早已过期、下一条已经重新占上，裸删等于删掉别人的冷却位，第三条就穿过去了。
 `acquire` 把本次令牌写进冷却位，`release_cooldown` 只删值等于令牌的那一位（`TestGuard::test_release_only_deletes_own_cooldown_slot`）。
 
+## 手机验证码（`service/captcha_service.py`，issue #168）
+
+第一个使用方。个人中心绑定手机号（`scene=bind`，按操作人隔离）和手机验证码登录（`scene=login`，第二步）共用，
+路由在 `app/admin`（`/sys/users/me/phone*`），那边 **lazy import + `check_plugin_installed('sms')`**（同 crud_user 对 oauth2 的做法），
+短信插件卸了用户接口照常能 import。
+
+- 🔴 **比对、删除、错误计数在一段 Lua 里原子完成。** 「GET 再比再 DEL」并发能同时穿过：两条请求都 GET 到同一个码、都比对成功，
+  一个码用两次；试错计数也会少加。对了即删（一次性），错满 `SMS_CAPTCHA_MAX_ATTEMPTS` 次整个作废 ——
+  6 位纯数字只有一百万种，不限次数就是可枚举的
+- 🔴 **发送失败把刚存的码删掉再抛。** 邮件插件 #64 的同款：吞掉异常返回成功，用户对着一个永远填不对的框等。
+  `sms_service.send()` 抛 `SmsSendError` 直接向上抛（400 / 502 原样到前端）
+- 用 `secrets` 生成（邮件插件那份是 `random.randint(1, 9)`，没有 0、不是密码学随机）。6 位：阿里云「4～6 个字符」、腾讯云「0 - 6 位纯数字」都收
+- 频率不另做：`captcha` 业务模板声明的 60 秒冷却 / 号码日上限由 `sms_guard` 兜着，接口上再按操作人 5 分钟 3 次
+
+**实测证据**：`tests/test_phone_binding.py` —— 发 → 填错码还在 → 填对绑上并写 `phone_verified_time` → 同一个码第二次「已失效」；
+错满 N 次后填对也不认；没有可用配置时 400/502 且 Redis 里没留码；别人的号 409 不发。
+
 ## 选配置（`pick_config` + `_choose`）
 
 指定 `config_id` → 只用它（必须启用且配了这个模板）。否则候选 = 启用 ∧ 配了模板 ∧ 今天没到 `daily_max`：
@@ -109,7 +126,7 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 
 ## 实测证据
 
-- `tests/` 120 条：SDK 契约 39（两家各一套行为矩阵 + 基类契约 + 模板映射）· 守卫 · 配置接口 · 发送链路（真 Redis + 测试库）· 日志接口
+- `tests/` 125 条：SDK 契约 39（两家各一套行为矩阵 + 基类契约 + 模板映射）· 守卫 · 配置接口 · 发送链路（真 Redis + 测试库）· 日志接口
 - 迁移 `z0000000sms` 在临时 PostgreSQL 库上 up → 与模型比对零差异 → down（两张表和 10 条菜单消失）→ up。SQL Server / MySQL 只过了离线编译守卫
 - 阿里云 2026-10-24 用真凭据发过（签名 / 模板从 avcp 的种子拿的）：验证码模板一条「已受理」、手机收到；填错模板 ID 那条
   被归成 `config_error` 并进了日志。腾讯云**还没用真凭据发过**，代码靠契约测试里的假服务器

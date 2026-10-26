@@ -103,6 +103,7 @@ error:
     dept_code_not_found: 部门编码 {code} 不存在
     dict_type_not_found: 字典类型编码 {code} 不存在
     duplicated_email: 邮箱 {value} 在文件里重复了，第 {row_no} 行已经用过
+    duplicated_phone: 手机号 {value} 在文件里重复了，第 {row_no} 行已经用过
     duplicated_in_file: 和第 {row_no} 行重复
     duplicated_name_in_level: 同一个上级下已经有同名部门（第 {row_no} 行）
     key_exists: '{key} 已存在（当前是「只新增」模式）'
@@ -307,11 +308,13 @@ error:
     cache_key_build_failed: 用户缓存键构建失败
     captcha_expired: 验证码已失效，请重新获取
     email_bound: 邮箱已被绑定
+    phone_bound: 手机号已被其他账号绑定
     not_found: 用户不存在
     password_mismatch: 两次密码输入不一致
     password_required: 密码不允许为空
     permission_type_not_found: 权限类型不存在
     self_permission_forbidden: 禁止修改自身权限
+    sms_plugin_required: 短信插件未安装，无法发送验证码
     username_registered: 用户名已注册
     wrong_old_password: 原密码错误
   workflow:

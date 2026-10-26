@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Path, Query, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import HttpUrl
+from pyrate_limiter import Duration, Rate
 
 from backend.app.admin.dataio import USER_EXPORT, USER_IMPORT
 from backend.app.admin.schema.data_import import (
@@ -26,12 +27,13 @@ from backend.app.admin.service.user_service import user_service
 from backend.common.enums import UserPermissionType
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.schema import IanaTimeZone
+from backend.common.schema import CustomPhoneNumber, IanaTimeZone
 from backend.common.security.jwt import DependsJwtAuth, DependsSuperUser
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
 from backend.utils.excel_ops import read_table_upload, xlsx_attachment
+from backend.utils.limiter import RateLimiter
 
 router = APIRouter()
 
@@ -252,6 +254,52 @@ async def update_user_email(
     email: Annotated[str, Body(embed=True, description='用户邮箱')],
 ) -> ResponseModel:
     count = await user_service.update_email(db=db, user_id=request.user.id, captcha=captcha, email=email)
+    if count > 0:
+        return response_base.success()
+    return response_base.fail()
+
+
+def _phone_captcha_by_user(request: Request) -> str:
+    """发码限流按**操作人**计（不按 IP）：一个办公室出口 IP 后面坐着所有人（同短信插件的测试短信接口）"""
+    user = getattr(request, 'user', None)
+    return f'phone-captcha:{getattr(user, "id", None) or "anonymous"}'
+
+
+@router.post(
+    '/me/phone/captcha',
+    summary='给要绑定的手机号发验证码',
+    # 每次都真发一条短信（扣费）。号码日上限 / 冷却由短信插件的 `captcha` 模板兜着，这里再按操作人限一道：
+    # 5 分钟 3 次，和验证码有效期（`SMS_CAPTCHA_EXPIRE_SECONDS`，默认 5 分钟）对齐
+    dependencies=[
+        DependsJwtAuth,
+        Depends(RateLimiter(Rate(3, Duration.MINUTE * 5), identifier=_phone_captcha_by_user)),
+    ],
+)
+async def send_phone_captcha(
+    db: CurrentSession,
+    request: Request,
+    phone: Annotated[CustomPhoneNumber, Body(embed=True, description='要绑定的手机号')],
+) -> ResponseModel:
+    await user_service.send_phone_captcha(db=db, user_id=request.user.id, phone=phone)
+    return response_base.success()
+
+
+@router.put('/me/phone', summary='用验证码绑定当前用户的手机号', dependencies=[DependsJwtAuth])
+async def update_user_phone(
+    db: CurrentSessionTransaction,
+    request: Request,
+    captcha: Annotated[str, Body(embed=True, min_length=1, max_length=8, description='短信验证码')],
+    phone: Annotated[CustomPhoneNumber, Body(embed=True, description='手机号')],
+) -> ResponseModel:
+    count = await user_service.update_phone(db=db, user_id=request.user.id, captcha=captcha, phone=phone)
+    if count > 0:
+        return response_base.success()
+    return response_base.fail()
+
+
+@router.delete('/me/phone', summary='解绑当前用户的手机号', dependencies=[DependsJwtAuth])
+async def unbind_user_phone(db: CurrentSessionTransaction, request: Request) -> ResponseModel:
+    count = await user_service.unbind_phone(db=db, user_id=request.user.id)
     if count > 0:
         return response_base.success()
     return response_base.fail()

@@ -436,7 +436,7 @@ async def _user_row(db: AsyncSession, row: ImportRow, depts: _CodeCache, roles: 
 
 
 async def _user_validate(db: AsyncSession, rows: list[ImportRow], _mode: str, _ctx: ImportContext) -> None:
-    """部门 / 角色编码 → ID，邮箱在文件里和库里都不能重复，用户名在库里不能已存在（文件里的重复框架查过了）
+    """部门 / 角色编码 → ID，邮箱和手机号在文件里和库里都不能重复，用户名在库里不能已存在（文件里的重复框架查过了）
 
     🔴 默认密码每次都现校验一遍强度：不校验的失败是延迟且分裂的 —— 导入成功、能登录，
     但本人改密码时被「必须含字母」挡住，两件事看不出是同一个原因（`123456` 就过不了）
@@ -445,25 +445,36 @@ async def _user_validate(db: AsyncSession, rows: list[ImportRow], _mode: str, _c
 
     depts, roles = _CodeCache(dept_dao.get_by_code), _CodeCache(role_dao.get_by_code)
     emails_seen: dict[str, int] = {}
+    phones_seen: dict[str, int] = {}
     for row in rows:
         await _user_row(db, row, depts, roles)
         email = row.values.get('email')
-        if not email:
-            continue
-        if email in emails_seen:
-            row.errors.append(t('error.import.duplicated_email', value=email, row_no=emails_seen[email]))
-        else:
-            emails_seen[email] = row.row_no
+        if email:
+            if email in emails_seen:
+                row.errors.append(t('error.import.duplicated_email', value=email, row_no=emails_seen[email]))
+            else:
+                emails_seen[email] = row.row_no
+        # 手机号同理（issue #168）：`sys_user.phone` 有唯一约束，文件内两行同号到提交阶段才撞约束，
+        # 而那时第一行已经进去了
+        phone = row.values.get('phone')
+        if phone:
+            if phone in phones_seen:
+                row.errors.append(t('error.import.duplicated_phone', value=phone, row_no=phones_seen[phone]))
+            else:
+                phones_seen[phone] = row.row_no
 
     # 和库里已有的重复：两次批量查询，不逐行往返（两者都豁免数据范围：冲突检查不是「展示读」）
     usernames = [row.values['username'] for row in rows if row.values.get('username')]
     taken_names = await user_dao.get_existing_usernames(db, usernames)
     taken_emails = await user_dao.get_existing_emails(db, list(emails_seen))
+    taken_phones = await user_dao.get_existing_phones(db, list(phones_seen))
     for row in rows:
         if row.values.get('username') in taken_names:
             row.errors.append(t('error.user.username_registered'))
         if row.values.get('email') in taken_emails:
             row.errors.append(t('error.user.email_bound'))
+        if row.values.get('phone') in taken_phones:
+            row.errors.append(t('error.user.phone_bound'))
 
 
 async def _user_commit(db: AsyncSession, rows: list[ImportRow], _ctx: ImportContext) -> CommitOutcome:
