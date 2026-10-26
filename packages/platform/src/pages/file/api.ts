@@ -269,20 +269,33 @@ export const fileThumbQuery = (file: Pick<FileItem, 'id' | 'download_url'>) =>
 /** 宫格 / 列表。默认宫格 —— 文件管理是「看东西」，不是「读表格」 */
 export type FileView = 'grid' | 'list'
 
-/** 预览器能渲染的扩展名。装了哪些 renderer 就只支持哪些 —— 见 apps/web/vite.config.ts */
+/**
+ * 预览器能渲染的扩展名。装了哪些 renderer 就只支持哪些 —— 见 apps/web/vite.config.ts。
+ *
+ * 后端上传白名单（`backend/core/conf.py` 的 `UPLOAD_*_EXT_INCLUDE`）里有、
+ * 但这里**刻意不列**的几个 —— 点了预览只会看到报错或一行安装命令：
+ *
+ * - `rtf`：3.x 起要另装 `@file-viewer/capability-rtf`，没装时只显示一行安装命令
+ * - `ppt`：旧版二进制 PPT 要 `renderer-ppt`（带 WASM + 字体），只装了 pptx 那条
+ * - `mov` / `avi` / `flv` / `mkv`：media renderer 的格式表里没有它们，浏览器也多半解不了码
+ */
 const PREVIEWABLE = new Set([
   // renderer-pdf
   'pdf',
   // renderer-word
-  'docx', 'doc', 'rtf', 'odt',
+  'docx', 'doc', 'odt',
   // renderer-spreadsheet
   'xlsx', 'xls', 'csv',
+  // renderer-pptx
+  'pptx',
   // renderer-image
   'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico', 'avif',
   // renderer-text
   'txt', 'md', 'json', 'xml', 'log', 'html', 'htm', 'css', 'js', 'ts', 'yaml', 'yml',
   // renderer-archive
-  'zip', 'tar', 'gz', '7z',
+  'zip', 'rar', 'tar', 'gz', '7z',
+  // renderer-media
+  'mp4', 'webm', 'mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac',
 ])
 
 export function isPreviewable(file: Pick<FileItem, 'ext'>): boolean {

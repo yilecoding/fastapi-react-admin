@@ -434,7 +434,9 @@
         "@file-viewer/react",
         "@file-viewer/renderer-archive",
         "@file-viewer/renderer-image",
+        "@file-viewer/renderer-media",
         "@file-viewer/renderer-pdf",
+        "@file-viewer/renderer-pptx",
         "@file-viewer/renderer-spreadsheet",
         "@file-viewer/renderer-text",
         "@file-viewer/renderer-word"

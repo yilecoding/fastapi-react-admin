@@ -14,6 +14,16 @@ import { fileBytesQuery, formatBytes, isPreviewable, type FileItem } from './api
 const CONFIRM_OVER = 20 * 1024 * 1024
 
 /**
+ * 音视频超过这个体积就不预览、只给下载。
+ *
+ * 播放前同样要整块读进内存（media renderer 拿 buffer 转对象 URL），
+ * 而视频是最容易上百 MB 的那一类 —— 问一句再下载也不该放行。
+ * 后端默认只收 20MB 以内的音视频，这条线是给 `.env` 调大上限之后兜底的。
+ * 真要在线播大视频得做带票据的 Range URL（边下边播），还没做。
+ */
+const MEDIA_MAX = 100 * 1024 * 1024
+
+/**
  * 文件预览弹窗。
  *
  * 为什么是 Dialog 而不是页面内嵌一块区域：多页签用 `<Activity>` 保活，
@@ -33,15 +43,16 @@ export function FilePreviewDialog({
   onOpenChange: (open: boolean) => void
   onDownload: (file: FileItem) => void
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   // 大文件先确认再取字节。confirmed 跟着 file.id 走 ——
   // 换一个文件必须重新确认，否则一次同意会放过后面所有大文件
   const [confirmedId, setConfirmedId] = React.useState<string | null>(null)
 
   const previewable = file ? isPreviewable(file) : false
+  const tooBigToPlay = Boolean(file && (file.type === 'video' || file.type === 'audio') && file.size > MEDIA_MAX)
   const oversized = Boolean(file && file.size > CONFIRM_OVER)
   const needConfirm = oversized && file?.id !== confirmedId
-  const shouldFetch = Boolean(file) && previewable && !needConfirm
+  const shouldFetch = Boolean(file) && previewable && !tooBigToPlay && !needConfirm
 
   const { data, isPending, isError, error, refetch } = useQuery({
     ...fileBytesQuery(file ?? { id: '', download_url: '', size: 0 }),
@@ -96,6 +107,18 @@ export function FilePreviewDialog({
                 </Button>
               }
             />
+          ) : tooBigToPlay ? (
+            <PreviewNotice
+              testId="preview-media-too-large"
+              title={t('这个文件有 {{size}}', { size: formatBytes(file.size) })}
+              description={t('音视频太大，不适合在浏览器里预览，请下载后用本地播放器打开。')}
+              action={
+                <Button size="sm" variant="outline" onClick={() => onDownload(file)}>
+                  <IconDownload className="size-4" />
+                  {t('下载')}
+                </Button>
+              }
+            />
           ) : needConfirm ? (
             <PreviewNotice
               title={t('这个文件有 {{size}}', { size: formatBytes(file.size) })}
@@ -127,7 +150,7 @@ export function FilePreviewDialog({
           ) : isPending || !data ? (
             <Skeleton className="size-full" data-testid="preview-loading" />
           ) : (
-            <FileViewer buffer={data} filename={file.original_name} />
+            <FileViewer buffer={data} filename={file.original_name} locale={i18n.language} />
           )}
         </div>
       </DialogContent>
@@ -140,14 +163,16 @@ function PreviewNotice({
   title,
   description,
   action,
+  testId,
 }: {
   icon?: React.ReactNode
   title: string
   description: string
   action?: React.ReactNode
+  testId?: string
 }) {
   return (
-    <div className="flex size-full flex-col items-center justify-center gap-3 p-6 text-center">
+    <div className="flex size-full flex-col items-center justify-center gap-3 p-6 text-center" data-testid={testId}>
       {icon}
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium">{title}</p>
