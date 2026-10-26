@@ -43,9 +43,31 @@ async def send_daily_greeting() -> str:
             title=f'每日问候 · {today.strftime("%m月%d日")}',
             content=greeting,
             category=NotificationCategory.SYSTEM,
+            kind='system.greeting',
         )
         await db.commit()
 
     msg = f'每日问候已发送（{timezone.to_str(today)}）：{greeting}'
     log.info(msg)
+    return msg
+
+
+@celery_app.task(name='notification.deliver_pending')
+@with_timeout()
+async def deliver_pending() -> str:
+    """把到点的通知投递发出去（邮件 / 短信，#166）。
+
+    每 15 秒由 beat 派一次（安全网），写了待发行的事务提交后也会立刻踢一次（`delivery_service.kick`）。
+    幂等：两个 worker 同时跑，每一行只有抢到的那一个发（`claim` 看 rowcount）。
+    """
+    from backend.plugin.core import check_plugin_installed
+
+    if not check_plugin_installed('notification'):
+        return '通知插件未安装，跳过'
+    from backend.plugin.notification.service.delivery_service import deliver_pending as run
+
+    stats = await run()
+    msg = f'通知投递：{stats or "没有到点的"}'
+    if stats:
+        log.info(msg)
     return msg

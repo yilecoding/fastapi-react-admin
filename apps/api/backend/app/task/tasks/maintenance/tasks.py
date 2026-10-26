@@ -15,6 +15,7 @@ from sqlalchemy.orm import InstrumentedAttribute
 from backend.app.task.celery import celery_app
 from backend.app.task.tasks.base import with_timeout
 from backend.common.log import log
+from backend.core.conf import settings
 from backend.database.db import async_db_session
 from backend.utils.timezone import timezone
 
@@ -91,15 +92,30 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
     except ImportError:
         SmsLog = None  # ruff: ignore[non-lowercase-variable-in-function]
 
+    # 通知投递记录（`sys_notification_delivery`，#166）**自己的**保留期（参数配置「通知推送」组可改）：
+    # 它和日志不是一类东西，管理员调它的时候不该连带改掉日志的。插件删掉了就跳过
+    try:
+        from backend.plugin.notification.model import NotificationDelivery
+        from backend.plugin.notification.service.config import load_notification_config
+    except ImportError:
+        NotificationDelivery = None  # ruff: ignore[non-lowercase-variable-in-function]
+
     async with async_db_session() as db:
         login = await _prune_table(db, LoginLog, LoginLog.login_time, cutoff, batch)
         opera = await _prune_table(db, OperaLog, OperaLog.opera_time, cutoff, batch)
         open_api = await _prune_table(db, OpenApiLog, OpenApiLog.request_time, cutoff, batch) if OpenApiLog else 0
         sms = await _prune_table(db, SmsLog, SmsLog.created_time, cutoff, batch) if SmsLog else 0
+        delivery = 0
+        if NotificationDelivery is not None:
+            await load_notification_config(db)
+            delivery_cutoff = timezone.now() - timedelta(days=settings.NOTIFICATION_DELIVERY_RETENTION_DAYS)
+            delivery = await _prune_table(
+                db, NotificationDelivery, NotificationDelivery.created_time, delivery_cutoff, batch
+            )
 
     msg = (
         f'清理 {days} 天前的日志：登录日志 {login} 条、操作日志 {opera} 条、开放接口调用日志 {open_api} 条、'
-        f'短信发送日志 {sms} 条'
+        f'短信发送日志 {sms} 条；通知投递记录（保留 {settings.NOTIFICATION_DELIVERY_RETENTION_DAYS} 天）{delivery} 条'
     )
     log.info(msg)
     return msg

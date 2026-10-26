@@ -11,3 +11,4 @@ class ConfigType(StrEnum):
     dev = 'DEV'
     file = 'FILE'
     session = 'SESSION'
+    notification = 'NOTIFICATION'
