@@ -1,10 +1,12 @@
+import { deflateSync } from "node:zlib"
+
 import { request } from "@playwright/test"
 
 import type { APIRequestContext, Page, Response } from "@playwright/test"
 
 import { API_BASE, expect, loginToken, test } from "../fixtures/base"
 import { uniqueCode } from "../utils/ids"
-import { zipStore } from "../utils/xlsx"
+import { crc32, zipStore } from "../utils/xlsx"
 
 /**
  * 文件预览：渲染器的**资产**真的取到了，而不是退回了兜底。
@@ -68,6 +70,36 @@ function buildWav(seconds = 1, rate = 8000): Buffer {
     buf.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 8000), 44 + i * 2)
   }
   return buf
+}
+
+/**
+ * 纯白的 1 位 PNG。尺寸随便给，体积很小 —— 20000×20000 只有几十 KB，
+ * 而浏览器解码出来是 1.6GB 的 RGBA（这正是「字节小 ≠ 解码小」那条要防的东西）。
+ */
+function buildPng(width: number, height: number): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4)
+    len.writeUInt32BE(data.length)
+    const body = Buffer.concat([Buffer.from(type, "latin1"), data])
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(crc32(body))
+    return Buffer.concat([len, body, crc])
+  }
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(width, 0)
+  ihdr.writeUInt32BE(height, 4)
+  ihdr[8] = 1 // 位深 1
+  ihdr[9] = 0 // 灰度
+  const row = Buffer.alloc(1 + Math.ceil(width / 8), 0xff)
+  row[0] = 0 // 每行一个过滤字节
+  const raw = Buffer.alloc(row.length * height)
+  for (let y = 0; y < height; y += 1) row.copy(raw, y * row.length)
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(raw, { level: 9 })),
+    chunk("IEND", Buffer.alloc(0)),
+  ])
 }
 
 /**
@@ -210,5 +242,31 @@ test.describe("文件预览 · 渲染器资产", () => {
     await expect(dialog.getByTestId("preview-media-too-large")).toBeVisible()
     await expect(dialog.locator("audio")).toHaveCount(0)
     expect(downloads, "超限的音视频不该去取字节（预览要整块读进内存）").toEqual([])
+  })
+  test("像素过多的图片不交给预览器（字节小 ≠ 解码小）", async ({ authedPage: page }) => {
+    // 20000×20000：实测交给 viewer 会让主线程卡 5.2 秒
+    const file = await upload("png", "image/png", buildPng(20000, 20000))
+    expect(file.size, "样本应该很小 —— 后端 5MB 的图片上限挡不住它").toBeLessThan(1024 * 1024)
+
+    const dialog = await openPreview(page, file)
+    await expect(dialog.getByTestId("preview-image-too-large")).toBeVisible()
+    await expect(dialog.locator("img")).toHaveCount(0)
+  })
+
+  test("浏览器解不了的图，缩略图退回类型图标而不是破图", async ({ authedPage: page }) => {
+    // 签名对、内容是垃圾：<img> 会 onError（和 30000×30000 那种「浏览器不肯解」是同一条路径）
+    const junk = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from(`junk ${Date.now()}`)])
+    const file = await upload("png", "image/png", junk)
+
+    // ⚠️ 取字节之前卡片上本来就是图标、也没有 <img> —— 直接断言「没有 img」是假绿。
+    // 先等缩略图那次取字节真的回来，再给 <img> 一点时间去 onError
+    const fetched = page.waitForResponse((r) => r.url().includes(`/sys/files/${file.id}/download`))
+    await page.goto(`/system/file?name=${encodeURIComponent(file.original_name)}`)
+    const card = page.getByTestId(`file-card-${file.id}`)
+    await expect(card).toBeVisible()
+    await fetched
+    await page.waitForTimeout(1000)
+    await expect(card.locator("img")).toHaveCount(0)
+    await expect(card.locator("svg").first()).toBeVisible()
   })
 })

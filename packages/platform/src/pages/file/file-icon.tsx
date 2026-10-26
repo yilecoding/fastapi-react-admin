@@ -109,6 +109,9 @@ export function FileThumb({ file }: { file: FileItem }) {
 
   // 从字节造 blob URL，并在卸载 / 换文件时收回
   const [url, setUrl] = React.useState<string | null>(null)
+  // 浏览器解不了的图（实测 30000×30000 的 PNG：naturalWidth 0）退回类型图标，
+  // 不然卡片上是一个破图标，看着像文件坏了
+  const [broken, setBroken] = React.useState(false)
   React.useEffect(() => {
     if (!data) return
     const next = URL.createObjectURL(new Blob([data], { type: file.content_type ?? 'image/*' }))
@@ -123,9 +126,10 @@ export function FileThumb({ file }: { file: FileItem }) {
 
   return (
     <div ref={ref} className="flex size-full items-center justify-center overflow-hidden">
-      {url ? (
+      {url && !broken ? (
         <img
           src={url}
+          onError={() => setBroken(true)}
           alt=""
           // 缩略图是装饰性的：alt 留空并 aria-hidden，文件名在下面那行已经念得到，
           // 读屏不需要在这里再听一次

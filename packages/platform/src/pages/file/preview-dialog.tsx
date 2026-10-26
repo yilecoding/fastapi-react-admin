@@ -9,6 +9,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 import { FileViewer } from '@admin/ui/components/file-viewer'
 
 import { fileBytesQuery, formatBytes, isPreviewable, type FileItem } from './api'
+import { exceedsPreviewPixels, readImageDimensions } from './image-dimensions'
 
 /** 超过这个体积就先问一句再下载 —— 预览要把整个文件读进内存 */
 const CONFIRM_OVER = 20 * 1024 * 1024
@@ -58,6 +59,14 @@ export function FilePreviewDialog({
     ...fileBytesQuery(file ?? { id: '', download_url: '', size: 0 }),
     enabled: shouldFetch,
   })
+
+  // 字节小不等于解码小：76KB 的 PNG 可以是 20000×20000，交给 viewer 会把主线程卡住 5 秒
+  // （实测数据见 image-dimensions.ts）。只读文件头，不解码
+  const hugeImage = React.useMemo(() => {
+    if (!data || file?.type !== 'image') return null
+    const d = readImageDimensions(data)
+    return exceedsPreviewPixels(d) ? d : null
+  }, [data, file?.type])
 
   return (
     <Dialog
@@ -149,6 +158,18 @@ export function FilePreviewDialog({
             />
           ) : isPending || !data ? (
             <Skeleton className="size-full" data-testid="preview-loading" />
+          ) : hugeImage ? (
+            <PreviewNotice
+              testId="preview-image-too-large"
+              title={t('这张图有 {{width}} × {{height}} 像素', hugeImage)}
+              description={t('尺寸太大，在浏览器里打开会让页面卡住好几秒，请下载后用本地看图软件打开。')}
+              action={
+                <Button size="sm" variant="outline" onClick={() => onDownload(file)}>
+                  <IconDownload className="size-4" />
+                  {t('下载')}
+                </Button>
+              }
+            />
           ) : (
             <FileViewer buffer={data} filename={file.original_name} locale={i18n.language} />
           )}

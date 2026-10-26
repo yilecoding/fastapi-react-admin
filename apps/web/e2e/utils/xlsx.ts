@@ -52,7 +52,7 @@ const CRC_TABLE = (() => {
   return table
 })()
 
-function crc32(buf: Buffer): number {
+export function crc32(buf: Buffer): number {
   let c = -1
   for (let i = 0; i < buf.length; i += 1) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8)
   return (c ^ -1) >>> 0

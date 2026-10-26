@@ -34,6 +34,7 @@ pages/file/
 ├─ file-menu.tsx      操作菜单，右键与 ⋯ 下拉共用一份条目定义
 ├─ detail-sheet.tsx   详情抽屉：落盘名 / MIME / 校验和 / 上传人这些排障字段
 ├─ preview-dialog.tsx 预览弹窗：取字节 → 交 viewer
+├─ image-dimensions.ts 从文件头读图片宽高（不解码），挡像素过多的图
 ├─ uploader.ts        往全局上传队列塞文件（`shell/upload-store.ts`），页面自己不画队列
 └─ attachments.tsx    **可复用的附件面板**，任何页面给 targetType + targetId 就能嵌
 ```
@@ -195,6 +196,10 @@ down 只删迁移自己那几个 ID。浏览器（Playwright）：阈值填 120 
 **真正的解法是后端出缩略图**（Pillow + 一列 `thumbnail_name`），那时把
 `canThumbnail` / `fileThumbQuery` 一起删掉。
 
+缩略图**不需要**像素上限（预览需要，见下面「预览器」那节）：实测 48MP / 144MP / 400MP 的图在宫格里
+主线程最长 18–40ms —— `<img>` 按显示尺寸解码。但浏览器**不肯解**的图（实测 30000×30000 的 PNG，
+`naturalWidth` 是 0）原来显示成一个破图标，像文件坏了；现在 `onError` 退回类型图标。
+
 ### 菜单图标要在 `icon-registry.tsx` 里登记
 
 菜单表的 `icon` 是 Iconify 命名，而 UI 包用 Tabler —— 没登记的会**静默回落成
@@ -318,11 +323,28 @@ React 19 + Vite 8 实测无摩擦（peer 分别是 `react >=17 <20`、`vite >=5 
 后端默认只收 20MB 以内的音视频，这条线是给 `.env` 调大上限之后兜底的。
 真要边下边播得做带票据的 Range URL，还没做。
 
+🔴 **图片按像素数拦，不按字节数拦。** 76KB 的 PNG 可以是 20000×20000，后端 5MB 的图片上限挡不住，
+解码出来是 1.6GB。实测（Playwright · 生产构建）交给 viewer 时主线程最长卡顿：
+
+| 样本 | 卡顿 |
+|---|---|
+| 图片 8000×6000（48MP，手机原图量级） | 191ms |
+| 图片 12000×12000（144MP） | 548ms |
+| 图片 20000×20000（400MP） | **5232ms** |
+| 图片 30000×30000 | 浏览器解不了，renderer 自己报「预览失败」（不卡） |
+| 日志 5 / 20 / 45MB | 79 / 65 / 72ms，1.7 秒内全部显示（3.x 的文本 renderer 是虚拟滚动） |
+
+所以 `preview-dialog` 取回字节后先过 `image-dimensions.ts`（只读文件头），超过 150MP 只给下载。
+线画在 144MP 之上 —— Orca 那条 32MP 照抄会把手机原图也挡掉。
+**文本不需要另设门槛**：最初的计划是「按类型分档」，实测 45MB 日志都不卡，那一项删了。
+单测用 Pillow 真编码的样本（`image-dimensions.test.ts`，变异过：JPEG 宽高读反当场红），
+E2E 现造一张 20000×20000 的 PNG（`file-preview.spec.ts`）。
+
 **只在可见处挂载** —— 放 Dialog / Sheet 里，别常驻页面。多页签用 `<Activity>` 保活，
 隐藏 tab 是 `display:none`（宽度 0），而 renderer 要测容器尺寸（recharts 栽过同一个坑）。
 关闭即卸载，**不要** `keepMounted`，顺带把 ArrayBuffer 让给 GC。
 
-四个只有实测才知道的坑：
+五个只有实测才知道的坑：
 
 | 坑 | 症状 | 修法 |
 |---|---|---|
