@@ -120,7 +120,7 @@ export interface AuthLoginInput {
 /** 手机验证码登录（issue #168）：验证码在渲染层已经发过了，主进程只负责换会话那一步 */
 export interface AuthPhoneLoginInput {
   phone: string
-  code: string
+  captcha: string
 }
 
 /**

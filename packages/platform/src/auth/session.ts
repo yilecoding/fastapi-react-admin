@@ -84,7 +84,8 @@ export async function login(qc: QueryClient, param: LoginParam) {
 }
 
 export type PhoneCaptchaParam = { phone: string; uuid?: string; captcha?: string }
-export type PhoneLoginParam = { phone: string; code: string }
+/** 短信验证码字段叫 `captcha` 不叫 `code`：后端按这个键名把它从操作日志里脱掉（`OPERA_LOG_REDACT_KEYS`） */
+export type PhoneLoginParam = { phone: string; captcha: string }
 
 /**
  * 手机验证码登录：发码（issue #168 第二步）。匿名接口，桌面端也直接走渲染层的 api 客户端 ——

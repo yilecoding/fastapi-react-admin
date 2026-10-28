@@ -444,6 +444,10 @@ class Settings(BaseSettings):
         'secret_key',
         # 短信配置新建 / 编辑时的厂商凭据 secret（`plugin/sms/schema/config.py`），按键名精确匹配
         'access_key_secret',
+        # 短信验证码：手机验证码登录（`AuthPhoneLoginParam`）和绑定手机号（`PUT /sys/users/me/phone` 的 Body 参数）
+        # 都叫这个名。
+        # 不脱的话操作日志里是「手机号 + 验证码」成对的明文。密码登录的图形验证码也叫 captcha，顺带脱掉，没损失
+        'captcha',
     ]
     OPERA_LOG_QUEUE_MAXSIZE: int = 100000
     OPERA_LOG_QUEUE_BATCH_CONSUME_SIZE: int = 100

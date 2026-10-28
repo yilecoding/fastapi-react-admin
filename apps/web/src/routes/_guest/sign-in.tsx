@@ -119,6 +119,9 @@ function SignInPage() {
   // 发完码要重新拉一张 —— 所以发码成功 / 失败（非限流）都 loadCaptcha()
   const [phone, setPhone] = React.useState("")
   const [smsCode, setSmsCode] = React.useState("")
+  // 发码接口有限流（5 次 / 分）且每次消费一张图形验证码：双击必须只打一次（硬纪律 10）。
+  // 倒计时只在成功之后才开始，挡不住第一次响应回来之前的第二下
+  const [smsSending, setSmsSending] = React.useState(false)
   const [smsCooldown, setSmsCooldown] = React.useState(0)
   const [smsSent, setSmsSent] = React.useState(false)
   const [phoneError, setPhoneError] = React.useState<string | null>(null)
@@ -221,8 +224,11 @@ function SignInPage() {
   }
 
   async function sendSmsCode() {
+    if (smsSending) return
+    setSmsSending(true)
     setPhoneError(null)
     setSmsSent(false)
+    let rateLimited = false
     try {
       await sendPhoneCaptcha({
         phone: phone.trim(),
@@ -232,10 +238,13 @@ function SignInPage() {
       // 和 `captcha` 业务模板的 60 秒冷却对齐；倒计时只是 UX，真正的闸在服务端
       setSmsCooldown(60)
     } catch (err) {
+      rateLimited = err instanceof ApiError && err.isRateLimited
       setPhoneError(err instanceof ApiError ? err.message : t("验证码发送失败，请稍后重试"))
     } finally {
-      // 图形验证码已被服务端消费（对了就消费，错了也要换一张）；命中限流时它没被消费，继续用旧的（同密码登录那条注释）
-      if (captchaUuid) void loadCaptcha()
+      setSmsSending(false)
+      // 图形验证码已被服务端消费（对了就消费，错了也要换一张）；命中限流（429）时限流器在 handler 之前就拦了、
+      // 它没被消费，继续用旧的 —— 而且 /auth/captcha 自己也有配额，跟着重拉就是密码登录那条注释说的双重死锁
+      if (captchaUuid && !rateLimited) void loadCaptcha()
     }
   }
 
@@ -244,7 +253,7 @@ function SignInPage() {
     setPhoneError(null)
     setPhonePending(true)
     try {
-      await loginByPhone(qc, { phone: phone.trim(), code: smsCode.trim() })
+      await loginByPhone(qc, { phone: phone.trim(), captcha: smsCode.trim() })
       await router.invalidate()
       await navigate({ to: search.redirect ?? "/dashboard" })
     } catch (err) {
@@ -480,7 +489,7 @@ function SignInPage() {
                         variant="outline"
                         className="h-11 w-[108px] shrink-0"
                         data-testid="sms-send"
-                        disabled={!phoneOk || smsCooldown > 0 || captchaState === "loading" || captchaState === "error"}
+                        disabled={smsSending || !phoneOk || smsCooldown > 0 || captchaState === "loading" || captchaState === "error"}
                         onClick={() => void sendSmsCode()}
                       >
                         {smsCooldown > 0 ? t("{{n}} 秒", { n: smsCooldown }) : t("发送验证码")}
