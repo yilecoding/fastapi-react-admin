@@ -274,11 +274,14 @@ class AuthService:
         「这个号有没有账号」—— 否则这个匿名接口就是一张号码表的核对器。耗时那一维：真发要等厂商
         几百毫秒，不发的那条随机睡一段补齐。
 
-        🔴 **真发那条失败了也返回成功。** 厂商超时 / 没有可用配置 / 全站熔断 / 插件自己的日上限，这些只会发生在
-        「有账号且验证过」的号上 —— 照原样抛 400 / 502 就是厂商故障期间的号码核对器。所以这里吞掉、记 error 日志，
-        `_phone_captcha_guard` 记下的冷却也不退（退了就是「验证过的号能立刻再试、别的号要等 60 秒」）。
-        用户侧的代价是故障期间要等一次冷却才知道没收到；管理员在发送日志里看得到那条失败。
-        个人中心绑定那条路（已登录、没有枚举问题）仍然把失败原样报出来（硬纪律 9）。
+        🔴 **真发那条失败了也返回成功。** 厂商超时 / 没有可用配置 / 全站熔断，这些只会发生在「有账号且验证过」的号上
+        —— 照原样抛 502 就是厂商故障期间的号码核对器。所以这里吞掉、记 error 日志，`_phone_captcha_guard` 记下的冷却
+        也不退（退了就是「验证过的号能立刻再试、别的号要等 60 秒」）。用户侧的代价是故障期间要等一次冷却才知道没收到；
+        管理员在发送日志里看得到那条失败。个人中心绑定那条路（已登录、没有枚举问题）仍然把失败原样报出来（硬纪律 9）。
+
+        ⚠️ 唯一放行的是插件自己判的「太频繁」（`rate_limited`）：它和 `_phone_captcha_guard` 是同一句 400，差别只在
+        插件把绑定那条路的发送也算进了冷却 —— 刚在个人中心绑完号就来登录是常见流程，吞掉它用户要白等 5 分钟；
+        而要靠它区分号码，攻击者得正好撞上号主 60 秒内绑过号，可忽略。
 
         :param db: 数据库会话
         :param obj: 手机号 + 图形验证码
@@ -293,11 +296,14 @@ class AuthService:
             await asyncio.sleep(random.uniform(0.3, 0.8))
             return
         from backend.plugin.sms.errors import SmsSendError
+        from backend.plugin.sms.sdk.base import SmsErrorKind
         from backend.plugin.sms.service.captcha_service import sms_captcha_service
 
         try:
             await sms_captcha_service.send(scene='login', subject=obj.phone, phone=obj.phone, user_id=user.id)
         except SmsSendError as e:
+            if e.kind == SmsErrorKind.rate_limited.value:
+                raise
             log.error(f'手机登录验证码没发出去（{obj.phone[:3]}****{obj.phone[-4:]}）：{e.msg}')
 
     async def phone_login(
