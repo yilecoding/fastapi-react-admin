@@ -139,11 +139,20 @@ class TestSendCaptcha:
         assert res.status_code == 400, res.text
         assert _login_code(client, PHONE_B) is None
 
-    def test_no_config_is_a_visible_failure_for_a_real_number(self, client: TestClient) -> None:
-        """短信通道没配好：验证过的号要报错（硬纪律 9），而不是假装发了"""
+    def test_provider_failure_looks_exactly_like_an_unknown_number(self, client: TestClient) -> None:
+        """短信通道没配好（一个可用配置都没有）：验证过的号也是 200、Redis 里没码、第二次同样「太频繁」。
+        厂商侧失败只会发生在验证过的号上 —— 原样抛 400 / 502，故障期间这个接口就是号码核对器"""
         _set_admin_phone(PHONE_B, verified=True)
-        res = client.post(CAPTCHA, json={'phone': PHONE_B})
-        assert res.json()['code'] != 200, res.text
+        real = client.post(CAPTCHA, json={'phone': PHONE_B})
+        unknown = client.post(CAPTCHA, json={'phone': UNKNOWN})
+        assert real.status_code == unknown.status_code == 200, real.text
+        assert real.json()['msg'] == unknown.json()['msg']
+        assert _login_code(client, PHONE_B) is None, '没发出去的码不能留着'
+        # 冷却也不退：退了就是「验证过的号能立刻再试、别的号要等 60 秒」
+        real_again = client.post(CAPTCHA, json={'phone': PHONE_B})
+        unknown_again = client.post(CAPTCHA, json={'phone': UNKNOWN})
+        assert real_again.status_code == unknown_again.status_code == 400
+        assert real_again.json()['msg'] == unknown_again.json()['msg']
 
 
 class TestLogin:
@@ -153,14 +162,14 @@ class TestLogin:
         make_config('login4', is_default=True)
         _set_admin_phone(PHONE_B, verified=True)
         assert client.post(CAPTCHA, json={'phone': PHONE_B}).json()['code'] == 200
-        wrong = client.post(LOGIN, json={'phone': PHONE_B, 'code': '000000'})
-        unknown = client.post(LOGIN, json={'phone': UNKNOWN, 'code': '000000'})
+        wrong = client.post(LOGIN, json={'phone': PHONE_B, 'captcha': '000000'})
+        unknown = client.post(LOGIN, json={'phone': UNKNOWN, 'captcha': '000000'})
         assert wrong.status_code == unknown.status_code == 403
         assert wrong.json()['msg'] == unknown.json()['msg']
         # 管理员录的号：就算码是对的也不认（这个号没经本人验证）
         code = _login_code(client, PHONE_B)
         _set_admin_phone(PHONE_B, verified=False)
-        unverified = client.post(LOGIN, json={'phone': PHONE_B, 'code': code})
+        unverified = client.post(LOGIN, json={'phone': PHONE_B, 'captcha': code})
         assert unverified.status_code == 403 and unverified.json()['msg'] == unknown.json()['msg']
 
     def test_right_code_opens_a_session_once(
@@ -170,7 +179,7 @@ class TestLogin:
         _set_admin_phone(PHONE_B, verified=True)
         assert client.post(CAPTCHA, json={'phone': PHONE_B}).json()['code'] == 200
         code = _login_code(client, PHONE_B)
-        res = client.post(LOGIN, json={'phone': PHONE_B, 'code': code})
+        res = client.post(LOGIN, json={'phone': PHONE_B, 'captcha': code})
         assert res.status_code == 200, res.text
         data = res.json()['data']
         assert data['access_token'] and data['user']['username'] == 'admin'
@@ -179,9 +188,9 @@ class TestLogin:
         me = client.get('/sys/users/me', headers={'Authorization': f'Bearer {data["access_token"]}'})
         assert me.json()['code'] == 200 and me.json()['data']['username'] == 'admin'
         # 码是一次性的
-        again = client.post(LOGIN, json={'phone': PHONE_B, 'code': code})
+        again = client.post(LOGIN, json={'phone': PHONE_B, 'captcha': code})
         assert again.status_code == 403
 
     def test_bad_phone_is_422(self, client: TestClient) -> None:
         assert client.post(CAPTCHA, json={'phone': '12345'}).status_code == 422
-        assert client.post(LOGIN, json={'phone': '12345', 'code': '1'}).status_code == 422
+        assert client.post(LOGIN, json={'phone': '12345', 'captcha': '1'}).status_code == 422

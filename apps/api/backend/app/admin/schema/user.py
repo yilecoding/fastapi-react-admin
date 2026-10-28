@@ -48,7 +48,9 @@ class AuthPhoneLoginParam(SchemaBase):
     """手机验证码登录"""
 
     phone: CustomPhoneNumber = Field(description='手机号')
-    code: str = Field(min_length=1, max_length=8, description='短信验证码')
+    # 🔴 字段名必须是 `captcha`：它在 `OPERA_LOG_REDACT_KEYS` 里（按键名精确匹配）。叫 `code` 的话操作日志会把
+    # 「手机号 + 验证码」成对明文落进 sys_opera_log；而 `code` 本身又是字典 / 部门编码的通用键名，不能整个脱掉
+    captcha: str = Field(min_length=1, max_length=8, description='短信验证码')
     client: Literal['web', 'desktop', 'mobile'] = Field('web', description='登录端')
 
 

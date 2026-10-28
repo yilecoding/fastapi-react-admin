@@ -126,6 +126,30 @@ def test_update_rejects_a_phone_already_bound_and_clears_verification(
     assert a  # a 没被动过
 
 
+def test_update_without_a_phone_key_keeps_the_verification(
+    client: TestClient, token_headers: dict[str, str], refs: dict
+) -> None:
+    """请求体里不带 phone（exclude_unset，号码原样不动）：验证时间也要原样不动。
+    只比 `obj.phone != user.phone` 会把它清掉 —— 号没变、手机登录失效，界面上看不出"""
+    pk = _create(client, token_headers, refs, 'c', PHONE_X).json()['data']['id']
+    _mark_verified(pk)
+    cur = client.get(f'/sys/users/{pk}', headers=token_headers).json()['data']
+    body = {
+        'username': cur['username'],
+        'nickname': cur['nickname'] + '2',
+        'email': cur['email'],
+        'dept_id': refs['dept_id'],
+        'roles': [refs['role_id']],
+    }
+    assert client.put(f'/sys/users/{pk}', headers=token_headers, json=body).json()['code'] == 200
+    after = client.get(f'/sys/users/{pk}', headers=token_headers).json()['data']
+    assert after['phone'] == PHONE_X and after['phone_verified_time'] is not None
+    # 显式传 null 才是「清空号码」，这时验证跟着没了
+    assert client.put(f'/sys/users/{pk}', headers=token_headers, json={**body, 'phone': None}).json()['code'] == 200
+    after = client.get(f'/sys/users/{pk}', headers=token_headers).json()['data']
+    assert after['phone'] is None and after['phone_verified_time'] is None
+
+
 def _xlsx(rows: list[list[Any]]) -> bytes:
     wb = Workbook()
     ws = wb.active

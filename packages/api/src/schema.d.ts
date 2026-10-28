@@ -3703,10 +3703,10 @@ export interface components {
              */
             phone: string;
             /**
-             * Code
+             * Captcha
              * @description 短信验证码
              */
-            code: string;
+            captcha: string;
             /**
              * Client
              * @description 登录端

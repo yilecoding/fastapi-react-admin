@@ -189,8 +189,10 @@ class UserService:
             if {role.id for role in roles} != set(obj.roles):
                 raise errors.NotFoundError(msg=t('error.role.not_found'))
         count = await user_dao.update(db, user.id, obj)
-        if obj.phone != user.phone:
-            # 管理员改的号码没经过本人验证：原来那次验证不再算数（issue #168）
+        # 管理员改的号码没经过本人验证：原来那次验证不再算数（issue #168）。
+        # 🔴 要看「请求里带没带 phone」：落库走 exclude_unset，不带的话号码原样不动 —— 这时清掉验证就是
+        # 「号没变、验证没了」，手机登录静默失效。`obj.phone is None` 分不出「没传」和「传了 null 要清空」
+        if 'phone' in obj.model_fields_set and obj.phone != user.phone:
             await user_dao.clear_phone_verification(db, user.id)
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
         return count
