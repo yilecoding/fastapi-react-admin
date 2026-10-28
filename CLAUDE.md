@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 **fastapi-react-admin** —— 中后台底座。产品标识集中在 `apps/web/src/lib/brand.ts`
-（改名字、改版本只动那一处）。
+（改名字只动那一处 + 后端 `conf.py` 的 `FASTAPI_TITLE` / `FASTAPI_DESCRIPTION`；版本在 `apps/web/package.json` + `backend/__init__.py: __version__`，release.yml 打 tag 时校验两处同值）。
 
 后端 fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)（FBA）
 并新增 SQL Server 支持（现在同时支持 MySQL / PostgreSQL / SQL Server 三种数据库，

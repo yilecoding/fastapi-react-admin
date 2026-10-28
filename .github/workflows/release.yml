@@ -42,11 +42,15 @@ jobs:
       # 🔴 这里原来是拿正则去 brand.ts 里抠 `version: "x.y.z"`，brand.ts 改成读
       # import.meta.env 之后那个正则就再也匹配不上了，而 v0.0.1 之后没人打过 tag，
       # 所以没人发现：下一次打 tag 会在第一个 job 上「找不到 version 字段」直接红掉
-      - name: 校验 tag 与 package.json 一致
+      # 后端的 `backend/__init__.py: __version__` 是第二份（/docs 徽章、OTel service.version 读它，
+      # 后端镜像的构建上下文只有 apps/api，运行时读不到 package.json），所以这里顺手核对两边同值
+      - name: 校验 tag 与 package.json / 后端 __version__ 一致
         run: |
           VER="${GITHUB_REF_NAME#v}"
           node -e "
+            const fs = require('fs')
             const pkg = require('./apps/web/package.json').version
+            const api = (fs.readFileSync('./apps/api/backend/__init__.py', 'utf8').match(/^__version__ = '([^']+)'/m) || [])[1]
             const tag = process.argv[1]
             // 允许预发布后缀：package.json 是 0.0.1 时 v0.0.1 与 v0.0.1-rc.1 都算一致。
             // 「发到 Release」那一步没法本地验证，得留个能试的口子
@@ -54,7 +58,11 @@ jobs:
               console.error(\`不一致：apps/web/package.json 是 \${pkg}，tag 是 v\${tag}。先改 package.json 再重新打 tag。\`)
               process.exit(1)
             }
-            console.log(\`一致：package.json \${pkg} ← tag v\${tag}\`)
+            if (api !== pkg) {
+              console.error(\`不一致：apps/api/backend/__init__.py 的 __version__ 是 \${api}，package.json 是 \${pkg}。两处要同值。\`)
+              process.exit(1)
+            }
+            console.log(\`一致：package.json \${pkg} = 后端 __version__ \${api} ← tag v\${tag}\`)
           " "$VER"
 
       - name: 建草稿（已存在就跳过）
