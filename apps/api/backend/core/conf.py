@@ -42,8 +42,9 @@ class Settings(BaseSettings):
 
     # FastAPI
     FASTAPI_API_V1_PATH: str = '/api/v1'
-    FASTAPI_TITLE: str = 'fba'
-    FASTAPI_DESCRIPTION: str = 'FastAPI Best Architecture'
+    # 和前端 `apps/web/src/lib/brand.ts` 的 wordmark / tagline 保持同一句；/docs 顶上显示的就是这两条
+    FASTAPI_TITLE: str = 'fastapi-react-admin'
+    FASTAPI_DESCRIPTION: str = 'FastAPI + React 19 中后台底座'
     FASTAPI_DOCS_URL: str = '/docs'
     FASTAPI_REDOC_URL: str = '/redoc'
     FASTAPI_OPENAPI_URL: str | None = '/openapi'
