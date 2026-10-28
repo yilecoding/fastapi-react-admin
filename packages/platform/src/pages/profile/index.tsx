@@ -15,6 +15,7 @@ import { Combobox, type ComboboxOption } from '@admin/ui/components/combobox'
 import { Input } from '@admin/ui/components/input'
 import { Label } from '@admin/ui/components/label'
 import { Skeleton } from '@admin/ui/components/skeleton'
+import { cn } from '@admin/ui/lib/utils'
 
 import { usePreferencePanels } from '../_shared/preferences-panel'
 import { SettingsShell, type SettingsPanel } from '../_shared/settings-shell'
@@ -307,17 +308,28 @@ function StatusLine({ state, okText }: { state: CardState; okText: string }) {
 type CardState = { kind: 'idle' } | { kind: 'ok' } | { kind: 'error'; msg: string }
 const IDLE: CardState = { kind: 'idle' }
 
+/**
+ * 昵称 / 邮箱 / 手机号三块表单的宽度上限。面板本身**刻意不封顶**（`settings-shell.tsx`
+ * 开头那段权衡），所以封顶要落在每块表单自己身上 —— 不封的话 1920px 视口下输入框铺到
+ * 1700px 宽，「保存 / 绑定」钉在最右边，和它管的那个框隔着大半屏，验证码那一小格和
+ * 按钮之间空出一整条。密码块早就封在 `max-w-sm`，时区选择器封在 `max-w-md`；
+ * 这三块带一个 8.5rem 的动作列，取 `max-w-md` 让输入框还剩 ~19rem，邮箱地址够看。
+ */
+const FORM_MAX = 'max-w-md'
+
 function SubmitButton({
-  pending, disabled, children, testid, className,
+  pending, disabled, children, testid, className, size = 'sm',
 }: {
   pending: boolean
   disabled: boolean
   children: React.ReactNode
   testid: string
   className?: string
+  /** 🔴 和输入框同一行的按钮要传 `default`：`Input` 是 h-9，`sm` 只有 h-8，并排时矮一截 */
+  size?: 'sm' | 'default'
 }) {
   return (
-    <Button type="submit" size="sm" className={className} disabled={disabled || pending} data-testid={testid}>
+    <Button type="submit" size={size} className={className} disabled={disabled || pending} data-testid={testid}>
       {pending && <IconLoader2 className="size-4 animate-spin" />}
       {children}
     </Button>
@@ -512,8 +524,10 @@ function NicknameBlock({ me }: { me?: CurrentUser }) {
       <form onSubmit={submit} className="flex flex-col gap-3">
         {/* 输入框和保存按钮同一行 —— 一个 64 字上限的短字段不值得占两行。
             原来是「输入框一行、按钮一行、旁边再一句『与当前一致，无需保存』」，
-            那句话是在给一个禁用的按钮做旁白，删掉：按钮灰着本身就是答案 */}
-        <div className="flex items-start gap-2">
+            那句话是在给一个禁用的按钮做旁白，删掉：按钮灰着本身就是答案。
+            宽度封在 `FORM_MAX`：面板本身不封顶（见 `settings-shell.tsx`），不封的话
+            1920px 下输入框铺 1700px、「保存」钉在最右边，和它管的那个框隔着大半屏 */}
+        <div className={cn('flex items-start gap-2', FORM_MAX)}>
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
             <Input
               id="p-nickname" data-testid="p-nickname" value={value} maxLength={64}
@@ -524,7 +538,7 @@ function NicknameBlock({ me }: { me?: CurrentUser }) {
               <p className="text-sm text-destructive">{t('昵称不能超过 64 个字符')}</p>
             )}
           </div>
-          <SubmitButton pending={mut.isPending} disabled={unchanged || invalid} testid="p-nickname-save">
+          <SubmitButton pending={mut.isPending} disabled={unchanged || invalid} testid="p-nickname-save" size="default">
             {t('保存')}
           </SubmitButton>
         </div>
@@ -632,7 +646,7 @@ function AvatarBlock({ me }: { me?: CurrentUser }) {
         <StatusLine state={state} okText={t('头像已更新')} />
 
         {showUrl ? (
-          <form onSubmit={submitUrl} className="flex items-start gap-2">
+          <form onSubmit={submitUrl} className={cn('flex items-start gap-2', FORM_MAX)}>
             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
               <Input
                 id="p-avatar" data-testid="p-avatar" value={value} placeholder="https://…"
@@ -641,7 +655,7 @@ function AvatarBlock({ me }: { me?: CurrentUser }) {
               />
               {invalid && <p className="text-sm text-destructive">{t('请填完整的 http(s) 地址')}</p>}
             </div>
-            <SubmitButton pending={mut.isPending} disabled={unchanged || invalid} testid="p-avatar-save">
+            <SubmitButton pending={mut.isPending} disabled={unchanged || invalid} testid="p-avatar-save" size="default">
               {t('保存')}
             </SubmitButton>
           </form>
@@ -721,11 +735,12 @@ function EmailBlock({ me }: { me?: CurrentUser }) {
         两个按钮各自贴在自己那行的右边 —— 一个在 1090px、一个在 630px，
         右边缘参差，中间还空出一大块，是这一块最难看的地方。
 
-        验证码只有 6 位，所以它不占满整个 `1fr` 格，而是在格子里左对齐给 `w-36`：
-        格子对齐保证按钮成列，框宽仍按内容给。
+        验证码框和上一行的输入框**同宽**（不再单独给 `w-36`）：整块封在 `FORM_MAX` 之后
+        输入列只剩 ~19rem，6 位验证码在里面不显空；而框一缩、它和右边按钮之间就空出
+        一截，两行读起来像两件事。同宽之后「输入 → 按钮」两行是同一个形状。
       */}
       <form onSubmit={submit} className="flex flex-col gap-3">
-        <div className="grid grid-cols-[minmax(0,1fr)_8.5rem] items-end gap-x-2 gap-y-1.5">
+        <div className={cn('grid grid-cols-[minmax(0,1fr)_8.5rem] items-end gap-x-2 gap-y-1.5', FORM_MAX)}>
           <Label htmlFor="p-email" className="col-span-2">{t('新邮箱')}</Label>
           <Input
             id="p-email" data-testid="p-email" value={email}
@@ -733,7 +748,7 @@ function EmailBlock({ me }: { me?: CurrentUser }) {
             onChange={(e) => { setEmail(e.target.value); setState(IDLE); setSent(IDLE) }}
           />
           <Button
-            type="button" variant="outline" size="sm" className="w-full"
+            type="button" variant="outline" className="w-full"
             data-testid="p-email-send"
             disabled={!emailOk || same || send.isPending}
             onClick={() => void sendCode()}
@@ -745,7 +760,8 @@ function EmailBlock({ me }: { me?: CurrentUser }) {
           <Label htmlFor="p-email-captcha" className="col-span-2 mt-1.5">{t('邮箱验证码')}</Label>
           <Input
             id="p-email-captcha" data-testid="p-email-captcha" value={captcha} maxLength={6}
-            inputMode="numeric" className="w-36 font-mono tracking-widest"
+            inputMode="numeric" autoComplete="one-time-code" placeholder="······"
+            className="font-mono tracking-widest placeholder:tracking-normal"
             onChange={(e) => { setCaptcha(e.target.value); setState(IDLE) }}
           />
           <SubmitButton
@@ -753,6 +769,7 @@ function EmailBlock({ me }: { me?: CurrentUser }) {
             disabled={!emailOk || same || captcha.trim().length === 0}
             testid="p-email-save"
             className="w-full"
+            size="default"
           >
             {t('绑定新邮箱')}
           </SubmitButton>
@@ -868,7 +885,7 @@ function PhoneBlock({ me }: { me?: CurrentUser }) {
       testId="profile-phone"
     >
       <form onSubmit={submit} className="flex flex-col gap-3">
-        <div className="grid grid-cols-[minmax(0,1fr)_8.5rem] items-end gap-x-2 gap-y-1.5">
+        <div className={cn('grid grid-cols-[minmax(0,1fr)_8.5rem] items-end gap-x-2 gap-y-1.5', FORM_MAX)}>
           <Label htmlFor="p-phone" className="col-span-2">{t('新手机号')}</Label>
           <Input
             id="p-phone" data-testid="p-phone" value={phone}
@@ -876,7 +893,7 @@ function PhoneBlock({ me }: { me?: CurrentUser }) {
             onChange={(e) => { setPhone(e.target.value); setState(IDLE); setSent(IDLE) }}
           />
           <Button
-            type="button" variant="outline" size="sm" className="w-full"
+            type="button" variant="outline" className="w-full"
             data-testid="p-phone-send"
             disabled={!phoneOk || send.isPending || cooldown > 0}
             onClick={() => void sendCode()}
@@ -888,7 +905,8 @@ function PhoneBlock({ me }: { me?: CurrentUser }) {
           <Label htmlFor="p-phone-captcha" className="col-span-2 mt-1.5">{t('短信验证码')}</Label>
           <Input
             id="p-phone-captcha" data-testid="p-phone-captcha" value={captcha} maxLength={6}
-            inputMode="numeric" autoComplete="one-time-code" className="w-36 font-mono tracking-widest"
+            inputMode="numeric" autoComplete="one-time-code" placeholder="······"
+            className="font-mono tracking-widest placeholder:tracking-normal"
             onChange={(e) => { setCaptcha(e.target.value); setState(IDLE) }}
           />
           <SubmitButton
@@ -896,6 +914,7 @@ function PhoneBlock({ me }: { me?: CurrentUser }) {
             disabled={!phoneOk || captcha.trim().length === 0}
             testid="p-phone-save"
             className="w-full"
+            size="default"
           >
             {t('绑定手机号')}
           </SubmitButton>
