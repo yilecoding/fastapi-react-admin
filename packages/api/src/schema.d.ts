@@ -6522,9 +6522,15 @@ export interface components {
             has_email: boolean;
             /**
              * Has Phone
-             * @description 有没有绑定手机号（没有就收不到短信通知）
+             * @description 有没有本人验证过的手机号（没有就收不到短信通知）
              */
             has_phone: boolean;
+            /**
+             * Phone Unverified
+             * @description 有号但没经本人验证（管理员录入 / 导入的）—— 短信照样不发
+             * @default false
+             */
+            phone_unverified: boolean;
         };
         /**
          * GetNewToken

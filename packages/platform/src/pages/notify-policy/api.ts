@@ -28,7 +28,14 @@ export type PolicyRow = {
 
 export type PrefCell = { channel: Channel; mode: PolicyMode; configurable: boolean; enabled: boolean }
 export type PrefRow = { kind: string; label: string; category: number; cells: PrefCell[] }
-export type MyPrefs = { items: PrefRow[]; has_email: boolean; has_phone: boolean }
+export type MyPrefs = {
+  items: PrefRow[]
+  has_email: boolean
+  /** 有**本人验证过**的手机号。短信只发这种号 */
+  has_phone: boolean
+  /** 有号但没经本人验证（管理员录入 / 导入的）：短信照样不发，要去个人中心验证一次 */
+  phone_unverified: boolean
+}
 
 export const notifyKeys = {
   all: ['notify-channel'] as const,
