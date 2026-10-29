@@ -53,6 +53,7 @@ import { Route as AuthSystemUserRouteImport } from './routes/_auth/system/user'
 import { Route as AuthWorkflowDefinitionRouteImport } from './routes/_auth/workflow/definition'
 import { Route as AuthWorkflowInboxRouteImport } from './routes/_auth/workflow/inbox'
 import { Route as AuthWorkflowMonitorRouteImport } from './routes/_auth/workflow/monitor'
+import { Route as GuestOauth2CallbackRouteImport } from './routes/_guest/oauth2/callback'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -273,6 +274,11 @@ const AuthWorkflowMonitorRoute = AuthWorkflowMonitorRouteImport.update({
   path: '/workflow/monitor',
   getParentRoute: () => AuthRoute,
 } as any)
+const GuestOauth2CallbackRoute = GuestOauth2CallbackRouteImport.update({
+  id: '/oauth2/callback',
+  path: '/oauth2/callback',
+  getParentRoute: () => GuestRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -317,6 +323,7 @@ export interface FileRoutesByFullPath {
   '/workflow/definition': typeof AuthWorkflowDefinitionRoute
   '/workflow/inbox': typeof AuthWorkflowInboxRoute
   '/workflow/monitor': typeof AuthWorkflowMonitorRoute
+  '/oauth2/callback': typeof GuestOauth2CallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -361,6 +368,7 @@ export interface FileRoutesByTo {
   '/workflow/definition': typeof AuthWorkflowDefinitionRoute
   '/workflow/inbox': typeof AuthWorkflowInboxRoute
   '/workflow/monitor': typeof AuthWorkflowMonitorRoute
+  '/oauth2/callback': typeof GuestOauth2CallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -408,6 +416,7 @@ export interface FileRoutesById {
   '/_auth/workflow/definition': typeof AuthWorkflowDefinitionRoute
   '/_auth/workflow/inbox': typeof AuthWorkflowInboxRoute
   '/_auth/workflow/monitor': typeof AuthWorkflowMonitorRoute
+  '/_guest/oauth2/callback': typeof GuestOauth2CallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -454,6 +463,7 @@ export interface FileRouteTypes {
     | '/workflow/definition'
     | '/workflow/inbox'
     | '/workflow/monitor'
+    | '/oauth2/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -498,6 +508,7 @@ export interface FileRouteTypes {
     | '/workflow/definition'
     | '/workflow/inbox'
     | '/workflow/monitor'
+    | '/oauth2/callback'
   id:
     | '__root__'
     | '/'
@@ -544,6 +555,7 @@ export interface FileRouteTypes {
     | '/_auth/workflow/definition'
     | '/_auth/workflow/inbox'
     | '/_auth/workflow/monitor'
+    | '/_guest/oauth2/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -862,6 +874,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthWorkflowMonitorRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_guest/oauth2/callback': {
+      id: '/_guest/oauth2/callback'
+      path: '/oauth2/callback'
+      fullPath: '/oauth2/callback'
+      preLoaderRoute: typeof GuestOauth2CallbackRouteImport
+      parentRoute: typeof GuestRoute
+    }
   }
 }
 
@@ -955,10 +974,12 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 interface GuestRouteChildren {
   GuestSignInRoute: typeof GuestSignInRoute
+  GuestOauth2CallbackRoute: typeof GuestOauth2CallbackRoute
 }
 
 const GuestRouteChildren: GuestRouteChildren = {
   GuestSignInRoute: GuestSignInRoute,
+  GuestOauth2CallbackRoute: GuestOauth2CallbackRoute,
 }
 
 const GuestRouteWithChildren = GuestRoute._addFileChildren(GuestRouteChildren)

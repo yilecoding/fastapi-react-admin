@@ -129,6 +129,17 @@ error:
     not_found: 菜单不存在
     parent_not_found: 父级菜单不存在
     title_exists: 菜单标题已存在
+  mfa:
+    already_enabled: 已经开启了二次验证
+    challenge_expired: 二次验证已过期，请重新登录
+    enforced: 管理员要求你的账号必须开启二次验证，不能关闭
+    invalid_code: 动态码不对（或恢复码已经用过）
+    not_enabled: 还没有开启二次验证
+    secret_key_invalid: MFA_SECRET_KEY 不是合法的十六进制密钥（需 32 字节 / 64 位十六进制）
+    secret_key_missing: 未配置 MFA_SECRET_KEY，不能开启二次验证。生成方式：python -c "import os;print(os.urandom(32).hex())"，写入 .env 后重启服务
+    setup_expired: 绑定已过期，请重新扫码
+    setup_required: 请先完成二次验证的绑定
+    swagger_unsupported: 这个账号开启了二次验证，请从登录页登录（Swagger 调试口做不了第二步）
   notice:
     not_found: 通知公告不存在
   notification:
@@ -625,6 +636,7 @@ response:
   success: 请求成功
 success:
   login:
+    mfa_success: 登录成功（二次验证）
     oauth2_success: 登录成功（OAuth2）
     success: 登录成功
 

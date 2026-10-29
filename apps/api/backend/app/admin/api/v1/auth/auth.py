@@ -5,7 +5,8 @@ from fastapi.security import HTTPBasicCredentials
 from pyrate_limiter import Duration, Rate
 from starlette.background import BackgroundTasks
 
-from backend.app.admin.schema.token import GetLoginToken, GetNewToken, GetSwaggerToken
+from backend.app.admin.schema.mfa import MfaChallenge, MfaChallengeParam, MfaSetupInfo, MfaTokenParam
+from backend.app.admin.schema.token import GetLoginToken, GetMfaEnrollToken, GetNewToken, GetSwaggerToken
 from backend.app.admin.schema.user import AuthLoginParam, AuthPhoneCaptchaParam, AuthPhoneLoginParam
 from backend.app.admin.service.auth_service import auth_service
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
@@ -59,7 +60,7 @@ async def login(
     response: Response,
     obj: AuthLoginParam,
     background_tasks: BackgroundTasks,
-) -> ResponseSchemaModel[GetLoginToken]:
+) -> ResponseSchemaModel[GetLoginToken | MfaChallenge]:
     data = await auth_service.login(
         db=db, request=request, response=response, obj=obj, background_tasks=background_tasks
     )
@@ -88,8 +89,56 @@ async def phone_login(
     response: Response,
     obj: AuthPhoneLoginParam,
     background_tasks: BackgroundTasks,
-) -> ResponseSchemaModel[GetLoginToken]:
+) -> ResponseSchemaModel[GetLoginToken | MfaChallenge]:
     data = await auth_service.phone_login(
+        db=db, request=request, response=response, obj=obj, background_tasks=background_tasks
+    )
+    return response_base.success(data=data)
+
+
+# ── 二次验证（#181）：登录第二步。三个都是匿名接口，凭第一步给的 `mfa_token` ──
+
+
+@router.post(
+    '/mfa/verify',
+    summary='登录第二步：动态码或恢复码',
+    dependencies=[Depends(RateLimiter(Rate(5, Duration.MINUTE)))],
+)
+async def mfa_verify(
+    db: CurrentSessionTransaction,
+    request: Request,
+    response: Response,
+    obj: MfaChallengeParam,
+    background_tasks: BackgroundTasks,
+) -> ResponseSchemaModel[GetLoginToken]:
+    data = await auth_service.mfa_login(
+        db=db, request=request, response=response, obj=obj, background_tasks=background_tasks
+    )
+    return response_base.success(data=data)
+
+
+@router.post(
+    '/mfa/setup',
+    summary='登录第二步（被强制但还没绑定）：取绑定用的密钥和二维码',
+    dependencies=[Depends(RateLimiter(Rate(5, Duration.MINUTE)))],
+)
+async def mfa_setup(db: CurrentSession, obj: MfaTokenParam) -> ResponseSchemaModel[MfaSetupInfo]:
+    return response_base.success(data=await auth_service.mfa_setup(db=db, obj=obj))
+
+
+@router.post(
+    '/mfa/enroll',
+    summary='登录第二步（被强制但还没绑定）：输对一次动态码 = 绑定完成并登录，恢复码只下发这一次',
+    dependencies=[Depends(RateLimiter(Rate(5, Duration.MINUTE)))],
+)
+async def mfa_enroll(
+    db: CurrentSessionTransaction,
+    request: Request,
+    response: Response,
+    obj: MfaChallengeParam,
+    background_tasks: BackgroundTasks,
+) -> ResponseSchemaModel[GetMfaEnrollToken]:
+    data = await auth_service.mfa_enroll(
         db=db, request=request, response=response, obj=obj, background_tasks=background_tasks
     )
     return response_base.success(data=data)

@@ -22,6 +22,7 @@ import {
   loginByPhone,
   sendPhoneCaptcha,
   SESSION_END_MESSAGE,
+  type MfaChallenge,
   type SessionEndReason,
 } from "@admin/platform/auth/session"
 import { Alert } from "@admin/ui/components/alert"
@@ -39,13 +40,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@admin/ui/components/t
 import { LanguageMenu } from "@/components/language-menu"
 import { ThemeMenu } from "@/components/theme-menu"
 import { BRAND } from "@/lib/brand"
+import { MfaStep } from "@/routes/_guest/-mfa-step"
 import { SignInBrandPanel, SignInBrandStrip } from "@/routes/_guest/-sign-in-brand"
 
 export const Route = createFileRoute("/_guest/sign-in")({
-  validateSearch: (s: Record<string, unknown>) => ({
+  // 返回类型标成可选：别处跳登录页时只带自己关心的那一两个参数（新加一个键不该让每个调用点都改）
+  validateSearch: (
+    s: Record<string, unknown>
+  ): { redirect?: string; reason?: SessionEndReason; mfa?: string; setup?: boolean } => ({
     redirect: typeof s.redirect === "string" ? s.redirect : undefined,
     // 会话为什么结束（后端 `EndReason`，#138）。不认识的值不显示提示，而不是显示一句错的
     reason: isSessionEndReason(s.reason) ? s.reason : undefined,
+    // 第三方登录回来、账号开了二次验证（#181）：后端不开会话，把一次性令牌带到这里接着做第二步
+    mfa: typeof s.mfa === "string" && s.mfa.length >= 16 ? s.mfa : undefined,
+    setup: s.setup === "1" || s.setup === 1 || s.setup === true ? true : undefined,
   }),
   component: SignInPage,
 })
@@ -115,6 +123,10 @@ function SignInPage() {
   const [captchaError, setCaptchaError] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [pending, setPending] = React.useState(false)
+  /** 二次验证（#181）：第一步过了、还差动态码。第三方登录回来的那一种从地址栏带进来 */
+  const [mfa, setMfa] = React.useState<MfaChallenge | null>(() =>
+    search.mfa ? { mfaToken: search.mfa, mfaSetup: search.setup === true } : null
+  )
   // 手机验证码登录（issue #168 第二步）。图形验证码和密码页签**共用**同一张：服务端校验后消费掉，
   // 发完码要重新拉一张 —— 所以发码成功 / 失败（非限流）都 loadCaptcha()
   const [phone, setPhone] = React.useState("")
@@ -194,20 +206,36 @@ function SignInPage() {
     void loadCaptcha()
   }, [loadCaptcha])
 
+  async function enter() {
+    await router.invalidate()
+    await navigate({ to: search.redirect ?? "/dashboard" })
+  }
+
+  function leaveMfa() {
+    setMfa(null)
+    setError(null)
+    // 地址栏里第三方登录带来的那枚令牌一起清掉，刷新页面不会又回到第二步
+    if (search.mfa) void navigate({ to: "/sign-in", search: { redirect: search.redirect }, replace: true })
+    void loadCaptcha()
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     setPending(true)
     const name = username.trim()
     try {
-      await login(qc, {
+      const challenge = await login(qc, {
         username: name,
         password,
         ...(captchaUuid ? { uuid: captchaUuid, captcha } : {}),
       })
       writeRemembered(remember ? name : null)
-      await router.invalidate()
-      await navigate({ to: search.redirect ?? "/dashboard" })
+      if (challenge) {
+        setMfa(challenge)
+        return
+      }
+      await enter()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("登录失败，请稍后重试"))
       // 🔴 命中登录限流（429）时**不要**重拉验证码。
@@ -253,9 +281,12 @@ function SignInPage() {
     setPhoneError(null)
     setPhonePending(true)
     try {
-      await loginByPhone(qc, { phone: phone.trim(), captcha: smsCode.trim() })
-      await router.invalidate()
-      await navigate({ to: search.redirect ?? "/dashboard" })
+      const challenge = await loginByPhone(qc, { phone: phone.trim(), captcha: smsCode.trim() })
+      if (challenge) {
+        setMfa(challenge)
+        return
+      }
+      await enter()
     } catch (err) {
       setPhoneError(err instanceof ApiError ? err.message : t("登录失败，请稍后重试"))
     } finally {
@@ -330,7 +361,10 @@ function SignInPage() {
             <h1 className="mt-3 text-2xl leading-tight font-semibold tracking-[-0.02em]">{t("欢迎回来")}</h1>
             <p className="mt-2 text-sm text-muted-foreground">{t("用管理员账号登录，进入你的工作台。")}</p>
 
-            {/* 三个面板给同一个 min-h：切登录方式时「欢迎回来」不会上下跳 */}
+            {mfa ? (
+              <MfaStep challenge={mfa} onDone={enter} onBack={leaveMfa} />
+            ) : (
+            /* 三个面板给同一个 min-h：切登录方式时「欢迎回来」不会上下跳 */
             <Tabs value={method} onValueChange={(v) => setMethod(v as Method)} className="mt-7">
               {/* 下划线页签而不是胶囊组：胶囊是 shadcn 的默认长相，一眼就是模板 */}
               <TabsList variant="line" className="h-auto w-full justify-start gap-6 rounded-none border-b border-border p-0">
@@ -531,6 +565,7 @@ function SignInPage() {
                 />
               </TabsContent>
             </Tabs>
+            )}
           </div>
         </div>
 

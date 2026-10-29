@@ -15,7 +15,7 @@ import { usePerm } from '../../auth/use-perm'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { FormSection } from '../_shared/form-fields'
 import {
-  useResetUserPassword, useToggleUserPermission,
+  useResetUserMfa, useResetUserPassword, useToggleUserPermission,
   type User, type UserPermissionType,
 } from './api'
 
@@ -80,6 +80,9 @@ export function UserSecuritySheet({
   const { isSuperuser } = usePerm()
   const toggle = useToggleUserPermission()
   const reset = useResetUserPassword()
+  const resetMfa = useResetUserMfa()
+  const [mfaConfirm, setMfaConfirm] = React.useState(false)
+  const [mfaState, setMfaState] = React.useState<{ kind: 'idle' | 'ok' | 'error'; msg?: string }>({ kind: 'idle' })
 
   const [busy, setBusy] = React.useState<UserPermissionType | null>(null)
   const [flagError, setFlagError] = React.useState<string | null>(null)
@@ -94,6 +97,7 @@ export function UserSecuritySheet({
     if (!open) return
     setFlagError(null)
     setPwd(''); setPwd2(''); setPwdState('idle'); setPwdMsg(null)
+    setMfaState({ kind: 'idle' })
   }, [open, user?.id])
 
   if (!user) return null
@@ -236,6 +240,34 @@ export function UserSecuritySheet({
               </div>
             </FormSection>
           </form>
+
+          {/* ── 二次验证（#181）── */}
+          <FormSection title={t('二次验证')}>
+            <p className="text-xs text-muted-foreground">
+              {t('手机丢了、认证器删了又没有恢复码时用。重置后这个人下次登录：被强制开启的会重新绑定，没被强制的就是关掉了。')}
+            </p>
+            <div className="flex items-center gap-3">
+              <Button
+                type="button" size="sm" variant="outline" data-testid="sec-mfa-reset"
+                disabled={!isSuperuser || resetMfa.isPending}
+                onClick={() => setMfaConfirm(true)}
+              >
+                {t('重置二次验证')}
+              </Button>
+              {mfaState.kind === 'ok' && (
+                <span className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400" data-testid="sec-mfa-ok">
+                  <IconCheck className="size-3.5" />
+                  {t('已重置')}
+                </span>
+              )}
+              {mfaState.kind === 'error' && (
+                <span className="flex items-center gap-1.5 text-sm text-destructive" data-testid="sec-mfa-error">
+                  <IconAlertTriangle className="size-3.5 shrink-0" />
+                  {mfaState.msg}
+                </span>
+              )}
+            </div>
+          </FormSection>
         </div>
 
         <SheetFooter>
@@ -243,6 +275,25 @@ export function UserSecuritySheet({
         </SheetFooter>
       </SheetContent>
 
+      <ConfirmDialog
+        open={mfaConfirm}
+        onOpenChange={setMfaConfirm}
+        title={t('重置二次验证')}
+        description={t('确定重置「{{name}}」的二次验证？原来的认证器和恢复码会立即失效。', { name: user.username })}
+        confirmText={t('确定重置')}
+        destructive
+        pending={resetMfa.isPending}
+        onConfirm={async () => {
+          setMfaConfirm(false)
+          try {
+            await resetMfa.mutateAsync(user.id)
+            setMfaState({ kind: 'ok' })
+          } catch (e) {
+            // 「还没有开启二次验证」这类服务端原话直接显示，别报一句笼统的失败
+            setMfaState({ kind: 'error', msg: e instanceof ApiError ? e.message : t('重置失败') })
+          }
+        }}
+      />
       <ConfirmDialog
         open={pendingFlag !== null}
         onOpenChange={(o) => !o && setPendingFlag(null)}

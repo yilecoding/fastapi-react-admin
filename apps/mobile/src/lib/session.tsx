@@ -20,10 +20,18 @@ type Session = {
    * 登录屏据此说一句为什么要重新登录；自己登出、或者压根没登录过时是 null
    */
   endReason: SessionEndReason | null
-  login: (input: { username: string; password: string; uuid?: string; captcha?: string }) => Promise<void>
+  /**
+   * 密码登录。返回 null = 已登录；返回挑战 = 这个账号开了（或被强制开）二次验证，登录屏接着收动态码（#181）
+   */
+  login: (input: { username: string; password: string; uuid?: string; captcha?: string }) => Promise<MfaChallenge | null>
+  /** 二次验证的第二步：动态码或恢复码 */
+  verifyMfa: (mfaToken: string, otp: string) => Promise<void>
   logout: () => Promise<void>
   reload: () => Promise<void>
 }
+
+/** 登录第一步过了、还差动态码。`setup` = 被强制但还没绑定 —— 移动端不做绑定（要扫码），引导去网页端 */
+export type MfaChallenge = { token: string; setup: boolean }
 
 const SessionContext = React.createContext<Session | null>(null)
 
@@ -146,10 +154,24 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           client: 'mobile',
         },
       })
+      // 开了二次验证：这一步没有 token、也没有 refresh cookie（#181）
+      if ('mfa_required' in result) return { token: result.mfa_token, setup: result.mfa_setup }
       await tokenStore.set(result.access_token)
       setEndReason(null)
       // 登录响应里的 user 是 `GetUserInfoDetail`，**没有 dept / roles 的名字**；
       // 个人中心要显示它们，所以再问一次 `/me` 拿摊平后的那份。
+      await reload()
+      return null
+    },
+    [reload],
+  )
+
+  const verifyMfa = React.useCallback<Session['verifyMfa']>(
+    async (mfaToken, otp) => {
+      // 字段叫 `otp`：后端按这个键名把它从操作日志里脱掉
+      const result = await api.POST('/api/v1/auth/mfa/verify', { body: { mfa_token: mfaToken, otp } })
+      await tokenStore.set(result.access_token)
+      setEndReason(null)
       await reload()
     },
     [reload],
@@ -170,8 +192,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [applyAnonymous])
 
   const value = React.useMemo<Session>(
-    () => ({ status, user, bootstrapError, endReason, login, logout, reload }),
-    [status, user, bootstrapError, endReason, login, logout, reload],
+    () => ({ status, user, bootstrapError, endReason, login, verifyMfa, logout, reload }),
+    [status, user, bootstrapError, endReason, login, verifyMfa, logout, reload],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>

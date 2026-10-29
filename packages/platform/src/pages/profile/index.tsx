@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAlertTriangle, IconAt, IconBellRinging, IconCheck, IconClock, IconDeviceMobile, IconExternalLink, IconFileExport, IconIdBadge2,
+  IconAlertTriangle, IconAt, IconAuth2fa, IconBellRinging, IconCheck, IconClock, IconDeviceMobile, IconExternalLink, IconFileExport, IconIdBadge2,
   IconInfoCircle, IconKey, IconLoader2, IconMail, IconPhoto, IconPlugConnected,
   IconShieldLock, IconSignature, IconUpload, IconUser,
 } from '@tabler/icons-react'
@@ -27,6 +27,7 @@ import { PageHeader } from '../../shell/page-header'
 import { StatusBadge, StatusPill } from '../_shared/status'
 import { PasswordStrength } from './password-strength'
 import { ExportsPanel } from './exports-panel'
+import { MfaBlock } from './mfa-block'
 import { NotifyPrefsPanel } from './notify-prefs-panel'
 import { RecentLogins } from './recent-logins'
 import {
@@ -939,9 +940,19 @@ function PhoneBlock({ me }: { me?: CurrentUser }) {
 /* ────────────────────────── 面板：安全 ────────────────────────── */
 
 function SecurityPanel({ me }: { me?: CurrentUser }) {
+  const { t } = useTranslation()
   return (
     <>
       <PasswordBlock />
+      {/* 二次验证（#181）：密码之后最该看的那一块 —— 密码被撞库了，有它就还登不进来 */}
+      <Block
+        title={t('二次验证')}
+        description={t('登录时除了密码，还要输入认证器上的动态码。手机丢了用恢复码登录，或者找管理员重置。')}
+        icon={<IconAuth2fa />}
+        testId="profile-mfa"
+      >
+        <MfaBlock />
+      </Block>
       <SocialBlock />
       {/* 最近登录放最后：前两块是「我主动改什么」，这块是「有没有人动过我的号」，
           属于事后核查。数据源和坑见 `recent-logins.tsx`。

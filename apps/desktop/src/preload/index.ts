@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from "electron"
 import { IPC } from "@admin/platform/desktop/contract"
 import type {
   AuthLoginInput,
+  AuthMfaInput,
   AuthPhoneLoginInput,
   DesktopBridge,
   DesktopConfig,
@@ -58,6 +59,8 @@ const bridge: DesktopBridge = {
   auth: {
     login: (input: AuthLoginInput) => call(IPC.authLogin, input),
     loginByPhone: (input: AuthPhoneLoginInput) => call(IPC.authLoginByPhone, input),
+    mfaVerify: (input: AuthMfaInput) => call(IPC.authMfaVerify, input),
+    mfaEnroll: (input: AuthMfaInput) => call(IPC.authMfaEnroll, input),
     refresh: () => call(IPC.authRefresh),
     restore: () => call(IPC.authRestore),
     logout: () => call(IPC.authLogout),

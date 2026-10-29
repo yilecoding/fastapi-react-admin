@@ -103,3 +103,35 @@ IP 锁定、停用 / 锁定判定、密码过期、成败计数、登录日志�
 > 想给某一页关掉保活时**不要复活这个字段**，直接在 `TabOutlet` 里判断。
 > 另外记住 `update` 走 `model_dump(exclude_unset=True)`：前端不传的字段不会被写 ——
 > 这条在「前端删字段」时是好事（不会静默重置老数据），但要归一老值就得显式传一次。
+
+## 二次验证（MFA，#181）：TOTP 动态码 + 一次性恢复码
+
+`utils/totp.py`（RFC 6238，SHA1 / 30 秒 / 6 位，自己实现、不引依赖）· `service/mfa_service.py` · 表 `sys_user_mfa`（迁移 `ad000000usermfa`）。
+三条登录路径（密码 / 手机验证码 / 第三方）在「身份确认」之后、「开会话」之前过 `mfa_service.gate()`：需要第二步就返回
+`MfaChallenge`（Redis 一次性令牌，5 分钟，最多试 5 次），**不开会话、不下发 refresh cookie、不记成功日志**。
+
+- 🔴 **「密码对了」不再清零失败计数**（`user_verify` 里那一句挪到了 `mark_login_success`，真正放行时才调）。原来密码一对就清零：
+  有密码的人每登一次试 5 次动态码、登完又清零，等于可以无限试 6 位数。动态码错算进同一个账号的失败计数，满了按密码错的规则锁定
+- 🔴 **同一个时间片的码只能用一次**（RFC 6238 5.2，`sys_user_mfa.last_step`）。不记的话被人从肩后看到的那 6 位数在 30～90 秒内还能再登一次
+- 🔴 **绑定要扫完码再输一次码才算开启**：密钥先放 Redis，确认了才落库。只扫不确认就算开启的话，认证器没存上就把自己锁在外面
+- 🔴 **Swagger 调试口拒绝 MFA 账号**（HTTP Basic 做不了第二步；这个口只在非 prod 注册）
+- 🔴 **字段名都起成专用的**（`otp` / `totp_secret` / `otpauth_uri` / `recovery_codes` / `mfa_token`）并进了 `OPERA_LOG_REDACT_KEYS`：
+  叫 `code` / `secret` 的话脱不掉（`code` 是部门 / 字典编码的通用键）
+- 强制策略 `LOGIN_MFA_ENFORCE`（off / superuser / all）在参数配置「登录策略」组。**`gate` 自己不加载登录配置**，三条登录路径各自
+  `load_login_config` —— 测试要能把策略钉住（`no_captcha` 夹具顶掉的是 auth_service 里那个名字）
+- 没配 `MFA_SECRET_KEY` 时：开不了（`setup` 报错说明原因）、写入侧不许把策略改成强制（`check_dynamic_dependency`）；
+  策略已经是强制、密钥后来被拿掉的兜底是 `is_enforced` 返回 False + error 日志（fail-open —— fail-closed 的话被强制的人一个都登不进来）
+
+### 🔴 参数配置的值校验原来挂在读写共用的基类上 —— 库里一个不合格的值就让整个列表 500
+
+`plugin/config/schema/config.py` 的范围 / 固定取值检查原来写在 `ConfigSchemaBase` 上，而 `GetConfigDetail`（读列表的那个）也继承它。
+库里只要有一个不合格的值（直接改库 / 范围后来收紧了 / 依赖运行时环境变量的检查不再成立），**参数配置列表 500，管理员连在界面上改回去都做不到**。
+MFA 这条依赖检查第一次就踩到了：变异检验时 `all` 被真写进了 `fba_test`，下一轮整个配置列表 `ResponseValidationError`。
+现在校验只挂在写入的三个参数模型上（`_WriteChecked`），读路径不校验；读取侧的回落在 `load_config` 里本来就有。
+
+**实测证据**：`tests/test_totp.py`（RFC 6238 附录 B 的 SHA1 向量 6 组全对 + 重放 / 窗口 / 格式）· `tests/api_v1/test_mfa.py` 14 条 ·
+`plugin/sms/tests/test_phone_login.py::test_two_factor_applies_to_phone_login_too` · E2E `mfa.spec.ts`。
+变异各有测试变红：密码 / 手机登录不过 gate · 不防重放 · 恢复码不标记已用 · 密码对了就清零 · 失败不计入账号 · 被强制也能关 ·
+没密钥也能改成强制 · Swagger 不拦 · 恢复码不脱敏 · 绑定令牌能拿来验证 · 读路径也校验 · 前端忽略挑战直接当登录成功（E2E）。
+迁移 `ad000000usermfa`：PostgreSQL 在开发库副本上 up → down → up（表和参数行都在 / 都没 / 都在）；SQL Server 在 `fba_test` 上 down → up 两轮，主键 `sys.identity_columns` 0 行。**没验过**：第三方登录真走一遍（要 GitHub / Google 的回调）、
+打包出来的桌面端、真机上的移动端（只过了 typecheck）。

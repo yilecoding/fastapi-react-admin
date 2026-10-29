@@ -10,9 +10,12 @@ from starlette.concurrency import run_in_threadpool
 from backend.app.admin.crud.crud_menu import menu_dao
 from backend.app.admin.crud.crud_user import user_dao
 from backend.app.admin.model import User
-from backend.app.admin.schema.token import GetLoginToken, GetNewToken
+from backend.app.admin.schema.mfa import MfaChallenge, MfaChallengeParam, MfaSetupInfo, MfaTokenParam
+from backend.app.admin.schema.token import GetLoginToken, GetMfaEnrollToken, GetNewToken
 from backend.app.admin.schema.user import AuthLoginParam, AuthPhoneCaptchaParam, AuthPhoneLoginParam
+from backend.app.admin.service import mfa_service as mfa
 from backend.app.admin.service.login_log_service import login_log_service
+from backend.app.admin.service.mfa_service import gate as mfa_gate
 from backend.app.admin.service.user_password_history_service import password_security_service
 from backend.app.admin.utils.password_security import get_hash_password, password_verify
 from backend.common.context import ctx
@@ -117,11 +120,16 @@ class AuthService:
         days_remaining = await password_security_service.check_password_expiry_status(
             db, user.last_password_changed_time
         )
-
-        await password_security_service.handle_login_success(user.id)
-        await password_security_service.handle_ip_login_success(ip)
-
+        # 🔴 失败计数**不在这里清零**（#181）：开了二次验证的账号，密码对了只算过了一半。
+        # 这里清零的话，有密码的人每登一次能试 5 次动态码、登完又清零 —— 等于无限试。
+        # 调用方在真正放行时调 mark_login_success
         return user, days_remaining
+
+    @staticmethod
+    async def mark_login_success(user_id: int) -> None:
+        """真正放行时清零失败计数（账号 + IP）。不需要第二步的直接调，需要的在第二步通过之后调"""
+        await password_security_service.handle_login_success(user_id)
+        await password_security_service.handle_ip_login_success(ctx.ip)
 
     async def swagger_login(self, *, db: AsyncSession, obj: HTTPBasicCredentials) -> tuple[str, User]:
         """
@@ -132,6 +140,10 @@ class AuthService:
         :return:
         """
         user, _ = await self.user_verify(db, obj.username, obj.password)
+        # HTTP Basic 做不了第二步：开了 / 被强制二次验证的账号不能从这里绕过去（这个口只在非 prod 注册）
+        if await mfa_gate(db, user, client=SessionClient.swagger) is not None:
+            raise errors.AuthorizationError(msg=t('error.mfa.swagger_unsupported'))
+        await self.mark_login_success(user.id)
         await user_dao.update_login_time(db, obj.username)
         # 只发 access token、不续期、不计入会话上限、不进在线列表（`SessionClient.swagger`）
         session = await session_store.create(user_id=user.id, client=SessionClient.swagger, meta=session_meta(user))
@@ -148,7 +160,7 @@ class AuthService:
         response: Response,
         obj: AuthLoginParam,
         background_tasks: BackgroundTasks,
-    ) -> GetLoginToken:
+    ) -> GetLoginToken | MfaChallenge:
         """
         用户登录
 
@@ -164,6 +176,11 @@ class AuthService:
             await load_login_config(db)
             await self._verify_graphical_captcha(obj.uuid, obj.captcha)
             user, days_remaining = await self.user_verify(db, obj.username, obj.password)
+            challenge = await mfa_gate(db, user, client=obj.client, extra={'days': days_remaining})
+            if challenge is not None:
+                # 密码对了、还差动态码：不开会话、不记成功日志（第二步通过才记）
+                return challenge
+            await self.mark_login_success(user.id)
             access_token_data = await self._open_session(
                 db=db, request=request, response=response, user=user, client=obj.client
             )
@@ -207,6 +224,122 @@ class AuthService:
                 user=user,  # type: ignore
             )
             return data
+
+    async def _mfa_user(self, db: AsyncSession, payload: dict) -> User:
+        """第二步通过之后取人：这几分钟里账号可能被停用 / 锁定了，照样要拦"""
+        user = await user_dao.get(db, int(payload['user_id']))
+        if user is None:
+            raise errors.AuthorizationError(msg=t('error.mfa.challenge_expired'))
+        lock_reason = await password_security_service.peek_lock_reason(user.id, user.status)
+        if lock_reason is not None:
+            raise errors.AuthorizationError(msg=lock_reason)
+        return user
+
+    async def _finish_mfa_login(
+        self,
+        *,
+        db: AsyncSession,
+        request: Request,
+        response: Response,
+        user: User,
+        payload: dict,
+        background_tasks: BackgroundTasks,
+    ) -> GetLoginToken:
+        await self.mark_login_success(user.id)
+        access = await self._open_session(
+            db=db, request=request, response=response, user=user, client=str(payload.get('client') or 'web')
+        )
+        background_tasks.add_task(
+            login_log_service.create,
+            user_uuid=user.uuid,
+            username=user.username,
+            login_time=timezone.now(),
+            status=LoginLogStatusType.success.value,
+            msg=t('success.login.mfa_success'),
+        )
+        return GetLoginToken(
+            access_token=access.access_token,
+            access_token_expire_time=access.access_token_expire_time,
+            session_uuid=access.session_uuid,
+            password_expire_days_remaining=payload.get('days'),
+            user=user,  # type: ignore
+        )
+
+    @staticmethod
+    def _mfa_failure_log(e: errors.BaseExceptionError, user: User | None) -> None:
+        """第二步失败也写登录日志（动态码错是撞库成功之后最值得看的那一条）"""
+        e.background = BackgroundTask(
+            login_log_service.create,
+            user_uuid=user.uuid if user else uuid4_str(),
+            username=user.username if user else '-',
+            login_time=timezone.now(),
+            status=LoginLogStatusType.fail.value,
+            msg=e.msg,
+        )
+
+    async def mfa_login(
+        self,
+        *,
+        db: AsyncSession,
+        request: Request,
+        response: Response,
+        obj: MfaChallengeParam,
+        background_tasks: BackgroundTasks,
+    ) -> GetLoginToken:
+        """登录第二步：动态码或恢复码（#181）"""
+        user: User | None = None
+        try:
+            payload = await mfa.verify_challenge(db, obj.mfa_token, obj.otp)
+            user = await self._mfa_user(db, payload)
+            return await self._finish_mfa_login(
+                db=db, request=request, response=response, user=user, payload=payload, background_tasks=background_tasks
+            )
+        except errors.BaseExceptionError as e:
+            if user is None:
+                user = await self._challenge_user(db, obj.mfa_token)
+            self._mfa_failure_log(e, user)
+            raise
+
+    async def mfa_setup(self, *, db: AsyncSession, obj: MfaTokenParam) -> MfaSetupInfo:
+        """被强制但还没绑：登录过程中先拿二维码"""
+        user = await self._challenge_user(db, obj.mfa_token)
+        if user is None:
+            raise errors.AuthorizationError(msg=t('error.mfa.challenge_expired'))
+        return await mfa.challenge_setup(obj.mfa_token, user)
+
+    async def mfa_enroll(
+        self,
+        *,
+        db: AsyncSession,
+        request: Request,
+        response: Response,
+        obj: MfaChallengeParam,
+        background_tasks: BackgroundTasks,
+    ) -> GetMfaEnrollToken:
+        """被强制但还没绑：输对一次动态码 = 绑定完成 + 直接登录，恢复码只在这一次下发"""
+        user: User | None = None
+        try:
+            payload, codes = await mfa.challenge_enroll(db, obj.mfa_token, obj.otp)
+            user = await self._mfa_user(db, payload)
+            token = await self._finish_mfa_login(
+                db=db, request=request, response=response, user=user, payload=payload, background_tasks=background_tasks
+            )
+            return GetMfaEnrollToken(**token.model_dump(), recovery_codes=codes.recovery_codes)
+        except errors.BaseExceptionError as e:
+            if user is None:
+                user = await self._challenge_user(db, obj.mfa_token)
+            self._mfa_failure_log(e, user)
+            raise
+
+    @staticmethod
+    async def _challenge_user(db: AsyncSession, token: str) -> User | None:
+        """令牌对应的人（令牌可能已经过期 / 作废了 —— 那就是 None）"""
+        import json
+
+        raw = await redis_client.get(f'{settings.MFA_REDIS_PREFIX}:challenge:{token}')
+        if not raw:
+            return None
+        return await user_dao.get(db, int(json.loads(raw)['user_id']))
 
     @staticmethod
     async def _verify_graphical_captcha(uuid: str | None, captcha: str | None) -> None:
@@ -314,7 +447,7 @@ class AuthService:
         response: Response,
         obj: AuthPhoneLoginParam,
         background_tasks: BackgroundTasks,
-    ) -> GetLoginToken:
+    ) -> GetLoginToken | MfaChallenge:
         """
         手机验证码登录（issue #168 第二步）
 
@@ -339,6 +472,8 @@ class AuthService:
             from backend.plugin.sms.service.captcha_service import sms_captcha_service
 
             ip = ctx.ip
+            # 二次验证的强制策略在登录配置里（#181）；这条路原来不需要它
+            await load_login_config(db)
             await password_security_service.check_ip_lock(ip)
             user = await user_dao.check_phone(db, obj.phone)
             eligible = user is not None and user.phone_verified_time is not None
@@ -360,8 +495,10 @@ class AuthService:
             days_remaining = await password_security_service.check_password_expiry_status(
                 db, user.last_password_changed_time
             )
-            await password_security_service.handle_login_success(user.id)
-            await password_security_service.handle_ip_login_success(ip)
+            challenge = await mfa_gate(db, user, client=obj.client, extra={'days': days_remaining})
+            if challenge is not None:
+                return challenge
+            await self.mark_login_success(user.id)
             access_token_data = await self._open_session(
                 db=db, request=request, response=response, user=user, client=obj.client
             )

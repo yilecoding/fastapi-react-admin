@@ -62,6 +62,13 @@ const SESSION_OVERFLOW_OPTIONS = [
   { value: 'deny', label: '拒绝新登录' },
 ]
 
+/** 二次验证强制策略（后端 `dynamic_config.MFA_ENFORCE_MODES`，#181） */
+const MFA_ENFORCE_OPTIONS = [
+  { value: 'off', label: '不强制（自愿开启）' },
+  { value: 'superuser', label: '超级管理员必须开' },
+  { value: 'all', label: '所有人必须开' },
+]
+
 export const REGISTRY: Record<string, SettingMeta> = {
   // ── 开发工具 ───────────────────────────────────────────────────────────────
   DEV_CONFIG_STATUS: {
@@ -85,6 +92,14 @@ export const REGISTRY: Record<string, SettingMeta> = {
     label: '图形验证码',
     hint: '关闭后登录不再要求验证码，暴力破解的门槛会显著降低',
     danger: true,
+  },
+  LOGIN_MFA_ENFORCE: {
+    section: '登录校验',
+    order: 2,
+    label: '二次验证强制',
+    widget: 'select',
+    options: MFA_ENFORCE_OPTIONS,
+    hint: '被强制、还没绑定的人下次登录会先用认证器扫码绑定，绑定之前进不了系统。服务器没配 MFA_SECRET_KEY 时只能选「不强制」',
   },
 
   // ── 口令强度 ───────────────────────────────────────────────────────────────
@@ -655,7 +670,11 @@ export function sectionSummary(section: string, get: (key: string) => string | u
   }
 
   if (section === '登录校验') {
-    return b('LOGIN_CAPTCHA_ENABLED') ? t('登录需要图形验证码') : t('登录不需要验证码')
+    const captchaText = b('LOGIN_CAPTCHA_ENABLED') ? t('登录需要图形验证码') : t('登录不需要验证码')
+    const mfa = get('LOGIN_MFA_ENFORCE')
+    const mfaText =
+      mfa === 'all' ? t('所有人必须二次验证') : mfa === 'superuser' ? t('超管必须二次验证') : t('二次验证自愿开启')
+    return `${captchaText} · ${mfaText}`
   }
 
   return null

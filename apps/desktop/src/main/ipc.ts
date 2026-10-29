@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain } from "electron"
 
 import { IPC } from "@admin/platform/desktop/contract"
-import type { AuthLoginInput, AuthPhoneLoginInput, DesktopConfig, PrintOptions } from "@admin/platform/desktop/contract"
+import type { AuthLoginInput, AuthMfaInput, AuthPhoneLoginInput, DesktopConfig, PrintOptions } from "@admin/platform/desktop/contract"
 
 import * as auth from "./auth"
 import { readConfig, writeConfig } from "./config"
@@ -24,6 +24,8 @@ export function registerIpc(appInfo: () => unknown): void {
 
   ipcMain.handle(IPC.authLogin, (_e, input: AuthLoginInput) => auth.login(input))
   ipcMain.handle(IPC.authLoginByPhone, (_e, input: AuthPhoneLoginInput) => auth.loginByPhone(input))
+  ipcMain.handle(IPC.authMfaVerify, (_e, input: AuthMfaInput) => auth.mfaVerify(input))
+  ipcMain.handle(IPC.authMfaEnroll, (_e, input: AuthMfaInput) => auth.mfaEnroll(input))
   ipcMain.handle(IPC.authRefresh, () => auth.refresh())
   ipcMain.handle(IPC.authRestore, () => auth.restore())
   ipcMain.handle(IPC.authLogout, () => auth.logout())

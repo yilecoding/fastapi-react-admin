@@ -291,3 +291,41 @@ export function useUploadAvatar() {
     onSuccess: () => qc.invalidateQueries({ queryKey: authKeys.me() }),
   })
 }
+
+/* ── 二次验证（#181）── 动态码字段叫 `otp`：后端按这个键名把它从操作日志里脱掉 */
+
+export type MfaStatus = {
+  enabled: boolean
+  enabled_time: string | null
+  recovery_remaining: number
+  /** 按策略这个人必须开（开了就不能自己关） */
+  enforced: boolean
+  /** 服务端配了 MFA_SECRET_KEY（没配时开不了） */
+  available: boolean
+}
+
+export const mfaKeys = { status: ['profile', 'mfa'] as const }
+
+export const mfaStatusQuery = queryOptions({
+  queryKey: mfaKeys.status,
+  queryFn: () => api.GET<MfaStatus>('/api/v1/sys/users/me/mfa'),
+})
+
+export function useMfaSetup() {
+  return useMutation({
+    mutationFn: () => api.POST<{ totp_secret: string; otpauth_uri: string }>('/api/v1/sys/users/me/mfa/setup'),
+  })
+}
+
+function useMfaAction<T>(path: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (otp: string) => api.POST<T>(path, { body: { otp } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: mfaKeys.status }),
+  })
+}
+
+export const useMfaEnable = () => useMfaAction<{ recovery_codes: string[] }>('/api/v1/sys/users/me/mfa/enable')
+export const useMfaDisable = () => useMfaAction<null>('/api/v1/sys/users/me/mfa/disable')
+export const useMfaRegenerate = () =>
+  useMfaAction<{ recovery_codes: string[] }>('/api/v1/sys/users/me/mfa/recovery-codes')

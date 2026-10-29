@@ -128,6 +128,17 @@ error:
     not_found: Menu does not exist
     parent_not_found: Parent menu does not exist
     title_exists: Menu title already exists
+  mfa:
+    already_enabled: Two-factor authentication is already on
+    challenge_expired: Two-factor verification expired, please sign in again
+    enforced: Your administrator requires two-factor authentication for your account; it cannot be turned off
+    invalid_code: Wrong code (or the recovery code was already used)
+    not_enabled: Two-factor authentication is not on yet
+    secret_key_invalid: MFA_SECRET_KEY is not a valid hex key (32 bytes / 64 hex characters)
+    secret_key_missing: MFA_SECRET_KEY is not configured, two-factor authentication cannot be turned on. Generate one with python -c "import os;print(os.urandom(32).hex())", put it in .env and restart
+    setup_expired: Setup expired, please scan the code again
+    setup_required: Please finish setting up two-factor authentication first
+    swagger_unsupported: This account uses two-factor authentication; sign in from the login page (the Swagger shortcut cannot do the second step)
   notice:
     not_found: Notice does not exist
   notification:
@@ -526,6 +537,7 @@ response:
 
 success:
   login:
+    mfa_success: Signed in (two-factor)
     oauth2_success: Login success (OAuth2)
     success: Login success
 

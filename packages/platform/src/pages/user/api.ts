@@ -221,3 +221,11 @@ export function useResetUserPassword() {
       api.PUT(`/api/v1/sys/users/${id}/password`, { body: { password } }),
   })
 }
+
+/** 重置用户的二次验证（#181，超管）：手机丢了的人下次登录重新绑定（被强制的）/ 直接关掉（没被强制的） */
+export function useResetUserMfa() {
+  return useMutation({
+    meta: { suppressErrorToast: true },
+    mutationFn: (id: string) => api.DELETE(`/api/v1/sys/users/${id}/mfa`),
+  })
+}

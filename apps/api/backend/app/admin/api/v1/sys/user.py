@@ -13,6 +13,7 @@ from backend.app.admin.schema.data_import import (
     ImportPreviewDetail,
 )
 from backend.app.admin.schema.export_job import GetExportJobDetail, StartExportParam
+from backend.app.admin.schema.mfa import GetMfaStatus, MfaOtpParam, MfaRecoveryCodes, MfaSetupInfo
 from backend.app.admin.schema.role import GetRoleDetail
 from backend.app.admin.schema.user import (
     AddUserParam,
@@ -23,6 +24,7 @@ from backend.app.admin.schema.user import (
 )
 from backend.app.admin.service.export_service import export_service
 from backend.app.admin.service.import_service import import_service
+from backend.app.admin.service.mfa_service import mfa_service
 from backend.app.admin.service.user_service import user_service
 from backend.common.enums import UserPermissionType
 from backend.common.pagination import DependsPagination, PageData
@@ -318,3 +320,61 @@ async def delete_user(db: CurrentSessionTransaction, pk: Annotated[int, Path(des
     if count > 0:
         return response_base.success()
     return response_base.fail()
+
+
+# ── 二次验证（#181）：个人中心自助 + 管理员重置 ──
+# 自助那几条要动态码的接口按人限流：已登录的人输错不锁账号（他已经过了一次二次验证），但不能无限试
+
+
+@router.get('/me/mfa', summary='获取当前用户的二次验证状态', dependencies=[DependsJwtAuth])
+async def get_my_mfa(db: CurrentSession, request: Request) -> ResponseSchemaModel[GetMfaStatus]:
+    return response_base.success(data=await mfa_service.status(db, request.user))
+
+
+@router.post(
+    '/me/mfa/setup',
+    summary='开启二次验证：取绑定用的密钥和二维码',
+    dependencies=[DependsJwtAuth, Depends(RateLimiter(Rate(10, Duration.MINUTE)))],
+)
+async def setup_my_mfa(db: CurrentSession, request: Request) -> ResponseSchemaModel[MfaSetupInfo]:
+    return response_base.success(data=await mfa_service.start_setup(db, request.user))
+
+
+@router.post(
+    '/me/mfa/enable',
+    summary='开启二次验证：输对一次动态码确认，恢复码只下发这一次',
+    dependencies=[DependsJwtAuth, Depends(RateLimiter(Rate(10, Duration.MINUTE)))],
+)
+async def enable_my_mfa(
+    db: CurrentSessionTransaction, request: Request, obj: MfaOtpParam
+) -> ResponseSchemaModel[MfaRecoveryCodes]:
+    return response_base.success(data=await mfa_service.enable(db, request.user, obj.otp))
+
+
+@router.post(
+    '/me/mfa/disable',
+    summary='关闭二次验证（要动态码或恢复码；被策略强制的不能关）',
+    dependencies=[DependsJwtAuth, Depends(RateLimiter(Rate(10, Duration.MINUTE)))],
+)
+async def disable_my_mfa(db: CurrentSessionTransaction, request: Request, obj: MfaOtpParam) -> ResponseModel:
+    await mfa_service.disable(db, request.user, obj.otp)
+    return response_base.success()
+
+
+@router.post(
+    '/me/mfa/recovery-codes',
+    summary='重新生成恢复码（旧的全部作废，要动态码或恢复码）',
+    dependencies=[DependsJwtAuth, Depends(RateLimiter(Rate(10, Duration.MINUTE)))],
+)
+async def regenerate_my_recovery_codes(
+    db: CurrentSessionTransaction, request: Request, obj: MfaOtpParam
+) -> ResponseSchemaModel[MfaRecoveryCodes]:
+    return response_base.success(data=await mfa_service.regenerate_codes(db, request.user, obj.otp))
+
+
+@router.delete('/{pk}/mfa', summary='重置用户的二次验证（手机丢了）', dependencies=[DependsSuperUser])
+async def reset_user_mfa(
+    db: CurrentSessionTransaction, pk: Annotated[int, Path(description='用户 ID')]
+) -> ResponseModel:
+    await mfa_service.admin_reset(db, pk)
+    return response_base.success()
