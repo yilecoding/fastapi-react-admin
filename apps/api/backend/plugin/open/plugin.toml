@@ -1,7 +1,7 @@
 [plugin]
 summary = "能力开放"
-version = "0.0.1"
-description = "给外部系统发 AK/SK，签名调用只读的开放接口（/api/open/v1）；调用全程留日志"
+version = "0.0.2"
+description = "给外部系统发 AK/SK，签名调用只读的开放接口（/api/open/v1）；调用全程留日志。Webhook 事件订阅：事件发生后签名 POST 给对方"
 author = "yile"
 tags = ["other"]
 database = ["mysql", "postgresql", "sqlserver"]
@@ -25,3 +25,20 @@ OPEN_SECRET_KEY = ""
 # 时间戳与服务端时间允许相差的秒数；nonce 在 Redis 里存它的 2 倍，
 # 保证窗口内重放一定撞上 nonce、窗口外重放一定撞上时间戳
 OPEN_SIGN_WINDOW_SECONDS = 300
+
+# ── Webhook 事件订阅（#167）──────────────────────────────────────────────
+# 总闸：关掉后事件照记（审计），但不再生成投递。参数配置「Webhook」组可覆盖
+OPEN_WEBHOOK_ENABLED = true
+# 连续失败这么多次、且这一轮第一次失败已过去 24 小时 → 自动停用端点（只按次数会把对方夜里重启十分钟当成死端点）
+OPEN_WEBHOOK_DISABLE_AFTER = 20
+# 事件 / 投递 / 尝试记录保留天数（`maintenance.prune_logs` 一起删）
+OPEN_WEBHOOK_RETENTION_DAYS = 30
+OPEN_WEBHOOK_MAX_PER_APP = 10
+# 规范建议 15–30 秒（飞书给接收方 3 秒、企微 5 秒；我们是发送方，宽一点）
+OPEN_WEBHOOK_TIMEOUT_SECONDS = 15
+# 照飞书事件订阅：15 秒 / 5 分钟 / 1 小时 / 6 小时，共 5 次尝试、约 7 小时
+OPEN_WEBHOOK_RETRY_BACKOFF_SECONDS = "15,300,3600,21600"
+OPEN_WEBHOOK_DELIVERY_BATCH = 50
+OPEN_WEBHOOK_SENDING_STALE_SECONDS = 120
+# 🔴 只给本地联调 / E2E：放行回环 / 私网地址和 http。生产保持 false
+OPEN_WEBHOOK_ALLOW_PRIVATE_NETWORK = false

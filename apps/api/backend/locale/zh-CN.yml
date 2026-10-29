@@ -168,6 +168,13 @@ error:
     secret_key_missing: 未配置 OPEN_SECRET_KEY，无法安全保存 Secret Key。生成方式：python -c "import os;print(os.urandom(32).hex())"，写入 .env 后重启服务
     sign_mismatch: 签名不匹配，请对照返回的 string_to_sign 逐行核对
     timestamp_expired: 时间戳超出允许范围（±{window} 秒），请校准服务器时钟
+    webhook_delivery_not_found: 投递记录不存在
+    webhook_delivery_not_resendable: 只有失败或已放弃的投递可以重发
+    webhook_events_unknown: '这些事件不存在：{events}'
+    webhook_limit: 每个应用最多 {max} 个 Webhook 端点
+    webhook_not_found: Webhook 端点不存在
+    webhook_scope_missing: '订阅这些事件要先给应用授权「{scopes}」：{events}'
+    webhook_url_invalid: 'Webhook 地址不可用：{reason}'
   password:
     max_length: 密码长度不能超过 {max_length} 个字符
     min_length: 密码长度不能少于 {min_length} 个字符
@@ -633,6 +640,11 @@ messages:
   Method Not Allowed: 不支持的请求方法
   Not Found: 请求的资源不存在
   Internal Server Error: 服务器内部错误
+open:
+  webhook:
+    disabled_title: 'Webhook 端点已停用：{name}'
+    disabled_auto: '应用「{app}」的端点 {url} 连续失败 {n} 次、超过 24 小时，已自动停用。修好之后重新启用，再到投递记录里批量重发'
+    disabled_gone: '应用「{app}」的端点 {url} 回复了 410 Gone，已停用。确认地址后重新启用'
 workflow:
   default_title: '{user}提交的{name}'
   no_assignee: 没有找到审批人，已自动跳过

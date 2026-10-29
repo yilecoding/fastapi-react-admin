@@ -12,6 +12,7 @@ from backend.app.admin.schema.user import AddOAuth2UserParam
 from backend.app.admin.service.auth_service import auth_service, session_meta
 from backend.app.admin.service.login_log_service import login_log_service
 from backend.app.admin.service.user_password_history_service import password_security_service
+from backend.app.admin.service.user_service import emit_user_event
 from backend.common.context import ctx
 from backend.common.enums import LoginLogStatusType
 from backend.common.exception import errors
@@ -91,8 +92,10 @@ class OAuth2Service:
                     email=email,
                     avatar=avatar,
                 )
-                await user_dao.add_by_oauth2(db, new_sys_user)
+                created = await user_dao.add_by_oauth2(db, new_sys_user)
                 await db.flush()
+                # 第三方登录首次进来自动建的号同样是「用户已创建」（#167），漏了对方的用户副本就少一个人
+                await emit_user_event(db, 'user.created', created.id)
                 sys_user = await user_dao.get_by_username(db, username)
 
             # 绑定社交账号

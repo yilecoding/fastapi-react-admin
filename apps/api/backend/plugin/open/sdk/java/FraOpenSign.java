@@ -82,4 +82,45 @@ public final class FraOpenSign {
         h.put("X-Sign", sign);
         return h;
     }
+
+    // ── 接收 Webhook 事件（Standard Webhooks）────────────────────────────────
+    //
+    // 🔴 body 要传**收到的原始字节**，不要先反序列化再序列化回去 —— 字节一变签名就对不上。
+    // 密钥轮换的那 24 小时里一条消息带两个签名（空格分隔），任一个对上即可。对方会重试，请按 webhook-id 去重。
+    // headers 的键请先统一成小写（各框架给的大小写不一样）。
+    public static boolean verifyWebhook(Map<String, String> headers, byte[] body, String secret, long toleranceSeconds, long nowSeconds)
+            throws Exception {
+        String id = headers.get("webhook-id");
+        String ts = headers.get("webhook-timestamp");
+        String sigs = headers.get("webhook-signature");
+        if (id == null || ts == null || sigs == null) return false;
+        long timestamp;
+        try {
+            timestamp = Long.parseLong(ts);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+        if (Math.abs(nowSeconds - timestamp) > toleranceSeconds) return false;
+        byte[] key = java.util.Base64.getDecoder().decode(secret.startsWith("whsec_") ? secret.substring(6) : secret);
+        Mac mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(key, "HmacSHA256"));
+        mac.update((id + "." + timestamp + ".").getBytes(StandardCharsets.UTF_8));
+        byte[] expected = mac.doFinal(body);
+        for (String part : sigs.split(" ")) {
+            int comma = part.indexOf(',');
+            if (comma < 0 || !"v1".equals(part.substring(0, comma))) continue;
+            byte[] got;
+            try {
+                got = java.util.Base64.getDecoder().decode(part.substring(comma + 1));
+            } catch (IllegalArgumentException e) {
+                continue;
+            }
+            if (MessageDigest.isEqual(got, expected)) return true;
+        }
+        return false;
+    }
+
+    public static boolean verifyWebhook(Map<String, String> headers, byte[] body, String secret) throws Exception {
+        return verifyWebhook(headers, body, secret, 300, System.currentTimeMillis() / 1000);
+    }
 }

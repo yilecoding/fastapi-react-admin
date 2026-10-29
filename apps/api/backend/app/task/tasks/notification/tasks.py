@@ -52,7 +52,9 @@ async def send_daily_greeting() -> str:
     return msg
 
 
-@celery_app.task(name='notification.deliver_pending')
+# 🔴 每 15 秒一次的高频任务：`ignore_result` 不往执行记录写（一天 5760 行会淹没「执行记录」页），
+# `notify=False` 不给所有在线页面推「开始 / 成功」提示（task 分册「高频任务的两条纪律」，同 `health.heartbeat`）
+@celery_app.task(name='notification.deliver_pending', ignore_result=True, notify=False)
 @with_timeout()
 async def deliver_pending() -> str:
     """把到点的通知投递发出去（邮件 / 短信，#166）。

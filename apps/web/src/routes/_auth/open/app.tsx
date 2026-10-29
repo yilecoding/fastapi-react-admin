@@ -14,6 +14,13 @@ const searchSchema = z.object({
   hide: z.string().optional(),
   /** 可移动列的顺序，逗号分隔（`pages/_shared/use-column-order.ts`）；默认顺序不写 */
   cols: z.string().optional(),
+  /** Webhook 抽屉（#167）：应用 ID（雪花，保持字符串 —— 硬纪律 6）· 页签 · 投递记录的状态 / 端点 / 页码 / 打开的那一条 */
+  webhook: z.string().optional(),
+  wtab: z.enum(["endpoints", "deliveries", "events"]).optional(),
+  wstatus: z.string().optional(),
+  whook: z.string().optional(),
+  wpage: z.coerce.number().int().min(1).optional(),
+  wdel: z.string().optional(),
 })
 
 /** 页面由 TabOutlet 挂载；这里只声明 search schema / staticData / 权限 */

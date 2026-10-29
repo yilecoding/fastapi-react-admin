@@ -189,13 +189,13 @@ class CRUDUser(DataScopedCRUD[User]):
 
         return stmt
 
-    async def add(self, db: AsyncSession, obj: AddUserParam) -> None:
+    async def add(self, db: AsyncSession, obj: AddUserParam) -> User:
         """
         添加用户
 
         :param db: 数据库会话
         :param obj: 添加用户参数
-        :return:
+        :return: 新用户（已 flush，有 ID）
         """
         salt = bcrypt.gensalt()
         obj.password = get_hash_password(obj.password, salt)
@@ -214,6 +214,7 @@ class CRUDUser(DataScopedCRUD[User]):
             user_role_data = [AddUserRoleParam(user_id=new_user.id, role_id=role.id).model_dump() for role in roles]
             user_role_stmt = insert(user_role)
             await db.execute(user_role_stmt, user_role_data)
+        return new_user
 
     async def get_existing_usernames(self, db: AsyncSession, usernames: list[str]) -> set[str]:
         """
@@ -249,7 +250,7 @@ class CRUDUser(DataScopedCRUD[User]):
             stmt = select(User.phone).where(User.phone.in_(phones), User.deleted == 0)
             return set((await db.execute(stmt)).scalars().all())
 
-    async def bulk_add(self, db: AsyncSession, rows: list[dict[str, Any]], password: str) -> list[str]:
+    async def bulk_add(self, db: AsyncSession, rows: list[dict[str, Any]], password: str) -> list[User]:
         """
         批量建用户。
 
@@ -266,7 +267,7 @@ class CRUDUser(DataScopedCRUD[User]):
 
         :param rows: 每行 `{'username','nickname','email','phone','dept_id','role_ids'}`
         :param password: 明文密码，整批共用
-        :return: 成功创建的用户名
+        :return: 新建的用户（已 flush，有 ID）
         """
         salt = bcrypt.gensalt()
         hashed = get_hash_password(password, salt)
@@ -296,15 +297,15 @@ class CRUDUser(DataScopedCRUD[User]):
         if user_role_data:
             await db.execute(insert(user_role), user_role_data)
 
-        return [user.username for user in users]
+        return users
 
-    async def add_by_oauth2(self, db: AsyncSession, obj: AddOAuth2UserParam) -> None:
+    async def add_by_oauth2(self, db: AsyncSession, obj: AddOAuth2UserParam) -> User:
         """
         通过 OAuth2 添加用户
 
         :param db: 数据库会话
         :param obj: 注册用户参数
-        :return:
+        :return: 新用户
         """
         dict_obj = obj.model_dump()
         dict_obj.update({'is_staff': True, 'salt': None})
@@ -320,6 +321,7 @@ class CRUDUser(DataScopedCRUD[User]):
 
         user_role_stmt = insert(user_role).values(AddUserRoleParam(user_id=new_user.id, role_id=role.id).model_dump())
         await db.execute(user_role_stmt)
+        return new_user
 
     async def update(self, db: AsyncSession, user_id: int, obj: UpdateUserParam) -> int:
         """

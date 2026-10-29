@@ -364,6 +364,43 @@ export const REGISTRY: Record<string, SettingMeta> = {
     max: 365,
     hint: '每天凌晨的日志清理一起删。和登录 / 操作日志的保留期分开设',
   },
+
+  // ── Webhook 事件订阅（#167）。范围和后端 `dynamic_config.DYNAMIC_INT_BOUNDS` 对账 ──
+  OPEN_WEBHOOK_ENABLED: {
+    section: 'Webhook 投递',
+    order: 1,
+    label: 'Webhook 总开关',
+    hint: '关掉后事件照记（审计用），但不再给任何端点生成投递；已经在排队的照常发完。端点在「能力开放 → 应用管理 → Webhook」里配',
+  },
+  OPEN_WEBHOOK_DISABLE_AFTER: {
+    section: 'Webhook 投递',
+    order: 2,
+    label: '自动停用阈值',
+    unit: '次',
+    widget: 'int',
+    min: 3,
+    max: 1000,
+    hint: '连续失败这么多次、且这一轮第一次失败已经过去 24 小时，才自动停用端点并通知应用创建人。只按次数的话，对方夜里重启十分钟就会被当成死端点',
+  },
+  OPEN_WEBHOOK_MAX_PER_APP: {
+    section: 'Webhook 投递',
+    order: 3,
+    label: '每个应用最多端点数',
+    unit: '个',
+    widget: 'int',
+    min: 1,
+    max: 100,
+  },
+  OPEN_WEBHOOK_RETENTION_DAYS: {
+    section: 'Webhook 记录',
+    order: 1,
+    label: '保留天数',
+    unit: '天',
+    widget: 'int',
+    min: 1,
+    max: 365,
+    hint: '事件、投递和每一次尝试的记录，每天凌晨的日志清理一起删',
+  },
 }
 
 export const metaOf = (key: string): SettingMeta | undefined => REGISTRY[key]
@@ -430,6 +467,11 @@ export const RAIL: RailGroup[] = [
         id: 'NOTIFICATION',
         label: '通知推送',
         desc: '站内通知之外的邮件 / 短信：总开关、失败重试、投递记录保留多久。哪类通知走哪条渠道在「消息推送 → 通知策略」里设。',
+      },
+      {
+        id: 'OPEN_WEBHOOK',
+        label: 'Webhook',
+        desc: '把用户 / 部门 / 审批的变更签名推给对接系统：总开关、自动停用阈值、记录保留多久。端点在「能力开放 → 应用管理」里每个应用自己配。',
       },
     ],
   },

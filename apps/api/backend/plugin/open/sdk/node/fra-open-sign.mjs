@@ -6,7 +6,7 @@
 //   const res = await fetch(url, { headers })
 //
 // 🔴 请求体要签**实际发出去的那串字节**：先 JSON.stringify 得到字符串、签它、再原样当 body 发。
-import { createHash, createHmac, randomUUID } from 'node:crypto'
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
 
 // RFC 3986：encodeURIComponent 不编码 ! ' ( ) *，这里补上
 const encode = (s) =>
@@ -49,3 +49,28 @@ export function signHeaders(method, url, body, { accessKey, secretKey, timestamp
   const sign = createHmac('sha256', secretKey).update(stringToSign(method, url, body, ts, n)).digest('hex')
   return { 'X-Access-Key': accessKey, 'X-Timestamp': ts, 'X-Nonce': n, 'X-Sign': sign }
 }
+
+// ── 接收 Webhook 事件（Standard Webhooks）────────────────────────────────────
+//
+// 🔴 body 要传**收到的原始字节**（Express 里用 express.raw({ type: 'application/json' })），
+// 不要先 JSON.parse 再 JSON.stringify 回去 —— 字节一变签名就对不上。
+// 密钥轮换的那 24 小时里一条消息带两个签名（空格分隔），任一个对上即可。对方会重试，请按 webhook-id 去重。
+export function verifyWebhook(headers, body, secret, { tolerance = 300, now = Date.now() / 1000 } = {}) {
+  const h = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), String(v)]))
+  const id = h['webhook-id']
+  const ts = Number(h['webhook-timestamp'])
+  const sigs = h['webhook-signature']
+  if (!id || !Number.isInteger(ts) || !sigs) return false
+  if (Math.abs(now - ts) > tolerance) return false
+  const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64')
+  const expected = createHmac('sha256', key)
+    .update(Buffer.concat([Buffer.from(`${id}.${ts}.`), Buffer.from(body)]))
+    .digest()
+  return sigs.split(' ').some((part) => {
+    const [version, value] = part.split(',', 2)
+    if (version !== 'v1' || !value) return false
+    const got = Buffer.from(value, 'base64')
+    return got.length === expected.length && timingSafeEqual(got, expected)
+  })
+}
+

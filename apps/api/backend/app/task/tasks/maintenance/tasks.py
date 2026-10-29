@@ -99,6 +99,14 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
     except ImportError:
         NotificationDelivery = None  # ruff: ignore[non-lowercase-variable-in-function]
 
+    # Webhook 事件 / 投递 / 尝试（#167）**自己的**保留期（参数配置「Webhook」组可改），理由同通知投递。
+    # 🔴 读保留期走 `webhook_settings`（直接查 sys_config），不走带 Redis 缓存的 `load_config`：见那个函数的注释
+    try:
+        from backend.plugin.open.model import OpenEvent, OpenWebhookAttempt, OpenWebhookDelivery
+        from backend.plugin.open.service.webhook_config import webhook_settings
+    except ImportError:
+        OpenEvent = None  # ruff: ignore[non-lowercase-variable-in-function]
+
     async with async_db_session() as db:
         login = await _prune_table(db, LoginLog, LoginLog.login_time, cutoff, batch)
         opera = await _prune_table(db, OperaLog, OperaLog.opera_time, cutoff, batch)
@@ -112,10 +120,19 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
             delivery = await _prune_table(
                 db, NotificationDelivery, NotificationDelivery.created_time, delivery_cutoff, batch
             )
+        webhook = 0
+        webhook_retention = 0
+        if OpenEvent is not None:
+            webhook_retention = (await webhook_settings(db)).retention_days
+            webhook_cutoff = timezone.now() - timedelta(days=webhook_retention)
+            # 先子后父：尝试 → 投递 → 事件（没有外键，但顺序反了中途失败会留下指向空的行）
+            for model in (OpenWebhookAttempt, OpenWebhookDelivery, OpenEvent):
+                webhook += await _prune_table(db, model, model.created_time, webhook_cutoff, batch)
 
     msg = (
         f'清理 {days} 天前的日志：登录日志 {login} 条、操作日志 {opera} 条、开放接口调用日志 {open_api} 条、'
-        f'短信发送日志 {sms} 条；通知投递记录（保留 {retention} 天）{delivery} 条'
+        f'短信发送日志 {sms} 条；通知投递记录（保留 {retention} 天）{delivery} 条；'
+        f'Webhook 事件 / 投递 / 尝试（保留 {webhook_retention} 天）{webhook} 条'
     )
     log.info(msg)
     return msg
