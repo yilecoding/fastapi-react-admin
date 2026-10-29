@@ -32,6 +32,8 @@ export function reasonLabel(t: (k: string) => string, r: string | null): string 
       return '—'
     case 'no_address':
       return t('没有地址（邮箱 / 手机号）')
+    case 'phone_unverified':
+      return t('手机号没经本人验证')
     case 'user_disabled':
       return t('账号已停用')
     case 'plugin_missing':
