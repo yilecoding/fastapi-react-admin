@@ -2,7 +2,14 @@ import { app, safeStorage } from "electron"
 import fs from "node:fs"
 import path from "node:path"
 
-import type { AuthLoginInput, AuthPhoneLoginInput, AuthRefreshResult, AuthTokens } from "@admin/platform/desktop/contract"
+import type {
+  AuthLoginInput,
+  AuthLoginOutcome,
+  AuthMfaInput,
+  AuthPhoneLoginInput,
+  AuthRefreshResult,
+  AuthTokens,
+} from "@admin/platform/desktop/contract"
 
 import { readConfig } from "./config"
 
@@ -27,6 +34,8 @@ import { readConfig } from "./config"
 const ENDPOINTS = {
   login: "/api/v1/auth/login",
   loginByPhone: "/api/v1/auth/phone/login",
+  mfaVerify: "/api/v1/auth/mfa/verify",
+  mfaEnroll: "/api/v1/auth/mfa/enroll",
   refresh: "/api/v1/auth/refresh",
   logout: "/api/v1/auth/logout",
 } as const
@@ -120,23 +129,73 @@ function toTokens(raw: RawTokens): AuthTokens {
   }
 }
 
-export async function login(input: AuthLoginInput): Promise<AuthTokens> {
-  return postLogin(ENDPOINTS.login, input)
+export async function login(input: AuthLoginInput): Promise<AuthLoginOutcome> {
+  return postFirstStep(ENDPOINTS.login, input)
 }
 
 /** 手机验证码登录（issue #168）。验证码是渲染层发的，这里只做「换会话 + 扣 cookie」那一步，和密码登录同一条收尾 */
-export async function loginByPhone(input: AuthPhoneLoginInput): Promise<AuthTokens> {
-  return postLogin(ENDPOINTS.loginByPhone, input)
+export async function loginByPhone(input: AuthPhoneLoginInput): Promise<AuthLoginOutcome> {
+  return postFirstStep(ENDPOINTS.loginByPhone, input)
 }
 
-async function postLogin(path: string, input: object): Promise<AuthTokens> {
+interface RawChallenge {
+  mfa_required: true
+  mfa_token: string
+  mfa_setup: boolean
+}
+
+/**
+ * 登录第一步。开了二次验证（#181）时服务端不开会话、不下发 refresh cookie，只给一个一次性令牌 ——
+ * 原样交回渲染层，第二步（`mfaVerify` / `mfaEnroll`）再由主进程发、再扣 cookie
+ */
+async function postFirstStep(path: string, input: object): Promise<AuthLoginOutcome> {
   const res = await fetch(`${baseUrl()}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     // 会话策略按端分（#138）。渲染层不知道自己跑在桌面端里，由主进程补上
     body: JSON.stringify({ ...input, client: "desktop" }),
   })
-  const raw = await unwrap(res)
+  const body = (await res.json()) as Envelope<RawTokens | RawChallenge>
+  const data = body.data
+  if (res.ok && data && "mfa_required" in data && data.mfa_required) {
+    return { kind: "mfa", mfaToken: data.mfa_token, mfaSetup: data.mfa_setup }
+  }
+  return { kind: "tokens", tokens: keepCookie(res, checked(res, body)) }
+}
+
+/** 二次验证第二步：动态码 / 恢复码 */
+export async function mfaVerify(input: AuthMfaInput): Promise<AuthTokens> {
+  const res = await postJson(ENDPOINTS.mfaVerify, { mfa_token: input.mfaToken, otp: input.otp })
+  const body = (await res.json()) as Envelope<RawTokens>
+  return keepCookie(res, checked(res, body))
+}
+
+/** 被强制、还没绑：输对一次动态码 = 绑定 + 登录。恢复码只在这一次返回，原样递给渲染层显示 */
+export async function mfaEnroll(input: AuthMfaInput): Promise<{ tokens: AuthTokens; recoveryCodes: string[] }> {
+  const res = await postJson(ENDPOINTS.mfaEnroll, { mfa_token: input.mfaToken, otp: input.otp })
+  const body = (await res.json()) as Envelope<RawTokens & { recovery_codes: string[] }>
+  const raw = checked(res, body) as RawTokens & { recovery_codes: string[] }
+  return { tokens: keepCookie(res, raw), recoveryCodes: raw.recovery_codes }
+}
+
+function postJson(path: string, body: object): Promise<Response> {
+  return fetch(`${baseUrl()}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
+}
+
+function checked(res: Response, body: Envelope<unknown>): RawTokens {
+  const data = body.data as RawTokens | undefined
+  if (!res.ok || !data?.access_token) {
+    // ⚠️ 把服务端原话透出去，不要在这里替它编一句「登录失败」
+    throw new Error(body.msg || `请求失败（HTTP ${res.status}）`)
+  }
+  return data
+}
+
+function keepCookie(res: Response, raw: RawTokens): AuthTokens {
   const refresh = extractRefreshCookie(res)
   if (refresh) saveRefreshToken(refresh)
   return toTokens(raw)

@@ -19,6 +19,8 @@ export const IPC = {
 
   authLogin: 'auth:login',
   authLoginByPhone: 'auth:login-by-phone',
+  authMfaVerify: 'auth:mfa-verify',
+  authMfaEnroll: 'auth:mfa-enroll',
   authRefresh: 'auth:refresh',
   authLogout: 'auth:logout',
   authRestore: 'auth:restore',
@@ -121,6 +123,20 @@ export interface AuthLoginInput {
 export interface AuthPhoneLoginInput {
   phone: string
   captcha: string
+}
+
+/**
+ * 登录第一步的结果（#181）：要么直接拿到令牌，要么开了二次验证、还差一步（这时**还没有** refresh cookie）。
+ * 用返回值区分而不是抛异常：同 `AuthRefreshResult`，IPC 只带得过 message
+ */
+export type AuthLoginOutcome =
+  | { kind: 'tokens'; tokens: AuthTokens }
+  | { kind: 'mfa'; mfaToken: string; mfaSetup: boolean }
+
+/** 登录第二步：动态码 / 恢复码。refresh cookie 在这一步才下发，所以也由主进程发 */
+export interface AuthMfaInput {
+  mfaToken: string
+  otp: string
 }
 
 /**
@@ -254,9 +270,13 @@ export interface DesktopBridge {
   }
   auth: {
     /** 主进程发登录请求、扣下 refresh cookie 加密存盘，只把 access token 递回来 */
-    login(input: AuthLoginInput): Promise<AuthTokens>
+    login(input: AuthLoginInput): Promise<AuthLoginOutcome>
     /** 手机验证码登录，同 `login`：主进程发请求、扣下 refresh cookie，只把 access token 递回来 */
-    loginByPhone(input: AuthPhoneLoginInput): Promise<AuthTokens>
+    loginByPhone(input: AuthPhoneLoginInput): Promise<AuthLoginOutcome>
+    /** 二次验证（#181）：登录第二步 */
+    mfaVerify(input: AuthMfaInput): Promise<AuthTokens>
+    /** 二次验证（#181）：被强制、还没绑的人在登录过程中绑定。恢复码只在这一次返回 */
+    mfaEnroll(input: AuthMfaInput): Promise<{ tokens: AuthTokens; recoveryCodes: string[] }>
     /** 用存盘的 refresh token 换新的 access token */
     refresh(): Promise<AuthRefreshResult>
     /** 冷启动时恢复会话；没有存盘凭据时是 `terminal` 且没有原因码 */

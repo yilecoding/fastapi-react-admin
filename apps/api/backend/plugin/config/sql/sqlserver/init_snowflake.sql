@@ -52,4 +52,5 @@ VALUES
 (2224875016875409429, N'Webhook 总开关', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_ENABLED', 'true', 0, N'关掉后事件照记，但不再给任何端点生成投递（已经在排队的照常发完）', GETDATE(), NULL),
 (2224875016875409430, N'自动停用阈值', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_DISABLE_AFTER', '20', 0, N'连续失败这么多次、且第一次失败已过去 24 小时，自动停用端点并通知应用创建人', GETDATE(), NULL),
 (2224875016875409431, N'记录保留（天）', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_RETENTION_DAYS', '30', 0, N'事件、投递、每次尝试的记录，每天凌晨的日志清理一起删', GETDATE(), NULL),
-(2224875016875409432, N'每个应用最多端点数', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_MAX_PER_APP', '10', 0, NULL, GETDATE(), NULL);
+(2224875016875409432, N'每个应用最多端点数', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_MAX_PER_APP', '10', 0, NULL, GETDATE(), NULL),
+(2224875016875409433, N'二次验证强制', 'LOGIN', 'LOGIN_MFA_ENFORCE', 'off', 0, N'off：自愿开启；superuser：超级管理员必须开；all：所有人必须开。被强制、还没绑定的人下次登录会先走绑定', GETDATE(), NULL);

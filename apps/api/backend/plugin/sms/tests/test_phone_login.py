@@ -191,6 +191,20 @@ class TestLogin:
         again = client.post(LOGIN, json={'phone': PHONE_B, 'captcha': code})
         assert again.status_code == 403
 
+    def test_two_factor_applies_to_phone_login_too(
+        self, client: TestClient, make_config: Callable[..., dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """二次验证（#181）不能只拦密码登录：验证码对了也只算过了一半，不开会话、不下发 refresh cookie"""
+        monkeypatch.setattr(settings, 'MFA_SECRET_KEY', '00' * 32)
+        monkeypatch.setattr(settings, 'LOGIN_MFA_ENFORCE', 'all')
+        make_config('login6', is_default=True)
+        _set_admin_phone(PHONE_B, verified=True)
+        assert client.post(CAPTCHA, json={'phone': PHONE_B}).json()['code'] == 200
+        res = client.post(LOGIN, json={'phone': PHONE_B, 'captcha': _login_code(client, PHONE_B)})
+        data = res.json()['data']
+        assert data['mfa_required'] is True and data['mfa_setup'] is True and 'access_token' not in data
+        assert settings.COOKIE_REFRESH_TOKEN_KEY not in res.cookies
+
     def test_bad_phone_is_422(self, client: TestClient) -> None:
         assert client.post(CAPTCHA, json={'phone': '12345'}).status_code == 422
         assert client.post(LOGIN, json={'phone': '12345', 'captcha': '1'}).status_code == 422

@@ -50,3 +50,9 @@ class GetTokenDetail(SchemaBase):
     last_login_time: str = Field(description='最后登录时间')
     last_active_time: datetime = Field(description='最后活跃时间（按用户操作算，后台轮询不算）')
     expire_time: datetime = Field(description='会话到期时间：空闲上限和绝对有效期先到的那个')
+
+
+class GetMfaEnrollToken(GetLoginToken):
+    """登录过程中被强制绑定二次验证：绑完直接登录，恢复码**只在这一次**下发（字段名在操作日志的脱敏名单里）"""
+
+    recovery_codes: list[str] = Field(description='一次性恢复码')

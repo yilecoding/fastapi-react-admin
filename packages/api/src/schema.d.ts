@@ -81,6 +81,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/mfa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登录第二步：动态码或恢复码 */
+        post: operations["mfa_verify_api_v1_auth_mfa_verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/mfa/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登录第二步（被强制但还没绑定）：取绑定用的密钥和二维码 */
+        post: operations["mfa_setup_api_v1_auth_mfa_setup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/mfa/enroll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登录第二步（被强制但还没绑定）：输对一次动态码 = 绑定完成并登录，恢复码只下发这一次 */
+        post: operations["mfa_enroll_api_v1_auth_mfa_enroll_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/codes": {
         parameters: {
             query?: never;
@@ -734,6 +785,108 @@ export interface paths {
         post?: never;
         /** 解绑当前用户的手机号 */
         delete: operations["unbind_user_phone_api_v1_sys_users_me_phone_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/users/me/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取当前用户的二次验证状态 */
+        get: operations["get_my_mfa_api_v1_sys_users_me_mfa_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/users/me/mfa/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 开启二次验证：取绑定用的密钥和二维码 */
+        post: operations["setup_my_mfa_api_v1_sys_users_me_mfa_setup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/users/me/mfa/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 开启二次验证：输对一次动态码确认，恢复码只下发这一次 */
+        post: operations["enable_my_mfa_api_v1_sys_users_me_mfa_enable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/users/me/mfa/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 关闭二次验证（要动态码或恢复码；被策略强制的不能关） */
+        post: operations["disable_my_mfa_api_v1_sys_users_me_mfa_disable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/users/me/mfa/recovery-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 重新生成恢复码（旧的全部作废，要动态码或恢复码） */
+        post: operations["regenerate_my_recovery_codes_api_v1_sys_users_me_mfa_recovery_codes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/users/{pk}/mfa": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 重置用户的二次验证（手机丢了） */
+        delete: operations["reset_user_mfa_api_v1_sys_users__pk__mfa_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6460,6 +6613,69 @@ export interface components {
             created_time: string;
         };
         /**
+         * GetMfaEnrollToken
+         * @description 登录过程中被强制绑定二次验证：绑完直接登录，恢复码**只在这一次**下发（字段名在操作日志的脱敏名单里）
+         */
+        GetMfaEnrollToken: {
+            /**
+             * Access Token
+             * @description 访问令牌
+             */
+            access_token: string;
+            /**
+             * Access Token Expire Time
+             * Format: date-time
+             * @description 令牌过期时间
+             */
+            access_token_expire_time: string;
+            /**
+             * Session Uuid
+             * @description 会话 UUID
+             */
+            session_uuid: string;
+            /**
+             * Password Expire Days Remaining
+             * @description 密码过期剩余天数
+             */
+            password_expire_days_remaining?: number | null;
+            /** @description 用户信息 */
+            user: components["schemas"]["GetUserInfoDetail"];
+            /**
+             * Recovery Codes
+             * @description 一次性恢复码
+             */
+            recovery_codes: string[];
+        };
+        /** GetMfaStatus */
+        GetMfaStatus: {
+            /**
+             * Enabled
+             * @description 开了没有
+             */
+            enabled: boolean;
+            /**
+             * Enabled Time
+             * @description 开启时间
+             */
+            enabled_time?: string | null;
+            /**
+             * Recovery Remaining
+             * @description 还剩几个没用过的恢复码
+             * @default 0
+             */
+            recovery_remaining: number;
+            /**
+             * Enforced
+             * @description 按策略这个人必须开（开了就不能自己关）
+             */
+            enforced: boolean;
+            /**
+             * Available
+             * @description 服务端配了 MFA_SECRET_KEY（没配时开不了）
+             */
+            available: boolean;
+        };
+        /**
          * GetMultipartDetail
          * @description 分片上传会话
          */
@@ -8663,6 +8879,85 @@ export interface components {
          */
         MenuType: 0 | 1 | 2 | 3 | 4;
         /**
+         * MfaChallenge
+         * @description 登录第一步过了、还差动态码：不发 access token，发一个 5 分钟的一次性令牌
+         */
+        MfaChallenge: {
+            /**
+             * Mfa Required
+             * @description 恒为 true：需要第二步
+             * @default true
+             * @constant
+             */
+            mfa_required: true;
+            /**
+             * Mfa Token
+             * @description 第二步要带回来的令牌（5 分钟，最多试 5 次）
+             */
+            mfa_token: string;
+            /**
+             * Mfa Setup
+             * @description true = 被强制开启但还没绑定，先走绑定流程
+             */
+            mfa_setup: boolean;
+        };
+        /**
+         * MfaChallengeParam
+         * @description 登录第二步
+         */
+        MfaChallengeParam: {
+            /**
+             * Mfa Token
+             * @description 登录第一步给的令牌
+             */
+            mfa_token: string;
+            /**
+             * Otp
+             * @description 认证器上的 6 位动态码，或一个恢复码
+             */
+            otp: string;
+        };
+        /** MfaOtpParam */
+        MfaOtpParam: {
+            /**
+             * Otp
+             * @description 认证器上的 6 位动态码（关闭 / 重新生成恢复码时也可以用恢复码）
+             */
+            otp: string;
+        };
+        /** MfaRecoveryCodes */
+        MfaRecoveryCodes: {
+            /**
+             * Recovery Codes
+             * @description 一次性恢复码，只显示这一次
+             */
+            recovery_codes: string[];
+        };
+        /**
+         * MfaSetupInfo
+         * @description 绑定用：认证器扫 `otpauth_uri` 的二维码，或者手动输 `totp_secret`
+         */
+        MfaSetupInfo: {
+            /**
+             * Totp Secret
+             * @description TOTP 密钥（base32），只在这次响应里出现
+             */
+            totp_secret: string;
+            /**
+             * Otpauth Uri
+             * @description otpauth:// 链接，前端渲染成二维码
+             */
+            otpauth_uri: string;
+        };
+        /** MfaTokenParam */
+        MfaTokenParam: {
+            /**
+             * Mfa Token
+             * @description 登录第一步给的令牌
+             */
+            mfa_token: string;
+        };
+        /**
          * NoticeType
          * @description 通知公告类型
          * @enum {integer}
@@ -10153,6 +10448,38 @@ export interface components {
             msg: string;
             data: components["schemas"]["GetMenuDetail"];
         };
+        /** ResponseSchemaModel[GetMfaEnrollToken] */
+        ResponseSchemaModel_GetMfaEnrollToken_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetMfaEnrollToken"];
+        };
+        /** ResponseSchemaModel[GetMfaStatus] */
+        ResponseSchemaModel_GetMfaStatus_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetMfaStatus"];
+        };
         /** ResponseSchemaModel[GetMultipartDetail] */
         ResponseSchemaModel_GetMultipartDetail_: {
             /**
@@ -10488,6 +10815,38 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["IssuedWebhookSecret"];
+        };
+        /** ResponseSchemaModel[MfaRecoveryCodes] */
+        ResponseSchemaModel_MfaRecoveryCodes_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["MfaRecoveryCodes"];
+        };
+        /** ResponseSchemaModel[MfaSetupInfo] */
+        ResponseSchemaModel_MfaSetupInfo_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["MfaSetupInfo"];
         };
         /** ResponseSchemaModel[PageData[GetAiMcpClientDetail]] */
         ResponseSchemaModel_PageData_GetAiMcpClientDetail__: {
@@ -11080,6 +11439,23 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["GetFileDetail"] | null;
+        };
+        /** ResponseSchemaModel[Union[GetLoginToken, MfaChallenge]] */
+        ResponseSchemaModel_Union_GetLoginToken__MfaChallenge__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["GetLoginToken"] | components["schemas"]["MfaChallenge"];
         };
         /** ResponseSchemaModel[Union[list[GetMenuTree], NoneType]] */
         ResponseSchemaModel_Union_list_GetMenuTree___NoneType__: {
@@ -13164,7 +13540,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ResponseSchemaModel_GetLoginToken_"];
+                    "application/json": components["schemas"]["ResponseSchemaModel_Union_GetLoginToken__MfaChallenge__"];
                 };
             };
             /** @description Validation Error */
@@ -13230,7 +13606,106 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_Union_GetLoginToken__MfaChallenge__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mfa_verify_api_v1_auth_mfa_verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaChallengeParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["ResponseSchemaModel_GetLoginToken_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mfa_setup_api_v1_auth_mfa_setup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaTokenParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_MfaSetupInfo_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mfa_enroll_api_v1_auth_mfa_enroll_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaChallengeParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetMfaEnrollToken_"];
                 };
             };
             /** @description Validation Error */
@@ -14895,6 +15370,177 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    get_my_mfa_api_v1_sys_users_me_mfa_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetMfaStatus_"];
+                };
+            };
+        };
+    };
+    setup_my_mfa_api_v1_sys_users_me_mfa_setup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_MfaSetupInfo_"];
+                };
+            };
+        };
+    };
+    enable_my_mfa_api_v1_sys_users_me_mfa_enable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaOtpParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_MfaRecoveryCodes_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    disable_my_mfa_api_v1_sys_users_me_mfa_disable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaOtpParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regenerate_my_recovery_codes_api_v1_sys_users_me_mfa_recovery_codes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MfaOtpParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_MfaRecoveryCodes_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_user_mfa_api_v1_sys_users__pk__mfa_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 用户 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
