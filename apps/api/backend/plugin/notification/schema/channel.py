@@ -51,7 +51,8 @@ class PrefRow(SchemaBase):
 class GetMyPrefsDetail(SchemaBase):
     items: list[PrefRow]
     has_email: bool = Field(description='有没有绑定邮箱（没有就收不到邮件通知）')
-    has_phone: bool = Field(description='有没有绑定手机号（没有就收不到短信通知）')
+    has_phone: bool = Field(description='有没有本人验证过的手机号（没有就收不到短信通知）')
+    phone_unverified: bool = Field(False, description='有号但没经本人验证（管理员录入 / 导入的）—— 短信照样不发')
 
 
 class PrefItem(SchemaBase):

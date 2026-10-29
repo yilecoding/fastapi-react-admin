@@ -32,7 +32,7 @@ export function NotifyPrefsPanel() {
   if (!query.data) {
     return <Skeleton className="h-48" />
   }
-  const { items, has_email, has_phone } = query.data
+  const { items, has_email, has_phone, phone_unverified } = query.data
   const missing: Partial<Record<Channel, boolean>> = { email: !has_email, sms: !has_phone }
 
   async function toggle(kind: string, channel: Channel, enabled: boolean) {
@@ -66,7 +66,7 @@ export function NotifyPrefsPanel() {
                     {channelLabel(t, c)}
                     {missing[c] ? (
                       <span className="text-[11px] font-normal text-amber-600 dark:text-amber-400" data-testid={`prefs-missing-${c}`}>
-                        {c === 'email' ? t('没绑邮箱') : t('没绑手机号')}
+                        {c === 'email' ? t('没绑邮箱') : phone_unverified ? t('手机号未验证') : t('没绑手机号')}
                       </span>
                     ) : null}
                   </span>
