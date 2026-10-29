@@ -25,7 +25,7 @@ from backend.app.admin.model import Dept, LoginLog, OperaLog, User
 from backend.app.admin.schema.dept import CreateDeptParam, UpdateDeptParam
 from backend.app.admin.service.dept_service import dept_service, leader_names
 from backend.app.admin.service.import_service import pydantic_errors, required_error
-from backend.app.admin.service.user_service import UserService
+from backend.app.admin.service.user_service import UserService, emit_user_event
 from backend.app.admin.utils.password_security import validate_password_strength
 from backend.common.dataio.exporting import ExportColumn, ExportSpec, register_export
 from backend.common.dataio.importing import (
@@ -484,12 +484,15 @@ async def _user_commit(db: AsyncSession, rows: list[ImportRow], _ctx: ImportCont
     """
     try:
         async with db.begin_nested():
-            created = await user_dao.bulk_add(db, [row.payload for row in rows], _default_password())
+            users = await user_dao.bulk_add(db, [row.payload for row in rows], _default_password())
+            # 对外事件（#167）和建号在同一个保存点里：这批回滚了，事件也一起没了
+            for user in users:
+                await emit_user_event(db, 'user.created', user.id)
     except SQLAlchemyError:
         log.exception('批量建号失败')
         return CommitOutcome(failed={row.row_no: t('error.import.row_unexpected') for row in rows})
     # 🔴 只回报「用了默认密码」这件事，不回报密码本身：操作日志会把响应体原样落库
-    return CommitOutcome(created=created, notes=[t('import.note.user_default_password')])
+    return CommitOutcome(created=[u.username for u in users], notes=[t('import.note.user_default_password')])
 
 
 USER_IMPORT = register_import(

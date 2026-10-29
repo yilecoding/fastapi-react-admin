@@ -28,5 +28,13 @@
       "string_to_sign": "POST\n/api/open/v1/echo\n\n1761009302000\n8f1c2a9e4b7d4e05\naeee24dcf36860565553dfa2bc0b50b4212da8c0a658c3cedcb3f67b5bb70d2a",
       "sign": "ed1172b1d94903a6d34c94de6c0ff25d9f4edc5dbcb74633a4dff6b5b8e9d119"
     }
-  ]
+  ],
+  "webhook": {
+    "_comment": "Webhook 出站签名（#167）。这一组就是 Standard Webhooks 规范 README 里的示例，签名和规范给的逐字一致",
+    "secret": "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw",
+    "id": "msg_p5jXN8AQM9LWM0D4loKWxJek",
+    "timestamp": 1614265330,
+    "body": "{\"test\": 2432232314}",
+    "signature": "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE="
+  }
 }

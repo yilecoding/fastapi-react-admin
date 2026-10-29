@@ -484,6 +484,34 @@ def test_every_schedule_in_db_points_at_a_registered_task(client: TestClient, to
     )
 
 
+def test_high_frequency_tasks_neither_record_nor_broadcast(client: TestClient, token_headers):
+    """🔴 一分钟内就要跑一次的任务，必须 `ignore_result=True` + `notify=False`（task 分册「高频任务的两条纪律」）。
+
+    不加的后果都不报错：每 15 秒一次就是一天 5760 行执行记录，把「执行记录」页淹没；
+    每次开始 / 成功还要经 Redis 给**所有**在线页面推一条提示。#166 的 `notification.deliver_pending`
+    就是这样带着两项都没关合进 main 的（#167 补上，同时加了这条）。
+    """
+    from backend.app.task.celery import celery_app
+
+    celery_app.loader.import_default_modules()  # autodiscover 是惰性的，不导入就是空表（`get_registered_tasks` 同款）
+    rows = client.get(f'{BASE}/all', headers=token_headers).json()['data']
+    seconds = {'seconds': 1, 'minutes': 60, 'hours': 3600, 'days': 86400}
+    frequent = [
+        r['task']
+        for r in rows
+        if r['enabled'] and r['type'] == 0 and r['interval_every'] * seconds.get(r['interval_period'], 86400) <= 60
+    ]
+    assert {'notification.deliver_pending', 'open.webhook_deliver_pending', 'health.heartbeat'} <= set(frequent), (
+        f'前置：种子里这几条高频调度都在：{frequent}'
+    )
+    noisy = [
+        name
+        for name in frequent
+        if not celery_app.tasks[name].ignore_result or getattr(celery_app.tasks[name], 'notify', True)
+    ]
+    assert not noisy, f'这些高频任务会写执行记录或推提示：{noisy}'
+
+
 def test_fresh_install_has_every_index_the_models_declare(client: TestClient, token_headers):
     """🔴 模型声明的索引，在库里必须真的存在。
 

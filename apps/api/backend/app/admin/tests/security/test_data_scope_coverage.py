@@ -51,6 +51,9 @@ EXEMPT: dict[str, str] = {
     'CRUDSmsConfig': '短信配置是系统级配置（同模型供应商 / 存储）；靠 sms:config:* 权限码',
     'CRUDSmsLog': '短信发送日志是审计记录（同操作日志），匿名接口发的短信也要记；靠 sms:log:* 权限码',
     'CRUDOpenApiLog': '调用日志是系统级审计记录（同操作日志）；靠 open:log:list 权限码',
+    'CRUDOpenWebhook': 'Webhook 端点挂在应用下，是系统级配置（同应用本身）；靠 open:webhook:* 权限码',
+    'CRUDOpenEvent': 'Webhook 事件是对外的审计记录，产生于任何人的写操作；靠 open:webhook:list 权限码',
+    'CRUDOpenWebhookDelivery': 'Webhook 投递记录是审计记录（同调用日志）；靠 open:webhook:list 权限码',
     'CRUDExportJob': (
         '导出记录按 created_by == 当前用户强制过滤（同收件箱），接口只挂登录；'
         '再叠部门维度会让受限用户连自己的导出都看不到'

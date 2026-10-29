@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.pagination import paging_data
-from backend.core.conf import settings
 from backend.plugin.open.crud.crud_app import open_app_dao
 from backend.plugin.open.gateway.auth import SCOPES
 from backend.plugin.open.model import OpenApp
@@ -22,7 +21,7 @@ from backend.plugin.open.schema.app import (
     OpenScopeItem,
     UpdateOpenAppParam,
 )
-from backend.utils.encrypt import AESCipher
+from backend.plugin.open.service.secret import encrypt
 from backend.utils.timezone import timezone
 
 ACCESS_KEY_PREFIX = 'fra_ak_'
@@ -30,25 +29,10 @@ SECRET_KEY_PREFIX = 'fra_sk_'
 OPEN_API_PREFIX = '/api/open/'
 
 
-def _cipher() -> AESCipher:
-    """取加密器。
-
-    🔴 **没配密钥就拒绝，不静默存明文**（同 AI 供应商密钥）：「存了但没加密」在界面上和
-    「存了且加密了」完全一样，等发现时密钥已经在库里躺了很久。
-    """
-    key = settings.OPEN_SECRET_KEY
-    if not key:
-        raise errors.ServerError(msg=t('error.open.secret_key_missing'))
-    try:
-        return AESCipher(key)
-    except ValueError as e:
-        raise errors.ServerError(msg=t('error.open.secret_key_invalid')) from e
-
-
 def _issue_secret() -> tuple[str, str, str]:
     """→ (明文 SK, 密文 hex, 辨认用前缀)。明文只在调用方那一次响应里出现"""
     secret = f'{SECRET_KEY_PREFIX}{secrets.token_urlsafe(32)}'
-    return secret, _cipher().encrypt(secret).hex(), f'{secret[: len(SECRET_KEY_PREFIX) + 4]}…'
+    return secret, encrypt(secret), f'{secret[: len(SECRET_KEY_PREFIX) + 4]}…'
 
 
 def open_routes(app: FastAPI) -> list[RouteContext]:

@@ -148,15 +148,15 @@ class CRUDDept(DataScopedCRUD[Dept]):
         stmt = await self.get_select(data_filter, name, code, phone, status)
         return (await db.execute(stmt)).scalars().all()
 
-    async def create(self, db: AsyncSession, obj: CreateDeptParam) -> None:
+    async def create(self, db: AsyncSession, obj: CreateDeptParam) -> Dept:
         """
         创建部门
 
         :param db: 数据库会话
         :param obj: 创建部门参数
-        :return:
+        :return: 新部门（已 flush，有 ID）
         """
-        await self.create_model(db, obj)
+        return await self.create_model(db, obj, flush=True)
 
     async def update(self, db: AsyncSession, dept_id: int, obj: UpdateDeptParam) -> int:
         """

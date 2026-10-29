@@ -440,7 +440,8 @@ class Settings(BaseSettings):
         # MCP 凭据新建 / 重新生成时的明文令牌（`plugin/ai/schema/mcp_client.py: IssuedAiMcpToken`）。
         # 不进名单的话操作日志会把它原样落进 response_body —— 永久、且日志表有自己的查看权限
         'mcp_token',
-        # 能力开放应用新建 / 重置密钥时的明文 SK（`plugin/open/schema/app.py: IssuedOpenSecret`），同上
+        # 能力开放应用新建 / 重置密钥时的明文 SK（`plugin/open/schema/app.py: IssuedOpenSecret`），同上；
+        # Webhook 端点的签名密钥（`plugin/open/schema/webhook.py: IssuedWebhookSecret`）用的是同一个字段名
         'secret_key',
         # 短信配置新建 / 编辑时的厂商凭据 secret（`plugin/sms/schema/config.py`），按键名精确匹配
         'access_key_secret',
@@ -590,6 +591,19 @@ class Settings(BaseSettings):
     OPEN_SIGN_WINDOW_SECONDS: int
     OPEN_NONCE_REDIS_PREFIX: str
     OPEN_LAST_USED_REDIS_PREFIX: str
+    # Webhook 事件订阅（#167）。总闸 / 自动停用阈值 / 保留天数 / 每应用端点上限可在参数配置「Webhook」组覆盖
+    OPEN_WEBHOOK_ENABLED: bool
+    OPEN_WEBHOOK_DISABLE_AFTER: int
+    OPEN_WEBHOOK_RETENTION_DAYS: int
+    OPEN_WEBHOOK_MAX_PER_APP: int
+    # 单次投递的超时（秒）；每次失败之后等多久（秒，逗号分隔，总尝试次数 = 表长 + 1）
+    OPEN_WEBHOOK_TIMEOUT_SECONDS: float
+    OPEN_WEBHOOK_RETRY_BACKOFF_SECONDS: str
+    # worker 每一批取多少行；停在「发送中」超过多少秒改回失败重试
+    OPEN_WEBHOOK_DELIVERY_BATCH: int
+    OPEN_WEBHOOK_SENDING_STALE_SECONDS: int
+    # 🔴 放行回环 / 私网地址（也放行 http）。只给本地联调和 E2E；生产打开等于把 SSRF 的门打开
+    OPEN_WEBHOOK_ALLOW_PRIVATE_NETWORK: bool
 
     ##################################################
     # [ Plugin ] notification
@@ -826,6 +840,13 @@ def _check_import_default_password(s: Settings) -> str | None:
     return None
 
 
+def _check_webhook_private_network(s: Settings) -> str | None:
+    """打开它 = Webhook 投递能打到回环 / 内网地址（SSRF），而端点 URL 是有权限的管理员随手填的（#167）"""
+    if getattr(s, 'OPEN_WEBHOOK_ALLOW_PRIVATE_NETWORK', False):
+        return 'OPEN_WEBHOOK_ALLOW_PRIVATE_NETWORK 在 prod 必须为 false —— 它只给本地联调和 E2E'
+    return None
+
+
 def check_production_settings(s: Settings) -> None:
     """prod 启动前置校验 —— 一次性收集**全部**问题后 fail-fast
 
@@ -883,6 +904,7 @@ def check_production_settings(s: Settings) -> None:
         _check_snowflake_node_lease(s),
         _check_session_settings(s),
         _check_import_default_password(s),
+        _check_webhook_private_network(s),
     ))
 
     found = [p for p in problems if p]

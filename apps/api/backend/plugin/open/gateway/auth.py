@@ -62,6 +62,14 @@ class ScopeInfo:
 SCOPES: dict[str, ScopeInfo] = {}
 
 
+def register_scope(scope: str, label: str) -> None:
+    """登记一个**没有开放接口**的 scope —— 只用于订阅 Webhook 事件（#167：`workflow:read`）。
+
+    有接口的 scope 由 `DependsOpenApp` 构造时自己登记，不要走这里（两处登记的 label 会打架）
+    """
+    SCOPES.setdefault(scope, ScopeInfo(scope=scope, label=label))
+
+
 @dataclass(slots=True)
 class OpenCallContext:
     """一次开放接口调用里鉴权看到的东西，交给 `gateway/route.py` 落调用日志。
