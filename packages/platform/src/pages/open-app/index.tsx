@@ -12,6 +12,7 @@ import {
   IconPlus,
   IconRefresh,
   IconTrash,
+  IconWebhook,
 } from '@tabler/icons-react'
 
 import { formatDateTime } from '@admin/i18n'
@@ -51,6 +52,7 @@ import {
 } from './api'
 import { OpenAppFormSheet } from './form'
 import { SecretDialog } from './secret-dialog'
+import { WebhookSheet, type WebhookTab, type WebhookView } from './webhook-sheet'
 
 const col = createColumnHelper<typeof features, OpenApp>()
 
@@ -104,6 +106,25 @@ export type OpenAppSearch = {
   hide?: string
   /** 可移动列的顺序（和默认一样时不写），逗号分隔 */
   cols?: string
+  /** Webhook 抽屉（#167）：打开的是哪个应用、哪个页签、投递记录的筛选 / 页码 / 打开的那一条 */
+  webhook?: string
+  wtab?: WebhookTab
+  wstatus?: string
+  whook?: string
+  wpage?: number
+  wdel?: string
+}
+
+function webhookView(s: OpenAppSearch): WebhookView {
+  return { tab: s.wtab, deliveries: { status: s.wstatus, hook: s.whook, page: s.wpage, open: s.wdel } }
+}
+
+const WEBHOOK_KEYS = ['webhook', 'wtab', 'wstatus', 'whook', 'wpage', 'wdel'] as const
+
+function withoutWebhook(s: OpenAppSearch): OpenAppSearch {
+  const next = { ...s }
+  for (const k of WEBHOOK_KEYS) delete next[k]
+  return next
 }
 
 function buildQuery(params: Record<string, unknown>, page: number, size: number): string {
@@ -128,7 +149,17 @@ export function OpenAppPage({
     (n: Partial<OpenAppSearch>) => onSearchChange?.({ ...search, ...n }),
     [onSearchChange, search]
   )
-  const q = useQuerySearch({ fields: FIELDS, search, onSearchChange, refreshKey: openAppKeys.all, keep: ['hide', 'cols'] })
+  const q = useQuerySearch({
+    fields: FIELDS,
+    search,
+    onSearchChange,
+    refreshKey: openAppKeys.all,
+    keep: ['hide', 'cols', ...WEBHOOK_KEYS],
+  })
+  const openWebhooks = React.useCallback(
+    (appId: string) => onSearchChange?.({ ...withoutWebhook(search), webhook: appId }),
+    [onSearchChange, search]
+  )
 
   const listQuery = useQuery(openAppsQuery(buildQuery(q.params, page, size)))
   const { data, isFetching } = listQuery
@@ -264,6 +295,12 @@ export function OpenAppPage({
                     {t('编辑')}
                   </DropdownMenuItem>
                 </Can>
+                <Can perm="open:webhook:list">
+                  <DropdownMenuItem onClick={() => openWebhooks(a.id)} data-testid={`webhooks-${a.code}`}>
+                    <IconWebhook className="size-4" />
+                    Webhook
+                  </DropdownMenuItem>
+                </Can>
                 <Can perm="open:log:list">
                   <DropdownMenuItem
                     render={<Link to="/open/log" search={{ app: a.id }} />}
@@ -296,7 +333,7 @@ export function OpenAppPage({
         },
       }),
     ],
-    [t]
+    [t, openWebhooks]
   )
 
   // 列顺序进 URL（同列显隐）—— 走 onSearchChange 而不是 patch：换列序不该清勾选、也不该跳回第一页
@@ -363,6 +400,8 @@ export function OpenAppPage({
                       size="sm"
                       variant="outline"
                       render={<Link to="/open/log" search={{}} />}
+                      // render 成 <a> 时要声明，否则 Base UI 在控制台报「expected a native <button>」
+                      nativeButton={false}
                       data-testid="open-app-logs"
                     >
                       <IconHistory className="size-4" />
@@ -415,6 +454,21 @@ export function OpenAppPage({
 
       <OpenAppFormSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} onIssued={setIssued} />
       <SecretDialog issued={issued} onClose={() => setIssued(null)} />
+      <WebhookSheet
+        appId={search.webhook ?? null}
+        view={webhookView(search)}
+        onViewChange={(v) =>
+          onSearchChange?.({
+            ...search,
+            wtab: v.tab === 'endpoints' ? undefined : v.tab,
+            wstatus: v.deliveries?.status,
+            whook: v.deliveries?.hook,
+            wpage: v.deliveries?.page,
+            wdel: v.deliveries?.open,
+          })
+        }
+        onClose={() => onSearchChange?.(withoutWebhook(search))}
+      />
 
       <ConfirmDialog
         open={pendingReset !== null}

@@ -25,6 +25,7 @@ from backend.app.admin.utils.password_security import (
     validate_password_strength,
 )
 from backend.common.context import ctx
+from backend.common.domain_events import emit
 from backend.common.enums import UserPermissionType
 from backend.common.exception import errors
 from backend.common.i18n import t
@@ -37,6 +38,21 @@ from backend.database.redis import redis_client
 from backend.plugin.core import check_plugin_installed
 from backend.utils.serializers import select_join_serialize
 from backend.utils.timezone import timezone
+
+
+async def emit_user_event(db: AsyncSession, type: str, user_id: int) -> None:
+    """对外的 Webhook 事件（#167）：写完之后**重新查一遍**那几列再发。
+
+    不拿手里的 ORM 实例：`user_dao.update` 走的是 Core UPDATE，实例上还是旧值
+    （「先改后读同一个 ORM 实例」那条坑的反面）。
+    thin：只有标识和状态，不给手机号邮箱（对方要详情走开放接口，经 scope 和调用日志）
+    """
+    with bypass_data_scope():
+        row = (
+            await db.execute(select(User.id, User.username, User.dept_id, User.status).where(User.id == user_id))
+        ).first()
+    if row is not None:
+        await emit(db, type, aggregate_id=user_id, data=dict(row._mapping))
 
 
 class UserService:
@@ -159,7 +175,8 @@ class UserService:
             if {role.id for role in roles} != set(obj.roles):
                 raise errors.NotFoundError(msg=t('error.role.not_found'))
         obj.nickname = obj.nickname or obj.username
-        await user_dao.add(db, obj)
+        user = await user_dao.add(db, obj)
+        await emit_user_event(db, 'user.created', user.id)
 
     @staticmethod
     async def update(*, db: AsyncSession, pk: int, obj: UpdateUserParam) -> int:
@@ -194,6 +211,7 @@ class UserService:
         # 「号没变、验证没了」，手机登录静默失效。`obj.phone is None` 分不出「没传」和「传了 null 要清空」
         if 'phone' in obj.model_fields_set and obj.phone != user.phone:
             await user_dao.clear_phone_verification(db, user.id)
+        await emit_user_event(db, 'user.updated', user.id)
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
         return count
 
@@ -230,6 +248,7 @@ class UserService:
                 if pk == request.user.id:
                     raise errors.ForbiddenError(msg=t('error.user.self_permission_forbidden'))
                 count = await user_dao.set_status(db, pk, 0 if user.status == 1 else 1)
+                await emit_user_event(db, 'user.status_changed', pk)
                 if user.status == 1:
                     # 停用：会话当场结束并告诉对方原因（#138）。不撤的话请求会在取用户时 403，
                     # 但会话还挂在在线列表上，refresh 也照样换得出新 token
@@ -285,6 +304,7 @@ class UserService:
         :return:
         """
         count = await user_dao.update_nickname(db, user_id, nickname)
+        await emit_user_event(db, 'user.updated', user_id)
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
         return count
 
@@ -344,6 +364,7 @@ class UserService:
             raise errors.ConflictError(msg=t('error.user.email_bound'))
         await redis_client.delete(f'{settings.EMAIL_CAPTCHA_REDIS_PREFIX}:{ctx.ip}')
         count = await user_dao.update_email(db, user_id, email)
+        await emit_user_event(db, 'user.updated', user_id)
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
         return count
 
@@ -391,6 +412,7 @@ class UserService:
         if other and other.id != user_id:
             raise errors.ConflictError(msg=t('error.user.phone_bound'))
         count = await user_dao.update_phone(db, user_id, phone, verified_time=timezone.now())
+        await emit_user_event(db, 'user.updated', user_id)
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
         return count
 
@@ -459,6 +481,7 @@ class UserService:
         if not user:
             raise errors.NotFoundError(msg=t('error.user.not_found'))
         count = await user_dao.delete(db, user.id)
+        await emit_user_event(db, 'user.deleted', user.id)
         await session_store.revoke_user(user.id, EndReason.disabled)
         await redis_client.delete_by_prefix(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
         return count

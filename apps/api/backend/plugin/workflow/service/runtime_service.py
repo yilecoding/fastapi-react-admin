@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import delete, false, func, select, update
 from sqlalchemy.exc import IntegrityError
 
+from backend.common.domain_events import emit
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
@@ -206,6 +207,28 @@ async def _kick_delivery() -> None:
 
 def detail_link(instance_id: int) -> str:
     return f'/workflow/inbox?id={instance_id}'
+
+
+async def _emit_instance(db: AsyncSession, inst: WfInstance, status: str) -> None:
+    """对外的 Webhook 事件（#167）。在事务里写，回滚就一起没了。
+
+    thin：只有标识和状态，不给表单内容（表单里什么都可能有 —— 金额、身份证、病假原因）
+    """
+    code = await db.scalar(select(WfDefinition.code).where(WfDefinition.id == inst.definition_id))
+    await emit(
+        db,
+        f'workflow.instance.{"started" if status == InstanceStatus.running else status}',
+        aggregate_id=inst.id,
+        data={
+            'id': inst.id,
+            'definition_code': code,
+            'title': inst.title,
+            'status': str(status),
+            'initiator_id': inst.initiator_id,
+            'biz_type': inst.biz_type,
+            'biz_id': inst.biz_id,
+        },
+    )
 
 
 async def _run_effects(effects: list[Callable[[], Awaitable[None]]]) -> None:
@@ -558,6 +581,7 @@ async def _finish(ctx: _Ctx, inst: WfInstance, status: InstanceStatus, opinion: 
     await get_handler(inst.biz_type).on_finished(
         ctx.db, inst.biz_id, FinishEvent(status=status, opinion=opinion, actor_id=ctx.actor_id)
     )
+    await _emit_instance(ctx.db, inst, InstanceStatus(status).value)
     if status in {InstanceStatus.approved, InstanceStatus.rejected, InstanceStatus.terminated}:
         word = t(f'workflow.status.{InstanceStatus(status).value}')
         await ctx.notify(
@@ -946,6 +970,8 @@ async def start_in_tx(
     await db.flush()
     await _sync_file_relations(db, inst, form_schema, data, actor.id)
     _record(ctx, inst, 'start', key=key, actor_id=actor.id, actor_name=actor.nickname)
+    # 先发「已发起」再推进：没有审批人的流程会在 `_advance` 里直接走到结束，对方要先收到 started 再收到终态
+    await _emit_instance(db, inst, InstanceStatus.running.value)
     await _advance(ctx, inst, nodes[model['root']['id']].after)
     # 只插一行 pending，模型调用在事务提交之后的 Celery 里（#111 不变式 1）
     await ai_review_service.queue_in_tx(ctx, inst)

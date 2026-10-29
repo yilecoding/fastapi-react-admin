@@ -406,3 +406,70 @@ def test_prunes_open_api_logs_with_the_same_retention(factory):
         with factory() as s:
             s.execute(delete(OpenApiLog).where(OpenApiLog.access_key == MARK))
             s.commit()
+
+
+def test_prunes_webhook_records_with_their_own_retention(factory):
+    """Webhook 的事件 / 投递 / 尝试（#167）按自己的保留期（默认 30 天）删，三张表一起，先子后父。
+
+    漏接的话：事件表是**每一次**用户 / 部门 / 审批变更都写一行（没人订阅也写），涨得比日志还快
+    """
+    from backend.plugin.open.model import OpenEvent, OpenWebhookAttempt, OpenWebhookDelivery
+
+    def seed(days_ago: float) -> int:
+        when = timezone.now() - timedelta(days=days_ago)
+        event_id, delivery_id = next(_next_id), next(_next_id)
+        with factory() as s:
+            s.execute(
+                OpenEvent.__table__.insert().values(
+                    id=event_id, type='dept.updated', aggregate_id=-1, payload='{}', created_time=when
+                )
+            )
+            s.execute(
+                OpenWebhookDelivery.__table__.insert().values(
+                    id=delivery_id,
+                    webhook_id=-1,
+                    event_id=event_id,
+                    event_type='dept.updated',
+                    status='success',
+                    attempts=1,
+                    created_time=when,
+                )
+            )
+            s.execute(
+                OpenWebhookAttempt.__table__.insert().values(
+                    id=next(_next_id),
+                    delivery_id=delivery_id,
+                    attempt=1,
+                    url='https://x',
+                    duration_ms=1,
+                    created_time=when,
+                )
+            )
+            s.commit()
+        return event_id
+
+    def remaining() -> tuple[int, int, int]:
+        with factory() as s:
+            return (
+                s.execute(select(func.count()).select_from(OpenEvent).where(OpenEvent.aggregate_id == -1)).scalar_one(),
+                s.execute(
+                    select(func.count()).select_from(OpenWebhookDelivery).where(OpenWebhookDelivery.webhook_id == -1)
+                ).scalar_one(),
+                s.execute(
+                    select(func.count()).select_from(OpenWebhookAttempt).where(OpenWebhookAttempt.url == 'https://x')
+                ).scalar_one(),
+            )
+
+    try:
+        seed(40)
+        seed(1)
+        assert remaining() == (2, 2, 2), '前置：两组都在'
+        msg = run_prune(days=30)
+        assert 'Webhook 事件 / 投递 / 尝试（保留 30 天）3 条' in msg, msg
+        assert remaining() == (1, 1, 1)
+    finally:
+        with factory() as s:
+            s.execute(delete(OpenWebhookAttempt).where(OpenWebhookAttempt.url == 'https://x'))
+            s.execute(delete(OpenWebhookDelivery).where(OpenWebhookDelivery.webhook_id == -1))
+            s.execute(delete(OpenEvent).where(OpenEvent.aggregate_id == -1))
+            s.commit()

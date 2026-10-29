@@ -2969,6 +2969,162 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/open-webhooks/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取可订阅的 Webhook 事件目录 */
+        get: operations["get_webhook_events_api_v1_open_webhooks_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/open-webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取应用的 Webhook 端点 */
+        get: operations["get_webhooks_api_v1_open_webhooks_get"];
+        put?: never;
+        /** 新建 Webhook 端点（明文签名密钥只在这次响应里出现） */
+        post: operations["create_webhook_api_v1_open_webhooks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/open-webhooks/{pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取 Webhook 端点详情 */
+        get: operations["get_webhook_api_v1_open_webhooks__pk__get"];
+        /** 更新 Webhook 端点 */
+        put: operations["update_webhook_api_v1_open_webhooks__pk__put"];
+        post?: never;
+        /** 删除 Webhook 端点（连同它的投递记录） */
+        delete: operations["delete_webhook_api_v1_open_webhooks__pk__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/open-webhooks/{pk}/secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 重置 Webhook 签名密钥（旧密钥再签 24 小时） */
+        post: operations["reset_webhook_secret_api_v1_open_webhooks__pk__secret_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/open-webhooks/{pk}/ping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 给端点发一个测试事件（当场发出、返回结果） */
+        post: operations["ping_webhook_api_v1_open_webhooks__pk__ping_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/open-webhooks/{pk}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 把端点在某时间之后放弃的投递全部改回待发 */
+        post: operations["resend_exhausted_api_v1_open_webhooks__pk__resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/open-webhook-deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页获取 Webhook 投递记录 */
+        get: operations["get_webhook_deliveries_api_v1_open_webhook_deliveries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/open-webhook-deliveries/{pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取 Webhook 投递详情（含每一次尝试） */
+        get: operations["get_webhook_delivery_api_v1_open_webhook_deliveries__pk__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/open-webhook-deliveries/{pk}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 重发一条 Webhook 投递 */
+        post: operations["resend_webhook_delivery_api_v1_open_webhook_deliveries__pk__resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sms/configs": {
         parameters: {
             query?: never;
@@ -4709,6 +4865,43 @@ export interface components {
              * @description 备注
              */
             remark?: string | null;
+        };
+        /**
+         * CreateWebhookParam
+         * @description 新建端点
+         */
+        CreateWebhookParam: {
+            /**
+             * Name
+             * @description 端点名称
+             */
+            name: string;
+            /**
+             * Url
+             * @description 接收地址（https）
+             */
+            url: string;
+            /**
+             * Events
+             * @description 订阅的事件类型；支持 user.* 前缀通配
+             */
+            events: string[];
+            /**
+             * Status
+             * @description 状态（0：停用、1：正常）
+             * @default 1
+             */
+            status: number;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
+            /**
+             * App Id
+             * @description 所属应用 ID
+             */
+            app_id: number;
         };
         /**
          * DeleteDataRuleParam
@@ -7865,6 +8058,258 @@ export interface components {
              */
             roles: components["schemas"]["GetRoleWithRelationDetail"][];
         };
+        /** GetWebhookDeliveryDetail */
+        GetWebhookDeliveryDetail: {
+            /**
+             * Id
+             * @description 记录 ID
+             */
+            id: string | number;
+            /**
+             * Webhook Id
+             * @description 端点 ID
+             */
+            webhook_id: number;
+            /**
+             * Webhook Name
+             * @description 端点名称
+             */
+            webhook_name: string;
+            /**
+             * Event Id
+             * @description 事件 ID（= webhook-id）
+             */
+            event_id: number;
+            /**
+             * Event Type
+             * @description 事件类型
+             */
+            event_type: string;
+            /**
+             * Status
+             * @description pending / sending / success / failed / exhausted
+             */
+            status: string;
+            /**
+             * Attempts
+             * @description 已尝试次数
+             */
+            attempts: number;
+            /**
+             * Next Attempt Time
+             * @description 下一次尝试的时间
+             */
+            next_attempt_time?: string | null;
+            /**
+             * Last Response Code
+             * @description 最近一次的 HTTP 状态码
+             */
+            last_response_code?: number | null;
+            /**
+             * Last Error
+             * @description 最近一次的错误
+             */
+            last_error?: string | null;
+            /**
+             * Last Duration Ms
+             * @description 最近一次的耗时（毫秒）
+             */
+            last_duration_ms?: number | null;
+            /**
+             * Success Time
+             * @description 成功的时间
+             */
+            success_time?: string | null;
+            /**
+             * Created Time
+             * Format: date-time
+             * @description 创建时间
+             */
+            created_time: string;
+            /**
+             * Updated Time
+             * @description 更新时间
+             */
+            updated_time?: string | null;
+            /**
+             * Payload
+             * @description 请求体原文
+             */
+            payload: string;
+            /**
+             * Attempts Log
+             * @description 每一次尝试
+             */
+            attempts_log: components["schemas"]["WebhookAttemptItem"][];
+        };
+        /** GetWebhookDeliveryRow */
+        GetWebhookDeliveryRow: {
+            /**
+             * Id
+             * @description 记录 ID
+             */
+            id: string | number;
+            /**
+             * Webhook Id
+             * @description 端点 ID
+             */
+            webhook_id: number;
+            /**
+             * Webhook Name
+             * @description 端点名称
+             */
+            webhook_name: string;
+            /**
+             * Event Id
+             * @description 事件 ID（= webhook-id）
+             */
+            event_id: number;
+            /**
+             * Event Type
+             * @description 事件类型
+             */
+            event_type: string;
+            /**
+             * Status
+             * @description pending / sending / success / failed / exhausted
+             */
+            status: string;
+            /**
+             * Attempts
+             * @description 已尝试次数
+             */
+            attempts: number;
+            /**
+             * Next Attempt Time
+             * @description 下一次尝试的时间
+             */
+            next_attempt_time?: string | null;
+            /**
+             * Last Response Code
+             * @description 最近一次的 HTTP 状态码
+             */
+            last_response_code?: number | null;
+            /**
+             * Last Error
+             * @description 最近一次的错误
+             */
+            last_error?: string | null;
+            /**
+             * Last Duration Ms
+             * @description 最近一次的耗时（毫秒）
+             */
+            last_duration_ms?: number | null;
+            /**
+             * Success Time
+             * @description 成功的时间
+             */
+            success_time?: string | null;
+            /**
+             * Created Time
+             * Format: date-time
+             * @description 创建时间
+             */
+            created_time: string;
+            /**
+             * Updated Time
+             * @description 更新时间
+             */
+            updated_time?: string | null;
+        };
+        /**
+         * GetWebhookDetail
+         * @description 端点详情 —— 🔴 没有密钥，也没有密文，只有 `secret_hint`
+         */
+        GetWebhookDetail: {
+            /**
+             * Name
+             * @description 端点名称
+             */
+            name: string;
+            /**
+             * Url
+             * @description 接收地址（https）
+             */
+            url: string;
+            /**
+             * Events
+             * @description 订阅的事件类型；支持 user.* 前缀通配
+             */
+            events: string[];
+            /**
+             * Status
+             * @description 状态（0：停用、1：正常）
+             * @default 1
+             */
+            status: number;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
+            /**
+             * Id
+             * @description 记录 ID
+             */
+            id: string | number;
+            /**
+             * App Id
+             * @description 所属应用 ID
+             */
+            app_id: number;
+            /**
+             * Secret Hint
+             * @description 签名密钥前几位（只用于辨认）
+             */
+            secret_hint: string;
+            /**
+             * Secret Prev Expire Time
+             * @description 旧密钥还在一起签名到这个时间（轮换期）
+             */
+            secret_prev_expire_time?: string | null;
+            /**
+             * Disabled Reason
+             * @description 停用原因（manual / auto / gone）
+             */
+            disabled_reason?: string | null;
+            /**
+             * Disabled Time
+             * @description 停用时间
+             */
+            disabled_time?: string | null;
+            /**
+             * Consecutive Failures
+             * @description 连续失败次数
+             * @default 0
+             */
+            consecutive_failures: number;
+            /**
+             * First Failure Time
+             * @description 这一轮连续失败的第一次时间
+             */
+            first_failure_time?: string | null;
+            /**
+             * Last Delivery Time
+             * @description 最近一次投递时间
+             */
+            last_delivery_time?: string | null;
+            /**
+             * Last Success Time
+             * @description 最近一次成功时间
+             */
+            last_success_time?: string | null;
+            /**
+             * Created Time
+             * Format: date-time
+             * @description 创建时间
+             */
+            created_time: string;
+            /**
+             * Updated Time
+             * @description 更新时间
+             */
+            updated_time?: string | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -8158,6 +8603,24 @@ export interface components {
             /**
              * Secret Key
              * @description 明文 Secret Key，只显示这一次
+             */
+            secret_key: string;
+        };
+        /**
+         * IssuedWebhookSecret
+         * @description 新建 / 重置密钥之后**唯一一次**返回明文
+         *
+         *     🔴 字段名用 `secret_key`：它在 `OPERA_LOG_REDACT_KEYS` 里（同应用的 SK），操作日志落响应体时会打码
+         */
+        IssuedWebhookSecret: {
+            /**
+             * Id
+             * @description 端点 ID
+             */
+            id: string | number;
+            /**
+             * Secret Key
+             * @description 明文签名密钥（whsec_ 开头），只显示这一次
              */
             secret_key: string;
         };
@@ -8986,6 +9449,60 @@ export interface components {
             total_pages: number;
             links: components["schemas"]["_Links"];
         };
+        /** PageData[GetWebhookDeliveryRow] */
+        PageData_GetWebhookDeliveryRow_: {
+            /** Items */
+            items: components["schemas"]["GetWebhookDeliveryRow"][];
+            /**
+             * Total
+             * @description 数据总条数
+             */
+            total: number;
+            /**
+             * Page
+             * @description 当前页码
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页数量
+             */
+            size: number;
+            /**
+             * Total Pages
+             * @description 总页数
+             */
+            total_pages: number;
+            links: components["schemas"]["_Links"];
+        };
+        /** PingResult */
+        PingResult: {
+            /**
+             * Delivery Id
+             * @description 这次测试的投递记录 ID
+             */
+            delivery_id: number;
+            /**
+             * Status
+             * @description success / exhausted
+             */
+            status: string;
+            /**
+             * Response Code
+             * @description HTTP 状态码
+             */
+            response_code?: number | null;
+            /**
+             * Error
+             * @description 错误
+             */
+            error?: string | null;
+            /**
+             * Duration Ms
+             * @description 耗时（毫秒）
+             */
+            duration_ms?: number | null;
+        };
         /**
          * PluginType
          * @description 插件类型
@@ -9247,6 +9764,23 @@ export interface components {
              * @description 键总数
              */
             keys_num: string;
+        };
+        /** ResendExhaustedParam */
+        ResendExhaustedParam: {
+            /**
+             * Since
+             * Format: date-time
+             * @description 把这个时间之后产生、已放弃的投递全部改回待发
+             */
+            since: string;
+        };
+        /** ResendResult */
+        ResendResult: {
+            /**
+             * Count
+             * @description 改回待发的条数
+             */
+            count: number;
         };
         /**
          * ResetPasswordParam
@@ -9837,6 +10371,38 @@ export interface components {
             msg: string;
             data: components["schemas"]["GetUserInfoWithRelationDetail"];
         };
+        /** ResponseSchemaModel[GetWebhookDeliveryDetail] */
+        ResponseSchemaModel_GetWebhookDeliveryDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetWebhookDeliveryDetail"];
+        };
+        /** ResponseSchemaModel[GetWebhookDetail] */
+        ResponseSchemaModel_GetWebhookDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetWebhookDetail"];
+        };
         /** ResponseSchemaModel[ImportCommitDetail] */
         ResponseSchemaModel_ImportCommitDetail_: {
             /**
@@ -9900,6 +10466,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["IssuedOpenSecret"];
+        };
+        /** ResponseSchemaModel[IssuedWebhookSecret] */
+        ResponseSchemaModel_IssuedWebhookSecret_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["IssuedWebhookSecret"];
         };
         /** ResponseSchemaModel[PageData[GetAiMcpClientDetail]] */
         ResponseSchemaModel_PageData_GetAiMcpClientDetail__: {
@@ -10301,6 +10883,38 @@ export interface components {
             msg: string;
             data: components["schemas"]["PageData_GetUserInfoWithRelationDetail_"];
         };
+        /** ResponseSchemaModel[PageData[GetWebhookDeliveryRow]] */
+        ResponseSchemaModel_PageData_GetWebhookDeliveryRow__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["PageData_GetWebhookDeliveryRow_"];
+        };
+        /** ResponseSchemaModel[PingResult] */
+        ResponseSchemaModel_PingResult_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["PingResult"];
+        };
         /** ResponseSchemaModel[RedisMonitorInfo] */
         ResponseSchemaModel_RedisMonitorInfo_: {
             /**
@@ -10316,6 +10930,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["RedisMonitorInfo"];
+        };
+        /** ResponseSchemaModel[ResendResult] */
+        ResponseSchemaModel_ResendResult_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["ResendResult"];
         };
         /** ResponseSchemaModel[ServerMonitorInfo] */
         ResponseSchemaModel_ServerMonitorInfo_: {
@@ -10770,6 +11400,23 @@ export interface components {
             /** Data */
             data: components["schemas"]["GetToolDetail"][];
         };
+        /** ResponseSchemaModel[list[GetWebhookDetail]] */
+        ResponseSchemaModel_list_GetWebhookDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["GetWebhookDetail"][];
+        };
         /** ResponseSchemaModel[list[OpenScopeItem]] */
         ResponseSchemaModel_list_OpenScopeItem__: {
             /**
@@ -10856,6 +11503,23 @@ export interface components {
             data: ({
                 [key: string]: unknown;
             } | null)[];
+        };
+        /** ResponseSchemaModel[list[WebhookEventItem]] */
+        ResponseSchemaModel_list_WebhookEventItem__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["WebhookEventItem"][];
         };
         /** ResponseSchemaModel[list[dict[str, Any]]] */
         ResponseSchemaModel_list_dict_str__Any___: {
@@ -12264,6 +12928,38 @@ export interface components {
             roles: number[];
         };
         /**
+         * UpdateWebhookParam
+         * @description 更新端点（不含所属应用：建后不可改；不含密钥：换密钥走「重置密钥」）
+         */
+        UpdateWebhookParam: {
+            /**
+             * Name
+             * @description 端点名称
+             */
+            name: string;
+            /**
+             * Url
+             * @description 接收地址（https）
+             */
+            url: string;
+            /**
+             * Events
+             * @description 订阅的事件类型；支持 user.* 前缀通配
+             */
+            events: string[];
+            /**
+             * Status
+             * @description 状态（0：停用、1：正常）
+             * @default 1
+             */
+            status: number;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
+        };
+        /**
          * UserPermissionType
          * @description 用户权限类型
          * @enum {string}
@@ -12287,6 +12983,89 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WebhookAttemptItem */
+        WebhookAttemptItem: {
+            /**
+             * Id
+             * @description 记录 ID
+             */
+            id: string | number;
+            /**
+             * Attempt
+             * @description 第几次尝试
+             */
+            attempt: number;
+            /**
+             * Url
+             * @description 发往的地址
+             */
+            url: string;
+            /**
+             * Request Headers
+             * @description 请求头（签名已打码）
+             */
+            request_headers?: {
+                [key: string]: string;
+            } | null;
+            /**
+             * Response Code
+             * @description HTTP 状态码
+             */
+            response_code?: number | null;
+            /**
+             * Response Headers
+             * @description 响应头
+             */
+            response_headers?: {
+                [key: string]: string;
+            } | null;
+            /**
+             * Response Body
+             * @description 响应体（脱敏 + 截断）
+             */
+            response_body?: string | null;
+            /**
+             * Error
+             * @description 错误
+             */
+            error?: string | null;
+            /**
+             * Duration Ms
+             * @description 耗时（毫秒）
+             */
+            duration_ms: number;
+            /**
+             * Created Time
+             * Format: date-time
+             * @description 尝试时间
+             */
+            created_time: string;
+        };
+        /** WebhookEventItem */
+        WebhookEventItem: {
+            /**
+             * Type
+             * @description 事件类型
+             */
+            type: string;
+            /**
+             * Label
+             * @description 说明
+             */
+            label: string;
+            /**
+             * Scope
+             * @description 应用要授权的 scope
+             */
+            scope: string;
+            /**
+             * Sample
+             * @description 示例 data
+             */
+            sample: {
+                [key: string]: unknown;
+            };
         };
         /**
          * _Links
@@ -19547,6 +20326,397 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseSchemaModel_PageData_GetOpenApiLogDetail__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_webhook_events_api_v1_open_webhooks_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_WebhookEventItem__"];
+                };
+            };
+        };
+    };
+    get_webhooks_api_v1_open_webhooks_get: {
+        parameters: {
+            query: {
+                /** @description 应用 ID */
+                app_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_GetWebhookDetail__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_webhook_api_v1_open_webhooks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWebhookParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_IssuedWebhookSecret_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_webhook_api_v1_open_webhooks__pk__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 端点 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetWebhookDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_webhook_api_v1_open_webhooks__pk__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 端点 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWebhookParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_webhook_api_v1_open_webhooks__pk__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 端点 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_webhook_secret_api_v1_open_webhooks__pk__secret_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 端点 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_IssuedWebhookSecret_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ping_webhook_api_v1_open_webhooks__pk__ping_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 端点 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_PingResult_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_exhausted_api_v1_open_webhooks__pk__resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 端点 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResendExhaustedParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_ResendResult_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_webhook_deliveries_api_v1_open_webhook_deliveries_get: {
+        parameters: {
+            query?: {
+                /** @description 应用 ID */
+                app_id?: number | null;
+                /** @description 端点 ID */
+                webhook_id?: number | null;
+                /** @description 事件类型 */
+                event_type?: string | null;
+                /** @description 状态 */
+                status?: string | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_PageData_GetWebhookDeliveryRow__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_webhook_delivery_api_v1_open_webhook_deliveries__pk__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 投递 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetWebhookDeliveryDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_webhook_delivery_api_v1_open_webhook_deliveries__pk__resend_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 投递 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
                 };
             };
             /** @description Validation Error */

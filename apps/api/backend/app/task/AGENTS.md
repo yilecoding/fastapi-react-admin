@@ -272,6 +272,12 @@ worker / beat 挂了网页照常能开、`/health/ready` 照常 200，只有定�
 | 每次往 `task_result` 写一行 —— 一天 1440 行，「执行记录」页被淹没 | 装饰器上 `ignore_result=True` |
 | `TaskBase` 的开始 / 成功提示经 Redis 广播给**所有**在线页面 | 装饰器上 `notify=False`（`tasks/base.py` 认这个类属性；失败照推） |
 
+🔴 **这两条现在有守卫**：`tests/test_scheduler_api.py::test_high_frequency_tasks_neither_record_nor_broadcast`
+—— 库里每条启用的、间隔 ≤ 60 秒的调度，任务上都得有这两项。补它是因为 #166 的 `notification.deliver_pending`
+（每 15 秒）两项都没关就合进了 main：一天 5760 行执行记录，每 15 秒给所有在线页面推两条提示，CI 全绿。
+#167 加 `open.webhook_deliver_pending` 时才发现。变异：去掉通知任务上的两项 → 这条红。
+⚠️ 拿注册表要先 `celery_app.loader.import_default_modules()`：autodiscover 是惰性的，不导入就是 `NotRegistered`。
+
 调度那一行的 `expire_seconds = 180`（= 阈值）：worker 停了很久再起来时，排队超过阈值的心跳直接丢掉。
 
 **实测证据**（2026-10-23，本机：临时库 + 空闲 Redis 库号，api / worker / beat 分开起，经 `nginx:1.27-alpine` 挂真实

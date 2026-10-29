@@ -51,4 +51,9 @@ values
 (36, '状态', 'NOTIFICATION', 'NOTIFICATION_CONFIG_STATUS', '1', false, null, now(), null),
 (37, '外部渠道总开关', 'NOTIFICATION', 'NOTIFICATION_EXTERNAL_ENABLED', 'true', false, '关掉后只写站内通知，邮件 / 短信一条都不发（已经在排队的照常发完）', now(), null),
 (38, '失败重试次数', 'NOTIFICATION', 'NOTIFICATION_RETRY_MAX', '4', false, '不含第一次；结果未知的不重试', now(), null),
-(39, '投递记录保留（天）', 'NOTIFICATION', 'NOTIFICATION_DELIVERY_RETENTION_DAYS', '30', false, '每天凌晨的日志清理一起删', now(), null);
+(39, '投递记录保留（天）', 'NOTIFICATION', 'NOTIFICATION_DELIVERY_RETENTION_DAYS', '30', false, '每天凌晨的日志清理一起删', now(), null),
+(40, '状态', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_CONFIG_STATUS', '1', false, null, now(), null),
+(41, 'Webhook 总开关', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_ENABLED', 'true', false, '关掉后事件照记，但不再给任何端点生成投递（已经在排队的照常发完）', now(), null),
+(42, '自动停用阈值', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_DISABLE_AFTER', '20', false, '连续失败这么多次、且第一次失败已过去 24 小时，自动停用端点并通知应用创建人', now(), null),
+(43, '记录保留（天）', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_RETENTION_DAYS', '30', false, '事件、投递、每次尝试的记录，每天凌晨的日志清理一起删', now(), null),
+(44, '每个应用最多端点数', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_MAX_PER_APP', '10', false, null, now(), null);

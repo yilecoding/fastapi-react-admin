@@ -224,3 +224,16 @@ healthcheck、把它盖掉了，实际没人用。镜像里的 HEALTHCHECK 也�
 
 ⚠️ **这个部署只有一个入口，而且是公网入口**（宝塔站点直通 web 容器），所以这两条对公网是开着的。
 body 里只有服务名、状态和异常类型名，不带主机、端口、连接串。要挡的话只能在宝塔那一层按 IP 白名单放监控方。
+
+## Webhook 投递从 worker 发出去：worker 能连到的内网，就是 SSRF 能打到的内网（#167）
+
+Webhook 端点的 URL 是管理员填的，worker 照着去 `POST`。代码里每次投递前都会解析域名、拒掉回环 / 私网 / 链路本地地址，
+也不跟随重定向（[`plugin/open` 分册](../apps/api/backend/plugin/open/AGENTS.md)），但挡不住 **DNS 重绑定**：
+检查那一刻解析出公网地址，真正连接时换成了内网地址。这一层只能在部署上收：
+
+- 🔴 **`OPEN_WEBHOOK_ALLOW_PRIVATE_NETWORK` 在服务器上永远是 false**（prod 启动检查会拒绝 true，它只给本地联调和 E2E）
+- 想再收紧，给跑 worker 的容器配一条只能出公网的网络（访问不到数据库、Redis、宿主机的管理端口）。现在的 compose
+  **没有这样拆**：worker 和 api 在同一个网络里，因为 worker 本身就要连数据库和 Redis。要拆就得把 Webhook 投递
+  单独拆成一个只出公网的 worker 队列，**还没做**
+
+**实测证据**：只有代码那一层的测试（`plugin/open/tests/test_webhooks.py::TestSsrf`，8 条）。部署层的网络隔离没做，也就没验。

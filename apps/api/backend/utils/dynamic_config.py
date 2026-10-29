@@ -131,6 +131,10 @@ DYNAMIC_INT_BOUNDS: dict[str, tuple[int, int]] = {
     # 通知推送（#166）：外部渠道的重试次数（不含第一次）、投递记录保留天数
     'NOTIFICATION_RETRY_MAX': (0, 10),
     'NOTIFICATION_DELIVERY_RETENTION_DAYS': (1, 365),
+    # Webhook 事件订阅（#167）：连续失败多少次（且跨 24 小时）自动停用端点、事件 / 投递保留天数、每个应用最多几个端点
+    'OPEN_WEBHOOK_DISABLE_AFTER': (3, 1000),
+    'OPEN_WEBHOOK_RETENTION_DAYS': (1, 365),
+    'OPEN_WEBHOOK_MAX_PER_APP': (1, 100),
     # 会话策略（#138）。空闲按分钟：下界 5 给等保那种「15 / 30 分钟无操作退出」留空间，上界 90 天；
     # 绝对有效期按天；会话上限 0 = 不限
     **{

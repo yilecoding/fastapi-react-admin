@@ -167,6 +167,13 @@ error:
     secret_key_missing: OPEN_SECRET_KEY is not configured, the Secret Key cannot be stored safely. Generate one with python -c "import os;print(os.urandom(32).hex())", put it in .env and restart
     sign_mismatch: Signature mismatch, compare line by line against the returned string_to_sign
     timestamp_expired: Timestamp is outside the allowed window (±{window} seconds), please sync the server clock
+    webhook_delivery_not_found: Delivery not found
+    webhook_delivery_not_resendable: Only failed or abandoned deliveries can be resent
+    webhook_events_unknown: 'These events do not exist: {events}'
+    webhook_limit: An app can have at most {max} webhook endpoints
+    webhook_not_found: Webhook endpoint not found
+    webhook_scope_missing: 'Grant the app "{scopes}" before subscribing to: {events}'
+    webhook_url_invalid: 'Webhook URL is not usable: {reason}'
   password:
     max_length: Password must be at most {max_length} characters
     min_length: Password must be at least {min_length} characters
@@ -525,6 +532,11 @@ success:
 # `messages`/`message_templates`（按中文原文查表那一套）已经在这次治理里
 # 撤掉了——en-US 不需要「反向翻译」（那是 zh-CN.yml 独有的场景，见那边
 # 顶部注释），业务消息全部搬进了上面的 `error.*`。别再往这加东西。
+open:
+  webhook:
+    disabled_title: 'Webhook endpoint disabled: {name}'
+    disabled_auto: 'Endpoint {url} of app "{app}" failed {n} times in a row for over 24 hours and was disabled. Fix it, re-enable it, then bulk-resend from the delivery log'
+    disabled_gone: 'Endpoint {url} of app "{app}" answered 410 Gone and was disabled. Check the URL and re-enable it'
 workflow:
   default_title: '{name} from {user}'
   no_assignee: No approver found, skipped automatically

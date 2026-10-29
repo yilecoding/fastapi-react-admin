@@ -130,3 +130,75 @@ resp = requests.get(url, headers=sign_headers('GET', url, b'', access_key=AK, se
 用户字段：`id` `username` `nickname` `dept_id` `status`（0 停用 1 正常） `deleted` `created_time` `updated_time`
 
 部门字段：`id` `parent_id` `code` `name` `sort` `leader_id` `status` `deleted` `created_time` `updated_time`
+
+## 4. 接收事件（Webhook）
+
+不想定时来拉，可以让管理员在「应用管理 → Webhook」里登记你的接收地址、选好要听的事件。
+事件一发生，这边就带签名 `POST` 过去。拿到的东西：
+
+| 项 | 说明 |
+|---|---|
+| 签名密钥 | `whsec_` 开头，**只显示一次**。和 SK 是两把不同的密钥 |
+| 能订阅的事件 | 只能是应用已授权的接口对应的那些（订阅 `user.*` 要先授权「读取用户」，审批事件要授权 `workflow:read`） |
+
+### 请求长什么样
+
+```
+POST <你的地址>
+content-type: application/json
+webhook-id: 2227231048117391360          # 事件 ID：重试时不变，按它去重
+webhook-timestamp: 1761750000            # 这一次尝试的时间（秒）
+webhook-signature: v1,<base64>           # 密钥轮换的 24 小时里会有两个，空格分隔
+
+{"type":"dept.updated","timestamp":"2026-10-29T18:00:00+08:00","data":{"id":"2048601263515500544","code":"HQ","name":"总部","parent_id":null,"status":1}}
+```
+
+`data` **只有标识和状态**，不含表单内容、手机号、邮箱。要详情，用这个应用的 AK/SK 调第 3 节的接口去拉 ——
+读权限只有一条路，走授权和调用日志。
+
+| 事件 | 什么时候 | data |
+|---|---|---|
+| `user.created` · `user.updated` · `user.status_changed` · `user.deleted` | 新建（含批量导入、第三方登录首次建号）· 改资料 · 启用 / 停用 · 删除 | `id` `username` `dept_id` `status` |
+| `dept.created` · `dept.updated` · `dept.deleted` | 新建 · 修改 · 删除 | `id` `code` `name` `parent_id` `status` |
+| `workflow.instance.started` · `.approved` · `.rejected` · `.withdrawn` · `.terminated` | 发起 · 通过 · 驳回 · 撤回 · 终止 | `id` `definition_code` `title` `status` `initiator_id` `biz_type` `biz_id` |
+
+管理员点「发测试」时你会收到一条 `{"type":"ping", ...}`，不用处理，回 2xx 即可。
+
+### 验签
+
+遵循 [Standard Webhooks](https://www.standardwebhooks.com/)：
+
+```
+签名 = base64( HMAC-SHA256( key, "{webhook-id}.{webhook-timestamp}.{请求体原文}" ) )
+key  = 去掉 whsec_ 前缀之后 base64 解码得到的字节
+```
+
+- 🔴 **拿收到的原始字节算**，不要先 `json.loads` 再 `json.dumps` 回去 —— 字节一变签名就对不上
+- `webhook-timestamp` 和你的时间差超过 5 分钟就拒掉（防重放）
+- 头里可能有两个签名（管理员刚重置过密钥，旧的还会一起签 24 小时），**任一个**对上即可
+
+三份参考实现里都有 `verify_webhook`（Python `verify_webhook(headers, body, secret)` · Node `verifyWebhook(headers, body, secret)` ·
+Java `FraOpenSign.verifyWebhook(headers, body, secret)`），也可以直接用 Standard Webhooks 各语言的官方库。
+测试向量在 `sdk/test_vectors.json` 的 `webhook` 一节（就是规范 README 里那一组）：
+
+```
+secret     whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw
+webhook-id msg_p5jXN8AQM9LWM0D4loKWxJek
+timestamp  1614265330
+body       {"test": 2432232314}
+signature  v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=
+```
+
+### 你要回什么
+
+| 你回 | 这边怎么办 |
+|---|---|
+| 2xx（15 秒内） | 成功 |
+| 3xx | 失败，**不跟随重定向** —— 把地址改成最终那一个 |
+| 410 Gone | 不再重试，端点立即停用 |
+| 其他 / 超时 / 连不上 | 失败，15 秒 / 5 分钟 / 1 小时 / 6 小时后重试，共 5 次 |
+
+- **至少一次投递**：同一个事件可能收到不止一次（比如你处理完了但响应在路上丢了），按 `webhook-id` 去重
+- **不保证顺序**：重试会让后发生的先到。按 `data` 里的状态或你自己再拉一次的结果为准，别按到达顺序
+- 连续失败 20 次**且**持续超过 24 小时，端点会被自动停用，管理员会收到通知。修好之后由管理员重新启用、批量重发
+- 先回 2xx 再慢慢处理：别在请求里做耗时的事，超过 15 秒这边就当失败了

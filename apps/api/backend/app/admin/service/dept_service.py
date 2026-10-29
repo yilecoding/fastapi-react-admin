@@ -8,9 +8,23 @@ from backend.app.admin.crud.crud_dept import dept_dao
 from backend.app.admin.model import Dept, User
 from backend.app.admin.schema.dept import CreateDeptParam, UpdateDeptParam
 from backend.app.admin.utils.cache import user_cache_manager
+from backend.common.domain_events import emit
 from backend.common.exception import errors
 from backend.common.i18n import t
+from backend.common.security.data_scope import bypass_data_scope
 from backend.utils.build_tree import get_tree_data
+
+
+async def emit_dept_event(db: AsyncSession, type: str, dept_id: int) -> None:
+    """对外的 Webhook 事件（#167）：写完之后重新查那几列再发（`dept_dao.update` 是 Core UPDATE，实例上是旧值）"""
+    with bypass_data_scope():
+        row = (
+            await db.execute(
+                select(Dept.id, Dept.code, Dept.name, Dept.parent_id, Dept.status).where(Dept.id == dept_id)
+            )
+        ).first()
+    if row is not None:
+        await emit(db, type, aggregate_id=dept_id, data=dict(row._mapping))
 
 
 async def leader_names(db: AsyncSession, ids: set[int]) -> dict[str, str]:
@@ -120,7 +134,8 @@ class DeptService:
         :return:
         """
         await self.check_create(db=db, obj=obj)
-        await dept_dao.create(db, obj)
+        dept = await dept_dao.create(db, obj)
+        await emit_dept_event(db, 'dept.created', dept.id)
 
     @staticmethod
     async def check_update(*, db: AsyncSession, pk: int, obj: UpdateDeptParam, check_ancestry: bool = True) -> Dept:
@@ -179,6 +194,7 @@ class DeptService:
         """
         await self.check_update(db=db, pk=pk, obj=obj)
         count = await dept_dao.update(db, pk, obj)
+        await emit_dept_event(db, 'dept.updated', pk)
         # (issue #58) 缓存的用户快照里嵌着整个 dept（含 status）——不清的话被禁用
         # 部门下的用户继续被当成"部门正常"放行，最长锁死一个 TOKEN_EXPIRE_SECONDS
         await user_cache_manager.clear_by_dept_id(db, background_tasks, [pk])
@@ -202,6 +218,7 @@ class DeptService:
         if children:
             raise errors.ConflictError(msg=t('error.dept.has_children'))
         count = await dept_dao.delete(db, pk)
+        await emit_dept_event(db, 'dept.deleted', pk)
         return count
 
 
