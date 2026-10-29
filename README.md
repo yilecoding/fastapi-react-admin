@@ -136,6 +136,4 @@ pnpm dev                                                # 打开 http://localhos
 
 ## 致谢
 
-后端最初基于 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)（FBA）构建，
-三层结构、插件机制、RBAC 与数据权限模型都来自它的设计。感谢 FBA 的作者和贡献者 🙏
-上游同为 MIT，原始版权声明保留在 [`apps/api/LICENSE`](./apps/api/LICENSE)。
+感谢 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) 的作者和贡献者 🙏
