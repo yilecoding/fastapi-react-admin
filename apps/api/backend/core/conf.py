@@ -113,6 +113,10 @@ class Settings(BaseSettings):
         # 手机验证码登录的两个匿名接口（issue #168）。精确匹配，不要写成前缀
         f'{FASTAPI_API_V1_PATH}/auth/phone/captcha',
         f'{FASTAPI_API_V1_PATH}/auth/phone/login',
+        # 二次验证的登录第二步（#181）：凭第一步给的 mfa_token，还没有 access token
+        f'{FASTAPI_API_V1_PATH}/auth/mfa/verify',
+        f'{FASTAPI_API_V1_PATH}/auth/mfa/setup',
+        f'{FASTAPI_API_V1_PATH}/auth/mfa/enroll',
         # ⚠️ **不要**把 `/auth/logout` 加进来。曾经加过，为的是让「access token 已过期
         # 时点登出」不被中间件 401 挡住 —— 但代价是 `request.user` 在这条路由上变成
         # 未认证，`opera_log_middleware` 的 `request.user.username` 走 AttributeError
@@ -148,6 +152,18 @@ class Settings(BaseSettings):
     LOGIN_IP_FAILURE_PREFIX: str = 'fba:login:failure:ip'
     LOGIN_IP_LOCK_THRESHOLD: int = 30  # 单 IP 跨账号失败阈值，0 表示禁用
     LOGIN_IP_LOCK_SECONDS: int = 60 * 15
+
+    # 二次验证（MFA，#181）。强制策略在参数配置「登录策略」组里改：off 自愿 / superuser 超管必须 / all 所有人必须
+    LOGIN_MFA_ENFORCE: str = 'off'
+    # 🔴 TOTP 密钥落库的加密密钥（32 字节 = 64 位十六进制）。留空 = **不许开启** MFA，也不许把策略改成强制 ——
+    # 不静默存明文（同 OPEN_SECRET_KEY）。生成：python -c "import os;print(os.urandom(32).hex())"
+    MFA_SECRET_KEY: str = ''
+    MFA_REDIS_PREFIX: str = 'fba:mfa'
+    # 密码 / 手机验证码对了之后，留给人输动态码的时间；一个令牌最多试几次
+    MFA_CHALLENGE_SECONDS: int = 60 * 5
+    MFA_CHALLENGE_ATTEMPTS: int = 5
+    # 扫了码还没确认的那把密钥在 Redis 里放多久
+    MFA_SETUP_SECONDS: int = 60 * 10
 
     # JWT
     JWT_USER_REDIS_PREFIX: str = 'fba:user'
@@ -445,6 +461,13 @@ class Settings(BaseSettings):
         'secret_key',
         # 短信配置新建 / 编辑时的厂商凭据 secret（`plugin/sms/schema/config.py`），按键名精确匹配
         'access_key_secret',
+        # 二次验证（#181）：动态码 / 恢复码 / 绑定时下发的 TOTP 密钥 / 登录第二步的令牌。字段名刻意都起成专用的，
+        # 不用 `code` / `secret` 这种通用名（`code` 是部门 / 字典编码的键，不能整个脱）
+        'otp',
+        'totp_secret',
+        'otpauth_uri',
+        'recovery_codes',
+        'mfa_token',
         # 短信验证码：手机验证码登录（`AuthPhoneLoginParam`）和绑定手机号（`PUT /sys/users/me/phone` 的 Body 参数）
         # 都叫这个名。
         # 不脱的话操作日志里是「手机号 + 验证码」成对的明文。密码登录的图形验证码也叫 captcha，顺带脱掉，没损失

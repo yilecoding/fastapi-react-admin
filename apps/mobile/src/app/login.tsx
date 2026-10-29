@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { KeyRoundIcon, LogOutIcon, QrCodeIcon, SmartphoneIcon } from 'lucide-react-native'
+import { KeyRoundIcon, LogOutIcon, QrCodeIcon, ShieldCheckIcon, SmartphoneIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -20,7 +20,7 @@ import { ApiError, SESSION_END_MESSAGE } from '@admin/api'
 import { api } from '@/lib/api'
 import { BRAND } from '@/lib/brand'
 import { remembered } from '@/lib/remember'
-import { useSession } from '@/lib/session'
+import { useSession, type MfaChallenge } from '@/lib/session'
 
 /**
  * 登录方式 —— 和 web 端登录页的三个页签一一对应（`_guest/sign-in.tsx` 的 `METHODS`）。
@@ -61,7 +61,7 @@ type CaptchaState =
 
 export default function LoginScreen() {
   const { t } = useTranslation()
-  const { login, bootstrapError, endReason } = useSession()
+  const { login, verifyMfa, bootstrapError, endReason } = useSession()
   const insets = useSafeAreaInsets()
 
   const [method, setMethod] = React.useState<Method>('password')
@@ -76,6 +76,9 @@ export default function LoginScreen() {
   const [code, setCode] = React.useState('')
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  /** 二次验证（#181）：密码对了、还差动态码 */
+  const [mfa, setMfa] = React.useState<MfaChallenge | null>(null)
+  const [otp, setOtp] = React.useState('')
 
   const alive = React.useRef(true)
   React.useEffect(() => {
@@ -146,13 +149,17 @@ export default function LoginScreen() {
     setError(null)
     setSubmitting(true)
     try {
-      await login({
+      const challenge = await login({
         username: username.trim(),
         password,
         uuid: captcha.kind === 'ready' ? captcha.uuid : undefined,
         captcha: captcha.kind === 'ready' ? code.trim() : undefined,
       })
       await remembered.set(remember ? username.trim() : null)
+      if (challenge) {
+        setOtp('')
+        setMfa(challenge)
+      }
       // 成功之后不用手动跳转：根布局按 session.status 决定渲染哪一棵树
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -164,6 +171,27 @@ export default function LoginScreen() {
     } finally {
       if (alive.current) setSubmitting(false)
     }
+  }
+
+  async function submitOtp() {
+    if (submitting || !mfa) return
+    setError(null)
+    setSubmitting(true)
+    try {
+      await verifyMfa(mfa.token, otp.trim())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setOtp('')
+    } finally {
+      if (alive.current) setSubmitting(false)
+    }
+  }
+
+  function backToPassword() {
+    setMfa(null)
+    setOtp('')
+    setError(null)
+    if (captcha.kind === 'ready') loadCaptcha()
   }
 
   const canSubmit =
@@ -213,7 +241,17 @@ export default function LoginScreen() {
 
           {/* 🔴 三个页签内容高度要一致，否则切换时下面的东西会跳 */}
           <View style={{ minHeight: 336 }} className="pt-4">
-            {method !== 'password' ? (
+            {mfa ? (
+              <MfaStep
+                challenge={mfa}
+                otp={otp}
+                onChangeOtp={setOtp}
+                onSubmit={() => void submitOtp()}
+                onBack={backToPassword}
+                submitting={submitting}
+                error={error}
+              />
+            ) : method !== 'password' ? (
               <NotWired method={method} onUsePassword={() => setMethod('password')} />
             ) : (
               <View className="gap-4">
@@ -445,5 +483,89 @@ function CaptchaRow({
         />
       </Pressable>
     </Row>
+  )
+}
+
+/**
+ * 二次验证的第二步（#181）。移动端只做「输动态码」：被强制、还没绑定的账号要扫码绑定，
+ * 在手机上扫自己屏幕上的二维码做不到 —— 引导去网页端绑一次
+ */
+function MfaStep({
+  challenge,
+  otp,
+  onChangeOtp,
+  onSubmit,
+  onBack,
+  submitting,
+  error,
+}: {
+  challenge: MfaChallenge
+  otp: string
+  onChangeOtp: (v: string) => void
+  onSubmit: () => void
+  onBack: () => void
+  submitting: boolean
+  error: string | null
+}) {
+  const { t } = useTranslation()
+  if (challenge.setup) {
+    return (
+      <View className="gap-4 px-4" testID="login-mfa-setup">
+        <Alert icon={ShieldCheckIcon}>
+          <AlertTitle>{t('要先开启二次验证')}</AlertTitle>
+          <AlertDescription>
+            {t('管理员要求这个账号开启二次验证。请先在电脑上用网页登录一次，按提示用认证器扫码绑定；之后在这里输入认证器上的动态码即可登录。')}
+          </AlertDescription>
+        </Alert>
+        <Button variant="outline" onPress={onBack} className="h-[50px] rounded-xl">
+          <Text>{t('返回')}</Text>
+        </Button>
+      </View>
+    )
+  }
+  return (
+    <View className="gap-4" testID="login-mfa">
+      <Text variant="small" className="text-muted-foreground px-5">
+        {t('这个账号开启了二次验证。输入认证器上的 6 位动态码；手机不在身边时可以用一个恢复码。')}
+      </Text>
+      <Group>
+        <FieldRow first label={t('动态码')}>
+          <Input
+            value={otp}
+            onChangeText={onChangeOtp}
+            autoCapitalize="none"
+            autoCorrect={false}
+            textContentType="oneTimeCode"
+            autoComplete="one-time-code"
+            placeholder="123456"
+            maxLength={16}
+            onSubmitEditing={onSubmit}
+            testID="login-otp"
+            className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+          />
+        </FieldRow>
+      </Group>
+      {error ? (
+        <Text variant="small" className="text-destructive px-5" testID="login-error">
+          {error}
+        </Text>
+      ) : null}
+      <View className="gap-3 px-4">
+        <Button
+          disabled={otp.trim().length < 6 || submitting}
+          onPress={onSubmit}
+          testID="login-otp-submit"
+          className="h-[50px] rounded-xl"
+        >
+          {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
+          <Text className="text-base font-semibold">{t('验证')}</Text>
+        </Button>
+        <Pressable onPress={onBack} hitSlop={8} className="self-start px-1 py-1">
+          <Text variant="small" className="text-muted-foreground">
+            {t('返回重新登录')}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
   )
 }

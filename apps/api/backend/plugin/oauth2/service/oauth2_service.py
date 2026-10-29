@@ -7,10 +7,12 @@ from fastapi import BackgroundTasks, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_user import user_dao
+from backend.app.admin.schema.mfa import MfaChallenge
 from backend.app.admin.schema.token import GetLoginToken
 from backend.app.admin.schema.user import AddOAuth2UserParam
 from backend.app.admin.service.auth_service import auth_service, session_meta
 from backend.app.admin.service.login_log_service import login_log_service
+from backend.app.admin.service.mfa_service import gate as mfa_gate
 from backend.app.admin.service.user_password_history_service import password_security_service
 from backend.app.admin.service.user_service import emit_user_event
 from backend.common.context import ctx
@@ -25,7 +27,7 @@ from backend.plugin.oauth2.crud.crud_user_social import user_social_dao
 from backend.plugin.oauth2.enums import UserSocialAuthType, UserSocialType
 from backend.plugin.oauth2.schema.user_social import CreateUserSocialParam
 from backend.plugin.oauth2.service.user_social_service import user_social_service
-from backend.utils.dynamic_config import load_session_config
+from backend.utils.dynamic_config import load_login_config, load_session_config
 from backend.utils.timezone import timezone
 
 
@@ -45,7 +47,7 @@ class OAuth2Service:
         nickname: str | None = None,
         email: str | None = None,
         avatar: str | None = None,
-    ) -> GetLoginToken:
+    ) -> GetLoginToken | MfaChallenge:
         """
         OAuth2 用户登录
 
@@ -112,6 +114,13 @@ class OAuth2Service:
         if lock_reason is not None:
             raise errors.AuthorizationError(msg=lock_reason)
 
+        # 二次验证（#181）：第三方证明了「是这个人」，但开了 / 被强制 MFA 的账号照样要第二步。
+        # 不开会话，回调把令牌带回前端登录页（`?mfa=`）接着做
+        await load_login_config(db)
+        challenge = await mfa_gate(db, sys_user, client=SessionClient.web)
+        if challenge is not None:
+            return challenge
+
         # 创建会话（#138）。同一个浏览器里上一次的会话就地作废，同表单登录
         await load_session_config(db)
         await auth_service.end_current_session(request, sys_user.id, EndReason.replaced)
@@ -147,7 +156,7 @@ class OAuth2Service:
         user: dict[str, Any],
         social: UserSocialType,
         state: str | None = None,
-    ) -> GetLoginToken | None:
+    ) -> GetLoginToken | MfaChallenge | None:
         """
         OAuth2 登录或绑定
 

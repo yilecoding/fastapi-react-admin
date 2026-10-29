@@ -2,12 +2,14 @@ import json
 import uuid
 
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response
 from fastapi_oauth20 import FastAPIOAuth20, GoogleOAuth20
 from pyrate_limiter import Duration, Rate
 from starlette.responses import RedirectResponse
 
+from backend.app.admin.schema.mfa import MfaChallenge
 from backend.common.response.response_schema import ResponseSchemaModel, response_base
 from backend.core.conf import settings
 from backend.database.db import CurrentSessionTransaction
@@ -67,6 +69,12 @@ async def google_oauth2_callback(  # ruff:ignore[missing-return-type-undocumente
     # 绑定流程
     if data is None:
         return RedirectResponse(url=settings.OAUTH2_FRONTEND_BINDING_REDIRECT_URI)
+
+    # 二次验证（#181）：没开会话，把一次性令牌带回登录页接着做第二步。令牌 5 分钟、最多试 5 次、
+    # 不配动态码用不了 —— 和 refresh token 不是一个量级，才能进 URL（那个不行，见下）
+    if isinstance(data, MfaChallenge):
+        query = urlencode({'mfa': data.mfa_token, 'setup': '1' if data.mfa_setup else '0'})
+        return RedirectResponse(url=f'{settings.OAUTH2_FRONTEND_LOGIN_REDIRECT_URI}?{query}')
 
     # 登录流程
     # 令牌不进 URL（会进浏览器历史和反代日志）：前端落地页用 refresh cookie 静默恢复会话（#138）

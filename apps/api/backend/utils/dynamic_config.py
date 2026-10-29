@@ -153,8 +153,11 @@ SESSION_OVERFLOW_MODES = ('evict_idle', 'deny')
 
 
 #: 只认几个固定取值的动态配置（写入侧在 schema 上卡，读取侧对不上回落 .env）
+MFA_ENFORCE_MODES = ('off', 'superuser', 'all')
+
 DYNAMIC_CHOICES: dict[str, tuple[str, ...]] = {
-    f'SESSION_{client}_OVERFLOW': SESSION_OVERFLOW_MODES for client in ('WEB', 'DESKTOP', 'MOBILE')
+    'LOGIN_MFA_ENFORCE': MFA_ENFORCE_MODES,
+    **{f'SESSION_{client}_OVERFLOW': SESSION_OVERFLOW_MODES for client in ('WEB', 'DESKTOP', 'MOBILE')},
 }
 
 
@@ -163,6 +166,21 @@ def session_overflow(value: str) -> str:
     if value not in SESSION_OVERFLOW_MODES:
         raise ValueError(value)
     return value
+
+
+def mfa_enforce(value: str) -> str:
+    """二次验证的强制策略。拼错的值不能当成 off 静默放过 —— 界面上写着「所有人必须」、实际谁都不用"""
+    if value not in MFA_ENFORCE_MODES:
+        raise ValueError(value)
+    return value
+
+
+def check_dynamic_dependency(key: str, raw: str) -> str | None:
+    """依赖别的配置才成立的值。现在只有一条：没配 `MFA_SECRET_KEY` 时不许把二次验证改成强制 ——
+    强制了却开不了，被强制的人一个都登不进来，包括改这个配置的管理员自己（#181）"""
+    if key == 'LOGIN_MFA_ENFORCE' and raw != 'off' and not settings.MFA_SECRET_KEY:
+        return '没有配置 MFA_SECRET_KEY，不能强制开启二次验证（被强制的人会一个都登不进来）'
+    return None
 
 
 def check_dynamic_choice(key: str, raw: str) -> str | None:
@@ -230,6 +248,7 @@ async def load_login_config(db: AsyncSession) -> None:
     """
     mapping = {
         'LOGIN_CAPTCHA_ENABLED': str_to_bool,
+        'LOGIN_MFA_ENFORCE': mfa_enforce,
     }
     await load_config(db, 'login', mapping, 'LOGIN_CONFIG_STATUS')
 
