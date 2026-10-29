@@ -123,7 +123,7 @@ def _isolate(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> Iterator[No
     _call(client, _purge)
     yield
     _call(client, _purge)
-    _call(client, _set_user, 'test', phone=None, status=1)
+    _call(client, _set_user, 'test', phone=None, phone_verified_time=None, status=1)
 
 
 # ── 纯函数：四态 × 偏好 ─────────────────────────────────────────────────────────
@@ -235,6 +235,24 @@ class TestRouting:
         assert _call(client, _notify, [uid]) == 0
         rows = _call(client, _deliveries)
         assert [(r.channel, r.status, r.reason) for r in rows] == [('sms', 'skipped', 'no_address')]
+
+    def test_sms_needs_a_phone_the_owner_verified(self, client: TestClient) -> None:
+        """管理员录的号没经本人验证：打错一位，审批标题就发到陌生人手机上。记一行 skipped，不发"""
+        from backend.utils.timezone import timezone
+
+        uid = _call(client, _user_id, 'test')
+        _call(client, _policy, 'pytest.channel', 'sms', 'forced')
+        _call(client, _set_user, 'test', phone='13800001111', phone_verified_time=None)
+        assert _call(client, _notify, [uid]) == 0
+        assert [(r.status, r.reason, r.address) for r in _call(client, _deliveries)] == [
+            ('skipped', 'phone_unverified', '13800001111')
+        ]
+        # 同一个号验证过之后就发
+        _call(client, _purge)
+        _call(client, _policy, 'pytest.channel', 'sms', 'forced')
+        _call(client, _set_user, 'test', phone_verified_time=timezone.now())
+        assert _call(client, _notify, [uid]) == 1
+        assert [(r.status, r.reason) for r in _call(client, _deliveries)] == [('pending', None)]
 
     def test_disabled_user_is_skipped(self, client: TestClient) -> None:
         uid = _call(client, _user_id, 'test')

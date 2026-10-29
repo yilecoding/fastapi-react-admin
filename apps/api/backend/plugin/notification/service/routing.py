@@ -82,7 +82,11 @@ async def resolve(db: AsyncSession, kind: NotificationKind, user_ids: Sequence[i
     users = {
         u.id: u
         for u in (
-            await db.execute(select(User.id, User.email, User.phone, User.status).where(User.id.in_(list(user_ids))))
+            await db.execute(
+                select(User.id, User.email, User.phone, User.phone_verified_time, User.status).where(
+                    User.id.in_(list(user_ids))
+                )
+            )
         ).all()
     }
 
@@ -105,5 +109,9 @@ async def resolve(db: AsyncSession, kind: NotificationKind, user_ids: Sequence[i
             elif not address:
                 # 🔴 缺地址不是静默跳过：记一行 skipped，投递记录页能看到「这 37 个人没邮箱」（硬纪律 9）
                 reason = 'no_address'
+            elif channel is NotificationChannel.sms and user.phone_verified_time is None:
+                # 🔴 管理员录入 / 导入的号没经本人验证：打错一位，审批标题就发到了陌生人手机上（同手机登录只认验证过的号，#168）。
+                # 记 skipped 而不是退回 no_address：投递记录里要看得出「有号，但没验证」
+                reason = 'phone_unverified'
             routes.append(Route(user_id=uid, channel=channel, address=address or None, reason=reason))
     return routes

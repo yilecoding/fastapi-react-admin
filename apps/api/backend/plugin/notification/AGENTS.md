@@ -66,3 +66,12 @@ PostgreSQL 和 SQL Server 都过（2026-10-26，本机）。MySQL 没跑。
 `test_model_matches_migrations` 绿。
 E2E `apps/web/e2e/tests/notify-channels.spec.ts` 2 条；变异（个人中心不看 `configurable`）→ 锁那一条红。
 邮件 / 短信渠道**没有真发过**：发送层在测试里是假的，分类规则（SMTP 5xx 永久、4xx 重试）来自 aiosmtplib 的异常层级，不是真服务器的回包。
+
+## 🔴 短信只发本人验证过的号
+
+`sys_user.phone_verified_time` 为空 = 管理员录入 / 导入的号（#168）。手机登录早就只认验证过的号，短信通知原来没跟上：
+号码打错一位，审批标题就发到陌生人手机上，而投递记录里显示「已发出」。现在 `routing.resolve` 对这种号记一行
+`skipped / phone_unverified`（不退回 `no_address`：「有号没验证」和「没号」要分得开），个人中心的通知偏好在短信那一列标「手机号未验证」。
+
+**实测证据**：`tests/test_channels.py::TestRouting::test_sms_needs_a_phone_the_owner_verified` —— 同一个号，没验证时 skipped、
+验证后 pending。变异：去掉那个判断 → 红。

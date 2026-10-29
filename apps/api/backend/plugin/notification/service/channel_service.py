@@ -88,7 +88,9 @@ class ChannelService:
         for p in await notification_policy_dao.get_all(db):
             overrides.setdefault(p.kind, {})[p.channel] = p.mode
         prefs = {(p.kind, p.channel): p.enabled for p in await notification_pref_dao.get_for_users(db, [user_id])}
-        user = (await db.execute(select(User.email, User.phone).where(User.id == user_id))).first()
+        user = (
+            await db.execute(select(User.email, User.phone, User.phone_verified_time).where(User.id == user_id))
+        ).first()
         rows = []
         for kind in _kinds():
             if not kind.user_configurable:
@@ -112,7 +114,9 @@ class ChannelService:
             'items': rows,
             # 没邮箱 / 没手机号时界面上那一列提示「先去绑定」—— 开着也收不到，记成 skipped
             'has_email': bool(user and user.email),
-            'has_phone': bool(user and user.phone),
+            # 短信只发**本人验证过**的号（routing 里记 `phone_unverified`）。有号没验证要单独说，否则人会以为「绑了就行」
+            'has_phone': bool(user and user.phone and user.phone_verified_time),
+            'phone_unverified': bool(user and user.phone and not user.phone_verified_time),
         }
 
     @staticmethod
