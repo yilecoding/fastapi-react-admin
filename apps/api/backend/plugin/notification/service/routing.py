@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
@@ -67,6 +67,22 @@ async def policy_overrides(db: AsyncSession, kind: str) -> dict[str, str]:
     return {p.channel: p.mode for p in await notification_policy_dao.get_all(db, [kind])}
 
 
+def _skip_reason(user: Any, channel: NotificationChannel, address: str | None) -> str | None:
+    """这条渠道记成 skipped 的原因；能发返回 None"""
+    if user.status != 1:
+        return 'user_disabled'
+    if not check_plugin_installed(_CHANNEL_PLUGIN[channel]):
+        return 'plugin_missing'
+    if not address:
+        # 🔴 缺地址不是静默跳过：记一行 skipped，投递记录页能看到「这 37 个人没邮箱」（硬纪律 9）
+        return 'no_address'
+    if channel is NotificationChannel.sms and user.phone_verified_time is None:
+        # 🔴 管理员录入 / 导入的号没经本人验证：打错一位，审批标题就发到了陌生人手机上
+        # （同手机登录只认验证过的号，#168）。不退回 no_address：投递记录里要看得出「有号，但没验证」
+        return 'phone_unverified'
+    return None
+
+
 async def resolve(db: AsyncSession, kind: NotificationKind, user_ids: Sequence[int]) -> list[Route]:
     """算出外部渠道的投递清单。站内不在这里（站内行由调用方直接写）"""
     if not user_ids or kind.broadcast:
@@ -101,17 +117,6 @@ async def resolve(db: AsyncSession, kind: NotificationKind, user_ids: Sequence[i
             if not wants(modes[channel], pref=pref, configurable=kind.user_configurable):
                 continue
             address = user.email if channel is NotificationChannel.email else user.phone
-            reason: str | None = None
-            if user.status != 1:
-                reason = 'user_disabled'
-            elif not check_plugin_installed(_CHANNEL_PLUGIN[channel]):
-                reason = 'plugin_missing'
-            elif not address:
-                # 🔴 缺地址不是静默跳过：记一行 skipped，投递记录页能看到「这 37 个人没邮箱」（硬纪律 9）
-                reason = 'no_address'
-            elif channel is NotificationChannel.sms and user.phone_verified_time is None:
-                # 🔴 管理员录入 / 导入的号没经本人验证：打错一位，审批标题就发到了陌生人手机上（同手机登录只认验证过的号，#168）。
-                # 记 skipped 而不是退回 no_address：投递记录里要看得出「有号，但没验证」
-                reason = 'phone_unverified'
+            reason = _skip_reason(user, channel, address)
             routes.append(Route(user_id=uid, channel=channel, address=address or None, reason=reason))
     return routes
