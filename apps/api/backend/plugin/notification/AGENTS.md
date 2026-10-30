@@ -14,7 +14,7 @@
 使用方      notification_service.create_in_tx(db, kind=…, user_ids=…, …)   ← 唯一写通知的入口
 路由层      kinds.py 注册表 · 系统策略（sys_notification_policy）× 个人偏好（sys_notification_pref）× 有没有地址
 投递层      sys_notification_delivery（事务内 outbox）· Celery `notification.deliver_pending` 每 15 秒 + 提交后踢一脚
-渠道层      senders.py：email（邮件插件 send_email）· sms（短信插件 sms_service.send）—— 永远返回分类结果、永远不抛
+渠道层      senders.py：email（邮件插件 send_email）· sms（短信插件 sms_service.send）· bot（群机器人，二期）—— 永远返回分类结果、永远不抛
 ```
 
 - **类型（kind）由使用方声明**：各插件放 `notification_kinds.py`（审批流 `plugin/workflow/`、公告 `plugin/notice/`），
@@ -75,3 +75,40 @@ E2E `apps/web/e2e/tests/notify-channels.spec.ts` 2 条；变异（个人中心�
 
 **实测证据**：`tests/test_channels.py::TestRouting::test_sms_needs_a_phone_the_owner_verified` —— 同一个号，没验证时 skipped、
 验证后 pending。变异：去掉那个判断 → 红。
+
+## 群机器人（#166 二期）
+
+```
+bot_platforms.py   三家的协议：地址前缀 · 签名 · 消息体 · 回包分类（纯函数，不认识 backend.* / httpx）
+bot_service.py     配置的增删改查（地址 / 密钥加密）· 发测试消息 · enqueue_bots（事务内写投递行）
+senders.post_bot   发一次 HTTP；投递 worker 和「发测试消息」共用
+```
+
+- **不按人路由**：类型声明 `bot=True`（「这条通知的文案对一个群说得通」）才能被机器人订阅；订阅关系在机器人自己身上
+  （`sys_notification_bot.kinds`），不进策略 / 偏好矩阵，`defaults` 里写 `bot` 当场抛。现在开了的：公告 · 审批结果 · Webhook 端点停用。
+  🔴 对着收件人说话的不开（「抄送给你」「新的待办」「X 退回了你的申请」）—— 为此「被退回」从 `workflow.result` 拆成了 `workflow.sent_back`
+- **一条通知 × 一个机器人一行**，和收件人有几个无关（投递行 `user_id` 为空、`bot_id` 有值、`address` 是机器人名称快照）
+- 广播（公告）的提交在调用方手里（依赖收尾），所以 `broadcast()` 用 `kick_after_commit`（会话 `after_commit` 监听）踢 worker；回滚清掉标记
+- 🔴 **Webhook 地址本身就是凭据**：和加签密钥一起用 `NOTIFICATION_ENCRYPT_SECRET_KEY` 加密存，没配就拒绝保存；
+  接口只给 `webhook_hint`；入参字段 `webhook_url` / `sign_secret` 在 `OPERA_LOG_REDACT_KEYS` 里
+- 🔴 **地址只许落在三家官方前缀上**（协议 + 主机 + 端口逐项比、路径按前缀、带 userinfo 的拒），私有化部署配
+  `NOTIFICATION_BOT_EXTRA_URL_PREFIXES`（prod 只许 https）。不跟随重定向
+- 🔴 **读超时 / 对方断开 = 结果未知、不重试**（可能已经进群了，群里出现两次比重复一封邮件显眼得多）；连接没建立才重试。
+  2xx 但读不出业务码同样按结果未知
+- 🔴 **发之前自己数频率**（`RATE_LIMITS`：钉钉 / 企微 20 条/分钟，飞书 100/分钟 + 5/秒）：这一分钟发够了就推到下一分钟，
+  `reason=throttled`、**不算一次尝试**。不数的话一次批量审批让第 21 条起全被平台拒，每条白耗一次重试
+- 消息一律纯文本类（飞书 `post` 的 text / a 标签，钉钉 / 企微 `text`），不用 markdown：标题正文是用户填的，
+  走 markdown 就能塞一个看着像系统发的钓鱼链接。企微 text 上限 2048 **字节**，按字节截
+
+**协议来源**：飞书（签名、错误码 9499 / 11232 / 19021 / 19022 / 19024、限频、20 KB）和企微（地址、20 条/分钟、2048 字节）是官方文档原文；
+钉钉官方页面是前端渲染、抓不到原文，签名按多处转载的官方示例代码，310000 / 130101 两个码来自转载。企微的 45009 / 93000 官方页面上没有，是常见回包。
+
+**实测证据**：`tests/test_bots.py` 57 条（假平台是 `httpx.MockTransport`）。变异各打红：飞书签名的密钥和消息对调 · 不比主机 ·
+放过 userinfo · 按收件人展开 · 停用的机器人也发 · 读超时当重试 · 不限流 · 限流算一次尝试 · 企微按字符截 · 广播不写机器人 ·
+企微收密钥 · 钉钉时间戳用秒。⚠️ 「回滚也踢」第一版**没打红**：测试在一个会话里回滚、另一个会话里提交，标记跟着会话一起丢了；
+改成同一个会话回滚后再提交才红。
+E2E `apps/web/e2e/tests/notify-bot.spec.ts`：界面新增 → 测试消息打到假飞书、按官方算法验签通过 → 平台回 19024 时原因留在卡片上 →
+发公告后投递记录里有这个群的一行。变异：签名对调 → 验签那句红。
+迁移 `ae000000notifybot` 在 PostgreSQL（开发库）和 SQL Server（`fba_test`）上 `upgrade → downgrade -1 → upgrade` 都过，
+SQL Server 上新表不是 IDENTITY；autogenerate 和迁移后的库比对没有本次的差异。
+**三家真平台都还没发过**（没有真群）：签名和回包分类靠文档 + 假服务器。

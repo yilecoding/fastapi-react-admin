@@ -11,6 +11,8 @@
 
 短信插件的 `SmsErrorKind` 已经把「没连上」和「连上之后出事」分开了（`plugin/sms/AGENTS.md` 第一张表），这里照它分；
 邮件那边 `send_email` 把一切包成 `GatewayError`，原始异常在 `__cause__` 上。
+群机器人（#166 二期）同短信：连接没建立 = 没发出去，重试；请求发出去之后超时 / 断开 = 可能已经进群了，结果未知、不重试
+（群里一条消息出现两次，比邮件重复显眼得多）。
 """
 
 from __future__ import annotations
@@ -27,6 +29,8 @@ from backend.database.db import async_db_session
 from backend.plugin.notification.enums import NotificationChannel
 
 if TYPE_CHECKING:
+    import httpx
+
     from backend.plugin.notification.kinds import NotificationKind
     from backend.plugin.notification.model import NotificationDelivery
 
@@ -136,6 +140,81 @@ async def send_sms(row: NotificationDelivery, kind: NotificationKind) -> SendRes
     return SendResult(Outcome.sent, None, None, result.log_id, _ms(started))
 
 
+#: 测试用：换成 `httpx.MockTransport`。生产永远是 None（走真实网络）
+bot_transport: httpx.AsyncBaseTransport | None = None
+
+_BOT_OUTCOME: dict[str, Outcome] = {
+    'sent': Outcome.sent,
+    'retryable': Outcome.retryable,
+    'permanent': Outcome.permanent,
+    'unknown': Outcome.unknown,
+}
+
+
+async def post_bot(
+    platform: str, url: str, secret: str | None, *, title: str, content: str, link: str | None
+) -> SendResult:
+    """往一个群机器人发一条。投递 worker 和「发测试消息」共用；永远返回，永远不抛"""
+    import httpx
+
+    from backend.common.i18n import t
+    from backend.plugin.notification.bot_platforms import build_request, classify
+
+    started = time.monotonic()
+    try:
+        req = build_request(
+            platform,
+            url,
+            secret=secret,
+            title=title,
+            content=content,
+            link=absolute_link(link),
+            link_label=t('notification.bot.view_detail'),
+            now=time.time(),
+        )
+    except Exception as e:
+        return SendResult(Outcome.permanent, repr(e)[:2000], 'config_error', None, _ms(started))
+    try:
+        # 不跟随重定向：官方接口不会 30x，跟过去就是去了一个没校验过的地址
+        async with httpx.AsyncClient(
+            timeout=settings.NOTIFICATION_BOT_TIMEOUT_SECONDS, follow_redirects=False, transport=bot_transport
+        ) as client:
+            resp = await client.post(req.url, content=req.body, headers={'content-type': 'application/json'})
+    except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as e:
+        # 连接没建立：一个字节都没发出去
+        return SendResult(Outcome.retryable, f'{type(e).__name__}: {e!s}'[:2000], 'network', None, _ms(started))
+    except httpx.HTTPError as e:
+        # 请求已经发出去了（读超时 / 对方断开）：可能已经进群了
+        return SendResult(
+            Outcome.unknown, f'{type(e).__name__}: {e!s}'[:2000], 'network_after_send', None, _ms(started)
+        )
+    except Exception as e:
+        log.error(f'群机器人发送时出现意外异常：{e!r}')
+        return SendResult(Outcome.retryable, repr(e)[:2000], 'unexpected', None, _ms(started))
+    verdict, reason, error = classify(platform, resp.status_code, resp.content)
+    return SendResult(_BOT_OUTCOME[verdict], error, reason, None, _ms(started))
+
+
+async def send_bot(row: NotificationDelivery) -> SendResult:
+    from backend.plugin.notification.crud.crud_bot import notification_bot_dao
+    from backend.plugin.notification.service.bot_service import decrypt
+
+    started = time.monotonic()
+    async with async_db_session() as db:
+        bot = await notification_bot_dao.get(db, row.bot_id) if row.bot_id is not None else None
+    if bot is None:
+        return SendResult(Outcome.permanent, '机器人已删除', 'bot_missing', None, _ms(started))
+    if bot.status != 1:
+        return SendResult(Outcome.permanent, '机器人已停用', 'bot_disabled', None, _ms(started))
+    try:
+        url = decrypt(bot.webhook_cipher)
+        secret = decrypt(bot.secret_cipher) if bot.secret_cipher else None
+    except Exception as e:
+        # 加密密钥换过 / 没配：再试也一样
+        return SendResult(Outcome.permanent, repr(e)[:2000], 'config_error', None, _ms(started))
+    return await post_bot(bot.platform, url, secret, title=row.title, content=row.content, link=row.link)
+
+
 async def send(row: NotificationDelivery, kind: NotificationKind) -> SendResult:
     """按渠道分发。永远返回，永远不抛"""
     try:
@@ -143,7 +222,9 @@ async def send(row: NotificationDelivery, kind: NotificationKind) -> SendResult:
             return await send_email(row)
         if row.channel == NotificationChannel.sms.value:
             return await send_sms(row, kind)
-    except Exception as e:  # 上面两个已经自己兜住了，这里是最后一道
+        if row.channel == NotificationChannel.bot.value:
+            return await send_bot(row)
+    except Exception as e:  # 上面三个已经自己兜住了，这里是最后一道
         return SendResult(Outcome.retryable, repr(e)[:2000], 'unexpected')
     return SendResult(Outcome.permanent, f'不认识的渠道 {row.channel}', 'unknown_channel')
 

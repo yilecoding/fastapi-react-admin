@@ -72,7 +72,9 @@ class GetDeliveryDetail(SchemaBase):
 
     id: int
     notification_id: int | None = None
-    user_id: int
+    #: 群机器人的投递发给一个群：`user_id` 为空、`bot_id` 有值，`address` 是机器人名称
+    user_id: int | None = None
+    bot_id: int | None = None
     kind: str
     channel: str
     address: str | None = None

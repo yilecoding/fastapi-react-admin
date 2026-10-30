@@ -25,6 +25,7 @@ import { PluginPage } from "@admin/platform/pages/plugin"
 import { DashboardPage } from "@admin/platform/pages/dashboard"
 import { SchedulerManagePage } from "@admin/platform/pages/scheduler-manage"
 import { SchedulerRecordPage } from "@admin/platform/pages/scheduler-record"
+import { NotifyBotPage } from "@admin/platform/pages/notify-bot"
 import { NotifyDeliveryPage } from "@admin/platform/pages/notify-delivery"
 import { NotifyPolicyPage } from "@admin/platform/pages/notify-policy"
 import { SmsConfigPage } from "@admin/platform/pages/sms-config"
@@ -60,6 +61,7 @@ export const pageRegistry: PageRegistry = {
   "/_auth/open/log": OpenLogPage,
   "/_auth/scheduler/manage": SchedulerManagePage,
   "/_auth/scheduler/record": SchedulerRecordPage,
+  "/_auth/notify/bot": NotifyBotPage,
   "/_auth/notify/delivery": NotifyDeliveryPage,
   "/_auth/notify/policy": NotifyPolicyPage,
   "/_auth/sms/config": SmsConfigPage,

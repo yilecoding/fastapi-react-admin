@@ -103,7 +103,8 @@ export function NotifyDeliveryPage({
             group: '通知',
             defaultVisible: true,
             optionsLoading: kindsQuery.isPending,
-            options: (kindsQuery.data ?? []).filter((k) => !k.broadcast).map((k) => ({ value: k.kind, label: k.label })),
+            // 广播类（公告）也留着：它不发邮件 / 短信，但群机器人可以订阅
+            options: (kindsQuery.data ?? []).map((k) => ({ value: k.kind, label: k.label })),
           }
         : { key: 'kind', label: '通知类型', type: 'text', group: '通知', defaultVisible: true, placeholder: 'workflow.remind' },
       {
@@ -112,7 +113,7 @@ export function NotifyDeliveryPage({
         type: 'select',
         group: '通知',
         defaultVisible: true,
-        options: CHANNELS.filter((c) => c !== 'inapp').map((c) => ({ value: c, label: channelLabel(t, c) })),
+        options: [...CHANNELS.filter((c) => c !== 'inapp'), 'bot' as const].map((c) => ({ value: c, label: channelLabel(t, c) })),
       },
       {
         key: 'status',

@@ -1,7 +1,9 @@
 """审批流的通知类型（#166）。通知插件启动时扫描这个模块（`plugin/notification/extensions.py`）。
 
-- 站内一律 forced；邮件默认开的只有「催办」「超时」这两条要人动手的，其余默认关、用户自己开
+- 站内一律 forced；邮件默认开的只有要人动手的「催办」「超时」「被退回」，其余默认关、用户自己开
 - 短信只给催办和超时：国内短信只能发审核过的模板，内容多变的结果通知不适合；而且是真金白银，默认关
+- 群机器人（#166 二期）只开「审批结果」：通过 / 驳回 / 终止是一句对谁都说得通的话。「被退回」单独一个类型，
+  正文是「X 退回了你的申请」—— 对着发起人说的，推到群里就不对了；抄送 / 催办 / 新的待办同理
 - `workflow.task_assigned`（你有新的待办）**不写站内行**：站内靠待办数红点感知（`enums.py` 里 WORKFLOW 的注释），
   在铃铛上再出现一次就重复了。但人不开后台时它是最想要的那一条，所以只声明外部渠道
 """
@@ -40,6 +42,14 @@ register_notification_kind(
     label='审批结果',
     category=NotificationCategory.WORKFLOW,
     defaults={'inapp': 'forced', 'email': 'default_off'},
+    bot=True,
+)
+register_notification_kind(
+    'workflow.sent_back',
+    label='申请被退回',
+    category=NotificationCategory.WORKFLOW,
+    # 要发起人动手改了重新提交，邮件默认开（同催办）
+    defaults={'inapp': 'forced', 'email': 'default_on'},
 )
 register_notification_kind(
     'workflow.cc',

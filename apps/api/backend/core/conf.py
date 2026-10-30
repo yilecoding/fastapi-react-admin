@@ -472,6 +472,10 @@ class Settings(BaseSettings):
         # 都叫这个名。
         # 不脱的话操作日志里是「手机号 + 验证码」成对的明文。密码登录的图形验证码也叫 captcha，顺带脱掉，没损失
         'captcha',
+        # 群机器人（#166 二期，`plugin/notification/schema/bot.py`）：Webhook 地址里带着凭据
+        # （钉钉 access_token / 企微 key / 飞书 hook ID，拿到地址就能往群里发），加签密钥同理。字段名同样起成专用的
+        'webhook_url',
+        'sign_secret',
     ]
     OPERA_LOG_QUEUE_MAXSIZE: int = 100000
     OPERA_LOG_QUEUE_BATCH_CONSUME_SIZE: int = 100
@@ -646,6 +650,14 @@ class Settings(BaseSettings):
     NOTIFICATION_DELIVERY_RETENTION_DAYS: int
     # 前端的访问地址：邮件里的「去处理」要拼绝对地址（和 AI 插件的 AI_WEB_BASE_URL 分开：两个插件可以单独装卸）
     NOTIFICATION_WEB_BASE_URL: str
+    # 群机器人（#166 二期）的 Webhook 地址 / 加签密钥的落库加密密钥（64 位十六进制）。
+    # 留空 = 拒绝保存机器人，不会静默存明文
+    NOTIFICATION_ENCRYPT_SECRET_KEY: str
+    # 调群机器人接口的超时（秒）
+    NOTIFICATION_BOT_TIMEOUT_SECONDS: float
+    # 官方地址之外还放行哪些地址前缀（逗号分隔，如私有化部署的飞书 `https://feishu.corp.example.com/open-apis/bot/v2/hook/`）。
+    # 🔴 地址只许落在这些前缀上 —— 服务端会往这个地址发请求，任意地址等于开了 SSRF 的口子
+    NOTIFICATION_BOT_EXTRA_URL_PREFIXES: str
 
     ##################################################
     # [ Plugin ] sms
@@ -870,6 +882,15 @@ def _check_webhook_private_network(s: Settings) -> str | None:
     return None
 
 
+def _check_bot_url_prefixes(s: Settings) -> str | None:
+    """群机器人的地址里带着凭据（钉钉 access_token / 企微 key），放行 http 前缀 = 凭据明文过网（#166 二期）"""
+    raw = str(getattr(s, 'NOTIFICATION_BOT_EXTRA_URL_PREFIXES', '') or '')
+    plain = [p.strip() for p in raw.split(',') if p.strip() and not p.strip().startswith('https://')]
+    if plain:
+        return f'NOTIFICATION_BOT_EXTRA_URL_PREFIXES 在 prod 只许 https 前缀：{", ".join(plain)}'
+    return None
+
+
 def check_production_settings(s: Settings) -> None:
     """prod 启动前置校验 —— 一次性收集**全部**问题后 fail-fast
 
@@ -928,6 +949,7 @@ def check_production_settings(s: Settings) -> None:
         _check_session_settings(s),
         _check_import_default_password(s),
         _check_webhook_private_network(s),
+        _check_bot_url_prefixes(s),
     ))
 
     found = [p for p in problems if p]
