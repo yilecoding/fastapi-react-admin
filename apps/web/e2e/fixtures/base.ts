@@ -82,23 +82,45 @@ export type ApiClient = {
   del: (apiPath: string, data?: unknown) => Promise<unknown>
 }
 
+/**
+ * SQL Server 把并发事务里的一个判成死锁牺牲者（1205），回的是 500 + 原文里的 `(1205)`。
+ *
+ * 🔴 CI 的 E2E 跑在 SQL Server 上（RCSI 关着），几个 spec 并行在 beforeAll / afterAll 里建、删用户时会撞上：
+ * PR #191 第一次 CI，`notice-phase2.spec.ts` 建账号的 `POST /sys/users` 和别的 spec 收尾的
+ * `DELETE /sys/users/{pk}`（删 `sys_user_role`）互锁，前者被选为牺牲者 → beforeAll 抛 → 整组 8 条跳过。
+ * 本地 E2E 跑的是 PostgreSQL，碰不到。报错原文就写着「Rerun the transaction」—— 那是这类错误的正解
+ * （牺牲者的整个事务已经回滚，重发 POST 不会多建一条），所以造数据的接口调用在这里重试；
+ * 页面上的请求不经过这里，照旧原样暴露
+ */
+const DEADLOCK_RETRIES = 3
+
+function isDeadlockVictim(status: number, body: { msg?: string } | null): boolean {
+  return status === 500 && typeof body?.msg === "string" && body.msg.includes("(1205)")
+}
+
 function makeClient(ctx: APIRequestContext, token: string): ApiClient {
   const headers = { Authorization: `Bearer ${token}` }
 
-  async function unwrap(resPromise: Promise<Awaited<ReturnType<APIRequestContext["get"]>>>) {
-    const res = await resPromise
-    const body = (await res.json().catch(() => null)) as { code?: number; msg?: string; data?: unknown } | null
-    if (!res.ok() || (body && typeof body.code === "number" && body.code !== 200)) {
-      throw new Error(`接口调用失败 [${res.status()}] ${res.url()}：${JSON.stringify(body)}`)
+  async function unwrap(send: () => Promise<Awaited<ReturnType<APIRequestContext["get"]>>>) {
+    for (let attempt = 0; ; attempt++) {
+      const res = await send()
+      const body = (await res.json().catch(() => null)) as { code?: number; msg?: string; data?: unknown } | null
+      if (attempt < DEADLOCK_RETRIES && isDeadlockVictim(res.status(), body)) {
+        await new Promise((r) => setTimeout(r, 200 * (attempt + 1)))
+        continue
+      }
+      if (!res.ok() || (body && typeof body.code === "number" && body.code !== 200)) {
+        throw new Error(`接口调用失败 [${res.status()}] ${res.url()}：${JSON.stringify(body)}`)
+      }
+      return body?.data
     }
-    return body?.data
   }
 
   return {
-    get: (p) => unwrap(ctx.get(`${API_BASE}${p}`, { headers })),
-    post: (p, data) => unwrap(ctx.post(`${API_BASE}${p}`, { headers, data })),
-    put: (p, data) => unwrap(ctx.put(`${API_BASE}${p}`, { headers, data })),
-    del: (p, data) => unwrap(ctx.delete(`${API_BASE}${p}`, { headers, data })),
+    get: (p) => unwrap(() => ctx.get(`${API_BASE}${p}`, { headers })),
+    post: (p, data) => unwrap(() => ctx.post(`${API_BASE}${p}`, { headers, data })),
+    put: (p, data) => unwrap(() => ctx.put(`${API_BASE}${p}`, { headers, data })),
+    del: (p, data) => unwrap(() => ctx.delete(`${API_BASE}${p}`, { headers, data })),
   }
 }
 

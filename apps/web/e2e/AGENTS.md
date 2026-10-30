@@ -428,6 +428,20 @@ CI 上读成了两个「侧边栏」（首跑 + 重试都红，本地一直绿�
 
 🔴 **「关不掉」的浮层断言 `data-open`，不要断言 `toBeVisible()`。** `notice-phase2.spec.ts` 第一版写的是按 Esc 之后 `expect(popup).toBeVisible()` —— 变异成「Esc 能关」之后**这句照样过**：关掉之后还有一段退场动画，那段时间里它就是看得见的。用例最后是红了，但红在后面一句不相干的 `click` 超时上。改成 `toHaveAttribute("data-open", "")`（Base UI 关的那一刻就摘掉）之后，同一个变异红在 Esc 那一句。
 
+### 🔴 CI 的 E2E 跑在 SQL Server 上：并行 spec 建 / 删用户会互相死锁
+
+**症状**：PR #191 第一次 CI，`notice-phase2.spec.ts` 整组 8 条 0ms 失败 / 跳过，报错是 `beforeAll` 里
+`POST /sys/users` 500 —— `Transaction … was deadlocked … chosen as the deadlock victim. Rerun the transaction. (1205)`。
+本地一直绿：本地 E2E 用的是 PostgreSQL（私有库），**CI 那个 job 只有 SQL Server**（RCSI 关着，读也加共享锁）。
+
+**根因**：同一时间窗口里另一个 spec 在 `afterAll` 删用户（`DELETE /sys/users/{pk}` → 删 `sys_user_role`），
+两边各拿着对方要的锁。服务端日志里两次死锁都在用户的建 / 删之间，每个请求 4～5 秒（CI 机器那时很忙）。
+和公告代码无关 —— 是「几个 spec 并行造 / 拆账号」这件事本身，新 spec 一次建 7 个账号把概率推高了。
+
+**修法**：`fixtures/base.ts` 的接口客户端（`api` fixture / `createApiClient`）遇到 500 + `(1205)` 重发，最多 3 次、退避递增。
+牺牲者的整个事务已经回滚，重发 POST 不会多建；页面自己的请求不走这里，照旧原样暴露。
+别的 500 不重试 —— 那会把真 bug 盖住。
+
 ### 导入类用例的 xlsx 现造，不提交固件
 
 `e2e/utils/xlsx.ts` 里有一个最小 xlsx 生成器（单表 + 内联字符串 + 数字格）。
