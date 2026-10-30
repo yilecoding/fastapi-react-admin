@@ -68,3 +68,16 @@ class BotPlatform(StrEnum):
     feishu = 'feishu'
     dingtalk = 'dingtalk'
     wecom = 'wecom'
+
+
+class AudienceKind(StrEnum):
+    """`sys_notification_audience.kind`：一条来源发给谁（#190）。值是契约：表里存它，前端的「发布范围」按它分组
+
+    同一个来源一行受众都没有 = 全员
+    """
+
+    #: 部门 —— **含所有下级部门**（发给「技术中心」，后端组 / 前端组的人都看得到）
+    dept = 'dept'
+    #: 角色（只认启用的角色）
+    role = 'role'
+    user = 'user'

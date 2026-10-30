@@ -33,6 +33,11 @@ export type MultiSelectOption = {
   /** 右侧的弱化补充说明（如权限码、编号） */
   hint?: string
   disabled?: boolean
+  /**
+   * 树形选项的层级（0 起），只在**下拉里**缩进。
+   * 不往 `label` 里塞全角空格：关闭态和搜索都用 label，那样触发器上的名字前面会多出一截空白
+   */
+  depth?: number
 }
 
 const triggerVariants = {
@@ -215,6 +220,7 @@ function MultiSelectItems({
             disabled={opt.disabled}
             data-slot="multi-select-item"
             className="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none select-none data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+            style={opt.depth ? { paddingInlineStart: `${0.5 + opt.depth * 1.125}rem` } : undefined}
           >
             {/*
               多选用**复选框**而不是右侧对勾：对勾是「当前是哪一个」的语义，

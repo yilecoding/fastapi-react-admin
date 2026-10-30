@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { createColumnHelper } from '@tanstack/react-table'
-import { IconCheck, IconExternalLink } from '@tabler/icons-react'
+import { IconCheck, IconExternalLink, IconEyeCheck } from '@tabler/icons-react'
 
 import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
@@ -68,8 +68,9 @@ export function buildColumns(
           <button
             type="button"
             onClick={() => {
-              readIfUnread(n)
+              // 公告那一行交给读者抽屉标已读（必须确认的要等人点「我已阅读」，#190）
               if (noticeId) onOpenNotice(noticeId)
+              else readIfUnread(n)
             }}
             data-testid={`open-notification-${n.id}`}
             data-unread={!n.read_time}
@@ -153,6 +154,26 @@ export function buildColumns(
               <TooltipContent>
                 {t('已读于 {{at}}', { at: formatDateTime(n.read_time) })}
               </TooltipContent>
+            </Tooltip>
+          )
+        }
+        // 🔴 必须确认的公告（#190）不给「标记已读」：那个 PUT 就是后端认的「我已阅读」，
+        // 在这里点一下等于替人确认了（弹窗不再弹、阅读统计里成了已读）。只能点标题打开抽屉、看完点「我已阅读」。
+        // 不摆禁用按钮的理由同上（禁用态打不开 tooltip），换成一个说明原因的标记
+        if (n.requires_ack) {
+          return (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    className="block w-7 text-center text-amber-700 dark:text-amber-300"
+                    data-testid={`notification-needs-ack-${n.id}`}
+                  />
+                }
+              >
+                <IconEyeCheck className="inline size-4" />
+              </TooltipTrigger>
+              <TooltipContent>{t('必须确认：点标题打开，读完点「我已阅读」')}</TooltipContent>
             </Tooltip>
           )
         }

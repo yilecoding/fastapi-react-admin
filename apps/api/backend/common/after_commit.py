@@ -7,8 +7,11 @@
 - `factory` 在提交那一刻才调，所以测试里 monkeypatch 掉的模块级函数照样生效
 - 提交后派出去的协程要留引用：只靠 `create_task` 的话可能被 GC 回收掉
 
-⚠️ 同形状的还有两份没迁过来：`plugin/open/service/event_service.py: kick_after_commit`（Webhook）和
-`app/task/model/scheduler.py` 的变更标记（同步会话）。
+调用方：通知广播的推送（`push_broadcast_after_commit`）· 通知投递踢 worker（`delivery_service.kick_after_commit`）·
+Webhook 投递踢 worker（`plugin/open/service/event_service.py: kick_after_commit`，#190 迁过来的）。
+
+⚠️ `app/task/model/scheduler.py` 的变更标记是同形状的另一份，**刻意不迁**：它挂在 beat / 接口的**同步**会话
+（`Session`）上、提交后要做的是一次同步的 Redis 写，这里派的是协程（要有正在跑的事件循环）。
 """
 
 import asyncio

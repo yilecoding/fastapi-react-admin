@@ -109,6 +109,13 @@ class CRUDNotificationDelivery(DataScopedCRUD[NotificationDelivery]):
             kwargs['created_time__le'] = end_time
         return await self.select_order('id', 'desc', **kwargs)
 
+    async def has_bot_delivery(self, db: AsyncSession, notification_id: int) -> bool:
+        """这一行站内通知推过群机器人没有（有它的机器人投递行，不管发没发成）"""
+        stmt = select(NotificationDelivery.id).where(
+            NotificationDelivery.notification_id == notification_id, NotificationDelivery.bot_id.is_not(None)
+        )
+        return await db.scalar(stmt.limit(1)) is not None
+
     async def due_ids(self, db: AsyncSession, *, after_id: int, limit: int, now: datetime) -> list[int]:
         """到点该发的一批：待发 / 失败待重试，按 id 往后翻（keyset）。
 

@@ -29,6 +29,8 @@ import { Separator } from "@admin/ui/components/separator"
 import { pageRegistry } from "@/lib/page-registry"
 import { buildValidPaths, makeIsValidPath } from "@/lib/valid-paths"
 import { NotificationBell } from "@admin/platform/pages/notification/bell"
+import { NoticeBanner } from "@admin/platform/pages/notice/banner"
+import { NoticePopupHost } from "@admin/platform/pages/notice/popup-host"
 import { AiDrawer, AiDrawerTrigger } from "@admin/platform/pages/ai-chat/drawer"
 import { GithubLink } from "@/components/github-link"
 import { UserMenu } from "@/components/user-menu"
@@ -121,6 +123,8 @@ function AuthLayout() {
             <UserMenu />
           </div>
         </header>
+        {/* 置顶 + 紧急 + 没读的公告（#190）。同铃铛，外壳家具不是标签页 —— 别注册进 page-registry */}
+        <NoticeBanner />
         <TabBar />
         <AiDrawer />
         {/* 这一层是 div 不是 main —— `SidebarInset` 自己渲染的就是 <main>，
@@ -140,6 +144,8 @@ function AuthLayout() {
 
         {/* 命令面板 + 快捷键帮助。挂在外壳里（不是页面里）—— 它要在任何 tab 上都能呼出 */}
         <CommandMenu options={options} />
+        {/* 登录后弹窗（#190）。排在导览前面：取数中 / 弹着的时候它按住导览（shell/tour/gate.ts），弹窗先、导览后 */}
+        <NoticePopupHost />
         {/* 首次登录在仪表盘自动弹一次外壳导览；之后从 ⌘K 的「功能引导」重放 */}
         <TourAutostart />
         {/* 右下角上传浮窗。外壳家具：队列在 store 里，切 tab / 关 tab 都不影响 */}

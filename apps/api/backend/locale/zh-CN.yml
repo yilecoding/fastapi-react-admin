@@ -145,6 +145,9 @@ error:
     not_found: 通知公告不存在
     attachment_invalid: 附件不存在，或者你没有权限使用这个文件
     attachment_public: 「{name}」是公开文件（不登录也能下载），不能作为公告附件，请重新上传
+    require_ack_needs_popup: 「必须确认」只能和「登录后弹窗」一起开
+    public_with_audience: 登录页可见的公告不能限定发布范围（不登录的人都看得到）
+    audience_invalid: 发布范围里有不存在的部门、角色或用户
   notification:
     not_found: 通知不存在
     delivery_not_found: 投递记录不存在

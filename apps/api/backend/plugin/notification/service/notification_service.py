@@ -11,9 +11,10 @@ from backend.common.log import log
 from backend.common.pagination import paging_data
 from backend.common.socketio.actions import notification_new
 from backend.core.conf import settings
-from backend.plugin.notification.crud.crud_notification import notification_dao
+from backend.plugin.notification.audience import Viewer
+from backend.plugin.notification.crud.crud_notification import implicit_read_time, notification_dao
 from backend.plugin.notification.enums import NotificationCategory
-from backend.plugin.notification.kinds import require_notification_kind
+from backend.plugin.notification.kinds import NotificationKind, require_notification_kind
 from backend.plugin.notification.model import Notification
 from backend.plugin.notification.schema.notification import (
     CreateNotificationParam,
@@ -127,24 +128,44 @@ async def create_in_tx(
     return out
 
 
+async def _push_to_bots(
+    db: AsyncSession, spec: NotificationKind, *, notification_id: int, title: str, content: str, link: str | None
+) -> int:
+    """一条广播推给订阅了它的群机器人：一个群一行投递（挂着站内那一行的 ID），提交之后踢 worker。不 commit
+
+    提交在调用方手里（公告接口是依赖收尾时提交）：踢挂到会话的 after_commit 上，回滚就不踢
+    """
+    from backend.plugin.notification.service.bot_service import enqueue_bots
+    from backend.plugin.notification.service.config import load_notification_config
+    from backend.plugin.notification.service.delivery_service import kick_after_commit
+
+    await load_notification_config(db)
+    if not settings.NOTIFICATION_EXTERNAL_ENABLED:
+        return 0
+    n = await enqueue_bots(db, kind=spec, title=title, content=content, link=link, notification_id=notification_id)
+    if n:
+        kick_after_commit(db)
+    return n
+
+
 class NotificationService:
     """站内通知服务类"""
 
     @staticmethod
     async def get_list(
-        *, db: AsyncSession, user_id: int, title: str | None, category: int | None, unread: bool | None
+        *, db: AsyncSession, viewer: Viewer, title: str | None, category: int | None, unread: bool | None
     ) -> dict[str, Any]:
         """
         获取「我的通知」分页列表
 
         :param db: 数据库会话
-        :param user_id: 当前用户 ID
+        :param viewer: 看的人（`audience.viewer_of(db, request.user)`）
         :param title: 标题（模糊匹配）
         :param category: 分类
         :param unread: True 只看未读、False 只看已读、None 不筛
         :return:
         """
-        select = await notification_dao.get_select(user_id, title, category, unread=unread)
+        select = await notification_dao.get_select(viewer, title, category, unread=unread)
         page_data = await paging_data(db, select)
 
         # 已读状态**不是** `sys_notification` 上的列（广播不 fan-out，见模型注释），
@@ -156,58 +177,71 @@ class NotificationService:
         # dataclass 展开它。这里按属性取（`item.id`）会直接
         # `'dict' object has no attribute 'id'` → 500（实测踩过）。
         items: list[dict[str, Any]] = list(page_data['items'])
-        read_map = await notification_dao.get_read_map(db, user_id, [i['id'] for i in items])
-        attachments = await count_source_attachments(db, [i.get('source') for i in items])
+        read_map = await notification_dao.get_read_map(db, viewer.id, [i['id'] for i in items])
+        attachments = await count_source_attachments(db, [i.get('source') for i in items], viewer)
+        needs_ack = await notification_dao.get_explicit_ack_ids(db, [i['id'] for i in items])
         for item in items:
-            item['read_time'] = read_map.get(item['id'])
+            # 必须读者打开确认的（#190 公告的「必须确认」）：前端那一行不摆「标为已读」，「全部已读」也跳过它
+            item['requires_ack'] = item['id'] in needs_ack
+            # 没有显式已读、但是建号之前的广播：按新账号规则算已读，阅读时间回填成建号时间（同 `_unread` 的判定，
+            # 必须确认的除外 —— 新来的人也要点「我已阅读」）
+            item['read_time'] = read_map.get(item['id']) or implicit_read_time(
+                viewer,
+                recipient_id=item['recipient_id'],
+                created_time=item['created_time'],
+                requires_ack=item['requires_ack'],
+            )
             item['attachment_count'] = attachments.get(item.get('source') or '')
         return page_data
 
     @staticmethod
-    async def get_unread(*, db: AsyncSession, user_id: int) -> dict[str, Any]:
+    async def get_unread(*, db: AsyncSession, viewer: Viewer) -> dict[str, Any]:
         """
         获取未读数（红点用）
 
         :param db: 数据库会话
-        :param user_id: 当前用户 ID
+        :param viewer: 看的人
         :return:
         """
-        by_category = await notification_dao.count_unread_by_category(db, user_id)
+        by_category, requires_ack = await notification_dao.count_unread(db, viewer)
         return {
             'total': sum(by_category.values()),
+            # 「全部已读」会跳过它们：前端拿 `total - requires_ack_count` 判按钮还有没有东西可标
+            'requires_ack_count': requires_ack,
             # key 转成字符串：JSON 对象的 key 本来就只能是字符串，
             # 这里显式转一次，免得前端拿到 `{0: 3}` 之后按数字下标去取
             'by_category': {str(k): v for k, v in by_category.items()},
         }
 
     @staticmethod
-    async def mark_read(*, db: AsyncSession, user_id: int, pk: int) -> int:
+    async def mark_read(*, db: AsyncSession, viewer: Viewer, pk: int) -> int:
         """
         标记单条已读（幂等）
 
         :param db: 数据库会话
-        :param user_id: 当前用户 ID
+        :param viewer: 看的人
         :param pk: 通知 ID
         :return:
         """
-        notification = await notification_dao.get(db, pk)
         # 🔴 看不见的通知不能标已读 —— 否则 `sys_notification_read` 会长出
-        # 「A 读过一条只发给 B 的通知」这种行，等于用一个写接口泄漏了「这条 ID 存在」
-        if not notification or (notification.recipient_id is not None and notification.recipient_id != user_id):
+        # 「A 读过一条只发给 B 的通知」这种行，等于用一个写接口泄漏了「这条 ID 存在」。
+        # 判定和列表同一个 `visible_to`（#190 起广播也有受众了，只比 `recipient_id` 不够）
+        notification = await notification_dao.get_visible(db, viewer, pk)
+        if not notification:
             raise errors.NotFoundError(msg=t('error.notification.not_found'))
-        return await notification_dao.mark_read(db, user_id, [pk])
+        return await notification_dao.mark_read(db, viewer.id, [pk])
 
     @staticmethod
-    async def mark_all_read(*, db: AsyncSession, user_id: int) -> int:
+    async def mark_all_read(*, db: AsyncSession, viewer: Viewer) -> int:
         """
-        标记全部已读
+        标记全部已读 —— **跳过必须读者打开确认的**（`notification_dao.get_unread_ids`），那些只能逐条 `mark_read`
 
         :param db: 数据库会话
-        :param user_id: 当前用户 ID
+        :param viewer: 看的人
         :return:
         """
-        pks = await notification_dao.get_unread_ids(db, user_id)
-        return await notification_dao.mark_read(db, user_id, pks)
+        pks = await notification_dao.get_unread_ids(db, viewer)
+        return await notification_dao.mark_read(db, viewer.id, pks)
 
     @staticmethod
     async def send(*, db: AsyncSession, obj: SendNotificationParam) -> int:
@@ -248,6 +282,7 @@ class NotificationService:
         category: NotificationCategory | None = None,
         kind: str = 'announcement',
         source: str | None = None,
+        to_bots: bool = True,
     ) -> Notification:
         """
         发一条全员广播（给别的模块调用，比如公告发布 / 每日问候）。站内一行，不走邮件 / 短信（那等于全员群发）；
@@ -261,6 +296,8 @@ class NotificationService:
         :param category: 分类，不给就用类型声明的分类
         :param kind: 通知类型码，必须是声明了 `broadcast=True` 的
         :param source: 来源业务对象（`sources.make_source`），要反查 / 撤回这一行的调用方给
+        :param to_bots: 是否推给订阅了这个类型的群机器人。🔴 **有受众限制的来源要传 False**（#190）：
+            群机器人发进的是一整个群，管不了「只给技术中心看」—— 推过去就是把限定范围的公告发给了群里所有人
         :return:
         """
         spec = require_notification_kind(kind)
@@ -278,19 +315,42 @@ class NotificationService:
                 source=source,
             ),
         )
-        if spec.bot:
-            from backend.plugin.notification.service.bot_service import enqueue_bots
-            from backend.plugin.notification.service.config import load_notification_config
-            from backend.plugin.notification.service.delivery_service import kick_after_commit
-
-            await load_notification_config(db)
-            if settings.NOTIFICATION_EXTERNAL_ENABLED and await enqueue_bots(
-                db, kind=spec, title=title, content=content, link=link
-            ):
-                # 提交在调用方手里（公告接口是依赖收尾时提交）：挂到会话的 after_commit 上，回滚就不踢
-                kick_after_commit(db)
+        if spec.bot and to_bots:
+            await _push_to_bots(db, spec, notification_id=notification.id, title=title, content=content, link=link)
         push_broadcast_after_commit(db)
         return notification
+
+    @staticmethod
+    async def broadcast_to_bots(
+        *,
+        db: AsyncSession,
+        notification_id: int,
+        title: str,
+        content: str,
+        link: str | None = None,
+        kind: str = 'announcement',
+    ) -> int:
+        """
+        给一条**已经在收件箱里**的广播补推群机器人（#190）：公告发布时有发布范围、没推群（`to_bots=False`），
+        之后范围放宽成全员。站内那一行不重写；这一行推过群（有它的机器人投递行）就不再推 ——
+        全员 → 限定 → 全员，群里不能出现两次。提交之后踢 worker，同 `broadcast`
+
+        :param db: 数据库会话
+        :param notification_id: 站内那一行广播
+        :param title: 标题
+        :param content: 内容
+        :param link: 点击跳转的前端路由
+        :param kind: 通知类型码，必须是声明了 `broadcast=True` 的
+        :return: 写了几行机器人投递
+        """
+        from backend.plugin.notification.crud.crud_channel import notification_delivery_dao
+
+        spec = require_notification_kind(kind)
+        if not spec.broadcast:
+            raise ValueError(f'通知类型 {kind} 不是广播类型')
+        if not spec.bot or await notification_delivery_dao.has_bot_delivery(db, notification_id):
+            return 0
+        return await _push_to_bots(db, spec, notification_id=notification_id, title=title, content=content, link=link)
 
     @staticmethod
     async def notify(

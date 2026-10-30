@@ -220,7 +220,7 @@ RN 在两端都硬编译了 `-DHERMES_ENABLE_INTL=True`
 
 ```
 src/lib/notifications.tsx      UnreadProvider —— 未读数，tab 红点的唯一来源
-src/app/(app)/notifications.tsx 列表：全部 / 未读 · 点一条标已读 · 全部已读
+src/app/(app)/notifications.tsx 列表：全部 / 未读 · 点一条标已读（公告行除外，交给详情屏，#190）· 全部已读
 ```
 
 🔴 **刻意没接 socket.io。** web 端靠 `packages/platform/src/shell/use-presence.ts`
@@ -416,8 +416,8 @@ src/lib/attachments.ts      带鉴权下载到缓存目录 → 图片屏内看�
 
 🔴 **详情的 404 是「已撤回或已过期」，不是加载失败。** 后端对隐藏 / 过期 / 删除一律 404。
 渲染成「加载失败 + 重试」就是一个永远不会成功的按钮；而且默认重试策略会对 404 再打两次，
-那一屏要晚三四秒才出来 —— 所以这个查询对 404 不重试。自然过期**不撤回**收件箱那一行，
-从通知屏点进来撞上 404 是正常路径，不是边角。
+那一屏要晚三四秒才出来 —— 所以这个查询对 404 不重试。收件箱那一行的撤回不是即时的（自然过期由
+#190 的定时任务每分钟撤一次），从通知屏点进来撞上 404 是正常路径，不是边角。
 
 ### 正文：自己把 HTML 摊成原生组件，不用 WebView
 
@@ -473,3 +473,27 @@ bundledNativeModules.json），但 offline 下 `--check` 只说 `Dependency vali
 只过了 tsc（含 typed routes：故意写成 `/notice/[id]` 报 TS2820）、eslint、`expo export`
 （新类名在 dev bundle 里都有生成的样式键，和老类名同一个数）。**没在任何设备上跑过**：首页那一组、
 详情排版、图片比例、下载进度、分享面板能不能被 WPS / 系统 PDF 阅读器接住；iOS 一次没跑。
+
+### 二期（#190）：弹窗 · 横幅 · 必须确认 · 登录页
+
+`components/notice-popups.tsx`（登录后弹窗，挂在 `(app)/_layout.tsx` = 外壳挂上之后）· `components/notice-banner.tsx`
+（首页顶部：置顶 + 紧急 + 没读）· `components/public-notices.tsx`（登录屏表单下面，匿名接口）。
+
+- 🔴 **必须确认（`require_ack`）后端只认显式已读，所有「顺手标已读」的路都要绕开它**：详情屏的自动标（改成底部
+  「我已阅读」）· 通知屏点公告那一行（公告行一律交给详情屏标）· 横幅的 ✕（这种不给 ✕，同 web）·
+  通知屏的「全部已读」（后端跳过这种行；收件箱那一行带 `requires_ack`、`unread-count` 带 `requires_ack_count`，
+  按钮按 `total − requires_ack_count` 判，那一行标「需确认」—— 只剩它们时按钮灰掉、红点照亮。后端测试见 [`plugin/notice` 分册](../../../api/backend/plugin/notice/AGENTS.md)）
+- 弹窗是 portal 浮层，不是路由屏也不是 `Modal`：没有任何手势能关掉它，出口只有按钮 + 自己接的返回键。
+  ⚠️ RN 的 `BackHandler` **后登记的先收到**（读源码：react-native 的 Libraries/Utilities/BackHandler.android.js 从数组尾部往前调），弹窗里还能开图片附件的
+  全屏查看 —— 弹窗的订阅只在挂上时登记一次（`useEffectEvent`），随渲染重登记就排到查看层前面，返回键关不掉图片
+- 没有 socket：弹窗靠回前台重拉（`focusManager` + `staleTime` 30 秒）和首页下拉；拉取失败不报，理由在 `notice-popups.tsx` 头注释
+- 标已读撞 404 = 已撤回 / 过期（`lib/notices.ts: isNoticeGone`），弹窗 / 横幅照收、不报错 —— 否则必须确认那条唯一的出口永远 404
+- 登录屏的 key 带服务器地址（运行时能换）；不显示时间（当时 `/public` 没有 `publish_time`；现在有了，要显示就用 `publish_time ?? created_time`，同 web 登录页）
+- 🔴 **会话结束要清整份查询缓存**（`lib/session.tsx: applyAnonymous`）。原来不清：A 登出、B 在同一台手机上 30 秒内登录，
+  重新挂上的查询拿 A 的缓存当新鲜数据、一次都不重拉 —— 二期之后就是 B 在弹窗里读到只发给 A 的公告全文。
+  实测（Node 22 跑 `@tanstack/query-core` 5.101.4、`staleTime` 30 秒，模拟 A 的弹窗宿主卸载 → B 的挂上）：不清时 B 首帧和
+  稳定后都是 A 的数据、`queryFn` 只被 A 调过；清了之后 B 首帧为空、随即拉到自己的。⚠️ 只验了 query 层，没在设备上换过账号
+
+⚠️ **没验证的**：只过了 tsc（含 typed routes）、eslint、`expo export`（新增的接口路径 / testID / 文案在 Hermes 包里都 grep
+得到）。**没在任何设备上跑过**：弹窗的高度收缩（`max-h-full` + ScrollView `flexGrow: 0`）、返回键的先后、横幅里嵌套
+Pressable 的触摸、登录屏摘要的行数测量（隐形副本 + `onTextLayout`）；iOS 一次没跑。

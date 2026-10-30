@@ -54,7 +54,8 @@ export function useNotificationOpen() {
 
   const readIfUnread = React.useCallback(
     (n: Notification) => {
-      if (!n.read_time) markRead.mutate(n.id)
+      // 必须确认的（#190）从不在这里顺手标：那个 PUT 就是「我已阅读」，只能读者在抽屉 / 弹窗里自己点
+      if (!n.read_time && !n.requires_ack) markRead.mutate(n.id)
     },
     [markRead]
   )

@@ -164,6 +164,23 @@ async def paging_data(db: AsyncSession, select: Select, **kwargs) -> dict[str, A
     return page_data
 
 
+async def count_rows(db: AsyncSession, stmt: Select) -> int:
+    """
+    数一条列表查询有几行 —— 和 `paging_data` 的 `total` 同一个口径（fastapi-pagination 也是包成子查询数的）
+
+    给分页之外还要一个数的地方用（另一个页签的人数、自己拼 OFFSET 的分页）。
+    ⚠️ 选的列里有同名的（join 进来两张表的 `id`）时子查询会撞名 —— 那种查询、或者要顺带取别的聚合的，
+    换掉选的列来数（`app/admin/service/export_service.py: _count`）
+
+    :param db: 数据库会话
+    :param stmt: SQL 查询语句（ORDER BY 会被去掉）
+    :return:
+    """
+    from sqlalchemy import func, select
+
+    return int(await db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0)
+
+
 async def cursor_paging_data(db: AsyncSession, select: Select, **kwargs) -> dict[str, Any]:
     """
     基于 SQLAlchemy 创建游标分页数据
