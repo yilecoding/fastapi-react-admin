@@ -334,6 +334,7 @@ def test_scheduler_tick_writes_the_scheduler_heartbeat(client: TestClient, heart
     monkeypatch.setattr(Scheduler, 'tick', lambda self, *a, **kw: next_in)
     sched = DatabaseScheduler.__new__(DatabaseScheduler)  # 不连库：只验 tick 里那一步
     sched._last_heartbeat = 0.0
+    sched._heap = None  # celery 的 __init__ 会设；tick 之后的「挪开堵住的堆顶」要读它（#183）
 
     assert sched.tick() is next_in, 'tick 的返回值（下次多久再来）被吞了'
     resp = client.get(_STATUS)
@@ -355,6 +356,7 @@ def test_scheduler_heartbeat_failure_does_not_stop_beat(monkeypatch) -> None:
     monkeypatch.setattr(Scheduler, 'tick', lambda self, *a, **kw: next_in)
     sched = mod.DatabaseScheduler.__new__(mod.DatabaseScheduler)
     sched._last_heartbeat = 0.0
+    sched._heap = None
     assert sched.tick() is next_in
 
 

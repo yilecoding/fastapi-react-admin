@@ -16,16 +16,29 @@ r"""任务调度表 —— beat 从这里读要跑什么、什么时候跑。
 `parent_id` 可空，所以只能在 service 层拦）。
 """
 
+import asyncio
+import uuid
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 
 from sqlalchemy import event
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, Session, mapped_column, object_session
 
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.model import Base, TimeZone, UniversalStr, UniversalText, id_key
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+_TOUCH_PENDING = 'task_scheduler_touch_pending'
+_TOUCH_LISTENING = 'task_scheduler_touch_listening'
+
+# create_task 出去的写 Redis 任务要有人拿着引用，否则可能没跑完就被回收
+_background: set[asyncio.Task] = set()
 
 
 class TaskScheduler(Base):
@@ -69,38 +82,97 @@ class TaskScheduler(Base):
 
     @classmethod
     def changed(cls, mapper, connection, target) -> None:  # ruff:ignore[missing-type-function-argument]
+        # 🔴 这里是 flush 里、提交**前**：当场打标记的话 beat 可能抢先重载读到旧行（SQL Server 上那次读还会
+        # 被这条未提交的 INSERT 挡住），所以也只登记、等提交之后再打（#183）
         if not target.no_changes:
-            cls.touch_last_update()
+            _touch_after_commit_of(object_session(target))
 
     @classmethod
     def touch_last_update(cls, *args, **kwargs) -> None:
-        """打一个「调度变了」的时间戳，beat 靠轮询它决定要不要重载。
+        """打一个「调度变了」的标记，beat 靠轮询它决定要不要重载。
 
         🔴 这里**不能**用 `asyncio.create_task`（上游是那么写的）：
         SQLAlchemy 的 ORM 事件是同步回调，而 celery beat / worker 进程里
         常常没有运行中的事件循环 —— `create_task` 会抛
         `RuntimeError: no running event loop`，把一次本来成功的保存
         变成 500，而用户看到的是「改调度失败」，跟调度本身毫无关系。
-        """
-        import asyncio
 
+        🔴 **每次的值必须不同**（#183）。beat 只比「和上次读到的相不相等」，原来写的是
+        `to_str(now())`、只到秒：同一秒里的两次改动（开关连点两下）写出同一个值，
+        第二次 beat 看不出来，停在第一次的状态。
+        时间留着是给人排查用的（看这个键停在哪天），后缀才是保证不重复的那部分。
+        """
         from backend.core.conf import settings
-        from backend.database.redis import redis_client
         from backend.utils.timezone import timezone
 
         key = f'{settings.CELERY_REDIS_PREFIX}:last_update'
-        value = timezone.to_str(timezone.now())
+        value = f'{timezone.now().isoformat()} {uuid.uuid4().hex[:8]}'
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             # 没有事件循环（beat / worker / 同步脚本）—— 起一个临时的写完就走
-            asyncio.run(redis_client.set(key, value))
+            asyncio.run(_write_marker(key, value))
         else:
-            loop.create_task(redis_client.set(key, value))
+            task = loop.create_task(_write_marker(key, value))
+            _background.add(task)
+            task.add_done_callback(_background.discard)
+
+    @classmethod
+    def touch_last_update_after_commit(cls, db: 'AsyncSession') -> None:
+        """事务提交之后再打变更标记。DAO 的增 / 改 / 启停 / 删都要调它（#183）。
+
+        🔴 **不能只靠下面那几个 ORM 事件。** crud 的 `update_model_by_column` /
+        `delete_model_by_column` 发的是 Core 的 `UPDATE ... WHERE`，**不触发 mapper 事件**
+        —— 页面上的启停、编辑、删除从来没打过标记，beat 一直按老配置跑到下次重启。
+        只有新建走 `session.add`，事件才会响。
+
+        🔴 **必须在提交之后打。** 提交前打，beat 可能抢在提交前重载、读到旧行，
+        再把这个标记记成「看过了」—— 这次改动就丢了，直到下一次有人改调度。
+        路由的事务在依赖退出时才提交，所以挂在 session 的 `after_commit` 上
+        （同 `plugin/open/service/event_service.py: kick_after_commit`）。回滚就不打。
+        """
+        _touch_after_commit_of(db.sync_session)
+
+
+async def _write_marker(key: str, value: str) -> None:
+    """写失败只记 warning：数据已经提交了，不能为了一个标记把保存变成 500；
+    beat 的定时重读会补上（`DatabaseScheduler.reload_every`）。
+
+    ⚠️ 错误要在协程**里面**接住：有事件循环时它是 `create_task` 出去的，外面那层
+    try 接不到，只会剩一句 asyncio 的「Task exception was never retrieved」。
+    """
+    from backend.common.log import log
+    from backend.database.redis import redis_client
+
+    try:
+        await redis_client.set(key, value)
+    except Exception as e:
+        log.warning(f'打任务调度变更标记失败（beat 定时重读时会补上）：{e!s}')
+
+
+def _touch_after_commit_of(sync: Session) -> None:
+    """登记「这个会话提交之后要打一次变更标记」。同一个会话只挂一次监听；回滚就把登记清掉"""
+    sync.info[_TOUCH_PENDING] = True
+    if sync.info.get(_TOUCH_LISTENING):
+        return
+    sync.info[_TOUCH_LISTENING] = True
+    event.listen(sync, 'after_commit', _touch_after_commit)
+    event.listen(sync, 'after_rollback', _drop_pending_touch)
+
+
+def _touch_after_commit(session: Session) -> None:
+    if session.info.pop(_TOUCH_PENDING, False):
+        TaskScheduler.touch_last_update()
+
+
+def _drop_pending_touch(session: Session) -> None:
+    session.info.pop(_TOUCH_PENDING, None)
 
 
 event.listen(TaskScheduler, 'before_insert', TaskScheduler.before_insert_or_update)
 event.listen(TaskScheduler, 'before_update', TaskScheduler.before_insert_or_update)
+# ⚠️ 下面三个只管得到 ORM 写法（`session.add` / 改实例属性再 flush），crud 的按列更新 / 删除是 Core 语句，
+# 一个都不触发 —— 主路径是 DAO 调 `touch_last_update_after_commit`，这里只是兜底（同样等提交之后才打）
 event.listen(TaskScheduler, 'after_insert', TaskScheduler.changed)
 event.listen(TaskScheduler, 'after_update', TaskScheduler.changed)
 event.listen(TaskScheduler, 'after_delete', TaskScheduler.changed)
