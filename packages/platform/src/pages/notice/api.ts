@@ -42,9 +42,29 @@ export type Notice = {
   level: number
   /** 过期时间；`null` = 不过期。过期之后读者看不到，管理页照样能看到 */
   expire_time: string | null
+  /** 登录后弹窗（#190） */
+  popup: boolean
+  /** 必须点「我已阅读」—— 只在 `popup` 为真时有意义（后端：反过来 422） */
+  require_ack: boolean
+  /** 定时发布；`null` = 建好就发布。在未来 = 到点之前读者看不到、不进收件箱 */
+  publish_time: string | null
+  /** 登录页可见（不登录也能看）。和发布范围互斥（后端 422） */
+  public: boolean
+  /** 附件个数（管理列表上的 📎） */
+  attachment_count: number
+  /** 发布范围；空数组 = 全员。`name` 是显示名，对象删了是 `null` */
+  audience: NoticeAudienceItem[]
   created_time: string
   updated_time: string | null
 }
+
+/** `backend/plugin/notification/enums.py: AudienceKind`。部门**含下级**（判定在看的人那一侧往上找） */
+export type AudienceKind = 'dept' | 'role' | 'user'
+
+/** 写入时的一项。`target_id` 是雪花字符串（硬纪律 6；后端按数字解析，不经过 JS number） */
+export type NoticeAudienceEntry = { kind: AudienceKind; target_id: string }
+
+export type NoticeAudienceItem = NoticeAudienceEntry & { name: string | null }
 
 /**
  * 读者那一份（`/feed`）的一行。不带正文；带附件数和「我读没读」。
@@ -60,6 +80,14 @@ export type NoticeFeedItem = {
   pinned: boolean
   level: number
   expire_time: string | null
+  popup: boolean
+  /**
+   * 必须点「我已阅读」。🔴 这种公告的 `read` **只认显式已读**（后端：新账号规则对它不生效），
+   * 打开详情时也不能自动标已读 —— 自动标了，「必须确认」就等于没有
+   */
+  require_ack: boolean
+  /** 定时发布的时间；`null` = 建好就发布了。界面上的「发布时间」一律 `publishedAt()` */
+  publish_time: string | null
   created_time: string
   updated_time: string | null
   attachment_count: number
@@ -69,6 +97,44 @@ export type NoticeFeedItem = {
 }
 
 export type NoticeFeedDetail = NoticeFeedItem & { content: string }
+
+/**
+ * 读者看到的「发布时间」：定时发布的是到点那一刻，否则是建好那一刻。
+ * 后端读者列表按同一个口径排序（`coalesce(publish_time, created_time)`）——
+ * 一条一周前建好、今天才到点的公告，显示成一周前发的就和排序对不上了
+ */
+export function publishedAt(n: { publish_time: string | null; created_time: string }): string {
+  return n.publish_time ?? n.created_time
+}
+
+/** 登录页上的一条（`GET /sys/notices/public`，**不用登录**）。只有纯文本摘要：不带正文、附件、图 */
+export type PublicNotice = {
+  id: string
+  title: string
+  level: number
+  pinned: boolean
+  /** 定时发布的时间；`null` = 建好就发布了。显示一律 `publishedAt()`（和读者看到的同一个时间） */
+  publish_time: string | null
+  created_time: string
+  /** 正文去标签后的纯文本，最多 200 字 */
+  summary: string
+}
+
+/** 阅读统计的一行（`GET /sys/notices/{pk}/reads`） */
+export type NoticeReader = {
+  user_id: string
+  username: string
+  nickname: string
+  dept_name: string | null
+  /** 已读页签有值；未读页签是 `null` */
+  read_time: string | null
+}
+
+/**
+ * 阅读统计的一页。分页的 `total` 是**当前页签**的条数；两个页签的人数另给，
+ * 不管看哪个页签都一起回来（`total` 和分页撞名，所以没叫 `{read_count, total}`）
+ */
+export type NoticeReadsPage = PageData<NoticeReader> & { read_count: number; unread_count: number }
 
 export type NoticeListParams = {
   page: number
@@ -106,6 +172,18 @@ export const noticeKeys = {
   feedAll: () => NOTICE_FEED_KEY,
   feed: (p: { page: number; size: number }) => [...noticeKeys.feedAll(), 'list', p] as const,
   feedDetail: (id: string) => [...noticeKeys.feedAll(), 'detail', id] as const,
+  /**
+   * 弹窗 / 横幅（#190）**挂在读者那组前缀下面**是刻意的：它们的条件里都有「我没读」，
+   * 收件箱一变（标已读 / 全部已读 / socket 说发了新的或撤了）就得重取 ——
+   * `invalidateInbox` 失效的正是这个前缀，不用再单独接一遍
+   */
+  popups: () => [...noticeKeys.feedAll(), 'popups'] as const,
+  banner: () => [...noticeKeys.feedAll(), 'banner'] as const,
+  /** 登录页那份不挂在 feed 下：没登录、没有「我」，和收件箱无关 */
+  publicList: () => [...noticeKeys.all, 'public'] as const,
+  detail: (id: string) => [...noticeKeys.all, 'detail', id] as const,
+  reads: (id: string, p: { read: boolean; page: number; size: number }) =>
+    [...noticeKeys.all, 'reads', id, p] as const,
 }
 
 function qs(p: NoticeListParams): string {
@@ -147,15 +225,74 @@ export const noticeFeedDetailQuery = (id: string) =>
   })
 
 /**
- * 标已读。走收件箱那条接口（读没读只有那一份），成功后两边一起失效：
- * 铃铛 / 消息中心的未读数，和工作台卡片上的未读点。
- * 少失效一边就是「铃铛红点没了、工作台那一行还挂着未读点」（或者反过来）。
+ * 登录后要弹给我的公告（#190）：看得见 · 弹窗 · 我没读（必须确认的只认点过「我已阅读」）。
+ * 置顶 → 级别 → 新到旧，最多 10 条，**带正文**（弹窗里直接显示，不再一条条取详情）。
+ *
+ * 「拉一次」靠的是 `staleTime: Infinity`：它只在收件箱变了的时候重取（`invalidateInbox` 失效整个
+ * feed 前缀 —— 铃铛收到 socket `notification:new` 时调的就是它，在线的人当场弹出新发的必读公告）。
+ * 不能跟着全局 30 秒 `staleTime` 走：切个 tab 就重取一次是纯噪音，正文还不小
  */
-export function useMarkNoticeRead() {
+export const noticePopupsQuery = queryOptions({
+  queryKey: noticeKeys.popups(),
+  queryFn: () => api.GET<NoticeFeedDetail[]>('/api/v1/sys/notices/feed/popups'),
+  staleTime: Infinity,
+})
+
+/** 顶部横幅：看得见 · 置顶 · 紧急 · 我没读，最多 3 条，不带正文。刷新时机同上 */
+export const noticeBannerQuery = queryOptions({
+  queryKey: noticeKeys.banner(),
+  queryFn: () => api.GET<NoticeFeedItem[]>('/api/v1/sys/notices/feed/banner'),
+  staleTime: Infinity,
+})
+
+/**
+ * 登录页公告（**不用登录**，每 IP 每分钟 30 次）。
+ *
+ * `retry: false`：失败了界面上有「重试」，自动再试一次只会多吃一次限流配额 ——
+ * 命中 429 时更是把自己往限流里推
+ */
+export const publicNoticesQuery = queryOptions({
+  queryKey: noticeKeys.publicList(),
+  queryFn: () => api.GET<PublicNotice[]>('/api/v1/sys/notices/public'),
+  staleTime: 5 * 60_000,
+  retry: false,
+})
+
+/** 管理端详情（要 `sys:notice:add`）。阅读统计抽屉从地址栏直接打开时，标题靠它 */
+export const noticeDetailQuery = (id: string) =>
+  queryOptions({
+    queryKey: noticeKeys.detail(id),
+    queryFn: () => api.GET<Notice>(`/api/v1/sys/notices/${id}`),
+  })
+
+/** 阅读统计。`read=true` 已读的、`false` 发布范围内还没读的（启用的账号） */
+export const noticeReadsQuery = (id: string, p: { read: boolean; page: number; size: number }) =>
+  queryOptions({
+    queryKey: noticeKeys.reads(id, p),
+    queryFn: () =>
+      api.GET<NoticeReadsPage>(`/api/v1/sys/notices/${id}/reads?read=${p.read}&page=${p.page}&size=${p.size}`),
+    // 翻页 / 换页签时保留上一份，计数和表格不闪空
+    placeholderData: (prev) => prev,
+  })
+
+/**
+ * 标已读。走收件箱那条接口（读没读只有那一份），成功后两边一起失效：
+ * 铃铛 / 消息中心的未读数，和工作台卡片上的未读点（还有弹窗 / 横幅，它们在同一个前缀下）。
+ * 少失效一边就是「铃铛红点没了、工作台那一行还挂着未读点」（或者反过来）。
+ *
+ * 「我已阅读」/ 关横幅 / 看过弹窗都走它 —— 后端没有另一个「确认」接口，显式的已读行就是确认。
+ * 调用处自己把错误画在按钮旁边的，传 `suppressErrorToast`（不然同一个错误弹两遍）
+ */
+export function useMarkNoticeRead(opts: { suppressErrorToast?: boolean } = {}) {
   const qc = useQueryClient()
   return useMutation({
+    meta: { suppressErrorToast: opts.suppressErrorToast ?? false },
     mutationFn: (notificationId: string) => api.PUT<null>(`/api/v1/sys/notifications/${notificationId}/read`),
     onSuccess: () => invalidateInbox(qc),
+    // 404 = 那一行已经撤回 / 看不见了（`isNoticeGone`）：手上的弹窗 / 横幅 / 详情都是旧的，一起重取
+    onError: (e) => {
+      if (isNoticeGone(e)) void invalidateInbox(qc)
+    },
   })
 }
 
@@ -163,6 +300,12 @@ export function useMarkNoticeRead() {
 export function isExpired(expireTime: ServerTime, now = Date.now()): boolean {
   const ms = toEpochMs(expireTime)
   return ms !== null && ms <= now
+}
+
+/** 定时发布、还没到点（#190）：读者看不到、不进收件箱。同上走 epoch */
+export function isScheduled(publishTime: ServerTime, now = Date.now()): boolean {
+  const ms = toEpochMs(publishTime)
+  return ms !== null && ms > now
 }
 
 export type NoticeBody = {
@@ -174,6 +317,19 @@ export type NoticeBody = {
   level: number
   /** 带偏移的 ISO；`null` = 不过期 */
   expire_time: string | null
+  popup: boolean
+  require_ack: boolean
+  /** 带偏移的 ISO；`null` = 立即发布 */
+  publish_time: string | null
+  public: boolean
+  /**
+   * 发布范围，语义和 `attachment_ids` 同一套：
+   *
+   * - 不传（`undefined`）= 不改。🔴 **编辑时没动过范围就别发**：范围里点过的人 / 部门后来被删了的话，
+   *   原样发回去后端会按「范围里有不存在的对象」整条 400 —— 改个标题都存不上
+   * - `[]` = 全员。⚠️ 所以「指定范围」一个都没选时**不能**发 `[]`，那是把范围悄悄放大成全员（表单里拦）
+   */
+  audience?: NoticeAudienceEntry[]
   /**
    * 附件文件 ID，**按顺序**（读者那边就按这个顺序列）。
    *

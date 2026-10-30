@@ -1,23 +1,25 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { IconArchive } from '@tabler/icons-react'
+import { IconArchive, IconCircleCheck, IconLoader2 } from '@tabler/icons-react'
 
 import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
+import { Button } from '@admin/ui/components/button'
 import { QueryError } from '@admin/ui/components/query-error'
 import {
-  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
+  Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle,
 } from '@admin/ui/components/sheet'
 import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { useTabPortalContainer } from '../../shell/tab-outlet'
 import { notificationKeys } from '../notification/api'
 import {
-  NOTICE_TYPE_LABEL, isNoticeGone, noticeFeedDetailQuery, noticeKeys, useMarkNoticeRead,
+  NOTICE_TYPE_LABEL, isNoticeGone, noticeFeedDetailQuery, noticeKeys, publishedAt, useMarkNoticeRead,
+  type NoticeFeedDetail,
 } from './api'
 import { NoticeArticle } from './article'
-import { NoticeLevelPill, PinnedMark } from './shared'
+import { NoticeLevelPill, PinnedMark, RequireAckMark } from './shared'
 
 /**
  * 读者看公告的那个抽屉（#186）。**任何登录用户都打得开**：数据走 `/sys/notices/feed/{pk}`，
@@ -33,16 +35,18 @@ import { NoticeLevelPill, PinnedMark } from './shared'
  * 刷新后后台 tab 恢复出来、抽屉照样渲染，挂在 `<body>` 下就会压住前台页面
  * （[shell 分册](../../shell/AGENTS.md)）。铃铛不在任何 tab 里，拿到的是 `undefined` = 回落到 `<body>`，正是它要的
  * （⚠️ 不是 `null`：Base UI 把显式 `null` 当「容器还没好」，一直等、什么都不挂 —— 见 `tab-outlet.tsx`）。
+ *
+ * 🔴 **「标已读」只在这里做，调用方别在点那一行时先标**（#190）。原来铃铛 / 消息中心点公告那一行就
+ * `readIfUnread`，抽屉再靠 `rowAlreadyMarked` 跳过 —— 可那一行不知道这条公告是不是「必须确认」，
+ * 点开就标掉，「我已阅读」就成了摆设（后端只认显式已读行，而那个 PUT 就是显式已读）。
+ * 现在打开 = 抽屉按详情决定：普通的自动标，必须确认的等人点底部的「我已阅读」。
  */
 export function NoticeReaderSheet({
   noticeId,
   onOpenChange,
-  rowAlreadyMarked = false,
 }: {
   noticeId: string | null
   onOpenChange: (open: boolean) => void
-  /** 从收件箱那一行点开的：行上已经标过已读了，抽屉别再标（两个 PUT 抢着发） */
-  rowAlreadyMarked?: boolean
 }) {
   const { t } = useTranslation()
   const container = useTabPortalContainer()
@@ -62,7 +66,7 @@ export function NoticeReaderSheet({
         data-testid="notice-reader"
       >
         {shownId ? (
-          <ReaderBody id={shownId} markRead={!rowAlreadyMarked} />
+          <ReaderBody id={shownId} />
         ) : (
           <SheetTitle className="sr-only">{t('公告详情')}</SheetTitle>
         )}
@@ -71,7 +75,7 @@ export function NoticeReaderSheet({
   )
 }
 
-function ReaderBody({ id, markRead: shouldMark }: { id: string; markRead: boolean }) {
+function ReaderBody({ id }: { id: string }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const query = useQuery(noticeFeedDetailQuery(id))
@@ -79,9 +83,10 @@ function ReaderBody({ id, markRead: shouldMark }: { id: string; markRead: boolea
   const gone = isNoticeGone(query.error)
 
   // 打开 = 读过了。未读才发（接口幂等，但每次打开都发是纯噪音）；
-  // 发完 `useMarkNoticeRead` 会把详情重新取一遍，`read` 变 true，这条 effect 就不会再发
+  // 发完 `useMarkNoticeRead` 会把详情重新取一遍，`read` 变 true，这条 effect 就不会再发。
+  // 🔴 必须确认的**不自动标**（#190）：底部给「我已阅读」，点了才算 —— 自动标了等于替他确认了
   const { mutate: markRead } = useMarkNoticeRead()
-  const unreadRow = shouldMark && d && !d.read ? d.notification_id : null
+  const unreadRow = d && !d.read && !d.require_ack ? d.notification_id : null
   React.useEffect(() => {
     if (unreadRow) markRead(unreadRow)
   }, [unreadRow, markRead])
@@ -143,6 +148,7 @@ function ReaderBody({ id, markRead: shouldMark }: { id: string; markRead: boolea
         <div className="flex flex-wrap items-center gap-2">
           {d.pinned && <PinnedMark withLabel />}
           <NoticeLevelPill level={d.level} />
+          {d.require_ack && <RequireAckMark />}
           <Badge variant="outline" className="font-normal">
             {t(NOTICE_TYPE_LABEL[d.type] ?? '公告')}
           </Badge>
@@ -151,7 +157,8 @@ function ReaderBody({ id, markRead: shouldMark }: { id: string; markRead: boolea
           {d.title}
         </SheetTitle>
         <SheetDescription className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs tabular-nums">
-          <span>{t('发布于 {{at}}', { at: formatDateTime(d.created_time) })}</span>
+          {/* 定时发布的是到点那一刻（`publishedAt`），和读者列表的排序同一个口径 */}
+          <span data-testid="notice-reader-published">{t('发布于 {{at}}', { at: formatDateTime(publishedAt(d)) })}</span>
           {d.updated_time && <span>{t('更新于 {{at}}', { at: formatDateTime(d.updated_time) })}</span>}
           {d.expire_time && (
             <span data-testid="notice-reader-expire">
@@ -164,6 +171,47 @@ function ReaderBody({ id, markRead: shouldMark }: { id: string; markRead: boolea
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
         <NoticeArticle id={d.id} content={d.content} hideEmptyAttachments attachmentCount={d.attachment_count} />
       </div>
+
+      {d.require_ack && <AckFooter notice={d} />}
     </>
+  )
+}
+
+/**
+ * 必须确认的公告底部那一条：没确认时是「我已阅读」，确认过了是一句「已确认」（不关抽屉 ——
+ * 人可能还要接着看附件）。按钮的失败画在它旁边、不弹 toast（`suppressErrorToast`），硬纪律 9
+ */
+function AckFooter({ notice }: { notice: NoticeFeedDetail }) {
+  const { t } = useTranslation()
+  const ack = useMarkNoticeRead({ suppressErrorToast: true })
+  if (notice.read) {
+    return (
+      <SheetFooter className="border-t">
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground" data-testid="notice-reader-acked">
+          <IconCircleCheck className="size-4 text-emerald-600 dark:text-emerald-400" aria-hidden />
+          {t('你已确认阅读这条公告')}
+        </p>
+      </SheetFooter>
+    )
+  }
+  const rowId = notice.notification_id
+  return (
+    <SheetFooter className="border-t">
+      <p className="text-xs text-muted-foreground">{t('这条公告要求确认：读完请点「我已阅读」。')}</p>
+      {ack.error && (
+        <p className="text-xs text-destructive" data-testid="notice-reader-ack-error">
+          {ack.error.message || t('操作失败，请重试')}
+        </p>
+      )}
+      <Button
+        // 没有收件箱行就没有可以标的东西（后端按「已读」下发，正常走不到这里）
+        disabled={!rowId || ack.isPending}
+        onClick={() => rowId && ack.mutate(rowId)}
+        data-testid="notice-reader-ack"
+      >
+        {ack.isPending && <IconLoader2 className="size-4 animate-spin" />}
+        {t('我已阅读')}
+      </Button>
+    </SheetFooter>
   )
 }

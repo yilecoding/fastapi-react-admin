@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrandTop } from '@/components/brand-top'
 import { Group, Row } from '@/components/grouped'
+import { PublicNotices } from '@/components/public-notices'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -345,6 +346,12 @@ export default function LoginScreen() {
               </View>
             )}
           </View>
+
+          {/*
+            登录页公告（#190，不用登录）。放在表单**下面**：它的加载 / 失败都不能挡住登录，
+            放上面的话一来一回会把输入框顶下去，键盘弹起时还会把表单挤出可视区
+          */}
+          <PublicNotices />
 
           <View className="mt-auto flex-row items-center justify-between gap-3 px-5 pt-6">
             <Text numberOfLines={1} className="text-muted-foreground shrink font-mono text-[9.5px]">

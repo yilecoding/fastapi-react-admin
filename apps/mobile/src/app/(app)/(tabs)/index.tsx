@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
 import { BellIcon, ChevronRightIcon, TriangleAlertIcon, UserRoundIcon, UsersIcon } from 'lucide-react-native'
@@ -7,11 +8,12 @@ import { RefreshControl, ScrollView, View } from 'react-native'
 import { BrandTop } from '@/components/brand-top'
 import { Chevron, Group, GroupHeader, PressRow, Row, RowIcon } from '@/components/grouped'
 import { NoticeRow } from '@/components/notice'
+import { NoticeBanner } from '@/components/notice-banner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
-import { useNoticeFeed } from '@/lib/notices'
+import { noticesKey, useNoticeBanner, useNoticeFeed } from '@/lib/notices'
 import { useUnread } from '@/lib/notifications'
 import { usePerm } from '@/lib/perm'
 import { useSession } from '@/lib/session'
@@ -24,6 +26,8 @@ export default function HomeScreen() {
   const { user, reload } = useSession()
   const { unread, refresh: refreshUnread } = useUnread()
   const feed = useNoticeFeed(HOME_NOTICE_COUNT)
+  const banner = useNoticeBanner()
+  const qc = useQueryClient()
   // ⚠️ 只在**确实知道**有权限时才放这个入口。`known` 为假（权限码没问上）时
   // 不出现 —— 那一层的错误提示统一在「应用」那一屏兜住，首页不重复报一遍
   const { can, known: permKnown } = usePerm()
@@ -33,8 +37,16 @@ export default function HomeScreen() {
   async function onRefresh() {
     setRefreshing(true)
     try {
-      // 公告那一组的失败有自己的错误块（下面），这里不用再管
-      await Promise.all([reload(), refreshUnread(), feed.refetch()])
+      // 公告那一组的失败有自己的错误块（下面），这里不用再管。
+      // 弹窗也一起重拉（#190）：移动端没有 socket，「下拉一下看看有什么新的」是除了回前台之外唯一的触发点，
+      // 新发了一条必须确认的，下拉之后当场弹出来（弹窗宿主挂在 `(app)/_layout.tsx`，它的查询一直有观察者）
+      await Promise.all([
+        reload(),
+        refreshUnread(),
+        feed.refetch(),
+        banner.refetch(),
+        qc.refetchQueries({ queryKey: noticesKey.popups }),
+      ])
     } catch {
       // 首页刷新失败不值得打断 —— 数据还是上一次那份，个人中心那屏有完整的错误态
     } finally {
@@ -59,6 +71,9 @@ export default function HomeScreen() {
           </Text>
         </View>
       </BrandTop>
+
+      {/* 横幅（#190）：置顶 + 紧急 + 我没读。没有就整块不出 */}
+      <NoticeBanner items={banner.data ?? []} />
 
       {/*
         公告（#186）：最近几条，置顶在前。三种状态必须长得不一样（硬纪律 9）——

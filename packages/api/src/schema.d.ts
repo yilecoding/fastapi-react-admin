@@ -1870,6 +1870,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/notices/feed/popups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取登录后要弹给我的公告 */
+        get: operations["get_notice_popups_api_v1_sys_notices_feed_popups_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notices/feed/banner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取我的公告横幅 */
+        get: operations["get_notice_banner_api_v1_sys_notices_feed_banner_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/notices/feed/{pk}": {
         parameters: {
             query?: never;
@@ -1879,6 +1913,40 @@ export interface paths {
         };
         /** 获取我能看的公告详情 */
         get: operations["get_notice_feed_detail_api_v1_sys_notices_feed__pk__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notices/public": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取登录页公告 */
+        get: operations["get_public_notices_api_v1_sys_notices_public_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notices/{pk}/reads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取通知公告的阅读统计 */
+        get: operations["get_notice_reads_api_v1_sys_notices__pk__reads_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4052,6 +4120,14 @@ export interface components {
             prompt: string;
         };
         /**
+         * AudienceKind
+         * @description `sys_notification_audience.kind`：一条来源发给谁（#190）。值是契约：表里存它，前端的「发布范围」按它分组
+         *
+         *     同一个来源一行受众都没有 = 全员
+         * @enum {string}
+         */
+        AudienceKind: "dept" | "role" | "user";
+        /**
          * AuthLoginParam
          * @description 用户登录参数
          */
@@ -4919,10 +4995,38 @@ export interface components {
              */
             expire_time?: string | null;
             /**
+             * Popup
+             * @description 登录后弹窗
+             * @default false
+             */
+            popup: boolean;
+            /**
+             * Require Ack
+             * @description 必须点「我已阅读」（只在登录后弹窗时有意义）
+             * @default false
+             */
+            require_ack: boolean;
+            /**
+             * Publish Time
+             * @description 定时发布时间（为空立即发布）
+             */
+            publish_time?: string | null;
+            /**
+             * Public
+             * @description 登录页可见（不登录也能看；不能有发布范围）
+             * @default false
+             */
+            public: boolean;
+            /**
              * Attachment Ids
              * @description 附件文件 ID（按顺序；为空不改附件）
              */
             attachment_ids?: number[] | null;
+            /**
+             * Audience
+             * @description 发布范围（为空不改；空列表 = 全员）
+             */
+            audience?: components["schemas"]["NoticeAudienceEntry"][] | null;
         };
         /**
          * CreateOpenAppParam
@@ -7088,6 +7192,29 @@ export interface components {
              */
             expire_time?: string | null;
             /**
+             * Popup
+             * @description 登录后弹窗
+             * @default false
+             */
+            popup: boolean;
+            /**
+             * Require Ack
+             * @description 必须点「我已阅读」（只在登录后弹窗时有意义）
+             * @default false
+             */
+            require_ack: boolean;
+            /**
+             * Publish Time
+             * @description 定时发布时间（为空立即发布）
+             */
+            publish_time?: string | null;
+            /**
+             * Public
+             * @description 登录页可见（不登录也能看；不能有发布范围）
+             * @default false
+             */
+            public: boolean;
+            /**
              * Id
              * @description 通知公告 ID
              */
@@ -7103,6 +7230,18 @@ export interface components {
              * @description 更新时间
              */
             updated_time?: string | null;
+            /**
+             * Attachment Count
+             * @description 附件个数
+             * @default 0
+             */
+            attachment_count: number;
+            /**
+             * Audience
+             * @description 发布范围（空 = 全员）
+             * @default []
+             */
+            audience: components["schemas"]["NoticeAudienceItem"][];
         };
         /**
          * GetNoticeFeedDetail
@@ -7133,6 +7272,23 @@ export interface components {
              * @description 过期时间
              */
             expire_time?: string | null;
+            /**
+             * Popup
+             * @description 登录后弹窗
+             * @default false
+             */
+            popup: boolean;
+            /**
+             * Require Ack
+             * @description 必须点「我已阅读」（打开时不自动标已读）
+             * @default false
+             */
+            require_ack: boolean;
+            /**
+             * Publish Time
+             * @description 定时发布时间（为空 = 建好就发布了）
+             */
+            publish_time?: string | null;
             /**
              * Created Time
              * Format: date-time
@@ -7197,6 +7353,23 @@ export interface components {
              */
             expire_time?: string | null;
             /**
+             * Popup
+             * @description 登录后弹窗
+             * @default false
+             */
+            popup: boolean;
+            /**
+             * Require Ack
+             * @description 必须点「我已阅读」（打开时不自动标已读）
+             * @default false
+             */
+            require_ack: boolean;
+            /**
+             * Publish Time
+             * @description 定时发布时间（为空 = 建好就发布了）
+             */
+            publish_time?: string | null;
+            /**
              * Created Time
              * Format: date-time
              * @description 创建时间
@@ -7224,6 +7397,117 @@ export interface components {
              * @default true
              */
             read: boolean;
+        };
+        /**
+         * GetNoticePublicItem
+         * @description 登录页上的公告（不登录也能看，#190）。只给纯文本摘要：不带正文、附件、图
+         */
+        GetNoticePublicItem: {
+            /**
+             * Id
+             * @description 通知公告 ID
+             */
+            id: string | number;
+            /**
+             * Title
+             * @description 标题
+             */
+            title: string;
+            /** @description 级别（0：普通、1：重要、2：紧急） */
+            level: components["schemas"]["NoticeLevel"];
+            /**
+             * Pinned
+             * @description 是否置顶
+             */
+            pinned: boolean;
+            /**
+             * Publish Time
+             * @description 定时发布时间（为空表示建好即发布）
+             */
+            publish_time?: string | null;
+            /**
+             * Created Time
+             * Format: date-time
+             * @description 创建时间
+             */
+            created_time: string;
+            /**
+             * Summary
+             * @description 摘要（正文去掉标签后的纯文本，最多 200 字）
+             */
+            summary: string;
+        };
+        /**
+         * GetNoticeReader
+         * @description 阅读统计的一行（#190）
+         */
+        GetNoticeReader: {
+            /**
+             * User Id
+             * @description 用户 ID
+             */
+            user_id: string | number;
+            /**
+             * Username
+             * @description 用户名
+             */
+            username: string;
+            /**
+             * Nickname
+             * @description 昵称
+             */
+            nickname: string;
+            /**
+             * Dept Name
+             * @description 部门名称
+             */
+            dept_name?: string | null;
+            /**
+             * Read Time
+             * @description 阅读时间（未读为空）
+             */
+            read_time?: string | null;
+        };
+        /**
+         * GetNoticeReadsPage
+         * @description 阅读统计：当前页签（已读 / 未读）的分页 + 两个页签各自的人数
+         *
+         *     分页的 `total` 是当前页签的条数；两个计数不管看哪个页签都一起给，界面上两个页签的数字一次拿齐
+         */
+        GetNoticeReadsPage: {
+            /** Items */
+            items: components["schemas"]["GetNoticeReader"][];
+            /**
+             * Total
+             * @description 数据总条数
+             */
+            total: number;
+            /**
+             * Page
+             * @description 当前页码
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页数量
+             */
+            size: number;
+            /**
+             * Total Pages
+             * @description 总页数
+             */
+            total_pages: number;
+            links: components["schemas"]["_Links"];
+            /**
+             * Read Count
+             * @description 已读人数
+             */
+            read_count: number;
+            /**
+             * Unread Count
+             * @description 未读人数（发布范围内、启用的账号里还没读的）
+             */
+            unread_count: number;
         };
         /**
          * GetNotificationDetail
@@ -7278,6 +7562,12 @@ export interface components {
              * @description 来源对象当前的附件个数（没有来源为空）
              */
             attachment_count?: number | null;
+            /**
+             * Requires Ack
+             * @description 必须读者打开确认（如必须确认的公告）：不能在列表里标已读，「全部已读」也会跳过它
+             * @default false
+             */
+            requires_ack: boolean;
         };
         /**
          * GetNotificationUnreadDetail
@@ -7289,6 +7579,12 @@ export interface components {
              * @description 未读总数
              */
             total: number;
+            /**
+             * Requires Ack Count
+             * @description 未读里必须打开确认的条数（「全部已读」不会标掉它们；total 减去它 = 「全部已读」能标的条数）
+             * @default 0
+             */
+            requires_ack_count: number;
             /**
              * By Category
              * @description 按分类拆开的未读数，key 是分类数值的字符串形式
@@ -9387,6 +9683,37 @@ export interface components {
             mfa_token: string;
         };
         /**
+         * NoticeAudienceEntry
+         * @description 发布范围的一项（#190）：部门（含下级）/ 角色 / 用户
+         */
+        NoticeAudienceEntry: {
+            /** @description 类型（dept：部门含下级、role：角色、user：用户） */
+            kind: components["schemas"]["AudienceKind"];
+            /**
+             * Target Id
+             * @description 部门 / 角色 / 用户 ID
+             */
+            target_id: string | number;
+        };
+        /**
+         * NoticeAudienceItem
+         * @description 发布范围的一项（带显示名）
+         */
+        NoticeAudienceItem: {
+            /** @description 类型（dept：部门含下级、role：角色、user：用户） */
+            kind: components["schemas"]["AudienceKind"];
+            /**
+             * Target Id
+             * @description 部门 / 角色 / 用户 ID
+             */
+            target_id: string | number;
+            /**
+             * Name
+             * @description 部门 / 角色名称、用户昵称（对象已删除时为空）
+             */
+            name?: string | null;
+        };
+        /**
          * NoticeLevel
          * @description 通知公告级别
          * @enum {integer}
@@ -11085,6 +11412,22 @@ export interface components {
             msg: string;
             data: components["schemas"]["GetNoticeFeedDetail"];
         };
+        /** ResponseSchemaModel[GetNoticeReadsPage] */
+        ResponseSchemaModel_GetNoticeReadsPage_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetNoticeReadsPage"];
+        };
         /** ResponseSchemaModel[GetNotificationUnreadDetail] */
         ResponseSchemaModel_GetNotificationUnreadDetail_: {
             /**
@@ -12254,6 +12597,57 @@ export interface components {
             msg: string;
             /** Data */
             data: components["schemas"]["GetMessageDetail"][];
+        };
+        /** ResponseSchemaModel[list[GetNoticeFeedDetail]] */
+        ResponseSchemaModel_list_GetNoticeFeedDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["GetNoticeFeedDetail"][];
+        };
+        /** ResponseSchemaModel[list[GetNoticeFeedItem]] */
+        ResponseSchemaModel_list_GetNoticeFeedItem__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["GetNoticeFeedItem"][];
+        };
+        /** ResponseSchemaModel[list[GetNoticePublicItem]] */
+        ResponseSchemaModel_list_GetNoticePublicItem__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["GetNoticePublicItem"][];
         };
         /** ResponseSchemaModel[list[GetRoleDetail]] */
         ResponseSchemaModel_list_GetRoleDetail__: {
@@ -13525,10 +13919,38 @@ export interface components {
              */
             expire_time?: string | null;
             /**
+             * Popup
+             * @description 登录后弹窗
+             * @default false
+             */
+            popup: boolean;
+            /**
+             * Require Ack
+             * @description 必须点「我已阅读」（只在登录后弹窗时有意义）
+             * @default false
+             */
+            require_ack: boolean;
+            /**
+             * Publish Time
+             * @description 定时发布时间（为空立即发布）
+             */
+            publish_time?: string | null;
+            /**
+             * Public
+             * @description 登录页可见（不登录也能看；不能有发布范围）
+             * @default false
+             */
+            public: boolean;
+            /**
              * Attachment Ids
              * @description 附件文件 ID（按顺序；为空不改附件）
              */
             attachment_ids?: number[] | null;
+            /**
+             * Audience
+             * @description 发布范围（为空不改；空列表 = 全员）
+             */
+            audience?: components["schemas"]["NoticeAudienceEntry"][] | null;
         };
         /**
          * UpdateOpenAppParam
@@ -18533,6 +18955,46 @@ export interface operations {
             };
         };
     };
+    get_notice_popups_api_v1_sys_notices_feed_popups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_GetNoticeFeedDetail__"];
+                };
+            };
+        };
+    };
+    get_notice_banner_api_v1_sys_notices_feed_banner_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_GetNoticeFeedItem__"];
+                };
+            };
+        };
+    };
     get_notice_feed_detail_api_v1_sys_notices_feed__pk__get: {
         parameters: {
             query?: never;
@@ -18552,6 +19014,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseSchemaModel_GetNoticeFeedDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_notices_api_v1_sys_notices_public_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_GetNoticePublicItem__"];
+                };
+            };
+        };
+    };
+    get_notice_reads_api_v1_sys_notices__pk__reads_get: {
+        parameters: {
+            query?: {
+                /** @description true：已读的；false：未读的（发布范围内、启用的账号） */
+                read?: boolean;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path: {
+                /** @description 通知公告 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetNoticeReadsPage_"];
                 };
             };
             /** @description Validation Error */

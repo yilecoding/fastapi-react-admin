@@ -19,6 +19,7 @@ import { AttachmentCount } from '../notice/shared'
 import {
   CATEGORY,
   invalidateInbox,
+  markableUnread,
   noticeIdOf,
   notificationsQuery,
   unreadCountQuery,
@@ -82,6 +83,8 @@ export function NotificationBell() {
   })
 
   const total = unread.data?.total ?? 0
+  // 「全部已读」按这个数判，不按 `total`：必须确认的公告后端会跳过（#190），只剩它们时按钮该灰掉
+  const markable = markableUnread(unread.data)
   const byCategory = unread.data?.by_category ?? {}
   const items = listQuery.data?.items ?? []
 
@@ -161,7 +164,7 @@ export function NotificationBell() {
               variant="link"
               size="sm"
               className="ms-auto h-auto p-0 text-xs"
-              disabled={total === 0 || markAll.isPending}
+              disabled={markable === 0 || markAll.isPending}
               onClick={() => markAll.mutate()}
               data-testid="notification-mark-all"
             >
@@ -222,9 +225,11 @@ export function NotificationBell() {
                     !n.read_time && 'bg-muted/30'
                   )
                   const onActivate = () => {
-                    readIfUnread(n)
                     setOpen(false)
+                    // 公告那一行**不在这里标已读**，交给读者抽屉：它拿到详情才知道这条是不是
+                    // 「必须确认」（#190）—— 在这里标掉，「我已阅读」就成了摆设
                     if (noticeId) setReading(noticeId)
+                    else readIfUnread(n)
                   }
                   // 有合法目标就是链接（中键/新窗口都能用），没有就是个只标已读的按钮。
                   // `to` 是库里的自由字符串，`isValidPath` 已经验过它真实存在；
@@ -245,6 +250,15 @@ export function NotificationBell() {
                             {n.title}
                           </span>
                           <AttachmentCount count={n.attachment_count} className="mt-0.5" />
+                          {/* 必须确认的（#190）：「全部已读」标不掉它，标出来，不然按钮灰了、红点还在，看不出为什么 */}
+                          {n.requires_ack && !n.read_time && (
+                            <span
+                              className="mt-0.5 shrink-0 text-xs text-amber-700 dark:text-amber-300"
+                              data-testid="notification-item-needs-ack"
+                            >
+                              {t('需确认')}
+                            </span>
+                          )}
                           {!n.read_time && (
                             <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-destructive" />
                           )}
@@ -308,8 +322,8 @@ export function NotificationBell() {
           </div>
         </PopoverContent>
       </Popover>
-      {/* 铃铛里的抽屉只会从某一行打开，那一行已经 `readIfUnread` 过了 */}
-      <NoticeReaderSheet noticeId={reading} rowAlreadyMarked onOpenChange={(o) => !o && setReading(null)} />
+      {/* 标已读由抽屉自己按详情决定（必须确认的不自动标），见 `reader-sheet.tsx` */}
+      <NoticeReaderSheet noticeId={reading} onOpenChange={(o) => !o && setReading(null)} />
     </>
   )
 }

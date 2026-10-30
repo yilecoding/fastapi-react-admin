@@ -144,6 +144,9 @@ error:
     not_found: Notice does not exist
     attachment_invalid: The attachment does not exist, or you are not allowed to use that file
     attachment_public: "\"{name}\" is a public file (downloadable without signing in) and cannot be attached to a notice; upload it again"
+    require_ack_needs_popup: "\"Require acknowledgement\" only works together with \"Pop up after sign-in\""
+    public_with_audience: A notice shown on the sign-in page cannot be limited to an audience (anyone can see it without signing in)
+    audience_invalid: The audience contains a department, role or user that does not exist
   notification:
     not_found: Notification does not exist
     delivery_not_found: Delivery record does not exist
