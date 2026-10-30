@@ -16,8 +16,13 @@
 
 ```bash
 pnpm e2e                          # = turbo e2e，起隔离环境 + 跑 chromium
-cd apps/web && pnpm e2e -- tests/dept-crud.spec.ts   # 只跑一个文件
+cd apps/web && pnpm e2e tests/dept-crud.spec.ts      # 只跑一个文件（不要写 `--`）
 ```
+
+🔴 **只跑一个文件时不能写成 `pnpm e2e -- tests/…`。** pnpm 会把 `--` 原样传给 playwright，
+后面的文件名和参数全被忽略，**静默地跑全部 134 条**（十几分钟），看起来只是「这个文件好慢」。
+实测（2026-10-30）：`pnpm e2e -- tests/dept-crud.spec.ts --list` 跑满 100 秒也没列出东西（它在起服务跑全量）；
+去掉 `--` 立刻 `Total: 2 tests in 1 file`。这一行原来就写的是带 `--` 的版本。
 
 ### 完全隔离的第二套实例，不跟 `pnpm dev` 共用任何东西
 

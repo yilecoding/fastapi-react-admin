@@ -85,7 +85,7 @@ export function NotifyBotPage() {
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {platformLabel(t, bot.platform)}
                     {' · '}
-                    {bot.has_secret ? t('已加签') : t('未加签')}
+                    {bot.has_secret ? t('已开签名校验') : t('未开签名校验')}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1">
@@ -165,7 +165,12 @@ export function NotifyBotPage() {
                   </Button>
                 </Can>
                 <Can perm="sys:notification:delivery:list">
-                  <Button size="sm" variant="ghost" render={<Link to="/notify/delivery" search={{ channel: 'bot' }} />}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    nativeButton={false}
+                    render={<Link to="/notify/delivery" search={{ channel: 'bot' }} />}
+                  >
                     <IconListDetails className="size-4" />
                     {t('投递记录')}
                   </Button>

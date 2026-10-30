@@ -179,7 +179,13 @@ async def _defer_if_throttled(pk: int, row: NotificationDelivery) -> bool:
     """群机器人这一分钟发够了：推到下一分钟。不算一次尝试 —— 没发出去是我们自己挡的，不是对方拒的"""
     if row.channel != NotificationChannel.bot.value:
         return False
-    wait = await _bot_throttled(pk, row)
+    try:
+        wait = await _bot_throttled(pk, row)
+    except Exception as e:
+        # 🔴 这一行已经抢成 sending 了：在这里抛出去，它就停在 sending、过一会儿被归成「结果未知」，一条没发也不会再发。
+        # 数不出来就照发 —— 真超了平台会拒，按重试走
+        log.warning(f'通知投递 {pk} 限流计数失败，照发：{e!s}')
+        return False
     if wait is None:
         return False
     async with async_db_session.begin() as db:
@@ -243,17 +249,30 @@ async def _deliver_one(pk: int) -> str | None:
     try:
         async with async_db_session.begin() as db:
             await notification_delivery_dao.settle(db, pk, **values)
-            if row.bot_id is not None and values['status'] != DeliveryStatus.failed.value:
-                # 机器人卡片上的「最近成功 / 最近失败原因」。还会重试的失败不记：下一次可能就成了
-                from backend.plugin.notification.crud.crud_bot import notification_bot_dao
-
-                await notification_bot_dao.record_result(
-                    db, row.bot_id, ok=values['status'] == DeliveryStatus.sent.value, error=values.get('last_error')
-                )
     except Exception as e:
         # 发出去了但终态没落库：那一行停在 sending，超时后由 reclaim_stale 归成「结果未知」—— 不会被重发
         log.error(f'通知投递 {pk} 更新终态失败（{values.get("status")}）：{e!s}')
+        return values['status']
+    if row.bot_id is not None and values['status'] != DeliveryStatus.failed.value:
+        await _record_bot_result(row.bot_id, values)
     return values['status']
+
+
+async def _record_bot_result(bot_id: int, values: dict[str, Any]) -> None:
+    """机器人卡片上的「最近成功 / 最近失败原因」。还会重试的失败不记：下一次可能就成了。
+
+    🔴 单独一个事务：和终态放在一起的话，卡片这一步失败（行锁、机器人刚被删）会把已经进群的那一行一起回滚，
+    停在 sending、过一会儿被归成「结果未知」
+    """
+    from backend.plugin.notification.crud.crud_bot import notification_bot_dao
+
+    try:
+        async with async_db_session.begin() as db:
+            await notification_bot_dao.record_result(
+                db, bot_id, ok=values['status'] == DeliveryStatus.sent.value, error=values.get('last_error')
+            )
+    except Exception as e:
+        log.warning(f'群机器人 {bot_id} 更新最近结果失败：{e!s}')
 
 
 async def deliver_pending() -> dict[str, int]:

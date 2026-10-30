@@ -86,6 +86,13 @@ async def _purge() -> None:
         await db.execute(delete(Notification).where(Notification.title.like(f'{TITLE}%')))
 
 
+async def _set_bot(pk: int, **values: Any) -> None:
+    async with async_test_db_session.begin() as db:
+        bot = await db.get(NotificationBot, pk)
+        for k, v in values.items():
+            setattr(bot, k, v)
+
+
 async def _bot_rows(kind: str = 'pytest.bot') -> list[NotificationDelivery]:
     async with async_test_db_session() as db:
         return list(
@@ -243,6 +250,10 @@ class TestProtocol:
             ('feishu', 'https://open.feishu.cn:8443/open-apis/bot/v2/hook/abc', False),
             ('feishu', 'https://x@open.feishu.cn/open-apis/bot/v2/hook/abc', False),
             ('feishu', 'https://open.feishu.cn/open-apis/other/abc', False),
+            # 🔴 字面上以前缀开头，httpx 发之前会把点段归一掉：实际请求的是 /open-apis/im/v1/messages
+            ('feishu', 'https://open.feishu.cn/open-apis/bot/v2/hook/../../../im/v1/messages', False),
+            ('feishu', 'https://open.feishu.cn/open-apis/bot/v2/hook/%2e%2e/%2E%2E/im/v1/messages', False),
+            ('feishu', 'https://open.feishu.cn/open-apis/bot/v2/hook/./abc', False),
             ('feishu', DINGTALK, False),
             ('dingtalk', DINGTALK, True),
             ('wecom', WECOM, True),
@@ -256,6 +267,7 @@ class TestProtocol:
         extra = ('https://feishu.corp.example/open-apis/bot/v2/hook/',)
         assert bp.url_allowed('feishu', 'https://feishu.corp.example/open-apis/bot/v2/hook/abc', extra)
         assert not bp.url_allowed('feishu', 'https://feishu.corp.example/admin', extra)
+        assert not bp.url_allowed('feishu', 'https://feishu.corp.example/open-apis/bot/v2/hook/../../../admin', extra)
 
     def test_credential_must_be_in_the_url(self) -> None:
         assert not bp.has_credential('feishu', 'https://open.feishu.cn/open-apis/bot/v2/hook/')
@@ -388,6 +400,23 @@ class TestApi:
         assert client.delete(f'{API}/{pk}', headers=token_headers).json()['code'] == 200
         assert _call(client, _get_bot, int(pk)) is None
 
+    def test_platform_change_drops_the_old_platforms_secret(
+        self, client: TestClient, token_headers: dict[str, str]
+    ) -> None:
+        """钉钉的密钥签飞书的消息，每条都 19021、按永久失败不重试。密钥是上一家发的，换平台没填新的就是没有"""
+        pk = _create(client, token_headers, sign_secret='SECfeishu')['id']
+        base = {'name': f'{TITLE} 换平台', 'kinds': ['pytest.bot'], 'status': 1}
+        res = client.put(
+            f'{API}/{pk}', json={**base, 'platform': 'dingtalk', 'webhook_url': DINGTALK}, headers=token_headers
+        ).json()
+        assert (res['code'], res['data']['has_secret']) == (200, False)
+        res = client.put(
+            f'{API}/{pk}',
+            json={**base, 'platform': 'feishu', 'webhook_url': FEISHU, 'sign_secret': 'SECnew'},
+            headers=token_headers,
+        ).json()
+        assert res['data']['has_secret'] is True
+
     def test_send_test_reports_the_platform_reason(
         self, client: TestClient, token_headers: dict[str, str], receiver: Receiver
     ) -> None:
@@ -402,6 +431,61 @@ class TestApi:
         res = client.post(f'{API}/{pk}/test', headers=token_headers).json()['data']
         assert (res['ok'], res['reason']) == (False, 'keyword_missing')
         assert 'Key Words Not Found' in (_call(client, _get_bot, int(pk)).last_error or '')
+
+    def test_worker_does_not_log_the_webhook_url_either(self) -> None:
+        """🔴 真正往群里发的是 worker，而 worker 不走 `setup_logging()`：`celery -l info` 自己接管根 logger。
+        只在 setup_logging 里压 httpx 的话，API 进程干净、worker 照样打出整条地址。
+        实测：真飞书公告走 worker，日志里是 `[INFO/MainProcess] HTTP Request: POST https://open.feishu.cn/…/<token>`"""
+        import subprocess
+        import sys
+        import textwrap
+
+        code = textwrap.dedent(f"""
+            import asyncio, logging, sys
+            import httpx
+            import backend.app.task.celery  # worker 的入口：celery -A backend.app.task.celery
+            from backend.plugin.notification.service import senders
+            # celery -l info 接管根 logger 的样子
+            logging.basicConfig(level=logging.INFO, stream=sys.stdout, force=True)
+            senders.bot_transport = httpx.MockTransport(lambda r: httpx.Response(200, json={{'code': 0}}))
+            r = asyncio.run(senders.post_bot('feishu', {FEISHU!r}, None, title='t', content='c', link=None))
+            print('outcome', r.outcome.value)
+        """)
+        out = subprocess.run(
+            [sys.executable, '-c', code], capture_output=True, text=True, timeout=120, check=False, cwd=os.getcwd()
+        )
+        assert 'outcome sent' in out.stdout, out.stdout + out.stderr
+        assert '0123456789abcdef-pytest' not in out.stdout + out.stderr
+
+    def test_send_test_with_an_undecryptable_url_says_config_error(
+        self, client: TestClient, token_headers: dict[str, str], receiver: Receiver
+    ) -> None:
+        """轮换了 NOTIFICATION_ENCRYPT_SECRET_KEY 之后旧密文解不开：worker 那边分类成 config_error，
+        这里原来是一个看不出原因的 500"""
+        pk = int(_create(client, token_headers)['id'])
+        _call(client, _set_bot, pk, webhook_cipher='00' * 48)
+        res = client.post(f'{API}/{pk}/test', headers=token_headers).json()
+        assert res['code'] == 200, res
+        assert (res['data']['ok'], res['data']['reason']) == (False, 'config_error')
+        assert not receiver.requests
+        assert _call(client, _get_bot, pk).last_error
+
+    def test_webhook_url_never_reaches_the_log(
+        self, client: TestClient, token_headers: dict[str, str], receiver: Receiver
+    ) -> None:
+        """🔴 httpx 在 INFO 级别给每个请求打一行 `HTTP Request: POST <完整 URL>`，经 InterceptHandler 进了
+        fba_access.log。实测：对真飞书发一次测试消息，token 原样落盘。钉钉 / 企业微信的 token 在查询串里，一样"""
+        from loguru import logger
+
+        lines: list[str] = []
+        sink = logger.add(lines.append, level='DEBUG')
+        try:
+            pk = _create(client, token_headers)['id']
+            assert client.post(f'{API}/{pk}/test', headers=token_headers).json()['data']['ok'] is True
+        finally:
+            logger.remove(sink)
+        assert receiver.requests
+        assert not [line for line in lines if '0123456789abcdef-pytest' in line]
 
 
 # ── 路由：一条通知 × 一个群一行 ──────────────────────────────────────────────
@@ -506,6 +590,39 @@ class TestWorker:
         (row,) = _call(client, _bot_rows)
         assert (row.status, row.reason) == ('exhausted', 'sign_failed')
         assert 'sign match fail' in (_call(client, _get_bot, bot_id).last_error or '')
+
+    def test_bot_card_update_failing_does_not_undo_the_send(
+        self, client: TestClient, token_headers: dict[str, str], receiver: Receiver, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """消息已经进群：卡片上的「最近成功」没写上不要紧，投递行的终态不能跟着回滚
+        （回滚了就停在 sending，过一会儿被归成「结果未知」，明明发成功了）"""
+        from backend.plugin.notification.crud.crud_bot import notification_bot_dao
+
+        async def _boom(*_a: Any, **_k: Any) -> None:  # ruff: ignore[unused-async] —— 替身要能被 await
+            raise RuntimeError('bot row locked')
+
+        monkeypatch.setattr(notification_bot_dao, 'record_result', _boom)
+        _enqueue(client, token_headers)
+        _call(client, delivery_service.deliver_pending)
+        (row,) = _call(client, _bot_rows)
+        assert (row.status, row.attempts) == ('sent', 1)
+        assert len(receiver.requests) == 1
+
+    def test_throttle_check_failing_still_sends(
+        self, client: TestClient, token_headers: dict[str, str], receiver: Receiver, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """🔴 限流计数在抢到行之后：它一抛，这一行就停在 sending、过一会儿归成「结果未知」—— 一条都没发，
+        也不会再发。数不出来就照发（真超了平台会拒，按重试走），不能把这一行丢了"""
+        from backend.plugin.notification.crud.crud_bot import notification_bot_dao
+
+        async def _boom(*_a: Any, **_k: Any) -> int:  # ruff: ignore[unused-async] —— 替身要能被 await
+            raise RuntimeError('db hiccup')
+
+        monkeypatch.setattr(notification_bot_dao, 'recent_sends', _boom)
+        _enqueue(client, token_headers)
+        _call(client, delivery_service.deliver_pending)
+        (row,) = _call(client, _bot_rows)
+        assert (row.status, row.attempts) == ('sent', 1)
 
     def test_timeout_after_sending_is_unknown_not_retried(
         self, client: TestClient, token_headers: dict[str, str], receiver: Receiver
