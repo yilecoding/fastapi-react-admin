@@ -11,11 +11,11 @@ values
 (4000000000000000073, 4000000000000000012, 2049629108262010880),
 (4000000000000000074, 4000000000000000013, 2049629108262010880);
 
-insert into sys_notification (id, title, content, category, link, recipient_id, created_time, updated_time, deleted, deleted_time)
+insert into sys_notification (id, title, content, category, link, recipient_id, created_time, updated_time, deleted, deleted_time, source)
 values
-(4000000000000000081, '欢迎使用消息中心', '铃铛里的红点是未读数，点标题可以直接跳到对应页面。这条是「系统」分类的示例。', 0, '/dashboard', null, now(), null, 0, null),
-(4000000000000000082, '系统升级公告：新增定时任务与数据权限模块', '本次升级新增「定时任务调度」与「数据权限矩阵」两个模块，详情见通知公告页。', 1, '/plugins/notice', null, now(), null, 0, null),
-(4000000000000000083, '你的账号资料待完善', '这条是只发给 admin 的定向通知示例——其他账号看不到它。', 0, '/profile', 2048601269672738816, now(), null, 0, null);
+(4000000000000000081, '欢迎使用消息中心', '铃铛里的红点是未读数，点标题可以直接跳到对应页面。这条是「系统」分类的示例。', 0, '/dashboard', null, now(), null, 0, null, null),
+(4000000000000000082, '系统升级公告：新增定时任务与数据权限模块', '本次升级新增「定时任务调度」与「数据权限矩阵」两个模块，详情见通知公告页。', 1, '/notification?notice=2112248797756129280', null, now(), null, 0, null, 'notice:2112248797756129280'),
+(4000000000000000083, '你的账号资料待完善', '这条是只发给 admin 的定向通知示例——其他账号看不到它。', 0, '/profile', 2048601269672738816, now(), null, 0, null, null);
 
 insert into sys_menu (id, title, name, path, sort, icon, type, perms, status, display, link, remark, parent_id, created_time, updated_time)
 values

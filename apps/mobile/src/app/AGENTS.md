@@ -19,7 +19,8 @@
 (app)/profile/edit.tsx       编辑资料  │ 天然带返回键、盖住 tab 栏
 (app)/profile/password.tsx   修改密码  │
 (app)/users/index.tsx        用户列表  │ ← 分页列表的范式样板
-(app)/users/[id].tsx         用户详情  ┘ ← 详情 + 写操作的范式样板
+(app)/users/[id].tsx         用户详情  │ ← 详情 + 写操作的范式样板
+(app)/notices/[id].tsx       公告详情  ┘ ← 正文 + 附件（见文末「公告」一节）
 ```
 
 ⚠️ 动态段在 `(app)/_layout.tsx` 里注册时，`name` 用的是**文件名**
@@ -234,8 +235,10 @@ src/app/(app)/notifications.tsx 列表：全部 / 未读 · 点一条标已读 �
 - `unread-count` 的 `by_category` 的 key 是**分类数值的字符串形式**（`'0'`/`'1'`/`'2'`），
   不是名字
 
-⚠️ `link` 字段是**web 的前端路由**（`/profile`、`/plugins/notice` 这种），
-移动端没有对应页面，所以现在只展示不跳。哪天移动端页面多了再做映射。
+⚠️ `link` 字段是**web 的前端路由**（`/profile`、`/notification?notice=…` 这种），
+移动端没有对应页面，所以只展示不跳。**例外是公告**（#186）：认 `source`
+（`notice:<id>`）推到移动端自己的公告详情屏 —— 认的是来源，**不解析 `link`**，
+链接的形状跟着 web 的路由变。行上的 📎 个数是 `attachment_count`（后端查询时现算）。
 
 ⚠️ 标记已读是**幂等**的（重复标记返回 0 行也算成功），所以列表用了乐观更新、
 失败也不回滚 —— 下一次刷新自然会纠正。
@@ -396,3 +399,77 @@ PostgreSQL / SQL Server 数匹配行），别拿这个接口的返回当「记�
   「长时间不动自动退出」再补
 - ⚠️ 只过了 `tsc` 和 `expo export`（提示文案和 `restoreSession` 都在 Hermes 包里，按上面
   UTF-16LE 那个办法核过），**没在真机上跑过**被踢 / 空闲的流程
+
+## 公告（#186）：首页一组 · 详情屏 · 附件
+
+```
+(app)/(tabs)/index.tsx      首页「公告」组：feed 最近 3 条（置顶在前），加载 / 空 / 失败三态
+(app)/notices/[id].tsx      详情：正文 + 附件区；**加载成功之后**才标已读
+src/lib/notices.ts          取数（feed / 详情 / 附件列表 / 标已读）
+src/lib/rich-text.ts        正文 HTML → 块（纯函数）；components/rich-text.tsx 画成原生组件
+src/lib/attachments.ts      带鉴权下载到缓存目录 → 图片屏内看，其余交系统分享面板
+```
+
+读的是 `GET /sys/notices/feed*`（只要登录），不是管理端那个口（要 `sys:notice:add`，普通员工 403）。
+已读跟着收件箱那一行走（`notification_id`）：标完要把公告 feed、通知列表、未读数**三处一起失效**，
+否则首页圆点和 tab 红点对不上。
+
+🔴 **详情的 404 是「已撤回或已过期」，不是加载失败。** 后端对隐藏 / 过期 / 删除一律 404。
+渲染成「加载失败 + 重试」就是一个永远不会成功的按钮；而且默认重试策略会对 404 再打两次，
+那一屏要晚三四秒才出来 —— 所以这个查询对 404 不重试。自然过期**不撤回**收件箱那一行，
+从通知屏点进来撞上 404 是正常路径，不是边角。
+
+### 正文：自己把 HTML 摊成原生组件，不用 WebView
+
+| 选项 | 为什么没选 |
+|---|---|
+| `react-native-webview` | **不是因为 Expo Go 没有**（实测 Expo Go 57.0.9 的 dex 里有 `RNCWebViewModule`）。它会**执行**正文（得另做消毒），高度要注入脚本量了再传回来，深浅色还得在 HTML 里再抄一份 CSS —— 路线 C 本来就是「不套 web」 |
+| HTML 转 RN 的库 | 依赖里一个都没有，为一屏引一个自带样式系统的库不划算 |
+| 只显示纯文本 | 标题 / 列表 / 加粗全丢 |
+
+Tiptap 的产出是封闭集合（StarterKit + TextAlign + Image），转换只认这些；安全靠**白名单输出**：
+只产出文字、样式标记、链接、图片地址；`script` / `style` 连内容丢；链接只放 `http(s)` / `mailto` / `tel`；
+图片只加载本服务器的相对路径（公开子树，不鉴权），外链图和 `//host` 不加载。
+⚠️ 纯文本正文（种子数据）按空行分段 —— web 把它折成一整段，这里刻意不同（手机上挤成一段没法读）。
+
+🔴 **标签扫描不能把正则直接跑在 `src.slice(lt)` 上 —— 一个没闭合的 `<` 就让它扫到串尾，平方级。**
+症状是详情屏卡住。修法：先引号感知地找这个标签的 `>`（引号外又遇到 `<` 就判「不是标签」），再匹配。
+实测（Node 22 / V8，`'<p>' + '<a '.repeat(100000)`，30 万字符）：原写法 **26357 ms**，改后 **97 ms**；
+Hermes 没有 JIT，只会更慢。同一个一次性探针还覆盖了 Tiptap 结构 / script 剥离 / 危险链接 / 外链图 /
+纯文本 / 不规范 HTML 共 12 组（没进仓库 —— 移动端没有单测框架，#137）。
+
+### 附件：先用共享客户端问一次 `GET /sys/files/{pk}`，再原生下载
+
+- 🔴 下载接口要 Authorization 头，而 `expo-file-system` 的原生下载**不经过 `@admin/api`**
+  （Android 上是它自己的 OkHttpClient，代码直读），401 单飞刷新也就不经过它。先问一次文件详情：
+  token 过期在这一步按共享那套刷新；它和下载走同一个读权限判断，公告撤回时这里是一条看得懂的 404，
+  而不是原生层的 `response has status: 404`
+- 本地文件名用 `original_name`（`Content-Disposition` 的 ASCII 兜底会去掉中文），滤掉路径分隔符、
+  保住扩展名（对方 App 靠它认类型）；每个文件一个子目录，重名不互相覆盖
+- 能画的图片（jpg / png / gif / webp）屏内全屏看（portal + 自己接返回键，和确认框同一条路）；
+  其余交 `expo-sharing`，Android 要传 `mimeType`。失败**留在那一行**（红字），不走 toast ——
+  一条公告常挂好几个文件，toast 飘走之后分不清是哪个
+
+✅ **两个模块都在 Expo Go（SDK 57）里。** 实测：下载 Expo Go 57.0.9 的 APK，dex 里有
+`expo/modules/sharing/SharingModule`、`SharingFileProvider`、`expo/modules/filesystem/FileSystemModule`、
+`downloadFileWithStore`（带进度 / 取消的那条下载路径）；随手造的类名 0 命中。
+
+⚠️ `npx expo install` 第一次连 `api.expo.dev` 是 `ETIMEDOUT`；`EXPO_OFFLINE=1` 能装（版本取本地 `expo` 的
+bundledNativeModules.json），但 offline 下 `--check` 只说 `Dependency validation is unreliable in offline-mode`
+—— **要联网再跑一次才算数**。2026-10-30 联网跑出的是整套 SDK 的补丁版漂移（`expo@57.0.19` 对 `~57.0.31`
+等 11 个包），早于本次改动；`expo-file-system` 刻意留在 57.0.6 —— 那正是 `expo@57.0.19` 自己依赖的版本，
+单独升会多出第二份。`expo-sharing` 装上时往 `app.json` 的 `plugins` 里加了一条，不带参数时是空操作
+（「分享进本 App」两端默认关，代码直读）。
+
+### 🔴 正则字面量里的引号会把 `pnpm i18n:check` 的剥注释带偏
+
+症状：`i18n:check` 的「动态 key 候选」里冒出这个文件**注释**的碎片（两个反引号之间那段中文）。
+根因：`strip-comments.mjs` 认字符串、不认正则字面量，属性正则里落单的引号让它以为后面整个文件都在字符串里。
+修法：正则里的引号写成 `\x22` / `\x27` / `\x60`。实测改完后剥注释的输出里不再残留中文注释行。
+⚠️ 只验到「噪音」这一层；同样的错位会不会让 `missing-keys` 漏掉真 key，没造例子验证。
+
+### 没验证的
+
+只过了 tsc（含 typed routes：故意写成 `/notice/[id]` 报 TS2820）、eslint、`expo export`
+（新类名在 dev bundle 里都有生成的样式键，和老类名同一个数）。**没在任何设备上跑过**：首页那一组、
+详情排版、图片比例、下载进度、分享面板能不能被 WPS / 系统 PDF 阅读器接住；iOS 一次没跑。

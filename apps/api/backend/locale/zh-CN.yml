@@ -80,6 +80,7 @@ error:
     unexpected: 导出时发生了意外错误，详情见服务端日志
     user_unavailable: 发起导出的账号已停用或不存在，导出已取消
   file:
+    relation_forbidden: 你没有权限修改这个对象的附件
     empty: 文件是空的
     invalid_filename: 非法的文件名
     missing: 文件已丢失，请重新上传
@@ -142,6 +143,8 @@ error:
     swagger_unsupported: 这个账号开启了二次验证，请从登录页登录（Swagger 调试口做不了第二步）
   notice:
     not_found: 通知公告不存在
+    attachment_invalid: 附件不存在，或者你没有权限使用这个文件
+    attachment_public: 「{name}」是公开文件（不登录也能下载），不能作为公告附件，请重新上传
   notification:
     not_found: 通知不存在
     delivery_not_found: 投递记录不存在

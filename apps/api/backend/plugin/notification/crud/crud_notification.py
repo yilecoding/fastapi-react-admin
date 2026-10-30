@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.common.security.data_scope import DataScopedCRUD
 from backend.plugin.notification.model import Notification, NotificationRead
 from backend.plugin.notification.schema.notification import CreateNotificationParam
+from backend.utils.timezone import timezone
 
 
 def visible_to(user_id: int) -> ColumnElement[bool]:
@@ -157,6 +158,72 @@ class CRUDNotification(DataScopedCRUD[Notification]):
         """
         stmt = select(Notification.id).where(Notification.deleted == 0, visible_to(user_id), _unread(user_id))
         return [row[0] for row in (await db.execute(stmt)).all()]
+
+    async def get_ids_by_sources(self, db: AsyncSession, sources: Sequence[str]) -> dict[str, int]:
+        """
+        来源 → 收件箱里那一行的 ID（只认广播行；同一来源有多行时取最新的）
+
+        :param db: 数据库会话
+        :param sources: 来源列表（`notice:123`）
+        :return:
+        """
+        if not sources:
+            return {}
+        stmt = (
+            select(Notification.source, Notification.id)
+            .where(
+                Notification.source.in_(list(dict.fromkeys(sources))),
+                Notification.recipient_id.is_(None),
+                Notification.deleted == 0,
+            )
+            .order_by(Notification.id)
+        )
+        # 按 id 升序灌进 dict，后来的覆盖先来的 = 取最新那一行
+        return {row[0]: row[1] for row in (await db.execute(stmt)).all()}
+
+    async def update_by_source(self, db: AsyncSession, source: str, *, title: str, content: str) -> int:
+        """
+        改一个来源对应的收件箱行的标题 / 摘要（公告改了标题，铃铛里那一行跟着改）
+
+        :param db: 数据库会话
+        :param source: 来源
+        :param title: 标题
+        :param content: 摘要
+        :return:
+        """
+        return await self.update_model_by_column(
+            db, {'title': title[:128], 'content': content}, allow_multiple=True, source=source, deleted=0
+        )
+
+    async def retract_by_source(self, db: AsyncSession, source: str) -> int:
+        """
+        撤回一个来源发出来的收件箱行（逻辑删除 + 清掉已读标记）。公告隐藏 / 删除时调
+
+        :param db: 数据库会话
+        :param source: 来源
+        :return: 撤回的行数
+        """
+        pks = list(
+            (
+                await db.scalars(
+                    select(Notification.id).where(Notification.source == source, Notification.deleted == 0)
+                )
+            ).all()
+        )
+        if not pks:
+            return 0
+        await self.delete_reads(db, pks)
+        return await self.delete_model_by_column(
+            db,
+            allow_multiple=True,
+            logical_deletion=True,
+            deleted_flag_column='deleted',
+            deleted_flag_value=self.model.id,
+            deleted_at_column='deleted_time',
+            deleted_at_factory=timezone.now(),
+            id__in=pks,
+            deleted=0,
+        )
 
     async def delete_reads(self, db: AsyncSession, pks: Sequence[int]) -> int:
         """

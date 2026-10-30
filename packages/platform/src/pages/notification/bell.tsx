@@ -14,9 +14,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/to
 import { cn } from '@admin/ui/lib/utils'
 
 import { useSocketEvent } from '../../shell/socket-events'
+import { NoticeReaderSheet } from '../notice/reader-sheet'
+import { AttachmentCount } from '../notice/shared'
 import {
   CATEGORY,
-  notificationKeys,
+  invalidateInbox,
+  noticeIdOf,
   notificationsQuery,
   unreadCountQuery,
   useMarkAllNotificationsRead,
@@ -52,6 +55,12 @@ export function NotificationBell() {
   const qc = useQueryClient()
   const [open, setOpen] = React.useState(false)
   const [tab, setTab] = React.useState<TabKey>('all')
+  /**
+   * 正在读的公告。铃铛是外壳家具、不在任何 tab 里，没有 search 可写，用组件 state。
+   * 抽屉挂在 Popover **外面**（见 return）：点一行要先关下拉再开抽屉，
+   * 挂在 `PopoverContent` 里的话下拉一关它就跟着卸载了
+   */
+  const [reading, setReading] = React.useState<string | null>(null)
 
   const unread = useQuery(unreadCountQuery)
   const markAll = useMarkAllNotificationsRead()
@@ -60,8 +69,9 @@ export function NotificationBell() {
   // 服务端推来「有新的」时重新拉未读数和列表。
   // 🔴 事件本身不带内容，这里也**不要**去信任 payload —— 权限判断只有 REST 一处
   // （见后端 `common/socketio/actions.py: notification_new` 的注释）。
+  // 公告读者列表一起失效（`invalidateInbox`）：新发 / 撤回的公告要出现在 / 消失于工作台公告卡上
   useSocketEvent('notification:new', () => {
-    void qc.invalidateQueries({ queryKey: notificationKeys.all })
+    void invalidateInbox(qc)
   })
 
   const category = TABS.find((x) => x.key === tab)?.category
@@ -121,175 +131,185 @@ export function NotificationBell() {
   )
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger render={trigger} />
-        <TooltipContent>
-          {unread.error
-            ? t('未读数获取失败')
-            : total > 0
-              ? t('{{n}} 条未读', { n: total })
-              : t('通知中心')}
-        </TooltipContent>
-      </Tooltip>
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <Tooltip>
+          <TooltipTrigger render={trigger} />
+          <TooltipContent>
+            {unread.error
+              ? t('未读数获取失败')
+              : total > 0
+                ? t('{{n}} 条未读', { n: total })
+                : t('通知中心')}
+          </TooltipContent>
+        </Tooltip>
 
-      <PopoverContent
-        align="end"
-        sideOffset={8}
-        className="w-[22rem] gap-0 p-0"
-        data-testid="notification-panel"
-      >
-        <div className="flex items-center gap-2 px-4 pt-4 pb-3">
-          <span className="text-sm font-semibold">{t('通知中心')}</span>
-          {total > 0 && (
-            <Badge variant="destructive" className="font-normal">
-              {t('{{n}} 条未读', { n: total })}
-            </Badge>
-          )}
-          <Button
-            variant="link"
-            size="sm"
-            className="ms-auto h-auto p-0 text-xs"
-            disabled={total === 0 || markAll.isPending}
-            onClick={() => markAll.mutate()}
-            data-testid="notification-mark-all"
-          >
-            {t('全部已读')}
-          </Button>
-        </div>
-
-        <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="px-4 pb-3">
-          <TabsList className="w-full">
-            {TABS.map((x) => (
-              <TabsTrigger key={x.key} value={x.key} data-testid={`notification-tab-${x.key}`}>
-                {t(x.label)}
-                {countOf(x.key) > 0 && (
-                  <span className="text-xs font-medium text-destructive tabular-nums">
-                    {countOf(x.key)}
-                  </span>
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-
-        {/* 面板自己是定高视区：条目多了只滚这一段，头部与页脚钉住 */}
-        <div className="max-h-80 min-h-24 overflow-y-auto border-t border-border">
-          {listQuery.error ? (
-            <QueryError
-              error={listQuery.error}
-              onRetry={() => void listQuery.refetch()}
-              className="m-3"
-              testId="notification-list-error"
-            />
-          ) : listQuery.isPending ? (
-            <div className="flex flex-col gap-3 p-4">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex gap-3">
-                  <Skeleton className="size-8 shrink-0 rounded-full" />
-                  <div className="flex flex-1 flex-col gap-1.5">
-                    <Skeleton className="h-3.5 w-2/3" />
-                    <Skeleton className="h-3 w-full" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : items.length === 0 ? (
-            <p className="px-4 py-8 text-center text-xs text-muted-foreground">
-              {t('暂无通知')}
-            </p>
-          ) : (
-            <ul>
-              {items.map((n) => {
-                const meta = categoryMeta(n.category)
-                const to = linkOf(n)
-                const rowClass = cn(
-                  'flex w-full items-start gap-3 px-4 py-3 text-start transition-colors hover:bg-muted/60',
-                  !n.read_time && 'bg-muted/30'
-                )
-                const onActivate = () => {
-                  readIfUnread(n)
-                  setOpen(false)
-                }
-                // 有合法目标就是链接（中键/新窗口都能用），没有就是个只标已读的按钮。
-                // `to` 是库里的自由字符串，`isValidPath` 已经验过它真实存在；
-                // TanStack 的 `to` 类型是**已知路由的字面量联合**，动态值只能断言过去
-                const body = (
-                  <>
-                    <span
-                      className={cn(
-                        'flex size-8 shrink-0 items-center justify-center rounded-full',
-                        meta.tone
-                      )}
-                    >
-                      <meta.Icon className="size-4" />
-                    </span>
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="flex items-start gap-2">
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                          {n.title}
-                        </span>
-                        {!n.read_time && (
-                          <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-destructive" />
-                        )}
-                      </span>
-                      {/* 两行截断：正文长度不受控，不截会把一条通知撑满整个面板 */}
-                      <span className="line-clamp-2 text-xs text-muted-foreground">
-                        {n.content}
-                      </span>
-                      <span className="text-xs text-muted-foreground/80">
-                        {relativeTime(n.created_time, t)}
-                      </span>
-                    </span>
-                  </>
-                )
-                return (
-                  <li key={n.id}>
-                    {to ? (
-                      <Link
-                        to={to.to as never}
-                        search={to.search as never}
-                        onClick={onActivate}
-                        data-testid="notification-item"
-                        data-unread={!n.read_time}
-                        className={rowClass}
-                      >
-                        {body}
-                      </Link>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={onActivate}
-                        data-testid="notification-item"
-                        data-unread={!n.read_time}
-                        className={rowClass}
-                      >
-                        {body}
-                      </button>
-                    )}
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
-
-        <div className="border-t border-border">
-          <Link
-            to="/notification"
-            search={{}}
-            className={cn(
-              buttonVariants({ variant: 'ghost', size: 'sm' }),
-              'w-full rounded-none rounded-b-md text-xs text-muted-foreground'
+        <PopoverContent
+          align="end"
+          sideOffset={8}
+          className="w-[22rem] gap-0 p-0"
+          data-testid="notification-panel"
+        >
+          <div className="flex items-center gap-2 px-4 pt-4 pb-3">
+            <span className="text-sm font-semibold">{t('通知中心')}</span>
+            {total > 0 && (
+              <Badge variant="destructive" className="font-normal">
+                {t('{{n}} 条未读', { n: total })}
+              </Badge>
             )}
-            data-testid="notification-view-all"
-            onClick={() => setOpen(false)}
-          >
-            {t('查看全部通知')}
-            <IconChevronRight className="size-3.5" />
-          </Link>
-        </div>
-      </PopoverContent>
-    </Popover>
+            <Button
+              variant="link"
+              size="sm"
+              className="ms-auto h-auto p-0 text-xs"
+              disabled={total === 0 || markAll.isPending}
+              onClick={() => markAll.mutate()}
+              data-testid="notification-mark-all"
+            >
+              {t('全部已读')}
+            </Button>
+          </div>
+
+          <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="px-4 pb-3">
+            <TabsList className="w-full">
+              {TABS.map((x) => (
+                <TabsTrigger key={x.key} value={x.key} data-testid={`notification-tab-${x.key}`}>
+                  {t(x.label)}
+                  {countOf(x.key) > 0 && (
+                    <span className="text-xs font-medium text-destructive tabular-nums">
+                      {countOf(x.key)}
+                    </span>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+
+          {/* 面板自己是定高视区：条目多了只滚这一段，头部与页脚钉住 */}
+          <div className="max-h-80 min-h-24 overflow-y-auto border-t border-border">
+            {listQuery.error ? (
+              <QueryError
+                error={listQuery.error}
+                onRetry={() => void listQuery.refetch()}
+                className="m-3"
+                testId="notification-list-error"
+              />
+            ) : listQuery.isPending ? (
+              <div className="flex flex-col gap-3 p-4">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex gap-3">
+                    <Skeleton className="size-8 shrink-0 rounded-full" />
+                    <div className="flex flex-1 flex-col gap-1.5">
+                      <Skeleton className="h-3.5 w-2/3" />
+                      <Skeleton className="h-3 w-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : items.length === 0 ? (
+              <p className="px-4 py-8 text-center text-xs text-muted-foreground">
+                {t('暂无通知')}
+              </p>
+            ) : (
+              <ul>
+                {items.map((n) => {
+                  const meta = categoryMeta(n.category)
+                  // 公告那一行就地打开详情（#186）：原来跳 `link` = 管理页，普通用户点进去是 403，
+                  // 而且这一下已经把它标成已读了
+                  const noticeId = noticeIdOf(n)
+                  const to = noticeId ? null : linkOf(n)
+                  const rowClass = cn(
+                    'flex w-full items-start gap-3 px-4 py-3 text-start transition-colors hover:bg-muted/60',
+                    !n.read_time && 'bg-muted/30'
+                  )
+                  const onActivate = () => {
+                    readIfUnread(n)
+                    setOpen(false)
+                    if (noticeId) setReading(noticeId)
+                  }
+                  // 有合法目标就是链接（中键/新窗口都能用），没有就是个只标已读的按钮。
+                  // `to` 是库里的自由字符串，`isValidPath` 已经验过它真实存在；
+                  // TanStack 的 `to` 类型是**已知路由的字面量联合**，动态值只能断言过去
+                  const body = (
+                    <>
+                      <span
+                        className={cn(
+                          'flex size-8 shrink-0 items-center justify-center rounded-full',
+                          meta.tone
+                        )}
+                      >
+                        <meta.Icon className="size-4" />
+                      </span>
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className="flex items-start gap-2">
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                            {n.title}
+                          </span>
+                          <AttachmentCount count={n.attachment_count} className="mt-0.5" />
+                          {!n.read_time && (
+                            <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-destructive" />
+                          )}
+                        </span>
+                        {/* 两行截断：正文长度不受控，不截会把一条通知撑满整个面板 */}
+                        <span className="line-clamp-2 text-xs text-muted-foreground">
+                          {n.content}
+                        </span>
+                        <span className="text-xs text-muted-foreground/80">
+                          {relativeTime(n.created_time, t)}
+                        </span>
+                      </span>
+                    </>
+                  )
+                  return (
+                    <li key={n.id}>
+                      {to ? (
+                        <Link
+                          to={to.to as never}
+                          search={to.search as never}
+                          onClick={onActivate}
+                          data-testid="notification-item"
+                          data-unread={!n.read_time}
+                          className={rowClass}
+                        >
+                          {body}
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={onActivate}
+                          data-testid="notification-item"
+                          data-unread={!n.read_time}
+                          data-notice-id={noticeId ?? undefined}
+                          className={rowClass}
+                        >
+                          {body}
+                        </button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+
+          <div className="border-t border-border">
+            <Link
+              to="/notification"
+              search={{}}
+              className={cn(
+                buttonVariants({ variant: 'ghost', size: 'sm' }),
+                'w-full rounded-none rounded-b-md text-xs text-muted-foreground'
+              )}
+              data-testid="notification-view-all"
+              onClick={() => setOpen(false)}
+            >
+              {t('查看全部通知')}
+              <IconChevronRight className="size-3.5" />
+            </Link>
+          </div>
+        </PopoverContent>
+      </Popover>
+      {/* 铃铛里的抽屉只会从某一行打开，那一行已经 `readIfUnread` 过了 */}
+      <NoticeReaderSheet noticeId={reading} rowAlreadyMarked onOpenChange={(o) => !o && setReading(null)} />
+    </>
   )
 }

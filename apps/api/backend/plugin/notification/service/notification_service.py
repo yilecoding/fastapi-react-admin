@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.common.after_commit import run_after_commit
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
@@ -18,6 +19,7 @@ from backend.plugin.notification.schema.notification import (
     CreateNotificationParam,
     SendNotificationParam,
 )
+from backend.plugin.notification.sources import count_source_attachments
 
 
 async def _push(user_id: int | None) -> None:
@@ -31,6 +33,16 @@ async def _push(user_id: int | None) -> None:
         await notification_new(user_id)
     except Exception as e:
         log.warning(f'站内通知推送失败（不影响入库）：{e!s}')
+
+
+def push_broadcast_after_commit(db: AsyncSession) -> None:
+    """让所有在线的人重拉收件箱，挂到调用方提交之后（#186）。广播新写一行、撤回一行、改一行的标题都要它
+
+    🔴 原来广播是写完那一行当场推：公告接口的提交在依赖收尾，铃铛收到推送立刻重拉未读数，
+    读到的还是提交前的旧数（`Dispatch` 的注释早就写着这一条，广播这条路漏了）。回滚就不推。
+    事件名是 `notification:new`，但前端收到只是重拉 —— 撤回也用它，不另开一个事件
+    """
+    run_after_commit(db, 'notification.push_broadcast', lambda: _push(None))
 
 
 @dataclass
@@ -145,8 +157,10 @@ class NotificationService:
         # `'dict' object has no attribute 'id'` → 500（实测踩过）。
         items: list[dict[str, Any]] = list(page_data['items'])
         read_map = await notification_dao.get_read_map(db, user_id, [i['id'] for i in items])
+        attachments = await count_source_attachments(db, [i.get('source') for i in items])
         for item in items:
             item['read_time'] = read_map.get(item['id'])
+            item['attachment_count'] = attachments.get(item.get('source') or '')
         return page_data
 
     @staticmethod
@@ -233,10 +247,12 @@ class NotificationService:
         link: str | None = None,
         category: NotificationCategory | None = None,
         kind: str = 'announcement',
+        source: str | None = None,
     ) -> Notification:
         """
         发一条全员广播（给别的模块调用，比如公告发布 / 每日问候）。站内一行，不走邮件 / 短信（那等于全员群发）；
-        类型声明了 `bot=True` 的，订阅了它的群机器人各一行投递（#166 二期），**调用方提交之后**才踢 worker
+        类型声明了 `bot=True` 的，订阅了它的群机器人各一行投递（#166 二期）。踢 worker 和 socket 推送都在
+        **调用方提交之后**
 
         :param db: 数据库会话
         :param title: 标题
@@ -244,6 +260,7 @@ class NotificationService:
         :param link: 点击跳转的前端路由
         :param category: 分类，不给就用类型声明的分类
         :param kind: 通知类型码，必须是声明了 `broadcast=True` 的
+        :param source: 来源业务对象（`sources.make_source`），要反查 / 撤回这一行的调用方给
         :return:
         """
         spec = require_notification_kind(kind)
@@ -258,6 +275,7 @@ class NotificationService:
                 category=category,
                 link=link,
                 recipient_id=None,
+                source=source,
             ),
         )
         if spec.bot:
@@ -271,7 +289,7 @@ class NotificationService:
             ):
                 # 提交在调用方手里（公告接口是依赖收尾时提交）：挂到会话的 after_commit 上，回滚就不踢
                 kick_after_commit(db)
-        await _push(None)
+        push_broadcast_after_commit(db)
         return notification
 
     @staticmethod

@@ -1,12 +1,29 @@
 from collections.abc import Sequence
 
-from sqlalchemy import Select
+from sqlalchemy import ColumnElement, Select, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.common.enums import StatusType
 from backend.common.security.data_scope import DataScopedCRUD
 from backend.plugin.notice.model import Notice
-from backend.plugin.notice.schema.notice import CreateNoticeParam, UpdateNoticeParam
+from backend.plugin.notice.schema.notice import NoticeWriteParam
 from backend.utils.timezone import timezone
+
+#: 入参里不是列的字段（附件另走 `sys_file_relation`）
+_NON_COLUMN_FIELDS = {'attachment_ids'}
+
+
+def readable_clause() -> ColumnElement[bool]:
+    """「读者看得见这条公告」：没删 · 显示 · 没过期（#186）
+
+    🔴 **唯一一份**。给读者的列表、详情、附件下载权限（`_notice_file_access`）、收件箱的附件数都用它 ——
+    原来附件权限只看「没删」，于是隐藏的公告附件照样下得到（实测 200），而列表上已经看不见了
+    """
+    return and_(
+        Notice.deleted == 0,
+        Notice.status == StatusType.enable,
+        or_(Notice.expire_time.is_(None), Notice.expire_time > timezone.now()),
+    )
 
 
 class CRUDNotice(DataScopedCRUD[Notice]):
@@ -61,6 +78,30 @@ class CRUDNotice(DataScopedCRUD[Notice]):
 
         return await self.select_order('created_time', 'desc', **filters)
 
+    async def get_readable(self, db: AsyncSession, pk: int) -> Notice | None:
+        """
+        取一条读者看得见的公告（隐藏 / 过期 / 删了的都当不存在）
+
+        :param db: 数据库会话
+        :param pk: 通知公告 ID
+        :return:
+        """
+        return await db.scalar(select(Notice).where(Notice.id == pk, readable_clause()))
+
+    def get_feed_select(self) -> Select:
+        """
+        给读者的列表：置顶的在前，再按发布时间倒序
+
+        排序带上 `id`：同一毫秒建的两条（批量导入）`created_time` 相同，不带的话翻页顺序在两次请求间可以不一样
+
+        :return:
+        """
+        return (
+            select(Notice)
+            .where(readable_clause())
+            .order_by(Notice.pinned.desc(), Notice.created_time.desc(), Notice.id.desc())
+        )
+
     async def get_all(self, db: AsyncSession) -> Sequence[Notice]:
         """
         获取所有通知公告
@@ -70,7 +111,7 @@ class CRUDNotice(DataScopedCRUD[Notice]):
         """
         return await self.select_models(db, deleted=0)
 
-    async def create(self, db: AsyncSession, obj: CreateNoticeParam) -> Notice:
+    async def create(self, db: AsyncSession, obj: NoticeWriteParam) -> Notice:
         """
         创建通知公告，返回创建出来的对象
 
@@ -79,19 +120,23 @@ class CRUDNotice(DataScopedCRUD[Notice]):
         而创建接口原来不下发 id —— 前端拿不到 id 就没法挂关联，
         于是新建公告里的图会变成谁也不认领的孤儿文件。
 
-        ⚠️ `flush=True` 不能省。`create_model` 默认既不 flush 也不 commit，
-        而 `id` 是数据库侧生成的（`id_key` → BigInteger 主键）——
+        ⚠️ flush 不能省。`id` 是数据库侧生成的（`id_key` → BigInteger 主键）——
         不 flush 就返回，实例的 `id` 还是 `None`，序列化响应时直接 500：
         `1 validation error: ('response','data','id') Input should be a valid integer`
         （实测踩到）。事务仍由 `CurrentSessionTransaction` 统一提交。
+
+        不走 `create_model`：它把整个入参 `model_dump()` 塞进模型，`attachment_ids` 不是列，当场 TypeError。
 
         :param db: 数据库会话
         :param obj: 创建通知公告参数
         :return:
         """
-        return await self.create_model(db, obj, flush=True)
+        notice = self.model(**obj.model_dump(exclude=_NON_COLUMN_FIELDS))
+        db.add(notice)
+        await db.flush()
+        return notice
 
-    async def update(self, db: AsyncSession, pk: int, obj: UpdateNoticeParam) -> int:
+    async def update(self, db: AsyncSession, pk: int, obj: NoticeWriteParam) -> int:
         """
         更新通知公告
 
@@ -100,7 +145,10 @@ class CRUDNotice(DataScopedCRUD[Notice]):
         :param obj: 更新通知公告参数
         :return:
         """
-        return await self.update_model_by_column(db, obj, id=pk, deleted=0)
+        # `exclude_unset`：没传的字段不写。置顶 / 级别 / 过期时间在入参上有默认值，整份写回的话
+        # 只传了标题和正文的调用方（脚本、老客户端）会把一条置顶 + 紧急 + 有期限的公告悄悄改回默认值
+        data = obj.model_dump(exclude=_NON_COLUMN_FIELDS, exclude_unset=True)
+        return await self.update_model_by_column(db, data, id=pk, deleted=0)
 
     async def delete(self, db: AsyncSession, pks: list[int]) -> int:
         """

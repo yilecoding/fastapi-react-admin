@@ -17,9 +17,11 @@ from backend.app.admin.schema.file import (
     GetUploadPolicyDetail,
     InitMultipartParam,
 )
-from backend.app.admin.service.file_service import file_service
+from backend.app.admin.service.file_service import can_change_relations, file_service
 from backend.app.admin.service.multipart_service import multipart_service
 from backend.common.enums import FileType
+from backend.common.exception import errors
+from backend.common.i18n import t
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
 from backend.common.security.jwt import DependsJwtAuth
@@ -391,6 +393,9 @@ async def delete_files(db: CurrentSessionTransaction, obj: DeleteFileParam) -> R
     ],
 )
 async def attach_files(request: Request, db: CurrentSessionTransaction, obj: CreateFileRelationParam) -> ResponseModel:
+    # 挂到公告这类「挂上就对所有人可读」的对象上，还要业务自己的权限（`register_relation_guard`，#186）
+    if not can_change_relations(request.user, obj.target_type):
+        raise errors.ForbiddenError(msg=t('error.file.relation_forbidden'))
     # 全部已挂载时 attach 返回 0，那是**幂等成功**而不是失败 ——
     # 这里不能照抄别处的 `if count > 0 else fail()`
     await file_service.attach(db=db, obj=obj, user_id=request.user.id)
@@ -407,6 +412,8 @@ async def attach_files(request: Request, db: CurrentSessionTransaction, obj: Cre
         DependsRBAC,
     ],
 )
-async def detach_files(db: CurrentSessionTransaction, obj: DeleteFileRelationParam) -> ResponseModel:
+async def detach_files(request: Request, db: CurrentSessionTransaction, obj: DeleteFileRelationParam) -> ResponseModel:
+    if not can_change_relations(request.user, obj.target_type):
+        raise errors.ForbiddenError(msg=t('error.file.relation_forbidden'))
     await file_service.detach(db=db, obj=obj)
     return response_base.success()
