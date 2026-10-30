@@ -324,6 +324,19 @@ async def _track_endpoint(db: Any, hook_id: int, app: OpenApp, *, ok: bool, gone
     return await _notify_disabled(db, hook, app, reason)
 
 
+def _display_url(url: str) -> str:
+    """通知正文里的端点地址：只留协议 + 主机 + 端口 + 路径。
+
+    🔴 这条通知能被群机器人订阅，正文会推到飞书 / 钉钉群里；对接方常把 token 放在查询串或 userinfo 里
+    """
+    try:
+        u = urlsplit(url)
+        port = f':{u.port}' if u.port else ''
+    except ValueError:
+        return '-'
+    return f'{u.scheme}://{u.hostname or ""}{port}{u.path}'
+
+
 async def _notify_disabled(db: Any, hook: OpenWebhook, app: OpenApp, reason: WebhookDisabledReason) -> Any:
     if app.created_by is None:
         return None
@@ -339,7 +352,12 @@ async def _notify_disabled(db: Any, hook: OpenWebhook, app: OpenApp, reason: Web
         kind='open.webhook.disabled',
         user_ids=[app.created_by],
         title=t('open.webhook.disabled_title', name=hook.name),
-        content=t(f'open.webhook.disabled_{reason.value}', app=app.name, url=hook.url, n=hook.consecutive_failures),
+        content=t(
+            f'open.webhook.disabled_{reason.value}',
+            app=app.name,
+            url=_display_url(hook.url),
+            n=hook.consecutive_failures,
+        ),
         link=f'/open/app?id={app.id}&tab=webhook',
     )
 

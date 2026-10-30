@@ -13,6 +13,13 @@ from backend.core.path_conf import LOG_DIR
 from backend.utils.timezone import timezone
 from backend.utils.trace_id import get_request_trace_id
 
+# 🔴 httpx 在 INFO 级别给每个请求打一行带完整 URL 的日志。群机器人 / Webhook 的地址本身就是凭据
+# （token 在路径或查询串里），这一行会原样落盘。
+# 放在模块顶层而不是 setup_logging() 里：worker 不走 setup_logging（`celery -l info` 自己接管根 logger），
+# 而真正往群里发的正是 worker。发请求的模块都 import 这里的 `log`，哪个进程发，哪个进程就生效。
+# 实测见 plugin/notification/AGENTS.md
+logging.getLogger('httpx').setLevel(logging.WARNING)
+
 
 class InterceptHandler(logging.Handler):
     """

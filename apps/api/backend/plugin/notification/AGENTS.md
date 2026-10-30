@@ -78,6 +78,8 @@ E2E `apps/web/e2e/tests/notify-channels.spec.ts` 2 条；变异（个人中心�
 
 ## 群机器人（#166 二期）
 
+> 接入步骤（建飞书机器人 → 登记 → 发测试消息 → 报错对照）和两道设计练习在 [`docs/guides/notify-bot.md`](../../../../../docs/guides/notify-bot.md)。
+
 ```
 bot_platforms.py   三家的协议：地址前缀 · 签名 · 消息体 · 回包分类（纯函数，不认识 backend.* / httpx）
 bot_service.py     配置的增删改查（地址 / 密钥加密）· 发测试消息 · enqueue_bots（事务内写投递行）
@@ -103,7 +105,7 @@ senders.post_bot   发一次 HTTP；投递 worker 和「发测试消息」共用
 **协议来源**：飞书（签名、错误码 9499 / 11232 / 19021 / 19022 / 19024、限频、20 KB）和企微（地址、20 条/分钟、2048 字节）是官方文档原文；
 钉钉官方页面是前端渲染、抓不到原文，签名按多处转载的官方示例代码，310000 / 130101 两个码来自转载。企微的 45009 / 93000 官方页面上没有，是常见回包。
 
-**实测证据**：`tests/test_bots.py` 57 条（假平台是 `httpx.MockTransport`）。变异各打红：飞书签名的密钥和消息对调 · 不比主机 ·
+**实测证据**：`tests/test_bots.py` 66 条（假平台是 `httpx.MockTransport`）。变异各打红：飞书签名的密钥和消息对调 · 不比主机 ·
 放过 userinfo · 按收件人展开 · 停用的机器人也发 · 读超时当重试 · 不限流 · 限流算一次尝试 · 企微按字符截 · 广播不写机器人 ·
 企微收密钥 · 钉钉时间戳用秒。⚠️ 「回滚也踢」第一版**没打红**：测试在一个会话里回滚、另一个会话里提交，标记跟着会话一起丢了；
 改成同一个会话回滚后再提交才红。
@@ -111,4 +113,33 @@ E2E `apps/web/e2e/tests/notify-bot.spec.ts`：界面新增 → 测试消息打�
 发公告后投递记录里有这个群的一行。变异：签名对调 → 验签那句红。
 迁移 `ae000000notifybot` 在 PostgreSQL（开发库）和 SQL Server（`fba_test`）上 `upgrade → downgrade -1 → upgrade` 都过，
 SQL Server 上新表不是 IDENTITY；autogenerate 和迁移后的库比对没有本次的差异。
-**三家真平台都还没发过**（没有真群）：签名和回包分类靠文档 + 假服务器。
+**真飞书（2026-10-30，开了签名校验的自定义机器人）**：加签的测试消息 200 + `code 0`、465 ms，进群；
+发布公告 → worker 投递 → `sent`、第 1 次就成（两条，3845 ms / 441 ms）；错密钥和不带签名都回
+`19021 sign match fail or timestamp is not within one hour from current time`，分类成 `sign_failed` / 不重试。
+**钉钉、企业微信还没在真群上发过**：签名和回包分类靠文档 + 假服务器。
+
+🔴 **httpx 的 INFO 日志会把 Webhook 地址整条写进 `fba_access.log`**（`HTTP Request: POST <完整 URL>`，经 `InterceptHandler` 进 loguru）。
+症状是没有症状：消息照发，凭据静静落盘。上面那次真飞书测试就是这样发现的，token 原样在日志里。
+修法：`common/log.py` **模块顶层**把 `httpx` logger 提到 WARNING。
+⚠️ 第一版放在 `setup_logging()` 里，只修了 API 进程：worker 不走 `setup_logging`（`celery -l info` 自己接管根 logger），
+而往群里发消息的正是 worker。API 进程里的测试是绿的，真公告走 worker 时日志里照样是 `[INFO/MainProcess] HTTP Request: POST …/<token>`。
+**实测证据**：
+- `test_bots.py::TestApi::test_webhook_url_never_reaches_the_log`（API 进程），去掉那一行就红
+- `test_bots.py::TestApi::test_worker_does_not_log_the_webhook_url_either`（子进程里 import worker 入口、按 `-l info` 配根 logger），
+  修复放在 `setup_logging` 里时红在 `INFO:httpx:… /hook/0123456789abcdef-pytest`
+- 真飞书公告走 dev worker（2026-10-30）：修之前 worker 日志带整条地址；挪到模块顶层并重启 worker 后，同样一条公告 441 ms 送达，日志里 token 0 次
+
+### 合并后补的评审（v0.9.0 发版后，2026-10-30）
+
+#184 合并前没有评审；补的那一轮找出下面几条，都是**静默**的，测试先红后绿：
+
+| 症状 | 根因 | 修法 | 测试 |
+|---|---|---|---|
+| `…/hook/../../../im/v1/messages` 存得进去，实际请求打到前缀外面 | 前缀按原始路径 `startswith` 比，httpx 发之前才把点段归一 | 解码后有 `.` / `..` 段就拒（`%2e%2e` httpx 不归一但对方服务器会，一起拒） | `test_url_must_sit_on_an_official_prefix` 三个点段用例 |
+| 钉钉机器人改成飞书、密钥框留空：之后每条都 19021、不重试 | 换平台只强制换地址，旧平台的密钥留着 | 换平台没填新密钥 = 没有密钥 | `test_platform_change_drops_the_old_platforms_secret` |
+| 消息进了群，投递记录却是「结果未知」 | 卡片的「最近成功」和投递终态同一个事务，卡片那步一失败就一起回滚，停在 sending | 终态先单独提交，卡片另起事务、失败只记 warning | `test_bot_card_update_failing_does_not_undo_the_send` |
+| 一条没发，也不会再发 | 限流计数在抢到行之后、`try` 外面，查库一抛就冲出 `deliver_pending`，这一行停在 sending | 数不出来就照发（超了平台会拒，按重试走） | `test_throttle_check_failing_still_sends` |
+| 轮换加密密钥后点「发测试消息」只有一个 500 | `send_test` 的解密没兜，worker 那边同样情况是 `config_error` | 同样回 `config_error` | `test_send_test_with_an_undecryptable_url_says_config_error` |
+| 对接方端点的 token 被推进飞书 / 钉钉群 | `open.webhook.disabled` 开了 `bot=True`，正文里是完整端点地址 | 正文只留协议 + 主机 + 端口 + 路径 | `open/tests/test_webhooks.py::test_disabled_notice_does_not_carry_the_endpoint_credentials` |
+| 不再可订阅的类型，编辑表单里看不见也去不掉，保存一直 400 | 表单只渲染 `bot=True` 的选项，回填的值里却有别的 | 列出来、标「已不能订阅」，取消勾选就能存 | 无前端单测；`pnpm typecheck` |
+| 英文界面上群机器人卡片写着 "Approver added" | 「已加签」和审批流的「加签」（加审批人）共用一个 key | 改成「已开 / 未开签名校验」 | `notify-bot.spec.ts` |

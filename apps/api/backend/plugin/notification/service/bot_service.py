@@ -216,7 +216,8 @@ class BotService:
             bot.webhook_cipher = encrypt(url)
             bot.webhook_hint = mask_url(url)
         secret = _check_secret(platform, obj.sign_secret)
-        if obj.clear_sign_secret or platform not in SIGNING:
+        # 🔴 换了平台，旧密钥是上一家发的：钉钉的密钥签飞书的消息，每条都 19021、按永久失败不重试
+        if obj.clear_sign_secret or platform not in SIGNING or (platform != bot.platform and not secret):
             bot.secret_cipher = None
         elif secret:
             bot.secret_cipher = encrypt(secret)
@@ -243,8 +244,15 @@ class BotService:
         from backend.plugin.notification.service.senders import Outcome, post_bot
 
         bot = await BotService.get(db, pk)
-        url = decrypt(bot.webhook_cipher)
-        secret = decrypt(bot.secret_cipher) if bot.secret_cipher else None
+        try:
+            url = decrypt(bot.webhook_cipher)
+            secret = decrypt(bot.secret_cipher) if bot.secret_cipher else None
+        except Exception as e:
+            # 轮换了 NOTIFICATION_ENCRYPT_SECRET_KEY 之后旧密文解不开：
+            # 和 worker 一样报 config_error，不是一个看不出原因的 500
+            error = repr(e)[:2000]
+            await notification_bot_dao.record_result(db, bot.id, ok=False, error=error)
+            return BotTestResult(ok=False, reason='config_error', error=error)
         result = await post_bot(
             bot.platform,
             url,

@@ -115,6 +115,10 @@ export function BotFormSheet({ open, onOpenChange, editing }: { open: boolean; o
   }
 
   const platformItems = React.useMemo(() => Object.fromEntries(PLATFORMS.map((p) => [p, platformLabel(t, p)])), [t])
+  // 订阅了、但已经不在可订阅列表里的类型（插件卸了 / 改回不能推到群）：后端会拒绝保存，
+  // 不列出来的话用户既看不见也去不掉，这个机器人就再也改不了
+  const offered = optionsQuery.data?.kinds
+  const staleKinds = offered ? kinds.filter((k) => !offered.some((o) => o.kind === k)) : []
   const toggleKind = (kind: string, on: boolean) =>
     form.setValue('kinds', on ? [...kinds, kind] : kinds.filter((k) => k !== kind), { shouldDirty: true, shouldValidate: true })
 
@@ -201,6 +205,13 @@ export function BotFormSheet({ open, onOpenChange, editing }: { open: boolean; o
                     />
                     <span>{t(k.label)}</span>
                     <span className="font-mono text-xs text-muted-foreground">{k.kind}</span>
+                  </label>
+                ))}
+                {staleKinds.map((k) => (
+                  <label key={k} className="flex items-center gap-2 text-sm">
+                    <Checkbox checked onCheckedChange={(c) => toggleKind(k, c === true)} data-testid={`bot-kind-${k}`} />
+                    <span className="font-mono text-xs">{k}</span>
+                    <span className="text-xs text-destructive">{t('已不能订阅，取消勾选后才能保存')}</span>
                   </label>
                 ))}
                 {optionsQuery.isPending ? <span className="text-xs text-muted-foreground">{t('加载中…')}</span> : null}

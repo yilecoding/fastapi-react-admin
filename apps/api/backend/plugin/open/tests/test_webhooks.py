@@ -382,6 +382,30 @@ class TestOutcomes:
         finally:
             run_db(lambda db: _hard_delete_dept(db, dept_id))
 
+    def test_disabled_notice_does_not_carry_the_endpoint_credentials(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """🔴 「端点已停用」能被群机器人订阅（推到飞书 / 钉钉群里），正文里的端点地址不能带查询串和 userinfo：
+        对接方常把 token 放在那里"""
+        from types import SimpleNamespace
+
+        from backend.plugin.notification.service import notification_service
+
+        seen: dict[str, Any] = {}
+
+        async def _capture(_db: Any, **kw: Any) -> None:  # ruff: ignore[unused-async] —— 替身要能被 await
+            seen.update(kw)
+
+        monkeypatch.setattr(notification_service, 'create_in_tx', _capture)
+        hook = SimpleNamespace(
+            name='h', url='https://u:pw@partner.example.com:8443/hook?token=SECRET123#x', consecutive_failures=9
+        )
+        app = SimpleNamespace(id=1, name='A', created_by=1)
+        reason = webhook_delivery.WebhookDisabledReason.gone
+        client.portal.call(webhook_delivery._notify_disabled, None, hook, app, reason)
+        assert 'SECRET123' not in seen['content'] and 'pw' not in seen['content']
+        assert 'https://partner.example.com:8443/hook' in seen['content']
+
     @pytest.mark.parametrize(('first_failed_hours_ago', 'disabled'), [(25, True), (1, False)])
     def test_auto_disable_needs_both_count_and_24_hours(
         self,

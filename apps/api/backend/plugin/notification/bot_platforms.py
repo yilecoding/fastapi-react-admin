@@ -25,7 +25,7 @@ import json
 
 from dataclasses import dataclass
 from typing import Any, Literal
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 
 Platform = Literal['feishu', 'dingtalk', 'wecom']
 Verdict = Literal['sent', 'retryable', 'permanent', 'unknown']
@@ -72,8 +72,15 @@ def matches_prefix(url: str, prefix: str) -> bool:
         and (u.hostname or '') == (p.hostname or '')
         and (u_port or default.get(u.scheme)) == (p_port or default.get(p.scheme))
         and u.path.startswith(p.path)
+        and not _has_dot_segment(u.path)
         and not u.fragment
     )
+
+
+def _has_dot_segment(path: str) -> bool:
+    """🔴 `…/hook/../../../im/v1/messages` 字面上以前缀开头，httpx 发之前会把点段归一掉，实际去的是前缀外面。
+    编码过的 `%2e%2e` httpx 不归一，但对方服务器会：一起拒"""
+    return any(seg in {'.', '..'} for seg in unquote(path).split('/'))
 
 
 def url_allowed(platform: str, url: str, extra_prefixes: tuple[str, ...] = ()) -> bool:
