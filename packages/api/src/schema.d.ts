@@ -1766,6 +1766,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/notification-channels/bots/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取群机器人表单选项（能订阅的通知类型） */
+        get: operations["get_bot_options_api_v1_sys_notification_channels_bots_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notification-channels/bots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取全部群机器人（地址掩码） */
+        get: operations["get_bots_api_v1_sys_notification_channels_bots_get"];
+        put?: never;
+        /** 新增群机器人 */
+        post: operations["create_bot_api_v1_sys_notification_channels_bots_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notification-channels/bots/{pk}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 更新群机器人 */
+        put: operations["update_bot_api_v1_sys_notification_channels_bots__pk__put"];
+        post?: never;
+        /** 删除群机器人 */
+        delete: operations["delete_bot_api_v1_sys_notification_channels_bots__pk__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/notification-channels/bots/{pk}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 给群机器人发一条测试消息 */
+        post: operations["test_bot_api_v1_sys_notification_channels_bots__pk__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/notices/export": {
         parameters: {
             query?: never;
@@ -4161,6 +4231,64 @@ export interface components {
              */
             file: string;
         };
+        /** BotKindOption */
+        BotKindOption: {
+            /**
+             * Kind
+             * @description 通知类型码
+             */
+            kind: string;
+            /**
+             * Label
+             * @description 通知类型名称
+             */
+            label: string;
+            /**
+             * Category
+             * @description 所属分类
+             */
+            category: number;
+        };
+        /**
+         * BotOptions
+         * @description 新建 / 编辑表单要的选项：能订阅的通知类型（只有声明了 `bot=True` 的）
+         */
+        BotOptions: {
+            /** Kinds */
+            kinds: components["schemas"]["BotKindOption"][];
+            /** Encrypt Key Ready */
+            encrypt_key_ready: boolean;
+        };
+        /**
+         * BotPlatform
+         * @description 群机器人的平台（#166 二期）。值是契约：`sys_notification_bot.platform` 存它，前端按它选图标和填写说明
+         * @enum {string}
+         */
+        BotPlatform: "feishu" | "dingtalk" | "wecom";
+        /** BotTestResult */
+        BotTestResult: {
+            /**
+             * Ok
+             * @description 平台收下了没有
+             */
+            ok: boolean;
+            /**
+             * Reason
+             * @description 失败分类（sign_failed / keyword_missing / rate_limited …）
+             */
+            reason?: string | null;
+            /**
+             * Error
+             * @description 对方回的原话 / 网络错误
+             */
+            error?: string | null;
+            /**
+             * Duration Ms
+             * @description 耗时（毫秒）
+             * @default 0
+             */
+            duration_ms: number;
+        };
         /**
          * ChatParam
          * @description 发起一轮对话
@@ -4346,6 +4474,45 @@ export interface components {
              * @description API Key（明文，只在这一次请求里出现，落库即加密）
              */
             api_key: string;
+        };
+        /**
+         * CreateBotParam
+         * @description 🔴 `webhook_url` / `sign_secret` 都在 `OPERA_LOG_REDACT_KEYS` 里：地址本身就是凭据，不能原样进操作日志
+         */
+        CreateBotParam: {
+            /**
+             * Name
+             * @description 名称
+             */
+            name: string;
+            /** @description 平台（feishu / dingtalk / wecom） */
+            platform: components["schemas"]["BotPlatform"];
+            /**
+             * Kinds
+             * @description 订阅的通知类型码
+             */
+            kinds: string[];
+            /**
+             * Status
+             * @description 状态（0：停用、1：正常）
+             * @default 1
+             */
+            status: number;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
+            /**
+             * Webhook Url
+             * @description Webhook 地址（地址本身就是凭据）
+             */
+            webhook_url: string;
+            /**
+             * Sign Secret
+             * @description 加签密钥（飞书 / 钉钉开了「签名校验」时填）
+             */
+            sign_secret?: string | null;
         };
         /**
          * CreateConfigParam
@@ -5446,6 +5613,64 @@ export interface components {
             created_time: string;
         };
         /**
+         * GetBotDetail
+         * @description 🔴 没有地址明文、没有密钥，只有 `webhook_hint` / `has_secret`
+         */
+        GetBotDetail: {
+            /**
+             * Name
+             * @description 名称
+             */
+            name: string;
+            /** @description 平台（feishu / dingtalk / wecom） */
+            platform: components["schemas"]["BotPlatform"];
+            /**
+             * Kinds
+             * @description 订阅的通知类型码
+             */
+            kinds: string[];
+            /**
+             * Status
+             * @description 状态（0：停用、1：正常）
+             * @default 1
+             */
+            status: number;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
+            /** Id */
+            id: string | number;
+            /**
+             * Webhook Hint
+             * @description Webhook 地址掩码（只用于辨认）
+             */
+            webhook_hint: string;
+            /**
+             * Has Secret
+             * @description 有没有配加签密钥
+             */
+            has_secret: boolean;
+            /**
+             * Last Sent Time
+             * @description 最近一次发送成功的时间
+             */
+            last_sent_time?: string | null;
+            /**
+             * Last Error
+             * @description 最近一次失败的原因（成功后清空）
+             */
+            last_error?: string | null;
+            /**
+             * Created Time
+             * Format: date-time
+             */
+            created_time: string;
+            /** Updated Time */
+            updated_time?: string | null;
+        };
+        /**
          * GetCaptchaDetail
          * @description 验证码详情
          */
@@ -5797,7 +6022,9 @@ export interface components {
             /** Notification Id */
             notification_id?: number | null;
             /** User Id */
-            user_id: string | number;
+            user_id?: string | number;
+            /** Bot Id */
+            bot_id?: number | null;
             /** Kind */
             kind: string;
             /** Channel */
@@ -8978,7 +9205,7 @@ export interface components {
          * @description 通知渠道（#166）。值是契约：策略表 / 偏好表 / 投递表都存它，前端矩阵的列也按它排
          * @enum {string}
          */
-        NotificationChannel: "inapp" | "email" | "sms";
+        NotificationChannel: "inapp" | "email" | "sms" | "bot";
         /** OpenDeptOut */
         OpenDeptOut: {
             /**
@@ -10144,6 +10371,38 @@ export interface components {
              */
             data?: unknown | null;
         };
+        /** ResponseSchemaModel[BotOptions] */
+        ResponseSchemaModel_BotOptions_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["BotOptions"];
+        };
+        /** ResponseSchemaModel[BotTestResult] */
+        ResponseSchemaModel_BotTestResult_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["BotTestResult"];
+        };
         /** ResponseSchemaModel[GetAiMcpClientDetail] */
         ResponseSchemaModel_GetAiMcpClientDetail_: {
             /**
@@ -10175,6 +10434,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["GetAiProviderDetail"];
+        };
+        /** ResponseSchemaModel[GetBotDetail] */
+        ResponseSchemaModel_GetBotDetail_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetBotDetail"];
         };
         /** ResponseSchemaModel[GetCaptchaDetail] */
         ResponseSchemaModel_GetCaptchaDetail_: {
@@ -11510,6 +11785,23 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** ResponseSchemaModel[list[GetBotDetail]] */
+        ResponseSchemaModel_list_GetBotDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["GetBotDetail"][];
+        };
         /** ResponseSchemaModel[list[GetConfigDetail]] */
         ResponseSchemaModel_list_GetConfigDetail__: {
             /**
@@ -12537,6 +12829,52 @@ export interface components {
              * @description API Key（留空表示不修改）
              */
             api_key?: string | null;
+        };
+        /**
+         * UpdateBotParam
+         * @description 🔴 `webhook_url` / `sign_secret` 留空 = 不改（详情接口不回明文，表单没法原样带回）。
+         *     `clear_sign_secret` 才是「关掉加签」，否则「留空」和「去掉密钥」分不开
+         */
+        UpdateBotParam: {
+            /**
+             * Name
+             * @description 名称
+             */
+            name: string;
+            /** @description 平台（feishu / dingtalk / wecom） */
+            platform: components["schemas"]["BotPlatform"];
+            /**
+             * Kinds
+             * @description 订阅的通知类型码
+             */
+            kinds: string[];
+            /**
+             * Status
+             * @description 状态（0：停用、1：正常）
+             * @default 1
+             */
+            status: number;
+            /**
+             * Remark
+             * @description 备注
+             */
+            remark?: string | null;
+            /**
+             * Webhook Url
+             * @description 新的 Webhook 地址；留空不改
+             */
+            webhook_url?: string | null;
+            /**
+             * Sign Secret
+             * @description 新的加签密钥；留空不改
+             */
+            sign_secret?: string | null;
+            /**
+             * Clear Sign Secret
+             * @description 去掉加签密钥（机器人那边关掉了「签名校验」）
+             * @default false
+             */
+            clear_sign_secret: boolean;
         };
         /**
          * UpdateConfigParam
@@ -17567,6 +17905,8 @@ export interface operations {
                 status?: components["schemas"]["DeliveryStatus"] | null;
                 /** @description 接收人 ID */
                 user_id?: number | null;
+                /** @description 群机器人 ID */
+                bot_id?: number | null;
                 /** @description 创建时间起 */
                 start_time?: string | null;
                 /** @description 创建时间止 */
@@ -17653,6 +17993,179 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_bot_options_api_v1_sys_notification_channels_bots_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_BotOptions_"];
+                };
+            };
+        };
+    };
+    get_bots_api_v1_sys_notification_channels_bots_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_GetBotDetail__"];
+                };
+            };
+        };
+    };
+    create_bot_api_v1_sys_notification_channels_bots_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBotParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetBotDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_bot_api_v1_sys_notification_channels_bots__pk__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 群机器人 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBotParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetBotDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_bot_api_v1_sys_notification_channels_bots__pk__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 群机器人 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_bot_api_v1_sys_notification_channels_bots__pk__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 群机器人 ID */
+                pk: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_BotTestResult_"];
                 };
             };
             /** @description Validation Error */

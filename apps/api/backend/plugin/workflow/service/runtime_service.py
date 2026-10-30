@@ -1393,7 +1393,7 @@ async def act(  # ruff:ignore[complex-structure]
                         t('workflow.notify.sent_back_title', title=inst.title),
                         t('workflow.notify.sent_back_content', user=actor.nickname, opinion=opinion),
                         detail_link(inst.id),
-                        kind='workflow.result',
+                        kind='workflow.sent_back',
                     )
                 else:
                     # 重新进入那个节点：审批人按规则**重新解析**（和第一次进入同一套逻辑）

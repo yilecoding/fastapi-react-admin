@@ -87,6 +87,7 @@ class CRUDNotificationDelivery(DataScopedCRUD[NotificationDelivery]):
         channel: str | None = None,
         status: str | None = None,
         user_id: int | None = None,
+        bot_id: int | None = None,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> Select:
@@ -100,6 +101,8 @@ class CRUDNotificationDelivery(DataScopedCRUD[NotificationDelivery]):
             kwargs['status'] = status
         if user_id is not None:
             kwargs['user_id'] = user_id
+        if bot_id is not None:
+            kwargs['bot_id'] = bot_id
         if start_time is not None:
             kwargs['created_time__ge'] = start_time
         if end_time is not None:

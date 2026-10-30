@@ -9,13 +9,16 @@ import type { Channel } from '../notify-policy/api'
  * - 列表接口的 `address` 是**掩码**，详情接口才给完整值（同短信发送日志）
  * - 「结果未知」= 可能已经发出去了，后端**不自动重试**；要不要重发由人看过之后决定
  * - 「跳过」= 没发：没邮箱 / 手机号、账号停用、渠道插件没装。重发也没用，先补地址
+ * - 群机器人（#166 二期）一条通知一个群一行，「地址」那一列是机器人名称
  */
 export type DeliveryStatus = 'pending' | 'sending' | 'sent' | 'failed' | 'exhausted' | 'skipped' | 'unknown'
 
 export type Delivery = {
   id: string
   notification_id: string | null
-  user_id: string
+  /** 群机器人的投递发给一个群：`user_id` 为空、`bot_id` 有值，`address` 是机器人名称 */
+  user_id: string | null
+  bot_id: string | null
   kind: string
   channel: Channel
   address: string | null

@@ -10,10 +10,11 @@ import { api } from '../../api-client/client'
  * - 站内渠道永远 forced、不能改：站内收件箱是通知的事实来源
  * - 全员广播类（公告 / 每日问候）只走站内，个人中心里不出现
  */
-export type Channel = 'inapp' | 'email' | 'sms'
+/** `bot`（群机器人，#166 二期）只出现在投递记录里：它不按人路由，不进策略 / 偏好矩阵 */
+export type Channel = 'inapp' | 'email' | 'sms' | 'bot'
 export type PolicyMode = 'off' | 'default_on' | 'default_off' | 'forced'
 
-/** 矩阵的列序（和后端 `NotificationChannel` 的枚举顺序一致） */
+/** 矩阵的列序（和后端 `NotificationChannel` 的枚举顺序一致）。没有 `bot`：群机器人的订阅在机器人自己身上 */
 export const CHANNELS: Channel[] = ['inapp', 'email', 'sms']
 
 export type PolicyCell = { channel: Channel; mode: PolicyMode; default: PolicyMode; editable: boolean }

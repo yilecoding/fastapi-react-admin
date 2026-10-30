@@ -19,6 +19,10 @@ register_notification_kind(
 ```
 
 `defaults` 里**没出现的渠道 = 这个类型不支持**（策略页上那一格不出现、保存时 400）。
+
+群机器人（#166 二期）不按人路由，不写在 `defaults` 里：类型声明 `bot=True` = 「这条通知的文案对一个群说得通」，
+管理员才能让机器人订阅它。🔴 对着收件人说话的类型（「你有新的待办」「抄送给你」）不要开 —— 推到群里，
+群里每个人读到的都是「你」，而且那张单子的内容摊给了整个群。
 """
 
 from __future__ import annotations
@@ -50,6 +54,8 @@ class NotificationKind:
     #: 走短信时用哪个短信业务模板（`plugin/sms/templates.py` 注册的码）
     sms_template: str | None = None
     sms_params: SmsParamsBuilder | None = field(default=None, compare=False)
+    #: 群机器人能不能订阅它（文案要对一个群说得通，见模块 docstring）
+    bot: bool = False
 
     @property
     def channels(self) -> tuple[NotificationChannel, ...]:
@@ -75,6 +81,7 @@ def register_notification_kind(
     broadcast: bool = False,
     sms_template: str | None = None,
     sms_params: SmsParamsBuilder | None = None,
+    bot: bool = False,
 ) -> NotificationKind:
     """声明一个通知类型。重复声明同样的内容是幂等的（模块被 import 两次）；内容不同就是冲突，当场抛"""
     if not _KIND_RE.match(code) or len(code) > 64:
@@ -85,6 +92,9 @@ def register_notification_kind(
         parsed = {NotificationChannel(k): PolicyMode(v) for k, v in defaults.items()}
     except ValueError as e:
         raise ValueError(f'通知类型 {code} 的 defaults 里有不认识的渠道或策略：{e}') from e
+    if NotificationChannel.bot in parsed:
+        # 群机器人不按人路由：策略 × 偏好那一套对它没有意义，订阅关系在机器人自己身上
+        raise ValueError(f'通知类型 {code} 的 defaults 里不能写 bot（群机器人用 bot=True 声明）')
     if not parsed:
         raise ValueError(f'通知类型 {code} 至少要支持一条渠道')
     inapp = parsed.get(NotificationChannel.inapp)
@@ -106,6 +116,7 @@ def register_notification_kind(
         broadcast=broadcast,
         sms_template=sms_template,
         sms_params=sms_params,
+        bot=bot,
     )
     existing = _KINDS.get(code)
     if existing is not None and existing != kind:

@@ -69,7 +69,11 @@ export function DeliveryDetailSheet({ open, onOpenChange, id }: { open: boolean;
                 <div className="flex flex-col gap-1">
                   <DetailIdRow label={t('记录 ID')} value={d.id} labelWidth="w-24" />
                   {d.notification_id ? <DetailIdRow label={t('站内通知 ID')} value={d.notification_id} labelWidth="w-24" /> : null}
-                  <DetailIdRow label={t('接收人 ID')} value={d.user_id} labelWidth="w-24" />
+                  {d.bot_id ? (
+                    <DetailIdRow label={t('群机器人 ID')} value={d.bot_id} labelWidth="w-24" />
+                  ) : (
+                    <DetailIdRow label={t('接收人 ID')} value={d.user_id ?? '—'} labelWidth="w-24" />
+                  )}
                   {/* 短信渠道是短信发送日志的 ID，去「短信 → 发送日志」能对上那一条 */}
                   {d.provider_ref ? <DetailIdRow label={t('渠道流水号')} value={d.provider_ref} labelWidth="w-24" /> : null}
                 </div>

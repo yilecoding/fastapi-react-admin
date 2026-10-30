@@ -28,6 +28,7 @@ import { Route as AuthLogOperaRouteImport } from './routes/_auth/log/opera'
 import { Route as AuthMonitorOnlineRouteImport } from './routes/_auth/monitor/online'
 import { Route as AuthMonitorRedisRouteImport } from './routes/_auth/monitor/redis'
 import { Route as AuthMonitorServerRouteImport } from './routes/_auth/monitor/server'
+import { Route as AuthNotifyBotRouteImport } from './routes/_auth/notify/bot'
 import { Route as AuthNotifyDeliveryRouteImport } from './routes/_auth/notify/delivery'
 import { Route as AuthNotifyPolicyRouteImport } from './routes/_auth/notify/policy'
 import { Route as AuthOpenAppRouteImport } from './routes/_auth/open/app'
@@ -146,6 +147,11 @@ const AuthMonitorRedisRoute = AuthMonitorRedisRouteImport.update({
 const AuthMonitorServerRoute = AuthMonitorServerRouteImport.update({
   id: '/monitor/server',
   path: '/monitor/server',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthNotifyBotRoute = AuthNotifyBotRouteImport.update({
+  id: '/notify/bot',
+  path: '/notify/bot',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthNotifyDeliveryRoute = AuthNotifyDeliveryRouteImport.update({
@@ -298,6 +304,7 @@ export interface FileRoutesByFullPath {
   '/monitor/online': typeof AuthMonitorOnlineRoute
   '/monitor/redis': typeof AuthMonitorRedisRoute
   '/monitor/server': typeof AuthMonitorServerRoute
+  '/notify/bot': typeof AuthNotifyBotRoute
   '/notify/delivery': typeof AuthNotifyDeliveryRoute
   '/notify/policy': typeof AuthNotifyPolicyRoute
   '/open/app': typeof AuthOpenAppRoute
@@ -343,6 +350,7 @@ export interface FileRoutesByTo {
   '/monitor/online': typeof AuthMonitorOnlineRoute
   '/monitor/redis': typeof AuthMonitorRedisRoute
   '/monitor/server': typeof AuthMonitorServerRoute
+  '/notify/bot': typeof AuthNotifyBotRoute
   '/notify/delivery': typeof AuthNotifyDeliveryRoute
   '/notify/policy': typeof AuthNotifyPolicyRoute
   '/open/app': typeof AuthOpenAppRoute
@@ -391,6 +399,7 @@ export interface FileRoutesById {
   '/_auth/monitor/online': typeof AuthMonitorOnlineRoute
   '/_auth/monitor/redis': typeof AuthMonitorRedisRoute
   '/_auth/monitor/server': typeof AuthMonitorServerRoute
+  '/_auth/notify/bot': typeof AuthNotifyBotRoute
   '/_auth/notify/delivery': typeof AuthNotifyDeliveryRoute
   '/_auth/notify/policy': typeof AuthNotifyPolicyRoute
   '/_auth/open/app': typeof AuthOpenAppRoute
@@ -438,6 +447,7 @@ export interface FileRouteTypes {
     | '/monitor/online'
     | '/monitor/redis'
     | '/monitor/server'
+    | '/notify/bot'
     | '/notify/delivery'
     | '/notify/policy'
     | '/open/app'
@@ -483,6 +493,7 @@ export interface FileRouteTypes {
     | '/monitor/online'
     | '/monitor/redis'
     | '/monitor/server'
+    | '/notify/bot'
     | '/notify/delivery'
     | '/notify/policy'
     | '/open/app'
@@ -530,6 +541,7 @@ export interface FileRouteTypes {
     | '/_auth/monitor/online'
     | '/_auth/monitor/redis'
     | '/_auth/monitor/server'
+    | '/_auth/notify/bot'
     | '/_auth/notify/delivery'
     | '/_auth/notify/policy'
     | '/_auth/open/app'
@@ -697,6 +709,13 @@ declare module '@tanstack/react-router' {
       path: '/monitor/server'
       fullPath: '/monitor/server'
       preLoaderRoute: typeof AuthMonitorServerRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/notify/bot': {
+      id: '/_auth/notify/bot'
+      path: '/notify/bot'
+      fullPath: '/notify/bot'
+      preLoaderRoute: typeof AuthNotifyBotRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/notify/delivery': {
@@ -900,6 +919,7 @@ interface AuthRouteChildren {
   AuthMonitorOnlineRoute: typeof AuthMonitorOnlineRoute
   AuthMonitorRedisRoute: typeof AuthMonitorRedisRoute
   AuthMonitorServerRoute: typeof AuthMonitorServerRoute
+  AuthNotifyBotRoute: typeof AuthNotifyBotRoute
   AuthNotifyDeliveryRoute: typeof AuthNotifyDeliveryRoute
   AuthNotifyPolicyRoute: typeof AuthNotifyPolicyRoute
   AuthOpenAppRoute: typeof AuthOpenAppRoute
@@ -943,6 +963,7 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthMonitorOnlineRoute: AuthMonitorOnlineRoute,
   AuthMonitorRedisRoute: AuthMonitorRedisRoute,
   AuthMonitorServerRoute: AuthMonitorServerRoute,
+  AuthNotifyBotRoute: AuthNotifyBotRoute,
   AuthNotifyDeliveryRoute: AuthNotifyDeliveryRoute,
   AuthNotifyPolicyRoute: AuthNotifyPolicyRoute,
   AuthOpenAppRoute: AuthOpenAppRoute,

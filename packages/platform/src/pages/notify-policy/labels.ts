@@ -7,8 +7,10 @@ export function channelLabel(t: (k: string) => string, c: Channel): string {
       return t('站内')
     case 'email':
       return t('邮件')
-    default:
+    case 'sms':
       return t('短信')
+    default:
+      return t('群机器人')
   }
 }
 

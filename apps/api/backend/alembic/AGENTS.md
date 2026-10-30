@@ -109,6 +109,17 @@ MySQL 改列类型要重建整张表，分开写的话，有三个时间列的�
 - 在旧结构的 `fba_test` 上（107 个时间列，精度全是 0）跑 `upgrade` 之后，107 列精度全是 6，名字、可空性、默认值、`EXTRA`、注释逐列一致
 - `downgrade -1` 之后，和最初的快照逐字节相同
 
+### 🔴 SQL Server 上改「被索引的列」的可空性：两个方向不对称
+
+`ae000000notifybot` 把 `sys_notification_delivery.user_id`（上面有 `ix_…_user_id`）从 NOT NULL 改成可空：
+**NOT NULL → NULL 放行；NULL → NOT NULL 被索引挡住**（`Msg 5074 The index … is dependent on column` + `Msg 4922`）。
+改类型同样被挡。所以 upgrade 照常 `alter_column`，**downgrade 要先删索引、改完再建**。
+第一版两边都没删，upgrade 在 SQL Server 上是绿的，downgrade 当场 5074 —— 只验 upgrade 的话这条要等到真的回滚那天才炸。
+PostgreSQL 两个方向都不挡。
+
+**实测证据**（2026-10-30，SQL Server 2022，临时表 `a BIGINT` + 索引）：`ALTER COLUMN a BIGINT NULL` 成功（`is_nullable` = 1）；
+`ALTER COLUMN a INT NULL` 和反方向的 `BIGINT NOT NULL` 都报 5074。
+
 ## 种子的一致性有两维，行数/列清单只是其中一维
 
 `tests/test_seed_dialects.py` 原来查四件事：三份文件都在 · 表相同 ·

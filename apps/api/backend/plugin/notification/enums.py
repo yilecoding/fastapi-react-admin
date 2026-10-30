@@ -24,9 +24,12 @@ class NotificationChannel(StrEnum):
     inapp = 'inapp'
     email = 'email'
     sms = 'sms'
+    #: 群机器人（#166 二期）。🔴 **不按人路由**：发给一个群，由机器人自己的订阅决定（`sys_notification_bot.kinds`），
+    #: 所以不进策略矩阵 / 偏好矩阵，类型也不能在 `defaults` 里声明它（声明的是 `bot=True`）
+    bot = 'bot'
 
 
-#: 走投递表（outbox）的外部渠道
+#: 按人路由（策略 × 偏好 × 地址）、走投递表（outbox）的外部渠道。群机器人也走投递表，但不在这里
 EXTERNAL_CHANNELS: tuple[NotificationChannel, ...] = (NotificationChannel.email, NotificationChannel.sms)
 
 
@@ -57,3 +60,11 @@ class DeliveryStatus(StrEnum):
     skipped = 'skipped'
     #: 可能已经发出去了（连上之后出的事）。🔴 **不重试** —— 重试就是重复发
     unknown = 'unknown'
+
+
+class BotPlatform(StrEnum):
+    """群机器人的平台（#166 二期）。值是契约：`sys_notification_bot.platform` 存它，前端按它选图标和填写说明"""
+
+    feishu = 'feishu'
+    dingtalk = 'dingtalk'
+    wecom = 'wecom'

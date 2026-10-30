@@ -1,7 +1,7 @@
 [plugin]
 summary = "消息通知中心"
-version = "0.0.2"
-description = "站内消息收件箱 + 通知渠道路由（站内 / 邮件 / 短信 · 系统策略 × 个人偏好 · 事务内投递，issue #166）"
+version = "0.0.3"
+description = "站内消息收件箱 + 通知渠道路由（站内 / 邮件 / 短信 / 群机器人 · 系统策略 × 个人偏好 · 事务内投递，issue #166）"
 author = "yile"
 tags = ["other"]
 database = ["mysql", "postgresql", "sqlserver"]
@@ -18,8 +18,14 @@ prefix = "/notification-channels"
 tags = "通知渠道"
 
 [settings]
+# 官方地址之外放行的地址前缀（逗号分隔），给私有化部署的飞书 / 钉钉 / 企微用。🔴 生产只许 https
+NOTIFICATION_BOT_EXTRA_URL_PREFIXES = ""
+NOTIFICATION_BOT_TIMEOUT_SECONDS = 5.0
 NOTIFICATION_DELIVERY_BATCH = 200
 NOTIFICATION_DELIVERY_RETENTION_DAYS = 30
+# 群机器人（#166 二期）：Webhook 地址和加签密钥的落库加密密钥（32 字节 = 64 位十六进制）。地址本身就是凭据。
+# 留空则「群机器人」拒绝保存并明确报错 —— 不会静默存明文。生成：python -c "import os;print(os.urandom(32).hex())"，真值放 .env
+NOTIFICATION_ENCRYPT_SECRET_KEY = ""
 NOTIFICATION_EXTERNAL_ENABLED = true
 NOTIFICATION_RETRY_BACKOFF_SECONDS = "60,300,1800,7200"
 NOTIFICATION_RETRY_MAX = 4

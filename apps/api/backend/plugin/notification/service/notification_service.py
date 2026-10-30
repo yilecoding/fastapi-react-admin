@@ -74,6 +74,7 @@ async def create_in_tx(
     :param kind: 通知类型码（`register_notification_kind` 注册过的）；没注册当场抛 LookupError —— 那是调用方的 bug
     :param category: 不给就用类型声明的分类
     """
+    from backend.plugin.notification.service.bot_service import enqueue_bots
     from backend.plugin.notification.service.config import load_notification_config
     from backend.plugin.notification.service.delivery_service import enqueue
     from backend.plugin.notification.service.routing import resolve
@@ -109,6 +110,8 @@ async def create_in_tx(
         out.pending = enqueue(
             db, kind=spec, routes=routes, title=title, content=content, link=link, notification_ids=ids
         )
+        # 群机器人（#166 二期）：一条通知一个群一行，和收件人有几个无关
+        out.pending += await enqueue_bots(db, kind=spec, title=title, content=content, link=link)
     return out
 
 
@@ -232,7 +235,8 @@ class NotificationService:
         kind: str = 'announcement',
     ) -> Notification:
         """
-        发一条全员广播（给别的模块调用，比如公告发布 / 每日问候）。只写站内（#166：广播一期不走外部渠道）
+        发一条全员广播（给别的模块调用，比如公告发布 / 每日问候）。站内一行，不走邮件 / 短信（那等于全员群发）；
+        类型声明了 `bot=True` 的，订阅了它的群机器人各一行投递（#166 二期），**调用方提交之后**才踢 worker
 
         :param db: 数据库会话
         :param title: 标题
@@ -256,6 +260,17 @@ class NotificationService:
                 recipient_id=None,
             ),
         )
+        if spec.bot:
+            from backend.plugin.notification.service.bot_service import enqueue_bots
+            from backend.plugin.notification.service.config import load_notification_config
+            from backend.plugin.notification.service.delivery_service import kick_after_commit
+
+            await load_notification_config(db)
+            if settings.NOTIFICATION_EXTERNAL_ENABLED and await enqueue_bots(
+                db, kind=spec, title=title, content=content, link=link
+            ):
+                # 提交在调用方手里（公告接口是依赖收尾时提交）：挂到会话的 after_commit 上，回滚就不踢
+                kick_after_commit(db)
         await _push(None)
         return notification
 

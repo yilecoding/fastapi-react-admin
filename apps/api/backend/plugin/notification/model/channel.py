@@ -69,11 +69,12 @@ class NotificationDelivery(DataClassBase):
     notification_id: Mapped[int | None] = mapped_column(
         BigInteger, index=True, comment='站内通知 ID（没有站内行时为空）'
     )
-    user_id: Mapped[int] = mapped_column(BigInteger, index=True, comment='接收人 ID')
+    #: 群机器人的投递发给一个群，不是一个人：这一列为空、`bot_id` 有值（#166 二期）
+    user_id: Mapped[int | None] = mapped_column(BigInteger, index=True, comment='接收人 ID（群机器人的投递为空）')
     kind: Mapped[str] = mapped_column(UniversalStr(64), index=True, comment='通知类型码（冗余，类型删了也读得懂）')
-    channel: Mapped[str] = mapped_column(UniversalStr(16), index=True, comment='渠道（email / sms）')
+    channel: Mapped[str] = mapped_column(UniversalStr(16), index=True, comment='渠道（email / sms / bot）')
     address: Mapped[str | None] = mapped_column(
-        UniversalStr(256), comment='发送时的地址快照（邮箱 / 手机号；列表接口掩码）'
+        UniversalStr(256), comment='发送时的地址快照（邮箱 / 手机号 / 机器人名称；列表接口掩码）'
     )
     title: Mapped[str] = mapped_column(UniversalStr(128), comment='标题快照')
     content: Mapped[str] = mapped_column(UniversalText, comment='正文快照')
@@ -83,6 +84,9 @@ class NotificationDelivery(DataClassBase):
     )
     reason: Mapped[str | None] = mapped_column(
         UniversalStr(32), default=None, comment='没发 / 失败的分类（no_address / plugin_missing / permanent …）'
+    )
+    bot_id: Mapped[int | None] = mapped_column(
+        BigInteger, index=True, default=None, comment='群机器人 ID（只有群机器人的投递有值）'
     )
     attempts: Mapped[int] = mapped_column(default=0, comment='已尝试次数')
     next_attempt_time: Mapped[datetime | None] = mapped_column(

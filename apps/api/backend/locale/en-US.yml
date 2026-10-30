@@ -149,6 +149,16 @@ error:
     channel_not_supported: Notification type {kind} does not support the {channel} channel
     inapp_fixed: The in-app channel cannot be changed; the inbox is the source of truth
     pref_not_configurable: The {channel} channel for {kind} is set by the administrator and cannot be changed
+    bot_not_found: Group bot does not exist
+    encrypt_key_unset: NOTIFICATION_ENCRYPT_SECRET_KEY is not configured, so group bot webhook URLs cannot be stored safely. Generate one with python -c "import os;print(os.urandom(32).hex())", put it in .env and restart the service
+    encrypt_key_invalid: NOTIFICATION_ENCRYPT_SECRET_KEY is not a valid hex key (32 bytes / 64 hex characters required)
+    bot_url_feishu: A Feishu bot webhook URL should start with https://open.feishu.cn/open-apis/bot/v2/hook/ (copy it from group settings → Bots → Custom bot)
+    bot_url_dingtalk: A DingTalk bot webhook URL should start with https://oapi.dingtalk.com/robot/send?access_token= (copy it from group settings → Bots → Custom bot)
+    bot_url_wecom: A WeCom bot webhook URL should start with https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key= (copy it from the group chat → Message push)
+    bot_url_no_token: The webhook URL is incomplete — the credential at the end (Feishu hook ID / DingTalk access_token / WeCom key) is missing. Copy the whole URL
+    bot_url_required_on_platform_change: Changing the platform requires the new platform's webhook URL
+    bot_secret_unsupported: WeCom group bots have no signing; leave the secret empty
+    bot_kind_not_allowed: '"{kind}" speaks to its recipient directly and cannot be pushed to a group'
   oauth2:
     account_bound: This account is already bound to {source}
     account_bound_to_other: This {source} account is already bound to another user
@@ -544,6 +554,11 @@ success:
 # `messages`/`message_templates`（按中文原文查表那一套）已经在这次治理里
 # 撤掉了——en-US 不需要「反向翻译」（那是 zh-CN.yml 独有的场景，见那边
 # 顶部注释），业务消息全部搬进了上面的 `error.*`。别再往这加东西。
+notification:
+  bot:
+    view_detail: View details
+    test_title: Test message
+    test_content: Group bot "{name}" is set up. Notifications it subscribes to will be pushed to this group.
 open:
   webhook:
     disabled_title: 'Webhook endpoint disabled: {name}'

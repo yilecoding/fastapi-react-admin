@@ -150,6 +150,16 @@ error:
     channel_not_supported: 通知类型 {kind} 不支持 {channel} 渠道
     inapp_fixed: 站内渠道不能修改：站内收件箱是通知的事实来源
     pref_not_configurable: 通知类型 {kind} 的 {channel} 渠道由管理员统一设置，个人不能修改
+    bot_not_found: 群机器人不存在
+    encrypt_key_unset: 未配置 NOTIFICATION_ENCRYPT_SECRET_KEY，无法安全保存群机器人的 Webhook 地址。生成方式：python -c "import os;print(os.urandom(32).hex())"，写入 .env 后重启服务
+    encrypt_key_invalid: NOTIFICATION_ENCRYPT_SECRET_KEY 不是合法的十六进制密钥（需 32 字节 / 64 位十六进制）
+    bot_url_feishu: 飞书机器人的 Webhook 地址应以 https://open.feishu.cn/open-apis/bot/v2/hook/ 开头（在群设置 → 群机器人 → 自定义机器人里复制）
+    bot_url_dingtalk: 钉钉机器人的 Webhook 地址应以 https://oapi.dingtalk.com/robot/send?access_token= 开头（在群设置 → 机器人 → 自定义机器人里复制）
+    bot_url_wecom: 企业微信机器人的 Webhook 地址应以 https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key= 开头（在群聊 → 消息推送里复制）
+    bot_url_no_token: Webhook 地址不完整：缺了最后那段凭据（飞书的 hook ID / 钉钉的 access_token / 企业微信的 key），请整段复制
+    bot_url_required_on_platform_change: 换了平台就要填新平台的 Webhook 地址
+    bot_secret_unsupported: 企业微信的群机器人没有加签，不用填密钥
+    bot_kind_not_allowed: 「{kind}」是对着收件人本人说的通知，不能推到群里
   oauth2:
     account_bound: 用户已绑定 {source} 账号
     account_bound_to_other: 该 {source} 账号已被其他用户绑定
@@ -652,6 +662,11 @@ messages:
   Method Not Allowed: 不支持的请求方法
   Not Found: 请求的资源不存在
   Internal Server Error: 服务器内部错误
+notification:
+  bot:
+    view_detail: 查看详情
+    test_title: 测试消息
+    test_content: 群机器人「{name}」配置成功，之后订阅的通知会推到这个群里。
 open:
   webhook:
     disabled_title: 'Webhook 端点已停用：{name}'
