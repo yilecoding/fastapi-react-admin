@@ -39,10 +39,22 @@ export type PageRegistry = Record<string, ComponentType<any>>
  * - 后台时传 `open={false}`：Base UI 关浮层要等退场动画的 effect 跑完才卸掉 portal，而后台 tab 的
  *   effect 已经被 `<Activity>` 销毁了 —— 那个「已经关掉」的抽屉一直留在屏幕上
  * - 后台时整个不渲染：挡不住了，但切一下 tab，填了一半的发起表单、写好的审批意见全没了（独立审查发现）
+ *
+ * 🔴 **三个值三个意思，`null` 和 `undefined` 不能混**：
+ *
+ * | 值 | 意思 | 交给 Base UI 的 `container` 之后 |
+ * |---|---|---|
+ * | 元素 | 在 tab 里，根节点就绪 | 挂进这个 tab |
+ * | `null` | 在 tab 里，根节点**还没拿到**（`TabFrame` 第一次渲染） | **等**：Base UI 对显式 `null` 的约定是「容器还没好」，先不挂 |
+ * | `undefined` | **不在任何 tab 里**（铃铛这类外壳家具） | 回落 `<body>` |
+ *
+ * 原来 context 的默认值是 `null`：同一个读者抽屉放到铃铛里（#186），`open` 是 true、
+ * DOM 里**一个节点都没有**，不报错不警告 —— Base UI 一直在「等容器」（`FloatingPortal.js`：
+ * `Wait for the container to be resolved if explicitly null`）。
  */
-const TabContainerContext = React.createContext<HTMLElement | null>(null)
+const TabContainerContext = React.createContext<HTMLElement | null | undefined>(undefined)
 
-export function useTabPortalContainer(): HTMLElement | null {
+export function useTabPortalContainer(): HTMLElement | null | undefined {
   return React.useContext(TabContainerContext)
 }
 

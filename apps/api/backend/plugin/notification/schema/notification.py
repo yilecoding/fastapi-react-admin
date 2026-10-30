@@ -19,6 +19,7 @@ class CreateNotificationParam(NotificationSchemaBase):
     """创建站内通知参数（服务端内部用）"""
 
     recipient_id: SnowflakeIdIn | None = Field(None, description='接收人 ID（为空表示全员广播）')
+    source: str | None = Field(None, description='来源业务对象（如 notice:123）', max_length=64)
 
 
 class SendNotificationParam(NotificationSchemaBase):
@@ -43,6 +44,10 @@ class GetNotificationDetail(NotificationSchemaBase):
     # 由 service 在分页之后按 `sys_notification_read` 回填 —— 不是数据库列。
     # 前端只认它：有值即已读。
     read_time: datetime | None = Field(None, description='阅读时间（为空表示未读）')
+    source: str | None = Field(None, description='来源业务对象（如 notice:123；前端认出公告就地打开详情）')
+    # 同 `read_time`，查询时由来源方回填（`sources.register_source_attachments`），不是数据库列：
+    # 公告发布之后还能再加附件，存进通知里就是一份会过期的快照
+    attachment_count: int | None = Field(None, description='来源对象当前的附件个数（没有来源为空）')
 
 
 class GetNotificationUnreadDetail(SchemaBase):

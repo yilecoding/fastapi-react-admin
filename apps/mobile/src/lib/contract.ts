@@ -48,6 +48,9 @@ export type CurrentUser = S['GetCurrentUserInfoWithRelationDetail']
  * 筛未读要用 `?unread=true` 那个查询参数。
  *
  * ⚠️ `link` 是**前端路由**，那是 web 的路由；移动端没有对应页面，只展示不跳。
+ * 例外是公告：认 `source`（`notice:<id>`，见 `lib/notices.ts: noticeIdFromSource`），
+ * 推到移动端自己的公告详情屏 —— 认的是来源，**不是**解析 `link`。
+ * `attachment_count` 是来源对象**现在**的附件数（没有来源为 `null`）。
  */
 export type Notification = S['GetNotificationDetail']
 
@@ -78,6 +81,20 @@ export type UserListItem = S['GetUserInfoWithRelationDetail']
 
 /** `GET /api/v1/sys/notifications/unread-count` */
 export type NotificationUnread = S['GetNotificationUnreadDetail']
+
+/**
+ * `GET /api/v1/sys/notices/feed` 的一条（首页「公告」组那一行的 props）。
+ *
+ * 🔴 `notification_id` 声明成 `number | null`，**wire 上是字符串**（雪花 ID，编码层转了串）。
+ * 只当路径参数原样回传，不要 `Number()`。`null` = 没有收件箱那一行（#186 之前发的），算已读。
+ */
+export type NoticeFeedItem = S['GetNoticeFeedItem']
+
+/** `GET /api/v1/sys/notices/feed/{pk}`：上面那条 + `content`（富文本 HTML） */
+export type NoticeFeedDetail = S['GetNoticeFeedDetail']
+
+/** `GET /api/v1/sys/files/targets/{type}/{id}` 的一条（附件行的 props） */
+export type FileDetail = S['GetFileDetail']
 
 /**
  * 站内通知分类。数值来自后端的 `NotificationCategory` 枚举。

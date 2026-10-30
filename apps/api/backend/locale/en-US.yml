@@ -79,6 +79,7 @@ error:
     unexpected: Something unexpected went wrong during the export. See the server log for details
     user_unavailable: The account that started this export is disabled or no longer exists, so it was cancelled
   file:
+    relation_forbidden: You are not allowed to change the attachments of this item
     empty: The file is empty
     invalid_filename: Invalid filename
     missing: File is missing, please upload it again
@@ -141,6 +142,8 @@ error:
     swagger_unsupported: This account uses two-factor authentication; sign in from the login page (the Swagger shortcut cannot do the second step)
   notice:
     not_found: Notice does not exist
+    attachment_invalid: The attachment does not exist, or you are not allowed to use that file
+    attachment_public: "\"{name}\" is a public file (downloadable without signing in) and cannot be attached to a notice; upload it again"
   notification:
     not_found: Notification does not exist
     delivery_not_found: Delivery record does not exist

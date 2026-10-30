@@ -6,6 +6,7 @@ import type { APIRequestContext, Page, Response } from "@playwright/test"
 
 import { API_BASE, expect, loginToken, test } from "../fixtures/base"
 import { uniqueCode } from "../utils/ids"
+import { buildPdf } from "../utils/pdf"
 import { crc32, zipStore } from "../utils/xlsx"
 
 /**
@@ -26,29 +27,6 @@ import { crc32, zipStore } from "../utils/xlsx"
  */
 
 type Uploaded = { id: string; original_name: string; size: number }
-
-/** 最小可用的单页 PDF。xref 偏移要算对，否则 PDF.js 会走「修复」路径，测不到正常加载 */
-function buildPdf(text: string): Buffer {
-  const stream = `BT /F1 24 Tf 40 100 Td (${text}) Tj ET`
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-  ]
-  let out = "%PDF-1.4\n"
-  const offsets: number[] = []
-  objects.forEach((body, i) => {
-    offsets.push(out.length)
-    out += `${i + 1} 0 obj\n${body}\nendobj\n`
-  })
-  const xref = out.length
-  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
-  for (const o of offsets) out += `${String(o).padStart(10, "0")} 00000 n \n`
-  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
-  return Buffer.from(out, "latin1")
-}
 
 /** 1 秒、8kHz、16bit 单声道的正弦波 */
 function buildWav(seconds = 1, rate = 8000): Buffer {

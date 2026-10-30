@@ -19,6 +19,7 @@ import {
   useDetachFiles,
   type FileItem,
 } from './api'
+import { FileTypeIcon } from './file-icon'
 import { FilePreviewDialog } from './preview-dialog'
 import { useFileUploader } from './uploader'
 import { useUploadStore } from '../../shell/upload-store'
@@ -34,14 +35,27 @@ import { useUploadStore } from '../../shell/upload-store'
  * `targetType` 是个约定字符串（`NOTICE` / `TICKET` / …），后端不做枚举校验 ——
  * 新业务挂附件不用改表也不用改后端，传个新值即可。代价是拼错了不会报错，
  * 只会读到空列表，所以**常量要写在调用方页面里**，别在 JSX 里手敲字面量。
+ *
+ * 🔴 **读者视图要传 `readOnly`。** 「添加附件 / 移除」原来只靠 `sys:file:upload` 藏起来 ——
+ * 可管理员打开读者那份详情时也有这个码，于是一个「看公告」的地方冒出了能改附件的按钮（#186）。
+ * 能不能改是**这个位置**的属性，不是看的人的属性。
  */
 export function FileAttachments({
   targetType,
   targetId,
+  readOnly = false,
+  hideWhenEmpty = false,
   className,
 }: {
   targetType: string
   targetId: string
+  /** 只看：不出「添加附件」和「移除」，不管看的人有没有上传权限 */
+  readOnly?: boolean
+  /**
+   * 一个附件都没有时整块不画（读者不需要看到「暂无附件」）。
+   * ⚠️ 只管「空」：取数**失败**照样显示错误 + 重试（硬纪律 9），不能跟着一起消失
+   */
+  hideWhenEmpty?: boolean
   className?: string
 }) {
   const { t } = useTranslation()
@@ -109,26 +123,27 @@ export function FileAttachments({
     [detach, t, targetId, targetType]
   )
 
+  if (hideWhenEmpty && !isPending && !isError && files.length === 0) return null
+
   return (
-    <div className={className} data-testid="file-attachments">
+    <div className={className} data-testid="file-attachments" data-readonly={readOnly || undefined}>
       <div className="flex items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-sm font-medium">
+        <p className="flex items-center gap-1.5 text-sm font-medium" data-testid="attach-heading">
           <IconPaperclip className="size-4 text-muted-foreground" aria-hidden />
-          {t('附件')}
-          {files.length > 0 && (
-            <span className="text-xs font-normal tabular-nums text-muted-foreground">{files.length}</span>
-          )}
+          {files.length > 0 ? t('附件（{{n}}）', { n: files.length }) : t('附件')}
         </p>
-        <Can perm="sys:file:upload">
-          <input {...picker.inputProps} data-testid="attach-input" />
-          <Button size="sm" variant="outline" disabled={attach.isPending || detach.isPending} data-testid="attach-upload" onClick={picker.open}>
-            <IconUpload className="size-4" />
-            {uploader.busy ? t('上传中…') : t('添加附件')}
-          </Button>
-        </Can>
+        {!readOnly && (
+          <Can perm="sys:file:upload">
+            <input {...picker.inputProps} data-testid="attach-input" />
+            <Button size="sm" variant="outline" disabled={attach.isPending || detach.isPending} data-testid="attach-upload" onClick={picker.open}>
+              <IconUpload className="size-4" />
+              {uploader.busy ? t('上传中…') : t('添加附件')}
+            </Button>
+          </Can>
+        )}
       </div>
 
-      {uploader.pending > 0 && (
+      {!readOnly && uploader.pending > 0 && (
         /* 进度在右下角的浮窗里；这里只留一句，点一下把折叠的浮窗展开 */
         <button
           type="button"
@@ -177,10 +192,12 @@ export function FileAttachments({
                 className="flex min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5"
                 data-testid={`attach-item-${f.id}`}
               >
-                <span className="min-w-0 flex-1 truncate text-sm" title={f.original_name}>
+                <FileTypeIcon file={f} className="size-4" />
+                {/* 显示原文件名（`original_name`），**不是**落盘名 `name` —— 后者带随机后缀，不给读者看 */}
+                <span className="min-w-0 flex-1 truncate text-sm" title={f.original_name} data-testid="attach-name">
                   {f.original_name}
                 </span>
-                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground" data-testid="attach-size">
                   {formatBytes(f.size)}
                 </span>
                 {isPreviewable(f) ? (
@@ -222,20 +239,22 @@ export function FileAttachments({
                 >
                   <IconDownload className="size-4" />
                 </Button>
-                <Can perm="sys:file:upload">
-                  {/* 「移除」只解开关联、不删文件，所以不加二次确认 ——
-                      误点的代价是重新挂一次，而每次都弹确认框会把常规操作变成负担 */}
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    disabled={busy}
-                    aria-label={t('移除 {{name}}', { name: f.original_name })}
-                    data-testid={`attach-detach-${f.id}`}
-                    onClick={() => void handleDetach(f)}
-                  >
-                    <IconX className="size-4" />
-                  </Button>
-                </Can>
+                {!readOnly && (
+                  <Can perm="sys:file:upload">
+                    {/* 「移除」只解开关联、不删文件，所以不加二次确认 ——
+                        误点的代价是重新挂一次，而每次都弹确认框会把常规操作变成负担 */}
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      disabled={busy}
+                      aria-label={t('移除 {{name}}', { name: f.original_name })}
+                      data-testid={`attach-detach-${f.id}`}
+                      onClick={() => void handleDetach(f)}
+                    >
+                      <IconX className="size-4" />
+                    </Button>
+                  </Can>
+                )}
               </li>
             ))}
           </ul>

@@ -71,3 +71,25 @@
 硬纪律 6），`apps/web/src/lib/valid-paths.ts` 只比路径部分。
 **实测证据**：`workflow.spec.ts` 第一条点「已通过」那条通知应打开对应审批单；
 把这两处修复打回去，它报 `element(s) not found`（链接根本没渲染成可点的）。
+
+## 🔴 公告那一行认 `source`、就地打开读者抽屉，不跟 `link`（#186）
+
+**症状**（修之前，#186 正文里用 zhoumin 实测的）：普通用户在铃铛 / 消息中心点「公告《xx》已发布」，落在
+`/403?from=/plugins/notice&need=sys:notice:add`，而且这一下已经把它标成已读（未读数 13 → 12）。
+
+**根因**：公告广播那一行的 `link` 是管理页（路由守卫要 `sys:notice:add`），
+而 `isValidPath` 只看路由在不在、不看权限 —— 渲染成可点、点进去 403。
+
+**修法**：后端给收件箱行加了 `source`（`notice:<id>`），`api.ts` 的 `noticeIdOf(n)` 认它；
+认出来就**不走 `link`**，就地打开 `pages/notice/reader-sheet.tsx`（数据走 `/sys/notices/feed/{pk}`，只要登录）。
+
+- 认 `source` 不认 `link`：`link` 是库里的自由字符串，拿它猜「这是不是公告」迟早猜错。
+  `source=null` 的老行（迁移按标题认领不上的）照旧跟 `link`，只有一处兜底：指着 `/plugins/notice`
+  而本人没有 `sys:notice:add` 时 `linkOf` 返回 `null`（不可点、正文照样看得到）—— 不可点总比点进 403 强
+- 铃铛的抽屉挂在 `Popover` **外面**：点一行要先关下拉再开抽屉，挂在 `PopoverContent` 里会跟着下拉一起卸载
+- 消息中心把开着的那条写进 search 的 `notice`（硬纪律 2），关掉时只删这一个键；
+  后端新行的 `link` 就是 `/notification?notice=<id>`，群机器人卡片的深链也靠它直接打开那一条
+- 铃铛不在任何 tab 里，抽屉的 portal 容器拿到的是 `undefined`（见 [shell 分册](../../shell/AGENTS.md) 最后一节 —— 那条坑就是在这儿踩的）
+
+**实测证据**：`apps/web/e2e/tests/notice-reach.spec.ts` 前两条（`test` / `zhoumin` 两个非管理员账号）。
+变异：`noticeIdOf` 恒返回 `null` → 第一条当场红（那一行不再带 `data-notice-id`，退回成跟 `link` 走的链接）。
