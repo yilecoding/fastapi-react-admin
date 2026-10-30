@@ -3,8 +3,12 @@ import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query
 
 import { richTextFileIds } from '@admin/ui/components/rich-text'
 
+import { ApiError } from '@admin/api'
+import { toEpochMs, type ServerTime } from '@admin/i18n'
+
 import { api, type PageData } from '../../api-client/client'
 import { targetFilesQuery, useAttachFiles, useDetachFiles } from '../file/api'
+import { NOTICE_FEED_KEY, invalidateInbox } from '../notification/api'
 
 /**
  * 通知公告。
@@ -13,6 +17,16 @@ import { targetFilesQuery, useAttachFiles, useDetachFiles } from '../file/api'
  * 这个插件 `extend = "admin"`，路由被挂到了 admin 的 sys 下。参数配置踩过同一个坑。
  *
  * ⚠️ id 是雪花字符串，不要 `Number()`（CLAUDE.md 硬纪律 6）。
+ *
+ * 🔴 **「读」和「管」是两个口**（#186）：
+ *
+ * - `/sys/notices`、`/sys/notices/{pk}` 是**管理端**，要 `sys:notice:add`（和管理页的路由守卫同一个码）。
+ *   原来它们只要登录，任何人都拿得到**隐藏的**公告和正文
+ * - `/sys/notices/feed`、`/sys/notices/feed/{pk}` 是**读者**的口，只要登录：只给显示中、没过期的，
+ *   隐藏 / 过期 / 删了的详情一律 404（刻意不分 —— 分开就等于告诉对方「这条存在，只是你看不了」）
+ *
+ * 工作台、铃铛、消息中心这些「所有人都会碰到」的地方**只能**用后一组，
+ * 碰了前一组，普通用户那里就是一个 403 错误块。
  */
 export type Notice = {
   id: string
@@ -22,9 +36,39 @@ export type Notice = {
   /** 0 隐藏 · 1 显示 */
   status: number
   content: string
+  /** 置顶（读者列表里排在最前） */
+  pinned: boolean
+  /** 0 普通 · 1 重要 · 2 紧急，见 `NOTICE_LEVEL_LABEL` */
+  level: number
+  /** 过期时间；`null` = 不过期。过期之后读者看不到，管理页照样能看到 */
+  expire_time: string | null
   created_time: string
   updated_time: string | null
 }
+
+/**
+ * 读者那一份（`/feed`）的一行。不带正文；带附件数和「我读没读」。
+ *
+ * `read` 跟着收件箱那一行走（`sys_notification_read`），不是另一张已读表 ——
+ * 铃铛、消息中心、工作台看到的是同一份「读没读」。标已读也走收件箱那条接口，
+ * 用的是 `notification_id`（没有收件箱行的老公告是 `null`，后端已经按「已读」下发）。
+ */
+export type NoticeFeedItem = {
+  id: string
+  title: string
+  type: number
+  pinned: boolean
+  level: number
+  expire_time: string | null
+  created_time: string
+  updated_time: string | null
+  attachment_count: number
+  /** ⚠️ openapi 里写的是 `number`，运行时是**字符串**（雪花 ID 由 `stringify_unsafe_ints` 转），按字符串用 */
+  notification_id: string | null
+  read: boolean
+}
+
+export type NoticeFeedDetail = NoticeFeedItem & { content: string }
 
 export type NoticeListParams = {
   page: number
@@ -57,6 +101,11 @@ export const NOTICE_CONTENT_TARGET = 'NOTICE_CONTENT'
 export const noticeKeys = {
   all: ['sys', 'notice'] as const,
   list: (p: NoticeListParams) => [...noticeKeys.all, 'list', p] as const,
+  /** 读者那一组的前缀：标已读之后整组失效（列表上的未读点、详情里的 `read`） */
+  /** 定义在 `notification/api.ts`（收件箱一变它也要失效，那边要引用它；见 `invalidateInbox`） */
+  feedAll: () => NOTICE_FEED_KEY,
+  feed: (p: { page: number; size: number }) => [...noticeKeys.feedAll(), 'list', p] as const,
+  feedDetail: (id: string) => [...noticeKeys.feedAll(), 'detail', id] as const,
 }
 
 function qs(p: NoticeListParams): string {
@@ -77,11 +126,64 @@ export const noticesQuery = (p: NoticeListParams) =>
     placeholderData: (prev) => prev,
   })
 
+/** 读者列表：显示中、没过期的，置顶在前、再按时间倒序（排序在后端） */
+export const noticeFeedQuery = (p: { page: number; size: number }) =>
+  queryOptions({
+    queryKey: noticeKeys.feed(p),
+    queryFn: () => api.GET<PageData<NoticeFeedItem>>(`/api/v1/sys/notices/feed?page=${p.page}&size=${p.size}`),
+  })
+
+/** 404 = 撤回了 / 过期了 / 删了（后端刻意不分）。这是一个**结论**，重试也不会变 */
+export function isNoticeGone(e: unknown): boolean {
+  return e instanceof ApiError && e.httpStatus === 404
+}
+
+export const noticeFeedDetailQuery = (id: string) =>
+  queryOptions({
+    queryKey: noticeKeys.feedDetail(id),
+    queryFn: () => api.GET<NoticeFeedDetail>(`/api/v1/sys/notices/feed/${id}`),
+    // 全局是 `retry: 1`：404 再试一次只是让「已撤回」晚一秒出来；别的错误照旧重试一次
+    retry: (count, e) => !isNoticeGone(e) && count < 1,
+  })
+
+/**
+ * 标已读。走收件箱那条接口（读没读只有那一份），成功后两边一起失效：
+ * 铃铛 / 消息中心的未读数，和工作台卡片上的未读点。
+ * 少失效一边就是「铃铛红点没了、工作台那一行还挂着未读点」（或者反过来）。
+ */
+export function useMarkNoticeRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (notificationId: string) => api.PUT<null>(`/api/v1/sys/notifications/${notificationId}/read`),
+    onSuccess: () => invalidateInbox(qc),
+  })
+}
+
+/** 过期了没有。比较一律走 epoch（i18n 分册：不拿时间字符串比大小） */
+export function isExpired(expireTime: ServerTime, now = Date.now()): boolean {
+  const ms = toEpochMs(expireTime)
+  return ms !== null && ms <= now
+}
+
 export type NoticeBody = {
   title: string
   type: number
   status: number
   content: string
+  pinned: boolean
+  level: number
+  /** 带偏移的 ISO；`null` = 不过期 */
+  expire_time: string | null
+  /**
+   * 附件文件 ID，**按顺序**（读者那边就按这个顺序列）。
+   *
+   * - 不传（`undefined`）= 附件不动 —— 编辑时附件列表还没取回来就提交，绝不能当成「清空」发出去
+   * - `[]` = 全部摘掉
+   *
+   * 后端和公告**同一个事务**里挂附件、再发广播（读者收到通知时附件已经在了）；
+   * 文件是公开的 / 自己读不了的，整条 400 回滚
+   */
+  attachment_ids?: string[]
 }
 
 /**
@@ -210,3 +312,11 @@ export const NOTICE_STATUS_FILTER_ITEMS: Record<string, string> = {
   all: '全部状态', '1': '显示', '0': '隐藏',
 }
 export const NOTICE_STATUS_FORM_ITEMS: Record<string, string> = { '1': '显示', '0': '隐藏' }
+
+/** `backend/plugin/notice/enums.py: NoticeLevel`。数值是契约，改数字要两边一起改 */
+export const NOTICE_LEVEL = { NORMAL: 0, IMPORTANT: 1, URGENT: 2 } as const
+export const NOTICE_LEVEL_LABEL: Record<number, string> = { 0: '普通', 1: '重要', 2: '紧急' }
+export const NOTICE_LEVEL_FORM_ITEMS: Record<string, string> = { '0': '普通', '1': '重要', '2': '紧急' }
+
+/** 每条公告最多几个附件 —— 后端 `NOTICE_ATTACHMENT_MAX`（`plugin/notice/schema/notice.py`），超了 422 */
+export const NOTICE_ATTACHMENT_MAX = 20

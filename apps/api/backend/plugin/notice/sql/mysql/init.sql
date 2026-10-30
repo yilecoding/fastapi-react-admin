@@ -12,7 +12,7 @@ values
 ('删除', 'DeleteNotice', null, 0, null, 2, 'sys:notice:del', 1, 0, '', null, @notice_menu_id, now(), null),
 ('导出', 'ExportNotice', null, 0, null, 2, 'sys:notice:export', 1, 0, '', null, @notice_menu_id, now(), null);
 
-insert into sys_notice (id, title, type, status, content, created_time, updated_time)
+insert into sys_notice (id, title, type, status, content, created_time, updated_time, pinned, level)
 values (1, 'hahahahahaahahaha', 0, 1, '你好😄
 
 ```
@@ -29,4 +29,4 @@ print(''fba yyds'')
 * 1
 * 2
 * 3
-', '2025-12-15 15:33:16', null);
+', '2025-12-15 15:33:16', null, false, 0);

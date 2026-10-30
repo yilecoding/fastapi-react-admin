@@ -1,5 +1,6 @@
 import * as React from 'react'
 
+import { usePerm } from '../../auth/use-perm'
 import { usePlatform } from '../../shell/platform-context'
 import { useMarkNotificationRead, type Notification } from './api'
 
@@ -19,8 +20,16 @@ import { useMarkNotificationRead, type Notification } from './api'
  */
 export type NotificationLink = { to: string; search: Record<string, string> }
 
+/**
+ * #186 之前发的公告，收件箱那一行指着管理页（迁移按标题认领不上的那几行还留着这个 link）。
+ * 管理页的守卫要 `sys:notice:add` —— 普通用户点过去就是 `/403`，所以对他们这行不可点（正文照样看得到）。
+ */
+const LEGACY_NOTICE_LINK = '/plugins/notice'
+
 export function useNotificationOpen() {
   const { isValidPath } = usePlatform()
+  const { can } = usePerm()
+  const canManageNotices = can('sys:notice:add')
   const markRead = useMarkNotificationRead()
 
   /**
@@ -37,9 +46,10 @@ export function useNotificationOpen() {
       if (!n.link) return null
       const url = new URL(n.link, 'http://local')
       if (!isValidPath(url.pathname)) return null
+      if (url.pathname === LEGACY_NOTICE_LINK && !canManageNotices) return null
       return { to: url.pathname, search: Object.fromEntries(url.searchParams) }
     },
-    [isValidPath]
+    [isValidPath, canManageNotices]
   )
 
   const readIfUnread = React.useCallback(

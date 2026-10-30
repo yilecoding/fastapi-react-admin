@@ -21,8 +21,7 @@ import asyncio
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import event as sa_event
-
+from backend.common.after_commit import run_after_commit
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
@@ -40,7 +39,6 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from sqlalchemy.ext.asyncio import AsyncSession
-    from sqlalchemy.orm import Session
 
     from backend.plugin.notification.service.routing import Route
 
@@ -110,37 +108,12 @@ async def kick() -> None:
         log.warning(f'通知投递任务派发失败（周期调度会补上）：{e!s}')
 
 
-_KICK_FLAG = 'notification_kick_after_commit'
-_LISTENING = 'notification_kick_listening'
-#: 提交后派出去的 kick 协程：只靠 create_task 不留引用的话可能被 GC 回收掉
-_background: set[asyncio.Task[None]] = set()
-
-
 def kick_after_commit(db: AsyncSession) -> None:
-    """提交之后踢一次 worker（给提交不在自己手里的调用方，如公告广播）。同一个会话只挂一次监听；回滚清掉标记"""
-    sync: Session = db.sync_session
-    sync.info[_KICK_FLAG] = True
-    if sync.info.get(_LISTENING):
-        return
-    sync.info[_LISTENING] = True
-    sa_event.listen(sync, 'after_commit', _after_commit)
-    sa_event.listen(sync, 'after_rollback', _after_rollback)
+    """提交之后踢一次 worker（给提交不在自己手里的调用方，如公告广播）。回滚了不踢
 
-
-def _after_commit(session: Session) -> None:
-    if not session.info.pop(_KICK_FLAG, False):
-        return
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return
-    task = loop.create_task(kick())
-    _background.add(task)
-    task.add_done_callback(_background.discard)
-
-
-def _after_rollback(session: Session) -> None:
-    session.info.pop(_KICK_FLAG, None)
+    `lambda` 而不是直接传 `kick`：提交那一刻才查模块级的名字，测试 monkeypatch 掉的 `kick` 才生效
+    """
+    run_after_commit(db, 'notification.kick', lambda: kick())
 
 
 async def _bot_throttled(pk: int, row: NotificationDelivery) -> int | None:

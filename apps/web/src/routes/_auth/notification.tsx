@@ -13,6 +13,12 @@ const searchSchema = z.object({
   unread: z.coerce.number().int().optional(),
   /** 摆开但还没填值的格子，逗号分隔；运算符不是默认值时写成 `key:op` */
   f: z.string().optional(),
+  /**
+   * 就地打开的那条公告（#186）。收件箱 / 群机器人卡片里公告的 `link` 就是 `/notification?notice=<id>`。
+   * 雪花 ID 一律字符串（硬纪律 6；`lib/search-params.ts` 保证超安全整数的不被 JSON.parse 掉精度）。
+   * `coerce` 是兜小数字的：`?notice=123` 会被解析成 number，`z.string()` 一验就把整页搞成错误页
+   */
+  notice: z.coerce.string().optional(),
 })
 
 /**

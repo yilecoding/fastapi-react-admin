@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
+import { queryOptions, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import { api, type PageData } from '../../api-client/client'
 
@@ -24,6 +24,26 @@ export type Notification = {
   created_time: string
   /** 为空 = 未读。**它不是数据库列**，由后端按 `sys_notification_read` 回填 */
   read_time: string | null
+  /**
+   * 来源业务对象，`<类型>:<ID>`（如 `notice:2049…`）；没有来源是 `null`（#186 之前发的老行也是）。
+   * 前端认出公告就**就地打开详情**，不拿 `link` 去跳 —— 见 `noticeIdOf`
+   */
+  source: string | null
+  /** 来源对象**现在**的附件个数（查询时现算，不是发布时存的）；没有来源是 `null` */
+  attachment_count: number | null
+}
+
+/**
+ * 这一行是不是某条公告的广播，是的话给出公告 id（雪花字符串，不 `Number()`，硬纪律 6）。
+ *
+ * 🔴 按 `source` 认，**不按 `link` 认**。老的公告行 `link` 是 `/plugins/notice`（管理页，
+ * 要 `sys:notice:add`），普通用户点进去是 403 —— 而 `link` 是库里的自由字符串，
+ * 拿它猜「这是不是公告」迟早猜错。`source` 是后端写的结构化来源，认不出就返回 `null`，
+ * 那一行照旧走 `link`。
+ */
+export function noticeIdOf(n: Pick<Notification, 'source'>): string | null {
+  const m = /^notice:(\d+)$/.exec(n.source ?? '')
+  return m ? m[1]! : null
 }
 
 /**
@@ -90,12 +110,32 @@ export const unreadCountQuery = queryOptions({
   staleTime: 5 * 60_000,
 })
 
+/**
+ * 公告读者列表（工作台公告卡）的 query key 前缀 —— `notice/api.ts` 的 `noticeKeys.feedAll()` 就是它。
+ * 定义在这边是因为 `notice/api.ts` 已经 import 了这个文件，反过来 import 就成环。
+ */
+export const NOTICE_FEED_KEY = ['sys', 'notice', 'feed'] as const
+
+/**
+ * 收件箱变了（标已读 / 全部已读 / socket 说有新的或撤回了）之后要重取的东西。
+ *
+ * 🔴 **公告读者列表也在里面**（#186）：它的「读没读」就是收件箱那一行的已读状态。只失效收件箱的话，
+ * 在铃铛里点了「全部已读」，工作台公告卡（被 `<Activity>` 保活着、`staleTime` 30 秒）还亮着一排未读点；
+ * 新发的公告也要等手动刷新才出现在卡片上（代码评审指出）
+ */
+export function invalidateInbox(qc: QueryClient) {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: notificationKeys.all }),
+    qc.invalidateQueries({ queryKey: NOTICE_FEED_KEY }),
+  ])
+}
+
 /** 标记单条已读。**幂等** —— 重复调用返回成功，不要当成失败 */
 export function useMarkNotificationRead() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => api.PUT<null>(`/api/v1/sys/notifications/${id}/read`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: notificationKeys.all }),
+    onSuccess: () => invalidateInbox(qc),
   })
 }
 
@@ -104,6 +144,6 @@ export function useMarkAllNotificationsRead() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => api.PUT<null>('/api/v1/sys/notifications/read-all'),
-    onSuccess: () => qc.invalidateQueries({ queryKey: notificationKeys.all }),
+    onSuccess: () => invalidateInbox(qc),
   })
 }

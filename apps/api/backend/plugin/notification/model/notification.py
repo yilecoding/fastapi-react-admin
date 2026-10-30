@@ -25,6 +25,12 @@ class Notification(Base):
     recipient_id: Mapped[int | None] = mapped_column(
         BigInteger, default=None, index=True, comment='接收人 ID（为空表示全员广播）'
     )
+    # 这一行是哪个业务对象发出来的（`notice:<id>`）。公告靠它反查收件箱那一行：
+    # 读者在工作台点开公告时标已读、公告隐藏 / 删除时把这一行撤回、列表上带出附件数（#186）。
+    # `link` 是给前端跳转的自由字符串，不拿来反查
+    source: Mapped[str | None] = mapped_column(
+        UniversalStr(64), default=None, index=True, comment='来源业务对象（如 notice:123；为空表示没有）'
+    )
 
 
 class NotificationRead(DataClassBase):

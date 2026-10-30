@@ -451,3 +451,24 @@ E2E 实测弹窗带着 `data-closed` 在屏幕上停了 5 秒还 visible。
 留退场动画；跳走时两个一起清）。React 卸载节点是同步的，不等任何 effect。
 `pages/sms-config/index.tsx` 的 `testDialogMounted` 就是这个形状。
 **实测证据**：`apps/web/e2e/tests/sms.spec.ts` 点日志链接那一步，修前 `toBeHidden` 超时，修后过。
+
+### 🔴 不在任何 tab 里的浮层：`container` 要给 `undefined`，不能给 `null`
+
+**症状**：同一个读者抽屉（`pages/notice/reader-sheet.tsx`，#186）在消息中心 / 工作台里开得好好的，
+放进顶栏铃铛就**打不开**：点了公告那一行，下拉关了、`open` 已经是 `true`，屏幕上什么都没有，
+控制台零报错零警告。
+
+**根因**：抽屉照规矩 `container={useTabPortalContainer()}`，而铃铛不在任何 `TabFrame` 里，
+那时 context 的默认值是 `null`。Base UI 对**显式 `null`** 的约定是「容器还没解析出来，先别挂」
+（`@base-ui/react@1.7.0` 的 FloatingPortal 源码里那句注释：
+`Wait for the container to be resolved if explicitly null`）—— 于是它一直等，portal 永远不创建。
+`undefined` 才是「没指定 → 回落 `<body>`」。
+
+**修法**：context 默认值改成 `undefined`（`tab-outlet.tsx`），三个值各有含义：
+元素 = 挂进本 tab；`null` = 在 tab 里但 `TabFrame` 第一次渲染还没拿到根节点（这时**就该等**，
+先挂 `<body>` 再搬家会把浮层重挂一遍）；`undefined` = 不在 tab 里，挂 `<body>`。
+**不要在调用处写 `container ?? undefined`** —— 那会把 tab 里「还没就绪」的那一帧也送去 `<body>`。
+
+**实测证据**：`apps/web/e2e/tests/notice-reach.spec.ts` 第一条（普通员工点铃铛里的公告），
+修前 `getByTestId('notice-reader')… element(s) not found`；挂一个 `MutationObserver` 盯 `document.body`，
+点完 1.5 秒内**没有任何**读者抽屉的节点被插进来过。改默认值之后同一条过。

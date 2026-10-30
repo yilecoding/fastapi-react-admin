@@ -31,6 +31,19 @@
 ⚠️ `notification_service.send()`（管理端手动发）因此改成在 service 里自己 commit，路由从 `CurrentSessionTransaction`
 换成了 `CurrentSession`：依赖收尾才提交的话，被踢醒的 worker 读不到投递行。
 
+🔴 **广播（`broadcast()`）的 socket 推送也挂在提交之后**（`push_broadcast_after_commit`，走公用的 `common/after_commit.py: run_after_commit`，
+`kick_after_commit` 也改成了它；回滚不做，同一个事务里多次只做一次）。
+#186 之前是写完那一行当场推：公告接口的提交在依赖收尾，铃铛收到推送立刻重拉未读数，读到的是提交前的旧数 —— 上面那条规矩唯独广播这条路漏了。
+**实测证据**：`app/admin/tests/api_v1/test_notice_reach.py::test_broadcast_pushes_only_after_commit`（回滚后同一个会话再提交：不推；提交：推一次）；
+变异改回当场推 → 红。
+
+## 收件箱行的来源：`sys_notification.source`（#186）
+
+`<类型>:<ID>`（`sources.make_source`），给要反查 / 撤回自己那一行的调用方用（现在只有公告：`notice:<id>`）。`link` 是给前端跳转的自由字符串，不拿来反查。
+列表接口按来源回填 `attachment_count`：通知插件不认识公告（依赖方向是 notice → notification），由来源方 `register_source_attachments` 登记计数函数。
+撤回 = 逻辑删除那一行 + 清已读标记（`crud_notification.retract_by_source`）；列表 / 未读数 / 详情本来就都带 `deleted == 0`。
+细节和实测证据见 [`plugin/notice` 分册](../notice/AGENTS.md)。
+
 ## 🔴 worker：抢占看 rowcount · 结果未知不重试 · 停在发送中的归「结果未知」
 
 - **抢占**是一条 `UPDATE … SET status='sending' WHERE id=? AND status IN (待发, 到点的失败)`，只有 rowcount == 1 的那个 worker 发

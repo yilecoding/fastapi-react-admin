@@ -16,7 +16,8 @@ import {
 import { Can } from '../../auth/can'
 import { buildSelectColumn } from '../_shared/select-column'
 import { StatusPill } from '../_shared/status'
-import { NOTICE_TYPE_LABEL, type Notice } from './api'
+import { NOTICE_TYPE_LABEL, isExpired, type Notice } from './api'
+import { NoticeLevelPill, PinnedMark } from './shared'
 import type { features } from './table-features'
 
 const col = createColumnHelper<typeof features, Notice>()
@@ -44,15 +45,22 @@ export function buildColumns(
     col.accessor('title', {
       header: t('标题'),
       cell: ({ row, getValue }) => (
-        <button
-          type="button"
-          onClick={() => onView(row.original)}
-          data-testid={`open-notice-${row.original.id}`}
-          className="max-w-[22rem] truncate text-start text-sm font-medium text-primary underline-offset-2 hover:underline"
-        >
-          {getValue()}
-        </button>
+        <span className="flex max-w-[24rem] items-center gap-1.5">
+          {row.original.pinned && <PinnedMark />}
+          <button
+            type="button"
+            onClick={() => onView(row.original)}
+            data-testid={`open-notice-${row.original.id}`}
+            className="min-w-0 truncate text-start text-sm font-medium text-primary underline-offset-2 hover:underline"
+          >
+            {getValue()}
+          </button>
+        </span>
       ),
+    }),
+    col.accessor('level', {
+      header: t('级别'),
+      cell: ({ getValue }) => <NoticeLevelPill level={getValue()} showNormal />,
     }),
     col.accessor('type', {
       header: t('类型'),
@@ -66,12 +74,29 @@ export function buildColumns(
       header: t('状态'),
       // 这里的语义是显示/隐藏，不是正常/停用 —— 所以用 StatusPill 自带文案，
       // 不用 StatusBadge（那个写死了「正常 / 停用」）
-      cell: ({ getValue }) =>
-        getValue() === 1 ? (
-          <StatusPill tone="success">{t('显示')}</StatusPill>
-        ) : (
-          <StatusPill tone="muted">{t('隐藏')}</StatusPill>
-        ),
+      // 「已过期」挂在状态旁边而不是另起一列：「显示 + 已过期」= 读者看不到，
+      // 两个放一起才读得出这层意思（管理页照样列出过期的，这正是要提醒的）
+      cell: ({ row, getValue }) => (
+        <span className="flex items-center gap-1">
+          {getValue() === 1 ? (
+            <StatusPill tone="success">{t('显示')}</StatusPill>
+          ) : (
+            <StatusPill tone="muted">{t('隐藏')}</StatusPill>
+          )}
+          {isExpired(row.original.expire_time) && (
+            <StatusPill tone="muted" data-testid={`notice-expired-${row.original.id}`}>
+              {t('已过期')}
+            </StatusPill>
+          )}
+        </span>
+      ),
+    }),
+    col.accessor('expire_time', {
+      header: t('过期时间'),
+      cell: ({ getValue }) => (
+        // 空值 formatDateTime 给 '—'（= 不过期）
+        <span className="text-sm tabular-nums text-muted-foreground">{formatDateTime(getValue())}</span>
+      ),
     }),
     col.accessor('content', {
       header: t('内容摘要'),
@@ -142,8 +167,10 @@ export function buildColumns(
 
 export const COLUMN_LABELS: Record<string, string> = {
   title: '标题',
+  level: '级别',
   type: '类型',
   status: '状态',
+  expire_time: '过期时间',
   content: '内容摘要',
   created_time: '创建时间',
   updated_time: '更新时间',

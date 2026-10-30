@@ -380,7 +380,8 @@ class CRUDFileRelation(DataScopedCRUD[FileRelation]):
             self.model.target_id == target_id,
             self.model.deleted == 0,
         )
-        return int(await db.scalar(stmt) or -1)
+        # coalesce 已经把「没有行」变成 -1 了；不能写 `or -1` —— 真实的最大值 0 也会被当成「没有」
+        return int(await db.scalar(stmt))
 
     async def bulk_create(self, db: AsyncSession, rows: list[dict]) -> int:
         """

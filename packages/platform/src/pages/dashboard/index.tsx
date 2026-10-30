@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { formatDateTime, formatDateTimeShort, formatNumber } from '@admin/i18n'
 import { Trans, useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
   IconArrowRight, IconLoader2, IconRefresh,
@@ -17,11 +17,19 @@ import { meQuery } from '../../auth/queries'
 import { usePerm } from '../../auth/use-perm'
 import { PageHeader } from '../../shell/page-header'
 import { StatusPill } from '../_shared/status'
+import { noticeKeys } from '../notice/api'
+import { NoticeReaderSheet } from '../notice/reader-sheet'
 import {
   loginTrendQuery, onlineCountQuery, recentLoginsQuery, recentOperasQuery,
   scaleStatsQuery, todayRangeParam, todayStatsQuery,
   type DayPoint,
 } from './api'
+import { DashboardNoticeCard } from './notice-card'
+
+export type DashboardSearch = {
+  /** 公告卡片里就地打开的那一条（雪花 ID，字符串） */
+  notice?: string
+}
 
 /**
  * 仪表盘（平台首页）。
@@ -33,8 +41,15 @@ import {
  * 硬纪律：组件 router-独立 —— 这里只用 `<Link>`（组件，走 router context 而非
  * match context，隐藏 tab 里照样可用），不调 `useNavigate()`。
  */
-export function DashboardPage() {
+export function DashboardPage({
+  search = {},
+  onSearchChange,
+}: {
+  search?: DashboardSearch
+  onSearchChange?: (next: DashboardSearch) => void
+}) {
   const { t } = useTranslation()
+  const qc = useQueryClient()
   const { data: me } = useQuery(meQuery)
   const { isSuperuser, can } = usePerm()
 
@@ -59,6 +74,13 @@ export function DashboardPage() {
     void logins.refetch(); void operas.refetch()
     if (isSuperuser) void online.refetch()
   }
+  // 「刷新」按钮也带上公告卡（它的查询在卡片里，按 key 失效）
+  const refreshAll = () => {
+    refetchAll()
+    void qc.invalidateQueries({ queryKey: [...noticeKeys.feedAll(), 'list'] })
+  }
+  // 开着哪条公告进 URL（硬纪律 2）；只动 `notice` 一个键
+  const openNotice = (id: string | undefined) => onSearchChange?.({ ...search, notice: id })
 
   const fails = today.data?.loginFails ?? 0
 
@@ -90,12 +112,16 @@ export function DashboardPage() {
             </div>
             <Button
               variant="outline" size="sm" data-testid="dash-refresh"
-              disabled={refreshing} onClick={refetchAll}
+              disabled={refreshing} onClick={refreshAll}
             >
               {refreshing ? <IconLoader2 className="size-4 animate-spin" /> : <IconRefresh className="size-4" />}
               {t('刷新')}
             </Button>
           </div>
+
+          {/* 公告卡排在管理员那批指标**前面**、也在下面那条错误条前面：它对所有人都有用，
+              而错误条（普通用户这里是「没有权限」）说的是它下面那些卡，不该把公告也一起罩住 */}
+          <DashboardNoticeCard onOpen={openNotice} />
 
           {Boolean(firstError) && (
             <QueryError error={firstError} onRetry={refetchAll} testId="dash-error" />
@@ -254,6 +280,14 @@ export function DashboardPage() {
           </p>
         </div>
       </div>
+
+      {/* 开在 URL 上 → 抽屉 portal 挂进本 tab 的根节点（reader-sheet 的注释） */}
+      <NoticeReaderSheet
+        noticeId={search.notice ?? null}
+        onOpenChange={(o) => {
+          if (!o) openNotice(undefined)
+        }}
+      />
     </div>
   )
 }

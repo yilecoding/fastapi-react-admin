@@ -15,7 +15,7 @@ end $$;
 
 select setval(pg_get_serial_sequence('sys_menu', 'id'), coalesce(max(id), 0) + 1, true) from sys_menu;
 
-insert into sys_notice (id, title, type, status, content, created_time, updated_time)
+insert into sys_notice (id, title, type, status, content, created_time, updated_time, pinned, level)
 values (1, 'hahahahahaahahaha', 0, 1, '你好😄
 
 ```
@@ -32,6 +32,6 @@ print(''fba yyds'')
 * 1
 * 2
 * 3
-', '2025-12-15 15:33:16', null);
+', '2025-12-15 15:33:16', null, false, 0);
 
 select setval(pg_get_serial_sequence('sys_notice', 'id'),coalesce(max(id), 0) + 1, true) from sys_notice;

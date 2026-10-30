@@ -1,4 +1,5 @@
-import { BellIcon, TriangleAlertIcon } from 'lucide-react-native'
+import { useRouter } from 'expo-router'
+import { BellIcon, ChevronRightIcon, TriangleAlertIcon } from 'lucide-react-native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import * as React from 'react'
@@ -6,7 +7,8 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from '
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Group } from '@/components/grouped'
+import { Chevron, Group } from '@/components/grouped'
+import { AttachmentCount } from '@/components/notice'
 import { Icon } from '@/components/ui/icon'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -14,6 +16,7 @@ import { Text } from '@/components/ui/text'
 import { api } from '@/lib/api'
 import { NOTIFICATION_CATEGORY, type Notification } from '@/lib/contract'
 import { relativeTime } from '@/lib/datetime'
+import { noticeIdFromSource, noticesKey } from '@/lib/notices'
 import { useUnread } from '@/lib/notifications'
 
 type Filter = 'all' | 'unread'
@@ -27,6 +30,7 @@ type Filter = 'all' | 'unread'
 export default function NotificationsScreen() {
   const { t } = useTranslation()
   const qc = useQueryClient()
+  const router = useRouter()
   const { refresh: refreshUnread, unread, known: unreadKnown } = useUnread()
   const [filter, setFilter] = React.useState<Filter>('all')
 
@@ -81,14 +85,32 @@ export default function NotificationsScreen() {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['notifications', 'list'] }),
         refreshUnread(),
+        // 公告的已读跟着收件箱这一行走 —— 首页「公告」组的未读圆点也要跟着变
+        qc.invalidateQueries({ queryKey: noticesKey.feeds }),
       ])
     }
+  }
+
+  /**
+   * 点一行：标已读（和原来一样）；公告来的那一行再推到公告详情。
+   *
+   * ⚠️ 其余分类的 `link` 是 **web 的路由**（`/profile`、`/task/...`），移动端没有对应页面，
+   * 仍然只标已读不跳。认公告靠 `source`（`notice:<id>`），**不靠解析 `link`** ——
+   * 链接是给 web 用的，形状随 web 的路由改。
+   */
+  function onPressRow(n: Notification) {
+    void markRead(n)
+    const noticeId = noticeIdFromSource(n.source)
+    if (noticeId) router.push({ pathname: '/notices/[id]', params: { id: noticeId } })
   }
 
   const markAll = useMutation({
     mutationFn: () => api.PUT('/api/v1/sys/notifications/read-all'),
     onSettled: async () => {
-      await Promise.all([qc.invalidateQueries({ queryKey: ['notifications'] })])
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['notifications'] }),
+        qc.invalidateQueries({ queryKey: noticesKey.feeds }),
+      ])
     },
   })
 
@@ -155,7 +177,7 @@ export default function NotificationsScreen() {
         ) : (
           <Group className="mx-0">
             {items.map((n, i) => (
-              <NotifRow key={n.id} n={n} first={i === 0} onPress={() => void markRead(n)} />
+              <NotifRow key={n.id} n={n} first={i === 0} onPress={() => onPressRow(n)} />
             ))}
           </Group>
         )}
@@ -167,24 +189,35 @@ export default function NotificationsScreen() {
 function NotifRow({ n, first, onPress }: { n: Notification; first?: boolean; onPress: () => void }) {
   const { t } = useTranslation()
   const unread = !n.read_time
+  // 公告来的那一行能点进详情 —— 给一枚 chevron，否则它和「只标已读」的行长得一样，没人知道能点进去
+  const opensNotice = noticeIdFromSource(n.source) !== null
   return (
     <>
       {first ? null : <View className="bg-border ml-5 h-px" />}
-      <Pressable onPress={onPress} className="active:bg-muted gap-1.5 px-5 py-3.5">
-        <View className="flex-row items-center gap-2">
-          {/* 未读只用一枚主色圆点 —— 不要把分类标签染成主色，
-              那是「状态」和「分类」两回事混在一起 */}
-          {unread ? <View className="bg-primary h-1.5 w-1.5 rounded-full" /> : null}
-          <Text className="text-muted-foreground text-[11px]">
-            {t(NOTIFICATION_CATEGORY[n.category] ?? '通知')}
+      <Pressable
+        onPress={onPress}
+        testID={opensNotice ? 'notification-row-notice' : 'notification-row'}
+        className="active:bg-muted flex-row items-center gap-2 px-5 py-3.5"
+      >
+        <View className="flex-1 gap-1.5">
+          <View className="flex-row items-center gap-2">
+            {/* 未读只用一枚主色圆点 —— 不要把分类标签染成主色，
+                那是「状态」和「分类」两回事混在一起 */}
+            {unread ? <View className="bg-primary h-1.5 w-1.5 rounded-full" /> : null}
+            <Text className="text-muted-foreground text-[11px]">
+              {t(NOTIFICATION_CATEGORY[n.category] ?? '通知')}
+            </Text>
+            {/* 📎：来源对象（公告）**现在**的附件数，后端查询时现算的 —— 发布之后再挂的也算 */}
+            <AttachmentCount count={n.attachment_count} />
+            <View className="flex-1" />
+            <Text className="text-muted-foreground font-mono text-[11px]">{relativeTime(n.created_time)}</Text>
+          </View>
+          <Text className={`text-[15px] ${unread ? 'font-semibold' : ''}`}>{n.title}</Text>
+          <Text variant="small" className="text-muted-foreground leading-5" numberOfLines={2}>
+            {n.content}
           </Text>
-          <View className="flex-1" />
-          <Text className="text-muted-foreground font-mono text-[11px]">{relativeTime(n.created_time)}</Text>
         </View>
-        <Text className={`text-[15px] ${unread ? 'font-semibold' : ''}`}>{n.title}</Text>
-        <Text variant="small" className="text-muted-foreground leading-5" numberOfLines={2}>
-          {n.content}
-        </Text>
+        {opensNotice ? <Chevron icon={ChevronRightIcon} /> : null}
       </Pressable>
     </>
   )

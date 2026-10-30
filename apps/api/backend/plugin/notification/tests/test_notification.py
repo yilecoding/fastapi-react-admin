@@ -268,8 +268,10 @@ def test_publishing_a_notice_lands_in_the_inbox(
     try:
         item = _find(_list(client, token_headers, category=1), title)
         assert item is not None
-        # 正文**不**复制进通知（会变成两份各自过期的真相），只留链接
-        assert item['link'] == '/plugins/notice'
+        # 正文**不**复制进通知（会变成两份各自过期的真相），只留链接。
+        # 🔴 链接指向消息中心就地打开这一条，不是管理页 —— 管理页要 `sys:notice:add`，普通用户点进去 403（#186）
+        assert item['link'] == f'/notification?notice={notice_id}'
+        assert item['source'] == f'notice:{notice_id}'
     finally:
         client.request('DELETE', NOTICES, headers=token_headers, json={'pks': [notice_id]})
 

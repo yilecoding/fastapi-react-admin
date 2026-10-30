@@ -184,7 +184,7 @@ class SchemaBase(BaseModel):
         # ⚠️ 只影响**序列化**（响应）。请求体那一侧 pydantic 走的是校验 schema，
         # 仍然声明 `integer` —— 前端回传 ID 时 FastAPI 会把 `"123"` 强转成 int，
         # 所以能用，但**声明上仍然不准**。那要在入参侧另加标注，是另一件事。
-        @field_serializer('dept_id', 'parent_id', 'recipient_id', check_fields=False)
+        @field_serializer('dept_id', 'parent_id', 'recipient_id', 'notification_id', check_fields=False)
         def serialize_nullable_fk(self, value: int | None) -> str | int | None:
             if value is not None and self.model_config.get('from_attributes'):
                 return str(value)

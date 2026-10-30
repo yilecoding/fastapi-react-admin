@@ -43,6 +43,7 @@ export default function AppLayout() {
       <Stack.Screen name="users/index" options={{ title: t('用户') }} />
       {/* ⚠️ 动态段的 `name` 用的是**文件名**（`users/[id]`），不是拼好的路径 */}
       <Stack.Screen name="users/[id]" options={{ title: t('用户详情') }} />
+      <Stack.Screen name="notices/[id]" options={{ title: t('公告详情') }} />
     </Stack>
   )
 }

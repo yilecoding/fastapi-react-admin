@@ -9,7 +9,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/to
 import { cn } from '@admin/ui/lib/utils'
 
 import { StatusPill } from '../_shared/status'
-import type { Notification } from './api'
+import { AttachmentCount } from '../notice/shared'
+import { noticeIdOf, type Notification } from './api'
 import type { NotificationLink } from './use-open'
 import { categoryMeta, type TFn } from './shared'
 import type { features } from './table-features'
@@ -22,6 +23,8 @@ export function buildColumns(
   /** 未读才发已读请求 */
   readIfUnread: (n: Notification) => void,
   onMarkRead: (n: Notification) => void,
+  /** 公告那一行就地打开详情（写进本页 search 的 `notice`，见 `index.tsx`） */
+  onOpenNotice: (noticeId: string) => void,
   /** 普通函数不能自己调 hook —— 由组件传进来（i18n 分册第 5 条） */
   t: TFn
 ) {
@@ -30,16 +33,19 @@ export function buildColumns(
       header: t('标题'),
       cell: ({ row, getValue }) => {
         const n = row.original
-        const to = linkOf(n)
+        // 公告认 `source` 不认 `link`（见 `noticeIdOf`）：就地开详情，不跳管理页
+        const noticeId = noticeIdOf(n)
+        const to = noticeId ? null : linkOf(n)
         const className = cn(
           'flex max-w-[18rem] items-center gap-1.5 truncate text-start text-sm underline-offset-2 hover:underline',
-          to ? 'text-primary' : 'text-foreground',
+          to || noticeId ? 'text-primary' : 'text-foreground',
           // 未读加粗 —— 「状态」列之外再给一个不用横向找的信号
           !n.read_time && 'font-semibold'
         )
         const body = (
           <>
             <span className="truncate">{getValue()}</span>
+            <AttachmentCount count={n.attachment_count} />
             {to && <IconExternalLink className="size-3.5 shrink-0 opacity-60" />}
           </>
         )
@@ -61,9 +67,13 @@ export function buildColumns(
         ) : (
           <button
             type="button"
-            onClick={() => readIfUnread(n)}
+            onClick={() => {
+              readIfUnread(n)
+              if (noticeId) onOpenNotice(noticeId)
+            }}
             data-testid={`open-notification-${n.id}`}
             data-unread={!n.read_time}
+            data-notice-id={noticeId ?? undefined}
             className={className}
           >
             {body}

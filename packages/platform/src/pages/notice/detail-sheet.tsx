@@ -1,21 +1,25 @@
 import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
-import { RichTextViewer } from '@admin/ui/components/rich-text'
 import { useTranslation } from 'react-i18next'
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from '@admin/ui/components/sheet'
 
 import { StatusPill } from '../_shared/status'
-import { FileAttachments } from '../file/attachments'
-import { NOTICE_ATTACHMENT_TARGET, NOTICE_TYPE_LABEL, type Notice } from './api'
+import { NOTICE_TYPE_LABEL, isExpired, type Notice } from './api'
+import { NoticeArticle } from './article'
+import { NoticeLevelPill, PinnedMark } from './shared'
 
 /**
- * 全文查看。
+ * 管理页的「查看」抽屉。
  *
- * 列表里只放一行摘要（正文是 NVARCHAR(MAX)，塞进单元格会把行撑烂），
- * 点标题在这里看完整内容。正文按纯文本渲染 —— 后端存的就是纯文本，
- * 这里**不做 HTML 渲染**，否则等于把富文本 XSS 面开在管理端。
+ * 列表里只放一行摘要（正文是 NVARCHAR(MAX)，塞进单元格会把行撑烂），点标题在这里看全文。
+ * 数据就是列表那一行（管理端接口带正文），所以隐藏 / 过期的也看得到 ——
+ * 读者那份（`reader-sheet.tsx`）走 `/feed`，看不到这两种。
+ *
+ * 正文 + 附件那一段和读者共用 `NoticeArticle`：**附件在这里是只读的**，
+ * 挂 / 摘附件挪进了新增 / 编辑表单（#186：原来要先保存、再来这里传，
+ * 而状态默认「显示」，一保存就发了广播 —— 读者收到通知时附件还没挂上）。
  */
 export function NoticeDetailSheet({
   notice, onOpenChange,
@@ -42,34 +46,19 @@ export function NoticeDetailSheet({
                 ) : (
                   <StatusPill tone="muted">{t('隐藏')}</StatusPill>
                 )}
+                {isExpired(notice.expire_time) && <StatusPill tone="muted">{t('已过期')}</StatusPill>}
+                <NoticeLevelPill level={notice.level} />
+                {notice.pinned && <PinnedMark withLabel />}
                 <span className="font-mono text-xs tabular-nums">
                   {t('创建 {{at}}', { at: formatDateTime(notice.created_time) })}
                   {notice.updated_time ? t(' · 更新 {{at}}', { at: formatDateTime(notice.updated_time) }) : ''}
+                  {notice.expire_time ? t(' · {{at}} 过期', { at: formatDateTime(notice.expire_time) }) : ''}
                 </span>
               </SheetDescription>
             </SheetHeader>
 
-            <div className="flex-1 overflow-y-auto px-4 py-2">
-              {/*
-                正文是富文本 HTML。用 RichTextViewer 而不是 dangerouslySetInnerHTML：
-                它走 Tiptap 的 schema 解析，schema 外的标签属性（script / onerror /
-                javascript: 链接）在解析阶段就被丢掉，比事后过滤可靠。
-              */}
-              <RichTextViewer
-                value={notice.content}
-                data-testid="notice-detail-content"
-              />
-
-              {/*
-                附件。`sys_file_relation` 的唯一界面入口 —— 这里的「移除」只解开关联，
-                文件本身留在「文件管理」里。放在详情抽屉而不是编辑表单里，是因为
-                挂载需要 `notice.id`，而新建表单在保存前还没有 id。
-              */}
-              <FileAttachments
-                targetType={NOTICE_ATTACHMENT_TARGET}
-                targetId={notice.id}
-                className="mt-6"
-              />
+            <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-2">
+              <NoticeArticle id={notice.id} content={notice.content} />
             </div>
           </>
         )}

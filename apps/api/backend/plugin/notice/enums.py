@@ -6,3 +6,11 @@ class NoticeType(IntEnum):
 
     NOTICE = 0
     ANNOUNCEMENT = 1
+
+
+class NoticeLevel(IntEnum):
+    """通知公告级别"""
+
+    NORMAL = 0
+    IMPORTANT = 1
+    URGENT = 2

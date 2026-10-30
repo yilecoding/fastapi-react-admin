@@ -9,6 +9,7 @@ import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { NoticeReaderSheet } from '../notice/reader-sheet'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
@@ -81,6 +82,11 @@ export type NotificationPageSearch = {
   category?: number
   /** 1 未读 · 0 已读 */
   unread?: number
+  /**
+   * 正在读的公告（雪花 ID，字符串）。开在 URL 上：刷新还在，
+   * 群机器人卡片 / 收件箱的 `link`（`/notification?notice=…`）也靠它直接打开那一条
+   */
+  notice?: string
 }
 
 /**
@@ -132,10 +138,25 @@ export function NotificationPage({
 
   const { linkOf, readIfUnread } = useNotificationOpen()
   const handleMarkRead = React.useCallback((n: Notification) => markRead.mutate(n.id), [markRead])
+  // 只改 `notice` 一个键，筛选 / 分页原样留着 —— 关掉详情回到的还是刚才那一页
+  const openNotice = React.useCallback(
+    (id: string | undefined) => onSearchChange?.({ ...search, notice: id }),
+    [onSearchChange, search]
+  )
+  // 点那一行打开的：行上已经 `readIfUnread` 过了，抽屉别再标一次（两个 PUT 抢着发，代码评审指出）。
+  // 从地址栏直接打开的（群机器人卡片的深链 `/notification?notice=…`）没有这一步，由抽屉标
+  const [openedFromRow, setOpenedFromRow] = React.useState(false)
+  const openNoticeFromRow = React.useCallback(
+    (id: string) => {
+      setOpenedFromRow(true)
+      openNotice(id)
+    },
+    [openNotice]
+  )
 
   const columns = React.useMemo(
-    () => buildColumns(linkOf, readIfUnread, handleMarkRead, t),
-    [linkOf, readIfUnread, handleMarkRead, t]
+    () => buildColumns(linkOf, readIfUnread, handleMarkRead, openNoticeFromRow, t),
+    [linkOf, readIfUnread, handleMarkRead, openNoticeFromRow, t]
   )
 
   const table = useTable({
@@ -225,6 +246,17 @@ export function NotificationPage({
           </div>
         </div>
       </div>
+
+      {/* 开在 URL 上 → 抽屉里用的是本 tab 的 portal 容器（reader-sheet 的注释） */}
+      <NoticeReaderSheet
+        noticeId={search.notice ?? null}
+        rowAlreadyMarked={openedFromRow}
+        onOpenChange={(o) => {
+          if (o) return
+          setOpenedFromRow(false)
+          openNotice(undefined)
+        }}
+      />
 
       <ConfirmDialog
         open={markAllOpen}

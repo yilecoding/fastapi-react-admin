@@ -65,14 +65,19 @@ export const todayStatsQuery = queryOptions({
 
 export type ScaleStats = { users: number; roles: number; notices: number }
 
-/** 平台规模。变化很慢，缓存久一点。 */
+/**
+ * 平台规模。变化很慢，缓存久一点。
+ *
+ * 公告数走读者那个口（`/feed`：显示中、没过期的）。原来数的是管理端的 `/sys/notices`，
+ * 把隐藏的、「通知」类型的都算进去了；而那个口现在要 `sys:notice:add`（#186）。
+ */
 export const scaleStatsQuery = queryOptions({
   queryKey: dashKeys.scale(),
   queryFn: async (): Promise<ScaleStats> => {
     const [users, roles, notices] = await Promise.all([
       countOf('/api/v1/sys/users', {}),
       countOf('/api/v1/sys/roles', {}),
-      countOf('/api/v1/sys/notices', {}),
+      countOf('/api/v1/sys/notices/feed', {}),
     ])
     return { users, roles, notices }
   },

@@ -1,20 +1,29 @@
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
-import { BellIcon, ChevronRightIcon, UserRoundIcon, UsersIcon } from 'lucide-react-native'
+import { BellIcon, ChevronRightIcon, TriangleAlertIcon, UserRoundIcon, UsersIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { RefreshControl, ScrollView, View } from 'react-native'
 
 import { BrandTop } from '@/components/brand-top'
 import { Chevron, Group, GroupHeader, PressRow, Row, RowIcon } from '@/components/grouped'
+import { NoticeRow } from '@/components/notice'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
+import { useNoticeFeed } from '@/lib/notices'
 import { useUnread } from '@/lib/notifications'
 import { usePerm } from '@/lib/perm'
 import { useSession } from '@/lib/session'
+
+/** 首页放几条公告。只是「最近有什么」，翻全部去通知屏的「全部」 */
+const HOME_NOTICE_COUNT = 3
 
 export default function HomeScreen() {
   const { t } = useTranslation()
   const { user, reload } = useSession()
   const { unread, refresh: refreshUnread } = useUnread()
+  const feed = useNoticeFeed(HOME_NOTICE_COUNT)
   // ⚠️ 只在**确实知道**有权限时才放这个入口。`known` 为假（权限码没问上）时
   // 不出现 —— 那一层的错误提示统一在「应用」那一屏兜住，首页不重复报一遍
   const { can, known: permKnown } = usePerm()
@@ -24,7 +33,8 @@ export default function HomeScreen() {
   async function onRefresh() {
     setRefreshing(true)
     try {
-      await Promise.all([reload(), refreshUnread()])
+      // 公告那一组的失败有自己的错误块（下面），这里不用再管
+      await Promise.all([reload(), refreshUnread(), feed.refetch()])
     } catch {
       // 首页刷新失败不值得打断 —— 数据还是上一次那份，个人中心那屏有完整的错误态
     } finally {
@@ -49,6 +59,49 @@ export default function HomeScreen() {
           </Text>
         </View>
       </BrandTop>
+
+      {/*
+        公告（#186）：最近几条，置顶在前。三种状态必须长得不一样（硬纪律 9）——
+        拉取失败如果渲染成「暂无公告」，读者会以为真的没有公告。
+        ⚠️ 下拉刷新失败时**留着上一次的列表**，不换成错误块：内容还是能读的。
+      */}
+      <GroupHeader>{t('公告')}</GroupHeader>
+      {feed.data ? (
+        <Group>
+          {feed.data.items.length === 0 ? (
+            <Row first>
+              <Text className="text-muted-foreground text-[14px]" testID="home-notice-empty">
+                {t('暂无公告')}
+              </Text>
+            </Row>
+          ) : (
+            feed.data.items.map((n, i) => (
+              <NoticeRow
+                key={String(n.id)}
+                notice={n}
+                first={i === 0}
+                // 🔴 ID 原样当字符串，不要 `Number()`（硬纪律 6）
+                onPress={() => router.push({ pathname: '/notices/[id]', params: { id: String(n.id) } })}
+              />
+            ))
+          )}
+        </Group>
+      ) : feed.isError ? (
+        <View className="px-4">
+          <Alert variant="destructive" icon={TriangleAlertIcon}>
+            <AlertTitle>{t('公告拉取失败')}</AlertTitle>
+            <AlertDescription>{feed.error instanceof Error ? feed.error.message : String(feed.error)}</AlertDescription>
+            <Button variant="outline" size="sm" onPress={() => void feed.refetch()} className="mt-2 self-start">
+              <Text>{t('重试')}</Text>
+            </Button>
+          </Alert>
+        </View>
+      ) : (
+        <View className="gap-2 px-4">
+          <Skeleton className="h-[52px] rounded-xl" />
+          <Skeleton className="h-[52px] rounded-xl" />
+        </View>
+      )}
 
       <GroupHeader>{t('我的组织')}</GroupHeader>
       <Group>

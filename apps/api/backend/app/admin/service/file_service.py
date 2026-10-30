@@ -42,6 +42,25 @@ def register_file_access(checker: FileAccessChecker) -> None:
     _ACCESS_CHECKERS.append(checker)
 
 
+#: 业务模块登记的「这个人能不能往这类业务对象上挂 / 卸附件」。签名：`(request.user) -> bool`
+RelationGuard = Callable[[Any], bool]
+_RELATION_GUARDS: dict[str, RelationGuard] = {}
+
+
+def register_relation_guard(target_type: str, guard: RelationGuard) -> None:
+    """同 `register_file_access`，由业务模块自己登记。没登记的 `target_type` 只看 `sys:file:upload`
+
+    🔴 挂附件同时也是**授权**：公告登记了「挂在公告上的文件所有登录用户可读」，于是只有上传权限的人
+    往任意公告上挂一个文件，就等于把它公开给了所有人（#186）。所以挂到这类对象上要业务自己的权限
+    """
+    _RELATION_GUARDS[target_type] = guard
+
+
+def can_change_relations(user: Any, target_type: str) -> bool:
+    guard = _RELATION_GUARDS.get(target_type)
+    return guard is None or guard(user)
+
+
 def _has_perm(user: Any, code: str) -> bool:
     """权限码的算法和 `rbac_verify` 一致：启用的角色 × 启用的菜单"""
     if getattr(user, 'is_superuser', False):
