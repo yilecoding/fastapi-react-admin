@@ -265,8 +265,8 @@ alembic 之前手写 ALTER 加的列守卫抓不到 · 种子数据要配 data m
   pydantic v2 的**默认**行为正好是要的（`2026-08-22T11:59:47+08:00`），
   而且那个 `json_encoders` 本身是 pydantic v2 已废弃的 API
 - **`to_str()` 不出网，出网用 `to_iso()`。** `to_str()` 输出不带时区标记，
-  只能用在日志前缀、和 `from_str()` 成对的 Redis 读写（用户锁定到期时间）、
-  以及靠字符串等值比较的地方（celery 的 `last_update`）。
+  只能用在日志前缀、和 `from_str()` 成对的 Redis 读写（用户锁定到期时间）。⚠️ **只到秒，别拿它当「变没变」的标记**：
+  celery 的 `last_update` 原来就是它，同一秒里两次改动写出同一个值，beat 看不出第二次（#183，[`task` 分册](backend/app/task/AGENTS.md)）。
   绕过了 pydantic 自己拼字符串下发给前端的那几处（token 里的 `last_login_time`、
   监控页 `startup`）必须用 `to_iso()`
 - ⚠️ **改格式后旧 token 里还存着旧格式**：`last_login_time` 是签发时写进
