@@ -63,7 +63,7 @@ test.describe("群机器人", () => {
 
       const card = tab.getByTestId(`bot-card-${name}`)
       await expect(card).toBeVisible()
-      await expect(card).toContainText("已加签")
+      await expect(card).toContainText("已开签名校验")
       // 地址就是凭据：页面上只有掩码
       await expect(tab.getByTestId(`bot-hint-${name}`)).toContainText("6789")
       await expect(tab).not.toContainText(TOKEN)
