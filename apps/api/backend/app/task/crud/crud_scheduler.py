@@ -22,7 +22,10 @@ class CRUDTaskScheduler(DataScopedCRUD[TaskScheduler]):
         return await self.select_model_by_column(db, name=name, deleted=0)
 
     async def get_select(
-        self, name: str | None, task: str | None, enabled: bool | None  # ruff:ignore[boolean-type-hint-positional-argument]
+        self,
+        name: str | None,
+        task: str | None,
+        enabled: bool | None,  # ruff:ignore[boolean-type-hint-positional-argument]
     ) -> Select:
         filters: dict = {'deleted': 0}
         if name:
@@ -36,20 +39,34 @@ class CRUDTaskScheduler(DataScopedCRUD[TaskScheduler]):
     async def get_all(self, db: AsyncSession) -> Sequence[TaskScheduler]:
         return await self.select_models(db, deleted=0)
 
+    # 🔴 下面四个写操作每个都要 `touch_last_update_after_commit`（#183）：改 / 启停 / 删走的是
+    # crud-plus 的 Core `UPDATE`，model 上的 ORM 事件一个都不响，不显式打标记 beat 要到重启才知道。
+    # 新建走 `session.add`，ORM 事件本来就会登记；这里再显式登记一次，防的是哪天它也改成 Core 语句。
+    # 放在 DAO 而不是 service：不管哪个 service 调进来，写这张表的就这几个方法
+
     async def create(self, db: AsyncSession, obj: CreateTaskSchedulerParam) -> TaskScheduler:
         # flush=True：id 由数据库生成，不 flush 就返回会让响应序列化 500
-        return await self.create_model(db, obj, flush=True)
+        created = await self.create_model(db, obj, flush=True)
+        TaskScheduler.touch_last_update_after_commit(db)
+        return created
 
     async def update(self, db: AsyncSession, pk: int, obj: UpdateTaskSchedulerParam) -> int:
-        return await self.update_model_by_column(db, obj, id=pk, deleted=0)
+        count = await self.update_model_by_column(db, obj, id=pk, deleted=0)
+        TaskScheduler.touch_last_update_after_commit(db)
+        return count
 
     async def set_enabled(
-        self, db: AsyncSession, pk: int, enabled: bool  # ruff:ignore[boolean-type-hint-positional-argument]
+        self,
+        db: AsyncSession,
+        pk: int,
+        enabled: bool,  # ruff:ignore[boolean-type-hint-positional-argument]
     ) -> int:
-        return await self.update_model_by_column(db, {'enabled': enabled}, id=pk, deleted=0)
+        count = await self.update_model_by_column(db, {'enabled': enabled}, id=pk, deleted=0)
+        TaskScheduler.touch_last_update_after_commit(db)
+        return count
 
     async def delete(self, db: AsyncSession, pks: list[int]) -> int:
-        return await self.delete_model_by_column(
+        count = await self.delete_model_by_column(
             db,
             allow_multiple=True,
             logical_deletion=True,
@@ -60,6 +77,8 @@ class CRUDTaskScheduler(DataScopedCRUD[TaskScheduler]):
             id__in=pks,
             deleted=0,
         )
+        TaskScheduler.touch_last_update_after_commit(db)
+        return count
 
 
 class CRUDTaskResult(DataScopedCRUD[TaskExtended]):

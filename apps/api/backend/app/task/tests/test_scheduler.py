@@ -132,6 +132,22 @@ def test_start_time_wins_over_now_for_last_run_at():
     assert e.last_run_at == start
 
 
+def test_last_run_at_is_converted_to_the_app_timezone():
+    """🔴 库里读出来是 UTC（PostgreSQL 的会话时区）也要换算成应用时区再交给 celery。
+
+    crontab 拿 last_run_at 的 `.day` / `.hour` 和本地 now 比，不换算的话北京时间 0～8 点
+    按 UTC 的钟点算下次触发（每天 02:30 的任务会在 10:30 再跑一次）。行为层面的那条在
+    `test_scheduler_timing.py::test_crontab_reloaded_from_db_keeps_the_local_wall_clock`，只有 PostgreSQL 红得出来；
+    这条在哪个方言的 CI 上都守得住。
+    """
+    from datetime import UTC
+
+    utc = timezone.now().astimezone(UTC)
+    e = ModelEntry(make_row(crontab='30 2 * * *', last_run_time=utc))
+    assert e.last_run_at == utc
+    assert e.last_run_at.utcoffset() == timezone.now().utcoffset()
+
+
 # ── all_as_schedule 的隔离性 ────────────────────────────────────────────────
 
 
@@ -171,11 +187,14 @@ def test_one_broken_row_does_not_kill_the_rest(monkeypatch):
     **beat 起不来** —— 所有定时任务一起停摆，而日志里只有一句
     ValueError，看不出是哪一条。
     """
-    _patch_session(monkeypatch, [
-        make_row(id=1, name='好的', crontab='15 3 * * *'),
-        make_row(id=2, name='坏的', crontab='坏表达式'),
-        make_row(id=3, name='也好的', type=0, interval_every=10, interval_period='seconds'),
-    ])
+    _patch_session(
+        monkeypatch,
+        [
+            make_row(id=1, name='好的', crontab='15 3 * * *'),
+            make_row(id=2, name='坏的', crontab='坏表达式'),
+            make_row(id=3, name='也好的', type=0, interval_every=10, interval_period='seconds'),
+        ],
+    )
     s = DatabaseScheduler.__new__(DatabaseScheduler)
     s.app = None
     entries = DatabaseScheduler.all_as_schedule(s)
@@ -193,6 +212,30 @@ def test_soft_deleted_rows_are_filtered(monkeypatch):
     s = DatabaseScheduler.__new__(DatabaseScheduler)
     s.app = None
     assert set(DatabaseScheduler.all_as_schedule(s)) == {'活的'}
+
+
+def test_retired_rows_are_not_loaded(monkeypatch):
+    """🔴 停用 / 过期 / one_off 跑完的不进 beat（#183）。
+
+    进了也不会触发，但它们按 `now + 60` 进堆，一排到堆顶就把所有调度堵死 —— celery 的
+    `tick()` 对没到期的堆顶原样留着。还没到 start_time 的要照样载入：到点它得自己开始跑。
+    变异：去掉 `all_as_schedule` 里的 `is_retired` → 红。
+    """
+    now = timezone.now()
+    _patch_session(
+        monkeypatch,
+        [
+            make_row(id=1, name='正常', crontab='* * * * *'),
+            make_row(id=2, name='停用', crontab='* * * * *', enabled=False),
+            make_row(id=3, name='过期', crontab='* * * * *', expire_time=now - timedelta(minutes=1)),
+            make_row(id=4, name='一次性跑完', crontab='* * * * *', one_off=True, total_run_count=1),
+            make_row(id=5, name='一次性没跑', crontab='* * * * *', one_off=True, total_run_count=0),
+            make_row(id=6, name='还没开始', crontab='* * * * *', start_time=now + timedelta(hours=1)),
+        ],
+    )
+    s = DatabaseScheduler.__new__(DatabaseScheduler)
+    s.app = None
+    assert set(DatabaseScheduler.all_as_schedule(s)) == {'正常', '一次性没跑', '还没开始'}
 
 
 # ── 变更标记 ────────────────────────────────────────────────────────────────
@@ -220,6 +263,90 @@ def test_touch_last_update_works_without_event_loop(monkeypatch):
     assert next(iter(written)).endswith(':last_update')
 
 
+def test_touch_last_update_never_writes_the_same_marker_twice(monkeypatch):
+    """🔴 同一秒里打两次，beat 也得看得出是两次（#183）。
+
+    beat 只比「和上次读到的相不相等」。原来写的是精确到秒的时间：开关连点两下，
+    或者新建时提交前的 ORM 事件和提交后的那次各打一下，写出同一个值 —— 第二次 beat 看不见，
+    停在第一次的状态。变异：值改回 `timezone.to_str(timezone.now())` → 红。
+    """
+    values: list[str] = []
+
+    class _FakeRedis:
+        async def set(self, k, v):
+            values.append(v)
+
+    import backend.database.redis as redis_mod
+
+    monkeypatch.setattr(redis_mod, 'redis_client', _FakeRedis())
+    frozen = timezone.now()
+    monkeypatch.setattr(timezone, 'now', lambda: frozen)
+    TaskScheduler.touch_last_update()
+    TaskScheduler.touch_last_update()
+    assert values[0] != values[1]
+
+
+def test_marker_write_failure_is_caught_inside_the_task(monkeypatch):
+    """有事件循环时标记是 `create_task` 出去写的，写失败要在协程里接住、记 warning（#183 review）。
+
+    外面那层 try 接不到后台任务的异常：Redis 暂时不可用时只剩一句 asyncio 的
+    「Task exception was never retrieved」，那条「打标记失败、定时重读会补上」的 warning 从来打不出来。
+    变异：去掉 `_write_marker` 里的 try → `gather` 把异常抛出来，红。
+    """
+    import asyncio
+
+    import backend.database.redis as redis_mod
+
+    from backend.app.task.model import scheduler as model_mod
+    from backend.common.log import log
+
+    class _DownRedis:
+        async def set(self, k, v):
+            raise ConnectionError('Redis 暂时不可用')
+
+    monkeypatch.setattr(redis_mod, 'redis_client', _DownRedis())
+    warnings: list[str] = []
+    sink = log.add(lambda message: warnings.append(str(message)), level='WARNING')
+
+    async def main() -> None:
+        TaskScheduler.touch_last_update()  # 有运行中的循环 → create_task
+        await asyncio.gather(*model_mod._background)
+
+    try:
+        asyncio.run(main())
+    finally:
+        log.remove(sink)
+    assert any('打任务调度变更标记失败' in w for w in warnings), warnings
+
+
+def test_unregistered_task_is_reported_once_not_on_every_reload(monkeypatch):
+    """指向未注册任务的调度，同一条只喊一次 ERROR（#183 review）。
+
+    定时重读每 5 分钟读一遍表，不去重就是一天 288 条 ERROR —— 按级别告警的监控被刷屏、最后被静音，
+    真正的错误跟着被淹掉。变异：去掉「喊过就不再喊」→ 红（2 条）。
+    """
+    from types import SimpleNamespace
+
+    _patch_session(monkeypatch, [make_row(id=1, name='改了名的', task='maintenance.old_name', crontab='15 3 * * *')])
+    logged: list[tuple] = []
+    monkeypatch.setattr(sched_mod.logger, 'error', lambda *a, **k: logged.append(a))
+    s = DatabaseScheduler.__new__(DatabaseScheduler)
+    s.app = SimpleNamespace(tasks={'maintenance.prune_logs': object()})
+    s._unregistered_reported = set()
+    DatabaseScheduler.all_as_schedule(s)
+    DatabaseScheduler.all_as_schedule(s)
+    assert len(logged) == 1
+
+
+def test_sync_redis_client_is_reused(monkeypatch):
+    """beat 每拍要读一两次变更标记，不能每次新建客户端 —— 那是每次一条新的 TCP 连接。
+
+    变异：去掉缓存、每次 `redis.Redis(...)` → 红。
+    """
+    monkeypatch.setattr(sched_mod, '_redis_client', None)
+    assert sched_mod._sync_redis() is sched_mod._sync_redis()
+
+
 # ── 调度只有一个来源 ────────────────────────────────────────────────────────
 
 
@@ -238,9 +365,7 @@ def test_beat_schedule_config_is_empty():
     """
     from backend.app.task.celery import celery_app
 
-    assert not celery_app.conf.beat_schedule, (
-        f'beat_schedule 非空但不会生效：{list(celery_app.conf.beat_schedule)}'
-    )
+    assert not celery_app.conf.beat_schedule, f'beat_schedule 非空但不会生效：{list(celery_app.conf.beat_schedule)}'
 
 
 def test_setup_schedule_reads_only_the_database(monkeypatch):

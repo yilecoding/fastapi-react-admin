@@ -225,6 +225,82 @@ def test_soft_delete_hides_from_list(client: TestClient, token_headers, uniq):
     client.request('DELETE', BASE, headers=token_headers, json={'pks': [again.json()['data']['id']]})
 
 
+# ── 通知 beat ───────────────────────────────────────────────────────────────
+
+
+def test_every_write_tells_beat_after_it_commits(client: TestClient, token_headers, uniq, monkeypatch):
+    """🔴 增 / 改 / 启停 / 删都要打变更标记，而且要在**提交之后**打（#183）。
+
+    原来全靠 model 上的 ORM 事件，而改 / 启停 / 删走的是 crud 的 Core 语句、事件不响 ——
+    页面上停用了一条调度，beat 第二天到点照样派发，要重启 beat 才生效。
+
+    「提交之后」靠的是：标记一打，就另开一条连接去读那一行，读得到新值才算数。
+    提交前打的话 beat 可能抢先重载、读到旧行，再把这个标记当成看过了 —— 改动照样丢。
+    变异：去掉编辑 / 启停 / 删除任一处 `touch_last_update_after_commit` → 对应那步红；新建那处有 ORM 事件兜着，
+    DAO 里那次和 `after_insert` 都去掉才红；改成在 DAO 里直接 `touch_last_update()`（提交前）→ 读到旧值，也红。
+    """
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.exc import DBAPIError
+
+    from backend.app.task.model.scheduler import TaskScheduler
+    from backend.tests.utils.db import sync_test_db_url
+
+    engine = create_engine(sync_test_db_url())
+    seen: list = []
+
+    def spy(cls, *args, **kwargs) -> None:
+        with engine.connect() as conn:
+            if conn.dialect.name == 'mssql':
+                # ⚠️ 提交前被调到时（打标记的位置写错了），SQL Server 默认加锁的 READ COMMITTED 会让这次读
+                # 一直等那条未提交的行 —— 而持锁的事务正等着这里返回，两边互等到 CI 超时。
+                # 等 1 秒拿不到锁就算「读不到」，那正是提交前打标记的样子（PostgreSQL / MySQL 读不加锁）
+                conn.exec_driver_sql('SET LOCK_TIMEOUT 1000')
+            try:
+                row = conn.execute(
+                    select(TaskScheduler.crontab, TaskScheduler.enabled, TaskScheduler.deleted).where(
+                        TaskScheduler.name == uniq
+                    )
+                ).first()
+            except DBAPIError as e:
+                if '1222' not in str(e):  # SQL Server 的 Lock request time out period exceeded
+                    raise
+                row = None
+            seen.append(row)
+
+    monkeypatch.setattr(TaskScheduler, 'touch_last_update', classmethod(spy))
+    body = {'name': uniq, 'task': 'maintenance.prune_logs', 'type': 1, 'crontab': '15 3 * * *'}
+    pk = None
+    try:
+        r = client.post(BASE, headers=token_headers, json=body)
+        assert r.status_code == 200, r.text
+        pk = r.json()['data']['id']
+        assert seen and seen[-1] is not None, '新建之后没打标记，或者打在提交之前（另一条连接读不到这一行）'
+
+        n = len(seen)
+        r = client.put(f'{BASE}/{pk}', headers=token_headers, json={**body, 'crontab': '30 4 * * *'})
+        assert r.status_code == 200, r.text
+        assert len(seen) > n, '编辑之后没打标记 —— beat 要到重启才用新的 crontab'
+        assert seen[-1] is not None and seen[-1].crontab == '30 4 * * *', '标记打在提交之前（另一条连接读到的还是旧值）'
+
+        n = len(seen)
+        r = client.put(f'{BASE}/{pk}/status', headers=token_headers, params={'enabled': False})
+        assert r.status_code == 200, r.text
+        assert len(seen) > n, '停用之后没打标记 —— 停了照样到点派发'
+        assert seen[-1] is not None and not seen[-1].enabled, '标记打在提交之前（另一条连接读到的还是旧值）'
+
+        n = len(seen)
+        r = client.request('DELETE', BASE, headers=token_headers, json={'pks': [pk]})
+        assert r.status_code == 200, r.text
+        assert len(seen) > n, '删除之后没打标记 —— 删了照样到点派发'
+        assert seen[-1] is not None and seen[-1].deleted != 0, '标记打在提交之前（另一条连接读到的还是旧值）'
+        pk = None
+    finally:
+        engine.dispose()
+        if pk:
+            # 中途红了也要删掉：留下一条停用的行，修复之前的 beat 会被它堵死（timing 那组用例就会跟着红）
+            client.request('DELETE', BASE, headers=token_headers, json={'pks': [pk]})
+
+
 # ── 执行记录 ────────────────────────────────────────────────────────────────
 
 
