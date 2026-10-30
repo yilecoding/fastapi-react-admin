@@ -1,4 +1,4 @@
-"""通知渠道路由的接口（#166）：系统策略矩阵 · 我的偏好矩阵 · 投递记录 / 重发"""
+"""通知渠道路由的接口（#166）：系统策略矩阵 · 我的偏好矩阵 · 投递记录 / 重发 · 群机器人（二期）"""
 
 from datetime import datetime
 from typing import Annotated
@@ -12,6 +12,13 @@ from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
 from backend.plugin.notification.enums import DeliveryStatus, NotificationChannel
+from backend.plugin.notification.schema.bot import (
+    BotOptions,
+    BotTestResult,
+    CreateBotParam,
+    GetBotDetail,
+    UpdateBotParam,
+)
 from backend.plugin.notification.schema.channel import (
     GetDeliveryDetail,
     GetMyPrefsDetail,
@@ -19,6 +26,7 @@ from backend.plugin.notification.schema.channel import (
     UpdatePoliciesParam,
     UpdatePrefsParam,
 )
+from backend.plugin.notification.service.bot_service import bot_service
 from backend.plugin.notification.service.channel_service import channel_service
 from backend.plugin.notification.service.delivery_service import delivery_service, kick
 
@@ -73,6 +81,7 @@ async def get_deliveries_paginated(
     channel: Annotated[NotificationChannel | None, Query(description='渠道')] = None,
     status: Annotated[DeliveryStatus | None, Query(description='状态')] = None,
     user_id: Annotated[int | None, Query(description='接收人 ID')] = None,
+    bot_id: Annotated[int | None, Query(description='群机器人 ID')] = None,
     start_time: Annotated[datetime | None, Query(description='创建时间起')] = None,
     end_time: Annotated[datetime | None, Query(description='创建时间止')] = None,
 ) -> ResponseSchemaModel[PageData[GetDeliveryDetail]]:
@@ -82,6 +91,7 @@ async def get_deliveries_paginated(
         channel=channel.value if channel else None,
         status=status.value if status else None,
         user_id=user_id,
+        bot_id=bot_id,
         start_time=start_time,
         end_time=end_time,
     )
@@ -115,3 +125,70 @@ async def resend_delivery(db: CurrentSession, pk: Annotated[int, Path(descriptio
         await delivery_service.resend(db, pk)
     await kick()
     return response_base.success()
+
+
+# ── 群机器人（#166 二期）────────────────────────────────────────────────────
+
+
+@router.get(
+    '/bots/options',
+    summary='获取群机器人表单选项（能订阅的通知类型）',
+    dependencies=[Depends(RequestPermission('sys:notification:bot:list')), DependsRBAC],
+)
+async def get_bot_options() -> ResponseSchemaModel[BotOptions]:
+    return response_base.success(data=bot_service.options())
+
+
+@router.get(
+    '/bots',
+    summary='获取全部群机器人（地址掩码）',
+    dependencies=[Depends(RequestPermission('sys:notification:bot:list')), DependsRBAC],
+)
+async def get_bots(db: CurrentSession) -> ResponseSchemaModel[list[GetBotDetail]]:
+    return response_base.success(data=await bot_service.get_list(db))
+
+
+@router.post(
+    '/bots',
+    summary='新增群机器人',
+    dependencies=[Depends(RequestPermission('sys:notification:bot:add')), DependsRBAC],
+)
+async def create_bot(
+    request: Request, db: CurrentSessionTransaction, obj: CreateBotParam
+) -> ResponseSchemaModel[GetBotDetail]:
+    return response_base.success(data=await bot_service.create(db, obj, request.user.id))
+
+
+@router.put(
+    '/bots/{pk}',
+    summary='更新群机器人',
+    dependencies=[Depends(RequestPermission('sys:notification:bot:edit')), DependsRBAC],
+)
+async def update_bot(
+    db: CurrentSessionTransaction, pk: Annotated[int, Path(description='群机器人 ID')], obj: UpdateBotParam
+) -> ResponseSchemaModel[GetBotDetail]:
+    return response_base.success(data=await bot_service.update(db, pk, obj))
+
+
+@router.delete(
+    '/bots/{pk}',
+    summary='删除群机器人',
+    dependencies=[Depends(RequestPermission('sys:notification:bot:del')), DependsRBAC],
+)
+async def delete_bot(
+    db: CurrentSessionTransaction, pk: Annotated[int, Path(description='群机器人 ID')]
+) -> ResponseModel:
+    await bot_service.delete(db, pk)
+    return response_base.success()
+
+
+@router.post(
+    '/bots/{pk}/test',
+    summary='给群机器人发一条测试消息',
+    dependencies=[Depends(RequestPermission('sys:notification:bot:test')), DependsRBAC],
+)
+async def test_bot(
+    db: CurrentSessionTransaction, pk: Annotated[int, Path(description='群机器人 ID')]
+) -> ResponseSchemaModel[BotTestResult]:
+    # 发失败也是 200：结果本身就是这个接口要回答的东西（原因分类 + 对方原话），前端照着显示
+    return response_base.success(data=await bot_service.send_test(db, pk))

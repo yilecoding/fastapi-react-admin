@@ -1,3 +1,4 @@
+from backend.plugin.notification.model.bot import NotificationBot as NotificationBot
 from backend.plugin.notification.model.channel import NotificationDelivery as NotificationDelivery
 from backend.plugin.notification.model.channel import NotificationPolicy as NotificationPolicy
 from backend.plugin.notification.model.channel import NotificationPref as NotificationPref

@@ -21,6 +21,8 @@ import asyncio
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import event as sa_event
+
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
@@ -28,7 +30,7 @@ from backend.common.pagination import paging_data
 from backend.core.conf import settings
 from backend.database.db import async_db_session
 from backend.plugin.notification.crud.crud_channel import notification_delivery_dao
-from backend.plugin.notification.enums import DeliveryStatus
+from backend.plugin.notification.enums import DeliveryStatus, NotificationChannel
 from backend.plugin.notification.kinds import NotificationKind, get_notification_kind
 from backend.plugin.notification.model import NotificationDelivery
 from backend.plugin.notification.service.senders import Outcome, send
@@ -38,6 +40,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.orm import Session
 
     from backend.plugin.notification.service.routing import Route
 
@@ -107,6 +110,123 @@ async def kick() -> None:
         log.warning(f'通知投递任务派发失败（周期调度会补上）：{e!s}')
 
 
+_KICK_FLAG = 'notification_kick_after_commit'
+_LISTENING = 'notification_kick_listening'
+#: 提交后派出去的 kick 协程：只靠 create_task 不留引用的话可能被 GC 回收掉
+_background: set[asyncio.Task[None]] = set()
+
+
+def kick_after_commit(db: AsyncSession) -> None:
+    """提交之后踢一次 worker（给提交不在自己手里的调用方，如公告广播）。同一个会话只挂一次监听；回滚清掉标记"""
+    sync: Session = db.sync_session
+    sync.info[_KICK_FLAG] = True
+    if sync.info.get(_LISTENING):
+        return
+    sync.info[_LISTENING] = True
+    sa_event.listen(sync, 'after_commit', _after_commit)
+    sa_event.listen(sync, 'after_rollback', _after_rollback)
+
+
+def _after_commit(session: Session) -> None:
+    if not session.info.pop(_KICK_FLAG, False):
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    task = loop.create_task(kick())
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+
+
+def _after_rollback(session: Session) -> None:
+    session.info.pop(_KICK_FLAG, None)
+
+
+async def _bot_throttled(pk: int, row: NotificationDelivery) -> int | None:
+    """群机器人发之前自己数：这个机器人这一分钟 / 这一秒已经发了几条。超了返回要等的秒数。
+
+    🔴 不数的话，一次批量审批（30 张单同时出结果）会让钉钉 / 企微第 21 条起全被拒（每个机器人 20 条/分钟），
+    每条白白耗掉一次重试；据转载钉钉超限还会封一段时间。等到下一分钟再发，比撞上去再退避快得多
+    """
+    from backend.plugin.notification.bot_platforms import RATE_LIMITS
+    from backend.plugin.notification.crud.crud_bot import notification_bot_dao
+
+    if row.bot_id is None:
+        return None
+    async with async_db_session() as db:
+        bot = await notification_bot_dao.get(db, row.bot_id)
+        if bot is None or bot.platform not in RATE_LIMITS:
+            return None
+        per_minute, per_second = RATE_LIMITS[bot.platform]
+        now = timezone.now()
+        if (
+            await notification_bot_dao.recent_sends(db, row.bot_id, since=now - timedelta(seconds=60), exclude_id=pk)
+            >= per_minute
+        ):
+            return 60
+        if (
+            per_second
+            and await notification_bot_dao.recent_sends(db, row.bot_id, since=now - timedelta(seconds=1), exclude_id=pk)
+            >= per_second
+        ):
+            # 每秒的上限（飞书 5 次/秒）等一下就过去了，不值得把这一行推到下一轮
+            await asyncio.sleep(1)
+    return None
+
+
+async def _defer_if_throttled(pk: int, row: NotificationDelivery) -> bool:
+    """群机器人这一分钟发够了：推到下一分钟。不算一次尝试 —— 没发出去是我们自己挡的，不是对方拒的"""
+    if row.channel != NotificationChannel.bot.value:
+        return False
+    wait = await _bot_throttled(pk, row)
+    if wait is None:
+        return False
+    async with async_db_session.begin() as db:
+        await notification_delivery_dao.settle(
+            db,
+            pk,
+            status=DeliveryStatus.failed.value,
+            reason='throttled',
+            next_attempt_time=timezone.now() + timedelta(seconds=wait),
+        )
+    return True
+
+
+async def _attempt(row: NotificationDelivery) -> dict[str, Any]:
+    """发一次，算出这一行的终态（要写回的列）"""
+    kind = get_notification_kind(row.kind)
+    if kind is None:
+        return {
+            'status': DeliveryStatus.exhausted.value,
+            'reason': 'kind_missing',
+            'last_error': f'通知类型 {row.kind} 已不存在',
+            'next_attempt_time': None,
+        }
+    result = await send(row, kind)
+    attempts = row.attempts + 1
+    values: dict[str, Any] = {
+        'attempts': attempts,
+        'duration_ms': result.duration_ms,
+        'provider_ref': result.ref,
+        'reason': result.reason,
+        'last_error': result.error,
+        'next_attempt_time': None,
+    }
+    if result.outcome is Outcome.sent:
+        values |= {'status': DeliveryStatus.sent.value, 'sent_time': timezone.now(), 'last_error': None}
+    elif result.outcome is Outcome.unknown:
+        values['status'] = DeliveryStatus.unknown.value
+    elif result.outcome is Outcome.permanent or attempts > settings.NOTIFICATION_RETRY_MAX:
+        values['status'] = DeliveryStatus.exhausted.value
+    else:
+        values |= {
+            'status': DeliveryStatus.failed.value,
+            'next_attempt_time': timezone.now() + timedelta(seconds=next_delay(attempts)),
+        }
+    return values
+
+
 async def _deliver_one(pk: int) -> str | None:
     """抢一行、发、落终态。返回这一行的新状态（没抢到返回 None）"""
     async with async_db_session.begin() as db:
@@ -116,40 +236,20 @@ async def _deliver_one(pk: int) -> str | None:
         row = await notification_delivery_dao.get(db, pk)
     if row is None:
         return None
+    if await _defer_if_throttled(pk, row):
+        return 'throttled'
 
-    kind = get_notification_kind(row.kind)
-    if kind is None:
-        values: dict[str, Any] = {
-            'status': DeliveryStatus.exhausted.value,
-            'reason': 'kind_missing',
-            'last_error': f'通知类型 {row.kind} 已不存在',
-            'next_attempt_time': None,
-        }
-    else:
-        result = await send(row, kind)
-        attempts = row.attempts + 1
-        values = {
-            'attempts': attempts,
-            'duration_ms': result.duration_ms,
-            'provider_ref': result.ref,
-            'reason': result.reason,
-            'last_error': result.error,
-            'next_attempt_time': None,
-        }
-        if result.outcome is Outcome.sent:
-            values |= {'status': DeliveryStatus.sent.value, 'sent_time': timezone.now(), 'last_error': None}
-        elif result.outcome is Outcome.unknown:
-            values['status'] = DeliveryStatus.unknown.value
-        elif result.outcome is Outcome.permanent or attempts > settings.NOTIFICATION_RETRY_MAX:
-            values['status'] = DeliveryStatus.exhausted.value
-        else:
-            values |= {
-                'status': DeliveryStatus.failed.value,
-                'next_attempt_time': timezone.now() + timedelta(seconds=next_delay(attempts)),
-            }
+    values = await _attempt(row)
     try:
         async with async_db_session.begin() as db:
             await notification_delivery_dao.settle(db, pk, **values)
+            if row.bot_id is not None and values['status'] != DeliveryStatus.failed.value:
+                # 机器人卡片上的「最近成功 / 最近失败原因」。还会重试的失败不记：下一次可能就成了
+                from backend.plugin.notification.crud.crud_bot import notification_bot_dao
+
+                await notification_bot_dao.record_result(
+                    db, row.bot_id, ok=values['status'] == DeliveryStatus.sent.value, error=values.get('last_error')
+                )
     except Exception as e:
         # 发出去了但终态没落库：那一行停在 sending，超时后由 reclaim_stale 归成「结果未知」—— 不会被重发
         log.error(f'通知投递 {pk} 更新终态失败（{values.get("status")}）：{e!s}')
@@ -230,6 +330,7 @@ def mask_address(channel: str | None, address: str | None) -> str | None:
     if channel == 'email' and '@' in address:
         name, domain = address.split('@', 1)
         return f'{name[:1]}***@{domain}'
+    # 群机器人的 address 是机器人名称，不是凭据
     return address
 
 

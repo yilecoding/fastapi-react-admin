@@ -9,4 +9,6 @@ register_notification_kind(
     category=NotificationCategory.SYSTEM,
     # 对接方的事件从这一刻起全部停投，邮件默认也发：管理员不一定开着后台
     defaults={'inapp': 'forced', 'email': 'default_on'},
+    # 运维群常订这一条：对接方的事件停投，值班的人要知道
+    bot=True,
 )

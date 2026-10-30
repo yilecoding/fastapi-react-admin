@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 
 import { StatusPill, type Tone } from '../_shared/status'
+import { botReasonLabel } from '../notify-bot/labels'
 import { ERROR_KIND_LABELS } from '../sms-config/api'
 import type { DeliveryStatus } from './api'
 
@@ -54,8 +55,8 @@ export function reasonLabel(t: (k: string) => string, r: string | null): string 
     case 'kind_changed':
       return t('通知类型已变更')
     default:
-      // 短信渠道的失败分类就是短信插件的 `SmsErrorKind`，沿用短信发送日志那份文案
-      return ERROR_KIND_LABELS[r] ? t(ERROR_KIND_LABELS[r]) : r
+      // 短信渠道的失败分类就是短信插件的 `SmsErrorKind`，沿用短信发送日志那份文案；群机器人的在它自己的页面里
+      return botReasonLabel(t, r) ?? (ERROR_KIND_LABELS[r] ? t(ERROR_KIND_LABELS[r]) : r)
   }
 }
 
