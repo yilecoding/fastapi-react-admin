@@ -19,7 +19,7 @@
     "@admin/api": "workspace:*",
     "@admin/i18n": "workspace:*",
     "@expo-google-fonts/jetbrains-mono": "^0.4.1",
-    "@react-navigation/bottom-tabs": "^7.18.18",
+    "@react-navigation/bottom-tabs": "^7.21.0",
     "@rn-primitives/avatar": "^1.5.2",
     "@rn-primitives/checkbox": "^1.5.2",
     "@rn-primitives/label": "^1.5.2",
