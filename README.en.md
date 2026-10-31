@@ -112,4 +112,4 @@ Sign in as `admin` / `123456`. Switching to SQL Server / MySQL, S3, skipping the
 
 ## Acknowledgements
 
-The backend was originally built on [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) (FBA) — its three-layer structure, plugin system and RBAC / data-scope model come from FBA's design. Thanks to its author and contributors 🙏 FBA is also MIT-licensed; its original copyright notice is kept in [`apps/api/LICENSE`](./apps/api/LICENSE).
+The backend was originally built on [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) (FBA) — its three-layer structure, plugin system and RBAC / data-scope model come from FBA's design. Thanks to its author and contributors 🙏 FBA is also MIT-licensed; its original copyright notice is kept in [`apps/api/LICENSE`](./apps/api/LICENSE). Thanks also to [shadcn/ui](https://github.com/shadcn-ui/ui), [TanStack](https://github.com/TanStack), [Tiptap](https://github.com/ueberdosis/tiptap), [file-viewer](https://github.com/flyfish-dev/file-viewer) and the other open-source projects this is built on.
