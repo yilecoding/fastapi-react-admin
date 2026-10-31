@@ -39,15 +39,18 @@ minimumReleaseAgeExclude:
   - expo-router@57.0.18
   - expo-secure-store@57.0.3
 
-# 1.0 前的依赖审计（#193）：有漏洞的**间接**依赖抬到同一大版本里的修复版，不跨大版本。
+# 1.0 前的依赖审计（#193）：有漏洞的**间接**依赖抬到同一大版本里的修复版。
+# 每条选择器都带下界（`>=大版本 <修复版`）—— 只写 `<修复版` 的话，将来哪个包要旧大版本也会被静默抬过去。
 # 直接依赖是改 package.json 升的，不在这里。去掉某一条之前先跑 `pnpm audit --prod` 确认上游已经带上修复版。
 overrides:
-  prosemirror-view@<1.42.3: ^1.42.3        # 富文本粘贴 XSS（GHSA-c8x8-7fp4-3x9w），经 @tiptap/pm 带进来
-  fast-uri@<3.1.6: ^3.1.6                  # 经 @hookform/resolvers → ajv，打进浏览器
-  js-yaml@>=4 <4.3.2: ^4.3.2               # 桌面端 electron-updater 解析更新清单
-  shell-quote@<1.11.0: ^1.11.0             # 移动端 react-native → react-devtools-core（开发期工具）
-  node-forge@<1.4.1: ^1.4.1                # 以下都是 expo CLI 的依赖，不进 App 包
-  compression@<1.8.2: ^1.8.2
-  source-map-js@<1.2.2: ^1.2.2
-  '@xmldom/xmldom@<0.8.15': ^0.8.15
+  prosemirror-view@>=1 <1.42.3: ^1.42.3            # 富文本粘贴 XSS（GHSA-c8x8-7fp4-3x9w），经 @tiptap/pm 带进来
+  fast-uri@>=3 <3.1.6: ^3.1.6                      # 经 @hookform/resolvers → ajv，打进浏览器
+  js-yaml@>=4 <4.3.2: ^4.3.2                       # 桌面端 electron-updater 解析更新清单
+  shell-quote@>=1 <1.11.0: ^1.11.0                 # 移动端 react-native → react-devtools-core（开发期工具）
+  undici@>=7 <7.30.1: ^7.30.1                      # 以下两条经 shadcn CLI → @dotenvx/dotenvx
+  systeminformation@>=5 <5.33.16: ^5.33.16
+  node-forge@>=1 <1.4.1: ^1.4.1                    # 以下都是 expo CLI 的依赖，不进 App 包
+  compression@>=1 <1.8.2: ^1.8.2
+  source-map-js@>=1 <1.2.2: ^1.2.2
+  '@xmldom/xmldom@>=0.8 <0.8.15': ^0.8.15
   brace-expansion@>=5 <5.0.11: ^5.0.11
