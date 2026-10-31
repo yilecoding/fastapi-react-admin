@@ -7,7 +7,7 @@ import jwt
 from fastapi import Depends, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.security.utils import get_authorization_scheme_param
-from jwt import ExpiredSignatureError, PyJWTError
+from jwt import ExpiredSignatureError
 from pydantic_core import from_json
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.authentication import UnauthenticatedUser
@@ -58,7 +58,7 @@ def jwt_decode(token: str) -> TokenPayload:
             raise errors.TokenError(msg=t('error.token.invalid'))
     except ExpiredSignatureError:
         raise errors.TokenError(msg=t('error.token.expired'))
-    except (PyJWTError, Exception):
+    except Exception:  # PyJWTError 和上面缺字段时抛的 TokenError 都归到「无效」
         raise errors.TokenError(msg=t('error.token.invalid'))
     return TokenPayload(
         user_id=int(user_id),

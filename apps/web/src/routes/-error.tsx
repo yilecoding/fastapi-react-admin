@@ -16,8 +16,14 @@ function isTransientApiError(error?: Error): boolean {
  */
 export function ErrorPage({ error: thrown }: { error?: unknown }) {
   const { t } = useTranslation()
-  // router 1.171.39 起把 `error` 标成 unknown —— 本来就是：`throw` 什么都能扔，不一定是 Error
+  // router 1.171.39 起把 `error` 标成 unknown —— 本来就是：`throw` 什么都能扔，不一定是 Error。
+  // 收窄只用在「是不是 ApiError」这种判断上；要显示的文案照旧认任何带字符串 message 的东西，
+  // 不然 `throw { message }` / 库 reject 一个普通对象时，真正的原因就从页面上丢了
   const error = thrown instanceof Error ? thrown : undefined
+  const message =
+    typeof thrown === 'object' && thrown !== null && 'message' in thrown && typeof thrown.message === 'string'
+      ? thrown.message
+      : undefined
 
   /**
    * 🔴 「分片取不到」不是一个 500，它是**版本不一致**：这个标签页开着没刷新，
@@ -67,7 +73,7 @@ export function ErrorPage({ error: thrown }: { error?: unknown }) {
       <div className="space-y-1">
         <h1 className="text-lg font-semibold">{t('出错了')}</h1>
         <p className="max-w-md text-sm text-muted-foreground">
-          {error?.message ?? t('页面渲染时发生未预期的错误。')}
+          {message ?? t('页面渲染时发生未预期的错误。')}
         </p>
       </div>
       {/* 注意：这里不能用 <Link> —— 它可能渲染在 router 之外 */}
