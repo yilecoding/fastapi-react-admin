@@ -10,18 +10,20 @@ import {
   IconKey,
   IconLoader2,
   IconLock,
-  IconQrcode,
   IconShieldCheck,
   IconUser,
 } from "@tabler/icons-react"
 
 import { ApiError } from "@admin/platform/api-client/errors"
 import {
+  isPhoneNumber,
   isSessionEndReason,
   login,
   loginByPhone,
   sendPhoneCaptcha,
   SESSION_END_MESSAGE,
+  shouldReloadCaptcha,
+  SMS_RESEND_SECONDS,
   type MfaChallenge,
   type SessionEndReason,
 } from "@admin/platform/auth/session"
@@ -95,10 +97,10 @@ function writeRemembered(username: string | null) {
   }
 }
 
+/** 扫码登录不做（issue #193）：要一个能派发登录票据的移动端，而移动端把扫码列在「明确不做」里 */
 const METHODS = [
   { value: "password", label: "密码登录", icon: IconKey },
   { value: "phone", label: "手机登录", icon: IconDeviceMobile },
-  { value: "qrcode", label: "扫码登录", icon: IconQrcode },
 ] as const
 
 type Method = (typeof METHODS)[number]["value"]
@@ -137,6 +139,9 @@ function SignInPage() {
   const [smsSending, setSmsSending] = React.useState(false)
   const [smsCooldown, setSmsCooldown] = React.useState(0)
   const [smsSent, setSmsSent] = React.useState(false)
+  // 码发给了哪个号。服务端的冷却是**按号码**算的：改了号，倒计时和「已发送」都不该再挂着 ——
+  // 否则按钮对一个没发过的号锁 60 秒，提示还说「已发送」。改回原来那个号时两样都接着显示
+  const [smsPhone, setSmsPhone] = React.useState("")
   const [phoneError, setPhoneError] = React.useState<string | null>(null)
   const [phonePending, setPhonePending] = React.useState(false)
   React.useEffect(() => {
@@ -144,7 +149,9 @@ function SignInPage() {
     const timer = window.setTimeout(() => setSmsCooldown((c) => c - 1), 1000)
     return () => window.clearTimeout(timer)
   }, [smsCooldown])
-  const phoneOk = /^1[3-9]\d{9}$/.test(phone.trim())
+  const phoneOk = isPhoneNumber(phone)
+  const smsForPhone = smsPhone !== "" && smsPhone === phone.trim()
+  const smsCooling = smsForPhone && smsCooldown > 0
 
   // 单飞：/auth/captcha 限流 5 次 / 30 秒，而 StrictMode 开发期会把 effect 跑两遍。
   // 不去重的话每次开页要吃掉 2 次配额，刷新三次就把自己限流锁死。
@@ -215,6 +222,9 @@ function SignInPage() {
   function leaveMfa() {
     setMfa(null)
     setError(null)
+    // 第一步是手机验证码时，那个码在第一步对上就被后端删了（一次性）：留在框里再点登录必然 403，
+    // 还会给这个账号和 IP 各记一次失败 —— 连点几次就把自己锁了
+    setSmsCode("")
     // 地址栏里第三方登录带来的那枚令牌一起清掉，刷新页面不会又回到第二步
     if (search.mfa) void navigate({ to: "/sign-in", search: { redirect: search.redirect }, replace: true })
     void loadCaptcha()
@@ -239,12 +249,10 @@ function SignInPage() {
       await enter()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("登录失败，请稍后重试"))
-      // 🔴 命中登录限流（429）时**不要**重拉验证码。
-      // /auth/captcha 自己也有配额（5 次 / 30 秒），而这里原来是「任何失败都重拉」——
-      // 用户被登录限流挡住后连点几下，验证码接口也跟着被打满，于是拿到一个
-      // 「验证码加载失败 + 登录也进不去」的双重死锁，且两条提示都不说明真正原因。
-      // 验证码本身没被消费掉，继续用旧的即可。
-      if (!(err instanceof ApiError && err.isRateLimited)) {
+      // 🔴 命中登录限流（429）时**不要**重拉验证码：这里原来是「任何失败都重拉」，
+      // 被登录限流挡住后连点几下，验证码接口（5 次 / 30 秒）也跟着被打满 ——
+      // 「验证码加载失败 + 登录也进不去」的双重死锁。判据和移动端共用（`@admin/api` 的 login.ts）
+      if (shouldReloadCaptcha(err)) {
         void loadCaptcha()
       }
     } finally {
@@ -257,23 +265,24 @@ function SignInPage() {
     setSmsSending(true)
     setPhoneError(null)
     setSmsSent(false)
-    let rateLimited = false
+    let reloadCaptcha = true
+    const target = phone.trim()
     try {
       await sendPhoneCaptcha({
-        phone: phone.trim(),
+        phone: target,
         ...(captchaUuid ? { uuid: captchaUuid, captcha } : {}),
       })
       setSmsSent(true)
-      // 和 `captcha` 业务模板的 60 秒冷却对齐；倒计时只是 UX，真正的闸在服务端
-      setSmsCooldown(60)
+      setSmsPhone(target)
+      // 和 `captcha` 业务模板的冷却对齐；倒计时只是 UX，真正的闸在服务端
+      setSmsCooldown(SMS_RESEND_SECONDS)
     } catch (err) {
-      rateLimited = err instanceof ApiError && err.isRateLimited
+      reloadCaptcha = shouldReloadCaptcha(err)
       setPhoneError(err instanceof ApiError ? err.message : t("验证码发送失败，请稍后重试"))
     } finally {
       setSmsSending(false)
-      // 图形验证码已被服务端消费（对了就消费，错了也要换一张）；命中限流（429）时限流器在 handler 之前就拦了、
-      // 它没被消费，继续用旧的 —— 而且 /auth/captcha 自己也有配额，跟着重拉就是密码登录那条注释说的双重死锁
-      if (captchaUuid && !rateLimited) void loadCaptcha()
+      // 图形验证码已被服务端消费（对了就消费，错了也要换一张）；命中限流（429）时没被消费，继续用旧的
+      if (captchaUuid && reloadCaptcha) void loadCaptcha()
     }
   }
 
@@ -365,7 +374,7 @@ function SignInPage() {
             {mfa ? (
               <MfaStep challenge={mfa} onDone={enter} onBack={leaveMfa} />
             ) : (
-            /* 三个面板给同一个 min-h：切登录方式时「欢迎回来」不会上下跳 */
+            /* 两个面板给同一个 min-h：切登录方式时「欢迎回来」不会上下跳 */
             <Tabs value={method} onValueChange={(v) => setMethod(v as Method)} className="mt-7">
               {/* 下划线页签而不是胶囊组：胶囊是 shadcn 的默认长相，一眼就是模板 */}
               <TabsList variant="line" className="h-auto w-full justify-start gap-6 rounded-none border-b border-border p-0">
@@ -524,13 +533,13 @@ function SignInPage() {
                         variant="outline"
                         className="h-11 w-[108px] shrink-0"
                         data-testid="sms-send"
-                        disabled={smsSending || !phoneOk || smsCooldown > 0 || captchaState === "loading" || captchaState === "error"}
+                        disabled={smsSending || !phoneOk || smsCooling || captchaState === "loading" || captchaState === "error"}
                         onClick={() => void sendSmsCode()}
                       >
-                        {smsCooldown > 0 ? t("{{n}} 秒", { n: smsCooldown }) : t("发送验证码")}
+                        {smsCooling ? t("{{n}} 秒", { n: smsCooldown }) : t("发送验证码")}
                       </Button>
                     </div>
-                    {smsSent && !phoneError && (
+                    {smsSent && smsForPhone && !phoneError && (
                       <p className="text-sm text-muted-foreground" data-testid="sms-sent">
                         {t("验证码已发送，5 分钟内有效。没收到？核对号码是否在个人中心验证过。")}
                       </p>
@@ -556,15 +565,6 @@ function SignInPage() {
                   </Button>
                 </form>
               </TabsContent>
-
-              <TabsContent value="qrcode" className="min-h-[22.5rem]">
-                <NotWired
-                  icon={IconQrcode}
-                  title={t("扫码登录还没接入")}
-                  hint={t("扫码需要一个能派发登录票据的移动端，现在还没有。")}
-                  onUsePassword={() => setMethod("password")}
-                />
-              </TabsContent>
             </Tabs>
             )}
 
@@ -583,32 +583,6 @@ function SignInPage() {
           </div>
         </footer>
       </main>
-    </div>
-  )
-}
-
-/** 还没接入的登录方式：说清楚为什么不能用，并把人送回能用的那条路 */
-function NotWired({
-  icon: Icon,
-  title,
-  hint,
-  onUsePassword,
-}: {
-  icon: typeof IconQrcode
-  title: string
-  hint: string
-  onUsePassword: () => void
-}) {
-  // NotWired 自己是组件，直接取 t()，不用让调用方传文案
-  const { t } = useTranslation()
-  return (
-    <div className="mt-6 rounded-xl border border-dashed border-border bg-muted/30 px-6 py-9 text-center">
-      <Icon className="mx-auto size-5 text-muted-foreground" />
-      <p className="mt-3 text-sm font-medium">{title}</p>
-      <p className="mx-auto mt-1.5 max-w-[17rem] text-sm leading-relaxed text-muted-foreground">{hint}</p>
-      <Button variant="outline" size="sm" className="mt-5" onClick={onUsePassword}>
-        {t("改用密码登录")}
-      </Button>
     </div>
   )
 }
