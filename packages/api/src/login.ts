@@ -11,10 +11,25 @@ import { ApiError } from './errors'
  * 手机号格式 —— 和后端 `common/schema.py: CustomPhoneNumber` 是同一条正则（后端才是权威）。
  * 前端提前判一次，只为了不把一个必然 422 的号发出去：发码接口 5 次 / 分钟，白白吃掉一次配额
  */
-export const PHONE_PATTERN = /^1[3-9]\d{9}$/
+const PHONE_PATTERN = /^1[3-9]\d{9}$/
 
 export function isPhoneNumber(value: string): boolean {
   return PHONE_PATTERN.test(value.trim())
+}
+
+/**
+ * 把手机号输入规整成校验认的形状：只留数字，再去掉 `86` / `0086` 国家码。
+ *
+ * 自动填充（`textContentType="telephoneNumber"` / `autoComplete="tel"`）给的常是「+86 138 0013 8000」
+ * 这种带格式的号。输入框上要是还挂着 `maxLength={11}`，RN 对一次插入多个字符（粘贴 / 填充）是**截断**不是拒绝
+ * （读源码：iOS 的 `RCTTextInputComponentView.mm` 按剩余长度 `substringToIndex:`，Android 是 `InputFilter.LengthFilter`；
+ * 没在设备上验）—— 截成「+86 138 001」，校验永远不过、按钮一直灰着，屏上又没有任何说明。
+ * 所以先规整、不靠 `maxLength` 卡长度
+ */
+export function normalizePhone(value: string): string {
+  const digits = value.replace(/\D/g, '')
+  const intl = /^(?:0086|86)(1\d{10})$/.exec(digits)
+  return intl ? intl[1] : digits
 }
 
 /**

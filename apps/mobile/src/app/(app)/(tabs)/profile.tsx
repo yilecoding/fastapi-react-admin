@@ -87,8 +87,9 @@ export default function ProfileScreen() {
             - 手机号：`PUT /me/phone` 要短信验证码（#170），那条链路移动端还没有 —— 去网页端个人中心绑。
               手机验证码登录只认那样验证过的号，登录屏的提示也是这么说的
             - 邮箱：`PUT /me/email` 要邮箱验证码，那条链路移动端还没有
-            与其放一个改了会失败的输入框，不如把原因写在这儿。 */}
-        <Field label={t('手机号')} value={user.phone} note={t('改手机号要短信验证码')} />
+            与其放一个改了会失败的输入框，不如把原因写在这儿 —— 而且要说去哪儿改，
+            只说「要验证码」会让人以为在这一屏就能改。 */}
+        <Field label={t('手机号')} value={user.phone} note={t('在网页端个人中心修改')} />
         <Field label={t('邮箱')} value={user.email} note={t('改邮箱要邮件验证码')} />
         <Field label={t('时区')} value={user.timezone} mono />
         {/* ⚠️ schema 里 `id` 是 `string | number`（后端那个 `field_serializer` 的

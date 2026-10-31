@@ -16,7 +16,14 @@ import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
-import { ApiError, isPhoneNumber, SESSION_END_MESSAGE, shouldReloadCaptcha, SMS_RESEND_SECONDS } from '@admin/api'
+import {
+  ApiError,
+  isPhoneNumber,
+  normalizePhone,
+  SESSION_END_MESSAGE,
+  shouldReloadCaptcha,
+  SMS_RESEND_SECONDS,
+} from '@admin/api'
 
 import { api } from '@/lib/api'
 import { BRAND } from '@/lib/brand'
@@ -72,9 +79,17 @@ export default function LoginScreen() {
   const [password, setPassword] = React.useState('')
   const [code, setCode] = React.useState('')
   const [submitting, setSubmitting] = React.useState(false)
+  /**
+   * 三个提交（密码 / 手机验证码 / 动态码）的单飞，用 ref 判、不等 `submitting` 那次重渲染（硬纪律 10）。
+   * 后两个拿的都是一次性的码：同一个码打两次，第二次必然失败，还会被后端记一次账号 + IP 的失败计数
+   */
+  const submitInFlight = React.useRef(false)
   const [error, setError] = React.useState<string | null>(null)
-  /** 二次验证（#181）：第一步（密码 / 手机验证码）过了、还差动态码 */
-  const [mfa, setMfa] = React.useState<MfaChallenge | null>(null)
+  /**
+   * 二次验证（#181）：第一步过了、还差动态码。`from` 记第一步走的是哪个页签 ——
+   * 退回时只有密码那条要换图形验证码（它在第一步被消费了），见 `leaveMfa`
+   */
+  const [mfa, setMfa] = React.useState<{ challenge: MfaChallenge; from: Method } | null>(null)
   const [otp, setOtp] = React.useState('')
 
   /*
@@ -87,6 +102,11 @@ export default function LoginScreen() {
   const [smsCode, setSmsCode] = React.useState('')
   const [smsSending, setSmsSending] = React.useState(false)
   const [smsSent, setSmsSent] = React.useState(false)
+  /**
+   * 码发给了哪个号。服务端的冷却是**按号码**算的：改了号，倒计时和「已发送」都不该再挂着 ——
+   * 否则按钮对一个没发过的号锁 60 秒，提示还说「已发送」。改回原来那个号时两样都接着显示
+   */
+  const [smsPhone, setSmsPhone] = React.useState('')
   const [phoneError, setPhoneError] = React.useState<string | null>(null)
   /**
    * 倒计时按**截止时刻**算，不按「每秒减一」数：看短信要切到别的 App，回来时 JS 计时器可能被挂起过，
@@ -151,7 +171,12 @@ export default function LoginScreen() {
     return { kind: 'ready', uuid: d.uuid, image: d.image }
   }, [captchaQuery.isPending, captchaQuery.error, captchaQuery.data])
 
+  /**
+   * 换一张图形验证码。🔴 **旧答案在这里一起清掉**，不在各个调用点各配一句 —— 漏一处，旧答案就留在新图旁边：
+   * 下一次登录报验证码错，手机页签上「发送验证码」照样可点、发出去被拒，白吃一次发码配额
+   */
   const loadCaptcha = React.useCallback(() => {
+    setCode('')
     void captchaQuery.refetch()
   }, [captchaQuery])
 
@@ -175,7 +200,8 @@ export default function LoginScreen() {
   }, [])
 
   async function submit() {
-    if (submitting) return
+    if (submitInFlight.current) return
+    submitInFlight.current = true
     setError(null)
     setSubmitting(true)
     try {
@@ -188,18 +214,16 @@ export default function LoginScreen() {
       await remembered.set(remember ? username.trim() : null)
       if (challenge) {
         setOtp('')
-        setMfa(challenge)
+        setMfa({ challenge, from: 'password' })
       }
       // 成功之后不用手动跳转：根布局按 session.status 决定渲染哪一棵树
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       // 验证码是一次性的，失败后必须换一张，否则用户重试必然再错一次。
       // 🔴 例外是撞了限流（429）：验证码没被消费，跟着重拉只会把 `/auth/captcha` 的配额也打满（判据见 `@admin/api`）
-      if (captcha.kind === 'ready' && shouldReloadCaptcha(err)) {
-        setCode('')
-        loadCaptcha()
-      }
+      if (captcha.kind === 'ready' && shouldReloadCaptcha(err)) loadCaptcha()
     } finally {
+      submitInFlight.current = false
       if (alive.current) setSubmitting(false)
     }
   }
@@ -215,16 +239,18 @@ export default function LoginScreen() {
     setPhoneError(null)
     setSmsSent(false)
     let reloadCaptcha = true
+    const target = phone.trim()
     try {
       await api.POST('/api/v1/auth/phone/captcha', {
         body: {
-          phone: phone.trim(),
+          phone: target,
           uuid: captcha.kind === 'ready' ? captcha.uuid : null,
           captcha: captcha.kind === 'ready' ? code.trim() : null,
         },
       })
       if (!alive.current) return
       setSmsSent(true)
+      setSmsPhone(target)
       setSmsDeadline(Date.now() + SMS_RESEND_SECONDS * 1000)
       setSmsLeft(SMS_RESEND_SECONDS)
     } catch (err) {
@@ -235,17 +261,15 @@ export default function LoginScreen() {
       if (alive.current) {
         setSmsSending(false)
         // 图形验证码发码时已被服务端校验（对了就消费，错了也换一张）；只有限流那次没被碰过
-        if (captcha.kind === 'ready' && reloadCaptcha) {
-          setCode('')
-          loadCaptcha()
-        }
+        if (captcha.kind === 'ready' && reloadCaptcha) loadCaptcha()
       }
     }
   }
 
   async function submitPhone() {
     // 键盘上的「完成」不看按钮禁没禁用，条件要在这里再判一次
-    if (submitting || !isPhoneNumber(phone) || smsCode.trim().length === 0) return
+    if (submitInFlight.current || !isPhoneNumber(phone) || smsCode.trim().length === 0) return
+    submitInFlight.current = true
     setPhoneError(null)
     setSubmitting(true)
     try {
@@ -253,38 +277,46 @@ export default function LoginScreen() {
       if (challenge) {
         setOtp('')
         setError(null)
-        setMfa(challenge)
+        setMfa({ challenge, from: 'phone' })
       }
       // 成功之后不用手动跳转：根布局按 session.status 决定渲染哪一棵树
     } catch (err) {
       // 没注册 / 没验证 / 码错 / 码过期一律同一句（后端防枚举），原样显示即可
       setPhoneError(err instanceof Error ? err.message : String(err))
     } finally {
+      submitInFlight.current = false
       if (alive.current) setSubmitting(false)
     }
   }
 
   async function submitOtp() {
-    if (submitting || !mfa) return
+    if (submitInFlight.current || !mfa) return
+    submitInFlight.current = true
     setError(null)
     setSubmitting(true)
     try {
-      await verifyMfa(mfa.token, otp.trim())
+      await verifyMfa(mfa.challenge.token, otp.trim())
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setOtp('')
     } finally {
+      submitInFlight.current = false
       if (alive.current) setSubmitting(false)
     }
   }
 
-  /** 从二次验证退回第一步（回到原来那个页签）。短信验证码第一步对了就被消费掉了，留在框里只会再错一次 */
+  /**
+   * 从二次验证退回第一步（回到原来那个页签）。短信验证码第一步对了就被消费掉了，留在框里只会再错一次。
+   * 图形验证码只在第一步是**密码**时换：手机那条在发码之后已经换过一张、还没用过，再拉只是多吃
+   * `/auth/captcha` 的配额（5 次 / 30 秒），反复进出二次验证很快就撞上
+   */
   function leaveMfa() {
+    const from = mfa?.from
     setMfa(null)
     setOtp('')
     setError(null)
     setSmsCode('')
-    if (captcha.kind === 'ready') loadCaptcha()
+    if (from === 'password' && captcha.kind === 'ready') loadCaptcha()
   }
 
   const canSubmit =
@@ -294,15 +326,44 @@ export default function LoginScreen() {
     !submitting
 
   const phoneOk = isPhoneNumber(phone)
+  // 输入已经规整成纯数字（`normalizePhone`），够 11 位还不对就是格式错 —— 要说出来，不能只把按钮灰着
+  const phoneMalformed = phone.length >= 11 && !phoneOk
+  // 倒计时和「已发送」只对发过码的那个号成立（见 `smsPhone`）
+  const smsForPhone = smsPhone !== '' && smsPhone === phone.trim()
+  const smsCooling = smsForPhone && smsLeft > 0
   // 图形验证码开着时必须先填：不填后端照样拒，还白吃一次发码配额
   const canSendSms =
     phoneOk &&
     !smsSending &&
-    smsLeft === 0 &&
+    !smsCooling &&
     captcha.kind !== 'loading' &&
     captcha.kind !== 'error' &&
     (captcha.kind !== 'ready' || code.trim().length > 0)
   const canSubmitPhone = phoneOk && smsCode.trim().length > 0 && !submitting
+
+  /*
+   * 启动时连不上 / 为什么回到了登录屏（#138）—— 两个页签**都要**显示：
+   * 只挂在密码页签上的话，切到手机页签的人什么说明都看不到。
+   * 疑似凭据被盗 / 账号被停用用醒目的样式，其余是提示
+   */
+  const sessionNotice = bootstrapError ? (
+    <View className="px-4">
+      <Alert variant="destructive" icon={KeyRoundIcon}>
+        <AlertTitle>{t('启动时没能连上服务器')}</AlertTitle>
+        <AlertDescription>{bootstrapError}</AlertDescription>
+      </Alert>
+    </View>
+  ) : endReason ? (
+    <View className="px-4">
+      <Alert
+        variant={endReason === 'reuse' || endReason === 'disabled' ? 'destructive' : 'default'}
+        icon={LogOutIcon}
+        testID="session-end-notice"
+      >
+        <AlertDescription>{t(SESSION_END_MESSAGE[endReason])}</AlertDescription>
+      </Alert>
+    </View>
+  ) : null
 
   return (
     <>
@@ -347,7 +408,7 @@ export default function LoginScreen() {
           <View style={{ minHeight: 336 }} className="pt-4">
             {mfa ? (
               <MfaStep
-                challenge={mfa}
+                challenge={mfa.challenge}
                 otp={otp}
                 onChangeOtp={setOtp}
                 onSubmit={() => void submitOtp()}
@@ -357,15 +418,17 @@ export default function LoginScreen() {
               />
             ) : method === 'phone' ? (
               <View className="gap-4">
+                {sessionNotice}
+
                 <Group>
                   <FieldRow first label={t('手机号')}>
                     <Input
                       value={phone}
-                      onChangeText={setPhone}
+                      // 🔴 先规整、不设 maxLength：自动填充的「+86 138 0013 8000」会被 maxLength 截断（见 `normalizePhone`）
+                      onChangeText={(v) => setPhone(normalizePhone(v))}
                       keyboardType="number-pad"
                       textContentType="telephoneNumber"
                       autoComplete="tel"
-                      maxLength={11}
                       placeholder={t('请输入手机号')}
                       testID="login-phone"
                       className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
@@ -398,22 +461,28 @@ export default function LoginScreen() {
                       {smsSending ? (
                         <ActivityIndicator size="small" />
                       ) : (
-                        <Text>{smsLeft > 0 ? t('{{n}} 秒', { n: smsLeft }) : t('发送验证码')}</Text>
+                        <Text>{smsCooling ? t('{{n}} 秒', { n: smsLeft }) : t('发送验证码')}</Text>
                       )}
                     </Button>
                   </FieldRow>
                 </Group>
 
-                {/* 分组块的脚注：发码前说哪种号能用，发码后换成「已发送」—— 同一格，高度不跳 */}
-                <Text
-                  variant="small"
-                  className="text-muted-foreground px-5 leading-5"
-                  testID={smsSent && !phoneError ? 'login-sms-sent' : undefined}
-                >
-                  {smsSent && !phoneError
-                    ? t('验证码已发送，5 分钟内有效。没收到？核对号码是否在网页端个人中心验证过。')
-                    : t('只认在网页端个人中心验证过的手机号')}
-                </Text>
+                {/* 分组块的脚注，同一格、高度不跳：号码格式不对 > 已发送（只对发过的那个号）> 哪种号能用 */}
+                {phoneMalformed ? (
+                  <Text variant="small" className="text-destructive px-5 leading-5" testID="login-phone-malformed">
+                    {t('手机号格式不正确')}
+                  </Text>
+                ) : (
+                  <Text
+                    variant="small"
+                    className="text-muted-foreground px-5 leading-5"
+                    testID={smsSent && smsForPhone && !phoneError ? 'login-sms-sent' : undefined}
+                  >
+                    {smsSent && smsForPhone && !phoneError
+                      ? t('验证码已发送，5 分钟内有效。没收到？核对号码是否在网页端个人中心验证过。')
+                      : t('只认在网页端个人中心验证过的手机号')}
+                  </Text>
+                )}
 
                 {phoneError ? (
                   <Text variant="small" className="text-destructive px-5" testID="login-phone-error">
@@ -435,25 +504,7 @@ export default function LoginScreen() {
               </View>
             ) : (
               <View className="gap-4">
-                {bootstrapError ? (
-                  <View className="px-4">
-                    <Alert variant="destructive" icon={KeyRoundIcon}>
-                      <AlertTitle>{t('启动时没能连上服务器')}</AlertTitle>
-                      <AlertDescription>{bootstrapError}</AlertDescription>
-                    </Alert>
-                  </View>
-                ) : endReason ? (
-                  // 为什么回到了登录屏（#138）。疑似凭据被盗 / 账号被停用用醒目的样式，其余是提示
-                  <View className="px-4">
-                    <Alert
-                      variant={endReason === 'reuse' || endReason === 'disabled' ? 'destructive' : 'default'}
-                      icon={LogOutIcon}
-                      testID="session-end-notice"
-                    >
-                      <AlertDescription>{t(SESSION_END_MESSAGE[endReason])}</AlertDescription>
-                    </Alert>
-                  </View>
-                ) : null}
+                {sessionNotice}
 
                 {/* 输入框做成**分组块里的行**：左侧标签、右侧输入。
                     iOS 上表单就是这个形状，不是一个个描边盒子 */}
