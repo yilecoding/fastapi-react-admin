@@ -68,10 +68,11 @@ dependencies = [
   "pydantic>=2.13.4",
   "pydantic-ai-slim[openai]>=2.54.0",  # plugin/ai（AI_AGENT_ENGINE = "pydantic_ai"）
   "pydantic-settings>=2.15.0",
+  # JWT。原来是 python-jose：CVE-2026-85394 没有修复版、它带进来的 ecdsa 也没有（#193）
+  "pyjwt>=2.10.1",
   "pymysql>=1.1.2",
   "pypdf>=5",
   "pyrate-limiter>=4.4.0",
-  "python-jose>=3.5.0",
   "python-socketio>=5.16.4",
   "redis[hiredis]>=8.1.0",
   "rtoml>=0.13.0",
