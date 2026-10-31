@@ -1,9 +1,9 @@
 import json
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Self
 
-from pydantic import Field, field_validator
+from pydantic import Field, PrivateAttr, model_validator
 
 from backend.common.schema import SchemaBase
 
@@ -44,12 +44,19 @@ class PutUserPreferenceParam(SchemaBase):
     """写一个偏好：整份覆盖，不做合并"""
 
     value: Any = Field(description='偏好值，任意 JSON（不能是 null），序列化后不超过 16 KB')
+    # 校验时序列化出来的那一份，落库就用它 —— 不在 service 里再 dump 一遍（两处各 dump 一次，
+    # 哪天一边改了参数，校验的和存进去的就不是同一份文本）
+    _text: str = PrivateAttr(default='')
 
-    @field_validator('value')
-    @classmethod
-    def _check_value(cls, v: Any) -> Any:
-        dump_preference_value(v)
-        return v
+    @model_validator(mode='after')
+    def _dump_value(self) -> Self:
+        self._text = dump_preference_value(self.value)
+        return self
+
+    @property
+    def text(self) -> str:
+        """落库的 JSON 文本（已经过合法性 / 大小校验）"""
+        return self._text
 
 
 class GetUserPreferenceDetail(SchemaBase):

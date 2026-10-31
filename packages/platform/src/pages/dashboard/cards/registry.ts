@@ -56,7 +56,7 @@ export const DASHBOARD_CARDS: readonly DashboardCardDef[] = [
     id: 'metrics',
     title: (t) => t('今日指标'),
     // 任一格有权限就有这张卡；没权限的格子在卡片里不画
-    available: (c) => c.isSuperuser || c.canAny('log:login:list', 'log:opera:list', 'sys:user:list'),
+    available: (c) => c.canAny('log:login:list', 'log:opera:list', 'sys:user:list'),
     defaultWidth: 'full',
     defaultVisible: true,
     Component: MetricsCard,

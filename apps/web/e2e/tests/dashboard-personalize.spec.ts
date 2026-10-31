@@ -21,7 +21,7 @@ const PREF = "/api/v1/sys/users/me/preferences/dashboard.layout"
 /** 普通员工的默认布局：人人都有的四张，按注册表顺序 */
 const STAFF_DEFAULT = ["quick-links", "todo", "unread", "notices"]
 
-const KEYS = ["default", "edit", "reset", "bogus", "broken", "savefail"] as const
+const KEYS = ["default", "edit", "reset", "bogus", "unreadable", "broken", "savefail"] as const
 type Key = (typeof KEYS)[number]
 
 test.describe("工作台个性化 · 普通员工", () => {
@@ -226,6 +226,25 @@ test.describe("工作台个性化 · 普通员工", () => {
     await expect(dash.getByTestId("dash-recent-logins")).toHaveCount(0)
     await expect(dash.getByTestId("dash-layout-unreadable")).toHaveCount(0)
     await expect(dash.getByTestId("dash-layout-error")).toHaveCount(0)
+  })
+
+  test("🔴 存的布局整份认不出来：提示 + 默认布局；不改任何东西也能直接保存，把坏数据覆盖掉", async ({ page }) => {
+    await putLayoutAs("unreadable", "这不是一份布局")
+    await open(page, "unreadable")
+    const dash = page.locator(DASH)
+    await expect(dash.getByTestId("dash-layout-unreadable")).toBeVisible()
+    await expectCards(page, STAFF_DEFAULT)
+
+    await dash.getByTestId("dash-edit").click()
+    // 提示说的就是「编辑并保存一次就会覆盖它」—— 非要先改点什么才能存的话，坏数据就一直覆盖不掉
+    const save = dash.getByTestId("dash-editor-save")
+    await expect(save).toBeEnabled()
+    await save.click()
+    await expect(dash.getByTestId("dash-editor")).toBeHidden()
+
+    await page.reload()
+    await expectCards(page, STAFF_DEFAULT)
+    await expect(dash.getByTestId("dash-layout-unreadable")).toHaveCount(0)
   })
 
   test("🔴 读布局失败：显示错误 + 默认布局、不能编辑；重试成功换回他自己的布局", async ({ page }) => {

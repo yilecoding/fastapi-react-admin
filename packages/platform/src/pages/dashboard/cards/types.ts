@@ -8,10 +8,9 @@ export type TFn = (key: string, vars?: Record<string, unknown>) => string
 
 /** 卡片判断「这个人能不能用我」时拿得到的东西 */
 export type CardContext = {
-  /** 全部满足（超管恒真），同 `usePerm().can` */
+  /** 全部满足 / 任一满足（超管恒真）—— 就是 `usePerm()` 的那两个，不另写一份判定 */
   can: (...perms: string[]) => boolean
   canAny: (...perms: string[]) => boolean
-  isSuperuser: boolean
   /** 这个人自己的侧边栏里有没有这个页面（菜单没授权 / 插件没装就没有） */
   inSidebar: (path: string) => boolean
 }

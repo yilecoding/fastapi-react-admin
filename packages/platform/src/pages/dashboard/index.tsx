@@ -11,12 +11,13 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 import { toast } from '@admin/ui/components/toast'
 import { cn } from '@admin/ui/lib/utils'
 
-import { authKeys, codesQuery, meQuery } from '../../auth/queries'
+import { codesQuery, meQuery, sidebarQuery } from '../../auth/queries'
+import { usePerm } from '../../auth/use-perm'
 import { useSaveUserPreference, userPreferenceQuery } from '../../auth/user-preferences'
 import { usePlatform } from '../../shell/platform-context'
 import { useSidebar } from '../../shell/use-sidebar'
 import { PageHeader } from '../../shell/page-header'
-import { NOTICE_FEED_KEY, notificationKeys } from '../notification/api'
+import { invalidateInbox } from '../notification/api'
 import { NoticeReaderSheet } from '../notice/reader-sheet'
 import { InstanceSheet } from '../workflow/instance-sheet'
 import { workflowKeys } from '../workflow/api'
@@ -64,6 +65,8 @@ export function DashboardPage({
   const qc = useQueryClient()
   const me = useQuery(meQuery)
   const codes = useQuery(codesQuery)
+  const sidebarQ = useQuery(sidebarQuery)
+  const { can, canAny } = usePerm()
   const { isValidPath } = usePlatform()
   const sidebarOpts = React.useMemo(() => ({ isValidPath }), [isValidPath])
   const sidebar = useSidebar(sidebarOpts)
@@ -73,23 +76,19 @@ export function DashboardPage({
   const patch = (p: Partial<DashboardSearch>) => onSearchChange?.({ ...search, ...p })
 
   // ── 这个人能用哪些卡片 ──
-  // 🔴 权限码 / 「我是谁」/ 侧边栏都到齐之前**不算**：`usePerm().can` 在 codes 还没回来时恒为 false，
-  // 那时算出来的「默认布局」只有人人都有的那几张，等 codes 回来又多出统计卡 —— 页面先画一版再跳一版
+  // 🔴 权限码 / 「我是谁」/ 侧边栏**有数据**之前不算：`usePerm().can` 在 codes 还没回来时恒为 false，
+  // 那时算出来的「默认布局」只有人人都有的那几张，等 codes 回来又多出统计卡 —— 页面先画一版再跳一版。
+  // 三者一律只看 `.data`，不看 `.error`：后台重取失败时 React Query 保留上一次的数据、同时置上 error ——
+  // 看 error 的话，侧边栏一次重取失败，整个工作台（连同正在编辑的编辑器）就没了
   const pages = React.useMemo(() => flattenPages(sidebar.nav), [sidebar.nav])
-  const ctxReady = Boolean(me.data && codes.data && !sidebar.isPending && !sidebar.error)
+  const ctxReady = Boolean(me.data && codes.data && sidebarQ.data)
   const available = React.useMemo<DashboardCardDef[]>(() => {
     if (!ctxReady) return []
-    const owned = codes.data ?? []
-    const superuser = me.data?.is_superuser ?? false
     const inSidebar = new Set(pages.map((p) => p.path))
-    const ctx: CardContext = {
-      isSuperuser: superuser,
-      can: (...perms) => superuser || perms.every((p) => owned.includes(p)),
-      canAny: (...perms) => superuser || perms.some((p) => owned.includes(p)),
-      inSidebar: (path) => inSidebar.has(path),
-    }
+    // 权限判定直接用 `usePerm` 那一份，不在这里另写一遍（两份迟早漂移）
+    const ctx: CardContext = { can, canAny, inSidebar: (path) => inSidebar.has(path) }
     return DASHBOARD_CARDS.filter((c) => c.available(ctx))
-  }, [ctxReady, codes.data, me.data?.is_superuser, pages])
+  }, [ctxReady, can, canAny, pages])
   const byId = React.useMemo(() => new Map(available.map((c) => [c.id, c])), [available])
   const titleOf = React.useCallback((id: string) => byId.get(id)?.title(t) ?? id, [byId, t])
 
@@ -133,14 +132,14 @@ export function DashboardPage({
     })
   }
 
-  // 「刷新」：只重取卡片的数据（布局不动）。卡片的查询各自在卡片里，按 key 失效
+  // 「刷新」：只重取卡片的数据（布局不动）。卡片的查询各自在卡片里，按 key 失效；
+  // 收件箱 + 公告读者列表那一组用铃铛同一个 `invalidateInbox`，别在这里抄一份 key 清单
   const [refreshing, setRefreshing] = React.useState(false)
   const refreshAll = () => {
     setRefreshing(true)
     void Promise.all([
+      invalidateInbox(qc),
       qc.invalidateQueries({ queryKey: dashKeys.all }),
-      qc.invalidateQueries({ queryKey: NOTICE_FEED_KEY }),
-      qc.invalidateQueries({ queryKey: notificationKeys.all }),
       qc.invalidateQueries({ queryKey: workflowKeys.counts() }),
       qc.invalidateQueries({ queryKey: workflowKeys.inbox() }),
     ]).finally(() => setRefreshing(false))
@@ -153,7 +152,9 @@ export function DashboardPage({
     pages,
   }
 
-  const contextError = me.error ?? codes.error ?? sidebar.error
+  // 只在「还没有数据」时算失败（有上一次的数据就照常用，同上面 `ctxReady` 的判据）
+  const contextError =
+    (!me.data && me.error) || (!codes.data && codes.error) || (!sidebarQ.data && sidebarQ.error) || null
   const visibleItems = shown?.items.filter((i) => i.visible) ?? []
 
   return (
@@ -200,13 +201,14 @@ export function DashboardPage({
               onRetry={() => {
                 void me.refetch()
                 void codes.refetch()
-                void qc.refetchQueries({ queryKey: authKeys.sidebar() })
+                void sidebarQ.refetch()
               }}
               testId="dash-context-error"
             />
           )}
 
-          {Boolean(pref.error) && (
+          {/* 只在「一份都没读到」时说「先按默认布局显示」：读到过之后一次后台重取失败，屏幕上仍是他自己的布局、也能编辑 */}
+          {Boolean(pref.error) && !pref.data && (
             <QueryError
               error={pref.error}
               title={t('没能读取你保存的工作台布局')}
@@ -227,7 +229,7 @@ export function DashboardPage({
               layout={shown}
               titleOf={titleOf}
               pages={pages}
-              dirty={dirty}
+              canSave={dirty || Boolean(resolved?.unreadable)}
               saving={save.isPending}
               saveError={save.error}
               onChange={setDraft}

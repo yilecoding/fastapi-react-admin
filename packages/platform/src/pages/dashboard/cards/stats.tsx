@@ -46,8 +46,11 @@ export function MetricsCard() {
   const logins = useQuery({ ...todayCountQuery('login'), enabled: canLogin })
   const operas = useQuery({ ...todayCountQuery('opera'), enabled: canOpera })
   const users = useQuery({ ...scaleCountQuery('users'), enabled: canUsers })
-  const roles = useQuery({ ...scaleCountQuery('roles'), enabled: canRoles })
-  const notices = useQuery(scaleCountQuery('notices'))
+  // 角色数 / 公告数只出现在「用户总数」那一格的小字里，而那行小字要两者都有才画 ——
+  // 用不到就不取：多一个请求是小事，它失败时在卡片顶上挂一条和这个人看到的数字都不相干的错误块是大事
+  const showScaleHint = canUsers && canRoles
+  const roles = useQuery({ ...scaleCountQuery('roles'), enabled: showScaleHint })
+  const notices = useQuery({ ...scaleCountQuery('notices'), enabled: showScaleHint })
   // 在线会话是超管专属接口，非超管直接不发请求（发了就是一条必然 403 的噪音）
   const online = useQuery({ ...onlineCountQuery, enabled: isSuperuser })
 
@@ -119,7 +122,7 @@ export function MetricsCard() {
             label={t('用户总数')} value={users.data} loading={users.isPending}
             testId="metric-users"
             hint={
-              canRoles && roles.data !== undefined && notices.data !== undefined
+              showScaleHint && roles.data !== undefined && notices.data !== undefined
                 ? t('{{roles}} 个角色 · {{notices}} 条公告', { roles: roles.data, notices: notices.data })
                 : undefined
             }
