@@ -137,3 +137,4 @@ pnpm dev                                                # 打开 http://localhos
 ## 致谢
 
 感谢 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) 的作者和贡献者 🙏
+也感谢 [shadcn/ui](https://github.com/shadcn-ui/ui)、[TanStack](https://github.com/TanStack)、[Tiptap](https://github.com/ueberdosis/tiptap)、[file-viewer](https://github.com/flyfish-dev/file-viewer) 等开源项目。
