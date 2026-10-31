@@ -764,6 +764,11 @@ def _entropy_bits(value: str) -> float:
     return -sum((c / n) * math.log2(c / n) for c in counts.values()) * n
 
 
+# HMAC 签名密钥至少要和摘要一样长（RFC 7518 §3.2）。短了 PyJWT 每签一次都发 InsecureKeyLengthWarning，
+# 但照样签 —— 那条警告淹在日志里没人看，所以在启动校验里按算法卡长度（#197 评审）
+_HMAC_MIN_KEY_LEN = {'HS256': 32, 'HS384': 48, 'HS512': 64}
+
+
 def _check_secret(name: str, value: str | None, *, min_len: int, min_bits: float, min_distinct: int) -> str | None:
     """判定一个密钥 / 密码是不是「还是占位符或者太弱」，返回不合格的原因
 
@@ -914,7 +919,13 @@ def check_production_settings(s: Settings) -> None:
 
     problems.extend([
         # 签名密钥 —— 泄漏等于任何人都能签发管理员 token，标准最高
-        _check_secret('TOKEN_SECRET_KEY', s.TOKEN_SECRET_KEY, min_len=32, min_bits=128, min_distinct=16),
+        _check_secret(
+            'TOKEN_SECRET_KEY',
+            s.TOKEN_SECRET_KEY,
+            min_len=_HMAC_MIN_KEY_LEN.get(s.TOKEN_ALGORITHM, 32),
+            min_bits=128,
+            min_distinct=16,
+        ),
         _check_secret('DATABASE_PASSWORD', s.DATABASE_PASSWORD, min_len=12, min_bits=48, min_distinct=8),
         # Redis 里放着全部 token 和用户缓存，而默认密码是空串
         _check_secret('REDIS_PASSWORD', s.REDIS_PASSWORD, min_len=12, min_bits=48, min_distinct=8),

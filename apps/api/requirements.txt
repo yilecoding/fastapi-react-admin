@@ -5,7 +5,7 @@ aiofiles==24.1.0
     # via alibabacloud-credentials
 aiohappyeyeballs==2.7.1
     # via aiohttp
-aiohttp==3.14.3
+aiohttp==3.14.5
     # via
     #   alibabacloud-tea
     #   darabonba-core
@@ -107,7 +107,7 @@ celery==5.6.3
     #   flower
 celery-aio-pool==0.1.0rc8
     # via fastapi-react-admin-api
-certifi==2026.7.22
+certifi==2026.10.23
     # via
     #   httpcore
     #   httpx
@@ -153,14 +153,14 @@ darabonba-core==1.0.9
     # via
     #   alibabacloud-dysmsapi20170525
     #   alibabacloud-tea-openapi
-dnspython==2.8.0
+dnspython==2.8.0 ; python_full_version < '3.11'
+    # via email-validator
+dnspython==2.9.1 ; python_full_version >= '3.11'
     # via email-validator
 docker==7.2.0
     # via moto
 dulwich==1.2.12
     # via fastapi-react-admin-api
-ecdsa==0.19.2
-    # via python-jose
 email-validator==2.3.0
     # via fastapi
 et-xmlfile==2.0.0
@@ -321,7 +321,7 @@ mpmath==1.3.0
     # via sympy
 msgspec==0.21.1
     # via fastapi-react-admin-api
-multidict==6.7.1
+multidict==6.9.1
     # via
     #   aiohttp
     #   yarl
@@ -341,7 +341,7 @@ opendal==0.47.12
     # via fastapi-react-admin-api
 openpyxl==3.1.5
     # via fastapi-react-admin-api
-opentelemetry-api==1.44.0
+opentelemetry-api==1.45.2
     # via
     #   mcp
     #   opentelemetry-exporter-otlp-proto-grpc
@@ -357,11 +357,13 @@ opentelemetry-api==1.44.0
     #   opentelemetry-sdk
     #   opentelemetry-semantic-conventions
     #   pydantic-ai-slim
-opentelemetry-exporter-otlp-proto-common==1.44.0
+opentelemetry-exporter-otlp-common==0.66b2
     # via opentelemetry-exporter-otlp-proto-grpc
-opentelemetry-exporter-otlp-proto-grpc==1.44.0
+opentelemetry-exporter-otlp-proto-common==1.45.2
+    # via opentelemetry-exporter-otlp-proto-grpc
+opentelemetry-exporter-otlp-proto-grpc==1.45.2
     # via fastapi-react-admin-api
-opentelemetry-instrumentation==0.65b0
+opentelemetry-instrumentation==0.66b2
     # via
     #   opentelemetry-instrumentation-asgi
     #   opentelemetry-instrumentation-asyncio
@@ -371,31 +373,32 @@ opentelemetry-instrumentation==0.65b0
     #   opentelemetry-instrumentation-logging
     #   opentelemetry-instrumentation-redis
     #   opentelemetry-instrumentation-sqlalchemy
-opentelemetry-instrumentation-asgi==0.65b0
+opentelemetry-instrumentation-asgi==0.66b2
     # via opentelemetry-instrumentation-fastapi
-opentelemetry-instrumentation-asyncio==0.65b0
+opentelemetry-instrumentation-asyncio==0.66b2
     # via fastapi-react-admin-api
-opentelemetry-instrumentation-celery==0.65b0
+opentelemetry-instrumentation-celery==0.66b2
     # via fastapi-react-admin-api
-opentelemetry-instrumentation-fastapi==0.65b0
+opentelemetry-instrumentation-fastapi==0.66b2
     # via fastapi-react-admin-api
-opentelemetry-instrumentation-httpx==0.65b0
+opentelemetry-instrumentation-httpx==0.66b2
     # via fastapi-react-admin-api
-opentelemetry-instrumentation-logging==0.65b0
+opentelemetry-instrumentation-logging==0.66b2
     # via fastapi-react-admin-api
-opentelemetry-instrumentation-redis==0.65b0
+opentelemetry-instrumentation-redis==0.66b2
     # via fastapi-react-admin-api
-opentelemetry-instrumentation-sqlalchemy==0.65b0
+opentelemetry-instrumentation-sqlalchemy==0.66b2
     # via fastapi-react-admin-api
-opentelemetry-proto==1.44.0
+opentelemetry-proto==1.45.2
     # via
     #   opentelemetry-exporter-otlp-proto-common
     #   opentelemetry-exporter-otlp-proto-grpc
-opentelemetry-sdk==1.44.0
+opentelemetry-sdk==1.45.2
     # via
     #   fastapi-react-admin-api
+    #   opentelemetry-exporter-otlp-common
     #   opentelemetry-exporter-otlp-proto-grpc
-opentelemetry-semantic-conventions==0.65b0
+opentelemetry-semantic-conventions==0.66b2
     # via
     #   opentelemetry-instrumentation
     #   opentelemetry-instrumentation-asgi
@@ -407,7 +410,7 @@ opentelemetry-semantic-conventions==0.65b0
     #   opentelemetry-instrumentation-redis
     #   opentelemetry-instrumentation-sqlalchemy
     #   opentelemetry-sdk
-opentelemetry-util-http==0.65b0
+opentelemetry-util-http==0.66b2
     # via
     #   opentelemetry-instrumentation-asgi
     #   opentelemetry-instrumentation-fastapi
@@ -421,7 +424,9 @@ packaging==26.3
     #   sqlakeyset
 pathable==0.6.0
     # via jsonschema-path
-pillow==12.3.0
+pillow==12.3.0 ; python_full_version < '3.11'
+    # via fast-captcha
+pillow==13.0.0 ; python_full_version >= '3.11'
     # via fast-captcha
 pluggy==1.6.0
     # via pytest
@@ -452,10 +457,6 @@ py-ip2region==3.0.4
     # via fastapi-react-admin-api
 py-partiql-parser==0.6.3
     # via moto
-pyasn1==0.6.4
-    # via
-    #   python-jose
-    #   rsa
 pycparser==3.0 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
     # via cffi
 pydantic==2.13.4
@@ -497,14 +498,16 @@ pygments==2.20.0
     #   pytest
     #   rich
 pyjwt==2.15.1
-    # via mcp
+    # via
+    #   fastapi-react-admin-api
+    #   mcp
 pymysql==1.2.0
     # via fastapi-react-admin-api
 pyodbc==5.3.0
     # via aioodbc
 pyparsing==3.3.3
     # via moto
-pypdf==6.21.2
+pypdf==6.21.4
     # via fastapi-react-admin-api
 pyrate-limiter==4.4.0
     # via fastapi-react-admin-api
@@ -522,8 +525,6 @@ python-dotenv==1.2.2
     #   uvicorn
 python-engineio==4.13.4
     # via python-socketio
-python-jose==3.5.0
-    # via fastapi-react-admin-api
 python-multipart==0.0.32
     # via
     #   fastapi
@@ -583,8 +584,6 @@ rpds-py==2026.9.1 ; python_full_version >= '3.11'
     # via
     #   jsonschema
     #   referencing
-rsa==4.9.1
-    # via python-jose
 rtoml==0.13.0
     # via fastapi-react-admin-api
 s3transfer==0.19.3
@@ -595,7 +594,6 @@ simple-websocket==1.1.0
     # via python-engineio
 six==1.17.0
     # via
-    #   ecdsa
     #   python-dateutil
     #   rfc3339-validator
 sniffio==1.3.1
@@ -611,7 +609,7 @@ sqlalchemy==2.0.52
     #   sqlalchemy-crud-plus
 sqlalchemy-crud-plus==1.13.3
     # via fastapi-react-admin-api
-sqlparse==0.5.5
+sqlparse==0.6.0
     # via fastapi-react-admin-api
 sse-starlette==3.5.0
     # via mcp
@@ -640,7 +638,9 @@ tomli==2.4.1 ; python_full_version < '3.11'
     #   alembic
     #   fastapi-cli
     #   pytest
-tornado==6.5.8
+tornado==6.5.10 ; python_full_version < '3.11'
+    # via flower
+tornado==6.6 ; python_full_version >= '3.11'
     # via flower
 truststore==0.10.5 ; sys_platform != 'emscripten'
     # via
@@ -710,7 +710,7 @@ ua-parser==1.0.2
     # via user-agents
 ua-parser-builtins==202606
     # via ua-parser
-urllib3==2.7.0
+urllib3==2.8.0
     # via
     #   botocore
     #   docker
@@ -760,7 +760,7 @@ wsproto==1.3.2
     # via simple-websocket
 xmltodict==1.0.4
     # via moto
-yarl==1.24.5
+yarl==1.25.1
     # via aiohttp
 zope-event==6.2
     # via gevent

@@ -14,8 +14,16 @@ function isTransientApiError(error?: Error): boolean {
  * 全局错误页。用 `-` 前缀被 routeFileIgnorePrefix 排除出路由树，
  * 但文件放在 routes/ 下就近维护。
  */
-export function ErrorPage({ error }: { error?: Error }) {
+export function ErrorPage({ error: thrown }: { error?: unknown }) {
   const { t } = useTranslation()
+  // router 1.171.39 起把 `error` 标成 unknown —— 本来就是：`throw` 什么都能扔，不一定是 Error。
+  // 收窄只用在「是不是 ApiError」这种判断上；要显示的文案照旧认任何带字符串 message 的东西，
+  // 不然 `throw { message }` / 库 reject 一个普通对象时，真正的原因就从页面上丢了
+  const error = thrown instanceof Error ? thrown : undefined
+  const message =
+    typeof thrown === 'object' && thrown !== null && 'message' in thrown && typeof thrown.message === 'string'
+      ? thrown.message
+      : undefined
 
   /**
    * 🔴 「分片取不到」不是一个 500，它是**版本不一致**：这个标签页开着没刷新，
@@ -24,7 +32,7 @@ export function ErrorPage({ error }: { error?: Error }) {
    * `Failed to fetch dynamically imported module: …/assets/viewer-D3f1.js`，
    * 没人会从这句话想到「刷新一下就好了」——所以这一支单独说人话。
    */
-  if (isStaleAssetError(error)) {
+  if (isStaleAssetError(thrown)) {
     return (
       <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-6 text-center">
         <div className="space-y-1">
@@ -65,7 +73,7 @@ export function ErrorPage({ error }: { error?: Error }) {
       <div className="space-y-1">
         <h1 className="text-lg font-semibold">{t('出错了')}</h1>
         <p className="max-w-md text-sm text-muted-foreground">
-          {error?.message ?? t('页面渲染时发生未预期的错误。')}
+          {message ?? t('页面渲染时发生未预期的错误。')}
         </p>
       </div>
       {/* 注意：这里不能用 <Link> —— 它可能渲染在 router 之外 */}

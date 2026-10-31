@@ -33,6 +33,7 @@ class _FakeSettings:
     def __init__(self, **overrides: object) -> None:
         self.ENVIRONMENT = 'prod'
         self.TOKEN_SECRET_KEY = 'S7xK2mQ9vR4tW8yZ1aB6cD3eF5gH0jLnP'
+        self.TOKEN_ALGORITHM = 'HS256'
         self.DATABASE_HOST = 'sqlserver.internal'
         self.DATABASE_PASSWORD = 'Xk92mQvR4tW8yZ1a'
         self.REDIS_PASSWORD = 'Pq73nZvT6yU2wX9b'
@@ -67,6 +68,18 @@ def _expect_rejected(**overrides: object) -> str:
 def test_a_well_configured_prod_passes() -> None:
     """基线：合格配置不能被误杀，否则下面的断言都没意义"""
     check_production_settings(_FakeSettings())
+
+
+@pytest.mark.parametrize(('algorithm', 'min_len'), [('HS384', 48), ('HS512', 64)])
+def test_token_secret_must_cover_the_hmac_digest(algorithm: str, min_len: int) -> None:
+    """密钥长度按算法卡：HS256 合格的 33 位密钥，换成 HS384 / HS512 就不够长了
+
+    PyJWT 对短密钥只发警告、照样签；不在这里拦，就只剩一条没人看的日志
+    """
+    msg = _expect_rejected(TOKEN_ALGORITHM=algorithm)
+    assert 'TOKEN_SECRET_KEY' in msg and f'最小要求 {min_len}' in msg
+    long_key = ('S7xK2mQ9vR4tW8yZ1aB6cD3eF5gH0jLnP' * 2)[:min_len]
+    check_production_settings(_FakeSettings(TOKEN_ALGORITHM=algorithm, TOKEN_SECRET_KEY=long_key))
 
 
 def test_weak_import_default_password_is_rejected() -> None:
