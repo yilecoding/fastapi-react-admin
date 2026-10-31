@@ -38,6 +38,10 @@ const allFiles = []
     if (e.name.startsWith('.') && e.name !== '.claude') continue
     if (IGNORE_DIRS.has(e.name)) continue
     const p = join(dir, e.name)
+    // 🔴 `.claude/worktrees/` 是子代理隔离用的 git worktree，每个都是**整仓的一份拷贝**。
+    // 扫进来的话：拷贝里的分册序言链接层级不对，报一串假的 wrong-preamble-link；更糟的是
+    // 主仓库里指向已删文件的死链，会被拷贝里那份同名文件「解析成功」—— 静默放过真错误
+    if (relative(ROOT, p).replaceAll('\\', '/') === '.claude/worktrees') continue
     if (e.isDirectory()) walk(p)
     else allFiles.push(relative(ROOT, p).replaceAll('\\', '/'))
   }
