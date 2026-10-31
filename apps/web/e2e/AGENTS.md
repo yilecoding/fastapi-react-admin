@@ -347,6 +347,7 @@ await expect(page.locator('[data-visible="true"] table tbody tr').first()).toBeV
 | 整条测试超时，报错指向后面一句无辜的 `api.post` | `innerText()` / `textContent()` 对**不存在**的元素会死等满 30 秒 | 探「在不在」用 `count()`，它不等待：`(await loc.count()) > 0 ? await loc.innerText() : null` |
 | 断言「元素找不到」，但那个 testid 明明在源码里 | 路由前缀写错（`/file` → 实际是 `/system/file`），页面渲染的是 404 壳子 | 新 spec 先去 `apps/web/src/routes/` 确认路径，别照页面目录名猜 |
 | 文件名怎么都对不上 | `sys_file.name` 是**落盘名**（原名 + 随机后缀），`original_name` 才是用户看到的 | 界面显示的、去重认的都是 `original_name` |
+| 整条测试超时，红在一句其实早已满足的 poll / 断言上（重试也红） | 多账号流程每次整页加载在忙的 CI 上要 3.5～4.5 秒，30 秒被前面的步骤吃光；服务端日志里那一步的请求早就成功了（#199：`workflow.spec.ts` 通过时也要 20～26 秒） | 这类文件 `beforeEach(() => test.slow())`；查这种红先对服务端日志的时间线，别先怀疑那一步的逻辑 |
 | 隔离跑绿、全量跑红，报「列表容器找不到」 | 列表容器（`file-list` 之类）**只在非空时渲染**，空态是另一个分支；隔离跑时库里恰好有上一轮的残留数据 | 造数据**之前**只等一直存在的东西（工具条按钮 / `page-title`），列表容器留到造完再断言 |
 
 ### 现在测了什么 / 没测什么
