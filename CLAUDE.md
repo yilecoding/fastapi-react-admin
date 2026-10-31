@@ -30,7 +30,7 @@
 | 我要… | 读 |
 |---|---|
 | **第一次上手** | 本文件的「结构」·「本地起服务」·「硬纪律」（必读） |
-| 加列表页 / CRUD 页 · 主从页 · 监控页 | [`packages/platform/src/pages/AGENTS.md`](packages/platform/src/pages/AGENTS.md) |
+| 加列表页 / CRUD 页 · 主从页 · 监控页 · **工作台卡片 / 布局** | [`packages/platform/src/pages/AGENTS.md`](packages/platform/src/pages/AGENTS.md) · [`dashboard` 分册](packages/platform/src/pages/dashboard/AGENTS.md) |
 | 加设置屏 —— 骨架本身 / 参数配置那种 | [`_shared` 分册](packages/platform/src/pages/_shared/AGENTS.md) / [`config` 分册](packages/platform/src/pages/config/AGENTS.md) |
 | 动多页签 / 标签条 / 偏好设置 / 侧边栏 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |
 | 动文件上传 / 预览 / 附件 | [`packages/platform/src/pages/file/AGENTS.md`](packages/platform/src/pages/file/AGENTS.md) |

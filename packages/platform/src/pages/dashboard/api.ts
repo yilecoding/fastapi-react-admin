@@ -25,70 +25,67 @@ async function countOf(path: string, params: Record<string, string | undefined>)
 
 export const dashKeys = {
   all: ['dashboard'] as const,
-  today: () => [...dashKeys.all, 'today'] as const,
+  today: (kind: 'login' | 'opera') => [...dashKeys.all, 'today', kind] as const,
   trend: () => [...dashKeys.all, 'trend'] as const,
   recent: (kind: string) => [...dashKeys.all, 'recent', kind] as const,
   online: () => [...dashKeys.all, 'online'] as const,
-  scale: () => [...dashKeys.all, 'scale'] as const,
+  count: (kind: 'users' | 'roles' | 'notices') => [...dashKeys.all, 'count', kind] as const,
 }
 
-export type TodayStats = {
-  logins: number
-  loginFails: number
-  operations: number
-  operaFails: number
-}
+/** 今日的一类日志：总数 + 失败数 */
+export type TodayCount = { total: number; fails: number }
 
 /**
- * 今日概览。
+ * 今日登录 / 今日操作。
+ *
+ * 🔴 **两类日志各一个查询**（#202 之前是一个 `Promise.all` 一起取）：两个接口要的权限码不同
+ * （`log:login:list` / `log:opera:list`），绑在一起的话只有其中一个权限的人整张指标卡一起 403。
+ * 卡片按权限决定发不发哪一个（`enabled`），没权限的那一格不画。
  *
  * 「今日」的边界用 `presetRange('today')` 算 —— 与日志页筛选栏用的是同一套，
  * 所以点「今日登录」跳过去时，日志页的筛选条件和这里的口径完全一致，
  * 不会出现「卡片说 12 条、点进去只有 9 条」这种对不上。
  */
-export const todayStatsQuery = queryOptions({
-  queryKey: dashKeys.today(),
-  queryFn: async (): Promise<TodayStats> => {
-    // 带时分秒：接口收的是 datetime，`end_time` 只给日期会被解析成当天 00:00:00，
-    // 静默丢掉今天一整天（见 query-bar/params.ts 里那段）
-    const [start, end] = presetRange('today', true)
-    const [logins, loginFails, operations, operaFails] = await Promise.all([
-      countOf('/api/v1/logs/login', { start_time: start, end_time: end }),
-      countOf('/api/v1/logs/login', { start_time: start, end_time: end, status: '0' }),
-      countOf('/api/v1/logs/opera', { start_time: start, end_time: end }),
-      countOf('/api/v1/logs/opera', { start_time: start, end_time: end, status: '0' }),
-    ])
-    return { logins, loginFails, operations, operaFails }
-  },
-  staleTime: 30_000,
-})
-
-export type ScaleStats = { users: number; roles: number; notices: number }
+export const todayCountQuery = (kind: 'login' | 'opera') =>
+  queryOptions({
+    queryKey: dashKeys.today(kind),
+    queryFn: async (): Promise<TodayCount> => {
+      // 带时分秒：接口收的是 datetime，`end_time` 只给日期会被解析成当天 00:00:00，
+      // 静默丢掉今天一整天（见 query-bar/params.ts 里那段）
+      const [start, end] = presetRange('today', true)
+      const path = `/api/v1/logs/${kind}`
+      const [total, fails] = await Promise.all([
+        countOf(path, { start_time: start, end_time: end }),
+        countOf(path, { start_time: start, end_time: end, status: '0' }),
+      ])
+      return { total, fails }
+    },
+    staleTime: 30_000,
+  })
 
 /**
- * 平台规模。变化很慢，缓存久一点。
- *
- * 公告数走读者那个口（`/feed`：显示中、没过期的）。原来数的是管理端的 `/sys/notices`，
- * 把隐藏的、「通知」类型的都算进去了；而那个口现在要 `sys:notice:add`（#186）。
+ * 平台规模（用户数 / 角色数 / 公告数）。变化很慢，缓存久一点。同样按权限拆成三个查询：
+ * 用户 `sys:user:list`、角色 `sys:role:list`，公告走读者那个口（`/feed`：显示中、没过期的，只要登录）。
+ * 原来数的是管理端的 `/sys/notices`，把隐藏的、「通知」类型的都算进去了；而那个口现在要 `sys:notice:add`（#186）。
  */
-export const scaleStatsQuery = queryOptions({
-  queryKey: dashKeys.scale(),
-  queryFn: async (): Promise<ScaleStats> => {
-    const [users, roles, notices] = await Promise.all([
-      countOf('/api/v1/sys/users', {}),
-      countOf('/api/v1/sys/roles', {}),
-      countOf('/api/v1/sys/notices/feed', {}),
-    ])
-    return { users, roles, notices }
-  },
-  staleTime: 5 * 60_000,
-})
+const COUNT_PATH = {
+  users: '/api/v1/sys/users',
+  roles: '/api/v1/sys/roles',
+  notices: '/api/v1/sys/notices/feed',
+} as const
+
+export const scaleCountQuery = (kind: keyof typeof COUNT_PATH) =>
+  queryOptions({
+    queryKey: dashKeys.count(kind),
+    queryFn: () => countOf(COUNT_PATH[kind], {}),
+    staleTime: 5 * 60_000,
+  })
 
 /**
  * 在线会话数。
  *
  * ⚠️ `/monitors/sessions` 是 `DependsSuperUser`，非超管会 403。
- * 调用方要按「没权限」而不是「出错」来展示 —— 见 index.tsx 里的 `enabled` 判断。
+ * 非超管不发这个请求（`enabled`），那一格也不画 —— 见 `cards/stats.tsx`。
  * 这个接口不分页，一次读完后端的会话索引全给（#138）。
  */
 export const onlineCountQuery = queryOptions({

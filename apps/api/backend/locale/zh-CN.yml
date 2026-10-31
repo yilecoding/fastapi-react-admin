@@ -354,6 +354,7 @@ error:
     password_mismatch: 两次密码输入不一致
     password_required: 密码不允许为空
     permission_type_not_found: 权限类型不存在
+    preference_too_many: '个人偏好最多存 {limit} 项'
     self_permission_forbidden: 禁止修改自身权限
     sms_plugin_required: 短信插件未安装，无法发送验证码
     username_registered: 用户名已注册

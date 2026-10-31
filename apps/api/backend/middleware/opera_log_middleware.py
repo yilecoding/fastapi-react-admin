@@ -205,11 +205,17 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
             if 'application/json' not in content_types:
                 args['data'] = body_data.decode('utf-8', 'ignore') if isinstance(body_data, bytes) else str(body_data)
             else:
-                json_data = await request.json()
-                if isinstance(json_data, dict):
-                    args['json'] = self.desensitization(json_data)
+                # 🔴 请求体声明是 JSON、实际不是（截断 / 手写错了）时不能在这里炸：这个中间件在路由**之前**，
+                # 抛出去就是一个 500，路由层本该回的 422（`json_invalid`）永远轮不到。原样记原文，交给路由层去拒
+                try:
+                    json_data = await request.json()
+                except ValueError:
+                    args['data'] = body_data.decode('utf-8', 'ignore')
                 else:
-                    args['data'] = str(json_data)
+                    if isinstance(json_data, dict):
+                        args['json'] = self.desensitization(json_data)
+                    else:
+                        args['data'] = str(json_data)
 
         if is_form:
             # 表单参数

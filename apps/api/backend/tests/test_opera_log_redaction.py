@@ -186,3 +186,35 @@ def test_a_client_that_left_while_the_route_ran_is_not_logged_as_a_success(monke
     response = asyncio.run(M(app=None).dispatch(Request(scope, receive), call_next))
     assert response.status_code == 499
     assert queue.empty(), f'没执行完的请求不该进操作日志：{queue.get_nowait()}'
+
+
+def test_a_body_that_claims_json_but_is_not_does_not_blow_up_before_the_route():
+    """`Content-Type: application/json` 但请求体是截断 / 写错的 JSON：这个中间件在路由**之前**读请求体，
+    原来 `request.json()` 的 `JSONDecodeError` 没人接 —— 任何接口收到一份坏 JSON 都是 500，路由层本该回的
+    422（`json_invalid`）永远轮不到。#202 写个人偏好「非法 JSON 被拒」那条用例时撞到的。
+    现在照原文记进 `data`，交给路由层去拒（接口层的 422 由 `test_user_preference.py` 那条守着）"""
+    import asyncio
+
+    from starlette.requests import Request
+
+    body = b'{"value": {"cards": ['
+
+    async def receive():  # ruff: ignore[unused-async] —— ASGI 的 receive 必须是 async
+        return {'type': 'http.request', 'body': body, 'more_body': False}
+
+    scope = {
+        'type': 'http',
+        'method': 'PUT',
+        'path': f'{settings.FASTAPI_API_V1_PATH}/sys/users/me/preferences/dashboard.layout',
+        'raw_path': b'',
+        'query_string': b'',
+        'headers': [(b'content-type', b'application/json'), (b'content-length', str(len(body)).encode())],
+        'path_params': {},
+        'client': ('127.0.0.1', 1),
+        'server': ('127.0.0.1', 8000),
+        'scheme': 'http',
+    }
+    args = asyncio.run(M(app=None).get_request_args(Request(scope, receive)))
+    assert args is not None
+    assert args['data'] == body.decode()
+    assert 'json' not in args

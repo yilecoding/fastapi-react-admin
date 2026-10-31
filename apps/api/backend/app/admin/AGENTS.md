@@ -135,3 +135,26 @@ MFA 这条依赖检查第一次就踩到了：变异检验时 `all` 被真写进
 没密钥也能改成强制 · Swagger 不拦 · 恢复码不脱敏 · 绑定令牌能拿来验证 · 读路径也校验 · 前端忽略挑战直接当登录成功（E2E）。
 迁移 `ad000000usermfa`：PostgreSQL 在开发库副本上 up → down → up（表和参数行都在 / 都没 / 都在）；SQL Server 在 `fba_test` 上 down → up 两轮，主键 `sys.identity_columns` 0 行。**没验过**：第三方登录真走一遍（要 GitHub / Google 的回调）、
 打包出来的桌面端、真机上的移动端（只过了 typecheck）。
+
+## 个人偏好（`GET / PUT /sys/users/me/preferences/{key}`，#202）
+
+表 `sys_user_preference`（迁移 `ah000000userpref`）：`(user_id, key)` 唯一，`value` 是 JSON **文本**（不用三方言各不相同的原生 JSON 类型）。
+跟人走、不跟设备走的设置放这里（第一期只有工作台布局 `dashboard.layout`，前端见
+[`pages/dashboard` 分册](../../../../../packages/platform/src/pages/dashboard/AGENTS.md)）；「这块屏幕上我想看到什么」那种仍在前端 localStorage。
+路径里没有用户 ID —— 「读写别人的偏好」在契约上就不存在。没存过回 **200 + `value: null`**，不是 404。
+键是格式白名单（小写 `命名空间.名字`），所以另有两道防滥用：值 ≤ 16 KB（UTF-8 字节）、每人 ≤ 32 个键。
+
+- 🔴 **`json.dumps` 要 `allow_nan=False`。** 请求体是 Python `json.loads` 解析的，它**接受** `NaN` / `Infinity`。
+  实测（关掉这道）：`PUT {"value": {"w": NaN}}` 回 **200**，库里存的是 `{"w":NaN}`（不是合法 JSON），
+  PUT 的响应和之后的 GET 都是 `{"w": null}` —— 响应编码层把 NaN 换成了 null。**写进去的和读回来的不是同一份，没有任何报错**
+- ⚠️ **大小按字节算，不按字符。** 6000 个汉字是 6000 个字符、18000 字节；按 `len(text)` 判就放进去了（变异实测：那条用例红）
+- ⚠️ **测试收尾删这张表的行要走 Core，不能裸 `text()`**：`key` 在 SQL Server / MySQL 是保留字。
+  实测：`text("DELETE FROM sys_user_preference WHERE key LIKE …")` 在 PostgreSQL 上全绿，换到 SQL Server
+  20 条用例在 fixture 里一起 `ProgrammingError`；改成 `delete(UserPreference).where(...)` 三个方言都过
+- ⚠️ 同一个人同一个键**第一次**被两个请求同时写，后到的那个撞唯一约束（先查后写，三个方言的 upsert 语法各不相同）。
+  只可能是同一个人两台设备同一瞬间第一次保存，接受；没有实测复现过
+
+**实测证据**：`tests/api_v1/test_user_preference.py` 20 条（往返 + 整份覆盖 · 只能动自己的 · 未登录 401 · 9 个坏 key ·
+5 种坏 JSON 且旧值不被覆盖 · 字节上限边界 · 键数上限）。变异各自当场红：放行 NaN · 按字符算大小 · 查询不带 `user_id` ·
+去掉键数上限。迁移在三个方言的私有库上都是 `downgrade -1`（表没了）→ `upgrade head`（表回来）：PostgreSQL 16 /
+SQL Server 2022（`sys.identity_columns` 对这张表 0 行）/ MySQL 8.4；之后在同一个库上跑这 20 条 + 迁移守卫 7 条，三个方言都全绿。

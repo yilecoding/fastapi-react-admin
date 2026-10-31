@@ -36,6 +36,7 @@ EXEMPT: dict[str, str] = {
     'CRUDConfig': '系统参数，且在启动 / 登录期读取',
     'CRUDStorage': '存储是系统级配置（同 sys_config），不归属部门/人；读文件那条路不挂权限码，过滤了就读不到文件',
     'CRUDUserPasswordHistory': '改密时内部读，不对外展示',
+    'CRUDUserPreference': '「我的偏好」，接口路径里没有用户 ID，每条查询都按 request.user.id 强制过滤（#202）',
     'CRUDUserSocial': 'OAuth2 绑定在登录链路上读，那时没有当前用户',
     'CRUDNotification': '收件箱按 current_user.id 强制过滤，再叠部门维度会变成「我和我下属的通知」',
     'CRUDNotificationPolicy': '通知渠道策略是全局配置，不归属部门/人；靠 sys:notification:policy:* 权限码',

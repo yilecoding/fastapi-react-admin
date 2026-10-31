@@ -1,0 +1,300 @@
+import * as React from 'react'
+import { menuTitle } from '@admin/i18n'
+import { useTranslation } from 'react-i18next'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type Announcements,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { restrictToParentElement, restrictToVerticalAxis } from '@dnd-kit/modifiers'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { IconChevronDown, IconGripVertical, IconLoader2, IconRotate } from '@tabler/icons-react'
+
+import { Button } from '@admin/ui/components/button'
+import { Checkbox } from '@admin/ui/components/checkbox'
+import { QueryError } from '@admin/ui/components/query-error'
+import { Switch } from '@admin/ui/components/switch'
+import { cn } from '@admin/ui/lib/utils'
+
+import { MenuIcon } from '../../shell/icon-registry'
+import type { NavNode } from '../../shell/use-sidebar'
+import { SegmentedControl } from '../_shared/settings-rows'
+import { resolveQuickLinks } from './cards/quick-links'
+import { QUICK_LINKS_MAX, moveItem, patchItem, type CardWidth, type DashboardLayout } from './layout'
+
+/**
+ * 编辑工作台：显示 / 隐藏 · 拖拽排序（键盘也能拖：Tab 到手柄 → 空格拿起 → 方向键 → 空格放下）·
+ * 半宽 / 全宽 · 快捷入口挑页面 · 恢复默认 · 保存 / 取消。
+ *
+ * 只编辑**草稿**：下面的卡片网格照着草稿实时预览，点「保存」才写服务端。
+ * 排序是一条竖着的列表而不是在网格里直接拖卡片 —— 卡片宽度不一，网格里拖动的落点很难预测，
+ * 键盘拖拽在二维网格里也不好用；竖列表的上下就是显示顺序。
+ */
+export function DashboardEditor({
+  layout,
+  titleOf,
+  pages,
+  dirty,
+  saving,
+  saveError,
+  onChange,
+  onReset,
+  onCancel,
+  onSave,
+}: {
+  layout: DashboardLayout
+  titleOf: (id: string) => string
+  pages: NavNode[]
+  dirty: boolean
+  saving: boolean
+  saveError: unknown
+  onChange: (next: DashboardLayout) => void
+  onReset: () => void
+  onCancel: () => void
+  onSave: () => void
+}) {
+  const { t } = useTranslation()
+  const ids = layout.items.map((i) => i.id)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  // 读屏的播报：dnd-kit 默认是英文，跟着界面语言走
+  const announcements = React.useMemo<Announcements>(
+    () => ({
+      onDragStart: ({ active }) => t('已拿起「{{name}}」', { name: titleOf(String(active.id)) }),
+      onDragOver: ({ active, over }) =>
+        over
+          ? t('「{{name}}」移到第 {{n}} 位', { name: titleOf(String(active.id)), n: ids.indexOf(String(over.id)) + 1 })
+          : undefined,
+      onDragEnd: ({ active, over }) =>
+        over
+          ? t('「{{name}}」放在第 {{n}} 位', { name: titleOf(String(active.id)), n: ids.indexOf(String(over.id)) + 1 })
+          : undefined,
+      onDragCancel: ({ active }) => t('已取消移动「{{name}}」', { name: titleOf(String(active.id)) }),
+    }),
+    [t, titleOf, ids]
+  )
+
+  function onDragEnd(e: DragEndEvent) {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    onChange(moveItem(layout, String(active.id), String(over.id)))
+  }
+
+  const widthOptions = [
+    { value: 'half' as const, label: t('半宽') },
+    { value: 'full' as const, label: t('全宽') },
+  ]
+
+  return (
+    <section
+      className="flex flex-col gap-3 rounded-lg border border-primary/40 bg-muted/20 px-4 py-3"
+      data-testid="dash-editor"
+      aria-label={t('编辑工作台')}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-medium">{t('编辑工作台')}</h2>
+        <span className="text-xs text-muted-foreground">
+          {t('拖动手柄调整顺序（键盘：空格拿起、方向键移动、空格放下）。下面的卡片按这里实时预览，保存后才生效。')}
+        </span>
+      </div>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+        onDragEnd={onDragEnd}
+        accessibility={{
+          announcements,
+          screenReaderInstructions: { draggable: t('按空格拿起，用方向键移动，再按空格放下；按 Esc 取消。') },
+        }}
+      >
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          <ul className="flex flex-col gap-1" data-testid="dash-editor-list">
+            {layout.items.map((item) => (
+              <EditorRow
+                key={item.id}
+                id={item.id}
+                title={titleOf(item.id)}
+                visible={item.visible}
+                width={item.width}
+                widthOptions={widthOptions}
+                onVisible={(visible) => onChange(patchItem(layout, item.id, { visible }))}
+                onWidth={(width) => onChange(patchItem(layout, item.id, { width }))}
+              />
+            ))}
+          </ul>
+        </SortableContext>
+      </DndContext>
+
+      {ids.includes('quick-links') && (
+        <QuickLinksPicker
+          pages={pages}
+          value={layout.quickLinks}
+          onChange={(quickLinks) => onChange({ ...layout, quickLinks })}
+        />
+      )}
+
+      {Boolean(saveError) && (
+        <QueryError error={saveError} title={t('保存失败，布局没有改动')} testId="dash-editor-save-error" />
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="ghost" size="sm" onClick={onReset} disabled={saving} data-testid="dash-editor-reset">
+          <IconRotate className="size-4" />
+          {t('恢复默认')}
+        </Button>
+        <div className="ms-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={onCancel} disabled={saving} data-testid="dash-editor-cancel">
+            {t('取消')}
+          </Button>
+          <Button size="sm" onClick={onSave} disabled={!dirty || saving} data-testid="dash-editor-save">
+            {saving && <IconLoader2 className="size-4 animate-spin" />}
+            {t('保存')}
+          </Button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function EditorRow({
+  id,
+  title,
+  visible,
+  width,
+  widthOptions,
+  onVisible,
+  onWidth,
+}: {
+  id: string
+  title: string
+  visible: boolean
+  width: CardWidth
+  widthOptions: { value: CardWidth; label: string }[]
+  onVisible: (v: boolean) => void
+  onWidth: (w: CardWidth) => void
+}) {
+  const { t } = useTranslation()
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={cn(
+        'flex items-center gap-3 rounded-md bg-background px-2 py-1.5 ring-1 ring-border/60',
+        isDragging && 'z-10 shadow-md ring-primary/40',
+        !visible && 'text-muted-foreground'
+      )}
+      data-testid={`dash-editor-row-${id}`}
+      data-visible={visible}
+    >
+      <button
+        type="button"
+        className="cursor-grab rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+        aria-label={t('拖动排序 {{name}}', { name: title })}
+        data-testid={`dash-editor-handle-${id}`}
+        {...attributes}
+        {...listeners}
+      >
+        <IconGripVertical className="size-4" />
+      </button>
+      <Switch
+        checked={visible}
+        onCheckedChange={(v: boolean) => onVisible(Boolean(v))}
+        aria-label={t('显示 {{name}}', { name: title })}
+        data-testid={`dash-editor-visible-${id}`}
+      />
+      <span className={cn('min-w-0 flex-1 truncate text-sm', !visible && 'line-through')}>{title}</span>
+      <SegmentedControl value={width} options={widthOptions} onChange={onWidth} testId={`dash-editor-width-${id}`} />
+    </li>
+  )
+}
+
+/**
+ * 快捷入口挑哪些页面。候选 = 这个人自己的侧边栏（`flattenPages`）。
+ *
+ * 没挑过（`null`）时勾着的是默认那几个；动一下就变成显式的清单。存着、但现在不在侧边栏里的 path
+ * （权限临时收走）原样留在清单末尾，不在这里替他删掉
+ */
+function QuickLinksPicker({
+  pages,
+  value,
+  onChange,
+}: {
+  pages: NavNode[]
+  value: string[] | null
+  onChange: (next: string[] | null) => void
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = React.useState(false)
+  const chosen = React.useMemo(() => new Set(resolveQuickLinks(value, pages).map((p) => p.path)), [value, pages])
+  const full = chosen.size >= QUICK_LINKS_MAX
+
+  function toggle(path: string, on: boolean) {
+    const next = new Set(chosen)
+    if (on) next.add(path)
+    else next.delete(path)
+    const known = new Set(pages.map((p) => p.path))
+    const kept = (value ?? []).filter((p) => !known.has(p))
+    onChange([...pages.filter((p) => next.has(p.path)).map((p) => p.path), ...kept])
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-border/60 pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          data-testid="dash-editor-links-toggle"
+        >
+          <IconChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} />
+          {t('快捷入口放哪些页面（{{n}}/{{max}}）', { n: chosen.size, max: QUICK_LINKS_MAX })}
+        </Button>
+        {open && value !== null && (
+          <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onChange(null)} data-testid="dash-editor-links-default">
+            {t('用默认的几个')}
+          </Button>
+        )}
+      </div>
+      {open && (
+        <ul className="grid gap-1 @xl/main:grid-cols-2 @4xl/main:grid-cols-3" data-testid="dash-editor-links">
+          {pages.map((p) => {
+            const on = chosen.has(p.path)
+            return (
+              <li key={p.path}>
+                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted/60 has-disabled:cursor-not-allowed has-disabled:opacity-50">
+                  <Checkbox
+                    checked={on}
+                    disabled={!on && full}
+                    onCheckedChange={(v: boolean) => toggle(p.path, Boolean(v))}
+                    data-testid={`dash-editor-link-${p.path}`}
+                  />
+                  <MenuIcon name={p.icon} className="size-4 text-muted-foreground" />
+                  <span className="truncate">{menuTitle(t, p.path, p.title)}</span>
+                </label>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
