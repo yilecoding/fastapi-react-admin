@@ -18,8 +18,7 @@ import json
 
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import event as sa_event
-
+from backend.common.after_commit import run_after_commit
 from backend.common.log import log
 from backend.plugin.open.crud.crud_webhook import open_webhook_dao
 from backend.plugin.open.enums import WebhookDeliveryStatus
@@ -31,13 +30,8 @@ from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
-    from sqlalchemy.orm import Session
 
 TASK_NAME = 'open.webhook_deliver_pending'
-_KICK_FLAG = 'open_webhook_kick'
-_LISTENING = 'open_webhook_listening'
-#: 提交后派出去的 kick 协程要留一个强引用，否则可能在跑完之前被回收（asyncio 文档的那条）
-_background: set[asyncio.Task[None]] = set()
 
 
 def build_payload(type: str, data: dict[str, Any]) -> str:
@@ -104,30 +98,12 @@ def _patterns(hook: OpenWebhook) -> list[str]:
 
 
 def kick_after_commit(db: AsyncSession) -> None:
-    """提交之后踢一次 worker。同一个 session 只挂一次监听；回滚会把「要踢」的标记清掉"""
-    sync: Session = db.sync_session
-    sync.info[_KICK_FLAG] = True
-    if sync.info.get(_LISTENING):
-        return
-    sync.info[_LISTENING] = True
-    sa_event.listen(sync, 'after_commit', _after_commit)
-    sa_event.listen(sync, 'after_rollback', _after_rollback)
+    """提交之后踢一次 worker。同一个事务里多次只踢一次；回滚了不踢
 
-
-def _after_commit(session: Session) -> None:
-    if not session.info.pop(_KICK_FLAG, False):
-        return
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return
-    task = loop.create_task(kick())
-    _background.add(task)
-    task.add_done_callback(_background.discard)
-
-
-def _after_rollback(session: Session) -> None:
-    session.info.pop(_KICK_FLAG, None)
+    走公用的 `common/after_commit.py: run_after_commit`（#190 之前这里自己挂了一份同形状的监听）。
+    `lambda` 而不是直接传 `kick`：提交那一刻才查模块级的名字，测试 monkeypatch 掉的 `kick` 才生效
+    """
+    run_after_commit(db, 'open.webhook_kick', lambda: kick())
 
 
 async def kick() -> None:

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { meQuery } from '../../auth/queries'
 import { useTabStore } from '../tab-store'
+import { isTourHeld, useTourHeld } from './gate'
 import { SHELL_TOUR } from './shell-tour'
 import { startTour, tourSeen } from './tour'
 
@@ -20,24 +21,28 @@ const SETTLE_MS = 800
  *
  * 只在**仪表盘是当前页签**时弹：直接深链进某个列表页的人是来干活的，不打断。
  * 没弹成功（目标一个都解析不到）不记「看过了」，下次到仪表盘再试。
+ *
+ * 登录后的公告弹窗还在取 / 还开着时让它先来（`gate.ts`）：放开之后这个 effect 重跑，照常等 SETTLE_MS。
  */
 export function TourAutostart() {
   const { data: me } = useQuery(meQuery)
   const userId = me?.id
   const activeRouteId = useTabStore((s) => s.tabs.find((tb) => tb.key === s.activeKey)?.routeId)
+  const held = useTourHeld()
 
   React.useEffect(() => {
-    if (!userId || activeRouteId !== DASHBOARD_ROUTE_ID) return
+    if (!userId || activeRouteId !== DASHBOARD_ROUTE_ID || held) return
     if (tourSeen(userId, SHELL_TOUR)) return
     const timer = window.setTimeout(() => {
       // 🔴 触发时**再查一遍**。上面那次检查发生在 effect 运行的瞬间，而这中间隔着
       // SETTLE_MS —— 用户完全可能在这段时间里自己从顶栏「帮助」点开导览、看完关掉。
       // 不重查的话定时器到点会**再弹一次**，而用户刚刚才手动关掉它。
-      if (tourSeen(userId, SHELL_TOUR)) return
+      // 让行同理：这 800ms 里可能刚到了一条要弹的公告（socket 推的）
+      if (tourSeen(userId, SHELL_TOUR) || isTourHeld()) return
       startTour(SHELL_TOUR, { userId })
     }, SETTLE_MS)
     return () => window.clearTimeout(timer)
-  }, [userId, activeRouteId])
+  }, [userId, activeRouteId, held])
 
   return null
 }

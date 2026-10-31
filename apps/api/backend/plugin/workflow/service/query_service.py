@@ -21,6 +21,7 @@ from backend.app.admin.model import Dept, File, Role, User
 from backend.app.admin.service.file_service import register_file_access
 from backend.common.exception import errors
 from backend.common.i18n import t
+from backend.common.pagination import count_rows
 from backend.plugin.workflow.engine.flow import index_nodes
 from backend.plugin.workflow.engine.form import (
     hidden_fields_for,
@@ -93,7 +94,7 @@ def _instance_row(inst: WfInstance, definition_name: str | None) -> dict[str, An
 
 
 async def _paged(db: AsyncSession, stmt: Select, page: int, size: int, order_by: Any) -> tuple[list[Any], int]:
-    total = await db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0
+    total = await count_rows(db, stmt)
     # 分页必须带 ORDER BY（SQL Server 的 OFFSET FETCH 强制要求）；按雪花 ID 排，同一毫秒内也唯一
     keys = order_by if isinstance(order_by, tuple) else (order_by,)
     rows = (await db.execute(stmt.order_by(*keys).offset((page - 1) * size).limit(size))).all()

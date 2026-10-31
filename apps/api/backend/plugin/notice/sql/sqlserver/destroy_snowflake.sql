@@ -1,3 +1,5 @@
+DELETE FROM task_scheduler WHERE task = 'notice.sync_inbox';
+
 DELETE FROM sys_menu WHERE name IN ('AddNotice', 'EditNotice', 'DeleteNotice', 'ExportNotice');
 
 DELETE FROM sys_menu WHERE name = 'PluginNotice';

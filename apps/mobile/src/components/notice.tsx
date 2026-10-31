@@ -1,13 +1,18 @@
-import { PaperclipIcon, PinIcon } from 'lucide-react-native'
+import { PaperclipIcon, PinIcon, TriangleAlertIcon } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import { Pressable, View } from 'react-native'
 
+import { AttachmentList } from '@/components/attachment-list'
+import { GroupHeader } from '@/components/grouped'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
 import type { NoticeFeedItem } from '@/lib/contract'
 import { relativeTime } from '@/lib/datetime'
-import { NOTICE_LEVEL_LABEL } from '@/lib/notices'
+import { NOTICE_LEVEL_LABEL, noticePublishedAt, useNoticeAttachments } from '@/lib/notices'
 
 /**
  * 公告的几个小件：级别徽标 · 置顶标记 · 附件个数 · 首页那一行。
@@ -88,7 +93,7 @@ export function NoticeRow({
           <Text className={`flex-1 text-[15px] ${unread ? 'font-semibold' : ''}`} numberOfLines={1}>
             {notice.title}
           </Text>
-          <Text className="text-muted-foreground font-mono text-[11px]">{relativeTime(notice.created_time)}</Text>
+          <Text className="text-muted-foreground font-mono text-[11px]">{relativeTime(noticePublishedAt(notice))}</Text>
         </View>
         {hasMeta ? (
           <View className="flex-row items-center gap-2">
@@ -98,6 +103,45 @@ export function NoticeRow({
           </View>
         ) : null}
       </Pressable>
+    </>
+  )
+}
+
+/**
+ * 公告的附件区（详情屏和登录后弹窗共用，#190 从详情屏里拆出来）。
+ *
+ * 没有附件整块不出（读者不需要看到「暂无附件」）。个数以列表为准 —— 后端只列这个人读得了的，
+ * 可能比 `attachment_count` 少；列表拉回来是空的也整块收起。
+ * 拉取失败要**占住位置**报出来（硬纪律 9）：否则读者看到的是「这条没有附件」，而列表上明明有 📎。
+ *
+ * ⚠️ 查询和调用方共用同一个 key（`noticesKey.attachments(id)`）：详情屏自己也挂着一份，下拉刷新时一起重拉
+ */
+export function NoticeAttachments({ noticeId, count }: { noticeId: string; count: number }) {
+  const { t } = useTranslation()
+  const has = count > 0
+  const files = useNoticeAttachments(noticeId, has)
+  const list = files.data ?? null
+  if (!has || (list && list.length === 0)) return null
+  return (
+    <>
+      <GroupHeader>{t('附件（{{n}}）', { n: list?.length ?? count })}</GroupHeader>
+      {files.isError ? (
+        <View className="px-4">
+          <Alert variant="destructive" icon={TriangleAlertIcon}>
+            <AlertTitle>{t('附件加载失败')}</AlertTitle>
+            <AlertDescription>{files.error instanceof Error ? files.error.message : String(files.error)}</AlertDescription>
+            <Button variant="outline" size="sm" onPress={() => void files.refetch()} className="mt-2 self-start">
+              <Text>{t('重试')}</Text>
+            </Button>
+          </Alert>
+        </View>
+      ) : list === null ? (
+        <View className="gap-2 px-4">
+          <Skeleton className="h-[54px] rounded-xl" />
+        </View>
+      ) : (
+        <AttachmentList files={list} />
+      )}
     </>
   )
 }

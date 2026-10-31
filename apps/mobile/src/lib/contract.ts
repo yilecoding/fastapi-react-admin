@@ -90,8 +90,19 @@ export type NotificationUnread = S['GetNotificationUnreadDetail']
  */
 export type NoticeFeedItem = S['GetNoticeFeedItem']
 
-/** `GET /api/v1/sys/notices/feed/{pk}`：上面那条 + `content`（富文本 HTML） */
+/**
+ * `GET /api/v1/sys/notices/feed/{pk}`：上面那条 + `content`（富文本 HTML）。
+ * 登录后弹窗（`/feed/popups`，#190）的每一条也是这个形状 —— 弹窗里直接显示正文
+ */
 export type NoticeFeedDetail = S['GetNoticeFeedDetail']
+
+/**
+ * `GET /api/v1/sys/notices/public` 的一条（登录页，**不用登录**，#190）。
+ *
+ * ⚠️ 只有纯文本 `summary`（正文去标签、≤200 字），没有正文 / 附件 / 图；
+ * **也没有 `publish_time`** —— 所以登录页不显示时间（`created_time` 对定时发布的公告不是「发布时间」）
+ */
+export type NoticePublicItem = S['GetNoticePublicItem']
 
 /** `GET /api/v1/sys/files/targets/{type}/{id}` 的一条（附件行的 props） */
 export type FileDetail = S['GetFileDetail']

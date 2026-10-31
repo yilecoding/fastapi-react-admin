@@ -41,6 +41,7 @@ import { LanguageMenu } from "@/components/language-menu"
 import { ThemeMenu } from "@/components/theme-menu"
 import { BRAND } from "@/lib/brand"
 import { MfaStep } from "@/routes/_guest/-mfa-step"
+import { PublicNotices } from "@/routes/_guest/-public-notices"
 import { SignInBrandPanel, SignInBrandStrip } from "@/routes/_guest/-sign-in-brand"
 
 export const Route = createFileRoute("/_guest/sign-in")({
@@ -566,6 +567,9 @@ function SignInPage() {
               </TabsContent>
             </Tabs>
             )}
+
+            {/* 登录页公告（#190）：在表单**下面** —— 取不到 / 没有都不占位，取数失败也只是一行，不挡登录 */}
+            <PublicNotices className="mt-8 border-t border-border/70 pt-4" />
           </div>
         </div>
 

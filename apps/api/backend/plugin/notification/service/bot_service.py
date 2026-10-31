@@ -133,8 +133,19 @@ def to_detail(bot: NotificationBot) -> dict[str, Any]:
 # ── 投递 ─────────────────────────────────────────────────────────────────────
 
 
-async def enqueue_bots(db: AsyncSession, *, kind: NotificationKind, title: str, content: str, link: str | None) -> int:
-    """在调用方的事务里给订阅了这个类型的机器人各写一行投递，返回行数（> 0 时提交后要踢 worker）。不 commit、不 flush"""
+async def enqueue_bots(
+    db: AsyncSession,
+    *,
+    kind: NotificationKind,
+    title: str,
+    content: str,
+    link: str | None,
+    notification_id: int | None = None,
+) -> int:
+    """在调用方的事务里给订阅了这个类型的机器人各写一行投递，返回行数（> 0 时提交后要踢 worker）。不 commit、不 flush
+
+    :param notification_id: 广播的站内那一行（#190）：记在投递行上，之后补推时据此判「这一行推过群没有」
+    """
     if not kind.bot:
         return 0
     n = 0
@@ -143,7 +154,7 @@ async def enqueue_bots(db: AsyncSession, *, kind: NotificationKind, title: str, 
             continue
         db.add(
             NotificationDelivery(
-                notification_id=None,
+                notification_id=notification_id,
                 user_id=None,
                 bot_id=bot.id,
                 kind=kind.code,

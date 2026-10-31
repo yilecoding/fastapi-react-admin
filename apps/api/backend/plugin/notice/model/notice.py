@@ -22,3 +22,12 @@ class Notice(Base):
     expire_time: Mapped[datetime | None] = mapped_column(
         TimeZone, default=None, comment='过期时间（为空不过期；过期后读者看不到，管理页照常可见）'
     )
+    # #190。发给谁不在这张表上：受众在 `sys_notification_audience`（按 `notice:<id>` 关联），
+    # 收件箱和公告读同一份，见 `crud_notice.readable_clause`
+    popup: Mapped[bool] = mapped_column(default=False, comment='登录后弹窗')
+    require_ack: Mapped[bool] = mapped_column(default=False, comment='必须点「我已阅读」（只在登录后弹窗时有意义）')
+    publish_time: Mapped[datetime | None] = mapped_column(
+        TimeZone, default=None, comment='定时发布时间（为空立即发布；到点之前读者看不到、不进收件箱）'
+    )
+    # ⚠️ `public` 在 SQL Server 上是保留字：ORM / Core 会自己加方括号，手写的 SQL（种子）要写成 `[public]`
+    public: Mapped[bool] = mapped_column(default=False, comment='登录页可见（不登录也能看；不能有发布范围）')

@@ -9,7 +9,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 import { cn } from '@admin/ui/lib/utils'
 
 import { CATEGORY } from '../notification/api'
-import { noticeFeedQuery } from '../notice/api'
+import { noticeFeedQuery, publishedAt } from '../notice/api'
 import { AttachmentCount, NoticeLevelPill, PinnedMark } from '../notice/shared'
 
 /** 卡片里放几条。置顶的在前（后端排序），翻更多去消息中心的「公告」分类 */
@@ -94,8 +94,9 @@ export function DashboardNoticeCard({ onOpen }: { onOpen: (noticeId: string) => 
                 <NoticeLevelPill level={n.level} className="shrink-0" />
                 <span className={cn('min-w-0 flex-1 truncate', !n.read && 'font-medium')}>{n.title}</span>
                 <AttachmentCount count={n.attachment_count} />
+                {/* 定时发布的显示到点那一刻（和后端排序同一个口径），不是建好那一刻 */}
                 <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                  {formatDateTimeShort(n.created_time)}
+                  {formatDateTimeShort(publishedAt(n))}
                 </span>
               </button>
             </li>

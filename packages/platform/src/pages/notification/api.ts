@@ -31,6 +31,11 @@ export type Notification = {
   source: string | null
   /** 来源对象**现在**的附件个数（查询时现算，不是发布时存的）；没有来源是 `null` */
   attachment_count: number | null
+  /**
+   * 必须读者打开确认（#190 公告的「必须确认」）。这种行**不能**在列表里标已读，「全部已读」也会跳过它 ——
+   * 只能在读者抽屉 / 弹窗里点「我已阅读」。查询时现算，不是数据库列
+   */
+  requires_ack: boolean
 }
 
 /**
@@ -68,6 +73,19 @@ export type UnreadCount = {
   total: number
   /** key 是分类数值的**字符串**形式（JSON 对象的 key 只能是字符串） */
   by_category: Record<string, number>
+  /** 未读里必须打开确认的条数 —— 「全部已读」标不掉它们（见 `markableUnread`） */
+  requires_ack_count: number
+}
+
+/**
+ * 「全部已读」点下去能标掉几条 = 未读总数 − 必须确认的（后端跳过它们）。
+ *
+ * 🔴 「全部已读」的按钮和确认框用这个数，**不用 `total`**：只剩必须确认的公告时 `total` 仍然 > 0（红点照亮，那是对的），
+ * 按 `total` 判的话按钮一直可点、确认框说「会把 1 条标为已读」，点完什么都没变
+ */
+export function markableUnread(u: UnreadCount | undefined): number {
+  if (!u) return 0
+  return Math.max(0, u.total - (u.requires_ack_count ?? 0))
 }
 
 export const notificationKeys = {
@@ -122,6 +140,10 @@ export const NOTICE_FEED_KEY = ['sys', 'notice', 'feed'] as const
  * 🔴 **公告读者列表也在里面**（#186）：它的「读没读」就是收件箱那一行的已读状态。只失效收件箱的话，
  * 在铃铛里点了「全部已读」，工作台公告卡（被 `<Activity>` 保活着、`staleTime` 30 秒）还亮着一排未读点；
  * 新发的公告也要等手动刷新才出现在卡片上（代码评审指出）
+ *
+ * 登录后弹窗 / 顶部横幅（#190）的 key 也在 `NOTICE_FEED_KEY` 下面（`noticeKeys.popups()` / `banner()`），
+ * 一起失效：铃铛收到 socket `notification:new` 时调的就是这里，所以「刚发了一条必读公告」
+ * 在线的人当场弹出来，不用另外订阅一遍；标已读之后弹窗 / 横幅里那一条也跟着消失
  */
 export function invalidateInbox(qc: QueryClient) {
   return Promise.all([

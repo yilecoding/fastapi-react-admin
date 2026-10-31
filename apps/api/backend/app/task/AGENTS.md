@@ -407,5 +407,5 @@ SQL Server（本机容器，RCSI 关着，同 CI）：本模块 + `test_health.p
 ⚠️ **没修的**：① 调度器心跳写在 `tick()` 里，beat 因为别的原因不派任务时心跳照写，`/health/status` 仍然只会报
 「worker 心跳停了」，分辨两者要另记一个「最近一次派发」的时间。② 写入侧靠 DAO 显式登记，绕过 DAO 直接写这张表的
 （原生 SQL、迁移）要等定时重读；更彻底的是在 Session 级挂 `do_orm_execute` / `after_flush` 统一登记，但要排除 beat 自己的
-回写，留给后续。③ 「提交后做一件事」的登记机制和 `plugin/open/service/event_service.py: kick_after_commit` 是同一套，
-还没抽成公用的。
+回写，留给后续。③ 「提交后做一件事」后来抽成了公用的 `common/after_commit.py: run_after_commit`（通知推送 / 通知投递 /
+Webhook 投递都走它，#190 迁完）；**这里的变更标记刻意没迁**：它挂在同步会话上、提交后做的是一次同步的 Redis 写，公用那份派的是协程。

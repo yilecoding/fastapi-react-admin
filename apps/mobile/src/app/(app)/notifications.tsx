@@ -97,11 +97,19 @@ export default function NotificationsScreen() {
    * ⚠️ 其余分类的 `link` 是 **web 的路由**（`/profile`、`/task/...`），移动端没有对应页面，
    * 仍然只标已读不跳。认公告靠 `source`（`notice:<id>`），**不靠解析 `link`** ——
    * 链接是给 web 用的，形状随 web 的路由改。
+   *
+   * 🔴 **公告那一行点了不在这里标已读，交给详情屏**（#190）。必须确认的公告在这里标掉就等于替读者点了
+   * 「我已阅读」—— 后端对那种公告只认显式已读，这一标就是。收件箱这一行现在带 `requires_ack` 了（「全部已读」
+   * 按钮要用），但标已读仍只放在详情屏一处：普通的打开成功才标（和原来一样），必须确认的等读者点按钮。
+   * 打不开（404 = 已撤回 / 过期）的那一行后端会自己撤掉
    */
   function onPressRow(n: Notification) {
-    void markRead(n)
     const noticeId = noticeIdFromSource(n.source)
-    if (noticeId) router.push({ pathname: '/notices/[id]', params: { id: noticeId } })
+    if (noticeId) {
+      router.push({ pathname: '/notices/[id]', params: { id: noticeId } })
+      return
+    }
+    void markRead(n)
   }
 
   const markAll = useMutation({
@@ -116,6 +124,11 @@ export default function NotificationsScreen() {
 
   const total = unread?.total ?? 0
   /*
+   * 「全部已读」标得掉的条数：必须确认的公告（#190）后端会跳过，只能在详情屏点「我已阅读」。
+   * 按 `total` 判的话，只剩那几条时按钮还亮着、点了什么都不变（红点照亮是对的 —— 它们确实没读）
+   */
+  const markable = Math.max(0, total - (unread?.requires_ack_count ?? 0))
+  /*
    * 🔴 **只在「确实知道是 0」的时候禁用。**
    *
    * 曾经写的是 `disabled={total === 0}`，而 `total` 是 `unread?.total ?? 0` ——
@@ -123,7 +136,7 @@ export default function NotificationsScreen() {
    * 看起来像「这个功能不存在」（硬纪律 9）。`known`（= query 的 `isSuccess`）
    * 为假时放开：接口本身是幂等的，点了最多是白点一次。
    */
-  const canMarkAll = !markAll.isPending && (!unreadKnown || total > 0)
+  const canMarkAll = !markAll.isPending && (!unreadKnown || markable > 0)
 
   return (
     <View className="bg-background flex-1">
@@ -209,6 +222,12 @@ function NotifRow({ n, first, onPress }: { n: Notification; first?: boolean; onP
             </Text>
             {/* 📎：来源对象（公告）**现在**的附件数，后端查询时现算的 —— 发布之后再挂的也算 */}
             <AttachmentCount count={n.attachment_count} />
+            {/* 必须确认的（#190）：「全部已读」标不掉它，标出来 —— 不然按钮灰了、红点还在，看不出为什么 */}
+            {unread && n.requires_ack ? (
+              <Text className="text-primary text-[11px]" testID="notification-needs-ack">
+                {t('需确认')}
+              </Text>
+            ) : null}
             <View className="flex-1" />
             <Text className="text-muted-foreground font-mono text-[11px]">{relativeTime(n.created_time)}</Text>
           </View>

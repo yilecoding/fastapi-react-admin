@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { StyleSheet } from 'react-native'
 import { useCSSVariable } from 'uniwind'
 
+import { NoticePopups } from '@/components/notice-popups'
+
 /**
  * 已登录那棵树的**外层 Stack**。
  *
@@ -22,28 +24,36 @@ export default function AppLayout() {
   const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
 
   return (
-    <Stack
-      screenOptions={{
-        headerBackButtonDisplayMode: 'minimal',
-        // 导航头和 tab 栏用卡片色 + 发丝底边，和内容区的 background 区分开
-        headerStyle: { backgroundColor: str(card) },
-        headerTintColor: str(fg),
-        headerTitleStyle: { fontSize: 16, fontWeight: '600', color: str(fg) },
-        headerShadowVisible: false,
-        contentStyle: { borderTopColor: str(line), borderTopWidth: StyleSheet.hairlineWidth },
-      }}
-    >
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="notifications" options={{ title: t('通知') }} />
-      <Stack.Screen name="settings" options={{ title: t('设置') }} />
-      <Stack.Screen name="server" options={{ title: t('服务器地址') }} />
-      <Stack.Screen name="timezone" options={{ title: t('显示时区') }} />
-      <Stack.Screen name="profile/edit" options={{ title: t('编辑资料') }} />
-      <Stack.Screen name="profile/password" options={{ title: t('修改密码') }} />
-      <Stack.Screen name="users/index" options={{ title: t('用户') }} />
-      {/* ⚠️ 动态段的 `name` 用的是**文件名**（`users/[id]`），不是拼好的路径 */}
-      <Stack.Screen name="users/[id]" options={{ title: t('用户详情') }} />
-      <Stack.Screen name="notices/[id]" options={{ title: t('公告详情') }} />
-    </Stack>
+    <>
+      <Stack
+        screenOptions={{
+          headerBackButtonDisplayMode: 'minimal',
+          // 导航头和 tab 栏用卡片色 + 发丝底边，和内容区的 background 区分开
+          headerStyle: { backgroundColor: str(card) },
+          headerTintColor: str(fg),
+          headerTitleStyle: { fontSize: 16, fontWeight: '600', color: str(fg) },
+          headerShadowVisible: false,
+          contentStyle: { borderTopColor: str(line), borderTopWidth: StyleSheet.hairlineWidth },
+        }}
+      >
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="notifications" options={{ title: t('通知') }} />
+        <Stack.Screen name="settings" options={{ title: t('设置') }} />
+        <Stack.Screen name="server" options={{ title: t('服务器地址') }} />
+        <Stack.Screen name="timezone" options={{ title: t('显示时区') }} />
+        <Stack.Screen name="profile/edit" options={{ title: t('编辑资料') }} />
+        <Stack.Screen name="profile/password" options={{ title: t('修改密码') }} />
+        <Stack.Screen name="users/index" options={{ title: t('用户') }} />
+        {/* ⚠️ 动态段的 `name` 用的是**文件名**（`users/[id]`），不是拼好的路径 */}
+        <Stack.Screen name="users/[id]" options={{ title: t('用户详情') }} />
+        <Stack.Screen name="notices/[id]" options={{ title: t('公告详情') }} />
+      </Stack>
+      {/*
+        登录后弹窗（#190）。挂在这里 = 「外壳挂上之后」：这棵树只在已登录时存在（根 `_layout` 的 AuthGate），
+        冷启动恢复会话、刚登录完都从这里开始；登出时整棵卸载，弹窗跟着没。
+        它渲染进根布局的 `<PortalHost />`，所以放在 Stack 旁边、盖在任何一屏之上
+      */}
+      <NoticePopups />
+    </>
   )
 }
