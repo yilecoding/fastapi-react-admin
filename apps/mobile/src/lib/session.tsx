@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
 
 import { ApiError, isSessionEndReason, type SessionEndReason } from '@admin/api'
@@ -46,6 +47,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<CurrentUser | null>(null)
   const [bootstrapError, setBootstrapError] = React.useState<string | null>(null)
   const [endReason, setEndReason] = React.useState<SessionEndReason | null>(null)
+  const qc = useQueryClient()
 
   /**
    * 🔴 **拿到 `/me` 就要把显示时区喂给 `@admin/i18n` 的 datetime 层。**
@@ -65,11 +67,24 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setStatus('authed')
   }, [])
 
+  /*
+   * 🔴 **会话一结束就清掉整份查询缓存。** 这里原来不清：A 登出、B 在同一台手机上登录，
+   * 30 秒（`staleTime`）之内重新挂上的查询直接拿 A 那份当新鲜数据、**一次都不重拉** ——
+   * 首页公告、权限码、通知列表都是 A 的。#190 之后更要命：弹窗带正文、公告有发布范围，
+   * B 会在一个弹窗里读到只发给 A 的公告全文，点「知道了」拿 A 的收件箱 ID 去标、404。
+   * 实测（Node 跑 `@tanstack/query-core` 5.101.4，同一份 staleTime）：不清时 B 首帧和稳定后都是
+   * A 的数据、queryFn 只被 A 调过一次；清了之后 B 首帧为空、随即拉到自己的。
+   *
+   * 放在「变成未登录」这一处，是因为换人一定先经过它（登出 / 被踢 / 改密码 / 换服务器）。
+   * ⚠️ 已登录那棵树此刻可能还没卸载，清完可能有几个查询带着空 token 重拉一次（没在设备上看过）—— 那种 401 共享客户端
+   * 既不刷新也不收尾（`packages/api` 分册「没带 token 发出去的请求撞上 401」），web 的登出也是这么清的
+   */
   const applyAnonymous = React.useCallback(() => {
+    qc.clear()
     setDisplayTimeZone(null)
     setUser(null)
     setStatus('anonymous')
-  }, [])
+  }, [qc])
 
   // 401 且刷新失败时，api 层会回调这里 —— 这是**唯一**把会话判死的地方，
   // 业务代码不要自己清 token。回调带着服务端给的原因码（#138），留给登录屏说明

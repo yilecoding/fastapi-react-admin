@@ -117,6 +117,9 @@ class Settings(BaseSettings):
         f'{FASTAPI_API_V1_PATH}/auth/mfa/verify',
         f'{FASTAPI_API_V1_PATH}/auth/mfa/setup',
         f'{FASTAPI_API_V1_PATH}/auth/mfa/enroll',
+        # 登录页的公告（#190，通知公告插件）：本来就不需要登录，放进来是为了浏览器里留着一个**过期**的 token 时
+        # 登录页照样拉得到 —— 不放的话带着坏 token 的请求先被 JWT 中间件 401，公告区一直显示「加载失败」
+        f'{FASTAPI_API_V1_PATH}/sys/notices/public',
         # ⚠️ **不要**把 `/auth/logout` 加进来。曾经加过，为的是让「access token 已过期
         # 时点登出」不被中间件 401 挡住 —— 但代价是 `request.user` 在这条路由上变成
         # 未认证，`opera_log_middleware` 的 `request.user.username` 走 AttributeError

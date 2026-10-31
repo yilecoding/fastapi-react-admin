@@ -69,6 +69,8 @@ _PATCHED_SESSION_MODULES = (
     'backend.app.task.tasks.export.tasks',
     # 短信发送（#153）：两段式日志必须自己开会话（放进请求会话里，外层回滚会把失败日志一起带走）
     'backend.plugin.sms.service.sms_service',
+    # 公告的收件箱对时（#190：定时发布到点就发、过期就撤）：worker 里没有依赖注入，每条公告自己开一个事务
+    'backend.app.task.tasks.notice.tasks',
 )
 
 

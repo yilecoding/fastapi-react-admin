@@ -8,6 +8,7 @@ from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
+from backend.plugin.notification.audience import viewer_of
 from backend.plugin.notification.schema.notification import (
     GetNotificationDetail,
     GetNotificationUnreadDetail,
@@ -44,14 +45,14 @@ async def get_my_notifications_paginated(
     unread: Annotated[bool | None, Query(description='只看未读 / 只看已读，不传则不筛')] = None,
 ) -> ResponseSchemaModel[PageData[GetNotificationDetail]]:
     page_data = await notification_service.get_list(
-        db=db, user_id=request.user.id, title=title, category=category, unread=unread
+        db=db, viewer=await viewer_of(db, request.user), title=title, category=category, unread=unread
     )
     return response_base.success(data=page_data)
 
 
 @router.get('/unread-count', summary='获取我的未读数', dependencies=[DependsJwtAuth])
 async def get_my_unread_count(request: Request, db: CurrentSession) -> ResponseSchemaModel[GetNotificationUnreadDetail]:
-    data = await notification_service.get_unread(db=db, user_id=request.user.id)
+    data = await notification_service.get_unread(db=db, viewer=await viewer_of(db, request.user))
     return response_base.success(data=data)
 
 
@@ -59,7 +60,7 @@ async def get_my_unread_count(request: Request, db: CurrentSession) -> ResponseS
 async def mark_all_read(request: Request, db: CurrentSessionTransaction) -> ResponseModel:
     # ⚠️ 这条路由必须排在 `/{pk}/read` **前面**，否则 `read-all` 会先被
     # `/{pk}` 匹配走，pk 解析失败报 422（FastAPI 按声明顺序匹配）
-    await notification_service.mark_all_read(db=db, user_id=request.user.id)
+    await notification_service.mark_all_read(db=db, viewer=await viewer_of(db, request.user))
     return response_base.success()
 
 
@@ -73,7 +74,7 @@ async def mark_read(
     # ⚠️ 不要拿返回的行数去判 `response_base.fail()` —— 重复点一条已读通知
     # 会被报成「操作失败」，而它本来就该什么都不做（AGENTS.md 里
     # 「update 返回的是写了几行，不是成败」同一个坑）
-    await notification_service.mark_read(db=db, user_id=request.user.id, pk=pk)
+    await notification_service.mark_read(db=db, viewer=await viewer_of(db, request.user), pk=pk)
     return response_base.success()
 
 

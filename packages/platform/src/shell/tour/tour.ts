@@ -5,6 +5,7 @@ import './tour.css'
 import { t } from '@admin/i18n'
 
 import { usePreferences } from '../preferences'
+import { setTourActive } from './gate'
 import { isRendered, type TourTarget } from './targets'
 
 /**
@@ -108,9 +109,12 @@ export function startTour(def: TourDef, opts: { userId: string }): boolean {
     disableActiveInteraction: true,
     onDestroyed: () => {
       current = null
+      // 新到的公告弹窗在等它结束（`gate.ts`）
+      setTourActive(false)
     },
   })
   current = d
+  setTourActive(true)
   d.drive()
   markTourSeen(opts.userId, def)
   return true

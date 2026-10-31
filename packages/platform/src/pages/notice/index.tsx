@@ -17,6 +17,7 @@ import { useQuerySearch } from '../_shared/use-query-search'
 import { noticeKeys, noticesQuery, useDeleteNotices, type Notice, type NoticeListParams } from './api'
 import { COLUMN_LABELS, buildColumns } from './columns'
 import { NoticeDetailSheet } from './detail-sheet'
+import { NoticeReadsSheet, type ReadsTab, type ReadsView } from './reads-sheet'
 import { features } from './table-features'
 import { NoticeFormSheet } from './form'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
@@ -77,6 +78,15 @@ export type NoticePageSearch = {
   type?: number
   /** 0 隐藏 · 1 显示 */
   status?: number
+  /**
+   * 阅读统计抽屉开着哪条公告（#190）。雪花 ID 字符串（硬纪律 6），关掉时整组 `r*` 一起清
+   */
+  reads?: string
+  /** 阅读统计的页签；不写 = 已读 */
+  rtab?: ReadsTab
+  /** 阅读统计的页码（1 起；第一页不写） */
+  rpage?: number
+  rsize?: number
 }
 
 export function NoticePage({
@@ -131,6 +141,20 @@ export function NoticePage({
   const [editing, setEditing] = React.useState<Notice | null>(null)
   const [viewing, setViewing] = React.useState<Notice | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<Notice | null>(null)
+  // 阅读统计：开着哪条在 URL 里（硬纪律 2）；点开那一行的数据留一份，标题不用再取一次详情
+  const [readsRow, setReadsRow] = React.useState<Notice | null>(null)
+  const readsView: ReadsView = {
+    tab: search.rtab ?? 'read',
+    page: search.rpage ?? 1,
+    size: search.rsize ?? DEFAULT_PAGE_SIZE,
+  }
+  const openReads = React.useCallback(
+    (n: Notice) => {
+      setReadsRow(n)
+      onSearchChange?.({ ...search, reads: n.id, rtab: undefined, rpage: undefined, rsize: undefined })
+    },
+    [onSearchChange, search]
+  )
   const [bulkOpen, setBulkOpen] = React.useState(false)
   const del = useDeleteNotices()
   // 单条删除单独一个 mutation 实例——留在弹窗里原地重试，不指望全局兜底
@@ -145,8 +169,8 @@ export function NoticePage({
   }, [])
 
   const columns = React.useMemo(
-    () => buildColumns(setViewing, handleEdit, setPendingDelete, t),
-    [handleEdit, t]
+    () => buildColumns(setViewing, handleEdit, setPendingDelete, openReads, t),
+    [handleEdit, openReads, t]
   )
 
   const table = useTable({
@@ -269,6 +293,25 @@ export function NoticePage({
 
       <NoticeFormSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} />
       <NoticeDetailSheet notice={viewing} onOpenChange={(o) => !o && setViewing(null)} />
+      <NoticeReadsSheet
+        noticeId={search.reads ?? null}
+        row={readsRow}
+        view={readsView}
+        onViewChange={(next) =>
+          onSearchChange?.({
+            ...search,
+            rtab: next.tab ? (next.tab === 'read' ? undefined : next.tab) : search.rtab,
+            // 「回第一页」写 undefined，不写 1（_shared/pagination.ts）
+            rpage: next.page !== undefined ? (next.page === 1 ? undefined : next.page) : search.rpage,
+            rsize: next.size !== undefined ? (next.size === DEFAULT_PAGE_SIZE ? undefined : next.size) : search.rsize,
+          })
+        }
+        onOpenChange={(o) => {
+          if (o) return
+          setReadsRow(null)
+          onSearchChange?.({ ...search, reads: undefined, rtab: undefined, rpage: undefined, rsize: undefined })
+        }}
+      />
 
       <ConfirmDialog
         open={pendingDelete !== null}

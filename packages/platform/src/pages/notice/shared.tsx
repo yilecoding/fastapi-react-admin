@@ -47,6 +47,19 @@ export function NoticeLevelPill({
   )
 }
 
+/**
+ * 「必读」：登录后弹窗、必须点「我已阅读」才算读过（#190）。读者详情的头部和管理列表共用 ——
+ * 读者看到这个标记，才知道底部那个按钮不是可有可无的
+ */
+export function RequireAckMark({ className }: { className?: string }) {
+  const { t } = useTranslation()
+  return (
+    <StatusPill tone="warning" className={className} data-testid="notice-require-ack">
+      {t('必读')}
+    </StatusPill>
+  )
+}
+
 /** 置顶标记。图标 + 读屏文案（列表行里只放图标，宽度紧） */
 export function PinnedMark({ withLabel = false, className }: { withLabel?: boolean; className?: string }) {
   const { t } = useTranslation()

@@ -48,10 +48,17 @@ class GetNotificationDetail(NotificationSchemaBase):
     # 同 `read_time`，查询时由来源方回填（`sources.register_source_attachments`），不是数据库列：
     # 公告发布之后还能再加附件，存进通知里就是一份会过期的快照
     attachment_count: int | None = Field(None, description='来源对象当前的附件个数（没有来源为空）')
+    # 同上，查询时由来源方登记的条件现算（`sources.register_explicit_ack`）
+    requires_ack: bool = Field(
+        False, description='必须读者打开确认（如必须确认的公告）：不能在列表里标已读，「全部已读」也会跳过它'
+    )
 
 
 class GetNotificationUnreadDetail(SchemaBase):
     """未读数（给红点用的轻量接口）"""
 
     total: int = Field(description='未读总数')
+    requires_ack_count: int = Field(
+        0, description='未读里必须打开确认的条数（「全部已读」不会标掉它们；total 减去它 = 「全部已读」能标的条数）'
+    )
     by_category: dict[str, int] = Field(description='按分类拆开的未读数，key 是分类数值的字符串形式')

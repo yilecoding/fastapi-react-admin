@@ -17,6 +17,7 @@ import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { useQuerySearch } from '../_shared/use-query-search'
 import {
   CATEGORY,
+  markableUnread,
   notificationKeys,
   notificationsQuery,
   unreadCountQuery,
@@ -143,20 +144,11 @@ export function NotificationPage({
     (id: string | undefined) => onSearchChange?.({ ...search, notice: id }),
     [onSearchChange, search]
   )
-  // 点那一行打开的：行上已经 `readIfUnread` 过了，抽屉别再标一次（两个 PUT 抢着发，代码评审指出）。
-  // 从地址栏直接打开的（群机器人卡片的深链 `/notification?notice=…`）没有这一步，由抽屉标
-  const [openedFromRow, setOpenedFromRow] = React.useState(false)
-  const openNoticeFromRow = React.useCallback(
-    (id: string) => {
-      setOpenedFromRow(true)
-      openNotice(id)
-    },
-    [openNotice]
-  )
-
+  // 标已读一律由抽屉做（点那一行 / 地址栏深链都一样）：它看得到这条是不是「必须确认」（#190）。
+  // 原来点行时先 `readIfUnread`、抽屉再按 `rowAlreadyMarked` 跳过，必须确认的就被那一下替人确认了
   const columns = React.useMemo(
-    () => buildColumns(linkOf, readIfUnread, handleMarkRead, openNoticeFromRow, t),
-    [linkOf, readIfUnread, handleMarkRead, openNoticeFromRow, t]
+    () => buildColumns(linkOf, readIfUnread, handleMarkRead, openNotice, t),
+    [linkOf, readIfUnread, handleMarkRead, openNotice, t]
   )
 
   const table = useTable({
@@ -172,7 +164,9 @@ export function NotificationPage({
     onColumnVisibilityChange: setColumnVisibility,
   })
 
-  const unreadTotal = unread.data?.total ?? 0
+  // 「全部已读」标得掉的条数：必须确认的公告后端会跳过（#190），按总数判的话只剩它们时按钮还亮着、点了什么都不变
+  const markable = markableUnread(unread.data)
+  const mustAck = unread.data?.requires_ack_count ?? 0
   const hasFilter = countActive(q.applied, FIELDS) > 0
 
   return (
@@ -201,14 +195,12 @@ export function NotificationPage({
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={unreadTotal === 0 || markAll.isPending}
+                    disabled={markable === 0 || markAll.isPending}
                     onClick={() => setMarkAllOpen(true)}
                     data-testid="notification-mark-all-page"
                   >
                     <IconChecks className="size-4" />
-                    {unreadTotal > 0
-                      ? t('全部已读（{{n}}）', { n: unreadTotal })
-                      : t('全部已读')}
+                    {markable > 0 ? t('全部已读（{{n}}）', { n: markable }) : t('全部已读')}
                   </Button>
                   <RefreshButton busy={isFetching} onClick={list.onRetry} />
                   <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
@@ -250,11 +242,8 @@ export function NotificationPage({
       {/* 开在 URL 上 → 抽屉里用的是本 tab 的 portal 容器（reader-sheet 的注释） */}
       <NoticeReaderSheet
         noticeId={search.notice ?? null}
-        rowAlreadyMarked={openedFromRow}
         onOpenChange={(o) => {
-          if (o) return
-          setOpenedFromRow(false)
-          openNotice(undefined)
+          if (!o) openNotice(undefined)
         }}
       />
 
@@ -262,9 +251,14 @@ export function NotificationPage({
         open={markAllOpen}
         onOpenChange={setMarkAllOpen}
         title={t('标记全部已读')}
-        description={t('会把你当前全部 {{n}} 条未读通知标记为已读，此操作不可撤销。', {
-          n: unreadTotal,
-        })}
+        description={
+          mustAck > 0
+            ? t(
+                '会把 {{n}} 条未读通知标记为已读，此操作不可撤销。另有 {{m}} 条必须确认的公告不会被标记，要打开读完后点「我已阅读」。',
+                { n: markable, m: mustAck }
+              )
+            : t('会把你当前全部 {{n}} 条未读通知标记为已读，此操作不可撤销。', { n: markable })
+        }
         confirmText={t('全部已读')}
         pending={markAll.isPending}
         onConfirm={async () => {

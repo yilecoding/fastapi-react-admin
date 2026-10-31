@@ -44,6 +44,68 @@
 撤回 = 逻辑删除那一行 + 清已读标记（`crud_notification.retract_by_source`）；列表 / 未读数 / 详情本来就都带 `deleted == 0`。
 细节和实测证据见 [`plugin/notice` 分册](../notice/AGENTS.md)。
 
+## 🔴 广播也有受众了：`visible_to(viewer)`（#190）
+
+广播（`recipient_id IS NULL`）原来对所有人可见。#190 加了通用的受众表 `sys_notification_audience`（硬删，`DataClassBase`），按 `source` 关联：
+
+| 列 | 含义 |
+|---|---|
+| `source` | 同 `sys_notification.source`（`notice:<id>`），索引 |
+| `kind` | `dept`（**含所有下级部门**）/ `role`（只认启用的）/ `user` |
+| `target_id` | 部门 / 角色 / 用户 ID；唯一约束 `(source, kind, target_id)` |
+
+**同一个来源一行都没有 = 全员**；没有来源的广播（每日问候、手动全员发）也是全员。
+
+- 收件箱的四处（列表 / 未读数 / 标已读 / 全部已读）都过 `crud_notification.visible_to(viewer)`：点名给他的，或者广播里
+  （没有来源 · 来源没有受众行 · 有一行受众点到了他）。🔴 **标已读也要过它**：原来只比 `recipient_id`，看不见的广播照样标得上，
+  等于用写接口探出「这条存在」
+- 「看的人」`audience.Viewer(id, join_time, dept_ids, role_ids)` 由接口层 `viewer_of(db, request.user)` 构造：`dept_ids` 是本部门 +
+  **所有上级部门**（`audience._dept_chain`，一条递归 CTE，见下面「#190 评审」），判定在看的人这一侧做（他的部门链里有没有被点名的）
+- 公告的可见性读的是同一个 `audience_admits(viewer, source)`（公告那边传 SQL 拼出来的 `source_expr('notice', Notice.id)`），
+  所以收件箱和公告不会各说各的。登记附件计数的函数也多了一个 `viewer` 参数（`sources.AttachmentCounter`）
+- 🔴 **新账号规则**（`implicitly_read`）：建号（`join_time`）**之前**写的广播行对他算已读 —— 不计红点、列表 `read_time` 回填成 `join_time`。
+  **例外：「必须显式确认」的行（下一条）只认显式已读**。公告那一侧用 `unread_clause(viewer, explicit_only=Notice.require_ack)`，
+  收件箱这一侧（`_unread` · 列表的 `read_time` 回填 · `unread-count`）用登记的 `explicit_ack_clause()` 当 `explicit_only` —— 两边必须同一个口径，
+  见下面「#190 评审」第一行
+- 🔴 **「必须显式确认」的行，「全部已读」跳过**（`sources.register_explicit_ack` / `explicit_ack_clause`）：来源方登记一个 `Notification` 上的条件
+  （公告：`source IN (还发着的必须确认公告)`，`crud_notice.must_ack_inbox_rows`；为什么要「还发着」见下面「#190 评审」）。原来 `get_unread_ids` 只按未读取，铃铛 / 消息中心 / 移动端的「全部已读」
+  一下就替人把「我已阅读」点掉了。列表那一行带 `requires_ack`（前端据此不摆「标记已读」），`unread-count` 带 `requires_ack_count`
+  （和 `total` 同一个未读口径，`total − 它` = 「全部已读」能标的条数）。单条 `PUT /{pk}/read` **不拦** —— 读者抽屉 / 弹窗 / 移动端详情的「我已阅读」就是它，
+  后端分不出谁在调，行操作那一侧靠前端不摆按钮。没有来源登记过时条件是 `None`，调用方不拼条件（不在每个方言上渲染一条恒真式）。
+  🔴 **条件前面要先 `source IS NOT NULL`**：第一版只写了 `~(source IN (…))`，没有来源的行（点名发的系统消息、每日问候）在 `IN` 上是 NULL、
+  取反还是 NULL —— 只要库里有一条必须确认的公告，「全部已读」就**静默跳过所有系统消息**。测试里原来只造了公告行，看不出来；
+  加一条点名消息之后 PostgreSQL / SQL Server 当场红（`test_read_all_does_not_acknowledge_for_the_reader`，去掉那句 → 红）。
+  登记的条件对非空 `source` 也必须算出真 / 假（`IN` 的子查询别选出 NULL）
+- 🔴 `broadcast(to_bots=False)`：有受众限制的来源不推群机器人（机器人发进的是整个群，管不了范围）。
+  之后范围放宽成全员，由来源方调 `broadcast_to_bots(notification_id=挂着的那一行)` 补推（站内不重写）；
+  广播的机器人投递行记着站内那一行的 `notification_id`，**那一行推过群就不再推**（全员 → 限定 → 全员，群里不出现两次）
+- socket 推送照旧推 `None`（全员重拉），权限只在 REST 一处判 —— 不按受众分推，少一处要和受众表对齐的地方
+
+**实测证据**：见 [`plugin/notice` 分册](../notice/AGENTS.md)「实测证据」#190 那一段（发布范围 / 新账号 / 标已读 404 的用例都在
+`app/admin/tests/api_v1/test_notice_phase2.py`，变异：广播不看受众 · 标已读只比 `recipient_id` · 去掉新账号规则 · 有范围也推机器人，各自打红）。
+
+### #190 评审补的（2026-10-31）
+
+| 症状 | 根因 | 修法 | 测试（`test_notice_phase2.py`） |
+|---|---|---|---|
+| 建号晚于一条必须确认的公告：铃铛里那一行是已读（没红点、没「需确认」、`requires_ack_count` 不算它、`read_time` 回填成建号时间），弹窗却要他点「我已阅读」 | 收件箱的 `_unread` 和列表回填对所有广播行吃新账号规则，公告那一侧（`unread_by`）对必须确认的不吃 —— 两份判定各说各的 | `_unread` 拿登记的 `explicit_ack_clause()` 当 `unread_clause` 的 `explicit_only`；`implicit_read_time` 对 `requires_ack` 的行不回填 | `test_new_account_does_not_inherit_old_broadcasts_as_unread` |
+| 必须确认的公告过期了、任务还没撤（最多 60 秒；任务停了就一直）：那一行谁也清不掉 —— 读者抽屉 404、不再弹、没有行按钮、「全部已读」跳过它 | 登记的条件只看 `require_ack` + 没删 | 只认**还发着的**（`crud_notice.must_ack_inbox_rows` 加 `live_clause()`），之后就是普通的一行 | `test_a_must_ack_row_whose_notice_is_gone_becomes_an_ordinary_row` |
+| 发布时限定范围、后来放宽成全员：群里永远收不到 | 发布时 `to_bots=False`，之后的编辑对「一直看得见」只推 socket | `broadcast_to_bots` 挂在那一行上补推；机器人投递行记 `notification_id`，推过不再推 | `test_widening_to_everyone_pushes_the_group_bots_once` |
+| （性能）`/unread-count` 把同一批未读扫两遍 | 按分类数一条、「要确认的」再数一条 | 合成一条 `count_unread`：内层算 0 / 1、外层 `GROUP BY` + `SUM` | `test_unread_count_is_one_scan` |
+| （性能）「看的人」每个请求都按部门深度一层一条 SELECT 往上走（未读数、每一次附件下载权限） | 用的是给结构检查写的循环 `dept_dao.get_ancestor_ids` | `audience._dept_chain`：一条递归 CTE。和那段循环逐个部门对表：删了的部门算它自己、不算它的上级，`parent_id` 悬空也照算；有环靠 `depth` 截住 | `test_viewer_dept_chain_is_one_query_and_walks_like_the_loop` |
+
+- ⚠️ 「要确认的」不能直接写成 `SUM(CASE WHEN source IN (SELECT …) …)`：SQL Server 报 **130**（聚合函数里不许有子查询，`sqlcmd` 实测），
+  登记的条件里就是子查询。所以内层先算成一列、外层再 SUM。MySQL 的 SUM 回来是 `Decimal`，转一次 `int`
+- 🔴 递归 CTE 的层数上限（`_MAX_DEPT_DEPTH = 64`）**不能往 100 以上调**：SQL Server 默认 `MAXRECURSION 100`，超了是**整条查询报错**（530），不是截断。
+  实测：有环时上限 101 正好 100 层能跑，200 报 530。PostgreSQL / MySQL 有环又没有上限会一直递归下去
+
+**实测证据**：`test_notice_phase2.py` 32 条在 PostgreSQL 16 / SQL Server 2022 / MySQL 8.4（一次性容器）上都过。
+上面五条的测试在修之前都是红的（修之前先写测试跑了一遍）；修完之后逐处改回去，都当场红：
+收件箱未读对必须确认的也吃新账号规则（三个方言）· 列表 `read_time` 对必须确认的也回填（PostgreSQL）· 必须确认只看没删（三个方言）·
+合并后「要确认的」恒 0（三个方言）· 部门链退回一层一条（三个方言，`3 == 1`）· 部门链遇到删了的部门不停（三个方言）·
+去掉层数上限（SQL Server，红在 530；另两个方言会死循环，没跑）· 放宽不补推（三个方言）· 补推不看推过没有（PostgreSQL，`2 == 1`）·
+发布时推群不记站内那一行（PostgreSQL）。
+
 ## 🔴 worker：抢占看 rowcount · 结果未知不重试 · 停在发送中的归「结果未知」
 
 - **抢占**是一条 `UPDATE … SET status='sending' WHERE id=? AND status IN (待发, 到点的失败)`，只有 rowcount == 1 的那个 worker 发
@@ -103,7 +165,7 @@ senders.post_bot   发一次 HTTP；投递 worker 和「发测试消息」共用
   （`sys_notification_bot.kinds`），不进策略 / 偏好矩阵，`defaults` 里写 `bot` 当场抛。现在开了的：公告 · 审批结果 · Webhook 端点停用。
   🔴 对着收件人说话的不开（「抄送给你」「新的待办」「X 退回了你的申请」）—— 为此「被退回」从 `workflow.result` 拆成了 `workflow.sent_back`
 - **一条通知 × 一个机器人一行**，和收件人有几个无关（投递行 `user_id` 为空、`bot_id` 有值、`address` 是机器人名称快照）
-- 广播（公告）的提交在调用方手里（依赖收尾），所以 `broadcast()` 用 `kick_after_commit`（会话 `after_commit` 监听）踢 worker；回滚清掉标记
+- 广播（公告）的提交在调用方手里（依赖收尾），所以 `broadcast()` 用 `kick_after_commit`（`common/after_commit.py: run_after_commit`）踢 worker；回滚清掉标记
 - 🔴 **Webhook 地址本身就是凭据**：和加签密钥一起用 `NOTIFICATION_ENCRYPT_SECRET_KEY` 加密存，没配就拒绝保存；
   接口只给 `webhook_hint`；入参字段 `webhook_url` / `sign_secret` 在 `OPERA_LOG_REDACT_KEYS` 里
 - 🔴 **地址只许落在三家官方前缀上**（协议 + 主机 + 端口逐项比、路径按前缀、带 userinfo 的拒），私有化部署配

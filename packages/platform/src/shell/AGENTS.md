@@ -393,6 +393,13 @@ socket 这条通道也要做一遍「这个人能不能看这条」的权限判�
 E2E：`e2e/tests/tour.spec.ts`。**fixture 默认把外壳导览标成已看过**（`seedTourSeen`），
 否则每条落到 `/dashboard` 的用例首屏都是一层遮罩、所有点击被挡，整套一起红而报错各不相同。
 
+🔴 **登录后的公告弹窗（#190）和导览抢同一块第一屏，规定弹窗先**（`tour/gate.ts`）：弹窗是 modal，开着时外面全不可交互，
+导览气泡的「下一步」点不动。弹窗那边在「还在取 / 有一条开着」时 `useHoldTour` 按住，自动启动的 effect 把 `held` 当依赖、
+定时器到点再查一次 `isTourHeld()`；反过来导览在跑时新到的弹窗等它结束（`useTourActive`）。`shell` 不能 import 页面，所以只能由页面那一侧来按。
+**实测证据**：`notice-phase2.spec.ts`「弹窗先、外壳导览后」。变异：`useHoldTour` 什么都不做 → 红在「弹窗开着时没有 `.driver-popover`」。
+⚠️ 只去掉 `tour-autostart.tsx` effect 里的 `held` 那一层**仍然绿**（实测）—— 定时器到点那次 `isTourHeld()` 复查也拦着；
+变异要打在 `useHoldTour` 本身（两层同时失效）才红。
+
 
 ## 右下角上传浮窗（`upload-store.ts` + `upload-tray.tsx`）
 

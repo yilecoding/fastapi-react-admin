@@ -28,6 +28,8 @@ delete from sys_menu where name = 'NotifyPolicy';
 
 delete from sys_menu where name = 'NotifyCenter';
 
+drop table if exists sys_notification_audience;
+
 drop table if exists sys_notification_bot;
 
 drop table if exists sys_notification_delivery;
