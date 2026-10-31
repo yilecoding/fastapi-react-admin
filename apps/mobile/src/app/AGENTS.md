@@ -46,7 +46,7 @@
 | 头像 | ✅ 从相册选（要 `sys:file:upload` + `is_staff`）或填 URL | `POST /sys/files/upload?public=true` → `PUT /sys/users/me/avatar` |
 | 密码 | ✅ | `PUT /sys/users/me/password` |
 | 时区 | ✅ | `PUT /sys/users/me/timezone`，并 `setDisplayTimeZone()` |
-| **手机号** | ❌ | 后端**没有** `/me/phone`，只有超管的 `PUT /sys/users/{pk}` |
+| **手机号** | ❌ | `PUT /me/phone` 要一个**短信验证码**（#170），那条链路移动端还没有 —— 去网页端绑。手机验证码登录只认这样验证过的号 |
 | **邮箱** | ❌ | `PUT /me/email` 要一个**邮件验证码**，那条链路移动端还没有 |
 
 界面上手机号/邮箱是只读行并写明原因 —— 放一个改了会失败的输入框更糟。
