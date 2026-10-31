@@ -14,8 +14,10 @@ function isTransientApiError(error?: Error): boolean {
  * 全局错误页。用 `-` 前缀被 routeFileIgnorePrefix 排除出路由树，
  * 但文件放在 routes/ 下就近维护。
  */
-export function ErrorPage({ error }: { error?: Error }) {
+export function ErrorPage({ error: thrown }: { error?: unknown }) {
   const { t } = useTranslation()
+  // router 1.171.39 起把 `error` 标成 unknown —— 本来就是：`throw` 什么都能扔，不一定是 Error
+  const error = thrown instanceof Error ? thrown : undefined
 
   /**
    * 🔴 「分片取不到」不是一个 500，它是**版本不一致**：这个标签页开着没刷新，
@@ -24,7 +26,7 @@ export function ErrorPage({ error }: { error?: Error }) {
    * `Failed to fetch dynamically imported module: …/assets/viewer-D3f1.js`，
    * 没人会从这句话想到「刷新一下就好了」——所以这一支单独说人话。
    */
-  if (isStaleAssetError(error)) {
+  if (isStaleAssetError(thrown)) {
     return (
       <div className="flex min-h-svh flex-col items-center justify-center gap-4 p-6 text-center">
         <div className="space-y-1">
