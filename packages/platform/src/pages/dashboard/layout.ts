@@ -24,8 +24,16 @@ export type StoredLayout = { v: 1; cards: LayoutItem[]; quickLinks?: string[] }
 /** 一张卡片的默认值（注册表里每张卡片各自声明，按注册表顺序就是默认顺序） */
 export type CardDefault = { id: string; defaultVisible: boolean; defaultWidth: CardWidth }
 
-/** 快捷入口最多几个：再多就不是「快捷」了，也让存的值有个上界 */
+/**
+ * 快捷入口最多**显示 / 勾选**几个：再多就不是「快捷」了。
+ *
+ * 🔴 这个数只管**现在看得见的**那些。存着、但这个人现在没权限的 path 原样留在清单末尾（权限还回来时照旧出现），
+ * 不算进这 12 个 —— 拿它去截存的清单，末尾那些「暂时没权限」的就被静默截掉了（代码评审翻出来的）
+ */
 export const QUICK_LINKS_MAX = 12
+
+/** 存的清单的硬上界（含暂时看不见的）。只是防一份坏数据撑爆偏好值的 16 KB，正常用不到 */
+export const QUICK_LINKS_STORED_MAX = 64
 
 export function defaultLayout(available: readonly CardDefault[]): DashboardLayout {
   return {
@@ -97,7 +105,7 @@ function readQuickLinks(raw: unknown): string[] | null {
   const out: string[] = []
   for (const p of raw) {
     if (typeof p === 'string' && p.startsWith('/') && !out.includes(p)) out.push(p)
-    if (out.length >= QUICK_LINKS_MAX) break
+    if (out.length >= QUICK_LINKS_STORED_MAX) break
   }
   return out
 }
@@ -121,7 +129,7 @@ export function toStoredLayout(layout: DashboardLayout, previous: unknown): Stor
     }
   }
   const stored: StoredLayout = { v: 1, cards }
-  if (layout.quickLinks) stored.quickLinks = layout.quickLinks.slice(0, QUICK_LINKS_MAX)
+  if (layout.quickLinks) stored.quickLinks = layout.quickLinks.slice(0, QUICK_LINKS_STORED_MAX)
   return stored
 }
 

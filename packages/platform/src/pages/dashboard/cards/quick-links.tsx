@@ -4,6 +4,7 @@ import { Link } from '@tanstack/react-router'
 import { IconBolt } from '@tabler/icons-react'
 
 import { MenuIcon } from '../../../shell/icon-registry'
+import { QUICK_LINKS_MAX } from '../layout'
 import type { NavNode } from '../../../shell/use-sidebar'
 import { DashboardCard } from '../card-shell'
 import type { CardProps } from './types'
@@ -42,7 +43,11 @@ export function flattenPages(nav: NavNode[]): NavNode[] {
 export function resolveQuickLinks(quickLinks: string[] | null, pages: NavNode[]): NavNode[] {
   if (quickLinks === null) return pages.slice(0, QUICK_LINKS_DEFAULT)
   const byPath = new Map(pages.map((p) => [p.path, p]))
-  return quickLinks.map((p) => byPath.get(p)).filter((p): p is NavNode => Boolean(p))
+  // 上限按「看得见的」数：存的清单里可能还排着暂时没权限的（见 `QUICK_LINKS_MAX` 的注释）
+  return quickLinks
+    .map((p) => byPath.get(p))
+    .filter((p): p is NavNode => Boolean(p))
+    .slice(0, QUICK_LINKS_MAX)
 }
 
 /**

@@ -4,11 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_user_preference import user_preference_dao
 from backend.app.admin.model.user_preference import UserPreference
-from backend.app.admin.schema.user_preference import (
-    USER_PREFERENCE_MAX_KEYS,
-    GetUserPreferenceDetail,
-    dump_preference_value,
-)
+from backend.app.admin.schema.user_preference import USER_PREFERENCE_MAX_KEYS, GetUserPreferenceDetail
 from backend.common.exception import errors
 from backend.common.i18n import t
 
@@ -36,8 +32,8 @@ class UserPreferenceService:
         return _detail(key, await user_preference_dao.get_one(db, user_id=user_id, key=key))
 
     @staticmethod
-    async def put(*, db: AsyncSession, user_id: int, key: str, value: object) -> GetUserPreferenceDetail:
-        text = dump_preference_value(value)  # schema 已经校验过一次，这里拿的是落库那一份文本
+    async def put(*, db: AsyncSession, user_id: int, key: str, text: str) -> GetUserPreferenceDetail:
+        """`text` 是 `PutUserPreferenceParam.text`：schema 校验时序列化好的那一份，这里不再 dump"""
         existing = await user_preference_dao.get_one(db, user_id=user_id, key=key)
         if existing is None and await user_preference_dao.count_keys(db, user_id=user_id) >= USER_PREFERENCE_MAX_KEYS:
             raise errors.RequestError(msg=t('error.user.preference_too_many', limit=USER_PREFERENCE_MAX_KEYS))

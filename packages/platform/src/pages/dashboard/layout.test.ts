@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   QUICK_LINKS_MAX,
+  QUICK_LINKS_STORED_MAX,
   defaultLayout,
   moveItem,
   patchItem,
@@ -94,13 +95,22 @@ describe('工作台布局：存的和现在能用的卡片怎么合并', () => {
     }
   })
 
-  it('快捷入口：只收 / 开头的字符串、去重、有上限；没给 = null（用默认那几个）', () => {
+  it('快捷入口：只收 / 开头的字符串、去重；没给 = null（用默认那几个）', () => {
     expect(resolveLayout({ v: 1, cards: [] }, AVAILABLE).layout.quickLinks).toBeNull()
     expect(resolveLayout({ v: 1, cards: [], quickLinks: [] }, AVAILABLE).layout.quickLinks).toEqual([])
     const r = resolveLayout({ v: 1, cards: [], quickLinks: ['/x', 3, 'http://evil', '/x', '/y'] }, AVAILABLE)
     expect(r.layout.quickLinks).toEqual(['/x', '/y'])
-    const many = Array.from({ length: QUICK_LINKS_MAX + 5 }, (_, i) => `/p${i}`)
-    expect(resolveLayout({ v: 1, cards: [], quickLinks: many }, AVAILABLE).layout.quickLinks).toHaveLength(QUICK_LINKS_MAX)
+  })
+
+  it('🔴 快捷入口：读 / 存都不按「显示上限」截 —— 末尾那些暂时没权限的 path 要原样留着', () => {
+    // 12 个看得见的 + 3 个现在没权限的（排在末尾）：截到 12 的话后 3 个就静默没了
+    const many = Array.from({ length: QUICK_LINKS_MAX + 3 }, (_, i) => `/p${i}`)
+    const { layout } = resolveLayout({ v: 1, cards: [], quickLinks: many }, AVAILABLE)
+    expect(layout.quickLinks).toEqual(many)
+    expect(toStoredLayout(layout, null).quickLinks).toEqual(many)
+    // 只有坏数据才会撞上的硬上界
+    const absurd = Array.from({ length: QUICK_LINKS_STORED_MAX + 10 }, (_, i) => `/q${i}`)
+    expect(resolveLayout({ v: 1, cards: [], quickLinks: absurd }, AVAILABLE).layout.quickLinks).toHaveLength(QUICK_LINKS_STORED_MAX)
   })
 })
 

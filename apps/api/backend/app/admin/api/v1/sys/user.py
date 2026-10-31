@@ -288,7 +288,7 @@ async def get_my_preference(
 async def put_my_preference(
     db: CurrentSessionTransaction, request: Request, key: PreferenceKey, obj: PutUserPreferenceParam
 ) -> ResponseSchemaModel[GetUserPreferenceDetail]:
-    data = await user_preference_service.put(db=db, user_id=request.user.id, key=key, value=obj.value)
+    data = await user_preference_service.put(db=db, user_id=request.user.id, key=key, text=obj.text)
     return response_base.success(data=data)
 
 

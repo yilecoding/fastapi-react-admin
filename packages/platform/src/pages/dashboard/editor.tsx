@@ -45,7 +45,7 @@ export function DashboardEditor({
   layout,
   titleOf,
   pages,
-  dirty,
+  canSave,
   saving,
   saveError,
   onChange,
@@ -56,7 +56,11 @@ export function DashboardEditor({
   layout: DashboardLayout
   titleOf: (id: string) => string
   pages: NavNode[]
-  dirty: boolean
+  /**
+   * 「保存」能不能点：通常是「改过了」；存的那份格式认不出来时，不改也要能存 ——
+   * 提示里说的就是「编辑并保存一次就会覆盖它」，非要先改点什么才能存，坏数据就一直覆盖不掉
+   */
+  canSave: boolean
   saving: boolean
   saveError: unknown
   onChange: (next: DashboardLayout) => void
@@ -162,7 +166,7 @@ export function DashboardEditor({
           <Button variant="outline" size="sm" onClick={onCancel} disabled={saving} data-testid="dash-editor-cancel">
             {t('取消')}
           </Button>
-          <Button size="sm" onClick={onSave} disabled={!dirty || saving} data-testid="dash-editor-save">
+          <Button size="sm" onClick={onSave} disabled={!canSave || saving} data-testid="dash-editor-save">
             {saving && <IconLoader2 className="size-4 animate-spin" />}
             {t('保存')}
           </Button>
@@ -230,7 +234,7 @@ function EditorRow({
  * 快捷入口挑哪些页面。候选 = 这个人自己的侧边栏（`flattenPages`）。
  *
  * 没挑过（`null`）时勾着的是默认那几个；动一下就变成显式的清单。存着、但现在不在侧边栏里的 path
- * （权限临时收走）原样留在清单末尾，不在这里替他删掉
+ * （权限临时收走）原样留在清单里，不在这里替他删掉，也不算进「最多 12 个」
  */
 function QuickLinksPicker({
   pages,
@@ -246,13 +250,11 @@ function QuickLinksPicker({
   const chosen = React.useMemo(() => new Set(resolveQuickLinks(value, pages).map((p) => p.path)), [value, pages])
   const full = chosen.size >= QUICK_LINKS_MAX
 
+  // 在**存的整份清单**上增删，不从「看得见的」重建：暂时没权限的 path 要原样留着（顺序也不动）。
+  // 新勾的排在最后 —— 快捷入口按勾选的先后显示
   function toggle(path: string, on: boolean) {
-    const next = new Set(chosen)
-    if (on) next.add(path)
-    else next.delete(path)
-    const known = new Set(pages.map((p) => p.path))
-    const kept = (value ?? []).filter((p) => !known.has(p))
-    onChange([...pages.filter((p) => next.has(p.path)).map((p) => p.path), ...kept])
+    const base = value ?? [...chosen]
+    onChange(on ? (base.includes(path) ? base : [...base, path]) : base.filter((p) => p !== path))
   }
 
   return (
