@@ -16,6 +16,11 @@ const CODE = `E2EWF_${Date.now().toString(36).toUpperCase()}`
 
 test.describe.configure({ mode: "serial" })
 
+// 一条用例要登 2～3 个账号、整页加载 6～8 次（dev server，忙的 CI 上一次 3.5～4.5 秒），
+// 通过的时候也要 20～26 秒，默认 30 秒的预算几乎没有余量。超了会报在当时正在跑的那一步上，
+// 看着像那一步的逻辑错了（#199：「已读」服务端早就标上了，是前面的步骤把时间用完了）
+test.beforeEach(() => test.slow())
+
 test.beforeAll(async () => {
   const { api, dispose } = await createApiClient()
   const form = {
