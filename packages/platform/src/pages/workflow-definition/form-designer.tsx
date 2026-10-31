@@ -58,9 +58,8 @@ function blankField(type: FieldType, label: string): FormField {
  * 表单设计器（#107 设计 6.5）。
  *
  * 字段 ID 是生成的、**不随标签变** —— 条件分支、字段权限、历史数据都按 ID 引用。
- * 排序用上 / 下按钮而不是拖拽：`@dnd-kit` 只是 `packages/ui` 的依赖，platform 要用就得
- * 在 `package.json` 里声明（根 CLAUDE.md 那条「依赖关系必须写进 package.json」），
- * 一版先不为它加依赖。
+ * 排序用上 / 下按钮而不是拖拽（第一版的取舍）。`@dnd-kit` 现在 platform 自己也声明了
+ * （#202 工作台编辑器在用，见 `pages/dashboard/editor.tsx`），以后要换成拖拽不用再加依赖。
  *
  * 删字段时如果流程里有条件 / 审批人规则在用它，要先提示 —— 删了发布校验会报
  * `CONDITION_VAR_UNKNOWN`，但那时用户已经不知道是哪一步删的了。

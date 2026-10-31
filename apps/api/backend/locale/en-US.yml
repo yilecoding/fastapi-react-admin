@@ -353,6 +353,7 @@ error:
     password_mismatch: The two passwords do not match
     password_required: Password cannot be empty
     permission_type_not_found: Permission type does not exist
+    preference_too_many: 'You can store at most {limit} personal preferences'
     self_permission_forbidden: You cannot change your own permissions
     sms_plugin_required: The SMS plugin is not installed, so a verification code cannot be sent
     username_registered: Username is already registered

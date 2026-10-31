@@ -1,45 +1,57 @@
 import * as React from 'react'
-import { formatDateTime, formatDateTimeShort, formatNumber } from '@admin/i18n'
-import { Trans, useTranslation } from 'react-i18next'
+import { formatDateTime } from '@admin/i18n'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
-import {
-  IconArrowRight, IconLoader2, IconRefresh,
-} from '@tabler/icons-react'
+import { IconLayoutDashboard, IconLoader2, IconRefresh } from '@tabler/icons-react'
 
 import { Alert } from '@admin/ui/components/alert'
-import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { QueryError } from '@admin/ui/components/query-error'
 import { Skeleton } from '@admin/ui/components/skeleton'
+import { toast } from '@admin/ui/components/toast'
+import { cn } from '@admin/ui/lib/utils'
 
-import { meQuery } from '../../auth/queries'
-import { usePerm } from '../../auth/use-perm'
+import { authKeys, codesQuery, meQuery } from '../../auth/queries'
+import { useSaveUserPreference, userPreferenceQuery } from '../../auth/user-preferences'
+import { usePlatform } from '../../shell/platform-context'
+import { useSidebar } from '../../shell/use-sidebar'
 import { PageHeader } from '../../shell/page-header'
-import { StatusPill } from '../_shared/status'
-import { noticeKeys } from '../notice/api'
+import { NOTICE_FEED_KEY, notificationKeys } from '../notification/api'
 import { NoticeReaderSheet } from '../notice/reader-sheet'
+import { InstanceSheet } from '../workflow/instance-sheet'
+import { workflowKeys } from '../workflow/api'
+import { dashKeys } from './api'
+import { flattenPages } from './cards/quick-links'
+import { DASHBOARD_CARDS } from './cards/registry'
+import type { CardContext, CardProps, DashboardCardDef } from './cards/types'
+import { DashboardEditor } from './editor'
 import {
-  loginTrendQuery, onlineCountQuery, recentLoginsQuery, recentOperasQuery,
-  scaleStatsQuery, todayRangeParam, todayStatsQuery,
-  type DayPoint,
-} from './api'
-import { DashboardNoticeCard } from './notice-card'
+  LAYOUT_PREF_KEY,
+  defaultLayout,
+  resolveLayout,
+  sameLayout,
+  toStoredLayout,
+  type DashboardLayout,
+} from './layout'
 
 export type DashboardSearch = {
-  /** 公告卡片里就地打开的那一条（雪花 ID，字符串） */
+  /** 公告卡 / 未读消息卡里就地打开的那一条公告（雪花 ID，字符串） */
   notice?: string
+  /** 待办卡里就地打开的那张审批单（雪花 ID，字符串） */
+  wf?: string
+  /** 编辑工作台（硬纪律 2：刷新之后还在编辑模式） */
+  edit?: boolean
 }
 
 /**
- * 仪表盘（平台首页）。
+ * 工作台（平台首页），每个人自己的（#202）。
  *
- * ⚠️ 后端**没有统计接口**，这一页的每个数字都是拿列表接口的 `total` 拼出来的
- * （见 `api.ts`）。所以它回答的是「此刻平台在发生什么」，不是 BI 报表：
- * 没有留存、没有同比、没有按维度下钻。要那些得先给后端加聚合端点。
+ * - 卡片是**注册表**（`cards/registry.ts`）：每张卡片声明自己要什么权限，没权限的不进候选也不渲染
+ * - 布局按人存在服务端（个人偏好 `dashboard.layout`），换设备 / 从网页换到桌面端都一样；没存过就按权限算默认布局
+ * - 编辑模式进 URL（`edit`），草稿只在这一页的 state 里，「保存」才写服务端
  *
- * 硬纪律：组件 router-独立 —— 这里只用 `<Link>`（组件，走 router context 而非
- * match context，隐藏 tab 里照样可用），不调 `useNavigate()`。
+ * 硬纪律 1：组件 router-独立 —— 这里只用 `<Link>`（走 router context 而非 match context，隐藏 tab 里照样可用），
+ * 开抽屉 / 进出编辑模式一律经 `onSearchChange` 写自己的 search。
  */
 export function DashboardPage({
   search = {},
@@ -50,360 +62,226 @@ export function DashboardPage({
 }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
-  const { data: me } = useQuery(meQuery)
-  const { isSuperuser, can } = usePerm()
+  const me = useQuery(meQuery)
+  const codes = useQuery(codesQuery)
+  const { isValidPath } = usePlatform()
+  const sidebarOpts = React.useMemo(() => ({ isValidPath }), [isValidPath])
+  const sidebar = useSidebar(sidebarOpts)
+  const pref = useQuery(userPreferenceQuery(LAYOUT_PREF_KEY))
+  const save = useSaveUserPreference(LAYOUT_PREF_KEY)
 
-  const today = useQuery(todayStatsQuery)
-  const scale = useQuery(scaleStatsQuery)
-  const trend = useQuery(loginTrendQuery)
-  const logins = useQuery(recentLoginsQuery)
-  const operas = useQuery(recentOperasQuery)
-  // 在线会话是超管专属接口，非超管直接不发请求（发了就是一条必然 403 的噪音）
-  const online = useQuery({ ...onlineCountQuery, enabled: isSuperuser })
+  const patch = (p: Partial<DashboardSearch>) => onSearchChange?.({ ...search, ...p })
 
-  /** 跳日志页用的时间参数：一个 `time=起~止`，不是 start_time + end_time */
-  const timeParam = React.useMemo(() => todayRangeParam(), [])
-  // 日志页的路由守卫要 log:*:del，没这个权限点过去只会落到 /403 —— 那就别给链接
-  const canLoginLog = can('log:login:del')
-  const canOperaLog = can('log:opera:del')
+  // ── 这个人能用哪些卡片 ──
+  // 🔴 权限码 / 「我是谁」/ 侧边栏都到齐之前**不算**：`usePerm().can` 在 codes 还没回来时恒为 false，
+  // 那时算出来的「默认布局」只有人人都有的那几张，等 codes 回来又多出统计卡 —— 页面先画一版再跳一版
+  const pages = React.useMemo(() => flattenPages(sidebar.nav), [sidebar.nav])
+  const ctxReady = Boolean(me.data && codes.data && !sidebar.isPending && !sidebar.error)
+  const available = React.useMemo<DashboardCardDef[]>(() => {
+    if (!ctxReady) return []
+    const owned = codes.data ?? []
+    const superuser = me.data?.is_superuser ?? false
+    const inSidebar = new Set(pages.map((p) => p.path))
+    const ctx: CardContext = {
+      isSuperuser: superuser,
+      can: (...perms) => superuser || perms.every((p) => owned.includes(p)),
+      canAny: (...perms) => superuser || perms.some((p) => owned.includes(p)),
+      inSidebar: (path) => inSidebar.has(path),
+    }
+    return DASHBOARD_CARDS.filter((c) => c.available(ctx))
+  }, [ctxReady, codes.data, me.data?.is_superuser, pages])
+  const byId = React.useMemo(() => new Map(available.map((c) => [c.id, c])), [available])
+  const titleOf = React.useCallback((id: string) => byId.get(id)?.title(t) ?? id, [byId, t])
 
-  const refreshing =
-    today.isFetching || scale.isFetching || trend.isFetching || logins.isFetching || operas.isFetching
-  const refetchAll = () => {
-    void today.refetch(); void scale.refetch(); void trend.refetch()
-    void logins.refetch(); void operas.refetch()
-    if (isSuperuser) void online.refetch()
-  }
-  // 「刷新」按钮也带上公告卡（它的查询在卡片里，按 key 失效）
-  const refreshAll = () => {
-    refetchAll()
-    void qc.invalidateQueries({ queryKey: [...noticeKeys.feedAll(), 'list'] })
-  }
-  // 开着哪条公告进 URL（硬纪律 2）；只动 `notice` 一个键
-  const openNotice = (id: string | undefined) => onSearchChange?.({ ...search, notice: id })
-
-  const fails = today.data?.loginFails ?? 0
-
+  // ── 布局：存的那份 + 现在能用的卡片 ──
+  // 能用的卡片还没算出来时（`ctxReady` 之前 `available` 是空的）不合并 —— 拿空集合并出来的是「一张卡片都没有」，
+  // 会先闪一下「所有卡片都隐藏了」
+  const resolved = React.useMemo(
+    () => (pref.data && ctxReady ? resolveLayout(pref.data.value, available) : null),
+    [pref.data, ctxReady, available]
+  )
   /**
-   * 🔴 这一页的每个数字都取自独立的一个查询，失败时全都退化成「—」（硬纪律 9）：
-   * 「今日登录 —」和「今日真的一次登录都没有」在界面上分不出来。
-   * 所以只要有一个查询挂了就把它顶到页头下面，重试复用「刷新」那条链。
-   * `online` 对非超管是 disabled 的（永远不会有 error），不用单独排除。
+   * 🔴 读失败时显示默认布局，但**页面上要说出来**、而且不让编辑（硬纪律 9）：
+   * 静默退回默认 = 让人以为「我存的布局没了」；而这时允许编辑保存，会拿默认布局覆盖掉他服务端那份
    */
-  const firstError = [today, scale, trend, logins, operas, online].find((q) => q.error)?.error
+  const baseline: DashboardLayout | null =
+    resolved?.layout ?? (pref.error && ctxReady ? defaultLayout(available) : null)
+  const canEdit = Boolean(resolved)
+  const editing = Boolean(search.edit) && canEdit
+  const [draft, setDraft] = React.useState<DashboardLayout | null>(null)
+  // 草稿写成 `draft ?? baseline` 两层：后台重取回来不会冲掉还没保存的改动
+  const shown = editing ? (draft ?? baseline) : baseline
+  const dirty = Boolean(editing && draft && baseline && !sameLayout(draft, baseline))
+
+  const enterEdit = () => {
+    setDraft(null)
+    save.reset()
+    patch({ edit: true })
+  }
+  const leaveEdit = () => {
+    setDraft(null)
+    save.reset()
+    patch({ edit: undefined })
+  }
+  const saveLayout = () => {
+    if (!shown) return
+    save.mutate(toStoredLayout(shown, pref.data?.value ?? null), {
+      onSuccess: () => {
+        toast.success(t('工作台布局已保存'))
+        leaveEdit()
+      },
+    })
+  }
+
+  // 「刷新」：只重取卡片的数据（布局不动）。卡片的查询各自在卡片里，按 key 失效
+  const [refreshing, setRefreshing] = React.useState(false)
+  const refreshAll = () => {
+    setRefreshing(true)
+    void Promise.all([
+      qc.invalidateQueries({ queryKey: dashKeys.all }),
+      qc.invalidateQueries({ queryKey: NOTICE_FEED_KEY }),
+      qc.invalidateQueries({ queryKey: notificationKeys.all }),
+      qc.invalidateQueries({ queryKey: workflowKeys.counts() }),
+      qc.invalidateQueries({ queryKey: workflowKeys.inbox() }),
+    ]).finally(() => setRefreshing(false))
+  }
+
+  const cardProps: CardProps = {
+    openNotice: (id) => patch({ notice: id }),
+    openApproval: (id) => patch({ wf: id }),
+    quickLinks: shown?.quickLinks ?? null,
+    pages,
+  }
+
+  const contextError = me.error ?? codes.error ?? sidebar.error
+  const visibleItems = shown?.items.filter((i) => i.visible) ?? []
 
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
         <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
-          <PageHeader title={t("仪表盘")} description={t("平台首页：今日活动、近 7 天趋势与最近动态。")} />
+          <PageHeader title={t('仪表盘')} description={t('平台首页：每个人自己的工作台。')} />
 
           <div className="flex flex-wrap items-baseline justify-between gap-3">
             <div className="flex flex-col gap-0.5">
               <span className="text-lg font-semibold" data-testid="dash-greeting">
-                {t('你好，{{name}}', { name: me?.nickname ?? '…' })}
+                {t('你好，{{name}}', { name: me.data?.nickname ?? '…' })}
               </span>
               <span className="text-sm text-muted-foreground">
-                {me?.last_login_time
-                  ? t('上次登录 {{at}}', { at: formatDateTime(me.last_login_time) })
+                {me.data?.last_login_time
+                  ? t('上次登录 {{at}}', { at: formatDateTime(me.data.last_login_time) })
                   : t('欢迎回来')}
-                {me?.dept ? ` · ${me.dept}` : ''}
+                {me.data?.dept ? ` · ${me.data.dept}` : ''}
               </span>
             </div>
-            <Button
-              variant="outline" size="sm" data-testid="dash-refresh"
-              disabled={refreshing} onClick={refreshAll}
-            >
-              {refreshing ? <IconLoader2 className="size-4 animate-spin" /> : <IconRefresh className="size-4" />}
-              {t('刷新')}
-            </Button>
-          </div>
-
-          {/* 公告卡排在管理员那批指标**前面**、也在下面那条错误条前面：它对所有人都有用，
-              而错误条（普通用户这里是「没有权限」）说的是它下面那些卡，不该把公告也一起罩住 */}
-          <DashboardNoticeCard onOpen={openNotice} />
-
-          {Boolean(firstError) && (
-            <QueryError error={firstError} onRetry={refetchAll} testId="dash-error" />
-          )}
-
-          {/* 今日有登录失败就顶上去 —— 这是这一页最该被看见的一条 */}
-          {fails > 0 && (
-            <Alert tone="warning" data-testid="dash-fail-alert" className="items-center [&>div]:flex-row [&>div]:flex-wrap [&>div]:items-center [&>div]:gap-2">
-              {/* 整句一个 key —— 拆成「前半 t() + <strong> + 后半 t()」换英文语序就散架 */}
-              <span>
-                <Trans
-                  t={t}
-                  i18nKey="今日有 <b>{{n}}</b> 次登录失败。"
-                  values={{ n: fails }}
-                  components={{ b: <strong className="tabular-nums" /> }}
-                />
-              </span>
-              {canLoginLog && (
-                <Link
-                  to="/log/login"
-                  search={{ status: 0, time: timeParam }}
-                  className="inline-flex items-center gap-1 underline underline-offset-2"
-                  data-testid="dash-fail-link"
+            {!editing && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline" size="sm" data-testid="dash-edit"
+                  disabled={!canEdit} onClick={enterEdit}
                 >
-                  {t('查看明细')} <IconArrowRight className="size-3.5" />
-                </Link>
-              )}
-            </Alert>
-          )}
-
-          {/* ── 今日指标 ── */}
-          <div className="grid gap-4 @2xl/main:grid-cols-2 @5xl/main:grid-cols-4" data-testid="dash-metrics">
-            <Metric
-              label={t("今日登录")} value={today.data?.logins} loading={today.isPending}
-              testId="metric-logins"
-              hint={fails > 0 ? t('其中 {{n}} 次失败', { n: fails }) : t('全部成功')}
-              tone={fails > 0 ? 'warning' : 'success'}
-              to={canLoginLog ? { path: '/log/login', search: { time: timeParam } } : undefined}
-            />
-            <Metric
-              label={t("今日操作")} value={today.data?.operations} loading={today.isPending}
-              testId="metric-operations"
-              hint={today.data?.operaFails ? t('其中 {{n}} 次异常', { n: today.data.operaFails }) : t('无异常')}
-              tone={today.data?.operaFails ? 'warning' : 'success'}
-              to={canOperaLog ? { path: '/log/opera', search: { time: timeParam } } : undefined}
-            />
-            <Metric
-              label={t("用户总数")} value={scale.data?.users} loading={scale.isPending}
-              testId="metric-users"
-              hint={scale.data ? t('{{roles}} 个角色 · {{notices}} 条公告', { roles: scale.data.roles, notices: scale.data.notices }) : undefined}
-            />
-            {isSuperuser ? (
-              <Metric
-                label={t("在线会话")} value={online.data} loading={online.isPending}
-                testId="metric-online"
-                hint={t("Redis 中未过期的 token 数")}
-                to={{ path: '/monitor/online', search: {} }}
-              />
-            ) : (
-              <div
-                className="flex flex-col justify-center gap-1 rounded-lg border border-dashed border-border px-4 py-3"
-                data-testid="metric-online-denied"
-              >
-                <span className="text-xs text-muted-foreground">{t('在线会话')}</span>
-                {/* 没权限要说「没权限」，不能装成 0 或者干脆不画这一格 */}
-                <span className="text-sm text-muted-foreground">{t('仅超级管理员可见')}</span>
+                  <IconLayoutDashboard className="size-4" />
+                  {t('编辑工作台')}
+                </Button>
+                <Button
+                  variant="outline" size="sm" data-testid="dash-refresh"
+                  disabled={refreshing} onClick={refreshAll}
+                >
+                  {refreshing ? <IconLoader2 className="size-4 animate-spin" /> : <IconRefresh className="size-4" />}
+                  {t('刷新')}
+                </Button>
               </div>
             )}
           </div>
 
-          {/* ── 近 7 天登录趋势 ── */}
-          <Panel
-            title={t("近 7 天登录")}
-            note={
-              trend.data?.truncated
-                ? t('按天统计 · 失败明细只取了最近 200 条（共 {{n}} 条）', { n: trend.data.failTotal })
-                : t('按天统计，红色为失败')
-            }
-            testId="dash-trend"
-            loading={trend.isPending}
-          >
-            {trend.data && <TrendBars points={trend.data.points} />}
-          </Panel>
+          {Boolean(contextError) && (
+            <QueryError
+              error={contextError}
+              onRetry={() => {
+                void me.refetch()
+                void codes.refetch()
+                void qc.refetchQueries({ queryKey: authKeys.sidebar() })
+              }}
+              testId="dash-context-error"
+            />
+          )}
 
-          {/* ── 最近动态 ── */}
-          <div className="grid gap-4 @4xl/main:grid-cols-2">
-            <Panel
-              title={t("最近登录")}
-              testId="dash-recent-logins"
-              loading={logins.isPending}
-              action={
-                canLoginLog ? (
-                  <Link to="/log/login" search={{}} className="text-xs text-primary underline-offset-2 hover:underline">
-                    {t('全部')}
-                  </Link>
-                ) : undefined
-              }
-            >
-              {logins.data?.length ? (
-                <ul className="flex flex-col divide-y divide-border/60">
-                  {logins.data.map((l) => (
-                    <li key={l.id} className="flex items-center gap-2 py-1.5 text-sm">
-                      {l.status === 1
-                        ? <StatusPill tone="success">{t('成功')}</StatusPill>
-                        : <StatusPill tone="danger">{t('失败')}</StatusPill>}
-                      <span className="min-w-0 flex-1 truncate">{l.username}</span>
-                      <span className="hidden font-mono text-xs text-muted-foreground @xl/main:inline">{l.ip}</span>
-                      <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                        {formatDateTimeShort(l.login_time)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <Empty>{t('暂无登录记录')}</Empty>
-              )}
-            </Panel>
+          {Boolean(pref.error) && (
+            <QueryError
+              error={pref.error}
+              title={t('没能读取你保存的工作台布局')}
+              detail={t('下面先按默认布局显示；重试成功后会换成你自己的布局。读取成功之前不能编辑。')}
+              onRetry={() => void pref.refetch()}
+              testId="dash-layout-error"
+            />
+          )}
 
-            <Panel
-              title={t("最近操作")}
-              testId="dash-recent-operas"
-              loading={operas.isPending}
-              action={
-                canOperaLog ? (
-                  <Link to="/log/opera" search={{}} className="text-xs text-primary underline-offset-2 hover:underline">
-                    {t('全部')}
-                  </Link>
-                ) : undefined
-              }
-            >
-              {operas.data?.length ? (
-                <ul className="flex flex-col divide-y divide-border/60">
-                  {operas.data.map((o) => (
-                    <li key={o.id} className="flex items-center gap-2 py-1.5 text-sm">
-                      <Badge variant="outline" className="shrink-0 font-mono text-2xs font-normal">
-                        {o.method}
-                      </Badge>
-                      <span className="min-w-0 flex-1 truncate" title={o.path}>{o.title ? t(o.title) : o.path}</span>
-                      <span className="hidden shrink-0 text-xs text-muted-foreground @xl/main:inline">
-                        {o.username ?? '—'}
-                      </span>
-                      <span className="shrink-0 font-mono text-xs tabular-nums text-muted-foreground">
-                        {formatDateTimeShort(o.opera_time)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <Empty>{t('暂无操作记录')}</Empty>
-              )}
-            </Panel>
-          </div>
+          {resolved?.unreadable && !editing && (
+            <Alert tone="warning" data-testid="dash-layout-unreadable">
+              {t('保存的工作台布局格式认不出来，下面是默认布局。编辑并保存一次就会覆盖它。')}
+            </Alert>
+          )}
 
-          <p className="text-xs text-muted-foreground" data-testid="dash-disclaimer">
-            {t('指标由各列表接口的分页总数实时算出，后端没有统计表 —— 数字反映当前库里的记录，不做缓存快照。')}
-          </p>
+          {editing && shown && (
+            <DashboardEditor
+              layout={shown}
+              titleOf={titleOf}
+              pages={pages}
+              dirty={dirty}
+              saving={save.isPending}
+              saveError={save.error}
+              onChange={setDraft}
+              onReset={() => setDraft(defaultLayout(available))}
+              onCancel={leaveEdit}
+              onSave={saveLayout}
+            />
+          )}
+
+          {!shown ? (
+            !contextError && <GridSkeleton />
+          ) : visibleItems.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground" data-testid="dash-empty">
+              {t('所有卡片都隐藏了。点「编辑工作台」把需要的卡片打开。')}
+            </p>
+          ) : (
+            <div className="grid gap-4 @4xl/main:grid-cols-2" data-testid="dash-grid">
+              {visibleItems.map((item) => {
+                const def = byId.get(item.id)
+                if (!def) return null
+                return (
+                  <div
+                    key={item.id}
+                    className={cn('min-w-0', item.width === 'full' && '@4xl/main:col-span-2')}
+                    data-testid={`dash-card-${item.id}`}
+                    data-width={item.width}
+                  >
+                    <def.Component {...cardProps} />
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 开在 URL 上 → 抽屉 portal 挂进本 tab 的根节点（reader-sheet 的注释） */}
+      {/* 开在 URL 上 → 抽屉 portal 挂进本 tab 的根节点（reader-sheet / instance-sheet 的注释） */}
       <NoticeReaderSheet
         noticeId={search.notice ?? null}
         onOpenChange={(o) => {
-          if (!o) openNotice(undefined)
+          if (!o) patch({ notice: undefined })
         }}
       />
+      <InstanceSheet id={search.wf ?? null} onClose={() => patch({ wf: undefined })} />
     </div>
   )
 }
 
-/* ────────────────────────── 小件 ────────────────────────── */
-
-function Metric({
-  label, value, hint, loading, tone, testId, to,
-}: {
-  label: string
-  value: number | undefined
-  hint?: string
-  loading: boolean
-  tone?: 'success' | 'warning'
-  testId: string
-  to?: { path: '/log/login' | '/log/opera' | '/monitor/online'; search: Record<string, unknown> }
-}) {
-  const body = (
-    <>
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {loading ? (
-        <Skeleton className="h-7 w-16" />
-      ) : (
-        <span className="text-2xl font-semibold tabular-nums" data-testid={`${testId}-value`}>
-          {value === undefined ? '—' : formatNumber(value)}
-        </span>
-      )}
-      {hint && (
-        <span
-          className={
-            tone === 'warning'
-              ? 'text-xs text-amber-700 dark:text-amber-300'
-              : 'text-xs text-muted-foreground'
-          }
-        >
-          {hint}
-        </span>
-      )}
-    </>
-  )
-
-  const cls = 'flex flex-col gap-1 rounded-lg border border-border px-4 py-3'
-  if (!to) return <div className={cls} data-testid={testId}>{body}</div>
+function GridSkeleton() {
   return (
-    <Link
-      to={to.path as never}
-      search={to.search as never}
-      className={`${cls} transition-colors hover:border-primary/40 hover:bg-muted/40`}
-      data-testid={testId}
-    >
-      {body}
-    </Link>
-  )
-}
-
-function Panel({
-  title, note, action, loading, testId, children,
-}: {
-  title: string
-  note?: string
-  action?: React.ReactNode
-  loading: boolean
-  testId: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border px-4 py-3" data-testid={testId}>
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="flex items-baseline gap-2">
-          <span className="text-sm font-medium">{title}</span>
-          {note && <span className="text-xs text-muted-foreground">{note}</span>}
-        </div>
-        {action}
-      </div>
-      {loading ? <Skeleton className="h-24 w-full" /> : children}
+    <div className="grid gap-4 @4xl/main:grid-cols-2" data-testid="dash-loading">
+      <Skeleton className="h-28 w-full @4xl/main:col-span-2" />
+      <Skeleton className="h-40 w-full" />
+      <Skeleton className="h-40 w-full" />
     </div>
   )
-}
-
-/**
- * 7 根柱子的极简条形图。
- *
- * 不用 recharts：`ResponsiveContainer` 要测容器宽度，而隐藏的 tab 是
- * `display:none`（宽度 0），切回来会画成一条线。这里是纯 flex + 百分比高度，
- * 不做任何测量。（和监控页的 `Sparkline` 是同一个理由。）
- */
-function TrendBars({ points }: { points: DayPoint[] }) {
-  const { t } = useTranslation()
-  const top = Math.max(1, ...points.map((p) => p.total))
-  return (
-    <div className="flex items-end gap-2" data-testid="trend-bars">
-      {points.map((p) => {
-        const okH = ((p.total - p.fails) / top) * 100
-        const failH = (p.fails / top) * 100
-        return (
-          <div key={p.date} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-            <span className="text-xs tabular-nums text-muted-foreground" data-testid={`trend-total-${p.date}`}>
-              {p.total}
-            </span>
-            <div className="flex h-24 w-full flex-col justify-end gap-px" title={t('{{date}}：{{total}} 次，其中失败 {{fails}} 次', { date: p.date, total: p.total, fails: p.fails })}>
-              {p.fails > 0 && (
-                <div className="w-full rounded-t bg-destructive/70" style={{ height: `${failH}%` }} />
-              )}
-              <div
-                className={`w-full bg-sky-500/70 ${p.fails > 0 ? '' : 'rounded-t'}`}
-                style={{ height: `${okH}%` }}
-              />
-            </div>
-            <span className="truncate text-2xs tabular-nums text-muted-foreground">{p.label}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="py-6 text-center text-sm text-muted-foreground">{children}</p>
 }

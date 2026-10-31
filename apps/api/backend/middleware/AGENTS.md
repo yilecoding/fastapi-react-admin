@@ -55,3 +55,17 @@
 没断言「没写日志」，所以是代码审查翻出来的。现在 except 里先把 `code` 改成 499、关掉 `should_log_opera` 再返回：
 访问日志那一行照常记（显示 499），操作日志不写。
 `test_a_client_that_left_while_the_route_ran_is_not_logged_as_a_success` 在旧代码上红：队列里是一条 `code='200' msg='Success'`。
+
+## 🔴 请求体声明是 JSON、实际不是：原来是 500，不是 422
+
+**症状**：任何接口收到一份截断 / 写坏的 JSON（`Content-Type: application/json`），回的是 **500**，
+日志里是一条服务端异常 —— 看着像后端坏了，其实是客户端发错了；路由层本该回的
+`422 json_invalid` 永远轮不到。
+
+**根因**：这个中间件在路由**之前**读请求体（`get_request_args`），`request.json()` 抛 `JSONDecodeError`，没人接。
+**修法**：接住 `ValueError`，把原文记进操作日志的 `data`，交给路由层去拒。
+
+**实测证据**（#202，个人偏好「非法 JSON 被拒」那条）：`PUT /sys/users/me/preferences/pytest.layout` 带
+`{"value": {"cards": [` —— 修之前测试红在 `JSONDecodeError`，栈顶是 `opera_log_middleware.py: get_request_args`；
+修之后 422。真起一个 uvicorn 用 curl 发同一份：不带修复 **500**、带修复 **422**。回归两条：`tests/test_opera_log_redaction.py` 最后一条（中间件单测）+
+`app/admin/tests/api_v1/test_user_preference.py` 的「截断」参数。变异（`except ValueError` 改成别的异常）→ 两条都红。

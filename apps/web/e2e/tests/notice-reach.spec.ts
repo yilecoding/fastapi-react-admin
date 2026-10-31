@@ -204,7 +204,7 @@ test.describe("公告触达面 · 读者视角", () => {
       expect(saved.equals(bytes), "下载下来的字节和上传的不一致").toBeTruthy()
     })
 
-    test("🔴 工作台：非管理员也有公告卡（旁边那条「没有权限」照旧），点一行就地打开", async ({ page }) => {
+    test("🔴 工作台：非管理员也有公告卡（没权限的统计卡不渲染，不再是一条「没有权限」），点一行就地打开", async ({ page }) => {
       const { notice, pdf } = attached
       await loginPageAs(page, "zhoumin", "123456")
       await page.goto("/dashboard")
@@ -214,8 +214,10 @@ test.describe("公告触达面 · 读者视角", () => {
       await expect(row).toContainText(notice.title)
       // 📎 个数：读者打开之前就知道这条带文件
       await expect(row.getByTestId("attachment-count")).toContainText("1")
-      // 别的卡是管理员看板：普通用户这里是那条错误条 —— 公告卡要在它旁边照常显示
-      await expect(page.locator('[data-tab="/_auth/dashboard"] [data-testid="dash-error"]')).toBeVisible()
+      // 统计卡是管理员看板：#202 之后只读访客的工作台上**不渲染**它们，也不再有一条「没有权限」的错误条
+      //（上面先断言了公告那一行在，这两条「没有」才不是页面还没加载出来）
+      await expect(page.locator('[data-tab="/_auth/dashboard"] [data-testid="dash-metrics"]')).toHaveCount(0)
+      await expect(page.locator('[data-tab="/_auth/dashboard"]').getByText("没有权限")).toHaveCount(0)
 
       await row.click()
       const reader = readerIn(page, "/_auth/dashboard")
