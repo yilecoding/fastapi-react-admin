@@ -139,6 +139,9 @@ function SignInPage() {
   const [smsSending, setSmsSending] = React.useState(false)
   const [smsCooldown, setSmsCooldown] = React.useState(0)
   const [smsSent, setSmsSent] = React.useState(false)
+  // 码发给了哪个号。服务端的冷却是**按号码**算的：改了号，倒计时和「已发送」都不该再挂着 ——
+  // 否则按钮对一个没发过的号锁 60 秒，提示还说「已发送」。改回原来那个号时两样都接着显示
+  const [smsPhone, setSmsPhone] = React.useState("")
   const [phoneError, setPhoneError] = React.useState<string | null>(null)
   const [phonePending, setPhonePending] = React.useState(false)
   React.useEffect(() => {
@@ -147,6 +150,8 @@ function SignInPage() {
     return () => window.clearTimeout(timer)
   }, [smsCooldown])
   const phoneOk = isPhoneNumber(phone)
+  const smsForPhone = smsPhone !== "" && smsPhone === phone.trim()
+  const smsCooling = smsForPhone && smsCooldown > 0
 
   // 单飞：/auth/captcha 限流 5 次 / 30 秒，而 StrictMode 开发期会把 effect 跑两遍。
   // 不去重的话每次开页要吃掉 2 次配额，刷新三次就把自己限流锁死。
@@ -217,6 +222,9 @@ function SignInPage() {
   function leaveMfa() {
     setMfa(null)
     setError(null)
+    // 第一步是手机验证码时，那个码在第一步对上就被后端删了（一次性）：留在框里再点登录必然 403，
+    // 还会给这个账号和 IP 各记一次失败 —— 连点几次就把自己锁了
+    setSmsCode("")
     // 地址栏里第三方登录带来的那枚令牌一起清掉，刷新页面不会又回到第二步
     if (search.mfa) void navigate({ to: "/sign-in", search: { redirect: search.redirect }, replace: true })
     void loadCaptcha()
@@ -258,12 +266,14 @@ function SignInPage() {
     setPhoneError(null)
     setSmsSent(false)
     let reloadCaptcha = true
+    const target = phone.trim()
     try {
       await sendPhoneCaptcha({
-        phone: phone.trim(),
+        phone: target,
         ...(captchaUuid ? { uuid: captchaUuid, captcha } : {}),
       })
       setSmsSent(true)
+      setSmsPhone(target)
       // 和 `captcha` 业务模板的冷却对齐；倒计时只是 UX，真正的闸在服务端
       setSmsCooldown(SMS_RESEND_SECONDS)
     } catch (err) {
@@ -523,13 +533,13 @@ function SignInPage() {
                         variant="outline"
                         className="h-11 w-[108px] shrink-0"
                         data-testid="sms-send"
-                        disabled={smsSending || !phoneOk || smsCooldown > 0 || captchaState === "loading" || captchaState === "error"}
+                        disabled={smsSending || !phoneOk || smsCooling || captchaState === "loading" || captchaState === "error"}
                         onClick={() => void sendSmsCode()}
                       >
-                        {smsCooldown > 0 ? t("{{n}} 秒", { n: smsCooldown }) : t("发送验证码")}
+                        {smsCooling ? t("{{n}} 秒", { n: smsCooldown }) : t("发送验证码")}
                       </Button>
                     </div>
-                    {smsSent && !phoneError && (
+                    {smsSent && smsForPhone && !phoneError && (
                       <p className="text-sm text-muted-foreground" data-testid="sms-sent">
                         {t("验证码已发送，5 分钟内有效。没收到？核对号码是否在个人中心验证过。")}
                       </p>
