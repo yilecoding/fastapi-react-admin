@@ -417,6 +417,18 @@ test_init_handles_every_seeded_account` 硬编码断言 `cli.py: _set_admin_pass
 
 ⚠️ 建测试库前要先手工 `CREATE DATABASE fba_test CHARACTER SET utf8mb4`（三个方言都是，`reset_test_db` 不建库）。
 
+**1.0 前重跑一次（2026-10-31，#193，MySQL 8.4.13，代码 = main `3e29cb4`）**：
+
+| 跑法 | 结果 |
+|---|---|
+| 新装：`reset_test_db` 建库 + 全套 pytest | 1451 条，1433 过、18 跳过、0 红 |
+| 升级路径：v0.0.1 的 `fba init` 建库 → 当前代码 `alembic upgrade head` | 整条链（`c0000000comments` → `ag000000noticephase2`）一次走完；56 张表，和模型 `compare_metadata` 的结构差异 0（只剩 1 条注释差异） |
+
+一次性容器的起法：`docker run -d --rm --name <名字> -p 3317:3306 -e MYSQL_ROOT_PASSWORD=<密码> mysql:8.4`，
+跑的时候带 `DATABASE_TYPE=mysql DATABASE_PORT=3317 DATABASE_USER=root DATABASE_PASSWORD=<密码> DATABASE_SCHEMA=<库名前缀>`。
+⚠️ 核对升级后的库别用 `alembic check`：`env.py` 的钩子读 `cmd_opts.autogenerate`，`check` 命令下没有这个属性，
+直接 `AttributeError` —— 照 `app/task/tests/test_migrations.py: test_model_matches_migrations` 的写法拿 `compare_metadata` 比。
+
 ### 🔴 测试里用 `text()` 写带时区的时间：SQL Server 上偏八小时
 
 **症状**：「把导出记录的过期时间改成一分钟前」→ 下载还是成功；「把开始时间改成一小时前」→ 卡住的任务没被结掉。
