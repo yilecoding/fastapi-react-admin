@@ -91,7 +91,7 @@ Switch with `DATABASE_TYPE` in `.env` — same code, same migration chain, seed 
 |---|---|---|
 | **PostgreSQL** (default) | new projects; `docker compose up` gives you one | full backend suite on every CI run |
 | **SQL Server** | teams already on the Microsoft stack | full backend suite + browser E2E on every CI run |
-| **MySQL** | teams already running MySQL | not in CI; full suite run locally on demand — last run (2026-10-23) passed in full |
+| **MySQL** | teams already running MySQL | not in CI; full suite run locally on demand — last run (2026-10-31) passed in full, including an upgrade from v0.0.1 |
 
 ## Quick start
 
