@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { KeyRoundIcon, LogOutIcon, QrCodeIcon, ShieldCheckIcon, SmartphoneIcon } from 'lucide-react-native'
+import { KeyRoundIcon, LogOutIcon, ShieldCheckIcon, SmartphoneIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -16,7 +16,7 @@ import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
-import { ApiError, SESSION_END_MESSAGE } from '@admin/api'
+import { ApiError, isPhoneNumber, SESSION_END_MESSAGE, shouldReloadCaptcha, SMS_RESEND_SECONDS } from '@admin/api'
 
 import { api } from '@/lib/api'
 import { BRAND } from '@/lib/brand'
@@ -24,16 +24,12 @@ import { remembered } from '@/lib/remember'
 import { useSession, type MfaChallenge } from '@/lib/session'
 
 /**
- * 登录方式 —— 和 web 端登录页的三个页签一一对应（`_guest/sign-in.tsx` 的 `METHODS`）。
- * 后两个是**占位**：后端目前只开了账号密码这一条路径。
- *
- * 🔴 占位屏必须说清楚**为什么不能用**，并把人送回能用的那条 —— 光禁用一个页签
- * 只会让人反复去点它（web 那边的 `NotWired` 就是这么做的，措辞照抄）。
+ * 登录方式 —— 和 web 端登录页的两个页签一一对应（`_guest/sign-in.tsx` 的 `METHODS`）。
+ * 扫码登录不做：它在 `apps/mobile` 分册开头那张「明确不做」的清单里（#193 把两端的占位页签一起删了）
  */
 const METHODS = [
   { value: 'password', label: '密码', icon: KeyRoundIcon },
   { value: 'phone', label: '手机', icon: SmartphoneIcon },
-  { value: 'qrcode', label: '扫码', icon: QrCodeIcon },
 ] as const
 
 type Method = (typeof METHODS)[number]['value']
@@ -62,7 +58,7 @@ type CaptchaState =
 
 export default function LoginScreen() {
   const { t } = useTranslation()
-  const { login, verifyMfa, bootstrapError, endReason } = useSession()
+  const { login, loginByPhone, verifyMfa, bootstrapError, endReason } = useSession()
   const insets = useSafeAreaInsets()
 
   const [method, setMethod] = React.useState<Method>('password')
@@ -77,9 +73,32 @@ export default function LoginScreen() {
   const [code, setCode] = React.useState('')
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  /** 二次验证（#181）：密码对了、还差动态码 */
+  /** 二次验证（#181）：第一步（密码 / 手机验证码）过了、还差动态码 */
   const [mfa, setMfa] = React.useState<MfaChallenge | null>(null)
   const [otp, setOtp] = React.useState('')
+
+  /*
+   * 手机验证码登录（#168，照 web 登录页的手机页签）。状态放在这一层而不是页签自己的组件里：
+   * 切去密码页签、或者进了二次验证再回来，号码和倒计时都还在 —— 倒计时一丢，用户以为能再发，点了只拿到一句「太频繁」。
+   *
+   * 图形验证码和密码页签**共用同一张**（同 web）：发码时服务端校验并消费，发完要换一张。
+   */
+  const [phone, setPhone] = React.useState('')
+  const [smsCode, setSmsCode] = React.useState('')
+  const [smsSending, setSmsSending] = React.useState(false)
+  const [smsSent, setSmsSent] = React.useState(false)
+  const [phoneError, setPhoneError] = React.useState<string | null>(null)
+  /**
+   * 倒计时按**截止时刻**算，不按「每秒减一」数：看短信要切到别的 App，回来时 JS 计时器可能被挂起过，
+   * 数出来的秒数会比真实的长。显示值每秒按截止时刻重算一次
+   */
+  const [smsDeadline, setSmsDeadline] = React.useState(0)
+  const [smsLeft, setSmsLeft] = React.useState(0)
+  /**
+   * 发码单飞（硬纪律 10）：接口 5 次 / 分钟，每次还消费一张图形验证码。倒计时要等响应回来才开始，
+   * 挡不住第一次响应回来之前的第二下 —— 用 ref 判，不等 `smsSending` 那次重渲染
+   */
+  const smsInFlight = React.useRef(false)
 
   const alive = React.useRef(true)
   React.useEffect(() => {
@@ -136,6 +155,16 @@ export default function LoginScreen() {
     void captchaQuery.refetch()
   }, [captchaQuery])
 
+  React.useEffect(() => {
+    if (smsDeadline === 0) return
+    const timer = setInterval(() => {
+      const left = Math.max(0, Math.ceil((smsDeadline - Date.now()) / 1000))
+      setSmsLeft(left)
+      if (left === 0) clearInterval(timer)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [smsDeadline])
+
   // 记住的账号回填。SecureStore 是异步读，所以先渲染上面那个初值，读到再覆盖
   React.useEffect(() => {
     void remembered.get().then((u) => {
@@ -164,11 +193,72 @@ export default function LoginScreen() {
       // 成功之后不用手动跳转：根布局按 session.status 决定渲染哪一棵树
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
-      // 验证码是一次性的，失败后必须换一张，否则用户重试必然再错一次
-      if (captcha.kind === 'ready') {
+      // 验证码是一次性的，失败后必须换一张，否则用户重试必然再错一次。
+      // 🔴 例外是撞了限流（429）：验证码没被消费，跟着重拉只会把 `/auth/captcha` 的配额也打满（判据见 `@admin/api`）
+      if (captcha.kind === 'ready' && shouldReloadCaptcha(err)) {
         setCode('')
         loadCaptcha()
       }
+    } finally {
+      if (alive.current) setSubmitting(false)
+    }
+  }
+
+  /**
+   * 发短信验证码。🔴 没注册 / 没验证过的号也返回「成功」（后端防号码枚举，不真发），
+   * 所以「已发送」的提示要带上「没收到就去核对号码」—— 照 web 的措辞
+   */
+  async function sendSms() {
+    if (smsInFlight.current) return
+    smsInFlight.current = true
+    setSmsSending(true)
+    setPhoneError(null)
+    setSmsSent(false)
+    let reloadCaptcha = true
+    try {
+      await api.POST('/api/v1/auth/phone/captcha', {
+        body: {
+          phone: phone.trim(),
+          uuid: captcha.kind === 'ready' ? captcha.uuid : null,
+          captcha: captcha.kind === 'ready' ? code.trim() : null,
+        },
+      })
+      if (!alive.current) return
+      setSmsSent(true)
+      setSmsDeadline(Date.now() + SMS_RESEND_SECONDS * 1000)
+      setSmsLeft(SMS_RESEND_SECONDS)
+    } catch (err) {
+      reloadCaptcha = shouldReloadCaptcha(err)
+      if (alive.current) setPhoneError(err instanceof Error ? err.message : String(err))
+    } finally {
+      smsInFlight.current = false
+      if (alive.current) {
+        setSmsSending(false)
+        // 图形验证码发码时已被服务端校验（对了就消费，错了也换一张）；只有限流那次没被碰过
+        if (captcha.kind === 'ready' && reloadCaptcha) {
+          setCode('')
+          loadCaptcha()
+        }
+      }
+    }
+  }
+
+  async function submitPhone() {
+    // 键盘上的「完成」不看按钮禁没禁用，条件要在这里再判一次
+    if (submitting || !isPhoneNumber(phone) || smsCode.trim().length === 0) return
+    setPhoneError(null)
+    setSubmitting(true)
+    try {
+      const challenge = await loginByPhone({ phone: phone.trim(), captcha: smsCode.trim() })
+      if (challenge) {
+        setOtp('')
+        setError(null)
+        setMfa(challenge)
+      }
+      // 成功之后不用手动跳转：根布局按 session.status 决定渲染哪一棵树
+    } catch (err) {
+      // 没注册 / 没验证 / 码错 / 码过期一律同一句（后端防枚举），原样显示即可
+      setPhoneError(err instanceof Error ? err.message : String(err))
     } finally {
       if (alive.current) setSubmitting(false)
     }
@@ -188,10 +278,12 @@ export default function LoginScreen() {
     }
   }
 
-  function backToPassword() {
+  /** 从二次验证退回第一步（回到原来那个页签）。短信验证码第一步对了就被消费掉了，留在框里只会再错一次 */
+  function leaveMfa() {
     setMfa(null)
     setOtp('')
     setError(null)
+    setSmsCode('')
     if (captcha.kind === 'ready') loadCaptcha()
   }
 
@@ -200,6 +292,17 @@ export default function LoginScreen() {
     password.length > 0 &&
     (captcha.kind !== 'ready' || code.trim().length > 0) &&
     !submitting
+
+  const phoneOk = isPhoneNumber(phone)
+  // 图形验证码开着时必须先填：不填后端照样拒，还白吃一次发码配额
+  const canSendSms =
+    phoneOk &&
+    !smsSending &&
+    smsLeft === 0 &&
+    captcha.kind !== 'loading' &&
+    captcha.kind !== 'error' &&
+    (captcha.kind !== 'ready' || code.trim().length > 0)
+  const canSubmitPhone = phoneOk && smsCode.trim().length > 0 && !submitting
 
   return (
     <>
@@ -240,7 +343,7 @@ export default function LoginScreen() {
             </Tabs>
           </View>
 
-          {/* 🔴 三个页签内容高度要一致，否则切换时下面的东西会跳 */}
+          {/* 🔴 两个页签内容高度要一致，否则切换时下面的东西会跳 */}
           <View style={{ minHeight: 336 }} className="pt-4">
             {mfa ? (
               <MfaStep
@@ -248,12 +351,88 @@ export default function LoginScreen() {
                 otp={otp}
                 onChangeOtp={setOtp}
                 onSubmit={() => void submitOtp()}
-                onBack={backToPassword}
+                onBack={leaveMfa}
                 submitting={submitting}
                 error={error}
               />
-            ) : method !== 'password' ? (
-              <NotWired method={method} onUsePassword={() => setMethod('password')} />
+            ) : method === 'phone' ? (
+              <View className="gap-4">
+                <Group>
+                  <FieldRow first label={t('手机号')}>
+                    <Input
+                      value={phone}
+                      onChangeText={setPhone}
+                      keyboardType="number-pad"
+                      textContentType="telephoneNumber"
+                      autoComplete="tel"
+                      maxLength={11}
+                      placeholder={t('请输入手机号')}
+                      testID="login-phone"
+                      className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+                    />
+                  </FieldRow>
+                  <CaptchaRow state={captcha} code={code} onChangeCode={setCode} onRetry={loadCaptcha} />
+                  <FieldRow label={t('短信验证码')}>
+                    <Input
+                      value={smsCode}
+                      onChangeText={setSmsCode}
+                      keyboardType="number-pad"
+                      // iOS 从短信里取码填进来；Android 走 autofill 的 sms-otp
+                      textContentType="oneTimeCode"
+                      autoComplete="sms-otp"
+                      maxLength={6}
+                      placeholder="123456"
+                      onSubmitEditing={() => void submitPhone()}
+                      testID="login-sms-code"
+                      className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!canSendSms}
+                      onPress={() => void sendSms()}
+                      testID="login-sms-send"
+                      // 定宽：「发送验证码」和「58 秒」来回切时输入框不跟着伸缩
+                      className="min-w-[96px]"
+                    >
+                      {smsSending ? (
+                        <ActivityIndicator size="small" />
+                      ) : (
+                        <Text>{smsLeft > 0 ? t('{{n}} 秒', { n: smsLeft }) : t('发送验证码')}</Text>
+                      )}
+                    </Button>
+                  </FieldRow>
+                </Group>
+
+                {/* 分组块的脚注：发码前说哪种号能用，发码后换成「已发送」—— 同一格，高度不跳 */}
+                <Text
+                  variant="small"
+                  className="text-muted-foreground px-5 leading-5"
+                  testID={smsSent && !phoneError ? 'login-sms-sent' : undefined}
+                >
+                  {smsSent && !phoneError
+                    ? t('验证码已发送，5 分钟内有效。没收到？核对号码是否在网页端个人中心验证过。')
+                    : t('只认在网页端个人中心验证过的手机号')}
+                </Text>
+
+                {phoneError ? (
+                  <Text variant="small" className="text-destructive px-5" testID="login-phone-error">
+                    {phoneError}
+                  </Text>
+                ) : null}
+
+                <View className="px-4">
+                  <Button
+                    disabled={!canSubmitPhone}
+                    onPress={() => void submitPhone()}
+                    testID="login-phone-submit"
+                    className="h-[50px] rounded-xl"
+                  >
+                    {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
+                    <Text className="text-base font-semibold">{submitting ? t('登录中') : t('登录')}</Text>
+                  </Button>
+                </View>
+              </View>
             ) : (
               <View className="gap-4">
                 {bootstrapError ? (
@@ -390,40 +569,6 @@ function FieldRow({
   )
 }
 
-/**
- * 还没接入的登录方式：说清楚为什么不能用，并把人送回能用的那条。
- * 措辞和 web 端 `_guest/sign-in.tsx` 的 `NotWired` 保持一致。
- */
-function NotWired({ method, onUsePassword }: { method: Method; onUsePassword: () => void }) {
-  const { t } = useTranslation()
-  const copy =
-    method === 'phone'
-      ? {
-          icon: SmartphoneIcon,
-          title: '手机验证码登录还没接入',
-          hint: '后端目前只开了账号密码这一条登录路径，手机号验证码要等短信通道接进来。',
-        }
-      : {
-          icon: QrCodeIcon,
-          title: '扫码登录还没接入',
-          // web 那边的原话是「扫码需要一个能派发登录票据的移动端，现在还没有」——
-          // 移动端就是眼前这个 App，所以这里换成缺的另一半：后端的票据接口
-          hint: '扫码要后端有一套派发登录票据的接口，现在还没有。这个 App 将来就是扫码的那一端。',
-        }
-  return (
-    <Group className="items-center gap-3 px-6 py-9">
-      <Icon as={copy.icon} className="text-muted-foreground size-8" />
-      <Text className="text-center font-medium">{t(copy.title)}</Text>
-      <Text variant="small" className="text-muted-foreground text-center leading-5">
-        {t(copy.hint)}
-      </Text>
-      <Button variant="outline" size="sm" onPress={onUsePassword} className="mt-1">
-        <Text>{t('用密码登录')}</Text>
-      </Button>
-    </Group>
-  )
-}
-
 function CaptchaRow({
   state,
   code,
@@ -435,7 +580,8 @@ function CaptchaRow({
   code: string
   onChangeCode: (v: string) => void
   onRetry: () => void
-  onSubmit: () => void
+  /** 键盘上的「完成」。手机页签不传：图形码填完下一步是点「发送验证码」，不是提交登录 */
+  onSubmit?: () => void
 }) {
   const { t } = useTranslation()
   if (state.kind === 'off') return null

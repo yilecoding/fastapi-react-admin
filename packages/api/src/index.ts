@@ -46,4 +46,5 @@ export {
   type UploadOptions,
 } from './client'
 export { isSessionEndReason, SESSION_END_MESSAGE, type SessionEndReason } from './session-end'
+export { isPhoneNumber, PHONE_PATTERN, shouldReloadCaptcha, SMS_RESEND_SECONDS } from './login'
 export type { ApiMethod, ApiMethods, Payload } from './types'

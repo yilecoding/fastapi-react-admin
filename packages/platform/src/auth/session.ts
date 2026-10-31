@@ -8,6 +8,8 @@ import type { AuthLoginOutcome } from '../desktop/contract'
 
 /** 会话结束的原因码与提示文案（和移动端共用的那一份在 `@admin/api`）。登录页从这里取，不直接依赖那个包 */
 export { isSessionEndReason, SESSION_END_MESSAGE, type SessionEndReason } from '@admin/api'
+/** 手机号格式 · 发码倒计时 · 失败后要不要换图形验证码 —— 同上，和移动端登录屏共用一份 */
+export { isPhoneNumber, shouldReloadCaptcha, SMS_RESEND_SECONDS } from '@admin/api'
 import { useTabStore } from '../shell/tab-store'
 import { authKeys } from './queries'
 

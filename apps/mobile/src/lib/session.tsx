@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
 
 import { ApiError, isSessionEndReason, type SessionEndReason } from '@admin/api'
+import type { components } from '@admin/api/schema'
 import { setDisplayTimeZone } from '@admin/i18n'
 
 import { api, setSessionExpiredHandler } from '@/lib/api'
@@ -25,6 +26,11 @@ type Session = {
    * 密码登录。返回 null = 已登录；返回挑战 = 这个账号开了（或被强制开）二次验证，登录屏接着收动态码（#181）
    */
   login: (input: { username: string; password: string; uuid?: string; captcha?: string }) => Promise<MfaChallenge | null>
+  /**
+   * 手机验证码登录（#168）。返回值同 `login`：收尾是同一段，同样可能要二次验证。
+   * 发码不在这里 —— 那是个不碰会话的匿名接口，登录屏直接调
+   */
+  loginByPhone: (input: { phone: string; captcha: string }) => Promise<MfaChallenge | null>
   /** 二次验证的第二步：动态码或恢复码 */
   verifyMfa: (mfaToken: string, otp: string) => Promise<void>
   logout: () => Promise<void>
@@ -33,6 +39,9 @@ type Session = {
 
 /** 登录第一步过了、还差动态码。`setup` = 被强制但还没绑定 —— 移动端不做绑定（要扫码），引导去网页端 */
 export type MfaChallenge = { token: string; setup: boolean }
+
+/** 登录第一步（密码 / 手机验证码）的返回：要么直接给 token，要么要二次验证。两个接口是同一个形状 */
+type FirstStep = components['schemas']['GetLoginToken'] | components['schemas']['MfaChallenge']
 
 const SessionContext = React.createContext<Session | null>(null)
 
@@ -157,18 +166,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
   }, [applyAnonymous, applyUser])
 
-  const login = React.useCallback<Session['login']>(
-    async (input) => {
-      const result = await api.POST('/api/v1/auth/login', {
-        body: {
-          username: input.username,
-          password: input.password,
-          uuid: input.uuid ?? null,
-          captcha: input.captcha ?? null,
-          // 会话策略按端分（#138）：移动端默认 30 天空闲、同一账号只留 1 台手机
-          client: 'mobile',
-        },
-      })
+  /** 第一步的收尾：密码登录和手机验证码登录是同一段（web 那边是 `afterLogin` + `challengeOf`） */
+  const finishFirstStep = React.useCallback(
+    async (result: FirstStep): Promise<MfaChallenge | null> => {
       // 开了二次验证：这一步没有 token、也没有 refresh cookie（#181）
       if ('mfa_required' in result) return { token: result.mfa_token, setup: result.mfa_setup }
       await tokenStore.set(result.access_token)
@@ -179,6 +179,35 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       return null
     },
     [reload],
+  )
+
+  const login = React.useCallback<Session['login']>(
+    async (input) =>
+      finishFirstStep(
+        await api.POST('/api/v1/auth/login', {
+          body: {
+            username: input.username,
+            password: input.password,
+            uuid: input.uuid ?? null,
+            captcha: input.captcha ?? null,
+            // 会话策略按端分（#138）：移动端默认 30 天空闲、同一账号只留 1 台手机
+            client: 'mobile',
+          },
+        }),
+      ),
+    [finishFirstStep],
+  )
+
+  const loginByPhone = React.useCallback<Session['loginByPhone']>(
+    async (input) =>
+      finishFirstStep(
+        await api.POST('/api/v1/auth/phone/login', {
+          // 🔴 `client` 不能省：后端默认 `'web'`，省了这个会话就按网页端的策略算（空闲时长 / 同端设备数都不对）。
+          // 短信验证码的字段叫 `captcha` 不叫 `code`：后端按这个键名把它从操作日志里脱掉
+          body: { phone: input.phone, captcha: input.captcha, client: 'mobile' },
+        }),
+      ),
+    [finishFirstStep],
   )
 
   const verifyMfa = React.useCallback<Session['verifyMfa']>(
@@ -207,8 +236,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [applyAnonymous])
 
   const value = React.useMemo<Session>(
-    () => ({ status, user, bootstrapError, endReason, login, verifyMfa, logout, reload }),
-    [status, user, bootstrapError, endReason, login, verifyMfa, logout, reload],
+    () => ({ status, user, bootstrapError, endReason, login, loginByPhone, verifyMfa, logout, reload }),
+    [status, user, bootstrapError, endReason, login, loginByPhone, verifyMfa, logout, reload],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
