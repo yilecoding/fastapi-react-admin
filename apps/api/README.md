@@ -19,7 +19,7 @@ SQL Server 支持**（现在同时支持 MySQL / PostgreSQL / SQL Server 三种�
 
 | 想知道什么 | 看哪里 |
 |---|---|
-| 这个项目是什么、怎么起服务 | 仓库根的 [README.md](../../README.md) |
+| 这个项目是什么、怎么起服务 | 仓库根的 [README.zh-CN.md](../../README.zh-CN.md) |
 | **改代码前必读的硬纪律**（SQL Server 适配 · 雪花 ID · 分页 · 上传安全…） | 仓库根的 [CLAUDE.md](../../CLAUDE.md) 的「后端约定」「文件管理与附件预览」「跑测试」 |
 
 ## 相对上游的主要改动
