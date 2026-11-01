@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from backend.app.admin.api.v1.sys.dashboard import router as dashboard_router
 from backend.app.admin.api.v1.sys.data_import import router as data_import_router
 from backend.app.admin.api.v1.sys.data_rule import router as data_rule_router
 from backend.app.admin.api.v1.sys.data_scope import router as data_scope_router
@@ -25,3 +26,4 @@ router.include_router(storage_router, prefix='/storages', tags=['系统存储'])
 router.include_router(plugin_router, prefix='/plugins', tags=['系统插件'])
 router.include_router(export_router, prefix='/exports', tags=['导出记录'])
 router.include_router(data_import_router, prefix='/imports', tags=['导入'])
+router.include_router(dashboard_router, prefix='/dashboard', tags=['工作台'])

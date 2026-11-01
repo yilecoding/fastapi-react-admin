@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
@@ -19,6 +20,7 @@ from backend.plugin.workflow.engine.flow import validate_publish
 from backend.plugin.workflow.enums import FORM_BIZ_TYPE, DefinitionStatus
 from backend.plugin.workflow.handler import get_handler
 from backend.plugin.workflow.model import WfDefinition, WfDefinitionVersion, WfInstance
+from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -166,6 +168,21 @@ async def versions(db: AsyncSession, pk: int) -> list[WfDefinitionVersion]:
         .order_by(WfDefinitionVersion.version_no.desc())
     )
     return list((await db.scalars(stmt)).all())
+
+
+#: 「最近发起的次数」看多久。太长会被很久以前的习惯带偏，太短一放假就全是 0
+RECENT_DAYS = 90
+
+
+async def my_recent_counts(db: AsyncSession, user_id: int) -> dict[int, int]:
+    """这个人近 `RECENT_DAYS` 天每个流程发起过几张单（流程定义 ID → 次数）"""
+    since = timezone.now() - timedelta(days=RECENT_DAYS)
+    rows = await db.execute(
+        select(WfInstance.definition_id, func.count())
+        .where(WfInstance.initiator_id == user_id, WfInstance.created_time >= since)
+        .group_by(WfInstance.definition_id)
+    )
+    return dict(rows.all())
 
 
 async def startable(db: AsyncSession) -> list[WfDefinition]:

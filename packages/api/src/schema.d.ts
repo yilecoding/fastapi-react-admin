@@ -1612,6 +1612,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/dashboard/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 需要你留意的异常（按各条目自己的权限过滤） */
+        get: operations["get_attention_api_v1_sys_dashboard_attention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/dashboard/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 服务状态 + 在线会话（按端） */
+        get: operations["get_services_api_v1_sys_dashboard_services_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sys/dashboard/visits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 近 N 天每天的登录成功 / 失败次数 */
+        get: operations["get_visits_api_v1_sys_dashboard_visits_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/notifications": {
         parameters: {
             query?: never;
@@ -18489,6 +18540,80 @@ export interface operations {
             };
         };
     };
+    get_attention_api_v1_sys_dashboard_attention_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    get_services_api_v1_sys_dashboard_services_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    get_visits_api_v1_sys_dashboard_visits_get: {
+        parameters: {
+            query?: {
+                /** @description 看几天（含今天） */
+                days?: number;
+                /** @description 按哪个时区切「哪一天」，不传 = 服务端时区 */
+                tz?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_my_notifications_paginated_api_v1_sys_notifications_get: {
         parameters: {
             query?: {
@@ -19613,6 +19738,8 @@ export interface operations {
                 page?: number;
                 /** @description 每页数量 */
                 size?: number;
+                /** @description attention = 加急 → 快到期 → 到手时间（工作台）；不传 = 加急在前、其余按到手时间倒序 */
+                sort?: "attention" | null;
             };
             header?: never;
             path?: never;
@@ -19686,6 +19813,8 @@ export interface operations {
                 page?: number;
                 /** @description 每页数量 */
                 size?: number;
+                /** @description 带上走到哪了（步骤条 / 在谁手上 / 后面的步骤）。每行要推演一遍，size 最多 10 */
+                progress?: boolean | null;
             };
             header?: never;
             path?: never;
