@@ -105,10 +105,10 @@ docker compose -f docker-compose.dev.yml up -d          # PostgreSQL + Redis
 pnpm install:all                                        # 前后端依赖
 cp apps/api/backend/.env.example apps/api/backend/.env  # 默认配置已对齐上面的容器
 pnpm db:init                                            # 建表 + 初始数据（首次）
-pnpm dev                                                # 打开 http://localhost:8888
+pnpm dev                                                # 打开 http://127.0.0.1:8888
 ```
 
-账号 `admin` / `123456`。换 SQL Server / MySQL、接 S3、跳过验证码、跑测试，见[本地开发指南](./CONTRIBUTING.md#本地开发)。
+账号 `admin`，密码是 `pnpm db:init` 时设的。换 SQL Server / MySQL、接 S3、跳过验证码、跑测试，见[本地开发指南](./CONTRIBUTING.md#本地开发)。
 
 部署到服务器：`main` 每次通过 CI 都会构建好镜像，服务器上 `bash prod.sh pull && bash prod.sh up` 即可更新，见 [`deploy/README.md`](./deploy/README.md)。
 

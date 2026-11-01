@@ -43,6 +43,19 @@ bash prod.sh pull && bash prod.sh up
 
 Back up the database before the first deployment against an existing one.
 
+## Checklist before going live
+
+- [ ] Every `CHANGE_ME` in `.env.server` is replaced. With `ENVIRONMENT='prod'` the backend checks length and randomness and refuses to start on weak values
+- [ ] `TOKEN_SECRET_KEY` is freshly generated (`python -c "import secrets;print(secrets.token_urlsafe(32))"`), not copied from another environment
+- [ ] `CORS_ALLOWED_ORIGINS` is your real address; behind nginx or a load balancer, `TRUSTED_PROXIES` is set — otherwise rate limits and IP allow-lists see the proxy's address
+- [ ] If you use the AI assistant, object storage, group bots or the open platform, their encryption keys are set (`AI_ENCRYPT_SECRET_KEY`, `STORAGE_ENCRYPT_SECRET_KEY`, `NOTIFICATION_ENCRYPT_SECRET_KEY`, `OPEN_SECRET_KEY`) — without them saving those settings fails instead of storing plaintext
+- [ ] `NOTIFICATION_WEB_BASE_URL` is your real address, or links in emails and group messages point at `localhost:8888`
+- [ ] The admin password is the strong one set during initialization, not the demo's `123456`
+- [ ] The database is backed up before the first deployment against it, and scheduled backups exist
+- [ ] TLS is provided by the reverse proxy or load balancer, and HTTP redirects to HTTPS
+- [ ] External monitoring probes `/api/health/status`, not `/healthz`
+- [ ] You noted the current image tag (`sha-<commit>`) so you know what to roll back to
+
 ## How do I update or roll back?
 
 ```bash

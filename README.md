@@ -102,10 +102,10 @@ docker compose -f docker-compose.dev.yml up -d          # PostgreSQL + Redis
 pnpm install:all                                        # frontend + backend dependencies
 cp apps/api/backend/.env.example apps/api/backend/.env  # defaults match the containers above
 pnpm db:init                                            # create tables + seed data (first run)
-pnpm dev                                                # open http://localhost:8888
+pnpm dev                                                # open http://127.0.0.1:8888
 ```
 
-Sign in as `admin` / `123456`. Switching to SQL Server / MySQL, S3, skipping the captcha and running tests are covered in [CONTRIBUTING.md](./CONTRIBUTING.md#本地开发) (Chinese; the commands are language-independent).
+Sign in as `admin` with the password you set during `pnpm db:init`. Switching to SQL Server / MySQL, S3, skipping the captcha and running tests are covered in [CONTRIBUTING.md](./CONTRIBUTING.md#本地开发) (Chinese; the commands are language-independent).
 
 ## Quality
 
