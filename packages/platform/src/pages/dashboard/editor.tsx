@@ -31,19 +31,23 @@ import { MenuIcon } from '../../shell/icon-registry'
 import type { NavNode } from '../../shell/use-sidebar'
 import { SegmentedControl } from '../_shared/settings-rows'
 import { resolveQuickLinks } from './cards/quick-links'
-import { QUICK_LINKS_MAX, moveItem, patchItem, type CardWidth, type DashboardLayout } from './layout'
+import { QUICK_LINKS_MAX, moveItem, patchItem, type CardWidth, type DashboardLayout, type LayoutItem } from './layout'
 
 /**
  * 编辑工作台：显示 / 隐藏 · 拖拽排序（键盘也能拖：Tab 到手柄 → 空格拿起 → 方向键 → 空格放下）·
- * 半宽 / 全宽 · 快捷入口挑页面 · 恢复默认 · 保存 / 取消。
+ * 四档宽度 · 常用入口挑页面 · 恢复默认 · 保存 / 取消。
  *
  * 只编辑**草稿**：下面的卡片网格照着草稿实时预览，点「保存」才写服务端。
- * 排序是一条竖着的列表而不是在网格里直接拖卡片 —— 卡片宽度不一，网格里拖动的落点很难预测，
+ * 排序是竖着的列表而不是在网格里直接拖卡片 —— 卡片宽度不一，网格里拖动的落点很难预测，
  * 键盘拖拽在二维网格里也不好用；竖列表的上下就是显示顺序。
+ *
+ * 两组（「我的工作」/「系统运行」）各一条列表、各一个 `DndContext`：系统运行区固定排在下面那一行标题之后，
+ * 跨组拖过去也画不到那里 —— 干脆不让拖过组界
  */
 export function DashboardEditor({
   layout,
   titleOf,
+  groupOf,
   pages,
   canSave,
   saving,
@@ -55,6 +59,7 @@ export function DashboardEditor({
 }: {
   layout: DashboardLayout
   titleOf: (id: string) => string
+  groupOf: (id: string) => 'work' | 'system'
   pages: NavNode[]
   /**
    * 「保存」能不能点：通常是「改过了」；存的那份格式认不出来时，不改也要能存 ——
@@ -69,83 +74,47 @@ export function DashboardEditor({
   onSave: () => void
 }) {
   const { t } = useTranslation()
-  const ids = layout.items.map((i) => i.id)
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  )
-
-  // 读屏的播报：dnd-kit 默认是英文，跟着界面语言走
-  const announcements = React.useMemo<Announcements>(
-    () => ({
-      onDragStart: ({ active }) => t('已拿起「{{name}}」', { name: titleOf(String(active.id)) }),
-      onDragOver: ({ active, over }) =>
-        over
-          ? t('「{{name}}」移到第 {{n}} 位', { name: titleOf(String(active.id)), n: ids.indexOf(String(over.id)) + 1 })
-          : undefined,
-      onDragEnd: ({ active, over }) =>
-        over
-          ? t('「{{name}}」放在第 {{n}} 位', { name: titleOf(String(active.id)), n: ids.indexOf(String(over.id)) + 1 })
-          : undefined,
-      onDragCancel: ({ active }) => t('已取消移动「{{name}}」', { name: titleOf(String(active.id)) }),
-    }),
-    [t, titleOf, ids]
-  )
-
-  function onDragEnd(e: DragEndEvent) {
-    const { active, over } = e
-    if (!over || active.id === over.id) return
-    onChange(moveItem(layout, String(active.id), String(over.id)))
-  }
-
   const widthOptions = [
-    { value: 'half' as const, label: t('半宽') },
-    { value: 'full' as const, label: t('全宽') },
+    { value: 'third' as const, label: t('三分之一') },
+    { value: 'half' as const, label: t('一半') },
+    { value: 'two-thirds' as const, label: t('三分之二') },
+    { value: 'full' as const, label: t('整行') },
   ]
+  const groups = [
+    { key: 'work' as const, label: t('我的工作') },
+    { key: 'system' as const, label: t('系统运行') },
+  ]
+    .map((g) => ({ ...g, items: layout.items.filter((i) => groupOf(i.id) === g.key) }))
+    .filter((g) => g.items.length > 0)
 
   return (
     <section
-      className="flex flex-col gap-3 rounded-lg border border-primary/40 bg-muted/20 px-4 py-3"
+      className="flex flex-col gap-3 rounded-[14px] border border-primary/40 bg-muted/20 px-4 py-3"
       data-testid="dash-editor"
-      aria-label={t('编辑工作台')}
+      aria-label={t('自定义工作台')}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-medium">{t('编辑工作台')}</h2>
+        <h2 className="text-sm font-bold">{t('自定义工作台')}</h2>
         <span className="text-xs text-muted-foreground">
           {t('拖动手柄调整顺序（键盘：空格拿起、方向键移动、空格放下）。下面的卡片按这里实时预览，保存后才生效。')}
         </span>
       </div>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-        onDragEnd={onDragEnd}
-        accessibility={{
-          announcements,
-          screenReaderInstructions: { draggable: t('按空格拿起，用方向键移动，再按空格放下；按 Esc 取消。') },
-        }}
-      >
-        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-          <ul className="flex flex-col gap-1" data-testid="dash-editor-list">
-            {layout.items.map((item) => (
-              <EditorRow
-                key={item.id}
-                id={item.id}
-                title={titleOf(item.id)}
-                visible={item.visible}
-                width={item.width}
-                widthOptions={widthOptions}
-                onVisible={(visible) => onChange(patchItem(layout, item.id, { visible }))}
-                onWidth={(width) => onChange(patchItem(layout, item.id, { width }))}
-              />
-            ))}
-          </ul>
-        </SortableContext>
-      </DndContext>
+      {groups.map((g) => (
+        <div key={g.key} className="flex flex-col gap-1.5">
+          {groups.length > 1 && <h3 className="text-xs font-semibold text-muted-foreground">{g.label}</h3>}
+          <SortableGroup
+            group={g.key}
+            items={g.items}
+            titleOf={titleOf}
+            widthOptions={widthOptions}
+            onMove={(from, to) => onChange(moveItem(layout, from, to))}
+            onPatch={(id, p) => onChange(patchItem(layout, id, p))}
+          />
+        </div>
+      ))}
 
-      {ids.includes('quick-links') && (
+      {layout.items.some((i) => i.id === 'quick-links') && (
         <QuickLinksPicker
           pages={pages}
           value={layout.quickLinks}
@@ -173,6 +142,83 @@ export function DashboardEditor({
         </div>
       </div>
     </section>
+  )
+}
+
+function SortableGroup({
+  group,
+  items,
+  titleOf,
+  widthOptions,
+  onMove,
+  onPatch,
+}: {
+  group: 'work' | 'system'
+  items: LayoutItem[]
+  titleOf: (id: string) => string
+  widthOptions: { value: CardWidth; label: string }[]
+  onMove: (fromId: string, toId: string) => void
+  onPatch: (id: string, p: Partial<Pick<LayoutItem, 'visible' | 'width'>>) => void
+}) {
+  const { t } = useTranslation()
+  const ids = items.map((i) => i.id)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  // 读屏的播报：dnd-kit 默认是英文，跟着界面语言走。「第几位」是组内的位置
+  const announcements = React.useMemo<Announcements>(
+    () => ({
+      onDragStart: ({ active }) => t('已拿起「{{name}}」', { name: titleOf(String(active.id)) }),
+      onDragOver: ({ active, over }) =>
+        over
+          ? t('「{{name}}」移到第 {{n}} 位', { name: titleOf(String(active.id)), n: ids.indexOf(String(over.id)) + 1 })
+          : undefined,
+      onDragEnd: ({ active, over }) =>
+        over
+          ? t('「{{name}}」放在第 {{n}} 位', { name: titleOf(String(active.id)), n: ids.indexOf(String(over.id)) + 1 })
+          : undefined,
+      onDragCancel: ({ active }) => t('已取消移动「{{name}}」', { name: titleOf(String(active.id)) }),
+    }),
+    [t, titleOf, ids]
+  )
+
+  function onDragEnd(e: DragEndEvent) {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    onMove(String(active.id), String(over.id))
+  }
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+      onDragEnd={onDragEnd}
+      accessibility={{
+        announcements,
+        screenReaderInstructions: { draggable: t('按空格拿起，用方向键移动，再按空格放下；按 Esc 取消。') },
+      }}
+    >
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <ul className="flex flex-col gap-1" data-testid={`dash-editor-list-${group}`}>
+          {items.map((item) => (
+            <EditorRow
+              key={item.id}
+              id={item.id}
+              title={titleOf(item.id)}
+              visible={item.visible}
+              width={item.width}
+              widthOptions={widthOptions}
+              onVisible={(visible) => onPatch(item.id, { visible })}
+              onWidth={(width) => onPatch(item.id, { width })}
+            />
+          ))}
+        </ul>
+      </SortableContext>
+    </DndContext>
   )
 }
 
@@ -231,7 +277,7 @@ function EditorRow({
 }
 
 /**
- * 快捷入口挑哪些页面。候选 = 这个人自己的侧边栏（`flattenPages`）。
+ * 常用入口挑哪些页面。候选 = 这个人自己的侧边栏（`flattenPages`）。
  *
  * 没挑过（`null`）时勾着的是默认那几个；动一下就变成显式的清单。存着、但现在不在侧边栏里的 path
  * （权限临时收走）原样留在清单里，不在这里替他删掉，也不算进「最多 12 个」
@@ -268,7 +314,7 @@ function QuickLinksPicker({
           data-testid="dash-editor-links-toggle"
         >
           <IconChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} />
-          {t('快捷入口放哪些页面（{{n}}/{{max}}）', { n: chosen.size, max: QUICK_LINKS_MAX })}
+          {t('常用入口放哪些页面（{{n}}/{{max}}）', { n: chosen.size, max: QUICK_LINKS_MAX })}
         </Button>
         {open && value !== null && (
           <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onChange(null)} data-testid="dash-editor-links-default">

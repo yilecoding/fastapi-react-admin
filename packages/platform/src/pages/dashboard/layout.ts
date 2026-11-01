@@ -7,7 +7,13 @@
 
 export const LAYOUT_PREF_KEY = 'dashboard.layout'
 
-export type CardWidth = 'half' | 'full'
+/**
+ * 卡片宽度，网格是 12 列（`index.tsx`）：三分之一 4 · 一半 6 · 三分之二 8 · 整行 12。
+ * 窄屏时三分之一 / 一半都占半行、三分之二占整行（同一份布局在各种宽度下都排得开）
+ */
+export type CardWidth = 'third' | 'half' | 'two-thirds' | 'full'
+
+export const CARD_WIDTHS: readonly CardWidth[] = ['third', 'half', 'two-thirds', 'full']
 
 export type LayoutItem = { id: string; visible: boolean; width: CardWidth }
 
@@ -50,7 +56,7 @@ function readItem(raw: unknown): { id: string; visible?: boolean; width?: CardWi
   return {
     id: raw.id,
     visible: typeof raw.visible === 'boolean' ? raw.visible : undefined,
-    width: raw.width === 'half' || raw.width === 'full' ? raw.width : undefined,
+    width: CARD_WIDTHS.includes(raw.width as CardWidth) ? (raw.width as CardWidth) : undefined,
   }
 }
 
