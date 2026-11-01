@@ -1,45 +1,45 @@
 ---
-title: Notifications and notices
-description: Real-time in-app inbox, notices with rich text, attachments and audiences, and routing to email, SMS and Feishu / DingTalk / WeCom group bots.
+title: 消息与通知
+description: 实时推送的站内消息、带富文本 / 附件 / 发布范围的通知公告，以及按类型路由到邮件、短信和飞书 / 钉钉 / 企业微信群机器人。
 sidebar:
   order: 7
 ---
 
-Notifications in fastapi-react-admin have three parts: an in-app inbox (the bell in the top bar plus a Message center page, updated over Socket.IO), notices that admins publish to everyone or to chosen departments, roles and users, and a routing layer that decides, per notification kind, whether a message also goes out by email, SMS or to a Feishu, DingTalk or WeCom group bot. External sends are written as delivery rows inside the caller's database transaction and sent by a Celery worker, so a rolled-back approval never emails anyone.
+fastapi-react-admin 的通知分三块：站内消息（顶栏铃铛 + 消息中心页，经 Socket.IO 实时更新）；管理员发给全员或指定部门 / 角色 / 人的通知公告；以及一层渠道路由 —— 按通知类型决定这条消息要不要再走邮件、短信，或推到飞书、钉钉、企业微信的群机器人。所有外部发送都先在调用方的数据库事务里写成投递行，再由 Celery worker 发出去，所以审批回滚了，邮件就不会先到。
 
-## How does the in-app inbox stay real-time?
+## 站内消息怎么做到实时？
 
-Inbox rows live in `sys_notification` under four categories: system, announcement, task (background exports) and workflow. When a row is written, the server emits a Socket.IO `notification:new` event **with an empty payload**; the browser refetches the list and unread count over REST. Permission checks therefore happen only in the REST API, and the unread badge is fetched over REST on every page load — a notification that arrived while the socket was disconnected still shows up. If the unread-count request fails, the bell shows `!` instead of an empty badge, which would look the same as "nothing unread".
+站内消息存在 `sys_notification`，分四类：系统、公告、任务（后台导出）、审批。写入一行后，服务端推一个 Socket.IO 事件 `notification:new`，**不带任何内容**；前端收到只是重新走 REST 拉列表和未读数。所以权限只在 REST 一处判。未读数在每次进页面时也走 REST 拉一次 —— 断线期间到达的通知照样能在红点上看到。未读数接口失败时，铃铛角标显示 `!`，而不是什么都不显示（那和「没有未读」长得一模一样）。
 
-A broadcast is one row, not one per user; read state is kept per user in `sys_notification_read`. Broadcasts written before an account was created count as read for that account, so a new hire does not log in to dozens of old red dots — except notices that require acknowledgement.
+全员广播在库里只有一行，不按人展开；每个人的已读状态记在 `sys_notification_read`。账号创建**之前**写的广播对这个账号算已读，新同事第一次登录不会看到几十个历史红点 —— 「必须确认」的公告除外。
 
-Approvers are not sent inbox rows for new tasks; the Approval center's to-do badge updates through a separate `workflow:todo` socket event (see [Approval workflow](/features/approval-workflow/)).
+审批人收到新待办时**不**写站内消息，审批中心的待办角标靠另一个 socket 事件 `workflow:todo` 刷新（见[审批流](/features/approval-workflow/)）。
 
-## What can a notice carry, and who can see it?
+## 通知公告能带什么？谁能看到？
 
-A notice has a rich-text body (Tiptap editor), up to 20 attachments, and these switches:
+公告正文是富文本（Tiptap 编辑器），最多挂 20 个附件，另有这些开关：
 
-| Setting | Effect |
+| 设置 | 效果 |
 |---|---|
-| Type · level | notice or announcement · normal, important or urgent |
-| Pinned | sorts first; pinned + urgent + unread notices also show as a banner (up to 3) |
-| Expiry / schedule | hidden after `expire_time`; invisible until `publish_time`. The Celery task `notice.sync_inbox` runs every 60 s to publish scheduled notices and retract expired ones |
-| Pop-up | shown in a dialog after sign-in until read (up to 10, with body) |
-| Require acknowledgement | the reader must click "I've read this"; "Mark all read" skips these rows. Only allowed together with pop-up (otherwise 422) |
-| Show on sign-in page | readable without signing in, rate-limited to 30 requests per minute per IP; returns at most 5 items with a 200-character plain-text summary |
-| Audience | departments (including all sub-departments), roles (enabled ones) and users. No audience rows = everyone. Sign-in page + audience is rejected with 422 |
+| 类型 · 级别 | 通知 / 公告 · 普通 / 重要 / 紧急 |
+| 置顶 | 排在前面；置顶 + 紧急 + 未读的公告还会以横幅出现（最多 3 条） |
+| 过期时间 / 定时发布 | 过了 `expire_time` 就看不到；`publish_time` 之前谁都看不到。Celery 任务 `notice.sync_inbox` 每 60 秒跑一次，负责到点发出、过期撤回 |
+| 弹窗 | 登录后弹出，读过才不再弹（最多 10 条，带正文） |
+| 必须确认 | 读者要点「我已阅读」；「全部已读」会跳过这些行。必须同时开弹窗，否则 422 |
+| 登录页可见 | 不登录也能看，每 IP 每分钟 30 次；最多返回 5 条，摘要是去掉标签后的 200 字纯文本 |
+| 发布范围 | 部门（含所有下级部门）、角色（只认启用的）、用户。一行都没有 = 全员。「登录页可见」和发布范围同时设置会被 422 拒绝 |
 
-Visibility has one definition, `crud_notice.readable_clause(viewer)` in [`crud_notice.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/crud/crud_notice.py): not deleted, shown, published, not expired, and the viewer is in the audience. The reader list, detail, pop-ups, banner and **attachment downloads** all use it, and the inbox reads the same audience table, so "it's in my bell" and "I can open it and download the file" cannot disagree. Hidden, expired, unpublished or out-of-audience notices all return 404 — a 403 would confirm the notice exists. Admins with `sys:notice:add` get read statistics: who in the audience has and has not read it.
+「谁看得见」只有一份定义：[`crud_notice.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/crud/crud_notice.py) 里的 `readable_clause(viewer)` —— 没删、显示中、已到发布时间、没过期，并且看的人在发布范围里。读者列表、详情、弹窗、横幅、**附件下载权限**都用它，收件箱读的也是同一张受众表，所以不会出现「铃铛里有这条，点进去看不到、附件下不了」。隐藏、过期、未到发布时间、不在范围里的公告一律返回 404 —— 返回 403 等于告诉对方「这条存在」。有 `sys:notice:add` 的管理员能看阅读统计：发布范围里谁读了、谁没读。
 
-Attachments are committed in the same transaction as the notice. Each must exist and not be in the recycle bin, must be readable by the person publishing (otherwise anyone with publish rights could expose someone else's private file), and must not be a public file.
+附件和公告在同一个事务里提交，每个附件过三道校验：文件存在且不在回收站；发布人自己读得了（否则有发公告权限的人拿到别人私有文件的 ID，就能借公告公开给所有人）；不能是公开文件。
 
 :::caution
-Images embedded in the rich-text body are public files (`/uploads/{key}`): an `<img>` tag cannot send an auth header. They stay reachable even when the notice is hidden or limited to an audience. Put confidential material in attachments.
+正文里插的图片是公开文件（`/uploads/{key}`）—— `<img>` 标签带不上鉴权头。公告隐藏了、限定了范围，图片照样能访问。有保密要求的内容请放附件。
 :::
 
-## How does a notification decide between email, SMS and a group bot?
+## 一条通知怎么决定走邮件、短信还是群机器人？
 
-Each plugin declares its notification kinds in a `notification_kinds.py`, which the notification plugin discovers at startup. This is the real declaration from [`plugin/workflow/notification_kinds.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/notification_kinds.py):
+每个插件在自己的 `notification_kinds.py` 里声明通知类型，通知插件启动时扫描。下面是 [`plugin/workflow/notification_kinds.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/notification_kinds.py) 里的原样代码：
 
 ```python
 register_notification_kind(
@@ -52,76 +52,76 @@ register_notification_kind(
 )
 ```
 
-For each recipient and external channel, the router in [`service/routing.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/routing.py) combines three things: the admin **policy** (`off`, `default_on`, `default_off` or `forced`, editable under **Notifications → Notification policy**), the user's own **preference** (**Profile → Notifications**; forced cells are locked), and whether the user has an **address**. In-app is always `forced`. A kind that is not declared for a channel cannot be switched on for it. SMS requires a registered SMS template because mainland-China SMS can only send pre-approved templates, and it is only sent to a phone number the user verified themselves — an admin-entered number gets a `skipped / phone_unverified` row instead.
+[`service/routing.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/routing.py) 对每个收件人 × 每条外部渠道看三样东西：管理员的**系统策略**（`off` / `default_on` / `default_off` / `forced`，在 **消息推送 → 通知策略** 里改）、本人的**个人偏好**（**个人中心 → 通知偏好**，`forced` 的格子是锁住的）、这个人**有没有地址**。站内渠道永远是 `forced`。类型没声明的渠道，策略页上也开不出来。短信必须给业务模板 —— 国内短信只能发审核过的模板；而且只发给**本人验证过**的手机号，管理员录入的号会记一行 `skipped / phone_unverified`，不发。
 
-The built-in kinds and their defaults:
+内置的类型和默认值：
 
-| Kind | In-app | Email | SMS | Group bot |
+| 类型 | 站内 | 邮件 | 短信 | 群机器人 |
 |---|---|---|---|---|
-| `workflow.remind`, `workflow.timeout` | forced | on | off | — |
-| `workflow.sent_back` | forced | on | — | — |
-| `workflow.result` | forced | off | — | yes |
-| `workflow.cc`, `workflow.withdrawn` | forced | off | — | — |
-| `workflow.task_assigned` ("you have a new task") | no row | off | — | — |
-| `announcement` (notices) | forced | — | — | yes |
-| `open.webhook.disabled` | forced | on | — | yes |
-| `system`, `export.done`, `export.failed` | forced | off | — | — |
+| `workflow.remind` 审批催办、`workflow.timeout` 审批超时提醒 | 必发 | 默认开 | 默认关 | — |
+| `workflow.sent_back` 申请被退回 | 必发 | 默认开 | — | — |
+| `workflow.result` 审批结果 | 必发 | 默认关 | — | 可订阅 |
+| `workflow.cc` 抄送、`workflow.withdrawn` 审批被撤回 | 必发 | 默认关 | — | — |
+| `workflow.task_assigned` 新的待办 | 不写站内 | 默认关 | — | — |
+| `announcement` 通知公告 | 必发 | — | — | 可订阅 |
+| `open.webhook.disabled` Webhook 端点已停用 | 必发 | 默认开 | — | 可订阅 |
+| `system` 系统通知、`export.done` / `export.failed` 导出完成 / 失败 | 必发 | 默认关 | — | — |
 
-Broadcast kinds (notices, the daily greeting) never go to email or SMS: one broadcast row would fan out into a company-wide mass mail.
+全员广播的类型（公告、每日问候）永远不走邮件和短信：站内一行广播，到外部渠道就成了全员群发。
 
-Calling code uses one entry point, `create_in_tx(db, kind=..., user_ids=..., title=..., content=..., link=...)` in [`notification_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/notification_service.py). It writes the inbox rows and delivery rows in your transaction, does not commit, and returns a `Dispatch` whose `after_commit()` pushes the socket event and wakes the worker.
+业务代码只有一个入口：[`notification_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/notification_service.py) 里的 `create_in_tx(db, kind=..., user_ids=..., title=..., content=..., link=...)`。它在你的事务里写站内行和投递行，不 commit，返回一个 `Dispatch`；提交之后调它的 `after_commit()` 推 socket、踢 worker。
 
-## What happens after a delivery row is written?
+## 投递行写下去之后发生什么？
 
-The Celery task `notification.deliver_pending` runs every 15 seconds and is also kicked right after each commit. A worker claims a row with `UPDATE … SET status = 'sending' WHERE id = ? AND status IN (…)` and sends only if exactly one row changed. Failed sends retry after 60, 300, 1800 and 7200 seconds (default `NOTIFICATION_RETRY_MAX = 4`). For SMS and group bots, a result that **may** have been delivered — the connection was made, then timed out — is recorded as `unknown` and **not** retried, because a retry would mean a duplicate. Email does retry on connection errors and timeouts: a duplicate email costs less than a missed reminder. Rows stuck in `sending` for more than 600 s become `unknown` rather than going back to `pending`.
+Celery 任务 `notification.deliver_pending` 每 15 秒扫一次，每次提交后也会立刻踢一脚。worker 用 `UPDATE … SET status = 'sending' WHERE id = ? AND status IN (…)` 抢占，rowcount 恰好是 1 才发。失败的按 60、300、1800、7200 秒退避重试（默认 `NOTIFICATION_RETRY_MAX = 4`）。短信和群机器人「可能已经发出去了」的结果（连上之后超时）记成 `unknown`，**不重试** —— 重试就是重复发。邮件则对连接错误和超时一律重试：重复一封邮件的代价小于漏掉一条催办。停在 `sending` 超过 600 秒的行归为 `unknown`，不会改回待发。
 
-**Notifications → Delivery records** lists every row with its status (`pending`, `sending`, `sent`, `failed`, `exhausted`, `skipped`, `unknown`) and reason, masks phone numbers and email addresses in the list, and can resend `failed`, `exhausted` or `unknown` rows. Records are kept 30 days by default.
+**消息推送 → 投递记录** 列出每一行的状态（`pending` / `sending` / `sent` / `failed` / `exhausted` / `skipped` / `unknown`）和原因，列表里手机号、邮箱打码，`failed` / `exhausted` / `unknown` 的行可以手动重发。默认保留 30 天。
 
-## Which platforms can a group bot post to?
+## 群机器人能推到哪些平台？
 
-Feishu (including `open.larksuite.com`), DingTalk and WeCom, configured under **Notifications → Group bots**. A bot subscribes to kinds marked `bot=True` — currently notices, approval results and "webhook endpoint disabled". Kinds that address the reader as "you" (CC, new task, sent back) are deliberately not subscribable: everyone in the group would read "you". Notices with an audience are not posted to groups, since a bot posts to the whole group; if the audience is later widened to everyone, the notice is posted once.
+飞书（含 `open.larksuite.com`）、钉钉、企业微信，在 **消息推送 → 群机器人** 里配置。机器人订阅的是声明了 `bot=True` 的类型，目前是通知公告、审批结果、Webhook 端点已停用。对着「你」说话的类型（抄送、新的待办、被退回）刻意不开放订阅：推到群里，每个人读到的都是「你」。设了发布范围的公告不推群 —— 机器人发进的是整个群，管不了范围；之后范围放宽成全员时补推一次。
 
-- **One delivery row per notification per bot**, regardless of how many people received it.
-- **URL allow-list**: the webhook must sit on the platform's official prefix (scheme, host, port and path compared separately; userinfo and `.` / `..` path segments rejected; redirects not followed). Private deployments add `NOTIFICATION_BOT_EXTRA_URL_PREFIXES`, which must be https in production.
-- **Signing**: Feishu and DingTalk signatures are supported; WeCom has none, so the `key` in its URL is the credential.
-- **Rate limits** are counted before sending: Feishu 100/min and 5/s, DingTalk and WeCom 20/min. Over the limit, the row moves to the next minute without using up a retry.
-- **Plain text only**, never markdown: titles are user input, and markdown would let someone post a link that looks system-generated. WeCom text is truncated at 2048 bytes, not characters.
-- A read timeout counts as `unknown` and is not retried — a duplicate in a group chat is more visible than a duplicate email.
+- **一条通知 × 一个机器人一行投递**，和收件人有几个无关。
+- **地址白名单**：Webhook 必须落在平台的官方前缀上（协议、主机、端口、路径逐项比；带 userinfo、带 `.` / `..` 路径段的拒绝；不跟随重定向）。私有化部署配 `NOTIFICATION_BOT_EXTRA_URL_PREFIXES`，生产环境只许 https。
+- **签名**：飞书、钉钉支持加签；企业微信没有加签，地址里的 `key` 就是凭据。
+- **限频**在发之前自己数：飞书 100 条/分钟 + 5 条/秒，钉钉、企业微信 20 条/分钟。超了就挪到下一分钟，不算一次重试。
+- **只发纯文本**，不用 markdown：标题是用户填的，走 markdown 就能塞进一条看起来像系统发的链接。企业微信正文按 2048 **字节**截断，不是按字符。
+- 读超时记为 `unknown`、不重试 —— 群里同一条出现两次，比重复一封邮件显眼得多。
 
-Links in bot messages and emails are built from `NOTIFICATION_WEB_BASE_URL` (default `http://localhost:8888`); set it to your real address before deploying. The step-by-step setup for a Feishu bot is in the [group bot guide](https://github.com/yilecoding/fastapi-react-admin/blob/main/docs/guides/notify-bot.md).
+机器人消息和邮件里的链接由 `NOTIFICATION_WEB_BASE_URL` 拼出（默认 `http://localhost:8888`），部署前要改成真实访问地址。接一个飞书机器人的完整步骤见[群机器人接入指南](https://github.com/yilecoding/fastapi-react-admin/blob/main/docs/guides/notify-bot.md)。
 
-## How is a webhook URL kept out of logs?
+## Webhook 地址怎么防止落进日志？
 
-A webhook URL is a credential: whoever has it can post to the group. The URL and signing secret are encrypted with `NOTIFICATION_ENCRYPT_SECRET_KEY` (32 bytes as 64 hex characters; without it, saving a bot is refused rather than storing plaintext). The API only returns a masked `webhook_hint`, and `webhook_url` / `sign_secret` are redacted from the operation log.
+Webhook 地址本身就是凭据：拿到它就能往群里发消息。地址和加签密钥用 `NOTIFICATION_ENCRYPT_SECRET_KEY`（32 字节，即 64 位十六进制）加密存储；没配这个密钥时直接拒绝保存，不会静默存明文。接口只返回打码后的 `webhook_hint`，入参里的 `webhook_url` / `sign_secret` 在操作日志里会被脱敏。
 
-The less obvious leak was httpx itself: at INFO level it logs `HTTP Request: POST <full URL>`. The first real Feishu test put the token into the access log. The first fix only covered the API process, but the Celery worker — which does the actual sending — configures logging separately. The fix now sits at module top level in [`common/log.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/log.py) (`logging.getLogger('httpx').setLevel(logging.WARNING)`) and is covered by two tests, one of which configures logging the way `celery -l info` does in a subprocess.
+不那么显眼的一处是 httpx 自己：它在 INFO 级别会打一行 `HTTP Request: POST <完整 URL>`。第一次真发飞书时，token 就这样进了访问日志。第一版修复只管住了 API 进程，而真正往群里发消息的 Celery worker 有自己的日志配置。现在修复放在 [`common/log.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/log.py) 的模块顶层（`logging.getLogger('httpx').setLevel(logging.WARNING)`），有两条测试守着，其中一条在子进程里按 `celery -l info` 的方式配日志。
 
-## What has been tested against real services?
+## 哪些渠道真发过？
 
-| Channel | Real-world evidence (from the plugin notes) |
+| 渠道 | 真实环境的证据（出自插件分册） |
 |---|---|
-| Feishu bot | 2026-10-30, signed custom bot: test message delivered in 465 ms; notices delivered by the worker on the first attempt; a wrong secret returned `19021` and was classified as `sign_failed`, not retried |
-| DingTalk, WeCom bots | not yet posted to a real group; signing and error codes follow the docs and fake servers |
-| SMS plugin | Aliyun sent for real on 2026-10-24 (a verification-code template); Tencent Cloud not yet, covered by contract tests that run the real SDK against a local fake server |
-| Email and SMS through the router | the sending layer is faked in tests; for email, the 5xx-permanent / 4xx-retry split follows aiosmtplib's exception hierarchy, not real server replies |
+| 飞书群机器人 | 2026-10-30，开了签名校验的自定义机器人：测试消息 465 ms 进群；公告经 worker 投递，第 1 次就成功；错密钥回 `19021`，归为 `sign_failed`、不重试 |
+| 钉钉、企业微信群机器人 | 还没在真群里发过，签名和回包分类靠官方文档 + 假服务器 |
+| 短信插件 | 阿里云 2026-10-24 真发过（验证码模板）；腾讯云还没有，靠真 SDK 打本地假服务器的契约测试 |
+| 经路由发的邮件 / 短信 | 测试里发送层是假的；邮件「5xx 永久失败、4xx 重试」的分类来自 aiosmtplib 的异常层级，不是真服务器的回包 |
 
-## Limits
+## 目前不支持的
 
-- Group bots subscribe by kind only; there is no per-workflow or per-department filter.
-- Group delivery is written from the same entry point as person delivery, so a bot-subscribed event with no person recipient (for example, an admin terminating their own request) does not reach the group either. Exercise 2 of the [group bot guide](https://github.com/yilecoding/fastapi-react-admin/blob/main/docs/guides/notify-bot.md) works through how to separate the two.
-- The audience pickers on the notice form call the user, department and role list APIs; a notice editor without those permissions sees a "no permission" line instead of options.
+- 群机器人只按通知类型订阅，不能再按流程或部门过滤。
+- 推群和推人走同一个入口，所以一条可推群的通知如果一个收件人都没有（比如管理员终止自己发起的单），群里也收不到。[群机器人指南](https://github.com/yilecoding/fastapi-react-admin/blob/main/docs/guides/notify-bot.md)的练习 2 专门讲怎么把两者拆开。
+- 公告表单的发布范围下拉调的是用户 / 部门 / 角色列表接口，只有发公告权限、没有这三个列表权限的人，看到的是一行「没有权限查看这些数据」。
 
-## Where it lives in the code
+## 代码在哪
 
-- [`plugin/notification/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/notification) — `kinds.py` (registry), `service/notification_service.py`, `service/routing.py`, `service/delivery_service.py`, `service/senders.py`, `bot_platforms.py` (URL prefixes, signing, payloads, response classification), `audience.py`
-- [`plugin/notice/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/notice) — `service/notice_service.py`, `crud/crud_notice.py`; [`plugin/sms/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/sms) — `sms_service.send()` and the Aliyun / Tencent Cloud adapters
-- Frontend: [`packages/platform/src/pages/notification/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/notification) (bell, Message center), `notice/` (form, reader drawer, pop-ups, banner), `notify-policy/`, `notify-delivery/`, `notify-bot/`, `profile/notify-prefs-panel.tsx`
-- Notes: [`plugin/notification/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/AGENTS.md), [`plugin/notice/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/AGENTS.md), [`pages/notification/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/notification/AGENTS.md)
+- [`plugin/notification/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/notification) —— `kinds.py`（类型注册表）、`service/notification_service.py`、`service/routing.py`、`service/delivery_service.py`、`service/senders.py`、`bot_platforms.py`（地址前缀、签名、消息体、回包分类）、`audience.py`
+- [`plugin/notice/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/notice) —— `service/notice_service.py`、`crud/crud_notice.py`；[`plugin/sms/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/sms) —— `sms_service.send()` 和阿里云 / 腾讯云适配
+- 前端：[`packages/platform/src/pages/notification/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/notification)（铃铛、消息中心）、`notice/`（表单、读者抽屉、弹窗、横幅）、`notify-policy/`、`notify-delivery/`、`notify-bot/`、`profile/notify-prefs-panel.tsx`
+- 分册：[`plugin/notification/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/AGENTS.md)、[`plugin/notice/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/AGENTS.md)、[`pages/notification/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/notification/AGENTS.md)
 
-## How it is tested
+## 怎么测的
 
-pytest collects 117 cases in `plugin/notification/tests/` (66 for group bots with `httpx.MockTransport` fake platforms, 42 for routing and delivery, 9 for the inbox), 52 for notices in `app/admin/tests/api_v1/test_notice_*.py`, 133 in `plugin/sms/tests/`, and 3 in `plugin/workflow/tests/test_notification_channels.py`. Examples: `test_rollback_takes_the_delivery_rows_with_it`, `test_sms_needs_a_phone_the_owner_verified`, `test_read_all_does_not_acknowledge_for_the_reader`. Per the notes, the notice phase-2 suite passed on PostgreSQL 16, SQL Server 2022 and MySQL 8.4. Playwright covers the bell, notices, policy and preferences, and a bot test that verifies the signature against a fake Feishu endpoint.
+pytest 在 `plugin/notification/tests/` 收集到 117 条（群机器人 66 条，假平台用 `httpx.MockTransport`；路由与投递 42 条；收件箱 9 条），`app/admin/tests/api_v1/test_notice_*.py` 公告 52 条，`plugin/sms/tests/` 133 条，`plugin/workflow/tests/test_notification_channels.py` 3 条。例如 `test_rollback_takes_the_delivery_rows_with_it`、`test_sms_needs_a_phone_the_owner_verified`、`test_read_all_does_not_acknowledge_for_the_reader`。按分册记录，公告二期那组测试在 PostgreSQL 16、SQL Server 2022、MySQL 8.4 上都跑过。Playwright 覆盖铃铛、公告、策略与个人偏好，还有一条群机器人用例：测试消息打到假飞书，按官方算法验签。
 
-## Try it in the demo
+## 在演示站里试试
 
-Sign in at [fra.wubunan.com](https://fra.wubunan.com/sign-in) with `admin` / `123456`. The bell is in the top bar and **Message center** is in the sidebar; notices are under **System → Notices**; policy, delivery records and group bots are under **Notifications**; your own channel preferences are in **Profile → Notifications**.
+打开 [fra.wubunan.com](https://fra.wubunan.com/sign-in)，用 `admin` / `123456` 登录。铃铛在顶栏，侧边栏有 **消息中心**；公告在 **系统管理 → 通知公告**；通知策略、投递记录、群机器人在 **消息推送** 下；自己的渠道偏好在 **个人中心 → 通知偏好**。

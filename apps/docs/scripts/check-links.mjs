@@ -15,8 +15,9 @@ import { dirname, join, posix, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), '../dist')
-const SITE = 'https://yilecoding.github.io'
-const BASE = '/fastapi-react-admin'
+// 和 astro.config.mjs 读同一对环境变量
+const SITE = process.env.DOCS_SITE ?? 'https://yilecoding.github.io'
+const BASE = process.env.DOCS_BASE ?? '/fastapi-react-admin'
 
 const pages = []
 ;(function walk(dir) {
