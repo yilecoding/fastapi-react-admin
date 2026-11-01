@@ -36,9 +36,31 @@ CI 的 `pages` job（只在 `main` 上跑）先构建本站，再把 E2E job 上
 CI 的 `pnpm build` **根本不会构建它**，pages job 的 `--filter @admin/docs` 也匹配不到。
 新加一个 app 时先确认 `pnpm -r ls --depth -1` 里有它。
 
+## 国内那一份：挂在 fra.wubunan.com/docs/
+
+GitHub Pages 在国内访问慢、百度基本收录不到，所以同一份文档还挂在自己的服务器上。
+`base` 是构建期写死的（`DOCS_SITE` / `DOCS_BASE` 两个环境变量），CI 的 pages job 先按
+`/docs` 构建一份打成 `docs-site.tar.gz`，再按 Pages 的路径构建正式那份，包放进 Pages 一起发。
+服务器上（宝塔站点 `fra.wubunan.com`，主配置把 `/` 整个反代到 web 容器）：
+
+- nginx 规则放在站点的扩展目录 `/www/server/panel/vhost/nginx/extension/fra.wubunan.com/docs.conf`，
+  **不改主配置**：`location ^~ /docs/` 指向站点目录下的 `docs/`（`^~` 压过主配置里那几条按扩展名的正则），
+  再给一个 `location = /robots.txt`：只放行 `/docs/`、其余（后台本身）一律不收录，并指向 sitemap
+- 更新就是拉包解压：
+  ```bash
+  cd /www/wwwroot/fra.wubunan.com && rm -rf docs.new && mkdir docs.new \
+    && curl -fsSL https://yilecoding.github.io/fastapi-react-admin/docs-site.tar.gz | tar xz -C docs.new \
+    && rm -rf docs.old && { [ -d docs ] && mv docs docs.old || true; } && mv docs.new docs
+  ```
+
+⚠️ 两份站点内容相同、canonical 各指各的域名。主推国内，所以提交百度站长平台的是
+https://fra.wubunan.com/docs/ ；Google / Bing 两份都可能收录，算重复内容但不算作弊。
+
 ## 写内容
 
-页面在 `src/content/docs/`（英文，根路径）和 `src/content/docs/zh-cn/`（简体中文）。
+页面在 `src/content/docs/`（简体中文，根路径 —— 先推国内）和 `src/content/docs/en/`（英文）。
+浏览器语言不是中文的访客进中文页，右下角会出「Read in English」提示（`astro.config.mjs` 的 `EN_HINT`），
+**只提示不跳转**：按地区 / 语言自动跳转会让爬虫只看得到一种语言。
 **两种语言都写**：缺译的页面 Starlight 会用英文顶上，但顶上去的那一页是同内容换 URL。
 
 GEO 调研（2026-10-31）得出的写法 —— 依据是 KDD 2024 的 GEO 论文（arXiv 2311.09735）和
@@ -56,7 +78,7 @@ Google 的 AI features 文档：
 
 站点挂在 `/fastapi-react-admin` 子路径下，Astro 只给自己生成的链接（侧边栏、上下篇、
 语言切换）补 base。`astro.config.mjs` 里的 remark 插件把**正文** markdown 里以 `/` 开头的
-站内链接补上 base，所以正文照常写 `/features/multi-tab/`、`/zh-cn/features/multi-tab/`。
+站内链接补上 base，所以正文照常写 `/features/multi-tab/`、`/en/features/multi-tab/`。
 
 **插件管不到的两处**，实测都是生成了不带 base 的 `href`（点进去落在 yilecoding.github.io 域名根下，404）：
 
