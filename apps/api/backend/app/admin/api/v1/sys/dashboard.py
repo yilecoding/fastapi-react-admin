@@ -16,9 +16,13 @@ router = APIRouter()
 
 
 @router.get('/attention', summary='需要你留意的异常（按各条目自己的权限过滤）', dependencies=[DependsJwtAuth])
-async def get_attention(request: Request, db: CurrentSession) -> ResponseModel:
+async def get_attention(
+    request: Request,
+    db: CurrentSession,
+    tz: Annotated[IanaTimeZone | None, Query(description='按哪个时区算「今天」，不传 = 服务端时区')] = None,
+) -> ResponseModel:
     # 只挂登录：一个总权限码挡不住「看得到定时任务、看不到 Webhook」这种组合，过滤在 service 里逐条做
-    return response_base.success(data=await dashboard_service.attention(db, request.user))
+    return response_base.success(data=await dashboard_service.attention(db, request.user, tz=tz))
 
 
 @router.get('/services', summary='服务状态 + 在线会话（按端）', dependencies=[DependsSuperUser])

@@ -452,7 +452,8 @@ Qwen3-VL 采购那条要回喂一轮，DeepSeek-V3.2 把「财务总监」留空
 ## 工作台用的数据（#202）：`sort=attention` · `progress=true` · 草稿摘要 · 我最近发起的次数
 
 `query_service.todo(sort='attention')`：加急 → 快到期 → 到手时间新的在前。超时不是一列（按节点配置现算），所以取出这个人
-全部待办（上限 500）在内存里**三趟稳定排序**（先排最次要的键）再切页。
+全部待办（上限 500）在内存里**三趟稳定排序**（先排最次要的键）再切页。超过上限时留**加急的 + 最老的**（截掉的是最新到手、没加急的），
+`total` / `urgent_total` / `returned_total` 单独 count、是全量数（工作台大标题和分段用）。
 
 - 🔴 **第二趟里没配超时的那些，排序键必须完全相同**（`(True, _NO_DUE)`），稳定排序才保得住第一趟排好的「到手时间新的在前」。
   第一版写的是 `due_time or arrived_time`，没超时的几条被按到手时间**升序**重排了一遍 —— 列表照样有序，只是反了；
@@ -463,3 +464,19 @@ Qwen3-VL 采购那条要回喂一轮，DeepSeek-V3.2 把「财务总监」留空
 
 **实测证据**：`tests/test_dashboard_feeds.py` 5 条，2026-11-01 PostgreSQL 16 / SQL Server 2022 / MySQL 8.4 全绿；
 前端 E2E `dashboard-personalize.spec.ts`「待我处理用真数据」走真接口验加急在前、超时胶囊、步骤条。
+
+### 代码评审（#203 之后）修掉的，每条一个测试，都做过变异（改回去当场红）
+
+| 症状 | 根因 / 修法 |
+|---|---|
+| 🔴 开始节点隐藏「复核人」、第 1 步审批人填、第 3 步审批人取自它：详情页预告对发起人是 masked，工作台步骤条却写出「王芳」 | `_next_steps` 算了 `hidden` 只拿去判条件分支，人名照样输出。先过 `_mask_forecast`，masked 的步骤只给节点名 |
+| 最后一步超时自动驳回：状态「已驳回」，说明却是上一个人的「同意」 | `_DECISIVE` 写的是 `auto_approve`，引擎记的是 `timeout_approve` / `timeout_reject`（`apply_timeout`，`_PROGRESS` 里也是这俩）。前端 `card-rules.lastLine` 一起改，`actor_name` 为空时说「超时自动驳回」 |
+| 退回那一步在步骤条上是绿勾 | `_steps` 只认 `decision == 'reject'`；退回写的是 `send_back`。新状态 `sent_back`，前端画退回的样式 |
+| 待办超过 500 条时丢的是最老、最可能已经超时的那批，`total` 也被封顶 500 | 原来取「最新 500 条」、`total = len(items)`。改成按 `(urgent desc, id)` 取、总数单独 count（测试把上限改成 2 来验） |
+| 「其中 60 件加急」显示成 50；「退回给我」只数一页 | 前端从取回来的 50 条里数。后端给 `urgent_total` / `returned_total`（新增可选字段，1.0 兼容约定允许）。「退回给我」在 SQL 里按**办理人就是发起人**认 —— 开始节点 id 在快照 JSON 里、不是列；审批人解析永远去掉发起人，转交 / 改派 / 加签给发起人都会被拒，所以两种认法一致（测试里对过） |
+| A → B → C 转交，C 看到「A 转交给你」；管理员改派也说成转交 | 原来用 `origin_assignee_id`（转交链上**最初**那个人，依次审批按它排队）。改成取最近一条 `transfer` / `reassign` 记录的 `actor_name`（按 单 × 节点 × 接手的人 认），多给 `transfer_kind` |
+| 500 行待办约 1000 次整棵树遍历（审批中心默认列表也在付） | `_todo_row` 每行调 `timeout_of` + `due_time`，各自 `index_nodes`。按快照缓存节点索引，两个函数收 `nodes`。测试数调用次数：3 行同一版本 = 1 次 |
+
+**实测证据**：`tests/test_dashboard_feeds.py` 12 条（新增 7 条），2026-11-01 在 PostgreSQL 16 / SQL Server 2022 / MySQL 8.4 私有库上全绿。
+变异 9 个各自当场红：不过 `_mask_forecast` · `_DECISIVE` 漏 `timeout_reject` · 退回画成同意 · 截断留最新的 · `total` 取条数 ·
+`urgent_total` 不按加急过滤 · `returned_total` 不按发起人过滤 · 转交来源用 `origin_assignee_id` · `due_time` 不传节点索引。
