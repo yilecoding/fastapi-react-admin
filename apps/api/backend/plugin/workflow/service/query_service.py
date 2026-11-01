@@ -9,7 +9,9 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
+import operator
 
 from itertools import starmap
 from math import ceil
@@ -40,14 +42,24 @@ from backend.plugin.workflow.enums import (
     TaskStatus,
 )
 from backend.plugin.workflow.handler import get_handler
-from backend.plugin.workflow.model import WfActionRecord, WfCc, WfDefinition, WfDraft, WfInstance, WfTask
+from backend.plugin.workflow.model import (
+    WfActionRecord,
+    WfCc,
+    WfDefinition,
+    WfDefinitionVersion,
+    WfDraft,
+    WfInstance,
+    WfTask,
+)
 from backend.plugin.workflow.service.runtime_service import (
     FILE_TARGET,
     Actor,
     capabilities,
+    draft_summary,
     due_time,
     resume_jump,
     send_back_targets,
+    timeout_of,
 )
 from backend.utils.timezone import timezone
 
@@ -120,20 +132,99 @@ async def _finish_rows(db: AsyncSession, rows: list[dict[str, Any]]) -> list[dic
     return rows
 
 
-async def todo(db: AsyncSession, user_id: int, *, keyword: str | None, page: int, size: int) -> dict[str, Any]:
+#: 「按要紧程度排」时一次最多取多少条待办在内存里排。一个人手上的待办通常几条到几十条，这只是防一个异常账号拖垮接口
+_ATTENTION_SORT_CAP = 500
+#: 排序时「没配超时」的占位（只用来让这些行的第二个键彼此相等）
+_NO_DUE = _dt.datetime.min.replace(tzinfo=_dt.UTC)
+
+
+async def todo(
+    db: AsyncSession, user_id: int, *, keyword: str | None, page: int, size: int, sort: str | None = None
+) -> dict[str, Any]:
+    """待我审批。
+
+    `sort=attention`（工作台用）：加急 → 快到期（超时时间早的在前，没配超时的在后）→ 到手时间新的在前。
+    超时时间不是列（按节点配置现算，见 `runtime_service.due_time`），排不进 SQL —— 取出这个人全部的待办在内存里排，
+    再切页。默认排序（审批中心）不变：加急在前，其余按到手时间倒序
+    """
     stmt = (
         select(WfTask, WfInstance, WfDefinition.name)
         .join(WfInstance, WfInstance.id == WfTask.instance_id)
         .join(WfDefinition, WfDefinition.id == WfInstance.definition_id)
         .where(WfTask.assignee_id == user_id, WfTask.status == TaskStatus.pending)
     )
-    # 加急的排前面（发起人标的），其余按到手时间倒序
-    rows, total = await _paged(db, _search(stmt, keyword), page, size, (WfInstance.urgent.desc(), WfTask.id.desc()))
-    items = [
-        {**_instance_row(i, n), 'task_id': tk.id, 'node_name': tk.node_name, 'arrived_time': tk.created_time}
-        for tk, i, n in rows
-    ]
+    stmt = _search(stmt, keyword)
+    models: dict[str, dict[str, Any]] = {}
+    if sort == 'attention':
+        all_rows = (await db.execute(stmt.order_by(WfTask.id.desc()).limit(_ATTENTION_SORT_CAP))).all()
+        items = [_todo_row(tk, i, n, models) for tk, i, n in all_rows]
+        # 稳定排序分三趟：先按最后一个键排，再按前面的键
+        items.sort(key=operator.itemgetter('arrived_time'), reverse=True)
+        # 没配超时的那些第二个键一律一样（`_NO_DUE`），保住上一趟排好的「到手时间新的在前」——
+        # 拿到手时间顶替的话，它们会按到手时间**正序**重排（测试里抓到过）
+        items.sort(key=lambda r: (r['due_time'] is None, r['due_time'] or _NO_DUE))
+        items.sort(key=lambda r: not r['urgent'])
+        total = len(items)
+        items = items[(page - 1) * size : page * size]
+    else:
+        # 加急的排前面（发起人标的），其余按到手时间倒序
+        rows, total = await _paged(db, stmt, page, size, (WfInstance.urgent.desc(), WfTask.id.desc()))
+        items = [_todo_row(tk, i, n, models) for tk, i, n in rows]
+    await _todo_extras(db, items)
     return _page(await _finish_rows(db, items), total, page, size)
+
+
+def _todo_row(tk: WfTask, inst: WfInstance, definition_name: str | None, models: dict[str, Any]) -> dict[str, Any]:
+    model = models.get(inst.model_snapshot)
+    if model is None:
+        model = models.setdefault(inst.model_snapshot, json.loads(inst.model_snapshot))
+    cfg = timeout_of(model, tk.node_id)
+    return {
+        **_instance_row(inst, definition_name),
+        'task_id': tk.id,
+        'node_name': tk.node_name,
+        'arrived_time': tk.created_time,
+        # 节点配了超时：什么时候到点、到点做什么（remind 提醒 / approve 自动同意 / reject 自动驳回）
+        'due_time': due_time(tk, model),
+        'timeout_action': cfg['action'] if cfg else None,
+        # 被退回到发起人（开始节点上的待办）：「改完重新提交」，不是一张要审批的单
+        'back': tk.node_id == model['root']['id'],
+        '_origin_id': tk.origin_assignee_id,
+        '_dept_id': inst.initiator_dept_id,
+    }
+
+
+async def _todo_extras(db: AsyncSession, items: list[dict[str, Any]]) -> None:
+    """一页里所有行一次查完（不是 N+1）：转交来源的名字 · 发起人部门 · 退回的人和原因"""
+    origins = await _initiator_names(db, {r['_origin_id'] for r in items if r['_origin_id']})
+    dept_ids = {r['_dept_id'] for r in items if r['_dept_id']}
+    depts = dict((await db.execute(select(Dept.id, Dept.name).where(Dept.id.in_(dept_ids)))).all()) if dept_ids else {}
+    backs = await _latest_send_back(db, [r['id'] for r in items if r['back']])
+    for r in items:
+        r['transferred_from'] = origins.get(r.pop('_origin_id') or 0)
+        r['initiator_dept'] = depts.get(r.pop('_dept_id') or 0)
+        by, reason = backs.get(r['id'], (None, None))
+        r['back_by'] = by if r['back'] else None
+        r['back_reason'] = reason if r['back'] else None
+
+
+async def _latest_send_back(db: AsyncSession, instance_ids: list[int]) -> dict[int, tuple[str | None, str | None]]:
+    """每张单最近一次「退回」是谁退的、原因是什么"""
+    if not instance_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(WfActionRecord.instance_id, WfActionRecord.actor_name, WfActionRecord.opinion)
+            .where(
+                WfActionRecord.instance_id.in_(instance_ids),
+                WfActionRecord.action == Action.send_back,
+                WfActionRecord.result == 'ok',
+            )
+            .order_by(WfActionRecord.created_time, WfActionRecord.id)
+        )
+    ).all()
+    # 按时间正序扫，后面的覆盖前面的 = 最近一次
+    return {iid: (actor, opinion) for iid, actor, opinion in rows}
 
 
 async def done(db: AsyncSession, user_id: int, *, keyword: str | None, page: int, size: int) -> dict[str, Any]:
@@ -160,8 +251,37 @@ async def done(db: AsyncSession, user_id: int, *, keyword: str | None, page: int
     return _page(await _finish_rows(db, items), total, page, size)
 
 
+#: `progress=true` 每行要推演一遍后面的步骤（`simulate` 会解析审批人），只给小页（工作台）用
+PROGRESS_MAX_SIZE = 10
+
+#: 「最后一步」那一行说的结论性动作。催办 / 抄送 / 分支 / 跳过这些不算
+_DECISIVE = frozenset({
+    'start',
+    'approve',
+    'reject',
+    'send_back',
+    'resubmit',
+    'withdraw',
+    'terminate',
+    'auto_approve',
+    'auto_reject',
+    'ai_approve',
+    'transfer',
+    'reassign',
+    'take_back',
+    'add_sign',
+})
+
+
 async def initiated(
-    db: AsyncSession, user_id: int, *, keyword: str | None, status: str | None, page: int, size: int
+    db: AsyncSession,
+    user_id: int,
+    *,
+    keyword: str | None,
+    status: str | None,
+    page: int,
+    size: int,
+    progress: bool = False,
 ) -> dict[str, Any]:
     stmt = (
         select(WfInstance, WfDefinition.name)
@@ -171,7 +291,127 @@ async def initiated(
     if status:
         stmt = stmt.where(WfInstance.status == status)
     rows, total = await _paged(db, _search(stmt, keyword), page, size, WfInstance.id.desc())
-    return _page(await _finish_rows(db, list(starmap(_instance_row, rows))), total, page, size)
+    items = await _finish_rows(db, list(starmap(_instance_row, rows)))
+    if progress:
+        await _with_progress(db, [i for i, _ in rows], items)
+    return _page(items, total, page, size)
+
+
+async def _with_progress(db: AsyncSession, insts: list[WfInstance], items: list[dict[str, Any]]) -> None:
+    """工作台「我发起的」：每张单走到哪了 —— 步骤条（走过的 / 当前 / 后面的）+ 在谁手上 + 等了多久 + 最后一步结论。
+
+    🔴 **后面的步骤只在推演得出来时给**（和详情页的预告同一套 `simulate`）。条件分支用到了发起人看不到的字段时
+    详情页不给预告，这里也不给（`next_steps: null`）—— 前端画「后面还有」，不能编一个出来
+    """
+    if not insts:
+        return
+    ids = [i.id for i in insts]
+    tasks = list((await db.scalars(select(WfTask).where(WfTask.instance_id.in_(ids)).order_by(WfTask.id))).all())
+    records = (
+        await db.execute(
+            select(
+                WfActionRecord.instance_id,
+                WfActionRecord.action,
+                WfActionRecord.actor_name,
+                WfActionRecord.opinion,
+                WfActionRecord.created_time,
+            )
+            .where(WfActionRecord.instance_id.in_(ids), WfActionRecord.result == 'ok')
+            .order_by(WfActionRecord.created_time, WfActionRecord.id)
+        )
+    ).all()
+    by_inst: dict[int, list[WfTask]] = {}
+    for tk in tasks:
+        by_inst.setdefault(tk.instance_id, []).append(tk)
+    last: dict[int, dict[str, Any]] = {}
+    for iid, action, actor, opinion, at in records:
+        if action in _DECISIVE:
+            last[iid] = {'action': action, 'actor_name': actor, 'opinion': opinion, 'time': at}
+    backs = await _latest_send_back(db, ids)
+
+    for inst, row in zip(insts, items, strict=True):
+        model = json.loads(inst.model_snapshot)
+        nodes = index_nodes(model)
+        root = model['root']['id']
+        mine = by_inst.get(inst.id, [])
+        pending = [tk for tk in mine if tk.status == TaskStatus.pending]
+        back = inst.status == 'running' and inst.current_node_id == root
+        by, reason = backs.get(inst.id, (None, None))
+        row['current_node_name'] = pending[0].node_name if pending and not back else None
+        row['handlers'] = [] if back else [tk.assignee_name for tk in pending]
+        row['arrived_time'] = min((tk.created_time for tk in pending), default=None)
+        row['back'] = back
+        row['back_by'] = by if back else None
+        row['back_reason'] = reason if back else None
+        row['last'] = last.get(inst.id)
+        row['steps'] = _steps(mine, root)
+        row['next_steps'] = await _next_steps(db, inst, model, nodes, back=back) if inst.status == 'running' else []
+        jump = resume_jump(inst, nodes, root) if back else None
+        row['resume_to'] = jump.get('name') if jump else None
+
+
+def _steps(tasks: list[WfTask], root: str) -> list[dict[str, Any]]:
+    """这一轮走过的步骤（被退回、重新提交之后从提交那一刻重新算），同一节点同一轮次合成一步。
+
+    每步：`name`（一个人办的写人名，多人写节点名）· `state`（done / current / rejected）
+    """
+    start = 0
+    for idx, tk in enumerate(tasks):
+        if tk.node_id == root and tk.status != TaskStatus.pending:
+            start = idx + 1
+    groups: dict[tuple[str, int], list[WfTask]] = {}
+    for tk in tasks[start:]:
+        if tk.node_id == root or tk.status == TaskStatus.canceled:
+            continue
+        groups.setdefault((tk.node_id, tk.batch), []).append(tk)
+    out = []
+    for group in groups.values():
+        people = {tk.assignee_name for tk in group if tk.status != TaskStatus.transferred}
+        if any(tk.status == TaskStatus.pending for tk in group):
+            state = 'current'
+        elif any(tk.decision == 'reject' for tk in group):
+            state = 'rejected'
+        else:
+            state = 'done'
+        out.append({'name': next(iter(people)) if len(people) == 1 else group[0].node_name, 'state': state})
+    return out
+
+
+async def _next_steps(
+    db: AsyncSession, inst: WfInstance, model: dict[str, Any], nodes: dict[str, Any], *, back: bool
+) -> list[str] | None:
+    """还没走到的步骤名（推演不了 → None）。被退回时从开始节点往后推（和重新提交之后的实际走法一致）"""
+    form_schema = json.loads(inst.form_snapshot)
+    approval_nodes = [r.node for r in nodes.values() if r.node['type'] == 'approval']
+    hidden = hidden_fields_for(form_schema, approval_nodes, see_all=False, participant_nodes=[model['root']])
+    if any(
+        r.node['type'] == 'condition'
+        and any(v in hidden for b in r.node['branches'] for v in _cond_vars(b.get('when')))
+        for r in nodes.values()
+    ):
+        return None
+    current = model['root']['id'] if back else inst.current_node_id
+    if current not in nodes:
+        return None
+    variables = json.loads(inst.variables)
+    steps = await simulate(
+        db,
+        model,
+        form_data={**(variables.get('biz') or {}), **json.loads(inst.form_data)},
+        initiator_id=inst.initiator_id,
+        initiator_dept_id=inst.initiator_dept_id,
+        selected=variables.get('selected') or {},
+        start_from=resume_jump(inst, nodes, current) or nodes[current].after,
+    )
+    out = []
+    for st in steps:
+        if st.get('outcome') == 'skip' or st.get('type') != 'approval':
+            continue
+        users = st.get('users') or []
+        out.append(users[0]['name'] if len(users) == 1 else st['name'])
+        if st.get('outcome') == 'reject':
+            break
+    return out
 
 
 async def cc_me(
@@ -695,8 +935,27 @@ DRAFT_MAX_BYTES = 200_000
 
 
 async def drafts(db: AsyncSession, user_id: int) -> list[dict[str, Any]]:
+    """我的发起草稿。带上流程名和一行摘要（按当前发布版本的表单拼，同待办列表的 `summary`）"""
     rows = (await db.scalars(select(WfDraft).where(WfDraft.user_id == user_id).order_by(WfDraft.id))).all()
-    return [{'code': d.code, 'updated_time': d.updated_time or d.created_time} for d in rows]
+    defs: dict[str, tuple[str, str, str]] = {}
+    if rows:
+        found = await db.execute(
+            select(WfDefinition.code, WfDefinition.name, WfDefinitionVersion.form_json, WfDefinitionVersion.model_json)
+            .join(WfDefinitionVersion, WfDefinitionVersion.id == WfDefinition.current_version_id)
+            .where(WfDefinition.code.in_([d.code for d in rows]), WfDefinition.deleted == 0)
+        )
+        defs = {code: (name, form_json, model_json) for code, name, form_json, model_json in found.all()}
+    out = []
+    for d in rows:
+        name, form_json, model_json = defs.get(d.code, (None, None, None))
+        summary = None
+        if form_json and model_json:
+            try:
+                summary = draft_summary(json.loads(form_json), json.loads(d.form_data), json.loads(model_json))
+            except (ValueError, KeyError, TypeError):  # 草稿是存下的半成品，拼不出摘要不算错
+                summary = None
+        out.append({'code': d.code, 'name': name, 'summary': summary, 'updated_time': d.updated_time or d.created_time})
+    return out
 
 
 async def get_draft(db: AsyncSession, user_id: int, code: str) -> dict[str, Any] | None:

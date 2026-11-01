@@ -353,11 +353,13 @@ error:
     password_mismatch: The two passwords do not match
     password_required: Password cannot be empty
     permission_type_not_found: Permission type does not exist
+    preference_too_many: 'You can store at most {limit} personal preferences'
     self_permission_forbidden: You cannot change your own permissions
     sms_plugin_required: The SMS plugin is not installed, so a verification code cannot be sent
     username_registered: Username is already registered
     wrong_old_password: Current password is incorrect
   workflow:
+    progress_page_too_large: 'With progress, a page holds at most {max} rows'
     ai_fill_nothing: There are no fields on this form that the AI can fill in
     ai_fill_no_material: Paste some text or upload a file first
     ai_fill_bad_output: The model's reply was not in the agreed format

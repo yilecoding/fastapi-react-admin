@@ -55,3 +55,23 @@
 没断言「没写日志」，所以是代码审查翻出来的。现在 except 里先把 `code` 改成 499、关掉 `should_log_opera` 再返回：
 访问日志那一行照常记（显示 499），操作日志不写。
 `test_a_client_that_left_while_the_route_ran_is_not_logged_as_a_success` 在旧代码上红：队列里是一条 `code='200' msg='Success'`。
+
+## 🔴 请求体声明是 JSON、实际不是：原来是 500，不是 422
+
+**症状**：任何接口收到一份截断 / 写坏的 JSON（`Content-Type: application/json`），回的是 **500**，
+日志里是一条服务端异常 —— 看着像后端坏了，其实是客户端发错了；路由层本该回的
+`422 json_invalid` 永远轮不到。
+
+**根因**：这个中间件在路由**之前**读请求体（`get_request_args`），`request.json()` 抛 `JSONDecodeError`，没人接。
+**修法**：接住 `ValueError`，交给路由层去拒；操作日志里只记一个占位（`_invalid_json` + 原始字节数）。
+
+🔴 **不能记原文。** 第一版接住之后「照原文记进 `data`」—— 解析不了就没法按字段脱敏，一份截断的
+`PUT /me/password` 会把新旧两个密码**明文**写进 `sys_opera_log`（改邮箱、建用户同理）。和上面响应体那条是同一个
+fail-closed 判据，自己写的时候却漏了，是代码评审翻出来的。实测（变异：改回记原文）：
+`test_a_broken_json_body_with_a_password_is_not_logged_in_plain_text` 红在
+`旧密码明文进了操作日志：{"data": "{\"old_password\": \"Old-Secret-1\", …`。
+
+**实测证据**（#202，个人偏好「非法 JSON 被拒」那条）：`PUT /sys/users/me/preferences/pytest.layout` 带
+`{"value": {"cards": [` —— 修之前测试红在 `JSONDecodeError`，栈顶是 `opera_log_middleware.py: get_request_args`；
+修之后 422。真起一个 uvicorn 用 curl 发同一份：不带修复 **500**、带修复 **422**。回归两条：`tests/test_opera_log_redaction.py::test_a_body_that_claims_json_but_is_not_does_not_blow_up_before_the_route`（中间件单测）+
+`app/admin/tests/api_v1/test_user_preference.py` 的「截断」参数。变异（`except ValueError` 改成别的异常）→ 两条都红。

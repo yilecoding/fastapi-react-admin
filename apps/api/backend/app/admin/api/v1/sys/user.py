@@ -22,9 +22,15 @@ from backend.app.admin.schema.user import (
     ResetPasswordParam,
     UpdateUserParam,
 )
+from backend.app.admin.schema.user_preference import (
+    PREFERENCE_KEY_PATTERN,
+    GetUserPreferenceDetail,
+    PutUserPreferenceParam,
+)
 from backend.app.admin.service.export_service import export_service
 from backend.app.admin.service.import_service import import_service
 from backend.app.admin.service.mfa_service import mfa_service
+from backend.app.admin.service.user_preference_service import user_preference_service
 from backend.app.admin.service.user_service import user_service
 from backend.common.enums import UserPermissionType
 from backend.common.pagination import DependsPagination, PageData
@@ -259,6 +265,31 @@ async def update_user_email(
     if count > 0:
         return response_base.success()
     return response_base.fail()
+
+
+# ── 个人偏好（#202）：跟人走、不跟设备走的那些设置。第一期只有工作台布局（`dashboard.layout`） ──
+#
+# 只挂 DependsJwtAuth（同头像 / 时区）：路径里没有用户 ID，读写的永远是 `request.user.id` 自己的。
+# 三段路径（`/me/preferences/{key}`），撞不上一段的 `/{pk}` 和两段的 `/{pk}/roles`。
+PreferenceKey = Annotated[
+    str, Path(min_length=3, max_length=64, pattern=PREFERENCE_KEY_PATTERN, description='偏好键，如 dashboard.layout')
+]
+
+
+@router.get('/me/preferences/{key}', summary='读当前用户的一个偏好', dependencies=[DependsJwtAuth])
+async def get_my_preference(
+    db: CurrentSession, request: Request, key: PreferenceKey
+) -> ResponseSchemaModel[GetUserPreferenceDetail]:
+    data = await user_preference_service.get(db=db, user_id=request.user.id, key=key)
+    return response_base.success(data=data)
+
+
+@router.put('/me/preferences/{key}', summary='写当前用户的一个偏好（整份覆盖）', dependencies=[DependsJwtAuth])
+async def put_my_preference(
+    db: CurrentSessionTransaction, request: Request, key: PreferenceKey, obj: PutUserPreferenceParam
+) -> ResponseSchemaModel[GetUserPreferenceDetail]:
+    data = await user_preference_service.put(db=db, user_id=request.user.id, key=key, text=obj.text)
+    return response_base.success(data=data)
 
 
 def _phone_captcha_by_user(request: Request) -> str:

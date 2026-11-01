@@ -205,11 +205,23 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
             if 'application/json' not in content_types:
                 args['data'] = body_data.decode('utf-8', 'ignore') if isinstance(body_data, bytes) else str(body_data)
             else:
-                json_data = await request.json()
-                if isinstance(json_data, dict):
-                    args['json'] = self.desensitization(json_data)
+                # 🔴 请求体声明是 JSON、实际不是（截断 / 手写错了）时不能在这里炸：这个中间件在路由**之前**，
+                # 抛出去就是一个 500，路由层本该回的 422（`json_invalid`）永远轮不到。接住，交给路由层去拒。
+                # 🔴 **也不能记原文**：解析不了就没法按字段脱敏，一份截断的 `PUT /me/password` 会把新旧两个密码
+                # 明文写进 sys_opera_log（同响应体那条 fail-closed：结构读不出来，宁可不记）
+                try:
+                    json_data = await request.json()
+                except ValueError:
+                    args['body'] = {
+                        '_invalid_json': True,
+                        '_original_size': len(body_data),
+                        '_message': '请求体不是合法 JSON，无法脱敏，未记录原文',
+                    }
                 else:
-                    args['data'] = str(json_data)
+                    if isinstance(json_data, dict):
+                        args['json'] = self.desensitization(json_data)
+                    else:
+                        args['data'] = str(json_data)
 
         if is_form:
             # 表单参数

@@ -39,6 +39,24 @@ test.describe("公告触达面 · 读者视角", () => {
     ;({ api: admin, dispose: disposeAdmin } = await createApiClient())
     ctx = await request.newContext({ baseURL: API_BASE })
     adminToken = (await loginToken(ctx)).token
+    // 工作台的「公告」卡默认不显示（#202 新版：顶栏横幅 / 弹窗 / 铃铛已经覆盖了「有新公告」）——
+    // 给 zhoumin 存一份把它打开的布局，下面两条工作台用例验的是卡片本身，不是默认布局。
+    // ⚠️ 这个 describe 是并行的，每个 worker 各跑一次 beforeAll：两边**第一次**同时存同一个人的同一个键，
+    // 后到的撞 `(user_id, key)` 唯一约束回 500（app/admin 分册「个人偏好」那条，实测撞上过）。再存一次就是更新
+    const own = await request.newContext({ baseURL: API_BASE })
+    try {
+      const { token } = await loginToken(own, "zhoumin", "123456")
+      for (let attempt = 0; ; attempt += 1) {
+        const res = await own.put(`${API_BASE}/api/v1/sys/users/me/preferences/dashboard.layout`, {
+          headers: { Authorization: `Bearer ${token}` },
+          data: { value: { v: 1, cards: [{ id: "notices", visible: true, width: "full" }] } },
+        })
+        if (res.ok()) break
+        expect(attempt, await res.text()).toBeLessThan(2)
+      }
+    } finally {
+      await own.dispose()
+    }
   })
 
   test.afterAll(async () => {
@@ -204,7 +222,7 @@ test.describe("公告触达面 · 读者视角", () => {
       expect(saved.equals(bytes), "下载下来的字节和上传的不一致").toBeTruthy()
     })
 
-    test("🔴 工作台：非管理员也有公告卡（旁边那条「没有权限」照旧），点一行就地打开", async ({ page }) => {
+    test("🔴 工作台：非管理员也能用公告卡（没权限的系统运行区不渲染，不再是一条「没有权限」），点一行就地打开", async ({ page }) => {
       const { notice, pdf } = attached
       await loginPageAs(page, "zhoumin", "123456")
       await page.goto("/dashboard")
@@ -214,8 +232,10 @@ test.describe("公告触达面 · 读者视角", () => {
       await expect(row).toContainText(notice.title)
       // 📎 个数：读者打开之前就知道这条带文件
       await expect(row.getByTestId("attachment-count")).toContainText("1")
-      // 别的卡是管理员看板：普通用户这里是那条错误条 —— 公告卡要在它旁边照常显示
-      await expect(page.locator('[data-tab="/_auth/dashboard"] [data-testid="dash-error"]')).toBeVisible()
+      // 统计是管理员看板（「系统运行」区）：#202 之后只读访客的工作台上**不渲染**它，也不再有一条「没有权限」的错误条
+      //（上面先断言了公告那一行在，这两条「没有」才不是页面还没加载出来）
+      await expect(page.locator('[data-tab="/_auth/dashboard"] [data-testid="dash-system"]')).toHaveCount(0)
+      await expect(page.locator('[data-tab="/_auth/dashboard"]').getByText("没有权限")).toHaveCount(0)
 
       await row.click()
       const reader = readerIn(page, "/_auth/dashboard")

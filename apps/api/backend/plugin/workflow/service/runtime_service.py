@@ -1078,6 +1078,11 @@ async def _check_attachments(
         raise errors.RequestError(msg=t('error.workflow.attachment_not_yours'))
 
 
+def draft_summary(form_schema: dict[str, Any], data: dict[str, Any], model: dict[str, Any]) -> str | None:
+    """草稿的摘要（工作台「待我处理」的草稿那一行）：和发起之后存下的 `summary` 同一个拼法"""
+    return _summary(form_schema, data, model)
+
+
 def _summary(form_schema: dict[str, Any], data: dict[str, Any], model: dict[str, Any]) -> str | None:
     """前三个有值的简单字段拼成一行，审批中心列表 / 抄送通知 / 详情头部里显示。
 
