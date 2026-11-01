@@ -360,6 +360,7 @@ error:
     username_registered: 用户名已注册
     wrong_old_password: 原密码错误
   workflow:
+    progress_page_too_large: '带进度查询每页最多 {max} 条'
     ai_fill_nothing: 这张表单里没有 AI 能帮你填的字段
     ai_fill_no_material: 先粘一段话或者传一份文件
     ai_fill_bad_output: 模型返回的内容不是约定的格式

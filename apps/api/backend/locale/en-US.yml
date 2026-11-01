@@ -359,6 +359,7 @@ error:
     username_registered: Username is already registered
     wrong_old_password: Current password is incorrect
   workflow:
+    progress_page_too_large: 'With progress, a page holds at most {max} rows'
     ai_fill_nothing: There are no fields on this form that the AI can fill in
     ai_fill_no_material: Paste some text or upload a file first
     ai_fill_bad_output: The model's reply was not in the agreed format
