@@ -86,6 +86,22 @@ PR 的 CI（`pnpm build`）就会红。反向验证过：把一页里的一条�
 ⚠️ 侧边栏分组写成 `{ label, items: [{ autogenerate: { directory } }] }` ——
 Starlight 0.39 起不再支持 `autogenerate` 和 `label` 写在同一层。
 
+## 视觉：和后台、登录页同一套品牌
+
+- **主题**在 `src/styles/theme.css`：品牌紫 + Inter / JetBrains Mono（`@fontsource-variable` 自托管 ——
+  不走 Google Fonts，国内打不开会卡住首屏）。⚠️ Starlight 的 `:root` 是**深色**、浅色挂在
+  `:root[data-theme='light']`，和后台的 `.dark` 方向相反，从后台抄颜色时别抄反
+- **首页**覆盖了 Starlight 的 `Hero`（`astro.config.mjs` 的 `components`），版式照搬登录页左栏：
+  渐变面板 + 立体榫卯（`src/components/TenonStage.astro`）。榫卯轮廓**直接 import**
+  `apps/web/src/components/tenon-outline.ts`，不抄坐标 —— 改了图形，侧边栏、登录页和这里一起变
+- 首页其余几块（截图窗框、数字条、功能卡、收尾面板）都在 `src/components/`，文案一律从
+  页面的 MDX / frontmatter 传进去（`landing` 字段是 `src/content.config.ts` 里扩出来的），
+  组件里不写给人看的话 —— 中英文各管各的
+- ⚠️ 只给首页加样式时选择器挂在 `:root[data-has-hero]` 上（Starlight 只给带 hero 的页加这个属性），
+  否则会漏到功能页里
+- ⚠️ 顶栏要写 `header.header`：Starlight 里外两层都叫 `.header`，裸写会把那道渐变线画到里层，
+  实测是一截只从搜索框画到右边的线
+
 ## SEO 相关的配置在哪
 
 | 什么 | 在哪 |

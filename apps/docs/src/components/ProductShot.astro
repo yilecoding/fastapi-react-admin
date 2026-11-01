@@ -1,0 +1,57 @@
+---
+/**
+ * 一张装进浏览器窗框的产品截图。`lift` 版往上压进 hero 面板的底边，并带一点透视倾角，
+ * 鼠标悬停时摆正 —— 首页首屏下面那张用它；Tabs 里的截图用平的。
+ */
+import { Image } from 'astro:assets'
+
+interface Props {
+  src: ImageMetadata
+  alt: string
+  url?: string
+  lift?: boolean
+}
+const { src, alt, url = 'fra.wubunan.com', lift = false } = Astro.props
+---
+
+<figure class:list={['shot not-content', { 'shot--lift': lift }]}>
+  <div class="shot-window">
+    <div class="shot-bar" aria-hidden="true">
+      <span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span>
+      <span class="shot-url">{url}</span>
+    </div>
+    <Image src={src} alt={alt} widths={[800, 1200, 1600]} sizes="(min-width: 76rem) 72rem, 100vw" loading={lift ? 'eager' : 'lazy'} />
+  </div>
+  {Astro.slots.has('default') && <figcaption><slot /></figcaption>}
+</figure>
+
+<style is:global>
+  .shot { margin: 0; perspective: 2400px }
+  .shot-window {
+    overflow: hidden;
+    border-radius: 1rem;
+    background: var(--brand-card);
+    box-shadow: 0 0 0 1px var(--brand-ring), var(--brand-shadow);
+  }
+  .shot-window img { display: block; width: 100%; height: auto }
+  .shot-bar {
+    display: flex; align-items: center; gap: 0.4rem;
+    height: 2.4rem; padding: 0 0.9rem;
+    background: color-mix(in oklab, var(--sl-color-gray-6) 70%, var(--brand-card));
+    border-bottom: 1px solid var(--brand-ring);
+  }
+  .shot-dot { width: 0.65rem; height: 0.65rem; border-radius: 99px; background: var(--sl-color-gray-4); opacity: 0.55 }
+  .shot-url {
+    margin-inline: auto; padding: 0.2rem 1.4rem; border-radius: 99px;
+    font-family: var(--__sl-font-mono); font-size: 0.72rem; color: var(--sl-color-gray-3);
+    background: color-mix(in oklab, var(--sl-color-black) 55%, transparent);
+    transform: translateX(-1.6rem);
+  }
+  .shot figcaption { margin-top: 1rem; text-align: center; font-size: 0.875rem; color: var(--sl-color-gray-3) }
+  .shot figcaption p { margin: 0 }
+
+  .shot--lift { position: relative; z-index: 1; width: min(100%, 64rem); margin: clamp(-6.5rem, -7vw, -3.5rem) auto 0 !important }
+  .shot--lift .shot-window { transform: rotateX(7deg); transform-origin: 50% 0; transition: transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) }
+  .shot--lift:hover .shot-window { transform: none }
+  @media (prefers-reduced-motion: reduce) { .shot--lift .shot-window { transform: none; transition: none } }
+</style>

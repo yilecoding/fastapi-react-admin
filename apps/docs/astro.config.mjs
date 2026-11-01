@@ -36,6 +36,10 @@ export default defineConfig({
         'Open-source admin foundation on FastAPI + React 19 + shadcn/ui: row-level data permissions, multi-tab that keeps state, approval workflow, a permission-bound AI assistant, PostgreSQL / SQL Server / MySQL.',
       logo: { src: './src/assets/logo.svg' },
       favicon: '/favicon.svg',
+      // 主题和后台同一套：Inter / JetBrains Mono 自托管（不走 Google Fonts —— 国内打不开），品牌紫见 theme.css
+      customCss: ['@fontsource-variable/inter', '@fontsource-variable/jetbrains-mono', './src/styles/theme.css'],
+      // 首页 hero 换成登录页那套品牌面板 + 立体榫卯（src/components/Hero.astro）
+      components: { Hero: './src/components/Hero.astro' },
       social: [{ icon: 'github', label: 'GitHub', href: REPO }],
       editLink: { baseUrl: `${REPO}/edit/main/apps/docs/` },
       // 每页显示「最后更新」—— 读 git 历史，所以 CI 里 checkout 要 fetch-depth: 0，

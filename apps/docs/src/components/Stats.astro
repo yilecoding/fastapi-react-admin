@@ -1,0 +1,39 @@
+---
+/** 首页的一排数字。数字只放 README 里有出处的（测试条数改了这里要一起改，见 AGENTS.md）。 */
+interface Props {
+  items: { value: string; label: string }[]
+}
+const { items } = Astro.props
+---
+
+<dl class="stats not-content">
+  {
+    items.map(({ value, label }) => (
+      <div class="stat">
+        <dt>{label}</dt>
+        <dd>{value}</dd>
+      </div>
+    ))
+  }
+</dl>
+
+<style is:global>
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    margin: 4.5rem 0 0 !important;
+    overflow: hidden;
+    border-radius: 1.25rem;
+    background: var(--brand-ring);
+    box-shadow: 0 0 0 1px var(--brand-ring);
+  }
+  @media (min-width: 50rem) { .stats { grid-template-columns: repeat(4, minmax(0, 1fr)) } }
+  .stat { display: flex; flex-direction: column-reverse; gap: 0.35rem; margin: 0 !important; padding: 1.5rem 1.6rem; background: var(--brand-card) }
+  .stat dd {
+    margin: 0; font-size: clamp(1.9rem, 3.4vw, 2.6rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1;
+    background: linear-gradient(120deg, var(--sl-color-white) 30%, var(--brand));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .stat dt { margin: 0; font-size: 0.85rem; line-height: 1.45; color: var(--sl-color-gray-3) }
+</style>

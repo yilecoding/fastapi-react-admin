@@ -1,0 +1,179 @@
+---
+/**
+ * 首页右侧的立体榫卯 —— 登录页那枚（apps/web/src/routes/_guest/-tenon-stage.tsx）的 Astro 版。
+ *
+ * 轮廓直接 import 后台的 `tenon-outline.ts`，不抄坐标：改了图形，登录页、侧边栏和这里一起变。
+ * 纯 CSS 3D（每片零件 30 层 clip-path 薄片叠出厚度），不引 three.js，构建出来就是静态 HTML。
+ * 和登录页的差别只有两处：主题选择器（这里深色是默认、浅色挂 data-theme='light'），
+ * 以及鼠标视差的那几行改写成了原生脚本。
+ */
+import { MORTISE_OUTLINE, TENON_OUTLINE, type Outline } from '../../../web/src/components/tenon-outline'
+
+const toPolygon = (pts: Outline) =>
+  `polygon(${pts.map(([x, y]) => `${(x / 24) * 100}% ${(y / 24) * 100}%`).join(', ')})`
+
+const LAYERS = 30
+const slices = Array.from({ length: LAYERS }, (_, i) => i)
+const pieces = [
+  { kind: 't', clip: toPolygon(TENON_OUTLINE) },
+  { kind: 'm', clip: toPolygon(MORTISE_OUTLINE) },
+] as const
+const seamLeft = `${(13 / 24) * 100}%`
+---
+
+<div class="tenon-stage-wrap" aria-hidden="true">
+  <div class="tenon-stage-box" style={`--tenon-layers: ${LAYERS}; --seam-left: ${seamLeft}`}>
+    <div class="tenon-stage-lens">
+      <div class="tenon-stage">
+        <div class="tenon-floor"></div>
+        <div class="tenon-axis"></div>
+        {pieces.map(({ kind, clip }) => (
+          <div class={`tenon-piece tenon-piece--${kind}`}>
+            <div class="tenon-slide">
+              <div class="tenon-shadow" style={`clip-path: ${clip}`}></div>
+              {slices.map((i) => <div class="tenon-slice" style={`clip-path: ${clip}; --i: ${i}`}></div>)}
+              <div class="tenon-top" style={`clip-path: ${clip}`}></div>
+              <div class="tenon-sheen" style={`clip-path: ${clip}`}></div>
+              {kind === 't' && (
+                <>
+                  <div class="tenon-seam-glow"></div>
+                  <div class="tenon-seam"></div>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 鼠标视差：只写两个自定义属性，旋转和过渡都在 CSS 里；触屏的 pointermove 是在拖，不跟
+  for (const host of document.querySelectorAll<HTMLElement>('[data-tenon-tilt]')) {
+    let frame = 0
+    host.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse') return
+      const r = host.getBoundingClientRect()
+      const x = (e.clientX - r.left) / r.width - 0.5
+      const y = (e.clientY - r.top) / r.height - 0.5
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => {
+        host.style.setProperty('--tilt-x', x.toFixed(3))
+        host.style.setProperty('--tilt-y', y.toFixed(3))
+      })
+    })
+    host.addEventListener('pointerleave', () => {
+      cancelAnimationFrame(frame)
+      host.style.setProperty('--tilt-x', '0')
+      host.style.setProperty('--tilt-y', '0')
+    })
+  }
+</script>
+
+<style is:global>
+  .tenon-stage-wrap { container-type: size; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; pointer-events: none }
+  .tenon-stage-box {
+    --tenon-depth: calc(100cqw * 22 / 300);
+    --tenon-step: calc(var(--tenon-depth) / var(--tenon-layers));
+    /* 深色（Starlight 的默认） */
+    --tenon-t-lo: oklch(0.2 0.12 277);
+    --tenon-t-hi: oklch(0.33 0.18 277);
+    --tenon-t-top: linear-gradient(135deg, oklch(0.64 0.2 282) 0%, oklch(0.52 0.24 277) 50%, oklch(0.43 0.22 277) 100%);
+    --tenon-m-lo: oklch(0.34 0.1 280);
+    --tenon-m-hi: oklch(0.47 0.12 282);
+    --tenon-m-top: linear-gradient(135deg, oklch(0.8 0.09 285) 0%, oklch(0.7 0.12 283) 50%, oklch(0.62 0.14 282) 100%);
+    --tenon-t-sheen: oklch(1 0 0 / 0.3);
+    --tenon-m-sheen: oklch(1 0 0 / 0.4);
+    --tenon-shadow: oklch(0.5 0.24 277);
+    --tenon-t-shadow-a: 0.5;
+    --tenon-m-shadow-a: 0.32;
+    --tenon-floor: oklch(0.78 0.15 277 / 0.12);
+    --tenon-axis: oklch(0.78 0.15 277 / 0.4);
+    --tenon-seam-core: oklch(1 0 0);
+    --tenon-seam-edge: oklch(0.82 0.11 285);
+    --tenon-seam-glow: oklch(0.72 0.2 280 / 0.75);
+
+    position: relative;
+    width: min(86cqw, 86cqh, 560px);
+    aspect-ratio: 1;
+    container-type: inline-size;
+    animation: tenon-fade 0.9s ease-out both, tenon-float 5.5s ease-in-out 1s infinite alternate;
+  }
+  :root[data-theme='light'] .tenon-stage-box {
+    --tenon-t-lo: oklch(0.27 0.15 277);
+    --tenon-t-hi: oklch(0.38 0.2 277);
+    --tenon-t-top: linear-gradient(135deg, oklch(0.56 0.22 280) 0%, oklch(0.457 0.24 277) 48%, oklch(0.41 0.22 277) 100%);
+    --tenon-m-lo: oklch(0.6 0.13 280);
+    --tenon-m-hi: oklch(0.72 0.11 282);
+    --tenon-m-top: linear-gradient(135deg, oklch(0.93 0.03 285) 0%, oklch(0.86 0.065 283) 50%, oklch(0.79 0.095 282) 100%);
+    --tenon-t-sheen: oklch(1 0 0 / 0.45);
+    --tenon-m-sheen: oklch(1 0 0 / 0.7);
+    --tenon-shadow: oklch(0.457 0.24 277);
+    --tenon-t-shadow-a: 0.38;
+    --tenon-m-shadow-a: 0.22;
+    --tenon-floor: oklch(0.457 0.24 277 / 0.13);
+    --tenon-axis: oklch(0.457 0.24 277 / 0.45);
+    --tenon-seam-edge: oklch(0.8 0.1 285);
+    --tenon-seam-glow: oklch(0.62 0.2 280 / 0.6);
+  }
+  /* perspective 单独一层：写在 .tenon-stage-box 自己身上的话，cqw 会按外层容器算 */
+  .tenon-stage-lens { position: absolute; inset: 0; perspective: 320cqw }
+  .tenon-stage {
+    position: absolute; inset: 0; transform-style: preserve-3d;
+    transform: rotateX(calc(58deg - var(--tilt-y, 0) * 8deg)) rotateZ(calc(-32deg + var(--tilt-x, 0) * 10deg));
+    transition: transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .tenon-floor {
+    position: absolute; left: -60%; top: -60%; width: 220%; height: 220%;
+    transform: translateZ(-0.4cqw);
+    background-image:
+      linear-gradient(to right, var(--tenon-floor) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--tenon-floor) 1px, transparent 1px);
+    background-size: calc(100cqw / 12) calc(100cqw / 12);
+    background-position: 60cqw 60cqw;
+    -webkit-mask-image: radial-gradient(45% 45% at 50% 50%, #000 20%, transparent 100%);
+    mask-image: radial-gradient(45% 45% at 50% 50%, #000 20%, transparent 100%);
+  }
+  .tenon-axis {
+    position: absolute; left: -10%; top: 50%; width: 120%; height: 1px;
+    transform: translateZ(-0.2cqw);
+    background: linear-gradient(90deg, transparent, var(--tenon-axis) 30%, var(--tenon-axis) 70%, transparent);
+  }
+  .tenon-piece { position: absolute; inset: 0; transform-style: preserve-3d; animation: tenon-drop 1.1s cubic-bezier(0.2, 0.8, 0.2, 1) both }
+  .tenon-piece--t { --lo: var(--tenon-t-lo); --hi: var(--tenon-t-hi); --top: var(--tenon-t-top); --sheen: var(--tenon-t-sheen); --shadow-a: var(--tenon-t-shadow-a) }
+  .tenon-piece--m { --lo: var(--tenon-m-lo); --hi: var(--tenon-m-hi); --top: var(--tenon-m-top); --sheen: var(--tenon-m-sheen); --shadow-a: var(--tenon-m-shadow-a); animation-delay: 0.12s }
+  .tenon-slide { position: absolute; inset: 0; transform-style: preserve-3d }
+  .tenon-piece--t .tenon-slide { animation: tenon-slide-t 4.4s cubic-bezier(0.65, 0, 0.35, 1) 1.2s infinite alternate both }
+  .tenon-piece--m .tenon-slide { animation: tenon-slide-m 4.4s cubic-bezier(0.65, 0, 0.35, 1) 1.2s infinite alternate both }
+  .tenon-shadow { position: absolute; inset: 0; background: var(--tenon-shadow); opacity: var(--shadow-a); filter: blur(4cqw); transform: translateZ(-0.3cqw) }
+  .tenon-slice {
+    position: absolute; inset: 0;
+    transform: translateZ(calc(var(--i) * var(--tenon-step)));
+    background: color-mix(in oklab, var(--hi) calc(var(--i) / (var(--tenon-layers) - 1) * 100%), var(--lo));
+  }
+  .tenon-top { position: absolute; inset: 0; background: var(--top); transform: translateZ(var(--tenon-depth)) }
+  .tenon-sheen { position: absolute; inset: 0; background: linear-gradient(135deg, var(--sheen), transparent 40%); transform: translateZ(calc(var(--tenon-depth) + 0.1cqw)) }
+  .tenon-seam, .tenon-seam-glow { position: absolute; top: 37.5%; height: 25%; opacity: 0; animation: tenon-seam 4.4s cubic-bezier(0.65, 0, 0.35, 1) 1.2s infinite alternate both }
+  .tenon-seam {
+    left: calc(var(--seam-left) - 0.35cqw); width: 0.7cqw; border-radius: 1cqw;
+    transform: translateZ(calc(var(--tenon-depth) + 0.2cqw));
+    background: linear-gradient(180deg, transparent, var(--tenon-seam-edge) 18%, var(--tenon-seam-core) 50%, var(--tenon-seam-edge) 82%, transparent);
+    box-shadow: 0 0 3cqw 0.8cqw var(--tenon-seam-glow);
+  }
+  .tenon-seam-glow { left: var(--seam-left); width: 9cqw; transform: translateZ(0.1cqw); background: radial-gradient(closest-side, var(--tenon-seam-glow), transparent) }
+  @keyframes tenon-fade { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes tenon-float { from { transform: translateY(0) } to { transform: translateY(-1.6cqw) } }
+  /* 只动 transform：preserve-3d 的元素上一旦有 opacity < 1，整组会被拍扁成一张平面 */
+  @keyframes tenon-drop { from { transform: translateZ(40cqw) } to { transform: none } }
+  @keyframes tenon-slide-t { from { transform: translateX(-24%) } to { transform: translateX(6%) } }
+  @keyframes tenon-slide-m { from { transform: translateX(4%) } to { transform: none } }
+  @keyframes tenon-seam { 0%, 55% { opacity: 0 } 100% { opacity: 1 } }
+  /* 选择器要和挂动画的那几条同样具体，否则 .tenon-piece--t .tenon-slide 的动画照跑（登录页实测踩过） */
+  @media (prefers-reduced-motion: reduce) {
+    .tenon-stage-box, .tenon-piece, .tenon-piece--t .tenon-slide, .tenon-piece--m .tenon-slide, .tenon-seam, .tenon-seam-glow { animation: none }
+    .tenon-stage { transition: none; transform: rotateX(58deg) rotateZ(-32deg) }
+    .tenon-piece--t .tenon-slide { transform: translateX(3%) }
+    .tenon-seam, .tenon-seam-glow { opacity: 0.5 }
+  }
+</style>

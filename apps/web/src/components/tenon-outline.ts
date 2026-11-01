@@ -3,6 +3,7 @@
  *
  * 一份数据两种用法：`tenon-mark.tsx` 的 SVG 路径，以及登录页 3D 舞台
  * （`routes/_guest/-tenon-stage.tsx`）每一层薄片的 `clip-path: polygon()`。
+ * 文档站首页那枚（`apps/docs/src/components/TenonStage.astro`）也按相对路径 import 这里。
  * 舞台要是手抄一份百分比坐标，改了图形就只有一边跟着变。
  *
  * 单独一个文件而不是从 `tenon-mark.tsx` 导出：那边只能导出组件，
