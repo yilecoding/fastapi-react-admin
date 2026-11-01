@@ -23,6 +23,7 @@ import { NoticeReaderSheet } from '../notice/reader-sheet'
 import { InstanceSheet } from '../workflow/instance-sheet'
 import { workflowKeys } from '../workflow/api'
 import { attentionQuery, dashKeys, deskTodoQuery, servicesQuery, visitsQuery } from './api'
+import { todoCounts } from './card-rules'
 import { flattenPages } from './cards/quick-links'
 import { DASHBOARD_CARDS } from './cards/registry'
 import type { CardContext, CardProps, DashboardCardDef, TodoTab } from './cards/types'
@@ -345,8 +346,8 @@ function Headline({ enabled, ready }: { enabled: boolean; ready: boolean }) {
       </p>
     )
   }
-  const n = todo.data.total
-  const m = todo.data.items.filter((r) => r.urgent).length
+  // 全量数（后端的 `urgent_total`），不从取回来的那一页里数 —— 见 `card-rules.todoCounts`
+  const { total: n, urgent: m } = todoCounts(todo.data)
   return (
     <p className={cls} data-testid="dash-headline" data-total={n} data-urgent={m}>
       {n === 0 ? (
@@ -374,7 +375,7 @@ function Headline({ enabled, ready }: { enabled: boolean; ready: boolean }) {
 function SystemHeader({ items, titleId }: { items: LayoutItem[]; titleId: string }) {
   const { t } = useTranslation()
   const ids = new Set(items.map((i) => i.id))
-  const attention = useQuery({ ...attentionQuery, enabled: false })
+  const attention = useQuery({ ...attentionQuery(), enabled: false })
   const services = useQuery({ ...servicesQuery, enabled: false })
   const visits = useQuery({ ...visitsQuery(), enabled: false })
   const at = Math.max(

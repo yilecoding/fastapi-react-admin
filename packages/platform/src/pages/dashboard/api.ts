@@ -21,7 +21,7 @@ const WF = '/api/v1/sys/workflow'
 export const dashKeys = {
   all: ['dashboard'] as const,
   system: () => [...dashKeys.all, 'system'] as const,
-  attention: () => [...dashKeys.system(), 'attention'] as const,
+  attention: (tz: string) => [...dashKeys.system(), 'attention', tz] as const,
   services: () => [...dashKeys.system(), 'services'] as const,
   visits: (days: number, tz: string) => [...dashKeys.system(), 'visits', days, tz] as const,
 }
@@ -42,17 +42,25 @@ export type DeskTodoRow = InstanceRow & {
   back: boolean
   back_by: string | null
   back_reason: string | null
-  /** 转交过来的：原来在谁手上 */
+  /** 转交 / 改派过来的：**最近一次**是谁交过来的（不是转交链上最初那个人） */
   transferred_from: string | null
+  /** `transfer` = 上一个办理人转交 · `reassign` = 管理员改派（含离职交接） */
+  transfer_kind: 'transfer' | 'reassign' | null
   initiator_dept: string | null
 }
 
 /** 工作台一次取多少条待办（加急 → 快到期 → 到手时间排好的前 N 条，标题里的「几件 / 其中几件加急」也从这里数） */
 export const DESK_TODO_SIZE = 50
 
+/**
+ * `sort=attention` 那一份另给两个全量数：大标题「其中 M 件加急」和「退回给我」的数不能从取回来的这一页里数
+ * （80 件里 60 件加急，这一页只有 50 条）
+ */
+export type DeskTodoPage = PageData<DeskTodoRow> & { urgent_total?: number; returned_total?: number }
+
 export const deskTodoQuery = queryOptions({
   queryKey: [...workflowKeys.inbox(), 'desk'] as const,
-  queryFn: () => api.GET<PageData<DeskTodoRow>>(`${WF}/inbox/todo?page=1&size=${DESK_TODO_SIZE}&sort=attention`),
+  queryFn: () => api.GET<DeskTodoPage>(`${WF}/inbox/todo?page=1&size=${DESK_TODO_SIZE}&sort=attention`),
 })
 
 export type DeskDraft = { code: string; name: string | null; summary: string | null; updated_time: string }
@@ -65,7 +73,8 @@ export const deskDraftsQuery = queryOptions({
 
 // ── 我发起的 ─────────────────────────────────────────────────────────────────
 
-export type StepState = 'done' | 'current' | 'rejected'
+/** `sent_back` = 这一步把单退回去了（不是同意） */
+export type StepState = 'done' | 'current' | 'rejected' | 'sent_back'
 
 export type InitiatedRow = InstanceRow & {
   current_node_name: string | null
@@ -126,7 +135,8 @@ export type AttentionItem =
   | {
       kind: 'task_failed'
       level: 'critical' | 'warning'
-      task: string
+      /** celery 的任务名；没记上名字的失败是 null（「看记录」就不带这个参数） */
+      task: string | null
       name: string
       count: number
       time: string | null
@@ -135,16 +145,22 @@ export type AttentionItem =
   | {
       kind: 'login_fail_spike'
       level: 'critical' | 'warning'
+      /** 按哪一天算的「今天」（查看人显示时区里的日期） */
+      day: string
       count: number
       avg: number
       top_ip: string | null
       top_ip_count: number
     }
 
-export const attentionQuery = queryOptions({
-  queryKey: dashKeys.attention(),
-  queryFn: () => api.GET<AttentionItem[]>('/api/v1/sys/dashboard/attention'),
-})
+/** 「今天登录失败偏多」的「今天」按显示时区算，和同一屏上的柱状图同一种切法 */
+export const attentionQuery = () => {
+  const tz = getDisplayTimeZone()
+  return queryOptions({
+    queryKey: dashKeys.attention(tz),
+    queryFn: () => api.GET<AttentionItem[]>(`/api/v1/sys/dashboard/attention?tz=${encodeURIComponent(tz)}`),
+  })
+}
 
 export type ServiceState = { status: 'ok' | 'error' | 'stale' | 'missing' | 'unknown'; last_seen_seconds?: number | null }
 
