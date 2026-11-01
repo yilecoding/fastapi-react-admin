@@ -6,6 +6,7 @@
     "dev": "turbo dev --filter=!@admin/desktop",
     "desktop:dev": "pnpm --filter @admin/desktop dev",
     "mobile:dev": "pnpm --filter @admin/mobile start",
+    "docs:dev": "pnpm --filter @admin/docs start",
     "build": "turbo build",
     "lint": "turbo lint",
     "format": "turbo format",
