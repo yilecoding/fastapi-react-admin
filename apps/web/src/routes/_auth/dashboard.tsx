@@ -11,6 +11,8 @@ const searchSchema = z.object({
   wf: z.coerce.string().optional(),
   /** 编辑工作台（#202）。`catch`：手敲一个认不出来的值不该让整页 validateSearch 失败 */
   edit: z.boolean().optional().catch(undefined),
+  /** 「待我处理」的分段（#202）；不写 = 全部。认不出来的值回落成「全部」，不让整页 validateSearch 失败 */
+  todo: z.enum(["approve", "back", "draft"]).optional().catch(undefined),
 })
 
 /**

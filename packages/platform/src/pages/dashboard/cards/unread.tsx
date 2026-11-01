@@ -1,53 +1,69 @@
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { IconBell } from '@tabler/icons-react'
+import { IconBellOff } from '@tabler/icons-react'
 
-import { Badge } from '@admin/ui/components/badge'
 import { cn } from '@admin/ui/lib/utils'
 
-import { noticeIdOf, notificationsQuery, unreadCountQuery, type Notification } from '../../notification/api'
+import {
+  markableUnread,
+  noticeIdOf,
+  notificationsQuery,
+  unreadCountQuery,
+  useMarkAllNotificationsRead,
+  type Notification,
+} from '../../notification/api'
 import { categoryMeta, relativeTime } from '../../notification/shared'
 import { useNotificationOpen } from '../../notification/use-open'
-import { CARD_ACTION_CLASS, CARD_ROW_CLASS, DashboardCard } from '../card-shell'
+import { CARD_ACTION_CLASS, CountBadge, DashboardCard } from '../card-shell'
 import type { CardProps } from './types'
 
-const UNREAD_SIZE = 5
+const UNREAD_SIZE = 4
 
 /**
- * 「未读消息」卡：未读数 + 最近几条未读。
+ * 「和我有关的消息」（注册表 id 仍是 `unread`，存过的布局照认）：最近几条未读。
  *
  * 和铃铛同一份 query（`notificationKeys`）：这里点开一条标了已读，铃铛的红点跟着变；
  * socket 推来新消息时铃铛那边 `invalidateInbox` 一次，这张卡片也跟着重取 —— 不用再订阅一遍。
  *
- * 点一行的行为照铃铛（`useNotificationOpen` 是唯一实现）：
- * 公告**就地**开读者抽屉（已读交给抽屉，它知道这条是不是「必须确认」）；有合法链接的开对应页签；
- * 都没有的只标已读
+ * ⚠️ 站内通知**没有「谁发的」这一列**（`sys_notification` 只有标题 / 正文 / 分类 / 来源），设计稿上的发消息人头像
+ * 换成了分类图标 —— 不拿收件人、不从标题里猜一个人名出来。
+ *
+ * 点一行的行为照铃铛（`useNotificationOpen` 是唯一实现）：公告**就地**开读者抽屉；有合法链接的开对应页签；都没有的只标已读
  */
 export function UnreadCard({ openNotice }: CardProps) {
   const { t } = useTranslation()
   const count = useQuery(unreadCountQuery)
   const list = useQuery(notificationsQuery({ page: 1, size: UNREAD_SIZE, unread: true }))
+  const markAll = useMarkAllNotificationsRead()
   const { linkOf, readIfUnread } = useNotificationOpen()
   const items = list.data?.items ?? []
-  const total = count.data?.total
+  const total = count.data?.total ?? 0
+  const markable = markableUnread(count.data)
 
   return (
     <DashboardCard
+      variant="tile"
       testId="dash-unread"
-      title={t('未读消息')}
-      icon={<IconBell className="size-4 text-primary" aria-hidden />}
-      note={
-        total !== undefined && total > 0 ? (
-          <Badge variant="destructive" className="font-normal tabular-nums" data-testid="dash-unread-count">
-            {t('{{n}} 条未读', { n: total })}
-          </Badge>
-        ) : undefined
-      }
+      title={t('和我有关的消息')}
+      badge={total > 0 ? <CountBadge n={total} testId="dash-unread-count" /> : undefined}
       action={
-        <Link to="/notification" search={{}} className={CARD_ACTION_CLASS} data-testid="dash-unread-all">
-          {t('全部')}
-        </Link>
+        <button
+          type="button"
+          className={CARD_ACTION_CLASS}
+          disabled={markable === 0 || markAll.isPending}
+          onClick={() => markAll.mutate()}
+          data-testid="dash-unread-mark-all"
+        >
+          {t('全部已读')}
+        </button>
+      }
+      footer={
+        total > items.length ? (
+          <Link to="/notification" search={{}} className={CARD_ACTION_CLASS} data-testid="dash-unread-all">
+            {t('还有 {{n}} 条未读', { n: total - items.length })} →
+          </Link>
+        ) : undefined
       }
       loading={list.isPending}
       error={count.error ?? list.error}
@@ -58,8 +74,9 @@ export function UnreadCard({ openNotice }: CardProps) {
       hasData={Boolean(list.data)}
       empty={items.length === 0}
       emptyText={t('没有未读消息')}
+      emptyIcon={<IconBellOff className="size-6 text-muted-foreground/60" aria-hidden />}
     >
-      <ul className="flex flex-col divide-y divide-border/60">
+      <ul className="-my-2 flex flex-col">
         {items.map((n) => (
           <UnreadRow key={n.id} n={n} openNotice={openNotice} linkOf={linkOf} readIfUnread={readIfUnread} />
         ))}
@@ -67,6 +84,8 @@ export function UnreadCard({ openNotice }: CardProps) {
     </DashboardCard>
   )
 }
+
+const ROW = 'flex w-full items-start gap-2.5 rounded-md py-2 text-start transition-colors hover:bg-muted/40'
 
 function UnreadRow({
   n,
@@ -86,11 +105,16 @@ function UnreadRow({
   const onActivate = () => (noticeId ? openNotice(noticeId) : readIfUnread(n))
   const body = (
     <>
-      <span className={cn('flex size-6 shrink-0 items-center justify-center rounded-full', meta.tone)}>
+      <span className={cn('grid size-[30px] shrink-0 place-items-center rounded-full', meta.tone)} aria-hidden>
         <meta.Icon className="size-3.5" />
       </span>
-      <span className="min-w-0 flex-1 truncate">{n.title}</span>
-      <span className="shrink-0 text-xs text-muted-foreground">{relativeTime(n.created_time, t)}</span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate font-semibold">{n.title}</span>
+        <span className="text-xs text-muted-foreground">
+          {t(meta.label)} · {relativeTime(n.created_time, t)}
+        </span>
+      </span>
+      <i className="mt-2 size-[7px] shrink-0 rounded-full bg-primary" aria-label={t('未读')} />
     </>
   )
   return (
@@ -101,13 +125,13 @@ function UnreadRow({
           to={to.to as never}
           search={to.search as never}
           onClick={onActivate}
-          className={CARD_ROW_CLASS}
+          className={ROW}
           data-testid={`dash-unread-${n.id}`}
         >
           {body}
         </Link>
       ) : (
-        <button type="button" onClick={onActivate} className={CARD_ROW_CLASS} data-testid={`dash-unread-${n.id}`}>
+        <button type="button" onClick={onActivate} className={ROW} data-testid={`dash-unread-${n.id}`}>
           {body}
         </button>
       )}

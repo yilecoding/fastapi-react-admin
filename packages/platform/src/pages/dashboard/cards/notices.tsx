@@ -9,7 +9,7 @@ import { cn } from '@admin/ui/lib/utils'
 import { CATEGORY } from '../../notification/api'
 import { noticeFeedQuery, publishedAt } from '../../notice/api'
 import { AttachmentCount, NoticeLevelPill, PinnedMark } from '../../notice/shared'
-import { CARD_ACTION_CLASS, CARD_ROW_CLASS, DashboardCard } from '../card-shell'
+import { CARD_ACTION_CLASS, CountBadge, DashboardCard } from '../card-shell'
 import type { CardProps } from './types'
 
 /** 卡片里放几条。置顶的在前（后端排序），翻更多去消息中心的「公告」分类 */
@@ -30,8 +30,7 @@ export function NoticesCard({ openNotice }: CardProps) {
     <DashboardCard
       testId="dash-notices"
       title={t('公告')}
-      icon={<IconSpeakerphone className="size-4 text-amber-600 dark:text-amber-500" aria-hidden />}
-      note={query.data && query.data.total > 0 ? t('共 {{n}} 条', { n: query.data.total }) : undefined}
+      badge={query.data && query.data.total > 0 ? <CountBadge n={query.data.total} /> : undefined}
       action={
         // 「全部」= 消息中心的公告分类。那一页不挂权限码，谁都进得去
         <Link
@@ -47,8 +46,10 @@ export function NoticesCard({ openNotice }: CardProps) {
       // 硬纪律 9：取数失败不能长成「暂无公告」—— 那和「真的没发过公告」分不出来
       error={query.error}
       onRetry={() => void query.refetch()}
+      hasData={Boolean(query.data)}
       empty={items.length === 0}
       emptyText={t('暂无公告')}
+      emptyIcon={<IconSpeakerphone className="size-6 text-muted-foreground/60" aria-hidden />}
     >
       <ul className="flex flex-col divide-y divide-border/60">
         {items.map((n) => (
@@ -56,7 +57,7 @@ export function NoticesCard({ openNotice }: CardProps) {
             <button
               type="button"
               onClick={() => openNotice(n.id)}
-              className={CARD_ROW_CLASS}
+              className="flex w-full items-center gap-2 px-5 py-2.5 text-start text-sm transition-colors hover:bg-muted/40"
               data-testid={`dash-notice-${n.id}`}
               data-unread={!n.read}
             >

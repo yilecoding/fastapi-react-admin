@@ -151,10 +151,28 @@ MFA 这条依赖检查第一次就踩到了：变异检验时 `all` 被真写进
 - ⚠️ **测试收尾删这张表的行要走 Core，不能裸 `text()`**：`key` 在 SQL Server / MySQL 是保留字。
   实测：`text("DELETE FROM sys_user_preference WHERE key LIKE …")` 在 PostgreSQL 上全绿，换到 SQL Server
   20 条用例在 fixture 里一起 `ProgrammingError`；改成 `delete(UserPreference).where(...)` 三个方言都过
-- ⚠️ 同一个人同一个键**第一次**被两个请求同时写，后到的那个撞唯一约束（先查后写，三个方言的 upsert 语法各不相同）。
-  只可能是同一个人两台设备同一瞬间第一次保存，接受；没有实测复现过
+- ⚠️ 同一个人同一个键**第一次**被两个请求同时写，后到的那个撞唯一约束回 500（先查后写，三个方言的 upsert 语法各不相同）。
+  真实用户只可能是两台设备同一瞬间第一次保存，接受。**E2E 撞上过**（2026-11-01）：`notice-reach.spec.ts` 是并行的，两个 worker 的
+  `beforeAll` 同时给 zhoumin 第一次存布局，一个 `UniqueViolationError` → 500。造前置数据的地方再存一次就是更新（那个 spec 里重试了）
 
 **实测证据**：`tests/api_v1/test_user_preference.py` 20 条（往返 + 整份覆盖 · 只能动自己的 · 未登录 401 · 9 个坏 key ·
 5 种坏 JSON 且旧值不被覆盖 · 字节上限边界 · 键数上限）。变异各自当场红：放行 NaN · 按字符算大小 · 查询不带 `user_id` ·
 去掉键数上限。迁移在三个方言的私有库上都是 `downgrade -1`（表没了）→ `upgrade head`（表回来）：PostgreSQL 16 /
 SQL Server 2022（`sys.identity_columns` 对这张表 0 行）/ MySQL 8.4；之后在同一个库上跑这 20 条 + 迁移守卫 7 条，三个方言都全绿。
+
+## 工作台「系统运行」三个接口（`/sys/dashboard/attention|services|visits`，#202）
+
+`service/dashboard_service.py`。前端只在「系统运行」区用（见 [`pages/dashboard` 分册](../../../../../packages/platform/src/pages/dashboard/AGENTS.md)）。
+一张卡片一个接口，守卫各自对齐：`services` 是 `DependsSuperUser`（同在线用户页），`visits` 要 `log:login:list`，
+`attention` 只要登录、**逐条按权限过滤**（Webhook 停用 `open:webhook:list` · 定时任务失败 `task:scheduler:edit` · 登录失败突增 `log:login:list`）。
+
+- 🔴 **「哪一天」按查看人的显示时区切**（`visits?tz=`）：按服务端时区切，人在别的时区时柱子整体错一天，不报错（同 i18n 分册 `dateKey` 那条）
+- 🔴 **只提醒自动停用的 Webhook**（`disabled_reason == 'auto'`）：手动停的是人自己关的
+- 🔴 **在线会话数不算 swagger 调试口的会话**（同在线用户页）。第一版测试只断言「三端加起来等于 total」，把过滤去掉照样绿 ——
+  `token_headers` 本身就是一个 swagger 会话，现在拿 `/monitors/sessions` 的条数对总数，变异当场红
+- ⚠️ **测试在共享库里垫数据要垫到「一定是我」**：「失败最多的 IP」那条原来只垫刚好够触发突增的条数，库里今天已经有别的 IP 失败了 6 次时
+  （截图用的私有库）`top_ip` 就成了别人。现在至少垫到比今天已有失败的总数还多一条
+
+**实测证据**：`tests/api_v1/test_dashboard_ops.py` 6 条 + 审批那边的 `plugin/workflow/tests/test_dashboard_feeds.py` 5 条，
+2026-11-01 在 PostgreSQL 16 / SQL Server 2022 / MySQL 8.4 三个私有库上都全绿（连同个人偏好 20 条）。
+变异各自当场红：任务失败不按权限过滤 · 手动停用的也提醒 · 按服务端时区切天 · 会话数算上 swagger（加了上面那句断言之后）。

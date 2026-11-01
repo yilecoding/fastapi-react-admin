@@ -1,12 +1,11 @@
 import { menuTitle } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 import { Link } from '@tanstack/react-router'
-import { IconBolt } from '@tabler/icons-react'
 
 import { MenuIcon } from '../../../shell/icon-registry'
 import { QUICK_LINKS_MAX } from '../layout'
 import type { NavNode } from '../../../shell/use-sidebar'
-import { DashboardCard } from '../card-shell'
+import { CARD_ACTION_CLASS, DashboardCard } from '../card-shell'
 import type { CardProps } from './types'
 
 /** 没挑过的人默认放侧边栏里的前几个页面 */
@@ -51,32 +50,41 @@ export function resolveQuickLinks(quickLinks: string[] | null, pages: NavNode[])
 }
 
 /**
- * 「快捷入口」卡：点一个就开对应的页签。
+ * 「常用入口」卡（注册表 id 仍是 `quick-links`，存过的布局照认）：点一个就开对应的页签。
  *
  * 用 `<Link>` 不用 `useNavigate()`（硬纪律 1）：`<Link>` 走 router context，隐藏的 tab 里照样能用；
  * 落地之后 `useSyncTabs` 按 location 开 / 切页签，和点侧边栏是同一条路
  */
-export function QuickLinksCard({ quickLinks, pages }: CardProps) {
+export function QuickLinksCard({ quickLinks, pages, onCustomize, editing }: CardProps) {
   const { t } = useTranslation()
   const links = resolveQuickLinks(quickLinks, pages)
 
   return (
     <DashboardCard
+      variant="tile"
       testId="dash-quick-links"
-      title={t('快捷入口')}
-      icon={<IconBolt className="size-4 text-primary" aria-hidden />}
+      title={t('常用入口')}
+      action={
+        editing ? undefined : (
+          <button type="button" onClick={onCustomize} className={CARD_ACTION_CLASS} data-testid="dash-quick-links-edit">
+            {t('编辑')}
+          </button>
+        )
+      }
       empty={links.length === 0}
-      emptyText={t('还没有快捷入口。点「编辑工作台」，从你的菜单里挑几个常用页面。')}
+      emptyText={t('还没有常用入口。点「自定义」，从你的菜单里挑几个常用页面。')}
     >
-      <ul className="grid grid-cols-2 gap-2 @xl/main:grid-cols-3 @5xl/main:grid-cols-6">
+      <ul className="grid grid-cols-3 gap-1.5">
         {links.map((p) => (
           <li key={p.path} className="min-w-0">
             <Link
               to={p.path as never}
-              className="flex h-full flex-col items-center gap-1.5 rounded-md border border-border/60 px-2 py-3 text-center text-sm transition-colors hover:border-primary/40 hover:bg-muted/40"
+              className="flex h-full flex-col items-center gap-2 rounded-[10px] px-1 py-3 text-center text-[13px] font-semibold transition-colors hover:bg-muted/60"
               data-testid={`dash-quick-link-${p.path}`}
             >
-              <MenuIcon name={p.icon} className="size-5 text-muted-foreground" />
+              <span className="grid size-10 place-items-center rounded-xl bg-muted text-foreground/80" aria-hidden>
+                <MenuIcon name={p.icon} className="size-[19px]" />
+              </span>
               <span className="w-full truncate">{menuTitle(t, p.path, p.title)}</span>
             </Link>
           </li>

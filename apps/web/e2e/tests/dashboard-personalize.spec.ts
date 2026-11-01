@@ -7,27 +7,31 @@ import type { ApiClient } from "../fixtures/base"
 import { uniqueCode } from "../utils/ids"
 
 /**
- * 工作台个性化（#202）：卡片按权限出现 · 编辑（显隐 / 键盘拖拽 / 宽度）· 存服务端、跨浏览器一样 · 恢复默认 ·
- * 存的布局里有认不出来的卡片照常渲染 · 读布局失败要看得见。
+ * 工作台（#202）：卡片按权限出现 · 编辑（显隐 / 键盘拖拽 / 宽度）· 存服务端、跨浏览器一样 · 恢复默认 ·
+ * 存的布局里有认不出来的卡片照常渲染 · 读布局失败要看得见 · 「待我处理」/「我发起的」用真数据 · 系统运行区只给管理员。
  *
- * 🔴 **全用非管理员**：admin 什么卡片都能用，「没权限的卡片不渲染」拿它测是假绿。账号是 `beforeAll` 现建的
- * 普通员工（普通员工角色没有日志 / 用户权限，正好是「只有人人都有的四张」那种人），**一条用例一个账号**：
- * 布局按人存，两条用例共用一个人会互相改对方的布局（文件里默认并行）。
+ * 🔴 **员工视图全用非管理员**：admin 什么卡片都能用，「没权限的卡片不渲染」拿它测是假绿。账号是 `beforeAll` 现建的
+ * 普通员工（普通员工角色没有日志 / 任务 / 开放平台权限，也不是超管 —— 正好一张系统运行区的卡片都没有），
+ * **一条用例一个账号**：布局按人存，两条用例共用一个人会互相改对方的布局（文件里默认并行）。
  */
 
 const PASSWORD = "Dash!123456"
 const DASH = '[data-tab="/_auth/dashboard"]'
 const PREF = "/api/v1/sys/users/me/preferences/dashboard.layout"
-/** 普通员工的默认布局：人人都有的四张，按注册表顺序 */
-const STAFF_DEFAULT = ["quick-links", "todo", "unread", "notices"]
+/** 普通员工的默认布局（按注册表顺序）。「公告」默认不显示，所以不在里面 */
+const STAFF_DEFAULT = ["todo", "initiated", "quick-start", "quick-links", "unread"]
+/** 系统运行区的三张，员工一张都不该有 */
+const SYSTEM_CARDS = ["attention", "services", "visits"]
 
-const KEYS = ["default", "edit", "reset", "bogus", "unreadable", "broken", "savefail"] as const
+const KEYS = ["default", "edit", "reset", "bogus", "unreadable", "broken", "savefail", "approver", "initiator"] as const
 type Key = (typeof KEYS)[number]
 
 test.describe("工作台个性化 · 普通员工", () => {
   let admin: ApiClient
   let disposeAdmin: () => Promise<void>
   const users = {} as Record<Key, { id: string; username: string }>
+  /** 真数据那条现建的流程定义：有过实例的删不掉，收尾时停用 —— 不然每跑一轮，所有人的「快速发起」里就多一个 */
+  const definitions: string[] = []
 
   test.beforeAll(async () => {
     ;({ api: admin, dispose: disposeAdmin } = await createApiClient())
@@ -59,6 +63,9 @@ test.describe("工作台个性化 · 普通员工", () => {
   test.beforeEach(() => test.slow())
 
   test.afterAll(async () => {
+    for (const id of definitions) {
+      await admin.put(`/api/v1/sys/workflow/definitions/${id}/status`, { enabled: false }).catch(() => {})
+    }
     for (const u of Object.values(users)) await admin.del(`/api/v1/sys/users/${u.id}`).catch(() => {})
     await disposeAdmin()
   })
@@ -110,22 +117,26 @@ test.describe("工作台个性化 · 普通员工", () => {
     await expect(handle).not.toHaveAttribute("aria-pressed", "true")
   }
 
-  test("🔴 默认布局按权限算：普通员工只有「快捷入口 · 我的待办 · 未读消息 · 公告」，没有一张「没有权限」", async ({ page }) => {
+  test("🔴 默认布局按权限算：普通员工是「待我处理 · 我发起的 · 快速发起 · 常用入口 · 和我有关的消息」，没有系统运行区", async ({ page }) => {
     await open(page, "default")
     const dash = page.locator(DASH)
 
-    // 先断言「应该看见的」（e2e 分册）：四张卡片按默认顺序、各自加载完
+    // 先断言「应该看见的」（e2e 分册）：五张卡片按默认顺序、各自加载完
     await expectCards(page, STAFF_DEFAULT)
-    for (const tid of ["dash-quick-links", "dash-todo", "dash-unread", "dash-notices"]) {
-      await expect(dash.getByTestId(tid)).toBeVisible()
-      await expect(dash.getByTestId(`${tid}-loading`)).toHaveCount(0)
+    for (const id of STAFF_DEFAULT) {
+      await expect(dash.getByTestId(`dash-${id}`)).toBeVisible()
+      await expect(dash.getByTestId(`dash-${id}-loading`)).toHaveCount(0)
     }
-    // 快捷入口默认从他自己的侧边栏里取了几个页面
+    await expect(dash.getByTestId("dash-card-todo")).toHaveAttribute("data-width", "two-thirds")
+    // 常用入口默认从他自己的侧边栏里取了几个页面
     await expect(dash.locator('[data-testid^="dash-quick-link-/"]').first()).toBeVisible()
+    // 新账号手上什么都没有：大标题说平静的那句，不是「你有 0 件事」
+    await expect(dash.getByTestId("dash-headline")).toHaveText("手上没有要处理的事")
 
-    // 再断言「不该看见的」：管理员那几张不在、也没有任何一块「没有权限」/ 错误
-    for (const tid of ["dash-metrics", "dash-trend", "dash-recent-logins", "dash-recent-operas", "metric-online-denied"]) {
-      await expect(dash.getByTestId(tid)).toHaveCount(0)
+    // 再断言「不该看见的」：系统运行区整块不在（连标题行都没有）、公告默认不显示、也没有任何一块「没有权限」/ 错误
+    await expect(dash.getByTestId("dash-system")).toHaveCount(0)
+    for (const id of [...SYSTEM_CARDS, "notices"]) {
+      await expect(dash.getByTestId(`dash-card-${id}`)).toHaveCount(0)
     }
     await expect(dash.getByText("没有权限")).toHaveCount(0)
     await expect(dash.getByText("仅超级管理员可见")).toHaveCount(0)
@@ -143,16 +154,19 @@ test.describe("工作台个性化 · 普通员工", () => {
     const editor = dash.getByTestId("dash-editor")
     await expect(editor).toBeVisible()
 
-    // 隐藏「未读消息」
+    // 员工的编辑器里只有「我的工作」那一组
+    await expect(editor.getByTestId("dash-editor-list-system")).toHaveCount(0)
+    // 隐藏「和我有关的消息」
     await editor.getByTestId("dash-editor-visible-unread").click()
     await expect(editor.getByTestId("dash-editor-row-unread")).toHaveAttribute("data-visible", "false")
-    // 「公告」用键盘拖到最前
+    // 打开默认隐藏的「公告」，再用键盘拖到最前
+    await editor.getByTestId("dash-editor-visible-notices").click()
     await keyboardMoveToTop(page, "notices", "公告")
-    // 「我的待办」改全宽
+    // 「待我处理」改整行
     await editor.getByTestId("dash-editor-width-todo-full").click()
 
     // 下面的网格是实时预览
-    const expected = ["notices", "quick-links", "todo"]
+    const expected = ["notices", "todo", "initiated", "quick-start", "quick-links"]
     await expectCards(page, expected)
     await expect(dash.getByTestId("dash-card-todo")).toHaveAttribute("data-width", "full")
 
@@ -184,15 +198,17 @@ test.describe("工作台个性化 · 普通员工", () => {
       v: 1,
       cards: [
         { id: "unread", visible: true, width: "full" },
-        { id: "notices", visible: false, width: "full" },
+        { id: "notices", visible: true, width: "full" },
         { id: "todo", visible: true, width: "full" },
+        { id: "initiated", visible: false, width: "full" },
+        { id: "quick-start", visible: false, width: "full" },
         { id: "quick-links", visible: false, width: "full" },
       ],
     })
     await open(page, "reset")
     const dash = page.locator(DASH)
     // 先确认存的那份真的生效了（否则「恢复之后是默认」在什么都没存时也成立）
-    await expectCards(page, ["unread", "todo"])
+    await expectCards(page, ["unread", "notices", "todo"])
 
     await dash.getByTestId("dash-edit").click()
     await dash.getByTestId("dash-editor-reset").click()
@@ -202,7 +218,7 @@ test.describe("工作台个性化 · 普通员工", () => {
 
     await page.reload()
     await expectCards(page, STAFF_DEFAULT)
-    await expect(dash.getByTestId("dash-card-todo")).toHaveAttribute("data-width", "half")
+    await expect(dash.getByTestId("dash-card-todo")).toHaveAttribute("data-width", "two-thirds")
   })
 
   test("🔴 存的布局里有不存在的卡片 id / 没权限的卡片：忽略它们，页面照常；新卡片按默认排到最后", async ({ page }) => {
@@ -210,8 +226,8 @@ test.describe("工作台个性化 · 普通员工", () => {
       v: 1,
       cards: [
         { id: "no-such-card", visible: true, width: "full" },
-        // 普通员工没有日志权限：存了也不能出现
-        { id: "recent-logins", visible: true, width: "full" },
+        // 普通员工没有登录日志权限：存了也不能出现（也不能因为它画出系统运行那一行标题）
+        { id: "visits", visible: true, width: "full" },
         { id: "notices", visible: true, width: "half" },
         { id: "unread", visible: false, width: "half" },
       ],
@@ -220,10 +236,11 @@ test.describe("工作台个性化 · 普通员工", () => {
     const dash = page.locator(DASH)
 
     // 存的那两张在前（显隐 / 宽度照存的），存的里面没有的按默认排到最后
-    await expectCards(page, ["notices", "quick-links", "todo"])
+    await expectCards(page, ["notices", "todo", "initiated", "quick-start", "quick-links"])
     await expect(dash.getByTestId("dash-card-notices")).toHaveAttribute("data-width", "half")
     await expect(dash.getByTestId("dash-notices")).toBeVisible()
-    await expect(dash.getByTestId("dash-recent-logins")).toHaveCount(0)
+    await expect(dash.getByTestId("dash-visits")).toHaveCount(0)
+    await expect(dash.getByTestId("dash-system")).toHaveCount(0)
     await expect(dash.getByTestId("dash-layout-unreadable")).toHaveCount(0)
     await expect(dash.getByTestId("dash-layout-error")).toHaveCount(0)
   })
@@ -270,7 +287,7 @@ test.describe("工作台个性化 · 普通员工", () => {
     fail = false
     await banner.getByRole("button").click()
     await expect(banner).toBeHidden()
-    await expectCards(page, ["notices", "quick-links", "todo", "unread"])
+    await expectCards(page, ["notices", ...STAFF_DEFAULT])
     await expect(dash.getByTestId("dash-card-notices")).toHaveAttribute("data-width", "half")
     await expect(dash.getByTestId("dash-edit")).toBeEnabled()
   })
@@ -313,13 +330,158 @@ test.describe("工作台个性化 · 普通员工", () => {
 
     await dash.getByTestId("dash-edit").click()
     const editor = dash.getByTestId("dash-editor")
-    await editor.getByTestId("dash-editor-visible-notices").click()
-    const edited = ["quick-links", "todo", "unread"]
+    await editor.getByTestId("dash-editor-visible-unread").click()
+    const edited = ["todo", "initiated", "quick-start", "quick-links"]
     await expectCards(page, edited)
 
     await editor.getByTestId("dash-editor-save").click()
     await expect(editor.getByTestId("dash-editor-save-error")).toBeVisible()
     await expect(page).toHaveURL(/[?&]edit=true/)
     await expectCards(page, edited)
+  })
+  test("🔴 待我处理用真数据：加急在前 · 超时胶囊照动作出字 · 「处理」就地开审批单 · 分段进 URL；发起人那边是带名字的步骤条", async ({
+    page,
+    browser,
+  }) => {
+    // 两步的流程：第一步给「approver」（48 小时不办自动同意），第二步给赵磊；「initiator」发两张，后一张加急
+    const code = uniqueCode("E2EDASH")
+    const step = (id: string, name: string, userId: string, next: unknown, timeout?: unknown) => ({
+      type: "approval",
+      id,
+      name,
+      mode: "any",
+      assignee: { kind: "user", user_ids: [userId] },
+      onEmpty: "reject",
+      fieldPerms: {},
+      ...(timeout ? { timeout } : {}),
+      next,
+    })
+    const found = (await admin.get("/api/v1/sys/users?page=1&size=20&username=zhaolei")) as {
+      items: { id: string; username: string }[]
+    }
+    const zhaolei = found.items.find((u) => u.username === "zhaolei")!.id
+    const def = (await admin.post("/api/v1/sys/workflow/definitions", {
+      code,
+      name: `E2E 采购 ${code}`,
+      form: { schemaVersion: 1, fields: [{ id: "f", type: "text", label: "事由" }] },
+      model: {
+        schemaVersion: 1,
+        root: {
+          type: "start",
+          id: "start",
+          next: step("n1", "部门初审", users.approver.id, step("n2", "财务复核", zhaolei, null), { hours: 48, action: "approve" }),
+        },
+      },
+    })) as { id: string }
+    definitions.push(def.id)
+    await admin.post(`/api/v1/sys/workflow/definitions/${def.id}/publish`)
+
+    const ctx = await request.newContext({ baseURL: API_BASE })
+    const ids: string[] = []
+    try {
+      const { token } = await loginToken(ctx, users.initiator.username, PASSWORD)
+      for (const [reason, urgent, k] of [["普通的一张", false, "plain"], ["加急的一张", true, "urgent"]] as const) {
+        const res = await ctx.post(`${API_BASE}/api/v1/sys/workflow/instances`, {
+          headers: { Authorization: `Bearer ${token}` },
+          data: { code, form: { f: reason }, urgent, key: `${code}-${k}` },
+        })
+        const body = (await res.json()) as { data: { instance_id: string } }
+        expect(res.ok(), JSON.stringify(body)).toBeTruthy()
+        ids.push(body.data.instance_id)
+      }
+    } finally {
+      await ctx.dispose()
+    }
+    const [plain, urgent] = ids as [string, string]
+
+    // ── 审批人 ──
+    await open(page, "approver")
+    const dash = page.locator(DASH)
+    await expect(dash.getByTestId("dash-headline")).toHaveAttribute("data-total", "2")
+    await expect(dash.getByTestId("dash-headline")).toHaveText("你有 2 件事等着处理，其中 1 件加急")
+    const rows = dash.locator('[data-testid="dash-todo-list"] > li')
+    await expect(rows).toHaveCount(2)
+    // 加急的后发，但排在前面（后端 sort=attention）
+    await expect(rows.nth(0)).toHaveAttribute("data-urgent", "true")
+    await expect(rows.nth(1)).toHaveAttribute("data-urgent", "false")
+    // 节点配的是「48 小时后自动同意」：胶囊照动作说，不是一律「快到期」
+    await expect(rows.nth(0).getByTestId("dash-todo-due")).toContainText("后自动同意")
+    await expect(dash.getByTestId("dash-todo-count-approve")).toHaveText("2")
+    await expect(dash.getByTestId("dash-todo-count-back")).toHaveText("0")
+
+    // 「处理」就地开审批单（URL 带上 wf，硬纪律 2），不跳到审批中心
+    await rows.nth(0).getByTestId("dash-todo-action").click()
+    await expect(page).toHaveURL(new RegExp(`[?&]wf=${urgent}`))
+    await expect(page).toHaveURL(/\/dashboard/)
+    await expect(page.getByTestId("wf-instance-sheet")).toBeVisible()
+    await expect(page.getByTestId("wf-instance-sheet").getByTestId("wf-act-approve")).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(page).not.toHaveURL(/[?&]wf=/)
+
+    // 分段进 URL：切到「草稿」→ 刷新还在「草稿」
+    await dash.getByTestId("dash-todo-tab-draft").click()
+    await expect(page).toHaveURL(/[?&]todo=draft/)
+    await expect(dash.getByTestId("dash-todo-empty")).toBeVisible()
+    await page.reload()
+    await expect(dash.getByTestId("dash-todo-tab-draft")).toHaveAttribute("aria-selected", "true")
+    await dash.getByTestId("dash-todo-tab-all").click()
+    await expect(page).not.toHaveURL(/[?&]todo=/)
+    await expect(rows).toHaveCount(2)
+
+    // ── 发起人：「我发起的」里两张都在第一步，步骤条画出 发起 ✓ · 审批人（当前）· 赵磊（后面那步，推演出来的）。
+    //    一步只有一个人办时写人名、多人写节点名（同设计稿「发起 → 赵磊 → 财务」）──
+    const other = await browser.newContext()
+    try {
+      const p2 = await other.newPage()
+      await open(p2, "initiator")
+      const item = p2.locator(DASH).getByTestId(`dash-initiated-${plain}`)
+      await expect(item).toBeVisible()
+      await expect(item.getByTestId("dash-initiated-status")).toHaveText("审批中")
+      const steps = item.getByTestId("dash-initiated-steps")
+      await expect(steps.locator('[data-state="start"]')).toHaveText("发起")
+      await expect(steps.locator('[data-state="current"]')).toHaveText(users.approver.username)
+      await expect(steps.locator('[data-state="next"]')).toHaveText(["赵磊"])
+      await expect(item).toContainText("手上")
+      // 刚发起的单还没等够一天，不给「催办」
+      await expect(item.getByTestId("dash-initiated-remind")).toHaveCount(0)
+    } finally {
+      await other.close()
+    }
+  })
+})
+
+test.describe("工作台 · 系统运行区（管理员）", () => {
+  test("🔴 超管看得到「系统运行」：需要你留意 · 服务状态 · 近 14 天访问，三块各自加载完、没有错误块", async ({ page, api }) => {
+    test.slow()
+    // admin 在这个库里可能存过布局（别的会话 / 截图脚本）：先存一份空的，等于「全按默认」
+    await api.put("/api/v1/sys/users/me/preferences/dashboard.layout", { value: { v: 1, cards: [] } })
+    await loginPageAs(page, "admin", "123456")
+    await page.goto("/dashboard")
+    const dash = page.locator(DASH)
+
+    const system = dash.getByTestId("dash-system")
+    await expect(system).toBeVisible()
+    await expect(system).toContainText("仅管理员可见")
+    await expect
+      .poll(() =>
+        system
+          .locator('[data-testid="dash-grid-system"] > [data-testid^="dash-card-"]')
+          .evaluateAll((els) => els.map((e) => (e as unknown as { dataset: { testid: string } }).dataset.testid))
+      )
+      .toEqual(SYSTEM_CARDS.map((id) => `dash-card-${id}`))
+    for (const id of SYSTEM_CARDS) {
+      await expect(dash.getByTestId(`dash-${id}`)).toBeVisible()
+      await expect(dash.getByTestId(`dash-${id}-loading`)).toHaveCount(0)
+      await expect(dash.getByTestId(`dash-${id}-error`)).toHaveCount(0)
+    }
+    // 服务状态：五个服务一行一个（E2E 环境没起 worker / beat，所以结论不一定是「全部正常」—— 只验它画出了结论）
+    await expect(dash.locator('[data-testid^="dash-service-"]')).toHaveCount(5)
+    await expect(dash.getByTestId("dash-services-summary")).toBeVisible()
+    await expect(dash.getByTestId("dash-sessions-total")).not.toHaveText("—")
+    // 近 14 天：14 组柱子，最后一组是今天（「哪一天」按显示时区切）
+    await expect(dash.getByTestId("dash-visits-day")).toHaveCount(14)
+    await expect(dash.getByTestId("dash-system-updated")).toBeVisible()
+    // 管理员的待办和员工是同一个组件
+    await expect(dash.getByTestId("dash-todo")).toBeVisible()
   })
 })

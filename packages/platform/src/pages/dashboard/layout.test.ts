@@ -87,6 +87,13 @@ describe('工作台布局：存的和现在能用的卡片怎么合并', () => {
     ])
   })
 
+  it('四档宽度都认（第一期只有半宽 / 全宽，存过的那两种照样认）', () => {
+    for (const width of ['third', 'half', 'two-thirds', 'full'] as const) {
+      const r = resolveLayout({ v: 1, cards: [{ id: 'a', visible: true, width }] }, AVAILABLE)
+      expect(r.layout.items[0]).toEqual({ id: 'a', visible: true, width })
+    }
+  })
+
   it('整份认不出来 → 默认布局，但要标出来（不能假装是这个人存的那份）', () => {
     for (const bad of ['oops', 42, [], { v: 1 }, { cards: 'x' }]) {
       const r = resolveLayout(bad, AVAILABLE)

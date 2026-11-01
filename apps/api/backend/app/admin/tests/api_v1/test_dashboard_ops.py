@@ -186,7 +186,9 @@ def test_attention_lists_what_needs_a_human(
     days = list(week.values())
     today_fails, week_fails = days[-1]['fails'], sum(d['fails'] for d in days[:-1])
     need = max(LOGIN_FAIL_MIN, int(LOGIN_FAIL_RATIO * week_fails / 7) + 1) - today_fails
-    _login_rows(now, fails=max(need, 1) + 1)
+    # 至少比今天已有的失败**总数**还多一条：库里可能已经有别的 IP 今天失败了好几次，只垫「刚好够」的话
+    # 失败最多的那个 IP 就不一定是这里的（开着截图数据的私有库上实测撞过）
+    _login_rows(now, fails=max(need, today_fails, 1) + 1)
 
     items = _attention(client, token_headers)
     task = next(i for i in items if i['kind'] == 'task_failed' and i['task'] == TASK)
@@ -239,5 +241,9 @@ def test_services_reports_each_service_and_sessions_by_client(
     sessions = data['sessions']
     assert set(sessions) == {'total', 'web', 'desktop', 'mobile'}
     assert sessions['total'] == sessions['web'] + sessions['desktop'] + sessions['mobile']
+    # 和在线用户页同一个口径：swagger 调试口的会话不算 —— 这条用例自己就拿着一个（`token_headers` 走的是 swagger 口），
+    # 算进去的话这里会比在线用户页多一个
+    online = client.get('/monitors/sessions', headers=token_headers).json()['data']
+    assert sessions['total'] == len(online)
     # 超管专属（在线会话和在线用户页同一个门槛）
     assert client.get('/sys/dashboard/services', headers=staff_headers).status_code == 403
