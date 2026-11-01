@@ -1,23 +1,23 @@
 ---
-title: Deploying to a server
-description: Deploy fastapi-react-admin with Docker Compose from images CI pushes to GHCR — three files on the server, migrations before start, one health URL, rollback by commit tag.
+title: 部署到服务器
+description: 用 CI 推到 GHCR 的镜像 + Docker Compose 部署：服务器上只放三份文件，先迁移再启动，一个健康检查地址，按提交号回滚。
 sidebar:
   order: 2
 ---
 
-Production runs from Docker images that CI builds and pushes to GitHub Container Registry (GHCR) after every green `main` build. The server only needs Docker and three files: `docker-compose.prod.yml`, the `prod.sh` script and an `.env.server` with your settings. `prod.sh up` runs Alembic migrations first and starts the services only if they succeed.
+生产环境跑的是 CI 构建好的 Docker 镜像：`main` 每次全绿后，CI 把镜像推到 GitHub Container Registry（GHCR）。服务器上只需要 Docker 和三份文件：`docker-compose.prod.yml`、`prod.sh` 脚本、填好配置的 `.env.server`。`prod.sh up` 会先跑 Alembic 迁移，成功了才启动服务。
 
-## What runs in production?
+## 生产环境跑了哪些服务
 
-`docker-compose.prod.yml` starts the API, a Celery worker, a separate Celery beat (scheduler) and the web container (nginx serving the built frontend and proxying the API). The database and Redis are yours — point `.env.server` at them.
+`docker-compose.prod.yml` 启动 API、Celery worker、单独的 Celery beat（调度器）和 web 容器（nginx 托管前端产物并反代 API）。数据库和 Redis 用你自己的，在 `.env.server` 里指过去。
 
 :::caution
-In development the worker runs with an embedded beat (`celery worker -B`). Don't do that in production: with several replicas, every replica would run its own beat and each schedule would fire N times. Production runs exactly one beat container.
+开发环境的 worker 内嵌了 beat（`celery worker -B`）。生产不能这么跑：多副本时每个副本都会起一个 beat，同一条定时任务会被触发 N 次。生产只跑一个 beat 容器。
 :::
 
-## How do I install it on a new server?
+## 新服务器第一次怎么装
 
-No repository clone is needed:
+不需要 clone 仓库：
 
 ```bash
 mkdir -p /srv/fastapi-react-admin && cd $_
@@ -26,63 +26,66 @@ curl -fsSLO $base/docker-compose.prod.yml
 curl -fsSL  $base/deploy/prod.sh -o prod.sh
 curl -fsSL  $base/apps/api/deploy/backend/docker-compose/.env.server.example -o .env.server
 
-# Fill in every CHANGE_ME, then hand the file to the container user (uid 1000)
+# 填掉所有 CHANGE_ME，再把文件交给容器里的用户（uid 1000）
 vi .env.server
 chown 1000:1000 .env.server && chmod 600 .env.server
 
-# Machine-specific values go here; the compose file stays byte-identical to the repo
+# 本机的差异只写在这里，compose 文件保持和仓库逐字节一致
 cat > .env <<'EOF'
 FBA_ENV_FILE=./.env.server
 FBA_WEB_PORT=8080
+FBA_PULL_MIRROR=ghcr.nju.edu.cn
 EOF
 
 bash prod.sh pull && bash prod.sh up
 ```
 
-`prod.sh` refuses to start if the config file is missing, readable by group or others, or still contains `CHANGE_ME`. TLS is left to whatever sits in front (a load balancer, Caddy, an nginx reverse proxy): the stack exposes one plain HTTP port.
+`FBA_PULL_MIRROR` 是给国内服务器用的 GHCR 镜像加速，能直连 ghcr.io 就去掉这一行。
 
-Back up the database before the first deployment against an existing one.
+配置文件不存在、对组或其他用户可读、或者还残留 `CHANGE_ME` 时，`prod.sh` 会拒绝启动。TLS 交给前面的负载均衡、Caddy 或宝塔反代，这套编排只出一个明文 HTTP 端口。
 
-## How do I update or roll back?
+如果连的是已有数据库，第一次部署前先备份。
+
+## 怎么更新、怎么回滚
 
 ```bash
-bash prod.sh status   # which commit is running, and how far behind main it is
+bash prod.sh status   # 服务器上跑的是哪个提交，落后 main 多少
 bash prod.sh pull
 bash prod.sh up
 ```
 
-Pushing new images does **not** update servers automatically — deploying is a deliberate step. Every image is also tagged `sha-<short SHA>` and `sha-<full SHA>`, so rolling back is a pull of an older tag, without waiting for a build:
+CI 推了新镜像**不会**自动更新服务器，部署是人明确决定的一步。每个镜像除了 `latest` 还带 `sha-<短 SHA>` 和 `sha-<完整 SHA>` 两种标签，回滚就是拉旧标签，不用等重新构建：
 
 ```bash
 TAG=sha-abc1234 bash prod.sh pull
 TAG=sha-abc1234 bash prod.sh up
 ```
 
-## What should external monitoring check?
+## 外部监控探哪个地址
 
-One URL: `https://<your-domain>/api/health/status`. It reports the API, database, Redis, scheduler (beat) and worker, and returns **200** only when all of them are healthy, **503** otherwise.
+只探一个：`https://<你的域名>/api/health/status`。它列出 API、数据库、Redis、调度器（beat）和 worker 的状态，全部正常返回 **200**，任何一项异常返回 **503**。
 
 ```json
 {"status":"ok","services":{"api":{"status":"ok"},"database":{"status":"ok"},"redis":{"status":"ok"},"scheduler":{"status":"ok","last_seen_seconds":12},"worker":{"status":"ok","last_seen_seconds":31}},"heartbeat_max_age_seconds":180}
 ```
 
 :::caution
-Don't monitor `/healthz`. It is nginx answering `200` by itself and stays green with the API and database down. For the same reason, probing a path that doesn't exist through the domain returns `200` and `index.html` (the frontend's history fallback) — check the body, not just the status.
+不要拿 `/healthz` 做外部监控。它是 nginx 自己返回的 `200`，API 和数据库全挂了照样是绿的。同理，经域名访问一个不存在的路径会落到前端的 history fallback，返回 `200` 加 `index.html`——判断时要看响应内容，不能只看状态码。
 :::
 
-## Can I build the images myself?
+## 能自己构建镜像吗
 
-Yes, when the server can't reach GHCR — it needs the full repository on that machine:
+可以，用于服务器访问不了 GHCR 的情况，这时整个仓库要在那台机器上：
 
 ```bash
 pnpm deploy:prod:build
 pnpm deploy:prod
 ```
 
-Use either `pull` or a local build, not both: otherwise which image `up` runs depends on which command last touched the local image cache.
+`pull` 和本地构建二选一，不要混用，否则 `up` 跑的是哪次的镜像，取决于最后碰过本地镜像缓存的是哪条命令。
 
-## Further reading
+## 延伸阅读
 
-- [`deploy/README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/README.md) — every command (in Chinese).
-- [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md) — the pitfalls behind these rules, and why automatic deployment was left out on purpose.
-- [Desktop and mobile clients](/features/clients/) — installers are built by a separate release workflow.
+- [`deploy/README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/README.md)——所有命令。
+- [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md)——这些规矩背后踩过的坑，以及为什么刻意不做自动部署。
+- [桌面端与移动端](/features/clients/)——安装包由单独的发版流程构建。

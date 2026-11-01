@@ -1,88 +1,88 @@
 ---
-title: Desktop and mobile clients
-description: An Electron desktop app with Windows, macOS and Linux installers, auto-update and silent printing, plus a native Expo / React Native mobile app.
+title: 桌面端与移动端
+description: Electron 桌面端：三平台安装包、自动更新、静默打印；移动端是 Expo / React Native 原生 App，不是 WebView 套壳。
 sidebar:
   order: 9
 ---
 
-The repo ships two clients alongside the browser. `apps/desktop` runs the same web build inside Electron and adds what a browser can't do: silent printing, local hardware through native helper processes, a refresh token held by the main process, and auto-update. Each GitHub Release carries installers for Windows, macOS and Linux. `apps/mobile` is a native Expo / React Native app with its own screens, not a WebView around the web pages. It shares the API client and translations with the web app.
+除了浏览器，仓库里还有两个客户端。`apps/desktop` 把同一份 web 构建产物装进 Electron，补上浏览器做不到的四件事：静默打印、通过原生助手进程接本地硬件、refresh token 由主进程托管、自动更新。每个 GitHub Release 都附带 Windows、macOS、Linux 三个平台的安装包。`apps/mobile` 是 Expo / React Native 原生 App，屏幕是单独写的，不是拿 WebView 套网页；请求客户端和语言包与 web 端共用。
 
-## Where do I download the desktop app?
+## 桌面端在哪下载？
 
-From [GitHub Releases](https://github.com/yilecoding/fastapi-react-admin/releases). Each release has:
+在 [GitHub Releases](https://github.com/yilecoding/fastapi-react-admin/releases) 下载。每个版本包含：
 
-| Platform | File | Notes |
+| 平台 | 文件 | 说明 |
 |---|---|---|
-| Windows 10/11 x64 | `admin-desktop-<version>-setup.exe` | NSIS installer, per-user install into `%LOCALAPPDATA%\Programs`, no admin rights |
-| macOS Apple Silicon / Intel | `admin-desktop-<version>-arm64.dmg` / `-x64.dmg` | the matching `.zip` files are for the updater |
-| Linux x64 | `admin-desktop-<version>-x86_64.AppImage` | `chmod +x` and run |
+| Windows 10/11 x64 | `admin-desktop-<版本>-setup.exe` | NSIS 安装向导，装到当前用户的 `%LOCALAPPDATA%\Programs`，不需要管理员权限 |
+| macOS Apple Silicon / Intel | `admin-desktop-<版本>-arm64.dmg` / `-x64.dmg` | 同名的 `.zip` 是给自动更新用的 |
+| Linux x64 | `admin-desktop-<版本>-x86_64.AppImage` | `chmod +x` 后直接运行 |
 
-The `.blockmap` and `latest*.yml` files are for the updater; you don't download them yourself.
+`.blockmap` 和 `latest*.yml` 是自动更新用的，不需要手动下载。
 
-:::caution[The installers are not code-signed]
-Windows SmartScreen warns once (*More info → Run anyway*). macOS Gatekeeper says the app "is damaged": right-click → *Open*, or run `xattr -dr com.apple.quarantine "/Applications/Admin Desktop.app"`. The release workflow already passes `CSC_LINK`, `CSC_KEY_PASSWORD` and the `APPLE_*` secrets to electron-builder, so signing (and notarization on macOS) can be turned on by adding those secrets instead of editing the workflow. That path hasn't been exercised with real certificates yet.
+:::caution[安装包没有代码签名]
+Windows 的 SmartScreen 会拦一次，点「更多信息 → 仍要运行」。macOS 的 Gatekeeper 会提示「已损坏」，右键 →「打开」即可，或执行 `xattr -dr com.apple.quarantine "/Applications/Admin Desktop.app"`。发版流水线已经把 `CSC_LINK`、`CSC_KEY_PASSWORD` 和 `APPLE_*` 这几个 secret 透传给了 electron-builder，在仓库里配上就能开启签名（macOS 还会公证），不用改流水线。不过这条路还没用真证书跑过。
 :::
 
-## What does the desktop shell add?
+## 桌面外壳比浏览器多了什么？
 
-The shell (Electron 42) contains no business code; the pages are the same `apps/web` build. The renderer talks to the main process through `window.desktop`, which exposes six namespaces (`app`, `config`, `auth`, `print`, `devices`, `updater`). The IPC contract lives in `packages/platform/src/desktop/contract.ts`.
+外壳（Electron 42）不含任何业务代码，页面就是 `apps/web` 的构建产物。渲染层通过 `window.desktop` 调主进程，一共六个命名空间：`app`、`config`、`auth`、`print`、`devices`、`updater`。IPC 契约在 `packages/platform/src/desktop/contract.ts`。
 
-- **Silent printing.** `print.html()` renders HTML in a hidden window and calls `webContents.print({ silent: true })`, so no dialog appears. It uses the printer named in config or the system default. This works for HTML only, not for an existing PDF, so labels are built as HTML with CSS `@page`; `buildLabelHtml()` helps with that. `print.htmlToPdf()` runs the same pipeline to a PDF for checking layouts without a printer. A failed print returns `{ ok: false, reason }`, never a false success. Silent printing is the reason recorded in [`apps/desktop/README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/desktop/README.md) for choosing Electron.
-- **Local hardware.** Device adapters start a native helper process and stream its events to `devices.on()`. The shell ships an ID-card-reader adapter. When the vendor's helper `.exe` isn't in `resources/`, the adapter runs in stub mode and `devices.simulate()` fires fake events, so the read → fetch → print flow can be developed on macOS.
-- **Credentials.** The renderer is served from `app://local`, so the browser's refresh cookie (`SameSite=Lax`) isn't sent to the backend. The main process therefore keeps the refresh token, encrypted with Electron `safeStorage` (DPAPI on Windows, Keychain on macOS), and hands only the access token to the page. This path has passed type checks but not yet an end-to-end test in a packaged build.
-- **Runtime config.** `config.json` in the app's user-data directory holds `serverUrl`, `printerName`, `kiosk`, `autoLaunch` and `updateUrl`. One installer can serve every environment; nothing is compiled in.
+- **静默打印。** `print.html()` 在隐藏窗口里渲染 HTML，再调 `webContents.print({ silent: true })`，全程不弹对话框。打印机取配置里的 `printerName`，没配就用系统默认。这条路只对 HTML 成立，现成的 PDF 没法静默打，所以标签要写成 HTML + CSS `@page`，可以借助 `buildLabelHtml()`。`print.htmlToPdf()` 走同一条渲染管线输出 PDF，没有打印机也能调版式。打印失败返回 `{ ok: false, reason }`，不会谎报成功。选 Electron 的决定性理由就是静默打印，[`apps/desktop/README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/desktop/README.md) 里有记录。
+- **本地硬件。** 设备适配器拉起一个原生助手子进程，把它的输出作为事件流推给 `devices.on()`。仓库自带一个身份证读卡器适配器。`resources/` 里没有厂商的助手程序时，它自动进入桩模式，用 `devices.simulate()` 造假数据，在 Mac 上也能把「读卡 → 拉数据 → 打标签」整条链路跑通。
+- **凭据托管。** 渲染层跑在 `app://local` 下，对后端是跨站请求，浏览器那条 `SameSite=Lax` 的 refresh cookie 带不过去。所以 refresh token 由主进程保存，用 Electron 的 `safeStorage` 加密落盘（Windows 走 DPAPI，macOS 走 Keychain），渲染层只拿 access token。这条链路目前只过了类型检查，还没在打包后的正式包里端到端验证过。
+- **运行期配置。** 应用数据目录下的 `config.json` 存 `serverUrl`、`printerName`、`kiosk`、`autoLaunch`、`updateUrl`。同一个安装包可以发到不同环境，什么都不需要编译进去。
 
 ```ts
 import { isDesktop, desktop } from "@admin/platform/desktop"
 
 if (isDesktop()) {
-  const res = await desktop().print.html(html, { pageSize: { width: 60000, height: 40000 } }) // microns
+  const res = await desktop().print.html(html, { pageSize: { width: 60000, height: 40000 } }) // 单位：微米
   if (!res.ok) showError(res.reason)
 }
 ```
 
-Measured while building the shell: `print()` takes `pageSize` in microns, while `printToPDF()` takes inches. With `preferCSSPageSize` and an `@page` rule, a 60 × 40 mm label came out at 59.944 × 39.878 mm (0.09% off).
+写外壳时实测到两点：`print()` 的 `pageSize` 单位是微米，`printToPDF()` 的单位却是英寸；开启 `preferCSSPageSize` 并写好 `@page` 后，60 × 40 mm 的标签实际输出 59.944 × 39.878 mm，偏差 0.09%。
 
-## How does the desktop app update itself?
+## 桌面端怎么自动更新？
 
-It uses `electron-updater`. The feed is `updateUrl` from `config.json` if set (a "generic" source: any static HTTP directory, e.g. on a customer's intranet). Otherwise it is the `app-update.yml` baked in at build time, which points at this repo's GitHub Releases. Updates download automatically and install when the app quits. `quitAndInstall(true, true)` installs silently and relaunches; without those flags the NSIS wizard opens and waits for a click. The renderer drives it through `desktop().updater.check()`, `.on()` and `.quitAndInstall()`. The web app doesn't call `check()` by itself, so add a button or a startup call in your app.
+用的是 `electron-updater`。`config.json` 里填了 `updateUrl` 就用它，这是 generic 源，任何能列目录的静态 HTTP 服务都行，比如客户内网。没填就用打包时写进 `app-update.yml` 的源，也就是本仓库的 GitHub Releases。更新包自动下载，在应用退出时安装。`quitAndInstall(true, true)` 静默安装并自动重启；不带这两个参数的话，弹出来的是 NSIS 安装向导，停在那里等人点「下一步」。渲染层通过 `desktop().updater.check()`、`.on()`、`.quitAndInstall()` 驱动更新。web 端自己不会调 `check()`，需要你在应用里接一个按钮或在启动时调用。
 
-| Platform | Auto-update |
+| 平台 | 自动更新 |
 |---|---|
-| Windows (NSIS) | works; per-user install, so updates need no UAC prompt |
-| Linux (AppImage) | works |
-| macOS | **does not work** while builds are unsigned: electron-updater checks the running app's code signature |
+| Windows（NSIS） | 可用。按用户安装，更新时不弹 UAC 提权 |
+| Linux（AppImage） | 可用 |
+| macOS | **不可用**。安装包未签名，而 electron-updater 会校验运行中应用的代码签名 |
 
-For an intranet mirror, publish `<version>.exe`, its `.blockmap` and `latest.yml`, uploading `latest.yml` **last** and serving it without caching. The `.blockmap` enables differential downloads, but the first update usually falls back to a full download.
+内网部署时，往静态目录放 `<版本>.exe`、对应的 `.blockmap` 和 `latest.yml`。`latest.yml` **必须最后放**，并且不能被缓存。`.blockmap` 用于差量下载，但第一次更新通常会回落成全量下载。
 
-## How are the installers built?
+## 安装包怎么出？
 
-Pushing a `v*` tag runs [`.github/workflows/release.yml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/.github/workflows/release.yml). A `prepare` job checks that the tag matches both `apps/web/package.json` and the backend's `__version__`, then creates **one** draft release. A matrix then builds on `windows-latest`, `macos-latest` and `ubuntu-latest`, each platform on its own OS. electron-builder runs with `--publish never` and `gh release upload` attaches the files, because electron-builder's own publisher once raced into two drafts. A person tests the draft before publishing it.
+推一个 `v*` tag 就会触发 [`.github/workflows/release.yml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/.github/workflows/release.yml)。`prepare` job 先核对 tag、`apps/web/package.json` 的版本和后端 `__version__` 三者一致，再建**唯一一个**草稿 release。随后矩阵在 `windows-latest`、`macos-latest`、`ubuntu-latest` 上各自打包，每个平台只在自己的系统上出包。electron-builder 用 `--publish never`，产物由 `gh release upload` 上传，因为 electron-builder 自带的上传器曾经并发建出过两个草稿。草稿要有人先装一遍试过，再点发布。
 
-Locally: `pnpm --filter web build`, then `pnpm --filter @admin/desktop package`. The desktop build does not rebuild the web app, so skipping the first step packages a stale UI without any error. For development, run the web dev server on :8888 and then `pnpm desktop:dev`.
+本地手动打包：先 `pnpm --filter web build`，再 `pnpm --filter @admin/desktop package`。桌面端自己的构建不会重新构建前端，漏了第一步，打出来的就是上一版界面，而且不报任何错。开发时先把 web dev server 起在 :8888，再跑 `pnpm desktop:dev`。
 
-## What is the mobile app?
+## 移动端是什么？
 
-`apps/mobile` uses Expo SDK 57, React Native 0.86 and Expo Router, styled with uniwind (Tailwind CSS v4 for React Native) and `react-native-reusables` components. It targets Android and iOS only.
+`apps/mobile` 基于 Expo SDK 57、React Native 0.86 和 Expo Router，样式用 uniwind（Tailwind CSS v4 的 React Native 实现），组件来自 `react-native-reusables`。只出 Android 和 iOS，不出 web。
 
-- **Native screens, not a WebView.** Tabs for Home, Apps and Me, plus notifications, profile and password, settings, a users list → detail → delete flow written as the pattern to copy, and notice detail with attachments. Lists use `FlatList` with infinite queries. Notice bodies (HTML from the web's Tiptap editor) are turned into native components through an allow-list, not rendered in a WebView.
-- **Shared with web:** `@admin/api` (envelope handling, single-flight 401 refresh, request types inferred from the generated `schema.d.ts`) and `@admin/i18n`. It does not depend on `@admin/platform`, which is web-shaped.
-- **Sign-in:** password or SMS code, both behind the image captcha. The access token is stored in `expo-secure-store` (Keystore / Keychain), never `AsyncStorage`. The refresh token stays in the httpOnly cookie; on Android, React Native's cookie jar sends it back automatically and keeps it across cold starts.
-- **Server address is set in the app** and stored on the device. Before saving, the app probes `/auth/captcha` to confirm the address is a reachable backend. The same `oklch()` colour tokens as the web app render pixel-identical on Android.
+- **原生界面，不是 WebView。** 底部三个 tab：首页、应用、我的。另有通知、个人资料与改密码、设置、公告详情（带附件），以及「用户列表 → 详情 → 删除」这一组专门写成可照抄的范式。列表用 `FlatList` + 无限查询。公告正文是 web 端 Tiptap 产出的 HTML，按白名单转换成原生组件来渲染，不走 WebView。
+- **与 web 共用：** `@admin/api`（信封判定、401 单飞刷新、从生成的 `schema.d.ts` 推出请求类型）和 `@admin/i18n`。不依赖 `@admin/platform`，那个包是按 web 的形状写的。
+- **登录：** 密码和手机验证码两种方式，都要先过图形验证码。access token 存在 `expo-secure-store`（Keystore / Keychain），绝不放 `AsyncStorage`。refresh token 留在 httpOnly cookie 里：在 Android 上实测，React Native 自带的 cookie jar 会自动回传它，冷启动后依然有效。
+- **服务器地址在 App 里设置**，存在设备上。保存前会先探一次 `/auth/captcha`，确认这个地址确实是一个能连通的后端。颜色令牌与 web 端是同一份 `oklch()`，在 Android 上实测逐像素一致。
 
-## What doesn't the mobile app do yet?
+## 移动端还没做什么？
 
-- Verified by hand on Android only (sign-in → permission gating → paging → detail → delete confirmation → toast). Newer screens, such as SMS sign-in and notice attachments, have so far passed only `tsc`, ESLint and the bundle build. **iOS has never been run.**
-- There are no automated mobile tests. The CI gate is `pnpm build`, which includes `expo export --platform android` and catches bundle-time failures only.
-- No real-time updates (no socket.io; screens refresh on open and pull-to-refresh). System push, QR scanning and silent printing are out of scope.
-- No published APK. `pnpm --filter @admin/mobile apk` has only been run as far as native module compilation, and it signs with the template's debug keystore; generate your own keystore before shipping.
-- Changing phone number or email needs a verification-code flow that exists only on the web.
+- 只在 Android 上手工验收过（登录 → 权限门控 → 列表翻页 → 详情 → 删除确认 → toast）。较新的屏幕，比如手机验证码登录和公告附件，目前只过了 `tsc`、ESLint 和打包。**iOS 一次都没跑过。**
+- 移动端没有自动化测试。CI 的闸门是 `pnpm build`，其中包括 `expo export --platform android`，只能挡住打包阶段的失败。
+- 没有实时推送：没接 socket.io，进入页面或下拉时刷新。系统推送、扫码、静默打印明确不在范围内。
+- 还没有发布过 APK。`pnpm --filter @admin/mobile apk` 只跑到原生模块编译那一步，而且用的是模板自带的 debug keystore，正式发布前要换成自己的 keystore。
+- 改手机号、邮箱要走验证码流程，目前只有网页端有。
 
-To run it: `pnpm --filter api dev:host` (backend on `0.0.0.0:8088`), then `pnpm mobile:dev`, and open the printed `exp://…:8800` address in Expo Go for SDK 57.
+本地跑起来：先 `pnpm --filter api dev:host`（后端绑 `0.0.0.0:8088`），再 `pnpm mobile:dev`，把打印出来的 `exp://…:8800` 地址填进 SDK 57 版的 Expo Go。
 
-## Where it lives in the code
+## 代码在哪
 
-- [`apps/desktop/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/desktop): `src/main/` (window, `app://` protocol, `print.ts`, `updater.ts`, `auth.ts`, `devices/`), `electron-builder.yml`
-- [`packages/platform/src/desktop/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/desktop): bridge contract, `isDesktop()` / `desktop()`, label template
-- [`apps/desktop/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/desktop/AGENTS.md): packaging, signing and update pitfalls found in real builds
-- [`apps/mobile/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/mobile): `src/app/` (screens), `src/lib/` (session, API, permissions), and [`AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/mobile/AGENTS.md)
+- [`apps/desktop/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/desktop)：`src/main/`（窗口、`app://` 协议、`print.ts`、`updater.ts`、`auth.ts`、`devices/`）和 `electron-builder.yml`
+- [`packages/platform/src/desktop/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/desktop)：桥接契约、`isDesktop()` / `desktop()`、标签模板
+- [`apps/desktop/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/desktop/AGENTS.md)：打包、签名、自动更新在正式包里踩到的坑
+- [`apps/mobile/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/mobile)：`src/app/`（屏幕）、`src/lib/`（会话、请求、权限），以及 [`AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/mobile/AGENTS.md)

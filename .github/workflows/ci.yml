@@ -606,7 +606,20 @@ jobs:
 
       - run: pnpm install --frozen-lockfile --filter @admin/docs
 
+      # 同一份文档还挂在自己的服务器上（fra.wubunan.com/docs/，给国内访问和百度收录）。
+      # base 是构建期写死的，所以先按 /docs 构建一份打成包，再按 Pages 的路径构建正式那份；
+      # 包放进 Pages 一起发，服务器按 apps/docs/AGENTS.md 里的命令拉下来解压
+      - name: 构建服务器版文档（/docs）
+        env:
+          DOCS_SITE: https://fra.wubunan.com
+          DOCS_BASE: /docs
+        run: |
+          pnpm --filter @admin/docs build
+          tar -czf "$RUNNER_TEMP/docs-site.tar.gz" -C apps/docs/dist .
+
       - run: pnpm --filter @admin/docs build
+
+      - run: cp "$RUNNER_TEMP/docs-site.tar.gz" apps/docs/dist/
 
       # E2E job 要是在装环境阶段就挂了，就没有报告可下 —— 那也照发文档站，
       # 只在 /e2e/ 放一页说明，免得 README 徽章点进去是 404

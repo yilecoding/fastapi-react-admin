@@ -153,3 +153,15 @@ h1#_top { letter-spacing: -0.03em; font-weight: 800 }
 .landing-footnote { max-width: 46rem; margin: 3rem auto 0 !important; text-align: center; font-size: 0.85rem; line-height: 1.6; color: var(--sl-color-gray-3) }
 .landing-footnote p { margin: 0 }
 .landing-footnote a { color: var(--sl-color-gray-2) }
+
+/* 非中文浏览器进中文页时的「Read in English」提示（脚本在 astro.config.mjs 的 EN_HINT） */
+.en-hint {
+  position: fixed; z-index: 100; right: 1rem; bottom: 1rem;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.6rem 0.6rem 0.6rem 1rem; border-radius: 999px;
+  font-size: 0.875rem; color: var(--sl-color-white);
+  background: var(--brand-card); box-shadow: 0 0 0 1px var(--brand-chip-line), var(--brand-shadow);
+}
+.en-hint a { font-weight: 600; color: var(--brand); text-decoration: none }
+.en-hint button { width: 1.6rem; height: 1.6rem; border: 0; border-radius: 999px; cursor: pointer; color: var(--sl-color-gray-3); background: transparent; font-size: 1.1rem; line-height: 1 }
+.en-hint button:hover { background: var(--brand-chip-bg) }

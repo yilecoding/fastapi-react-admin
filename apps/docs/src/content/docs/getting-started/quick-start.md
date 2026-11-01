@@ -1,71 +1,71 @@
 ---
-title: Quick start
-description: Run fastapi-react-admin locally — PostgreSQL and Redis in Docker, five commands, then sign in at localhost:8888 as admin / 123456.
+title: 快速开始
+description: 在本地跑起 fastapi-react-admin：Docker 起 PostgreSQL 和 Redis，五条命令，打开 localhost:8888 用 admin / 123456 登录。
 sidebar:
   order: 1
 ---
 
-Five commands bring up the whole stack locally: PostgreSQL and Redis in Docker, the FastAPI backend on port 8088, the React frontend on port 8888 and a Celery worker. Sign in as `admin` / `123456`.
+五条命令在本地起全套：Docker 里的 PostgreSQL 和 Redis、8088 端口的 FastAPI 后端、8888 端口的 React 前端，外加一个 Celery worker。账号 `admin` / `123456`。
 
-## What do I need installed?
+## 需要装什么
 
-- Node.js ≥ 22.13 (pnpm is pinned in `package.json` and installed by corepack)
-- Python ≥ 3.10 and [uv](https://docs.astral.sh/uv/)
+- Node.js ≥ 22.13（pnpm 版本由 `package.json` 锁定，corepack 会自动装）
+- Python ≥ 3.10 和 [uv](https://docs.astral.sh/uv/)
 - Docker
 
-## How do I run it?
+## 怎么跑起来
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d          # PostgreSQL 16 + Redis
-pnpm install:all                                        # JS workspace, Python deps, git hooks, Playwright Chromium
-cp apps/api/backend/.env.example apps/api/backend/.env  # defaults already match the containers above
-pnpm db:init                                            # create tables + seed data (first run only)
+pnpm install:all                                        # JS 依赖、Python 依赖、git 钩子、Playwright Chromium
+cp apps/api/backend/.env.example apps/api/backend/.env  # 默认值已经和上面的容器对齐
+pnpm db:init                                            # 建表 + 灌种子数据（只在首次跑）
 pnpm dev                                                # api :8088 · web :8888 · celery worker
 ```
 
-Open <http://localhost:8888> and sign in as `admin` / `123456`.
+打开 <http://localhost:8888>，用 `admin` / `123456` 登录。
 
 :::caution
-`pnpm db:init` drops and recreates every table. Run it on the first setup or when you want a clean database; after that, schema changes go through `pnpm db:upgrade` (Alembic).
+`pnpm db:init` 会 DROP 并重建所有表，只在首次搭环境或想清空数据时跑；之后的表结构变化一律走 `pnpm db:upgrade`（Alembic）。
 :::
 
-## Why does the sign-in page ask for a captcha?
+## 登录页为什么要输验证码
 
-The image captcha is on by default. To skip it locally, set `LOGIN_CAPTCHA_ENABLED` to `false` under **System → Config**; it takes effect immediately. To type it instead, take the `uuid` from the `GET /api/v1/auth/captcha` response and read the answer from Redis:
+图形验证码默认开启。本地想省掉，在「系统管理 → 参数配置」里把 `LOGIN_CAPTCHA_ENABLED` 改成 `false`，改完立即生效。想照常输入的话，先记下 `GET /api/v1/auth/captcha` 响应里的 `uuid`，再去 Redis 里查答案：
 
 ```bash
 docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 ```
 
-## How do I use SQL Server, MySQL or S3 instead?
+## 换成 SQL Server、MySQL 或 S3
 
-Everything optional is in the same `docker-compose.dev.yml`; turn it on and change `DATABASE_*` in `.env`.
+可选的依赖都在同一份 `docker-compose.dev.yml` 里，按需打开，再改 `.env` 里的 `DATABASE_*`：
 
-| To use | Command | Notes |
+| 要用 | 命令 | 备注 |
 |---|---|---|
-| **SQL Server** | `docker compose -f docker-compose.dev.yml --profile sqlserver up -d mssql` | The host also needs [Microsoft ODBC Driver 18](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) — the backend connects through `aioodbc`, so the driver inside the container doesn't count |
-| **MySQL** | bring your own MySQL 8.x | `DATABASE_TYPE='mysql'`, charset `utf8mb4` |
-| **S3-compatible storage** (RustFS) | `docker compose -f docker-compose.dev.yml --profile s3 up -d rustfs` | Set `STORAGE_ENCRYPT_SECRET_KEY` in `.env` (`openssl rand -hex 32`) before adding a storage under **System → Storage** |
+| **SQL Server** | `docker compose -f docker-compose.dev.yml --profile sqlserver up -d mssql` | 宿主机还要装 [Microsoft ODBC Driver 18](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server)——后端走 `aioodbc` 连库，容器里那份驱动不算 |
+| **MySQL** | 自备 MySQL 8.x | `DATABASE_TYPE='mysql'`，字符集用 `utf8mb4` |
+| **S3 兼容存储**（RustFS） | `docker compose -f docker-compose.dev.yml --profile s3 up -d rustfs` | 在「系统管理 → 存储管理」里新建存储前，`.env` 里要先配 `STORAGE_ENCRYPT_SECRET_KEY`（`openssl rand -hex 32`） |
 
 :::caution
-Keep `DATABASE_PK_MODE='snowflake'` (the default). Seed data only exists for snowflake IDs; in autoincrement mode the seed step is skipped silently and you end up with tables but no `admin` account.
+`DATABASE_PK_MODE` 保持默认的 `'snowflake'`。种子数据只有雪花 ID 版，改成自增模式后初始化会**静默跳过**种子——表建好了，却没有 admin 账号。
 :::
 
-See [Databases](/features/databases/) for how the three databases are supported and tested.
+三种数据库各自怎么支持、怎么测，见[数据库](/features/databases/)。
 
-## What runs where?
+## 各个进程在哪
 
-| Process | Port | Started by |
+| 进程 | 端口 | 由谁启动 |
 |---|---|---|
-| FastAPI backend (uvicorn, `--reload`) | 8088 | `pnpm dev` |
-| React frontend (Vite) | 8888 (fixed — `strictPort`) | `pnpm dev` |
-| Celery worker with embedded beat | — | `pnpm dev` |
+| FastAPI 后端（uvicorn，`--reload`） | 8088 | `pnpm dev` |
+| React 前端（Vite） | 8888（固定，`strictPort`） | `pnpm dev` |
+| Celery worker（内嵌 beat） | — | `pnpm dev` |
 | PostgreSQL / Redis | 5432 / 6380 | `docker compose` |
 
-The frontend port is fixed on purpose: CORS, OAuth2 redirect URIs and the desktop app's dev URL all point at 8888, so Vite fails instead of drifting to 8889.
+前端端口是刻意固定的：CORS、OAuth2 回调地址、桌面端的开发地址都写的是 8888，所以端口被占时 Vite 直接报错，而不是漂到 8889。
 
-## Where to go next
+## 接下来
 
-- [Feature overview](/features/overview/) — what you can build on.
-- [Deployment](/getting-started/deployment/) — run it on a server from prebuilt images.
-- [CONTRIBUTING.md](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md) — tests, branches and releases (in Chinese; the commands are language-independent).
+- [功能总览](/features/overview/)——能在上面做什么。
+- [部署](/getting-started/deployment/)——用现成的镜像部署到服务器。
+- [CONTRIBUTING.md](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md)——测试、分支模型和发版流程。

@@ -1,53 +1,53 @@
 ---
-title: What is fastapi-react-admin?
-description: An open-source admin foundation on FastAPI + React 19 + shadcn/ui for internal and back-office systems, and how it differs from a typical admin template.
+title: fastapi-react-admin 是什么
+description: 基于 FastAPI + React 19 + shadcn/ui 的开源中后台底座，适合做企业内部系统；以及它和常见后台模板的区别。
 sidebar:
   order: 0
 ---
 
-fastapi-react-admin is an open-source (MIT) foundation for building admin and back-office systems: a FastAPI backend, a React 19 frontend on shadcn/ui, and the parts most internal systems end up needing — users, roles, departments, row-level data permissions, approvals, files, notifications, scheduled jobs and an AI assistant. You clone it and build your own business pages on top.
+fastapi-react-admin 是一个开源（MIT）的中后台底座：后端 FastAPI，前端 React 19 + shadcn/ui，内部系统迟早要做的那些东西都已经做好了——用户、角色、部门、行级数据权限、审批、文件、消息通知、定时任务、AI 助手。拿去之后在上面写自己的业务页面。
 
-## Who is it for?
+## 适合谁用
 
-- Teams building an internal system (OA, ERP-style back office, operations console) who want Python on the backend and React on the frontend.
-- Teams on the Microsoft stack: SQL Server is a first-class database here, tested in CI on every run alongside PostgreSQL.
-- Teams that need permissions finer than "which menus can this role open" — for example, a manager should only see their own department's records.
+- 要做企业内部系统（OA、ERP 式后台、运营管理台），后端想用 Python、前端想用 React 的团队。
+- 已经在用微软技术栈的团队：SQL Server 在这里是一等公民，每次 CI 都和 PostgreSQL 一起跑全量测试。
+- 权限要求不止「这个角色能打开哪些菜单」的团队——比如部门经理只能看到本部门的数据。
 
-## How does it differ from a typical admin template?
+## 和常见的后台模板有什么不同
 
-| | Typical template | fastapi-react-admin |
+| | 常见模板 | fastapi-react-admin |
 |---|---|---|
-| **Permission granularity** | menus + buttons | menus + buttons + **data scopes** — the role decides which **rows** a user sees |
-| **Multi-tab** | free with Vue's `keep-alive`; most React templates don't have it, or lose state when you switch away | React 19 **`<Activity>`**: open tabs stay mounted, DOM and state survive switching |
-| **Component base** | most are still on shadcn's older Radix version | **Base UI**, shadcn's current default (zero `@radix-ui` imports), plus a component sandbox to copy code from |
-| **Database** | usually one | **pick one of three**: PostgreSQL (default) · SQL Server · MySQL |
-| **Business features** | users / roles / menus | plus approval workflow, AI assistant, open API, files & storage, messaging and scheduled jobs |
-| **Tests** | mostly none, or component unit tests with mocks | 1,400+ backend + 150+ end-to-end browser tests, **against real dependencies, no mocks** |
+| **权限粒度** | 菜单 + 按钮 | 菜单 + 按钮 + **数据范围**——角色决定一个人能看到**哪几行** |
+| **多页签** | Vue 有 `keep-alive` 天然支持；React 模板大多没有，或者切走就丢状态 | React 19 **`<Activity>`**：打开的页签一直挂载，DOM 和状态切换后都还在 |
+| **组件底座** | 多数还停在 shadcn 旧的 Radix 版本 | 已经是 shadcn 现在默认的 **Base UI**（零 `@radix-ui` 引用），另有一个能直接复制代码的组件沙箱 |
+| **数据库** | 通常只支持一种 | **三选一**：PostgreSQL（默认）· SQL Server · MySQL |
+| **业务功能** | 用户 / 角色 / 菜单 | 另有审批流、AI 助手、开放平台、文件与存储、消息通知、定时任务 |
+| **测试** | 大多没有，或者只有带 mock 的组件单测 | 后端 1400+ 条、端到端浏览器 150+ 条，**连真实依赖，不用 mock** |
 
-## What is it built with?
+## 用了哪些技术
 
 | | |
 |---|---|
-| **Frontend** | React 19 · TypeScript 6 · Vite 8 · TanStack Router / Query / Table v9 · Tailwind CSS 4 · shadcn/ui (Base UI) · zustand · Tiptap 3 · i18next |
-| **Backend** | FastAPI · Pydantic 2 · SQLAlchemy 2 (async) · Alembic · Redis · Celery · Socket.IO · Apache OpenDAL · pydantic-ai |
-| **Databases** | PostgreSQL · SQL Server · MySQL |
-| **Clients** | Electron desktop app · Expo / React Native mobile app |
-| **Tooling** | pnpm + turbo monorepo · uv · ruff · pytest · Playwright · GitHub Actions |
+| **前端** | React 19 · TypeScript 6 · Vite 8 · TanStack Router / Query / Table v9 · Tailwind CSS 4 · shadcn/ui（Base UI）· zustand · Tiptap 3 · i18next |
+| **后端** | FastAPI · Pydantic 2 · SQLAlchemy 2（异步）· Alembic · Redis · Celery · Socket.IO · Apache OpenDAL · pydantic-ai |
+| **数据库** | PostgreSQL · SQL Server · MySQL |
+| **客户端** | Electron 桌面端 · Expo / React Native 移动端 |
+| **工程** | pnpm + turbo monorepo · uv · ruff · pytest · Playwright · GitHub Actions |
 
-## What it is not
+## 它不是什么
 
-- **Not a low-code platform.** You write business pages in React and endpoints in FastAPI; the foundation gives you the shell, the permission model and the shared building blocks.
-- **Not a hosted service.** You deploy it yourself — see [Deployment](/getting-started/deployment/).
-- **Not 1.0 yet.** It is released as 0.x versions; read the [release notes](https://github.com/yilecoding/fastapi-react-admin/releases) before upgrading.
+- **不是低代码平台。** 业务页面用 React 写，接口用 FastAPI 写；底座提供的是外壳、权限模型和公共组件。
+- **不是托管服务。** 需要自己部署，见[部署](/getting-started/deployment/)。
+- **还没到 1.0。** 目前发的是 0.x 版本，升级前先看[更新记录](https://github.com/yilecoding/fastapi-react-admin/releases)。
 
-## Where did it come from?
+## 从哪来的
 
-The backend started as a fork of [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) (FBA). The three-layer structure (`api → service → crud`), the plugin system and the RBAC / data-scope model come from FBA's design; FBA's copyright notice is kept in [`apps/api/LICENSE`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/LICENSE). SQL Server support is what this project added — upstream declined to merge it, so the fork is permanent and only takes upstream security fixes.
+后端最初 fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)（FBA）。三层结构（`api → service → crud`）、插件机制、RBAC 与数据权限模型都是 FBA 的设计，FBA 的版权声明保留在 [`apps/api/LICENSE`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/LICENSE)。SQL Server 支持是本项目加的，上游明确不合并这部分，所以是永久分叉，只 cherry-pick 上游的安全补丁。
 
-The frontend, the desktop and mobile clients, and most business features (approvals, AI assistant, open API, file storage, notification routing) were written for this project.
+前端、桌面端和移动端，以及大部分业务功能（审批、AI 助手、开放平台、文件存储、消息渠道路由）是本项目自己写的。
 
-## Next steps
+## 下一步
 
-- [Quick start](/getting-started/quick-start/) — run it locally in five commands.
-- [Feature overview](/features/overview/) — everything that ships, by area.
-- [Live demo](https://fra.wubunan.com/sign-in) — `admin` / `123456`.
+- [快速开始](/getting-started/quick-start/)——五条命令在本地跑起来。
+- [功能总览](/features/overview/)——按领域列出所有功能。
+- [在线演示](https://fra.wubunan.com/sign-in)——`admin` / `123456`。
