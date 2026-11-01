@@ -91,9 +91,19 @@ export default defineConfig({
           items: [{ autogenerate: { directory: 'getting-started' } }],
         },
         {
+          label: '指南',
+          translations: { en: 'Guides' },
+          items: [{ autogenerate: { directory: 'guides' } }],
+        },
+        {
           label: '功能',
           translations: { en: 'Features' },
           items: [{ autogenerate: { directory: 'features' } }],
+        },
+        {
+          label: '参考',
+          translations: { en: 'Reference' },
+          items: [{ autogenerate: { directory: 'reference' } }],
         },
         {
           label: '链接',
