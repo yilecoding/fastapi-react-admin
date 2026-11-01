@@ -18,15 +18,19 @@ const TOP = 16
 const BASE = 200
 const BAR = 18
 const GAP = 3
-const TICKS = 5
+const MAX_TICKS = 5
 
-/** 纵轴上限取一个好读的整数（1 / 2 / 5 × 10ⁿ 的 5 倍） */
-function niceMax(max: number): number {
-  if (max <= 0) return TICKS
-  const raw = max / TICKS
+/**
+ * 纵轴：步长取 1 / 2 / 5 × 10ⁿ（至少 1）、最多 5 格，上限取刚好盖住最大值的那一格。
+ * 原来固定画满 5 格，最高 54 时步长 20 × 5 = 100，上面空了将近一半；现在画到 60
+ */
+function niceAxis(max: number): { top: number; ticks: number } {
+  if (max <= 0) return { top: MAX_TICKS, ticks: MAX_TICKS }
+  const raw = max / MAX_TICKS
   const mag = 10 ** Math.floor(Math.log10(raw))
-  const step = [1, 2, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? 10 * mag
-  return Math.max(step, 1) * TICKS
+  const step = Math.max([1, 2, 5, 10].map((m) => m * mag).find((s) => s >= raw) ?? 10 * mag, 1)
+  const ticks = Math.ceil(max / step)
+  return { top: ticks * step, ticks }
 }
 
 /** 「10-18」—— `date` 是后端按显示时区切好的 `YYYY-MM-DD`，直接取月日，不再过一次时区 */
@@ -97,7 +101,7 @@ function Stat({ label, value, warn = false, testId }: { label: string; value: nu
 
 function Bars({ points }: { points: VisitPoint[] }) {
   const { t } = useTranslation()
-  const max = niceMax(Math.max(...points.map((p) => Math.max(p.total - p.fails, p.fails))))
+  const { top: max, ticks } = niceAxis(Math.max(...points.map((p) => Math.max(p.total - p.fails, p.fails))))
   const slot = (RIGHT - LEFT) / points.length
   const h = (v: number) => (v <= 0 ? 0 : Math.max(1.5, (v / max) * (BASE - TOP)))
   const last = points.length - 1
@@ -111,15 +115,15 @@ function Bars({ points }: { points: VisitPoint[] }) {
       data-testid="dash-visits-chart"
     >
       <g className="stroke-border" strokeWidth="1">
-        {Array.from({ length: TICKS + 1 }).map((_, i) => {
-          const yy = TOP + ((BASE - TOP) / TICKS) * i
-          return <line key={i} x1={LEFT} x2={RIGHT} y1={yy} y2={yy} strokeOpacity={i === TICKS ? 1 : 0.6} />
+        {Array.from({ length: ticks + 1 }).map((_, i) => {
+          const yy = TOP + ((BASE - TOP) / ticks) * i
+          return <line key={i} x1={LEFT} x2={RIGHT} y1={yy} y2={yy} strokeOpacity={i === ticks ? 1 : 0.6} />
         })}
       </g>
       <g className="fill-muted-foreground" fontSize="11" textAnchor="end">
-        {Array.from({ length: TICKS + 1 }).map((_, i) => (
-          <text key={i} x={LEFT - 8} y={TOP + ((BASE - TOP) / TICKS) * i + 4}>
-            {formatNumber(max - (max / TICKS) * i)}
+        {Array.from({ length: ticks + 1 }).map((_, i) => (
+          <text key={i} x={LEFT - 8} y={TOP + ((BASE - TOP) / ticks) * i + 4}>
+            {formatNumber(max - (max / ticks) * i)}
           </text>
         ))}
       </g>
