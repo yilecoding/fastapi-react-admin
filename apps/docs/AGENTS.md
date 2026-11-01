@@ -54,7 +54,7 @@ GitHub Pages 在国内访问慢、百度基本收录不到，所以同一份文�
   ```
 
 ⚠️ 两份站点内容相同、canonical 各指各的域名。主推国内，所以提交百度站长平台的是
-`fra.wubunan.com/docs/`；Google / Bing 两份都可能收录，算重复内容但不算作弊。
+https://fra.wubunan.com/docs/ ；Google / Bing 两份都可能收录，算重复内容但不算作弊。
 
 ## 写内容
 
