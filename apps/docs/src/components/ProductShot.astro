@@ -11,7 +11,7 @@ interface Props {
   url?: string
   lift?: boolean
 }
-const { src, alt, url = 'fra.wubunan.com', lift = false } = Astro.props
+const { src, alt, url = 'localhost:8888', lift = false } = Astro.props
 ---
 
 <figure class:list={['shot not-content', { 'shot--lift': lift }]}>

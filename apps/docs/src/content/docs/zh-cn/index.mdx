@@ -30,6 +30,7 @@ import { TabItem, Tabs } from '@astrojs/starlight/components'
 import dashboard from '../../../../../../docs/screenshots/dashboard.png'
 import dataPermission from '../../../../../../docs/screenshots/data-permission.png'
 import role from '../../../../../../docs/screenshots/role.png'
+import signIn from '../../../../../../docs/screenshots/sign-in.png'
 import workflowDesigner from '../../../../../../docs/screenshots/workflow-designer.png'
 import workflowInbox from '../../../../../../docs/screenshots/workflow-inbox.png'
 import CtaBand from '../../../components/CtaBand.astro'
@@ -38,7 +39,7 @@ import ProductShot from '../../../components/ProductShot.astro'
 import SectionTitle from '../../../components/SectionTitle.astro'
 import Stats from '../../../components/Stats.astro'
 
-<ProductShot src={dashboard} alt="fastapi-react-admin 仪表盘" lift>
+<ProductShot url="localhost:8888/dashboard" src={dashboard} alt="fastapi-react-admin 仪表盘" lift>
 
 在线演示账号 `admin` / `123456`。这是公开实例，任何人都能登录，数据可能被其他访客改动或清空，请勿存放真实信息。
 
@@ -80,24 +81,27 @@ import Stats from '../../../components/Stats.astro'
   </Feature>
 </div>
 
-<SectionTitle id="截图" eyebrow="SEE IT" title="在线演示里的几个页面">
+<SectionTitle id="截图" eyebrow="SEE IT" title="最新版本的几个页面">
 
-每个页面都有中英文、浅色和深色。
+在本地用 `main` 最新代码拍的。每个页面都有中英文、浅色和深色。
 
 </SectionTitle>
 
 <Tabs>
+  <TabItem label="登录页">
+    <ProductShot src={signIn} alt="登录页：立体榫卯品牌面板" url="localhost:8888/sign-in" />
+  </TabItem>
   <TabItem label="角色管理">
-    <ProductShot src={role} alt="角色管理：菜单与按钮权限矩阵" url="fra.wubunan.com/system/role" />
+    <ProductShot src={role} alt="角色管理：菜单与按钮权限矩阵" url="localhost:8888/system/role" />
   </TabItem>
   <TabItem label="数据权限">
-    <ProductShot src={dataPermission} alt="数据权限：行级过滤规则" url="fra.wubunan.com/system/data-permission" />
+    <ProductShot src={dataPermission} alt="数据权限：行级过滤规则" url="localhost:8888/system/data-permission" />
   </TabItem>
   <TabItem label="流程设计">
-    <ProductShot src={workflowDesigner} alt="审批流程设计器" url="fra.wubunan.com/workflow/definition" />
+    <ProductShot src={workflowDesigner} alt="审批流程设计器" url="localhost:8888/workflow/definition" />
   </TabItem>
   <TabItem label="审批中心">
-    <ProductShot src={workflowInbox} alt="审批中心" url="fra.wubunan.com/workflow/inbox" />
+    <ProductShot src={workflowInbox} alt="审批中心" url="localhost:8888/workflow/inbox" />
   </TabItem>
 </Tabs>
 

@@ -102,6 +102,29 @@ Starlight 0.39 起不再支持 `autogenerate` 和 `label` 写在同一层。
 - ⚠️ 顶栏要写 `header.header`：Starlight 里外两层都叫 `.header`，裸写会把那道渐变线画到里层，
   实测是一截只从搜索框画到右边的线
 
+## 截图怎么重拍（`docs/screenshots/`）
+
+README、文档站首页和分享卡片（`og.png`）用的是同一批图，界面一改就该重拍 ——
+2026-11-01 发现首页截图还停在 08-26，工作台改版（#203）后已经完全对不上。
+**用一套隔离的环境拍**，别拿自己的开发库随手截：
+
+1. 在现有 PostgreSQL 里建一个单独的库（如 `fba_shots`），Redis 号全被占时起一个一次性容器；
+   所有进程用环境变量覆盖 `DATABASE_SCHEMA` / `REDIS_PORT` / `REDIS_PASSWORD`
+2. `pnpm db:init`：非交互时必须给 `FBA_INIT_ADMIN_PASSWORD`（种子里的 admin/123456 不许留下）。
+   种子里 admin 的昵称是「用户88888」，截图前只在这个库里改成「系统管理员」
+3. 起 api 时加 `REQUEST_LIMITER_ENABLED=false`：造数据要连着登录好几个账号，第 9 个就 429 了
+4. 造数据走接口（发起 / 审批请假、发公告），访问柱状图读 `sys_login_log`，直接插近 14 天的记录
+5. 1600×960、浅色、`zh-CN`；拍完跑 `pnpm --filter @admin/docs og` 更新分享卡片
+
+🔴 **浏览器要开 `http://127.0.0.1:8888`，不能开 `localhost:8888`。** 前端默认直连
+`http://127.0.0.1:8088`（`packages/platform/src/api-client/client.ts` 的 `API_BASE`），
+从 localhost 打开时那是跨站请求，刷新令牌的 cookie 浏览器根本不存 —— 登录能成功，
+**一整页跳转就回到登录页**（实测：登录后 `context.cookies()` 是空的，`/auth/refresh` 401）。
+
+🔴 **找页面里的元素要限定在当前页签里**（根 `CLAUDE.md` 硬纪律 5）：隐藏页签的 DOM 还在，
+实测 `getByText('部门及以下数据权限')` 命中的是角色页里那段说明文字，点了 30 秒点不动。
+按 `[data-tab="/_auth/…"]` 限定；另开新页签的页面（流程设计器）用 `[data-visible="true"]`。
+
 ## SEO 相关的配置在哪
 
 | 什么 | 在哪 |

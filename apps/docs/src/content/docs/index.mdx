@@ -30,6 +30,7 @@ import { TabItem, Tabs } from '@astrojs/starlight/components'
 import dashboard from '../../../../../docs/screenshots/dashboard.png'
 import dataPermission from '../../../../../docs/screenshots/data-permission.png'
 import role from '../../../../../docs/screenshots/role.png'
+import signIn from '../../../../../docs/screenshots/sign-in.png'
 import workflowDesigner from '../../../../../docs/screenshots/workflow-designer.png'
 import workflowInbox from '../../../../../docs/screenshots/workflow-inbox.png'
 import CtaBand from '../../components/CtaBand.astro'
@@ -38,7 +39,7 @@ import ProductShot from '../../components/ProductShot.astro'
 import SectionTitle from '../../components/SectionTitle.astro'
 import Stats from '../../components/Stats.astro'
 
-<ProductShot src={dashboard} alt="fastapi-react-admin dashboard" lift>
+<ProductShot url="localhost:8888/dashboard" src={dashboard} alt="fastapi-react-admin dashboard" lift>
 
 Live demo account `admin` / `123456` — a public instance: other visitors can change or wipe its data, so don't store anything real there.
 
@@ -80,24 +81,27 @@ Users, roles and departments are the easy part. These are the pieces that usuall
   </Feature>
 </div>
 
-<SectionTitle id="screens" eyebrow="SEE IT" title="Screens from the live demo">
+<SectionTitle id="screens" eyebrow="SEE IT" title="Screens from the latest version">
 
-Every screen ships in Chinese and English, light and dark.
+Taken from `main` on a local install. Every screen ships in Chinese and English, light and dark.
 
 </SectionTitle>
 
 <Tabs>
+  <TabItem label="Sign-in">
+    <ProductShot src={signIn} alt="Sign-in page with the 3D joinery mark" url="localhost:8888/sign-in" />
+  </TabItem>
   <TabItem label="Roles">
-    <ProductShot src={role} alt="Roles: menu and button permission matrix" url="fra.wubunan.com/system/role" />
+    <ProductShot src={role} alt="Roles: menu and button permission matrix" url="localhost:8888/system/role" />
   </TabItem>
   <TabItem label="Data permissions">
-    <ProductShot src={dataPermission} alt="Data permissions: row-level filter rules" url="fra.wubunan.com/system/data-permission" />
+    <ProductShot src={dataPermission} alt="Data permissions: row-level filter rules" url="localhost:8888/system/data-permission" />
   </TabItem>
   <TabItem label="Approval designer">
-    <ProductShot src={workflowDesigner} alt="Approval flow designer" url="fra.wubunan.com/workflow/definition" />
+    <ProductShot src={workflowDesigner} alt="Approval flow designer" url="localhost:8888/workflow/definition" />
   </TabItem>
   <TabItem label="Approval center">
-    <ProductShot src={workflowInbox} alt="Approval center" url="fra.wubunan.com/workflow/inbox" />
+    <ProductShot src={workflowInbox} alt="Approval center" url="localhost:8888/workflow/inbox" />
   </TabItem>
 </Tabs>
 
