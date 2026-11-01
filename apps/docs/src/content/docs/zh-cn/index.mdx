@@ -1,0 +1,81 @@
+---
+title: FastAPI + React 19 中后台底座
+description: 开源中后台底座，FastAPI + React 19 + shadcn/ui：权限细到数据行、多页签保留状态、审批流、不越权的 AI 助手，支持 PostgreSQL / SQL Server / MySQL。
+template: splash
+hero:
+  title: fastapi-react-admin
+  tagline: 开箱即用的开源中后台底座，FastAPI + React 19 + shadcn/ui。权限细到每个人能看到哪几行数据，多页签切回来状态还在，自带审批流和不越权的 AI 助手，PostgreSQL / SQL Server / MySQL 三选一。
+  actions:
+    - text: 快速开始
+      link: getting-started/quick-start/
+      icon: right-arrow
+    - text: 在线演示
+      link: https://fra.wubunan.com/sign-in
+      icon: external
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/yilecoding/fastapi-react-admin
+      icon: github
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components'
+import { Image } from 'astro:assets'
+import dashboard from '../../../../../../docs/screenshots/dashboard.png'
+import dataPermission from '../../../../../../docs/screenshots/data-permission.png'
+import role from '../../../../../../docs/screenshots/role.png'
+import workflowDesigner from '../../../../../../docs/screenshots/workflow-designer.png'
+import workflowInbox from '../../../../../../docs/screenshots/workflow-inbox.png'
+
+演示账号 `admin` / `123456`。这是公开实例，任何人都能登录，数据可能被其他访客改动或清空，请勿存放真实信息。
+
+<Image src={dashboard} alt="仪表盘" />
+
+## 有什么
+
+<CardGrid>
+  <Card title="权限细到数据行" icon="seti:lock">
+    菜单、按钮之外还有数据范围：角色决定一个人能看到**哪几行**。同一张用户表，部门经理打开只看得到本部门的人。
+    [怎么做的 →](features/data-permissions/)
+  </Card>
+  <Card title="多页签切回来状态还在" icon="laptop">
+    基于 React 19 的 `<Activity>`：填了一半的表单、翻到的页码、展开的树，切走再切回来都还在；筛选条件写在 URL 里，刷新也不丢。
+    [怎么做的 →](features/multi-tab/)
+  </Card>
+  <Card title="审批流" icon="list-format">
+    表单设计器 + 流程树，或签 / 会签、退回、转交、撤回、加签、超时处理。
+    [怎么做的 →](features/approval-workflow/)
+  </Card>
+  <Card title="不越权的 AI 助手" icon="puzzle">
+    工具调用以当前登录用户的身份执行，受同一套权限和数据范围约束；写操作先预览、用户确认后才执行，每次调用都留审计。
+    [怎么做的 →](features/ai-assistant/)
+  </Card>
+  <Card title="大文件上传" icon="document">
+    本地磁盘或 S3 兼容存储，按哈希秒传，分片并行上传，刷新页面后断点续传。
+    [怎么做的 →](features/file-storage/)
+  </Card>
+  <Card title="数据库三选一" icon="setting">
+    PostgreSQL、SQL Server、MySQL 用同一套代码、同一条迁移链。
+    [怎么做的 →](features/databases/)
+  </Card>
+</CardGrid>
+
+## 截图
+
+<CardGrid>
+  <Image src={role} alt="角色管理：菜单与按钮权限矩阵" />
+  <Image src={dataPermission} alt="数据权限：行级过滤规则" />
+  <Image src={workflowDesigner} alt="审批流程设计器" />
+  <Image src={workflowInbox} alt="审批中心" />
+</CardGrid>
+
+## 测试连的是真实依赖
+
+后端 1400 多条 pytest 每次 CI 都连真实数据库和 Redis 跑，PostgreSQL 和 SQL Server 各跑一遍全量；150 多条 Playwright 用例用真浏览器打真实的接口和数据库，不用 mock。`main` 每次跑完的 [E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/)都公开。
+
+<CardGrid>
+  <LinkCard title="这是什么，和常见模板有什么不同" href="getting-started/introduction/" />
+  <LinkCard title="全部功能" href="features/overview/" />
+</CardGrid>
+
+MIT 协议。后端最初 fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)（FBA），三层结构、插件机制和 RBAC 模型都来自它的设计。

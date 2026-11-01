@@ -1,0 +1,81 @@
+---
+title: FastAPI + React 19 admin foundation
+description: Open-source admin foundation on FastAPI + React 19 + shadcn/ui — row-level data permissions, multi-tab that keeps state, approval workflow, a permission-bound AI assistant; PostgreSQL, SQL Server or MySQL.
+template: splash
+hero:
+  title: fastapi-react-admin
+  tagline: An open-source admin foundation on FastAPI + React 19 + shadcn/ui. Permissions down to the rows a user sees, tabs that keep their state, an approval workflow and an AI assistant that can't overreach — on PostgreSQL, SQL Server or MySQL.
+  actions:
+    - text: Quick start
+      link: getting-started/quick-start/
+      icon: right-arrow
+    - text: Live demo
+      link: https://fra.wubunan.com/sign-in
+      icon: external
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/yilecoding/fastapi-react-admin
+      icon: github
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components'
+import { Image } from 'astro:assets'
+import dashboard from '../../../../../docs/screenshots/dashboard.png'
+import dataPermission from '../../../../../docs/screenshots/data-permission.png'
+import role from '../../../../../docs/screenshots/role.png'
+import workflowDesigner from '../../../../../docs/screenshots/workflow-designer.png'
+import workflowInbox from '../../../../../docs/screenshots/workflow-inbox.png'
+
+The demo account is `admin` / `123456`. It is a public instance: other visitors can change or wipe its data, so don't store anything real there.
+
+<Image src={dashboard} alt="Dashboard" />
+
+## What's in the box
+
+<CardGrid>
+  <Card title="Row-level data permissions" icon="seti:lock">
+    Beyond menus and buttons, a role decides which **rows** a user sees. A department manager opening the user list only gets their own department.
+    [How it works →](features/data-permissions/)
+  </Card>
+  <Card title="Tabs that keep their state" icon="laptop">
+    Built on React 19's `<Activity>`: a half-filled form, the page you were on and an expanded tree are still there when you switch back. Filters live in the URL, so a refresh keeps them too.
+    [How it works →](features/multi-tab/)
+  </Card>
+  <Card title="Approval workflow" icon="list-format">
+    Form designer and flow tree with or-sign / co-sign, send back, transfer, take back, add approvers and timeouts.
+    [How it works →](features/approval-workflow/)
+  </Card>
+  <Card title="An AI assistant that can't overreach" icon="puzzle">
+    Tool calls run as the signed-in user, inside their permissions and data scopes. Writes are previewed and run only after the user confirms; every call is audited.
+    [How it works →](features/ai-assistant/)
+  </Card>
+  <Card title="Large files, handled" icon="document">
+    Local disk or S3-compatible storage, instant upload by hash, parallel chunks and resume after a page refresh.
+    [How it works →](features/file-storage/)
+  </Card>
+  <Card title="Pick your database" icon="setting">
+    PostgreSQL, SQL Server or MySQL with the same code and the same migration chain.
+    [How it works →](features/databases/)
+  </Card>
+</CardGrid>
+
+## Screenshots
+
+<CardGrid>
+  <Image src={role} alt="Roles: menu and button permission matrix" />
+  <Image src={dataPermission} alt="Data permissions: row-level filter rules" />
+  <Image src={workflowDesigner} alt="Approval flow designer" />
+  <Image src={workflowInbox} alt="Approval center" />
+</CardGrid>
+
+## Tested against real dependencies
+
+The backend suite (1,400+ pytest tests) runs against a real database and Redis on every CI run — on both PostgreSQL and SQL Server. 150+ Playwright tests drive a real browser against the real API and database, with no mocks. The [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) from every `main` run is public.
+
+<CardGrid>
+  <LinkCard title="What it is and how it compares" href="getting-started/introduction/" />
+  <LinkCard title="All features" href="features/overview/" />
+</CardGrid>
+
+MIT licensed. The backend started as a fork of [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture); its three-layer structure, plugin system and RBAC model come from that project.

@@ -16,6 +16,8 @@
  *   apps/web/public/apple-touch-icon.png iOS「添加到主屏幕」
  *   apps/desktop/build/icon.png          electron-builder 的图标源
  *     （1024×1024，够它自动派生 .ico / .icns，不用手工转)
+ *   apps/docs/public/favicon.svg         文档站标签页图标
+ *   apps/docs/src/assets/logo.svg        文档站顶栏标题旁的 logo（Starlight 的 logo 只认 src/ 下的文件）
  *
  * 不依赖任何图形库：PNG 编码用 node:zlib 手搓 —— 这几个尺寸够小，没必要为此
  * 装一个原生编译的 sharp。
@@ -180,6 +182,12 @@ const svgPath = resolve(ROOT, "apps/web/public/favicon.svg")
 mkdirSync(dirname(svgPath), { recursive: true })
 writeFileSync(svgPath, buildFaviconSvg())
 console.log(`  ${svgPath.replace(ROOT + "/", "")}`)
+
+for (const p of ["apps/docs/public/favicon.svg", "apps/docs/src/assets/logo.svg"]) {
+  mkdirSync(dirname(resolve(ROOT, p)), { recursive: true })
+  writeFileSync(resolve(ROOT, p), buildFaviconSvg())
+  console.log(`  ${p}`)
+}
 
 writePng(resolve(ROOT, "apps/web/public/favicon-32.png"), 32)
 writePng(resolve(ROOT, "apps/web/public/apple-touch-icon.png"), 180)

@@ -547,21 +547,26 @@ jobs:
           path: apps/web/playwright-report/
           retention-days: 7
           # 只重跑这一个 job 时同一个 run_id 会再传一份同名 artifact——默认不覆盖，
-          # 会撞出 2 份同名（download-artifact 这次凑巧没炸，但 pages-report 那边
+          # 会撞出 2 份同名（download-artifact 这次凑巧没炸，但 pages 那边
           # 同类的 github-pages 重复已经实测炸过一次），显式覆盖更稳。
           overwrite: true
 
-  # 把 E2E 报告发到 GitHub Pages，给一个每次跑完都刷新、不用手动下载 zip 的固定链接。
+  # 把文档站（`apps/docs`）和 E2E 报告一起发到 GitHub Pages：文档站在根路径，
+  # E2E 报告在 `/e2e/`，给它一个每次跑完都刷新、不用手动下载 zip 的固定链接。
+  # 🔴 两样东西必须拼进**同一个** artifact 一起发：Pages 每次部署都是整站替换，
+  # 拆成两个 job 各发各的，后发的那个会把先发的整份抹掉。
   # 🔴 只在 main 上跑（`pull_request` 事件的 `github.ref` 是 `refs/pull/N/merge`，
   # 天然被这条 if 挡掉）—— fork 来的 PR 拿不到 pages 写权限，硬跑会直接失败；
   # 就算是本仓库自己的 PR，也不该让报告链接被一次性的分支覆盖掉。
   # `if: always()` 是因为最想看报告的时候往往就是 E2E 挂了的那一次。
-  pages-report:
-    name: 发布 E2E 报告到 Pages
+  pages:
+    name: 发布文档站和 E2E 报告到 Pages
     needs: [test-e2e]
     if: always() && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
+      # job 级写了 permissions，没列出来的一律是 none —— 下面 checkout 文档站源码要读权限
+      contents: read
       pages: write
       id-token: write
       actions: write # 下面清理旧 artifact 要用到（删除 artifact 需要这个权限）
@@ -587,15 +592,45 @@ jobs:
             gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id"
           done
 
+      - uses: actions/checkout@v4
+        with:
+          # 文档站每页的「最后更新」读的是 git 历史，浅克隆下每一页都会显示成今天
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile --filter @admin/docs
+
+      - run: pnpm --filter @admin/docs build
+
+      # E2E job 要是在装环境阶段就挂了，就没有报告可下 —— 那也照发文档站，
+      # 只在 /e2e/ 放一页说明，免得 README 徽章点进去是 404
       - name: Download playwright report artifact
+        id: report
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: playwright-report
-          path: report
+          path: apps/docs/dist/e2e
+
+      - name: E2E 报告不进搜索索引
+        run: |
+          if [ "${{ steps.report.outcome }}" = success ]; then
+            # 它和文档站同域，不拦的话「Playwright Test Report」会作为本站的一页被收录
+            sed -i '0,/<head>/s//<head><meta name="robots" content="noindex">/' apps/docs/dist/e2e/index.html
+          else
+            mkdir -p apps/docs/dist/e2e
+            echo '<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><title>E2E report</title><p>This run produced no E2E report. See <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">the workflow run</a>.</p>' > apps/docs/dist/e2e/index.html
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: report
+          path: apps/docs/dist
 
       - name: Deploy to GitHub Pages
         id: deployment

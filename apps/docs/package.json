@@ -1,0 +1,19 @@
+{
+  "name": "@admin/docs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "公开文档站（Astro Starlight）：发到 GitHub Pages 根路径，E2E 报告挂在它的 /e2e/ 下",
+  "type": "module",
+  "scripts": {
+    "start": "astro dev",
+    "build": "astro build && node scripts/check-links.mjs",
+    "preview": "astro preview",
+    "og": "node scripts/gen-og.mjs"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "^7.3.5",
+    "@astrojs/starlight": "^0.42.8",
+    "astro": "^7.3.8",
+    "sharp": "^0.35.5"
+  }
+}
