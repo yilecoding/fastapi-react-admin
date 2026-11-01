@@ -1,242 +1,193 @@
 import { queryOptions } from '@tanstack/react-query'
 
-import { api, type PageData } from '../../api-client/client'
-import { dateKey } from '@admin/i18n'
+import { getDisplayTimeZone } from '@admin/i18n'
 import { presetRange } from '@admin/ui/components/datetime-picker'
 
+import { api, type PageData } from '../../api-client/client'
+import { workflowKeys, type InstanceRow } from '../workflow/api'
+
 /**
- * 仪表盘的数据源。
+ * 工作台的数据源（#202）。
  *
- * ⚠️ **后端没有任何聚合/统计接口** —— 这里全部指标都是拿现有列表接口的
- * `total` 字段算出来的：请求 `size=1` 只为了拿分页元数据里的总数，
- * 不是真的要那一条记录。这样零后端改动，代价是每个指标一个请求。
+ * - 「待我处理」「我发起的」走审批插件的列表接口，带工作台专用的参数（`sort=attention` / `progress=true`）
+ * - 「系统运行」三块走 `/sys/dashboard/*`：每块一个接口，一块挂了只影响那一张卡片
  *
- * 真要做重的统计（按天分组、留存、漏斗）必须先给后端加聚合端点，
- * 前端这样拼是拼不出来的 —— 别在这一页上加需要 GROUP BY 的东西。
+ * query key 都挂在 `dashKeys.all`（`['dashboard']`）或审批的 `workflowKeys.all` 下 ——
+ * 「刷新」按这两个前缀失效；日志页「清空」那里失效 `['dashboard']`，访问柱状图跟着重取。
  */
 
-/** 拿分页总数：size=1 是为了让后端少序列化，不是要那条数据 */
-async function countOf(path: string, params: Record<string, string | undefined>): Promise<number> {
-  const q = new URLSearchParams({ page: '1', size: '1' })
-  for (const [k, v] of Object.entries(params)) if (v !== undefined) q.set(k, v)
-  const data = await api.GET<PageData<unknown>>(`${path}?${q.toString()}`)
-  return data.total ?? 0
-}
+const WF = '/api/v1/sys/workflow'
 
 export const dashKeys = {
   all: ['dashboard'] as const,
-  today: () => [...dashKeys.all, 'today'] as const,
-  trend: () => [...dashKeys.all, 'trend'] as const,
-  recent: (kind: string) => [...dashKeys.all, 'recent', kind] as const,
-  online: () => [...dashKeys.all, 'online'] as const,
-  scale: () => [...dashKeys.all, 'scale'] as const,
+  system: () => [...dashKeys.all, 'system'] as const,
+  attention: () => [...dashKeys.system(), 'attention'] as const,
+  services: () => [...dashKeys.system(), 'services'] as const,
+  visits: (days: number, tz: string) => [...dashKeys.system(), 'visits', days, tz] as const,
 }
 
-export type TodayStats = {
-  logins: number
-  loginFails: number
-  operations: number
-  operaFails: number
+// ── 待我处理 ─────────────────────────────────────────────────────────────────
+
+export type TimeoutAction = 'remind' | 'approve' | 'reject'
+
+/** 待办一行（审批中心那份 `InstanceRow` + 工作台要的几项） */
+export type DeskTodoRow = InstanceRow & {
+  task_id: string
+  arrived_time: string
+  urgent: boolean
+  /** 节点配了超时：什么时候到点 / 到点做什么 */
+  due_time: string | null
+  timeout_action: TimeoutAction | null
+  /** 退回给发起人（开始节点上的待办）：「改完重新提交」 */
+  back: boolean
+  back_by: string | null
+  back_reason: string | null
+  /** 转交过来的：原来在谁手上 */
+  transferred_from: string | null
+  initiator_dept: string | null
 }
 
-/**
- * 今日概览。
- *
- * 「今日」的边界用 `presetRange('today')` 算 —— 与日志页筛选栏用的是同一套，
- * 所以点「今日登录」跳过去时，日志页的筛选条件和这里的口径完全一致，
- * 不会出现「卡片说 12 条、点进去只有 9 条」这种对不上。
- */
-export const todayStatsQuery = queryOptions({
-  queryKey: dashKeys.today(),
-  queryFn: async (): Promise<TodayStats> => {
-    // 带时分秒：接口收的是 datetime，`end_time` 只给日期会被解析成当天 00:00:00，
-    // 静默丢掉今天一整天（见 query-bar/params.ts 里那段）
-    const [start, end] = presetRange('today', true)
-    const [logins, loginFails, operations, operaFails] = await Promise.all([
-      countOf('/api/v1/logs/login', { start_time: start, end_time: end }),
-      countOf('/api/v1/logs/login', { start_time: start, end_time: end, status: '0' }),
-      countOf('/api/v1/logs/opera', { start_time: start, end_time: end }),
-      countOf('/api/v1/logs/opera', { start_time: start, end_time: end, status: '0' }),
-    ])
-    return { logins, loginFails, operations, operaFails }
-  },
-  staleTime: 30_000,
+/** 工作台一次取多少条待办（加急 → 快到期 → 到手时间排好的前 N 条，标题里的「几件 / 其中几件加急」也从这里数） */
+export const DESK_TODO_SIZE = 50
+
+export const deskTodoQuery = queryOptions({
+  queryKey: [...workflowKeys.inbox(), 'desk'] as const,
+  queryFn: () => api.GET<PageData<DeskTodoRow>>(`${WF}/inbox/todo?page=1&size=${DESK_TODO_SIZE}&sort=attention`),
 })
 
-export type ScaleStats = { users: number; roles: number; notices: number }
+export type DeskDraft = { code: string; name: string | null; summary: string | null; updated_time: string }
 
-/**
- * 平台规模。变化很慢，缓存久一点。
- *
- * 公告数走读者那个口（`/feed`：显示中、没过期的）。原来数的是管理端的 `/sys/notices`，
- * 把隐藏的、「通知」类型的都算进去了；而那个口现在要 `sys:notice:add`（#186）。
- */
-export const scaleStatsQuery = queryOptions({
-  queryKey: dashKeys.scale(),
-  queryFn: async (): Promise<ScaleStats> => {
-    const [users, roles, notices] = await Promise.all([
-      countOf('/api/v1/sys/users', {}),
-      countOf('/api/v1/sys/roles', {}),
-      countOf('/api/v1/sys/notices/feed', {}),
-    ])
-    return { users, roles, notices }
-  },
-  staleTime: 5 * 60_000,
+export const deskDraftsQuery = queryOptions({
+  // 和审批中心的 `draftsQuery` 同一个 key：在发起页存了草稿，这里跟着变
+  queryKey: [...workflowKeys.all, 'drafts'] as const,
+  queryFn: () => api.GET<DeskDraft[]>(`${WF}/drafts`),
 })
 
-/**
- * 在线会话数。
- *
- * ⚠️ `/monitors/sessions` 是 `DependsSuperUser`，非超管会 403。
- * 调用方要按「没权限」而不是「出错」来展示 —— 见 index.tsx 里的 `enabled` 判断。
- * 这个接口不分页，一次读完后端的会话索引全给（#138）。
- */
-export const onlineCountQuery = queryOptions({
-  queryKey: dashKeys.online(),
-  queryFn: async (): Promise<number> => {
-    const list = await api.GET<unknown[]>('/api/v1/monitors/sessions')
-    return Array.isArray(list) ? list.length : 0
-  },
-  staleTime: 20_000,
-  retry: false,
+// ── 我发起的 ─────────────────────────────────────────────────────────────────
+
+export type StepState = 'done' | 'current' | 'rejected'
+
+export type InitiatedRow = InstanceRow & {
+  current_node_name: string | null
+  handlers: string[]
+  /** 当前这一步到办理人手上的时间（「已等多久」） */
+  arrived_time: string | null
+  back: boolean
+  back_by: string | null
+  back_reason: string | null
+  /** 被退回时选了「直接回到我这一步」：重新提交之后直接回到哪一步 */
+  resume_to: string | null
+  /** 这一轮走过的步骤（不含「发起」） */
+  steps: { name: string; state: StepState }[]
+  /** 推演出来的后面步骤；`null` = 推演不了（条件用到了看不到的字段），前端画「后面还有」不编 */
+  next_steps: string[] | null
+  last: { action: string; actor_name: string | null; opinion: string | null; time: string } | null
+}
+
+export const INITIATED_SIZE = 3
+
+export const deskInitiatedQuery = queryOptions({
+  queryKey: [...workflowKeys.inbox(), 'desk-initiated'] as const,
+  queryFn: () =>
+    api.GET<PageData<InitiatedRow>>(`${WF}/inbox/initiated?page=1&size=${INITIATED_SIZE}&progress=true`),
 })
 
-/**
- * 近 7 天每日登录数。
- *
- * 成本说明（重要）：后端**没有按天分组的能力**，所以：
- * - 每日**总数**只能一天一个请求（7 个并发的 `size=1`，很轻）
- * - 每日**失败数**换个打法 —— 失败是稀疏事件，整段区间**取一次明细**
- *   再在前端按天分桶，1 个请求顶 7 个
- *
- * 这样趋势图从 14 个请求降到 8 个。
- * **不要**照这个思路扩到 30/90 天：那是 30/90 个请求，该给后端加聚合端点了。
- *
- * ⚠️ 失败明细有 `FAIL_SAMPLE_CAP` 上限。超出时 `truncated` 会置位，
- * 页面必须把「只统计了最近 N 条」说出来 —— 静默少算比不显示更糟。
- */
-export type DayPoint = { date: string; label: string; total: number; fails: number }
-export type TrendResult = { points: DayPoint[]; truncated: boolean; failTotal: number }
+// ── 快速发起 ─────────────────────────────────────────────────────────────────
 
-/**
- * 失败明细的取样上限。
- *
- * ⚠️ 后端分页的 `size` **硬上限是 200**（`common/pagination.py`），
- * 超了直接 422 —— 实测写 300 会让整个趋势 query 挂掉，连日总数一起丢，
- * 图上一根柱子都没有。这个数不能再往上调。
- */
-const FAIL_SAMPLE_CAP = 200
-
-export const loginTrendQuery = queryOptions({
-  queryKey: dashKeys.trend(),
-  queryFn: async (): Promise<TrendResult> => {
-    // 「哪一天」一律按**显示时区**算，和下面 `dateKey()` 的分组键同一个时区框架。
-    //
-    // 原来这里用 `new Date().getFullYear()/getMonth()/getDate()` —— 那是**浏览器**
-    // 时区的今天，而分组键是切后端字符串得到的**服务端**时区的日期。两者只在
-    // 「浏览器和服务端都在东八区」时才吻合，不吻合时柱子会整体错位一天。
-    const days: Array<{ date: string; label: string; start: string; end: string }> = []
-    const todayKey = dateKey(Date.now()) ?? new Date().toISOString().slice(0, 10)
-    const [ty, tm, td] = todayKey.split('-').map(Number)
-    for (let i = 6; i >= 0; i--) {
-      // 纯日历算术：UTC 只是个不带夏令时的载体，跟展示时区无关
-      const date = new Date(Date.UTC(ty!, tm! - 1, td! - i)).toISOString().slice(0, 10)
-      days.push({
-        date,
-        label: date.slice(5),
-        start: `${date} 00:00:00`,
-        end: `${date} 23:59:59`,
-      })
-    }
-    const windowStart = days[0]!.start
-    const windowEnd = days[days.length - 1]!.end
-
-    const [totals, failPage] = await Promise.all([
-      Promise.all(
-        days.map((d) => countOf('/api/v1/logs/login', { start_time: d.start, end_time: d.end }))
-      ),
-      api.GET<PageData<{ login_time: string }>>(
-        `/api/v1/logs/login?page=1&size=${FAIL_SAMPLE_CAP}` +
-          `&status=0&start_time=${encodeURIComponent(windowStart)}&end_time=${encodeURIComponent(windowEnd)}`
-      ),
-    ])
-
-    // 🔴 **不要**切字符串取日期键。后端现在下发的是带时区偏移的 ISO 8601，
-    // `.slice(0, 10)` 拿到的是 **UTC 的**年月日：东八区 8 月 22 日早上 7 点的
-    // 登录，ISO 是 `2026-08-21T23:00:00+00:00`，切出来是 8 月 21 日 ——
-    // 柱状图把它算进前一天，不报错、不空白，只是数字悄悄对不上。
-    const failByDay = new Map<string, number>()
-    for (const item of failPage.items ?? []) {
-      const key = dateKey(item.login_time)
-      if (key) failByDay.set(key, (failByDay.get(key) ?? 0) + 1)
-    }
-
-    const failTotal = failPage.total ?? 0
-    return {
-      points: days.map((d, i) => ({
-        date: d.date,
-        label: d.label,
-        total: totals[i] ?? 0,
-        fails: failByDay.get(d.date) ?? 0,
-      })),
-      truncated: failTotal > FAIL_SAMPLE_CAP,
-      failTotal,
-    }
-  },
-  staleTime: 5 * 60_000,
-})
-
-// ─── 最近动态 ────────────────────────────────────────────────────────────────
-
-export type RecentLogin = {
+export type StartableDef = {
   id: string
-  username: string
-  status: number
-  ip: string
-  login_time: string
-  msg: string
-}
-
-export type RecentOpera = {
-  id: string
-  username: string | null
-  /** 操作摘要，字段名是 `title` 不是 summary */
-  title: string
-  method: string
-  path: string
-  status: number
   code: string
-  cost_time: number
-  opera_time: string
+  name: string
+  icon: string | null
+  category: string | null
+  sort: number
+  /** 这个人近 90 天发起过几张 */
+  my_recent_count: number
 }
 
-const RECENT_SIZE = 6
-
-export const recentLoginsQuery = queryOptions({
-  queryKey: dashKeys.recent('login'),
-  queryFn: () =>
-    api
-      .GET<PageData<RecentLogin>>(`/api/v1/logs/login?page=1&size=${RECENT_SIZE}`)
-      .then((d) => d.items ?? []),
-  staleTime: 30_000,
+export const deskStartableQuery = queryOptions({
+  queryKey: [...workflowKeys.startable(), 'desk'] as const,
+  queryFn: () => api.GET<StartableDef[]>(`${WF}/startable`),
+  staleTime: 5 * 60_000,
 })
 
-export const recentOperasQuery = queryOptions({
-  queryKey: dashKeys.recent('opera'),
-  queryFn: () =>
-    api
-      .GET<PageData<RecentOpera>>(`/api/v1/logs/opera?page=1&size=${RECENT_SIZE}`)
-      .then((d) => d.items ?? []),
-  staleTime: 30_000,
+// ── 系统运行 ─────────────────────────────────────────────────────────────────
+
+export type AttentionItem =
+  | {
+      kind: 'webhook_disabled'
+      level: 'critical' | 'warning'
+      name: string
+      app_id: string
+      time: string | null
+      failures: number
+      last_delivery_time: string | null
+    }
+  | {
+      kind: 'task_failed'
+      level: 'critical' | 'warning'
+      task: string
+      name: string
+      count: number
+      time: string | null
+      error: string | null
+    }
+  | {
+      kind: 'login_fail_spike'
+      level: 'critical' | 'warning'
+      count: number
+      avg: number
+      top_ip: string | null
+      top_ip_count: number
+    }
+
+export const attentionQuery = queryOptions({
+  queryKey: dashKeys.attention(),
+  queryFn: () => api.GET<AttentionItem[]>('/api/v1/sys/dashboard/attention'),
 })
+
+export type ServiceState = { status: 'ok' | 'error' | 'stale' | 'missing' | 'unknown'; last_seen_seconds?: number | null }
+
+export type ServicesStatus = {
+  status: 'ok' | 'degraded'
+  services: Record<'api' | 'database' | 'redis' | 'scheduler' | 'worker', ServiceState>
+  heartbeat_max_age_seconds: number
+  /** 会话索引读不到（Redis 挂了）时是 `null` —— 「不知道」，不是 0 */
+  sessions: { total: number; web: number; desktop: number; mobile: number } | null
+}
+
+export const servicesQuery = queryOptions({
+  queryKey: dashKeys.services(),
+  queryFn: () => api.GET<ServicesStatus>('/api/v1/sys/dashboard/services'),
+  staleTime: 20_000,
+})
+
+export type VisitPoint = { date: string; total: number; fails: number }
+
+export const VISIT_DAYS = 14
 
 /**
- * 「今天」在**日志页地址栏**里的写法，给卡片上的下钻链接用。
+ * 近 14 天每天登录成功 / 失败。「哪一天」按**显示时区**切（后端按 `tz` 算边界）：
+ * 按服务端时区切的话，查看人和服务端不在一个时区时柱子整体错一天
+ */
+export const visitsQuery = () => {
+  const tz = getDisplayTimeZone()
+  return queryOptions({
+    queryKey: dashKeys.visits(VISIT_DAYS, tz),
+    queryFn: () =>
+      api.GET<{ tz: string; points: VisitPoint[] }>(
+        `/api/v1/sys/dashboard/visits?days=${VISIT_DAYS}&tz=${encodeURIComponent(tz)}`
+      ),
+    staleTime: 5 * 60_000,
+  })
+}
+
+/**
+ * 「今天」在**日志页地址栏**里的写法，给「看明细」那种下钻链接用。
  *
  * 日志页的时间筛选在 URL 里是一个参数（`time=起~止`，整天边界不写时分秒），
- * 接口那两个 `start_time` / `end_time` 由查询区在发请求时拼 ——
- * 所以跳过去只能给这一份，不能给 `presetRange()` 的完整串。
- * 口径仍然是同一个 `presetRange('today')`，卡片数字和点进去的列表不会对不上。
+ * 接口那两个 `start_time` / `end_time` 由查询区在发请求时拼 —— 所以跳过去只能给这一份。
+ * 口径是日志页筛选栏同一个 `presetRange('today')`
  */
 export function todayRangeParam(): string {
   const [start, end] = presetRange('today')

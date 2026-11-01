@@ -186,3 +186,57 @@ def test_a_client_that_left_while_the_route_ran_is_not_logged_as_a_success(monke
     response = asyncio.run(M(app=None).dispatch(Request(scope, receive), call_next))
     assert response.status_code == 499
     assert queue.empty(), f'没执行完的请求不该进操作日志：{queue.get_nowait()}'
+
+
+def _request_args_for(path: str, body: bytes) -> dict | None:
+    """让中间件读一份 `Content-Type: application/json` 的请求体，返回它要记进操作日志的参数"""
+    import asyncio
+
+    from starlette.requests import Request
+
+    async def receive():  # ruff: ignore[unused-async] —— ASGI 的 receive 必须是 async
+        return {'type': 'http.request', 'body': body, 'more_body': False}
+
+    scope = {
+        'type': 'http',
+        'method': 'PUT',
+        'path': f'{settings.FASTAPI_API_V1_PATH}{path}',
+        'raw_path': b'',
+        'query_string': b'',
+        'headers': [(b'content-type', b'application/json'), (b'content-length', str(len(body)).encode())],
+        'path_params': {},
+        'client': ('127.0.0.1', 1),
+        'server': ('127.0.0.1', 8000),
+        'scheme': 'http',
+    }
+    return asyncio.run(M(app=None).get_request_args(Request(scope, receive)))
+
+
+def test_a_body_that_claims_json_but_is_not_does_not_blow_up_before_the_route():
+    """`Content-Type: application/json` 但请求体是截断 / 写错的 JSON：这个中间件在路由**之前**读请求体，
+    原来 `request.json()` 的 `JSONDecodeError` 没人接 —— 任何接口收到一份坏 JSON 都是 500，路由层本该回的
+    422（`json_invalid`）永远轮不到。#202 写个人偏好「非法 JSON 被拒」那条用例时撞到的。
+    现在接住、记一个占位，交给路由层去拒（接口层的 422 由 `test_user_preference.py` 那条守着）"""
+    body = b'{"value": {"cards": ['
+    args = _request_args_for('/sys/users/me/preferences/dashboard.layout', body)
+    assert args is not None
+    assert args['body'] == {
+        '_invalid_json': True,
+        '_original_size': len(body),
+        '_message': '请求体不是合法 JSON，无法脱敏，未记录原文',
+    }
+    assert 'json' not in args
+    assert 'data' not in args
+
+
+def test_a_broken_json_body_with_a_password_is_not_logged_in_plain_text():
+    """🔴 上一条的修法第一版是「照原文记进 `data`」—— 解析不了就没法按字段脱敏，
+    一份截断的 `PUT /me/password` 会把新旧两个密码明文写进 sys_opera_log（代码评审翻出来的）。
+    同响应体那条 fail-closed：结构读不出来就不记原文"""
+    body = b'{"old_password": "Old-Secret-1", "new_password": "New-Secret-2", "confirm_password": "New-Se'
+    args = _request_args_for('/sys/users/me/password', body)
+    dumped = json.dumps(args, ensure_ascii=False)
+    # 先断言「有」：这一份请求确实被记了一笔（否则「没有明文」在什么都没记时也成立）
+    assert args, '坏 JSON 的请求体一点痕迹都没留'
+    assert 'Old-Secret-1' not in dumped, f'旧密码明文进了操作日志：{dumped}'
+    assert 'New-Secret-2' not in dumped, f'新密码明文进了操作日志：{dumped}'

@@ -16,3 +16,4 @@ from backend.app.admin.model.storage import Storage as Storage
 from backend.app.admin.model.user import User as User
 from backend.app.admin.model.user_mfa import UserMfa as UserMfa
 from backend.app.admin.model.user_password_history import UserPasswordHistory as UserPasswordHistory
+from backend.app.admin.model.user_preference import UserPreference as UserPreference

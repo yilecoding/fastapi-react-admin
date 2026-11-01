@@ -448,3 +448,18 @@ Qwen3-VL 采购那条要回喂一轮，DeepSeek-V3.2 把「财务总监」留空
 | 卡片写「转交给 王芳（wangfang）」，点确认时多了一个同名的王芳 → 报「对应多个人」（改名 / 停号时可能转给别人 —— 这半句是推出来的，测试只造了同名） | 执行时又按名字找了一遍。预演把解析出的人钉进令牌（`RunContext.pinned`），执行用它。测试走真实确认接口；变异：工具不用 / 确认接口不带回，各自红 |
 | `/startable/{code}/ai-fill` 登录了就能无限循环调（每次一次计费的模型请求，最多带 10 MB 图） | 和设计器生成共用一份按人限流：每分钟 10 次（`_AI_ASSIST_LIMIT`，按用户 ID 不按 IP）。去掉限流，第 11 次是 200 不是 429 |
 | 附件慢的预审要等 10 分钟才显示超时，自动同意也不跑 | 读附件不在任何内层超时里，外层 300 秒先到点、协程被取消（`CancelledError` 不是 `Exception`）。读附件自己 50 秒（`ATTACHMENT_TIMEOUT_SECONDS`，加模型的 240 小于 300），超了记 `attachment_timeout` |
+
+## 工作台用的数据（#202）：`sort=attention` · `progress=true` · 草稿摘要 · 我最近发起的次数
+
+`query_service.todo(sort='attention')`：加急 → 快到期 → 到手时间新的在前。超时不是一列（按节点配置现算），所以取出这个人
+全部待办（上限 500）在内存里**三趟稳定排序**（先排最次要的键）再切页。
+
+- 🔴 **第二趟里没配超时的那些，排序键必须完全相同**（`(True, _NO_DUE)`），稳定排序才保得住第一趟排好的「到手时间新的在前」。
+  第一版写的是 `due_time or arrived_time`，没超时的几条被按到手时间**升序**重排了一遍 —— 列表照样有序，只是反了；
+  `test_todo_rows_carry_timeout_and_attention_sort` 当场红。变异：去掉「加急」那一趟 / 去掉「快到期」那一趟，各自当场红
+- `initiated(progress=True)` 每行多查轨迹 + 推演（`simulate`），所以 `size` 上限 10（再大回 400）。
+  步骤名：一步只有一个人办写**人名**，多人写节点名（`_steps` / `_next_steps`）；推演用到发起人看不到的字段时 `next_steps` 是 `null`，前端画「…」，不编
+- 被退回给发起人的那条待办是**开始节点上的待办**（`back`），带谁退的 / 原因；转交过来的带「从谁那转来」—— 前端据此分「退回给我」和「待审批」
+
+**实测证据**：`tests/test_dashboard_feeds.py` 5 条，2026-11-01 PostgreSQL 16 / SQL Server 2022 / MySQL 8.4 全绿；
+前端 E2E `dashboard-personalize.spec.ts`「待我处理用真数据」走真接口验加急在前、超时胶囊、步骤条。

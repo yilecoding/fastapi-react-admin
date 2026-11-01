@@ -12,7 +12,7 @@ avc-bp 踩过：审批中心挂了权限码，普通员工进不去，只好另�
 import json
 
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Path, Query, Request, UploadFile
 from pyrate_limiter import Duration, Rate
@@ -120,9 +120,11 @@ def _version_row(v: WfDefinitionVersion, *, with_json: bool = False) -> dict[str
 
 
 @router.get('/startable', summary='可发起的审批', dependencies=[DependsJwtAuth])
-async def get_startable(db: CurrentSession) -> ResponseModel:
+async def get_startable(request: Request, db: CurrentSession) -> ResponseModel:
     rows = await definition_service.startable(db)
-    return response_base.success(data=[_definition_row(d) for d in rows])
+    # 工作台「快速发起」按「我最近发起的次数」排：每个流程带上这个人近 90 天发起过几次
+    mine = await definition_service.my_recent_counts(db, request.user.id)
+    return response_base.success(data=[{**_definition_row(d), 'my_recent_count': mine.get(d.id, 0)} for d in rows])
 
 
 @router.get('/startable/{code}', summary='发起页：表单与要自选审批人的节点', dependencies=[DependsJwtAuth])
@@ -242,10 +244,18 @@ async def get_counts(request: Request, db: CurrentSession) -> ResponseModel:
 
 @router.get('/inbox/todo', summary='待我审批', dependencies=[DependsJwtAuth])
 async def get_todo(
-    request: Request, db: CurrentSession, keyword: Keyword = None, page: Page = 1, size: Size = 20
+    request: Request,
+    db: CurrentSession,
+    keyword: Keyword = None,
+    page: Page = 1,
+    size: Size = 20,
+    sort: Annotated[
+        Literal['attention'] | None,
+        Query(description='attention = 加急 → 快到期 → 到手时间（工作台）；不传 = 加急在前、其余按到手时间倒序'),
+    ] = None,
 ) -> ResponseModel:
     return response_base.success(
-        data=await query_service.todo(db, request.user.id, keyword=keyword, page=page, size=size)
+        data=await query_service.todo(db, request.user.id, keyword=keyword, page=page, size=size, sort=sort)
     )
 
 
@@ -266,9 +276,16 @@ async def get_initiated(
     status: Annotated[str | None, Query(max_length=16)] = None,
     page: Page = 1,
     size: Size = 20,
+    progress: Annotated[
+        bool | None, Query(description='带上走到哪了（步骤条 / 在谁手上 / 后面的步骤）。每行要推演一遍，size 最多 10')
+    ] = None,
 ) -> ResponseModel:
+    if progress and size > query_service.PROGRESS_MAX_SIZE:
+        raise errors.RequestError(msg=t('error.workflow.progress_page_too_large', max=query_service.PROGRESS_MAX_SIZE))
     return response_base.success(
-        data=await query_service.initiated(db, request.user.id, keyword=keyword, status=status, page=page, size=size)
+        data=await query_service.initiated(
+            db, request.user.id, keyword=keyword, status=status, page=page, size=size, progress=bool(progress)
+        )
     )
 
 
