@@ -1,0 +1,141 @@
+---
+title: Multi-tab that keeps state
+description: Open tabs stay mounted under React 19.2's <Activity>, so half-filled forms and expanded trees survive switching; filters and paging live in the URL.
+sidebar:
+  order: 2
+---
+
+The admin shell keeps every opened page mounted at the same time and hides the inactive ones with React 19.2's `<Activity>` component. Switching tabs keeps the DOM and React state — a half-filled form, a collapsed tree node, a typed-in filter — and view state such as filters, paging and the selected row is also written to the URL, so it survives a page refresh too.
+
+## How does it work?
+
+[`TabOutlet`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx) **replaces** the router's `<Outlet />`. `<Outlet />` renders only the matched route; `TabOutlet` renders one `<Activity>` per open tab:
+
+```tsx
+return tabs.map((tab) => {
+  const Page = registry[tab.routeId]
+  const visible = tab.key === activeKey
+  return (
+    <Activity key={tab.key} mode={visible ? 'visible' : 'hidden'} name={tab.key}>
+      <TabFrame key={`${tab.key}#${tab.revision ?? 0}`} /* params, search, Page … */ />
+    </Activity>
+  )
+})
+```
+
+In `hidden` mode React keeps the DOM (with `display: none`) and the component state, but cleans up the effects and re-creates them when the tab becomes visible again. That is why a background tab keeps its form but stops polling.
+
+The tab list is a small zustand store ([`tab-store.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-store.ts)), persisted in `sessionStorage` under `admin:tabs`:
+
+- The tab key is `routeId` + params, **without** search — changing a filter updates the tab instead of opening a second one.
+- At most 20 tabs. Opening a 21st closes the left-most unpinned tab.
+- Pinned tabs sort first and can't be closed. The right-click menu has close, pin, reload, open in new window, and close left / right / others / all. Middle-click closes and tabs can be dragged (each within its pinned or unpinned group). These are switchable in the appearance settings.
+
+## Why does the tab keep a half-filled form?
+
+Because the page component is never unmounted. Switching hides it, the same instance stays in memory, and switching back shows it again — nothing is restored from a cache.
+
+One case needed extra work: a drawer opened from the URL (the approval inbox opens its detail drawer on `?id=`). Overlays render through a portal into `<body>`, outside the hidden `<Activity>` subtree. After a refresh the inbox tab was restored in the background with the drawer open, and that drawer covered the page in front, blocking every click. Closing it while hidden left it stuck on screen (Base UI waits for an exit-animation effect that `<Activity>` has already cleaned up); not rendering it at all lost the draft. The fix is to portal into the tab's own root:
+
+```tsx
+<SheetContent container={useTabPortalContainer()}>…</SheetContent>
+```
+
+The ref callback that provides that root ignores `null`, because `<Activity>` detaches refs when it hides a subtree even though the node still exists. Only URL-driven overlays need this; overlays opened from state are already closed by the time you can switch tabs.
+
+## Why is view state in the URL as well?
+
+`<Activity>` only keeps state in memory. A page refresh starts a new JavaScript runtime, so anything that must survive it goes into search params. Route files declare a zod schema, a guard and a title, and render nothing:
+
+```tsx
+export const Route = createFileRoute("/_auth/system/user")({
+  validateSearch: searchSchema,   // page, size, username, status, dept, role, hidden columns…
+  beforeLoad: requirePerm("sys:user:del"),
+  staticData: { title: "用户管理" },
+  component: () => null,
+})
+```
+
+Each tab's URL and search snapshot are in `sessionStorage`, so after a refresh every open tab comes back with its own filters. Unsaved form input does not.
+
+Two details:
+
+- **Coarse state in the URL, fine state in memory.** A tree stores only `fold=all` in the URL; which individual nodes you opened stays in component state ([`use-tree-fold.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/use-tree-fold.ts)). The menu tree has 65 nodes with 19-digit IDs — too long for an address bar.
+- **Snowflake IDs stay strings.** TanStack Router runs `JSON.parse` on search values by default, and `?role=2202097973238829056` became `2202097973238829000`; a role's permissions were saved onto a different role. [`search-params.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/search-params.ts) keeps integers beyond `Number.MAX_SAFE_INTEGER` as strings.
+
+## Why can't a page read the router itself?
+
+The router has exactly one matched location. A hidden tab is still mounted, but `Route.useSearch()` or `Route.useParams()` inside it has no match of its own. So pages receive everything as props and write back through a callback that `TabOutlet` creates for each tab:
+
+```tsx
+export function UserPage({ search = {}, onSearchChange }: {
+  search?: UserSearch
+  onSearchChange?: (next: UserSearch) => void
+}) { … }
+```
+
+`onSearchChange` drops empty values and navigates with `replace: true`, so typing a filter does not add browser history entries. Tabs are synced from `resolvedLocation` and only once the router is `idle`: during navigation TanStack Router updates `location` before `matches`, and syncing in that window wrote the new URL onto the old tab (React then reported a duplicate key).
+
+## What happens to effects, polling and timers in background tabs?
+
+They stop. `<Activity>` cleans up effects of hidden tabs, so React Query observers detach and monitor-page timers stop — three monitor tabs in the background do not poll the backend together.
+
+The catch is that effects are **re-created** when the tab comes back, and a re-created effect always runs once. An effect like `useEffect(() => reset(), [foldAll])` cannot tell "the value changed" from "the tab came back". The department tree lost a manually collapsed node on every switch until an E2E test caught it; the fix compares against the last applied value in a ref, which is preserved like state:
+
+```ts
+const lastFoldAll = React.useRef(foldAll)
+React.useEffect(() => {
+  if (lastFoldAll.current !== foldAll) {
+    lastFoldAll.current = foldAll
+    setFlipped(new Set())
+  }
+}, [foldAll])
+```
+
+## How does "Reload" work if the page never unmounts?
+
+Reload increments the tab's `revision`, which is part of the page's `key`, so the page remounts while the `<Activity>` boundary stays. That alone was not enough: with the global `staleTime: 30_000`, React Query served the cached data and "Reload" sent **zero requests** for 30 seconds (issue #36). Reload now also calls `invalidateQueries({ refetchType: 'active' })` — only the visible page refetches, background tabs are marked stale and refetch when shown.
+
+## What breaks if code queries the DOM globally?
+
+Hidden tabs are still in the document:
+
+- `document.querySelector` can match an element in a hidden tab.
+- Measuring returns 0 inside `display: none`. Monitor-page trend lines are inline SVG with a fixed `viewBox` instead of a chart that measures its container.
+- Third-party code with string selectors has the same problem — the guided tour passes functions that resolve inside the visible tab.
+
+Each tab root carries `data-tab` and `data-visible`. Scope queries to `[data-tab="/_auth/system/user"]`: `[data-visible="true"]` is briefly true on two tabs during a switch — measured at about 18 ms in-app and about 300 ms after a full page load.
+
+## What happens on sign-out or switching accounts?
+
+Tabs are cleared on both login and logout, and the sync hook adds nothing while signed out (otherwise it re-added the current page right after logout, issue #29). Appearance preferences stay. Known gap: if an admin revokes a permission while the user is signed in, tabs already open stay until closed; opening one redirects to `/403`.
+
+## Rules for adding a page
+
+These are enforced by `pnpm arch:check` in CI ([`scripts/arch-check.mjs`](https://github.com/yilecoding/fastapi-react-admin/blob/main/scripts/arch-check.mjs)):
+
+1. No `Route.useSearch()`, `Route.useParams()` or `useNavigate()` in `packages/platform/src/pages/` — use the props.
+2. Route files under `apps/web/src/routes/_auth/` use `component: () => null`; register the page in [`page-registry.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx).
+3. No `document.querySelector` / `getElementById` without a `data-tab` or `data-visible` scope.
+
+Not checked automatically: put filters, paging and selection in `validateSearch`, and give URL-driven drawers `useTabPortalContainer()`.
+
+## Where it lives in the code
+
+- [`shell/tab-outlet.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx) — `TabOutlet`, `TabFrame`, `useTabPortalContainer`
+- [`shell/tab-store.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-store.ts) · [`shell/use-sync-tabs.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/use-sync-tabs.ts) · [`shell/use-tab-actions.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/use-tab-actions.ts)
+- [`apps/web/src/routes/_auth.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/routes/_auth.tsx) — where `TabOutlet` is mounted
+
+## How it is tested
+
+Playwright drives real client-side navigation (clicking links, not `page.goto`, which would reload the runtime):
+
+- [`tabs.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/tabs.spec.ts) — a collapsed department node survives Departments → Roles → Departments; the hidden tab stays attached with `data-visible="false"`.
+- [`workflow.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/workflow.spec.ts) — a half-filled drawer survives a switch and does not block the page in front.
+- [`list-refresh.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/list-refresh.spec.ts) — "Reload" really refetches; [`session-tabs.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/session-tabs.spec.ts) — two accounts with different permissions, no leftover tabs.
+
+## Try it in the demo
+
+Sign in at [the demo](https://fra.wubunan.com/sign-in) as `admin` / `123456`. Open **System → Departments** and collapse a node, open **System → Roles**, then go back — the node is still collapsed. Filter **System → Users**, switch away and back, then refresh: the filter is still in the address bar and the list.
+
+See also: [data permissions](/features/data-permissions/), which decide which tabs and rows a user gets in the first place.

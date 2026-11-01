@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <circle cx="24" cy="24" r="24" fill="#4630db" />
+  <g transform="translate(24 24) scale(1.6) translate(-12 -12)">
+    <path fill="#fff" d="M2 4 H10 V9 H13 V15 H10 V20 H2 Z" />
+    <path fill="#fff" fill-opacity="0.45" d="M15 4 H22 V20 H15 V15 H18 V9 H15 Z" />
+  </g>
+</svg>

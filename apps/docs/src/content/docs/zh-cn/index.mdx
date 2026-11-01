@@ -1,0 +1,124 @@
+---
+title: FastAPI + React 19 中后台底座
+description: 开源中后台底座，FastAPI + React 19 + shadcn/ui：权限细到数据行、多页签保留状态、审批流、不越权的 AI 助手，支持 PostgreSQL / SQL Server / MySQL。
+template: splash
+hero:
+  title: 中后台底座，<br/>像榫卯一样<span class="shine">咬合</span>。
+  tagline: 开箱即用的开源底座，FastAPI + React 19 + shadcn/ui。权限细到每个人能看到哪几行数据，多页签切回来状态还在，自带审批流和不越权的 AI 助手，PostgreSQL / SQL Server / MySQL 三选一。
+  actions:
+    - text: 快速开始
+      link: getting-started/quick-start/
+      icon: right-arrow
+      variant: primary
+    - text: 在线演示
+      link: https://fra.wubunan.com/sign-in
+      icon: external
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/yilecoding/fastapi-react-admin
+      icon: github
+      variant: minimal
+landing:
+  eyebrow: FASTAPI + REACT 19 · MIT
+  chips:
+    - 行级数据权限
+    - 保状态多页签
+    - 原生 SQL Server
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components'
+import dashboard from '../../../../../../docs/screenshots/dashboard.png'
+import dataPermission from '../../../../../../docs/screenshots/data-permission.png'
+import role from '../../../../../../docs/screenshots/role.png'
+import signIn from '../../../../../../docs/screenshots/sign-in.png'
+import workflowDesigner from '../../../../../../docs/screenshots/workflow-designer.png'
+import workflowInbox from '../../../../../../docs/screenshots/workflow-inbox.png'
+import CtaBand from '../../../components/CtaBand.astro'
+import Feature from '../../../components/Feature.astro'
+import ProductShot from '../../../components/ProductShot.astro'
+import SectionTitle from '../../../components/SectionTitle.astro'
+import Stats from '../../../components/Stats.astro'
+
+<ProductShot url="localhost:8888/dashboard" src={dashboard} alt="fastapi-react-admin 仪表盘" lift>
+
+在线演示账号 `admin` / `123456`。这是公开实例，任何人都能登录，数据可能被其他访客改动或清空，请勿存放真实信息。
+
+</ProductShot>
+
+<Stats
+  items={[
+    { value: '1400+', label: '条后端测试，连真实数据库和 Redis' },
+    { value: '150+', label: '条 Playwright 用例，打真实接口' },
+    { value: '3', label: '种数据库，一套代码、一条迁移链' },
+    { value: 'MIT', label: '开源协议，拿去随便改' },
+  ]}
+/>
+
+<SectionTitle id="有什么" eyebrow="WHAT'S IN THE BOX" title="内部系统迟早要做的那几样">
+
+用户、角色、部门是容易的那部分。下面这些，才是每个项目都要从头再造一遍的。
+
+</SectionTitle>
+
+<div class="features">
+  <Feature title="权限细到数据行" icon="rows" href="features/data-permissions/" more="怎么做的">
+    菜单、按钮之外还有数据范围：角色决定一个人能看到**哪几行**。同一张用户表，部门经理打开只看得到本部门的人。
+  </Feature>
+  <Feature title="多页签切回来状态还在" icon="tabs" href="features/multi-tab/" more="怎么做的">
+    基于 React 19 的 `<Activity>`：填了一半的表单、翻到的页码、展开的树，切走再切回来都还在；筛选条件写在 URL 里，刷新也不丢。
+  </Feature>
+  <Feature title="审批流" icon="flow" href="features/approval-workflow/" more="怎么做的">
+    表单设计器 + 流程树，或签 / 会签、退回、转交、撤回、加签、超时处理。
+  </Feature>
+  <Feature title="不越权的 AI 助手" icon="sparkles" href="features/ai-assistant/" more="怎么做的">
+    工具调用以当前登录用户的身份执行，受同一套权限和数据范围约束；写操作先预览、用户确认后才执行，每次调用都留审计。
+  </Feature>
+  <Feature title="大文件上传" icon="upload" href="features/file-storage/" more="怎么做的">
+    本地磁盘或 S3 兼容存储，按哈希秒传，分片并行上传，刷新页面后断点续传。
+  </Feature>
+  <Feature title="数据库三选一" icon="database" href="features/databases/" more="怎么做的">
+    PostgreSQL、SQL Server、MySQL 用同一套代码、同一条迁移链。
+  </Feature>
+</div>
+
+<SectionTitle id="截图" eyebrow="SEE IT" title="最新版本的几个页面">
+
+在本地用 `main` 最新代码拍的。每个页面都有中英文、浅色和深色。
+
+</SectionTitle>
+
+<Tabs>
+  <TabItem label="登录页">
+    <ProductShot src={signIn} alt="登录页：立体榫卯品牌面板" url="localhost:8888/sign-in" />
+  </TabItem>
+  <TabItem label="角色管理">
+    <ProductShot src={role} alt="角色管理：菜单与按钮权限矩阵" url="localhost:8888/system/role" />
+  </TabItem>
+  <TabItem label="数据权限">
+    <ProductShot src={dataPermission} alt="数据权限：行级过滤规则" url="localhost:8888/system/data-permission" />
+  </TabItem>
+  <TabItem label="流程设计">
+    <ProductShot src={workflowDesigner} alt="审批流程设计器" url="localhost:8888/workflow/definition" />
+  </TabItem>
+  <TabItem label="审批中心">
+    <ProductShot src={workflowInbox} alt="审批中心" url="localhost:8888/workflow/inbox" />
+  </TabItem>
+</Tabs>
+
+<CtaBand title="五条命令，在本地跑起来" primary={{ text: '快速开始', href: 'getting-started/quick-start/' }} secondary={{ text: '这是什么，和常见模板有什么不同', href: 'getting-started/introduction/' }}>
+
+```bash
+docker compose -f docker-compose.dev.yml up -d          # PostgreSQL + Redis
+pnpm install:all
+cp apps/api/backend/.env.example apps/api/backend/.env
+pnpm db:init                                            # 建表 + 种子数据
+pnpm dev                                                # 打开 http://localhost:8888
+```
+
+</CtaBand>
+
+<div class="landing-footnote">
+
+MIT 协议。后端最初 fork 自 <a href="https://github.com/fastapi-practices/fastapi_best_architecture">fastapi-best-architecture</a>（FBA），三层结构、插件机制和 RBAC 模型都来自它的设计。
+
+</div>
