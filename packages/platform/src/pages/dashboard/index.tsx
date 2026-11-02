@@ -37,6 +37,7 @@ import {
   type DashboardLayout,
   type LayoutItem,
 } from './layout'
+import { PageShell } from '../_shared/page-shell'
 
 export type DashboardSearch = {
   /** 公告卡 / 消息卡里就地打开的那一条公告（雪花 ID，字符串） */
@@ -200,104 +201,100 @@ export function DashboardPage({
   )
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-1 flex-col gap-5 py-4 md:py-6">
-          <PageHeader title={t('仪表盘')} description={t('平台首页：每个人自己的工作台。')} />
+    <PageShell className="flex-1 gap-5 md:gap-5">
+      <PageHeader title={t('仪表盘')} description={t('平台首页：每个人自己的工作台。')} />
 
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-[13px] text-muted-foreground" data-testid="dash-greeting">
-                {todayLine()}
-                {me.data && <> · {greeting(me.data.nickname, t)}</>}
-              </span>
-              <Headline enabled={ctxReady && byId.has('todo')} ready={ctxReady} />
-            </div>
-            {!editing && (
-              <div className="flex items-center gap-2">
-                <RefreshButton onClick={refreshAll} busy={refreshing} testId="dash-refresh" />
-                <Button variant="outline" size="sm" data-testid="dash-edit" disabled={!canEdit} onClick={enterEdit}>
-                  <IconAdjustmentsHorizontal className="size-4" />
-                  {t('自定义')}
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {Boolean(contextError) && (
-            <QueryError
-              error={contextError}
-              onRetry={() => {
-                void me.refetch()
-                void codes.refetch()
-                void sidebarQ.refetch()
-              }}
-              testId="dash-context-error"
-            />
-          )}
-
-          {/* 只在「一份都没读到」时说「先按默认布局显示」：读到过之后一次后台重取失败，屏幕上仍是他自己的布局、也能编辑 */}
-          {Boolean(pref.error) && !pref.data && (
-            <QueryError
-              error={pref.error}
-              title={t('没能读取你保存的工作台布局')}
-              detail={t('下面先按默认布局显示；重试成功后会换成你自己的布局。读取成功之前不能编辑。')}
-              onRetry={() => void pref.refetch()}
-              testId="dash-layout-error"
-            />
-          )}
-
-          {resolved?.unreadable && !editing && (
-            <Alert tone="warning" data-testid="dash-layout-unreadable">
-              {t('保存的工作台布局格式认不出来，下面是默认布局。编辑并保存一次就会覆盖它。')}
-            </Alert>
-          )}
-
-          {editing && shown && (
-            <DashboardEditor
-              layout={shown}
-              titleOf={titleOf}
-              groupOf={groupOf}
-              pages={pages}
-              canSave={dirty || Boolean(resolved?.unreadable)}
-              saving={save.isPending}
-              saveError={save.error}
-              onChange={setDraft}
-              onReset={() => setDraft(defaultLayout(available))}
-              onCancel={leaveEdit}
-              onSave={saveLayout}
-            />
-          )}
-
-          {!shown ? (
-            !contextError && <GridSkeleton />
-          ) : visible.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground" data-testid="dash-empty">
-              {t('所有卡片都隐藏了。点「自定义」把需要的卡片打开。')}
-            </p>
-          ) : (
-            <>
-              {workItems.length > 0 && renderGrid(workItems, 'dash-grid')}
-              {systemItems.length > 0 && (
-                <section className="mt-1 flex flex-col gap-5" data-testid="dash-system" aria-labelledby={systemTitleId}>
-                  <SystemHeader items={systemItems} titleId={systemTitleId} />
-                  {renderGrid(systemItems, 'dash-grid-system')}
-                </section>
-              )}
-            </>
-          )}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-[13px] text-muted-foreground" data-testid="dash-greeting">
+            {todayLine()}
+            {me.data && <> · {greeting(me.data.nickname, t)}</>}
+          </span>
+          <Headline enabled={ctxReady && byId.has('todo')} ready={ctxReady} />
         </div>
+        {!editing && (
+          <div className="flex items-center gap-2">
+            <RefreshButton onClick={refreshAll} busy={refreshing} testId="dash-refresh" />
+            <Button variant="outline" size="sm" data-testid="dash-edit" disabled={!canEdit} onClick={enterEdit}>
+              <IconAdjustmentsHorizontal className="size-4" />
+              {t('自定义')}
+            </Button>
+          </div>
+        )}
       </div>
+
+      {Boolean(contextError) && (
+        <QueryError
+          error={contextError}
+          onRetry={() => {
+            void me.refetch()
+            void codes.refetch()
+            void sidebarQ.refetch()
+          }}
+          testId="dash-context-error"
+        />
+      )}
+
+      {/* 只在「一份都没读到」时说「先按默认布局显示」：读到过之后一次后台重取失败，屏幕上仍是他自己的布局、也能编辑 */}
+      {Boolean(pref.error) && !pref.data && (
+        <QueryError
+          error={pref.error}
+          title={t('没能读取你保存的工作台布局')}
+          detail={t('下面先按默认布局显示；重试成功后会换成你自己的布局。读取成功之前不能编辑。')}
+          onRetry={() => void pref.refetch()}
+          testId="dash-layout-error"
+        />
+      )}
+
+      {resolved?.unreadable && !editing && (
+        <Alert tone="warning" data-testid="dash-layout-unreadable">
+          {t('保存的工作台布局格式认不出来，下面是默认布局。编辑并保存一次就会覆盖它。')}
+        </Alert>
+      )}
+
+      {editing && shown && (
+        <DashboardEditor
+          layout={shown}
+          titleOf={titleOf}
+          groupOf={groupOf}
+          pages={pages}
+          canSave={dirty || Boolean(resolved?.unreadable)}
+          saving={save.isPending}
+          saveError={save.error}
+          onChange={setDraft}
+          onReset={() => setDraft(defaultLayout(available))}
+          onCancel={leaveEdit}
+          onSave={saveLayout}
+        />
+      )}
+
+      {!shown ? (
+        !contextError && <GridSkeleton />
+      ) : visible.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground" data-testid="dash-empty">
+          {t('所有卡片都隐藏了。点「自定义」把需要的卡片打开。')}
+        </p>
+      ) : (
+        <>
+          {workItems.length > 0 && renderGrid(workItems, 'dash-grid')}
+          {systemItems.length > 0 && (
+            <section className="mt-1 flex flex-col gap-5" data-testid="dash-system" aria-labelledby={systemTitleId}>
+              <SystemHeader items={systemItems} titleId={systemTitleId} />
+              {renderGrid(systemItems, 'dash-grid-system')}
+            </section>
+          )}
+        </>
+      )}
 
       {/* 开在 URL 上 → 抽屉 portal 挂进本 tab 的根节点（reader-sheet / instance-sheet 的注释） */}
       <NoticeReaderSheet
         noticeId={search.notice ?? null}
         onOpenChange={(o) => {
-          if (!o) patch({ notice: undefined })
+      if (!o) patch({ notice: undefined })
         }}
       />
       <InstanceSheet id={search.wf ?? null} onClose={() => patch({ wf: undefined })} />
-    </div>
+    </PageShell>
   )
 }
 

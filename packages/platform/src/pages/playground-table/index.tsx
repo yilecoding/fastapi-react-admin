@@ -53,6 +53,7 @@ import { cn } from '@admin/ui/lib/utils'
 import { PageHeader } from '../../shell/page-header'
 import { StatusPill } from '../_shared/status'
 import { STATUS_META, makeDemoRows, type DemoRow } from './data'
+import { PageShell } from '../_shared/page-shell'
 
 /**
  * DataTable 能力实验台。
@@ -344,149 +345,145 @@ export function PlaygroundTablePage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
-          <PageHeader
-            title="数据表格（Table）"
-            description="在同一页里切换 DataGrid 的布局、交互和工具栏能力，看 1000 行数据下的实际表现。"
-          />
+    <PageShell className="flex-1">
+      <PageHeader
+        title="数据表格（Table）"
+        description="在同一页里切换 DataGrid 的布局、交互和工具栏能力，看 1000 行数据下的实际表现。"
+      />
 
-          <div className="grid gap-3 md:grid-cols-4">
-            <Stat label="总数据量" value={data.length} hint={`${filtered} 条命中过滤条件`} />
-            <Stat label="当前已选" value={selectedCount} hint="支持批量操作与跨页选择" />
-            <Stat label="已置顶" value={pinnedCount} hint={`${rowPinning.top?.length ?? 0} 顶部 / ${rowPinning.bottom?.length ?? 0} 底部`} />
-            <Stat label="当前渲染" value={rendered} hint={caps.virtual ? '虚拟滚动' : caps.paginated ? '分页模式' : '全量渲染'} />
-          </div>
+      <div className="grid gap-3 md:grid-cols-4">
+        <Stat label="总数据量" value={data.length} hint={`${filtered} 条命中过滤条件`} />
+        <Stat label="当前已选" value={selectedCount} hint="支持批量操作与跨页选择" />
+        <Stat label="已置顶" value={pinnedCount} hint={`${rowPinning.top?.length ?? 0} 顶部 / ${rowPinning.bottom?.length ?? 0} 底部`} />
+        <Stat label="当前渲染" value={rendered} hint={caps.virtual ? '虚拟滚动' : caps.paginated ? '分页模式' : '全量渲染'} />
+      </div>
 
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-            <Card className="w-full shrink-0 xl:w-72">
-              <CardContent className="flex flex-col gap-4 p-4">
-                <div>
-                  <h3 className="text-sm font-semibold">能力配置面板</h3>
-                  <p className="text-xs text-muted-foreground">集中测试渲染、交互、工具栏与布局能力。</p>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <Label className="text-xs">分组方式</Label>
-                  <Select
-                    value={grouping[0] ?? 'none'}
-                    items={{ none: '不分组', role: '按角色分组', status: '按状态分组', team: '按团队分组' }}
-                    onValueChange={(v: string | null) => setGrouping(!v || v === 'none' ? [] : [v])}
-                  >
-                    <SelectTrigger className="w-full" data-testid="pg-grouping"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">不分组</SelectItem>
-                      <SelectItem value="role">按角色分组</SelectItem>
-                      <SelectItem value="status">按状态分组</SelectItem>
-                      <SelectItem value="team">按团队分组</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {GROUPS.map((group, gi) => (
-                  <React.Fragment key={gi}>
-                    <Separator />
-                    <div className="flex flex-col">
-                      {group.map((item) => (
-                        <label
-                          key={item.key}
-                          className="flex cursor-pointer items-start justify-between gap-3 rounded-md px-1 py-2 hover:bg-muted/50"
-                        >
-                          <span className="flex min-w-0 flex-col">
-                            <span className="text-sm">{item.label}</span>
-                            <span className="text-xs text-muted-foreground">{item.hint}</span>
-                          </span>
-                          <Switch
-                            checked={caps[item.key]}
-                            onCheckedChange={(v: boolean) => set(item.key)(Boolean(v))}
-                            data-testid={`pg-${item.key}`}
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  </React.Fragment>
-                ))}
-              </CardContent>
-            </Card>
-
-            <div className="min-w-0 flex-1">
-              <DataGrid
-                table={table}
-                storageKey="grid:playground"
-                loading={caps.loading}
-                columnLabels={{
-                  name: '用户', email: '邮箱', team: '团队', role: '角色', status: '状态',
-                  score: '评分', amount: '额度', createdAt: '创建时间', actions: '操作',
-                }}
-                caps={{
-                  search: caps.search,
-                  density: true,
-                  columnSettings: true,
-                  refresh: caps.refresh,
-                  clearFilters: caps.clearFilters,
-                  expandToggle: caps.expandToggle,
-                  fullscreen: caps.fullscreen,
-                }}
-                search={globalFilter}
-                onSearchChange={setGlobalFilter}
-                searchPlaceholder="搜索姓名、邮箱、团队、角色…"
-                onRefresh={() => setSeed((s) => s + 1)}
-                virtual={{ enabled: caps.virtual, threshold: 80, overscan: 12, maxHeight: 560 }}
-                keyboardNav={caps.keyboard}
-                showFooter={caps.footer}
-                onRowReorder={caps.rowDrag ? reorder : undefined}
-                columnDrag={caps.colDrag}
-                columnFilters={caps.colFilter}
-                expandableColumns={
-                  caps.colExpand
-                    ? {
-                        name: (row: any) => <ColDetail row={row} kind="name" />,
-                        team: (row: any) => <ColDetail row={row} kind="team" />,
-                      }
-                    : undefined
-                }
-                emptyMessage="没有匹配的数据"
-                toolbar={<SortToolbar table={t} sorting={sorting} />}
-                contextMenu={caps.contextMenu ? (row: any) => <RowMenu row={row} /> : undefined}
-                renderSubRow={caps.expand ? (row: any) => <SubRow row={row} /> : undefined}
-                bulkActions={
-                  caps.bulkBar
-                    ? (rows: any[]) => (
-                        <>
-                          <Button variant="ghost" size="sm" className="h-7 text-xs"
-                                  onClick={() => rows.forEach((r) => r.pin('top'))}>
-                            批量置顶
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-7 text-xs"
-                                  onClick={() => t.resetRowPinning()}>
-                            取消置顶
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive">
-                            <IconTrash className="size-3.5" />删除
-                          </Button>
-                        </>
-                      )
-                    : undefined
-                }
-                pagination={
-                  caps.paginated
-                    ? {
-                        pageIndex: pagination.pageIndex,
-                        pageCount: t.getPageCount(),
-                        pageSize: pagination.pageSize,
-                        totalCount: filtered,
-                        onPageChange: (i: number) => setPagination((p) => ({ ...p, pageIndex: i })),
-                        onPageSizeChange: (s: number) => setPagination({ pageIndex: 0, pageSize: s }),
-                      }
-                    : undefined
-                }
-              />
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+        <Card className="w-full shrink-0 xl:w-72">
+          <CardContent className="flex flex-col gap-4 p-4">
+            <div>
+              <h3 className="text-sm font-semibold">能力配置面板</h3>
+              <p className="text-xs text-muted-foreground">集中测试渲染、交互、工具栏与布局能力。</p>
             </div>
-          </div>
+
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs">分组方式</Label>
+              <Select
+                value={grouping[0] ?? 'none'}
+                items={{ none: '不分组', role: '按角色分组', status: '按状态分组', team: '按团队分组' }}
+                onValueChange={(v: string | null) => setGrouping(!v || v === 'none' ? [] : [v])}
+              >
+                <SelectTrigger className="w-full" data-testid="pg-grouping"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">不分组</SelectItem>
+                  <SelectItem value="role">按角色分组</SelectItem>
+                  <SelectItem value="status">按状态分组</SelectItem>
+                  <SelectItem value="team">按团队分组</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {GROUPS.map((group, gi) => (
+              <React.Fragment key={gi}>
+                <Separator />
+                <div className="flex flex-col">
+                  {group.map((item) => (
+                    <label
+                      key={item.key}
+                      className="flex cursor-pointer items-start justify-between gap-3 rounded-md px-1 py-2 hover:bg-muted/50"
+                    >
+                      <span className="flex min-w-0 flex-col">
+                        <span className="text-sm">{item.label}</span>
+                        <span className="text-xs text-muted-foreground">{item.hint}</span>
+                      </span>
+                      <Switch
+                        checked={caps[item.key]}
+                        onCheckedChange={(v: boolean) => set(item.key)(Boolean(v))}
+                        data-testid={`pg-${item.key}`}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </React.Fragment>
+            ))}
+          </CardContent>
+        </Card>
+
+        <div className="min-w-0 flex-1">
+          <DataGrid
+            table={table}
+            storageKey="grid:playground"
+            loading={caps.loading}
+            columnLabels={{
+              name: '用户', email: '邮箱', team: '团队', role: '角色', status: '状态',
+              score: '评分', amount: '额度', createdAt: '创建时间', actions: '操作',
+            }}
+            caps={{
+              search: caps.search,
+              density: true,
+              columnSettings: true,
+              refresh: caps.refresh,
+              clearFilters: caps.clearFilters,
+              expandToggle: caps.expandToggle,
+              fullscreen: caps.fullscreen,
+            }}
+            search={globalFilter}
+            onSearchChange={setGlobalFilter}
+            searchPlaceholder="搜索姓名、邮箱、团队、角色…"
+            onRefresh={() => setSeed((s) => s + 1)}
+            virtual={{ enabled: caps.virtual, threshold: 80, overscan: 12, maxHeight: 560 }}
+            keyboardNav={caps.keyboard}
+            showFooter={caps.footer}
+            onRowReorder={caps.rowDrag ? reorder : undefined}
+            columnDrag={caps.colDrag}
+            columnFilters={caps.colFilter}
+            expandableColumns={
+              caps.colExpand
+                ? {
+                    name: (row: any) => <ColDetail row={row} kind="name" />,
+                    team: (row: any) => <ColDetail row={row} kind="team" />,
+                  }
+                : undefined
+            }
+            emptyMessage="没有匹配的数据"
+            toolbar={<SortToolbar table={t} sorting={sorting} />}
+            contextMenu={caps.contextMenu ? (row: any) => <RowMenu row={row} /> : undefined}
+            renderSubRow={caps.expand ? (row: any) => <SubRow row={row} /> : undefined}
+            bulkActions={
+              caps.bulkBar
+                ? (rows: any[]) => (
+                    <>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                              onClick={() => rows.forEach((r) => r.pin('top'))}>
+                        批量置顶
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs"
+                              onClick={() => t.resetRowPinning()}>
+                        取消置顶
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:text-destructive">
+                        <IconTrash className="size-3.5" />删除
+                      </Button>
+                    </>
+                  )
+                : undefined
+            }
+            pagination={
+              caps.paginated
+                ? {
+                    pageIndex: pagination.pageIndex,
+                    pageCount: t.getPageCount(),
+                    pageSize: pagination.pageSize,
+                    totalCount: filtered,
+                    onPageChange: (i: number) => setPagination((p) => ({ ...p, pageIndex: i })),
+                    onPageSizeChange: (s: number) => setPagination({ pageIndex: 0, pageSize: s }),
+                  }
+                : undefined
+            }
+          />
         </div>
       </div>
-    </div>
+    </PageShell>
   )
 }
 

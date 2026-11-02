@@ -53,6 +53,7 @@ import {
 import { OpenAppFormSheet } from './form'
 import { SecretDialog } from './secret-dialog'
 import { WebhookSheet, type WebhookTab, type WebhookView } from './webhook-sheet'
+import { PageShell } from '../_shared/page-shell'
 
 const col = createColumnHelper<typeof features, OpenApp>()
 
@@ -359,96 +360,92 @@ export function OpenAppPage({
   const hasFilter = countActive(q.applied, FIELDS) > 0
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          {/* PageHeader 只渲染 sr-only 的 <h1>；说明要让人看见，单独一行（同 MCP 凭据页） */}
-          <PageHeader title={t('应用管理')} />
-          <p className="text-sm text-muted-foreground">
-            {t('给对接的外部系统发一对 AK/SK，它就能带签名调用勾选的开放接口。SK 加密存储，明文只在创建和重置时显示一次。')}
-          </p>
+    <PageShell fill="always">
+      {/* PageHeader 只渲染 sr-only 的 <h1>；说明要让人看见，单独一行（同 MCP 凭据页） */}
+      <PageHeader title={t('应用管理')} />
+      <p className="text-sm text-muted-foreground">
+        {t('给对接的外部系统发一对 AK/SK，它就能带签名调用勾选的开放接口。SK 加密存储，明文只在创建和重置时显示一次。')}
+      </p>
 
-          <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-            <QueryBar
-              fields={FIELDS}
-              value={q.value}
-              onChange={q.setValue}
-              onSearch={q.submit}
-              onReset={q.reset}
-              applied={q.applied}
-              loading={isFetching}
-              actions={
-                <>
-                  <Can perm="open:app:add">
-                    <Button size="sm" onClick={() => openSheet(null)} data-testid="open-app-add">
-                      <IconPlus className="size-4" />
-                      {t('新增应用')}
-                    </Button>
-                  </Can>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={exportDoc}
-                    aria-busy={exporting}
-                    data-testid="open-app-doc"
-                  >
-                    {exporting ? <IconLoader2 className="size-4 animate-spin" /> : <IconFileDescription className="size-4" />}
-                    {t('开放接口文档')}
-                  </Button>
-                  <Can perm="open:log:list">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      render={<Link to="/open/log" search={{}} />}
-                      // render 成 <a> 时要声明，否则 Base UI 在控制台报「expected a native <button>」
-                      nativeButton={false}
-                      data-testid="open-app-logs"
-                    >
-                      <IconHistory className="size-4" />
-                      {t('调用日志')}
-                    </Button>
-                  </Can>
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-                </>
-              }
-              viewsStorageKey="qb:open-app"
-            />
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        <QueryBar
+          fields={FIELDS}
+          value={q.value}
+          onChange={q.setValue}
+          onSearch={q.submit}
+          onReset={q.reset}
+          applied={q.applied}
+          loading={isFetching}
+          actions={
+            <>
+              <Can perm="open:app:add">
+                <Button size="sm" onClick={() => openSheet(null)} data-testid="open-app-add">
+                  <IconPlus className="size-4" />
+                  {t('新增应用')}
+                </Button>
+              </Can>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={exportDoc}
+                aria-busy={exporting}
+                data-testid="open-app-doc"
+              >
+                {exporting ? <IconLoader2 className="size-4 animate-spin" /> : <IconFileDescription className="size-4" />}
+                {t('开放接口文档')}
+              </Button>
+              <Can perm="open:log:list">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  render={<Link to="/open/log" search={{}} />}
+                  // render 成 <a> 时要声明，否则 Base UI 在控制台报「expected a native <button>」
+                  nativeButton={false}
+                  data-testid="open-app-logs"
+                >
+                  <IconHistory className="size-4" />
+                  {t('调用日志')}
+                </Button>
+              </Can>
+              <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+            </>
+          }
+          viewsStorageKey="qb:open-app"
+        />
 
-            {actionError && (
-              <Alert tone="danger" data-testid="open-app-action-error">
-                {actionError}
-              </Alert>
-            )}
+        {actionError && (
+          <Alert tone="danger" data-testid="open-app-action-error">
+            {actionError}
+          </Alert>
+        )}
 
-            <div
-              data-testid="open-app-table"
-              className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-            >
-              <DataTable
-                table={table}
-                showColumnVisibility={false}
-                rows={table.getRowModel().rows}
-                columnCount={columns.length}
-                emptyMessage={hasFilter ? t('没有匹配的应用') : t('还没有应用。点「新增应用」给对接的系统发一对密钥')}
-                emptyAction={
-                  hasFilter ? (
-                    <ResetButton variant="outline" testId="empty-clear-filter" label={t('清除筛选')} onClick={q.reset} />
-                  ) : undefined
-                }
-                {...list}
-                skeletonRows={5}
-                pagination={{
-                  pageIndex: page - 1,
-                  pageCount: data?.total_pages ?? 1,
-                  pageSize: size,
-                  totalCount: data?.total ?? 0,
-                  onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                  onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-                }}
-              />
-            </div>
-          </div>
+        <div
+          data-testid="open-app-table"
+          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+        >
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            emptyMessage={hasFilter ? t('没有匹配的应用') : t('还没有应用。点「新增应用」给对接的系统发一对密钥')}
+            emptyAction={
+              hasFilter ? (
+                <ResetButton variant="outline" testId="empty-clear-filter" label={t('清除筛选')} onClick={q.reset} />
+              ) : undefined
+            }
+            {...list}
+            skeletonRows={5}
+            pagination={{
+              pageIndex: page - 1,
+              pageCount: data?.total_pages ?? 1,
+              pageSize: size,
+              totalCount: data?.total ?? 0,
+              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+            }}
+          />
         </div>
       </div>
 
@@ -458,14 +455,14 @@ export function OpenAppPage({
         appId={search.webhook ?? null}
         view={webhookView(search)}
         onViewChange={(v) =>
-          onSearchChange?.({
-            ...search,
-            wtab: v.tab === 'endpoints' ? undefined : v.tab,
-            wstatus: v.deliveries?.status,
-            whook: v.deliveries?.hook,
-            wpage: v.deliveries?.page,
-            wdel: v.deliveries?.open,
-          })
+      onSearchChange?.({
+        ...search,
+        wtab: v.tab === 'endpoints' ? undefined : v.tab,
+        wstatus: v.deliveries?.status,
+        whook: v.deliveries?.hook,
+        wpage: v.deliveries?.page,
+        wdel: v.deliveries?.open,
+      })
         }
         onClose={() => onSearchChange?.(withoutWebhook(search))}
       />
@@ -475,18 +472,18 @@ export function OpenAppPage({
         onOpenChange={(o) => !o && setPendingReset(null)}
         title={t('重置密钥')}
         description={t('「{{name}}」现在用的 Secret Key 会立即失效。对方系统换成新的 SK 之前，所有调用都会被拒绝。Access Key 不变。', {
-          name: pendingReset?.name ?? '',
+      name: pendingReset?.name ?? '',
         })}
         confirmText={t('确定重置')}
         pending={reset.isPending}
         onConfirm={async () => {
-          setActionError(null)
-          try {
-            if (pendingReset) setIssued(await reset.mutateAsync(pendingReset.id))
-          } catch (e) {
-            setActionError(e instanceof Error ? e.message : t('重置失败'))
-          }
-          setPendingReset(null)
+      setActionError(null)
+      try {
+        if (pendingReset) setIssued(await reset.mutateAsync(pendingReset.id))
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : t('重置失败'))
+      }
+      setPendingReset(null)
         }}
       />
       <ConfirmDialog
@@ -497,15 +494,15 @@ export function OpenAppPage({
         destructive
         pending={del.isPending}
         onConfirm={async () => {
-          setActionError(null)
-          try {
-            if (pendingDelete) await del.mutateAsync(pendingDelete.id)
-          } catch (e) {
-            setActionError(e instanceof Error ? e.message : t('删除失败'))
-          }
-          setPendingDelete(null)
+      setActionError(null)
+      try {
+        if (pendingDelete) await del.mutateAsync(pendingDelete.id)
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : t('删除失败'))
+      }
+      setPendingDelete(null)
         }}
       />
-    </div>
+    </PageShell>
   )
 }

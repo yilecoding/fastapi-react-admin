@@ -34,6 +34,7 @@ import {
 } from './api'
 import { countBroken, isBrokenMenu } from './dead-link'
 import { MenuFormSheet } from './form'
+import { PageShell } from '../_shared/page-shell'
 
 /**
  * 菜单管理 —— 平台里最复杂的一页。
@@ -117,142 +118,135 @@ export function MenuPage({
   )
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        {/* content-scroll:* —— 「内容区滚动」模式下这一块撑满可用高度，
-              于是里面的表格框变成定高视区：筛选栏 / 表头 / 分页条钉住，只有行滚。
-              整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          <PageHeader title={t("菜单管理")} description={t("侧边栏结构与权限标识的来源。路由地址从前端已有路由中选，填不错。")} />
+    <PageShell fill="always">
+      <PageHeader title={t("菜单管理")} description={t("侧边栏结构与权限标识的来源。路由地址从前端已有路由中选，填不错。")} />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <TextFilter
-              value={search.title ?? ''}
-              placeholder={t("搜索菜单标题…")}
-              testId="filter-title"
-              onCommit={(v) => patch({ title: v || undefined })}
-            />
-            <SelectFilter
-              value={search.type}
-              items={TYPE_FILTER_ITEMS}
-              testId="filter-type"
-              onChange={(v) => patch({ type: v === undefined ? undefined : Number(v) })}
-            />
-            <StatusFilter value={search.status} onChange={(v) => patch({ status: v })} />
-            {hasFilter && (
-              <ResetButton
-                onClick={() =>
-                  patch({ title: undefined, status: undefined, type: undefined, broken: undefined })
+      <div className="flex flex-wrap items-center gap-2">
+        <TextFilter
+          value={search.title ?? ''}
+          placeholder={t("搜索菜单标题…")}
+          testId="filter-title"
+          onCommit={(v) => patch({ title: v || undefined })}
+        />
+        <SelectFilter
+          value={search.type}
+          items={TYPE_FILTER_ITEMS}
+          testId="filter-type"
+          onChange={(v) => patch({ type: v === undefined ? undefined : Number(v) })}
+        />
+        <StatusFilter value={search.status} onChange={(v) => patch({ status: v })} />
+        {hasFilter && (
+          <ResetButton
+            onClick={() =>
+              patch({ title: undefined, status: undefined, type: undefined, broken: undefined })
+            }
+          />
+        )}
+        <Button
+          variant="outline" size="sm" className="h-8"
+          data-testid="toggle-fold"
+          onClick={() => patch({ fold: foldAll ? undefined : 'all' })}
+        >
+          {foldAll ? <IconChevronsDown className="size-4" /> : <IconChevronsUp className="size-4" />}
+          {foldAll ? t('展开全部') : t('折叠全部')}
+        </Button>
+        <span className="ms-auto flex items-center gap-2 text-sm text-muted-foreground">
+          <span data-testid="menu-total">
+            {hasFilter ? t('{{shown}} / {{total}} 项', { shown: shownTotal, total }) : t('共 {{n}} 项', { n: total })}
+          </span>
+          {broken > 0 && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-pressed={search.broken === true}
+                    onClick={() => patch({ broken: search.broken ? undefined : true })}
+                    className={cn(
+                      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ring-1',
+                      TONE_CLASS.warning,
+                      search.broken && 'ring-2 ring-amber-500/60'
+                    )}
+                  />
                 }
-              />
-            )}
-            <Button
-              variant="outline" size="sm" className="h-8"
-              data-testid="toggle-fold"
-              onClick={() => patch({ fold: foldAll ? undefined : 'all' })}
-            >
-              {foldAll ? <IconChevronsDown className="size-4" /> : <IconChevronsUp className="size-4" />}
-              {foldAll ? t('展开全部') : t('折叠全部')}
-            </Button>
-            <span className="ms-auto flex items-center gap-2 text-sm text-muted-foreground">
-              <span data-testid="menu-total">
-                {hasFilter ? t('{{shown}} / {{total}} 项', { shown: shownTotal, total }) : t('共 {{n}} 项', { n: total })}
-              </span>
-              {broken > 0 && (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button
-                        type="button"
-                        aria-pressed={search.broken === true}
-                        onClick={() => patch({ broken: search.broken ? undefined : true })}
-                        className={cn(
-                          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ring-1',
-                          TONE_CLASS.warning,
-                          search.broken && 'ring-2 ring-amber-500/60'
-                        )}
-                      />
-                    }
-                    data-testid="broken-count"
-                  >
-                    <IconAlertTriangle className="size-3" />{t('{{n}} 个死链', { n: broken })}
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {t('这些菜单的 path 在前端路由里不存在，侧边栏会跳过它们。')}
-                    {search.broken ? t('点一下取消筛选') : t('点一下只看它们')}
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </span>
-            <Can perm="sys:menu:add">
-              <Button size="sm" data-testid="add-menu"
-                      onClick={() => { setEditing(null); setPresetParent(null); setSheet(true) }}>
-                <IconPlus className="size-4" />{t('新增菜单')}
-              </Button>
-            </Can>
-            <RefreshButton busy={isFetching} onClick={list.onRetry} />
-          </div>
-
-          {/* 有旧数据可看时（重取失败那种）不抽走表格，错误挂成横幅 */}
-          {Boolean(list.error) && tree.length > 0 && (
-            <QueryError error={list.error} onRetry={list.onRetry} className="shrink-0" />
+                data-testid="broken-count"
+              >
+                <IconAlertTriangle className="size-3" />{t('{{n}} 个死链', { n: broken })}
+              </TooltipTrigger>
+              <TooltipContent>
+                {t('这些菜单的 path 在前端路由里不存在，侧边栏会跳过它们。')}
+                {search.broken ? t('点一下取消筛选') : t('点一下只看它们')}
+              </TooltipContent>
+            </Tooltip>
           )}
+        </span>
+        <Can perm="sys:menu:add">
+          <Button size="sm" data-testid="add-menu"
+                  onClick={() => { setEditing(null); setPresetParent(null); setSheet(true) }}>
+            <IconPlus className="size-4" />{t('新增菜单')}
+          </Button>
+        </Can>
+        <RefreshButton busy={isFetching} onClick={list.onRetry} />
+      </div>
 
-          {/* 加载中也保留表头与工具栏 —— 整块换骨架屏会让筛选栏在加载完成时凭空出现 */}
-          <div
-            className={cn(
-              'overflow-x-auto rounded-lg border transition-opacity',
-              // 与 `DataTable` 的表格框同款：内容区滚动模式下变成定高的表格视区。
-              // 真正滚的是 `Table` 内部那层 table-container（见 ui/components/table.tsx），
-              // 所以这里只负责「变成列向 flex + 把高度传下去」
-              'content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col',
-              isFetching && !isPending && 'opacity-60'
+      {/* 有旧数据可看时（重取失败那种）不抽走表格，错误挂成横幅 */}
+      {Boolean(list.error) && tree.length > 0 && (
+        <QueryError error={list.error} onRetry={list.onRetry} className="shrink-0" />
+      )}
+
+      {/* 加载中也保留表头与工具栏 —— 整块换骨架屏会让筛选栏在加载完成时凭空出现 */}
+      <div
+        className={cn(
+          'overflow-x-auto rounded-lg border transition-opacity',
+          // 与 `DataTable` 的表格框同款：内容区滚动模式下变成定高的表格视区。
+          // 真正滚的是 `Table` 内部那层 table-container（见 ui/components/table.tsx），
+          // 所以这里只负责「变成列向 flex + 把高度传下去」
+          'content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col',
+          isFetching && !isPending && 'opacity-60'
+        )}
+        data-testid="menu-table"
+        aria-busy={isFetching}
+      >
+        <Table>
+          {/* 吸顶表头。`bg-muted` 不能省（透明的话滚上来的行会从底下透出来），
+              inset 阴影补那条分隔线 —— collapse 表格里 thead 的 border 会跟着滚走 */}
+          <TableHeader className="sticky top-0 z-10 bg-muted shadow-[inset_0_-1px_0_var(--border)]">
+            <TableRow>
+              <TableHead className="min-w-56">{t('菜单标题')}</TableHead>
+              <TableHead>{t('类型')}</TableHead>
+              <TableHead>{t('路由地址')}</TableHead>
+              <TableHead>{t('权限标识')}</TableHead>
+              <TableHead>{t('排序')}</TableHead>
+              <TableHead>{t('状态')}</TableHead>
+              <TableHead className="w-10" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isPending ? (
+              <DataTableSkeletonRows rows={8} columns={7} />
+            ) : list.error && tree.length === 0 ? (
+              /* 🔴 排在空态前面 —— 否则接口挂了会显示成「没有匹配的菜单」（硬纪律 9）。
+                 判的是 `tree` 不是 `shown`：前端过滤把结果筛空了不是失败 */
+              <DataTableErrorRow columnCount={7} error={list.error} onRetry={list.onRetry} />
+            ) : shown.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                  {t('没有匹配的菜单')}
+                </TableCell>
+              </TableRow>
+            ) : (
+              shown.map((m) => (
+                <MenuRows
+                  key={m.id} node={m} depth={0} isOpen={isOpen} isValidPath={isValidPath}
+                  onToggle={toggle}
+                  onEdit={(x) => { setEditing(x); setPresetParent(null); setSheet(true) }}
+                  onAddChild={(pid) => { setEditing(null); setPresetParent(pid); setSheet(true) }}
+                  onDelete={setPendingDelete}
+                />
+              ))
             )}
-            data-testid="menu-table"
-            aria-busy={isFetching}
-          >
-            <Table>
-              {/* 吸顶表头。`bg-muted` 不能省（透明的话滚上来的行会从底下透出来），
-                  inset 阴影补那条分隔线 —— collapse 表格里 thead 的 border 会跟着滚走 */}
-              <TableHeader className="sticky top-0 z-10 bg-muted shadow-[inset_0_-1px_0_var(--border)]">
-                <TableRow>
-                  <TableHead className="min-w-56">{t('菜单标题')}</TableHead>
-                  <TableHead>{t('类型')}</TableHead>
-                  <TableHead>{t('路由地址')}</TableHead>
-                  <TableHead>{t('权限标识')}</TableHead>
-                  <TableHead>{t('排序')}</TableHead>
-                  <TableHead>{t('状态')}</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isPending ? (
-                  <DataTableSkeletonRows rows={8} columns={7} />
-                ) : list.error && tree.length === 0 ? (
-                  /* 🔴 排在空态前面 —— 否则接口挂了会显示成「没有匹配的菜单」（硬纪律 9）。
-                     判的是 `tree` 不是 `shown`：前端过滤把结果筛空了不是失败 */
-                  <DataTableErrorRow columnCount={7} error={list.error} onRetry={list.onRetry} />
-                ) : shown.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                      {t('没有匹配的菜单')}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  shown.map((m) => (
-                    <MenuRows
-                      key={m.id} node={m} depth={0} isOpen={isOpen} isValidPath={isValidPath}
-                      onToggle={toggle}
-                      onEdit={(x) => { setEditing(x); setPresetParent(null); setSheet(true) }}
-                      onAddChild={(pid) => { setEditing(null); setPresetParent(pid); setSheet(true) }}
-                      onDelete={setPendingDelete}
-                    />
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
+          </TableBody>
+        </Table>
       </div>
 
       <MenuFormSheet
@@ -265,25 +259,25 @@ export function MenuPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除菜单")}
         description={
-          deleteError ? (
-            <span className="text-destructive">{deleteError}</span>
-          ) : pendingDelete ? (
-            t('确定删除「{{title}}」吗？其下的子菜单与按钮权限也会一并移除。', { title: pendingDelete.title })
-          ) : ''
+      deleteError ? (
+        <span className="text-destructive">{deleteError}</span>
+      ) : pendingDelete ? (
+        t('确定删除「{{title}}」吗？其下的子菜单与按钮权限也会一并移除。', { title: pendingDelete.title })
+      ) : ''
         }
         confirmText={t("删除")} destructive pending={del.isPending}
         onConfirm={async () => {
-          if (!pendingDelete) return
-          setDeleteError(null)
-          try {
-            await del.mutateAsync(pendingDelete.id)
-            setPendingDelete(null)
-          } catch (e) {
-            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
-          }
+      if (!pendingDelete) return
+      setDeleteError(null)
+      try {
+        await del.mutateAsync(pendingDelete.id)
+        setPendingDelete(null)
+      } catch (e) {
+        setDeleteError(e instanceof Error ? e.message : t('删除失败'))
+      }
         }}
       />
-    </div>
+    </PageShell>
   )
 }
 

@@ -130,7 +130,7 @@ export function ProfilePage({
 
   return (
     <div className="flex flex-1 flex-col">
-      <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
+      <div className="flex flex-1 flex-col gap-4 md:gap-6">
         <PageHeader title={t('个人中心')} description={t('维护自己的资料与登录密码')} />
         <SettingsShell
           panels={panels}
