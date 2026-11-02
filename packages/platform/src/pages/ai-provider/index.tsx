@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { IconCheck, IconPencil, IconPlugConnected, IconPlus, IconTrash, IconX } from '@tabler/icons-react'
+import { IconCheck, IconPencil, IconPlugConnected, IconTrash, IconX } from '@tabler/icons-react'
 import * as React from 'react'
 
 import { Badge } from '@admin/ui/components/badge'
@@ -10,6 +10,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { AddCard, CardField, CardFields } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   PROVIDER_TYPE_LABELS,
@@ -112,20 +113,11 @@ export function AiProviderPage() {
                   </div>
                 </div>
 
-                <dl className="space-y-1.5 text-xs">
-                  <div className="flex gap-2">
-                    <dt className="w-10 shrink-0 text-muted-foreground">{t('地址')}</dt>
-                    <dd className="min-w-0 truncate font-mono">{provider.base_url}</dd>
-                  </div>
-                  <div className="flex gap-2">
-                    <dt className="w-10 shrink-0 text-muted-foreground">{t('密钥')}</dt>
-                    <dd className="font-mono">{provider.api_key_mask}</dd>
-                  </div>
-                  <div className="flex gap-2">
-                    <dt className="w-10 shrink-0 text-muted-foreground">TLS</dt>
-                    <dd>{provider.verify_ssl ? t('校验') : t('不校验（内网自签）')}</dd>
-                  </div>
-                </dl>
+                <CardFields>
+                  <CardField label={t('地址')} className="truncate font-mono">{provider.base_url}</CardField>
+                  <CardField label={t('密钥')} className="font-mono">{provider.api_key_mask}</CardField>
+                  <CardField label="TLS">{provider.verify_ssl ? t('校验') : t('不校验（内网自签）')}</CardField>
+                </CardFields>
 
                 <div className="flex items-center gap-2">
                   <Can perm="ai:provider:edit">
@@ -148,17 +140,11 @@ export function AiProviderPage() {
           })}
 
           <Can perm="ai:provider:add">
-            <button
-              type="button"
+            <AddCard
+              label={t('新增供应商')}
               onClick={openCreate}
-              className="flex min-h-44 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40 hover:text-foreground"
-            >
-              <IconPlus className="size-5" />
-              <span className="text-sm">{t('新增供应商')}</span>
-              {providers.length === 0 ? (
-                <span className="max-w-56 text-xs text-balance">{t('先配一个可用的供应商，AI 助手才能对话')}</span>
-              ) : null}
-            </button>
+              hint={providers.length === 0 ? t('先配一个可用的供应商，AI 助手才能对话') : undefined}
+            />
           </Can>
         </div>
       )}
