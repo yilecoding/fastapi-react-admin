@@ -77,7 +77,7 @@ export function StoragePage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 py-3 content-scroll:min-h-0">
+    <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
       <p className="text-sm text-muted-foreground">
         {t('新上传的文件落在默认存储。切换默认只影响之后的上传，已有文件仍从它原来的存储读取。')}
       </p>

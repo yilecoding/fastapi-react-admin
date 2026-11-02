@@ -1000,6 +1000,7 @@ import { QueryBar, countActive, type FilterField } from '@admin/ui/components/qu
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
+import { PageShell } from '../_shared/page-shell'
 import { BulkBar, RefreshButton, ResetButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
@@ -1131,68 +1132,66 @@ export function CustomerPage({
   const hasFilter = countActive(q.applied, FIELDS) > 0
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-        <PageHeader title={t('客户管理')} description={t('维护客户档案；能看到哪些客户由数据权限决定。')} />
+    <PageShell fill="always">
+      <PageHeader title={t('客户管理')} description={t('维护客户档案；能看到哪些客户由数据权限决定。')} />
 
-        <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-          <QueryBar
-            fields={FIELDS}
-            value={q.value}
-            onChange={q.setValue}
-            onSearch={submitQuery}
-            onReset={clearFilters}
-            applied={q.applied}
-            loading={isFetching}
-            viewsStorageKey="qb:customer"
-            actions={
-              <>
-                <Can perm="crm:customer:add">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setEditing(null)
-                      setSheetOpen(true)
-                    }}
-                  >
-                    <IconPlus className="size-4" />
-                    {t('新增客户')}
-                  </Button>
-                </Can>
-                <RefreshButton busy={isFetching} onClick={list.onRetry} />
-                <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-                <Can perm="crm:customer:del">
-                  <BulkBar count={selectedIds.length} pending={del.isPending} onDelete={() => setBulkOpen(true)} />
-                </Can>
-              </>
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        <QueryBar
+          fields={FIELDS}
+          value={q.value}
+          onChange={q.setValue}
+          onSearch={submitQuery}
+          onReset={clearFilters}
+          applied={q.applied}
+          loading={isFetching}
+          viewsStorageKey="qb:customer"
+          actions={
+            <>
+              <Can perm="crm:customer:add">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setEditing(null)
+                    setSheetOpen(true)
+                  }}
+                >
+                  <IconPlus className="size-4" />
+                  {t('新增客户')}
+                </Button>
+              </Can>
+              <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+              <Can perm="crm:customer:del">
+                <BulkBar count={selectedIds.length} pending={del.isPending} onDelete={() => setBulkOpen(true)} />
+              </Can>
+            </>
+          }
+        />
+
+        <div className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col">
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            columnLabels={COLUMN_LABELS}
+            emptyMessage={t('还没有客户')}
+            emptyAction={
+              hasFilter ? (
+                <ResetButton variant="outline" label={t('清除筛选')} onClick={clearFilters} />
+              ) : undefined
             }
+            {...list}
+            pagination={{
+              pageIndex: page - 1,
+              pageCount: data?.total_pages ?? 1,
+              pageSize: size,
+              selectedCount: selectedIds.length,
+              totalCount: total,
+              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+            }}
           />
-
-          <div className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col">
-            <DataTable
-              table={table}
-              showColumnVisibility={false}
-              rows={table.getRowModel().rows}
-              columnCount={columns.length}
-              columnLabels={COLUMN_LABELS}
-              emptyMessage={t('还没有客户')}
-              emptyAction={
-                hasFilter ? (
-                  <ResetButton variant="outline" label={t('清除筛选')} onClick={clearFilters} />
-                ) : undefined
-              }
-              {...list}
-              pagination={{
-                pageIndex: page - 1,
-                pageCount: data?.total_pages ?? 1,
-                pageSize: size,
-                selectedCount: selectedIds.length,
-                totalCount: total,
-                onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-              }}
-            />
-          </div>
         </div>
       </div>
 
@@ -1232,7 +1231,7 @@ export function CustomerPage({
           }
         }}
       />
-    </div>
+    </PageShell>
   )
 }
 ```

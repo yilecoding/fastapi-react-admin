@@ -58,7 +58,7 @@ export function NotifyBotPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 py-3 content-scroll:min-h-0">
+    <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
       <p className="text-sm text-muted-foreground">
         {t('把公告、审批结果这类对谁都说得通的通知推到飞书 / 钉钉 / 企业微信群里。一条通知一个群只推一次，失败会按通知策略的退避重试，记录在「投递记录」里。')}
       </p>

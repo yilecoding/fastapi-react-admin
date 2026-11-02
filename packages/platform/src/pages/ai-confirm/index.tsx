@@ -51,7 +51,7 @@ export function AiConfirmPage({ search = {} }: { search?: AiConfirmSearch; onSea
   }
 
   return (
-    <div className="flex flex-1 justify-center py-8">
+    <div className="flex flex-1 justify-center">
       <div className="w-full max-w-xl space-y-4">
         {!token ? (
           <Alert tone="danger">{t('链接里没有确认令牌，请从外部系统给出的完整链接打开。')}</Alert>

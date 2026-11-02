@@ -33,6 +33,7 @@ import { listState } from '../_shared/list-query'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { ExportButton } from '../_shared/data-io/export-button'
 import { ImportSheet } from '../_shared/data-io/import-sheet'
+import { PageShell } from '../_shared/page-shell'
 
 /**
  * 数据字典 —— 左右主从布局。
@@ -238,159 +239,153 @@ export function DictPage({
   const selectedIds = Object.keys(rowSelection).filter((k) => rowSelection[k])
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        {/* content-scroll:lg:* —— 内容区滚动 + 宽屏时整块撑满，两栏各自成定高视区
-            （左栏只滚类型、右栏只滚字典项）。窄屏是上下堆叠的，那时照旧整块滚 */}
-        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:lg:min-h-0 content-scroll:lg:flex-1">
-          <PageHeader title={t("数据字典")} description={t("集中管理业务枚举。状态、类型、单位这类下拉选项都放这里。")} />
+    <PageShell fill="lg">
+      <PageHeader title={t("数据字典")} description={t("集中管理业务枚举。状态、类型、单位这类下拉选项都放这里。")} />
 
-          {/* 断点用 lg 不用 md：左栏是 w-72 硬宽，768px 下右栏只剩约 176px，
-              字典项表格塞不下（角色页踩过同一条，见 CLAUDE.md 主从页一节）。
-              不要 items-start —— 定高情形下两栏要等高，sticky 由下面按模式给 */}
-          <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6 content-scroll:lg:min-h-0">
-            {/* ── 左：字典类型 ── 与角色 / 数据范围同一个左栏件 */}
-            <MasterList
-              idPrefix="type"
-              title={t('字典类型')}
-              items={typeItems}
-              total={typeTotal}
-              selectedId={selectedId ?? null}
-              onSelect={(id) => patch({ type: id, page: undefined, q: undefined })}
-              keyword={typeQ}
-              searchPlaceholder="搜索字典类型…"
-              onKeyword={setTypeQ}
-              loading={loadingTypes}
-              error={typesState.error}
-              onRetry={typesState.onRetry}
-              onRefresh={() => void qc.invalidateQueries({ queryKey: dictKeys.all })}
-              onAdd={() => { setEditingType(null); setTypeSheet(true) }}
-              addLabel={t('新增字典类型')}
-              addPerm="dict:type:add"
-              emptyText={t('没有匹配的类型')}
-              // 一次只取 TYPE_PAGE_SIZE 条 —— 超出时说清楚，别让人以为就这么多
-              footerNote={
-                typeTotal > types.length
-                  ? t('共 {{total}} 个类型，仅加载前 {{n}} 个', { total: typeTotal, n: types.length })
-                  : undefined
+      {/* 断点用 lg 不用 md：左栏是 w-72 硬宽，768px 下右栏只剩约 176px，
+          字典项表格塞不下（角色页踩过同一条，见 CLAUDE.md 主从页一节）。
+          不要 items-start —— 定高情形下两栏要等高，sticky 由下面按模式给 */}
+      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6 content-scroll:lg:min-h-0">
+        {/* ── 左：字典类型 ── 与角色 / 数据范围同一个左栏件 */}
+        <MasterList
+          idPrefix="type"
+          title={t('字典类型')}
+          items={typeItems}
+          total={typeTotal}
+          selectedId={selectedId ?? null}
+          onSelect={(id) => patch({ type: id, page: undefined, q: undefined })}
+          keyword={typeQ}
+          searchPlaceholder="搜索字典类型…"
+          onKeyword={setTypeQ}
+          loading={loadingTypes}
+          error={typesState.error}
+          onRetry={typesState.onRetry}
+          onRefresh={() => void qc.invalidateQueries({ queryKey: dictKeys.all })}
+          onAdd={() => { setEditingType(null); setTypeSheet(true) }}
+          addLabel={t('新增字典类型')}
+          addPerm="dict:type:add"
+          emptyText={t('没有匹配的类型')}
+          // 一次只取 TYPE_PAGE_SIZE 条 —— 超出时说清楚，别让人以为就这么多
+          footerNote={
+            typeTotal > types.length
+              ? t('共 {{total}} 个类型，仅加载前 {{n}} 个', { total: typeTotal, n: types.length })
+              : undefined
+          }
+          renderActions={(item) => {
+            const ty = types.find((x) => x.id === item.id)
+            if (!ty) return null
+            return (
+              <>
+                <Can perm="dict:type:edit">
+                  <DropdownMenuItem onClick={() => { setEditingType(ty); setTypeSheet(true) }}>
+                    <IconPencil className="size-4" />{t('编辑')}
+                  </DropdownMenuItem>
+                </Can>
+                <Can perm="dict:type:del">
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" onClick={() => setDelType(ty)}>
+                    <IconTrash className="size-4" />{t('删除')}
+                  </DropdownMenuItem>
+                </Can>
+              </>
+            )
+          }}
+        />
+        {/* ── 右：字典项 ── */}
+        <div className="flex min-w-0 flex-1 flex-col gap-3 content-scroll:lg:min-h-0">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-col">
+              <span className="truncate text-sm font-medium" data-testid="selected-type">
+                {selected?.name ?? t('未选择字典类型')}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {selected ? t('{{code}} · 共 {{n}} 项', { code: selected.code, n: datasPage?.total ?? 0 }) : t('先在左侧选一个类型')}
+              </span>
+            </div>
+            <div className="ms-auto flex items-center gap-2">
+              <Can perm="dict:data:add">
+                <Button size="sm" variant="outline" disabled={!selected} data-testid="add-data"
+                        onClick={() => { setEditingData(null); setDataSheet(true) }}>
+                  <IconPlus className="size-4" />{t('新增字典项')}
+                </Button>
+              </Can>
+              {/* 导入不限于当前类型：模板里每一行自己写类型编码，一份文件能填好几个字典 */}
+              <Can perm="dict:data:import">
+                <Button size="sm" variant="outline" data-testid="import-dict-data" onClick={() => setImportOpen(true)}>
+                  <IconUpload className="size-4" />{t('导入')}
+                </Button>
+              </Can>
+              {selected ? (
+                <Can perm="dict:data:export">
+                  <ExportButton
+                    path="/api/v1/sys/dict-datas/export"
+                    filters={{ type_id: selectedId, label: search.q || undefined }}
+                    selectedIds={selectedIds}
+                    total={datasPage?.total}
+                  />
+                </Can>
+              ) : null}
+            </div>
+          </div>
+
+          {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 定高情形下
+              也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
+          <div
+            data-testid="data-table"
+            data-fetching={isFetching}
+            className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+          >
+            <DataTable
+              table={table}
+              rows={table.getRowModel().rows}
+              columnCount={columns.length}
+              rowAttributes={(row) => ({ 'data-testid': `data-row-${row.original.value}` })}
+              columnLabels={{
+                // DataTable 在渲染处过 `t(columnLabels[id])`，这里传中文原文即可
+                label: '显示文本', value: '实际值', sort: '排序',
+                status: '状态', remark: '备注',
+              }}
+              emptyMessage={selected ? t('该类型下还没有字典项') : t('请先选择一个字典类型')}
+              emptyAction={
+                search.q ? (
+                  <ResetButton
+                    variant="outline" testId="empty-clear-filter" label={t("清除筛选")}
+                    onClick={() => patch({ q: undefined, page: undefined })}
+                  />
+                ) : undefined
               }
-              renderActions={(item) => {
-                const ty = types.find((x) => x.id === item.id)
-                if (!ty) return null
-                return (
-                  <>
-                    <Can perm="dict:type:edit">
-                      <DropdownMenuItem onClick={() => { setEditingType(ty); setTypeSheet(true) }}>
-                        <IconPencil className="size-4" />{t('编辑')}
-                      </DropdownMenuItem>
-                    </Can>
-                    <Can perm="dict:type:del">
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem variant="destructive" onClick={() => setDelType(ty)}>
-                        <IconTrash className="size-4" />{t('删除')}
-                      </DropdownMenuItem>
-                    </Can>
-                  </>
-                )
+              {...dataList}
+              // 「刷新」和「列」是一组次要图标工具，聚在右端；
+              // 左边的 toolbar 留给筛选与批量条
+              actions={<RefreshButton busy={isFetching} onClick={dataList.onRetry} />}
+              toolbar={
+                <>
+                  <TextFilter
+                    value={search.q ?? ''}
+                    placeholder={t("搜索字典项…")}
+                    testId="filter-label"
+                    onCommit={(v) => patch({ q: v || undefined, page: undefined })}
+                  />
+                  {search.q && <ResetButton onClick={() => patch({ q: undefined, page: undefined })} />}
+                  <Can perm="dict:data:del">
+                    <BulkBar
+                      count={selectedIds.length}
+                      pending={rmData.isPending}
+                      onDelete={() => setBulkOpen(true)}
+                    />
+                  </Can>
+                </>
+              }
+              pagination={{
+                pageIndex: page - 1,
+                pageCount: datasPage?.total_pages ?? 1,
+                pageSize: size,
+                selectedCount: selectedIds.length,
+                totalCount: datasPage?.total ?? 0,
+                onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+                onPageSizeChange: (s) => patch({ size: s, page: undefined }),
               }}
             />
-            {/* ── 右：字典项 ── */}
-            <div className="flex min-w-0 flex-1 flex-col gap-3 content-scroll:lg:min-h-0">
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <div className="flex min-w-0 flex-col">
-                  <span className="truncate text-sm font-medium" data-testid="selected-type">
-                    {selected?.name ?? t('未选择字典类型')}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {selected ? t('{{code}} · 共 {{n}} 项', { code: selected.code, n: datasPage?.total ?? 0 }) : t('先在左侧选一个类型')}
-                  </span>
-                </div>
-                <div className="ms-auto flex items-center gap-2">
-                  <Can perm="dict:data:add">
-                    <Button size="sm" variant="outline" disabled={!selected} data-testid="add-data"
-                            onClick={() => { setEditingData(null); setDataSheet(true) }}>
-                      <IconPlus className="size-4" />{t('新增字典项')}
-                    </Button>
-                  </Can>
-                  {/* 导入不限于当前类型：模板里每一行自己写类型编码，一份文件能填好几个字典 */}
-                  <Can perm="dict:data:import">
-                    <Button size="sm" variant="outline" data-testid="import-dict-data" onClick={() => setImportOpen(true)}>
-                      <IconUpload className="size-4" />{t('导入')}
-                    </Button>
-                  </Can>
-                  {selected ? (
-                    <Can perm="dict:data:export">
-                      <ExportButton
-                        path="/api/v1/sys/dict-datas/export"
-                        filters={{ type_id: selectedId, label: search.q || undefined }}
-                        selectedIds={selectedIds}
-                        total={datasPage?.total}
-                      />
-                    </Can>
-                  ) : null}
-                </div>
-              </div>
-
-              {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 定高情形下
-                  也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
-              <div
-                data-testid="data-table"
-                data-fetching={isFetching}
-                className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-              >
-                <DataTable
-                  table={table}
-                  rows={table.getRowModel().rows}
-                  columnCount={columns.length}
-                  rowAttributes={(row) => ({ 'data-testid': `data-row-${row.original.value}` })}
-                  columnLabels={{
-                    // DataTable 在渲染处过 `t(columnLabels[id])`，这里传中文原文即可
-                    label: '显示文本', value: '实际值', sort: '排序',
-                    status: '状态', remark: '备注',
-                  }}
-                  emptyMessage={selected ? t('该类型下还没有字典项') : t('请先选择一个字典类型')}
-                  emptyAction={
-                    search.q ? (
-                      <ResetButton
-                        variant="outline" testId="empty-clear-filter" label={t("清除筛选")}
-                        onClick={() => patch({ q: undefined, page: undefined })}
-                      />
-                    ) : undefined
-                  }
-                  {...dataList}
-                  // 「刷新」和「列」是一组次要图标工具，聚在右端；
-                  // 左边的 toolbar 留给筛选与批量条
-                  actions={<RefreshButton busy={isFetching} onClick={dataList.onRetry} />}
-                  toolbar={
-                    <>
-                      <TextFilter
-                        value={search.q ?? ''}
-                        placeholder={t("搜索字典项…")}
-                        testId="filter-label"
-                        onCommit={(v) => patch({ q: v || undefined, page: undefined })}
-                      />
-                      {search.q && <ResetButton onClick={() => patch({ q: undefined, page: undefined })} />}
-                      <Can perm="dict:data:del">
-                        <BulkBar
-                          count={selectedIds.length}
-                          pending={rmData.isPending}
-                          onDelete={() => setBulkOpen(true)}
-                        />
-                      </Can>
-                    </>
-                  }
-                  pagination={{
-                    pageIndex: page - 1,
-                    pageCount: datasPage?.total_pages ?? 1,
-                    pageSize: size,
-                    selectedCount: selectedIds.length,
-                    totalCount: datasPage?.total ?? 0,
-                    onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                    onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-                  }}
-                />
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -476,6 +471,6 @@ export function DictPage({
           }
         }}
       />
-    </div>
+    </PageShell>
   )
 }

@@ -15,6 +15,7 @@ import {
 import { PageHeader } from '../../shell/page-header'
 import { StatusPill } from '../_shared/status'
 import { STATUS_META, makeDemoRows, type DemoRow } from '../playground-table/data'
+import { PageShell } from '../_shared/page-shell'
 
 /**
  * 顶部查询区实验台。
@@ -102,109 +103,105 @@ export function PlaygroundQueryPage() {
   const total = submitted.mode === 'advanced' ? ROWS.length : undefined
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
-          <PageHeader
-            title="查询区（QueryBar）"
-            description="字段声明式配置、默认不铺满、按需添加条件、显式搜索。右侧实时显示出参与条件树。"
-          />
+    <PageShell className="flex-1">
+      <PageHeader
+        title="查询区（QueryBar）"
+        description="字段声明式配置、默认不铺满、按需添加条件、显式搜索。右侧实时显示出参与条件树。"
+      />
 
-          <QueryBar
-            fields={FIELDS}
-            value={value}
-            onChange={setValue}
-            onSearch={(v) => setSubmitted(v)}
-            applied={submitted}
-            onReset={() => setSubmitted(emptyQuery(FIELDS))}
-            advanced
-            viewsStorageKey="qb:playground"
-            actions={
-              <Button size="sm" className="h-8" data-testid="pgq-add">
-                <IconPlus className="size-4" />新增
-              </Button>
-            }
-          />
+      <QueryBar
+        fields={FIELDS}
+        value={value}
+        onChange={setValue}
+        onSearch={(v) => setSubmitted(v)}
+        applied={submitted}
+        onReset={() => setSubmitted(emptyQuery(FIELDS))}
+        advanced
+        viewsStorageKey="qb:playground"
+        actions={
+          <Button size="sm" className="h-8" data-testid="pgq-add">
+            <IconPlus className="size-4" />新增
+          </Button>
+        }
+      />
 
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-            <div className="min-w-0 flex-1 overflow-x-auto rounded-lg border" data-testid="pgq-table">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>姓名</TableHead>
-                    <TableHead>团队</TableHead>
-                    <TableHead>角色</TableHead>
-                    <TableHead>城市</TableHead>
-                    <TableHead>评分</TableHead>
-                    <TableHead>状态</TableHead>
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
+        <div className="min-w-0 flex-1 overflow-x-auto rounded-lg border" data-testid="pgq-table">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>姓名</TableHead>
+                <TableHead>团队</TableHead>
+                <TableHead>角色</TableHead>
+                <TableHead>城市</TableHead>
+                <TableHead>评分</TableHead>
+                <TableHead>状态</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="h-32 text-center text-sm text-muted-foreground">
+                    没有匹配的数据
+                  </TableCell>
+                </TableRow>
+              ) : (
+                rows.map((r: DemoRow) => (
+                  <TableRow key={r.id} data-testid={`pgq-row-${r.id}`}>
+                    <TableCell className="text-sm font-medium">{r.name}</TableCell>
+                    <TableCell className="text-sm">{r.team}</TableCell>
+                    <TableCell className="text-sm">{r.role}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{r.city}</TableCell>
+                    <TableCell className="text-sm tabular-nums">{r.score}</TableCell>
+                    <TableCell>
+                      <StatusPill tone={STATUS_META[r.status]!.tone}>{STATUS_META[r.status]!.label}</StatusPill>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="h-32 text-center text-sm text-muted-foreground">
-                        没有匹配的数据
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    rows.map((r: DemoRow) => (
-                      <TableRow key={r.id} data-testid={`pgq-row-${r.id}`}>
-                        <TableCell className="text-sm font-medium">{r.name}</TableCell>
-                        <TableCell className="text-sm">{r.team}</TableCell>
-                        <TableCell className="text-sm">{r.role}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{r.city}</TableCell>
-                        <TableCell className="text-sm tabular-nums">{r.score}</TableCell>
-                        <TableCell>
-                          <StatusPill tone={STATUS_META[r.status]!.tone}>{STATUS_META[r.status]!.label}</StatusPill>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <Card className="w-full shrink-0 xl:w-96">
+          <CardContent className="flex flex-col gap-3 p-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold">本次提交</span>
+              <Badge variant="outline" className="font-normal" data-testid="pgq-mode">
+                {submitted.mode === 'basic' ? '基础筛选' : '高级筛选'}
+              </Badge>
+              <span className="text-xs text-muted-foreground" data-testid="pgq-count">
+                {countActive(submitted, FIELDS)} 个条件 · {total ?? rows.length} 条结果
+              </span>
             </div>
 
-            <Card className="w-full shrink-0 xl:w-96">
-              <CardContent className="flex flex-col gap-3 p-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold">本次提交</span>
-                  <Badge variant="outline" className="font-normal" data-testid="pgq-mode">
-                    {submitted.mode === 'basic' ? '基础筛选' : '高级筛选'}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground" data-testid="pgq-count">
-                    {countActive(submitted, FIELDS)} 个条件 · {total ?? rows.length} 条结果
-                  </span>
-                </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">
+                发给后端的参数（<code>toQueryParams</code>）
+              </span>
+              <pre className="max-h-40 overflow-auto rounded-md bg-muted p-2 text-xs"
+                   data-testid="pgq-params">
+                {JSON.stringify(params, null, 2)}
+              </pre>
+            </div>
 
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">
-                    发给后端的参数（<code>toQueryParams</code>）
-                  </span>
-                  <pre className="max-h-40 overflow-auto rounded-md bg-muted p-2 text-xs"
-                       data-testid="pgq-params">
-                    {JSON.stringify(params, null, 2)}
-                  </pre>
-                </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground">
+                条件树（<code>toFilterTree</code>，高级模式用）
+              </span>
+              <pre className="max-h-56 overflow-auto rounded-md bg-muted p-2 text-xs"
+                   data-testid="pgq-tree">
+                {JSON.stringify(toFilterTree(submitted, FIELDS), null, 2)}
+              </pre>
+            </div>
 
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-muted-foreground">
-                    条件树（<code>toFilterTree</code>，高级模式用）
-                  </span>
-                  <pre className="max-h-56 overflow-auto rounded-md bg-muted p-2 text-xs"
-                       data-testid="pgq-tree">
-                    {JSON.stringify(toFilterTree(submitted, FIELDS), null, 2)}
-                  </pre>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  高级模式的条件树后端目前吃不下（各列表接口只收平铺入参），
-                  这里只演示出参形状。真要用得先给后端加过滤语法。
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+            <p className="text-xs text-muted-foreground">
+              高级模式的条件树后端目前吃不下（各列表接口只收平铺入参），
+              这里只演示出参形状。真要用得先给后端加过滤语法。
+            </p>
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </PageShell>
   )
 }

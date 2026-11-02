@@ -57,9 +57,7 @@ export function AiProviderPage() {
   }
 
   return (
-    /* `py-3`：全站别的页面第一个可见元素距框顶 24~32px（实测），只有这一页曾经是 0，
-       说明文字死贴标签栏 */
-    <div className="flex flex-1 flex-col gap-4 py-3 content-scroll:min-h-0">
+    <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
       <p className="text-sm text-muted-foreground">
         {t('AI 助手通过这里配置的供应商调用模型。密钥加密落库，界面上只显示掩码。')}
       </p>

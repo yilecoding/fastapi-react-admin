@@ -17,6 +17,7 @@ import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import { useUrlColumnOrder } from '../_shared/use-column-order'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { INVOCATION_STATUS, toolLogKeys, toolLogsQuery, type ToolInvocation } from './api'
+import { PageShell } from '../_shared/page-shell'
 
 const FIELDS: FilterField[] = [
   {
@@ -212,68 +213,66 @@ export function AiToolLogPage({
   const hasFilter = countActive(q.applied, FIELDS) > 0
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-4 content-scroll:min-h-0">
-        <PageHeader
-          title={t('调用日志')}
-          description={t('AI 每一次工具调用都会留痕，包括被权限拦下的那些。')}
+    <PageShell fill="always">
+      <PageHeader
+        title={t('调用日志')}
+        description={t('AI 每一次工具调用都会留痕，包括被权限拦下的那些。')}
+      />
+
+      {/* 查询区和表格是同一个块的两半（筛选 → 结果），所以包一层用 gap-4；
+          这一层也必须能收缩 —— 「只滚表格行」那条链断一层就整条失效 */}
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        <QueryBar
+          fields={FIELDS}
+          value={q.value}
+          onChange={q.setValue}
+          onSearch={q.submit}
+          onReset={q.reset}
+          applied={q.applied}
+          loading={isFetching}
+          actions={
+            <>
+              <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+            </>
+          }
+          viewsStorageKey="qb:ai-tool-log"
         />
 
-        {/* 查询区和表格是同一个块的两半（筛选 → 结果），所以包一层用 gap-4；
-            这一层也必须能收缩 —— 「只滚表格行」那条链断一层就整条失效 */}
-        <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-          <QueryBar
-            fields={FIELDS}
-            value={q.value}
-            onChange={q.setValue}
-            onSearch={q.submit}
-            onReset={q.reset}
-            applied={q.applied}
-            loading={isFetching}
-            actions={
-              <>
-                <RefreshButton busy={isFetching} onClick={list.onRetry} />
-                <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-              </>
+        <div
+          data-testid="ai-tool-log-table"
+          data-fetching={isFetching}
+          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+        >
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            emptyMessage={t('没有匹配的调用记录')}
+            emptyAction={
+              hasFilter ? (
+                <ResetButton
+                  variant="outline"
+                  testId="empty-clear-filter"
+                  label={t('清除筛选')}
+                  onClick={q.reset}
+                />
+              ) : undefined
             }
-            viewsStorageKey="qb:ai-tool-log"
+            {...list}
+            skeletonRows={8}
+            pagination={{
+              pageIndex: page - 1,
+              pageCount: data?.total_pages ?? 1,
+              pageSize: size,
+              totalCount: data?.total ?? 0,
+              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+            }}
           />
-
-          <div
-            data-testid="ai-tool-log-table"
-            data-fetching={isFetching}
-            className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-          >
-            <DataTable
-              table={table}
-              showColumnVisibility={false}
-              rows={table.getRowModel().rows}
-              columnCount={columns.length}
-              emptyMessage={t('没有匹配的调用记录')}
-              emptyAction={
-                hasFilter ? (
-                  <ResetButton
-                    variant="outline"
-                    testId="empty-clear-filter"
-                    label={t('清除筛选')}
-                    onClick={q.reset}
-                  />
-                ) : undefined
-              }
-              {...list}
-              skeletonRows={8}
-              pagination={{
-                pageIndex: page - 1,
-                pageCount: data?.total_pages ?? 1,
-                pageSize: size,
-                totalCount: data?.total ?? 0,
-                onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-              }}
-            />
-          </div>
         </div>
       </div>
-    </div>
+    </PageShell>
   )
 }
