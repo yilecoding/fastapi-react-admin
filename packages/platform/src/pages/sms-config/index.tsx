@@ -10,7 +10,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
-import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
+import { AddCard, CardField, CardFields, CardPageRefresh, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   smsConfigsQuery,
@@ -69,7 +69,9 @@ export function SmsConfigPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
-      <PageHeader title={t('短信配置')} description={t('使用方只认业务模板码，这里把它对到每家厂商自己的模板。有默认配置就先用它，到了日上限再按权重分给备用；凭据加密落库，界面上只显示掩码。')} />
+      <PageHeader title={t('短信配置')} description={t('使用方只认业务模板码，这里把它对到每家厂商自己的模板。有默认配置就先用它，到了日上限再按权重分给备用；凭据加密落库，界面上只显示掩码。')}>
+        <CardPageRefresh queries={[listQuery, providersQuery, templatesQuery]} testId="sms-config-refresh" />
+      </PageHeader>
 
       {/* 厂商 / 模板目录拉不下来时卡片照样能列，但「厂商不可用」的判断和新增表单都会失真：错误要显示出来（硬纪律 9） */}
       {providersQuery.error ? <QueryError error={providersQuery.error} onRetry={() => providersQuery.refetch()} /> : null}

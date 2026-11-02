@@ -12,12 +12,12 @@ import { Button } from '@admin/ui/components/button'
 import { Card, CardContent, CardHeader } from '@admin/ui/components/card'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { Switch } from '@admin/ui/components/switch'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 
 import { ApiError } from '../../api-client/errors'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton, SelectFilter, TextFilter } from '../_shared/filters'
-import { StatusPill } from '../_shared/status'
 import {
   declaredPrefixes, downloadPlugin, isEnabled, pluginChangedQuery, pluginKind,
   pluginsQuery, realPrefix, useTogglePlugin, useUninstallPlugin,
@@ -261,10 +261,13 @@ function PluginCard({
                 {m.name}
               </code>
               <Badge variant="outline" className="font-normal tabular-nums">v{m.version}</Badge>
-              {on ? <StatusPill tone="success">{t('已启用')}</StatusPill> : <StatusPill tone="muted">{t('已停用')}</StatusPill>}
             </div>
             <p className="text-sm text-muted-foreground">{t(m.description)}</p>
           </div>
+          {/* 状态写在开关旁边（同存储卡片的「启用」），不再在标题行另挂一个徽章：原来徽章 + 开关同一件事说两遍（#210 P2）；
+              只靠开关的颜色 / 位置又读不出字（#219 评审） */}
+          <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+            {on ? t('已启用') : t('已停用')}
           <Switch
             checked={on}
             disabled={toggling}
@@ -272,6 +275,7 @@ function PluginCard({
             aria-label={on ? t('停用 {{name}}', { name: m.name }) : t('启用 {{name}}', { name: m.name })}
             data-testid={`plugin-toggle-${m.name}`}
           />
+          </label>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
@@ -306,14 +310,23 @@ function PluginCard({
             {downloading ? <IconLoader2 className="size-4 animate-spin" /> : <IconDownload className="size-4" />}
             {t('下载 zip')}
           </Button>
-          <Button
-            variant="outline" size="sm" data-testid={`plugin-uninstall-${m.name}`}
-            className="text-destructive hover:text-destructive"
-            onClick={onUninstall}
-          >
-            <IconTrash className="size-4" />
-            {t('卸载')}
-          </Button>
+          {/* 卸载是低频的危险操作：原来每张卡一个红色描边按钮，十张卡满屏红点、最抢眼的反而是最不该点的（#210）。
+              平时灰色图标，悬停才变红；点了还有二次确认 */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive"
+                  aria-label={t('卸载 {{name}}', { name: m.name })}
+                  data-testid={`plugin-uninstall-${m.name}`}
+                  onClick={onUninstall}
+                />
+              }
+            >
+              <IconTrash className="size-4" />
+            </TooltipTrigger>
+            <TooltipContent>{t('卸载')}</TooltipContent>
+          </Tooltip>
           {(prefixes.length > 0 || settings.length > 0) && (
             <Button
               variant="ghost" size="sm" className="ms-auto"

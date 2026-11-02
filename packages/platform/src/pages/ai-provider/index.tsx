@@ -10,7 +10,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
-import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
+import { AddCard, CardField, CardFields, CardPageRefresh, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   PROVIDER_TYPE_LABELS,
@@ -60,7 +60,9 @@ export function AiProviderPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
-      <PageHeader title={t('模型密钥管理')} description={t('AI 助手通过这里配置的供应商调用模型。密钥加密落库，界面上只显示掩码。')} />
+      <PageHeader title={t('模型密钥管理')} description={t('AI 助手通过这里配置的供应商调用模型。密钥加密落库，界面上只显示掩码。')}>
+        <CardPageRefresh queries={[listQuery]} testId="provider-refresh" />
+      </PageHeader>
 
       {listQuery.error ? (
         <QueryError error={listQuery.error} onRetry={() => listQuery.refetch()} />

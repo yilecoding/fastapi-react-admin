@@ -11,7 +11,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
-import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
+import { AddCard, CardField, CardFields, CardPageRefresh, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   mcpClientsQuery,
@@ -50,7 +50,9 @@ export function AiMcpClientPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
-      <PageHeader title={t('MCP 凭据')} description={t('外部系统（如 pis-agent、Claude Desktop）用这里发的令牌调用 AI 查询工具。库里只存令牌的哈希，明文只在生成时显示一次。')} />
+      <PageHeader title={t('MCP 凭据')} description={t('外部系统（如 pis-agent、Claude Desktop）用这里发的令牌调用 AI 查询工具。库里只存令牌的哈希，明文只在生成时显示一次。')}>
+        <CardPageRefresh queries={[listQuery]} testId="mcp-client-refresh" />
+      </PageHeader>
 
       {listQuery.error ? (
         <QueryError error={listQuery.error} onRetry={() => listQuery.refetch()} />
