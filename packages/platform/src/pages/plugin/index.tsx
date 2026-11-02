@@ -18,7 +18,6 @@ import { ApiError } from '../../api-client/errors'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton, SelectFilter, TextFilter } from '../_shared/filters'
-import { StatusPill } from '../_shared/status'
 import {
   declaredPrefixes, downloadPlugin, isEnabled, pluginChangedQuery, pluginKind,
   pluginsQuery, realPrefix, useTogglePlugin, useUninstallPlugin,
@@ -262,11 +261,13 @@ function PluginCard({
                 {m.name}
               </code>
               <Badge variant="outline" className="font-normal tabular-nums">v{m.version}</Badge>
-              {/* 「已启用」不再单独标：右上角的开关已经说了这件事，两处说同一句话（#210 P2）。停用是少数，留一个灰徽章方便扫 */}
-              {on ? null : <StatusPill tone="muted">{t('已停用')}</StatusPill>}
             </div>
             <p className="text-sm text-muted-foreground">{t(m.description)}</p>
           </div>
+          {/* 状态写在开关旁边（同存储卡片的「启用」），不再在标题行另挂一个徽章：原来徽章 + 开关同一件事说两遍（#210 P2）；
+              只靠开关的颜色 / 位置又读不出字（#219 评审） */}
+          <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+            {on ? t('已启用') : t('已停用')}
           <Switch
             checked={on}
             disabled={toggling}
@@ -274,6 +275,7 @@ function PluginCard({
             aria-label={on ? t('停用 {{name}}', { name: m.name }) : t('启用 {{name}}', { name: m.name })}
             data-testid={`plugin-toggle-${m.name}`}
           />
+          </label>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
@@ -314,7 +316,7 @@ function PluginCard({
             <TooltipTrigger
               render={
                 <Button
-                  variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive"
+                  variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive"
                   aria-label={t('卸载 {{name}}', { name: m.name })}
                   data-testid={`plugin-uninstall-${m.name}`}
                   onClick={onUninstall}

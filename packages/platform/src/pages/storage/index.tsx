@@ -20,8 +20,7 @@ import { Switch } from '@admin/ui/components/switch'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
-import { RefreshButton } from '../_shared/filters'
-import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
+import { AddCard, CardField, CardFields, CardPageRefresh, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   STORAGE_TYPE_LABELS,
@@ -81,8 +80,7 @@ export function StoragePage() {
   return (
     <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
       <PageHeader title={t('存储管理')} description={t('新上传的文件落在默认存储。切换默认只影响之后的上传，已有文件仍从它原来的存储读取。')}>
-        {/* 卡片页原来没有刷新（#210）：web 端关了切回窗口自动重取，别人改了配置只能整页刷新才看得到 */}
-        <RefreshButton busy={listQuery.isFetching} onClick={() => void listQuery.refetch()} />
+        <CardPageRefresh queries={[listQuery]} testId="storage-refresh" />
       </PageHeader>
 
       {listQuery.error ? (

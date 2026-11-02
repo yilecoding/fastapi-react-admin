@@ -1,6 +1,8 @@
 import { IconPlus } from '@tabler/icons-react'
 import type * as React from 'react'
 
+import { RefreshButton } from './filters'
+
 import { cn } from '@admin/ui/lib/utils'
 
 /**
@@ -95,5 +97,28 @@ export function AddCard({
       <span className="text-sm">{label}</span>
       {hint ? <span className="max-w-60 text-xs text-balance">{hint}</span> : null}
     </button>
+  )
+}
+
+/**
+ * 卡片页右上角的刷新（#210）。web 端关了 `refetchOnWindowFocus`，不给按钮的话别人改了配置只能整页刷新。
+ *
+ * 🔴 **这一页用到的查询全部传进来**，不只是主列表。短信配置的卡片和表单还靠厂商 / 模板目录、群机器人靠选项：
+ * 只重取主列表的话，按钮转完一圈像是整页都新了，其实「厂商不可用」的判断和模板名还是旧的，
+ * 那几份之前取失败留下的错误块也不会重试（#219 评审）。
+ */
+export function CardPageRefresh({
+  queries,
+  testId,
+}: {
+  queries: { isFetching: boolean; refetch: () => unknown }[]
+  testId: string
+}) {
+  return (
+    <RefreshButton
+      testId={testId}
+      busy={queries.some((q) => q.isFetching)}
+      onClick={() => queries.forEach((q) => void q.refetch())}
+    />
   )
 }
