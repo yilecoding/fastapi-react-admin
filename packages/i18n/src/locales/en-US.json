@@ -730,6 +730,7 @@
   "危险": "Danger",
   "即将清除": "Deleting soon",
   "卸载": "Uninstall",
+  "卸载 {{name}}": "Uninstall {{name}}",
   "卸载后需要重启服务，并按插件说明移除相关配置。": "After uninstalling, restart the service and remove the related configuration as the plugin documents.",
   "卸载失败": "Uninstall failed",
   "卸载插件": "Uninstall plugin",
