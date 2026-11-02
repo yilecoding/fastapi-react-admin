@@ -9,9 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/t
 
 import { Can } from '../../auth/can'
 import { cn } from '@admin/ui/lib/utils'
-import {
-  DropdownMenuItem, DropdownMenuSeparator,
-} from '@admin/ui/components/dropdown-menu'
 import { listState } from '../_shared/list-query'
 import { MasterList, type MasterListItem } from '../_shared/master-list'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
@@ -178,27 +175,13 @@ export function RolePage({
           addPerm="sys:role:add"
           onRefresh={() => void qc.invalidateQueries({ queryKey: roleKeys.all })}
           emptyText={t('没有匹配的角色')}
-          renderActions={(item) => {
-            const role = roles.find((r) => r.id === item.id)
-            if (!role) return null
-            return (
-              <>
-                <Can perm="sys:role:edit">
-                  <DropdownMenuItem onClick={() => { setEditing(role); setSheetOpen(true) }}>
-                    <IconPencil className="size-4" />{t('编辑')}
-                  </DropdownMenuItem>
-                </Can>
-                <Can perm="sys:role:del">
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() => setPendingDelete(role)}
-                  >
-                    <IconTrash className="size-4" />{t('删除')}
-                  </DropdownMenuItem>
-                </Can>
-              </>
-            )
+          rowActions={(item) => {
+            const role = roles.find((x) => x.id === item.id)
+            if (!role) return []
+            return [
+              { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'sys:role:edit', onClick: () => { setEditing(role); setSheetOpen(true) } },
+              { key: 'delete', label: t('删除'), icon: IconTrash, danger: true, perm: 'sys:role:del', onClick: () => setPendingDelete(role) },
+            ]
           }}
         />
 

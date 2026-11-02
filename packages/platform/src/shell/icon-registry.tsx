@@ -21,6 +21,7 @@ import {
   IconLogin,
   IconMenu2,
   IconPlug,
+  IconPlugConnected,
   IconPoint,
   IconRobot,
   IconPuzzle,
@@ -89,6 +90,8 @@ export const ICON_MAP: Record<string, IconCmp> = {
   'mdi:chat-processing-outline': IconMessageChatbot,
   'mdi:key-variant': IconKey,
   'mdi:api': IconApi,
+  // MCP 凭据。原来也是 mdi:api，IconApi 画出来是「API」三个字母，在页签里像一行字（#210）
+  'mdi:connection': IconPlugConnected,
   'mdi:message-text-outline': IconMessage,
   'mdi:cellphone-message': IconDeviceMobileMessage,
   'mdi:message-badge-outline': IconMessageReport,
