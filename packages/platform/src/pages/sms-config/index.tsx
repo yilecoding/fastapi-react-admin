@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { IconPencil, IconPlus, IconSend, IconStar, IconTrash } from '@tabler/icons-react'
+import { IconPencil, IconSend, IconStar, IconTrash } from '@tabler/icons-react'
 import * as React from 'react'
 
 import { Badge } from '@admin/ui/components/badge'
@@ -10,6 +10,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { AddCard, CardField, CardFields } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   smsConfigsQuery,
@@ -129,10 +130,8 @@ export function SmsConfigPage() {
                   </div>
                 </div>
 
-                <dl className="space-y-1.5 text-xs">
-                  <div className="flex gap-2">
-                    <dt className="w-16 shrink-0 text-muted-foreground">{t('业务模板')}</dt>
-                    <dd className="flex min-w-0 flex-wrap gap-1">
+                <CardFields>
+                  <CardField label={t('业务模板')} className="flex flex-wrap gap-1">
                       {mapped.length === 0 ? (
                         <span className="text-amber-700 dark:text-amber-300">{t('一个都没配 —— 发不了任何业务短信')}</span>
                       ) : (
@@ -143,33 +142,23 @@ export function SmsConfigPage() {
                           </Badge>
                         ))
                       )}
-                    </dd>
-                  </div>
+                    </CardField>
                   {config.secret_mask ? (
-                    <div className="flex gap-2">
-                      <dt className="w-16 shrink-0 text-muted-foreground">{t('凭据')}</dt>
-                      <dd className="min-w-0 truncate font-mono">
+                    <CardField label={t('凭据')} className="truncate font-mono">
                         {config.access_key_id} · {config.secret_mask}
-                      </dd>
-                    </div>
+                      </CardField>
                   ) : null}
-                  <div className="flex gap-2">
-                    <dt className="w-16 shrink-0 text-muted-foreground">{t('今日已发')}</dt>
-                    <dd className="tabular-nums">
+                  <CardField label={t('今日已发')} className="tabular-nums">
                       {config.today_sent}
                       {config.daily_max > 0 ? ` / ${config.daily_max}` : ` / ${t('不限')}`}
-                    </dd>
-                  </div>
-                  <div className="flex gap-2">
-                    <dt className="w-16 shrink-0 text-muted-foreground">{t('权重')}</dt>
-                    <dd className="tabular-nums">
+                    </CardField>
+                  <CardField label={t('权重')} className="tabular-nums">
                       {config.weight === 0 ? t('0（只能被指定）') : config.weight}
                       <span className="ms-2 text-muted-foreground">
                         {t('超时')} {config.timeout}s
                       </span>
-                    </dd>
-                  </div>
-                </dl>
+                    </CardField>
+                </CardFields>
 
                 <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
                   {config.is_default ? null : (
@@ -201,23 +190,15 @@ export function SmsConfigPage() {
           })}
 
           <Can perm="sms:config:add">
-            <button
-              type="button"
+            <AddCard
+              label={t('新增短信配置')}
               onClick={() => {
                 setEditing(null)
                 setSheetOpen(true)
               }}
-              className="flex min-h-52 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40 hover:text-foreground"
-              data-testid="sms-config-add"
-            >
-              <IconPlus className="size-5" />
-              <span className="text-sm">{t('新增短信配置')}</span>
-              {configs.length === 0 ? (
-                <span className="max-w-60 text-xs text-balance">
-                  {t('开发期先建一条「控制台」厂商的配置跑通流程；接真厂商时换成阿里云 / 腾讯云并发一条测试短信')}
-                </span>
-              ) : null}
-            </button>
+              hint={configs.length === 0 ? t('开发期先建一条「控制台」厂商的配置跑通流程；接真厂商时换成阿里云 / 腾讯云并发一条测试短信') : undefined}
+              testId="sms-config-add"
+            />
           </Can>
         </div>
       )}

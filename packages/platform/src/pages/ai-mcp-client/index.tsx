@@ -11,6 +11,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { AddCard, CardField, CardFields } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   mcpClientsQuery,
@@ -87,19 +88,19 @@ export function AiMcpClientPage() {
                 </div>
               </div>
 
-              <dl className="space-y-1.5 text-xs">
-                <Row label={t('令牌')}>
+              <CardFields>
+                <CardField label={t('令牌')}>
                   <span className="font-mono">{c.token_hint}</span>
-                </Row>
-                <Row label={t('代表')}>
+                </CardField>
+                <CardField label={t('代表')}>
                   <span className="font-mono">{c.act_as.includes('*') ? t('任何普通用户') : c.act_as.join('、')}</span>
-                </Row>
-                <Row label={t('工具')}>{c.tools ? <span className="font-mono">{c.tools.join('、')}</span> : t('不限（按被代表的人的权限）')}</Row>
-                <Row label={t('限流')}>
+                </CardField>
+                <CardField label={t('工具')}>{c.tools ? <span className="font-mono">{c.tools.join('、')}</span> : t('不限（按被代表的人的权限）')}</CardField>
+                <CardField label={t('限流')}>
                   {c.rate_per_minute ? t('每分钟 {{n}} 次', { n: c.rate_per_minute }) : t('全局默认')}
-                </Row>
-                <Row label={t('最近使用')}>{c.last_used_time ? formatDateTime(c.last_used_time) : t('从未使用')}</Row>
-              </dl>
+                </CardField>
+                <CardField label={t('最近使用')}>{c.last_used_time ? formatDateTime(c.last_used_time) : t('从未使用')}</CardField>
+              </CardFields>
 
               <Can perm="ai:mcp:edit">
                 <div>
@@ -113,17 +114,12 @@ export function AiMcpClientPage() {
           ))}
 
           <Can perm="ai:mcp:add">
-            <button
-              type="button"
+            <AddCard
+              label={t('新建凭据')}
               onClick={() => openSheet(null)}
-              className="flex min-h-48 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40 hover:text-foreground"
-            >
-              {clients.length ? <IconPlus className="size-5" /> : <IconKey className="size-5" />}
-              <span className="text-sm">{t('新建凭据')}</span>
-              {clients.length === 0 ? (
-                <span className="max-w-60 text-xs text-balance">{t('给一个外部系统发一把令牌，它就能以指定用户的身份调用查询工具')}</span>
-              ) : null}
-            </button>
+              hint={clients.length === 0 ? t('给一个外部系统发一把令牌，它就能以指定用户的身份调用查询工具') : undefined}
+              icon={clients.length ? IconPlus : IconKey}
+            />
           </Can>
         </div>
       )}
@@ -153,15 +149,6 @@ export function AiMcpClientPage() {
           setPendingDelete(null)
         }}
       />
-    </div>
-  )
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex gap-2">
-      <dt className="w-14 shrink-0 text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 break-words">{children}</dd>
     </div>
   )
 }
