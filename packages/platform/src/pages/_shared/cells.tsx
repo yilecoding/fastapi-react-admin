@@ -119,6 +119,9 @@ export type RowAction = {
   disabled?: boolean
   /** 危险操作：红色、排在最后、前面一条分隔线 */
   danger?: boolean
+  /** 普通项里另起一组：前面画一条分隔线（过滤后它是第一项就不画）。
+   *  Webhook 的「批量重发」和「编辑 / 重置签名密钥」要分开，挨着容易点错（#221 评审） */
+  separatorBefore?: boolean
   testId?: string
 }
 
@@ -137,11 +140,14 @@ export function RowActions({
   label,
   testId,
   items,
+  triggerClassName,
 }: {
   /** 读屏用：「操作 {{name}}」里的 name */
   label: string
   testId?: string
   items: RowAction[]
+  /** 触发按钮的额外样式（主从页左栏、参数配置行要「悬停才显形」） */
+  triggerClassName?: string
 }) {
   const { t } = useTranslation()
   const { can, isSuperuser } = usePerm()
@@ -170,14 +176,19 @@ export function RowActions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="ghost" size="icon" className="size-7" aria-label={t('操作 {{name}}', { name: label })} />}
+        render={<Button variant="ghost" size="icon" className={cn('size-7', triggerClassName)} aria-label={t('操作 {{name}}', { name: label })} />}
         data-testid={testId}
       >
         <IconDotsVertical className="size-4" />
       </DropdownMenuTrigger>
       {/* 不写死宽度：各页菜单项长短不一（「强制下线」「查看调用日志」），原来 w-32 / w-36 / w-40 三种 */}
       <DropdownMenuContent align="end" className="w-auto min-w-36">
-        {normal.map(item)}
+        {normal.map((i, idx) => (
+          <React.Fragment key={i.key}>
+            {i.separatorBefore && idx > 0 ? <DropdownMenuSeparator /> : null}
+            {item(i)}
+          </React.Fragment>
+        ))}
         {normal.length > 0 && danger.length > 0 ? <DropdownMenuSeparator /> : null}
         {danger.map(item)}
       </DropdownMenuContent>

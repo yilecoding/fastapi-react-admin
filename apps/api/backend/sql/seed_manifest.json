@@ -1,7 +1,7 @@
 {
-  "plugin/ai/sql/mysql/init_snowflake.sql": "19bf16b45c86d4fcd53f19326c37e4ff6ce98ab734f05b51b87cd0a225892f7e",
-  "plugin/ai/sql/postgresql/init_snowflake.sql": "19bf16b45c86d4fcd53f19326c37e4ff6ce98ab734f05b51b87cd0a225892f7e",
-  "plugin/ai/sql/sqlserver/init_snowflake.sql": "d3a70a12093967ced0ec2afebc31b05da9eae134d12c9a0200525a78ec6d0df7",
+  "plugin/ai/sql/mysql/init_snowflake.sql": "892d31428eb6fe0c091caf7db37c1e05a898de5a724aaa1359ee3bad49493c6e",
+  "plugin/ai/sql/postgresql/init_snowflake.sql": "892d31428eb6fe0c091caf7db37c1e05a898de5a724aaa1359ee3bad49493c6e",
+  "plugin/ai/sql/sqlserver/init_snowflake.sql": "355353ee412a9fbaba13635355a697826cbbd1efbb2eb376907e4de9023f8606",
   "plugin/config/sql/mysql/init_snowflake.sql": "5152f73336e40d9bc7395905c4aa7c37fee846287cd1688bcdc5feb4c38ee0bb",
   "plugin/config/sql/postgresql/init_snowflake.sql": "15e3fe59f9122ad18063b4e7c0378b364c9b23877c7cd099d0904df10973db57",
   "plugin/config/sql/sqlserver/init_snowflake.sql": "05d0957cec58a4ae33628b6e319807d3a7a96986440ad3594c3f8bb8ec0d063c",

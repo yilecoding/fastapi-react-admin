@@ -7,9 +7,6 @@ import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
 
 import { Can } from '../../auth/can'
-import {
-  DropdownMenuItem, DropdownMenuSeparator,
-} from '@admin/ui/components/dropdown-menu'
 import { listState } from '../_shared/list-query'
 import { MasterList, type MasterListItem } from '../_shared/master-list'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
@@ -120,24 +117,13 @@ export function DataPermissionPage({
           addPerm="data:scope:add"
           onRefresh={() => void qc.invalidateQueries({ queryKey: scopeKeys.all })}
           emptyText={t('没有匹配的数据范围')}
-          renderActions={(item) => {
+          rowActions={(item) => {
             const scope = scopes.find((x) => x.id === item.id)
-            if (!scope) return null
-            return (
-              <>
-                <Can perm="data:scope:edit">
-                  <DropdownMenuItem onClick={() => { setEditing(scope); setSheetOpen(true) }}>
-                    <IconPencil className="size-4" />{t('编辑')}
-                  </DropdownMenuItem>
-                </Can>
-                <Can perm="data:scope:del">
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={() => setPendingDelete(scope)}>
-                    <IconTrash className="size-4" />{t('删除')}
-                  </DropdownMenuItem>
-                </Can>
-              </>
-            )
+            if (!scope) return []
+            return [
+              { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'data:scope:edit', onClick: () => { setEditing(scope); setSheetOpen(true) } },
+              { key: 'delete', label: t('删除'), icon: IconTrash, danger: true, perm: 'data:scope:del', onClick: () => setPendingDelete(scope) },
+            ]
           }}
         />
 

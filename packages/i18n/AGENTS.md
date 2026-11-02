@@ -163,7 +163,7 @@ const fe = useFieldError()
 | 函数 | 给谁用 |
 |---|---|
 | `formatDateTime` | 默认选择。`2026-08-22 11:59:47`，**固定格式不跟 locale** |
-| `formatDateTimeShort` | 宽度紧张处。`08-22 11:59`（原 `.slice(5, 16)` 想做的事） |
+| `formatDateTimeShort` | 宽度紧张处。今年的 `08-22 11:59`，往年的补年份 `2025-08-22 11:59`（「今年」按显示时区算；原 `.slice(5, 16)` 想做的事） |
 | `dateKey` | 按天分组统计（原 `.slice(0, 10)` 想做的事） |
 | `toEpochMs` | 排序、比较、算差 |
 | `formatDate` / `formatTime` | 只要日期或只要时刻，这两个**跟 locale** |
