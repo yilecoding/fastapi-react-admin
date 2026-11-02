@@ -290,7 +290,7 @@ export function DashboardPage({
       <NoticeReaderSheet
         noticeId={search.notice ?? null}
         onOpenChange={(o) => {
-      if (!o) patch({ notice: undefined })
+          if (!o) patch({ notice: undefined })
         }}
       />
       <InstanceSheet id={search.wf ?? null} onClose={() => patch({ wf: undefined })} />

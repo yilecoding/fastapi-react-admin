@@ -259,22 +259,22 @@ export function MenuPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除菜单")}
         description={
-      deleteError ? (
-        <span className="text-destructive">{deleteError}</span>
-      ) : pendingDelete ? (
-        t('确定删除「{{title}}」吗？其下的子菜单与按钮权限也会一并移除。', { title: pendingDelete.title })
-      ) : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('确定删除「{{title}}」吗？其下的子菜单与按钮权限也会一并移除。', { title: pendingDelete.title })
+          ) : ''
         }
         confirmText={t("删除")} destructive pending={del.isPending}
         onConfirm={async () => {
-      if (!pendingDelete) return
-      setDeleteError(null)
-      try {
-        await del.mutateAsync(pendingDelete.id)
-        setPendingDelete(null)
-      } catch (e) {
-        setDeleteError(e instanceof Error ? e.message : t('删除失败'))
-      }
+          if (!pendingDelete) return
+          setDeleteError(null)
+          try {
+            await del.mutateAsync(pendingDelete.id)
+            setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
+          }
         }}
       />
     </PageShell>

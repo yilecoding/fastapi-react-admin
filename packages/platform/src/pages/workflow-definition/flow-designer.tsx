@@ -97,7 +97,7 @@ export function FlowDesigner({
         </div>
       </div>
       <aside
-        className="flex max-h-[calc(100svh-15rem)] flex-col gap-4 overflow-y-auto rounded-xl border bg-card p-4 lg:sticky lg:top-4"
+        className="flex max-h-[calc(100svh-15rem)] flex-col gap-4 overflow-y-auto rounded-xl border bg-card p-4 lg:sticky lg:top-4 content-scroll:lg:top-0"
         data-testid="flow-props"
       >
         {isStart ? (

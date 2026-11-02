@@ -240,7 +240,7 @@ export function NotificationPage({
       <NoticeReaderSheet
         noticeId={search.notice ?? null}
         onOpenChange={(o) => {
-      if (!o) openNotice(undefined)
+          if (!o) openNotice(undefined)
         }}
       />
 
@@ -249,18 +249,18 @@ export function NotificationPage({
         onOpenChange={setMarkAllOpen}
         title={t('标记全部已读')}
         description={
-      mustAck > 0
-        ? t(
-            '会把 {{n}} 条未读通知标记为已读，此操作不可撤销。另有 {{m}} 条必须确认的公告不会被标记，要打开读完后点「我已阅读」。',
-            { n: markable, m: mustAck }
-          )
-        : t('会把你当前全部 {{n}} 条未读通知标记为已读，此操作不可撤销。', { n: markable })
+          mustAck > 0
+            ? t(
+                '会把 {{n}} 条未读通知标记为已读，此操作不可撤销。另有 {{m}} 条必须确认的公告不会被标记，要打开读完后点「我已阅读」。',
+                { n: markable, m: mustAck }
+              )
+            : t('会把你当前全部 {{n}} 条未读通知标记为已读，此操作不可撤销。', { n: markable })
         }
         confirmText={t('全部已读')}
         pending={markAll.isPending}
         onConfirm={async () => {
-      await markAll.mutateAsync()
-      setMarkAllOpen(false)
+          await markAll.mutateAsync()
+          setMarkAllOpen(false)
         }}
       />
     </PageShell>

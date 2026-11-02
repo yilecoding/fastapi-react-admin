@@ -225,24 +225,24 @@ export function DeptPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除部门")}
         description={
-      deleteError ? (
-        <span className="text-destructive">{deleteError}</span>
-      ) : pendingDelete ? (
-        t('确定删除「{{name}}」吗？若该部门下仍有子部门或用户，后端会拒绝。', { name: pendingDelete.name })
-      ) : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('确定删除「{{name}}」吗？若该部门下仍有子部门或用户，后端会拒绝。', { name: pendingDelete.name })
+          ) : ''
         }
         confirmText={t("删除")} destructive pending={del.isPending}
         onConfirm={async () => {
-      if (!pendingDelete) return
-      // 失败（409 冲突等）留在弹窗里说清楚，不静默关掉——
-      // 「部门下有子部门/用户」这类拒绝，关了弹窗用户也无从知晓原因
-      setDeleteError(null)
-      try {
-        await del.mutateAsync(pendingDelete.id)
-        setPendingDelete(null)
-      } catch (e) {
-        setDeleteError(e instanceof Error ? e.message : t('删除失败'))
-      }
+          if (!pendingDelete) return
+          // 失败（409 冲突等）留在弹窗里说清楚，不静默关掉——
+          // 「部门下有子部门/用户」这类拒绝，关了弹窗用户也无从知晓原因
+          setDeleteError(null)
+          try {
+            await del.mutateAsync(pendingDelete.id)
+            setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
+          }
         }}
       />
     </PageShell>

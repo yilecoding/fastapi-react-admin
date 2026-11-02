@@ -264,8 +264,8 @@ export function RolePage({
         confirmText={t("放弃并切换")}
         destructive
         onConfirm={() => {
-      if (pendingSelect) patch({ role: pendingSelect, upage: undefined })
-      setPendingSelect(null)
+          if (pendingSelect) patch({ role: pendingSelect, upage: undefined })
+          setPendingSelect(null)
         }}
       />
 
@@ -274,26 +274,26 @@ export function RolePage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除角色")}
         description={
-      deleteError ? (
-        <span className="text-destructive">{deleteError}</span>
-      ) : pendingDelete ? (
-        t('确定删除角色「{{name}}」吗？已分配该角色的用户会失去对应权限。', { name: pendingDelete.name })
-      ) : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('确定删除角色「{{name}}」吗？已分配该角色的用户会失去对应权限。', { name: pendingDelete.name })
+          ) : ''
         }
         confirmText={t("删除")}
         destructive
         pending={del.isPending}
         onConfirm={async () => {
-      if (!pendingDelete) return
-      setDeleteError(null)
-      try {
-        const wasSelected = pendingDelete.id === selected?.id
-        await del.mutateAsync([pendingDelete.id])
-        if (wasSelected) patch({ role: undefined, upage: undefined })
-        setPendingDelete(null)
-      } catch (e) {
-        setDeleteError(e instanceof Error ? e.message : t('删除失败'))
-      }
+          if (!pendingDelete) return
+          setDeleteError(null)
+          try {
+            const wasSelected = pendingDelete.id === selected?.id
+            await del.mutateAsync([pendingDelete.id])
+            if (wasSelected) patch({ role: undefined, upage: undefined })
+            setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
+          }
         }}
       />
     </PageShell>

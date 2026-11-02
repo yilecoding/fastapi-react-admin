@@ -292,18 +292,18 @@ export function NoticePage({
         row={readsRow}
         view={readsView}
         onViewChange={(next) =>
-      onSearchChange?.({
-        ...search,
-        rtab: next.tab ? (next.tab === 'read' ? undefined : next.tab) : search.rtab,
-        // 「回第一页」写 undefined，不写 1（_shared/pagination.ts）
-        rpage: next.page !== undefined ? (next.page === 1 ? undefined : next.page) : search.rpage,
-        rsize: next.size !== undefined ? (next.size === DEFAULT_PAGE_SIZE ? undefined : next.size) : search.rsize,
-      })
+          onSearchChange?.({
+            ...search,
+            rtab: next.tab ? (next.tab === 'read' ? undefined : next.tab) : search.rtab,
+            // 「回第一页」写 undefined，不写 1（_shared/pagination.ts）
+            rpage: next.page !== undefined ? (next.page === 1 ? undefined : next.page) : search.rpage,
+            rsize: next.size !== undefined ? (next.size === DEFAULT_PAGE_SIZE ? undefined : next.size) : search.rsize,
+          })
         }
         onOpenChange={(o) => {
-      if (o) return
-      setReadsRow(null)
-      onSearchChange?.({ ...search, reads: undefined, rtab: undefined, rpage: undefined, rsize: undefined })
+          if (o) return
+          setReadsRow(null)
+          onSearchChange?.({ ...search, reads: undefined, rtab: undefined, rpage: undefined, rsize: undefined })
         }}
       />
 
@@ -312,24 +312,24 @@ export function NoticePage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t('删除通知公告')}
         description={
-      deleteError ? (
-        <span className="text-destructive">{deleteError}</span>
-      ) : pendingDelete ? (
-        t('确定删除「{{title}}」吗？此操作不可撤销。', { title: pendingDelete.title })
-      ) : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('确定删除「{{title}}」吗？此操作不可撤销。', { title: pendingDelete.title })
+          ) : ''
         }
         confirmText={t('删除')}
         destructive
         pending={delOne.isPending}
         onConfirm={async () => {
-      if (!pendingDelete) return
-      setDeleteError(null)
-      try {
-        await delOne.mutateAsync([pendingDelete.id])
-        setPendingDelete(null)
-      } catch (e) {
-        setDeleteError(e instanceof Error ? e.message : t('删除失败'))
-      }
+          if (!pendingDelete) return
+          setDeleteError(null)
+          try {
+            await delOne.mutateAsync([pendingDelete.id])
+            setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
+          }
         }}
       />
 
@@ -342,12 +342,12 @@ export function NoticePage({
         destructive
         pending={del.isPending}
         onConfirm={async () => {
-      try {
-        await del.mutateAsync(selectedIds)
-        setRowSelection({})
-      } finally {
-        setBulkOpen(false)
-      }
+          try {
+            await del.mutateAsync(selectedIds)
+            setRowSelection({})
+          } finally {
+            setBulkOpen(false)
+          }
         }}
       />
     </PageShell>

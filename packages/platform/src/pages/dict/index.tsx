@@ -412,25 +412,25 @@ export function DictPage({
         onOpenChange={(o) => !o && setDelType(null)}
         title={t("删除字典类型")}
         description={
-      typeError ? (
-        <span className="text-destructive">{typeError}</span>
-      ) : delType ? (
-        t('确定删除「{{name}}」吗？其下的字典项也会一并失效。', { name: delType.name })
-      ) : ''
+          typeError ? (
+            <span className="text-destructive">{typeError}</span>
+          ) : delType ? (
+            t('确定删除「{{name}}」吗？其下的字典项也会一并失效。', { name: delType.name })
+          ) : ''
         }
         confirmText={t("删除")} destructive pending={rmType.isPending}
         onConfirm={async () => {
-      if (!delType) return
-      setTypeError(null)
-      try {
-        const removingSelected = delType.id === selectedId
-        await rmType.mutateAsync([delType.id])
-        // 删掉的正是当前选中的 —— 清掉 URL 里的 type，让它回落到第一个
-        if (removingSelected) patch({ type: undefined, page: undefined, q: undefined })
-        setDelType(null)
-      } catch (e) {
-        setTypeError(e instanceof Error ? e.message : t('删除失败'))
-      }
+          if (!delType) return
+          setTypeError(null)
+          try {
+            const removingSelected = delType.id === selectedId
+            await rmType.mutateAsync([delType.id])
+            // 删掉的正是当前选中的 —— 清掉 URL 里的 type，让它回落到第一个
+            if (removingSelected) patch({ type: undefined, page: undefined, q: undefined })
+            setDelType(null)
+          } catch (e) {
+            setTypeError(e instanceof Error ? e.message : t('删除失败'))
+          }
         }}
       />
       <ConfirmDialog
@@ -438,22 +438,22 @@ export function DictPage({
         onOpenChange={(o) => !o && setDelData(null)}
         title={t("删除字典项")}
         description={
-      dataError ? (
-        <span className="text-destructive">{dataError}</span>
-      ) : delData ? (
-        t('确定删除「{{label}}」吗？', { label: delData.label })
-      ) : ''
+          dataError ? (
+            <span className="text-destructive">{dataError}</span>
+          ) : delData ? (
+            t('确定删除「{{label}}」吗？', { label: delData.label })
+          ) : ''
         }
         confirmText={t("删除")} destructive pending={rmDataOne.isPending}
         onConfirm={async () => {
-      if (!delData) return
-      setDataError(null)
-      try {
-        await rmDataOne.mutateAsync([delData.id])
-        setDelData(null)
-      } catch (e) {
-        setDataError(e instanceof Error ? e.message : t('删除失败'))
-      }
+          if (!delData) return
+          setDataError(null)
+          try {
+            await rmDataOne.mutateAsync([delData.id])
+            setDelData(null)
+          } catch (e) {
+            setDataError(e instanceof Error ? e.message : t('删除失败'))
+          }
         }}
       />
       <ConfirmDialog
@@ -463,12 +463,12 @@ export function DictPage({
         description={t('确定删除选中的 {{n}} 个字典项吗？', { n: selectedIds.length })}
         confirmText={t("删除")} destructive pending={rmData.isPending}
         onConfirm={async () => {
-      try {
-        await rmData.mutateAsync(selectedIds)
-        setRowSelection({})
-      } finally {
-        setBulkOpen(false)
-      }
+          try {
+            await rmData.mutateAsync(selectedIds)
+            setRowSelection({})
+          } finally {
+            setBulkOpen(false)
+          }
         }}
       />
     </PageShell>

@@ -53,10 +53,19 @@ ai-provider 等五页又是 12px。全站三种顶距，没有任何测试会因
 
 - 内容列（`routes/_auth.tsx` 的 `data-slot="content-scroll"`）从 `px-4` 改成 **`p-4`**，四边同一个值、同一个地方给
 - 页面最外层一律 `<PageShell>`（`_shared/page-shell.tsx`），它**不带**上下 padding；页面根元素也不写 `p-` / `py-` / `pt-` / `pb-`
-- `pnpm arch:check` 两条闸门：`page-shell-handwritten`（页面里出现 `@container/main`）·
-  `page-root-padding`（`*Page` 组件 return 的根元素带竖向 padding）。两条都注入违规反向验证过
+- `pnpm arch:check` 三条闸门：`page-shell-handwritten`（页面里出现 `@container/main`）·
+  `page-root-padding`（`*Page` 的根元素带竖向 padding / 上下 margin）· `page-root-unscanned`（认不出根就报错）。
+  「根元素」怎么认、哪些写法放行，见 [scripts 分册](../../../../scripts/AGENTS.md)
 - 整屏居中的空态（`pages/forbidden.tsx` 的 `py-24`）不算对齐边距，不在闸门范围
-- 参数配置的粘性顶栏原来是 `-mx-4` 出血到两边、贴着标签条；现在和内容同宽，`-mt-3 py-3` 让搜索框落在 16px、吸顶时上面留 12px
+- 🔴 **内容区滚动模式下，sticky 的基准是滚动容器 padding 的内沿，不是它的上边。** 外壳加了 `pt-4` 之后，
+  全站在内容区里吸顶的元素都多了 16px：`top-0` 的条带吸在距顶 16px，上面那条缝里看得见滚过去的行；
+  `top-2` / `top-4` 的左栏**静止时**就被往下推（个人中心左导航实测落在 24、审批中心左栏 32）。
+  修法统一用 `content-scroll:` 只改内容区模式（整页滚动的基准是视口，原值不动）：
+  盖住内容的条带用 `content-scroll:-top-4`（参数配置顶栏 · 权限矩阵工具条），
+  左栏 / 面板用 `content-scroll:*:top-0`（设置屏导航 · 审批中心 · 流程设计器 · 组件沙箱）。新写 sticky 照这两种挑
+- 参数配置的粘性顶栏要**出血**：`-mx-4 -mt-4` 吃掉外壳的 padding、`px-4 pt-4` 补回来。第一版改成和内容同宽，吸顶时两侧 16px 的槽里露出滚过去的行（代码评审抓到的）；主体那层原来的 `py-5` 也只留 `pt-5`，否则底部是 20 + 16
+
+参数配置实测：顶栏静止和吸顶时都是 top 0、左右铺满，搜索框都在 16；左栏静止 85、吸顶 80（顶栏 64 + 16）。
 
 **实测**（Playwright，1920 和 390 两档，「第一个画出东西的元素」距内容列）：用户 / 短信日志 / 投递记录 / AI 调用日志 /
 参数配置 / 个人中心 / 工作台 / 模型供应商 / 角色 / 服务器监控 / 文件 / 审批中心等 15 页，上 = 左 = 16（文字行是 17，行高的半行距）；

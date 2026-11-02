@@ -356,13 +356,13 @@ export function SchedulerManagePage({
         confirmText={t('删除')}
         destructive
         onConfirm={async () => {
-      if (removing) await remove.mutateAsync([removing.id])
-      setRemoving(null)
+          if (removing) await remove.mutateAsync([removing.id])
+          setRemoving(null)
         }}
       />
 
       {/* 「立即执行」是异步的 —— 接口返回 task_id 就算成功，任务本身还在队列里。
-      不说清楚的话用户会以为点完就跑完了，然后去执行记录里找不到 */}
+          不说清楚的话用户会以为点完就跑完了，然后去执行记录里找不到 */}
       <ConfirmDialog
         open={ranId !== null}
         onOpenChange={(o) => { if (!o) setRanId(null) }}
