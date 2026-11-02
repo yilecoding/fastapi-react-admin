@@ -165,7 +165,7 @@ export function TodoCard({ openApproval, todoTab, onTodoTab }: CardProps) {
       testId="dash-todo"
       title={t('待我处理')}
       headerExtra={
-        <div role="tablist" aria-label={t('待我处理')} className="inline-flex gap-0.5 rounded-[10px] bg-muted p-[3px]">
+        <div role="tablist" aria-label={t('待我处理')} className="no-scrollbar inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[10px] bg-muted p-[3px]">
           {tabs.map((tb) => {
             const on = tb.key === todoTab
             return (
@@ -177,7 +177,7 @@ export function TodoCard({ openApproval, todoTab, onTodoTab }: CardProps) {
                 onClick={() => onTodoTab(tb.key)}
                 data-testid={`dash-todo-tab-${tb.key}`}
                 className={cn(
-                  'inline-flex h-7 items-center gap-1.5 rounded-[7px] px-2.5 text-[13px] transition-colors',
+                  'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-[7px] px-2.5 text-[13px] whitespace-nowrap transition-colors',
                   on ? 'bg-background font-bold text-foreground shadow-xs' : 'font-medium text-muted-foreground hover:text-foreground'
                 )}
               >
