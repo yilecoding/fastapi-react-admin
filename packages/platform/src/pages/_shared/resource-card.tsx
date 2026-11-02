@@ -80,7 +80,7 @@ export function AddCard({
       type="button"
       onClick={onClick}
       data-testid={testId}
-      className="flex min-h-44 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed p-4 text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40 hover:text-foreground"
+      className="flex min-h-44 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-foreground/20 p-4 text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40 hover:text-foreground"
     >
       <Icon className="size-5" />
       <span className="text-sm">{label}</span>

@@ -123,7 +123,9 @@ export function MonitorRedisPage({
               label={t("已连接客户端")}
               testId="metric-clients"
               value={int(info.connected_clients)}
-              tone={num(info.blocked_clients) > 0 ? 'warning' : 'info'}
+              // 只有「拒绝的连接」才算异常。阻塞客户端是常态 —— Celery worker 一直挂着 BRPOP 等任务，
+              // 原来按它标橙，这张卡在任何跑着 worker 的环境里都是橙的（#210）
+              tone={num(info.rejected_connections) > 0 ? 'warning' : 'info'}
               hint={t('阻塞 {{b}} · 拒绝 {{r}}', { b: info.blocked_clients, r: info.rejected_connections })}
             />
           </div>
@@ -183,7 +185,6 @@ export function MonitorRedisPage({
               <InfoRow
                 label={t("阻塞客户端")}
                 value={int(info.blocked_clients)}
-                tone={num(info.blocked_clients) > 0 ? 'warning' : undefined}
               />
               <InfoRow
                 label={t("拒绝的连接")}

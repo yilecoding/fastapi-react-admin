@@ -96,7 +96,7 @@ export function StoragePage() {
             return (
               <div
                 key={storage.id}
-                className="flex flex-col gap-2 rounded-lg border p-4"
+                className="flex flex-col gap-2 rounded-lg border bg-card p-4"
                 data-testid={`storage-card-${storage.code}`}
               >
                 <div className="flex items-start justify-between gap-2">

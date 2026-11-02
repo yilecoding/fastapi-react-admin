@@ -137,7 +137,9 @@ export function buildColumns({
             title={t('过期于 {{at}}', { at: formatDateTime(row.original.expire_time) })}
             className={cn(
               'font-mono text-xs tabular-nums',
-              hours <= 0 ? 'text-destructive' : hours < 2 ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
+              // 只在快过期（10 分钟内）时标琥珀：原来 < 2 小时就标，会话有效期本来就是这个量级，
+              // 于是整列常年是橙的，颜色不再说明任何事（#210）
+              hours <= 0 ? 'text-destructive' : hours < 1 / 6 ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
             )}
           >
             {text}

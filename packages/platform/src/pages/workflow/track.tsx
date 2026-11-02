@@ -135,24 +135,35 @@ function ResultTag({ text, tone }: { text: string; tone: 'ok' | 'bad' | 'muted' 
 /**
  * 名字首字的圆头像。色相由名字算出来、固定不变 —— 同一个人在轨道、列表、通知里是同一个颜色，
  * 扫一眼就能认出「又是他」。
+ *
+ * #210 改过两处：
+ * - 颜色原来写死在 style 里（浅底深字），深色模式下是一个个亮斑。现在只把色相作为 `--h` 传进去，
+ *   亮度 / 彩度由类名按模式给 —— 深色下换成暗底浅字
+ * - 小号（28px）原来塞两个字、字号 10px，读不清。小号只放一个字：中文取名的最后一个字，
+ *   拉丁字母取首字母大写；中号以上照旧两个字
  */
 export function PersonAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 'md' | 'lg' }) {
   const { t } = useTranslation()
   const label = name || t('未知')
   let h = 0
   for (const ch of label) h = (h * 31 + ch.codePointAt(0)!) % 360
+  const chars = [...label]
+  const cjk = /[\u3400-\u9fff]/.test(label)
+  const text = cjk ? chars.slice(size === 'sm' ? -1 : -2).join('') : (chars[0] ?? '').toUpperCase()
   return (
     <span
       aria-hidden
       className={cn(
         'grid shrink-0 place-items-center rounded-full font-medium select-none',
-        size === 'sm' && 'size-7 text-[10px]',
+        'bg-[oklch(0.9_0.06_var(--h))] text-[oklch(0.38_0.11_var(--h))]',
+        'dark:bg-[oklch(0.36_0.07_var(--h))] dark:text-[oklch(0.9_0.07_var(--h))]',
+        size === 'sm' && 'size-7 text-xs',
         size === 'md' && 'size-8 text-xs',
         size === 'lg' && 'size-10 text-sm'
       )}
-      style={{ backgroundColor: `oklch(0.9 0.06 ${h})`, color: `oklch(0.38 0.11 ${h})` }}
+      style={{ '--h': h } as React.CSSProperties}
     >
-      {[...label].slice(-2).join('')}
+      {text}
     </span>
   )
 }

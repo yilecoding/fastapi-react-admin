@@ -89,7 +89,7 @@ export function SmsConfigPage() {
             const mapped = Object.keys(config.templates)
             const unknownProvider = providersQuery.data !== undefined && !provider
             return (
-              <div key={config.id} className="flex flex-col gap-2 rounded-lg border p-4" data-testid={`sms-config-card-${config.name}`}>
+              <div key={config.id} className="flex flex-col gap-2 rounded-lg border bg-card p-4" data-testid={`sms-config-card-${config.name}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">

@@ -75,7 +75,7 @@ export function NotifyBotPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {bots.map((bot) => (
-            <div key={bot.id} className="flex flex-col gap-2 rounded-lg border p-4" data-testid={`bot-card-${bot.name}`}>
+            <div key={bot.id} className="flex flex-col gap-2 rounded-lg border bg-card p-4" data-testid={`bot-card-${bot.name}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
