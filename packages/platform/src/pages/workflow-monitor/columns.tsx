@@ -1,9 +1,7 @@
 import { createColumnHelper } from '@tanstack/react-table'
 import { IconEye } from '@tabler/icons-react'
 
-import {
-  DropdownMenuItem,
-} from '@admin/ui/components/dropdown-menu'
+import { ACTIONS_COLUMN_ID } from '@admin/ui/components/data-table'
 
 import { RowActions, TimeCell } from '../_shared/cells'
 import { logFeatures } from '../_shared/log-features'
@@ -86,16 +84,15 @@ export function buildColumns(onOpen: (r: InstanceRow) => void, t: (k: string, va
       cell: ({ getValue }) => <TimeCell value={getValue()} />,
     }),
     col.display({
-      id: 'actions',
+      id: ACTIONS_COLUMN_ID,
       header: () => <span className="sr-only">{t('操作')}</span>,
       cell: ({ row }) => (
-        <RowActions label={row.original.title} testId={`wf-monitor-actions-${row.original.id}`}>
-          {/* 终止 / 改办理人在详情里（按能力信封出），这里只给入口 */}
-          <DropdownMenuItem onClick={() => onOpen(row.original)}>
-            <IconEye className="size-4" />
-            {t('查看详情')}
-          </DropdownMenuItem>
-        </RowActions>
+        <RowActions
+          label={row.original.title}
+          testId={`wf-monitor-actions-${row.original.id}`}
+          // 终止 / 改办理人在详情里（按能力信封出），这里只给入口
+          items={[{ key: 'open', label: t('查看详情'), icon: IconEye, onClick: () => onOpen(row.original) }]}
+        />
       ),
     }),
   ]

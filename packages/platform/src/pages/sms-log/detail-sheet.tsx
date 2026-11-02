@@ -8,6 +8,7 @@ import { QueryError } from '@admin/ui/components/query-error'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@admin/ui/components/sheet'
 import { Skeleton } from '@admin/ui/components/skeleton'
 
+import { formatMs } from '../_shared/cells'
 import { ERROR_KIND_LABELS } from '../sms-config/api'
 import { DetailIdRow, DetailSection } from '../_shared/detail-sheet'
 import { JsonViewer } from '../_shared/json-viewer'
@@ -75,7 +76,7 @@ export function SmsLogDetailSheet({ open, onOpenChange, id }: { open: boolean; o
                   <DescriptionItem label={t('厂商原文')}>
                     <span className="break-all font-mono text-xs">{log.provider_msg ?? '—'}</span>
                   </DescriptionItem>
-                  <DescriptionItem label={t('耗时')}>{log.duration_ms === null ? '—' : `${log.duration_ms}ms`}</DescriptionItem>
+                  <DescriptionItem label={t('耗时')}>{log.duration_ms === null ? '—' : formatMs(log.duration_ms)}</DescriptionItem>
                 </Descriptions>
                 <div className="flex flex-col gap-1">
                   <DetailIdRow label={t('日志 ID')} value={log.id} labelWidth="w-24" />

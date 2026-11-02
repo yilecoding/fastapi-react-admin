@@ -5,15 +5,13 @@ import { createColumnHelper, useTable } from '@tanstack/react-table'
 import { IconAlertTriangle, IconPlayerPlay, IconPlus, IconTrash } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
-import { DropdownMenuItem, DropdownMenuSeparator } from '@admin/ui/components/dropdown-menu'
-import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
+import { ACTIONS_COLUMN_ID, DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 import { Switch } from '@admin/ui/components/switch'
 import { cn } from '@admin/ui/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 
 import { Can } from '../../auth/can'
-import { usePerm } from '../../auth/use-perm'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { RowActions, TimeCell } from '../_shared/cells'
@@ -81,7 +79,6 @@ export function SchedulerManagePage({
   onSearchChange?: (n: SchedulerManageSearch) => void
 }) {
   const { t, i18n } = useTranslation()
-  const { canAny } = usePerm()
   const page = search.page ?? 1
   const size = search.size ?? DEFAULT_PAGE_SIZE
   const patch = React.useCallback(
@@ -214,40 +211,32 @@ export function SchedulerManagePage({
         cell: ({ getValue }) => <TimeCell value={getValue()} />,
       }),
       col.display({
-        id: 'actions',
+        id: ACTIONS_COLUMN_ID,
         header: () => <span className="sr-only">{t('操作')}</span>,
         // 原来是 ▶ 图标 + 一个红字「删除」，十行连成一条红带（#210）。收进 ⋯，删除放最后
-        cell: ({ row }) =>
-          canAny('task:scheduler:run', 'task:scheduler:del') ? (
-            <RowActions label={row.original.name} testId={`scheduler-actions-${row.original.id}`}>
-              <Can perm="task:scheduler:run">
-                <DropdownMenuItem
-                  data-testid={`run-scheduler-${row.original.id}`}
-                  onClick={async () => {
-                    const id = await run.mutateAsync(row.original.id)
-                    setRanId(id)
-                  }}
-                >
-                  <IconPlayerPlay className="size-4" />
-                  {t('立即执行一次')}
-                </DropdownMenuItem>
-              </Can>
-              <Can perm="task:scheduler:del">
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  data-testid={`del-scheduler-${row.original.id}`}
-                  onClick={() => setRemoving(row.original)}
-                >
-                  <IconTrash className="size-4" />
-                  {t('删除')}
-                </DropdownMenuItem>
-              </Can>
-            </RowActions>
-          ) : null,
+        cell: ({ row }) => (
+          <RowActions
+            label={row.original.name}
+            testId={`scheduler-actions-${row.original.id}`}
+            items={[
+              {
+                key: 'run', label: t('立即执行一次'), icon: IconPlayerPlay, perm: 'task:scheduler:run',
+                testId: `run-scheduler-${row.original.id}`,
+                onClick: async () => {
+                  const id = await run.mutateAsync(row.original.id)
+                  setRanId(id)
+                },
+              },
+              {
+                key: 'del', label: t('删除'), icon: IconTrash, perm: 'task:scheduler:del', danger: true,
+                testId: `del-scheduler-${row.original.id}`, onClick: () => setRemoving(row.original),
+              },
+            ]}
+          />
+        ),
       }),
     ],
-    [t, i18n.language, toggle, run, registered, canAny]
+    [t, i18n.language, toggle, run, registered]
   )
 
   // 列顺序进 URL（同列显隐）—— 走 onSearchChange 而不是 patch：换列序不该清勾选、也不该跳回第一页

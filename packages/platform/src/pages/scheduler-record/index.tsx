@@ -6,7 +6,7 @@ import { createColumnHelper, useTable } from '@tanstack/react-table'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 
-import { TimeCell } from '../_shared/cells'
+import { EmptyCell, TimeCell } from '../_shared/cells'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton } from '../_shared/filters'
 import { logFeatures as features } from '../_shared/log-features'
@@ -134,12 +134,12 @@ export function SchedulerRecordPage({
           <TimeCell value={getValue()} onOpen={() => setDetailId(row.original.id)} testId={`open-result-${row.original.id}`} />
         ),
       }),
-      col.accessor((r) => r.name ?? '—', {
+      col.accessor((r) => r.name ?? '', {
         id: 'name',
         header: t('任务名'),
         cell: ({ getValue }) => (
-          <span className="block max-w-56 truncate font-mono text-xs" title={getValue()}>
-            {getValue()}
+          <span className="block max-w-56 truncate font-mono text-xs" title={getValue() || undefined}>
+            {getValue() || <EmptyCell />}
           </span>
         ),
       }),
@@ -170,17 +170,17 @@ export function SchedulerRecordPage({
           </span>
         ),
       }),
-      col.accessor((r) => r.worker ?? '—', {
+      col.accessor((r) => r.worker ?? '', {
         id: 'worker',
         header: t('执行节点'),
-        cell: ({ getValue }) => <span className="text-sm text-muted-foreground">{getValue()}</span>,
+        cell: ({ getValue }) => <span className="text-sm text-muted-foreground">{getValue() || <EmptyCell />}</span>,
       }),
-      col.accessor((r) => r.task_id ?? '—', {
+      col.accessor((r) => r.task_id ?? '', {
         id: 'task_id',
         header: t('任务 UUID'),
         cell: ({ getValue }) => (
-          <span className="block max-w-52 truncate font-mono text-xs text-muted-foreground" title={getValue()}>
-            {getValue()}
+          <span className="block max-w-52 truncate font-mono text-xs text-muted-foreground" title={getValue() || undefined}>
+            {getValue() || <EmptyCell />}
           </span>
         ),
       }),

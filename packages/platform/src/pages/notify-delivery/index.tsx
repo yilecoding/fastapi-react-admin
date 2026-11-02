@@ -4,12 +4,10 @@ import { IconSend } from '@tabler/icons-react'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
+import { ACTIONS_COLUMN_ID, DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
-import { DropdownMenuItem } from '@admin/ui/components/dropdown-menu'
 import { toast } from '@admin/ui/components/toast'
 
-import { Can } from '../../auth/can'
 import { usePerm } from '../../auth/use-perm'
 import { PageHeader } from '../../shell/page-header'
 import { EmptyCell, RowActions, TimeCell } from '../_shared/cells'
@@ -212,20 +210,22 @@ export function NotifyDeliveryPage({
         cell: ({ getValue }) => <TimeCell value={getValue()} />,
       }),
       col.display({
-        id: 'actions',
+        id: ACTIONS_COLUMN_ID,
         // 原来表头写「操作」、大多数行底下是空的（#210）。现在表头只给读屏，
         // 不能重发的行整格留空，能重发的才有 ⋯
         header: () => <span className="sr-only">{t('操作')}</span>,
         cell: ({ row }) =>
           RESENDABLE.has(row.original.status) ? (
-            <Can perm="sys:notification:delivery:resend">
-              <RowActions label={row.original.title} testId={`delivery-actions-${row.original.id}`}>
-                <DropdownMenuItem data-testid={`resend-${row.original.id}`} onClick={() => void doResend(row.original.id)}>
-                  <IconSend className="size-4" />
-                  {t('重发')}
-                </DropdownMenuItem>
-              </RowActions>
-            </Can>
+            <RowActions
+              label={row.original.title}
+              testId={`delivery-actions-${row.original.id}`}
+              items={[
+                {
+                  key: 'resend', label: t('重发'), icon: IconSend, perm: 'sys:notification:delivery:resend',
+                  testId: `resend-${row.original.id}`, onClick: () => void doResend(row.original.id),
+                },
+              ]}
+            />
           ) : null,
       }),
     ],

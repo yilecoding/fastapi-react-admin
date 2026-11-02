@@ -3,6 +3,7 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { IconCheck, IconExternalLink, IconEyeCheck } from '@tabler/icons-react'
 
 import { formatDateTime } from '@admin/i18n'
+import { ACTIONS_COLUMN_ID } from '@admin/ui/components/data-table'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
@@ -133,7 +134,7 @@ export function buildColumns(
       ),
     }),
     col.display({
-      id: 'actions',
+      id: ACTIONS_COLUMN_ID,
       header: () => <span className="sr-only">{t('操作')}</span>,
       cell: ({ row }) => {
         const n = row.original

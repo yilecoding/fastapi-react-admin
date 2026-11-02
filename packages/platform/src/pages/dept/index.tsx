@@ -5,19 +5,16 @@ import {
   IconChevronRight,
   IconChevronsDown,
   IconChevronsUp,
-  IconDotsVertical,
   IconPencil,
   IconPlus,
   IconTrash,
   IconUpload,
 } from '@tabler/icons-react'
 
+import { ACTIONS_CELL_CLASS } from '@admin/ui/components/data-table'
 import { Button } from '@admin/ui/components/button'
 import { DataTableErrorRow, DataTableSkeletonRows } from '@admin/ui/components/data-table'
 import { QueryError } from '@admin/ui/components/query-error'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@admin/ui/components/dropdown-menu'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@admin/ui/components/table'
@@ -26,6 +23,7 @@ import { cn } from '@admin/ui/lib/utils'
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
+import { RowActions } from '../_shared/cells'
 import { RefreshButton, ResetButton, StatusFilter, TextFilter } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import { StatusBadge } from '../_shared/status'
@@ -289,34 +287,22 @@ function DeptRows({
         <TableCell className="text-sm tabular-nums">{node.phone || <span className="text-muted-foreground">—</span>}</TableCell>
         <TableCell className="text-sm tabular-nums text-muted-foreground">{node.sort}</TableCell>
         <TableCell><StatusBadge value={node.status} /></TableCell>
-        <TableCell>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon" className="size-7" aria-label={t('操作 {{name}}', { name: node.name })} />}
-              data-testid={`dept-actions-${node.name}`}
-            >
-              <IconDotsVertical className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-36">
-              <Can perm="sys:dept:add">
-                <DropdownMenuItem onClick={() => onAddChild(node.id)} data-testid={`dept-addchild-${node.name}`}>
-                  <IconPlus className="size-4" />{t('新增子部门')}
-                </DropdownMenuItem>
-              </Can>
-              <Can perm="sys:dept:edit">
-                <DropdownMenuItem onClick={() => onEdit(node)} data-testid={`dept-edit-${node.name}`}>
-                  <IconPencil className="size-4" />{t('编辑')}
-                </DropdownMenuItem>
-              </Can>
-              <Can perm="sys:dept:del">
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={() => onDelete(node)}
-                                  data-testid={`dept-delete-${node.name}`}>
-                  <IconTrash className="size-4" />{t('删除')}
-                </DropdownMenuItem>
-              </Can>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <TableCell className={ACTIONS_CELL_CLASS}>
+          <RowActions
+            label={node.name}
+            testId={`dept-actions-${node.name}`}
+            items={[
+              {
+                key: 'add', label: t('新增子部门'), icon: IconPlus, perm: 'sys:dept:add',
+                testId: `dept-addchild-${node.name}`, onClick: () => onAddChild(node.id),
+              },
+              { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'sys:dept:edit', testId: `dept-edit-${node.name}`, onClick: () => onEdit(node) },
+              {
+                key: 'del', label: t('删除'), icon: IconTrash, perm: 'sys:dept:del', danger: true,
+                testId: `dept-delete-${node.name}`, onClick: () => onDelete(node),
+              },
+            ]}
+          />
         </TableCell>
       </TableRow>
 

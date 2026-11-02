@@ -1,11 +1,19 @@
 import { IconDotsVertical } from '@tabler/icons-react'
-import type * as React from 'react'
+import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { formatDateTime, type ServerTime } from '@admin/i18n'
+import { formatDateTime, toEpochMs, type ServerTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@admin/ui/components/dropdown-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@admin/ui/components/dropdown-menu'
 import { cn } from '@admin/ui/lib/utils'
+
+import { usePerm } from '../../auth/use-perm'
 
 /**
  * 表格单元格的**唯一写法**（#210 P1-7 / P1-8）。
@@ -18,14 +26,11 @@ import { cn } from '@admin/ui/lib/utils'
  * 约定：
  * - **蓝色 = 能点**。只有 `TimeCell` 给了 `onOpen` 才是主色 + 悬停下划线；
  *   不能点的时间一律灰色，免得用户去点一个不是链接的东西
- * - 空值一律 `—`（em dash），灰色
+ * - 空值一律灰色 `—`（`EmptyCell`）。accessor 里别写 `?? '—'`：那样是前景色的黑「—」
  */
 
-/** 空值占位。表格里「没有」只用这一个字符 */
-export const EMPTY = '—'
-
 export function EmptyCell() {
-  return <span className="text-muted-foreground">{EMPTY}</span>
+  return <span className="text-muted-foreground">—</span>
 }
 
 const TIME_CLASS = 'font-mono text-xs whitespace-nowrap tabular-nums'
@@ -33,6 +38,10 @@ const TIME_CLASS = 'font-mono text-xs whitespace-nowrap tabular-nums'
 /**
  * 时间单元格。给 `onOpen` 就是「点时间看详情」的入口（日志类页面的约定，
  * 比单加一列「查看」省地方），否则是纯展示。
+ *
+ * 🔴 **有 `onOpen` 时，时间为空也要渲染成能点的「—」。** 执行记录页的详情入口就挂在
+ * `date_done` 上，而 Celery 对执行中 / 重试中的任务不写它 —— 空了就返回纯文本的话，
+ * 这些行整行没有入口，正在重试的任务恰恰最需要看异常栈（#213 评审）。
  */
 export function TimeCell({
   value,
@@ -43,8 +52,8 @@ export function TimeCell({
   onOpen?: () => void
   testId?: string
 }) {
-  const text = formatDateTime(value)
-  if (text === EMPTY) return <EmptyCell />
+  // 判空看能不能解析，不拿格式化结果去比占位符 —— 那是 datetime.ts 的内部细节
+  const empty = toEpochMs(value) === null
   if (onOpen) {
     return (
       <button
@@ -53,21 +62,29 @@ export function TimeCell({
         onClick={onOpen}
         className={cn(TIME_CLASS, 'text-primary underline-offset-2 hover:underline')}
       >
-        {text}
+        {formatDateTime(value)}
       </button>
     )
   }
+  if (empty) return <EmptyCell />
   return (
     <span className={cn(TIME_CLASS, 'text-muted-foreground')} data-testid={testId}>
-      {text}
+      {formatDateTime(value)}
     </span>
   )
 }
 
-/** `7.0 ms` · `52 ms` · `1.24 s`：10ms 以下留一位小数，1 秒以上换成秒 */
-export function formatDuration(ms: number): string {
-  if (ms < 10) return `${ms.toFixed(1)} ms`
-  if (ms < 999.5) return `${Math.round(ms)} ms` // 不写 < 1000：999.6 会取整成「1000 ms」
+/**
+ * 毫秒数 → `7.0 ms` · `52 ms` · `1.24 s`：10ms 以下留一位小数，1 秒以上换成秒。
+ *
+ * 不叫 `formatDuration`：`@admin/i18n` 里已经有一个同名的、收**秒**数（`25 分钟`），
+ * 自动导入挑错一个就差 1000 倍还不报错。
+ * 两道阈值都按「舍入后」判：写成 `< 10` / `< 1000` 的话，9.96 显示成「10.0 ms」、
+ * 999.6 显示成「1000 ms」，同一列两种写法。
+ */
+export function formatMs(ms: number): string {
+  if (ms < 9.95) return `${ms.toFixed(1)} ms`
+  if (ms < 999.5) return `${Math.round(ms)} ms`
   return `${(ms / 1000).toFixed(2)} s`
 }
 
@@ -81,50 +98,88 @@ export function DurationCell({ ms, slowMs = 500 }: { ms: number | null | undefin
         ms > slowMs ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
       )}
     >
-      {formatDuration(ms)}
+      {formatMs(ms)}
     </span>
   )
 }
 
+export type RowAction = {
+  key: string
+  label: React.ReactNode
+  icon?: React.ComponentType<{ className?: string }>
+  onClick?: () => void
+  /** 渲染成别的元素（如 `<Link>`），同 Base UI 的 `render` */
+  render?: React.ReactElement
+  /** 要这个权限码才显示 */
+  perm?: string
+  /** 只给超管（后端是 `DependsSuperUser`、没有权限码的那类） */
+  superOnly?: boolean
+  /** 按行数据决定不显示 */
+  hidden?: boolean
+  disabled?: boolean
+  /** 危险操作：红色、排在最后、前面一条分隔线 */
+  danger?: boolean
+  testId?: string
+}
+
 /**
- * 行操作：一律收进 ⋯ 菜单，危险操作放菜单最后（前面加 `DropdownMenuSeparator`、
- * 用 `variant="destructive"`）。children 就是 `DropdownMenuItem`，
- * 所以 `<Can>` / `<SuperOnly>` 照旧包在单项外面。
+ * 行操作：一律收进 ⋯ 菜单。
  *
- * 列定义用 `id: 'actions'` —— `DataTable` 认这个 id，把这一列收到最窄、靠右。
- * 一行没有可做的操作时整格返回 `null`，别留一个点开是空的菜单。
+ * 用数据描述而不是 children：原来写成 `<Can>` 包着 `DropdownMenuItem`，组件看不见哪些项
+ * 最后真的渲染了 —— 没有任何权限的人点开是一个**空浮层**，只有删除权限的人菜单顶上是一条
+ * **孤立的分隔线**（#213 评审）。现在按权限过滤完：一项不剩就整格返回 `null`；
+ * 危险项永远排最后，前面确实有普通项时才画分隔线。
+ *
+ * 列定义用 `id: ACTIONS_COLUMN_ID`（`@admin/ui/components/data-table`），`DataTable` 认它，
+ * 把这一列收到按内容宽、靠右。
  */
 export function RowActions({
   label,
   testId,
-  children,
-  className,
+  items,
 }: {
   /** 读屏用：「操作 {{name}}」里的 name */
   label: string
   testId?: string
-  children: React.ReactNode
-  className?: string
+  items: RowAction[]
 }) {
   const { t } = useTranslation()
+  const { can, isSuperuser } = usePerm()
+  const visible = items.filter(
+    (i) => !i.hidden && (!i.superOnly || isSuperuser) && (!i.perm || can(i.perm))
+  )
+  if (!visible.length) return null
+  const normal = visible.filter((i) => !i.danger)
+  const danger = visible.filter((i) => i.danger)
+  const item = (i: RowAction) => {
+    const Icon = i.icon
+    return (
+      <DropdownMenuItem
+        key={i.key}
+        variant={i.danger ? 'destructive' : 'default'}
+        disabled={i.disabled}
+        onClick={i.onClick}
+        render={i.render}
+        data-testid={i.testId}
+      >
+        {Icon ? <Icon className="size-4" /> : null}
+        {i.label}
+      </DropdownMenuItem>
+    )
+  }
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn('size-7', className)}
-            aria-label={t('操作 {{name}}', { name: label })}
-          />
-        }
+        render={<Button variant="ghost" size="icon" className="size-7" aria-label={t('操作 {{name}}', { name: label })} />}
         data-testid={testId}
       >
         <IconDotsVertical className="size-4" />
       </DropdownMenuTrigger>
       {/* 不写死宽度：各页菜单项长短不一（「强制下线」「查看调用日志」），原来 w-32 / w-36 / w-40 三种 */}
       <DropdownMenuContent align="end" className="w-auto min-w-36">
-        {children}
+        {normal.map(item)}
+        {normal.length > 0 && danger.length > 0 ? <DropdownMenuSeparator /> : null}
+        {danger.map(item)}
       </DropdownMenuContent>
     </DropdownMenu>
   )

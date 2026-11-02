@@ -8,7 +8,7 @@ import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 import { cn } from '@admin/ui/lib/utils'
 
-import { TimeCell } from '../_shared/cells'
+import { EmptyCell, TimeCell } from '../_shared/cells'
 import { api, type PageData } from '../../api-client/client'
 import { Can } from '../../auth/can'
 import { PageHeader } from '../../shell/page-header'
@@ -220,21 +220,21 @@ export function LogLoginPage({
         header: t('登录地点'),
         cell: ({ getValue }) => <span className="text-sm text-muted-foreground">{getValue()}</span>,
       }),
-      col.accessor((r) => r.browser ?? '—', {
+      col.accessor((r) => r.browser ?? '', {
         id: 'browser',
         header: t('浏览器'),
         cell: ({ getValue }) => (
-          <span className="block max-w-28 truncate text-sm text-muted-foreground" title={getValue()}>
-            {getValue()}
+          <span className="block max-w-28 truncate text-sm text-muted-foreground" title={getValue() || undefined}>
+            {getValue() || <EmptyCell />}
           </span>
         ),
       }),
-      col.accessor((r) => r.os ?? '—', {
+      col.accessor((r) => r.os ?? '', {
         id: 'os',
         header: t('终端系统'),
         cell: ({ row, getValue }) => (
           <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            {getValue()}
+            {getValue() || <EmptyCell />}
             {row.original.device && (
               <Badge variant="outline" className="font-normal">
                 {row.original.device}

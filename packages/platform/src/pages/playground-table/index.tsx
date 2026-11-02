@@ -32,6 +32,7 @@ import {
   IconTrash,
 } from '@tabler/icons-react'
 
+import { ACTIONS_COLUMN_ID } from '@admin/ui/components/data-table'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { Card, CardContent } from '@admin/ui/components/card'
@@ -264,7 +265,7 @@ export function PlaygroundTablePage() {
         ),
       }),
       col.display({
-        id: 'actions',
+        id: ACTIONS_COLUMN_ID,
         header: () => <span className="block text-end">操作</span>,
         size: 130,
         enableHiding: false,

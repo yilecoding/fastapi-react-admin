@@ -2,10 +2,8 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { IconLogout, IconWifi, IconWifiOff } from '@tabler/icons-react'
 
 import { formatDateTime } from '@admin/i18n'
+import { ACTIONS_COLUMN_ID } from '@admin/ui/components/data-table'
 import { Badge } from '@admin/ui/components/badge'
-import {
-  DropdownMenuItem,
-} from '@admin/ui/components/dropdown-menu'
 import { cn } from '@admin/ui/lib/utils'
 
 import { RowActions, TimeCell } from '../_shared/cells'
@@ -156,24 +154,23 @@ export function buildColumns({
       ),
     }),
     col.display({
-      id: 'actions',
+      id: ACTIONS_COLUMN_ID,
       enableHiding: false,
       header: () => <span className="sr-only">{t('操作')}</span>,
       cell: ({ row }) => {
         const s = row.original
         const isMe = s.session_uuid === currentUuid
         return (
-          <RowActions label={s.username} testId={`row-actions-${s.session_uuid}`}>
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={isMe}
-              onClick={() => onKick(s)}
-              data-testid={`kick-${s.session_uuid}`}
-            >
-              <IconLogout className="size-4" />
-              {isMe ? t('不能踢自己') : t('强制下线')}
-            </DropdownMenuItem>
-          </RowActions>
+          <RowActions
+            label={s.username}
+            testId={`row-actions-${s.session_uuid}`}
+            items={[
+              {
+                key: 'kick', label: isMe ? t('不能踢自己') : t('强制下线'), icon: IconLogout, danger: true,
+                disabled: isMe, testId: `kick-${s.session_uuid}`, onClick: () => onKick(s),
+              },
+            ]}
+          />
         )
       },
     }),
