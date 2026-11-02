@@ -10,7 +10,7 @@ values
 (2210000000000000008, '修改', 'EditAiProvider', null, 2, null, 2, 'ai:provider:edit', 1, 0, '', null, 2210000000000000003, now(), null),
 (2210000000000000009, '删除', 'DeleteAiProvider', null, 3, null, 2, 'ai:provider:del', 1, 0, '', null, 2210000000000000003, now(), null),
 (2210000000000000010, '查询', 'QueryAiToolLog', null, 0, null, 2, 'ai:log:list', 1, 0, '', null, 2210000000000000004, now(), null),
-(2210000000000000011, 'MCP 凭据', 'AiMcpClient', '/ai/mcp-client', 4, 'mdi:api', 1, null, 1, 1, '', null, 2210000000000000001, now(), null),
+(2210000000000000011, 'MCP 凭据', 'AiMcpClient', '/ai/mcp-client', 4, 'mdi:connection', 1, null, 1, 1, '', null, 2210000000000000001, now(), null),
 (2210000000000000012, '查询', 'QueryAiMcpClient', null, 0, null, 2, 'ai:mcp:list', 1, 0, '', null, 2210000000000000011, now(), null),
 (2210000000000000013, '新增', 'AddAiMcpClient', null, 1, null, 2, 'ai:mcp:add', 1, 0, '', null, 2210000000000000011, now(), null),
 (2210000000000000014, '修改', 'EditAiMcpClient', null, 2, null, 2, 'ai:mcp:edit', 1, 0, '', null, 2210000000000000011, now(), null),

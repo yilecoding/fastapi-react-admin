@@ -137,11 +137,14 @@ export function RowActions({
   label,
   testId,
   items,
+  triggerClassName,
 }: {
   /** 读屏用：「操作 {{name}}」里的 name */
   label: string
   testId?: string
   items: RowAction[]
+  /** 触发按钮的额外样式（主从页左栏、参数配置行要「悬停才显形」） */
+  triggerClassName?: string
 }) {
   const { t } = useTranslation()
   const { can, isSuperuser } = usePerm()
@@ -170,7 +173,7 @@ export function RowActions({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="ghost" size="icon" className="size-7" aria-label={t('操作 {{name}}', { name: label })} />}
+        render={<Button variant="ghost" size="icon" className={cn('size-7', triggerClassName)} aria-label={t('操作 {{name}}', { name: label })} />}
         data-testid={testId}
       >
         <IconDotsVertical className="size-4" />

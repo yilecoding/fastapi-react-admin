@@ -14,10 +14,6 @@ import {
 
 import { Button } from '@admin/ui/components/button'
 import { ACTIONS_COLUMN_ID, DataTable } from '@admin/ui/components/data-table'
-import {
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from '@admin/ui/components/dropdown-menu'
 import { cn } from '@admin/ui/lib/utils'
 
 import { RowActions } from '../_shared/cells'
@@ -267,24 +263,13 @@ export function DictPage({
               ? t('共 {{total}} 个类型，仅加载前 {{n}} 个', { total: typeTotal, n: types.length })
               : undefined
           }
-          renderActions={(item) => {
+          rowActions={(item) => {
             const ty = types.find((x) => x.id === item.id)
-            if (!ty) return null
-            return (
-              <>
-                <Can perm="dict:type:edit">
-                  <DropdownMenuItem onClick={() => { setEditingType(ty); setTypeSheet(true) }}>
-                    <IconPencil className="size-4" />{t('编辑')}
-                  </DropdownMenuItem>
-                </Can>
-                <Can perm="dict:type:del">
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={() => setDelType(ty)}>
-                    <IconTrash className="size-4" />{t('删除')}
-                  </DropdownMenuItem>
-                </Can>
-              </>
-            )
+            if (!ty) return []
+            return [
+              { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'dict:type:edit', onClick: () => { setEditingType(ty); setTypeSheet(true) } },
+              { key: 'delete', label: t('删除'), icon: IconTrash, danger: true, perm: 'dict:type:del', onClick: () => setDelType(ty) },
+            ]
           }}
         />
         {/* ── 右：字典项 ── */}
