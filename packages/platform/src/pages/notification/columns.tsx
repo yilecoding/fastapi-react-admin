@@ -8,6 +8,7 @@ import { Button } from '@admin/ui/components/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 import { cn } from '@admin/ui/lib/utils'
 
+import { TimeCell } from '../_shared/cells'
 import { StatusPill } from '../_shared/status'
 import { AttachmentCount } from '../notice/shared'
 import { noticeIdOf, type Notification } from './api'
@@ -128,9 +129,7 @@ export function buildColumns(
     col.accessor('created_time', {
       header: t('时间'),
       cell: ({ getValue }) => (
-        <span className="text-sm tabular-nums text-muted-foreground">
-          {formatDateTime(getValue())}
-        </span>
+        <TimeCell value={getValue()} />
       ),
     }),
     col.display({

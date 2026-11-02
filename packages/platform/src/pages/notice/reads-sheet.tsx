@@ -116,11 +116,11 @@ function ReadsBody({
           <TabsList>
             <TabsTrigger value="read" data-testid="notice-reads-tab-read">
               {t('已读')}
-              <span className="tabular-nums" data-testid="notice-reads-read-count">{d ? d.read_count : '–'}</span>
+              <span className="tabular-nums" data-testid="notice-reads-read-count">{d ? d.read_count : '—'}</span>
             </TabsTrigger>
             <TabsTrigger value="unread" data-testid="notice-reads-tab-unread">
               {t('未读')}
-              <span className="tabular-nums" data-testid="notice-reads-unread-count">{d ? d.unread_count : '–'}</span>
+              <span className="tabular-nums" data-testid="notice-reads-unread-count">{d ? d.unread_count : '—'}</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>

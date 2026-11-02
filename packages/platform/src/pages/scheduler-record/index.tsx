@@ -3,10 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
 
-import { formatDateTime } from '@admin/i18n'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 
+import { TimeCell } from '../_shared/cells'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton } from '../_shared/filters'
 import { logFeatures as features } from '../_shared/log-features'
@@ -126,23 +126,12 @@ export function SchedulerRecordPage({
           </span>
         ),
       }),
-      col.accessor((r) => formatDateTime(r.date_done), {
-        id: 'date_done',
+      col.accessor('date_done', {
         header: t('结束时间'),
-        // ⚠️ 不要裸打印 date_done：后端下发的是 ISO（UTC），
-        // 直接渲染会得到 `2026-08-22T16:29:00.141035+08:00` 这种带微秒的原文，
-        // 而且切片取日期在东八区凌晨会切到前一天。一律走 `@admin/i18n` 的
-        // formatDateTime（见 packages/i18n/src/datetime.ts 的头注释）
+        // ⚠️ 不要裸打印 date_done：后端下发的是 ISO（UTC），TimeCell 里走 formatDateTime
         // 点时间开详情 —— 和操作日志一致，比多一列「查看」省地方
         cell: ({ row, getValue }) => (
-          <button
-            type="button"
-            data-testid={`open-result-${row.original.id}`}
-            onClick={() => setDetailId(row.original.id)}
-            className="font-mono text-xs text-primary tabular-nums underline-offset-2 hover:underline"
-          >
-            {getValue()}
-          </button>
+          <TimeCell value={getValue()} onOpen={() => setDetailId(row.original.id)} testId={`open-result-${row.original.id}`} />
         ),
       }),
       col.accessor((r) => r.name ?? '—', {
