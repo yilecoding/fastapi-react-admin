@@ -246,11 +246,8 @@ export function OpenLogPage({
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          <PageHeader title={t('调用日志')} />
-          <p className="text-sm text-muted-foreground">
-            {t('外部系统每次调用开放接口都会记一条，成功失败都记。点时间看详情；日志保留 30 天，到期由定时任务清理。')}
-          </p>
+        <div className="flex flex-col gap-4 md:gap-6 content-scroll:min-h-0 content-scroll:flex-1">
+          <PageHeader title={t('调用日志')} description={t('外部系统每次调用开放接口都会记一条，成功失败都记。点时间看详情；日志保留 30 天，到期由定时任务清理。')} />
 
           <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
             <QueryBar

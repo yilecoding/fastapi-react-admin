@@ -242,7 +242,7 @@ export function DictPage({
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
         {/* content-scroll:lg:* —— 内容区滚动 + 宽屏时整块撑满，两栏各自成定高视区
             （左栏只滚类型、右栏只滚字典项）。窄屏是上下堆叠的，那时照旧整块滚 */}
-        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:lg:min-h-0 content-scroll:lg:flex-1">
+        <div className="flex flex-1 flex-col gap-4 md:gap-6 content-scroll:lg:min-h-0 content-scroll:lg:flex-1">
           <PageHeader title={t("数据字典")} description={t("集中管理业务枚举。状态、类型、单位这类下拉选项都放这里。")} />
 
           {/* 断点用 lg 不用 md：左栏是 w-72 硬宽，768px 下右栏只剩约 176px，

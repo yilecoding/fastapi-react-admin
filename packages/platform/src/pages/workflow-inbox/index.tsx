@@ -87,7 +87,7 @@ export function WorkflowInboxPage({
   const badge = (v: InboxTab) => (v === 'todo' ? counts?.todo : v === 'cc' ? counts?.cc_unread : undefined)
 
   return (
-    <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 lg:flex-row lg:items-start">
+    <div className="flex flex-col gap-4 md:gap-6 lg:flex-row lg:items-start">
       <PageHeader title={t('审批中心')} />
 
       <nav className="flex shrink-0 flex-col gap-3 lg:sticky lg:top-4 lg:w-52" aria-label={t('审批中心')}>

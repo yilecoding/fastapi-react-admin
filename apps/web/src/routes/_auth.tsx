@@ -129,7 +129,10 @@ function AuthLayout() {
         <AiDrawer />
         {/* 这一层是 div 不是 main —— `SidebarInset` 自己渲染的就是 <main>，
             再嵌一个会出现两个 main 地标，读屏「跳到主内容」不知道该去哪个。
-            水平内边距统一在这里给（页面级块一律不加 px-*，见 CLAUDE.md）。 */}
+            四边内边距统一在这里给，一个值（16px）：页面级块一律不加 px-* / py-* / pt-*。
+            原来这里只给水平的 px-4、竖直方向由各页自己写，于是全站顶部长出五档
+            （0 / 12 / 24 / 28 / 37px，实测 #209）—— 漏抄、抄错没有任何东西会红。
+            现在竖直方向也收在这里，`pnpm arch:check` 挡页面根上的竖直 padding。 */}
         {/* data-slot 是给这一层的**地标**（和 sidebar-inset / table-container 同一套做法），
             排障时能一眼定位「外壳的内容列」。
             ⚠️ 曾经拿它挂过 `scrollbar-gutter: stable`，已经撤了 ——
@@ -137,7 +140,7 @@ function AuthLayout() {
             10px 并让表格右边缘比页头短一截。理由见 globals.css 里那段。 */}
         <div
           data-slot="content-scroll"
-          className="flex flex-1 flex-col px-4 content-scroll:min-h-0 content-scroll:overflow-y-auto content-scroll:overflow-x-hidden"
+          className="flex flex-1 flex-col p-4 content-scroll:min-h-0 content-scroll:overflow-y-auto content-scroll:overflow-x-hidden"
         >
           <TabOutlet registry={pageRegistry} />
         </div>

@@ -8,7 +8,11 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        // 禁用态不走基础类的 `opacity-50`：主色降半透明在浅色下是浅紫底白字、
+        // 深色下是深靛蓝底暗紫字，两种都读成「样式没加载 / 坏了」而不是「现在点不了」（#210）。
+        // 换成中性灰底 + 次要前景，和 outline / ghost 禁用后的观感是同一档。
+        default:
+          "bg-primary text-primary-foreground hover:bg-primary/80 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100",
         outline:
           "border-border bg-background shadow-xs hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:

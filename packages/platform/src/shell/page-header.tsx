@@ -40,7 +40,7 @@ export function PageHeader({
     // 刻意**不加** px-*：这一行要和页面内容左右对齐。
     // 原来带 `px-1`，于是「刷新」按钮的右边缘是 1980 而所有卡片是 1984 ——
     // 差 4px，肉眼就是「边距怪怪的」（实测确认）。
-    // 页面的水平内边距由 `_auth.tsx` 的 `<main className="px-4">` 统一给。
+    // 页面四边的内边距由 `_auth.tsx` 内容列的 `p-4` 统一给（#209）。
     <div className="flex items-center justify-end gap-2">
       <h1 className="sr-only" data-testid="page-title">{title}</h1>
       {description && <p className="sr-only">{description}</p>}

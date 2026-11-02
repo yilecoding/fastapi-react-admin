@@ -21,6 +21,7 @@ import {
 } from './api'
 import { McpClientFormSheet } from './form'
 import { TokenDialog } from './token-dialog'
+import { PageHeader } from '../../shell/page-header'
 
 /**
  * MCP 凭据：给外部系统发「调 AI 工具」的身份。
@@ -47,21 +48,19 @@ export function AiMcpClientPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 py-3 content-scroll:min-h-0">
-      <p className="text-sm text-muted-foreground">
-        {t('外部系统（如 pis-agent、Claude Desktop）用这里发的令牌调用 AI 查询工具。库里只存令牌的哈希，明文只在生成时显示一次。')}
-      </p>
+    <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
+      <PageHeader title={t('MCP 凭据')} description={t('外部系统（如 pis-agent、Claude Desktop）用这里发的令牌调用 AI 查询工具。库里只存令牌的哈希，明文只在生成时显示一次。')} />
 
       {listQuery.error ? (
         <QueryError error={listQuery.error} onRetry={() => listQuery.refetch()} />
       ) : listQuery.isPending ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Skeleton className="h-48" />
           <Skeleton className="h-48" />
         </div>
       ) : (
         // 「新建」是网格的最后一格，理由同模型密钥管理页
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {clients.map((c) => (
             <div key={c.id} className="flex flex-col gap-2 rounded-lg border p-4" data-testid="mcp-client-card">
               <div className="flex items-start justify-between gap-2">

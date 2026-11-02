@@ -99,8 +99,9 @@
     --color-muted: var(--muted);
     --color-secondary-foreground: var(--secondary-foreground);
     --color-secondary: var(--secondary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-primary: var(--primary);
+    /* 经一层 `--primary-ink*` 间接：深色下要派生一个更亮的主色，见文件末尾那段 */
+    --color-primary-foreground: var(--primary-ink-foreground);
+    --color-primary: var(--primary-ink);
     --color-popover-foreground: var(--popover-foreground);
     --color-popover: var(--popover);
     --color-card-foreground: var(--card-foreground);
@@ -181,6 +182,12 @@
 
 :root[data-density="spacious"] {
     --font-size-scale: 1.285714286;
+}
+
+/* 亮色：有效主色就是 `--primary` 本身 */
+:root {
+    --primary-ink: var(--primary);
+    --primary-ink-foreground: var(--primary-foreground);
 }
 
 .dark {
@@ -324,5 +331,27 @@ html[data-scroll-mode="page"] {
     animation: none;
     background-image: none;
     color: var(--muted-foreground);
+  }
+}
+
+/*
+ * 深色下的有效主色（#210）。
+ *
+ * 🔴 `.dark` 里那条 `--primary` **实际上从来不生效**：主题色偏好
+ * （`shell/use-apply-preferences.ts: applyThemeColor`）把 `--primary` 写在根节点的
+ * **行内样式**上，优先级压过 `.dark`。于是深色下用的还是亮色那个 L≈0.46 的深靛蓝 ——
+ * 当背景（按钮）还行，当**文字**压在 L 0.145 的底上几乎读不出来：
+ * 日志的时间列、卡片右上角的「全部 →」、左栏选中项，十几页一起发闷。
+ *
+ * 修法不是再写一个 `.dark { --primary }`（照样被行内样式盖掉），而是从**当前的**
+ * `--primary` 派生：亮度抬到至少 0.7，色相 / 彩度不动（七种主题色都跟着走）；
+ * 主色底上的字换成同色相的深墨色 —— 和 shadcn 深色主题「浅主色 + 深前景」同一个做法。
+ *
+ * `@supports` 兜住不认相对颜色语法的旧浏览器：那时退回原来的样子，而不是变量失效变透明。
+ */
+@supports (color: oklch(from red l c h)) {
+  .dark {
+    --primary-ink: oklch(from var(--primary) max(l, 0.7) c h);
+    --primary-ink-foreground: oklch(from var(--primary) 0.21 calc(c * 0.5) h);
   }
 }

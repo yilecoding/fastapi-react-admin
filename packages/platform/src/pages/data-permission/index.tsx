@@ -92,7 +92,7 @@ export function DataPermissionPage({
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
         {/* 主从页的滚动骨架，三种情形三套行为 —— 见 CLAUDE.md「主从页」一节 */}
-        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:lg:min-h-0 content-scroll:lg:flex-1">
+        <div className="flex flex-1 flex-col gap-4 md:gap-6 content-scroll:lg:min-h-0 content-scroll:lg:flex-1">
           <PageHeader
             title={t("数据权限")}
             description={t("左边是数据范围（一捆规则的名字，角色绑的就是它），右边是这个范围下的具体条件。")}

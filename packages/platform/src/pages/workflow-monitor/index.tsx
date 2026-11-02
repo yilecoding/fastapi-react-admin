@@ -137,7 +137,7 @@ export function WorkflowMonitorPage({
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
+        <div className="flex flex-col gap-4 md:gap-6 content-scroll:min-h-0 content-scroll:flex-1">
           <PageHeader title={t('实例监控')} description={t('查看全部审批单，处理卡住的待办。')} />
           <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
             <QueryBar

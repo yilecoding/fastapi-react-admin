@@ -104,7 +104,7 @@ export function PlaygroundQueryPage() {
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
+        <div className="flex flex-1 flex-col gap-4 md:gap-6">
           <PageHeader
             title="查询区（QueryBar）"
             description="字段声明式配置、默认不铺满、按需添加条件、显式搜索。右侧实时显示出参与条件树。"
