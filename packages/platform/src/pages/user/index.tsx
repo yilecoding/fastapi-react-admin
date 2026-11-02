@@ -374,26 +374,26 @@ export function UserPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t('删除用户')}
         description={
-      deleteError ? (
-        <span className="text-destructive">{deleteError}</span>
-      ) : pendingDelete ? (
-        t('确定删除「{{who}}」吗？此操作不可撤销。', {
-          who: pendingDelete.nickname || pendingDelete.username,
-        })
-      ) : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('确定删除「{{who}}」吗？此操作不可撤销。', {
+              who: pendingDelete.nickname || pendingDelete.username,
+            })
+          ) : ''
         }
         confirmText={t('删除')}
         destructive
         pending={del.isPending}
         onConfirm={async () => {
-      if (!pendingDelete) return
-      setDeleteError(null)
-      try {
-        await del.mutateAsync(pendingDelete.id)
-        setPendingDelete(null)
-      } catch (e) {
-        setDeleteError(e instanceof Error ? e.message : t('删除失败'))
-      }
+          if (!pendingDelete) return
+          setDeleteError(null)
+          try {
+            await del.mutateAsync(pendingDelete.id)
+            setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
+          }
         }}
       />
 
@@ -406,14 +406,14 @@ export function UserPage({
         destructive
         pending={delMany.isPending}
         onConfirm={async () => {
-      // 部分失败（已删除的不会回滚）由全局 mutationCache 的 onError 弹 toast
-      // 说清楚失败条数，弹窗不用再自己接一份一样的文案
-      try {
-        await delMany.mutateAsync(selectedIds)
-        setRowSelection({})
-      } finally {
-        setBulkOpen(false)
-      }
+          // 部分失败（已删除的不会回滚）由全局 mutationCache 的 onError 弹 toast
+          // 说清楚失败条数，弹窗不用再自己接一份一样的文案
+          try {
+            await delMany.mutateAsync(selectedIds)
+            setRowSelection({})
+          } finally {
+            setBulkOpen(false)
+          }
         }}
       />
     </PageShell>

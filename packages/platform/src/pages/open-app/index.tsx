@@ -455,14 +455,14 @@ export function OpenAppPage({
         appId={search.webhook ?? null}
         view={webhookView(search)}
         onViewChange={(v) =>
-      onSearchChange?.({
-        ...search,
-        wtab: v.tab === 'endpoints' ? undefined : v.tab,
-        wstatus: v.deliveries?.status,
-        whook: v.deliveries?.hook,
-        wpage: v.deliveries?.page,
-        wdel: v.deliveries?.open,
-      })
+          onSearchChange?.({
+            ...search,
+            wtab: v.tab === 'endpoints' ? undefined : v.tab,
+            wstatus: v.deliveries?.status,
+            whook: v.deliveries?.hook,
+            wpage: v.deliveries?.page,
+            wdel: v.deliveries?.open,
+          })
         }
         onClose={() => onSearchChange?.(withoutWebhook(search))}
       />
@@ -472,18 +472,18 @@ export function OpenAppPage({
         onOpenChange={(o) => !o && setPendingReset(null)}
         title={t('重置密钥')}
         description={t('「{{name}}」现在用的 Secret Key 会立即失效。对方系统换成新的 SK 之前，所有调用都会被拒绝。Access Key 不变。', {
-      name: pendingReset?.name ?? '',
+          name: pendingReset?.name ?? '',
         })}
         confirmText={t('确定重置')}
         pending={reset.isPending}
         onConfirm={async () => {
-      setActionError(null)
-      try {
-        if (pendingReset) setIssued(await reset.mutateAsync(pendingReset.id))
-      } catch (e) {
-        setActionError(e instanceof Error ? e.message : t('重置失败'))
-      }
-      setPendingReset(null)
+          setActionError(null)
+          try {
+            if (pendingReset) setIssued(await reset.mutateAsync(pendingReset.id))
+          } catch (e) {
+            setActionError(e instanceof Error ? e.message : t('重置失败'))
+          }
+          setPendingReset(null)
         }}
       />
       <ConfirmDialog
@@ -494,13 +494,13 @@ export function OpenAppPage({
         destructive
         pending={del.isPending}
         onConfirm={async () => {
-      setActionError(null)
-      try {
-        if (pendingDelete) await del.mutateAsync(pendingDelete.id)
-      } catch (e) {
-        setActionError(e instanceof Error ? e.message : t('删除失败'))
-      }
-      setPendingDelete(null)
+          setActionError(null)
+          try {
+            if (pendingDelete) await del.mutateAsync(pendingDelete.id)
+          } catch (e) {
+            setActionError(e instanceof Error ? e.message : t('删除失败'))
+          }
+          setPendingDelete(null)
         }}
       />
     </PageShell>

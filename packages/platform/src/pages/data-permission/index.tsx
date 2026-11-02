@@ -190,26 +190,26 @@ export function DataPermissionPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除数据范围")}
         description={
-      deleteError ? (
-        <span className="text-destructive">{deleteError}</span>
-      ) : pendingDelete ? (
-        t('删除范围「{{name}}」？绑了它的角色会失去这部分数据权限。范围里的规则本身保留，可以挂到别的范围上。', { name: pendingDelete.name })
-      ) : ''
+          deleteError ? (
+            <span className="text-destructive">{deleteError}</span>
+          ) : pendingDelete ? (
+            t('删除范围「{{name}}」？绑了它的角色会失去这部分数据权限。范围里的规则本身保留，可以挂到别的范围上。', { name: pendingDelete.name })
+          ) : ''
         }
         confirmText={t("删除")}
         destructive
         pending={del.isPending}
         onConfirm={async () => {
-      if (!pendingDelete) return
-      setDeleteError(null)
-      try {
-        const wasSelected = pendingDelete.id === selected?.id
-        await del.mutateAsync([pendingDelete.id])
-        if (wasSelected) patch({ scope: undefined })
-        setPendingDelete(null)
-      } catch (e) {
-        setDeleteError(e instanceof Error ? e.message : t('删除失败'))
-      }
+          if (!pendingDelete) return
+          setDeleteError(null)
+          try {
+            const wasSelected = pendingDelete.id === selected?.id
+            await del.mutateAsync([pendingDelete.id])
+            if (wasSelected) patch({ scope: undefined })
+            setPendingDelete(null)
+          } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : t('删除失败'))
+          }
         }}
       />
     </PageShell>

@@ -207,25 +207,25 @@ export function PluginPage({
         onOpenChange={(o) => !o && setPendingUninstall(null)}
         title={t("卸载插件")}
         description={
-      pendingUninstall
-        ? t('确定卸载「{{summary}}（{{name}}）」吗？', { summary: pendingUninstall.plugin.summary, name: pendingUninstall.plugin.name }) +
-          t('后端会先把插件目录打包成 backup.zip 再删除，同时卸载它的 Python 依赖。') +
-          t('卸载后需要重启服务，并按插件说明移除相关配置。')
-        : ''
+          pendingUninstall
+            ? t('确定卸载「{{summary}}（{{name}}）」吗？', { summary: pendingUninstall.plugin.summary, name: pendingUninstall.plugin.name }) +
+              t('后端会先把插件目录打包成 backup.zip 再删除，同时卸载它的 Python 依赖。') +
+              t('卸载后需要重启服务，并按插件说明移除相关配置。')
+            : ''
         }
         confirmText={t("卸载")}
         destructive
         pending={uninstall.isPending}
         onConfirm={async () => {
-      if (!pendingUninstall) return
-      try {
-        await uninstall.mutateAsync(pendingUninstall.plugin.name)
-        setPendingUninstall(null)
-      } catch (e) {
-        // 必需插件 / 非开发环境都会被后端拒绝 —— 把原话显示出来
-        setActionError(e instanceof ApiError ? e.message : t('卸载失败'))
-        setPendingUninstall(null)
-      }
+          if (!pendingUninstall) return
+          try {
+            await uninstall.mutateAsync(pendingUninstall.plugin.name)
+            setPendingUninstall(null)
+          } catch (e) {
+            // 必需插件 / 非开发环境都会被后端拒绝 —— 把原话显示出来
+            setActionError(e instanceof ApiError ? e.message : t('卸载失败'))
+            setPendingUninstall(null)
+          }
         }}
       />
     </PageShell>

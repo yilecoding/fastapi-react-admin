@@ -356,51 +356,51 @@ export function LogOnlinePage({
         confirmText={t('确认下线')}
         pending={kick.isPending}
         description={
-      pendingKick && (
-        <>
-          {t(
-            '将吊销 {{who}} 来自 {{ip}} 的这个会话（{{browser}} · {{os}}）。对方下一次请求就会被要求重新登录。',
-            {
-              who: pendingKick.nickname || pendingKick.username,
-              ip: pendingKick.ip,
-              browser: pendingKick.browser,
-              os: pendingKick.os,
-            }
-          )}
-        </>
-      )
+          pendingKick && (
+            <>
+              {t(
+                '将吊销 {{who}} 来自 {{ip}} 的这个会话（{{browser}} · {{os}}）。对方下一次请求就会被要求重新登录。',
+                {
+                  who: pendingKick.nickname || pendingKick.username,
+                  ip: pendingKick.ip,
+                  browser: pendingKick.browser,
+                  os: pendingKick.os,
+                }
+              )}
+            </>
+          )
         }
         onConfirm={async () => {
-      if (!pendingKick) return
-      await kick.mutateAsync(pendingKick)
-      setPendingKick(null)
+          if (!pendingKick) return
+          await kick.mutateAsync(pendingKick)
+          setPendingKick(null)
         }}
       />
 
       <ConfirmDialog
         open={bulkOpen}
         onOpenChange={(o) => {
-      setBulkOpen(o)
-      if (!o) setBulkError(null)
+          setBulkOpen(o)
+          if (!o) setBulkError(null)
         }}
         title={t('批量下线 {{n}} 个会话', { n: selected.length })}
         destructive
         confirmText={t('确认下线')}
         pending={kickMany.isPending}
         description={
-      <>
-        {t('这些会话的 token 会被立即吊销。当前会话不在其中（自己踢不了自己）。')}
-        {bulkError && <p className="mt-2 text-destructive">{bulkError}</p>}
-      </>
+          <>
+            {t('这些会话的 token 会被立即吊销。当前会话不在其中（自己踢不了自己）。')}
+            {bulkError && <p className="mt-2 text-destructive">{bulkError}</p>}
+          </>
         }
         onConfirm={async () => {
-      try {
-        await kickMany.mutateAsync(selected.map((s) => ({ id: s.id, session_uuid: s.session_uuid })))
-        setRowSelection({})
-        setBulkOpen(false)
-      } catch (e) {
-        setBulkError(e instanceof Error ? e.message : t('批量下线失败'))
-      }
+          try {
+            await kickMany.mutateAsync(selected.map((s) => ({ id: s.id, session_uuid: s.session_uuid })))
+            setRowSelection({})
+            setBulkOpen(false)
+          } catch (e) {
+            setBulkError(e instanceof Error ? e.message : t('批量下线失败'))
+          }
         }}
       />
     </PageShell>
