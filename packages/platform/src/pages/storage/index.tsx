@@ -5,7 +5,6 @@ import {
   IconCloud,
   IconPencil,
   IconPlugConnected,
-  IconPlus,
   IconServer2,
   IconStar,
   IconTrash,
@@ -21,6 +20,7 @@ import { Switch } from '@admin/ui/components/switch'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { AddCard, CardField, CardFields } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   STORAGE_TYPE_LABELS,
@@ -147,43 +147,25 @@ export function StoragePage() {
                   )}
                 </div>
 
-                <dl className="space-y-1.5 text-xs">
+                <CardFields>
                   {storage.builtin ? (
-                    <div className="flex gap-2">
-                      <dt className="w-14 shrink-0 text-muted-foreground">{t('位置')}</dt>
-                      <dd className="min-w-0 truncate">{t('应用所在机器的上传目录（多副本部署时不共享）')}</dd>
-                    </div>
+                    <CardField label={t('位置')} className="truncate">{t('应用所在机器的上传目录（多副本部署时不共享）')}</CardField>
                   ) : storage.type === 'local' ? (
-                    <div className="flex gap-2">
-                      <dt className="w-14 shrink-0 text-muted-foreground">{t('根目录')}</dt>
-                      <dd className="min-w-0 truncate font-mono">{storage.root}</dd>
-                    </div>
+                    <CardField label={t('根目录')} className="truncate font-mono">{storage.root}</CardField>
                   ) : (
                     <>
-                      <div className="flex gap-2">
-                        <dt className="w-14 shrink-0 text-muted-foreground">{t('端点')}</dt>
-                        <dd className="min-w-0 truncate font-mono">{storage.endpoint}</dd>
-                      </div>
-                      <div className="flex gap-2">
-                        <dt className="w-14 shrink-0 text-muted-foreground">{t('桶')}</dt>
-                        <dd className="min-w-0 truncate font-mono">
-                          {storage.bucket}
-                          {storage.root ? `/${storage.root}` : ''}
-                        </dd>
-                      </div>
-                      <div className="flex gap-2">
-                        <dt className="w-14 shrink-0 text-muted-foreground">{t('密钥')}</dt>
-                        <dd className="min-w-0 truncate font-mono">
-                          {storage.access_key} · {storage.secret_hint}
-                        </dd>
-                      </div>
+                      <CardField label={t('端点')} className="truncate font-mono">{storage.endpoint}</CardField>
+                      <CardField label={t('桶')} className="truncate font-mono">
+                        {storage.bucket}
+                        {storage.root ? `/${storage.root}` : ''}
+                      </CardField>
+                      <CardField label={t('密钥')} className="truncate font-mono">
+                        {storage.access_key} · {storage.secret_hint}
+                      </CardField>
                     </>
                   )}
-                  <div className="flex gap-2">
-                    <dt className="w-14 shrink-0 text-muted-foreground">{t('文件数')}</dt>
-                    <dd>{storage.file_count}</dd>
-                  </div>
-                </dl>
+                  <CardField label={t('文件数')}>{storage.file_count}</CardField>
+                </CardFields>
 
                 <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
                   {storage.is_default ? null : (
@@ -231,22 +213,14 @@ export function StoragePage() {
           })}
 
           <Can perm="sys:storage:add">
-            <button
-              type="button"
+            <AddCard
+              label={t('新增存储')}
               onClick={() => {
                 setEditing(null)
                 setSheetOpen(true)
               }}
-              className="flex min-h-48 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40 hover:text-foreground"
-            >
-              <IconPlus className="size-5" />
-              <span className="text-sm">{t('新增存储')}</span>
-              {storages.length <= 1 ? (
-                <span className="max-w-60 text-xs text-balance">
-                  {t('多副本部署时请接一个对象存储（MinIO / 阿里 OSS / 腾讯 COS …），否则各台机器上的文件互不相通')}
-                </span>
-              ) : null}
-            </button>
+              hint={storages.length <= 1 ? t('多副本部署时请接一个对象存储（MinIO / 阿里 OSS / 腾讯 COS …），否则各台机器上的文件互不相通') : undefined}
+            />
           </Can>
         </div>
       )}
