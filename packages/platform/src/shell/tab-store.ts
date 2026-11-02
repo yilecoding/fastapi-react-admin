@@ -8,6 +8,11 @@ export type Tab = {
   href: string
   title: string
   routeId: string
+  /**
+   * 路由 `staticData.icon`。只给**不进侧边栏**的页面兜底 —— 页签图标照旧先按路径查菜单树，
+   * 查不到才用它（原来查不到就是一个圆点，比如开放接口日志，#210）
+   */
+  icon?: string
   /** 渲染隐藏 tab 时用的 props 快照 */
   snapshot: { params: unknown; search: unknown }
   closable: boolean

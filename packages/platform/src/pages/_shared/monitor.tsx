@@ -203,6 +203,9 @@ export function Sparkline({
     info: 'fill-sky-500/15', muted: 'fill-muted',
   }[tone]
 
+  // 只有一个采样点时画成一条平线：刚打开监控页时这块原来是 120px 高、只写着「采样中…」的灰块，
+  // 什么信息都没有（#210 P2）。平线至少说出了「现在是多少」，第二个点到了直接接上，高度不跳
+  if (points.length === 1) points = [points[0]!, points[0]!]
   if (points.length < 2) {
     return (
       <div
