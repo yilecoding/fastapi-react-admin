@@ -103,6 +103,13 @@ export interface DataTableColumnVisibilityProps<
  * ⚠️ tooltip 的 `render` 必须**直接指向 trigger**，不能套一层 `<span className="contents">` ——
  * `display:contents` 不生成布局盒，`getBoundingClientRect()` 全 0，气泡会飞到视口左上角（见 ui 分册）。
  */
+/**
+ * 操作列的约定 id。`id: 'actions'` 的列收到最窄（`w-px` = 按内容宽）、靠右，
+ * 各页不用再自己给宽度 —— 原来有的页这一列平均分到一大块，⋯ 孤零零地漂在中间（#210）。
+ */
+export const ACTIONS_COLUMN_ID = "actions"
+const ACTIONS_CELL_CLASS = "w-px text-end"
+
 export function DataTableColumnVisibility<
   TFeatures extends TableFeatures,
   TData extends RowData,
@@ -581,7 +588,11 @@ export function DataTable<
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} colSpan={header.colSpan}>
+                  <TableHead
+                    key={header.id}
+                    colSpan={header.colSpan}
+                    className={header.column.id === ACTIONS_COLUMN_ID ? ACTIONS_CELL_CLASS : undefined}
+                  >
                     {header.isPlaceholder ? null : (
                       <FlexRender header={header} />
                     )}
@@ -614,7 +625,10 @@ export function DataTable<
                     {...rowAttributes?.(row)}
                   >
                     {(row as AnyRow).getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
+                      <TableCell
+                        key={cell.id}
+                        className={cell.column.id === ACTIONS_COLUMN_ID ? ACTIONS_CELL_CLASS : undefined}
+                      >
                         <FlexRender cell={cell} />
                       </TableCell>
                     ))}

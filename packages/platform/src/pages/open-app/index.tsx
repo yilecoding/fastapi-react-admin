@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
 import {
-  IconDotsVertical,
   IconFileDescription,
   IconHistory,
   IconLoader2,
@@ -22,14 +21,12 @@ import { Button } from '@admin/ui/components/button'
 import { CopyButton } from '@admin/ui/components/copy-button'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
 } from '@admin/ui/components/dropdown-menu'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 
+import { RowActions, TimeCell } from '../_shared/cells'
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
@@ -252,27 +249,28 @@ export function OpenAppPage({
       }),
       col.accessor('expire_time', {
         header: t('失效时间'),
-        cell: ({ getValue }) => (
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
-            {getValue() ? formatDateTime(getValue()) : t('永不过期')}
-          </span>
-        ),
+        cell: ({ getValue }) =>
+          getValue() ? <TimeCell value={getValue()} /> : <span className="text-xs text-muted-foreground">{t('永不过期')}</span>,
       }),
       col.accessor('last_used_time', {
         header: t('最近调用'),
-        cell: ({ row, getValue }) => (
-          <Can perm="open:log:list" fallback={<span className="font-mono text-xs">{formatDateTime(getValue())}</span>}>
-            {/* 🔴 用 `<Link>` 不用 `useNavigate()`：页面组件要 router-独立（硬纪律 1） */}
-            <Link
-              to="/open/log"
-              search={{ app: row.original.id }}
-              className="font-mono text-xs tabular-nums text-primary underline-offset-2 hover:underline"
-              data-testid={`open-app-last-used-${row.original.code}`}
-            >
-              {getValue() ? formatDateTime(getValue()) : t('从未调用')}
-            </Link>
-          </Can>
-        ),
+        cell: ({ row, getValue }) => {
+          // 「从未调用」不是链接：调研时它也染成了链接蓝（#210）
+          if (!getValue()) return <span className="text-xs text-muted-foreground">{t('从未调用')}</span>
+          return (
+            <Can perm="open:log:list" fallback={<TimeCell value={getValue()} />}>
+              {/* 🔴 用 `<Link>` 不用 `useNavigate()`：页面组件要 router-独立（硬纪律 1） */}
+              <Link
+                to="/open/log"
+                search={{ app: row.original.id }}
+                className="font-mono text-xs whitespace-nowrap tabular-nums text-primary underline-offset-2 hover:underline"
+                data-testid={`open-app-last-used-${row.original.code}`}
+              >
+                {formatDateTime(getValue())}
+              </Link>
+            </Can>
+          )
+        },
       }),
       col.display({
         id: 'actions',
@@ -280,56 +278,46 @@ export function OpenAppPage({
         cell: ({ row }) => {
           const a = row.original
           return (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button variant="ghost" size="icon" className="size-7" aria-label={t('操作 {{name}}', { name: a.name })} />
-                }
-                data-testid={`row-actions-${a.code}`}
-              >
-                <IconDotsVertical className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <Can perm="open:app:edit">
-                  <DropdownMenuItem onClick={() => openSheet(a)} data-testid={`edit-${a.code}`}>
-                    <IconPencil className="size-4" />
-                    {t('编辑')}
-                  </DropdownMenuItem>
-                </Can>
-                <Can perm="open:webhook:list">
-                  <DropdownMenuItem onClick={() => openWebhooks(a.id)} data-testid={`webhooks-${a.code}`}>
-                    <IconWebhook className="size-4" />
-                    Webhook
-                  </DropdownMenuItem>
-                </Can>
-                <Can perm="open:log:list">
-                  <DropdownMenuItem
-                    render={<Link to="/open/log" search={{ app: a.id }} />}
-                    data-testid={`logs-${a.code}`}
-                  >
-                    <IconHistory className="size-4" />
-                    {t('调用日志')}
-                  </DropdownMenuItem>
-                </Can>
-                <Can perm="open:app:reset">
-                  <DropdownMenuItem onClick={() => setPendingReset(a)} data-testid={`reset-${a.code}`}>
-                    <IconRefresh className="size-4" />
-                    {t('重置密钥')}
-                  </DropdownMenuItem>
-                </Can>
-                <Can perm="open:app:del">
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() => setPendingDelete(a)}
-                    data-testid={`delete-${a.code}`}
-                  >
-                    <IconTrash className="size-4" />
-                    {t('删除')}
-                  </DropdownMenuItem>
-                </Can>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <RowActions label={a.name} testId={`row-actions-${a.code}`}>
+              <Can perm="open:app:edit">
+                <DropdownMenuItem onClick={() => openSheet(a)} data-testid={`edit-${a.code}`}>
+                  <IconPencil className="size-4" />
+                  {t('编辑')}
+                </DropdownMenuItem>
+              </Can>
+              <Can perm="open:webhook:list">
+                <DropdownMenuItem onClick={() => openWebhooks(a.id)} data-testid={`webhooks-${a.code}`}>
+                  <IconWebhook className="size-4" />
+                  Webhook
+                </DropdownMenuItem>
+              </Can>
+              <Can perm="open:log:list">
+                <DropdownMenuItem
+                  render={<Link to="/open/log" search={{ app: a.id }} />}
+                  data-testid={`logs-${a.code}`}
+                >
+                  <IconHistory className="size-4" />
+                  {t('调用日志')}
+                </DropdownMenuItem>
+              </Can>
+              <Can perm="open:app:reset">
+                <DropdownMenuItem onClick={() => setPendingReset(a)} data-testid={`reset-${a.code}`}>
+                  <IconRefresh className="size-4" />
+                  {t('重置密钥')}
+                </DropdownMenuItem>
+              </Can>
+              <Can perm="open:app:del">
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => setPendingDelete(a)}
+                  data-testid={`delete-${a.code}`}
+                >
+                  <IconTrash className="size-4" />
+                  {t('删除')}
+                </DropdownMenuItem>
+              </Can>
+            </RowActions>
           )
         },
       }),

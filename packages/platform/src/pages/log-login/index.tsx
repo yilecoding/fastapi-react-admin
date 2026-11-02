@@ -3,12 +3,12 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
 
-import { formatDateTime } from '@admin/i18n'
 import { Badge } from '@admin/ui/components/badge'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 import { cn } from '@admin/ui/lib/utils'
 
+import { TimeCell } from '../_shared/cells'
 import { api, type PageData } from '../../api-client/client'
 import { Can } from '../../auth/can'
 import { PageHeader } from '../../shell/page-header'
@@ -184,14 +184,7 @@ export function LogLoginPage({
       col.accessor('login_time', {
         header: t('登录时间'),
         cell: ({ row, getValue }) => (
-          <button
-            type="button"
-            data-testid={`open-detail-${row.original.id}`}
-            onClick={() => setDetail(row.original)}
-            className="font-mono text-xs text-primary tabular-nums underline-offset-2 hover:underline"
-          >
-            {formatDateTime(getValue())}
-          </button>
+          <TimeCell value={getValue()} onOpen={() => setDetail(row.original)} testId={`open-detail-${row.original.id}`} />
         ),
       }),
       col.accessor('username', {
@@ -203,10 +196,7 @@ export function LogLoginPage({
         cell: ({ getValue }) => {
           const ok = getValue() === 1
           return (
-            <StatusPill tone={ok ? 'success' : 'danger'} className="gap-1">
-              <span className={cn('size-1.5 rounded-full', ok ? 'bg-emerald-500' : 'bg-destructive')} />
-              {ok ? t('成功') : t('失败')}
-            </StatusPill>
+            <StatusPill tone={ok ? 'success' : 'danger'}>{ok ? t('成功') : t('失败')}</StatusPill>
           )
         },
       }),

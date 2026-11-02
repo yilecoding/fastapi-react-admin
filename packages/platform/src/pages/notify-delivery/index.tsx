@@ -4,15 +4,15 @@ import { IconSend } from '@tabler/icons-react'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { formatDateTime } from '@admin/i18n'
-import { Button } from '@admin/ui/components/button'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
+import { DropdownMenuItem } from '@admin/ui/components/dropdown-menu'
 import { toast } from '@admin/ui/components/toast'
 
 import { Can } from '../../auth/can'
 import { usePerm } from '../../auth/use-perm'
 import { PageHeader } from '../../shell/page-header'
+import { EmptyCell, RowActions, TimeCell } from '../_shared/cells'
 import { RefreshButton, ResetButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import { logFeatures as features } from '../_shared/log-features'
@@ -163,14 +163,7 @@ export function NotifyDeliveryPage({
       col.accessor('created_time', {
         header: t('时间'),
         cell: ({ row, getValue }) => (
-          <button
-            type="button"
-            data-testid={`open-detail-${row.original.id}`}
-            onClick={() => setDetail(row.original.id)}
-            className="font-mono text-xs text-primary tabular-nums underline-offset-2 hover:underline"
-          >
-            {formatDateTime(getValue())}
-          </button>
+          <TimeCell value={getValue()} onOpen={() => setDetail(row.original.id)} testId={`open-detail-${row.original.id}`} />
         ),
       }),
       col.accessor('kind', {
@@ -193,7 +186,7 @@ export function NotifyDeliveryPage({
       }),
       col.accessor('address', {
         header: t('地址'),
-        cell: ({ getValue }) => <span className="font-mono text-xs">{getValue() ?? '—'}</span>,
+        cell: ({ getValue }) => (getValue() ? <span className="font-mono text-xs">{getValue()}</span> : <EmptyCell />),
       }),
       col.accessor('status', {
         header: t('状态'),
@@ -201,11 +194,14 @@ export function NotifyDeliveryPage({
       }),
       col.accessor('reason', {
         header: t('原因'),
-        cell: ({ getValue, row }) => (
-          <span className="block max-w-xs truncate text-xs" title={row.original.last_error ?? ''}>
-            {reasonLabel(t, getValue())}
-          </span>
-        ),
+        cell: ({ getValue, row }) =>
+          getValue() === null ? (
+            <EmptyCell />
+          ) : (
+            <span className="block max-w-xs truncate text-xs" title={row.original.last_error ?? ''}>
+              {reasonLabel(t, getValue())}
+            </span>
+          ),
       }),
       col.accessor('attempts', {
         header: t('尝试'),
@@ -213,23 +209,22 @@ export function NotifyDeliveryPage({
       }),
       col.accessor('next_attempt_time', {
         header: t('下一次'),
-        cell: ({ getValue }) => <span className="font-mono text-xs tabular-nums">{formatDateTime(getValue())}</span>,
+        cell: ({ getValue }) => <TimeCell value={getValue()} />,
       }),
       col.display({
         id: 'actions',
-        header: t('操作'),
+        // 原来表头写「操作」、大多数行底下是空的（#210）。现在表头只给读屏，
+        // 不能重发的行整格留空，能重发的才有 ⋯
+        header: () => <span className="sr-only">{t('操作')}</span>,
         cell: ({ row }) =>
           RESENDABLE.has(row.original.status) ? (
             <Can perm="sys:notification:delivery:resend">
-              <Button
-                variant="ghost"
-                size="sm"
-                data-testid={`resend-${row.original.id}`}
-                onClick={() => void doResend(row.original.id)}
-              >
-                <IconSend />
-                {t('重发')}
-              </Button>
+              <RowActions label={row.original.title} testId={`delivery-actions-${row.original.id}`}>
+                <DropdownMenuItem data-testid={`resend-${row.original.id}`} onClick={() => void doResend(row.original.id)}>
+                  <IconSend className="size-4" />
+                  {t('重发')}
+                </DropdownMenuItem>
+              </RowActions>
             </Can>
           ) : null,
       }),

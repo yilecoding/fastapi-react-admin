@@ -3,11 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
 
-import { formatDateTime } from '@admin/i18n'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
-import { cn } from '@admin/ui/lib/utils'
 
+import { DurationCell, EmptyCell, TimeCell } from '../_shared/cells'
 import { api, type PageData } from '../../api-client/client'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton } from '../_shared/filters'
@@ -151,14 +150,7 @@ export function OpenLogPage({
         header: t('时间'),
         // 点时间开详情（同操作日志）
         cell: ({ row, getValue }) => (
-          <button
-            type="button"
-            onClick={() => setDetail(row.original)}
-            data-testid={`open-log-detail-${row.original.id}`}
-            className="font-mono text-xs text-primary tabular-nums underline-offset-2 hover:underline"
-          >
-            {formatDateTime(getValue())}
-          </button>
+          <TimeCell value={getValue()} onOpen={() => setDetail(row.original)} testId={`open-log-detail-${row.original.id}`} />
         ),
       }),
       col.accessor((r) => r.app_name ?? '', {
@@ -198,21 +190,12 @@ export function OpenLogPage({
       col.accessor('row_count', {
         header: t('返回条数'),
         cell: ({ getValue }) => (
-          <span className="font-mono text-xs tabular-nums">{getValue() === null ? '—' : getValue()}</span>
+          getValue() === null ? <EmptyCell /> : <span className="font-mono text-xs tabular-nums">{getValue()}</span>
         ),
       }),
       col.accessor('cost_time', {
         header: t('耗时'),
-        cell: ({ getValue }) => (
-          <span
-            className={cn(
-              'font-mono text-xs tabular-nums',
-              getValue() > 500 ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
-            )}
-          >
-            {getValue().toFixed(1)} ms
-          </span>
-        ),
+        cell: ({ getValue }) => <DurationCell ms={getValue()} />,
       }),
       col.accessor('ip', {
         header: t('来源 IP'),

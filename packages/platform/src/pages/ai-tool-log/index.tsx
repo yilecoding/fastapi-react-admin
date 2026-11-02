@@ -3,10 +3,10 @@ import { createColumnHelper, useTable } from '@tanstack/react-table'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { formatDateTime } from '@admin/i18n'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 
+import { DurationCell, EmptyCell, TimeCell } from '../_shared/cells'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
@@ -144,7 +144,7 @@ export function AiToolLogPage({
       col.accessor('created_time', {
         header: t('调用时间'),
         // 时间一律过 formatDateTime，不裸渲染 ISO 串（pages 分册那条）
-        cell: ({ getValue }) => <span className="tabular-nums">{formatDateTime(getValue())}</span>,
+        cell: ({ getValue }) => <TimeCell value={getValue()} />,
       }),
       col.accessor('tool_name', {
         header: t('工具'),
@@ -171,18 +171,19 @@ export function AiToolLogPage({
       }),
       col.accessor('params_redacted', {
         header: t('入参（已脱敏）'),
-        cell: ({ getValue }) => (
-          <span className="block max-w-xs truncate font-mono text-xs" title={getValue() ?? ''}>
-            {getValue() ?? '—'}
-          </span>
-        ),
+        cell: ({ getValue }) =>
+          getValue() ? (
+            <span className="block max-w-xs truncate font-mono text-xs" title={getValue() ?? ''}>
+              {getValue()}
+            </span>
+          ) : (
+            <EmptyCell />
+          ),
       }),
       col.accessor('duration_ms', {
         header: t('耗时'),
-        cell: ({ getValue }) => {
-          const v = getValue()
-          return <span className="tabular-nums">{v === null ? '—' : `${v}ms`}</span>
-        },
+        // 工具会查库、调外部接口，几百毫秒是常态 —— 3 秒以上才标慢
+        cell: ({ getValue }) => <DurationCell ms={getValue()} slowMs={3000} />,
       }),
     ],
     [page, size, t],

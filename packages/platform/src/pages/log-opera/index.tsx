@@ -3,12 +3,11 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
 
-import { formatDateTime } from '@admin/i18n'
-import { Badge } from '@admin/ui/components/badge'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 import { cn } from '@admin/ui/lib/utils'
 
+import { DurationCell, TimeCell } from '../_shared/cells'
 import { api, type PageData } from '../../api-client/client'
 import { Can } from '../../auth/can'
 import { PageHeader } from '../../shell/page-header'
@@ -202,14 +201,7 @@ export function LogOperaPage({
         header: t('操作时间'),
         // 点时间开详情 —— 与 ContiNew 的交互一致，比额外加一列「查看」省地方
         cell: ({ row, getValue }) => (
-          <button
-            type="button"
-            data-testid={`open-detail-${row.original.id}`}
-            onClick={() => setDetail(row.original)}
-            className="font-mono text-xs text-primary tabular-nums underline-offset-2 hover:underline"
-          >
-            {formatDateTime(getValue())}
-          </button>
+          <TimeCell value={getValue()} onOpen={() => setDetail(row.original)} testId={`open-detail-${row.original.id}`} />
         ),
       }),
       col.accessor((r) => r.username ?? t('匿名'), {
@@ -253,15 +245,10 @@ export function LogOperaPage({
         cell: ({ row, getValue }) => {
           const ok = getValue() === 1
           return (
-            <div className="flex items-center gap-1.5">
-              <StatusPill tone={ok ? 'success' : 'danger'} className="gap-1">
-                <span className={cn('size-1.5 rounded-full', ok ? 'bg-emerald-500' : 'bg-destructive')} />
-                {ok ? t('成功') : t('异常')}
-              </StatusPill>
-              <Badge variant="outline" className="font-mono font-normal">
-                {row.original.code}
-              </Badge>
-            </div>
+            // 成功时不再挂一个「200」：和「成功」说的是同一件事。失败才带上业务码，那是排查要用的
+            <StatusPill tone={ok ? 'success' : 'danger'}>
+              {ok ? t('成功') : `${t('异常')} · ${row.original.code}`}
+            </StatusPill>
           )
         },
       }),
@@ -276,19 +263,7 @@ export function LogOperaPage({
       }),
       col.accessor('cost_time', {
         header: t('耗时'),
-        cell: ({ getValue }) => {
-          const ms = getValue()
-          return (
-            <span
-              className={cn(
-                'font-mono text-xs tabular-nums',
-                ms > 500 ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-muted-foreground'
-              )}
-            >
-              {ms.toFixed(1)} ms
-            </span>
-          )
-        },
+        cell: ({ getValue }) => <DurationCell ms={getValue()} />,
       }),
       col.accessor((r) => r.browser ?? '—', {
         id: 'browser',

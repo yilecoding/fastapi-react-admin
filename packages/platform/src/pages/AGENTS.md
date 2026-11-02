@@ -270,8 +270,8 @@ const submitQuery = React.useCallback((v) => { setRowSelection({}); q.submit(v) 
 服务端**没有排序入参**（各 `crud_*.py` 固定 `select_order('id')`），
 所以表格一律不注册 `rowSortingFeature`。要做排序得先改后端。
 
-## 页面顶部不放可见说明（#210）
-`PageHeader` 的 `description` 只给读屏。要知道的半句放在用得着的那一刻（SK 只显示一次 → 结果弹窗；日志保留 30 天 → 空态；一个群只推一次 → 群机器人表单）。挪之前**逐句核对**别处有没有 —— #212 第一版说「本来就都在」，评审翻出两句没有。卡片网格写 `grid-cols-1` 的原因见 [ui 分册](../../../ui/AGENTS.md)
+## 页面顶部不放可见说明 · 表格单元格一套写法（#210）
+`PageHeader` 的 `description` 只给读屏。要知道的半句放在用得着的那一刻（SK 只显示一次 → 结果弹窗；日志保留 30 天 → 空态；一个群只推一次 → 群机器人表单）。挪之前**逐句核对**别处有没有 —— #212 第一版说「本来就都在」，评审翻出两句没有。卡片网格写 `grid-cols-1` 的原因见 [ui 分册](../../../ui/AGENTS.md)。**表格里的时间 / 耗时 / 空值 / 行操作一律用 `_shared/cells.tsx`**（`TimeCell` · `DurationCell` · `EmptyCell` · `RowActions`）：调研时时间有四种写法、耗时两种、操作列四种，都是照兄弟页抄出来的。约定是**蓝色 = 能点**（只有给了 `onOpen` 的时间是主色），操作一律收进 ⋯、危险项放最后，列 id 写 `actions` 由 `DataTable` 收窄靠右
 
 ## 导入导出（#11 · v0.4）
 
