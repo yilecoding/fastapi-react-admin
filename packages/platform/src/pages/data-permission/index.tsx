@@ -149,7 +149,7 @@ export function DataPermissionPage({
               <div className="flex shrink-0 flex-wrap items-start justify-between gap-3" data-testid="scope-detail">
                 <div className="flex flex-col gap-1">
                   <span className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold" data-testid="scope-detail-name">{selected.name}</h2>
+                    <h2 className="text-base font-semibold" data-testid="scope-detail-name">{selected.name}</h2>
                     <StatusBadge value={selected.status} />
                   </span>
                   <span className="text-xs text-muted-foreground">
