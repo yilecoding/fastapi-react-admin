@@ -65,7 +65,7 @@ export function AiConfirmPage({ search = {} }: { search?: AiConfirmSearch; onSea
         ) : pending.isPending ? (
           <Skeleton className="h-48" />
         ) : result ? (
-          <div className="flex items-start gap-3 rounded-lg border p-4" data-testid="ai-confirm-result">
+          <div className="flex items-start gap-3 rounded-lg border bg-card p-4" data-testid="ai-confirm-result">
             {result.ok ? (
               <IconCircleCheck className="mt-0.5 size-5 shrink-0 text-emerald-600" />
             ) : (

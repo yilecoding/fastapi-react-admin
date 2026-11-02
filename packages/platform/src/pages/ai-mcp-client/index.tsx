@@ -11,7 +11,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
-import { AddCard, CardField, CardFields } from '../_shared/resource-card'
+import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   mcpClientsQuery,
@@ -63,7 +63,7 @@ export function AiMcpClientPage() {
         // 「新建」是网格的最后一格，理由同模型密钥管理页
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {clients.map((c) => (
-            <div key={c.id} className="flex flex-col gap-2 rounded-lg border bg-card p-4" data-testid="mcp-client-card">
+            <ResourceCard key={c.id} data-testid="mcp-client-card">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -110,7 +110,7 @@ export function AiMcpClientPage() {
                   </Button>
                 </div>
               </Can>
-            </div>
+            </ResourceCard>
           ))}
 
           <Can perm="ai:mcp:add">

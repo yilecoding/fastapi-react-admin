@@ -20,7 +20,7 @@ import { Switch } from '@admin/ui/components/switch'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
-import { AddCard, CardField, CardFields } from '../_shared/resource-card'
+import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   STORAGE_TYPE_LABELS,
@@ -94,11 +94,7 @@ export function StoragePage() {
             const result = results[storage.id]
             const TypeIcon = storage.type === 's3' ? IconCloud : IconServer2
             return (
-              <div
-                key={storage.id}
-                className="flex flex-col gap-2 rounded-lg border bg-card p-4"
-                data-testid={`storage-card-${storage.code}`}
-              >
+              <ResourceCard key={storage.id} data-testid={`storage-card-${storage.code}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex min-w-0 gap-2.5">
                     <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted/60">
@@ -208,7 +204,7 @@ export function StoragePage() {
                     {result.message}
                   </span>
                 ) : null}
-              </div>
+              </ResourceCard>
             )
           })}
 
