@@ -206,10 +206,12 @@
     --accent: oklch(0.269 0 0);
     --accent-foreground: oklch(0.985 0 0);
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
+    /* 深色下的边框层级（#210）：10% 时卡片边、未勾选的复选框几乎看不见（截图审查）。
+       卡片另外有了 bg-card 的底色差，边框只需要再亮一点 */
+    --border: oklch(1 0 0 / 13%);
     /* 暗色下要比亮色更实一点：深底上低透明度的白会被背景吃掉 */
     --scrollbar-thumb: oklch(1 0 0 / 22%);
-    --input: oklch(1 0 0 / 15%);
+    --input: oklch(1 0 0 / 20%);
     --ring: oklch(0.556 0 0);
     --chart-1: oklch(0.785 0.115 274.713);
     --chart-2: oklch(0.585 0.233 277.117);

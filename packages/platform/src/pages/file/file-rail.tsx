@@ -100,7 +100,7 @@ export function FileRail({
         ) : null}
       </nav>
 
-      <div className="flex flex-col gap-2 rounded-lg border p-3">
+      <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
         <div className="flex items-baseline justify-between">
           <span className="text-xs text-muted-foreground">{t('已用空间')}</span>
           {isPending ? (

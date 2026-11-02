@@ -17,6 +17,13 @@ const col = createColumnHelper<typeof features, OnlineSession>()
 /** 后端的登录端枚举 → 显示名（i18n key） */
 const CLIENT_LABELS: Record<string, string> = { web: '网页端', desktop: '桌面端', mobile: '移动端' }
 
+
+/**
+ * 剩余有效期少于这么多分钟才标琥珀。原来是 2 小时 —— 而会话有效期本来就是这个量级，
+ * 整列常年是橙的，颜色不再说明任何事（#210）
+ */
+const EXPIRING_SOON_MINUTES = 10
+
 export function buildColumns({
   page,
   size,
@@ -137,7 +144,7 @@ export function buildColumns({
             title={t('过期于 {{at}}', { at: formatDateTime(row.original.expire_time) })}
             className={cn(
               'font-mono text-xs tabular-nums',
-              hours <= 0 ? 'text-destructive' : hours < 2 ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
+              hours <= 0 ? 'text-destructive' : hours * 60 < EXPIRING_SOON_MINUTES ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'
             )}
           >
             {text}
