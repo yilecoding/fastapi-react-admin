@@ -312,26 +312,30 @@ export function QueryBar({
           />
         )}
 
-        <Button
-          size="sm" className="h-8"
-          disabled={loading || errorCount > 0}
-          onClick={() => submit()}
-          data-testid="qb-search"
-        >
-          {loading
-            ? <IconLoader2 className="size-4 animate-spin" />
-            : <IconSearch className="size-4" />}
-          {t("搜索")}
-        </Button>
-        <Button
-          variant="outline" size="sm" className="h-8"
-          disabled={active === 0 && !activeView && !dirty}
-          onClick={reset}
-          data-testid="qb-reset"
-        >
-          <IconRotate className="size-4" />
-          {t("重置")}
-        </Button>
+        {/* 「搜索 + 重置」是一对，包成一个不拆开的整体：窄屏（390）下动作行各按钮单独折行时，
+            原来会剩一个「重置」独占一行（#210）。现在要换行就两个一起换 */}
+        <div className="flex shrink-0 items-center gap-2">
+          <Button
+            size="sm" className="h-8"
+            disabled={loading || errorCount > 0}
+            onClick={() => submit()}
+            data-testid="qb-search"
+          >
+            {loading
+              ? <IconLoader2 className="size-4 animate-spin" />
+              : <IconSearch className="size-4" />}
+            {t("搜索")}
+          </Button>
+          <Button
+            variant="outline" size="sm" className="h-8"
+            disabled={active === 0 && !activeView && !dirty}
+            onClick={reset}
+            data-testid="qb-reset"
+          >
+            <IconRotate className="size-4" />
+            {t("重置")}
+          </Button>
+        </div>
       </div>
     </div>
   )
