@@ -350,11 +350,12 @@ export function LogOperaPage({
                   testId="export-logs"
                 />
               </Can>
-              {/* 日志只增不减，之前界面上没有任何清理入口 —— 权限码 log:opera:clear 一直闲置 */}
-              <ClearLogsButton kind="opera" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
-              {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
               <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
               <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+              {/* 日志只增不减，之前界面上没有任何清理入口 —— 权限码 log:opera:clear 一直闲置。
+                  破坏性操作排最后（#210 工具栏规范），不和刷新挨着，免得手滑 */}
+              <ClearLogsButton kind="opera" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
             </>
           }
           viewsStorageKey="qb:log-opera"

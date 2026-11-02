@@ -3,7 +3,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
   IconChevronDown, IconDatabaseExclamation, IconDownload,
-  IconLoader2, IconPlus, IconRefresh, IconTrash,
+  IconLoader2, IconPlus, IconTrash,
 } from '@tabler/icons-react'
 
 import { Alert } from '@admin/ui/components/alert'
@@ -16,7 +16,7 @@ import { Switch } from '@admin/ui/components/switch'
 import { ApiError } from '../../api-client/errors'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
-import { ResetButton, SelectFilter, TextFilter } from '../_shared/filters'
+import { RefreshButton, ResetButton, SelectFilter, TextFilter } from '../_shared/filters'
 import { StatusPill } from '../_shared/status'
 import {
   declaredPrefixes, downloadPlugin, isEnabled, pluginChangedQuery, pluginKind,
@@ -138,17 +138,12 @@ export function PluginPage({
           {t('共 {{n}} / {{total}} 个', { n: filtered.length, total: plugins.length })}
         </span>
         <div className="ms-auto flex items-center gap-2">
-          <Button
-            variant="outline" size="sm" data-testid="plugin-refresh"
-            disabled={isFetching} onClick={() => void refetch()}
-          >
-            {isFetching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRefresh className="size-4" />}
-            {t('刷新')}
-          </Button>
+          {/* 主动作在前、刷新是图标（#210 工具栏规范） */}
           <Button size="sm" data-testid="install-plugin" onClick={() => setInstallOpen(true)}>
             <IconPlus className="size-4" />
             {t('安装插件')}
           </Button>
+          <RefreshButton testId="plugin-refresh" busy={isFetching} onClick={() => void refetch()} />
         </div>
       </div>
 

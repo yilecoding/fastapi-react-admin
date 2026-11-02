@@ -231,9 +231,10 @@ export function SmsLogPage({ search = {}, onSearchChange }: { search?: SmsLogSea
           loading={isFetching}
           actions={
             <>
-              <ClearLogsButton kind="sms" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
               <RefreshButton busy={isFetching} onClick={list.onRetry} />
               <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+              {/* 破坏性操作排最后（#210）：原来它是工具栏第一个，最抢眼也最容易误点 */}
+              <ClearLogsButton kind="sms" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
             </>
           }
           viewsStorageKey="qb:sms-log"
