@@ -85,10 +85,12 @@ export function MetricCard({
     // 不让它断就把这一格撑出网格
     <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border px-4 py-3" data-testid={testId}>
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="flex items-baseline gap-1">
+      {/* 手机上一行两张时卡片内容只有 ~140px：数值降一档字号、和单位之间可以折行，
+          不然 Redis 上千万 key 的「12,345,678 个」会画到隔壁卡片上（#216 评审） */}
+      <span className="flex flex-wrap items-baseline gap-x-1">
         <span
           data-testid={testId ? `${testId}-value` : undefined}
-          className={cn('font-mono text-2xl font-semibold tabular-nums leading-none', TEXT_CLASS[tn])}
+          className={cn('font-mono text-xl font-semibold tabular-nums leading-none [overflow-wrap:anywhere] @md/main:text-2xl', TEXT_CLASS[tn])}
         >
           {value}
         </span>
@@ -364,7 +366,7 @@ export function MonitorError({
 export function MonitorSkeleton({ cards = 4 }: { cards?: number }) {
   return (
     <div className="flex flex-col gap-4" data-testid="monitor-skeleton">
-      <div className="grid grid-cols-2 gap-3 @2xl/main:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @4xl/main:grid-cols-4">
         {Array.from({ length: cards }).map((_, i) => (
           <div key={i} className="h-24 animate-pulse rounded-lg border border-border bg-muted/40" />
         ))}
