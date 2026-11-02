@@ -3,13 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { Link } from '@tanstack/react-router'
 
 import { MenuIcon } from '../../../shell/icon-registry'
-import { QUICK_LINKS_MAX } from '../layout'
+import { QUICK_LINKS_DEFAULT, QUICK_LINKS_MAX } from '../layout'
 import type { NavNode } from '../../../shell/use-sidebar'
 import { CARD_ACTION_CLASS, DashboardCard } from '../card-shell'
 import type { CardProps } from './types'
-
-/** 没挑过的人默认放侧边栏里的前几个页面 */
-export const QUICK_LINKS_DEFAULT = 6
 
 /**
  * 侧边栏 → 能当快捷入口的页面（叶子、站内、不是工作台自己），按侧边栏顺序，path 去重。

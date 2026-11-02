@@ -170,9 +170,17 @@ SQL Server 2022（`sys.identity_columns` 对这张表 0 行）/ MySQL 8.4；之�
 - 🔴 **只提醒自动停用的 Webhook**（`disabled_reason == 'auto'`）：手动停的是人自己关的
 - 🔴 **在线会话数不算 swagger 调试口的会话**（同在线用户页）。第一版测试只断言「三端加起来等于 total」，把过滤去掉照样绿 ——
   `token_headers` 本身就是一个 swagger 会话，现在拿 `/monitors/sessions` 的条数对总数，变异当场红
+- 🔴 **权限判据走 `rbac.user_has_perm`**（和接口上的 `RequestPermission` 同一份）。第一版自己收集权限码：
+  权限码白名单（`RBAC_ROLE_MENU_EXCLUDE`）里的码它看不到，casbin 模式下它照样按菜单算 —— 两种情形下结论都和真正的接口守卫对不上
+- 🔴 **被删应用下的端点不提醒**：应用是逻辑删除、端点还在表里，不过滤的话「严重」永远清不掉，「去处理」点进去 404。
+  join `OpenApp` 且 `deleted == 0`，同投递侧的 `crud_webhook.subscribers`
+- **「今天登录失败偏多」的「今天」也按查看人的时区切**（`attention?tz=`），和同一屏的柱状图同一种切法；条目里带 `day` 说是哪一天
+- **失败任务的最后一行报错一条窗口函数查完**（`row_number() over (partition by name order by date_done desc, id desc)`），原来逐个任务查（N+1）。
+  按 id 取「最后一条」不对：最新的那次不一定 id 最大（测试里先插最新的）
 - ⚠️ **测试在共享库里垫数据要垫到「一定是我」**：「失败最多的 IP」那条原来只垫刚好够触发突增的条数，库里今天已经有别的 IP 失败了 6 次时
   （截图用的私有库）`top_ip` 就成了别人。现在至少垫到比今天已有失败的总数还多一条
 
-**实测证据**：`tests/api_v1/test_dashboard_ops.py` 6 条 + 审批那边的 `plugin/workflow/tests/test_dashboard_feeds.py` 5 条，
-2026-11-01 在 PostgreSQL 16 / SQL Server 2022 / MySQL 8.4 三个私有库上都全绿（连同个人偏好 20 条）。
-变异各自当场红：任务失败不按权限过滤 · 手动停用的也提醒 · 按服务端时区切天 · 会话数算上 swagger（加了上面那句断言之后）。
+**实测证据**：`tests/api_v1/test_dashboard_ops.py` 10 条 + 审批那边的 `plugin/workflow/tests/test_dashboard_feeds.py` 12 条，
+2026-11-01 在 PostgreSQL 16 / SQL Server 2022 / MySQL 8.4 三个私有库上都全绿（连同个人偏好 20 条；窗口函数三个方言都认）。
+变异各自当场红：任务失败不按权限过滤 · 手动停用的也提醒 · 按服务端时区切天 · 会话数算上 swagger（加了上面那句断言之后）·
+被删应用下的端点照样提醒 · 报错逐个任务查（数查询条数）· 报错按 id 取最新 · 登录失败按服务端时区算「今天」· 自己收集权限码。
