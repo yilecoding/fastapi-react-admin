@@ -310,28 +310,67 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', '
 
 // 页面根不写竖直 padding（#209）
 //
-// 四边内边距只在外壳给一次：`apps/web/src/routes/_auth.tsx` 内容列的 `p-4`。
-// 原来外壳只给水平的 `px-4`、竖直方向各页自己写（`py-4 md:py-6` / `py-3` / 漏写），
-// 实测全站顶部长出五档：0 / 12 / 24 / 28 / 37px —— 漏抄、抄错没有任何东西会红，
-// 新功能的页面又爱照着同一批的「兄弟页」抄，错一个传一串（#163 → #169 → AI 调用日志）。
+// 上下 16px 只在外壳给一次：`shell/tab-outlet.tsx` 的 TabFrame 上的 `py-4`（水平的 `px-4` 在
+// `_auth.tsx` 的滚动容器上 —— 竖直的不放那里，见那段注释：会让所有 sticky 的停靠线下移）。
+// 原来竖直方向各页自己写（`py-4 md:py-6` / `py-3` / 漏写），实测全站顶部长出五档：0 / 12 / 24 / 28 / 37px，
+// 漏抄、抄错没有任何东西会红；新功能的页面又爱照着同一批的「兄弟页」抄，错一个传一串。
 //
-// 判据：页面根按 shell 分册的约定都带 `content-scroll:min-h-0`，带它的 className 里
-// 不许再有 `py-* / pt-* / pb-*`；`md:py-6` 这一档在 pages 下整个不许出现（它就是那份旧样板）。
-// 居中布局（`ai-confirm` 的 `py-8`、403 页的 `py-24`）不带根标记，不在此列。
+// 「哪一层算页面根」没法精确判定，用三条互补的启发式（#212 评审：只认一个标记会漏掉约 9 页）：
+//   1. 带页面层标记的 className —— `content-scroll:min-h-0`（shell 分册规定页面根都要有；
+//      `content-scroll:lg:min-h-0` 不算，那是 Tab 面板 / 主从页内层在用）、
+//      `@container/main`、`md:gap-6`（页面级块之间的节奏，见 ui 分册「页面纵向节奏」）
+//   2. 导出的页面组件 `return (` 之后的第一个 className（通知策略这类根上没有任何标记的）
+//   3. `md:py-6` / `md:pt-6` 在 pages 下整个不许出现 —— 它就是那份旧样板
+// className 里的 `cn("…", x)` / 模板串也要拆出字符串来看，只认 `className="…"` 会被一个 `cn(` 绕过去。
+// 居中布局（`ai-confirm` 的 `py-8`、403 页的 `py-24`）放行：那是在给内容定位置。
 {
-  const VERTICAL_PAD = /(?:^|\s)(?:[a-z-]+:)*(?:py|pt|pb)-(?:\d|\[)/
+  const VERTICAL_PAD = /(?:^|\s)(?:[\w[\]=&>*.-]+:)*(?:p|py|pt|pb)-(?:\d|\[|px\b)/
+  const ROOT_MARK = /(?:^|\s)(?:content-scroll:min-h-0|@container\/main|md:gap-6)(?:\s|$)/
+  // 居中布局（403 页 `py-24`、AI 确认页 `py-8`）的竖直留白是在给内容定位置，不是页边距
+  const CENTERED = /(?:^|\s)justify-center(?:\s|$)/
+  const LEGACY = /(?:^|\s)md:p[yt]-6(?:\s|$)/
+  // className 表达式里的全部字符串字面量：className="…" / className={'…'} / className={cn('…', x)} / 模板串
+  const classStrings = (src) => {
+    const out = []
+    for (const m of src.matchAll(/className=(?:"([^"]*)"|'([^']*)'|\{)/g)) {
+      if (m[1] !== undefined || m[2] !== undefined) {
+        out.push({ cls: m[1] ?? m[2], at: m.index })
+        continue
+      }
+      // 花括号：数到配对的 }，把里面的字符串字面量都捞出来
+      let depth = 1
+      let i = m.index + m[0].length
+      for (; i < src.length && depth > 0; i++) {
+        if (src[i] === '{') depth++
+        else if (src[i] === '}') depth--
+      }
+      const expr = src.slice(m.index + m[0].length, i - 1)
+      for (const q of expr.matchAll(/"([^"]*)"|'([^']*)'|`([^`$]*)`/g)) out.push({ cls: q[1] ?? q[2] ?? q[3], at: m.index })
+    }
+    return out
+  }
   for (const file of tsFiles('packages/platform/src/pages')) {
+    if (!file.endsWith('.tsx')) continue
     const src = stripComments(fs.readFileSync(file, 'utf8'))
-    for (const m of src.matchAll(/className=["'{`]([^"'`]*)["'`}]/g)) {
-      const cls = m[1]
-      const legacy = /(?:^|\s)md:p[yt]-6(?:\s|$)/.test(cls)
-      const rootPad = /(?:^|\s)content-scroll:min-h-0(?:\s|$)/.test(cls) && VERTICAL_PAD.test(cls)
-      if (legacy || rootPad) {
+    const strings = classStrings(src)
+    // 导出的页面组件：`export function XxxPage(` 函数体顶层 `return (` 之后的第一个 className
+    const roots = new Set()
+    for (const fm of src.matchAll(/export\s+function\s+\w*Page\s*\(/g)) {
+      // 只认函数体顶层（缩进两格）的那个 return —— 列定义 / 渲染函数里嵌套的 return 也长这样
+      const after = src.slice(fm.index).search(/\n {2}return \(/)
+      if (after < 0) continue
+      const ret = fm.index + after
+      const first = strings.find((x) => x.at > ret)
+      if (first) roots.add(first.at)
+    }
+    for (const { cls, at } of strings) {
+      const isRoot = (roots.has(at) && !CENTERED.test(cls)) || ROOT_MARK.test(cls)
+      if (LEGACY.test(cls) || (isRoot && VERTICAL_PAD.test(cls))) {
         add(
           'error',
           rel(file),
           'page-vertical-padding',
-          `页面根上写了竖直 padding（${cls.trim()}）—— 外壳 _auth.tsx 已经四边各给 16px，见 #209 / pages 分册`,
+          `页面根上写了竖直 padding（${cls.trim()}）—— 上下 16px 由 TabFrame 统一给，见 #209 / pages 分册「页面四边的留白」`,
         )
       }
     }

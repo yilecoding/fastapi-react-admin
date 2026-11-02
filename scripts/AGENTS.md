@@ -84,6 +84,7 @@ dev 脚本、零 JS 依赖，不参与）：
 | `page-reads-router` —— 页面组件不得调 `Route.useSearch/useParams` / `useNavigate` | 1 | 隐藏 tab 拿不到 match 上下文 |
 | `route-renders-page` —— `routes/_auth/` 下的 `component` 必须是 `() => null` | 3 | 页面被挂两次 / 切走丢状态 |
 | `unscoped-dom-query` —— `document.querySelector` 等必须带 `[data-tab=…]` 或 `[data-visible="true"]` | 5 | 命中隐藏页的 DOM |
+| `page-vertical-padding` —— 页面根上不写竖直 padding（#209） | —— | 全站顶部长出五档间距；判据和七种反向验证见 [pages 分册](../packages/platform/src/pages/AGENTS.md)「页面四边的留白」 |
 
 这三条**当前全仓干净**，所以它们是回归守卫，不是在抓存量。值得做成闸门是因为
 失败方式极难归因：违反了不报错，只会「切回这个 tab 时筛选条件没了」或

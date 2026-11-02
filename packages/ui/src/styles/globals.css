@@ -347,9 +347,13 @@ html[data-scroll-mode="page"] {
  * `--primary` 派生：亮度抬到至少 0.7，色相 / 彩度不动（七种主题色都跟着走）；
  * 主色底上的字换成同色相的深墨色 —— 和 shadcn 深色主题「浅主色 + 深前景」同一个做法。
  *
- * `@supports` 兜住不认相对颜色语法的旧浏览器：那时退回原来的样子，而不是变量失效变透明。
+ * `@supports` 兜住不认这套写法的浏览器：那时退回原来的样子，而不是变量失效变透明。
+ * ⚠️ 条件要测**实际用到的那个表达式**（通道关键字放进 `max()` / `calc()`），不能只测
+ * `oklch(from red l c h)`：早期实现（Safari 16.4–17 一带，按旧规范把 `l` 当百分比）认基本语法、
+ * 不认通道参与数学运算 —— 只测基本语法会判定通过，变量在使用时失效，`bg-primary` 整个变透明。
+ * （#212 评审指出，未在 Safari 上实测；条件写成实际表达式之后，两种情况都安全。）
  */
-@supports (color: oklch(from red l c h)) {
+@supports (color: oklch(from red max(l, 0.7) calc(c * 0.5) h)) {
   .dark {
     --primary-ink: oklch(from var(--primary) max(l, 0.7) c h);
     --primary-ink-foreground: oklch(from var(--primary) 0.21 calc(c * 0.5) h);
