@@ -7,7 +7,7 @@ import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 import { cn } from '@admin/ui/lib/utils'
 
-import { DurationCell, TimeCell } from '../_shared/cells'
+import { DurationCell, EmptyCell, TimeCell } from '../_shared/cells'
 import { api, type PageData } from '../../api-client/client'
 import { Can } from '../../auth/can'
 import { PageHeader } from '../../shell/page-header'
@@ -265,19 +265,19 @@ export function LogOperaPage({
         header: t('耗时'),
         cell: ({ getValue }) => <DurationCell ms={getValue()} />,
       }),
-      col.accessor((r) => r.browser ?? '—', {
+      col.accessor((r) => r.browser ?? '', {
         id: 'browser',
         header: t('浏览器'),
         cell: ({ getValue }) => (
-          <span className="block max-w-28 truncate text-sm text-muted-foreground" title={getValue()}>
-            {getValue()}
+          <span className="block max-w-28 truncate text-sm text-muted-foreground" title={getValue() || undefined}>
+            {getValue() || <EmptyCell />}
           </span>
         ),
       }),
-      col.accessor((r) => r.os ?? '—', {
+      col.accessor((r) => r.os ?? '', {
         id: 'os',
         header: t('终端系统'),
-        cell: ({ getValue }) => <span className="text-sm text-muted-foreground">{getValue()}</span>,
+        cell: ({ getValue }) => <span className="text-sm text-muted-foreground">{getValue() || <EmptyCell />}</span>,
       }),
     ],
     [page, size, t]

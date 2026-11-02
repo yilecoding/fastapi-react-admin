@@ -19,6 +19,7 @@ import {
 } from '@admin/ui/components/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
 
+import { formatMs } from '../_shared/cells'
 import { Can } from '../../auth/can'
 import { DetailIdRow, DetailSection } from '../_shared/detail-sheet'
 import { JsonViewer } from '../_shared/json-viewer'
@@ -100,7 +101,7 @@ export function OpenApiLogDetailSheet({
                 </span>
               </DescriptionItem>
               <DescriptionItem label={t('耗时')}>
-                <span className="font-mono text-sm tabular-nums">{log.cost_time.toFixed(1)} ms</span>
+                <span className="font-mono text-sm tabular-nums">{formatMs(log.cost_time)}</span>
               </DescriptionItem>
               <DescriptionItem label={t('返回条数')} value={log.row_count === null ? '—' : String(log.row_count)} mono />
             </Descriptions>

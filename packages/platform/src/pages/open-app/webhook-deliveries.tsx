@@ -21,6 +21,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@admin/ui/components/table'
 
 import { Can } from '../../auth/can'
+import { TimeCell } from '../_shared/cells'
 import { RefreshButton, SelectFilter } from '../_shared/filters'
 import { StatusPill, type Tone } from '../_shared/status'
 import {
@@ -140,7 +141,9 @@ export function WebhookDeliveries({
                   onClick={() => onViewChange({ ...view, open: r.id })}
                   data-testid={`webhook-delivery-${r.event_type}`}
                 >
-                  <TableCell className="font-mono text-xs tabular-nums">{formatDateTime(r.created_time)}</TableCell>
+                  <TableCell>
+                    <TimeCell value={r.created_time} />
+                  </TableCell>
                   <TableCell className="font-mono text-xs">{r.event_type}</TableCell>
                   <TableCell className="text-sm">{r.webhook_name}</TableCell>
                   <TableCell>

@@ -2,7 +2,6 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 
-import { formatDateTime } from '@admin/i18n'
 import { Pagination } from '@admin/ui/components/pagination'
 import { QueryError } from '@admin/ui/components/query-error'
 import {
@@ -15,6 +14,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
 
 import { useTabPortalContainer } from '../../shell/tab-outlet'
+import { EmptyCell, TimeCell } from '../_shared/cells'
 import { RefreshButton } from '../_shared/filters'
 import { noticeDetailQuery, noticeReadsQuery, type Notice } from './api'
 
@@ -170,10 +170,10 @@ function ReadsBody({
                       <TableRow key={r.user_id} data-testid="notice-reads-row" data-username={r.username}>
                         <TableCell className="font-mono text-xs">{r.username}</TableCell>
                         <TableCell>{r.nickname}</TableCell>
-                        <TableCell className="text-muted-foreground">{r.dept_name ?? '—'}</TableCell>
+                        <TableCell className="text-muted-foreground">{r.dept_name ?? <EmptyCell />}</TableCell>
                         {read && (
-                          <TableCell className="font-mono text-xs tabular-nums text-muted-foreground">
-                            {formatDateTime(r.read_time)}
+                          <TableCell>
+                            <TimeCell value={r.read_time} />
                           </TableCell>
                         )}
                       </TableRow>

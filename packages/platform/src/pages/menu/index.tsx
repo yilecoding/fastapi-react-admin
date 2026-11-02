@@ -3,17 +3,20 @@ import { menuTitle } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAlertTriangle, IconChevronRight, IconChevronsDown, IconChevronsUp,
-  IconDotsVertical, IconPencil, IconPlus, IconTrash,
+  IconAlertTriangle,
+  IconChevronRight,
+  IconChevronsDown,
+  IconChevronsUp,
+  IconPencil,
+  IconPlus,
+  IconTrash,
 } from '@tabler/icons-react'
 
+import { ACTIONS_CELL_CLASS } from '@admin/ui/components/data-table'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { DataTableErrorRow, DataTableSkeletonRows } from '@admin/ui/components/data-table'
 import { QueryError } from '@admin/ui/components/query-error'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@admin/ui/components/dropdown-menu'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@admin/ui/components/table'
@@ -25,6 +28,7 @@ import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { MenuIcon } from '../../shell/icon-registry'
 import { PageHeader } from '../../shell/page-header'
 import { usePlatform } from '../../shell/platform-context'
+import { RowActions } from '../_shared/cells'
 import { RefreshButton, ResetButton, SelectFilter, StatusFilter, TextFilter } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
 import { StatusBadge, TONE_CLASS } from '../_shared/status'
@@ -351,36 +355,22 @@ function MenuRows({
         </TableCell>
         <TableCell className="text-sm tabular-nums text-muted-foreground">{node.sort}</TableCell>
         <TableCell><StatusBadge value={node.status} /></TableCell>
-        <TableCell>
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon" className="size-7" aria-label={t('操作 {{name}}', { name: node.title })} />}
-              data-testid={`menu-actions-${node.name}`}
-            >
-              <IconDotsVertical className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-36">
-              {!isButton && (
-                <Can perm="sys:menu:add">
-                  <DropdownMenuItem onClick={() => onAddChild(node.id)} data-testid={`menu-addchild-${node.name}`}>
-                    <IconPlus className="size-4" />{t('新增子菜单')}
-                  </DropdownMenuItem>
-                </Can>
-              )}
-              <Can perm="sys:menu:edit">
-                <DropdownMenuItem onClick={() => onEdit(node)} data-testid={`menu-edit-${node.name}`}>
-                  <IconPencil className="size-4" />{t('编辑')}
-                </DropdownMenuItem>
-              </Can>
-              <Can perm="sys:menu:del">
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={() => onDelete(node)}
-                                  data-testid={`menu-delete-${node.name}`}>
-                  <IconTrash className="size-4" />{t('删除')}
-                </DropdownMenuItem>
-              </Can>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <TableCell className={ACTIONS_CELL_CLASS}>
+          <RowActions
+            label={node.title}
+            testId={`menu-actions-${node.name}`}
+            items={[
+              {
+                key: 'add', label: t('新增子菜单'), icon: IconPlus, perm: 'sys:menu:add', hidden: isButton,
+                testId: `menu-addchild-${node.name}`, onClick: () => onAddChild(node.id),
+              },
+              { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'sys:menu:edit', testId: `menu-edit-${node.name}`, onClick: () => onEdit(node) },
+              {
+                key: 'del', label: t('删除'), icon: IconTrash, perm: 'sys:menu:del', danger: true,
+                testId: `menu-delete-${node.name}`, onClick: () => onDelete(node),
+              },
+            ]}
+          />
         </TableCell>
       </TableRow>
 

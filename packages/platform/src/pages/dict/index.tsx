@@ -13,7 +13,7 @@ import {
 } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
-import { DataTable } from '@admin/ui/components/data-table'
+import { ACTIONS_COLUMN_ID, DataTable } from '@admin/ui/components/data-table'
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -193,26 +193,25 @@ export function DictPage({
         ),
       }),
       col.display({
-        id: 'actions',
+        id: ACTIONS_COLUMN_ID,
         header: () => <span className="sr-only">{t('操作')}</span>,
         cell: ({ row }) => {
           const d = row.original
           return (
-            <RowActions label={d.label} testId={`data-actions-${d.value}`}>
-              <Can perm="dict:data:edit">
-                <DropdownMenuItem onClick={() => { setEditingData(d); setDataSheet(true) }}
-                                  data-testid={`data-edit-${d.value}`}>
-                  <IconPencil className="size-4" />{t('编辑')}
-                </DropdownMenuItem>
-              </Can>
-              <Can perm="dict:data:del">
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={() => setDelData(d)}
-                                  data-testid={`data-delete-${d.value}`}>
-                  <IconTrash className="size-4" />{t('删除')}
-                </DropdownMenuItem>
-              </Can>
-            </RowActions>
+            <RowActions
+              label={d.label}
+              testId={`data-actions-${d.value}`}
+              items={[
+                {
+                  key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'dict:data:edit', testId: `data-edit-${d.value}`,
+                  onClick: () => { setEditingData(d); setDataSheet(true) },
+                },
+                {
+                  key: 'del', label: t('删除'), icon: IconTrash, perm: 'dict:data:del', danger: true,
+                  testId: `data-delete-${d.value}`, onClick: () => setDelData(d),
+                },
+              ]}
+            />
           )
         },
       }),
