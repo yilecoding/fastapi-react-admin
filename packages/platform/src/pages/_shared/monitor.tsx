@@ -81,7 +81,9 @@ export function MetricCard({
   // ⚠️ 不要把这个变量叫 `t` —— 会遮蔽翻译函数
   const tn = tone ?? (pct === undefined ? 'muted' : usageTone(pct))
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border px-4 py-3" data-testid={testId}>
+    // min-w-0 + hint 可断行：手机上一行两张（#210），磁盘卡的 hint 是一整条不带空格的挂载路径，
+    // 不让它断就把这一格撑出网格
+    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border px-4 py-3" data-testid={testId}>
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="flex items-baseline gap-1">
         <span
@@ -93,7 +95,7 @@ export function MetricCard({
         {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
       </span>
       {pct !== undefined && <UsageBar pct={pct} tone={tn} />}
-      {hint && <span className="text-xs leading-tight text-muted-foreground">{hint}</span>}
+      {hint && <span className="text-xs leading-tight [overflow-wrap:anywhere] text-muted-foreground">{hint}</span>}
       {children}
     </div>
   )
@@ -362,7 +364,7 @@ export function MonitorError({
 export function MonitorSkeleton({ cards = 4 }: { cards?: number }) {
   return (
     <div className="flex flex-col gap-4" data-testid="monitor-skeleton">
-      <div className="grid grid-cols-1 gap-3 @2xl/main:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 @2xl/main:grid-cols-4">
         {Array.from({ length: cards }).map((_, i) => (
           <div key={i} className="h-24 animate-pulse rounded-lg border border-border bg-muted/40" />
         ))}

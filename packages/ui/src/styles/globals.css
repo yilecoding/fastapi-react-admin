@@ -359,3 +359,23 @@ html[data-scroll-mode="page"] {
     --primary-ink-foreground: oklch(from var(--primary) 0.21 calc(c * 0.5) h);
   }
 }
+
+/*
+ * 横向滚动阴影（#210 窄屏）：容器能横向滚、而且那一侧还有内容时，那一侧边缘出现一道渐隐阴影。
+ *
+ * 症状：390 宽下通知策略的表格 586px，装在 356px 的容器里 —— 其实能横向滑，但界面上没有任何迹象，
+ * 截图审查时读成「表格被裁掉了、短信那一列没了」。
+ * 做法是 Lea Verou 的纯 CSS 写法：两层「遮罩」跟着内容走（attachment: local），两层「阴影」钉在容器上
+ * （attachment: scroll）。滚到头时遮罩正好盖住阴影，所以不用 JS 判断滚动位置。
+ * ⚠️ 遮罩色必须等于容器的底色（默认 --background）。表格放在别的底色上时设 `--scroll-shadow-cover`。
+ * 单元格自带不透明底色的地方（表头 bg-muted）会盖住阴影 —— 表身那几行看得见就够了。
+ */
+@utility scroll-shadow-x {
+  --scroll-shadow-cover: var(--background);
+  --scroll-shadow-ink: color-mix(in oklch, var(--foreground) 14%, transparent);
+  background:
+    linear-gradient(to right, var(--scroll-shadow-cover) 40%, transparent) left center / 2rem 100% no-repeat local,
+    linear-gradient(to left, var(--scroll-shadow-cover) 40%, transparent) right center / 2rem 100% no-repeat local,
+    linear-gradient(to right, var(--scroll-shadow-ink), transparent) left center / 0.75rem 100% no-repeat scroll,
+    linear-gradient(to left, var(--scroll-shadow-ink), transparent) right center / 0.75rem 100% no-repeat scroll;
+}
