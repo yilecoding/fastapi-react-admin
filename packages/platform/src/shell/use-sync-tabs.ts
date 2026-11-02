@@ -36,7 +36,7 @@ export function useSyncTabs(resolveTitle?: (path: string) => string | undefined)
         routeId: leaf?.routeId,
         params: leaf?.params,
         search: leaf?.search,
-        staticData: leaf?.staticData as { title?: string; pinned?: boolean } | undefined,
+        staticData: leaf?.staticData as { title?: string; pinned?: boolean; icon?: string } | undefined,
         href: loc.href,
         pathname: loc.pathname,
       }
@@ -70,6 +70,7 @@ export function useSyncTabs(resolveTitle?: (path: string) => string | undefined)
       href,
       routeId,
       title,
+      icon: sd.icon,
       snapshot: { params, search },
       pinned: sd.pinned ?? false,
       closable: !(sd.pinned ?? false),

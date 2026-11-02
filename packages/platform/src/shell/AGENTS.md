@@ -479,3 +479,10 @@ E2E 实测弹窗带着 `data-closed` 在屏幕上停了 5 秒还 visible。
 **实测证据**：`apps/web/e2e/tests/notice-reach.spec.ts` 第一条（普通员工点铃铛里的公告），
 修前 `getByTestId('notice-reader')… element(s) not found`；挂一个 `MutationObserver` 盯 `document.body`，
 点完 1.5 秒内**没有任何**读者抽屉的节点被插进来过。改默认值之后同一条过。
+
+## 不进侧边栏的页面：`staticData.parent` / `staticData.icon`（#210）
+
+页签图标按路径查菜单树、面包屑按菜单树的祖先链 —— 不进侧边栏的页面（开放接口日志、AI 确认页）两样都查不到：
+页签是一个兜底圆点，面包屑只剩页名一级。路由里写 `staticData.parent`（逻辑上挂在哪个菜单下，如 `/open/app`）和
+`staticData.icon`（图标注册表里的名字，如 `mdi:history`），查不到时由它们兜底；查得到时照旧以菜单树为准。
+

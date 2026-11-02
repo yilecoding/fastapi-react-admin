@@ -210,7 +210,7 @@ export function TabBar() {
               key={tab.key}
               tab={tab}
               active={tab.key === activeKey}
-              icon={iconByPath.get(pathname)}
+              icon={iconByPath.get(pathname) ?? tab.icon}
               closable={isRemovable(tab)}
               styleName={tabStyle}
               showIcon={tabShowIcon}

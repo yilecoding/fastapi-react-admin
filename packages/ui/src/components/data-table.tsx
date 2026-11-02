@@ -577,9 +577,11 @@ export function DataTable<
       )}
 
       {/* ── Table ── */}
-      {/* 宽表要横向滚动，不能 overflow-hidden —— 那会把最右侧的操作列裁掉，用户点不到行操作 */}
+      {/* 宽表要横向滚动，不能 overflow-hidden —— 那会把最右侧的操作列裁掉，用户点不到行操作。
+          `flex-initial`（0 1 auto）而不是 `flex-1`：高度按内容来，装不下时照样收缩、在框里滚。
+          原来是 flex-1，在线用户 1 行、任务调度 10 行时边框也撑满到页面底部，下面几百 px 的空框（#210 P2） */}
       <div
-        className={`overflow-x-auto rounded-lg border transition-opacity content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col ${busy ? "opacity-60" : ""}`}
+        className={`overflow-x-auto rounded-lg border transition-opacity content-scroll:flex content-scroll:min-h-0 content-scroll:flex-initial content-scroll:flex-col ${busy ? "opacity-60" : ""}`}
         aria-busy={loading || busy}
         data-busy={busy || undefined}
       >
