@@ -84,7 +84,7 @@ export function SettingsShell({
     <div className="flex flex-col gap-6 md:flex-row md:items-start" data-testid={testId}>
       {/* ── 左：竖导航 ── */}
       <nav
-        className="flex w-full shrink-0 flex-col gap-4 md:sticky md:top-2 md:w-44"
+        className="flex w-full shrink-0 flex-col gap-4 md:sticky md:top-2 content-scroll:md:top-0 md:w-44"
         aria-label={t('设置分组')}
       >
         {groups.map(({ group, items }) => (

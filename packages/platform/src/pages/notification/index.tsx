@@ -29,6 +29,7 @@ import {
 import { buildColumns, COLUMN_LABELS } from './columns'
 import { features } from './table-features'
 import { useNotificationOpen } from './use-open'
+import { PageShell } from '../_shared/page-shell'
 
 /**
  * 可筛字段。`key` 是**地址栏参数名**，恰好和接口入参同名，所以不用 `param` 映射。
@@ -170,72 +171,68 @@ export function NotificationPage({
   const hasFilter = countActive(q.applied, FIELDS) > 0
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          <PageHeader
-            title={t('消息中心')}
-            description={t('系统消息与公告的收件箱。已读状态只属于你自己。')}
+    <PageShell fill="always">
+      <PageHeader
+        title={t('消息中心')}
+        description={t('系统消息与公告的收件箱。已读状态只属于你自己。')}
+      />
+
+      {/* 查询区和表格是同一个块的两半；这一层也要能收缩，
+          否则「只滚表格行」那条链断在这里（见 shell 分册） */}
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        <QueryBar
+          fields={FIELDS}
+          value={q.value}
+          onChange={q.setValue}
+          onSearch={q.submit}
+          onReset={q.reset}
+          applied={q.applied}
+          loading={isFetching}
+          viewsStorageKey="qb:notification"
+          actions={
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={markable === 0 || markAll.isPending}
+                onClick={() => setMarkAllOpen(true)}
+                data-testid="notification-mark-all-page"
+              >
+                <IconChecks className="size-4" />
+                {markable > 0 ? t('全部已读（{{n}}）', { n: markable }) : t('全部已读')}
+              </Button>
+              <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+            </>
+          }
+        />
+
+        <div
+          data-testid="notification-table"
+          data-fetching={isFetching}
+          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+        >
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            columnLabels={COLUMN_LABELS}
+            emptyMessage={hasFilter ? t('没有匹配的通知') : t('暂无通知')}
+            // 未读行整行加一点底色 —— 和铃铛下拉里的处理保持一致
+            rowAttributes={(row) => ({ 'data-unread': row.original.read_time ? undefined : 'true' })}
+            tableBodyClassName="[&_tr[data-unread=true]]:bg-muted/30"
+            {...list}
+            pagination={{
+              pageIndex: page - 1,
+              pageCount: totalPages,
+              pageSize: size,
+              totalCount: total,
+              onPageChange: (i) =>
+                onSearchChange?.({ ...search, page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => onSearchChange?.({ ...search, size: s, page: undefined }),
+            }}
           />
-
-          {/* 查询区和表格是同一个块的两半；这一层也要能收缩，
-              否则「只滚表格行」那条链断在这里（见 shell 分册） */}
-          <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-            <QueryBar
-              fields={FIELDS}
-              value={q.value}
-              onChange={q.setValue}
-              onSearch={q.submit}
-              onReset={q.reset}
-              applied={q.applied}
-              loading={isFetching}
-              viewsStorageKey="qb:notification"
-              actions={
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={markable === 0 || markAll.isPending}
-                    onClick={() => setMarkAllOpen(true)}
-                    data-testid="notification-mark-all-page"
-                  >
-                    <IconChecks className="size-4" />
-                    {markable > 0 ? t('全部已读（{{n}}）', { n: markable }) : t('全部已读')}
-                  </Button>
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-                </>
-              }
-            />
-
-            <div
-              data-testid="notification-table"
-              data-fetching={isFetching}
-              className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-            >
-              <DataTable
-                table={table}
-                showColumnVisibility={false}
-                rows={table.getRowModel().rows}
-                columnCount={columns.length}
-                columnLabels={COLUMN_LABELS}
-                emptyMessage={hasFilter ? t('没有匹配的通知') : t('暂无通知')}
-                // 未读行整行加一点底色 —— 和铃铛下拉里的处理保持一致
-                rowAttributes={(row) => ({ 'data-unread': row.original.read_time ? undefined : 'true' })}
-                tableBodyClassName="[&_tr[data-unread=true]]:bg-muted/30"
-                {...list}
-                pagination={{
-                  pageIndex: page - 1,
-                  pageCount: totalPages,
-                  pageSize: size,
-                  totalCount: total,
-                  onPageChange: (i) =>
-                    onSearchChange?.({ ...search, page: i === 0 ? undefined : i + 1 }),
-                  onPageSizeChange: (s) => onSearchChange?.({ ...search, size: s, page: undefined }),
-                }}
-              />
-            </div>
-          </div>
         </div>
       </div>
 
@@ -266,6 +263,6 @@ export function NotificationPage({
           setMarkAllOpen(false)
         }}
       />
-    </div>
+    </PageShell>
   )
 }
