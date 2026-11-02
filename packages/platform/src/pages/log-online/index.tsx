@@ -248,7 +248,7 @@ export function LogOnlinePage({
 
       {/* ── 统计条 ── */}
       <div
-        className="grid grid-cols-1 gap-3 @xl/main:grid-cols-2 @4xl/main:grid-cols-4"
+        className="grid grid-cols-2 gap-3 @4xl/main:grid-cols-4"
         data-testid="online-stats"
       >
         <MetricCard
