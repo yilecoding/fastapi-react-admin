@@ -35,7 +35,6 @@
  * | 页面组件不读路由 | 1 | 隐藏 tab 拿不到 match 上下文 |
  * | `_auth/` 下的路由文件不渲染页面 | 3 | 页面被挂两次 / 切走丢状态 |
  * | 全局 DOM 查询要限定作用域 | 5 | 命中隐藏页的 DOM |
- * | 页面根不写竖直 padding（#209） | —— | 全站顶部五档间距，外壳统一给的那 16px 被各页再叠一层 |
  *
  * **功能引导那两条**（硬纪律 5 的延伸，见 `shell/tour/targets.ts` 头注释）
  *
@@ -138,7 +137,11 @@ const stripComments = (src) => {
     }
     if (c === '/' && src[i + 1] === '*') {
       i += 2
-      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i += 1
+      // 换行留下：后面报 `file:line` 的规则在剥过注释的文本上数行，吞掉换行行号就整体往上偏
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) {
+        if (src[i] === '\n') out += '\n'
+        i += 1
+      }
       i += 2
       continue
     }
@@ -308,72 +311,177 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', '
   }
 }
 
-// 页面根不写竖直 padding（#209）
+// ── 页面外壳：四边 16px 只有一个来源（#209） ──────────────────────────
 //
-// 上下 16px 只在外壳给一次：`shell/tab-outlet.tsx` 的 TabFrame 上的 `py-4`（水平的 `px-4` 在
-// `_auth.tsx` 的滚动容器上 —— 竖直的不放那里，见那段注释：会让所有 sticky 的停靠线下移）。
-// 原来竖直方向各页自己写（`py-4 md:py-6` / `py-3` / 漏写），实测全站顶部长出五档：0 / 12 / 24 / 28 / 37px，
-// 漏抄、抄错没有任何东西会红；新功能的页面又爱照着同一批的「兄弟页」抄，错一个传一串。
+// 内容列（`routes/_auth.tsx` 的 `data-slot="content-scroll"`）给 `p-4`，
+// 页面最外层走 `pages/_shared/page-shell.tsx`，**页面自己不写上下 padding**。
 //
-// 「哪一层算页面根」没法精确判定，用三条互补的启发式（#212 评审：只认一个标记会漏掉约 9 页）：
-//   1. 带页面层标记的 className —— `content-scroll:min-h-0`（shell 分册规定页面根都要有；
-//      `content-scroll:lg:min-h-0` 不算，那是 Tab 面板 / 主从页内层在用）、
-//      `@container/main`、`md:gap-6`（页面级块之间的节奏，见 ui 分册「页面纵向节奏」）
-//   2. 导出的页面组件 `return (` 之后的第一个 className（通知策略这类根上没有任何标记的）
-//   3. `md:py-6` / `md:pt-6` 在 pages 下整个不许出现 —— 它就是那份旧样板
-// className 里的 `cn("…", x)` / 模板串也要拆出字符串来看，只认 `className="…"` 会被一个 `cn(` 绕过去。
-// 居中布局（`ai-confirm` 的 `py-8`、403 页的 `py-24`）放行：那是在给内容定位置。
+// 原来三层外壳是每页手抄的，`py-4 md:py-6` 写在第三层 —— 抄漏一层的三页
+// （短信日志 / 投递记录 / AI 调用日志）查询区直接贴着标签条，另有五页抄成 `py-3`，
+// 全站三种顶距。少 16px 不会让任何测试变红，修过两次都只修了当时那一页。
+//
+// 三条：
+// - `page-shell-handwritten` —— 页面里出现 `@container/main`：说明又在手抄外壳
+// - `page-root-padding` —— `*Page` 组件 return 出来的根元素（及其第一层子 div、返回的同文件组件的根）
+//   带竖向 padding / 上下 margin
+// - `page-root-unscanned` —— 某个 `*Page` 一个根元素都没认出来（扫描器盲区，宁可报错不要假绿）
+//
+// ⚠️ 只看 `pages/<目录>/index.tsx` 里 `export function XxxPage` 的**每一个** return
+// （早退的加载 / 出错分支也算 —— 那几屏同样贴着标签条）。`pages/forbidden.tsx`
+// 那种整屏居中的空态不在扫描范围：它的 `py-24` 是居中留白，不是对齐边距。
 {
-  const VERTICAL_PAD = /(?:^|\s)(?:[\w[\]=&>*.-]+:)*(?:p|py|pt|pb)-(?:\d|\[|px\b)/
-  const ROOT_MARK = /(?:^|\s)(?:content-scroll:min-h-0|@container\/main|md:gap-6)(?:\s|$)/
-  // 居中布局（403 页 `py-24`、AI 确认页 `py-8`）的竖直留白是在给内容定位置，不是页边距
-  const CENTERED = /(?:^|\s)justify-center(?:\s|$)/
-  const LEGACY = /(?:^|\s)md:p[yt]-6(?:\s|$)/
-  // className 表达式里的全部字符串字面量：className="…" / className={'…'} / className={cn('…', x)} / 模板串
-  const classStrings = (src) => {
-    const out = []
-    for (const m of src.matchAll(/className=(?:"([^"]*)"|'([^']*)'|\{)/g)) {
-      if (m[1] !== undefined || m[2] !== undefined) {
-        out.push({ cls: m[1] ?? m[2], at: m.index })
+  const PAGES = path.join('packages', 'platform', 'src', 'pages')
+  const SHELL = path.join(PAGES, '_shared', 'page-shell.tsx')
+  for (const file of tsFiles(PAGES)) {
+    if (rel(file) === SHELL) continue
+    const src = stripComments(fs.readFileSync(file, 'utf8'))
+    if (src.includes('@container/main')) {
+      add('error', rel(file), 'page-shell-handwritten', '手写了 @container/main 外壳 —— 用 pages/_shared/page-shell.tsx 的 <PageShell>（#209）')
+    }
+  }
+
+  // 竖向 padding 和上下 margin 都算（`mt-4` 一样把内容往下推）。`m-auto` / `*-0` 不算
+  const VERTICAL = /^-?(?:p|py|pt|pb|m|my|mt|mb)-(?!0$|auto$)\S+$/
+  const badTokens = (classes) => {
+    const toks = classes.split(/\s+/)
+    // 自己画了边框 / 底色的是一张卡片（`EmbeddedPage` 的虚线提示框），padding 在框里面，不挪动它的位置
+    const boxed = toks.some((tok) => /^(?:border|bg-)/.test(tok) && !/^border-(?:none|0)$/.test(tok))
+    return toks.filter((tok) => {
+      const cut = tok.lastIndexOf(':')
+      // `[&>section]:py-2` 是给子元素的，不是根元素自己的
+      if (cut !== -1 && tok.slice(0, cut).includes('[')) return false
+      const base = tok.slice(cut + 1)
+      if (boxed && /^-?p/.test(base)) return false
+      return VERTICAL.test(base)
+    })
+  }
+
+  /** 从 `<` 开始读完整个开标签（跳过 `{…}` 和字符串里的 `>`），返回 [标签文本, 结束位置] */
+  const openTag = (src, at) => {
+    let depth = 0
+    let quote = null
+    for (let i = at + 1; i < src.length; i += 1) {
+      const c = src[i]
+      if (quote) {
+        if (c === quote) quote = null
         continue
       }
-      // 花括号：数到配对的 }，把里面的字符串字面量都捞出来
-      let depth = 1
-      let i = m.index + m[0].length
-      for (; i < src.length && depth > 0; i++) {
-        if (src[i] === '{') depth++
-        else if (src[i] === '}') depth--
+      if (c === '"' || c === "'" || c === '`') quote = c
+      else if (c === '{') depth += 1
+      else if (c === '}') depth -= 1
+      else if (c === '>' && depth === 0) return [src.slice(at, i + 1), i + 1]
+    }
+    return [src.slice(at), src.length]
+  }
+
+  /** className 里的全部字符串字面量：`"…"` 直接拿；`{cn('…', x && '…')}` 拿里面每一个 */
+  const classesOf = (tag) => {
+    const m = tag.match(/\bclassName=(?:"([^"]*)"|\{)/)
+    if (!m) return ''
+    if (m[1] !== undefined) return m[1]
+    let depth = 1
+    let i = m.index + m[0].length
+    for (; i < tag.length && depth > 0; i += 1) {
+      if (tag[i] === '{') depth += 1
+      else if (tag[i] === '}') depth -= 1
+    }
+    const expr = tag.slice(m.index + m[0].length, i - 1)
+    return [...expr.matchAll(/'([^']*)'|"([^"]*)"|`([^`]*)`/g)].map((x) => x[1] ?? x[2] ?? x[3]).join(' ')
+  }
+
+  /** 顶格声明的函数组件 → 函数体在 src 里的 [起, 止) */
+  const fnBody = (src, name) => {
+    const m = new RegExp(`^(?:export )?(?:default )?(?:function ${name}\\b|const ${name}\\s*=)`, 'm').exec(src)
+    if (!m) return null
+    const end = src.slice(m.index).search(/\n\}\)?;?\n/)
+    return [m.index, end === -1 ? src.length : m.index + end]
+  }
+
+  /**
+   * 一个函数体里「return 出去的根元素」的位置。
+   *
+   * 判据是缩进：函数体这一层的 return（缩进 2 / 4 = 主 return 和 `if` 里的早退）之后，
+   * 根元素是「return 那一行上的 `<`」或者「比 return 深一级的行首 `<`」——
+   * 三元的两个分支（`? (` / `) : (`）都落在这一级。更深的是 `.map(…)` 回调里的行 / 卡片，
+   * 它们的 padding 是组件自己的（第一版没限缩进，卡片的 `p-4` 全被报成页面根）。
+   */
+  const rootsIn = (src, [from, to]) => {
+    const out = []
+    const body = src.slice(from, to)
+    for (const r of body.matchAll(/\n( {2,4})return\b/g)) {
+      const indent = r[1].length
+      const lineStart = from + r.index + 1
+      // 缩进 4 的 return 只认 `if` / `else` 里的早退 —— `useMemo(() => { return … })` 这类回调也在这一级
+      if (indent > 2) {
+        const above = src.slice(from, lineStart).split('\n').reverse()
+        const opener = above.find((l) => l.trim() && l.length - l.trimStart().length === indent - 2)
+        if (!opener || !/^\s*(?:if\b|\}?\s*else\b)/.test(opener)) continue
       }
-      const expr = src.slice(m.index + m[0].length, i - 1)
-      for (const q of expr.matchAll(/"([^"]*)"|'([^']*)'|`([^`$]*)`/g)) out.push({ cls: q[1] ?? q[2] ?? q[3], at: m.index })
+      const lineEnd = src.indexOf('\n', lineStart)
+      const sameLine = src.slice(lineStart, lineEnd).indexOf('<')
+      if (sameLine !== -1) {
+        out.push(lineStart + sameLine)
+        continue
+      }
+      // `return renderX()` / `return null`：这一行没开括号就不是多行 JSX，别往下读进别的函数
+      if (!/\(\s*$/.test(src.slice(lineStart, lineEnd))) continue
+      // 读到和 return 同缩进的那个 `)` 为止
+      // 只认单独一行的 `)`：三元的 `) : (` 也在这一级，不能在那儿停
+      const close = new RegExp(`\\n {${indent}}\\)\\s*;?\\s*(?=\\n|$)`, 'g')
+      close.lastIndex = lineEnd
+      const stop = close.exec(src)?.index ?? to
+      const child = new RegExp(`\\n {${indent + 2}}<(?!/)`, 'g')
+      child.lastIndex = lineEnd
+      for (let m = child.exec(src); m && m.index < stop; m = child.exec(src)) out.push(m.index + m[0].length - 1)
     }
     return out
   }
-  for (const file of tsFiles('packages/platform/src/pages')) {
-    if (!file.endsWith('.tsx')) continue
+
+  let roots = 0
+  for (const dir of fs.readdirSync(path.join(ROOT, PAGES), { withFileTypes: true })) {
+    if (!dir.isDirectory() || dir.name.startsWith('_')) continue
+    const file = path.join(ROOT, PAGES, dir.name, 'index.tsx')
+    if (!fs.existsSync(file)) continue
     const src = stripComments(fs.readFileSync(file, 'utf8'))
-    const strings = classStrings(src)
-    // 导出的页面组件：`export function XxxPage(` 函数体顶层 `return (` 之后的第一个 className
-    const roots = new Set()
-    for (const fm of src.matchAll(/export\s+function\s+\w*Page\s*\(/g)) {
-      // 只认函数体顶层（缩进两格）的那个 return —— 列定义 / 渲染函数里嵌套的 return 也长这样
-      const after = src.slice(fm.index).search(/\n {2}return \(/)
-      if (after < 0) continue
-      const ret = fm.index + after
-      const first = strings.find((x) => x.at > ret)
-      if (first) roots.add(first.at)
-    }
-    for (const { cls, at } of strings) {
-      const isRoot = (roots.has(at) && !CENTERED.test(cls)) || ROOT_MARK.test(cls)
-      if (LEGACY.test(cls) || (isRoot && VERTICAL_PAD.test(cls))) {
-        add(
-          'error',
-          rel(file),
-          'page-vertical-padding',
-          `页面根上写了竖直 padding（${cls.trim()}）—— 上下 16px 由 TabFrame 统一给，见 #209 / pages 分册「页面四边的留白」`,
-        )
+    const pages = [...src.matchAll(/^export (?:default )?(?:function|const) (\w+Page)\b/gm)].map((m) => m[1])
+
+    for (const page of pages) {
+      let found = 0
+      const check = (at, depth) => {
+        const [tag, after] = openTag(src, at)
+        const name = tag.match(/^<([\w.]*)/)?.[1] ?? ''
+        found += 1
+        const bad = badTokens(classesOf(tag))
+        if (bad.length) {
+          add(
+            'error',
+            `${rel(file)}:${src.slice(0, at).split('\n').length}`,
+            'page-root-padding',
+            `${page} 的根元素 <${name}> 带了 ${bad.join(' ')} —— 上下左右 16px 由外壳内容列统一给，页面不写（#209）`,
+          )
+        }
+        // 第二层也查：`py-4 md:py-6` 历史上就写在里层 div 上
+        if (name === 'div' && depth === 0) {
+          const next = src.slice(after).match(/^\s*<div\b/)
+          if (next) check(after + next[0].length - 4, 1)
+        }
+        // `return cond ? <Designer/> : <List/>` —— 同文件里的组件跟进去一层
+        if (/^[A-Z]/.test(name) && name !== 'PageShell' && depth === 0) {
+          const inner = fnBody(src, name)
+          if (inner) for (const r of rootsIn(src, inner)) check(r, 1)
+        }
+      }
+      const own = fnBody(src, page)
+      for (const r of own ? rootsIn(src, own) : []) check(r, 0)
+      roots += found
+      if (!found) {
+        add('error', rel(file), 'page-root-unscanned', `${page} 一个根元素都没认出来 —— 扫描器认不了这种写法，补一下 arch-check 的 rootsIn`)
       }
     }
+  }
+  // 🔴 先断言「有」：一个根元素都没扫到时「没有违规」天然成立
+  if (roots < 40) {
+    add('error', PAGES, 'page-root-scanner-broken', `只扫到 ${roots} 个页面根元素，扫描器可能坏了`)
   }
 }
 
@@ -699,7 +807,7 @@ for (const [where, ps] of byWhere) {
 }
 
 console.log(
-  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 功能引导两条 · 组件孤儿 · registry · 品牌版本 · E2E 断言 · 错误 ${errors.length} · 警告 ${warns.length}`,
+  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 页面外壳三条 · 功能引导两条 · 组件孤儿 · registry · 品牌版本 · E2E 断言 · 错误 ${errors.length} · 警告 ${warns.length}`,
 )
 if (!problems.length) console.log('[ok] 没有漂')
 process.exit(errors.length ? 1 : 0)

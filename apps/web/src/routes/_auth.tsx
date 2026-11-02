@@ -129,11 +129,10 @@ function AuthLayout() {
         <AiDrawer />
         {/* 这一层是 div 不是 main —— `SidebarInset` 自己渲染的就是 <main>，
             再嵌一个会出现两个 main 地标，读屏「跳到主内容」不知道该去哪个。
-            水平内边距在这里给；竖直的 16px 在里面那层 TabFrame（`shell/tab-outlet.tsx`）上给 ——
-            页面级块一律不加 px-* / py-* / pt-*（#209，`pnpm arch:check` 挡着）。
-            🔴 竖直的**不能**挪到这一层：这一层就是滚动容器，padding 加在它身上，
-            里面所有 sticky 元素的停靠线都会下移 16px（sticky 停在 padding 内侧），
-            于是每个 sticky 都得打 `-top-4` 补丁、漏一个就错位（#212 评审翻出 4 处）。 */}
+            四边内边距统一在这里给，上下左右同一个 16px（页面级块一律不加 px-* / py-*，
+            见 CLAUDE.md；页面最外层走 `pages/_shared/page-shell.tsx`）。
+            原来这里只给 px-4，上下由每页手抄 `py-4 md:py-6` —— 桌面上顶 24 / 左右 16，
+            抄漏的页贴着标签条、抄成 py-3 的是 12（#209）。 */}
         {/* data-slot 是给这一层的**地标**（和 sidebar-inset / table-container 同一套做法），
             排障时能一眼定位「外壳的内容列」。
             ⚠️ 曾经拿它挂过 `scrollbar-gutter: stable`，已经撤了 ——
@@ -141,7 +140,7 @@ function AuthLayout() {
             10px 并让表格右边缘比页头短一截。理由见 globals.css 里那段。 */}
         <div
           data-slot="content-scroll"
-          className="flex flex-1 flex-col px-4 content-scroll:min-h-0 content-scroll:overflow-y-auto content-scroll:overflow-x-hidden"
+          className="flex flex-1 flex-col p-4 content-scroll:min-h-0 content-scroll:overflow-y-auto content-scroll:overflow-x-hidden"
         >
           <TabOutlet registry={pageRegistry} />
         </div>

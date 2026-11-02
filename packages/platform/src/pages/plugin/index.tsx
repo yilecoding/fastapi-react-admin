@@ -24,6 +24,7 @@ import {
   type PluginInfo,
 } from './api'
 import { InstallSheet } from './install-sheet'
+import { PageShell } from '../_shared/page-shell'
 
 /**
  * 插件管理。
@@ -91,117 +92,113 @@ export function PluginPage({
   const clearFilters = () => patch({ q: undefined, enabled: undefined, tag: undefined })
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-1 flex-col gap-4 md:gap-6">
-          <PageHeader title={t("插件管理")} description={t("查看已装插件、启停与打包下载。")} />
+    <PageShell className="flex-1">
+      <PageHeader title={t("插件管理")} description={t("查看已装插件、启停与打包下载。")} />
 
-          {/* 改动要重启才生效 —— 这件事必须说出来，否则用户以为点完开关就生效了 */}
-          {changed && (
-            <Alert tone="warning" data-testid="plugin-changed-banner">
-              <Trans
-                t={t}
-                i18nKey="有插件发生变更，<b>需要重启后端服务才会生效</b>。启停/安装/卸载都只改了 Redis 里的记录，运行中的路由不会热更新。"
-                components={{ b: <strong /> }}
-              />
-            </Alert>
-          )}
+      {/* 改动要重启才生效 —— 这件事必须说出来，否则用户以为点完开关就生效了 */}
+      {changed && (
+        <Alert tone="warning" data-testid="plugin-changed-banner">
+          <Trans
+            t={t}
+            i18nKey="有插件发生变更，<b>需要重启后端服务才会生效</b>。启停/安装/卸载都只改了 Redis 里的记录，运行中的路由不会热更新。"
+            components={{ b: <strong /> }}
+          />
+        </Alert>
+      )}
 
-          {actionError && (
-            <Alert tone="danger" data-testid="plugin-action-error">
-              {actionError}
-            </Alert>
-          )}
+      {actionError && (
+        <Alert tone="danger" data-testid="plugin-action-error">
+          {actionError}
+        </Alert>
+      )}
 
-          {/* 工具栏 */}
-          <div className="flex flex-wrap items-center gap-2">
-            <TextFilter
-              value={search.q ?? ''}
-              placeholder={t("搜索插件名 / 描述…")}
-              testId="filter-plugin"
-              width="w-56"
-              onCommit={(v) => patch({ q: v || undefined })}
-            />
-            <SelectFilter
-              value={search.enabled}
-              items={ENABLED_ITEMS}
-              testId="filter-enabled"
-              onChange={(v) => patch({ enabled: v })}
-            />
-            <SelectFilter
-              value={search.tag}
-              items={tagItems}
-              testId="filter-tag"
-              onChange={(v) => patch({ tag: v })}
-            />
-            {hasFilter && <ResetButton onClick={clearFilters} />}
-            <span className="text-sm text-muted-foreground" data-testid="plugin-count">
-              {t('共 {{n}} / {{total}} 个', { n: filtered.length, total: plugins.length })}
-            </span>
-            <div className="ms-auto flex items-center gap-2">
-              <Button
-                variant="outline" size="sm" data-testid="plugin-refresh"
-                disabled={isFetching} onClick={() => void refetch()}
-              >
-                {isFetching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRefresh className="size-4" />}
-                {t('刷新')}
-              </Button>
-              <Button size="sm" data-testid="install-plugin" onClick={() => setInstallOpen(true)}>
-                <IconPlus className="size-4" />
-                {t('安装插件')}
-              </Button>
-            </div>
-          </div>
-
-          {isPending ? (
-            <div className="grid gap-4 @3xl/main:grid-cols-2">
-              {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-52 w-full rounded-lg" />)}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div
-              className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-16 text-center"
-              data-testid="plugin-empty"
-            >
-              <p className="text-sm text-muted-foreground">
-                {plugins.length === 0 ? t('没有已安装的插件') : t('没有匹配的插件')}
-              </p>
-              {hasFilter && (
-                <ResetButton variant="outline" testId="empty-clear-filter" label={t("清除筛选")} onClick={clearFilters} />
-              )}
-            </div>
-          ) : (
-            <div className="grid gap-4 @3xl/main:grid-cols-2" data-testid="plugin-grid">
-              {filtered.map((p) => (
-                <PluginCard
-                  key={p.plugin.name}
-                  info={p}
-                  toggling={toggle.isPending && toggle.variables === p.plugin.name}
-                  onToggle={async () => {
-                    setActionError(null)
-                    try {
-                      await toggle.mutateAsync(p.plugin.name)
-                    } catch (e) {
-                      setActionError(e instanceof ApiError ? e.message : t('状态切换失败'))
-                    }
-                  }}
-                  onDownload={async () => {
-                    setActionError(null)
-                    try {
-                      await downloadPlugin(p.plugin.name)
-                    } catch (e) {
-                      setActionError(e instanceof ApiError ? e.message : t('下载失败'))
-                    }
-                  }}
-                  onUninstall={() => {
-                    setActionError(null)
-                    setPendingUninstall(p)
-                  }}
-                />
-              ))}
-            </div>
-          )}
+      {/* 工具栏 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <TextFilter
+          value={search.q ?? ''}
+          placeholder={t("搜索插件名 / 描述…")}
+          testId="filter-plugin"
+          width="w-56"
+          onCommit={(v) => patch({ q: v || undefined })}
+        />
+        <SelectFilter
+          value={search.enabled}
+          items={ENABLED_ITEMS}
+          testId="filter-enabled"
+          onChange={(v) => patch({ enabled: v })}
+        />
+        <SelectFilter
+          value={search.tag}
+          items={tagItems}
+          testId="filter-tag"
+          onChange={(v) => patch({ tag: v })}
+        />
+        {hasFilter && <ResetButton onClick={clearFilters} />}
+        <span className="text-sm text-muted-foreground" data-testid="plugin-count">
+          {t('共 {{n}} / {{total}} 个', { n: filtered.length, total: plugins.length })}
+        </span>
+        <div className="ms-auto flex items-center gap-2">
+          <Button
+            variant="outline" size="sm" data-testid="plugin-refresh"
+            disabled={isFetching} onClick={() => void refetch()}
+          >
+            {isFetching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRefresh className="size-4" />}
+            {t('刷新')}
+          </Button>
+          <Button size="sm" data-testid="install-plugin" onClick={() => setInstallOpen(true)}>
+            <IconPlus className="size-4" />
+            {t('安装插件')}
+          </Button>
         </div>
       </div>
+
+      {isPending ? (
+        <div className="grid gap-4 @3xl/main:grid-cols-2">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-52 w-full rounded-lg" />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div
+          className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-16 text-center"
+          data-testid="plugin-empty"
+        >
+          <p className="text-sm text-muted-foreground">
+            {plugins.length === 0 ? t('没有已安装的插件') : t('没有匹配的插件')}
+          </p>
+          {hasFilter && (
+            <ResetButton variant="outline" testId="empty-clear-filter" label={t("清除筛选")} onClick={clearFilters} />
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-4 @3xl/main:grid-cols-2" data-testid="plugin-grid">
+          {filtered.map((p) => (
+            <PluginCard
+              key={p.plugin.name}
+              info={p}
+              toggling={toggle.isPending && toggle.variables === p.plugin.name}
+              onToggle={async () => {
+                setActionError(null)
+                try {
+                  await toggle.mutateAsync(p.plugin.name)
+                } catch (e) {
+                  setActionError(e instanceof ApiError ? e.message : t('状态切换失败'))
+                }
+              }}
+              onDownload={async () => {
+                setActionError(null)
+                try {
+                  await downloadPlugin(p.plugin.name)
+                } catch (e) {
+                  setActionError(e instanceof ApiError ? e.message : t('下载失败'))
+                }
+              }}
+              onUninstall={() => {
+                setActionError(null)
+                setPendingUninstall(p)
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       <InstallSheet open={installOpen} onOpenChange={setInstallOpen} />
 
@@ -231,7 +228,7 @@ export function PluginPage({
           }
         }}
       />
-    </div>
+    </PageShell>
   )
 }
 

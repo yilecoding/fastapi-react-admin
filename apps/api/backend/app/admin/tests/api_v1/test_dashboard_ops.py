@@ -13,18 +13,21 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from sqlalchemy import delete, insert
+from sqlalchemy import delete, insert, update
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.testclient import TestClient
 
 from backend.app.admin.model import LoginLog
 from backend.app.admin.service.dashboard_service import LOGIN_FAIL_MIN, LOGIN_FAIL_RATIO
 from backend.app.task.model import TaskExtended
+from backend.core.conf import settings
 from backend.utils.timezone import timezone
 
 MARK = 'pytest_dash_ops'
 IP = '203.0.113.77'
 TASK = 'pytest.dashboard.failing_task'
 WEBHOOK_ID = 990000000000000077
+APP_ID = 990000000000000001
 
 
 def _run(*stmts) -> None:
@@ -44,12 +47,55 @@ def _run(*stmts) -> None:
 
 
 def _purge() -> None:
-    from backend.plugin.open.model import OpenWebhook
+    from backend.plugin.open.model import OpenApp, OpenWebhook
 
     _run(
         delete(LoginLog).where(LoginLog.username == MARK),
-        delete(TaskExtended).where(TaskExtended.name == TASK),
+        delete(TaskExtended).where(TaskExtended.name.like(f'{TASK}%')),
         delete(OpenWebhook).where(OpenWebhook.id == WEBHOOK_ID),
+        delete(OpenApp).where(OpenApp.id == APP_ID),
+    )
+
+
+def _open_app() -> None:
+    """Webhook 端点挂的应用（「需要你留意」只认没删的应用下的端点）"""
+    from backend.plugin.open.model import OpenApp
+
+    _run(
+        insert(OpenApp.__table__).values({
+            'id': APP_ID,
+            'name': 'pytest-ERP',
+            'code': 'PYTEST_DASH_ERP',
+            'access_key': 'ak_pytest_dash_erp',
+            'secret_cipher': 'x',
+            'secret_hint': 'x',
+            'scopes': '["user:read"]',
+            'status': 1,
+            'created_time': timezone.now(),
+            'deleted': 0,
+        })
+    )
+
+
+def _webhook(reason: str, name: str) -> None:
+    from backend.plugin.open.model import OpenWebhook
+
+    now = timezone.now()
+    _run(
+        insert(OpenWebhook.__table__).values({
+            'id': WEBHOOK_ID,
+            'app_id': APP_ID,
+            'name': name,
+            'url': 'https://example.com/hook',
+            'secret_cipher': 'x',
+            'secret_hint': 'x',
+            'events': '[]',
+            'status': 0,
+            'disabled_reason': reason,
+            'disabled_time': now,
+            'consecutive_failures': 10 if reason == 'auto' else 0,
+            'created_time': now,
+        })
     )
 
 
@@ -139,8 +185,8 @@ def test_visits_rejects_bad_input_and_needs_login_log_permission(
 # ── 需要你留意 ───────────────────────────────────────────────────────────────
 
 
-def _attention(client: TestClient, headers: dict[str, str]) -> list[dict]:
-    res = client.get('/sys/dashboard/attention', headers=headers)
+def _attention(client: TestClient, headers: dict[str, str], **params: object) -> list[dict]:
+    res = client.get('/sys/dashboard/attention', headers=headers, params=params)
     assert res.status_code == 200, res.text
     return res.json()['data']
 
@@ -148,7 +194,6 @@ def _attention(client: TestClient, headers: dict[str, str]) -> list[dict]:
 def test_attention_lists_what_needs_a_human(
     client: TestClient, token_headers: dict[str, str], staff_headers: dict[str, str]
 ) -> None:
-    from backend.plugin.open.model import OpenWebhook
 
     now = timezone.now()
     # 定时任务最近失败了两次（最后一行报错是要显示的那句）
@@ -164,23 +209,9 @@ def test_attention_lists_what_needs_a_human(
             for i in range(2)
         ])
     )
-    # 一个被自动停用的 Webhook 端点 + 一个手动停用的（手动停的不提醒）
-    _run(
-        insert(OpenWebhook.__table__).values({
-            'id': WEBHOOK_ID,
-            'app_id': 990000000000000001,
-            'name': 'pytest-ERP 同步',
-            'url': 'https://example.com/hook',
-            'secret_cipher': 'x',
-            'secret_hint': 'x',
-            'events': '[]',
-            'status': 0,
-            'disabled_reason': 'auto',
-            'disabled_time': now,
-            'consecutive_failures': 10,
-            'created_time': now,
-        })
-    )
+    # 一个被自动停用的 Webhook 端点（手动停用的不提醒，见下一条）
+    _open_app()
+    _webhook('auto', 'pytest-ERP 同步')
     # 今天的登录失败要明显高于近 7 天日均：按库里现有的数现算要垫多少（表里有别的用例留下的失败）
     week = _visits(client, token_headers, days=8)
     days = list(week.values())
@@ -194,7 +225,7 @@ def test_attention_lists_what_needs_a_human(
     task = next(i for i in items if i['kind'] == 'task_failed' and i['task'] == TASK)
     assert task['count'] == 2 and task['error'] == 'TimeoutError: 存储连接超时'
     hook = next(i for i in items if i['kind'] == 'webhook_disabled' and i['name'] == 'pytest-ERP 同步')
-    assert hook['level'] == 'critical' and hook['app_id'] == '990000000000000001'
+    assert hook['level'] == 'critical' and hook['app_id'] == str(APP_ID)
     spike = next(i for i in items if i['kind'] == 'login_fail_spike')
     assert spike['count'] >= LOGIN_FAIL_MIN
     assert spike['top_ip'] == IP
@@ -204,26 +235,100 @@ def test_attention_lists_what_needs_a_human(
 
 
 def test_manually_disabled_webhook_is_not_flagged(client: TestClient, token_headers: dict[str, str]) -> None:
-    from backend.plugin.open.model import OpenWebhook
-
-    now = timezone.now()
-    _run(
-        insert(OpenWebhook.__table__).values({
-            'id': WEBHOOK_ID,
-            'app_id': 990000000000000001,
-            'name': 'pytest-手动停用',
-            'url': 'https://example.com/hook',
-            'secret_cipher': 'x',
-            'secret_hint': 'x',
-            'events': '[]',
-            'status': 0,
-            'disabled_reason': 'manual',
-            'disabled_time': now,
-            'consecutive_failures': 0,
-            'created_time': now,
-        })
-    )
+    _open_app()
+    _webhook('manual', 'pytest-手动停用')
     assert not any(i.get('name') == 'pytest-手动停用' for i in _attention(client, token_headers))
+
+
+def test_webhook_of_a_deleted_app_is_not_flagged(client: TestClient, token_headers: dict[str, str]) -> None:
+    """🔴 应用删了（逻辑删除），它下面自动停用的端点还在表里：再提醒就是一条永远清不掉、点进去 404 的「严重」"""
+    from backend.plugin.open.model import OpenApp
+
+    _open_app()
+    _webhook('auto', 'pytest-删了应用')
+    assert any(i.get('name') == 'pytest-删了应用' for i in _attention(client, token_headers))  # 前提：没删时是提醒的
+    _run(update(OpenApp).where(OpenApp.id == APP_ID).values(deleted=APP_ID))
+    assert not any(i.get('name') == 'pytest-删了应用' for i in _attention(client, token_headers))
+
+
+def test_failed_tasks_take_the_newest_traceback_in_one_query(
+    client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """每个任务最近一次失败的报错，一条查询拿全（原来逐个任务查一次，N+1）"""
+    now = timezone.now()
+    rows = []
+    for t in range(3):
+        for i, (hours, line) in enumerate(((1, 'NewestError: 最新'), (5, 'OldError: 旧的'))):
+            rows.append({
+                'task_id': f'{MARK}-{t}-{i}',
+                'name': f'{TASK}.{t}',
+                'status': 'FAILURE',
+                'date_done': now - timedelta(hours=hours),
+                'traceback': f'Traceback (most recent call last):\n{line}',
+            })
+    # 最新的那条先插（id 更小）：按 id 取「最后一条」的写法会拿到旧的
+    _run(insert(TaskExtended.__table__).values(rows))
+
+    seen: list[str] = []
+    real_execute, real_scalar = AsyncSession.execute, AsyncSession.scalar
+
+    async def execute(self, statement, *args, **kwargs):
+        seen.append(str(statement))
+        return await real_execute(self, statement, *args, **kwargs)
+
+    async def scalar(self, statement, *args, **kwargs):
+        seen.append(str(statement))
+        return await real_scalar(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, 'execute', execute)
+    monkeypatch.setattr(AsyncSession, 'scalar', scalar)
+    items = [i for i in _attention(client, token_headers) if i['kind'] == 'task_failed' and i['task'].startswith(TASK)]
+    monkeypatch.undo()
+
+    assert {i['task'] for i in items} == {f'{TASK}.{t}' for t in range(3)}
+    assert all(i['count'] == 2 and i['error'] == 'NewestError: 最新' for i in items)
+    # 碰任务结果表的查询：一条按任务合并 + 一条取每个任务最近一次的报错，和任务个数无关
+    assert sum('task_result' in q for q in seen) == 2, seen
+
+
+def test_login_fail_spike_counts_today_in_the_viewers_time_zone(
+    client: TestClient, token_headers: dict[str, str]
+) -> None:
+    """🔴 「今天」按查看人的时区切（同柱状图）：按服务端时区算的话，同一屏上的柱子和这一条说的不是同一天"""
+    server_day = datetime.now(timezone.tz_info).date()
+    # 东十四区和西十二区差 26 小时，总有一个和服务端不是同一天
+    tz = next(z for z in ('Etc/GMT-14', 'Etc/GMT+12') if datetime.now(ZoneInfo(z)).date() != server_day)
+    now = datetime.now(ZoneInfo(tz))
+    week = _visits(client, token_headers, days=8, tz=tz)
+    days = list(week.values())
+    today_fails, week_fails = days[-1]['fails'], sum(d['fails'] for d in days[:-1])
+    need = max(LOGIN_FAIL_MIN, int(LOGIN_FAIL_RATIO * week_fails / 7) + 1) - today_fails
+    _login_rows(now, fails=max(need, 1) + 1)
+
+    spike = next(i for i in _attention(client, token_headers, tz=tz) if i['kind'] == 'login_fail_spike')
+    day = now.date().isoformat()
+    assert spike['day'] == day
+    assert spike['count'] == _visits(client, token_headers, tz=tz)[day]['fails']
+    assert client.get('/sys/dashboard/attention', headers=token_headers, params={'tz': 'Mars/Base'}).status_code == 422
+
+
+def test_attention_permissions_go_through_user_has_perm(
+    client: TestClient,
+    token_headers: dict[str, str],
+    staff_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """权限判据和接口守卫同一份（`rbac.user_has_perm`）：权限码白名单里的码对所有有菜单的人放行 ——
+    自己收集权限码的写法看不到它（casbin 模式下也对不上）"""
+    week = _visits(client, token_headers, days=8)
+    days = list(week.values())
+    today_fails, week_fails = days[-1]['fails'], sum(d['fails'] for d in days[:-1])
+    need = max(LOGIN_FAIL_MIN, int(LOGIN_FAIL_RATIO * week_fails / 7) + 1) - today_fails
+    _login_rows(timezone.now(), fails=max(need, 1) + 1)
+    assert not any(i['kind'] == 'login_fail_spike' for i in _attention(client, staff_headers))  # 前提：员工本来看不到
+
+    monkeypatch.setattr(settings, 'RBAC_ROLE_MENU_EXCLUDE', [*settings.RBAC_ROLE_MENU_EXCLUDE, 'log:login:list'])
+    assert any(i['kind'] == 'login_fail_spike' for i in _attention(client, staff_headers))
 
 
 # ── 服务状态 ─────────────────────────────────────────────────────────────────

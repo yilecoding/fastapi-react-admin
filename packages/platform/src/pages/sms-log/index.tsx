@@ -19,6 +19,7 @@ import { useQuerySearch } from '../_shared/use-query-search'
 import { ERROR_KIND_LABELS, smsConfigsQuery, smsTemplatesQuery } from '../sms-config/api'
 import { LOG_STATUS, smsLogKeys, smsLogsQuery, type SmsLog } from './api'
 import { SmsLogDetailSheet, StatusBadgeFor } from './detail-sheet'
+import { PageShell } from '../_shared/page-shell'
 
 const COLUMN_LABELS = {
   seq: '序号',
@@ -225,59 +226,57 @@ export function SmsLogPage({ search = {}, onSearchChange }: { search?: SmsLogSea
   const hasFilter = countActive(q.applied, fields) > 0
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-4 content-scroll:min-h-0">
-        <PageHeader title={t('发送日志')} description={t('每一次短信发送都会留痕，失败也记。点一行看完整手机号和厂商原文。')} />
+    <PageShell fill="always">
+      <PageHeader title={t('发送日志')} description={t('每一次短信发送都会留痕，失败也记。点一行看完整手机号和厂商原文。')} />
 
-        <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-          <QueryBar
-            fields={fields}
-            value={q.value}
-            onChange={q.setValue}
-            onSearch={q.submit}
-            onReset={q.reset}
-            applied={q.applied}
-            loading={isFetching}
-            actions={
-              <>
-                <ClearLogsButton kind="sms" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
-                <RefreshButton busy={isFetching} onClick={list.onRetry} />
-                <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-              </>
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        <QueryBar
+          fields={fields}
+          value={q.value}
+          onChange={q.setValue}
+          onSearch={q.submit}
+          onReset={q.reset}
+          applied={q.applied}
+          loading={isFetching}
+          actions={
+            <>
+              <ClearLogsButton kind="sms" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
+              <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+            </>
+          }
+          viewsStorageKey="qb:sms-log"
+        />
+
+        <div
+          data-testid="sms-log-table"
+          data-fetching={isFetching}
+          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+        >
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            emptyMessage={t('没有匹配的发送记录')}
+            emptyAction={
+              hasFilter ? <ResetButton variant="outline" testId="empty-clear-filter" label={t('清除筛选')} onClick={q.reset} /> : undefined
             }
-            viewsStorageKey="qb:sms-log"
+            {...list}
+            skeletonRows={8}
+            pagination={{
+              pageIndex: page - 1,
+              pageCount: data?.total_pages ?? 1,
+              pageSize: size,
+              totalCount: data?.total ?? 0,
+              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+            }}
           />
-
-          <div
-            data-testid="sms-log-table"
-            data-fetching={isFetching}
-            className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-          >
-            <DataTable
-              table={table}
-              showColumnVisibility={false}
-              rows={table.getRowModel().rows}
-              columnCount={columns.length}
-              emptyMessage={t('没有匹配的发送记录')}
-              emptyAction={
-                hasFilter ? <ResetButton variant="outline" testId="empty-clear-filter" label={t('清除筛选')} onClick={q.reset} /> : undefined
-              }
-              {...list}
-              skeletonRows={8}
-              pagination={{
-                pageIndex: page - 1,
-                pageCount: data?.total_pages ?? 1,
-                pageSize: size,
-                totalCount: data?.total ?? 0,
-                onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-              }}
-            />
-          </div>
         </div>
       </div>
 
       <SmsLogDetailSheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)} id={detail} />
-    </div>
+    </PageShell>
   )
 }

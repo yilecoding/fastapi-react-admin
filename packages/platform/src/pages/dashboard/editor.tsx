@@ -30,8 +30,7 @@ import { cn } from '@admin/ui/lib/utils'
 import { MenuIcon } from '../../shell/icon-registry'
 import type { NavNode } from '../../shell/use-sidebar'
 import { SegmentedControl } from '../_shared/settings-rows'
-import { resolveQuickLinks } from './cards/quick-links'
-import { QUICK_LINKS_MAX, moveItem, patchItem, type CardWidth, type DashboardLayout, type LayoutItem } from './layout'
+import { QUICK_LINKS_MAX, chosenQuickLinks, moveItem, patchItem, type CardWidth, type DashboardLayout, type LayoutItem } from './layout'
 
 /**
  * 编辑工作台：显示 / 隐藏 · 拖拽排序（键盘也能拖：Tab 到手柄 → 空格拿起 → 方向键 → 空格放下）·
@@ -293,8 +292,10 @@ function QuickLinksPicker({
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
-  const chosen = React.useMemo(() => new Set(resolveQuickLinks(value, pages).map((p) => p.path)), [value, pages])
+  // 勾着的 = 存的清单里现在看得见的**全部**（不按 12 截），超了照实画、让人取消（见 `chosenQuickLinks`）
+  const chosen = React.useMemo(() => new Set(chosenQuickLinks(value, pages.map((p) => p.path))), [value, pages])
   const full = chosen.size >= QUICK_LINKS_MAX
+  const over = chosen.size - QUICK_LINKS_MAX
 
   // 在**存的整份清单**上增删，不从「看得见的」重建：暂时没权限的 path 要原样留着（顺序也不动）。
   // 新勾的排在最后 —— 快捷入口按勾选的先后显示
@@ -322,6 +323,11 @@ function QuickLinksPicker({
           </Button>
         )}
       </div>
+      {open && over > 0 && (
+        <p className="text-xs text-amber-700 dark:text-amber-400" data-testid="dash-editor-links-over">
+          {t('勾了 {{n}} 个，超过上限 {{max}} 个：卡片上只显示前 {{max}} 个，请取消几个。', { n: chosen.size, max: QUICK_LINKS_MAX })}
+        </p>
+      )}
       {open && (
         <ul className="grid gap-1 @xl/main:grid-cols-2 @4xl/main:grid-cols-3" data-testid="dash-editor-links">
           {pages.map((p) => {

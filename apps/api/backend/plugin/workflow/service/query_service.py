@@ -17,7 +17,7 @@ from itertools import starmap
 from math import ceil
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Select, delete, func, or_, select
+from sqlalchemy import Select, delete, func, or_, select, true
 
 from backend.app.admin.model import Dept, File, Role, User
 from backend.app.admin.service.file_service import register_file_access
@@ -132,7 +132,8 @@ async def _finish_rows(db: AsyncSession, rows: list[dict[str, Any]]) -> list[dic
     return rows
 
 
-#: 「按要紧程度排」时一次最多取多少条待办在内存里排。一个人手上的待办通常几条到几十条，这只是防一个异常账号拖垮接口
+#: 「按要紧程度排」时一次最多取多少条待办在内存里排。一个人手上的待办通常几条到几十条，这只是防一个异常账号拖垮接口。
+#: 超过时**截掉的是最新到手、又没加急的那批**（见 `todo`），`total` / `urgent_total` / `returned_total` 照样是全量数
 _ATTENTION_SORT_CAP = 500
 #: 排序时「没配超时」的占位（只用来让这些行的第二个键彼此相等）
 _NO_DUE = _dt.datetime.min.replace(tzinfo=_dt.UTC)
@@ -145,7 +146,10 @@ async def todo(
 
     `sort=attention`（工作台用）：加急 → 快到期（超时时间早的在前，没配超时的在后）→ 到手时间新的在前。
     超时时间不是列（按节点配置现算，见 `runtime_service.due_time`），排不进 SQL —— 取出这个人全部的待办在内存里排，
-    再切页。默认排序（审批中心）不变：加急在前，其余按到手时间倒序
+    再切页。默认排序（审批中心）不变：加急在前，其余按到手时间倒序。
+
+    工作台那一份另给两个全量数（大标题和分段要用，不能从取回来的那一页数）：`urgent_total` 加急的几件 ·
+    `returned_total` 退回给我、等我改完重新提交的几件
     """
     stmt = (
         select(WfTask, WfInstance, WfDefinition.name)
@@ -154,9 +158,14 @@ async def todo(
         .where(WfTask.assignee_id == user_id, WfTask.status == TaskStatus.pending)
     )
     stmt = _search(stmt, keyword)
-    models: dict[str, dict[str, Any]] = {}
+    models: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+    extra: dict[str, int] = {}
     if sort == 'attention':
-        all_rows = (await db.execute(stmt.order_by(WfTask.id.desc()).limit(_ATTENTION_SORT_CAP))).all()
+        # 🔴 超过上限时留**加急的 + 最老的**：截掉的应该是最不急的那批（最新到手、没加急）。
+        # 按「最新的 500 条」截（原来的写法），丢的恰恰是最老、最可能已经超时的待办
+        all_rows = (
+            await db.execute(stmt.order_by(WfInstance.urgent.desc(), WfTask.id).limit(_ATTENTION_SORT_CAP))
+        ).all()
         items = [_todo_row(tk, i, n, models) for tk, i, n in all_rows]
         # 稳定排序分三趟：先按最后一个键排，再按前面的键
         items.sort(key=operator.itemgetter('arrived_time'), reverse=True)
@@ -164,48 +173,104 @@ async def todo(
         # 拿到手时间顶替的话，它们会按到手时间**正序**重排（测试里抓到过）
         items.sort(key=lambda r: (r['due_time'] is None, r['due_time'] or _NO_DUE))
         items.sort(key=lambda r: not r['urgent'])
-        total = len(items)
+        # 全量数单独 count：取回来的最多 `_ATTENTION_SORT_CAP` 条，拿它的长度当 total 会被封顶
+        total = await count_rows(db, stmt)
+        extra['urgent_total'] = await count_rows(db, stmt.where(WfInstance.urgent == true()))
+        # 「退回给我」= 开始节点上的待办。开始节点的 id 在快照 JSON 里、不是列，SQL 里按「办理人就是发起人」认：
+        # 审批人解析永远去掉发起人（`engine/assignee.py`），转交 / 改派 / 加签给发起人都会被拒，
+        # 所以发起人手上的在办待办只可能是被退回的那一条
+        # （`test_urgent_and_returned_totals_count_beyond_the_page` 守着两边一致）
+        extra['returned_total'] = await count_rows(db, stmt.where(WfInstance.initiator_id == WfTask.assignee_id))
         items = items[(page - 1) * size : page * size]
     else:
         # 加急的排前面（发起人标的），其余按到手时间倒序
         rows, total = await _paged(db, stmt, page, size, (WfInstance.urgent.desc(), WfTask.id.desc()))
         items = [_todo_row(tk, i, n, models) for tk, i, n in rows]
     await _todo_extras(db, items)
-    return _page(await _finish_rows(db, items), total, page, size)
+    return {**_page(await _finish_rows(db, items), total, page, size), **extra}
 
 
-def _todo_row(tk: WfTask, inst: WfInstance, definition_name: str | None, models: dict[str, Any]) -> dict[str, Any]:
-    model = models.get(inst.model_snapshot)
-    if model is None:
-        model = models.setdefault(inst.model_snapshot, json.loads(inst.model_snapshot))
-    cfg = timeout_of(model, tk.node_id)
+def _todo_row(
+    tk: WfTask,
+    inst: WfInstance,
+    definition_name: str | None,
+    models: dict[str, tuple[dict[str, Any], dict[str, Any]]],
+) -> dict[str, Any]:
+    # 同一份快照只解析、只建一次节点索引：一页里多数行来自同一个流程版本，逐行 `index_nodes` 是 O(行数 × 节点数)
+    cached = models.get(inst.model_snapshot)
+    if cached is None:
+        model = json.loads(inst.model_snapshot)
+        cached = models.setdefault(inst.model_snapshot, (model, index_nodes(model)))
+    model, nodes = cached
+    cfg = timeout_of(model, tk.node_id, nodes=nodes)
     return {
         **_instance_row(inst, definition_name),
         'task_id': tk.id,
         'node_name': tk.node_name,
         'arrived_time': tk.created_time,
         # 节点配了超时：什么时候到点、到点做什么（remind 提醒 / approve 自动同意 / reject 自动驳回）
-        'due_time': due_time(tk, model),
+        'due_time': due_time(tk, model, nodes=nodes),
         'timeout_action': cfg['action'] if cfg else None,
         # 被退回到发起人（开始节点上的待办）：「改完重新提交」，不是一张要审批的单
         'back': tk.node_id == model['root']['id'],
         '_origin_id': tk.origin_assignee_id,
+        '_node_id': tk.node_id,
+        '_assignee_id': tk.assignee_id,
         '_dept_id': inst.initiator_dept_id,
     }
 
 
 async def _todo_extras(db: AsyncSession, items: list[dict[str, Any]]) -> None:
-    """一页里所有行一次查完（不是 N+1）：转交来源的名字 · 发起人部门 · 退回的人和原因"""
-    origins = await _initiator_names(db, {r['_origin_id'] for r in items if r['_origin_id']})
+    """一页里所有行一次查完（不是 N+1）：谁转交 / 改派过来的 · 发起人部门 · 退回的人和原因"""
+    handed = await _latest_handover(db, [r['id'] for r in items if r['_origin_id']])
     dept_ids = {r['_dept_id'] for r in items if r['_dept_id']}
     depts = dict((await db.execute(select(Dept.id, Dept.name).where(Dept.id.in_(dept_ids)))).all()) if dept_ids else {}
     backs = await _latest_send_back(db, [r['id'] for r in items if r['back']])
     for r in items:
-        r['transferred_from'] = origins.get(r.pop('_origin_id') or 0)
+        key = (r['id'], r.pop('_node_id'), r.pop('_assignee_id'))
+        by, how = handed.get(key, (None, None)) if r.pop('_origin_id') else (None, None)
+        r['transferred_from'] = by
+        #: `transfer` = 上一个办理人转交给我 · `reassign` = 管理员改派给我（含离职交接）
+        r['transfer_kind'] = how
         r['initiator_dept'] = depts.get(r.pop('_dept_id') or 0)
         by, reason = backs.get(r['id'], (None, None))
         r['back_by'] = by if r['back'] else None
         r['back_reason'] = reason if r['back'] else None
+
+
+async def _latest_handover(
+    db: AsyncSession, instance_ids: list[int]
+) -> dict[tuple[int, str, int], tuple[str | None, str]]:
+    """每条转交 / 改派过来的待办：**最近一次**是谁、用哪种方式交到这个人手上的（按 单 × 节点 × 接手的人 认）。
+
+    🔴 不能用 `wf_task.origin_assignee_id`：那是转交链上**最初**那个人（依次审批按它接着排队），A → B → C 时
+    C 看到的会是「A 转交给你」；管理员改派也写它，说成「转交」也不对
+    """
+    if not instance_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(
+                WfActionRecord.instance_id,
+                WfActionRecord.node_id,
+                WfActionRecord.target_user_id,
+                WfActionRecord.actor_name,
+                WfActionRecord.action,
+            )
+            .where(
+                WfActionRecord.instance_id.in_(instance_ids),
+                WfActionRecord.action.in_([Action.transfer, Action.reassign]),
+                WfActionRecord.result == 'ok',
+            )
+            .order_by(WfActionRecord.created_time, WfActionRecord.id)
+        )
+    ).all()
+    # 按时间正序扫，后面的覆盖前面的 = 最近一次
+    return {
+        (iid, node, target): (actor, getattr(action, 'value', action))
+        for iid, node, target, actor, action in rows
+        if target
+    }
 
 
 async def _latest_send_back(db: AsyncSession, instance_ids: list[int]) -> dict[int, tuple[str | None, str | None]]:
@@ -263,7 +328,10 @@ _DECISIVE = frozenset({
     'resubmit',
     'withdraw',
     'terminate',
-    'auto_approve',
+    # 超时自动处理（`runtime_service.apply_timeout` 记的就是这两个名字，`_PROGRESS` 里也是）
+    'timeout_approve',
+    'timeout_reject',
+    # 节点取不到审批人、按 onEmpty 自动驳回
     'auto_reject',
     'ai_approve',
     'transfer',
@@ -353,7 +421,8 @@ async def _with_progress(db: AsyncSession, insts: list[WfInstance], items: list[
 def _steps(tasks: list[WfTask], root: str) -> list[dict[str, Any]]:
     """这一轮走过的步骤（被退回、重新提交之后从提交那一刻重新算），同一节点同一轮次合成一步。
 
-    每步：`name`（一个人办的写人名，多人写节点名）· `state`（done / current / rejected）
+    每步：`name`（一个人办的写人名，多人写节点名）· `state`（done / current / rejected / sent_back）。
+    `sent_back` = 这一步把单退回去了（`decision == 'send_back'`）—— 不能画成同意的绿勾
     """
     start = 0
     for idx, tk in enumerate(tasks):
@@ -371,6 +440,8 @@ def _steps(tasks: list[WfTask], root: str) -> list[dict[str, Any]]:
             state = 'current'
         elif any(tk.decision == 'reject' for tk in group):
             state = 'rejected'
+        elif any(tk.decision == Action.send_back for tk in group):
+            state = 'sent_back'
         else:
             state = 'done'
         out.append({'name': next(iter(people)) if len(people) == 1 else group[0].node_name, 'state': state})
@@ -380,7 +451,11 @@ def _steps(tasks: list[WfTask], root: str) -> list[dict[str, Any]]:
 async def _next_steps(
     db: AsyncSession, inst: WfInstance, model: dict[str, Any], nodes: dict[str, Any], *, back: bool
 ) -> list[str] | None:
-    """还没走到的步骤名（推演不了 → None）。被退回时从开始节点往后推（和重新提交之后的实际走法一致）"""
+    """还没走到的步骤名（推演不了 → None）。被退回时从开始节点往后推（和重新提交之后的实际走法一致）。
+
+    🔴 **审批人来自发起人看不到的人员字段时只给节点名**（同详情页预告的 `_mask_forecast`）：
+    步骤条在工作台上原样显示，写出人名 = 把那个隐藏字段的值告诉了发起人
+    """
     form_schema = json.loads(inst.form_snapshot)
     approval_nodes = [r.node for r in nodes.values() if r.node['type'] == 'approval']
     hidden = hidden_fields_for(form_schema, approval_nodes, see_all=False, participant_nodes=[model['root']])
@@ -404,11 +479,11 @@ async def _next_steps(
         start_from=resume_jump(inst, nodes, current) or nodes[current].after,
     )
     out = []
-    for st in steps:
+    for st in _mask_forecast(steps, nodes, hidden):
         if st.get('outcome') == 'skip' or st.get('type') != 'approval':
             continue
         users = st.get('users') or []
-        out.append(users[0]['name'] if len(users) == 1 else st['name'])
+        out.append(users[0]['name'] if len(users) == 1 and not st.get('masked') else st['name'])
         if st.get('outcome') == 'reject':
             break
     return out

@@ -108,7 +108,7 @@ export function FormDesigner({
 
   return (
     <div className="grid min-h-[32rem] gap-4 lg:grid-cols-[11rem_minmax(0,1fr)_20rem]">
-      <aside className="flex flex-col gap-4 rounded-xl border bg-card p-3 lg:sticky lg:top-4 lg:self-start" data-testid="fd-palette">
+      <aside className="flex flex-col gap-4 rounded-xl border bg-card p-3 lg:sticky lg:top-4 content-scroll:lg:top-0 lg:self-start" data-testid="fd-palette">
         {PALETTE_GROUPS.map((g) => (
           <div key={g.label} className="flex flex-col gap-1.5">
             <p className="px-1 text-xs font-medium text-muted-foreground">{t(g.label)}</p>
@@ -220,7 +220,7 @@ export function FormDesigner({
           setConfirmRemove(null)
         }}
       />
-      <aside className="rounded-xl border bg-card p-4 lg:sticky lg:top-4 lg:self-start" data-testid="fd-props">
+      <aside className="rounded-xl border bg-card p-4 lg:sticky lg:top-4 content-scroll:lg:top-0 lg:self-start" data-testid="fd-props">
         {current ? (
           <FieldProps field={current} before={fields.slice(0, fields.indexOf(current))} onChange={patch} />
         ) : (

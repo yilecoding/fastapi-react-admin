@@ -22,6 +22,7 @@ import { RoleFormSheet } from './form'
 import { PermMatrix } from './perm-matrix'
 import { RoleScopes } from './role-scopes'
 import { RoleUsers } from './role-users'
+import { PageShell } from '../_shared/page-shell'
 
 /**
  * 角色管理 —— 左角色列表 / 右授权面板的主从结构。
@@ -141,126 +142,115 @@ export function RolePage({
   }
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        {/*
-          content-scroll:lg:* —— 内容区滚动模式 + 宽屏时，这一块撑满可用高度，
-          于是下面两栏各自成为定高视区：左栏只滚角色项、右栏只滚权限行，
-          角色详情头 / tab 行 / 工具条 / 表头全部钉住。
-          **只在 lg 以上**：窄屏两栏是上下堆叠的，钉成定高只会把两个列表都压扁，
-          那时照旧整块滚。整页滚动模式下这两条是空操作。
-        */}
-        <div className="flex flex-1 flex-col gap-4 md:gap-6 content-scroll:lg:min-h-0 content-scroll:lg:flex-1">
-          <PageHeader
-            title={t("角色管理")}
-            description={t("左边选角色，右边配权限。点菜单行右侧的「已授权 n/m」就地展开按钮权限，勾完直接保存。")}
-          />
+    <PageShell fill="lg">
+      <PageHeader
+        title={t("角色管理")}
+        description={t("左边选角色，右边配权限。点菜单行右侧的「已授权 n/m」就地展开按钮权限，勾完直接保存。")}
+      />
 
-          {/*
-            lg 以下改成上下堆叠 —— 左栏是 w-72 硬宽，横排时右栏会被压到几十像素
-            （实测 390px 视口下右栏只剩 46px，内容直接被裁掉）。
-            不再需要 items-start：左栏原来靠 `sticky top-4` 跟着滚，
-            现在它自己就是定高的一栏，钉不钉由骨架决定。
-          */}
-          <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6 content-scroll:lg:min-h-0">
-            {/* 左栏走 `_shared/master-list` —— 角色 / 数据范围 / 字典类型同一个件 */}
-            <MasterList
-              idPrefix="role"
-              title={t('角色列表')}
-              items={roleItems}
-              total={total}
-              selectedId={selected?.id ?? null}
-              onSelect={selectRole}
-              keyword={search.name ?? ''}
-              searchPlaceholder="搜索角色名称…"
-              onKeyword={(v) => patch({ name: v || undefined, role: undefined })}
-              status={search.status}
-              onStatus={(v) => patch({ status: v, role: undefined })}
-              onReset={() => patch({ name: undefined, status: undefined, role: undefined })}
-              hasMore={hasNextPage}
-              loadingMore={isFetchingNextPage}
-              {...list}
-              onLoadMore={() => void fetchNextPage()}
-              onAdd={() => { setEditing(null); setSheetOpen(true) }}
-              addLabel={t('新增角色')}
-              addPerm="sys:role:add"
-              onRefresh={() => void qc.invalidateQueries({ queryKey: roleKeys.all })}
-              emptyText={t('没有匹配的角色')}
-              renderActions={(item) => {
-                const role = roles.find((r) => r.id === item.id)
-                if (!role) return null
-                return (
-                  <>
-                    <Can perm="sys:role:edit">
-                      <DropdownMenuItem onClick={() => { setEditing(role); setSheetOpen(true) }}>
-                        <IconPencil className="size-4" />{t('编辑')}
-                      </DropdownMenuItem>
-                    </Can>
-                    <Can perm="sys:role:del">
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() => setPendingDelete(role)}
-                      >
-                        <IconTrash className="size-4" />{t('删除')}
-                      </DropdownMenuItem>
-                    </Can>
-                  </>
-                )
-              }}
-            />
-
-            <div className="flex min-w-0 flex-1 flex-col gap-4 content-scroll:lg:min-h-0">
-              {!selected ? (
-                <EmptyDetail loading={isPending} onAdd={() => { setEditing(null); setSheetOpen(true) }} />
-              ) : (
-                <>
-                  <RoleDetailHeader
-                    role={selected}
-                    onEdit={() => { setEditing(selected); setSheetOpen(true) }}
-                    onDelete={() => setPendingDelete(selected)}
-                  />
-
-                  <Tabs
-                    value={tab}
-                    onValueChange={(v) => patch({ tab: v as RoleTab })}
-                    className="min-w-0 flex-1 content-scroll:lg:min-h-0"
+      {/*
+        lg 以下改成上下堆叠 —— 左栏是 w-72 硬宽，横排时右栏会被压到几十像素
+        （实测 390px 视口下右栏只剩 46px，内容直接被裁掉）。
+        不再需要 items-start：左栏原来靠 `sticky top-4` 跟着滚，
+        现在它自己就是定高的一栏，钉不钉由骨架决定。
+      */}
+      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:gap-6 content-scroll:lg:min-h-0">
+        {/* 左栏走 `_shared/master-list` —— 角色 / 数据范围 / 字典类型同一个件 */}
+        <MasterList
+          idPrefix="role"
+          title={t('角色列表')}
+          items={roleItems}
+          total={total}
+          selectedId={selected?.id ?? null}
+          onSelect={selectRole}
+          keyword={search.name ?? ''}
+          searchPlaceholder="搜索角色名称…"
+          onKeyword={(v) => patch({ name: v || undefined, role: undefined })}
+          status={search.status}
+          onStatus={(v) => patch({ status: v, role: undefined })}
+          onReset={() => patch({ name: undefined, status: undefined, role: undefined })}
+          hasMore={hasNextPage}
+          loadingMore={isFetchingNextPage}
+          {...list}
+          onLoadMore={() => void fetchNextPage()}
+          onAdd={() => { setEditing(null); setSheetOpen(true) }}
+          addLabel={t('新增角色')}
+          addPerm="sys:role:add"
+          onRefresh={() => void qc.invalidateQueries({ queryKey: roleKeys.all })}
+          emptyText={t('没有匹配的角色')}
+          renderActions={(item) => {
+            const role = roles.find((r) => r.id === item.id)
+            if (!role) return null
+            return (
+              <>
+                <Can perm="sys:role:edit">
+                  <DropdownMenuItem onClick={() => { setEditing(role); setSheetOpen(true) }}>
+                    <IconPencil className="size-4" />{t('编辑')}
+                  </DropdownMenuItem>
+                </Can>
+                <Can perm="sys:role:del">
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => setPendingDelete(role)}
                   >
-                    <TabsList variant="line" className="shrink-0" data-testid="role-tabs">
-                      {/* ⚠️ 回调参数**不能叫 `t`** —— 会遮蔽翻译函数，
-                          于是 `{t.label}` 直接渲染库里的中文，看起来还像「已经在用 t.」 */}
-                      {TABS.map((item) => (
-                        <TabsTrigger key={item.value} value={item.value} data-testid={`role-tab-${item.value}`}>
-                          {t(item.label)}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
+                    <IconTrash className="size-4" />{t('删除')}
+                  </DropdownMenuItem>
+                </Can>
+              </>
+            )
+          }}
+        />
 
-                    {/* keepMounted：切到别的 tab 再切回来，没保存的勾选还在 */}
-                    {/*
-                      ⚠️ display:flex 必须限定 `:not([hidden])`。Base UI 给未选中的面板
-                      挂的是 `hidden` 属性（靠 UA 的 [hidden]{display:none} 生效），
-                      作者样式里的 .flex 优先级更高，无条件写会把三个面板一起显示出来。
-                    */}
-                    <TabsContent value="perms" keepMounted className="pt-2 content-scroll:lg:min-h-0 content-scroll:lg:flex-col content-scroll:lg:[&:not([hidden])]:flex">
-                      <PermMatrix key={selected.id} role={selected} onDirtyChange={setPermsDirty} />
-                    </TabsContent>
-                    <TabsContent value="scopes" keepMounted className="pt-2 content-scroll:lg:min-h-0 content-scroll:lg:flex-col content-scroll:lg:[&:not([hidden])]:flex">
-                      <RoleScopes key={selected.id} role={selected} onDirtyChange={setScopesDirty} />
-                    </TabsContent>
-                    <TabsContent value="users" className="pt-2 content-scroll:lg:min-h-0 content-scroll:lg:flex-col content-scroll:lg:[&:not([hidden])]:flex">
-                      <RoleUsers
-                        key={selected.id}
-                        role={selected}
-                        page={upage}
-                        onPage={(p) => patch({ upage: p })}
-                      />
-                    </TabsContent>
-                  </Tabs>
-                </>
-              )}
-            </div>
-          </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-4 content-scroll:lg:min-h-0">
+          {!selected ? (
+            <EmptyDetail loading={isPending} onAdd={() => { setEditing(null); setSheetOpen(true) }} />
+          ) : (
+            <>
+              <RoleDetailHeader
+                role={selected}
+                onEdit={() => { setEditing(selected); setSheetOpen(true) }}
+                onDelete={() => setPendingDelete(selected)}
+              />
+
+              <Tabs
+                value={tab}
+                onValueChange={(v) => patch({ tab: v as RoleTab })}
+                className="min-w-0 flex-1 content-scroll:lg:min-h-0"
+              >
+                <TabsList variant="line" className="shrink-0" data-testid="role-tabs">
+                  {/* ⚠️ 回调参数**不能叫 `t`** —— 会遮蔽翻译函数，
+                      于是 `{t.label}` 直接渲染库里的中文，看起来还像「已经在用 t.」 */}
+                  {TABS.map((item) => (
+                    <TabsTrigger key={item.value} value={item.value} data-testid={`role-tab-${item.value}`}>
+                      {t(item.label)}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                {/* keepMounted：切到别的 tab 再切回来，没保存的勾选还在 */}
+                {/*
+                  ⚠️ display:flex 必须限定 `:not([hidden])`。Base UI 给未选中的面板
+                  挂的是 `hidden` 属性（靠 UA 的 [hidden]{display:none} 生效），
+                  作者样式里的 .flex 优先级更高，无条件写会把三个面板一起显示出来。
+                */}
+                <TabsContent value="perms" keepMounted className="pt-2 content-scroll:lg:min-h-0 content-scroll:lg:flex-col content-scroll:lg:[&:not([hidden])]:flex">
+                  <PermMatrix key={selected.id} role={selected} onDirtyChange={setPermsDirty} />
+                </TabsContent>
+                <TabsContent value="scopes" keepMounted className="pt-2 content-scroll:lg:min-h-0 content-scroll:lg:flex-col content-scroll:lg:[&:not([hidden])]:flex">
+                  <RoleScopes key={selected.id} role={selected} onDirtyChange={setScopesDirty} />
+                </TabsContent>
+                <TabsContent value="users" className="pt-2 content-scroll:lg:min-h-0 content-scroll:lg:flex-col content-scroll:lg:[&:not([hidden])]:flex">
+                  <RoleUsers
+                    key={selected.id}
+                    role={selected}
+                    page={upage}
+                    onPage={(p) => patch({ upage: p })}
+                  />
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
         </div>
       </div>
 
@@ -306,7 +296,7 @@ export function RolePage({
           }
         }}
       />
-    </div>
+    </PageShell>
   )
 }
 
