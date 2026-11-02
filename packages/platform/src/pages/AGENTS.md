@@ -270,6 +270,9 @@ const submitQuery = React.useCallback((v) => { setRowSelection({}); q.submit(v) 
 服务端**没有排序入参**（各 `crud_*.py` 固定 `select_order('id')`），
 所以表格一律不注册 `rowSortingFeature`。要做排序得先改后端。
 
+## 页面顶部不放可见说明（#210）
+`PageHeader` 的 `description` 只给读屏。要知道的半句放在用得着的那一刻（SK 只显示一次 → 结果弹窗；日志保留 30 天 → 空态；一个群只推一次 → 群机器人表单）。挪之前**逐句核对**别处有没有 —— #212 第一版说「本来就都在」，评审翻出两句没有。卡片网格写 `grid-cols-1` 的原因见 [ui 分册](../../../ui/AGENTS.md)
+
 ## 导入导出（#11 · v0.4）
 
 `_shared/data-io/` 下三件：`ExportButton`（导出）· `ImportSheet`（导入抽屉）· `api.ts`。

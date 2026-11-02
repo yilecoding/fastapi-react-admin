@@ -128,7 +128,7 @@ export function BotFormSheet({ open, onOpenChange, editing }: { open: boolean; o
         <SheetHeader>
           <SheetTitle>{isEdit ? t('编辑群机器人') : t('新增群机器人')}</SheetTitle>
           <SheetDescription>
-            {t('订阅的通知一产生就往群里推一条，和收件人有几个无关。Webhook 地址本身就是凭据，加密保存，之后只显示掩码。')}
+            {t('订阅的通知一产生就往群里推一条，和收件人有几个无关；一条通知一个群只推一次，失败会按通知策略的退避重试，记录在「投递记录」里。Webhook 地址本身就是凭据，加密保存，之后只显示掩码。')}
           </SheetDescription>
         </SheetHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-1 flex-col overflow-hidden">

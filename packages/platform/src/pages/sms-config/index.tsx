@@ -22,6 +22,7 @@ import {
 } from './api'
 import { SmsConfigFormSheet } from './form'
 import { SmsTestDialog } from './test-dialog'
+import { PageHeader } from '../../shell/page-header'
 
 /**
  * 短信配置（issue #153，对标 ContiNew Admin 的「短信配置」）。
@@ -67,9 +68,7 @@ export function SmsConfigPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
-      <p className="text-sm text-muted-foreground">
-        {t('使用方只认业务模板码，这里把它对到每家厂商自己的模板。有默认配置就先用它，到了日上限再按权重分给备用；凭据加密落库，界面上只显示掩码。')}
-      </p>
+      <PageHeader title={t('短信配置')} description={t('使用方只认业务模板码，这里把它对到每家厂商自己的模板。有默认配置就先用它，到了日上限再按权重分给备用；凭据加密落库，界面上只显示掩码。')} />
 
       {/* 厂商 / 模板目录拉不下来时卡片照样能列，但「厂商不可用」的判断和新增表单都会失真：错误要显示出来（硬纪律 9） */}
       {providersQuery.error ? <QueryError error={providersQuery.error} onRetry={() => providersQuery.refetch()} /> : null}
@@ -78,12 +77,12 @@ export function SmsConfigPage() {
       {listQuery.error ? (
         <QueryError error={listQuery.error} onRetry={() => listQuery.refetch()} />
       ) : listQuery.isPending ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Skeleton className="h-52" />
           <Skeleton className="h-52" />
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {configs.map((config) => {
             const provider = providers.get(config.provider)
             const mapped = Object.keys(config.templates)

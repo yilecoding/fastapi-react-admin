@@ -20,6 +20,7 @@ import {
   type TestResult,
 } from './api'
 import { ProviderFormSheet } from './form'
+import { PageHeader } from '../../shell/page-header'
 
 /**
  * 模型密钥管理。
@@ -58,14 +59,12 @@ export function AiProviderPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
-      <p className="text-sm text-muted-foreground">
-        {t('AI 助手通过这里配置的供应商调用模型。密钥加密落库，界面上只显示掩码。')}
-      </p>
+      <PageHeader title={t('模型密钥管理')} description={t('AI 助手通过这里配置的供应商调用模型。密钥加密落库，界面上只显示掩码。')} />
 
       {listQuery.error ? (
         <QueryError error={listQuery.error} onRetry={() => listQuery.refetch()} />
       ) : listQuery.isPending ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Skeleton className="h-44" />
           <Skeleton className="h-44" />
           <Skeleton className="h-44" />
@@ -77,7 +76,7 @@ export function AiProviderPage() {
               恰好悬在缺角的上方，离它要操作的卡片半屏远（实测差 518px）
            2. 一条都没有时，这一格自己就是空状态 —— 空屏该是邀请动作的地方，
               不是一句"还没有配置"的通知 */
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {providers.map((provider) => {
             const result = results[provider.id]
             return (

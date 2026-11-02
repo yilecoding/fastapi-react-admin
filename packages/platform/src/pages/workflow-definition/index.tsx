@@ -150,7 +150,7 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
       </div>
 
       {list.loading ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
         </div>
       ) : list.error ? (
@@ -179,7 +179,7 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
               {g}
               <span className="text-xs font-normal text-muted-foreground tabular-nums">{defs.length}</span>
             </h3>
-            <div className={cn('grid gap-3 sm:grid-cols-2 xl:grid-cols-3', list.busy && 'opacity-60')}>
+            <div className={cn('grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3', list.busy && 'opacity-60')}>
               {defs.map((d) => (
                 <article
                   key={d.id}
