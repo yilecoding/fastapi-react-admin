@@ -18,6 +18,7 @@ from sqlalchemy import case, func, select
 
 from backend.app.admin.model import LoginLog
 from backend.app.task.model import TaskExtended, TaskScheduler
+from backend.common.security.rbac import user_has_perm
 from backend.common.security.session import SessionClient, session_store
 from backend.core.conf import settings
 from backend.plugin.core import check_plugin_installed
@@ -36,18 +37,6 @@ TASK_FAIL_WINDOW = timedelta(hours=24)
 
 #: 访问柱状图最多看多少天
 VISITS_MAX_DAYS = 31
-
-
-def _perms_of(user: Any) -> tuple[bool, set[str]]:
-    """`request.user` 的权限码。算法和 `common/security/rbac.py` 的 RBAC 校验一致（启用的角色 × 启用的菜单）"""
-    perms: set[str] = set()
-    for role in getattr(user, 'roles', None) or []:
-        if role.status != 1:
-            continue
-        for menu in role.menus or []:
-            if menu.perms and menu.status == 1:
-                perms.update(menu.perms.split(','))
-    return bool(user.is_superuser), perms
 
 
 def _day_start(day: datetime) -> datetime:
@@ -85,31 +74,36 @@ async def visits(db: AsyncSession, *, days: int, tz: str | None) -> dict[str, An
     return {'tz': str(zone), 'points': points}
 
 
-async def attention(db: AsyncSession, user: Any) -> list[dict[str, Any]]:
-    """要人动手的异常。只列「现在有问题、点过去能处理」的，每条带着它的去处所需的参数"""
-    superuser, perms = _perms_of(user)
+async def attention(db: AsyncSession, user: Any, *, tz: str | None = None) -> list[dict[str, Any]]:
+    """要人动手的异常。只列「现在有问题、点过去能处理」的，每条带着它的去处所需的参数。
 
-    def can(code: str) -> bool:
-        return superuser or code in perms
-
+    权限判据走 `rbac.user_has_perm`（和接口上的 `RequestPermission` 同一份）：自己收集权限码的话，
+    casbin 模式 / 权限码白名单（`RBAC_ROLE_MENU_EXCLUDE`）这两种情形下结论和真正的接口守卫对不上。
+    `tz`：「今天」按查看人的显示时区切（同 `visits`），同一屏上的柱状图和这里说的「今天」才是同一天
+    """
     items: list[dict[str, Any]] = []
-    if can('open:webhook:list') and check_plugin_installed('open'):
+    if user_has_perm(user, 'open:webhook:list') and check_plugin_installed('open'):
         items += await _disabled_webhooks(db)
-    if can('task:scheduler:edit'):
+    if user_has_perm(user, 'task:scheduler:edit'):
         items += await _failed_tasks(db)
-    if can('log:login:list'):
-        items += await _login_fail_spike(db)
+    if user_has_perm(user, 'log:login:list'):
+        items += await _login_fail_spike(db, ZoneInfo(tz) if tz else timezone.tz_info)
     return items
 
 
 async def _disabled_webhooks(db: AsyncSession) -> list[dict[str, Any]]:
-    """被**自动**停用的 Webhook 端点（连续投递失败到阈值）。手动停用的是人自己关的，不用提醒"""
-    from backend.plugin.open.model import OpenWebhook
+    """被**自动**停用的 Webhook 端点（连续投递失败到阈值）。手动停用的是人自己关的，不用提醒。
+
+    🔴 应用被删（逻辑删除）之后它的端点还在表里：不过滤的话这条「严重」永远清不掉，「去处理」点进去是 404。
+    和投递侧的 `crud_webhook.subscribers` 同一个口径（join 应用、`deleted == 0`）
+    """
+    from backend.plugin.open.model import OpenApp, OpenWebhook
 
     rows = (
         await db.scalars(
             select(OpenWebhook)
-            .where(OpenWebhook.status == 0, OpenWebhook.disabled_reason == 'auto')
+            .join(OpenApp, OpenApp.id == OpenWebhook.app_id)
+            .where(OpenWebhook.status == 0, OpenWebhook.disabled_reason == 'auto', OpenApp.deleted == 0)
             .order_by(OpenWebhook.disabled_time.desc(), OpenWebhook.id.desc())
         )
     ).all()
@@ -143,14 +137,23 @@ async def _failed_tasks(db: AsyncSession) -> list[dict[str, Any]]:
     titles = dict(
         (await db.execute(select(TaskScheduler.task, TaskScheduler.name).where(TaskScheduler.task.in_(names)))).all()
     )
+    # 每个任务最近一次失败的报错：一条窗口函数查完，不逐个任务查（原来是 N+1）
+    newest = (
+        select(
+            TaskExtended.name.label('name'),
+            TaskExtended.traceback.label('tb'),
+            func
+            .row_number()
+            .over(partition_by=TaskExtended.name, order_by=(TaskExtended.date_done.desc(), TaskExtended.id.desc()))
+            .label('rn'),
+        )
+        .where(TaskExtended.status == 'FAILURE', TaskExtended.date_done >= since)
+        .subquery()
+    )
+    tracebacks = dict((await db.execute(select(newest.c.name, newest.c.tb).where(newest.c.rn == 1))).all())
     out = []
     for name, count, last in sorted(rows, key=lambda r: r[2] or since, reverse=True):
-        tb = await db.scalar(
-            select(TaskExtended.traceback)
-            .where(TaskExtended.name == name, TaskExtended.status == 'FAILURE', TaskExtended.date_done >= since)
-            .order_by(TaskExtended.date_done.desc(), TaskExtended.id.desc())
-            .limit(1)
-        )
+        tb = tracebacks.get(name)
         out.append({
             'kind': 'task_failed',
             'level': 'warning',
@@ -171,9 +174,9 @@ def _last_line(tb: str | None) -> str | None:
     return lines[-1][:160] if lines else None
 
 
-async def _login_fail_spike(db: AsyncSession) -> list[dict[str, Any]]:
-    """今天的登录失败明显高于近 7 天的日均（今天不算进均值）"""
-    today = _day_start(timezone.now())
+async def _login_fail_spike(db: AsyncSession, zone: Any) -> list[dict[str, Any]]:
+    """今天的登录失败明显高于近 7 天的日均（今天不算进均值）。「今天」按 `zone` 切（查看人的显示时区）"""
+    today = _day_start(datetime.now(zone))
     _, today_fails = await _login_counts(db, today, today + timedelta(days=1))
     if today_fails < LOGIN_FAIL_MIN:
         return []
@@ -184,7 +187,7 @@ async def _login_fail_spike(db: AsyncSession) -> list[dict[str, Any]]:
     top = (
         await db.execute(
             select(LoginLog.ip, func.count().label('n'))
-            .where(LoginLog.status == 0, LoginLog.login_time >= today)
+            .where(LoginLog.status == 0, LoginLog.login_time >= today, LoginLog.login_time < today + timedelta(days=1))
             .group_by(LoginLog.ip)
             .order_by(func.count().desc(), LoginLog.ip)
             .limit(1)
@@ -194,6 +197,8 @@ async def _login_fail_spike(db: AsyncSession) -> list[dict[str, Any]]:
         {
             'kind': 'login_fail_spike',
             'level': 'warning',
+            #: 按哪一天算的「今天」（查看人时区里的日期）
+            'day': today.date().isoformat(),
             'count': today_fails,
             'avg': round(avg, 1),
             'top_ip': top[0] if top else None,

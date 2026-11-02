@@ -1,12 +1,19 @@
 """工作台用到的审批数据（#202）：待办带超时 / 退回 / 转交 + 按要紧程度排 · 我发起的带进度 · 草稿和可发起的"""
 
+import json
+import uuid
+
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 from starlette.testclient import TestClient
 
+from backend.plugin.workflow.engine import flow
+from backend.plugin.workflow.service import query_service, runtime_service
 from backend.plugin.workflow.tests.conftest import key, ok
-from backend.plugin.workflow.tests.test_ops import FORM, _act, _start
+from backend.plugin.workflow.tests.test_ops import FORM, _act, _detail, _start
 from backend.plugin.workflow.tests.test_review_fixes import _approval, _model, _publish
 
 Login = Callable[[str], dict[str, str]]
@@ -171,3 +178,184 @@ def test_drafts_carry_name_and_summary_and_startable_counts(
     _start(client, login, 'PYTEST_DASH_DRAFT', who='sunqiang')
     # 只数自己的
     assert count() == 2
+
+
+# ── 代码评审（#203 之后）补的 ───────────────────────────────────────────────
+
+
+def _marked(
+    client: TestClient, login: Login, code: str, mark: str, n: int, *, who: str = 'sunqiang', urgent: int = 0
+) -> list[str]:
+    """发 n 张事由里带 `mark` 的单（前 `urgent` 张加急）。
+
+    按 `mark` 搜就只有这几张 —— 共用的测试库里别的用例也给同一个人留了待办
+    """
+    return [
+        ok(
+            client.post(
+                '/sys/workflow/instances',
+                headers=login(who),
+                json={'code': code, 'form': {'f': f'{mark} {i}'}, 'key': key(), 'urgent': i < urgent},
+            )
+        )['instance_id']
+        for i in range(n)
+    ]
+
+
+def _attention_page(client: TestClient, login: Login, who: str, mark: str, size: int) -> dict[str, Any]:
+    params = {'sort': 'attention', 'keyword': mark, 'size': size}
+    return ok(client.get('/sys/workflow/inbox/todo', headers=login(who), params=params))
+
+
+def test_next_steps_do_not_name_people_from_a_field_the_initiator_cannot_see(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid
+) -> None:
+    """🔴 第 3 步的审批人取自「复核人」字段，而这个字段对发起人隐藏（第 1 步审批人填）：
+    详情页的预告对发起人是 masked，工作台的步骤条也不能写出那个人名 —— 只给节点名"""
+    form = {
+        'schemaVersion': 1,
+        'fields': [{'id': 'f', 'type': 'text', 'label': '事由'}, {'id': 'f_rev', 'type': 'user', 'label': '复核人'}],
+    }
+    n3 = _approval('n3', {'kind': 'var_user', 'field': 'f_rev'})
+    n2 = _approval('n2', {'kind': 'user', 'user_ids': [uid('zhoumin')]}, nxt=n3)
+    n1 = _approval('n1', {'kind': 'user', 'user_ids': [uid('zhaolei')]}, perms={'f_rev': 'editable'}, nxt=n2)
+    model = {
+        'schemaVersion': 1,
+        'root': {'type': 'start', 'id': 'start', 'fieldPerms': {'f_rev': 'hidden'}, 'next': n1},
+    }
+    _publish(client, token_headers, 'PYTEST_DASH_MASK', form, model)
+    pk = _start(client, login, 'PYTEST_DASH_MASK')
+    ok(_act(client, login('zhaolei'), pk, 'approve', form={'f_rev': uid('wangfang')}))
+
+    # 前提：发起人的详情页预告里，第 3 步确实是遮掉的
+    forecast = _detail(client, login('sunqiang'), pk)['forecast']
+    assert [(s['node_id'], s.get('masked')) for s in forecast] == [('n3', True)]
+
+    row = _initiated(client, login, 'sunqiang', pk)
+    assert row['steps'] == [{'name': '赵磊', 'state': 'done'}, {'name': '周敏', 'state': 'current'}]
+    assert row['next_steps'] == ['n3']
+    assert '王芳' not in json.dumps(row, ensure_ascii=False)
+
+
+def test_last_step_reads_the_timeout_actions_the_engine_records(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 最后一步超时自动驳回：「最后一步结论」是那次超时，不是前一个人的同意。引擎记的动作名是
+    `timeout_approve` / `timeout_reject`（`runtime_service.apply_timeout`），没有 `auto_approve` 这个名字"""
+    from backend.plugin.workflow.tests.test_timeouts import _noop, _run
+
+    monkeypatch.setattr(runtime_service, 'workflow_todo_changed', _noop)
+    monkeypatch.setattr(runtime_service, 'notification_new', _noop)
+    last = _approval('n2', {'kind': 'user', 'user_ids': [uid('zhoumin')]})
+    last['timeout'] = {'hours': 2, 'action': 'reject'}
+    _publish(
+        client,
+        token_headers,
+        'PYTEST_DASH_TOREJ',
+        FORM,
+        _model(_approval('n1', {'kind': 'user', 'user_ids': [uid('zhaolei')]}, nxt=last)),
+    )
+    pk = _start(client, login, 'PYTEST_DASH_TOREJ')
+    ok(_act(client, login('zhaolei'), pk, 'approve', opinion='可以'))
+    _run(3)
+
+    row = _initiated(client, login, 'sunqiang', pk)
+    assert row['status'] == 'rejected'
+    assert row['last']['action'] == 'timeout_reject'
+    assert row['last']['actor_name'] is None
+    assert row['steps'] == [{'name': '赵磊', 'state': 'done'}, {'name': '周敏', 'state': 'rejected'}]
+
+
+def test_a_step_that_sent_the_form_back_is_not_a_green_tick(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid
+) -> None:
+    """退回写的是 `decision='send_back'`：步骤条上那一步是「退回」，不是同意"""
+    _chain(client, token_headers, uid, 'PYTEST_DASH_SB', 'zhaolei', 'zhoumin')
+    pk = _start(client, login, 'PYTEST_DASH_SB')
+    ok(_act(client, login('zhaolei'), pk, 'approve'))
+    ok(_act(client, login('zhoumin'), pk, 'send_back', target_node_id='n1', opinion='再看看'))
+    row = _initiated(client, login, 'sunqiang', pk)
+    assert row['steps'] == [
+        {'name': '赵磊', 'state': 'done'},
+        {'name': '周敏', 'state': 'sent_back'},
+        {'name': '赵磊', 'state': 'current'},
+    ]
+
+
+def test_attention_sort_keeps_the_oldest_when_over_the_cap_and_counts_everything(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 超过一次取的上限时：留下的是最老的（最可能已经超时的），`total` 是全量数、不是取回来的条数"""
+    _publish_one(client, token_headers, uid, 'PYTEST_DASH_CAP', 'zhaolei')
+    mark = f'CAP{uuid.uuid4().hex[:10]}'
+    oldest, middle, newest = _marked(client, login, 'PYTEST_DASH_CAP', mark, 3)
+    monkeypatch.setattr(query_service, '_ATTENTION_SORT_CAP', 2)
+
+    page = _attention_page(client, login, 'zhaolei', mark, 10)
+    assert page['total'] == 3
+    assert [r['id'] for r in page['items']] == [middle, oldest]  # 取回来的两条照常按到手时间新的在前
+    assert newest not in [r['id'] for r in page['items']]
+
+
+def test_urgent_and_returned_totals_count_beyond_the_page(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid
+) -> None:
+    """大标题「其中 M 件加急」和「退回给我」的数是全量的，不是从取回来的那一页里数"""
+    _publish_one(client, token_headers, uid, 'PYTEST_DASH_CNT', 'zhaolei')
+    mark = f'CNT{uuid.uuid4().hex[:10]}'
+    _marked(client, login, 'PYTEST_DASH_CNT', mark, 3, urgent=2)
+    page = _attention_page(client, login, 'zhaolei', mark, 1)
+    assert (page['total'], page['urgent_total'], page['returned_total'], len(page['items'])) == (3, 2, 0, 1)
+
+    # 退回给发起人的两张：孙强手上两条「改完重新提交」
+    back = f'BCK{uuid.uuid4().hex[:10]}'
+    for pk in _marked(client, login, 'PYTEST_DASH_CNT', back, 2):
+        ok(_act(client, login('zhaolei'), pk, 'send_back', target_node_id='start', opinion='补材料'))
+    page = _attention_page(client, login, 'sunqiang', back, 1)
+    assert (page['total'], page['returned_total'], len(page['items'])) == (2, 2, 1)
+    # SQL 里按「办理人就是发起人」数的，和逐行按开始节点认的 `back` 必须是同一回事
+    full = _attention_page(client, login, 'sunqiang', back, 10)
+    assert sum(r['back'] for r in full['items']) == full['returned_total']
+
+
+def test_transfer_source_is_the_latest_hand_not_the_first(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid
+) -> None:
+    """🔴 A → B → C 转交：C 看到的是「B 转交给你」。`origin_assignee_id` 是链上最初那个人，拿它说就成了「A 转交给你」；
+    管理员改派要说成改派"""
+    _publish_one(client, token_headers, uid, 'PYTEST_DASH_HAND', 'zhaolei')
+    pk = _start(client, login, 'PYTEST_DASH_HAND')
+    ok(_act(client, login('zhaolei'), pk, 'transfer', target_user_ids=[uid('zhoumin')]))
+    ok(_act(client, login('zhoumin'), pk, 'transfer', target_user_ids=[uid('wangfang')]))
+    row = next(r for r in _todo_rows(client, login, 'wangfang') if r['id'] == pk)
+    assert (row['transferred_from'], row['transfer_kind']) == ('周敏', 'transfer')
+
+    admin = ok(client.get('/sys/users/me', headers=token_headers))['nickname']
+    ok(_act(client, token_headers, pk, 'reassign', task_id=row['task_id'], target_user_ids=[uid('chenjing')]))
+    row = next(r for r in _todo_rows(client, login, 'chenjing') if r['id'] == pk)
+    assert (row['transferred_from'], row['transfer_kind']) == (admin, 'reassign')
+
+
+def test_todo_rows_index_each_snapshot_once(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """同一个流程版本的几行只建一次节点索引（审批中心默认的待办列表也走这里）"""
+    _publish_one(client, token_headers, uid, 'PYTEST_DASH_IDX', 'zhaolei', {'hours': 24, 'action': 'remind'})
+    mark = f'IDX{uuid.uuid4().hex[:10]}'
+    _marked(client, login, 'PYTEST_DASH_IDX', mark, 3)
+    calls = 0
+    real = flow.index_nodes
+
+    def counting(model: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        return real(model)
+
+    monkeypatch.setattr(query_service, 'index_nodes', counting)
+    monkeypatch.setattr(runtime_service, 'index_nodes', counting)
+    for sort in ('attention', None):
+        calls = 0
+        params = {'keyword': mark, 'size': 10, **({'sort': sort} if sort else {})}
+        page = ok(client.get('/sys/workflow/inbox/todo', headers=login('zhaolei'), params=params))
+        assert len(page['items']) == 3 and all(r['due_time'] for r in page['items'])
+        assert calls == 1, (sort, calls)
