@@ -107,8 +107,12 @@ function AuthLayout() {
       <SidebarInset className="content-scroll:min-h-0">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
           <SidebarTrigger className="-ms-1" />
-          <Separator orientation="vertical" className="me-2 data-[orientation=vertical]:h-4" />
-          <NavBreadcrumb nav={nav} activePath={activePath} fallbackTitle={activeTabTitle} />
+          {/* 窄屏（< sm）不显示面包屑：页名在标签上已经有了。原来在 390 宽下两级文字被 truncate 压到 0 宽，
+              中间的「›」不会收缩，孤零零地贴在搜索按钮左边，像一个残影（#210） */}
+          <Separator orientation="vertical" className="me-2 max-sm:hidden data-[orientation=vertical]:h-4" />
+          <div className="min-w-0 max-sm:hidden">
+            <NavBreadcrumb nav={nav} activePath={activePath} fallbackTitle={activeTabTitle} />
+          </div>
           {/* 命令面板入口：⌘K 也能开，但快捷键不摆出来就等于只有作者知道 */}
           <div className="ms-auto flex items-center gap-2">
             <CommandTrigger />

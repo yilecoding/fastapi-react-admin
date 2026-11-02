@@ -95,7 +95,7 @@ export function MonitorRedisPage({
       {info && (
         <div className="flex flex-col gap-4 md:gap-6" data-testid="redis-monitor" data-fetching={isFetching}>
           {/* ── 四个顶层指标 ── */}
-          <div className="grid grid-cols-1 gap-3 @xl/main:grid-cols-2 @4xl/main:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 @4xl/main:grid-cols-4">
             <MetricCard
               label={t("已使用内存")}
               testId="metric-memory"
