@@ -13,6 +13,6 @@ export const Route = createFileRoute("/_auth/ai/confirm")({
   validateSearch: searchSchema,
   // 和确认接口同一个权限：看得到却点不了，等于死胡同
   beforeLoad: requirePerm("ai:chat:use"),
-  staticData: { title: "确认 AI 操作" },
+  staticData: { title: "确认 AI 操作", parent: "/ai/chat", icon: "mdi:robot-outline" },
   component: () => null,
 })
