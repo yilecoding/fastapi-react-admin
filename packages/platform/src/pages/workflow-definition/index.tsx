@@ -139,13 +139,13 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
           />
         </InputGroup>
         <span className="ms-auto flex items-center gap-2">
-          <RefreshButton onClick={list.onRetry} busy={list.busy} />
           <Can perm="workflow:definition:add">
             <Button size="sm" onClick={() => setCreating(true)} data-testid="wfd-create">
               <IconPlus className="size-4" />
               {t('新建流程')}
             </Button>
           </Can>
+          <RefreshButton onClick={list.onRetry} busy={list.busy} />
         </span>
       </div>
 
