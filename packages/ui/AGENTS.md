@@ -150,7 +150,7 @@ context** 里取翻译函数，而那个 i18next 实例是 `@admin/i18n` 建的�
 | Select 的高度 | 工具栏里的 Select 要传 `size="sm"`（32px）。className 里写 `h-8` **无效** —— 基础类是 `data-[size=default]:h-9`，默认 size 就是 `default`。写了也还是 36px，和旁边 32px 的 InputGroup / `Button size="sm"` 差 4px，一整行参差不齐 |
 | `overflow-y-auto` 的副作用 | CSS 规定：一个轴是 `visible`、另一个轴不是时，`visible` **计算成 `auto`**。所以只写 `overflow-y-auto` 的容器，横向溢出会自己长出滚动条。抽屉/面板主体一律写成 `overflow-y-auto overflow-x-hidden` |
 | flex 行里的 `w-full` | `w-full` = `width:100%`**容器全宽**，旁边还有兄弟元素时必然溢出（图标行溢出正好 = 清除按钮 32px + gap 8px）。要占满剩余空间用 `min-w-0 flex-1`，别用 `w-full` |
-| 页面块的水平内边距 | **一律不加**。水平内边距由 `_auth.tsx` 的 `<main className="px-4">` 统一给，页面级块再加 `px-1` 就会比别的块内缩 4px（`PageHeader` 曾经带 `px-1`，「刷新」按钮右边缘 1980 而卡片 1984 —— 肉眼就是「边距怪怪的」） |
+| 页面块的内边距 | **四边都不加**。由 `_auth.tsx` 内容列的 `p-4` 统一给（竖直方向见 [pages 分册](../platform/src/pages/AGENTS.md)「页面四边的留白」，`pnpm arch:check` 的 `page-vertical-padding` 挡着），页面级块再加 `px-1` 就会比别的块内缩 4px（`PageHeader` 曾经带 `px-1`，「刷新」按钮右边缘 1980 而卡片 1984 —— 肉眼就是「边距怪怪的」） |
 | 页面纵向节奏 | 页面级块之间统一 `gap-4 md:gap-6`（24px）。嵌套容器**也要用同一个值** —— 监控页内层只写 `gap-4`，于是「页头→第一块」24px、「块与块」16px，同一页两种间距 |
 | 说明文字贴住它解释的东西 | 包一层 `flex flex-col gap-2` 做**结构化分组**，不要给说明加 `-mt-2` 往上拽 —— 负 margin 会变成「说明上方 8px、下方 24px」，同一条缝两个数 |
 | 禁用态选择器 | Base UI 的 Checkbox/Select 渲染成 `<span role="checkbox">`，禁用是 `data-disabled` / `aria-disabled`，**不是** HTML 的 `disabled` 属性 —— `:not([disabled])` 选不掉它，要写 `:not([data-disabled])` |
@@ -160,6 +160,28 @@ context** 里取翻译函数，而那个 i18next 实例是 `@admin/i18n` 建的�
 | 富文本 | `ui/components/rich-text`。图片能力由 `platform` 注入（`useRichTextImages()`），不传 `images` 就整块关掉。详见 [rich-text 分册](./src/components/rich-text/AGENTS.md) |
 | 选文件 / 拖拽投放 / 上传浮窗 | `ui/components/uploader/` 的 `useFilePicker`（隐藏 input + `open()`，change 后自动清 `value`）· `Dropzone`（包住任意内容，拖进来盖一层提示；不给 children 就是空态格子）· `UploadTray`（右下角浮窗：标题 / 剩余时间 / 取消全部 / 每行状态环，折叠态只剩标题栏）。它们只认一个 `UploadTrayItem` 形状，不发请求 —— 引擎在 `../platform/src/upload/`，队列和接线在 `../platform/src/shell/upload-store.ts`，页面只调 `pages/file/uploader.ts` |
 | 带鉴权的下载 | 不能用 `<a href download>`（带不上 Authorization 头，会把 401 的 JSON 存成文件）。走 `fetchBytes` → Blob → 临时 `<a>` → `revokeObjectURL` |
+
+### 🔴 错误块的原文会落进 `whitespace-nowrap` 的单元格（#210）
+
+**症状**：执行记录 / 消息中心 / 通知公告取数失败时，报错原文一整行横着冲出表格右边，**桌面端看不到「重试」**
+（390 宽反而看得到）；仪表盘卡片里则是几十行 SQL 竖着铺开，把卡片撑出屏幕。
+**根因**：后端把 SQL / pydantic 报错原样放进 `message`，一条几百字符；`DataTableErrorRow` 把 `QueryError` 放进
+`TableCell`，而 shadcn 的 `TableCell` 自带 `whitespace-nowrap`，祖先的这一条一路继承下来。原来「重试」排在最右边，跟着一起被裁。
+**修法**（`components/query-error.tsx`）：根上显式 `whitespace-normal` + `overflow-wrap:anywhere`，不信任祖先；
+「重试」挪到标题旁边；原文超过 140 字或带换行先 `line-clamp-2`，「展开详情」再看全（展开后限高内滚）。
+**实测证据**：本地库少一个迁移时截执行记录页，修前报错一行冲出右边界、重试不可见；修后两行 + 重试在标题旁 + 「展开详情」。
+
+### 主按钮的禁用态、深色下的主色（#210）
+
+- 默认变体禁用时**不走基础类的 `opacity-50`**：主色降半透明在浅色下是浅紫底白字、深色下是深靛蓝底暗紫字，
+  截图审查里两种都被读成「样式没加载 / 坏了」。现在是 `disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100`
+  （同一变体前缀，`twMerge` 能顶掉基础类那条）
+- 🔴 **`.dark` 里写的 `--primary` 从来不生效**：主题色偏好（`platform/src/shell/use-apply-preferences.ts`）把 `--primary`
+  写在根节点**行内样式**上，压过 `.dark`。于是深色下用的还是 L≈0.46 的深靛蓝，当文字压在 L 0.145 的底上几乎读不出来
+  （日志时间列、卡片的「全部 →」、左栏选中项）。再写一条 `.dark { --primary }` 照样被盖掉 ——
+  `globals.css` 里改成经一层 `--primary-ink`：亮色 = `--primary`，深色从**当前的** `--primary` 用相对颜色派生
+  （亮度抬到 ≥ 0.7，前景换成同色相的深墨色），七种主题色都跟着走；`@supports` 兜住不认相对颜色的旧浏览器
+- 直接写 `var(--primary)` 的地方（导览的 css、个人中心的横幅）**不经过**这层，深色下还是原色 —— 要跟着提亮就改用 `--primary-ink`
 
 ### 🔴 tooltip 的锚点不能是 `display:contents` 的包装元素
 

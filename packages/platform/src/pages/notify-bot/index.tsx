@@ -17,6 +17,7 @@ import { StatusBadge } from '../_shared/status'
 import { botOptionsQuery, botsQuery, useDeleteBot, useTestBot, type Bot } from './api'
 import { BotFormSheet } from './form'
 import { botReasonLabel, platformLabel } from './labels'
+import { PageHeader } from '../../shell/page-header'
 
 /**
  * 群机器人（#166 二期）。卡片流而不是 DataTable，理由同短信配置：系统配置那一类，天然只有几条。
@@ -58,22 +59,20 @@ export function NotifyBotPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 py-3 content-scroll:min-h-0">
-      <p className="text-sm text-muted-foreground">
-        {t('把公告、审批结果这类对谁都说得通的通知推到飞书 / 钉钉 / 企业微信群里。一条通知一个群只推一次，失败会按通知策略的退避重试，记录在「投递记录」里。')}
-      </p>
+    <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
+      <PageHeader title={t('群机器人')} description={t('把公告、审批结果这类对谁都说得通的通知推到飞书 / 钉钉 / 企业微信群里。一条通知一个群只推一次，失败会按通知策略的退避重试，记录在「投递记录」里。')} />
 
       {optionsQuery.error ? <QueryError error={optionsQuery.error} onRetry={() => optionsQuery.refetch()} /> : null}
 
       {listQuery.error ? (
         <QueryError error={listQuery.error} onRetry={() => listQuery.refetch()} />
       ) : listQuery.isPending ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Skeleton className="h-44" />
           <Skeleton className="h-44" />
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {bots.map((bot) => (
             <div key={bot.id} className="flex flex-col gap-2 rounded-lg border p-4" data-testid={`bot-card-${bot.name}`}>
               <div className="flex items-start justify-between gap-2">

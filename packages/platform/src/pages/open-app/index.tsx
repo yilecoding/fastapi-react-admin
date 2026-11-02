@@ -361,12 +361,8 @@ export function OpenAppPage({
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          {/* PageHeader 只渲染 sr-only 的 <h1>；说明要让人看见，单独一行（同 MCP 凭据页） */}
-          <PageHeader title={t('应用管理')} />
-          <p className="text-sm text-muted-foreground">
-            {t('给对接的外部系统发一对 AK/SK，它就能带签名调用勾选的开放接口。SK 加密存储，明文只在创建和重置时显示一次。')}
-          </p>
+        <div className="flex flex-col gap-4 md:gap-6 content-scroll:min-h-0 content-scroll:flex-1">
+          <PageHeader title={t('应用管理')} description={t('给对接的外部系统发一对 AK/SK，它就能带签名调用勾选的开放接口。SK 加密存储，明文只在创建和重置时显示一次。')} />
 
           <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
             <QueryBar

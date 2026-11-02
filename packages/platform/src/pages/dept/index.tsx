@@ -101,7 +101,7 @@ export function DeptPage({
         {/* content-scroll:* —— 「内容区滚动」模式下这一块撑满可用高度，
               于是里面的表格框变成定高视区：筛选栏 / 表头 / 分页条钉住，只有行滚。
               整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
+        <div className="flex flex-col gap-4 md:gap-6 content-scroll:min-h-0 content-scroll:flex-1">
           <PageHeader title={t("部门管理")} description={t("组织架构树。数据权限的隔离就建在这棵树上。")} />
 
           <div className="flex flex-wrap items-center gap-2">

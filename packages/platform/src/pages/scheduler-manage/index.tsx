@@ -280,12 +280,11 @@ export function SchedulerManagePage({
   const hasFilter = countActive(q.applied, FIELDS) > 0
 
   return (
-    // 三件套模板的外层骨架（照 pages/user/ 抄，见 pages/AGENTS.md）——
-    // 之前这一页把 py-4 md:py-6 那层拆掉、gap 直接摆在 @container/main 上，
-    // 于是「页头 → 查询区」少了一层竖向留白，跟别的列表页对不上
+    // 三件套模板的外层骨架（照 pages/user/ 抄，见 pages/AGENTS.md）。
+    // 上下左右的留白由外壳统一给（#209），这里不写竖直 padding
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
+        <div className="flex flex-col gap-4 md:gap-6 content-scroll:min-h-0 content-scroll:flex-1">
           <PageHeader title={t('任务调度')} description={t('配置定时任务的触发策略；改完立刻生效，不用重启')} />
 
           {/* 查询区和表格是同一个块的两半，gap-4 而不是页面级的 24px */}

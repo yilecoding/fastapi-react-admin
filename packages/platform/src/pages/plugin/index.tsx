@@ -93,7 +93,7 @@ export function PluginPage({
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
+        <div className="flex flex-1 flex-col gap-4 md:gap-6">
           <PageHeader title={t("插件管理")} description={t("查看已装插件、启停与打包下载。")} />
 
           {/* 改动要重启才生效 —— 这件事必须说出来，否则用户以为点完开关就生效了 */}

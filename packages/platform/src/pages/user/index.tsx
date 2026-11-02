@@ -247,7 +247,7 @@ export function UserPage({
         {/* content-scroll:* —— 「内容区滚动」模式下这一块撑满可用高度，
               于是里面的表格框变成定高视区：筛选栏 / 表头 / 分页条钉住，只有行滚。
               整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
+        <div className="flex flex-col gap-4 md:gap-6 content-scroll:min-h-0 content-scroll:flex-1">
           <PageHeader title={t('用户管理')} description={t('管理后台账号、部门归属与角色分配。')} />
 
           {/* 查询区和表格是同一个块的两半（筛选 → 结果），gap-4 而不是页面级的 24px；

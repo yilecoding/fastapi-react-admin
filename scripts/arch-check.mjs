@@ -35,6 +35,7 @@
  * | 页面组件不读路由 | 1 | 隐藏 tab 拿不到 match 上下文 |
  * | `_auth/` 下的路由文件不渲染页面 | 3 | 页面被挂两次 / 切走丢状态 |
  * | 全局 DOM 查询要限定作用域 | 5 | 命中隐藏页的 DOM |
+ * | 页面根不写竖直 padding（#209） | —— | 全站顶部五档间距，外壳统一给的那 16px 被各页再叠一层 |
  *
  * **功能引导那两条**（硬纪律 5 的延伸，见 `shell/tour/targets.ts` 头注释）
  *
@@ -303,6 +304,36 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', '
         'unscoped-dom-query',
         `document.${m[1]} 没限定作用域 —— 见硬纪律 5，隐藏 tab 的 DOM 也在文档树里，按 [data-tab="<routeId>"] 锁`,
       )
+    }
+  }
+}
+
+// 页面根不写竖直 padding（#209）
+//
+// 四边内边距只在外壳给一次：`apps/web/src/routes/_auth.tsx` 内容列的 `p-4`。
+// 原来外壳只给水平的 `px-4`、竖直方向各页自己写（`py-4 md:py-6` / `py-3` / 漏写），
+// 实测全站顶部长出五档：0 / 12 / 24 / 28 / 37px —— 漏抄、抄错没有任何东西会红，
+// 新功能的页面又爱照着同一批的「兄弟页」抄，错一个传一串（#163 → #169 → AI 调用日志）。
+//
+// 判据：页面根按 shell 分册的约定都带 `content-scroll:min-h-0`，带它的 className 里
+// 不许再有 `py-* / pt-* / pb-*`；`md:py-6` 这一档在 pages 下整个不许出现（它就是那份旧样板）。
+// 居中布局（`ai-confirm` 的 `py-8`、403 页的 `py-24`）不带根标记，不在此列。
+{
+  const VERTICAL_PAD = /(?:^|\s)(?:[a-z-]+:)*(?:py|pt|pb)-(?:\d|\[)/
+  for (const file of tsFiles('packages/platform/src/pages')) {
+    const src = stripComments(fs.readFileSync(file, 'utf8'))
+    for (const m of src.matchAll(/className=["'{`]([^"'`]*)["'`}]/g)) {
+      const cls = m[1]
+      const legacy = /(?:^|\s)md:p[yt]-6(?:\s|$)/.test(cls)
+      const rootPad = /(?:^|\s)content-scroll:min-h-0(?:\s|$)/.test(cls) && VERTICAL_PAD.test(cls)
+      if (legacy || rootPad) {
+        add(
+          'error',
+          rel(file),
+          'page-vertical-padding',
+          `页面根上写了竖直 padding（${cls.trim()}）—— 外壳 _auth.tsx 已经四边各给 16px，见 #209 / pages 分册`,
+        )
+      }
     }
   }
 }

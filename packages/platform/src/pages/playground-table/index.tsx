@@ -346,7 +346,7 @@ export function PlaygroundTablePage() {
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6">
+        <div className="flex flex-1 flex-col gap-4 md:gap-6">
           <PageHeader
             title="数据表格（Table）"
             description="在同一页里切换 DataGrid 的布局、交互和工具栏能力，看 1000 行数据下的实际表现。"

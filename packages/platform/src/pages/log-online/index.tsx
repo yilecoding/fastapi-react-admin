@@ -241,7 +241,7 @@ export function LogOnlinePage({
         {/* content-scroll:* —— 「内容区滚动」模式下这一块撑满可用高度，
               于是里面的表格框变成定高视区：筛选栏 / 表头 / 分页条钉住，只有行滚。
               整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
+        <div className="flex flex-col gap-4 md:gap-6 content-scroll:min-h-0 content-scroll:flex-1">
           {/* 标题/描述是 sr-only 的（页名在 tab 上）；刷新条走 DataTable 的 actions 槽 */}
           <PageHeader
             title={t('在线用户')}

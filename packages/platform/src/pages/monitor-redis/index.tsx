@@ -76,7 +76,7 @@ export function MonitorRedisPage({
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+        <div className="flex flex-col gap-4 md:gap-6">
           <PageHeader title={t("Redis 监控")} description={t("缓存实例的实时状态。会话、验证码、权限缓存都落在这里。")}>
             <RefreshBar
               interval={refresh}

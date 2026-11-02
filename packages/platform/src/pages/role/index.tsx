@@ -150,7 +150,7 @@ export function RolePage({
           **只在 lg 以上**：窄屏两栏是上下堆叠的，钉成定高只会把两个列表都压扁，
           那时照旧整块滚。整页滚动模式下这两条是空操作。
         */}
-        <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:lg:min-h-0 content-scroll:lg:flex-1">
+        <div className="flex flex-1 flex-col gap-4 md:gap-6 content-scroll:lg:min-h-0 content-scroll:lg:flex-1">
           <PageHeader
             title={t("角色管理")}
             description={t("左边选角色，右边配权限。点菜单行右侧的「已授权 n/m」就地展开按钮权限，勾完直接保存。")}

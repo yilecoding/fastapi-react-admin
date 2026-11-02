@@ -242,9 +242,14 @@ export function ConfigPage({
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <PageHeader title={t("参数配置")} description={t("系统级动态参数。登录与口令策略是活的 —— 改完立刻对所有人生效。")} />
 
-      {/* ── 顶部粘性栏 ── */}
+      {/* ── 顶部粘性栏 ──
+          通栏（-mx-4）且顶到标签条（-mt-4）：外壳四边各给 16px（#209），
+          这一条是全站唯一刻意贴边的 —— 它自带 border-b，本身就是一道分隔。
+          🔴 `-mt-4` 必须配 `-top-4`：sticky 的停靠线算在滚动容器 padding 的**内侧**，
+          `top-0` 会把它按回 16px 处，负 margin 看着像没生效（实测栏顶停在 103 而不是 87）。
+          只在「内容区滚动」时这样 —— 整页滚动时滚的是窗口，没有那层 padding，照旧 `top-0` */}
       <div
-        className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur"
+        className="sticky top-0 z-20 -mx-4 -mt-4 flex content-scroll:-top-4 flex-wrap items-center gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur"
         data-testid="config-topbar"
       >
         <InputGroup className="h-9 w-full sm:w-72">

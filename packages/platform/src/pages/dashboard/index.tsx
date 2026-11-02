@@ -202,7 +202,7 @@ export function DashboardPage({
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-1 flex-col gap-5 py-4 md:py-6">
+        <div className="flex flex-1 flex-col gap-5">
           <PageHeader title={t('仪表盘')} description={t('平台首页：每个人自己的工作台。')} />
 
           <div className="flex flex-wrap items-end justify-between gap-4">

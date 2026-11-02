@@ -124,7 +124,7 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
     )
 
   return (
-    <div className="flex flex-col gap-5 py-4 md:py-6">
+    <div className="flex flex-col gap-5">
       <PageHeader title={t('流程定义')} />
       <div className="flex flex-wrap items-center gap-2">
         <InputGroup className="h-8 w-full sm:w-64">
@@ -150,7 +150,7 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
       </div>
 
       {list.loading ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
         </div>
       ) : list.error ? (
@@ -411,7 +411,7 @@ function Designer({
   const used = usedFields(cur.model)
 
   return (
-    <div className="flex flex-col gap-4 py-4 md:py-6" data-testid="wfd-designer">
+    <div className="flex flex-col gap-4" data-testid="wfd-designer">
       <PageHeader title={t('流程设计')} />
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-3 py-2.5">
         <Button

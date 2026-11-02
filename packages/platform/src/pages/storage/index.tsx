@@ -33,6 +33,7 @@ import {
   type TestResult,
 } from './api'
 import { StorageFormSheet } from './form'
+import { PageHeader } from '../../shell/page-header'
 
 /**
  * 存储管理。
@@ -77,20 +78,18 @@ export function StoragePage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 py-3 content-scroll:min-h-0">
-      <p className="text-sm text-muted-foreground">
-        {t('新上传的文件落在默认存储。切换默认只影响之后的上传，已有文件仍从它原来的存储读取。')}
-      </p>
+    <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
+      <PageHeader title={t('存储管理')} description={t('新上传的文件落在默认存储。切换默认只影响之后的上传，已有文件仍从它原来的存储读取。')} />
 
       {listQuery.error ? (
         <QueryError error={listQuery.error} onRetry={() => listQuery.refetch()} />
       ) : listQuery.isPending ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Skeleton className="h-48" />
           <Skeleton className="h-48" />
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {storages.map((storage) => {
             const result = results[storage.id]
             const TypeIcon = storage.type === 's3' ? IconCloud : IconServer2

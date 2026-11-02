@@ -58,7 +58,7 @@ export function MonitorServerPage({
   return (
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+        <div className="flex flex-col gap-4 md:gap-6">
           <PageHeader title={t("服务器监控")} description={t("后端进程所在主机的实时资源占用。数据由 psutil 现场采集，无历史留存。")}>
             <RefreshBar
               interval={refresh}

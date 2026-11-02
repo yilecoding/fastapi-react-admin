@@ -12,8 +12,18 @@
  *   - 表体里横跨一整行（`DataTableErrorRow`）
  *   - 还有旧数据可看时挂在表格上方当横幅（`DataTable` 的 `error` prop）
  *   - 卡片式页面（仪表盘 / 监控页）直接摆在页头下面
+ *
+ * 🔴 **原文可能很长，而且常常落在 `whitespace-nowrap` 的单元格里**（#210）。
+ * 后端把 SQL / pydantic 报错原样回给 `message`，一条就是几百个字符：
+ *   - 表体里（`TableCell` 自带 `whitespace-nowrap`）整句排成一行，横向冲出表格右边，
+ *     原来排在最右边的「重试」被一起裁掉 —— 桌面端**看不到重试**，390 宽反而看得到
+ *   - 卡片里（仪表盘）几十行竖着铺开，把卡片撑出屏幕
+ * 所以：根上显式 `whitespace-normal` + `overflow-wrap:anywhere`，不信任祖先；
+ * 「重试」跟着标题走，放在左上，宽表横向滚到哪都在视野里；
+ * 原文超过两行先截断，「展开」再看全。
  */
-import { IconAlertTriangle, IconRefresh } from "@tabler/icons-react"
+import * as React from "react"
+import { IconAlertTriangle, IconChevronDown, IconRefresh } from "@tabler/icons-react"
 import { useT } from "../lib/i18n"
 
 import { Button } from "@admin/ui/components/button"
@@ -31,6 +41,9 @@ export interface QueryErrorProps {
   className?: string
 }
 
+/** 超过这个长度（或带换行）就先截成两行，给「展开」 */
+const LONG_DETAIL = 140
+
 export function QueryError({
   error,
   onRetry,
@@ -40,34 +53,52 @@ export function QueryError({
   className = "",
 }: QueryErrorProps) {
   const t = useT()
+  const [expanded, setExpanded] = React.useState(false)
   const e = error as { httpStatus?: number; message?: string } | null
   const forbidden = e?.httpStatus === 403
+  const text = detail ?? (forbidden ? t("该接口需要更高的权限。") : (e?.message ?? t("未知错误")))
+  const long = text.length > LONG_DETAIL || text.includes("\n")
   return (
     <div
-      className={`flex flex-col items-start gap-2 rounded-md bg-destructive/10 px-4 py-3 text-start ring-1 ring-destructive/25 sm:flex-row sm:items-center sm:justify-between ${className}`}
+      className={`flex min-w-0 flex-col items-start gap-1.5 rounded-md bg-destructive/10 px-4 py-3 text-start whitespace-normal ring-1 ring-destructive/25 ${className}`}
       data-testid={testId}
       role="alert"
     >
-      <div className="flex min-w-0 flex-col gap-0.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <p className="flex items-center gap-1.5 text-sm font-medium text-destructive">
           <IconAlertTriangle className="size-4 shrink-0" />
           {title ?? (forbidden ? t("没有权限查看这些数据") : t("数据加载失败"))}
         </p>
-        <p className="text-xs text-destructive/80">
-          {detail ?? (forbidden ? t("该接口需要更高的权限。") : (e?.message ?? t("未知错误")))}
-        </p>
+        {onRetry && (
+          <Button
+            variant="outline"
+            size="xs"
+            className="shrink-0 bg-background"
+            onClick={onRetry}
+            data-testid={`${testId}-retry`}
+          >
+            <IconRefresh />
+            {t("重试")}
+          </Button>
+        )}
       </div>
-      {onRetry && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          onClick={onRetry}
-          data-testid={`${testId}-retry`}
+      <p
+        className={`max-w-full text-xs text-foreground/70 [overflow-wrap:anywhere] ${long && !expanded ? "line-clamp-2" : "max-h-64 overflow-y-auto whitespace-pre-wrap"}`}
+        data-testid={`${testId}-detail`}
+      >
+        {text}
+      </p>
+      {long && (
+        <button
+          type="button"
+          className="inline-flex items-center gap-0.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+          data-testid={`${testId}-toggle`}
         >
-          <IconRefresh className="size-4" />
-          {t("重试")}
-        </Button>
+          <IconChevronDown className={`size-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          {expanded ? t("收起") : t("展开详情")}
+        </button>
       )}
     </div>
   )
