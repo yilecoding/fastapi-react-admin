@@ -121,20 +121,20 @@ export function NotifyBotPage() {
 
               <CardFields>
                 <CardField label={t('地址')} className="truncate font-mono" testId={`bot-hint-${bot.name}`}>
-                    {bot.webhook_hint}
-                  </CardField>
+                  {bot.webhook_hint}
+                </CardField>
                 <CardField label={t('订阅')} className="flex flex-wrap gap-1">
-                    {bot.kinds.map((k) => (
-                      <Badge key={k} variant="outline" className="font-normal">
-                        {kindLabels.has(k) ? t(kindLabels.get(k) ?? k) : <span className="font-mono">{k}</span>}
-                      </Badge>
-                    ))}
-                  </CardField>
+                  {bot.kinds.map((k) => (
+                    <Badge key={k} variant="outline" className="font-normal">
+                      {kindLabels.has(k) ? t(kindLabels.get(k) ?? k) : <span className="font-mono">{k}</span>}
+                    </Badge>
+                  ))}
+                </CardField>
                 <CardField label={t('最近成功')} className="font-mono tabular-nums">{formatDateTime(bot.last_sent_time)}</CardField>
                 {bot.last_error ? (
                   <CardField label={t('最近失败')} className="break-all text-destructive" testId={`bot-last-error-${bot.name}`}>
-                      {bot.last_error}
-                    </CardField>
+                    {bot.last_error}
+                  </CardField>
                 ) : null}
               </CardFields>
 

@@ -156,12 +156,12 @@ export function StoragePage() {
                     <>
                       <CardField label={t('端点')} className="truncate font-mono">{storage.endpoint}</CardField>
                       <CardField label={t('桶')} className="truncate font-mono">
-                          {storage.bucket}
-                          {storage.root ? `/${storage.root}` : ''}
-                        </CardField>
+                        {storage.bucket}
+                        {storage.root ? `/${storage.root}` : ''}
+                      </CardField>
                       <CardField label={t('密钥')} className="truncate font-mono">
-                          {storage.access_key} · {storage.secret_hint}
-                        </CardField>
+                        {storage.access_key} · {storage.secret_hint}
+                      </CardField>
                     </>
                   )}
                   <CardField label={t('文件数')}>{storage.file_count}</CardField>

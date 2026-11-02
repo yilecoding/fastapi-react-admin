@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { IconKey, IconPencil, IconPlus, IconRefresh, IconTrash } from '@tabler/icons-react'
+import { IconKey, IconPencil, IconRefresh, IconTrash } from '@tabler/icons-react'
 import * as React from 'react'
 
 import { formatDateTime } from '@admin/i18n'
@@ -118,7 +118,7 @@ export function AiMcpClientPage() {
               label={t('新建凭据')}
               onClick={() => openSheet(null)}
               hint={clients.length === 0 ? t('给一个外部系统发一把令牌，它就能以指定用户的身份调用查询工具') : undefined}
-              icon={clients.length ? IconPlus : IconKey}
+              icon={clients.length ? undefined : IconKey}
             />
           </Can>
         </div>

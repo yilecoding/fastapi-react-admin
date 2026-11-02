@@ -132,32 +132,32 @@ export function SmsConfigPage() {
 
                 <CardFields>
                   <CardField label={t('业务模板')} className="flex flex-wrap gap-1">
-                      {mapped.length === 0 ? (
-                        <span className="text-amber-700 dark:text-amber-300">{t('一个都没配 —— 发不了任何业务短信')}</span>
-                      ) : (
-                        mapped.map((code) => (
-                          <Badge key={code} variant="outline" className="font-normal">
-                            {t(templateLabels.get(code) ?? code)}
-                            <span className="ms-1 font-mono text-muted-foreground">{config.templates[code]?.template_id}</span>
-                          </Badge>
-                        ))
-                      )}
-                    </CardField>
+                    {mapped.length === 0 ? (
+                      <span className="text-amber-700 dark:text-amber-300">{t('一个都没配 —— 发不了任何业务短信')}</span>
+                    ) : (
+                      mapped.map((code) => (
+                        <Badge key={code} variant="outline" className="font-normal">
+                          {t(templateLabels.get(code) ?? code)}
+                          <span className="ms-1 font-mono text-muted-foreground">{config.templates[code]?.template_id}</span>
+                        </Badge>
+                      ))
+                    )}
+                  </CardField>
                   {config.secret_mask ? (
                     <CardField label={t('凭据')} className="truncate font-mono">
-                        {config.access_key_id} · {config.secret_mask}
-                      </CardField>
+                      {config.access_key_id} · {config.secret_mask}
+                    </CardField>
                   ) : null}
                   <CardField label={t('今日已发')} className="tabular-nums">
-                      {config.today_sent}
-                      {config.daily_max > 0 ? ` / ${config.daily_max}` : ` / ${t('不限')}`}
-                    </CardField>
+                    {config.today_sent}
+                    {config.daily_max > 0 ? ` / ${config.daily_max}` : ` / ${t('不限')}`}
+                  </CardField>
                   <CardField label={t('权重')} className="tabular-nums">
-                      {config.weight === 0 ? t('0（只能被指定）') : config.weight}
-                      <span className="ms-2 text-muted-foreground">
-                        {t('超时')} {config.timeout}s
-                      </span>
-                    </CardField>
+                    {config.weight === 0 ? t('0（只能被指定）') : config.weight}
+                    <span className="ms-2 text-muted-foreground">
+                      {t('超时')} {config.timeout}s
+                    </span>
+                  </CardField>
                 </CardFields>
 
                 <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">

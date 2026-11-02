@@ -9,7 +9,8 @@ import { cn } from '@admin/ui/lib/utils'
  * 外框和标题区五页本来就是同一套写法，没收；真正各写各的是这两处：
  * - **键值区**：标签列宽写死成 `w-10` / `w-14` / `w-16` 三种，同一行的「标签 + 值」两列在卡片之间对不齐，
  *   而且宽度一写死，换成英文标签（`Last success`）就把值挤到下一行。现在是 grid 的 `max-content` 列：
- *   标签列按**这张卡里最长的标签**自适应，不用再猜宽度
+ *   标签列按**这张卡里最长的标签**自适应，不用再猜宽度。标签另有 `max-w-24` 上限、超了就折行 ——
+ *   否则英文的 `Business template` 会把整列撑到 110px，值列（多是 `truncate` 的凭据 / 地址）被截得更狠（#215 评审）
  * - **「新增」格**：五份手抄，最小高度 `min-h-44` / `48` / `52` 三种
  */
 
@@ -41,8 +42,13 @@ export function CardField({
 }) {
   return (
     <>
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className={cn('min-w-0 break-words', className)} title={title} data-testid={testId}>
+      <dt className="max-w-24 text-muted-foreground">{label}</dt>
+      {/* 值是纯文本时自动带 title：卡片里的地址 / 凭据多是 truncate 的，截了得有办法看全 */}
+      <dd
+        className={cn('min-w-0 break-words', className)}
+        title={title ?? (typeof children === 'string' ? children : undefined)}
+        data-testid={testId}
+      >
         {children}
       </dd>
     </>
