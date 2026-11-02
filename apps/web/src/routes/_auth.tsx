@@ -76,8 +76,13 @@ function AuthLayout() {
   // 顶栏面包屑：活动 tab 的 URL 决定链路,tab 自己的标题兜底
   // hideInMenu 的页面（个人中心那类)不进 nav 树,链路查不到时用它
   const activePath = useRouterState({ select: (s) => s.location.pathname })
+  // 面包屑的父级和最后一级都从**同一个**路由匹配里取：最后一级原来用页签的标题，而页签要等导航空闲后才切过去，
+  // 中间有一两帧读成「应用管理 › 应用管理」（#220 评审）
   const activeParent = useRouterState({
     select: (s) => (s.matches[s.matches.length - 1]?.staticData as { parent?: string } | undefined)?.parent,
+  })
+  const activeStaticTitle = useRouterState({
+    select: (s) => (s.matches[s.matches.length - 1]?.staticData as { title?: string } | undefined)?.title,
   })
   const showTabs = usePreferences((s) => s.showTabs)
   const activeTabTitle = useTabStore((s) => s.tabs.find((tb) => tb.key === s.activeKey)?.title)
@@ -118,7 +123,7 @@ function AuthLayout() {
               关掉多标签页时标签条整个不渲染，那时面包屑是唯一看得见页名的地方，照旧显示（#216 评审） */}
           <Separator orientation="vertical" className={cn("me-2 data-[orientation=vertical]:h-4", showTabs && "max-sm:hidden")} />
           <div className={cn("min-w-0", showTabs && "max-sm:hidden")}>
-            <NavBreadcrumb nav={nav} activePath={activePath} fallbackTitle={activeTabTitle} parentPath={activeParent} />
+            <NavBreadcrumb nav={nav} activePath={activePath} fallbackTitle={activeParent ? (activeStaticTitle ?? activeTabTitle) : activeTabTitle} parentPath={activeParent} />
           </div>
           {/* 命令面板入口：⌘K 也能开，但快捷键不摆出来就等于只有作者知道 */}
           <div className="ms-auto flex items-center gap-2">

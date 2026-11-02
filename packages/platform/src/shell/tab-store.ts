@@ -68,9 +68,11 @@ export const useTabStore = create<TabState>()(
         const { tabs } = get()
         const existing = tabs.findIndex((t) => t.key === input.key)
         if (existing >= 0) {
-          // 同一 tab，只更新 href/snapshot（search 变化不开新 tab）
+          // 同一 tab：更新 href/snapshot（search 变化不开新 tab），标题和图标也跟着路由当前的声明走 ——
+          // 只更新前两样的话，从 sessionStorage 恢复出来的老页签永远留着改名前的标题、没有新加的图标（#220 评审）。
+          // 标题都是静态的（staticData / 菜单），没有别处动态改它，所以覆盖是安全的
           const next = [...tabs]
-          next[existing] = { ...next[existing], href: input.href, snapshot: input.snapshot }
+          next[existing] = { ...next[existing], href: input.href, snapshot: input.snapshot, title: input.title, icon: input.icon }
           set({ tabs: next, activeKey: input.key })
           return
         }
@@ -187,4 +189,13 @@ export const useTabStore = create<TabState>()(
 export function makeTabKey(routeId: string, params: unknown) {
   const p = params && Object.keys(params as object).length ? JSON.stringify(params) : ""
   return p ? `${routeId}|${p}` : routeId
+}
+
+/**
+ * 页签用哪个图标：先按路径查菜单树，查不到再用路由 `staticData.icon`（不进侧边栏的页面）。
+ * 标签条、标签列表下拉、⌘K「已打开的标签页」三处共用这一条，别各写各的（#220 评审：只改了标签条，另两处还是圆点）
+ */
+export function tabIcon(tab: Pick<Tab, 'href' | 'icon'>, iconByPath: Map<string, string | null>): string | null {
+  const pathname = tab.href.split('?')[0] ?? tab.href
+  return iconByPath.get(pathname) ?? tab.icon ?? null
 }

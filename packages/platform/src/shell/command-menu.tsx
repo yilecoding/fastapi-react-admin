@@ -15,7 +15,7 @@ import { useCommandStore } from './command-store'
 import { isEditableTarget, MOD_LABEL } from './hotkeys'
 import { MenuIcon } from './icon-registry'
 import { ShortcutsDialog } from './shortcuts-dialog'
-import { isRemovable, useTabStore } from './tab-store'
+import { isRemovable, tabIcon, useTabStore } from './tab-store'
 import { SHELL_TOUR } from './tour/shell-tour'
 import { startTour } from './tour/tour'
 import { useSidebar, type NavNode, type SidebarOptions } from './use-sidebar'
@@ -97,7 +97,7 @@ export function CommandMenu({ options }: { options: SidebarOptions }) {
           label,
           hint: tab.href,
           keywords: pathname,
-          icon: <MenuIcon name={iconByPath.get(pathname) ?? null} className="size-4" />,
+          icon: <MenuIcon name={tabIcon(tab, iconByPath)} className="size-4" />,
           trailing: (
             <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
               {tab.pinned && <IconPin className="size-3" />}
