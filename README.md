@@ -8,11 +8,11 @@
 
 Row-level permissions · multi-tab that keeps state · approval workflow · an AI assistant that can't overreach · S3 storage with resumable uploads · web, desktop and mobile
 
-[Live demo](https://fra.wubunan.com/sign-in) · [Quick start](#quick-start) · [Features](#features) · [Releases](https://github.com/yilecoding/fastapi-react-admin/releases) · [简体中文](./README.zh-CN.md)
+[Live demo](https://fra.wubunan.com/sign-in) · [Docs](https://yilecoding.github.io/fastapi-react-admin/en/) · [Quick start](#quick-start) · [Features](#features) · [Releases](https://github.com/yilecoding/fastapi-react-admin/releases) · [简体中文](./README.zh-CN.md)
 
 [![Release](https://img.shields.io/github/v/release/yilecoding/fastapi-react-admin?style=flat-square)](https://github.com/yilecoding/fastapi-react-admin/releases)
 [![CI](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml/badge.svg)](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml)
-[![E2E report](https://img.shields.io/badge/E2E_report-Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://yilecoding.github.io/fastapi-react-admin/)
+[![E2E report](https://img.shields.io/badge/E2E_report-Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://yilecoding.github.io/fastapi-react-admin/e2e/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](./LICENSE)
 
 </div>
@@ -102,16 +102,16 @@ docker compose -f docker-compose.dev.yml up -d          # PostgreSQL + Redis
 pnpm install:all                                        # frontend + backend dependencies
 cp apps/api/backend/.env.example apps/api/backend/.env  # defaults match the containers above
 pnpm db:init                                            # create tables + seed data (first run)
-pnpm dev                                                # open http://localhost:8888
+pnpm dev                                                # open http://127.0.0.1:8888
 ```
 
-Sign in as `admin` / `123456`. Switching to SQL Server / MySQL, S3, skipping the captcha and running tests are covered in [CONTRIBUTING.md](./CONTRIBUTING.md#本地开发) (Chinese; the commands are language-independent).
+Sign in as `admin` with the password you set during `pnpm db:init`. Switching to SQL Server / MySQL, S3, skipping the captcha and running tests are covered in [CONTRIBUTING.md](./CONTRIBUTING.md#本地开发) (Chinese; the commands are language-independent).
 
 ## Quality
 
 1,400+ backend pytest tests run against a real database and Redis; 150+ Playwright tests drive a real browser against the real API and database — **no mocks**.
 Data permissions were verified by signing in as 41 real accounts one by one; key safeguards are mutation-tested (break the code on purpose, confirm the tests go red).
-The [E2E report](https://yilecoding.github.io/fastapi-react-admin/) from every `main` run is public, with screenshots and videos of failures.
+The [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) from every `main` run is public, with screenshots and videos of failures.
 
 ## Docs
 

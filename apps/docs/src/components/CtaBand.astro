@@ -1,0 +1,35 @@
+---
+/** 首页收尾的一条品牌色面板：标题 + slot（放那五条命令的代码块）+ 两个按钮。 */
+interface Props {
+  title: string
+  primary: { text: string; href: string }
+  secondary?: { text: string; href: string }
+}
+const { title, primary, secondary } = Astro.props
+---
+
+<section class="cta-band not-content">
+  <div class="hero-glow" aria-hidden="true"></div>
+  <h2 id="cta">{title}</h2>
+  <div class="cta-code"><slot /></div>
+  <div class="cta-actions">
+    <a class="hero-btn hero-btn--primary" href={primary.href}>{primary.text}</a>
+    {secondary && <a class="hero-btn hero-btn--secondary" href={secondary.href}>{secondary.text}</a>}
+  </div>
+</section>
+
+<style is:global>
+  .cta-band {
+    position: relative; isolation: isolate; overflow: hidden;
+    display: flex; flex-direction: column; align-items: center; gap: 1.5rem;
+    margin: 6.5rem 0 0 !important; padding: clamp(2rem, 5vw, 3.5rem) clamp(1.25rem, 4vw, 3.5rem);
+    border-radius: 2rem; text-align: center;
+    background: var(--brand-panel);
+    box-shadow: inset 0 0 0 1px var(--brand-ring);
+  }
+  .cta-band > * { margin: 0 !important }
+  .cta-band .hero-glow { top: -30rem; left: 50%; transform: translateX(-50%) }
+  .cta-band h2 { font-size: clamp(1.7rem, 3.4vw, 2.4rem); font-weight: 800; letter-spacing: -0.03em; color: var(--sl-color-white) }
+  .cta-code { width: min(100%, 46rem); text-align: left }
+  .cta-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.75rem }
+</style>

@@ -8,11 +8,11 @@
 
 权限细到数据行 · 多页签真保状态 · 飞书式审批 · 不越权的 AI 助手 · S3 存储与断点续传 · Web / 桌面 / 移动三端
 
-[在线演示](https://fra.wubunan.com/sign-in) · [快速开始](#快速开始) · [功能一览](#功能一览) · [更新记录](https://github.com/yilecoding/fastapi-react-admin/releases) · [English](./README.md)
+[在线演示](https://fra.wubunan.com/sign-in) · [文档](https://yilecoding.github.io/fastapi-react-admin/) · [快速开始](#快速开始) · [功能一览](#功能一览) · [更新记录](https://github.com/yilecoding/fastapi-react-admin/releases) · [English](./README.md)
 
 [![Release](https://img.shields.io/github/v/release/yilecoding/fastapi-react-admin?style=flat-square)](https://github.com/yilecoding/fastapi-react-admin/releases)
 [![CI](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml/badge.svg)](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml)
-[![E2E 报告](https://img.shields.io/badge/E2E_报告-Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://yilecoding.github.io/fastapi-react-admin/)
+[![E2E 报告](https://img.shields.io/badge/E2E_报告-Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://yilecoding.github.io/fastapi-react-admin/e2e/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](./LICENSE)
 
 </div>
@@ -105,10 +105,10 @@ docker compose -f docker-compose.dev.yml up -d          # PostgreSQL + Redis
 pnpm install:all                                        # 前后端依赖
 cp apps/api/backend/.env.example apps/api/backend/.env  # 默认配置已对齐上面的容器
 pnpm db:init                                            # 建表 + 初始数据（首次）
-pnpm dev                                                # 打开 http://localhost:8888
+pnpm dev                                                # 打开 http://127.0.0.1:8888
 ```
 
-账号 `admin` / `123456`。换 SQL Server / MySQL、接 S3、跳过验证码、跑测试，见[本地开发指南](./CONTRIBUTING.md#本地开发)。
+账号 `admin`，密码是 `pnpm db:init` 时设的。换 SQL Server / MySQL、接 S3、跳过验证码、跑测试，见[本地开发指南](./CONTRIBUTING.md#本地开发)。
 
 部署到服务器：`main` 每次通过 CI 都会构建好镜像，服务器上 `bash prod.sh pull && bash prod.sh up` 即可更新，见 [`deploy/README.md`](./deploy/README.md)。
 
@@ -116,7 +116,7 @@ pnpm dev                                                # 打开 http://localhos
 
 后端 1400+ 条 pytest 打真实数据库和 Redis，前端 150+ 条 Playwright 打真实浏览器、真实接口和真实库 —— **不 mock**。
 数据权限是拿 41 个真账号逐个登录验证出来的；关键防线都做过变异检验（故意把代码改坏，确认测试会红）。
-`main` 每次跑完的 [E2E 报告](https://yilecoding.github.io/fastapi-react-admin/) 都公开，失败用例带截图和录像。
+`main` 每次跑完的 [E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/) 都公开，失败用例带截图和录像。
 
 ## 文档
 

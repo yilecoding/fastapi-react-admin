@@ -1,0 +1,69 @@
+---
+/**
+ * 首页功能卡：整张卡是一个链接。图标是这里手画的 24×24 描边图（不引图标库 —— 只用到六个）。
+ * 外层用 `<div class="features">` 包成网格（样式在本文件里）。
+ */
+interface Props {
+  title: string
+  href: string
+  icon: keyof typeof ICONS
+  more: string
+}
+
+const ICONS = {
+  rows: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M3 14.5h18"/><path d="M6.5 12h6" stroke-width="2.6"/>',
+  tabs: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 11h18"/><path d="M5.5 7V5.5A1.5 1.5 0 0 1 7 4h4a1.5 1.5 0 0 1 1.5 1.5V7"/><path d="M14 4.6A1.5 1.5 0 0 1 15 4h3.5A1.5 1.5 0 0 1 20 5.5V7"/>',
+  flow: '<circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 6h7M7.2 8.3l3.6 7.4M16.8 8.3l-3.6 7.4"/>',
+  sparkles: '<path d="M11 3.5l1.9 4.6 4.6 1.9-4.6 1.9L11 16.5l-1.9-4.6L4.5 10l4.6-1.9z"/><path d="M18.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/>',
+  upload: '<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
+  database: '<ellipse cx="12" cy="5.5" rx="7.5" ry="2.5"/><path d="M4.5 5.5v13c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5v-13"/><path d="M4.5 12c0 1.4 3.4 2.5 7.5 2.5s7.5-1.1 7.5-2.5"/>',
+}
+
+const { title, href, icon, more } = Astro.props
+---
+
+<a class="feature not-content" href={href}>
+  <span class="feature-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" set:html={ICONS[icon]} />
+  </span>
+  <h3>{title}</h3>
+  <div class="feature-body"><slot /></div>
+  <span class="feature-more">{more} <span aria-hidden="true">→</span></span>
+</a>
+
+<style is:global>
+  .features { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) }
+  @media (min-width: 46rem) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+  @media (min-width: 66rem) { .features { grid-template-columns: repeat(3, minmax(0, 1fr)) } }
+  .features > * { margin: 0 !important }
+
+  .feature {
+    position: relative; display: flex; flex-direction: column; gap: 0.7rem;
+    padding: 1.6rem; border-radius: 1.25rem;
+    color: inherit; text-decoration: none;
+    background: var(--brand-card);
+    box-shadow: 0 0 0 1px var(--brand-ring);
+    transition: transform 0.22s ease, box-shadow 0.22s ease, background-color 0.22s ease;
+  }
+  .feature::before {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: radial-gradient(28rem 12rem at 0% 0%, var(--brand-glow), transparent 60%);
+    opacity: 0; transition: opacity 0.22s ease;
+  }
+  .feature:hover { transform: translateY(-3px); background: var(--brand-card-hover); box-shadow: 0 0 0 1px var(--brand-chip-line), 0 22px 50px -26px oklch(0.457 0.24 277 / 0.7) }
+  .feature:hover::before { opacity: 1 }
+  .feature > * { position: relative; margin: 0 }
+  .feature-icon {
+    display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 0.85rem;
+    color: #fff;
+    background: linear-gradient(140deg, oklch(0.62 0.21 284), oklch(0.457 0.24 277));
+    box-shadow: 0 8px 20px -8px oklch(0.457 0.24 277 / 0.8), inset 0 1px 0 oklch(1 0 0 / 0.3);
+  }
+  .feature-icon svg { width: 1.4rem; height: 1.4rem }
+  .feature h3 { margin-top: 0.4rem; font-size: 1.15rem; font-weight: 700; letter-spacing: -0.015em; color: var(--sl-color-white) }
+  .feature-body { font-size: 0.925rem; line-height: 1.65; color: var(--sl-color-gray-3) }
+  .feature-body p { margin: 0 }
+  .feature-more { margin-top: auto !important; padding-top: 0.4rem; font-size: 0.85rem; font-weight: 600; color: var(--brand) }
+  .feature-more span { display: inline-block; transition: transform 0.2s ease }
+  .feature:hover .feature-more span { transform: translateX(3px) }
+</style>
