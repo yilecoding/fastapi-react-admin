@@ -3,10 +3,10 @@ import { createColumnHelper, useTable } from '@tanstack/react-table'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { formatDateTime } from '@admin/i18n'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 
+import { DurationCell, TimeCell } from '../_shared/cells'
 import { PageHeader } from '../../shell/page-header'
 import { ClearLogsButton } from '../_shared/clear-logs'
 import { RefreshButton, ResetButton } from '../_shared/filters'
@@ -147,14 +147,7 @@ export function SmsLogPage({ search = {}, onSearchChange }: { search?: SmsLogSea
         header: t('时间'),
         // 点时间开详情 —— 同操作日志页，比额外加一列「查看」省地方
         cell: ({ row, getValue }) => (
-          <button
-            type="button"
-            data-testid={`open-detail-${row.original.id}`}
-            onClick={() => setDetail(row.original.id)}
-            className="font-mono text-xs text-primary tabular-nums underline-offset-2 hover:underline"
-          >
-            {formatDateTime(getValue())}
-          </button>
+          <TimeCell value={getValue()} onOpen={() => setDetail(row.original.id)} testId={`open-detail-${row.original.id}`} />
         ),
       }),
       col.accessor('phone', {
@@ -195,10 +188,8 @@ export function SmsLogPage({ search = {}, onSearchChange }: { search?: SmsLogSea
       }),
       col.accessor('duration_ms', {
         header: t('耗时'),
-        cell: ({ getValue }) => {
-          const v = getValue()
-          return <span className="tabular-nums">{v === null ? '—' : `${v}ms`}</span>
-        },
+        // 要等短信厂商回话，几百毫秒是常态 —— 3 秒以上才标慢
+        cell: ({ getValue }) => <DurationCell ms={getValue()} slowMs={3000} />,
       }),
     ],
     [page, size, t],

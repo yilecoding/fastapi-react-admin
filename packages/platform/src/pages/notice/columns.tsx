@@ -1,20 +1,13 @@
 import { createColumnHelper } from '@tanstack/react-table'
-import { IconChartBar, IconDotsVertical, IconEye, IconPencil, IconTrash } from '@tabler/icons-react'
+import { IconChartBar, IconEye, IconPencil, IconTrash } from '@tabler/icons-react'
 
-import { formatDateTime, formatDateTimeShort } from '@admin/i18n'
+import { formatDateTimeShort } from '@admin/i18n'
+import { ACTIONS_COLUMN_ID } from '@admin/ui/components/data-table'
 import { Badge } from '@admin/ui/components/badge'
-import { Button } from '@admin/ui/components/button'
 import { richTextToPlain } from '@admin/ui/components/rich-text'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@admin/ui/components/dropdown-menu'
 
-import { Can } from '../../auth/can'
+import { RowActions, TimeCell } from '../_shared/cells'
 import { buildSelectColumn } from '../_shared/select-column'
 import { StatusPill } from '../_shared/status'
 import { NOTICE_TYPE_LABEL, isExpired, isScheduled, type Notice, type NoticeAudienceItem } from './api'
@@ -180,8 +173,8 @@ export function buildColumns(
     col.accessor('expire_time', {
       header: t('过期时间'),
       cell: ({ getValue }) => (
-        // 空值 formatDateTime 给 '—'（= 不过期）
-        <span className="text-sm tabular-nums text-muted-foreground">{formatDateTime(getValue())}</span>
+        // 空值显示 '—'（= 不过期）
+        <TimeCell value={getValue()} />
       ),
     }),
     col.accessor('content', {
@@ -198,58 +191,35 @@ export function buildColumns(
     col.accessor('created_time', {
       header: t('创建时间'),
       cell: ({ getValue }) => (
-        <span className="text-sm tabular-nums text-muted-foreground">{formatDateTime(getValue())}</span>
+        <TimeCell value={getValue()} />
       ),
     }),
     col.accessor('updated_time', {
       header: t('更新时间'),
       cell: ({ getValue }) => (
-        // 空值由 formatDateTime 统一给 '—'，不用再判一次
-        <span className="text-sm tabular-nums text-muted-foreground">{formatDateTime(getValue())}</span>
+        <TimeCell value={getValue()} />
       ),
     }),
     col.display({
-      id: 'actions',
+      id: ACTIONS_COLUMN_ID,
       header: () => <span className="sr-only">{t('操作')}</span>,
       cell: ({ row }) => {
         const n = row.original
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon" className="size-7" aria-label={t('操作 {{name}}', { name: n.title })} />}
-              data-testid={`notice-actions-${n.id}`}
-            >
-              <IconDotsVertical className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-36">
-              <DropdownMenuItem onClick={() => onView(n)} data-testid={`notice-view-${n.id}`}>
-                <IconEye className="size-4" />
-                {t('查看全文')}
-              </DropdownMenuItem>
-              {/* 接口和管理页同一个码（`sys:notice:add`），能进这一页就能看 */}
-              <DropdownMenuItem onClick={() => onReads(n)} data-testid={`notice-reads-${n.id}`}>
-                <IconChartBar className="size-4" />
-                {t('阅读统计')}
-              </DropdownMenuItem>
-              <Can perm="sys:notice:edit" fallback={null}>
-                <DropdownMenuItem onClick={() => onEdit(n)} data-testid={`notice-edit-${n.id}`}>
-                  <IconPencil className="size-4" />
-                  {t('编辑')}
-                </DropdownMenuItem>
-              </Can>
-              <Can perm="sys:notice:del">
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => onDelete(n)}
-                  data-testid={`notice-delete-${n.id}`}
-                >
-                  <IconTrash className="size-4" />
-                  {t('删除')}
-                </DropdownMenuItem>
-              </Can>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <RowActions
+            label={n.title}
+            testId={`notice-actions-${n.id}`}
+            items={[
+              { key: 'view', label: t('查看全文'), icon: IconEye, testId: `notice-view-${n.id}`, onClick: () => onView(n) },
+              // 阅读统计的接口和管理页同一个码（`sys:notice:add`），能进这一页就能看
+              { key: 'reads', label: t('阅读统计'), icon: IconChartBar, testId: `notice-reads-${n.id}`, onClick: () => onReads(n) },
+              { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'sys:notice:edit', testId: `notice-edit-${n.id}`, onClick: () => onEdit(n) },
+              {
+                key: 'del', label: t('删除'), icon: IconTrash, perm: 'sys:notice:del', danger: true,
+                testId: `notice-delete-${n.id}`, onClick: () => onDelete(n),
+              },
+            ]}
+          />
         )
       },
     }),

@@ -13,6 +13,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
 import { cn } from '@admin/ui/lib/utils'
 
+import { formatMs } from '../_shared/cells'
 import { JsonViewer } from '../_shared/json-viewer'
 import { DetailIdRow, DetailSection } from '../_shared/detail-sheet'
 import { StatusPill } from '../_shared/status'
@@ -93,7 +94,7 @@ export function OperaLogDetailSheet({
               </DescriptionItem>
               <DescriptionItem label={t('耗时')}>
                 <span className={cn('font-mono text-sm tabular-nums', log.cost_time > 500 && 'font-medium text-amber-600 dark:text-amber-400')}>
-                  {log.cost_time.toFixed(1)} ms
+                  {formatMs(log.cost_time)}
                 </span>
               </DescriptionItem>
             </Descriptions>

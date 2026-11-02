@@ -56,7 +56,9 @@ test.describe("任务调度", () => {
     ).not.toBeChecked()
 
     // 删除必须过二次确认，不能一点就没
-    await page.locator("tbody tr", { hasText: name }).locator('[data-testid^="del-scheduler-"]').click()
+    // 删除收在行尾的 ⋯ 菜单里（#210）
+    await page.locator("tbody tr", { hasText: name }).locator('[data-testid^="scheduler-actions-"]').click()
+    await page.locator('[data-testid^="del-scheduler-"]').click()
     await expect(page.getByTestId("confirm-dialog")).toBeVisible()
     await page.getByTestId("confirm-ok").click()
     await expect(page.locator("tbody tr", { hasText: name })).toHaveCount(0)
@@ -94,7 +96,9 @@ test.describe("任务调度", () => {
     await expect(page.getByTestId("cron-expr")).toHaveValue(stepped)
     await page.getByRole("button", { name: "取消" }).click()
 
-    await page.locator("tbody tr", { hasText: name }).locator('[data-testid^="del-scheduler-"]').click()
+    // 删除收在行尾的 ⋯ 菜单里（#210）
+    await page.locator("tbody tr", { hasText: name }).locator('[data-testid^="scheduler-actions-"]').click()
+    await page.locator('[data-testid^="del-scheduler-"]').click()
     await page.getByTestId("confirm-ok").click()
   })
 
@@ -291,7 +295,9 @@ test.describe("任务参数", () => {
     await expect(page.getByTestId("s-kwargs")).toHaveValue('{"days": 60}')
     await page.getByRole("button", { name: "取消" }).click()
 
-    await page.locator("tbody tr", { hasText: name }).locator('[data-testid^="del-scheduler-"]').click()
+    // 删除收在行尾的 ⋯ 菜单里（#210）
+    await page.locator("tbody tr", { hasText: name }).locator('[data-testid^="scheduler-actions-"]').click()
+    await page.locator('[data-testid^="del-scheduler-"]').click()
     await page.getByTestId("confirm-ok").click()
   })
 })

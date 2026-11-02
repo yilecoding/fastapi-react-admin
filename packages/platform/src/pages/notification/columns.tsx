@@ -3,11 +3,13 @@ import { createColumnHelper } from '@tanstack/react-table'
 import { IconCheck, IconExternalLink, IconEyeCheck } from '@tabler/icons-react'
 
 import { formatDateTime } from '@admin/i18n'
+import { ACTIONS_COLUMN_ID } from '@admin/ui/components/data-table'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 import { cn } from '@admin/ui/lib/utils'
 
+import { TimeCell } from '../_shared/cells'
 import { StatusPill } from '../_shared/status'
 import { AttachmentCount } from '../notice/shared'
 import { noticeIdOf, type Notification } from './api'
@@ -128,13 +130,11 @@ export function buildColumns(
     col.accessor('created_time', {
       header: t('时间'),
       cell: ({ getValue }) => (
-        <span className="text-sm tabular-nums text-muted-foreground">
-          {formatDateTime(getValue())}
-        </span>
+        <TimeCell value={getValue()} />
       ),
     }),
     col.display({
-      id: 'actions',
+      id: ACTIONS_COLUMN_ID,
       header: () => <span className="sr-only">{t('操作')}</span>,
       cell: ({ row }) => {
         const n = row.original

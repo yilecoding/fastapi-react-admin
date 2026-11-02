@@ -6,16 +6,21 @@ import {
   type ColumnVisibilityState, type RowSelectionState,
 } from '@tanstack/react-table'
 import {
-  IconDotsVertical, IconPencil, IconPlus, IconTrash, IconUpload,
+  IconPencil,
+  IconPlus,
+  IconTrash,
+  IconUpload,
 } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
-import { DataTable } from '@admin/ui/components/data-table'
+import { ACTIONS_COLUMN_ID, DataTable } from '@admin/ui/components/data-table'
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
 } from '@admin/ui/components/dropdown-menu'
 import { cn } from '@admin/ui/lib/utils'
 
+import { RowActions } from '../_shared/cells'
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
@@ -188,34 +193,25 @@ export function DictPage({
         ),
       }),
       col.display({
-        id: 'actions',
+        id: ACTIONS_COLUMN_ID,
         header: () => <span className="sr-only">{t('操作')}</span>,
         cell: ({ row }) => {
           const d = row.original
           return (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={<Button variant="ghost" size="icon" className="size-7" aria-label={t('操作 {{name}}', { name: d.label })} />}
-                data-testid={`data-actions-${d.value}`}
-              >
-                <IconDotsVertical className="size-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-32">
-                <Can perm="dict:data:edit">
-                  <DropdownMenuItem onClick={() => { setEditingData(d); setDataSheet(true) }}
-                                    data-testid={`data-edit-${d.value}`}>
-                    <IconPencil className="size-4" />{t('编辑')}
-                  </DropdownMenuItem>
-                </Can>
-                <Can perm="dict:data:del">
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem variant="destructive" onClick={() => setDelData(d)}
-                                    data-testid={`data-delete-${d.value}`}>
-                    <IconTrash className="size-4" />{t('删除')}
-                  </DropdownMenuItem>
-                </Can>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <RowActions
+              label={d.label}
+              testId={`data-actions-${d.value}`}
+              items={[
+                {
+                  key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'dict:data:edit', testId: `data-edit-${d.value}`,
+                  onClick: () => { setEditingData(d); setDataSheet(true) },
+                },
+                {
+                  key: 'del', label: t('删除'), icon: IconTrash, perm: 'dict:data:del', danger: true,
+                  testId: `data-delete-${d.value}`, onClick: () => setDelData(d),
+                },
+              ]}
+            />
           )
         },
       }),

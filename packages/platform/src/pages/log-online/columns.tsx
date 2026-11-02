@@ -1,14 +1,12 @@
 import { createColumnHelper } from '@tanstack/react-table'
-import { IconDotsVertical, IconLogout, IconWifi, IconWifiOff } from '@tabler/icons-react'
+import { IconLogout, IconWifi, IconWifiOff } from '@tabler/icons-react'
 
 import { formatDateTime } from '@admin/i18n'
+import { ACTIONS_COLUMN_ID } from '@admin/ui/components/data-table'
 import { Badge } from '@admin/ui/components/badge'
-import { Button } from '@admin/ui/components/button'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from '@admin/ui/components/dropdown-menu'
 import { cn } from '@admin/ui/lib/utils'
 
+import { RowActions, TimeCell } from '../_shared/cells'
 import { buildSelectColumn } from '../_shared/select-column'
 import { StatusPill } from '../_shared/status'
 import { remainingText, type OnlineSession } from './api'
@@ -118,19 +116,14 @@ export function buildColumns({
     col.accessor('last_login_time', {
       header: t('登录时间'),
       cell: ({ getValue }) => (
-        <span className="font-mono text-xs tabular-nums text-muted-foreground">
-          {formatDateTime(getValue())}
-        </span>
+        <TimeCell value={getValue()} />
       ),
     }),
     col.accessor('last_active_time', {
       header: t('最后活跃'),
       cell: ({ getValue }) => (
-        <span
-          className="font-mono text-xs tabular-nums text-muted-foreground"
-          title={t('按用户操作算，页面的后台轮询不算')}
-        >
-          {formatDateTime(getValue())}
+        <span title={t('按用户操作算，页面的后台轮询不算')}>
+          <TimeCell value={getValue()} />
         </span>
       ),
     }),
@@ -161,32 +154,23 @@ export function buildColumns({
       ),
     }),
     col.display({
-      id: 'actions',
+      id: ACTIONS_COLUMN_ID,
       enableHiding: false,
       header: () => <span className="sr-only">{t('操作')}</span>,
       cell: ({ row }) => {
         const s = row.original
         const isMe = s.session_uuid === currentUuid
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon" className="size-7" aria-label={t('操作 {{name}}', { name: s.username })} />}
-              data-testid={`row-actions-${s.session_uuid}`}
-            >
-              <IconDotsVertical className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
-              <DropdownMenuItem
-                variant="destructive"
-                disabled={isMe}
-                onClick={() => onKick(s)}
-                data-testid={`kick-${s.session_uuid}`}
-              >
-                <IconLogout className="size-4" />
-                {isMe ? t('不能踢自己') : t('强制下线')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <RowActions
+            label={s.username}
+            testId={`row-actions-${s.session_uuid}`}
+            items={[
+              {
+                key: 'kick', label: isMe ? t('不能踢自己') : t('强制下线'), icon: IconLogout, danger: true,
+                disabled: isMe, testId: `kick-${s.session_uuid}`, onClick: () => onKick(s),
+              },
+            ]}
+          />
         )
       },
     }),

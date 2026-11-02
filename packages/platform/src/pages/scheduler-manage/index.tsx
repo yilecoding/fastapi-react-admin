@@ -2,11 +2,10 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
-import { IconAlertTriangle, IconPlayerPlay, IconPlus } from '@tabler/icons-react'
+import { IconAlertTriangle, IconPlayerPlay, IconPlus, IconTrash } from '@tabler/icons-react'
 
-import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
-import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
+import { ACTIONS_COLUMN_ID, DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 import { Switch } from '@admin/ui/components/switch'
 import { cn } from '@admin/ui/lib/utils'
@@ -15,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/to
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
+import { RowActions, TimeCell } from '../_shared/cells'
 import { RefreshButton, ResetButton } from '../_shared/filters'
 import { logFeatures as features } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
@@ -206,52 +206,33 @@ export function SchedulerManagePage({
           <span className="font-mono text-xs tabular-nums">{getValue()}</span>
         ),
       }),
-      col.accessor((r) => formatDateTime(r.last_run_time), {
-        id: 'last_run_time',
+      col.accessor('last_run_time', {
         header: t('最近触发'),
-        cell: ({ getValue }) => (
-          <span className="font-mono text-xs text-muted-foreground tabular-nums">{getValue()}</span>
-        ),
+        cell: ({ getValue }) => <TimeCell value={getValue()} />,
       }),
       col.display({
-        id: 'actions',
-        header: t('操作'),
+        id: ACTIONS_COLUMN_ID,
+        header: () => <span className="sr-only">{t('操作')}</span>,
+        // 原来是 ▶ 图标 + 一个红字「删除」，十行连成一条红带（#210）。收进 ⋯，删除放最后
         cell: ({ row }) => (
-          <div className="flex items-center gap-1">
-            <Can perm="task:scheduler:run">
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="size-8 p-0"
-                      aria-label={t('立即执行一次')}
-                      data-testid={`run-scheduler-${row.original.id}`}
-                      onClick={async () => {
-                        const id = await run.mutateAsync(row.original.id)
-                        setRanId(id)
-                      }}
-                    />
-                  }
-                >
-                  <IconPlayerPlay className="size-4" />
-                </TooltipTrigger>
-                <TooltipContent>{t('立即执行一次')}</TooltipContent>
-              </Tooltip>
-            </Can>
-            <Can perm="task:scheduler:del">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-destructive hover:text-destructive"
-                data-testid={`del-scheduler-${row.original.id}`}
-                onClick={() => setRemoving(row.original)}
-              >
-                {t('删除')}
-              </Button>
-            </Can>
-          </div>
+          <RowActions
+            label={row.original.name}
+            testId={`scheduler-actions-${row.original.id}`}
+            items={[
+              {
+                key: 'run', label: t('立即执行一次'), icon: IconPlayerPlay, perm: 'task:scheduler:run',
+                testId: `run-scheduler-${row.original.id}`,
+                onClick: async () => {
+                  const id = await run.mutateAsync(row.original.id)
+                  setRanId(id)
+                },
+              },
+              {
+                key: 'del', label: t('删除'), icon: IconTrash, perm: 'task:scheduler:del', danger: true,
+                testId: `del-scheduler-${row.original.id}`, onClick: () => setRemoving(row.original),
+              },
+            ]}
+          />
         ),
       }),
     ],

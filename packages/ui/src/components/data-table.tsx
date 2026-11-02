@@ -89,6 +89,15 @@ export interface DataTableColumnVisibilityProps<
 }
 
 /**
+ * 操作列的约定 id。这一列收到按内容宽（`w-px`）、靠右，各页不用再自己给宽度 ——
+ * 原来有的页这一列平均分到一大块，⋯ 孤零零地漂在中间（#210）。
+ * 写列定义时用这个常量，别手写 `'actions'`：拼错成 `'action'` 不报错，只是又漂回中间。
+ * 不走 DataTable、自己画表的（部门 / 菜单树）要自己给那一格加 `ACTIONS_CELL_CLASS`。
+ */
+export const ACTIONS_COLUMN_ID = "actions"
+export const ACTIONS_CELL_CLASS = "w-px text-end"
+
+/**
  * 「列」：显隐 + 顺序（#11）。
  *
  * 顺序要调用方在 `tableFeatures()` 里注册 `columnOrderingFeature`；没注册的表只有显隐，
@@ -103,6 +112,7 @@ export interface DataTableColumnVisibilityProps<
  * ⚠️ tooltip 的 `render` 必须**直接指向 trigger**，不能套一层 `<span className="contents">` ——
  * `display:contents` 不生成布局盒，`getBoundingClientRect()` 全 0，气泡会飞到视口左上角（见 ui 分册）。
  */
+
 export function DataTableColumnVisibility<
   TFeatures extends TableFeatures,
   TData extends RowData,
@@ -581,7 +591,11 @@ export function DataTable<
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} colSpan={header.colSpan}>
+                  <TableHead
+                    key={header.id}
+                    colSpan={header.colSpan}
+                    className={header.column.id === ACTIONS_COLUMN_ID ? ACTIONS_CELL_CLASS : undefined}
+                  >
                     {header.isPlaceholder ? null : (
                       <FlexRender header={header} />
                     )}
@@ -614,7 +628,10 @@ export function DataTable<
                     {...rowAttributes?.(row)}
                   >
                     {(row as AnyRow).getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
+                      <TableCell
+                        key={cell.id}
+                        className={cell.column.id === ACTIONS_COLUMN_ID ? ACTIONS_CELL_CLASS : undefined}
+                      >
                         <FlexRender cell={cell} />
                       </TableCell>
                     ))}
