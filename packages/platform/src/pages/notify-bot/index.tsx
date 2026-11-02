@@ -13,7 +13,7 @@ import { toast } from '@admin/ui/components/toast'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
-import { AddCard, CardField, CardFields } from '../_shared/resource-card'
+import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import { botOptionsQuery, botsQuery, useDeleteBot, useTestBot, type Bot } from './api'
 import { BotFormSheet } from './form'
@@ -75,7 +75,7 @@ export function NotifyBotPage() {
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {bots.map((bot) => (
-            <div key={bot.id} className="flex flex-col gap-2 rounded-lg border bg-card p-4" data-testid={`bot-card-${bot.name}`}>
+            <ResourceCard key={bot.id} data-testid={`bot-card-${bot.name}`}>
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -164,7 +164,7 @@ export function NotifyBotPage() {
                   </Button>
                 </Can>
               </div>
-            </div>
+            </ResourceCard>
           ))}
 
           <Can perm="sys:notification:bot:add">

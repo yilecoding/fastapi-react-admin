@@ -1450,7 +1450,7 @@
   "折叠 / 展开侧边栏": "Collapse / expand sidebar",
   "折叠全部": "Collapse all",
   "拒绝新登录": "Refuse the new sign-in",
-  "拒绝的连接": "Rejected connections",
+  "拒绝的连接（累计）": "Rejected connections (total)",
   "拖动手柄调整顺序（键盘：空格拿起、方向键移动、空格放下）。下面的卡片按这里实时预览，保存后才生效。": "Drag the handles to reorder (keyboard: Space to pick up, arrow keys to move, Space to drop). The cards below preview your changes; nothing is applied until you save.",
   "拖动排序 {{name}}": "Drag to reorder {{name}}",
   "拖动调整「{{name}}」的位置": "Drag to move \"{{name}}\"",
