@@ -12,7 +12,8 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
       // 列向 flex（见 data-table.tsx / 树形表格的外框），这里 flex-1 + min-h-0
       // 就拿到了确定高度，表头才吸得住、行才是滚动的那一部分。
       // 高度是 auto 时（整页滚动、或嵌在卡片里的普通表格）这两条是空操作。
-      className="relative w-full overflow-x-auto content-scroll:min-h-0 content-scroll:flex-1"
+      // scroll-fade-x：能横向滚时还有内容的那一侧边缘渐隐，不然窄屏下看着像「被裁掉了」（见 globals.css）
+      className="scroll-fade-x relative w-full overflow-x-auto content-scroll:min-h-0 content-scroll:flex-1"
     >
       <table
         data-slot="table"
