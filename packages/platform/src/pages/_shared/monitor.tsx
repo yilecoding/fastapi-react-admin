@@ -1,9 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatNumber, formatTime } from '@admin/i18n'
-import { IconRefresh } from '@tabler/icons-react'
 
-import { Button } from '@admin/ui/components/button'
 import { QueryError } from '@admin/ui/components/query-error'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -11,6 +9,7 @@ import {
 import { cn } from '@admin/ui/lib/utils'
 
 import { TONE_CLASS, type Tone } from './status'
+import { RefreshButton } from './filters'
 
 /**
  * 监控页公共件。
@@ -319,10 +318,8 @@ export function RefreshBar({
           ))}
         </SelectContent>
       </Select>
-      <Button size="sm" variant="outline" className="h-8" data-testid="refresh-now" onClick={onRefresh}>
-        <IconRefresh className={cn('size-4', fetching && 'animate-spin')} />
-        {t('刷新')}
-      </Button>
+      {/* 和列表页同一个图标按钮（#210）：原来这三个监控页是带字的「刷新」，全站就这几处不一样 */}
+      <RefreshButton testId="refresh-now" busy={fetching} onClick={onRefresh} />
     </div>
   )
 }
