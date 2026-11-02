@@ -143,10 +143,7 @@ export function AiChatPage({
   )
 
   return (
-    /* `py-3`：左栏是带边框的卡片，不给上下留白它会死贴标签栏和窗口底边 ——
-       而全站别的页面第一个可见元素距框顶约 24px（实测），只有这一页是 0，
-       所以那条边框看起来像被"卡住"了 */
-    <div className="flex h-full flex-col gap-4 py-3 content-scroll:min-h-0 lg:flex-row">
+    <div className="flex h-full flex-col gap-4 content-scroll:min-h-0 lg:flex-row">
       <ConversationList
         conversations={conversations}
         activeId={conversationId}

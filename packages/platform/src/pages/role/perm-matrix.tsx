@@ -129,7 +129,7 @@ export function PermMatrix({
         - 定高视区（内容区滚动 + 宽屏）→ 它本来就在滚动区**外面**，改回 static，
           否则 sticky 元素在不滚动的容器里只是白占一个层叠上下文
       */}
-      <div className="sticky top-0 z-20 -mx-1 flex shrink-0 flex-wrap items-center gap-2 bg-background px-1 py-2 content-scroll:lg:static">
+      <div className="sticky top-0 content-scroll:-top-4 z-20 -mx-1 flex shrink-0 flex-wrap items-center gap-2 bg-background px-1 py-2 content-scroll:lg:static">
         <WhenEditable editable={editable}>
           <Button size="sm" disabled={!dirty || save.isPending} onClick={handleSave} data-testid="perm-save">
             {save.isPending ? <IconLoader2 className="size-4 animate-spin" /> : <IconDeviceFloppy className="size-4" />}

@@ -23,6 +23,7 @@ import { INSTANCE_STATUS } from '../workflow/status'
 import { COLUMN_LABELS, buildColumns } from './columns'
 import { AiReviewStatsSheet } from './ai-review-stats'
 import { HandoverDialog } from './handover-dialog'
+import { PageShell } from '../_shared/page-shell'
 
 export type WorkflowMonitorSearch = {
   page?: number
@@ -135,72 +136,68 @@ export function WorkflowMonitorPage({
   const hasFilter = countActive(q.applied, fields) > 0
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          <PageHeader title={t('实例监控')} description={t('查看全部审批单，处理卡住的待办。')} />
-          <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-            <QueryBar
-              fields={fields}
-              value={q.value}
-              onChange={q.setValue}
-              onSearch={q.submit}
-              onReset={q.reset}
-              applied={q.applied}
-              loading={isFetching}
-              viewsStorageKey="qb:wf-monitor"
-              actions={
-                <>
-                  {/* 离职交接 = 批量改办理人，权限码同详情里的「改办理人」 */}
-                  <Can perm="workflow:instance:reassign">
-                    <Button size="sm" variant="outline" onClick={() => setHandover(true)} data-testid="wf-handover">
-                      <IconUserShare className="size-4" />
-                      {t('离职交接')}
-                    </Button>
-                  </Can>
-                  <Button size="sm" variant="outline" onClick={() => patch({ stats: 1 })} data-testid="wf-ai-stats-open">
-                    <IconChartBar className="size-4" />
-                    {t('AI 预审一致率')}
-                  </Button>
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-                </>
-              }
-            />
-            <div
-              data-testid="wf-monitor-table"
-              className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-            >
-              <DataTable
-                table={table}
-                showColumnVisibility={false}
-                rows={table.getRowModel().rows}
-                columnCount={columns.length}
-                columnLabels={COLUMN_LABELS}
-                rowAttributes={(row) => ({ 'data-testid': `wf-monitor-row-${row.original.id}` })}
-                emptyMessage={t('没有匹配的审批单')}
-                emptyAction={
-                  hasFilter ? (
-                    <ResetButton variant="outline" label={t('清除筛选')} onClick={q.reset} />
-                  ) : undefined
-                }
-                {...list}
-                pagination={{
-                  pageIndex: page - 1,
-                  pageCount: Math.max(1, data?.total_pages ?? 1),
-                  pageSize: size,
-                  totalCount: total,
-                  onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                  onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-                }}
-              />
-            </div>
-          </div>
+    <PageShell fill="always">
+      <PageHeader title={t('实例监控')} description={t('查看全部审批单，处理卡住的待办。')} />
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        <QueryBar
+          fields={fields}
+          value={q.value}
+          onChange={q.setValue}
+          onSearch={q.submit}
+          onReset={q.reset}
+          applied={q.applied}
+          loading={isFetching}
+          viewsStorageKey="qb:wf-monitor"
+          actions={
+            <>
+              {/* 离职交接 = 批量改办理人，权限码同详情里的「改办理人」 */}
+              <Can perm="workflow:instance:reassign">
+                <Button size="sm" variant="outline" onClick={() => setHandover(true)} data-testid="wf-handover">
+                  <IconUserShare className="size-4" />
+                  {t('离职交接')}
+                </Button>
+              </Can>
+              <Button size="sm" variant="outline" onClick={() => patch({ stats: 1 })} data-testid="wf-ai-stats-open">
+                <IconChartBar className="size-4" />
+                {t('AI 预审一致率')}
+              </Button>
+              <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+            </>
+          }
+        />
+        <div
+          data-testid="wf-monitor-table"
+          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+        >
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            columnLabels={COLUMN_LABELS}
+            rowAttributes={(row) => ({ 'data-testid': `wf-monitor-row-${row.original.id}` })}
+            emptyMessage={t('没有匹配的审批单')}
+            emptyAction={
+              hasFilter ? (
+                <ResetButton variant="outline" label={t('清除筛选')} onClick={q.reset} />
+              ) : undefined
+            }
+            {...list}
+            pagination={{
+              pageIndex: page - 1,
+              pageCount: Math.max(1, data?.total_pages ?? 1),
+              pageSize: size,
+              totalCount: total,
+              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+            }}
+          />
         </div>
       </div>
       <InstanceSheet id={search.id ?? null} onClose={() => patch({ id: undefined })} />
       <HandoverDialog open={handover} onOpenChange={setHandover} />
       <AiReviewStatsSheet open={search.stats === 1} onOpenChange={(o) => patch({ stats: o ? 1 : undefined })} />
-    </div>
+    </PageShell>
   )
 }

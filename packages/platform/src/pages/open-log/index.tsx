@@ -21,6 +21,7 @@ import { useQuerySearch } from '../_shared/use-query-search'
 import { allOpenAppsQuery } from '../open-app/api'
 import { OpenApiLogDetailSheet } from './detail-sheet'
 import { ERROR_META, ERROR_OPTIONS, type OpenApiLog } from './shared'
+import { PageShell } from '../_shared/page-shell'
 
 /** 这一页列表 query 的 key 前缀；`useQuerySearch` 的 `refreshKey` 也用它（点搜索必须真的重取） */
 const LOG_KEY = ['open-api-logs'] as const
@@ -244,65 +245,61 @@ export function OpenLogPage({
   const hasFilter = countActive(q.applied, fields) > 0
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          <PageHeader title={t('调用日志')} />
-          <p className="text-sm text-muted-foreground">
-            {t('外部系统每次调用开放接口都会记一条，成功失败都记。点时间看详情；日志保留 30 天，到期由定时任务清理。')}
-          </p>
+    <PageShell fill="always">
+      <PageHeader title={t('调用日志')} />
+      <p className="text-sm text-muted-foreground">
+        {t('外部系统每次调用开放接口都会记一条，成功失败都记。点时间看详情；日志保留 30 天，到期由定时任务清理。')}
+      </p>
 
-          <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-            <QueryBar
-              fields={fields}
-              value={q.value}
-              onChange={q.setValue}
-              onSearch={q.submit}
-              onReset={q.reset}
-              applied={q.applied}
-              loading={isFetching}
-              actions={
-                <>
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-                </>
-              }
-              viewsStorageKey="qb:open-log"
-            />
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        <QueryBar
+          fields={fields}
+          value={q.value}
+          onChange={q.setValue}
+          onSearch={q.submit}
+          onReset={q.reset}
+          applied={q.applied}
+          loading={isFetching}
+          actions={
+            <>
+              <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+            </>
+          }
+          viewsStorageKey="qb:open-log"
+        />
 
-            <div
-              data-testid="open-log-table"
-              data-fetching={isFetching}
-              className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-            >
-              <DataTable
-                table={table}
-                showColumnVisibility={false}
-                rows={table.getRowModel().rows}
-                columnCount={columns.length}
-                emptyMessage={t('没有匹配的调用记录')}
-                emptyAction={
-                  hasFilter ? (
-                    <ResetButton variant="outline" testId="empty-clear-filter" label={t('清除筛选')} onClick={q.reset} />
-                  ) : undefined
-                }
-                {...list}
-                skeletonRows={8}
-                pagination={{
-                  pageIndex: page - 1,
-                  pageCount: data?.total_pages ?? 1,
-                  pageSize: size,
-                  totalCount: data?.total ?? 0,
-                  onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                  onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-                }}
-              />
-            </div>
-          </div>
+        <div
+          data-testid="open-log-table"
+          data-fetching={isFetching}
+          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+        >
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            emptyMessage={t('没有匹配的调用记录')}
+            emptyAction={
+              hasFilter ? (
+                <ResetButton variant="outline" testId="empty-clear-filter" label={t('清除筛选')} onClick={q.reset} />
+              ) : undefined
+            }
+            {...list}
+            skeletonRows={8}
+            pagination={{
+              pageIndex: page - 1,
+              pageCount: data?.total_pages ?? 1,
+              pageSize: size,
+              totalCount: data?.total ?? 0,
+              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+            }}
+          />
         </div>
       </div>
 
       <OpenApiLogDetailSheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)} log={detail} />
-    </div>
+    </PageShell>
   )
 }

@@ -34,6 +34,7 @@ import { UserSecuritySheet } from './security-sheet'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { ExportButton } from '../_shared/data-io/export-button'
 import { ImportSheet } from '../_shared/data-io/import-sheet'
+import { PageShell } from '../_shared/page-shell'
 
 /**
  * 用户管理 —— **三件套模板的样板页**。
@@ -242,117 +243,110 @@ export function UserPage({
   }, [q])
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        {/* content-scroll:* —— 「内容区滚动」模式下这一块撑满可用高度，
-              于是里面的表格框变成定高视区：筛选栏 / 表头 / 分页条钉住，只有行滚。
-              整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          <PageHeader title={t('用户管理')} description={t('管理后台账号、部门归属与角色分配。')} />
+    <PageShell fill="always">
+      <PageHeader title={t('用户管理')} description={t('管理后台账号、部门归属与角色分配。')} />
 
-          {/* 查询区和表格是同一个块的两半（筛选 → 结果），gap-4 而不是页面级的 24px；
-              这一层也要能收缩，否则「只滚表格行」那条链断在这里 */}
-          <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-            <QueryBar
-              fields={fields}
-              value={q.value}
-              onChange={q.setValue}
-              onSearch={submitQuery}
-              onReset={clearFilters}
-              applied={q.applied}
-              loading={isFetching}
-              viewsStorageKey="qb:user"
-              actions={
-                <>
-                  {/* 新增用户后端是 DependsSuperUser（user.py:71），不是权限码校验，
-                      按 isSuperuser 直判，别用 <Can perm="..."> 编一个假权限码 */}
-                  <SuperOnly>
-                    <Button
-                      size="sm"
-                      data-testid="add-user"
-                      onClick={() => {
-                        setEditing(null)
-                        setSheetOpen(true)
-                      }}
-                    >
-                      <IconPlus className="size-4" />
-                      {t('新增用户')}
-                    </Button>
-                    {/* 导入同样是 DependsSuperUser（`user.py` 那三条 import 路由，批量建号的影响面比单条大），
-                        次要动作所以是 outline —— 一行里主动作只能有一个 */}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      data-testid="import-users"
-                      onClick={() => setImportOpen(true)}
-                    >
-                      <IconUpload className="size-4" />
-                      {t('导入')}
-                    </Button>
-                  </SuperOnly>
-                  <Can perm="sys:user:export">
-                    <ExportButton
-                      path="/api/v1/sys/users/export"
-                      filters={q.params}
-                      selectedIds={selectedIds}
-                      total={total}
-                    />
-                  </Can>
-                  {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-                  {/*
-                  批量条放**左组末尾**：选中行时它才出现，左组往右长进空白里，
-                  右边的「搜索 / 重置」不会跟着跳。放右组的话每选一次行按钮就位移一次。
-                */}
-                  <Can perm="sys:user:del">
-                    <BulkBar
-                      count={selectedIds.length}
-                      pending={delMany.isPending}
-                      onDelete={() => setBulkOpen(true)}
-                    />
-                  </Can>
-                </>
-              }
-            />
+      {/* 查询区和表格是同一个块的两半（筛选 → 结果），gap-4 而不是页面级的 24px；
+          这一层也要能收缩，否则「只滚表格行」那条链断在这里 */}
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        <QueryBar
+          fields={fields}
+          value={q.value}
+          onChange={q.setValue}
+          onSearch={submitQuery}
+          onReset={clearFilters}
+          applied={q.applied}
+          loading={isFetching}
+          viewsStorageKey="qb:user"
+          actions={
+            <>
+              {/* 新增用户后端是 DependsSuperUser（user.py:71），不是权限码校验，
+                  按 isSuperuser 直判，别用 <Can perm="..."> 编一个假权限码 */}
+              <SuperOnly>
+                <Button
+                  size="sm"
+                  data-testid="add-user"
+                  onClick={() => {
+                    setEditing(null)
+                    setSheetOpen(true)
+                  }}
+                >
+                  <IconPlus className="size-4" />
+                  {t('新增用户')}
+                </Button>
+                {/* 导入同样是 DependsSuperUser（`user.py` 那三条 import 路由，批量建号的影响面比单条大），
+                    次要动作所以是 outline —— 一行里主动作只能有一个 */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  data-testid="import-users"
+                  onClick={() => setImportOpen(true)}
+                >
+                  <IconUpload className="size-4" />
+                  {t('导入')}
+                </Button>
+              </SuperOnly>
+              <Can perm="sys:user:export">
+                <ExportButton
+                  path="/api/v1/sys/users/export"
+                  filters={q.params}
+                  selectedIds={selectedIds}
+                  total={total}
+                />
+              </Can>
+              {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
+              <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+              {/*
+              批量条放**左组末尾**：选中行时它才出现，左组往右长进空白里，
+              右边的「搜索 / 重置」不会跟着跳。放右组的话每选一次行按钮就位移一次。
+            */}
+              <Can perm="sys:user:del">
+                <BulkBar
+                  count={selectedIds.length}
+                  pending={delMany.isPending}
+                  onDelete={() => setBulkOpen(true)}
+                />
+              </Can>
+            </>
+          }
+        />
 
-            {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
-              也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
-            <div
-              data-testid="user-table"
-              data-fetching={isFetching}
-              className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-            >
-              <DataTable
-                table={table}
-                showColumnVisibility={false}
-                rows={table.getRowModel().rows}
-                columnCount={columns.length}
-                columnLabels={COLUMN_LABELS}
-                emptyMessage={t('没有匹配的用户')}
-                emptyAction={
-                  hasFilter ? (
-                    <ResetButton
-                      variant="outline"
-                      testId="empty-clear-filter"
-                      label={t('清除筛选')}
-                      onClick={clearFilters}
-                    />
-                  ) : undefined
-                }
-                {...list}
-                pagination={{
-                  pageIndex: page - 1,
-                  pageCount: totalPages,
-                  pageSize: size,
-                  selectedCount: selectedIds.length,
-                  totalCount: total,
-                  onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                  onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-                }}
-              />
-            </div>
-          </div>
+        {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
+          也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
+        <div
+          data-testid="user-table"
+          data-fetching={isFetching}
+          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+        >
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            columnLabels={COLUMN_LABELS}
+            emptyMessage={t('没有匹配的用户')}
+            emptyAction={
+              hasFilter ? (
+                <ResetButton
+                  variant="outline"
+                  testId="empty-clear-filter"
+                  label={t('清除筛选')}
+                  onClick={clearFilters}
+                />
+              ) : undefined
+            }
+            {...list}
+            pagination={{
+              pageIndex: page - 1,
+              pageCount: totalPages,
+              pageSize: size,
+              selectedCount: selectedIds.length,
+              totalCount: total,
+              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+            }}
+          />
         </div>
       </div>
 
@@ -422,6 +416,6 @@ export function UserPage({
           }
         }}
       />
-    </div>
+    </PageShell>
   )
 }

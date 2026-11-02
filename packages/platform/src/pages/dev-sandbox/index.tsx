@@ -141,7 +141,7 @@ export function DevSandboxPage({
             窄屏是堆叠布局，限 60svh 免得 49 个条目把正文全顶下去；
             lg 起减掉外壳的顶栏（3rem）+ 标签条（约 2.5rem）+ 呼吸。
           */
-          className="max-h-[60svh] lg:col-start-1 lg:row-start-1 lg:sticky lg:top-2 lg:max-h-[calc(100svh-7.5rem)] lg:self-start"
+          className="max-h-[60svh] lg:col-start-1 lg:row-start-1 lg:sticky lg:top-2 content-scroll:lg:top-0 lg:max-h-[calc(100svh-7.5rem)] lg:self-start"
         />
 
         <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-1">
@@ -243,7 +243,7 @@ export function DevSandboxPage({
           dirty={dirty}
           onChange={patch}
           onReset={reset}
-          className="lg:col-start-2 lg:row-start-2 xl:col-start-3 xl:row-start-1 xl:sticky xl:top-2 xl:self-start"
+          className="lg:col-start-2 lg:row-start-2 xl:col-start-3 xl:row-start-1 xl:sticky xl:top-2 content-scroll:xl:top-0 xl:self-start"
         />
       </div>
     </div>
