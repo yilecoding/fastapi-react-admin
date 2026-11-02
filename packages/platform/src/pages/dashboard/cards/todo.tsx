@@ -14,6 +14,7 @@ import { meQuery } from '../../../auth/queries'
 import { useSocketEvent } from '../../../shell/socket-events'
 import { relativeTime } from '../../notification/shared'
 import { workflowKeys } from '../../workflow/api'
+import { todoCounts } from '../card-rules'
 import { deskDraftsQuery, deskTodoQuery, type DeskDraft, type DeskTodoRow, type TimeoutAction } from '../api'
 import { CARD_ACTION_CLASS, DashboardCard, NameAvatar } from '../card-shell'
 import { spanText, until } from './time'
@@ -36,7 +37,9 @@ type DeskRow = {
   note: string | null
   who: string
   when: string
+  /** 最近一次谁交过来的 + 怎么交的（转交 / 管理员改派） */
   transferredFrom: string | null
+  transferKind: 'transfer' | 'reassign' | null
   due: { at: string; action: TimeoutAction } | null
   instanceId: string | null
   draftCode: string | null
@@ -63,6 +66,7 @@ function fromTodo(r: DeskTodoRow, t: TFn): DeskRow {
       : [r.initiator_name ?? '—', r.initiator_dept].filter(Boolean).join(' · '),
     when: r.back ? formatDateTimeShort(r.arrived_time) : t('{{when}}到你这', { when: relativeTime(r.arrived_time, t) }),
     transferredFrom: r.transferred_from,
+    transferKind: r.transfer_kind,
     due: r.due_time && r.timeout_action ? { at: r.due_time, action: r.timeout_action } : null,
     instanceId: r.id,
     draftCode: null,
@@ -81,6 +85,7 @@ function fromDraft(d: DeskDraft, me: string | null, t: TFn): DeskRow {
     who: t('你自己'),
     when: t('保存于 {{at}}', { at: formatDateTimeShort(d.updated_time) }),
     transferredFrom: null,
+    transferKind: null,
     due: null,
     instanceId: null,
     draftCode: d.code,
@@ -125,13 +130,12 @@ export function TodoCard({ openApproval, todoTab, onTodoTab }: CardProps) {
     return list.map((d) => fromDraft(d, me, t))
   }, [drafts.data, me, t])
 
-  const total = todo.data?.total ?? 0
-  // ⚠️ 「退回给我」只数取回来的那一页（`DESK_TODO_SIZE` 条）；待办超过一页时它偏小、「待审批」偏大，总数仍是后端的 total
-  const backCount = todoRows.filter((r) => r.kind === 'back').length
+  // 分段上的数一律是后端给的全量数（`card-rules.todoCounts`），不从取回来的那一页（`DESK_TODO_SIZE` 条）里数
+  const full = todo.data ? todoCounts(todo.data) : { total: 0, approve: 0, back: 0 }
   const counts: Record<TodoTab, number> = {
-    all: total,
-    approve: total - backCount,
-    back: backCount,
+    all: full.total,
+    approve: full.approve,
+    back: full.back,
     draft: draftRows.length,
   }
   const rows =
@@ -289,7 +293,9 @@ function TodoRowView({ row, openApproval }: { row: DeskRow; openApproval: (id: s
           {row.transferredFrom && (
             <span className="inline-flex items-center gap-[5px]" data-testid="dash-todo-transferred">
               <IconArrowsExchange className="size-[13px]" aria-hidden />
-              {t('{{name}} 转交给你', { name: row.transferredFrom })}
+              {row.transferKind === 'reassign'
+                ? t('{{name}} 改派给你', { name: row.transferredFrom })
+                : t('{{name}} 转交给你', { name: row.transferredFrom })}
             </span>
           )}
         </span>

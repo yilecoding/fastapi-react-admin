@@ -41,6 +41,22 @@ export const QUICK_LINKS_MAX = 12
 /** 存的清单的硬上界（含暂时看不见的）。只是防一份坏数据撑爆偏好值的 16 KB，正常用不到 */
 export const QUICK_LINKS_STORED_MAX = 64
 
+/** 没挑过时默认放侧边栏里的前几个 */
+export const QUICK_LINKS_DEFAULT = 6
+
+/**
+ * 编辑器里「勾着的」那些：存的清单里**现在看得见的全部**，不按显示上限截。
+ *
+ * 🔴 按 12 截的话，可见项超过 12 个时（权限先收后还，清单里排着的又都回来了）第 13 个起显示成没勾、
+ * 而且因为「满了」被禁用 —— 取消不掉；取消前面一个，第 13 个又悄悄出现在卡片上。勾着的要如实画出来，
+ * 超了就提示「请取消几个」，并且让人能取消（`editor.tsx` 的 `QuickLinksPicker`）
+ */
+export function chosenQuickLinks(value: readonly string[] | null, visiblePaths: readonly string[]): string[] {
+  if (value === null) return visiblePaths.slice(0, QUICK_LINKS_DEFAULT)
+  const visible = new Set(visiblePaths)
+  return value.filter((p) => visible.has(p))
+}
+
 export function defaultLayout(available: readonly CardDefault[]): DashboardLayout {
   return {
     items: available.map((c) => ({ id: c.id, visible: c.defaultVisible, width: c.defaultWidth })),

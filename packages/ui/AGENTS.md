@@ -150,7 +150,8 @@ context** 里取翻译函数，而那个 i18next 实例是 `@admin/i18n` 建的�
 | Select 的高度 | 工具栏里的 Select 要传 `size="sm"`（32px）。className 里写 `h-8` **无效** —— 基础类是 `data-[size=default]:h-9`，默认 size 就是 `default`。写了也还是 36px，和旁边 32px 的 InputGroup / `Button size="sm"` 差 4px，一整行参差不齐 |
 | `overflow-y-auto` 的副作用 | CSS 规定：一个轴是 `visible`、另一个轴不是时，`visible` **计算成 `auto`**。所以只写 `overflow-y-auto` 的容器，横向溢出会自己长出滚动条。抽屉/面板主体一律写成 `overflow-y-auto overflow-x-hidden` |
 | flex 行里的 `w-full` | `w-full` = `width:100%`**容器全宽**，旁边还有兄弟元素时必然溢出（图标行溢出正好 = 清除按钮 32px + gap 8px）。要占满剩余空间用 `min-w-0 flex-1`，别用 `w-full` |
-| 页面块的内边距 | **四边都不加**。水平的 `px-4` 在 `_auth.tsx` 的滚动容器上、竖直的 `py-4` 在 TabFrame 上（为什么分两层、见 [pages 分册](../platform/src/pages/AGENTS.md)「页面四边的留白」，`pnpm arch:check` 的 `page-vertical-padding` 挡着），页面级块再加 `px-1` 就会比别的块内缩 4px（`PageHeader` 曾经带 `px-1`，「刷新」按钮右边缘 1980 而卡片 1984 —— 肉眼就是「边距怪怪的」） |
+| 页面块的内边距 | **一律不加，四个方向都是**。上下左右 16px 由 `_auth.tsx` 内容列（`data-slot="content-scroll"`）的 `p-4` 一次给齐，页面最外层用 `pages/_shared/page-shell.tsx`（#209，`pnpm arch:check` 守着）。页面级块再加 `px-1` 就会比别的块内缩 4px（`PageHeader` 曾经带 `px-1`，「刷新」按钮右边缘 1980 而卡片 1984 —— 肉眼就是「边距怪怪的」） |
+| 卡片网格 | 写 `grid grid-cols-1 gap-3 sm:grid-cols-2 …`，不能只写 `sm:grid-cols-2`：`sm` 以下是隐式 auto 列、宽 = 内容最小宽度，短信配置那串不换行的凭据把卡片撑出 390 宽的屏幕、删除按钮被裁一半（#210）。`grid-cols-1` = `minmax(0,1fr)` |
 | 页面纵向节奏 | 页面级块之间统一 `gap-4 md:gap-6`（24px）。嵌套容器**也要用同一个值** —— 监控页内层只写 `gap-4`，于是「页头→第一块」24px、「块与块」16px，同一页两种间距 |
 | 说明文字贴住它解释的东西 | 包一层 `flex flex-col gap-2` 做**结构化分组**，不要给说明加 `-mt-2` 往上拽 —— 负 margin 会变成「说明上方 8px、下方 24px」，同一条缝两个数 |
 | 禁用态选择器 | Base UI 的 Checkbox/Select 渲染成 `<span role="checkbox">`，禁用是 `data-disabled` / `aria-disabled`，**不是** HTML 的 `disabled` 属性 —— `:not([disabled])` 选不掉它，要写 `:not([data-disabled])` |

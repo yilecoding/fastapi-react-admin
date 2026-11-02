@@ -134,13 +134,11 @@ function TabFrame({
     // 否则 `min-height: auto`（= 内容的 min-content 高）会一路顶住，
     // 页面里那些想变成定高视区的块（列表页的表格框）永远拿不到约束，
     // 于是外层内容区照旧整块滚 —— 看着像「设置没生效」。整页滚动模式下这条是空操作。
-    // py-4：页面上下的 16px 只在这里给一次（#209，水平的 px-4 在 _auth.tsx 的滚动容器上）。
-    // 给在这一层而不是滚动容器上，是为了让 sticky 的停靠线留在滚动区的顶边 —— 见 _auth.tsx 那段。
     <div
       ref={keepContainer}
       data-tab={tabKey}
       data-visible={visible}
-      className="flex min-w-0 flex-1 flex-col py-4 content-scroll:min-h-0"
+      className="flex min-w-0 flex-1 flex-col content-scroll:min-h-0"
     >
       <TabContainerContext.Provider value={container}>
         <Page params={params} search={search} onSearchChange={onSearchChange} />

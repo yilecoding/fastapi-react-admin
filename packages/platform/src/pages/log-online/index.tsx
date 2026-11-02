@@ -23,6 +23,7 @@ import {
 import { COLUMN_LABELS, buildColumns } from './columns'
 import { features } from './table-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
+import { PageShell } from '../_shared/page-shell'
 
 /**
  * 在线用户（会话监控）。
@@ -236,120 +237,113 @@ export function LogOnlinePage({
   }, [all])
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        {/* content-scroll:* —— 「内容区滚动」模式下这一块撑满可用高度，
-              于是里面的表格框变成定高视区：筛选栏 / 表头 / 分页条钉住，只有行滚。
-              整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
-        <div className="flex flex-col gap-4 md:gap-6 content-scroll:min-h-0 content-scroll:flex-1">
-          {/* 标题/描述是 sr-only 的（页名在 tab 上）；刷新条走 DataTable 的 actions 槽 */}
-          <PageHeader
-            title={t('在线用户')}
-            description={t('Redis 里仍然有效的登录会话。可强制下线，被踢的人下次请求即失效。')}
-          />
+    <PageShell fill="always">
+      {/* 标题/描述是 sr-only 的（页名在 tab 上）；刷新条走 DataTable 的 actions 槽 */}
+      <PageHeader
+        title={t('在线用户')}
+        description={t('Redis 里仍然有效的登录会话。可强制下线，被踢的人下次请求即失效。')}
+      />
 
-          {error && <MonitorError error={error} />}
+      {error && <MonitorError error={error} />}
 
-          {/* ── 统计条 ── */}
-          <div
-            className="grid grid-cols-1 gap-3 @xl/main:grid-cols-2 @4xl/main:grid-cols-4"
-            data-testid="online-stats"
-          >
-            <MetricCard
-              label={t('有效会话')}
-              testId="stat-total"
-              value={stats.total}
-              tone="info"
-              hint={t('token 未过期的全部会话')}
-            />
-            <MetricCard
-              label={t('实时在线')}
-              testId="stat-online"
-              value={stats.online}
-              tone={stats.online > 0 ? 'success' : 'muted'}
-              hint={t('有活跃 WebSocket 连接')}
-            />
-            <MetricCard
-              label={t('独立账号')}
-              testId="stat-users"
-              value={stats.users}
-              tone="info"
-              hint={t('去重后的登录用户数')}
-            />
-            <MetricCard
-              label={t('独立 IP')}
-              testId="stat-ips"
-              value={stats.ips}
-              tone="info"
-              hint={t('去重后的来源地址数')}
-            />
-          </div>
+      {/* ── 统计条 ── */}
+      <div
+        className="grid grid-cols-1 gap-3 @xl/main:grid-cols-2 @4xl/main:grid-cols-4"
+        data-testid="online-stats"
+      >
+        <MetricCard
+          label={t('有效会话')}
+          testId="stat-total"
+          value={stats.total}
+          tone="info"
+          hint={t('token 未过期的全部会话')}
+        />
+        <MetricCard
+          label={t('实时在线')}
+          testId="stat-online"
+          value={stats.online}
+          tone={stats.online > 0 ? 'success' : 'muted'}
+          hint={t('有活跃 WebSocket 连接')}
+        />
+        <MetricCard
+          label={t('独立账号')}
+          testId="stat-users"
+          value={stats.users}
+          tone="info"
+          hint={t('去重后的登录用户数')}
+        />
+        <MetricCard
+          label={t('独立 IP')}
+          testId="stat-ips"
+          value={stats.ips}
+          tone="info"
+          hint={t('去重后的来源地址数')}
+        />
+      </div>
 
-          {/* 查询区和表格是同一个块的两半；这一层也要能收缩，否则「只滚表格行」那条链断在这里 */}
-          <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-            <QueryBar
-              fields={FIELDS}
-              value={qb.value}
-              onChange={qb.setValue}
-              onSearch={submitQuery}
-              onReset={clearFilters}
-              applied={qb.applied}
-              loading={isFetching}
-              viewsStorageKey="qb:log-online"
-              actions={
-                <>
-                  <RefreshBar
-                    interval={refresh}
-                    updatedAt={dataUpdatedAt || undefined}
-                    fetching={isFetching}
-                    onIntervalChange={(v) => patch({ refresh: v })}
-                    onRefresh={() => void qc.invalidateQueries({ queryKey: onlineKeys.all })}
-                  />
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-                  {/* 批量条放左组末尾：它随选中行出现/消失，放右组会让「搜索/重置」横向位移 */}
-                  <BulkBar
-                    count={selected.length}
-                    label={t('批量下线')}
-                    icon={<IconLogout className="size-4" />}
-                    pending={kickMany.isPending}
-                    onDelete={() => {
-                      setBulkError(null)
-                      setBulkOpen(true)
-                    }}
-                  />
-                </>
-              }
-            />
-
-            {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
-              也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
-            <div
-              data-testid="online-table"
-              data-fetching={isFetching}
-              className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-            >
-              <DataTable
-                table={table}
-                showColumnVisibility={false}
-                rows={table.getRowModel().rows}
-                columnCount={columns.length}
-                emptyMessage={hasFilter ? t('没有匹配的会话') : t('当前没有有效会话')}
-                loading={isPending}
-                busy={isFetching && !isPending}
-                skeletonRows={6}
-                columnLabels={COLUMN_LABELS}
-                rowAttributes={(row) => ({ 'data-testid': `session-row-${row.original.session_uuid}` })}
-                pagination={{
-                  pageIndex: safePage - 1,
-                  pageCount: totalPages,
-                  pageSize: size,
-                  totalCount: total,
-                  onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                  onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+      {/* 查询区和表格是同一个块的两半；这一层也要能收缩，否则「只滚表格行」那条链断在这里 */}
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        <QueryBar
+          fields={FIELDS}
+          value={qb.value}
+          onChange={qb.setValue}
+          onSearch={submitQuery}
+          onReset={clearFilters}
+          applied={qb.applied}
+          loading={isFetching}
+          viewsStorageKey="qb:log-online"
+          actions={
+            <>
+              <RefreshBar
+                interval={refresh}
+                updatedAt={dataUpdatedAt || undefined}
+                fetching={isFetching}
+                onIntervalChange={(v) => patch({ refresh: v })}
+                onRefresh={() => void qc.invalidateQueries({ queryKey: onlineKeys.all })}
+              />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+              {/* 批量条放左组末尾：它随选中行出现/消失，放右组会让「搜索/重置」横向位移 */}
+              <BulkBar
+                count={selected.length}
+                label={t('批量下线')}
+                icon={<IconLogout className="size-4" />}
+                pending={kickMany.isPending}
+                onDelete={() => {
+                  setBulkError(null)
+                  setBulkOpen(true)
                 }}
               />
-            </div>
-          </div>
+            </>
+          }
+        />
+
+        {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
+          也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
+        <div
+          data-testid="online-table"
+          data-fetching={isFetching}
+          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+        >
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            emptyMessage={hasFilter ? t('没有匹配的会话') : t('当前没有有效会话')}
+            loading={isPending}
+            busy={isFetching && !isPending}
+            skeletonRows={6}
+            columnLabels={COLUMN_LABELS}
+            rowAttributes={(row) => ({ 'data-testid': `session-row-${row.original.session_uuid}` })}
+            pagination={{
+              pageIndex: safePage - 1,
+              pageCount: totalPages,
+              pageSize: size,
+              totalCount: total,
+              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+            }}
+          />
         </div>
       </div>
 
@@ -409,6 +403,6 @@ export function LogOnlinePage({
           }
         }}
       />
-    </div>
+    </PageShell>
   )
 }

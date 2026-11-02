@@ -84,7 +84,6 @@ dev 脚本、零 JS 依赖，不参与）：
 | `page-reads-router` —— 页面组件不得调 `Route.useSearch/useParams` / `useNavigate` | 1 | 隐藏 tab 拿不到 match 上下文 |
 | `route-renders-page` —— `routes/_auth/` 下的 `component` 必须是 `() => null` | 3 | 页面被挂两次 / 切走丢状态 |
 | `unscoped-dom-query` —— `document.querySelector` 等必须带 `[data-tab=…]` 或 `[data-visible="true"]` | 5 | 命中隐藏页的 DOM |
-| `page-vertical-padding` —— 页面根上不写竖直 padding（#209） | —— | 全站顶部长出五档间距；判据和七种反向验证见 [pages 分册](../packages/platform/src/pages/AGENTS.md)「页面四边的留白」 |
 
 这三条**当前全仓干净**，所以它们是回归守卫，不是在抓存量。值得做成闸门是因为
 失败方式极难归因：违反了不报错，只会「切回这个 tab 时筛选条件没了」或
@@ -127,6 +126,29 @@ JSON 字符串里的 glob 当成了块注释开头：`"@/*"` 里那两个字符�
 
 ⚠️ 写这段说明的时候还踩了第三种形态：注释里写 `"**/*.ts"` 这样的 glob，
 `*` 和 `/` 挨在一起就把**块注释自己**提前关掉了，脚本直接 `SyntaxError`。
+
+### 页面外壳那三条（#209）
+
+| 规则 | 违反后的表现 |
+|---|---|
+| `page-shell-handwritten` —— `pages/` 里出现 `@container/main` | 又在手抄三层外壳，抄漏一层的页查询区贴着标签条 |
+| `page-root-padding` —— `pages/<目录>/index.tsx` 里 `*Page` return 的根元素带竖向 padding / 上下 margin | 四边 16px 不再只有外壳一个来源，顶距又分叉 |
+| `page-root-unscanned` —— 某个 `*Page` 一个根元素都没认出来 | 扫描器盲区：那一页的根从此没人查 |
+
+「根元素」认得比看上去宽，每一条都是代码评审翻出来的漏网写法：
+
+- **三元的两个分支**都算（`return id ? (<Designer/>) : (<List/>)`），收尾只认**单独一行**的 `)` —— 第一版在 `) : (` 那行就停了
+- 返回的是**同文件里的组件**就跟进去一层（流程定义页的根在 `DefinitionList` / `Designer` 里）
+- 根是 div 时**第一层子 div 也查** —— `py-4 md:py-6` 历史上就写在里层
+- `className={cn('…', x)}` 里的每个字符串字面量都查，不只 `className="…"`
+- 缩进 4 的 return 只认 `if` / `else` 里的早退；`useMemo(() => { return … })` 也在这一级，第一版把回调里的 JSX 当成了根
+- `return renderX()` 这种不开括号的不往下读（第一版一路读进了下一个函数，于是 `page-root-unscanned` 永远不报）
+
+放行两种：自己有 `border` / `bg-*` 的元素（一张卡片，padding 在框里面）· `[&>x]:py-2` 这种给子元素的任意变体。
+`stripComments` 现在**保留块注释里的换行** —— 原来吞掉换行，所有在剥过注释的文本上数行的规则报出来的行号都整体偏上。
+
+反向验证（各注入一处，改回即绿）：三元分支委托的组件加 `py-4` · 第二层 div 加 `py-4` · `cn("py-4 …")` · 根元素 `mt-4` ·
+`return renderIt()` → 前四个报 `page-root-padding`（行号指到真实那一行）、最后一个报 `page-root-unscanned`；`[&>section]:py-2` 不报。
 
 ### 组件库那三条（`orphan-component` / `unused-third-party` / `stale-registry`）
 

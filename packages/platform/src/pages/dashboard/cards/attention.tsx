@@ -10,6 +10,7 @@ import { cn } from '@admin/ui/lib/utils'
 
 import { usePerm } from '../../../auth/use-perm'
 import { attentionQuery, todayRangeParam, type AttentionItem } from '../api'
+import { attentionLink } from '../card-rules'
 import { CountBadge, DashboardCard } from '../card-shell'
 import type { TFn } from './types'
 
@@ -26,7 +27,7 @@ import type { TFn } from './types'
  */
 export function AttentionCard() {
   const { t } = useTranslation()
-  const query = useQuery(attentionQuery)
+  const query = useQuery(attentionQuery())
   const items = query.data ?? []
 
   return (
@@ -64,27 +65,21 @@ function AttentionRow({ item }: { item: AttentionItem }) {
   const view = describe(item, t)
   const Icon = view.Icon
 
-  let action: React.ReactNode = null
-  if (item.kind === 'webhook_disabled' && can('open:app:list')) {
-    action = (
-      <Link to="/open/app" search={{ webhook: item.app_id, wtab: 'endpoints' }} className={ACTION_CLASS} data-testid="dash-attention-action">
-        {t('去处理')}
-      </Link>
-    )
-  } else if (item.kind === 'task_failed') {
-    // 执行记录页只要登录（route 文件里写了为什么）
-    action = (
-      <Link to="/scheduler/record" search={{ name: item.task, status: 'FAILURE' }} className={ACTION_CLASS} data-testid="dash-attention-action">
-        {t('看记录')}
-      </Link>
-    )
-  } else if (item.kind === 'login_fail_spike' && can('log:login:del')) {
-    action = (
-      <Link to="/log/login" search={{ status: 0, time: todayRangeParam() }} className={ACTION_CLASS} data-testid="dash-attention-action">
-        {t('看明细')}
-      </Link>
-    )
-  }
+  const link = attentionLink(item, can, todayRangeParam(), t)
+  // 三种去处的 search 形状各不相同，TanStack 的 `<Link>` 要按 `to` 收窄类型 —— 分开写
+  const action: React.ReactNode = !link ? null : link.to === '/open/app' ? (
+    <Link to={link.to} search={link.search} className={ACTION_CLASS} data-testid="dash-attention-action">
+      {link.label}
+    </Link>
+  ) : link.to === '/scheduler/record' ? (
+    <Link to={link.to} search={link.search} className={ACTION_CLASS} data-testid="dash-attention-action">
+      {link.label}
+    </Link>
+  ) : (
+    <Link to={link.to} search={link.search} className={ACTION_CLASS} data-testid="dash-attention-action">
+      {link.label}
+    </Link>
+  )
 
   return (
     <li className="flex items-start gap-3.5 px-5 py-4" data-testid={`dash-attention-${item.kind}`} data-level={item.level}>

@@ -22,6 +22,7 @@ import { features } from './table-features'
 import { NoticeFormSheet } from './form'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { ExportButton } from '../_shared/data-io/export-button'
+import { PageShell } from '../_shared/page-shell'
 
 /**
  * 通知公告。标准的三件套列表页，照 `pages/user/` 的模板。
@@ -195,99 +196,92 @@ export function NoticePage({
   }, [q])
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        {/* content-scroll:* —— 「内容区滚动」模式下这一块撑满可用高度，
-              于是里面的表格框变成定高视区：筛选栏 / 表头 / 分页条钉住，只有行滚。
-              整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
-        <div className="flex flex-col gap-4 md:gap-6 content-scroll:min-h-0 content-scroll:flex-1">
-          <PageHeader title={t('通知公告')} description={t('发布系统通知与公告，状态控制是否对外展示。')} />
+    <PageShell fill="always">
+      <PageHeader title={t('通知公告')} description={t('发布系统通知与公告，状态控制是否对外展示。')} />
 
-          {/* 查询区和表格是同一个块的两半；这一层也要能收缩，否则「只滚表格行」那条链断在这里 */}
-          <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-            <QueryBar
-              fields={FIELDS}
-              value={q.value}
-              onChange={q.setValue}
-              onSearch={submitQuery}
-              onReset={clearFilters}
-              applied={q.applied}
-              loading={isFetching}
-              viewsStorageKey="qb:notice"
-              actions={
-                <>
-                  <Can perm="sys:notice:add">
-                    <Button
-                      size="sm"
-                      data-testid="add-notice"
-                      onClick={() => {
-                        setEditing(null)
-                        setSheetOpen(true)
-                      }}
-                    >
-                      <IconPlus className="size-4" />
-                      {t('新增公告')}
-                    </Button>
-                  </Can>
-                  <Can perm="sys:notice:export">
-                    <ExportButton
-                      path="/api/v1/sys/notices/export"
-                      filters={q.params}
-                      selectedIds={selectedIds}
-                      total={total}
-                    />
-                  </Can>
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-                  {/* 批量条放左组末尾：它随选中行出现/消失，放右组会让「搜索/重置」横向位移 */}
-                  <Can perm="sys:notice:del">
-                    <BulkBar
-                      count={selectedIds.length}
-                      pending={del.isPending}
-                      onDelete={() => setBulkOpen(true)}
-                    />
-                  </Can>
-                </>
-              }
-            />
+      {/* 查询区和表格是同一个块的两半；这一层也要能收缩，否则「只滚表格行」那条链断在这里 */}
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        <QueryBar
+          fields={FIELDS}
+          value={q.value}
+          onChange={q.setValue}
+          onSearch={submitQuery}
+          onReset={clearFilters}
+          applied={q.applied}
+          loading={isFetching}
+          viewsStorageKey="qb:notice"
+          actions={
+            <>
+              <Can perm="sys:notice:add">
+                <Button
+                  size="sm"
+                  data-testid="add-notice"
+                  onClick={() => {
+                    setEditing(null)
+                    setSheetOpen(true)
+                  }}
+                >
+                  <IconPlus className="size-4" />
+                  {t('新增公告')}
+                </Button>
+              </Can>
+              <Can perm="sys:notice:export">
+                <ExportButton
+                  path="/api/v1/sys/notices/export"
+                  filters={q.params}
+                  selectedIds={selectedIds}
+                  total={total}
+                />
+              </Can>
+              <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+              {/* 批量条放左组末尾：它随选中行出现/消失，放右组会让「搜索/重置」横向位移 */}
+              <Can perm="sys:notice:del">
+                <BulkBar
+                  count={selectedIds.length}
+                  pending={del.isPending}
+                  onDelete={() => setBulkOpen(true)}
+                />
+              </Can>
+            </>
+          }
+        />
 
-            {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
-              也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
-            <div
-              data-testid="notice-table"
-              data-fetching={isFetching}
-              className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-            >
-              <DataTable
-                table={table}
-                showColumnVisibility={false}
-                rows={table.getRowModel().rows}
-                columnCount={columns.length}
-                columnLabels={COLUMN_LABELS}
-                emptyMessage={t('还没有通知公告')}
-                emptyAction={
-                  hasFilter ? (
-                    <ResetButton
-                      variant="outline"
-                      testId="empty-clear-filter"
-                      label={t('清除筛选')}
-                      onClick={clearFilters}
-                    />
-                  ) : undefined
-                }
-                {...list}
-                pagination={{
-                  pageIndex: page - 1,
-                  pageCount: totalPages,
-                  pageSize: size,
-                  selectedCount: selectedIds.length,
-                  totalCount: total,
-                  onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                  onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-                }}
-              />
-            </div>
-          </div>
+        {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
+          也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
+        <div
+          data-testid="notice-table"
+          data-fetching={isFetching}
+          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+        >
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            columnLabels={COLUMN_LABELS}
+            emptyMessage={t('还没有通知公告')}
+            emptyAction={
+              hasFilter ? (
+                <ResetButton
+                  variant="outline"
+                  testId="empty-clear-filter"
+                  label={t('清除筛选')}
+                  onClick={clearFilters}
+                />
+              ) : undefined
+            }
+            {...list}
+            pagination={{
+              pageIndex: page - 1,
+              pageCount: totalPages,
+              pageSize: size,
+              selectedCount: selectedIds.length,
+              totalCount: total,
+              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+            }}
+          />
         </div>
       </div>
 
@@ -356,6 +350,6 @@ export function NoticePage({
           }
         }}
       />
-    </div>
+    </PageShell>
   )
 }

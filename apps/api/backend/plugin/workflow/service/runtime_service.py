@@ -1810,16 +1810,17 @@ async def handover(db: AsyncSession, *, from_user_id: int, to_user_id: int, acto
 REMIND_MAX = 3
 
 
-def timeout_of(model: dict[str, Any], node_id: str) -> dict[str, Any] | None:
-    ref = index_nodes(model).get(node_id)
+def timeout_of(model: dict[str, Any], node_id: str, *, nodes: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    """节点的超时配置。列表里逐行调的地方传 `nodes`（同一份快照的节点索引）：不传每次都要把整棵树走一遍"""
+    ref = (nodes if nodes is not None else index_nodes(model)).get(node_id)
     if ref is None or ref.node['type'] != 'approval':
         return None
     return ref.node.get('timeout') or None
 
 
-def due_time(task: WfTask, model: dict[str, Any]) -> datetime | None:
+def due_time(task: WfTask, model: dict[str, Any], *, nodes: dict[str, Any] | None = None) -> datetime | None:
     """这条待办什么时候算超时（没配超时 = None）。详情接口拿它给前端显示「X 点自动通过」"""
-    cfg = timeout_of(model, task.node_id)
+    cfg = timeout_of(model, task.node_id, nodes=nodes)
     if not cfg:
         return None
     return task.created_time + timedelta(hours=cfg['hours'])

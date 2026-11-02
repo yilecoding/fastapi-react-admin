@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  QUICK_LINKS_DEFAULT,
   QUICK_LINKS_MAX,
   QUICK_LINKS_STORED_MAX,
+  chosenQuickLinks,
   defaultLayout,
   moveItem,
   patchItem,
@@ -159,5 +161,22 @@ describe('编辑动作', () => {
     expect(sameLayout(base, patchItem(base, 'b', { width: 'full' }))).toBe(false)
     expect(sameLayout(base, { ...base, quickLinks: [] })).toBe(false)
     expect(sameLayout({ ...base, quickLinks: ['/x'] }, { ...base, quickLinks: ['/x'] })).toBe(true)
+  })
+})
+
+describe('chosenQuickLinks（编辑器里勾着的常用入口）', () => {
+  const visible = Array.from({ length: 20 }, (_, i) => `/p${i}`)
+
+  it('🔴 可见的超过显示上限时如实全给（不按 12 截）—— 截了的话第 13 个起显示没勾、还被「满了」禁用，取消不掉', () => {
+    const stored = visible.slice(0, QUICK_LINKS_MAX + 1)
+    expect(chosenQuickLinks(stored, visible)).toEqual(stored)
+  })
+
+  it('暂时看不见的不算进勾着的，顺序照存的', () => {
+    expect(chosenQuickLinks(['/gone', '/p3', '/p1'], visible)).toEqual(['/p3', '/p1'])
+  })
+
+  it('没挑过时是默认的前几个', () => {
+    expect(chosenQuickLinks(null, visible)).toEqual(visible.slice(0, QUICK_LINKS_DEFAULT))
   })
 })

@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { formatDateTimeShort } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
@@ -12,6 +11,7 @@ import { cn } from '@admin/ui/lib/utils'
 import { ApiError } from '../../../api-client/errors'
 import { idempotencyKey, useAct } from '../../workflow/api'
 import { deskInitiatedQuery, type InitiatedRow, type StepState } from '../api'
+import { lastLine } from '../card-rules'
 import { CARD_ACTION_CLASS, DashboardCard } from '../card-shell'
 import { DAY, since, spanText } from './time'
 import type { CardProps, TFn } from './types'
@@ -34,30 +34,6 @@ function statusOf(row: InitiatedRow, t: TFn): Status {
       return { label: t('已撤回'), className: 'bg-muted text-muted-foreground' }
     default:
       return { label: t('已终止'), className: 'bg-muted text-muted-foreground' }
-  }
-}
-
-/**
- * 已结束的单最后一步那句话：「10-28 赵磊 同意：「注意交接」」。
- * 每种动作一条完整的句子 key —— 拼「{{action}}」的话英文语序和标点都对不上
- */
-function lastLine(last: NonNullable<InitiatedRow['last']>, t: TFn): string {
-  const v = { at: formatDateTimeShort(last.time), who: last.actor_name ?? '—', opinion: last.opinion }
-  const said = Boolean(last.opinion)
-  switch (last.action) {
-    case 'approve':
-    case 'auto_approve':
-    case 'ai_approve':
-      return said ? t('{{at}} {{who}} 同意：「{{opinion}}」', v) : t('{{at}} {{who}} 同意', v)
-    case 'reject':
-    case 'auto_reject':
-      return said ? t('{{at}} {{who}} 驳回：「{{opinion}}」', v) : t('{{at}} {{who}} 驳回', v)
-    case 'withdraw':
-      return t('{{at}} {{who}} 撤回了这张单', v)
-    case 'terminate':
-      return said ? t('{{at}} {{who}} 终止：「{{opinion}}」', v) : t('{{at}} {{who}} 终止', v)
-    default:
-      return said ? t('{{at}} {{who}} 处理：「{{opinion}}」', v) : t('{{at}} {{who}} 处理', v)
   }
 }
 
@@ -187,7 +163,7 @@ function Steps({ row }: { row: InitiatedRow }) {
               <span className={cn(DOT, 'grid place-items-center bg-destructive')} aria-hidden>
                 <IconX className="size-2.5 text-white" stroke={3.4} />
               </span>
-            ) : it.state === 'back' ? (
+            ) : it.state === 'back' || it.state === 'sent_back' ? (
               <span className={cn(DOT, 'grid place-items-center bg-destructive')} aria-hidden>
                 <IconArrowBackUp className="size-2.5 text-white" stroke={3} />
               </span>
@@ -198,9 +174,10 @@ function Steps({ row }: { row: InitiatedRow }) {
               className={cn(
                 'shrink-0 truncate',
                 it.state === 'current' && 'font-bold text-foreground',
-                it.state === 'back' && 'font-bold text-destructive'
+                it.state === 'back' && 'font-bold text-destructive',
+                it.state === 'sent_back' && 'text-destructive'
               )}
-              title={it.state === 'more' ? t('后面还有几步要看审批结果') : undefined}
+              title={it.state === 'more' ? t('后面还有几步要看审批结果') : it.state === 'sent_back' ? t('这一步退回了') : undefined}
               data-state={it.state}
             >
               {it.name}

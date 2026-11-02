@@ -243,11 +243,13 @@ export function ConfigPage({
       <PageHeader title={t("参数配置")} description={t("系统级动态参数。登录与口令策略是活的 —— 改完立刻对所有人生效。")} />
 
       {/* ── 顶部粘性栏 ──
-          通栏（-mx-4）且顶到标签条（-mt-4，抵掉 TabFrame 的 py-4，#209）：
-          全站唯一刻意贴边的一条 —— 它自带 border-b，本身就是一道分隔。`sticky top-0` 停在滚动区顶边
-          （外壳的竖直留白在 TabFrame 上、不在滚动容器上，所以不用补偿，见 _auth.tsx 那段） */}
+          负 margin 吃掉外壳内容列的 p-4（上 + 左右），再用同样的 padding 补回来：
+          静止时搜索框照旧落在距标签条 / 左边 16px（#209），吸顶时整条栏铺满滚动区，
+          两侧 16px 的槽里不会露出滚过去的行。
+          `content-scroll:-top-4`：内容区滚动时 sticky 的基准是滚动容器 padding 的**内沿**（实测吸在 16px，
+          上面那条缝里看得见滚过去的行），负 16 才贴到滚动区最上沿。整页滚动时基准是视口，照旧 top-0 */}
       <div
-        className="sticky top-0 z-20 -mx-4 -mt-4 flex flex-wrap items-center gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur"
+        className="sticky top-0 z-20 -mx-4 -mt-4 content-scroll:-top-4 flex flex-wrap items-center gap-3 border-b border-border bg-background/95 px-4 pt-4 pb-3 backdrop-blur"
         data-testid="config-topbar"
       >
         <InputGroup className="h-9 w-full sm:w-72">
@@ -322,8 +324,8 @@ export function ConfigPage({
       {err && <p className="px-1 pt-3 text-sm text-destructive" data-testid="save-error">{err}</p>}
 
       {/* ── 左右主体 ── */}
-      <div className="flex flex-1 flex-col gap-6 py-5 md:flex-row">
-        <aside className="md:sticky md:top-20 md:h-fit md:w-52 md:shrink-0 lg:w-72">
+      <div className="flex flex-1 flex-col gap-6 pt-5 md:flex-row">
+        <aside className="md:sticky md:top-20 content-scroll:md:top-16 md:h-fit md:w-52 md:shrink-0 lg:w-72">
           {isPending ? (
             <div className="flex flex-col gap-2">
               {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}

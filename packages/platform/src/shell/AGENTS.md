@@ -73,8 +73,8 @@ inset（SidebarInset）       content-scroll:min-h-0
 |---|---|---|
 | 内容层 | `min-h-0` + `overflow-y-auto` | `routes/_auth.tsx` |
 | TabFrame | `content-scroll:min-h-0` | `shell/tab-outlet.tsx` |
-| 页面根 / `@container/main` | `content-scroll:min-h-0` | 各页面（21 处，全量加过了） |
-| 页面主块 | `content-scroll:min-h-0 content-scroll:flex-1` | **只有列表页加** —— 这一条就是「我要变成视区」的开关 |
+| 页面根 / `@container/main` | `content-scroll:min-h-0` | `pages/_shared/page-shell.tsx`（`<PageShell>`，各页不再手写） |
+| 页面主块 | `content-scroll:min-h-0 content-scroll:flex-1` | **只有列表页加** —— 这一条就是「我要变成视区」的开关（`<PageShell fill="always">`） |
 | `data-testid="*-table"` 包装层 | `content-scroll:flex/min-h-0/flex-1/flex-col` | user · notice · log-* · dict |
 | 表格外框（带 border 的那层） | `content-scroll:flex/min-h-0/flex-1/flex-col` | `ui/data-table.tsx`、dept / menu 手写的树形表 |
 | **`Table` 内部的 table-container** | `content-scroll:min-h-0 content-scroll:flex-1` | `ui/components/table.tsx` |
