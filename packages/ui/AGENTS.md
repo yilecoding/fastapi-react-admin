@@ -152,7 +152,7 @@ context** 里取翻译函数，而那个 i18next 实例是 `@admin/i18n` 建的�
 | flex 行里的 `w-full` | `w-full` = `width:100%`**容器全宽**，旁边还有兄弟元素时必然溢出（图标行溢出正好 = 清除按钮 32px + gap 8px）。要占满剩余空间用 `min-w-0 flex-1`，别用 `w-full` |
 | 页面块的内边距 | **一律不加，四个方向都是**。上下左右 16px 由 `_auth.tsx` 内容列（`data-slot="content-scroll"`）的 `p-4` 一次给齐，页面最外层用 `pages/_shared/page-shell.tsx`（#209，`pnpm arch:check` 守着）。页面级块再加 `px-1` 就会比别的块内缩 4px（`PageHeader` 曾经带 `px-1`，「刷新」按钮右边缘 1980 而卡片 1984 —— 肉眼就是「边距怪怪的」） |
 | 卡片网格 | 写 `grid grid-cols-1 gap-3 sm:grid-cols-2 …`，不能只写 `sm:grid-cols-2`：`sm` 以下是隐式 auto 列、宽 = 内容最小宽度，短信配置那串不换行的凭据把卡片撑出 390 宽的屏幕、删除按钮被裁一半（#210）。`grid-cols-1` = `minmax(0,1fr)` |
-| 表格横向滚动 | `Table` 的容器带 `scroll-shadow-x`（globals.css）：能横向滚、那一侧还有内容时边缘出阴影。没有它的时候，390 宽下通知策略 586px 的表在 356px 里其实能滑，但截图审查读成「被裁掉了、短信那列没了」（#210）。⚠️ 阴影的遮罩色默认是 `--background`，表格放在别的底色上要设 `--scroll-shadow-cover` |
+| 表格横向滚动 | `Table` 的容器带 `scroll-fade-x`（globals.css）：能横向滚时，还有内容的那一侧边缘渐隐。没有它时 390 宽下通知策略 586px 的表在 356px 里其实能滑，但截图审查读成「被裁掉了」（#210）。🔴 用 mask + 滚动驱动动画，**别换回「背景模拟阴影」**：那个要遮罩色等于底色（深色抽屉里是两条暗带）、被选中行的底色盖住、还让大表格失去合成层滚动（#216 评审）|
 | 页面纵向节奏 | 页面级块之间统一 `gap-4 md:gap-6`（24px）。嵌套容器**也要用同一个值** —— 监控页内层只写 `gap-4`，于是「页头→第一块」24px、「块与块」16px，同一页两种间距 |
 | 说明文字贴住它解释的东西 | 包一层 `flex flex-col gap-2` 做**结构化分组**，不要给说明加 `-mt-2` 往上拽 —— 负 margin 会变成「说明上方 8px、下方 24px」，同一条缝两个数 |
 | 禁用态选择器 | Base UI 的 Checkbox/Select 渲染成 `<span role="checkbox">`，禁用是 `data-disabled` / `aria-disabled`，**不是** HTML 的 `disabled` 属性 —— `:not([disabled])` 选不掉它，要写 `:not([data-disabled])` |

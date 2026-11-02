@@ -361,21 +361,55 @@ html[data-scroll-mode="page"] {
 }
 
 /*
- * 横向滚动阴影（#210 窄屏）：容器能横向滚、而且那一侧还有内容时，那一侧边缘出现一道渐隐阴影。
+ * 横向滚动提示（#210 窄屏）：容器能横向滚、而且那一侧还有内容时，那一侧边缘的内容渐隐。
  *
  * 症状：390 宽下通知策略的表格 586px，装在 356px 的容器里 —— 其实能横向滑，但界面上没有任何迹象，
  * 截图审查时读成「表格被裁掉了、短信那一列没了」。
- * 做法是 Lea Verou 的纯 CSS 写法：两层「遮罩」跟着内容走（attachment: local），两层「阴影」钉在容器上
- * （attachment: scroll）。滚到头时遮罩正好盖住阴影，所以不用 JS 判断滚动位置。
- * ⚠️ 遮罩色必须等于容器的底色（默认 --background）。表格放在别的底色上时设 `--scroll-shadow-cover`。
- * 单元格自带不透明底色的地方（表头 bg-muted）会盖住阴影 —— 表身那几行看得见就够了。
+ *
+ * 🔴 用 mask，不用「背景模拟阴影」（`background-attachment: local` 那个经典写法）。#216 第一版就是那么做的，评审指出三处坏：
+ * 遮罩色必须等于底色 —— 深色下抽屉 / 卡片（`--popover` / `--card`）和 `--background` 不同，两边是两条永久的暗带；
+ * 选中行（`bg-muted`）这类不透明单元格会盖住阴影，提示恰好在有选中行时消失；
+ * `attachment: local` 让 Chromium 放弃合成层滚动，全站大表格滚动都要主线程重绘。
+ * mask 只看 alpha，跟底色无关、盖在所有单元格上面。两侧渐隐宽度由滚动驱动动画按滚动位置推：
+ * 滚到最左时左边不渐隐、滚到最右时右边不渐隐；不能滚时时间轴无效、动画不生效，两边都不渐隐。
+ * 不认 `animation-timeline` 的浏览器（写这条时的 Firefox）走 @supports 外面 —— 没有提示，也不坏。
  */
-@utility scroll-shadow-x {
-  --scroll-shadow-cover: var(--background);
-  --scroll-shadow-ink: color-mix(in oklch, var(--foreground) 14%, transparent);
-  background:
-    linear-gradient(to right, var(--scroll-shadow-cover) 40%, transparent) left center / 2rem 100% no-repeat local,
-    linear-gradient(to left, var(--scroll-shadow-cover) 40%, transparent) right center / 2rem 100% no-repeat local,
-    linear-gradient(to right, var(--scroll-shadow-ink), transparent) left center / 0.75rem 100% no-repeat scroll,
-    linear-gradient(to left, var(--scroll-shadow-ink), transparent) right center / 0.75rem 100% no-repeat scroll;
+@property --scroll-fade-l {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --scroll-fade-r {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes scroll-fade-x {
+  from {
+    --scroll-fade-l: 0px;
+    --scroll-fade-r: 2rem;
+  }
+  8% {
+    --scroll-fade-l: 2rem;
+  }
+  92% {
+    --scroll-fade-r: 2rem;
+  }
+  to {
+    --scroll-fade-l: 2rem;
+    --scroll-fade-r: 0px;
+  }
+}
+@utility scroll-fade-x {
+  @supports (animation-timeline: scroll()) {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 var(--scroll-fade-l),
+      #000 calc(100% - var(--scroll-fade-r)),
+      transparent
+    );
+    animation: scroll-fade-x linear both;
+    animation-timeline: scroll(self inline);
+  }
 }

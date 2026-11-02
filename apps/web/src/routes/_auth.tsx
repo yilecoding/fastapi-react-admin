@@ -10,6 +10,7 @@ import { UploadTray } from "@admin/platform/shell/upload-tray"
 import { TenonMark } from "@/components/tenon-mark"
 import { BRAND } from "@/lib/brand"
 import { NavBreadcrumb } from "@admin/platform/shell/nav-breadcrumb"
+import { usePreferences } from "@admin/platform/shell/preferences"
 import { TabBar } from "@admin/platform/shell/tab-bar"
 import { TabOutlet } from "@admin/platform/shell/tab-outlet"
 import { useTabStore } from "@admin/platform/shell/tab-store"
@@ -25,6 +26,7 @@ import {
   SidebarTrigger,
 } from "@admin/ui/components/sidebar"
 import { Separator } from "@admin/ui/components/separator"
+import { cn } from "@admin/ui/lib/utils"
 
 import { pageRegistry } from "@/lib/page-registry"
 import { buildValidPaths, makeIsValidPath } from "@/lib/valid-paths"
@@ -74,6 +76,7 @@ function AuthLayout() {
   // 顶栏面包屑：活动 tab 的 URL 决定链路,tab 自己的标题兜底
   // hideInMenu 的页面（个人中心那类)不进 nav 树,链路查不到时用它
   const activePath = useRouterState({ select: (s) => s.location.pathname })
+  const showTabs = usePreferences((s) => s.showTabs)
   const activeTabTitle = useTabStore((s) => s.tabs.find((tb) => tb.key === s.activeKey)?.title)
 
   return (
@@ -108,9 +111,10 @@ function AuthLayout() {
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
           <SidebarTrigger className="-ms-1" />
           {/* 窄屏（< sm）不显示面包屑：页名在标签上已经有了。原来在 390 宽下两级文字被 truncate 压到 0 宽，
-              中间的「›」不会收缩，孤零零地贴在搜索按钮左边，像一个残影（#210） */}
-          <Separator orientation="vertical" className="me-2 max-sm:hidden data-[orientation=vertical]:h-4" />
-          <div className="min-w-0 max-sm:hidden">
+              中间的「›」不会收缩，孤零零地贴在搜索按钮左边，像一个残影（#210）。
+              关掉多标签页时标签条整个不渲染，那时面包屑是唯一看得见页名的地方，照旧显示（#216 评审） */}
+          <Separator orientation="vertical" className={cn("me-2 data-[orientation=vertical]:h-4", showTabs && "max-sm:hidden")} />
+          <div className={cn("min-w-0", showTabs && "max-sm:hidden")}>
             <NavBreadcrumb nav={nav} activePath={activePath} fallbackTitle={activeTabTitle} />
           </div>
           {/* 命令面板入口：⌘K 也能开，但快捷键不摆出来就等于只有作者知道 */}
