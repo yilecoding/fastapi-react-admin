@@ -32,18 +32,30 @@ function findChain(nodes: NavNode[], path: string, trail: NavNode[] = []): NavNo
  *
  * `hideInMenu` 的页面(比如「个人中心」)根本不进 `nav` 树,链找不到时
  * 退回 `fallbackTitle`（调用方传当前 tab 自己的标题)单独顶一级,不留白。
+ *
+ * 不进侧边栏、但逻辑上挂在某个菜单下面的页面（开放接口日志挂在「应用管理」下），
+ * 路由写 `staticData.parent`：链找不到时按父路径接上祖先链，再把自己的标题放最后一级（#210）。
  */
 export function NavBreadcrumb({
   nav,
   activePath,
   fallbackTitle,
+  parentPath,
 }: {
   nav: NavNode[]
   activePath: string
   fallbackTitle?: string
+  /** 当前路由的 `staticData.parent` */
+  parentPath?: string
 }) {
   const { t } = useTranslation()
-  const chain = findChain(nav, activePath)
+  const own = findChain(nav, activePath)
+  const parentChain = !own && parentPath ? findChain(nav, parentPath) : null
+  const chain: NavNode[] | null =
+    own ??
+    (parentChain && fallbackTitle
+      ? [...parentChain, { id: `${activePath}#self`, title: fallbackTitle, path: activePath, icon: null, external: null, children: [] }]
+      : null)
 
   if (!chain) {
     if (!fallbackTitle) return null

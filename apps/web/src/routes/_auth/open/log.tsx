@@ -28,6 +28,8 @@ const searchSchema = z.object({
 export const Route = createFileRoute("/_auth/open/log")({
   validateSearch: searchSchema,
   beforeLoad: requirePerm("open:log:list"),
-  staticData: { title: "调用日志" },
+  // parent / icon：不进侧边栏，面包屑和页签图标由这里兜底（#210）。
+  // 标题不叫「调用日志」：AI 助手下也有一个「调用日志」，两个页签同名分不出来
+  staticData: { title: "开放接口日志", parent: "/open/app", icon: "mdi:history" },
   component: () => null,
 })
