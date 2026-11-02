@@ -311,7 +311,8 @@ function EndpointCard({
           items={[
             { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'open:webhook:edit', onClick: onEdit, testId: `webhook-edit-${h.name}` },
             { key: 'reset', label: t('重置签名密钥'), icon: IconRefresh, perm: 'open:webhook:reset', onClick: onReset, testId: `webhook-reset-${h.name}` },
-            ...RESEND_WINDOWS.map((w) => ({
+            ...RESEND_WINDOWS.map((w, idx) => ({
+              separatorBefore: idx === 0,
               key: `resend-${w.hours}`,
               label: t('重发{{window}}放弃的', { window: t(w.label) }),
               icon: IconRotateClockwise,
