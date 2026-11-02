@@ -289,7 +289,7 @@ function Row({
           label={item.title}
           testId={`${idPrefix}-actions-${item.id}`}
           items={actions}
-          triggerClassName={cn('size-6 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100', active && 'opacity-100')}
+          triggerClassName={cn('size-6 shrink-0 opacity-0 [&_svg]:size-3.5 group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100', active && 'opacity-100')}
         />
       )}
     </div>

@@ -284,9 +284,12 @@ export function formatDateTime(at: ServerTime): string {
  * 🔴 年份不能一律省：审批单、流程定义一放就是跨年的，去年 12 月的待办和今年 12 月的
  * 长得一模一样（#210 调研：「审批中心和流程定义还不带年份」）。「今年」按**显示时区**算，
  * 跨年夜东八区已经是新年、UTC 还是旧年时，不该给刚过去几分钟的记录补年份。
- * `now` 只给测试用。
+ * `opts.now` 只给测试用。🔴 不写成第二个位置参数：`tickFormatter={formatDateTimeShort}`、
+ * `arr.map(formatDateTimeShort)` 会把下标当成 `now`（= 1970 年），每一条都被补上年份（#221 评审）。
+ * 收成对象后，误传进来的数字没有 `.now`，照常按当前时间算。
  */
-export function formatDateTimeShort(at: ServerTime, now: number = Date.now()): string {
+export function formatDateTimeShort(at: ServerTime, opts?: { now?: number }): string {
+  const now = (typeof opts === 'object' && opts?.now) || Date.now()
   const ms = toEpochMs(at)
   if (ms === null) return EMPTY
   const p = partsInDisplayZone(ms)
