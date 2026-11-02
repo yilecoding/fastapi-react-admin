@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
-import { IconListDetails, IconPencil, IconPlus, IconSend, IconTrash } from '@tabler/icons-react'
+import { IconListDetails, IconPencil, IconSend, IconTrash } from '@tabler/icons-react'
 import * as React from 'react'
 
 import { formatDateTime } from '@admin/i18n'
@@ -13,6 +13,7 @@ import { toast } from '@admin/ui/components/toast'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { AddCard, CardField, CardFields } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import { botOptionsQuery, botsQuery, useDeleteBot, useTestBot, type Bot } from './api'
 import { BotFormSheet } from './form'
@@ -118,36 +119,24 @@ export function NotifyBotPage() {
                 </div>
               </div>
 
-              <dl className="space-y-1.5 text-xs">
-                <div className="flex gap-2">
-                  <dt className="w-16 shrink-0 text-muted-foreground">{t('地址')}</dt>
-                  <dd className="min-w-0 truncate font-mono" data-testid={`bot-hint-${bot.name}`}>
+              <CardFields>
+                <CardField label={t('地址')} className="truncate font-mono" testId={`bot-hint-${bot.name}`}>
                     {bot.webhook_hint}
-                  </dd>
-                </div>
-                <div className="flex gap-2">
-                  <dt className="w-16 shrink-0 text-muted-foreground">{t('订阅')}</dt>
-                  <dd className="flex min-w-0 flex-wrap gap-1">
+                  </CardField>
+                <CardField label={t('订阅')} className="flex flex-wrap gap-1">
                     {bot.kinds.map((k) => (
                       <Badge key={k} variant="outline" className="font-normal">
                         {kindLabels.has(k) ? t(kindLabels.get(k) ?? k) : <span className="font-mono">{k}</span>}
                       </Badge>
                     ))}
-                  </dd>
-                </div>
-                <div className="flex gap-2">
-                  <dt className="w-16 shrink-0 text-muted-foreground">{t('最近成功')}</dt>
-                  <dd className="font-mono tabular-nums">{formatDateTime(bot.last_sent_time)}</dd>
-                </div>
+                  </CardField>
+                <CardField label={t('最近成功')} className="font-mono tabular-nums">{formatDateTime(bot.last_sent_time)}</CardField>
                 {bot.last_error ? (
-                  <div className="flex gap-2">
-                    <dt className="w-16 shrink-0 text-muted-foreground">{t('最近失败')}</dt>
-                    <dd className="min-w-0 break-all text-destructive" data-testid={`bot-last-error-${bot.name}`}>
+                  <CardField label={t('最近失败')} className="break-all text-destructive" testId={`bot-last-error-${bot.name}`}>
                       {bot.last_error}
-                    </dd>
-                  </div>
+                    </CardField>
                 ) : null}
-              </dl>
+              </CardFields>
 
               <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
                 <Can perm="sys:notification:bot:test">
@@ -179,23 +168,15 @@ export function NotifyBotPage() {
           ))}
 
           <Can perm="sys:notification:bot:add">
-            <button
-              type="button"
+            <AddCard
+              label={t('新增群机器人')}
               onClick={() => {
                 setEditing(null)
                 setSheetOpen(true)
               }}
-              className="flex min-h-44 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40 hover:text-foreground"
-              data-testid="bot-add"
-            >
-              <IconPlus className="size-5" />
-              <span className="text-sm">{t('新增群机器人')}</span>
-              {bots.length === 0 ? (
-                <span className="max-w-60 text-xs text-balance">
-                  {t('在群里添加一个「自定义机器人」，把它的 Webhook 地址粘过来，再发一条测试消息确认通了')}
-                </span>
-              ) : null}
-            </button>
+              hint={bots.length === 0 ? t('在群里添加一个「自定义机器人」，把它的 Webhook 地址粘过来，再发一条测试消息确认通了') : undefined}
+              testId="bot-add"
+            />
           </Can>
         </div>
       )}

@@ -291,9 +291,10 @@ export function DictPage({
         <div className="flex min-w-0 flex-1 flex-col gap-3 content-scroll:lg:min-h-0">
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <div className="flex min-w-0 flex-col">
-              <span className="truncate text-sm font-medium" data-testid="selected-type">
+              {/* 主从页右侧的详情标题统一 text-base font-semibold（角色 / 数据权限 / 参数配置同款，#210 P1-10） */}
+              <h2 className="truncate text-base font-semibold" data-testid="selected-type">
                 {selected?.name ?? t('未选择字典类型')}
-              </span>
+              </h2>
               <span className="text-xs text-muted-foreground">
                 {selected ? t('{{code}} · 共 {{n}} 项', { code: selected.code, n: datasPage?.total ?? 0 }) : t('先在左侧选一个类型')}
               </span>

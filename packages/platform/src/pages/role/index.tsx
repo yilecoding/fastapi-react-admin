@@ -312,7 +312,7 @@ function RoleDetailHeader({
     <div className="flex shrink-0 flex-wrap items-start justify-between gap-3" data-testid="role-detail">
       <div className="flex flex-col gap-1">
         <span className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold" data-testid="role-detail-name">{role.name}</h2>
+          <h2 className="text-base font-semibold" data-testid="role-detail-name">{role.name}</h2>
           <code
             className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground"
             data-testid="role-detail-code"
