@@ -77,17 +77,18 @@ export function NotifyPolicyPage() {
         title={t('通知策略')}
         description={t('每一类通知走哪些渠道。「默认发 / 默认不发」用户可以在个人中心自己改，「必发 / 不发」不行。')}
       >
-        <RefreshButton busy={query.isFetching} onClick={() => void query.refetch()} />
+        {/* 主动作 → 次要动作 → 刷新（#210 工具栏规范） */}
         <Can perm="sys:notification:policy:edit">
-          <Button variant="outline" size="sm" disabled={!dirty || update.isPending} onClick={() => setDraft({})} data-testid="policy-discard">
-            <IconRestore />
-            {t('放弃修改')}
-          </Button>
           <Button size="sm" disabled={!dirty || update.isPending} onClick={() => void save()} data-testid="policy-save">
             <IconDeviceFloppy />
             {dirty ? t('保存（{{n}} 处）', { n: Object.keys(draft).length }) : t('保存')}
           </Button>
+          <Button variant="outline" size="sm" disabled={!dirty || update.isPending} onClick={() => setDraft({})} data-testid="policy-discard">
+            <IconRestore />
+            {t('放弃修改')}
+          </Button>
         </Can>
+        <RefreshButton busy={query.isFetching} onClick={() => void query.refetch()} />
       </PageHeader>
 
       {error && (

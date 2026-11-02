@@ -300,7 +300,7 @@ export function DictPage({
             </div>
             <div className="ms-auto flex items-center gap-2">
               <Can perm="dict:data:add">
-                <Button size="sm" variant="outline" disabled={!selected} data-testid="add-data"
+                <Button size="sm" disabled={!selected} data-testid="add-data"
                         onClick={() => { setEditingData(null); setDataSheet(true) }}>
                   <IconPlus className="size-4" />{t('新增字典项')}
                 </Button>
