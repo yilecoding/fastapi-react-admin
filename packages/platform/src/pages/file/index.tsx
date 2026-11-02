@@ -197,7 +197,7 @@ export function FilePage({
     <div className="flex flex-1 flex-col content-scroll:min-h-0">
       {/* content-scroll:* —— 内容区滚动模式下把整块撑满可用高度，
           于是下面 file-content 那一层变成滚动区：工具栏、左侧分类、分页条都钉住 */}
-      <div className="flex flex-1 flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0">
+      <div className="flex flex-1 flex-col gap-4 md:gap-6 content-scroll:min-h-0">
         <PageHeader
           title={t('文件管理')}
           description={t('系统上传文件的统一入口，支持预览、下载与批量清理。')}

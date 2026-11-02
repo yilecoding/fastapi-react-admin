@@ -72,7 +72,7 @@ export function NotifyPolicyPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 py-4 md:py-6">
+    <div className="flex flex-1 flex-col gap-4">
       <PageHeader
         title={t('通知策略')}
         description={t('每一类通知走哪些渠道。「默认发 / 默认不发」用户可以在个人中心自己改，「必发 / 不发」不行。')}

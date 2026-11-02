@@ -34,6 +34,7 @@ import { ExportButton } from '../_shared/data-io/export-button'
 import { ImportSheet } from '../_shared/data-io/import-sheet'
 import { deptKeys, deptTreeQuery, useDeleteDept, type Dept } from './api'
 import { DeptFormSheet } from './form'
+import { PageShell } from '../_shared/page-shell'
 
 /**
  * 部门管理 —— 树形表格。
@@ -96,117 +97,110 @@ export function DeptPage({
   const total = React.useMemo(() => countNodes(tree), [tree])
 
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        {/* content-scroll:* —— 「内容区滚动」模式下这一块撑满可用高度，
-              于是里面的表格框变成定高视区：筛选栏 / 表头 / 分页条钉住，只有行滚。
-              整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          <PageHeader title={t("部门管理")} description={t("组织架构树。数据权限的隔离就建在这棵树上。")} />
+    <PageShell fill="always">
+      <PageHeader title={t("部门管理")} description={t("组织架构树。数据权限的隔离就建在这棵树上。")} />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <TextFilter
-              value={search.name ?? ''}
-              placeholder={t("搜索部门名称…")}
-              testId="filter-name"
-              onCommit={(v) => patch({ name: v || undefined })}
-            />
-            <TextFilter
-              value={search.code ?? ''}
-              placeholder={t("搜索编码…")}
-              testId="filter-code"
-              width="w-40"
-              onCommit={(v) => patch({ code: v || undefined })}
-            />
-            <StatusFilter value={search.status} onChange={(v) => patch({ status: v })} />
-            {hasFilter && (
-              <ResetButton onClick={() => patch({ name: undefined, code: undefined, status: undefined })} />
+      <div className="flex flex-wrap items-center gap-2">
+        <TextFilter
+          value={search.name ?? ''}
+          placeholder={t("搜索部门名称…")}
+          testId="filter-name"
+          onCommit={(v) => patch({ name: v || undefined })}
+        />
+        <TextFilter
+          value={search.code ?? ''}
+          placeholder={t("搜索编码…")}
+          testId="filter-code"
+          width="w-40"
+          onCommit={(v) => patch({ code: v || undefined })}
+        />
+        <StatusFilter value={search.status} onChange={(v) => patch({ status: v })} />
+        {hasFilter && (
+          <ResetButton onClick={() => patch({ name: undefined, code: undefined, status: undefined })} />
+        )}
+        <Button
+          variant="outline" size="sm" className="h-8"
+          data-testid="toggle-fold"
+          onClick={() => patch({ fold: foldAll ? undefined : 'all' })}
+        >
+          {foldAll ? <IconChevronsDown className="size-4" /> : <IconChevronsUp className="size-4" />}
+          {foldAll ? t('展开全部') : t('折叠全部')}
+        </Button>
+        <span className="ms-auto text-sm text-muted-foreground">{t('共 {{n}} 个部门', { n: total })}</span>
+        <Can perm="sys:dept:add">
+          <Button size="sm" data-testid="add-dept" onClick={() => openCreate(null)}>
+            <IconPlus className="size-4" />
+            {t('新增部门')}
+          </Button>
+        </Can>
+        {/* 导入能一次建一棵树、挪一批部门的上级 —— 次要动作，outline */}
+        <Can perm="sys:dept:import">
+          <Button size="sm" variant="outline" data-testid="import-depts" onClick={() => setImportOpen(true)}>
+            <IconUpload className="size-4" />
+            {t('导入')}
+          </Button>
+        </Can>
+        <Can perm="sys:dept:export">
+          <ExportButton path="/api/v1/sys/depts/export" filters={filters} total={total} />
+        </Can>
+        <RefreshButton busy={isFetching} onClick={list.onRetry} />
+      </div>
+
+      {/* 有旧数据可看时（重取失败那种）不抽走表格，错误挂成横幅 */}
+      {Boolean(list.error) && tree.length > 0 && (
+        <QueryError error={list.error} onRetry={list.onRetry} className="shrink-0" />
+      )}
+
+      {/* 加载中也保留表头与工具栏 —— 整块换骨架屏会让筛选栏在加载完成时凭空出现 */}
+      <div
+        className={cn(
+          'overflow-x-auto rounded-lg border transition-opacity',
+          // 与 `DataTable` 的表格框同款：内容区滚动模式下变成定高的表格视区。
+          // 真正滚的是 `Table` 内部那层 table-container（见 ui/components/table.tsx），
+          // 所以这里只负责「变成列向 flex + 把高度传下去」
+          'content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col',
+          isFetching && !isPending && 'opacity-60'
+        )}
+        data-testid="dept-table"
+        aria-busy={isFetching}
+      >
+        <Table>
+          {/* 吸顶表头。`bg-muted` 不能省（透明的话滚上来的行会从底下透出来），
+              inset 阴影补那条分隔线 —— collapse 表格里 thead 的 border 会跟着滚走 */}
+          <TableHeader className="sticky top-0 z-10 bg-muted shadow-[inset_0_-1px_0_var(--border)]">
+            <TableRow>
+              <TableHead>{t('部门名称')}</TableHead>
+              <TableHead>{t('编码')}</TableHead>
+              <TableHead>{t('负责人')}</TableHead>
+              <TableHead>{t('联系电话')}</TableHead>
+              <TableHead>{t('排序')}</TableHead>
+              <TableHead>{t('状态')}</TableHead>
+              <TableHead className="w-10" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isPending ? (
+              <DataTableSkeletonRows rows={5} columns={7} />
+            ) : list.error && tree.length === 0 ? (
+              /* 🔴 排在空态前面 —— 否则接口挂了会显示成「没有匹配的部门」（硬纪律 9） */
+              <DataTableErrorRow columnCount={7} error={list.error} onRetry={list.onRetry} />
+            ) : tree.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                  {t('没有匹配的部门')}
+                </TableCell>
+              </TableRow>
+            ) : (
+              tree.map((d) => (
+                <DeptRows
+                  key={d.id} node={d} depth={0} isOpen={isOpen}
+                  onToggle={toggle} onEdit={openEdit} onAddChild={openCreate}
+                  onDelete={setPendingDelete}
+                />
+              ))
             )}
-            <Button
-              variant="outline" size="sm" className="h-8"
-              data-testid="toggle-fold"
-              onClick={() => patch({ fold: foldAll ? undefined : 'all' })}
-            >
-              {foldAll ? <IconChevronsDown className="size-4" /> : <IconChevronsUp className="size-4" />}
-              {foldAll ? t('展开全部') : t('折叠全部')}
-            </Button>
-            <span className="ms-auto text-sm text-muted-foreground">{t('共 {{n}} 个部门', { n: total })}</span>
-            <Can perm="sys:dept:add">
-              <Button size="sm" data-testid="add-dept" onClick={() => openCreate(null)}>
-                <IconPlus className="size-4" />
-                {t('新增部门')}
-              </Button>
-            </Can>
-            {/* 导入能一次建一棵树、挪一批部门的上级 —— 次要动作，outline */}
-            <Can perm="sys:dept:import">
-              <Button size="sm" variant="outline" data-testid="import-depts" onClick={() => setImportOpen(true)}>
-                <IconUpload className="size-4" />
-                {t('导入')}
-              </Button>
-            </Can>
-            <Can perm="sys:dept:export">
-              <ExportButton path="/api/v1/sys/depts/export" filters={filters} total={total} />
-            </Can>
-            <RefreshButton busy={isFetching} onClick={list.onRetry} />
-          </div>
-
-          {/* 有旧数据可看时（重取失败那种）不抽走表格，错误挂成横幅 */}
-          {Boolean(list.error) && tree.length > 0 && (
-            <QueryError error={list.error} onRetry={list.onRetry} className="shrink-0" />
-          )}
-
-          {/* 加载中也保留表头与工具栏 —— 整块换骨架屏会让筛选栏在加载完成时凭空出现 */}
-          <div
-            className={cn(
-              'overflow-x-auto rounded-lg border transition-opacity',
-              // 与 `DataTable` 的表格框同款：内容区滚动模式下变成定高的表格视区。
-              // 真正滚的是 `Table` 内部那层 table-container（见 ui/components/table.tsx），
-              // 所以这里只负责「变成列向 flex + 把高度传下去」
-              'content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col',
-              isFetching && !isPending && 'opacity-60'
-            )}
-            data-testid="dept-table"
-            aria-busy={isFetching}
-          >
-            <Table>
-              {/* 吸顶表头。`bg-muted` 不能省（透明的话滚上来的行会从底下透出来），
-                  inset 阴影补那条分隔线 —— collapse 表格里 thead 的 border 会跟着滚走 */}
-              <TableHeader className="sticky top-0 z-10 bg-muted shadow-[inset_0_-1px_0_var(--border)]">
-                <TableRow>
-                  <TableHead>{t('部门名称')}</TableHead>
-                  <TableHead>{t('编码')}</TableHead>
-                  <TableHead>{t('负责人')}</TableHead>
-                  <TableHead>{t('联系电话')}</TableHead>
-                  <TableHead>{t('排序')}</TableHead>
-                  <TableHead>{t('状态')}</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isPending ? (
-                  <DataTableSkeletonRows rows={5} columns={7} />
-                ) : list.error && tree.length === 0 ? (
-                  /* 🔴 排在空态前面 —— 否则接口挂了会显示成「没有匹配的部门」（硬纪律 9） */
-                  <DataTableErrorRow columnCount={7} error={list.error} onRetry={list.onRetry} />
-                ) : tree.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                      {t('没有匹配的部门')}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  tree.map((d) => (
-                    <DeptRows
-                      key={d.id} node={d} depth={0} isOpen={isOpen}
-                      onToggle={toggle} onEdit={openEdit} onAddChild={openCreate}
-                      onDelete={setPendingDelete}
-                    />
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
+          </TableBody>
+        </Table>
       </div>
 
       <DeptFormSheet
@@ -251,7 +245,7 @@ export function DeptPage({
           }
         }}
       />
-    </div>
+    </PageShell>
   )
 }
 
