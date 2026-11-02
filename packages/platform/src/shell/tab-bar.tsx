@@ -17,7 +17,7 @@ import { usePreferences, type TabStyle } from './preferences'
 import { TabItem } from './tab-item'
 import { TabListMenu } from './tab-list-menu'
 import { TabMenu, type TabMenuTarget } from './tab-menu'
-import { isRemovable, useTabStore } from './tab-store'
+import { isRemovable, tabIcon, useTabStore } from './tab-store'
 import { useSidebar } from './use-sidebar'
 import { tabCapabilities, useTabActions } from './use-tab-actions'
 
@@ -204,13 +204,12 @@ export function TabBar() {
         role="tablist"
       >
         {tabs.map((tab) => {
-          const pathname = tab.href.split('?')[0] ?? tab.href
           return (
             <TabItem
               key={tab.key}
               tab={tab}
               active={tab.key === activeKey}
-              icon={iconByPath.get(pathname)}
+              icon={tabIcon(tab, iconByPath)}
               closable={isRemovable(tab)}
               styleName={tabStyle}
               showIcon={tabShowIcon}

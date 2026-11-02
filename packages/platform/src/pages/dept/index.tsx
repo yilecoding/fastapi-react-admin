@@ -156,7 +156,7 @@ export function DeptPage({
           // 与 `DataTable` 的表格框同款：内容区滚动模式下变成定高的表格视区。
           // 真正滚的是 `Table` 内部那层 table-container（见 ui/components/table.tsx），
           // 所以这里只负责「变成列向 flex + 把高度传下去」
-          'content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col',
+          'content-scroll:flex content-scroll:min-h-0 content-scroll:flex-initial content-scroll:flex-col', // 同 DataTable：高度按内容（#210）
           isFetching && !isPending && 'opacity-60'
         )}
         data-testid="dept-table"

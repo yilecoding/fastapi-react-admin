@@ -229,7 +229,7 @@ export function OpenLogPage({
 
   return (
     <PageShell fill="always">
-      <PageHeader title={t('调用日志')} description={t('外部系统每次调用开放接口都会记一条，成功失败都记。点时间看详情；日志保留 30 天，到期由定时任务清理。')} />
+      <PageHeader title={t('开放接口日志')} description={t('外部系统每次调用开放接口都会记一条，成功失败都记。点时间看详情；日志保留 30 天，到期由定时任务清理。')} />
 
       <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
         <QueryBar

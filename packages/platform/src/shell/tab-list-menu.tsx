@@ -10,7 +10,7 @@ import {
 import { cn } from '@admin/ui/lib/utils'
 
 import { MenuIcon } from './icon-registry'
-import { isRemovable, type Tab } from './tab-store'
+import { isRemovable, tabIcon, type Tab } from './tab-store'
 import { useMenuTitles } from './use-menu-titles'
 
 /**
@@ -69,7 +69,7 @@ export function TabListMenu({
               className={cn('group/row gap-2', active && 'bg-muted')}
               onClick={() => onSelect(tab)}
             >
-              <MenuIcon name={iconByPath.get(pathname)} className="size-4 shrink-0" />
+              <MenuIcon name={tabIcon(tab, iconByPath)} className="size-4 shrink-0" />
               <span className="flex-1 truncate">{label}</span>
               {tab.pinned && <IconPin className="size-3 shrink-0 opacity-60" />}
               {active && <IconCheck className="size-3.5 shrink-0" />}
