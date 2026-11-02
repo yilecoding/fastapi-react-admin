@@ -378,9 +378,8 @@ const submitQuery = React.useCallback((v) => { setRowSelection({}); q.submit(v) 
 （见 [shell 分册](../shell/AGENTS.md) 的「列表页：只滚表格行」）。工具条原来的 `sticky top-0` **保留**，只在定高情形下
 `content-scroll:lg:static` —— 它那时已经在滚动区外面了，留着 sticky 只是白占一个层叠上下文。
 
-同理左栏列表的 `max-h-[calc(100svh-20rem)]` 是**兜底**（堆叠/整页滚动时父级高度是
-auto，只能这么算），定高情形下要 `content-scroll:lg:max-h-none` 显式取消 ——
-不取消的话 480px 的硬上限会让列表在 900px 高的栏里只用一半，下面空一片还照旧内滚。
+同理左栏列表的高度上限分三档（`_shared/master-list.tsx`）：`< lg` 堆叠时 `max-h-[40svh]`（原来也是下面那个 calc，844 高的手机上约 524px、第一屏全是列表，#210；按屏高算是因为竖屏平板不该和手机一样挤，#218 评审）·
+`lg` 整页滚动时 `max-h-[calc(100svh-20rem)]` **兜底**（父级高度 auto）· `lg` 定高时 `content-scroll:lg:max-h-none` 显式取消 —— 不取消的话 480px 的硬上限让列表在 900px 高的栏里只用一半、下面空一片还照旧内滚
 
 权限矩阵（`pages/role/perm-matrix.tsx` + `perm-tree.ts`）不用 `ui/components/tree`：
 按钮（`type=2`）不铺成树的叶子行，而是收在所属菜单行右侧的「已授权 n/m」芯片里，
