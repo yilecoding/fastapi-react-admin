@@ -1,0 +1,124 @@
+---
+title: FastAPI + React 19 admin foundation
+description: Open-source admin foundation on FastAPI + React 19 + shadcn/ui — row-level data permissions, multi-tab that keeps state, approval workflow, a permission-bound AI assistant; PostgreSQL, SQL Server or MySQL.
+template: splash
+hero:
+  title: An admin foundation that <span class="shine">locks together</span> like joinery.
+  tagline: Open source, on FastAPI + React 19 + shadcn/ui. Permissions down to the rows a user sees, tabs that keep their state, an approval workflow and an AI assistant that can't overreach — on PostgreSQL, SQL Server or MySQL.
+  actions:
+    - text: Quick start
+      link: getting-started/quick-start/
+      icon: right-arrow
+      variant: primary
+    - text: Live demo
+      link: https://fra.wubunan.com/sign-in
+      icon: external
+      variant: secondary
+    - text: GitHub
+      link: https://github.com/yilecoding/fastapi-react-admin
+      icon: github
+      variant: minimal
+landing:
+  eyebrow: FASTAPI + REACT 19 · MIT
+  chips:
+    - Row-level data permissions
+    - Tabs that keep their state
+    - Native SQL Server
+---
+
+import { TabItem, Tabs } from '@astrojs/starlight/components'
+import dashboard from '../../../../../../docs/screenshots/dashboard.png'
+import dataPermission from '../../../../../../docs/screenshots/data-permission.png'
+import role from '../../../../../../docs/screenshots/role.png'
+import signIn from '../../../../../../docs/screenshots/sign-in.png'
+import workflowDesigner from '../../../../../../docs/screenshots/workflow-designer.png'
+import workflowInbox from '../../../../../../docs/screenshots/workflow-inbox.png'
+import CtaBand from '../../../components/CtaBand.astro'
+import Feature from '../../../components/Feature.astro'
+import ProductShot from '../../../components/ProductShot.astro'
+import SectionTitle from '../../../components/SectionTitle.astro'
+import Stats from '../../../components/Stats.astro'
+
+<ProductShot url="localhost:8888/dashboard" src={dashboard} alt="fastapi-react-admin dashboard" lift>
+
+Live demo account `admin` / `123456` — a public instance: other visitors can change or wipe its data, so don't store anything real there.
+
+</ProductShot>
+
+<Stats
+  items={[
+    { value: '1,400+', label: 'backend tests against a real database and Redis' },
+    { value: '150+', label: 'Playwright tests driving the real API' },
+    { value: '3', label: 'databases on one codebase and one migration chain' },
+    { value: 'MIT', label: 'licensed, fork it and build on it' },
+  ]}
+/>
+
+<SectionTitle id="whats-in-the-box" eyebrow="WHAT'S IN THE BOX" title="The parts every internal system ends up needing">
+
+Users, roles and departments are the easy part. These are the pieces that usually get rebuilt from scratch.
+
+</SectionTitle>
+
+<div class="features">
+  <Feature title="Row-level data permissions" icon="rows" href="features/data-permissions/" more="How it works">
+    Beyond menus and buttons, a role decides which **rows** a user sees. A department manager opening the user list only gets their own department.
+  </Feature>
+  <Feature title="Tabs that keep their state" icon="tabs" href="features/multi-tab/" more="How it works">
+    Built on React 19's `<Activity>`: a half-filled form, the page you were on and an expanded tree are still there when you switch back. Filters live in the URL, so a refresh keeps them too.
+  </Feature>
+  <Feature title="Approval workflow" icon="flow" href="features/approval-workflow/" more="How it works">
+    Form designer and flow tree with or-sign / co-sign, send back, transfer, take back, add approvers and timeouts.
+  </Feature>
+  <Feature title="An AI assistant that can't overreach" icon="sparkles" href="features/ai-assistant/" more="How it works">
+    Tool calls run as the signed-in user, inside their permissions and data scopes. Writes are previewed and run only after the user confirms; every call is audited.
+  </Feature>
+  <Feature title="Large files, handled" icon="upload" href="features/file-storage/" more="How it works">
+    Local disk or S3-compatible storage, instant upload by hash, parallel chunks and resume after a page refresh.
+  </Feature>
+  <Feature title="Pick your database" icon="database" href="features/databases/" more="How it works">
+    PostgreSQL, SQL Server or MySQL with the same code and the same migration chain.
+  </Feature>
+</div>
+
+<SectionTitle id="screens" eyebrow="SEE IT" title="Screens from the latest version">
+
+Taken from `main` on a local install. Every screen ships in Chinese and English, light and dark.
+
+</SectionTitle>
+
+<Tabs>
+  <TabItem label="Sign-in">
+    <ProductShot src={signIn} alt="Sign-in page with the 3D joinery mark" url="localhost:8888/sign-in" />
+  </TabItem>
+  <TabItem label="Roles">
+    <ProductShot src={role} alt="Roles: menu and button permission matrix" url="localhost:8888/system/role" />
+  </TabItem>
+  <TabItem label="Data permissions">
+    <ProductShot src={dataPermission} alt="Data permissions: row-level filter rules" url="localhost:8888/system/data-permission" />
+  </TabItem>
+  <TabItem label="Approval designer">
+    <ProductShot src={workflowDesigner} alt="Approval flow designer" url="localhost:8888/workflow/definition" />
+  </TabItem>
+  <TabItem label="Approval center">
+    <ProductShot src={workflowInbox} alt="Approval center" url="localhost:8888/workflow/inbox" />
+  </TabItem>
+</Tabs>
+
+<CtaBand title="Running locally in five commands" primary={{ text: 'Quick start', href: 'getting-started/quick-start/' }} secondary={{ text: 'What it is and how it compares', href: 'getting-started/introduction/' }}>
+
+```bash
+docker compose -f docker-compose.dev.yml up -d          # PostgreSQL + Redis
+pnpm install:all
+cp apps/api/backend/.env.example apps/api/backend/.env
+pnpm db:init                                            # tables + seed data
+pnpm dev                                                # open http://localhost:8888
+```
+
+</CtaBand>
+
+<div class="landing-footnote">
+
+MIT licensed. The backend started as a fork of <a href="https://github.com/fastapi-practices/fastapi_best_architecture">fastapi-best-architecture</a>; its three-layer structure, plugin system and RBAC model come from that project.
+
+</div>

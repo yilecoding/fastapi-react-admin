@@ -1,0 +1,24 @@
+---
+/** 首页每一节的标题：一行等宽小字 + 居中大标题 + 一句引言（slot）。 */
+interface Props {
+  id: string
+  eyebrow: string
+  title: string
+}
+const { id, eyebrow, title } = Astro.props
+---
+
+<header class="section-title not-content">
+  <p class="section-eyebrow">{eyebrow}</p>
+  <h2 id={id}>{title}</h2>
+  {Astro.slots.has('default') && <div class="section-lead"><slot /></div>}
+</header>
+
+<style is:global>
+  .section-title { max-width: 44rem; margin: 6.5rem auto 2.5rem !important; text-align: center }
+  .section-title > * { margin: 0 }
+  .section-eyebrow { font-family: var(--__sl-font-mono); font-size: 0.72rem; letter-spacing: 0.3em; color: var(--brand) }
+  .section-title h2 { margin-top: 0.8rem; font-size: clamp(1.8rem, 3.6vw, 2.6rem); line-height: 1.15; font-weight: 800; letter-spacing: -0.03em; color: var(--sl-color-white) }
+  .section-lead { margin-top: 1rem; font-size: 1.05rem; line-height: 1.7; color: var(--sl-color-gray-3) }
+  .section-lead p { margin: 0 }
+</style>
