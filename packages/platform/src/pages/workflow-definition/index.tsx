@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAlertTriangle, IconArrowLeft, IconCircleX, IconDeviceFloppy, IconDots, IconHierarchy2, IconLoader2,
+  IconAlertTriangle, IconArrowLeft, IconCircleX, IconDeviceFloppy, IconHierarchy2, IconLoader2,
   IconPencil, IconPlayerPause, IconPlayerPlay, IconPlus, IconRocket, IconSearch, IconSparkles, IconTrash,
 } from '@tabler/icons-react'
 
@@ -10,9 +10,6 @@ import { Button } from '@admin/ui/components/button'
 import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@admin/ui/components/dialog'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from '@admin/ui/components/dropdown-menu'
 import { Input } from '@admin/ui/components/input'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@admin/ui/components/input-group'
 import { QueryError } from '@admin/ui/components/query-error'
@@ -27,6 +24,7 @@ import { ApiError } from '../../api-client/errors'
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
+import { RowActions } from '../_shared/cells'
 import { FormField as Row } from '../_shared/form-fields'
 import { RefreshButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
@@ -195,31 +193,19 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
                       </span>
                       <span className="truncate font-mono text-xs text-muted-foreground">{d.code}</span>
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button variant="ghost" size="icon" className="size-7" aria-label={t('更多操作')} data-testid={`wfd-more-${d.code}`} />
-                        }
-                      >
-                        <IconDots className="size-4" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {d.status !== 'draft' && (
-                          <Can perm="workflow:definition:publish">
-                            <DropdownMenuItem onClick={() => toggle(d)}>
-                              {d.status === 'published' ? <IconPlayerPause className="size-4" /> : <IconPlayerPlay className="size-4" />}
-                              {d.status === 'published' ? t('停用') : t('启用')}
-                            </DropdownMenuItem>
-                          </Can>
-                        )}
-                        <Can perm="workflow:definition:del">
-                          <DropdownMenuItem variant="destructive" onClick={() => setDeleting(d)}>
-                            <IconTrash className="size-4" />
-                            {t('删除')}
-                          </DropdownMenuItem>
-                        </Can>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <RowActions
+                      label={d.name}
+                      testId={`wfd-more-${d.code}`}
+                      items={[
+                        {
+                          key: 'toggle', perm: 'workflow:definition:publish', hidden: d.status === 'draft',
+                          label: d.status === 'published' ? t('停用') : t('启用'),
+                          icon: d.status === 'published' ? IconPlayerPause : IconPlayerPlay,
+                          onClick: () => toggle(d),
+                        },
+                        { key: 'delete', label: t('删除'), icon: IconTrash, danger: true, perm: 'workflow:definition:del', onClick: () => setDeleting(d) },
+                      ]}
+                    />
                   </div>
                   <p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
                     {d.description || t('没有说明')}

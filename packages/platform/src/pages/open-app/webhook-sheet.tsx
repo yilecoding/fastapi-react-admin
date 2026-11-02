@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  IconDotsVertical,
   IconPencil,
   IconPlayerPlay,
   IconPlus,
@@ -15,13 +14,6 @@ import { formatDateTime } from '@admin/i18n'
 import { Alert } from '@admin/ui/components/alert'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@admin/ui/components/dropdown-menu'
 import { QueryError } from '@admin/ui/components/query-error'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@admin/ui/components/sheet'
 import { Skeleton } from '@admin/ui/components/skeleton'
@@ -29,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/t
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { RowActions } from '../_shared/cells'
 import { StatusPill } from '../_shared/status'
 import { openAppQuery } from './api'
 import {
@@ -309,44 +302,26 @@ function EndpointCard({
             {t('发测试')}
           </Button>
         </Can>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<Button variant="ghost" size="icon" className="size-8" aria-label={t('操作 {{name}}', { name: h.name })} />}
-            data-testid={`webhook-actions-${h.name}`}
-          >
-            <IconDotsVertical className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <Can perm="open:webhook:edit">
-              <DropdownMenuItem onClick={onEdit} data-testid={`webhook-edit-${h.name}`}>
-                <IconPencil className="size-4" />
-                {t('编辑')}
-              </DropdownMenuItem>
-            </Can>
-            <Can perm="open:webhook:reset">
-              <DropdownMenuItem onClick={onReset} data-testid={`webhook-reset-${h.name}`}>
-                <IconRefresh className="size-4" />
-                {t('重置签名密钥')}
-              </DropdownMenuItem>
-            </Can>
-            <Can perm="open:webhook:resend">
-              <DropdownMenuSeparator />
-              {RESEND_WINDOWS.map((w) => (
-                <DropdownMenuItem key={w.hours} onClick={() => onResend(w.hours)}>
-                  <IconRotateClockwise className="size-4" />
-                  {t('重发{{window}}放弃的', { window: t(w.label) })}
-                </DropdownMenuItem>
-              ))}
-            </Can>
-            <Can perm="open:webhook:del">
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={onDelete} data-testid={`webhook-delete-${h.name}`}>
-                <IconTrash className="size-4" />
-                {t('删除')}
-              </DropdownMenuItem>
-            </Can>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* 走 RowActions：原来 <Can> 包着菜单项和分隔线，没有任何权限的人点开是空浮层、
+            只有删除权限的人顶上一条孤立分隔线（#213 修过列表页，这里漏了，#210） */}
+        <RowActions
+          label={h.name}
+          testId={`webhook-actions-${h.name}`}
+          triggerClassName="size-8"
+          items={[
+            { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'open:webhook:edit', onClick: onEdit, testId: `webhook-edit-${h.name}` },
+            { key: 'reset', label: t('重置签名密钥'), icon: IconRefresh, perm: 'open:webhook:reset', onClick: onReset, testId: `webhook-reset-${h.name}` },
+            ...RESEND_WINDOWS.map((w, idx) => ({
+              separatorBefore: idx === 0,
+              key: `resend-${w.hours}`,
+              label: t('重发{{window}}放弃的', { window: t(w.label) }),
+              icon: IconRotateClockwise,
+              perm: 'open:webhook:resend',
+              onClick: () => onResend(w.hours),
+            })),
+            { key: 'delete', label: t('删除'), icon: IconTrash, danger: true, perm: 'open:webhook:del', onClick: onDelete, testId: `webhook-delete-${h.name}` },
+          ]}
+        />
       </div>
 
       <div className="flex flex-wrap gap-1">

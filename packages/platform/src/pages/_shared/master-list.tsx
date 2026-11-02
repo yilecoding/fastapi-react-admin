@@ -1,16 +1,14 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { IconDotsVertical, IconPlus, IconRefresh } from '@tabler/icons-react'
+import { IconPlus, IconRefresh } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
-} from '@admin/ui/components/dropdown-menu'
 import { QueryError } from '@admin/ui/components/query-error'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { cn } from '@admin/ui/lib/utils'
 
 import { Can } from '../../auth/can'
+import { RowActions, type RowAction } from './cells'
 import { SearchWithStatus, TextFilter } from './filters'
 import { useInfiniteScroll } from './use-infinite-scroll'
 
@@ -64,7 +62,7 @@ export function MasterList({
   addLabel,
   addPerm,
   onRefresh,
-  renderActions,
+  rowActions,
   emptyText,
   footerNote,
   idPrefix,
@@ -104,8 +102,8 @@ export function MasterList({
   addPerm?: string
   onRefresh?: () => void
 
-  /** 行内 kebab 的菜单项；不传就不渲染那个按钮 */
-  renderActions?: (item: MasterListItem) => React.ReactNode
+  /** 行内 ⋯ 的菜单项（按权限过滤完一项不剩就不渲染那个按钮，见 `RowActions`） */
+  rowActions?: (item: MasterListItem) => RowAction[]
   emptyText: string
   /** 底部左侧的附加说明（如「仅加载前 200 个」） */
   footerNote?: React.ReactNode
@@ -210,7 +208,7 @@ export function MasterList({
               active={item.id === selectedId}
               idPrefix={idPrefix}
               onSelect={() => onSelect(item.id)}
-              actions={renderActions?.(item)}
+              actions={rowActions?.(item)}
             />
           ))
         )}
@@ -247,7 +245,7 @@ function Row({
   item: MasterListItem
   active: boolean
   onSelect: () => void
-  actions?: React.ReactNode
+  actions?: RowAction[]
   idPrefix: string
 }) {
   const { t } = useTranslation()
@@ -287,23 +285,12 @@ function Row({
       </button>
 
       {actions && (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost" size="icon"
-                className={cn('size-6 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100', active && 'opacity-100')}
-                aria-label={t('操作 {{name}}', { name: item.title })}
-              />
-            }
-            data-testid={`${idPrefix}-actions-${item.id}`}
-          >
-            <IconDotsVertical className="size-3.5" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-32">
-            {actions}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RowActions
+          label={item.title}
+          testId={`${idPrefix}-actions-${item.id}`}
+          items={actions}
+          triggerClassName={cn('size-6 shrink-0 opacity-0 [&_svg]:size-3.5 group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100', active && 'opacity-100')}
+        />
       )}
     </div>
   )

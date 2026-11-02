@@ -7,16 +7,16 @@ import {
 
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
-import { DataTableSkeletonRows } from '@admin/ui/components/data-table'
+import { ACTIONS_CELL_CLASS, DataTableSkeletonRows } from '@admin/ui/components/data-table'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@admin/ui/components/table'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 import { cn } from '@admin/ui/lib/utils'
 
 import { Can } from '../../auth/can'
 import { usePerm } from '../../auth/use-perm'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { RowActions } from '../_shared/cells'
 import { TONE_CLASS } from '../_shared/status'
 import {
   expressionSymbol, scopeRulesQuery, useDeleteDataRules, useUpdateScopeRules,
@@ -112,7 +112,7 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
               <TableHead>{t('作用模型')}</TableHead>
               <TableHead>{t('条件')}</TableHead>
               <TableHead className="w-28">{t('连接方式')}</TableHead>
-              <TableHead className="w-24" />
+              <TableHead className={ACTIONS_CELL_CLASS} />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -143,51 +143,27 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
                       {r.operator === 1 ? 'OR' : 'AND'}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <span className="flex items-center justify-end gap-1">
-                      <Can perm="data:rule:edit">
-                        <Button variant="ghost" size="icon" className="size-7" aria-label={t('编辑 {{name}}', { name: r.name })}
-                                onClick={() => { setEditing(r); setFormOpen(true) }}
-                                data-testid={`rule-edit-${r.id}`}>
-                          <IconPencil className="size-4" />
-                        </Button>
-                      </Can>
-                      <Can perm="data:scope:rule:edit">
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <Button
-                                variant="ghost" size="icon" className="size-7"
-                                aria-label={t('从本范围移除 {{name}}', { name: r.name })}
-                                onClick={() => setPendingUnbind(r)}
-                              />
-                            }
-                            data-testid={`rule-unbind-${r.id}`}
-                          >
-                            <IconUnlink className="size-4" />
-                          </TooltipTrigger>
-                          <TooltipContent>{t('从本范围移除（规则本身保留）')}</TooltipContent>
-                        </Tooltip>
-                      </Can>
-                      <Can perm="data:rule:del">
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <Button
-                                variant="ghost" size="icon"
-                                className="size-7 text-destructive hover:text-destructive"
-                                aria-label={t('彻底删除 {{name}}', { name: r.name })}
-                                onClick={() => setPendingDelete(r)}
-                              />
-                            }
-                            data-testid={`rule-delete-${r.id}`}
-                          >
-                            <IconTrash className="size-4" />
-                          </TooltipTrigger>
-                          <TooltipContent>{t('彻底删除规则（所有范围都会失去它）')}</TooltipContent>
-                        </Tooltip>
-                      </Can>
-                    </span>
+                  {/* 收进 ⋯（#210 P1-8）：原来是编辑 / 移出 / 红色删除三个裸图标并排，
+                      「移出」和「删除」只差一个图标、后果差一整个范围，全靠悬停提示区分 */}
+                  <TableCell className={ACTIONS_CELL_CLASS}>
+                    <RowActions
+                      label={r.name}
+                      testId={`rule-actions-${r.id}`}
+                      items={[
+                        {
+                          key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'data:rule:edit',
+                          onClick: () => { setEditing(r); setFormOpen(true) }, testId: `rule-edit-${r.id}`,
+                        },
+                        {
+                          key: 'unbind', label: t('从本范围移除（规则本身保留）'), icon: IconUnlink,
+                          perm: 'data:scope:rule:edit', onClick: () => setPendingUnbind(r), testId: `rule-unbind-${r.id}`,
+                        },
+                        {
+                          key: 'delete', label: t('彻底删除规则（所有范围都会失去它）'), icon: IconTrash, danger: true,
+                          perm: 'data:rule:del', onClick: () => setPendingDelete(r), testId: `rule-delete-${r.id}`,
+                        },
+                      ]}
+                    />
                   </TableCell>
                 </TableRow>
               ))

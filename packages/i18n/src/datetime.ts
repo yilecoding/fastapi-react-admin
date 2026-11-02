@@ -275,17 +275,26 @@ export function formatDateTime(at: ServerTime): string {
 }
 
 /**
- * 短日期时间：`08-22 11:59`（省年、省秒）。
+ * 短日期时间：今年的 `08-22 11:59`（省年、省秒），**不是今年的补上年份** `2025-08-22 11:59`。
  *
- * 给宽度紧张的地方用（仪表盘的近期列表、图表轴）。
+ * 给宽度紧张的地方用（仪表盘的近期列表、审批中心、流程定义）。
  * 这是原来 `.slice(5, 16)` 想做的事 —— 那个切法在 ISO 串上会切出
  * `08-22T03:59`（带个 `T`，而且是 UTC 的日期）。
+ *
+ * 🔴 年份不能一律省：审批单、流程定义一放就是跨年的，去年 12 月的待办和今年 12 月的
+ * 长得一模一样（#210 调研：「审批中心和流程定义还不带年份」）。「今年」按**显示时区**算，
+ * 跨年夜东八区已经是新年、UTC 还是旧年时，不该给刚过去几分钟的记录补年份。
+ * `opts.now` 只给测试用。🔴 不写成第二个位置参数：`tickFormatter={formatDateTimeShort}`、
+ * `arr.map(formatDateTimeShort)` 会把下标当成 `now`（= 1970 年），每一条都被补上年份（#221 评审）。
+ * 收成对象后，误传进来的数字没有 `.now`，照常按当前时间算。
  */
-export function formatDateTimeShort(at: ServerTime): string {
+export function formatDateTimeShort(at: ServerTime, opts?: { now?: number }): string {
+  const now = (typeof opts === 'object' && opts?.now) || Date.now()
   const ms = toEpochMs(at)
   if (ms === null) return EMPTY
   const p = partsInDisplayZone(ms)
-  return `${p.month}-${p.day} ${p.hour}:${p.minute}`
+  const md = `${p.month}-${p.day} ${p.hour}:${p.minute}`
+  return p.year === partsInDisplayZone(now).year ? md : `${p.year}-${md}`
 }
 
 /**

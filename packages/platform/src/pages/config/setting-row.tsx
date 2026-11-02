@@ -1,14 +1,10 @@
-import { IconDeviceDesktop, IconDotsVertical, IconPencil, IconTrash } from '@tabler/icons-react'
+import { IconDeviceDesktop, IconPencil, IconTrash } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@admin/ui/components/badge'
-import { Button } from '@admin/ui/components/button'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
-} from '@admin/ui/components/dropdown-menu'
 import { cn } from '@admin/ui/lib/utils'
 
-import { Can } from '../../auth/can'
+import { RowActions } from '../_shared/cells'
 import type { ConfigItem } from './api'
 import { metaOf } from './registry'
 import { ValueEditor } from './value-editor'
@@ -98,38 +94,17 @@ export function SettingRow({
           )}
         </div>
         {/* 键本身的增删改是**副入口** —— 平时没人动，收进 kebab 菜单 */}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            /* 悬停/键盘聚焦才显形。用 opacity 而不是 display：
-               display:none 会让它键盘不可达，也会让 E2E 点不到 */
-            render={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 data-popup-open:opacity-100"
-                aria-label={t('更多 {{what}}', { what: label })}
-              />
-            }
-            data-testid={`row-menu-${item.key}`}
-          >
-            <IconDotsVertical className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-40">
-            <Can perm="sys:config:edit">
-              <DropdownMenuItem onClick={() => onEdit(item)} data-testid={`edit-${item.key}`}>
-                <IconPencil className="size-4" />
-                {t('编辑键定义')}
-              </DropdownMenuItem>
-            </Can>
-            <Can perm="sys:config:del">
-              <DropdownMenuSeparator />
-              <DropdownMenuItem variant="destructive" onClick={() => onDelete(item)} data-testid={`del-${item.key}`}>
-                <IconTrash className="size-4" />
-                {t('删除')}
-              </DropdownMenuItem>
-            </Can>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* 悬停/键盘聚焦才显形。用 opacity 而不是 display：
+            display:none 会让它键盘不可达，也会让 E2E 点不到 */}
+        <RowActions
+          label={label}
+          testId={`row-menu-${item.key}`}
+          triggerClassName="size-8 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 data-popup-open:opacity-100"
+          items={[
+            { key: 'edit', label: t('编辑键定义'), icon: IconPencil, perm: 'sys:config:edit', onClick: () => onEdit(item), testId: `edit-${item.key}` },
+            { key: 'delete', label: t('删除'), icon: IconTrash, danger: true, perm: 'sys:config:del', onClick: () => onDelete(item), testId: `del-${item.key}` },
+          ]}
+        />
       </div>
     </div>
   )
