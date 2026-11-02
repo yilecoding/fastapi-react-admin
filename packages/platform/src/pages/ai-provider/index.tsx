@@ -10,6 +10,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { RefreshButton } from '../_shared/filters'
 import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
@@ -60,7 +61,10 @@ export function AiProviderPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
-      <PageHeader title={t('模型密钥管理')} description={t('AI 助手通过这里配置的供应商调用模型。密钥加密落库，界面上只显示掩码。')} />
+      <PageHeader title={t('模型密钥管理')} description={t('AI 助手通过这里配置的供应商调用模型。密钥加密落库，界面上只显示掩码。')}>
+        {/* 卡片页原来没有刷新（#210）：web 端关了切回窗口自动重取，别人改了配置只能整页刷新才看得到 */}
+        <RefreshButton busy={listQuery.isFetching} onClick={() => void listQuery.refetch()} />
+      </PageHeader>
 
       {listQuery.error ? (
         <QueryError error={listQuery.error} onRetry={() => listQuery.refetch()} />
