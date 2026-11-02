@@ -12,6 +12,7 @@ import { Button } from '@admin/ui/components/button'
 import { Card, CardContent, CardHeader } from '@admin/ui/components/card'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { Switch } from '@admin/ui/components/switch'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 
 import { ApiError } from '../../api-client/errors'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
@@ -261,7 +262,8 @@ function PluginCard({
                 {m.name}
               </code>
               <Badge variant="outline" className="font-normal tabular-nums">v{m.version}</Badge>
-              {on ? <StatusPill tone="success">{t('已启用')}</StatusPill> : <StatusPill tone="muted">{t('已停用')}</StatusPill>}
+              {/* 「已启用」不再单独标：右上角的开关已经说了这件事，两处说同一句话（#210 P2）。停用是少数，留一个灰徽章方便扫 */}
+              {on ? null : <StatusPill tone="muted">{t('已停用')}</StatusPill>}
             </div>
             <p className="text-sm text-muted-foreground">{t(m.description)}</p>
           </div>
@@ -306,14 +308,23 @@ function PluginCard({
             {downloading ? <IconLoader2 className="size-4 animate-spin" /> : <IconDownload className="size-4" />}
             {t('下载 zip')}
           </Button>
-          <Button
-            variant="outline" size="sm" data-testid={`plugin-uninstall-${m.name}`}
-            className="text-destructive hover:text-destructive"
-            onClick={onUninstall}
-          >
-            <IconTrash className="size-4" />
-            {t('卸载')}
-          </Button>
+          {/* 卸载是低频的危险操作：原来每张卡一个红色描边按钮，十张卡满屏红点、最抢眼的反而是最不该点的（#210）。
+              平时灰色图标，悬停才变红；点了还有二次确认 */}
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive"
+                  aria-label={t('卸载 {{name}}', { name: m.name })}
+                  data-testid={`plugin-uninstall-${m.name}`}
+                  onClick={onUninstall}
+                />
+              }
+            >
+              <IconTrash className="size-4" />
+            </TooltipTrigger>
+            <TooltipContent>{t('卸载')}</TooltipContent>
+          </Tooltip>
           {(prefixes.length > 0 || settings.length > 0) && (
             <Button
               variant="ghost" size="sm" className="ms-auto"

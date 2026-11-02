@@ -13,6 +13,7 @@ import { toast } from '@admin/ui/components/toast'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { RefreshButton } from '../_shared/filters'
 import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import { botOptionsQuery, botsQuery, useDeleteBot, useTestBot, type Bot } from './api'
@@ -61,7 +62,10 @@ export function NotifyBotPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
-      <PageHeader title={t('群机器人')} description={t('把公告、审批结果这类对谁都说得通的通知推到飞书 / 钉钉 / 企业微信群里。一条通知一个群只推一次，失败会按通知策略的退避重试，记录在「投递记录」里。')} />
+      <PageHeader title={t('群机器人')} description={t('把公告、审批结果这类对谁都说得通的通知推到飞书 / 钉钉 / 企业微信群里。一条通知一个群只推一次，失败会按通知策略的退避重试，记录在「投递记录」里。')}>
+        {/* 卡片页原来没有刷新（#210）：web 端关了切回窗口自动重取，别人改了配置只能整页刷新才看得到 */}
+        <RefreshButton busy={listQuery.isFetching} onClick={() => void listQuery.refetch()} />
+      </PageHeader>
 
       {optionsQuery.error ? <QueryError error={optionsQuery.error} onRetry={() => optionsQuery.refetch()} /> : null}
 

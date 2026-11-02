@@ -11,6 +11,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { RefreshButton } from '../_shared/filters'
 import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
@@ -50,7 +51,10 @@ export function AiMcpClientPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
-      <PageHeader title={t('MCP 凭据')} description={t('外部系统（如 pis-agent、Claude Desktop）用这里发的令牌调用 AI 查询工具。库里只存令牌的哈希，明文只在生成时显示一次。')} />
+      <PageHeader title={t('MCP 凭据')} description={t('外部系统（如 pis-agent、Claude Desktop）用这里发的令牌调用 AI 查询工具。库里只存令牌的哈希，明文只在生成时显示一次。')}>
+        {/* 卡片页原来没有刷新（#210）：web 端关了切回窗口自动重取，别人改了配置只能整页刷新才看得到 */}
+        <RefreshButton busy={listQuery.isFetching} onClick={() => void listQuery.refetch()} />
+      </PageHeader>
 
       {listQuery.error ? (
         <QueryError error={listQuery.error} onRetry={() => listQuery.refetch()} />
