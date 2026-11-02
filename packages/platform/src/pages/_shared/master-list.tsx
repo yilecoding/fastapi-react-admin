@@ -192,7 +192,7 @@ export function MasterList({
 
       <div
         ref={scrollRef}
-        className="flex max-h-[calc(100svh-20rem)] flex-col gap-1 overflow-y-auto content-scroll:lg:max-h-none content-scroll:lg:min-h-0 content-scroll:lg:flex-1"
+        className="flex max-h-[40svh] flex-col gap-1 overflow-y-auto lg:max-h-[calc(100svh-20rem)] content-scroll:lg:max-h-none content-scroll:lg:min-h-0 content-scroll:lg:flex-1"
         data-testid={`${idPrefix}-items`}
       >
         {loading ? (
