@@ -10,7 +10,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
-import { AddCard, CardField, CardFields } from '../_shared/resource-card'
+import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   smsConfigsQuery,
@@ -89,7 +89,7 @@ export function SmsConfigPage() {
             const mapped = Object.keys(config.templates)
             const unknownProvider = providersQuery.data !== undefined && !provider
             return (
-              <div key={config.id} className="flex flex-col gap-2 rounded-lg border p-4" data-testid={`sms-config-card-${config.name}`}>
+              <ResourceCard key={config.id} data-testid={`sms-config-card-${config.name}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -185,7 +185,7 @@ export function SmsConfigPage() {
                     </Button>
                   </Can>
                 </div>
-              </div>
+              </ResourceCard>
             )
           })}
 

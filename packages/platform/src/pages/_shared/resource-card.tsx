@@ -14,6 +14,15 @@ import { cn } from '@admin/ui/lib/utils'
  * - **「新增」格**：五份手抄，最小高度 `min-h-44` / `48` / `52` 三种
  */
 
+/**
+ * 卡片外框。🔴 `bg-card` 不能省：浅色下 `--card` 和 `--background` 同为白色看不出差别，
+ * 深色下只画一圈边框的卡片和页面融成一片（#210）。原来这串类名在六个页面里各手抄一遍，
+ * 下一个照抄旧字符串的页面会把 `bg-card` 丢掉（#217 评审）—— 所以收在这里。
+ */
+export function ResourceCard({ className, ...props }: React.ComponentProps<'div'>) {
+  return <div className={cn('flex flex-col gap-2 rounded-lg border bg-card p-4', className)} {...props} />
+}
+
 /** 卡片里的键值区。子元素只放 `CardField` */
 export function CardFields({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
@@ -80,7 +89,7 @@ export function AddCard({
       type="button"
       onClick={onClick}
       data-testid={testId}
-      className="flex min-h-44 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed p-4 text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40 hover:text-foreground"
+      className="flex min-h-44 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-input p-4 text-muted-foreground transition-colors hover:border-primary/50 hover:bg-accent/40 hover:text-foreground"
     >
       <Icon className="size-5" />
       <span className="text-sm">{label}</span>

@@ -123,7 +123,9 @@ export function MonitorRedisPage({
               label={t("已连接客户端")}
               testId="metric-clients"
               value={int(info.connected_clients)}
-              tone={num(info.blocked_clients) > 0 ? 'warning' : 'info'}
+              // 不按任何值标色：阻塞客户端是常态（Celery worker 一直挂着 BRPOP），原来按它标橙、常年是橙的（#210）；
+              // 拒绝连接数是 Redis 启动以来的**累计值**，拒过一次就永远 > 0，同样不能拿来标当前状态（#217 评审）
+              tone="info"
               hint={t('阻塞 {{b}} · 拒绝 {{r}}', { b: info.blocked_clients, r: info.rejected_connections })}
             />
           </div>
@@ -183,12 +185,10 @@ export function MonitorRedisPage({
               <InfoRow
                 label={t("阻塞客户端")}
                 value={int(info.blocked_clients)}
-                tone={num(info.blocked_clients) > 0 ? 'warning' : undefined}
               />
               <InfoRow
-                label={t("拒绝的连接")}
+                label={t("拒绝的连接（累计）")}
                 value={int(info.rejected_connections)}
-                tone={num(info.rejected_connections) > 0 ? 'danger' : undefined}
               />
               <InfoRow label={t("命令处理总数")} value={int(info.total_commands_processed)} />
               <InfoRow label={t("瞬时 QPS")} value={`${int(info.instantaneous_ops_per_sec)} ops/s`} />

@@ -83,7 +83,7 @@ export function MetricCard({
   return (
     // min-w-0 + hint 可断行：手机上一行两张（#210），磁盘卡的 hint 是一整条不带空格的挂载路径，
     // 不让它断就把这一格撑出网格
-    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border px-4 py-3" data-testid={testId}>
+    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border bg-card px-4 py-3" data-testid={testId}>
       <span className="text-xs text-muted-foreground">{label}</span>
       {/* 手机上一行两张时卡片内容只有 ~140px：数值降一档字号、和单位之间可以折行，
           不然 Redis 上千万 key 的「12,345,678 个」会画到隔壁卡片上（#216 评审） */}
@@ -116,7 +116,7 @@ export function InfoCard({
   testId?: string
 }) {
   return (
-    <div className={cn('flex flex-col rounded-lg border border-border', className)} data-testid={testId}>
+    <div className={cn('flex flex-col rounded-lg border border-border bg-card', className)} data-testid={testId}>
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         {icon}
         <h2 className="text-sm font-medium">{title}</h2>

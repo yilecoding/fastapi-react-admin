@@ -10,7 +10,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
-import { AddCard, CardField, CardFields } from '../_shared/resource-card'
+import { AddCard, CardField, CardFields, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
   PROVIDER_TYPE_LABELS,
@@ -81,7 +81,7 @@ export function AiProviderPage() {
           {providers.map((provider) => {
             const result = results[provider.id]
             return (
-              <div key={provider.id} className="flex flex-col gap-2 rounded-lg border p-4">
+              <ResourceCard key={provider.id}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -135,7 +135,7 @@ export function AiProviderPage() {
                     </span>
                   ) : null}
                 </div>
-              </div>
+              </ResourceCard>
             )
           })}
 

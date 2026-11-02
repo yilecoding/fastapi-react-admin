@@ -133,26 +133,52 @@ function ResultTag({ text, tone }: { text: string; tone: 'ok' | 'bad' | 'muted' 
 }
 
 /**
+ * 头像里放哪几个字。
+ * - 中日韩名字取**末尾** n 个字（「张三丰」→「三丰」/「丰」）—— 姓氏重复率高，名才认得出人
+ * - 其余取单词首字母（「John Smith」→「JS」/「J」），只有一个词就取前 n 个字母
+ * - 先去掉括号后缀和非字母字符：「张三（已停用）」原来会显示成「）」（#217 评审）
+ */
+export function avatarText(name: string, n: number): string {
+  const clean = name.replace(/[（(][^）)]*[）)]/g, '').trim()
+  const letters = [...clean].filter((c) => /\p{L}/u.test(c))
+  if (!letters.length) return [...name.trim()].slice(0, n).join('')
+  if (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(clean)) {
+    return letters.slice(-n).join('')
+  }
+  const words = clean.split(/\s+/).filter(Boolean)
+  const initials = words.length > 1 ? words.map((w) => [...w][0]).slice(0, n) : letters.slice(0, n)
+  return initials.join('').toUpperCase()
+}
+
+/**
  * 名字首字的圆头像。色相由名字算出来、固定不变 —— 同一个人在轨道、列表、通知里是同一个颜色，
  * 扫一眼就能认出「又是他」。
+ *
+ * #210 改过两处：
+ * - 颜色原来写死在 style 里（浅底深字），深色模式下是一个个亮斑。现在只把色相作为 `--h` 传进去，
+ *   亮度 / 彩度由类名按模式给 —— 深色下换成暗底浅字
+ * - 小号（28px）原来塞两个字、字号 10px，读不清。小号只放一个字，中号以上两个字（规则见 `avatarText`）
  */
 export function PersonAvatar({ name, size = 'sm' }: { name: string; size?: 'sm' | 'md' | 'lg' }) {
   const { t } = useTranslation()
   const label = name || t('未知')
   let h = 0
   for (const ch of label) h = (h * 31 + ch.codePointAt(0)!) % 360
+  const text = avatarText(label, size === 'sm' ? 1 : 2)
   return (
     <span
       aria-hidden
       className={cn(
         'grid shrink-0 place-items-center rounded-full font-medium select-none',
-        size === 'sm' && 'size-7 text-[10px]',
+        'bg-[oklch(0.9_0.06_var(--h))] text-[oklch(0.38_0.11_var(--h))]',
+        'dark:bg-[oklch(0.36_0.07_var(--h))] dark:text-[oklch(0.9_0.07_var(--h))]',
+        size === 'sm' && 'size-7 text-xs',
         size === 'md' && 'size-8 text-xs',
         size === 'lg' && 'size-10 text-sm'
       )}
-      style={{ backgroundColor: `oklch(0.9 0.06 ${h})`, color: `oklch(0.38 0.11 ${h})` }}
+      style={{ '--h': h } as React.CSSProperties}
     >
-      {[...label].slice(-2).join('')}
+      {text}
     </span>
   )
 }
