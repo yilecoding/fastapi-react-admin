@@ -307,6 +307,68 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', '
   }
 }
 
+// ── 页面外壳：四边 16px 只有一个来源（#209） ──────────────────────────
+//
+// 内容列（`routes/_auth.tsx` 的 `data-slot="content-scroll"`）给 `p-4`，
+// 页面最外层走 `pages/_shared/page-shell.tsx`，**页面自己不写上下 padding**。
+//
+// 原来三层外壳是每页手抄的，`py-4 md:py-6` 写在第三层 —— 抄漏一层的三页
+// （短信日志 / 投递记录 / AI 调用日志）查询区直接贴着标签条，另有五页抄成 `py-3`，
+// 全站三种顶距。少 16px 不会让任何测试变红，修过两次都只修了当时那一页。
+//
+// 两条：
+// - `page-shell-handwritten` —— 页面里出现 `@container/main`：说明又在手抄外壳
+// - `page-root-padding` —— `*Page` 组件 return 出来的根元素带 `p-` / `py-` / `pt-` / `pb-`
+//
+// ⚠️ 只看 `pages/<目录>/index.tsx` 里 `export function XxxPage` 的**每一个** return
+// （早退的加载 / 出错分支也算 —— 那几屏同样贴着标签条）。`pages/forbidden.tsx`
+// 那种整屏居中的空态不在扫描范围：它的 `py-24` 是居中留白，不是对齐边距。
+{
+  const PAGES = path.join('packages', 'platform', 'src', 'pages')
+  const SHELL = path.join(PAGES, '_shared', 'page-shell.tsx')
+  for (const file of tsFiles(PAGES)) {
+    if (rel(file) === SHELL) continue
+    const src = stripComments(fs.readFileSync(file, 'utf8'))
+    if (src.includes('@container/main')) {
+      add('error', rel(file), 'page-shell-handwritten', '手写了 @container/main 外壳 —— 用 pages/_shared/page-shell.tsx 的 <PageShell>（#209）')
+    }
+  }
+
+  const VERTICAL_PAD = /^-?p[ytb]?-(?!0$)\S+$/
+  let roots = 0
+  for (const dir of fs.readdirSync(path.join(ROOT, PAGES), { withFileTypes: true })) {
+    if (!dir.isDirectory() || dir.name.startsWith('_')) continue
+    const file = path.join(ROOT, PAGES, dir.name, 'index.tsx')
+    if (!fs.existsSync(file)) continue
+    const src = stripComments(fs.readFileSync(file, 'utf8'))
+    for (const fn of src.matchAll(/export function \w+Page\b/g)) {
+      // 函数体到下一个顶格的 `}` 为止
+      const end = src.indexOf('\n}\n', fn.index)
+      const body = src.slice(fn.index, end === -1 ? undefined : end)
+      // 只认函数体这一层的 return（缩进 2 或 4 = 主 return 和 if 里的早退）——
+      // 更深的是 `.map(…)` 回调里的行 / 卡片，它们的 padding 是组件自己的
+      for (const r of body.matchAll(/\n {2,4}return \(\s*<([\w.]+)([\s\S]*?)\/?>\s*\n/g)) {
+        roots += 1
+        const cls = r[2].match(/className="([^"]*)"/)?.[1] ?? ''
+        const bad = cls.split(/\s+/).filter((tok) => VERTICAL_PAD.test(tok.split(':').pop() ?? ''))
+        if (bad.length) {
+          const lineNo = src.slice(0, fn.index + r.index).split('\n').length
+          add(
+            'error',
+            `${rel(file)}:${lineNo}`,
+            'page-root-padding',
+            `页面根元素带了 ${bad.join(' ')} —— 上下左右 16px 由外壳内容列统一给，页面不写（#209）`,
+          )
+        }
+      }
+    }
+  }
+  // 🔴 先断言「有」：一个根元素都没扫到时「没有违规」天然成立
+  if (roots < 30) {
+    add('error', PAGES, 'page-root-scanner-broken', `只扫到 ${roots} 个页面根元素，扫描器可能坏了`)
+  }
+}
+
 // ── 功能引导：tour 库不出 shell/tour/、目标标记不能是死的 ─────────────────
 //
 // driver.js 对字符串目标是 `document.querySelector(e)`，发生在 node_modules 里 ——
@@ -629,7 +691,7 @@ for (const [where, ps] of byWhere) {
 }
 
 console.log(
-  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 功能引导两条 · 组件孤儿 · registry · 品牌版本 · E2E 断言 · 错误 ${errors.length} · 警告 ${warns.length}`,
+  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 页面外壳两条 · 功能引导两条 · 组件孤儿 · registry · 品牌版本 · E2E 断言 · 错误 ${errors.length} · 警告 ${warns.length}`,
 )
 if (!problems.length) console.log('[ok] 没有漂')
 process.exit(errors.length ? 1 : 0)

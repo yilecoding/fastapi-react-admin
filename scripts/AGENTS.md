@@ -127,6 +127,17 @@ JSON 字符串里的 glob 当成了块注释开头：`"@/*"` 里那两个字符�
 ⚠️ 写这段说明的时候还踩了第三种形态：注释里写 `"**/*.ts"` 这样的 glob，
 `*` 和 `/` 挨在一起就把**块注释自己**提前关掉了，脚本直接 `SyntaxError`。
 
+### 页面外壳那两条（#209）
+
+| 规则 | 违反后的表现 |
+|---|---|
+| `page-shell-handwritten` —— `pages/` 里出现 `@container/main` | 又在手抄三层外壳，抄漏一层的页查询区贴着标签条 |
+| `page-root-padding` —— `pages/<目录>/index.tsx` 里 `*Page` 组件 return 的根元素带 `p-` / `py-` / `pt-` / `pb-` | 四边 16px 不再只有外壳一个来源，顶距又分叉 |
+
+⚠️ 只认函数体那一层的 return（缩进 2 / 4 = 主 return 和 `if` 里的早退）。第一版没限缩进，
+`.map(…)` 回调里卡片自己的 `p-4` 全被报成页面根元素。扫到的根元素少于 30 个算扫描器坏了。
+两条都注入违规反向验证过。
+
 ### 组件库那三条（`orphan-component` / `unused-third-party` / `stale-registry`）
 
 都是为 `packages/ui`「**被下游整包拿走自己改**」这个定位服务的

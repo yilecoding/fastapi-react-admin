@@ -244,7 +244,7 @@ export function ConfigPage({
 
       {/* ── 顶部粘性栏 ── */}
       <div
-        className="sticky top-0 z-20 -mx-4 flex flex-wrap items-center gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur"
+        className="sticky top-0 z-20 -mt-3 flex flex-wrap items-center gap-3 border-b border-border bg-background/95 py-3 backdrop-blur"
         data-testid="config-topbar"
       >
         <InputGroup className="h-9 w-full sm:w-72">

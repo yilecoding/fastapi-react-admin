@@ -25,6 +25,7 @@ pages/xxx/
 
 | 文件 | 提供 |
 |---|---|
+| `_shared/page-shell.tsx` | `PageShell`：每个页面最外面那几层 div（`fill="always"` 列表页 / `"lg"` 主从页 / 默认按自然高度）。**页面里不再手写外壳、不写上下 padding**，见下一节 |
 | `_shared/status.tsx` | `TONE_CLASS` 色板 · `StatusPill` · `StatusBadge`（正常/停用）· `STATUS_FILTER_ITEMS` / `STATUS_FORM_ITEMS` · `YesNoBadge` |
 | `_shared/filters.tsx` | `TextFilter`（回车/失焦才写 URL）· `SelectFilter` · `StatusFilter` · `ResetButton` · `BulkBar` · `RefreshButton`（见下「刷新」一节） |
 | `_shared/select-column.tsx` | `buildSelectColumn(col, { canSelect })` —— 表格首列的复选框（含半选态） |
@@ -36,6 +37,30 @@ pages/xxx/
 | `_shared/login-log.ts` | `LoginLog` 类型 + `formatLocation`（内网 IP 后端返 `Reserved`）。两个调用方：登录日志页、个人中心的「最近登录」 |
 | `_shared/use-query-search.ts` | `QueryBar` ↔ URL 的胶水：从地址栏恢复条件 · 本地编辑 · 搜索时写回 URL + 拼接口入参 + **跳回第一页**。两个日志页 + 用户管理页在用，见 [查询区分册](../../../ui/src/components/query-bar/AGENTS.md) |
 | `_shared/data-io/` | 导出按钮 · 导入抽屉 · 两者的接口层。所有资源共用一份，见 [`data-io` 分册](_shared/data-io/AGENTS.md) |
+
+### 🔴 页面四边 16px 只有一个来源：外壳内容列的 `p-4`（#209）
+
+**症状**：短信日志 / 投递记录 / AI 调用日志三页的查询区**直接贴着标签条**；
+别的列表页桌面上顶部 24px、左右 16px（看着像内容被往下推了一截）；
+ai-provider 等五页又是 12px。全站三种顶距，没有任何测试会因此变红。
+
+**根因**：外壳是三层 div、每页手抄，`py-4 md:py-6` 写在第三层
+（从 shadcn dashboard 模板带来的，那个模板没有标签条）。那三页少抄了一层，
+而且是互相照着抄的 —— 新功能照「同一批的兄弟页」抄，错一个传一串。
+之前修过两次（`32985c1` 任务调度两页、ai-provider 补 `py-3`），每次只修当时那一页。
+
+**修法**：
+
+- 内容列（`routes/_auth.tsx` 的 `data-slot="content-scroll"`）从 `px-4` 改成 **`p-4`**，四边同一个值、同一个地方给
+- 页面最外层一律 `<PageShell>`（`_shared/page-shell.tsx`），它**不带**上下 padding；页面根元素也不写 `p-` / `py-` / `pt-` / `pb-`
+- `pnpm arch:check` 两条闸门：`page-shell-handwritten`（页面里出现 `@container/main`）·
+  `page-root-padding`（`*Page` 组件 return 的根元素带竖向 padding）。两条都注入违规反向验证过
+- 整屏居中的空态（`pages/forbidden.tsx` 的 `py-24`）不算对齐边距，不在闸门范围
+- 参数配置的粘性顶栏原来是 `-mx-4` 出血到两边、贴着标签条；现在和内容同宽，`-mt-3 py-3` 让搜索框落在 16px、吸顶时上面留 12px
+
+**实测**（Playwright，1920 和 390 两档，「第一个画出东西的元素」距内容列）：用户 / 短信日志 / 投递记录 / AI 调用日志 /
+参数配置 / 个人中心 / 工作台 / 模型供应商 / 角色 / 服务器监控 / 文件 / 审批中心等 15 页，上 = 左 = 16（文字行是 17，行高的半行距）；
+右边 1920 下也是 16。⚠️ 量的时候 `background-image`（个人中心的渐变横幅）也要算「画了东西」，只看 `background-color` 会漏掉它、误报 24。
 
 ⚠️ 这里**没有**「只读列表工厂」了。`_shared` 下那个 `createListPage(cfg)`
 删掉了 —— 它写好之后一直**零调用方**（两个日志页长出

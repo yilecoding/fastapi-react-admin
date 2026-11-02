@@ -47,7 +47,7 @@ export function AiMcpClientPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 py-3 content-scroll:min-h-0">
+    <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
       <p className="text-sm text-muted-foreground">
         {t('外部系统（如 pis-agent、Claude Desktop）用这里发的令牌调用 AI 查询工具。库里只存令牌的哈希，明文只在生成时显示一次。')}
       </p>

@@ -30,6 +30,7 @@ import {
   type TaskScheduler,
 } from './api'
 import { SchedulerFormSheet } from './form'
+import { PageShell } from '../_shared/page-shell'
 
 export type SchedulerManageSearch = {
   page?: number
@@ -280,75 +281,68 @@ export function SchedulerManagePage({
   const hasFilter = countActive(q.applied, FIELDS) > 0
 
   return (
-    // 三件套模板的外层骨架（照 pages/user/ 抄，见 pages/AGENTS.md）——
-    // 之前这一页把 py-4 md:py-6 那层拆掉、gap 直接摆在 @container/main 上，
-    // 于是「页头 → 查询区」少了一层竖向留白，跟别的列表页对不上
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          <PageHeader title={t('任务调度')} description={t('配置定时任务的触发策略；改完立刻生效，不用重启')} />
+    <PageShell fill="always">
+      <PageHeader title={t('任务调度')} description={t('配置定时任务的触发策略；改完立刻生效，不用重启')} />
 
-          {/* 查询区和表格是同一个块的两半，gap-4 而不是页面级的 24px */}
-          <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-            <QueryBar
-              fields={FIELDS}
-              value={q.value}
-              onChange={q.setValue}
-              onSearch={q.submit}
-              onReset={q.reset}
-              applied={q.applied}
-              loading={isFetching}
-              actions={
-                <>
-                  <Can perm="task:scheduler:add">
-                    <Button
-                      size="sm"
-                      data-testid="add-scheduler"
-                      onClick={() => { setEditing(null); setFormOpen(true) }}
-                    >
-                      <IconPlus className="size-4" />
-                      {t('新增')}
-                    </Button>
-                  </Can>
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-                </>
-              }
-            />
+      {/* 查询区和表格是同一个块的两半，gap-4 而不是页面级的 24px */}
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        <QueryBar
+          fields={FIELDS}
+          value={q.value}
+          onChange={q.setValue}
+          onSearch={q.submit}
+          onReset={q.reset}
+          applied={q.applied}
+          loading={isFetching}
+          actions={
+            <>
+              <Can perm="task:scheduler:add">
+                <Button
+                  size="sm"
+                  data-testid="add-scheduler"
+                  onClick={() => { setEditing(null); setFormOpen(true) }}
+                >
+                  <IconPlus className="size-4" />
+                  {t('新增')}
+                </Button>
+              </Can>
+              <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+            </>
+          }
+        />
 
-            <div
-              data-testid="scheduler-manage-table"
-              className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-            >
-              <DataTable
-                table={table}
-                showColumnVisibility={false}
-                rows={table.getRowModel().rows}
-                columnCount={columns.length}
-                {...list}
-                skeletonRows={8}
-                emptyMessage={t('还没有任务调度')}
-                emptyAction={
-                  hasFilter ? (
-                    <ResetButton
-                      variant="outline"
-                      testId="empty-clear-filter"
-                      label={t('清除筛选')}
-                      onClick={q.reset}
-                    />
-                  ) : undefined
-                }
-                pagination={{
-                  pageIndex: page - 1,
-                  pageCount: data?.total_pages ?? 1,
-                  pageSize: size,
-                  totalCount: data?.total ?? 0,
-                  onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                  onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-                }}
-              />
-            </div>
-          </div>
+        <div
+          data-testid="scheduler-manage-table"
+          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+        >
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            {...list}
+            skeletonRows={8}
+            emptyMessage={t('还没有任务调度')}
+            emptyAction={
+              hasFilter ? (
+                <ResetButton
+                  variant="outline"
+                  testId="empty-clear-filter"
+                  label={t('清除筛选')}
+                  onClick={q.reset}
+                />
+              ) : undefined
+            }
+            pagination={{
+              pageIndex: page - 1,
+              pageCount: data?.total_pages ?? 1,
+              pageSize: size,
+              totalCount: data?.total ?? 0,
+              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+            }}
+          />
         </div>
       </div>
 
@@ -362,13 +356,13 @@ export function SchedulerManagePage({
         confirmText={t('删除')}
         destructive
         onConfirm={async () => {
-          if (removing) await remove.mutateAsync([removing.id])
-          setRemoving(null)
+      if (removing) await remove.mutateAsync([removing.id])
+      setRemoving(null)
         }}
       />
 
       {/* 「立即执行」是异步的 —— 接口返回 task_id 就算成功，任务本身还在队列里。
-          不说清楚的话用户会以为点完就跑完了，然后去执行记录里找不到 */}
+      不说清楚的话用户会以为点完就跑完了，然后去执行记录里找不到 */}
       <ConfirmDialog
         open={ranId !== null}
         onOpenChange={(o) => { if (!o) setRanId(null) }}
@@ -377,6 +371,6 @@ export function SchedulerManagePage({
         confirmText={t('知道了')}
         onConfirm={() => setRanId(null)}
       />
-    </div>
+    </PageShell>
   )
 }

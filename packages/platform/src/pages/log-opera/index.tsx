@@ -23,6 +23,7 @@ import { StatusPill } from '../_shared/status'
 import { OperaLogDetailSheet, formatLocation } from './detail-sheet'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { ExportButton } from '../_shared/data-io/export-button'
+import { PageShell } from '../_shared/page-shell'
 
 /** 这一页列表 query 的 key 前缀。`useQuerySearch` 的 `refreshKey` 也用它 ——
  *  「点搜索必须真的重取」靠让这个前缀失效实现（见 use-query-search.ts） */
@@ -333,103 +334,96 @@ export function LogOperaPage({
 
   /** 导出当前筛选条件下的全部记录为 CSV（后端没有导出接口，前端按分页拉全量） */
   return (
-    <div className="flex flex-1 flex-col content-scroll:min-h-0">
-      <div className="@container/main flex flex-1 flex-col gap-2 content-scroll:min-h-0">
-        {/* content-scroll:* —— 「内容区滚动」模式下这一块撑满可用高度，
-              于是里面的表格框变成定高视区：筛选栏 / 表头 / 分页条钉住，只有行滚。
-              整页滚动模式下祖先高度是 auto，这两条是空操作（见 ui/data-table.tsx 的注释）。 */}
-        <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 content-scroll:min-h-0 content-scroll:flex-1">
-          <PageHeader
-            title={t('操作日志')}
-            description={t('记录后台每一次接口调用的请求、响应与耗时。点操作时间看完整详情。')}
+    <PageShell fill="always">
+      <PageHeader
+        title={t('操作日志')}
+        description={t('记录后台每一次接口调用的请求、响应与耗时。点操作时间看完整详情。')}
+      />
+
+      {/*
+        🔴 查询区和表格是**同一个块的两半**（筛选 → 结果），所以包一层、
+        用 `gap-4`（16px）而不是页面级块之间的 `gap-4 md:gap-6`（24px）：
+        查询区内部两行只隔 8px，紧接着就跳 24px 到表格，节奏是断的。
+
+        ⚠️ 这一层也必须能收缩 —— 「只滚表格行」那条链断一层就整条失效。
+      */}
+      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+        {/* 查询区不塞进 DataTable 的 toolbar 槽（那是一行） */}
+        <QueryBar
+          fields={FIELDS}
+          value={q.value}
+          onChange={q.setValue}
+          onSearch={q.submit}
+          onReset={q.reset}
+          applied={q.applied}
+          loading={isFetching}
+          actions={
+            <>
+              {/*
+              这三个是**次要的工具动作**，只留图标：这一行已经有六个控件，
+              留着文字会把主动作（搜索）挤到边上。图标按钮一律配
+              tooltip + aria-label。
+            */}
+              {/* 导出走后端（#11）：原来是前端按页拉全量拼 CSV，拉到 20 页就停（静默截断）。
+                  权限码是独立的 log:opera:export（原来复用 log:opera:del） */}
+              <Can perm="log:opera:export">
+                <ExportButton
+                  path="/api/v1/logs/opera/export"
+                  filters={q.params}
+                  total={data?.total}
+                  iconOnly
+                  testId="export-logs"
+                />
+              </Can>
+              {/* 日志只增不减，之前界面上没有任何清理入口 —— 权限码 log:opera:clear 一直闲置 */}
+              <ClearLogsButton kind="opera" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
+              {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
+              <RefreshButton busy={isFetching} onClick={list.onRetry} />
+              <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
+            </>
+          }
+          viewsStorageKey="qb:log-opera"
+        />
+
+
+        {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
+          也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
+        <div
+          data-testid="opera-table"
+          data-fetching={isFetching}
+          className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
+        >
+          <DataTable
+            table={table}
+            showColumnVisibility={false}
+            rows={table.getRowModel().rows}
+            columnCount={columns.length}
+            emptyMessage={t('没有匹配的操作记录')}
+            emptyAction={
+              hasFilter ? (
+                <ResetButton
+                  variant="outline"
+                  testId="empty-clear-filter"
+                  label={t('清除筛选')}
+                  onClick={q.reset}
+                />
+              ) : undefined
+            }
+            {...list}
+            skeletonRows={8}
+            pagination={{
+              pageIndex: page - 1,
+              pageCount: data?.total_pages ?? 1,
+              pageSize: size,
+              totalCount: data?.total ?? 0,
+              onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
+              onPageSizeChange: (s) => patch({ size: s, page: undefined }),
+            }}
           />
-
-          {/*
-            🔴 查询区和表格是**同一个块的两半**（筛选 → 结果），所以包一层、
-            用 `gap-4`（16px）而不是页面级块之间的 `gap-4 md:gap-6`（24px）：
-            查询区内部两行只隔 8px，紧接着就跳 24px 到表格，节奏是断的。
-
-            ⚠️ 这一层也必须能收缩 —— 「只滚表格行」那条链断一层就整条失效。
-          */}
-          <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
-            {/* 查询区不塞进 DataTable 的 toolbar 槽（那是一行） */}
-            <QueryBar
-              fields={FIELDS}
-              value={q.value}
-              onChange={q.setValue}
-              onSearch={q.submit}
-              onReset={q.reset}
-              applied={q.applied}
-              loading={isFetching}
-              actions={
-                <>
-                  {/*
-                  这三个是**次要的工具动作**，只留图标：这一行已经有六个控件，
-                  留着文字会把主动作（搜索）挤到边上。图标按钮一律配
-                  tooltip + aria-label。
-                */}
-                  {/* 导出走后端（#11）：原来是前端按页拉全量拼 CSV，拉到 20 页就停（静默截断）。
-                      权限码是独立的 log:opera:export（原来复用 log:opera:del） */}
-                  <Can perm="log:opera:export">
-                    <ExportButton
-                      path="/api/v1/logs/opera/export"
-                      filters={q.params}
-                      total={data?.total}
-                      iconOnly
-                      testId="export-logs"
-                    />
-                  </Can>
-                  {/* 日志只增不减，之前界面上没有任何清理入口 —— 权限码 log:opera:clear 一直闲置 */}
-                  <ClearLogsButton kind="opera" filtered={hasFilter} total={data?.total ?? 0} iconOnly />
-                  {/* 「列」下拉从 DataTable 搬过来 —— 它自己那一行就整行消失了 */}
-                  <RefreshButton busy={isFetching} onClick={list.onRetry} />
-                  <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
-                </>
-              }
-              viewsStorageKey="qb:log-opera"
-            />
-
-
-            {/* 这一层只为 E2E 定位而存在，但它在链路上 —— 内容区滚动模式下
-              也要变成能收缩的列向 flex，否则约束传不到 DataTable */}
-            <div
-              data-testid="opera-table"
-              data-fetching={isFetching}
-              className="content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 content-scroll:flex-col"
-            >
-              <DataTable
-                table={table}
-                showColumnVisibility={false}
-                rows={table.getRowModel().rows}
-                columnCount={columns.length}
-                emptyMessage={t('没有匹配的操作记录')}
-                emptyAction={
-                  hasFilter ? (
-                    <ResetButton
-                      variant="outline"
-                      testId="empty-clear-filter"
-                      label={t('清除筛选')}
-                      onClick={q.reset}
-                    />
-                  ) : undefined
-                }
-                {...list}
-                skeletonRows={8}
-                pagination={{
-                  pageIndex: page - 1,
-                  pageCount: data?.total_pages ?? 1,
-                  pageSize: size,
-                  totalCount: data?.total ?? 0,
-                  onPageChange: (i) => patch({ page: i === 0 ? undefined : i + 1 }),
-                  onPageSizeChange: (s) => patch({ size: s, page: undefined }),
-                }}
-              />
-            </div>
-          </div>
         </div>
       </div>
 
       <OperaLogDetailSheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)} log={detail} />
-    </div>
+    </PageShell>
   )
 }

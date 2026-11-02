@@ -66,7 +66,7 @@ export function SmsConfigPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-4 py-3 content-scroll:min-h-0">
+    <div className="flex flex-1 flex-col gap-4 content-scroll:min-h-0">
       <p className="text-sm text-muted-foreground">
         {t('使用方只认业务模板码，这里把它对到每家厂商自己的模板。有默认配置就先用它，到了日上限再按权重分给备用；凭据加密落库，界面上只显示掩码。')}
       </p>
