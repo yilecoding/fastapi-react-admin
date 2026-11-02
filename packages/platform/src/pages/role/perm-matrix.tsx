@@ -125,13 +125,11 @@ export function PermMatrix({
     <div className="flex flex-col gap-3 content-scroll:lg:min-h-0 content-scroll:lg:flex-1" data-testid="perm-matrix">
       {/*
         工具条要一直在手边。两种模式两条路：
-        - 整块在滚（整页滚动模式 / 窄屏）→ `sticky top-0`，靠 bg + -mx-1/px-1 盖住滚过去的行。
-          窄屏 + 内容区滚动时滚的是外壳内容列，它带 16px 的上内边距（#209），sticky 的停靠线
-          算在 padding 内侧 —— 要 `-top-4` 才贴到顶，否则上面留一条缝，滚过去的行从缝里露出来
+        - 整块在滚（整页滚动模式 / 窄屏）→ `sticky top-0`，靠 bg + -mx-1/px-1 盖住滚过去的行
         - 定高视区（内容区滚动 + 宽屏）→ 它本来就在滚动区**外面**，改回 static，
           否则 sticky 元素在不滚动的容器里只是白占一个层叠上下文
       */}
-      <div className="sticky top-0 z-20 -mx-1 flex shrink-0 flex-wrap items-center gap-2 bg-background px-1 py-2 content-scroll:-top-4 content-scroll:lg:static">
+      <div className="sticky top-0 z-20 -mx-1 flex shrink-0 flex-wrap items-center gap-2 bg-background px-1 py-2 content-scroll:lg:static">
         <WhenEditable editable={editable}>
           <Button size="sm" disabled={!dirty || save.isPending} onClick={handleSave} data-testid="perm-save">
             {save.isPending ? <IconLoader2 className="size-4 animate-spin" /> : <IconDeviceFloppy className="size-4" />}

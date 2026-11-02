@@ -20,7 +20,8 @@
  *   - 卡片里（仪表盘）几十行竖着铺开，把卡片撑出屏幕
  * 所以：根上显式 `whitespace-normal` + `overflow-wrap:anywhere`，不信任祖先；
  * 「重试」跟着标题走，放在左上，宽表横向滚到哪都在视野里；
- * 原文超过两行先截断，「展开」再看全。
+ * 原文先截成两行，**真的被截了**（量出来溢出）才给「展开详情」；换了一条报错就收回去。
+ * 不按字符数判：宽表里 150 个字符两行放得下，300px 的卡片里 130 个汉字要铺六七行（#212 评审）。
  */
 import * as React from "react"
 import { IconAlertTriangle, IconChevronDown, IconRefresh } from "@tabler/icons-react"
@@ -41,9 +42,6 @@ export interface QueryErrorProps {
   className?: string
 }
 
-/** 超过这个长度（或带换行）就先截成两行，给「展开」 */
-const LONG_DETAIL = 140
-
 export function QueryError({
   error,
   onRetry,
@@ -53,11 +51,25 @@ export function QueryError({
   className = "",
 }: QueryErrorProps) {
   const t = useT()
-  const [expanded, setExpanded] = React.useState(false)
+  const detailRef = React.useRef<HTMLParagraphElement>(null)
+  /** 展开的是哪一条原文 —— 存原文而不是布尔：报错换了，自然回到收起，不用 effect 去重置 */
+  const [expandedText, setExpandedText] = React.useState<string | null>(null)
+  const [clamped, setClamped] = React.useState(false)
   const e = error as { httpStatus?: number; message?: string } | null
   const forbidden = e?.httpStatus === 403
   const text = detail ?? (forbidden ? t("该接口需要更高的权限。") : (e?.message ?? t("未知错误")))
-  const long = text.length > LONG_DETAIL || text.includes("\n")
+  const expanded = expandedText === text
+
+  // 收起态下量一次「有没有被截」；容器宽度变了（换列宽、隐藏页签切回来）再量
+  React.useLayoutEffect(() => {
+    const el = detailRef.current
+    if (!el || expanded) return
+    const measure = () => setClamped(el.scrollHeight > el.clientHeight + 1)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [text, expanded])
   return (
     <div
       className={`flex min-w-0 flex-col items-start gap-1.5 rounded-md bg-destructive/10 px-4 py-3 text-start whitespace-normal ring-1 ring-destructive/25 ${className}`}
@@ -83,17 +95,18 @@ export function QueryError({
         )}
       </div>
       <p
-        className={`max-w-full text-xs text-foreground/70 [overflow-wrap:anywhere] ${long && !expanded ? "line-clamp-2" : "max-h-64 overflow-y-auto whitespace-pre-wrap"}`}
+        ref={detailRef}
+        className={`max-w-full text-xs text-foreground/70 [overflow-wrap:anywhere] ${expanded ? "max-h-64 overflow-y-auto whitespace-pre-wrap" : "line-clamp-2"}`}
         data-testid={`${testId}-detail`}
       >
         {text}
       </p>
-      {long && (
+      {(clamped || expanded) && (
         <button
           type="button"
           className="inline-flex items-center gap-0.5 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           aria-expanded={expanded}
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => setExpandedText(expanded ? null : text)}
           data-testid={`${testId}-toggle`}
         >
           <IconChevronDown className={`size-3 transition-transform ${expanded ? "rotate-180" : ""}`} />

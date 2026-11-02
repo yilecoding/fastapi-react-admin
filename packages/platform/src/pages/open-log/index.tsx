@@ -277,7 +277,7 @@ export function OpenLogPage({
                 showColumnVisibility={false}
                 rows={table.getRowModel().rows}
                 columnCount={columns.length}
-                emptyMessage={t('没有匹配的调用记录')}
+                emptyMessage={t('没有匹配的调用记录。日志只保留 30 天，更早的已由定时任务清理。')}
                 emptyAction={
                   hasFilter ? (
                     <ResetButton variant="outline" testId="empty-clear-filter" label={t('清除筛选')} onClick={q.reset} />

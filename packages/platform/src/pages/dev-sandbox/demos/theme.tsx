@@ -46,7 +46,8 @@ const SURFACE: readonly Swatch[] = [
 ]
 
 const BRAND: readonly Swatch[] = [
-  { token: '--primary', cls: 'bg-primary', label: '主色（主按钮）', onDark: true },
+  // 读 --primary-ink 不读 --primary：bg-primary / text-primary 走的是它，深色下从 --primary 派生提亮（#210）
+  { token: '--primary-ink', cls: 'bg-primary', label: '主色（主按钮 · 深色下自动提亮）', onDark: true },
   { token: '--secondary', cls: 'bg-secondary', label: '次级按钮' },
   { token: '--destructive', cls: 'bg-destructive', label: '危险', onDark: true },
 ]
