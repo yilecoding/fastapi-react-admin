@@ -1,15 +1,9 @@
 import { createColumnHelper } from '@tanstack/react-table'
-import { IconDotsVertical, IconEye } from '@tabler/icons-react'
+import { IconEye } from '@tabler/icons-react'
 
-import { formatDateTime } from '@admin/i18n'
-import { Button } from '@admin/ui/components/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@admin/ui/components/dropdown-menu'
+import { ACTIONS_COLUMN_ID } from '@admin/ui/components/data-table'
 
+import { RowActions, TimeCell } from '../_shared/cells'
 import { logFeatures } from '../_shared/log-features'
 import type { InstanceRow } from '../workflow/api'
 import { InstanceStatusPill } from '../workflow/status'
@@ -83,31 +77,22 @@ export function buildColumns(onOpen: (r: InstanceRow) => void, t: (k: string, va
     }),
     col.accessor('created_time', {
       header: t('发起时间'),
-      cell: ({ getValue }) => <span className="text-sm tabular-nums text-muted-foreground">{formatDateTime(getValue())}</span>,
+      cell: ({ getValue }) => <TimeCell value={getValue()} />,
     }),
     col.accessor('finished_time', {
       header: t('结束时间'),
-      cell: ({ getValue }) => <span className="text-sm tabular-nums text-muted-foreground">{formatDateTime(getValue())}</span>,
+      cell: ({ getValue }) => <TimeCell value={getValue()} />,
     }),
     col.display({
-      id: 'actions',
+      id: ACTIONS_COLUMN_ID,
       header: () => <span className="sr-only">{t('操作')}</span>,
       cell: ({ row }) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<Button variant="ghost" size="icon" className="size-7" aria-label={t('操作 {{name}}', { name: row.original.title })} />}
-            data-testid={`wf-monitor-actions-${row.original.id}`}
-          >
-            <IconDotsVertical className="size-4" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-36">
-            {/* 终止 / 改办理人在详情里（按能力信封出），这里只给入口 */}
-            <DropdownMenuItem onClick={() => onOpen(row.original)}>
-              <IconEye className="size-4" />
-              {t('查看详情')}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RowActions
+          label={row.original.title}
+          testId={`wf-monitor-actions-${row.original.id}`}
+          // 终止 / 改办理人在详情里（按能力信封出），这里只给入口
+          items={[{ key: 'open', label: t('查看详情'), icon: IconEye, onClick: () => onOpen(row.original) }]}
+        />
       ),
     }),
   ]

@@ -1,19 +1,11 @@
 import { createColumnHelper } from '@tanstack/react-table'
-import { IconDotsVertical, IconPencil, IconShieldLock, IconTrash } from '@tabler/icons-react'
+import { IconPencil, IconShieldLock, IconTrash } from '@tabler/icons-react'
 
-import { formatDateTime } from '@admin/i18n'
+import { ACTIONS_COLUMN_ID } from '@admin/ui/components/data-table'
 import { Avatar, AvatarFallback, AvatarImage } from '@admin/ui/components/avatar'
 import { Badge } from '@admin/ui/components/badge'
-import { Button } from '@admin/ui/components/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@admin/ui/components/dropdown-menu'
 
-import { Can, SuperOnly } from '../../auth/can'
+import { RowActions, TimeCell } from '../_shared/cells'
 import { buildSelectColumn } from '../_shared/select-column'
 import { StatusBadge } from '../_shared/status'
 import type { User } from './api'
@@ -90,52 +82,32 @@ export function buildColumns(
     col.accessor('join_time', {
       header: t('注册时间'),
       cell: ({ getValue }) => (
-        <span className="text-sm tabular-nums text-muted-foreground">{formatDateTime(getValue())}</span>
+        <TimeCell value={getValue()} />
       ),
     }),
     col.display({
-      id: 'actions',
+      id: ACTIONS_COLUMN_ID,
       header: () => <span className="sr-only">{t('操作')}</span>,
       cell: ({ row }) => {
         const u = row.original
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon" className="size-7" aria-label={t('操作 {{name}}', { name: u.username })} />}
-              data-testid={`row-actions-${u.username}`}
-            >
-              <IconDotsVertical className="size-4" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-36">
-              {/* 新增/编辑用户后端都是 DependsSuperUser（user.py:71,80），不是权限码校验，
-                  按 isSuperuser 直判，别用 <Can perm="..."> 编一个假权限码 */}
-              <SuperOnly>
-                <DropdownMenuItem onClick={() => onEdit(u)} data-testid={`edit-${u.username}`}>
-                  <IconPencil className="size-4" />
-                  {t('编辑')}
-                </DropdownMenuItem>
-              </SuperOnly>
-              {/* 权限开关与重置密码同样是 DependsSuperUser */}
-              <SuperOnly>
-                <DropdownMenuItem onClick={() => onSecurity(u)} data-testid={`security-${u.username}`}>
-                  <IconShieldLock className="size-4" />
-                  {t('权限与安全')}
-                </DropdownMenuItem>
-              </SuperOnly>
-              <Can perm="sys:user:del">
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => onDelete(u)}
-                  disabled={u.is_superuser}
-                  data-testid={`delete-${u.username}`}
-                >
-                  <IconTrash className="size-4" />
-                  {t('删除')}
-                </DropdownMenuItem>
-              </Can>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <RowActions
+            label={u.username}
+            testId={`row-actions-${u.username}`}
+            items={[
+              // 编辑、权限与安全后端都是 DependsSuperUser（user.py:71,80），不是权限码校验 ——
+              // 按超管直判，别编一个假权限码
+              { key: 'edit', label: t('编辑'), icon: IconPencil, superOnly: true, testId: `edit-${u.username}`, onClick: () => onEdit(u) },
+              {
+                key: 'security', label: t('权限与安全'), icon: IconShieldLock, superOnly: true,
+                testId: `security-${u.username}`, onClick: () => onSecurity(u),
+              },
+              {
+                key: 'del', label: t('删除'), icon: IconTrash, perm: 'sys:user:del', danger: true,
+                disabled: u.is_superuser, testId: `delete-${u.username}`, onClick: () => onDelete(u),
+              },
+            ]}
+          />
         )
       },
     }),

@@ -8,6 +8,7 @@ import { QueryError } from '@admin/ui/components/query-error'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@admin/ui/components/sheet'
 import { Skeleton } from '@admin/ui/components/skeleton'
 
+import { formatMs } from '../_shared/cells'
 import { DetailIdRow, DetailSection } from '../_shared/detail-sheet'
 import { channelLabel } from '../notify-policy/labels'
 import { deliveryDetailQuery } from './api'
@@ -61,7 +62,7 @@ export function DeliveryDetailSheet({ open, onOpenChange, id }: { open: boolean;
                   <DescriptionItem label={t('已尝试')}>{d.attempts}</DescriptionItem>
                   <DescriptionItem label={t('下一次')}>{formatDateTime(d.next_attempt_time)}</DescriptionItem>
                   <DescriptionItem label={t('原因')}>{reasonLabel(t, d.reason)}</DescriptionItem>
-                  <DescriptionItem label={t('耗时')}>{d.duration_ms === null ? '—' : `${d.duration_ms}ms`}</DescriptionItem>
+                  <DescriptionItem label={t('耗时')}>{d.duration_ms === null ? '—' : formatMs(d.duration_ms)}</DescriptionItem>
                   <DescriptionItem label={t('错误原文')}>
                     <span className="break-all font-mono text-xs">{d.last_error ?? '—'}</span>
                   </DescriptionItem>
