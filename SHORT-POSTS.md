@@ -95,3 +95,17 @@ GitHub：https://github.com/yilecoding/fastapi-react-admin
 ```
 在线演示：https://fra.wubunan.com （admin / 123456）
 ```
+
+## OSChina 软件收录
+
+在 oschina.net「开源软件」→「提交软件」。先在 Gitee 导入仓库，两个地址都填上。
+
+- **软件名称**：fastapi-react-admin
+- **一句话**：开箱即用的 FastAPI + React 19 中后台底座，权限细到数据行
+- **开发语言**：Python、TypeScript
+- **授权协议**：MIT
+- **操作系统**：跨平台
+- **官网 / 文档**：https://fra.wubunan.com/docs/
+- **源码**：https://github.com/yilecoding/fastapi-react-admin ，Gitee 镜像地址导入后补上
+- **介绍**：用 HelloGitHub 那份「项目描述」+「亮点」，末尾附在线演示 https://fra.wubunan.com （admin / 123456）
+- 每次发新版，在 OSChina 软件页发一条更新
