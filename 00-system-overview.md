@@ -4,8 +4,9 @@
 
 > **GitHub**：<https://github.com/yilecoding/fastapi-react-admin>
 > **在线演示**：<https://fra.wubunan.com>（`admin` / `123456`，公开实例，数据可能被其他访客改动）
+> **文档**：<https://fra.wubunan.com/docs/>
 >
-> MIT 协议，当前版本 v0.5.0
+> MIT 协议，当前版本 v1.0.0。从 1.0 起，开放接口 / SDK、Webhook 事件、迁移链、插件接口、配置键有兼容承诺
 
 ![登录页](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/01-sign-in.png)
 
@@ -23,25 +24,27 @@
 | 多页签 | React 侧大多切走就丢状态 | 用 React 19.2 的 `<Activity>`，切回来状态还在 |
 | 组件库 | 多数还在 Radix 版 shadcn | 已跟进 shadcn 现在默认的 **Base UI** |
 | 数据库 | 通常只支持一种 | PostgreSQL / SQL Server / MySQL 三选一 |
-| 端 | 只有 Web | Web + Electron 桌面端 + Expo 原生移动 App |
-| 测试 | 大多不带 | 后端 1100+ 条、前端 120+ 条端到端，连真实数据库，不 mock |
+| 端 | 只有 Web | Web + Electron 桌面端 + Expo 原生移动 App（移动端是预览版） |
+| 测试 | 大多不带 | 后端 1400+ 条、前端 150+ 条端到端，连真实数据库，不 mock |
 
 ## 二、功能全景
 
 | 模块 | 能做什么 |
 |---|---|
 | 权限与组织 | RBAC（菜单 / 按钮 / 数据范围）、行级数据权限、部门树、用户与角色 |
-| 登录与安全 | 图形验证码、失败锁定、密码历史与过期、OAuth2（GitHub / Google）、手机验证码登录、会话管理与强制下线 |
-| 工作区 | 多页签（固定 / 拖拽 / 重新加载）、⌘K 命令面板、快捷键、功能引导、主题色与圆角、每人自己的时区、中英双语 |
+| 登录与安全 | 图形验证码、失败锁定、密码历史与过期、OAuth2（GitHub / Google）、手机验证码登录、登录二次验证（认证器动态码 + 恢复码，可强制开启）、会话管理与强制下线 |
+| 工作区 | 以待办为中心的工作台（卡片按权限出现，每人自己编辑布局，换设备也在）、多页签（固定 / 拖拽 / 重新加载）、⌘K 命令面板、快捷键、功能引导、主题色与圆角、每人自己的时区、中英双语 |
 | 审批流 | 表单设计器、流程树（审批 / 抄送 / 条件分支）、或签会签依次审批、退回 / 拿回 / 加签 / 转交、超时自动处理、AI 预审 |
 | AI 助手 | 整页对话和侧滑抽屉，工具调用受当前用户的权限和数据范围约束，写操作先预演再确认，全程审计，MCP 网关 |
 | 文件与存储 | 文件管理器、在线预览、本地盘或 S3 兼容存储、秒传、分片上传与断点续传、回收站、可嵌入任何页面的附件面板 |
 | 导入导出 | 服务端导出 xlsx / csv，大批量转后台；导入带下拉模板、预览校验和错误报告 |
-| 消息与通知 | 站内消息实时推送、通知公告（富文本 + 附件）、邮件 / 短信通知渠道（系统策略 × 个人偏好，失败自动重试） |
-| 能力开放 | AK/SK 签名的开放接口，scope、IP 白名单、防重放、限流，附 Python / Node / Java SDK |
+| 消息与通知 | 站内消息实时推送；通知公告（按部门 / 角色 / 人发布、定时发布、登录后弹窗必须确认、顶部横幅、阅读统计）；邮件 / 短信渠道（系统策略 × 个人偏好，失败自动重试）；飞书 / 钉钉 / 企业微信群机器人 |
+| 能力开放 | AK/SK 签名的开放接口，scope、IP 白名单、防重放、限流，附 Python / Node / Java SDK；Webhook 事件订阅（带签名推送用户 / 部门 / 审批变化，失败重试，持续失败自动停用） |
 | 运维 | 参数配置、数据字典、登录 / 操作日志（自动脱敏）、服务器与 Redis 监控、定时任务、发新版提示 |
 
 几张截图：
+
+![工作台](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/02-dashboard.png)
 
 ![角色权限矩阵](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/03-role.png)
 
@@ -163,7 +166,7 @@ AI 能调用的工具就是当前用户有权限的接口，走同一套权限�
 - **变异检验**：守关键逻辑的测试写完，会故意把代码改坏一次，确认测试真的会红。
 - **静态守卫**：`arch:check` 管分层方向和几条硬规则（页面不能读路由、全局 DOM 查询必须限定范围、E2E 断言不能漏 `await`）；`i18n:check` 管两种语言的键是否对齐。
 - **文档是踩坑记录**：根目录的 `CLAUDE.md` 加上 40 多份模块分册，记录的都是「违反了会坏，而且多数是静默地坏」的结论，每条都要带实测证据。`ctx:check` 会检查文档里引用的文件、脚本、测试还在不在。
-- **公开的测试报告**：`main` 每次跑完的 [E2E 报告](https://yilecoding.github.io/fastapi-react-admin/) 都公开，失败用例带截图和录像。
+- **公开的测试报告**：`main` 每次跑完的 [E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/) 都公开，失败用例带截图和录像。
 
 ## 七、跑起来
 
@@ -175,10 +178,10 @@ docker compose -f docker-compose.dev.yml up -d          # PostgreSQL + Redis
 pnpm install:all
 cp apps/api/backend/.env.example apps/api/backend/.env
 pnpm db:init
-pnpm dev                                                # http://localhost:8888
+pnpm dev                                                # http://127.0.0.1:8888
 ```
 
-需要 Node ≥ 22.13、Python ≥ 3.10、uv 和 Docker。账号 `admin` / `123456`。
+需要 Node ≥ 22.13、Python ≥ 3.10、uv 和 Docker。账号 `admin`，密码是 `pnpm db:init` 时设的。
 
 ## 八、系列文章
 
