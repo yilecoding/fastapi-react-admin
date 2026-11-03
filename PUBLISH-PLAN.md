@@ -14,7 +14,7 @@
 | HelloGitHub | 自荐，100 字左右 | 写清楚解决什么问题、和同类比特别在哪 |
 | Gitee + OSChina | 仓库镜像 + 软件收录 | 用 README 本身，再加一句话简介。每次发版在 OSChina 发一条更新 |
 
-掘金标签每篇挑 2～3 个：00 用「开源 / React / FastAPI」，01 用「React / 前端」，02 用「JavaScript / Python」。
+掘金的分类、标签、摘要见 `SHORT-POSTS.md`。
 
 ## 时间线
 
