@@ -9,7 +9,9 @@ How you upgrade depends on how you use the project. If you **deploy the publishe
 
 ## How are versions numbered?
 
-Semver: a big feature bumps the minor version (0.11 → 0.12), fixes only bump the patch (0.9.0 → 0.9.1). It is still 0.x, but the compatibility rules below are already in force.
+Semver: breaking any of the compatibility rules below bumps the major version (1.x → 2.0), a big feature bumps the minor version (1.0 → 1.1), fixes only bump the patch (1.0.0 → 1.0.1). From 1.0.0 these rules are formally in force.
+
+The mobile app is a **preview** in 1.0 and is not covered by these rules (see "Mobile app (preview)" in the README for what it has and lacks).
 
 ## What is promised not to break?
 
