@@ -143,7 +143,8 @@ class TimeZone(TypeDecorator[datetime]):
             # 「已经是应用时区的墙钟时间」，只需要补时区标记，不需要换算。
             value = value.replace(tzinfo=timezone.tz_info)
         elif value is not None and value.utcoffset() != timezone.now().utcoffset():
-            # TODO 处理夏令时偏移
+            # 夏令时不用另外处理：astimezone 按「那个时刻」查规则，冬天的值夏天写入也还是同一时刻、
+            # 带当时的偏移。唯一缺口是 MySQL 秋季回拨那一小时（DATETIME 不存偏移），见 tests/test_timezone_dst.py
             value = timezone.from_datetime(value)
         return value
 

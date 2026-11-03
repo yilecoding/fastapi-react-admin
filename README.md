@@ -62,15 +62,16 @@ Row-level permissions · multi-tab that keeps state · approval workflow · an A
 |---|---|
 | **Access & org** | RBAC (menus / buttons / data scopes) · row-level data permissions · department tree · users & roles |
 | **Import & export** | server-side xlsx / csv export (current filter or selected rows · large exports run in the background and notify you when done · formula-injection safe) · generic import (templates with dropdowns · preview & validation · insert only / upsert / update only · error report · all-or-nothing) · build a whole department tree from one file |
-| **Sign-in & security** | captcha · lockout · password history & expiry · OAuth2 (GitHub / Google) · force sign-out of sessions |
-| **Workspace** | multi-tab (pin / drag / reload) · command palette ⌘K · shortcuts · guided tour · theme / radius / tab style · per-user time zone · Chinese & English |
+| **Sign-in & security** | captcha · lockout · password history & expiry · SMS code sign-in · two-factor auth (TOTP + recovery codes) · OAuth2 (GitHub / Google) · session management (idle timeout + absolute limit · per-client session caps · tells users why they were signed out · force sign-out) |
+| **Workspace** | customizable dashboard (cards appear by permission · layout saved per user on the server) · multi-tab (pin / drag / reload) · command palette ⌘K · shortcuts · guided tour · theme / radius / tab style · per-user time zone · Chinese & English |
 | **Files & storage** | file manager with previews (pdf / docx / xlsx / images / archives) · local + S3-compatible storage · pre-signed downloads · recycle bin · instant upload · chunked & resumable uploads · attachment panel for any page |
-| **Approval workflow** | form designer · flow tree (approve / CC / conditional branches) · approve / reject / transfer / send back / take back / add approvers · timeout reminders and auto-actions · drafts · urgent · handover |
+| **Approval workflow** | form designer · flow tree (approve / CC / conditional branches) · approve / reject / transfer / send back / take back / add approvers · timeout reminders and auto-actions · drafts · urgent · handover · AI pre-review / form filling / AI approval nodes |
 | **AI assistant** | full-page chat + side drawer · tool calls bound by permissions and data scopes · preview + confirm for writes · audit log · MCP gateway |
-| **Open API** | AK/SK-signed endpoints · scopes / IP allow-list / replay protection / rate limits · call logs · incremental sync · Python / Node / Java SDKs |
-| **Messages & jobs** | in-app notifications (real-time) · notices (rich text + attachments) · scheduled jobs (online scheduling · cron preview · run history) |
+| **Open API** | AK/SK-signed endpoints · scopes / IP allow-list / replay protection / rate limits · call logs · incremental sync · Python / Node / Java SDKs · webhook subscriptions (Standard Webhooks signatures · retries · delivery log · bulk resend) |
+| **Messages & notifications** | in-app notifications (real-time) · notices (rich text + attachments · audiences · scheduled publishing · pinned / level / expiry · pop-up after sign-in with required acknowledgement · top banner · sign-in page notices · read stats) · notification routing (email / SMS / Feishu · DingTalk · WeCom group bots · per-event policies · delivery log) · SMS (Alibaba Cloud / Tencent Cloud) |
+| **Scheduled jobs** | online scheduling · cron preview · run history |
 | **Operations** | settings · dictionaries · sign-in / operation logs (redacted) · server & Redis monitoring · new-version prompt |
-| **Clients** | Electron desktop (silent printing · local hardware · auto-update) · native Expo app (not a WebView wrapper) |
+| **Clients** | Electron desktop (installers for three platforms · silent printing · local hardware · auto-update) · native Expo app (not a WebView wrapper, **preview** — see below) |
 | **Developers** | component sandbox (every component tweakable and copy-pasteable) · color palette · type-safe API contract generated from OpenAPI |
 
 ## Stack
@@ -82,6 +83,14 @@ Row-level permissions · multi-tab that keeps state · approval workflow · an A
 | **Databases** | PostgreSQL · SQL Server · MySQL |
 | **Clients** | Electron 42 · Expo 57 / React Native 0.86 |
 | **Tooling** | pnpm + turbo monorepo · uv · ruff · pytest · Playwright · GitHub Actions |
+
+## Mobile app (preview)
+
+The Expo app is shipped as a **preview** in 1.0 — it's real and usable, but not yet covered by the 1.0 compatibility promises.
+
+- **Has:** home · notices · notifications · users · profile · server monitoring · time zone · SMS code sign-in · session expiry reasons
+- **Not yet:** approvals · roles / departments / menus · files · operation & sign-in logs (the Apps screen lists them as "not built yet" rather than hiding them) · binding a phone number or turning on two-factor auth from the app
+- **Not yet verified:** no automated tests ([#137](https://github.com/yilecoding/fastapi-react-admin/issues/137)), most screens not run on a real device, no release pipeline
 
 ## Databases
 
