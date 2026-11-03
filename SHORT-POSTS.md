@@ -56,10 +56,42 @@ GitHub：https://github.com/yilecoding/fastapi-react-admin
 
 ## HelloGitHub 自荐
 
-在 https://hellogithub.com 提交。类别选 Python。
+在 GitHub 上提 issue：<https://github.com/521xueweihan/HelloGitHub/issues/new?template=submit-cn.yaml>（也可以在 hellogithub.com 登录后提交，字段一样）。
+模板要求**别复制 README 原文**，下面是另写的。收录了会在 issue 里通知，月刊每月 28 号出。
 
-**一句话**：开箱即用的 FastAPI + React 19 中后台底座
+**项目地址**：`https://github.com/yilecoding/fastapi-react-admin`
 
-**描述**：
+**类别**：Python
 
-> 权限能细到数据行：同一张表，不同角色看到不同的行。多页签基于 React 19.2 的 `<Activity>`，切走不丢状态。自带飞书式审批流，还有一个不越权的 AI 助手：它只能做当前用户能做的事，写操作要本人确认。支持 PostgreSQL / SQL Server / MySQL，附 Electron 桌面端。1400+ 后端测试和 150+ 端到端测试都连真实数据库，不 mock。
+**项目标题**（20 字左右，最多 50）：
+
+```
+开箱即用的 FastAPI + React 19 中后台底座，权限细到数据行
+```
+
+**项目描述**（32～256 字）：
+
+```
+一个拿来就能改业务的中后台底座。用户、角色、菜单、部门这些基础模块都有，在这之上还有审批流、AI 助手、文件存储、导入导出、开放接口和 Webhook。适合要做企业内部管理系统、又不想从零搭权限和流程的团队；想学 FastAPI 分层架构、React 19 新特性或者"测试怎么连真实数据库写"的人，也能从源码和 40 多份踩坑文档里学到东西。
+```
+
+**亮点**：
+
+```
+- 权限除了菜单和按钮，还能控制"看到哪些行"：同一张用户表，部门经理只看得到自己部门的人
+- 多页签用 React 19.2 的 <Activity> 实现，切走再回来，填了一半的表单和翻到的页码都还在
+- 飞书式审批流：表单设计器 + 流程树，或签 / 会签、退回、加签、超时自动处理
+- AI 助手的权限等于当前用户的权限，写操作先预演、本人确认后才执行，全程审计
+- PostgreSQL / SQL Server / MySQL 三选一，附 Electron 桌面端
+- 1400+ 后端测试和 150+ 端到端测试都连真实数据库，不 mock；E2E 报告公开
+```
+
+**示例代码**：不填。
+
+**截图**：把 `images/02-dashboard.png`、`images/03-role.png`、`images/07-workflow-flow.png` 拖进去。
+
+再附上在线演示地址：
+
+```
+在线演示：https://fra.wubunan.com （admin / 123456）
+```
