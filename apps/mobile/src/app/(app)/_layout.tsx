@@ -41,8 +41,10 @@ export default function AppLayout() {
         <Stack.Screen name="settings" options={{ title: t('设置') }} />
         <Stack.Screen name="server" options={{ title: t('服务器地址') }} />
         <Stack.Screen name="timezone" options={{ title: t('显示时区') }} />
+        <Stack.Screen name="profile/info" options={{ title: t('个人资料') }} />
         <Stack.Screen name="profile/edit" options={{ title: t('编辑资料') }} />
         <Stack.Screen name="profile/password" options={{ title: t('修改密码') }} />
+        <Stack.Screen name="profile/phone" options={{ title: t('手机号') }} />
         <Stack.Screen name="users/index" options={{ title: t('用户') }} />
         {/* ⚠️ 动态段的 `name` 用的是**文件名**（`users/[id]`），不是拼好的路径 */}
         <Stack.Screen name="users/[id]" options={{ title: t('用户详情') }} />
