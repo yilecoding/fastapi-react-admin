@@ -33,12 +33,14 @@ from backend.app.admin.service.mfa_service import mfa_service
 from backend.app.admin.service.user_preference_service import user_preference_service
 from backend.app.admin.service.user_service import user_service
 from backend.common.enums import UserPermissionType
+from backend.common.exception import errors
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
 from backend.common.schema import CustomPhoneNumber, IanaTimeZone
+from backend.common.security.data_scope import bypass_data_scope
 from backend.common.security.jwt import DependsJwtAuth, DependsSuperUser
 from backend.common.security.permission import RequestPermission
-from backend.common.security.rbac import DependsRBAC
+from backend.common.security.rbac import DependsRBAC, user_has_perm
 from backend.database.db import CurrentSession, CurrentSessionTransaction
 from backend.utils.excel_ops import read_table_upload, xlsx_attachment
 from backend.utils.limiter import RateLimiter
@@ -123,8 +125,18 @@ async def get_userinfo(
 
 @router.get('/{pk}/roles', summary='获取用户所有角色', dependencies=[DependsJwtAuth])
 async def get_user_roles(
-    db: CurrentSession, pk: Annotated[int, Path(description='用户 ID')]
+    request: Request, db: CurrentSession, pk: Annotated[int, Path(description='用户 ID')]
 ) -> ResponseSchemaModel[list[GetRoleDetail]]:
+    # 自己的角色谁都能看；看别人的要能看用户列表，或者能改角色（角色页移出成员前要查每个人还剩几个角色）。
+    # 原来只挂 DependsJwtAuth，任何登录用户都能按 ID 枚举别人的角色（#228）
+    if pk == request.user.id:
+        # 本人读本人不按数据范围过滤：「开了过滤、没配范围」的角色（种子里的 STAFF）连自己都看不见，
+        # 会拿到 404（security 分册「非展示的读必须 bypass」同一类）
+        with bypass_data_scope():
+            data = await user_service.get_roles(db=db, pk=pk)
+        return response_base.success(data=data)
+    if not (user_has_perm(request.user, 'sys:user:list') or user_has_perm(request.user, 'sys:role:edit')):
+        raise errors.AuthorizationError
     data = await user_service.get_roles(db=db, pk=pk)
     return response_base.success(data=data)
 
