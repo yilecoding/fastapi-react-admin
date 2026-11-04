@@ -1,0 +1,11 @@
+# Actions 全部钉在 commit SHA 上（#232），由 Dependabot 提升级 PR —— 钉了 SHA 又没人升级，
+# 等于把安全修复也一起钉死了。只管 github-actions：npm / uv 的依赖有锁文件和各自的升级节奏，不在这里一起开。
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
