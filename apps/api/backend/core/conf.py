@@ -579,6 +579,14 @@ class Settings(BaseSettings):
     OAUTH2_FRONTEND_LOGIN_REDIRECT_URI: str
     OAUTH2_FRONTEND_BINDING_REDIRECT_URI: str
 
+    # 第三方账号第一次登录时要不要自动建系统用户（#226）。
+    # 🔴 默认关：开着时任何一个陌生人用自己的 GitHub / Google 账号走一遍，就成了系统用户。
+    # 关着时陌生社交账号直接拒绝 —— 已有用户先用账号密码登录，再在个人中心绑定。
+    OAUTH2_AUTO_REGISTER: bool = False
+    # 自动建出来的用户挂哪个角色（`sys_role.code`）。开了自动注册就必须配，找不到 / 已停用就拒绝登录 ——
+    # 原来是「第一个启用的角色」，查询没有 ORDER BY，拿到哪个取决于物理行序
+    OAUTH2_AUTO_REGISTER_ROLE: str = ''
+
     ##################################################
     # [ Plugin ] workflow
     ##################################################
