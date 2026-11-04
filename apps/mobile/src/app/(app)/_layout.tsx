@@ -49,6 +49,8 @@ export default function AppLayout() {
         {/* ⚠️ 动态段的 `name` 用的是**文件名**（`users/[id]`），不是拼好的路径 */}
         <Stack.Screen name="users/[id]" options={{ title: t('用户详情') }} />
         <Stack.Screen name="notices/[id]" options={{ title: t('公告详情') }} />
+        <Stack.Screen name="workflow/index" options={{ title: t('审批') }} />
+        <Stack.Screen name="workflow/[id]" options={{ title: t('审批详情') }} />
       </Stack>
       {/*
         登录后弹窗（#190）。挂在这里 = 「外壳挂上之后」：这棵树只在已登录时存在（根 `_layout` 的 AuthGate），

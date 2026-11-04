@@ -291,3 +291,20 @@ toast 进了 store、屏上没有，纯静默。
 已改的三处：`login.tsx`（4 处）· `profile/edit.tsx`（2 处）· `profile/password.tsx`。
 **新写表单行时直接用 `min-w-*`。**
 
+## 审批（`workflow.tsx` · `lib/workflow.ts` · `lib/workflow-progress.ts`）
+
+#224 2a，审批人这一侧：收件箱四个 tab + 详情 + 全部 11 个动作。屏在 `src/app/(app)/workflow/`。
+
+- 🔴 **按钮只按能力信封（`capabilities`）出**，不自己按状态推（同 web `pages/workflow` 分册第一条）。
+  `enabled: false` 的也画，灰的 + 服务端给的原因
+- 🔴 **进度是 web `progress.ts` 的移植**，分步规则（节点 + 轮次、AI 自动同意画「没经手」……）一条不改；
+  web 那份改了这里跟着改。只换了预告里两句发起页专用的文案
+- 响应类型是**手写的**：这些接口后端返回裸 `ResponseModel`，`schema.d.ts` 里 `data` 是 `unknown`。
+  后端补上 `ResponseSchemaModel[...]` 后删掉断言
+- 浮层（选人 / 动作面板）走 portal，**不用 `Modal`**，理由和代价同上一节「确认框走 portal」。
+  ⚠️ 返回键关的是面板：键盘开着时按返回会连面板一起关（实测，Android 模拟器）
+- 不做的明说：审批人可填字段、被退回后重新提交 → 详情顶上提示去网页端，重新提交时「同意」禁用。AI 预审面板没做
+- 表单只读展示里**空字段整行不画**：没移植显示条件（`form-rules.ts`），画「—」分不清「没填」和「条件不成立」
+
+✅ 实测（2026-11-04，Android 模拟器 + 本地 SQL Server）：待办角标 · 加急置顶 · 同意（带意见）· 转交（选人排除发起人和本步办理人）·
+驳回（不写原因提交按钮禁用）· 已办列表状态 · 驳回后的进度和意见。抄送 / 退回 / 加签 / 撤回 / 终止 / 改办理人只走过类型和 lint，没在设备上点过。
