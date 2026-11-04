@@ -31,6 +31,39 @@ from backend.utils.dynamic_config import load_login_config, load_session_config
 from backend.utils.timezone import timezone
 
 
+async def _register_stranger(
+    db: AsyncSession,
+    *,
+    source: UserSocialType,
+    username: str | None,
+    nickname: str | None,
+    email: str | None,
+    avatar: str | None,
+) -> Any:
+    """库里对不上任何用户的第三方账号：按配置决定建不建号
+
+    🔴 自动注册默认关（#226）：原来任何陌生人走一遍第三方登录就成了 staff 用户，
+    还挂上「第一个启用的角色」（没有 ORDER BY）
+    """
+    if not settings.OAUTH2_AUTO_REGISTER:
+        raise errors.AuthorizationError(msg=t('error.oauth2.auto_register_disabled', source=source.value))
+    if not settings.OAUTH2_AUTO_REGISTER_ROLE:
+        raise errors.AuthorizationError(msg=t('error.oauth2.auto_register_role_missing', role=''))
+    base_username = username or text_captcha(5)
+    username_candidates = [base_username, *[f'{base_username}_{text_captcha(5)}' for _ in range(10)]]
+    existing_users = await user_dao.get_all_by_usernames(db, username_candidates)
+    existing_usernames = {user.username for user in existing_users}
+    picked = next((candidate for candidate in username_candidates if candidate not in existing_usernames), None)
+    if picked is None:
+        raise errors.ConflictError(msg=t('error.oauth2.username_exists'))
+    new_sys_user = AddOAuth2UserParam(username=picked, password=None, nickname=nickname, email=email, avatar=avatar)
+    created = await user_dao.add_by_oauth2(db, new_sys_user, role_code=settings.OAUTH2_AUTO_REGISTER_ROLE)
+    await db.flush()
+    # 第三方登录首次进来自动建的号同样是「用户已创建」（#167），漏了对方的用户副本就少一个人
+    await emit_user_event(db, 'user.created', created.id)
+    return await user_dao.get_by_username(db, picked)
+
+
 class OAuth2Service:
     """OAuth2 认证服务类"""
 
@@ -66,6 +99,9 @@ class OAuth2Service:
         user_social = await user_social_dao.get_by_sid(db, sid, source.value)
         if user_social:
             sys_user = await user_dao.get(db, user_social.user_id)
+            if sys_user is None:
+                # 绑定还在、用户被删了（逻辑删除）：原来下一行 `sys_user.avatar` 直接 AttributeError → 500
+                raise errors.AuthorizationError(msg=t('error.user.not_found'))
             # 更新用户头像
             if not sys_user.avatar and avatar is not None:
                 await user_dao.update_avatar(db, sys_user.id, avatar)
@@ -77,28 +113,9 @@ class OAuth2Service:
 
             # 创建系统用户
             if not sys_user:
-                base_username = username or text_captcha(5)
-                username_candidates = [base_username, *[f'{base_username}_{text_captcha(5)}' for _ in range(10)]]
-                existing_users = await user_dao.get_all_by_usernames(db, username_candidates)
-                existing_usernames = {user.username for user in existing_users}
-                username = next(
-                    (candidate for candidate in username_candidates if candidate not in existing_usernames),
-                    None,
+                sys_user = await _register_stranger(
+                    db, source=source, username=username, nickname=nickname, email=email, avatar=avatar
                 )
-                if username is None:
-                    raise errors.ConflictError(msg=t('error.oauth2.username_exists'))
-                new_sys_user = AddOAuth2UserParam(
-                    username=username,
-                    password=None,
-                    nickname=nickname,
-                    email=email,
-                    avatar=avatar,
-                )
-                created = await user_dao.add_by_oauth2(db, new_sys_user)
-                await db.flush()
-                # 第三方登录首次进来自动建的号同样是「用户已创建」（#167），漏了对方的用户副本就少一个人
-                await emit_user_event(db, 'user.created', created.id)
-                sys_user = await user_dao.get_by_username(db, username)
 
             # 绑定社交账号
             new_user_social = CreateUserSocialParam(sid=sid, source=source.value, user_id=sys_user.id)
