@@ -3,10 +3,11 @@
 # 而且报错指向 Dockerfile 第 2 行，看起来像语法问题）。
 # 这里用到的 `--mount=type=cache|bind` 由 BuildKit 内置 frontend 支持，不需要它。
 #
-# 本仓库的后端生产镜像（SQL Server 主线）。
+# 本仓库的后端生产镜像。三种库都能连（PostgreSQL 是默认库，2026-09-08 起；驱动都在主依赖里，
+# SQL Server 额外要的 ODBC 驱动在下面装了）。
 #
 # 与同目录 `Dockerfile` 的关系：那份是**上游 fastapi-best-architecture 的**，
-# 主库是 PostgreSQL、不装 ODBC 驱动，照它构建出来的镜像连不上 SQL Server。
+# 不装 ODBC 驱动，照它构建出来的镜像连不上 SQL Server。
 # 保留它是为了对照上游，不要拿它部署。
 #
 #     docker build -f apps/api/Dockerfile.prod -t fba-api apps/api

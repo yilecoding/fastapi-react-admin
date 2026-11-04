@@ -77,6 +77,16 @@ dev 脚本、零 JS 依赖，不参与）：
 ⚠️ 回落值刻意写成 `v0.0.0` 而不是当前版本：万一注入没接上，
 显示一个明显不对的数比显示一个碰巧对的数好。
 
+### 还有一条：web 镜像安装依赖前要拷齐清单（#233）
+
+`dockerfile-missing-manifest`：沿 `workspace:*` 算出 `apps/web` 的整条依赖链，逐个核对 `apps/web/Dockerfile`
+在 `pnpm install` 之前有没有 `COPY <包>/package.json`。漏拷的包 pnpm 在安装那一刻看不见，它的第三方依赖一个都不装，
+而 `COPY . .` 之后源码又在 —— 所以不一定当场炸。`packages/api` 就这样漏了很久（为什么没炸是推断、没在真镜像里验：web 用到的导出不碰 `openapi-fetch` 的运行时）。
+
+**实测证据**：只拷 Dockerfile 里那几份清单模拟安装前的目录，`pnpm -r ls --filter 'web...'` 修前是
+`[i18n, platform, ui, web]`、补上之后多出 `@admin/api`。反向验证：删掉那行 COPY → 这条报 `packages/api/package.json`。
+另有一条 `dockerfile-closure-empty`：算出来的链里没有 `packages/platform` 就报错（解析坏了时「全都拷了」会假绿）。
+
 ### 下半场：多页签那三条硬纪律
 
 | 规则 | 硬纪律 | 违反后的表现 |
