@@ -59,3 +59,42 @@ def test_manager_account_keeps_working_dept_page_after_the_fix(client: TestClien
     for path in ('/sys/roles', '/sys/data-scopes', '/sys/dict-datas'):
         resp = client.get(path, headers=headers)
         assert resp.status_code == 403, f'MANAGER 不该有 {path} 的权限，实际是 {resp.status_code}'
+
+
+def test_task_read_endpoints_require_their_list_codes(client: TestClient, token_headers: dict[str, str]) -> None:
+    """issue #228：任务调度 / 执行记录的读接口原来只要登录 —— 任务的 args/kwargs、执行结果和 traceback 谁都读得到
+
+    STAFF 没有 `task:scheduler:list` / `task:result:list`，全部 403；超管（对照组）照常 200，
+    证明不是把接口整个打坏了。
+    """
+    paths = ['/tasks/schedulers', '/tasks/schedulers/all', '/tasks/schedulers/meta', '/tasks/results']
+    staff = _login(client, 'test')
+    for path in paths:
+        resp = client.get(path, headers=staff)
+        assert resp.status_code == 403, f'{path} 应该 403（STAFF 没有任务模块的权限码），实际是 {resp.status_code}'
+    for path in paths:
+        resp = client.get(path, headers=token_headers)
+        assert resp.status_code == 200, f'超管读 {path} 应该 200，实际是 {resp.status_code}: {resp.text}'
+
+
+def test_user_roles_endpoint_only_reads_your_own_without_a_user_code(
+    client: TestClient, token_headers: dict[str, str]
+) -> None:
+    """issue #228：`GET /sys/users/{pk}/roles` 原来任何登录用户都能按 ID 读别人的角色
+
+    自己的照常能读（没有任何权限码的 STAFF 也行）；别人的要 `sys:user:list` 或 `sys:role:edit`。
+    """
+    staff = _login(client, 'test')
+    me = client.get('/sys/users/me', headers=staff).json()['data']['id']
+    admin_id = client.get('/sys/users/me', headers=token_headers).json()['data']['id']
+    assert me != admin_id
+
+    own = client.get(f'/sys/users/{me}/roles', headers=staff)
+    assert own.status_code == 200, own.text
+    assert own.json()['data'], '先断言「有」：STAFF 自己至少挂着一个角色，否则下面的 403 证明不了什么'
+
+    other = client.get(f'/sys/users/{admin_id}/roles', headers=staff)
+    assert other.status_code == 403, f'读别人的角色应该 403，实际是 {other.status_code}'
+
+    # 超管读别人的照常 200
+    assert client.get(f'/sys/users/{me}/roles', headers=token_headers).status_code == 200
