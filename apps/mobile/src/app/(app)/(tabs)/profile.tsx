@@ -2,11 +2,9 @@ import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
 import {
   ChevronRightIcon,
-  IdCardIcon,
   KeyRoundIcon,
   SettingsIcon,
   SmartphoneIcon,
-  SquarePenIcon,
   TriangleAlertIcon,
 } from 'lucide-react-native'
 import * as React from 'react'
@@ -88,25 +86,9 @@ export default function ProfileScreen() {
       ) : null}
 
       {/*
-        「我的」首屏只放入口，资料收进 `profile/info.tsx`。原来这里直接铺着部门 / 角色 / 邮箱 / 时区 / 账号 ID —
-        账号 ID 是雪花 ID，对用户毫无用处；其余几项也不是每次进来都要看的。
+        「我的」首屏只放入口：资料从顶部卡片进 `profile/info.tsx`，编辑在资料页右上角（同微信）。
+        原来这里直接铺着部门 / 角色 / 邮箱 / 时区 / 账号 ID —— 账号 ID 是雪花 ID，对用户毫无用处。
       */}
-      <GroupHeader>{t('账号')}</GroupHeader>
-      <Group>
-        <PressRow first inset={56} onPress={() => router.push('/profile/info')} testID="profile-info">
-          <RowIcon icon={IdCardIcon} />
-          <Text className="flex-1 text-[15px]">{t('个人资料')}</Text>
-          <Text className="text-muted-foreground text-[13px]">{t('部门 · 角色')}</Text>
-          <Chevron icon={ChevronRightIcon} />
-        </PressRow>
-        <PressRow inset={56} onPress={() => router.push('/profile/edit')} testID="profile-edit">
-          <RowIcon icon={SquarePenIcon} />
-          <Text className="flex-1 text-[15px]">{t('编辑资料')}</Text>
-          <Text className="text-muted-foreground text-[13px]">{t('昵称 · 头像')}</Text>
-          <Chevron icon={ChevronRightIcon} />
-        </PressRow>
-      </Group>
-
       <GroupHeader>{t('安全')}</GroupHeader>
       <Group>
         {/* 手机号（#224）：右边写明验证状态 —— 管理员录入的号没验证过，验证码登录不认 */}
