@@ -365,7 +365,7 @@ jobs:
         env:
           PG_CID: ${{ job.services.postgres.id }}
         run: |
-          for db in fba fba_test fba_empty; do
+          for db in fba fba_test fba_empty fba_upgrade fba_upgrade_test; do
             docker exec "$PG_CID" psql -U postgres -c "CREATE DATABASE $db;"
           done
 
@@ -397,6 +397,30 @@ jobs:
       - name: pytest
         working-directory: apps/api
         run: uv run --no-sync pytest -rs
+
+      # 🔴 「改了模型就必须写迁移」真正的守卫（#230）。上面那轮 pytest 里的
+      # test_model_matches_migrations 比的是 fba_test，而 fba_test 是**按当前模型** create_all 出来的 ——
+      # 拿模型比一个由模型建出来的库，差异恒为 0，漏写迁移也是绿的（实测：给 sys_role 加一列不写迁移，那条照样 passed）。
+      # 这里换成部署时真实发生的路径：用**最近一个 release tag 的代码**建库（和当时 `fba init` 同一条路），
+      # 再用当前代码 `alembic upgrade head`，最后拿当前模型去比。漏写迁移 → 缺列 → 红。
+      # 只在 postgres 上跑：方言相关的迁移问题由「离线编译」守卫和 SQL Server 那个 job 的全量 pytest 管，
+      # 这一步只管「迁移链有没有跟上模型」，跟方言无关。
+      - name: 迁移链：从最近一个 release 升到当前
+        working-directory: apps/api
+        run: |
+          TAG=$(git ls-remote --tags --refs --sort=-v:refname origin 'v*' | head -1 | sed 's#.*refs/tags/##')
+          if [ -z "$TAG" ]; then echo "没有 release tag（fork？），跳过"; exit 0; fi
+          echo "基线：$TAG"
+          git fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
+          git worktree add "$RUNNER_TEMP/base" "$TAG"
+          # 基线用它自己那一版的依赖和种子建库（重建脚本会 stamp 到基线自己的 head）
+          (cd "$RUNNER_TEMP/base/apps/api" \
+            && cp backend/.env.example backend/.env \
+            && uv sync --locked --no-group lint \
+            && DATABASE_SCHEMA=fba_upgrade uv run --no-sync python -m backend.scripts.reset_test_db)
+          (cd backend && DATABASE_SCHEMA=fba_upgrade_test uv run --no-sync alembic upgrade head)
+          DATABASE_SCHEMA=fba_upgrade uv run --no-sync pytest -o addopts="" -q \
+            backend/app/task/tests/test_migrations.py::test_model_matches_migrations
 
   test-e2e:
     name: playwright · E2E
