@@ -12,7 +12,6 @@ from backend.app.task.schema.scheduler import (
 from backend.app.task.service import task_scheduler_service
 from backend.common.pagination import DependsPagination, PageData, paging_data
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -20,7 +19,14 @@ from backend.database.db import CurrentSession, CurrentSessionTransaction
 router = APIRouter()
 
 
-@router.get('/meta', summary='获取调度运行时元信息', dependencies=[DependsJwtAuth])
+@router.get(
+    '/meta',
+    summary='获取调度运行时元信息',
+    dependencies=[
+        Depends(RequestPermission('task:scheduler:list')),
+        DependsRBAC,
+    ],
+)
 async def get_scheduler_meta() -> ResponseSchemaModel[TaskSchedulerMeta]:
     """给调度表单用：能选哪些任务 + beat 按哪个时区解释 crontab。
 
@@ -33,12 +39,27 @@ async def get_scheduler_meta() -> ResponseSchemaModel[TaskSchedulerMeta]:
     return response_base.success(data=task_scheduler_service.get_meta())
 
 
-@router.get('/all', summary='获取所有任务调度', dependencies=[DependsJwtAuth])
+@router.get(
+    '/all',
+    summary='获取所有任务调度',
+    dependencies=[
+        Depends(RequestPermission('task:scheduler:list')),
+        DependsRBAC,
+    ],
+)
 async def get_all_task_schedulers(db: CurrentSession) -> ResponseSchemaModel[list[GetTaskSchedulerDetail]]:
     return response_base.success(data=await task_scheduler_service.get_all(db=db))
 
 
-@router.get('', summary='分页获取任务调度', dependencies=[DependsJwtAuth, DependsPagination])
+@router.get(
+    '',
+    summary='分页获取任务调度',
+    dependencies=[
+        Depends(RequestPermission('task:scheduler:list')),
+        DependsRBAC,
+        DependsPagination,
+    ],
+)
 async def get_task_schedulers_paginated(
     db: CurrentSession,
     name: Annotated[str | None, Query(description='任务名称')] = None,
@@ -49,7 +70,14 @@ async def get_task_schedulers_paginated(
     return response_base.success(data=await paging_data(db, stmt))
 
 
-@router.get('/{pk}', summary='获取任务调度详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取任务调度详情',
+    dependencies=[
+        Depends(RequestPermission('task:scheduler:list')),
+        DependsRBAC,
+    ],
+)
 async def get_task_scheduler(
     db: CurrentSession, pk: Annotated[int, Path(description='任务调度 ID')]
 ) -> ResponseSchemaModel[GetTaskSchedulerDetail]:
