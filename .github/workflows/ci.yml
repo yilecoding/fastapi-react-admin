@@ -396,6 +396,22 @@ jobs:
         working-directory: apps/api
         run: uv run --no-sync pytest
 
+      # 🔴 前端契约 `packages/api/src/schema.d.ts` 要和后端同步（#234）。改了接口忘了 `gen:api`，
+      # 按 schema 推类型的那一端（移动端 `apps/mobile/src/lib/contract.ts`）就以为参数不存在，而 tsc 全绿。
+      # 放在这个 job 而不是 static：`import backend.main` 在导入期就要连 Redis，这里有、那里没有。
+      # 用 .env.example 生成和用开发者本机的 .env 生成，导出的 OpenAPI 逐字节一致（实测），所以不会误报。
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 契约新鲜度（schema.d.ts）
+        run: |
+          pnpm install --frozen-lockfile --filter @admin/api
+          pnpm --filter @admin/api gen:api
+          git diff --exit-code packages/api/src/schema.d.ts \
+            || { echo "::error::schema.d.ts 和后端对不上：跑 pnpm --filter @admin/api gen:api 并提交"; exit 1; }
+
   test-e2e:
     name: playwright · E2E
     runs-on: ubuntu-latest

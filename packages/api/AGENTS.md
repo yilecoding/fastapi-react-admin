@@ -365,6 +365,15 @@ stdout 打几行插件探测日志，混在一起解析会失败，而失败信�
 也能用同一份 —— 移动端现在还有一份**手抄**的 DTO（`src/lib/contract.ts`），
 那是个待还的债：手抄的字段对不上时不会报错，只会在界面上空一格。
 
+⚠️ **「不需要起服务」只说对了一半：不用起 API，但 Redis 得连得上。** `import backend.main` 在导入期就连 Redis
+（实测：Redis 不通时报「Redis 服务器连接超时」，退出码 2，`schema.d.ts` 不会生成）。数据库碰不碰没单独验过。
+
+🔴 **CI 里有新鲜度闸门（#234）**：PostgreSQL job 末尾 `gen:api` 再 `git diff --exit-code src/schema.d.ts`。
+在那之前改了接口忘了生成，没有任何东西会发现 —— `2a2afec` 给 `/sys/dashboard/attention` 加了 `?tz=`，
+schema 里一直是 `query?: never`。web 端用 `api.GET<T>('字符串')` 不经过 schema 所以没事，移动端按 schema 推类型就会以为不能传。
+放在 PostgreSQL job 不放 static：后者没有 Redis。用 `.env.example` 和开发者本机 `.env` 导出的 OpenAPI 逐字节一致（实测 516630 字节，`cmp` 相同），
+所以闸门不会因为配置不同误报。
+
 ## 搬家留下的一层 re-export
 
 `packages/platform/src/api-client/errors.ts` 现在只是

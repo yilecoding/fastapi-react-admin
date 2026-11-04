@@ -18542,7 +18542,10 @@ export interface operations {
     };
     get_attention_api_v1_sys_dashboard_attention_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 按哪个时区算「今天」，不传 = 服务端时区 */
+                tz?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -18556,6 +18559,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
