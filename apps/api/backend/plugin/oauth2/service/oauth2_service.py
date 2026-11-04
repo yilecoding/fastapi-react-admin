@@ -79,6 +79,7 @@ class OAuth2Service:
         username: str | None = None,
         nickname: str | None = None,
         email: str | None = None,
+        email_verified: bool = False,
         avatar: str | None = None,
     ) -> GetLoginToken | MfaChallenge:
         """
@@ -93,6 +94,7 @@ class OAuth2Service:
         :param username: 用户名
         :param nickname: 昵称
         :param email: 邮箱
+        :param email_verified: 第三方是否明确说这个邮箱验证过（见 `plugin/oauth2/utils.py`）
         :param avatar: 头像地址
         :return:
         """
@@ -108,6 +110,11 @@ class OAuth2Service:
         else:
             sys_user = None
             # 检测系统用户是否已存在
+            # 🔴 按邮箱关联已有用户 = 「谁能让第三方返回这个邮箱，谁就能登进那个账号」，
+            # 所以只认第三方明确说验证过的邮箱（#227）。没验证的也不写进新用户：
+            # 不然下一个人拿真邮箱来关联时，撞上的是一个陌生人建出来的号
+            if not email_verified:
+                email = None
             if email:
                 sys_user = await user_dao.check_email(db, email)
 
@@ -173,6 +180,7 @@ class OAuth2Service:
         user: dict[str, Any],
         social: UserSocialType,
         state: str | None = None,
+        email_verified: bool = False,
     ) -> GetLoginToken | MfaChallenge | None:
         """
         OAuth2 登录或绑定
@@ -184,6 +192,7 @@ class OAuth2Service:
         :param user: OAuth2 用户信息
         :param social: 社交平台类型
         :param state: OAuth2 state 参数
+        :param email_verified: 第三方是否明确说 `email` 验证过（回调里查，见 `plugin/oauth2/utils.py`）
         :return:
         """
 
@@ -243,6 +252,7 @@ class OAuth2Service:
             username=username,
             nickname=nickname,
             email=email,
+            email_verified=email_verified,
             avatar=avatar,
         )
 
