@@ -25,8 +25,10 @@ def inject_extend_router(plugin: PluginEntry) -> None:
     if not os.path.exists(plugin_api_path):
         raise PluginConfigError(f'插件 {plugin.name} 缺少 api 目录，请检查插件文件是否完整')
 
-    for root, _, api_files in os.walk(plugin_api_path):
-        for file in api_files:
+    # 🔴 排序：`os.walk` 的顺序是文件系统给的，不排的话路由注册顺序因机器而异（同 `get_plugins`）
+    for root, dirs, api_files in os.walk(plugin_api_path):
+        dirs.sort()
+        for file in sorted(api_files):
             if not (file.endswith('.py') and file != '__init__.py'):
                 continue
 

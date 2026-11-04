@@ -399,7 +399,8 @@ jobs:
       # 🔴 前端契约 `packages/api/src/schema.d.ts` 要和后端同步（#234）。改了接口忘了 `gen:api`，
       # 按 schema 推类型的那一端（移动端 `apps/mobile/src/lib/contract.ts`）就以为参数不存在，而 tsc 全绿。
       # 放在这个 job 而不是 static：`import backend.main` 在导入期就要连 Redis，这里有、那里没有。
-      # 用 .env.example 生成和用开发者本机的 .env 生成，导出的 OpenAPI 逐字节一致（实测），所以不会误报。
+      # ⚠️ 生成结果要和开发者本机逐字节一致，前提是后端的插件 / 路由加载顺序不取决于文件系统（#234 修的就是这个，
+      # 见 packages/api 分册）。哪天这一步红了而 diff 全是顺序调整，先查是不是又有一处 os.listdir 没排序。
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
