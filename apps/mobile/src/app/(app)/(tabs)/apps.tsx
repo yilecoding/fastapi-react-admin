@@ -1,112 +1,104 @@
-import { useRouter } from 'expo-router'
+import { useRouter, type Href } from 'expo-router'
 import {
-  Building2Icon,
-  ChevronRightIcon,
-  FolderIcon,
-  LayoutGridIcon,
-  ListTreeIcon,
+  BellIcon,
+  IdCardIcon,
   LockIcon,
-  LogInIcon,
-  ScrollTextIcon,
-  ShieldIcon,
+  SettingsIcon,
   TriangleAlertIcon,
   UsersIcon,
   type LucideIcon,
 } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import * as React from 'react'
-import { RefreshControl, ScrollView, View } from 'react-native'
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { BrandTop } from '@/components/brand-top'
 import { Button } from '@/components/ui/button'
-import { Chevron, Group, GroupHeader, PressRow, RowIcon } from '@/components/grouped'
+import { GroupHeader } from '@/components/grouped'
 import { Icon } from '@/components/ui/icon'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
+import { useUnread } from '@/lib/notifications'
 import { usePerm } from '@/lib/perm'
 
 /**
- * 「应用」—— **按权限码列出能进的模块**。
+ * 「应用」—— 启动台：按分组排的图标宫格（参考钉钉 / 企业微信的工作台），不是导航列表。
  *
- * 这一屏的副标题一直写着「按你的权限列出能进的功能模块」，而在
- * `lib/perm.ts` 之前移动端**完全没有权限概念**（`CurrentUser` 里只有角色
- * 名字），所以它是一个空屏 + 一句「还没做」。现在它是真的。
+ * 原来这一屏是一条「用户」列表 + 一段「还没做的」，和首页的「入口」组长得一样，
+ * 看起来就是个导航页。#224 定了移动端不做角色 / 部门 / 菜单 / 文件 / 日志，
+ * 所以「还没做的」那段删掉，宫格里只放**真能进**的。以后做了审批，往 `SECTIONS` 里加一格。
  *
  * ## 🔴 三种「空」必须分开，否则全都长成「这 App 坏了」
  *
  * | 情况 | 屏上 |
  * |---|---|
- * | 权限码还在拉 | 骨架屏 |
+ * | 权限码还在拉 | 骨架屏（宫格形状） |
  * | **权限码拉失败** | 错误块 + 重试（硬纪律 9：`can()` 此时一律 false，不兜住的话入口全消失、看着像功能不存在） |
  * | 拉到了、但一个模块都没授权 | 「没有可用模块」+ 说清是权限问题、找谁 |
  *
- * 中间那一条是这一屏存在的主要理由。**权限门控天生会把错误伪装成缺失**：
- * `can()` 返回 false 的原因有两个（真没权限 / 没问上），而界面上长得一样。
- * `usePerm()` 的 `known` 就是用来分开它们的。
- *
- * ## 加一个模块要改的就是下面那张表
- *
- * 一条 = 图标 + 文案 + **权限码** + 目标路由。没有 `href` 的条目表示
- * 「后端有、移动端这一屏还没做」—— 刻意留着，因为 `perms` 那一列是这张表
- * 唯一容易写错的地方，对着后端 `RequestPermission('…')` 抄一次比事后猜便宜。
+ * 只有挂了 `perms` 的格子受这三种状态影响；不要权限的格子（通知、个人资料、设置）**始终显示** ——
+ * 权限没拉到不该让用户连设置都找不到。
  */
-type Module = {
+type Tile = {
   key: string
   /** ⚠️ 存 **key**，渲染时才 `t()` —— 模块级常量切语言不会变 */
   label: string
-  hint: string
   icon: LucideIcon
-  /** 后端 `Depends(RequestPermission('…'))` 里那个码，任一满足即可进 */
-  perms: string[]
-  /** 移动端还没做这一屏时留空 */
-  href?: '/users'
+  /** 格子底色：Tailwind 色板的 `/15` 半透明底，深浅色主题下都成立 */
+  bg: string
+  /** 图标色，和底色同一个色相 */
+  fg: string
+  href: Href
+  /** 后端 `Depends(RequestPermission('…'))` 里那个码，任一满足即可进；不填 = 人人可进 */
+  perms?: string[]
 }
 
-const MODULES: Module[] = [
+type Section = { key: string; title: string; tiles: Tile[] }
+
+const SECTIONS: Section[] = [
   {
-    key: 'users',
-    label: '用户',
-    hint: '查看 · 搜索 · 删除',
-    icon: UsersIcon,
-    perms: ['sys:user:list'],
-    href: '/users',
+    key: 'common',
+    title: '常用',
+    tiles: [
+      { key: 'notifications', label: '通知', icon: BellIcon, bg: 'bg-sky-500/15', fg: 'text-sky-600 dark:text-sky-400', href: '/notifications' },
+      { key: 'profile', label: '个人资料', icon: IdCardIcon, bg: 'bg-violet-500/15', fg: 'text-violet-600 dark:text-violet-400', href: '/profile/info' },
+      { key: 'settings', label: '设置', icon: SettingsIcon, bg: 'bg-slate-500/15', fg: 'text-slate-600 dark:text-slate-300', href: '/settings' },
+    ],
   },
-  // ⚠️ 下面这些**后端有、移动端还没做这一屏**。留在表里而不是删掉，是因为
-  // `perms` 那一列对着后端 `Depends(RequestPermission('…'))` 抄一次最便宜；
-  // 而且它们会渲染成一句「还没做的」，那比「这个功能不存在」诚实。
-  { key: 'roles', label: '角色', hint: '', icon: ShieldIcon, perms: ['sys:role:list'] },
-  { key: 'depts', label: '部门', hint: '', icon: Building2Icon, perms: ['sys:dept:list'] },
-  { key: 'menus', label: '菜单', hint: '', icon: ListTreeIcon, perms: ['sys:menu:list'] },
-  { key: 'files', label: '文件', hint: '', icon: FolderIcon, perms: ['sys:file:list'] },
-  { key: 'opera-log', label: '操作日志', hint: '', icon: ScrollTextIcon, perms: ['log:opera:list'] },
-  { key: 'login-log', label: '登录日志', hint: '', icon: LogInIcon, perms: ['log:login:list'] },
+  {
+    key: 'admin',
+    title: '系统管理',
+    tiles: [
+      { key: 'users', label: '用户', icon: UsersIcon, bg: 'bg-emerald-500/15', fg: 'text-emerald-600 dark:text-emerald-400', href: '/users', perms: ['sys:user:list'] },
+    ],
+  },
 ]
 
 export default function AppsScreen() {
   const { t } = useTranslation()
   const router = useRouter()
-  const { canAny, known, error, codes, isSuperuser, refresh } = usePerm()
+  const { canAny, known, error, refresh } = usePerm()
+  const { unread, refresh: refreshUnread } = useUnread()
   const [refreshing, setRefreshing] = React.useState(false)
 
   async function onRefresh() {
     setRefreshing(true)
     try {
-      await refresh()
+      await Promise.all([refresh(), refreshUnread()])
     } finally {
       setRefreshing(false)
     }
   }
 
-  // ⚠️ 只有 `known` 之后才谈「有哪些」—— 之前算出来的一定是空数组
-  const permitted = known ? MODULES.filter((m) => canAny(...m.perms)) : []
-  const allowed = permitted.filter((m) => m.href)
-  /*
-   * 「还没做的」也要**按权限过滤**。不过滤的话，一个只有用户权限的账号会看到
-   * 「角色、部门、菜单、文件、操作日志、登录日志」一整排 —— 那些他压根进不去，
-   * 读起来像「有权限但我们没做」。过滤之后这句话才是准的。
-   */
-  const notBuilt = permitted.filter((m) => !m.href)
+  const gated = SECTIONS.some((s) => s.tiles.some((tile) => tile.perms))
+  // ⚠️ 只有 `known` 之后才谈「有哪些」—— 之前 `canAny` 一律 false
+  const visible = SECTIONS.map((s) => ({
+    ...s,
+    tiles: s.tiles.filter((tile) => !tile.perms || (known && canAny(...tile.perms))),
+  }))
+  const noGranted = known && !SECTIONS.some((s) => s.tiles.some((tile) => tile.perms && canAny(...tile.perms)))
+  const badges: Record<string, number> = { notifications: unread?.total ?? 0 }
 
   return (
     <ScrollView
@@ -115,12 +107,9 @@ export default function AppsScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
     >
       <BrandTop>
-        <View className="gap-1 pt-1">
-          <Text className="text-3xl font-bold" style={{ letterSpacing: -0.9 }}>
-            {t('应用')}
-          </Text>
-          <Text className="text-muted-foreground text-[13px]">{t('按你的权限列出能进的功能模块')}</Text>
-        </View>
+        <Text className="pt-1 text-3xl font-bold" style={{ letterSpacing: -0.9 }}>
+          {t('应用')}
+        </Text>
       </BrandTop>
 
       {/* 🔴 拉失败要占住位置，不能静默变成「没有模块」 */}
@@ -134,72 +123,88 @@ export default function AppsScreen() {
             </Button>
           </Alert>
         </View>
-      ) : !known ? (
-        <View className="gap-3 px-4 pt-4">
-          {[0, 1].map((i) => (
-            <Skeleton key={i} className="h-14 rounded-xl" />
-          ))}
-        </View>
-      ) : allowed.length === 0 ? (
-        <>
-          <GroupHeader>{t('可用模块')}</GroupHeader>
-          <Group className="items-center gap-2 py-10">
-            <Icon as={LockIcon} className="text-muted-foreground size-8" />
-            <Text variant="small" className="text-muted-foreground">
-              {t('没有可用模块')}
-            </Text>
-            <Text className="text-muted-foreground/70 px-8 text-center text-xs leading-5">
-              {t('你的账号还没有被分配这些模块的权限，找管理员在「角色」里勾上。')}
-            </Text>
-          </Group>
-        </>
-      ) : (
-        <>
-          <GroupHeader>{t('可用模块')}</GroupHeader>
-          <Group>
-            {allowed.map((m, i) => (
-              <PressRow
-                key={m.key}
-                first={i === 0}
-                inset={56}
-                testID={`module-${m.key}`}
-                onPress={() => {
-                  if (m.href) router.push(m.href)
-                }}
-              >
-                <RowIcon icon={m.icon} />
-                <Text className="flex-1 text-[15px]">{t(m.label)}</Text>
-                {m.hint ? <Text className="text-muted-foreground text-[13px]">{t(m.hint)}</Text> : null}
-                <Chevron icon={ChevronRightIcon} />
-              </PressRow>
-            ))}
-          </Group>
-        </>
+      ) : null}
+
+      {visible.map((s) =>
+        s.tiles.length > 0 ? (
+          <React.Fragment key={s.key}>
+            <GroupHeader>{t(s.title)}</GroupHeader>
+            <TileGrid>
+              {s.tiles.map((tile) => (
+                <TileButton
+                  key={tile.key}
+                  tile={tile}
+                  label={t(tile.label)}
+                  badge={badges[tile.key] ?? 0}
+                  onPress={() => router.push(tile.href)}
+                />
+              ))}
+            </TileGrid>
+          </React.Fragment>
+        ) : null,
       )}
 
-      {/* 把权限层做成可见的 —— 排查「为什么这个入口不出现」时第一眼看这里 */}
-      {known ? (
-        <Text className="text-muted-foreground/70 px-5 pt-3 text-xs leading-5" testID="perm-summary">
-          {isSuperuser ? t('超级管理员，不受权限码限制。') : t('已授权 {{n}} 项权限。', { n: codes.length })}
-        </Text>
-      ) : null}
-
-      {/* 还没做的模块：明说「还没做」，不要长得像「没权限」 */}
-      {notBuilt.length > 0 ? (
+      {/* 有权限门控的格子还在拉权限码：占一个宫格形状的位，别让分组闪出来又消失 */}
+      {gated && !known && !error ? (
         <>
-          <GroupHeader>{t('还没做的')}</GroupHeader>
-          <Group className="py-3">
-            <View className="flex-row items-center gap-2 px-5">
-              <Icon as={LayoutGridIcon} className="text-muted-foreground size-4" />
-              <Text className="text-muted-foreground flex-1 text-xs leading-5">
-                {t('后端有、移动端还没做这一屏的模块：{{list}}', {
-                  list: notBuilt.map((m) => t(m.label)).join('、'),
-                })}
-              </Text>
-            </View>
-          </Group>
+          <GroupHeader>{t('系统管理')}</GroupHeader>
+          <TileGrid>
+            {[0, 1].map((i) => (
+              <View key={i} className="w-1/4 items-center gap-2 py-3">
+                <Skeleton className="size-[52px] rounded-2xl" />
+                <Skeleton className="h-3 w-10 rounded" />
+              </View>
+            ))}
+          </TileGrid>
         </>
       ) : null}
+
+      {noGranted ? (
+        <View className="items-center gap-2 px-8 pt-8" testID="apps-none-granted">
+          <Icon as={LockIcon} className="text-muted-foreground size-6" />
+          <Text className="text-muted-foreground text-center text-xs leading-5">
+            {t('你的账号还没有被分配这些模块的权限，找管理员在「角色」里勾上。')}
+          </Text>
+        </View>
+      ) : null}
     </ScrollView>
+  )
+}
+
+function TileGrid({ children }: { children: React.ReactNode }) {
+  return <View className="bg-card mx-4 flex-row flex-wrap rounded-2xl px-1 py-2">{children}</View>
+}
+
+function TileButton({
+  tile,
+  label,
+  badge,
+  onPress,
+}: {
+  tile: Tile
+  label: string
+  badge: number
+  onPress: () => void
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      testID={`module-${tile.key}`}
+      accessibilityRole="button"
+      accessibilityLabel={badge > 0 ? `${label}, ${badge}` : label}
+      className="w-1/4 items-center gap-2 py-3 active:opacity-60"
+    >
+      <View className={`size-[52px] items-center justify-center rounded-2xl ${tile.bg}`}>
+        <Icon as={tile.icon} className={`size-6 ${tile.fg}`} />
+        {badge > 0 ? (
+          <View className="bg-destructive absolute -top-1 -right-1 min-w-[18px] items-center rounded-full px-1">
+            <Text className="text-[11px] font-semibold leading-[18px] text-white">{badge > 99 ? '99+' : badge}</Text>
+          </View>
+        ) : null}
+      </View>
+      <Text className="text-center text-[13px]" numberOfLines={1}>
+        {label}
+      </Text>
+    </Pressable>
   )
 }
