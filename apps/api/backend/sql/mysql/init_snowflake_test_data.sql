@@ -68,7 +68,9 @@ values
 (2049629108253622314, '修改', 'EditTaskScheduler', null, 1, null, 2, 'task:scheduler:edit', 1, 0, '', null, 2049629108253622311, '2026-08-22 17:00:00', null),
 (2049629108253622315, '删除', 'DeleteTaskScheduler', null, 2, null, 2, 'task:scheduler:del', 1, 0, '', null, 2049629108253622311, '2026-08-22 17:00:00', null),
 (2049629108253622316, '执行', 'RunTaskScheduler', null, 3, null, 2, 'task:scheduler:run', 1, 0, '', null, 2049629108253622311, '2026-08-22 17:00:00', null),
-(2049629108253622317, '删除', 'DeleteTaskResult', null, 0, null, 2, 'task:result:del', 1, 0, '', null, 2049629108253622312, '2026-08-22 17:00:00', null);
+(2049629108253622317, '删除', 'DeleteTaskResult', null, 0, null, 2, 'task:result:del', 1, 0, '', null, 2049629108253622312, '2026-08-22 17:00:00', null),
+(2049629108253622318, '查询', 'QueryTaskScheduler', null, 4, null, 2, 'task:scheduler:list', 1, 0, '', null, 2049629108253622311, '2026-11-04 18:00:00', null),
+(2049629108253622319, '查询', 'QueryTaskResult', null, 1, null, 2, 'task:result:list', 1, 0, '', null, 2049629108253622312, '2026-11-04 18:00:00', null);
 
 insert into task_scheduler (id, name, task, args, kwargs, queue, exchange, routing_key, start_time, expire_time, expire_seconds, type, interval_every, interval_period, crontab, one_off, enabled, total_run_count, last_run_time, remark, created_time, updated_time, deleted, deleted_time)
 values
