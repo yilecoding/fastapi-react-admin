@@ -120,6 +120,15 @@ return or_(and_(*where_and_list), or_(*where_or_list))
 `grep` 一遍调用方，尤其是那些没有专属业务权限码、靠"反正只要登录就行"这个
 隐含假设活着的旁路用途。
 
+🔴 **#228 又补了一批同样的洞：任务调度 / 执行记录的读接口、`GET /sys/users/{pk}/roles`。** 任务那批泄露的是
+`args` / `kwargs`（常放连接串、令牌）和执行结果里的 `traceback`；任务表没有 `dept_id` / `created_by`，
+数据范围兜不住。补法同上：`task:scheduler:list` / `task:result:list` + 种子按钮 + 数据迁移
+`aj000000tasklist`（**凡是已经拥有父页面的角色一并授予新按钮**，升级前能看的升级后照样能看）。
+`/users/{pk}/roles` 是「本人随便读、读别人要 `sys:user:list` 或 `sys:role:edit`」——
+⚠️ 本人那一支要 `bypass_data_scope()`：第一版没加，STAFF 读自己的角色拿到 **404**（「开了过滤没配范围」连自己都看不见，
+下面「非展示的读」一节同一类）。**实测证据**：`test_read_endpoint_rbac_gaps.py` 新增两条；迁移在 PostgreSQL 私有库上
+模拟「MANAGER 有任务调度页、没有新按钮」→ upgrade 后只拿到 `QueryTaskScheduler`、重跑 0 条、downgrade 删净、再 upgrade 一致。
+
 ### 已修：三个让接口直接 500 的坑
 
 - 🔴 **`UniversalStr` / `UniversalText` 必须显式写 `python_type`。**
