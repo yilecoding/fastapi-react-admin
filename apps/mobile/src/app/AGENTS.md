@@ -22,7 +22,8 @@
 (app)/profile/phone.tsx      手机号    │ ← 绑定 / 换绑 / 解绑（#224）
 (app)/users/index.tsx        用户列表  │ ← 分页列表的范式样板
 (app)/users/[id].tsx         用户详情  │ ← 详情 + 写操作的范式样板
-(app)/notices/[id].tsx       公告详情  ┘ ← 正文 + 附件（见文末「公告」一节）
+(app)/notices/[id].tsx       公告详情  │ ← 正文 + 附件（见文末「公告」一节）
+(app)/workflow/{index,[id]}  审批      ┘ ← 收件箱 + 详情 / 动作（#224 2a，见 `components` 分册「审批」）
 ```
 
 ⚠️ 动态段在 `(app)/_layout.tsx` 里注册时，`name` 用的是**文件名**
