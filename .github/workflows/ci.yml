@@ -385,9 +385,11 @@ jobs:
           DATABASE_SCHEMA: fba_empty
         run: uv run --no-sync alembic upgrade c0000000comments
 
+      # `-rs`：把跳过的用例连同原因打出来。三份 SDK 的测试在缺 node / JDK 时是 skip 不是失败，
+      # 只看「N skipped」分不出它们在 CI 上到底跑没跑（#231）
       - name: pytest
         working-directory: apps/api
-        run: uv run --no-sync pytest
+        run: uv run --no-sync pytest -rs
 
       # 🔴 「改了模型就必须写迁移」真正的守卫（#230）。上面那轮 pytest 里的
       # test_model_matches_migrations 比的是 fba_test，而 fba_test 是**按当前模型** create_all 出来的 ——
