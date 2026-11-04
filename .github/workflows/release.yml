@@ -35,8 +35,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # 版本号的单一来源是 apps/web/package.json —— vite.config.ts 把它注入成
       # VITE_APP_VERSION，brand.ts 和 /version.json 都读那个值。
       # 🔴 这里原来是拿正则去 brand.ts 里抠 `version: "x.y.z"`，brand.ts 改成读
@@ -107,11 +106,9 @@ jobs:
         # windows runner 默认是 pwsh，而下面用了 `${VAR#v}` 这类 POSIX 展开
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           # 必须放在 pnpm/action-setup 之后 —— 缓存要先知道 pnpm 在哪
@@ -121,13 +118,21 @@ jobs:
 
       # 版本号的单一来源是 tag。electron-builder 读的是 apps/desktop/package.json，
       # 所以这里把 tag 写进去（**不提交**，只在这次构建的工作区里生效）。
+      # 🔴 手填的版本号走环境变量，不要 `${{ inputs.version }}` 直接插进 shell（#232）：
+      # 那是模板替换，值里的引号 / `$(…)` 会被当成脚本执行，而这个 job 拿着写权限和签名证书。
+      # 同时校验格式，挡住一切不像版本号的输入
       - name: 定版本号
         id: ver
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
             VER="${GITHUB_REF_NAME#v}"
           else
-            VER="${{ inputs.version }}"
+            VER="$INPUT_VERSION"
+          fi
+          if ! printf '%s' "$VER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::版本号格式不对：$VER"; exit 1
           fi
           echo "value=$VER" >> "$GITHUB_OUTPUT"
           node -e "
@@ -209,7 +214,7 @@ jobs:
 
       - name: 上传产物（试跑时留个下载入口）
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-${{ matrix.os }}-${{ steps.ver.outputs.value }}
           path: |
