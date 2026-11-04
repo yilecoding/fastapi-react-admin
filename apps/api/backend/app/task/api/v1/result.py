@@ -7,7 +7,6 @@ from backend.app.task.schema.scheduler import DeleteTaskResultParam, GetTaskResu
 from backend.app.task.service import task_result_service
 from backend.common.pagination import DependsPagination, PageData, paging_data
 from backend.common.response.response_schema import ResponseModel, ResponseSchemaModel, response_base
-from backend.common.security.jwt import DependsJwtAuth
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession, CurrentSessionTransaction
@@ -15,7 +14,15 @@ from backend.database.db import CurrentSession, CurrentSessionTransaction
 router = APIRouter()
 
 
-@router.get('', summary='分页获取任务执行记录', dependencies=[DependsJwtAuth, DependsPagination])
+@router.get(
+    '',
+    summary='分页获取任务执行记录',
+    dependencies=[
+        Depends(RequestPermission('task:result:list')),
+        DependsRBAC,
+        DependsPagination,
+    ],
+)
 async def get_task_results_paginated(
     db: CurrentSession,
     name: Annotated[str | None, Query(description='任务名')] = None,
@@ -30,7 +37,14 @@ async def get_task_results_paginated(
     return response_base.success(data=await paging_data(db, stmt))
 
 
-@router.get('/{pk}', summary='获取任务执行记录详情', dependencies=[DependsJwtAuth])
+@router.get(
+    '/{pk}',
+    summary='获取任务执行记录详情',
+    dependencies=[
+        Depends(RequestPermission('task:result:list')),
+        DependsRBAC,
+    ],
+)
 async def get_task_result(
     db: CurrentSession, pk: Annotated[int, Path(description='记录 ID')]
 ) -> ResponseSchemaModel[GetTaskResultDetail]:
