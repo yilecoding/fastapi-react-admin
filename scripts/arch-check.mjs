@@ -537,21 +537,21 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src']) 
 //
 // 现在版本从 `package.json` 注入（`VITE_APP_VERSION`），实测 bump 成 9.9.9
 // 产物里就是 `v9.9.9`。这条守卫防的是有人再把它写死回去。
-{
-  const brandPath = path.join(ROOT, 'apps/web/src/lib/brand.ts')
+//
+// 移动端同理（#234）：它单独编号（预览版，不在 1.0 兼容约定里），`brand.ts` 从 `app.json` 读。
+for (const [file, source] of [
+  ['apps/web/src/lib/brand.ts', 'package.json（VITE_APP_VERSION）'],
+  ['apps/mobile/src/lib/brand.ts', 'app.json（expo.version）'],
+]) {
+  const brandPath = path.join(ROOT, file)
   if (fs.existsSync(brandPath)) {
     const src = stripComments(fs.readFileSync(brandPath, 'utf8'))
     const hardcoded = src.match(/version:\s*['"`](v?\d+\.\d+\.\d+)/)
     if (hardcoded) {
-      add(
-        'error',
-        'apps/web/src/lib/brand.ts',
-        'hardcoded-version',
-        `version 写死成了 ${hardcoded[1]} —— 它必须来自 package.json（VITE_APP_VERSION）`,
-      )
+      add('error', file, 'hardcoded-version', `version 写死成了 ${hardcoded[1]} —— 它必须来自 ${source}`)
     }
   } else {
-    add('error', 'apps/web/src/lib/brand.ts', 'missing-brand', '文件不在了，这条守卫已经罩不住了')
+    add('error', file, 'missing-brand', '文件不在了，这条守卫已经罩不住了')
   }
 }
 
