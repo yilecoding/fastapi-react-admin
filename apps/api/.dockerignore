@@ -16,6 +16,10 @@ venv/
 backend/log/
 backend/upload/
 backend/upload-public/
-backend/.env
-backend/.env.e2e
-deploy/backend/docker-compose/.env.server
+# 🔴 .env 一律通配（#233）：原来只挡了 backend/.env 等三个字面路径，照 `plugin/*/.env.example` 建出的
+# `plugin/*/.env`（第三方登录 / 邮件 / AI 的密钥）会被 `Dockerfile.prod` 的 `COPY . /app` 烤进最终镜像。
+# 根目录的 .dockerignore 早就是 `**/.env*`（#61），这份没跟上。模板留着：它们不含密钥，`get_settings()` 缺 .env 时会拷一份
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example

@@ -28,6 +28,10 @@ COPY apps/desktop/package.json  apps/desktop/
 COPY packages/ui/package.json       packages/ui/
 COPY packages/platform/package.json packages/platform/
 COPY packages/i18n/package.json     packages/i18n/
+# 🔴 `packages/platform` 依赖 `@admin/api`（workspace:*），漏拷这份清单，`--filter web...` 的裁剪范围里就没有它，
+# 它自己的依赖（openapi-fetch / openapi-typescript-helpers）一个都不装（#233）。之前能构建过（推断，没在真镜像里验）是因为 web 只走到它不需要
+# 运行时依赖的那几个导出 —— 哪天多 import 一个就当场炸，和根 CLAUDE.md「scoped install 才暴露」同一类
+COPY packages/api/package.json      packages/api/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store \
  && pnpm install --frozen-lockfile --filter web... --filter .
@@ -36,7 +40,7 @@ COPY . .
 
 # 🔴 空串 = 同源相对路径，这是「一次构建、多环境复用」的唯一办法。
 # `packages/platform/src/api-client/client.ts` 的
-# `API_BASE = import.meta.env?.VITE_API_BASE ?? 'http://127.0.0.1:8000'`
+# `API_BASE = import.meta.env?.VITE_API_BASE ?? 'http://127.0.0.1:8088'`
 # 是**构建期**写死的，socket.io 地址和富文本图片的绝对 URL 都拼它 ——
 # 用默认值构建出来的产物只能连本机。
 # `??` 是 nullish 合并，空串会被保留（写 `||` 就会退回默认值，别改）。
