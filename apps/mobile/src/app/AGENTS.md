@@ -13,7 +13,7 @@
 (app)/_layout.tsx            Stack —— 外层，非 tab 的屏推在这里
 (app)/(tabs)/_layout.tsx     Tabs —— 首页 · 应用 · 我的
 (app)/(tabs)/index.tsx       首页
-(app)/(tabs)/apps.tsx        应用
+(app)/(tabs)/apps.tsx        应用（启动台宫格；只放能进的，#224 不做的模块不列）
 (app)/(tabs)/profile.tsx     个人中心（只放入口；账号 ID 不显示）
 (app)/notifications.tsx      通知      ┐ 推在 tab 之上：
 (app)/profile/info.tsx       个人资料  │ 天然带返回键、盖住 tab 栏
@@ -247,7 +247,7 @@ src/app/(app)/notifications.tsx 列表：全部 / 未读 · 点一条标已读�
 
 ```
 src/lib/perm.ts               usePerm() —— /auth/codes + can / canAny / canWrite
-src/app/(app)/(tabs)/apps.tsx 「应用」：按权限码列模块，三种「空」分开
+src/app/(app)/(tabs)/apps.tsx 「应用」：宫格，带权限码的格子三种「空」分开
 ```
 
 权限码来自 `GET /auth/codes`（登录后一次，形如 `sys:user:add`）。
