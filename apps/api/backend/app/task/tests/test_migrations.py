@@ -55,8 +55,16 @@ def test_model_matches_migrations(alembic_cfg) -> None:
     而漏做的后果是**静默的**：本机开发库是手工 ALTER 过的（能跑），
     全新环境按迁移建出来的库缺那一列，要到部署时才炸。
 
-    ⚠️ 它比对的是 **fba_test**。所以本地跑之前 fba_test 要先到 head：
-        `pnpm --filter api db:upgrade`（或 `test:db` 重建后再 stamp+upgrade）
+    ⚠️ 它比对的是 **`DATABASE_SCHEMA` + `_test`** 那个库，**能不能抓到漏写的迁移全看那个库是怎么建的**（#230）：
+
+    - 普通那轮 pytest 里是 fba_test —— **按当前模型 create_all** 出来的，模型比模型，差异恒为 0，
+      在那里它只能证明「测试库没坏」，**证明不了「迁移跟上了模型」**
+    - CI 的「迁移链：从最近一个 release 升到当前」那一步用**上一个 release 的代码**建库，
+      再用当前代码 `upgrade head`，然后对这个库跑本条 —— 这才是它真正起守卫作用的地方
+
+    实测（2026-11-04，PostgreSQL）：给 `sys_role` 加一列不写迁移，fba_test 上这条 **passed**；
+    v1.0.0 建库 → 升级 → 比对，当场报 `add_column sys_role.mutation_probe`。
+    本地复现见 alembic 分册「守卫」一节。
     """
     from alembic.autogenerate import compare_metadata
     from alembic.migration import MigrationContext
