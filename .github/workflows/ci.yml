@@ -415,6 +415,23 @@ jobs:
           DATABASE_SCHEMA=fba_upgrade uv run --no-sync pytest -o addopts="" -q \
             backend/app/task/tests/test_migrations.py::test_model_matches_migrations
 
+      # 🔴 前端契约 `packages/api/src/schema.d.ts` 要和后端同步（#234）。改了接口忘了 `gen:api`，
+      # 按 schema 推类型的那一端（移动端 `apps/mobile/src/lib/contract.ts`）就以为参数不存在，而 tsc 全绿。
+      # 放在这个 job 而不是 static：`import backend.main` 在导入期就要连 Redis，这里有、那里没有。
+      # ⚠️ 生成结果要和开发者本机逐字节一致，前提是后端的插件 / 路由加载顺序不取决于文件系统（#234 修的就是这个，
+      # 见 packages/api 分册）。哪天这一步红了而 diff 全是顺序调整，先查是不是又有一处 os.listdir 没排序。
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 契约新鲜度（schema.d.ts）
+        run: |
+          pnpm install --frozen-lockfile --filter @admin/api
+          pnpm --filter @admin/api gen:api
+          git diff --exit-code packages/api/src/schema.d.ts \
+            || { echo "::error::schema.d.ts 和后端对不上：跑 pnpm --filter @admin/api gen:api 并提交"; exit 1; }
+
   test-e2e:
     name: playwright · E2E
     runs-on: ubuntu-latest
