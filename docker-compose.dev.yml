@@ -22,8 +22,11 @@ services:
     environment:
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+    # 🔴 端口默认只绑 127.0.0.1（#232）：原来是 0.0.0.0，配上默认口令（postgres/postgres、Redis 无密码、
+    # rabbitmq guest/guest），开发机在局域网 / 公网时整套数据库对外开放。要从别的机器连就设 DEV_BIND_HOST=0.0.0.0。
+    # 下面每个服务同理
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${DEV_BIND_HOST:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -40,7 +43,7 @@ services:
     # 端口刻意用 6380 而不是默认的 6379：开发机上常常已经跑着一个本地 Redis，
     # 撞端口时 compose 只会报 bind 失败，不会告诉你是哪个进程占的
     ports:
-      - "${REDIS_PORT:-6380}:6379"
+      - "${DEV_BIND_HOST:-127.0.0.1}:${REDIS_PORT:-6380}:6379"
     command: redis-server --save 60 1 --loglevel warning
     volumes:
       - redis_data:/data
@@ -78,7 +81,7 @@ services:
       # 否则容器会启动后立刻退出，日志里只有一句 password validation failed
       MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:-YourStrong!Passw0rd}"
     ports:
-      - "${MSSQL_PORT:-1433}:1433"
+      - "${DEV_BIND_HOST:-127.0.0.1}:${MSSQL_PORT:-1433}:1433"
     volumes:
       - mssql_data:/var/opt/mssql
     healthcheck:
@@ -107,8 +110,8 @@ services:
     image: rabbitmq:3.13.7-management
     container_name: fba_rabbitmq
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_UI_PORT:-15672}:15672"
+      - "${DEV_BIND_HOST:-127.0.0.1}:${RABBITMQ_PORT:-5672}:5672"
+      - "${DEV_BIND_HOST:-127.0.0.1}:${RABBITMQ_UI_PORT:-15672}:15672"
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -137,7 +140,7 @@ services:
       RUSTFS_SECRET_KEY: "${RUSTFS_SECRET_KEY:-rustfs-secret-2026}"
     ports:
       # 宿主机用 9100：9000 这一带常被别的服务占着（MinIO / 其它项目）
-      - "${RUSTFS_PORT:-9100}:9000"
+      - "${DEV_BIND_HOST:-127.0.0.1}:${RUSTFS_PORT:-9100}:9000"
     volumes:
       - rustfs_data:/data
     healthcheck:
