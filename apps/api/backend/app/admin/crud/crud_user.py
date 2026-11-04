@@ -299,25 +299,27 @@ class CRUDUser(DataScopedCRUD[User]):
 
         return users
 
-    async def add_by_oauth2(self, db: AsyncSession, obj: AddOAuth2UserParam) -> User:
+    async def add_by_oauth2(self, db: AsyncSession, obj: AddOAuth2UserParam, *, role_code: str) -> User:
         """
         通过 OAuth2 添加用户
 
         :param db: 数据库会话
         :param obj: 注册用户参数
+        :param role_code: 新用户挂的角色编码（`OAUTH2_AUTO_REGISTER_ROLE`）
         :return: 新用户
         """
+        # 🔴 角色按**配置的编码**取，先取再建用户（#226）。原来是 `select(Role)...first()` 没有 ORDER BY ——
+        # 拿到哪个角色取决于数据库物理行序，生产库里完全可能是带写权限的那个
+        role_stmt = select(Role).where(Role.code == role_code, Role.status == StatusType.enable, Role.deleted == 0)
+        role = (await db.execute(role_stmt)).scalars().first()
+        if role is None:
+            raise errors.AuthorizationError(msg=t('error.oauth2.auto_register_role_missing', role=role_code))
+
         dict_obj = obj.model_dump()
         dict_obj.update({'is_staff': True, 'salt': None})
         new_user = self.model(**dict_obj)
         db.add(new_user)
         await db.flush()
-
-        role_stmt = select(Role).where(Role.status == StatusType.enable, Role.deleted == 0)
-        result = await db.execute(role_stmt)
-        role = result.scalars().first()  # 默认绑定第一个角色
-        if role is None:
-            raise errors.NotFoundError(msg=t('error.role.none_available'))
 
         user_role_stmt = insert(user_role).values(AddUserRoleParam(user_id=new_user.id, role_id=role.id).model_dump())
         await db.execute(user_role_stmt)

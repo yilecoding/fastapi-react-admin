@@ -13,11 +13,13 @@
 (app)/_layout.tsx            Stack —— 外层，非 tab 的屏推在这里
 (app)/(tabs)/_layout.tsx     Tabs —— 首页 · 应用 · 我的
 (app)/(tabs)/index.tsx       首页
-(app)/(tabs)/apps.tsx        应用
-(app)/(tabs)/profile.tsx     个人中心
+(app)/(tabs)/apps.tsx        应用（启动台宫格；只放能进的，#224 不做的模块不列）
+(app)/(tabs)/profile.tsx     个人中心（只放入口；账号 ID 不显示）
 (app)/notifications.tsx      通知      ┐ 推在 tab 之上：
-(app)/profile/edit.tsx       编辑资料  │ 天然带返回键、盖住 tab 栏
+(app)/profile/info.tsx       个人资料  │ 天然带返回键、盖住 tab 栏
+(app)/profile/edit.tsx       编辑资料  │
 (app)/profile/password.tsx   修改密码  │
+(app)/profile/phone.tsx      手机号    │ ← 绑定 / 换绑 / 解绑（#224）
 (app)/users/index.tsx        用户列表  │ ← 分页列表的范式样板
 (app)/users/[id].tsx         用户详情  │ ← 详情 + 写操作的范式样板
 (app)/notices/[id].tsx       公告详情  ┘ ← 正文 + 附件（见文末「公告」一节）
@@ -46,10 +48,8 @@
 | 头像 | ✅ 从相册选（要 `sys:file:upload` + `is_staff`）或填 URL | `POST /sys/files/upload?public=true` → `PUT /sys/users/me/avatar` |
 | 密码 | ✅ | `PUT /sys/users/me/password` |
 | 时区 | ✅ | `PUT /sys/users/me/timezone`，并 `setDisplayTimeZone()` |
-| **手机号** | ❌ | `PUT /me/phone` 要一个**短信验证码**（#170），那条链路移动端还没有 —— 去网页端绑。手机验证码登录只认这样验证过的号 |
-| **邮箱** | ❌ | `PUT /me/email` 要一个**邮件验证码**，那条链路移动端还没有 |
-
-界面上手机号/邮箱是只读行并写明原因 —— 放一个改了会失败的输入框更糟。
+| 手机号 | ✅（#224） | `POST /sys/users/me/phone/captcha` 发码 → `PUT /sys/users/me/phone` 绑定；`DELETE` 解绑。🔴 **必须显示「已验证 / 未验证」**：管理员录入 / 导入的号 `phone_verified_time` 为空，验证码登录不认，只显示号码用户会以为能登 |
+| **邮箱** | ❌ | `PUT /me/email` 要一个**邮件验证码**，那条链路移动端还没有。界面上是只读行并写明原因 —— 放一个改了会失败的输入框更糟 |
 
 🔴 **头像清空要发 `null`，不能发 `''`。** 读取侧 `GetUserInfoDetail.avatar` 是
 `HttpUrl | None`，存进空串之后登录和 `/users/me` 会**全部 422**
@@ -247,7 +247,7 @@ src/app/(app)/notifications.tsx 列表：全部 / 未读 · 点一条标已读�
 
 ```
 src/lib/perm.ts               usePerm() —— /auth/codes + can / canAny / canWrite
-src/app/(app)/(tabs)/apps.tsx 「应用」：按权限码列模块，三种「空」分开
+src/app/(app)/(tabs)/apps.tsx 「应用」：宫格，带权限码的格子三种「空」分开
 ```
 
 权限码来自 `GET /auth/codes`（登录后一次，形如 `sys:user:add`）。
