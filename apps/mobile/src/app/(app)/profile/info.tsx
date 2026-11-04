@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
-import { ScrollView, View } from 'react-native'
+import { Stack, useRouter } from 'expo-router'
+import { Pressable, ScrollView, View } from 'react-native'
 
 import { Group, GroupHeader, Row } from '@/components/grouped'
 import { Text } from '@/components/ui/text'
@@ -12,16 +13,33 @@ import { useSession } from '@/lib/session'
  * ⚠️ **刻意不显示账号 ID。** 它是雪花 ID，对用户没有任何用处，原来摆在「我的」首屏上只是占地方。
  * 管理员看别人时（`users/[id].tsx`）才需要它。
  *
- * 能改的东西不在这一屏：昵称 / 头像在「编辑资料」，手机号在 `profile/phone.tsx`。
+ * 昵称 / 头像点右上角「编辑」进 `profile/edit`；手机号在「我的」的安全组（`profile/phone.tsx`）。
  * 邮箱只读 —— `PUT /me/email` 要邮件验证码，那条链路移动端还没有。
  */
 export default function ProfileInfoScreen() {
   const { t } = useTranslation()
   const { user } = useSession()
+  const router = useRouter()
   if (!user) return null
 
   return (
     <ScrollView className="bg-background flex-1" contentContainerClassName="pb-10">
+      {/* 编辑入口放在导航栏右上角（同微信「个人信息」）：「我的」首屏不再单独占一行 */}
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable
+              onPress={() => router.push('/profile/edit')}
+              hitSlop={10}
+              accessibilityRole="button"
+              testID="profile-info-edit"
+              className="active:opacity-60"
+            >
+              <Text className="text-primary text-[15px] font-medium">{t('编辑')}</Text>
+            </Pressable>
+          ),
+        }}
+      />
       <GroupHeader>{t('账号')}</GroupHeader>
       <Group>
         <Field first label={t('用户名')} value={user.username} mono />
