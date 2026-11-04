@@ -68,7 +68,9 @@ VALUES
 (2049629108253622314, N'修改', 'EditTaskScheduler', NULL, 1, NULL, 2, 'task:scheduler:edit', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
 (2049629108253622315, N'删除', 'DeleteTaskScheduler', NULL, 2, NULL, 2, 'task:scheduler:del', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
 (2049629108253622316, N'执行', 'RunTaskScheduler', NULL, 3, NULL, 2, 'task:scheduler:run', 1, 0, '', NULL, 2049629108253622311, '2026-08-22 17:00:00', NULL),
-(2049629108253622317, N'删除', 'DeleteTaskResult', NULL, 0, NULL, 2, 'task:result:del', 1, 0, '', NULL, 2049629108253622312, '2026-08-22 17:00:00', NULL);
+(2049629108253622317, N'删除', 'DeleteTaskResult', NULL, 0, NULL, 2, 'task:result:del', 1, 0, '', NULL, 2049629108253622312, '2026-08-22 17:00:00', NULL),
+(2049629108253622318, N'查询', 'QueryTaskScheduler', NULL, 4, NULL, 2, 'task:scheduler:list', 1, 0, '', NULL, 2049629108253622311, '2026-11-04 18:00:00', NULL),
+(2049629108253622319, N'查询', 'QueryTaskResult', NULL, 1, NULL, 2, 'task:result:list', 1, 0, '', NULL, 2049629108253622312, '2026-11-04 18:00:00', NULL);
 
 INSERT INTO task_scheduler (id, name, task, args, kwargs, queue, exchange, routing_key, start_time, expire_time, expire_seconds, type, interval_every, interval_period, crontab, one_off, enabled, total_run_count, last_run_time, remark, created_time, updated_time, deleted, deleted_time)
 VALUES
