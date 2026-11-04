@@ -172,3 +172,17 @@ MySQL 只过了离线编译守卫。**没验过**：真实公网接收端（只�
 `test_open_api.py::TestIncrementalSync::test_inserts_and_soft_deletes_show_up_after_the_cursor` 必红 —— 种子时间是
 `GETDATE()` 的 `.6466667`（第 7 位非 0），测试拿接口返回的、已经舍入到微秒的时间自己拼游标，游标落在种子之前，
 种子部门全被当成「之后的变更」返回。服务端查询那一侧早已 CAST 过（上面「增量同步的静默坑」），坏的是测试拼游标的方式。
+
+## 🔴 Java SDK：请求签名要对向量，验 webhook 不分头名大小写（#231）
+
+三份 SDK 的请求签名原来只有 Python / Node 对了测试向量，Java 只测了 webhook 验签 —— `signHeaders` 自己拼规范化查询串
+（`URLEncoder` + 三次 replace，`URLEncoder` 是表单编码：空格变 `+`、`~` 被编码），和服务端 `quote(safe='-_.~')`
+是否逐字节一致没人验过。开放接口是 1.0 兼容约定里承诺最强的面，调用方在别人的系统里。现在 `test_java_sdk_matches_vectors`
+用 `javac` 跑同一份向量。
+
+Java 的 `verifyWebhook` 原来 `headers.get("webhook-id")` 按原样取，只在注释里要求调用方先转小写；Python / Node 都在函数里转了。
+Servlet 在 HTTP/1.1 下给的是 `Webhook-Id`，照 README 直接传进来，合法推送被**静默拒掉**（返回 false，不报错）。现在函数内统一转小写，
+测试里的头名改成大小写混合 —— 原来那条测试用的是全小写 `Map.of`，所以一直测不出来。
+
+**实测证据**（JDK 本机）：变异 —— 去掉转小写 → `test_java_sdk_verifies_webhooks` 红；去掉 `.replace("+", "%20")` →
+`test_java_sdk_matches_vectors` 红。⚠️ 这几条在缺 JDK 时是 skip：CI 的 PostgreSQL job 加了 `-rs`，看日志里有没有它们的 skip 行。
