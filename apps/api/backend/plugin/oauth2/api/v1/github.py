@@ -16,6 +16,7 @@ from backend.database.db import CurrentSessionTransaction
 from backend.database.redis import redis_client
 from backend.plugin.oauth2.enums import UserSocialAuthType, UserSocialType
 from backend.plugin.oauth2.service.oauth2_service import oauth2_service
+from backend.plugin.oauth2.utils import github_email_verified
 from backend.utils.limiter import RateLimiter
 
 router = APIRouter()
@@ -64,6 +65,7 @@ async def github_oauth2_callback(  # ruff:ignore[missing-return-type-undocumente
         user=user,
         social=UserSocialType.github,
         state=state,
+        email_verified=await github_email_verified(access_token, user.get('email')),
     )
 
     # 绑定流程
