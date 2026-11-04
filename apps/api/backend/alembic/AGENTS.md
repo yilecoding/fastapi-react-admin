@@ -66,13 +66,30 @@ stamp 只是把这件事声明出来。
 
 | 测试 | 挡什么 |
 |---|---|
-| `test_model_matches_migrations` | **改了模型但没生成迁移** —— 这条是整套约定的支点 |
+| `test_model_matches_migrations` | **改了模型但没生成迁移** —— 这条是整套约定的支点（**只在 CI「从最近一个 release 升到当前」那一步上有效**，见下） |
 | `test_single_head` | 两个人各自 revision 导致分叉，`upgrade head` 谁都升不了 |
 | `test_every_revision_is_reachable_from_base` | 断链的迁移永远不会执行 |
 | `test_fresh_database_is_stamped_at_head` | **新建的库没 stamp** —— 将来 `upgrade head` 会把已有迁移重跑一遍 |
 
 ⚠️ 这些比对的是 **fba_test**，所以本地跑测试前它要在 head 上
 （`pnpm --filter api test:db` 会重建并自动 stamp）。
+
+🔴 **但 fba_test 上的 `test_model_matches_migrations` 抓不到漏写的迁移（#230）。** fba_test 是按**当前模型**
+`create_all` 出来的，拿模型比模型差异恒为 0。它从引进那天起在 CI 里就是同义反复，而这张表一直写着它是「支点」。
+真正起作用的是 CI 里 PostgreSQL job 的「迁移链：从最近一个 release 升到当前」：用上一个 release tag 的代码建库
+（和当时的 `fba init` 同一条路）→ 当前代码 `alembic upgrade head` → 对这个库跑同一条测试。本地复现：
+
+```bash
+git worktree add /tmp/base v1.0.0                      # 最近一个 tag
+# 在 /tmp/base/apps/api 里（.env / .venv 照抄主检出的）：
+DATABASE_SCHEMA=fba_up uv run --no-sync python -m backend.scripts.reset_test_db   # 建 fba_up_test
+# 回到当前检出：
+(cd backend && DATABASE_SCHEMA=fba_up_test uv run --no-sync alembic upgrade head)
+DATABASE_SCHEMA=fba_up uv run --no-sync pytest backend/app/task/tests/test_migrations.py::test_model_matches_migrations
+```
+
+**实测证据**（2026-11-04，PostgreSQL 16）：给 `sys_role` 加一列、不写迁移 —— fba_test 那条 `1 passed`；
+v1.0.0 建库 → 升级 → 比对，`assert not [('add_column', None, 'sys_role', Column('mutation_probe', ...))]`。
 
 > 🔴 第 4 条上线时当场抓到一个已经存在很久的 bug：`reset_test_db._stamp_head`
 > 一直在 stamp **开发库**而不是测试库。它靠设 `os.environ['DATABASE_SCHEMA']` 切库，
