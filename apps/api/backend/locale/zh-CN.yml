@@ -170,6 +170,8 @@ error:
     account_bound: 用户已绑定 {source} 账号
     account_bound_to_other: 该 {source} 账号已被其他用户绑定
     account_not_bound: 用户未绑定 {source} 账号
+    auto_register_disabled: 这个 {source} 账号还没有绑定系统用户。请先用账号密码登录，再到个人中心绑定
+    auto_register_role_missing: 第三方账号自动注册的默认角色未配置或不可用（{role}），请联系系统管理员
     binding_unsupported: 暂不支持 {source} 绑定
     illegal_state_operation: 非法操作，OAuth2 状态信息无效
     social_login_unsupported: 暂不支持 {social} OAuth2 登录

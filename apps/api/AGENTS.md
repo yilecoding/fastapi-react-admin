@@ -161,7 +161,7 @@ access token 一过期就被登出。access 原来活 1 天，看不太出来；
 **实测证据**（2026-10-23，fastapi 0.141.1，最小应用）：注入的 `response` 上 `set_cookie` 后
 `return RedirectResponse(...)`，响应头里的 `set-cookie` 是 `[]`；逐行 `headers.append` 搬过去之后是
 `['rt=v1; Path=/; SameSite=lax']`。⚠️ OAuth2 回调本身没有路由级的回归测试（要打桩第三方授权依赖），
-新写「设 cookie 再重定向」的路由时自己核一遍。
+新写「设 cookie 再重定向」的路由时自己核一遍。陌生账号默认不建号（#226）见 [`plugin/oauth2` 分册](backend/plugin/oauth2/AGENTS.md)。
 
 ## 上传的表格一律过 `utils/excel_ops.py`
 
