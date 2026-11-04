@@ -1,11 +1,19 @@
 import { useRouter } from 'expo-router'
 import { useTranslation } from 'react-i18next'
-import { ChevronRightIcon, KeyRoundIcon, SettingsIcon, SquarePenIcon, TriangleAlertIcon } from 'lucide-react-native'
+import {
+  ChevronRightIcon,
+  IdCardIcon,
+  KeyRoundIcon,
+  SettingsIcon,
+  SmartphoneIcon,
+  SquarePenIcon,
+  TriangleAlertIcon,
+} from 'lucide-react-native'
 import * as React from 'react'
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
 import { BrandTop } from '@/components/brand-top'
-import { Chevron, DangerRow, Group, GroupHeader, PressRow, Row, RowIcon } from '@/components/grouped'
+import { Chevron, DangerRow, Group, GroupHeader, PressRow, RowIcon } from '@/components/grouped'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -47,7 +55,7 @@ export default function ProfileScreen() {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
     >
       <BrandTop>
-        <Pressable onPress={() => router.push('/profile/edit')} className="flex-row items-center gap-3.5 pt-1">
+        <Pressable onPress={() => router.push('/profile/info')} testID="profile-header" className="flex-row items-center gap-3.5 pt-1">
           <Avatar alt={user.nickname || user.username} className="size-[54px] rounded-[17px]">
             {/* 头像地址坏掉时 AvatarImage 静默不显示，AvatarFallback 兜住 ——
                 「没有头像」和「头像挂了」都有一个确定的样子 */}
@@ -79,31 +87,37 @@ export default function ProfileScreen() {
         </View>
       ) : null}
 
-      <GroupHeader>{t('资料')}</GroupHeader>
-      <Group>
-        <Field first label={t('部门')} value={user.dept} />
-        <Field label={t('角色')} value={user.roles.join('、')} />
-        {/* 🔴 手机号和邮箱是**只读**的，不是漏做：
-            - 手机号：`PUT /me/phone` 要短信验证码（#170），那条链路移动端还没有 —— 去网页端个人中心绑。
-              手机验证码登录只认那样验证过的号，登录屏的提示也是这么说的
-            - 邮箱：`PUT /me/email` 要邮箱验证码，那条链路移动端还没有
-            与其放一个改了会失败的输入框，不如把原因写在这儿 —— 而且要说去哪儿改，
-            只说「要验证码」会让人以为在这一屏就能改。 */}
-        <Field label={t('手机号')} value={user.phone} note={t('在网页端个人中心修改')} />
-        <Field label={t('邮箱')} value={user.email} note={t('改邮箱要邮件验证码')} />
-        <Field label={t('时区')} value={user.timezone} mono />
-        {/* ⚠️ schema 里 `id` 是 `string | number`（后端那个 `field_serializer` 的
-            声明就是 `-> str | int`），wire 上实际总是字符串。这里只是展示，
-            就地 `String()` —— **不要 `Number()`**（硬纪律 6：会丢精度） */}
-        <Field label={t('账号 ID')} value={String(user.id)} mono />
-      </Group>
-
+      {/*
+        「我的」首屏只放入口，资料收进 `profile/info.tsx`。原来这里直接铺着部门 / 角色 / 邮箱 / 时区 / 账号 ID —
+        账号 ID 是雪花 ID，对用户毫无用处；其余几项也不是每次进来都要看的。
+      */}
       <GroupHeader>{t('账号')}</GroupHeader>
       <Group>
-        <PressRow first inset={56} onPress={() => router.push('/profile/edit')} testID="profile-edit">
+        <PressRow first inset={56} onPress={() => router.push('/profile/info')} testID="profile-info">
+          <RowIcon icon={IdCardIcon} />
+          <Text className="flex-1 text-[15px]">{t('个人资料')}</Text>
+          <Text className="text-muted-foreground text-[13px]">{t('部门 · 角色')}</Text>
+          <Chevron icon={ChevronRightIcon} />
+        </PressRow>
+        <PressRow inset={56} onPress={() => router.push('/profile/edit')} testID="profile-edit">
           <RowIcon icon={SquarePenIcon} />
           <Text className="flex-1 text-[15px]">{t('编辑资料')}</Text>
           <Text className="text-muted-foreground text-[13px]">{t('昵称 · 头像')}</Text>
+          <Chevron icon={ChevronRightIcon} />
+        </PressRow>
+      </Group>
+
+      <GroupHeader>{t('安全')}</GroupHeader>
+      <Group>
+        {/* 手机号（#224）：右边写明验证状态 —— 管理员录入的号没验证过，验证码登录不认 */}
+        <PressRow first inset={56} onPress={() => router.push('/profile/phone')} testID="profile-phone">
+          <RowIcon icon={SmartphoneIcon} />
+          <Text className="flex-1 text-[15px]">{t('手机号')}</Text>
+          <Text
+            className={`text-[13px] ${user.phone && !user.phone_verified_time ? 'text-amber-700 dark:text-amber-300' : 'text-muted-foreground'}`}
+          >
+            {!user.phone ? t('未绑定') : user.phone_verified_time ? t('已验证') : t('未验证')}
+          </Text>
           <Chevron icon={ChevronRightIcon} />
         </PressRow>
         <PressRow inset={56} onPress={() => router.push('/profile/password')} testID="profile-password">
@@ -111,13 +125,18 @@ export default function ProfileScreen() {
           <Text className="flex-1 text-[15px]">{t('修改密码')}</Text>
           <Chevron icon={ChevronRightIcon} />
         </PressRow>
-        <PressRow inset={56} onPress={() => router.push('/settings')} testID="profile-settings">
-          <RowIcon icon={SettingsIcon} />
-          <Text className="flex-1 text-[15px]">{t('设置')}</Text>
-          <Text className="text-muted-foreground text-[13px]">{t('外观 · 时区 · 服务器')}</Text>
-          <Chevron icon={ChevronRightIcon} />
-        </PressRow>
       </Group>
+
+      <View className="pt-4">
+        <Group>
+          <PressRow first inset={56} onPress={() => router.push('/settings')} testID="profile-settings">
+            <RowIcon icon={SettingsIcon} />
+            <Text className="flex-1 text-[15px]">{t('设置')}</Text>
+            <Text className="text-muted-foreground text-[13px]">{t('外观 · 时区 · 服务器')}</Text>
+            <Chevron icon={ChevronRightIcon} />
+          </PressRow>
+        </Group>
+      </View>
 
       {/* 登出单独一个分组块 —— iOS 上「破坏性动作」就是这么放的 */}
       <View className="pt-4">
@@ -146,33 +165,4 @@ export default function ProfileScreen() {
 /** ⚠️ 返回 **key**，由调用处 `t()` */
 function accountKind(user: { is_superuser: boolean; is_staff: boolean }) {
   return user.is_superuser ? '超级管理员' : user.is_staff ? '后台管理员' : '普通用户'
-}
-
-function Field({
-  first,
-  label,
-  value,
-  note,
-  mono,
-}: {
-  first?: boolean
-  label: string
-  value?: string | null
-  note?: string
-  mono?: boolean
-}) {
-  return (
-    <Row first={first} className="items-start">
-      <Text className="shrink-0 text-[15px]">{label}</Text>
-      <View className="flex-1 items-end">
-        <Text
-          className={`text-muted-foreground text-right ${mono ? 'font-mono text-xs' : 'text-[14px]'}`}
-          numberOfLines={2}
-        >
-          {value?.trim() ? value : '—'}
-        </Text>
-        {note ? <Text className="text-muted-foreground/70 mt-0.5 text-right text-[11px]">{note}</Text> : null}
-      </View>
-    </Row>
-  )
 }
