@@ -392,9 +392,11 @@ jobs:
           DATABASE_SCHEMA: fba_empty
         run: uv run --no-sync alembic upgrade c0000000comments
 
+      # `-rs`：把跳过的用例连同原因打出来。三份 SDK 的测试在缺 node / JDK 时是 skip 不是失败，
+      # 只看「N skipped」分不出它们在 CI 上到底跑没跑（#231）
       - name: pytest
         working-directory: apps/api
-        run: uv run --no-sync pytest
+        run: uv run --no-sync pytest -rs
 
   test-e2e:
     name: playwright · E2E
