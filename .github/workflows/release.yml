@@ -34,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # 版本号的单一来源是 apps/web/package.json —— vite.config.ts 把它注入成
@@ -63,6 +64,33 @@ jobs:
             }
             console.log(\`一致：package.json \${pkg} = 后端 __version__ \${api} ← tag v\${tag}\`)
           " "$VER"
+
+      # 🔴 打 tag 就出签名安装包，所以先确认这个提交「在 main 上、且 main 上那一轮 CI 全绿」（#232）。
+      # 不查的话，在本地分支上随手打个 tag 推上去，没过评审、没过测试的代码就带着证书签名发出去了。
+      # 合并后马上打 tag 时 CI 多半还在跑（E2E 约 20 分钟），所以这里等它跑完，最多 45 分钟。
+      # ⚠️ ci.yml 在 main 上是 cancel-in-progress：tag 的提交后面又合了别的 PR，这个提交的 CI 会被取消 →
+      # 这里报错。到 Actions 里把那一轮 re-run 绿了，再重跑本 workflow 即可。
+      # 预发布 tag（v1.2.0-rc.1）只警告不拦：那是用来试发布流水线本身的口子。
+      - name: tag 的提交在 main 上，且 CI 已经绿了
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          fail() { if [[ "$GITHUB_REF_NAME" == *-* ]]; then echo "::warning::$1（预发布 tag，放行）"; exit 0; else echo "::error::$1"; exit 1; fi; }
+          # compare main...SHA：SHA 是 main 的祖先时 status 是 behind / identical
+          REL=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$GITHUB_SHA" --jq .status)
+          case "$REL" in behind|identical) echo "提交在 main 上（$REL）" ;; *) fail "tag 指向的 $GITHUB_SHA 不在 main 上（$REL）：先合进 main 再打 tag" ;; esac
+          for i in $(seq 1 90); do
+            RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=1" \
+              --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion) \(.html_url)"')
+            [ -z "$RUN" ] && fail "找不到 $GITHUB_SHA 在 main 上的 CI 运行"
+            read -r STATUS CONCLUSION URL <<< "$RUN"
+            if [ "$STATUS" = completed ]; then
+              [ "$CONCLUSION" = success ] && { echo "CI 绿：$URL"; exit 0; }
+              fail "这个提交的 CI 结论是 $CONCLUSION：$URL"
+            fi
+            echo "CI 还在跑（$STATUS），30 秒后再看…"; sleep 30
+          done
+          fail "等了 45 分钟 CI 还没跑完"
 
       - name: 建草稿（已存在就跳过）
         env:
