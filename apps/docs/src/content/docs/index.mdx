@@ -1,10 +1,10 @@
 ---
 title: FastAPI + React 19 中后台底座
-description: 开源中后台底座，FastAPI + React 19 + shadcn/ui：权限细到数据行、多页签保留状态、审批流、不越权的 AI 助手，支持 PostgreSQL / SQL Server / MySQL。
+description: 开源中后台底座，FastAPI + React 19 + shadcn/ui：Web、桌面、手机三端同一个 monorepo，权限细到数据行、多页签保留状态、审批流、不越权的 AI 助手，支持 PostgreSQL / SQL Server / MySQL。
 template: splash
 hero:
   title: 中后台底座，<br/>像榫卯一样<span class="shine">咬合</span>。
-  tagline: 开箱即用的开源底座，FastAPI + React 19 + shadcn/ui。权限细到每个人能看到哪几行数据，多页签切回来状态还在，自带审批流和不越权的 AI 助手，PostgreSQL / SQL Server / MySQL 三选一。
+  tagline: 开箱即用的开源底座，FastAPI + React 19 + shadcn/ui。Web、桌面、手机三端同一个仓库；权限细到每个人能看到哪几行数据，多页签切回来状态还在，自带审批流和不越权的 AI 助手，PostgreSQL / SQL Server / MySQL 三选一。
   actions:
     - text: 快速开始
       link: getting-started/quick-start/
@@ -21,6 +21,7 @@ hero:
 landing:
   eyebrow: FASTAPI + REACT 19 · MIT
   chips:
+    - Web · 桌面 · 手机
     - 行级数据权限
     - 保状态多页签
     - 原生 SQL Server
@@ -78,6 +79,24 @@ import Stats from '../../components/Stats.astro'
   </Feature>
   <Feature title="数据库三选一" icon="database" href="features/databases/" more="怎么做的">
     PostgreSQL、SQL Server、MySQL 用同一套代码、同一条迁移链。
+  </Feature>
+</div>
+
+<SectionTitle id="为什么做它" eyebrow="WHY WE BUILT IT" title="一次重构，沉淀成一个拿来就能写业务的底座">
+
+AI 让要做的系统越来越多，可每个新系统开头都在重复登录、权限、审批这批活。这个项目起步于几套 Java + Vue 2 小系统的重构：用 FastAPI + React 19 从头搭一遍，把每次都要重做的部分沉淀下来——下一个系统，从写业务开始。
+
+</SectionTitle>
+
+<div class="features">
+  <Feature title="Web · 桌面 · 手机，一个仓库" icon="devices" href="features/clients/" more="看三端">
+    Web 管理后台开箱即用。桌面端模板（Electron）直接加载 Web 的构建产物，只补静默打印、本地硬件和自动更新；移动端模板（Expo）是原生界面，和 Web 共用接口类型与语言包。
+  </Feature>
+  <Feature title="Monorepo，分层有闸门" icon="layers" href="getting-started/introduction/#一个仓库里有什么" more="看结构">
+    pnpm + turbo 一个仓库装下后端、三端和文档站，`pnpm dev` 一条命令起前后端。依赖严格单向，`pnpm arch:check` 在 CI 里把关，反向引用直接报错。
+  </Feature>
+  <Feature title="为 AI 协作而设计" icon="shield" href="getting-started/introduction/#为什么说它适合和-ai-一起写代码" more="为什么">
+    1600+ 条测试连真实数据库、跑真实浏览器，兜住 AI 的每一次改动；前后端类型由 OpenAPI 生成，接口对不上类型检查就报错；50 多份按目录拆分的 `CLAUDE.md` 让编码助手一进目录就懂规矩。
   </Feature>
 </div>
 
