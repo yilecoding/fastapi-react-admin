@@ -27,11 +27,9 @@ jobs:
     name: typecheck · build · i18n
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           # 必须放在 pnpm/action-setup 之后 —— 缓存要先知道 pnpm 在哪
@@ -97,11 +95,9 @@ jobs:
     name: eslint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -124,9 +120,8 @@ jobs:
     name: ruff
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           enable-cache: true
 
@@ -200,9 +195,8 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           # pyproject 里 python-downloads = "manual"，不显式指定 uv 不会自己下 Python
           python-version: "3.13"
@@ -343,9 +337,8 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           python-version: "3.13"
           enable-cache: true
@@ -365,7 +358,7 @@ jobs:
         env:
           PG_CID: ${{ job.services.postgres.id }}
         run: |
-          for db in fba fba_test fba_empty; do
+          for db in fba fba_test fba_empty fba_upgrade fba_upgrade_test; do
             docker exec "$PG_CID" psql -U postgres -c "CREATE DATABASE $db;"
           done
 
@@ -392,9 +385,52 @@ jobs:
           DATABASE_SCHEMA: fba_empty
         run: uv run --no-sync alembic upgrade c0000000comments
 
+      # `-rs`：把跳过的用例连同原因打出来。三份 SDK 的测试在缺 node / JDK 时是 skip 不是失败，
+      # 只看「N skipped」分不出它们在 CI 上到底跑没跑（#231）
       - name: pytest
         working-directory: apps/api
-        run: uv run --no-sync pytest
+        run: uv run --no-sync pytest -rs
+
+      # 🔴 「改了模型就必须写迁移」真正的守卫（#230）。上面那轮 pytest 里的
+      # test_model_matches_migrations 比的是 fba_test，而 fba_test 是**按当前模型** create_all 出来的 ——
+      # 拿模型比一个由模型建出来的库，差异恒为 0，漏写迁移也是绿的（实测：给 sys_role 加一列不写迁移，那条照样 passed）。
+      # 这里换成部署时真实发生的路径：用**最近一个 release tag 的代码**建库（和当时 `fba init` 同一条路），
+      # 再用当前代码 `alembic upgrade head`，最后拿当前模型去比。漏写迁移 → 缺列 → 红。
+      # 只在 postgres 上跑：方言相关的迁移问题由「离线编译」守卫和 SQL Server 那个 job 的全量 pytest 管，
+      # 这一步只管「迁移链有没有跟上模型」，跟方言无关。
+      - name: 迁移链：从最近一个 release 升到当前
+        working-directory: apps/api
+        run: |
+          TAG=$(git ls-remote --tags --refs --sort=-v:refname origin 'v*' | head -1 | sed 's#.*refs/tags/##')
+          if [ -z "$TAG" ]; then echo "没有 release tag（fork？），跳过"; exit 0; fi
+          echo "基线：$TAG"
+          git fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
+          git worktree add "$RUNNER_TEMP/base" "$TAG"
+          # 基线用它自己那一版的依赖和种子建库（重建脚本会 stamp 到基线自己的 head）
+          (cd "$RUNNER_TEMP/base/apps/api" \
+            && cp backend/.env.example backend/.env \
+            && uv sync --locked --no-group lint \
+            && DATABASE_SCHEMA=fba_upgrade uv run --no-sync python -m backend.scripts.reset_test_db)
+          (cd backend && DATABASE_SCHEMA=fba_upgrade_test uv run --no-sync alembic upgrade head)
+          DATABASE_SCHEMA=fba_upgrade uv run --no-sync pytest -o addopts="" -q \
+            backend/app/task/tests/test_migrations.py::test_model_matches_migrations
+
+      # 🔴 前端契约 `packages/api/src/schema.d.ts` 要和后端同步（#234）。改了接口忘了 `gen:api`，
+      # 按 schema 推类型的那一端（移动端 `apps/mobile/src/lib/contract.ts`）就以为参数不存在，而 tsc 全绿。
+      # 放在这个 job 而不是 static：`import backend.main` 在导入期就要连 Redis，这里有、那里没有。
+      # ⚠️ 生成结果要和开发者本机逐字节一致，前提是后端的插件 / 路由加载顺序不取决于文件系统（#234 修的就是这个，
+      # 见 packages/api 分册）。哪天这一步红了而 diff 全是顺序调整，先查是不是又有一处 os.listdir 没排序。
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: 契约新鲜度（schema.d.ts）
+        run: |
+          pnpm install --frozen-lockfile --filter @admin/api
+          pnpm --filter @admin/api gen:api
+          git diff --exit-code packages/api/src/schema.d.ts \
+            || { echo "::error::schema.d.ts 和后端对不上：跑 pnpm --filter @admin/api gen:api 并提交"; exit 1; }
 
   test-e2e:
     name: playwright · E2E
@@ -449,16 +485,14 @@ jobs:
           --health-retries 10
 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
         with:
           python-version: "3.13"
           enable-cache: true
@@ -540,7 +574,7 @@ jobs:
         run: pnpm e2e
 
       - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
           name: playwright-report
@@ -592,14 +626,13 @@ jobs:
             gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id"
           done
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # 文档站每页的「最后更新」读的是 git 历史，浅克隆下每一页都会显示成今天
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -625,7 +658,7 @@ jobs:
       # 只在 /e2e/ 放一页说明，免得 README 徽章点进去是 404
       - name: Download playwright report artifact
         id: report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         continue-on-error: true
         with:
           name: playwright-report
@@ -641,14 +674,13 @@ jobs:
             echo '<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><title>E2E report</title><p>This run produced no E2E report. See <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">the workflow run</a>.</p>' > apps/docs/dist/e2e/index.html
           fi
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
           path: apps/docs/dist
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
-
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
   # 构建生产镜像，推到 GHCR（GitHub Container Registry）。
   # 只在全部质量闸门都过了、且是 main 上的 push 时才跑——镜像是要真的拿去发生产的,
   # 测试没过不能有一个新 tag 出现在 registry 里,哪怕只是躺着没人拉取。
@@ -665,11 +697,9 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -691,7 +721,7 @@ jobs:
         run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Build & push api image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: ./apps/api
           file: ./apps/api/Dockerfile.prod
@@ -707,7 +737,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=fba-api
 
       - name: Build & push web image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           file: ./apps/web/Dockerfile

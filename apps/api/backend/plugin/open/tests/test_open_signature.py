@@ -71,6 +71,48 @@ def test_node_sdk_matches_vectors() -> None:
     assert result.stdout.strip() == f'ok {len(vectors()["cases"])}'
 
 
+@pytest.mark.skipif(shutil.which('javac') is None or shutil.which('java') is None, reason='没有 JDK')
+def test_java_sdk_matches_vectors(tmp_path: Path) -> None:
+    """#231：Java 的请求签名原来只测了 webhook 验签，`signHeaders` 自己拼的规范化 query
+    （`URLEncoder` + 三次 replace）和服务端 `quote(safe='-_.~')` 是否逐字节一致，CI 里没人验证过"""
+    import json as _json
+
+    v = vectors()
+    calls = '\n'.join(
+        f'        check({_json.dumps(c["name"])}, {_json.dumps(c["method"])}, {_json.dumps(c["url"])}, '
+        f'{_json.dumps(c["body"])}, {_json.dumps(c["sign"])});'
+        for c in v['cases']
+    )
+    harness = f"""
+import java.nio.charset.StandardCharsets;
+public class SignHarness {{
+    static int bad = 0;
+    static void check(String name, String method, String url, String body, String expected) throws Exception {{
+        String got = FraOpenSign.signHeaders(method, url, body.getBytes(StandardCharsets.UTF_8),
+            {_json.dumps(v['access_key'])}, {_json.dumps(v['secret_key'])},
+            {_json.dumps(str(v['timestamp']))}, {_json.dumps(v['nonce'])}).get("X-Sign");
+        if (!expected.equals(got)) {{ System.err.println("MISMATCH " + name + " " + got); bad++; }}
+    }}
+    public static void main(String[] a) throws Exception {{
+{calls}
+        if (bad > 0) System.exit(1);
+        System.out.println("ok {len(v['cases'])}");
+    }}
+}}
+"""
+    (tmp_path / 'SignHarness.java').write_text(harness, encoding='utf-8')
+    compiled = subprocess.run(
+        ['javac', '-d', str(tmp_path), str(SDK_DIR / 'java' / 'FraOpenSign.java'), str(tmp_path / 'SignHarness.java')],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert compiled.returncode == 0, compiled.stderr
+    result = subprocess.run(['java', '-cp', str(tmp_path), 'SignHarness'], capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f'ok {len(v["cases"])}'
+
+
 def test_readme_shows_the_same_vectors() -> None:
     """对接文档里贴出来的签名必须就是测试向量算出来的那个 —— 改了算法忘了改文档会在这里红"""
     text = README.read_text(encoding='utf-8')
@@ -141,8 +183,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 public class Harness {{
     public static void main(String[] a) throws Exception {{
-        Map<String, String> h = Map.of("webhook-id", {_json.dumps(v['id'])},
-            "webhook-timestamp", "{v['timestamp']}", "webhook-signature", {_json.dumps(v['signature'])});
+        // 大小写混合：Servlet 在 HTTP/1.1 下给的就是 Webhook-Id 这种（#231）
+        Map<String, String> h = Map.of("Webhook-Id", {_json.dumps(v['id'])},
+            "WEBHOOK-TIMESTAMP", "{v['timestamp']}", "webhook-signature", {_json.dumps(v['signature'])});
         byte[] body = {_json.dumps(v['body'])}.getBytes(StandardCharsets.UTF_8);
         byte[] tampered = ({_json.dumps(v['body'])} + " ").getBytes(StandardCharsets.UTF_8);
         long now = {v['timestamp']}L + 10;
