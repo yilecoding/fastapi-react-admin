@@ -174,9 +174,11 @@ error:
     binding_unsupported: Binding {source} is not supported yet
     illegal_state_operation: 'Illegal operation: invalid OAuth2 state'
     social_login_unsupported: '{social} OAuth2 sign-in is not supported yet'
+    state_already_claimed: This authorization link has already been used. Please start again from the page
     state_invalid: Invalid OAuth2 state
     state_invalid_or_missing: OAuth2 state is invalid or missing
     state_missing: OAuth2 state is missing
+    state_not_bound: This authorization was not started from this browser. Please start again from the page
     username_exists: Username already exists, please try another one
   open:
     app_disabled: The application is disabled, please contact the administrator

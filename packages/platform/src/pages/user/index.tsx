@@ -34,7 +34,7 @@ import { UserSecuritySheet } from './security-sheet'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { ExportButton } from '../_shared/data-io/export-button'
 import { ImportSheet } from '../_shared/data-io/import-sheet'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 /**
  * 用户管理 —— **三件套模板的样板页**。
@@ -246,9 +246,7 @@ export function UserPage({
     <PageShell fill="always">
       <PageHeader title={t('用户管理')} description={t('管理后台账号、部门归属与角色分配。')} />
 
-      {/* 查询区和表格是同一个块的两半（筛选 → 结果），gap-4 而不是页面级的 24px；
-          这一层也要能收缩，否则「只滚表格行」那条链断在这里 */}
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         <QueryBar
           fields={fields}
           value={q.value}
@@ -348,7 +346,7 @@ export function UserPage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       <UserFormSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} />
       <ImportSheet

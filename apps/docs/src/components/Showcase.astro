@@ -1,0 +1,61 @@
+---
+/**
+ * 首页的「大卡片」：左边标题 + 一句话 + 几条发丝线隔开的要点（默认 slot，写 markdown 列表）+ 看文档，
+ * 右边一张线稿图示（`slot="diagram"`）。`wide` 占满一行、左右排；不带 `wide` 的半宽、上下排。
+ * 用图示不用截图：截图信息太满，线稿只画「这件事的形状」。
+ */
+interface Props {
+  title: string
+  lead: string
+  href: string
+  more: string
+  wide?: boolean
+}
+const { title, lead, href, more, wide = false } = Astro.props
+---
+
+<article class:list={['showcase not-content', { 'showcase--wide': wide }]}>
+  <div class="showcase-copy">
+    <h3>{title}</h3>
+    <p class="showcase-lead">{lead}</p>
+    <div class="showcase-points"><slot /></div>
+    <a class="showcase-more" href={href}>{more} <span aria-hidden="true">→</span></a>
+  </div>
+  <div class="showcase-diagram"><slot name="diagram" /></div>
+</article>
+
+<style is:global>
+  .showcases { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) }
+  @media (min-width: 52rem) { .showcases { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+  .showcases > * { margin: 0 !important }
+
+  .showcase {
+    display: flex; flex-direction: column; gap: 2rem;
+    padding: clamp(1.1rem, 3vw, 2.25rem);
+    border-radius: 1.25rem;
+    background: var(--surface);
+    box-shadow: inset 0 0 0 1px var(--line);
+    transition: box-shadow 0.25s ease;
+  }
+  .showcase:hover { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--brand) 35%, transparent) }
+  .showcase--wide { grid-column: 1 / -1 }
+  @media (min-width: 52rem) {
+    .showcase--wide { flex-direction: row; align-items: center; gap: 3rem }
+    .showcase--wide .showcase-copy { flex: 0 0 42% }
+    .showcase--wide .showcase-diagram { flex: 1 }
+  }
+
+  .showcase-copy { display: flex; flex-direction: column; min-width: 0 }
+  .showcase-copy > * { margin: 0 }
+  .showcase h3 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; color: var(--sl-color-white) }
+  .showcase-lead { margin-top: 0.5rem !important; font-size: 0.95rem; line-height: 1.7; color: var(--sl-color-gray-3) }
+  .showcase-points ul { margin: 1.25rem 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line) }
+  .showcase-points li { margin: 0; padding: 0.7rem 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; line-height: 1.6; color: var(--sl-color-gray-2) }
+  .showcase-points code { font-size: 0.85em }
+  .showcase-more { margin-top: 1.25rem !important; font-size: 0.9rem; font-weight: 600; color: var(--brand); text-decoration: none }
+  .showcase-more span { display: inline-block; transition: transform 0.2s ease }
+  .showcase-more:hover span { transform: translateX(3px) }
+
+  .showcase-diagram { min-width: 0; color: var(--diagram-text) }
+  .showcase-diagram svg { display: block; width: 100%; height: auto; overflow: visible }
+</style>

@@ -25,7 +25,7 @@ pages/xxx/
 
 | 文件 | 提供 |
 |---|---|
-| `_shared/page-shell.tsx` | `PageShell`：每个页面最外面那几层 div（`fill="always"` 列表页 / `"lg"` 主从页 / 默认按自然高度）。**页面里不再手写外壳、不写上下 padding**，见下一节 |
+| `_shared/page-shell.tsx` | `PageShell` + 列表页「查询区 + 表格」那块的 `ListBody`。`PageShell`：每个页面最外面那几层 div（`fill="always"` 列表页 / `"lg"` 主从页 / 默认按自然高度）。**页面里不再手写外壳、不写上下 padding**，见下一节 |
 | `_shared/status.tsx` | `TONE_CLASS` 色板 · `StatusPill` · `StatusBadge`（正常/停用）· `STATUS_FILTER_ITEMS` / `STATUS_FORM_ITEMS` · `YesNoBadge` |
 | `_shared/filters.tsx` | `TextFilter`（回车/失焦才写 URL）· `SelectFilter` · `StatusFilter` · `ResetButton` · `BulkBar` · `RefreshButton`（见下「刷新」一节） |
 | `_shared/select-column.tsx` | `buildSelectColumn(col, { canSelect })` —— 表格首列的复选框（含半选态） |
@@ -256,10 +256,10 @@ const submitQuery = React.useCallback((v) => { setRowSelection({}); q.submit(v) 
    `countActive(q.applied, fields) > 0`
 4. 🔴 **删掉 `DataTable` 的 `toolbar` / `actions`**，传 `showColumnVisibility={false}`，
    把「新增 / 导出 / 列 / 批量条」搬进 `QueryBar` 的 `actions`（理由见上）
-5. 🔴 查询区和表格**包一层** `flex flex-col gap-4 content-scroll:min-h-0
-   content-scroll:flex-1` —— 少了 `gap-4` 是 24px 断档（查询区内部才 8px）；
-   少了后两个类，「只滚表格行」那条链就断在这一层（表现是「设置生效了，
-   但还是整块在滚」）
+5. 🔴 查询区和表格**包进 `<ListBody>`**（`_shared/page-shell.tsx`，`arch:check` 的 `list-body-handwritten` 守着不手写）：
+   `gap-3`（12px）+ `content-scroll:min-h-0 content-scroll:flex-1`（少了「只滚表格行」那条链断在这层）。
+   原来 14 页各抄一份 `gap-4`（部门 / 菜单没包、吃页面级 24px），2026-11-05 截图比过 8 / 12 / 16 定 12 —— 8 时三段等距，
+   分不出条件和结果；16 偏松。`DataTable` 自带工具栏那条路同值
 6. route schema：筛选键换成 `FIELDS` 的 `key`，补 `f`，**不留 `adv`**
    （没开 `advanced` 的话它是个休眠字段）
 

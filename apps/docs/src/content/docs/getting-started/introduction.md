@@ -1,17 +1,57 @@
 ---
 title: fastapi-react-admin 是什么
-description: 基于 FastAPI + React 19 + shadcn/ui 的开源中后台底座，适合做企业内部系统；以及它和常见后台模板的区别。
+description: 基于 FastAPI + React 19 + shadcn/ui 的开源中后台底座：Web、桌面、手机三端同一个 monorepo，为和 AI 一起写代码而设计；为什么做它，以及它和常见后台模板的区别。
 sidebar:
   order: 0
 ---
 
 fastapi-react-admin 是一个开源（MIT）的中后台底座：后端 FastAPI，前端 React 19 + shadcn/ui，内部系统迟早要做的那些东西都已经做好了——用户、角色、部门、行级数据权限、审批、文件、消息通知、定时任务、AI 助手。拿去之后在上面写自己的业务页面。
 
+## 为什么在 AI 时代还要做一个后台底座？
+
+因为 AI 让要做的系统变多了，而每个新系统开头都在重复同一批活。排不上队的小工具值得做了，跑了多年的老系统也该换了——可登录、权限、组织架构、审批、文件、通知，每次都得从头再来。
+
+这个项目起步于公司里几套 Java + Vue 2 小系统的重构。我们没有在旧架构上修补，而是用 FastAPI + React 19 从头搭了一遍，再把每次都要重做的部分沉淀成底座：**下一个系统，从写业务开始。**
+
+## 一个仓库里有什么？
+
+后端、Web 管理后台、桌面端模板、移动端模板和文档站，都在同一个 pnpm + turbo monorepo 里：`pnpm install:all` 一次装好，`pnpm dev` 一条命令起前后端。
+
+```
+apps/
+├── api        后端 · FastAPI + Celery
+├── web        Web 管理后台 · React 19
+├── desktop    桌面端模板 · Electron
+├── mobile     移动端模板 · Expo / React Native
+└── docs       文档站 · Astro
+packages/      依赖单向：i18n / api ← ui ← platform ← web
+├── api        前后端类型契约，由 OpenAPI 生成
+├── i18n       中英文案
+├── ui         组件库，不含业务，可整包带走
+└── platform   权限、多页签、业务页面
+```
+
+- **Web 管理后台**是主体，开箱即用。
+- **桌面端模板**直接加载 Web 的构建产物，只补浏览器做不到的事：静默打印、本地硬件、自动更新。见[桌面端与移动端](/features/clients/)。
+- **移动端模板**是原生界面，和 Web 共用接口类型（`@admin/api`）与语言包（`@admin/i18n`）。
+- **分层有约束。** 依赖严格单向，写在各包的 `package.json` 里，`pnpm arch:check` 在 CI 里把关。
+
+## 为什么说它适合和 AI 一起写代码？
+
+因为 AI 改代码很快，而这里每一处改动都有东西兜底：
+
+- **测试兜底。** AI 一次改十几个文件很常见，人工点一遍点不过来。后端 1400+ 条 pytest 连真实数据库和 Redis，前端 150+ 条 Playwright 跑真实浏览器，不用 mock，CI 每次全量跑；失败的用例带截图和录像，[E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/)公开。
+- **类型兜底。** 前后端类型由后端的 OpenAPI 生成（`packages/api/src/schema.d.ts`），接口改了而页面没跟上，`pnpm typecheck` 直接报错。
+- **规矩写给 AI 看。** 仓库里 50 多份按目录拆分的 `CLAUDE.md` / `AGENTS.md` 记着实测踩过的坑和硬纪律，编码助手改到哪个目录，就读到哪一份。
+- **后端就在 AI 生态里。** Python + FastAPI，内置的 AI 助手基于 pydantic-ai。
+
 ## 适合谁用
 
 - 要做企业内部系统（OA、ERP 式后台、运营管理台），后端想用 Python、前端想用 React 的团队。
 - 已经在用微软技术栈的团队：SQL Server 在这里是一等公民，每次 CI 都和 PostgreSQL 一起跑全量测试。
 - 权限要求不止「这个角色能打开哪些菜单」的团队——比如部门经理只能看到本部门的数据。
+- 除了 Web 还要出桌面端或手机端的团队：两个模板已经接好登录、接口类型和语言包，从模板起步，不用从零搭。
+- 在用 AI 编码助手、又担心它把东西改坏的团队。
 
 ## 和常见的后台模板有什么不同
 
@@ -38,7 +78,7 @@ fastapi-react-admin 是一个开源（MIT）的中后台底座：后端 FastAPI�
 
 - **不是低代码平台。** 业务页面用 React 写，接口用 FastAPI 写；底座提供的是外壳、权限模型和公共组件。
 - **不是托管服务。** 需要自己部署，见[部署](/getting-started/deployment/)。
-- **还没到 1.0。** 目前发的是 0.x 版本，升级前先看[更新记录](https://github.com/yilecoding/fastapi-react-admin/releases)。
+- **不是一次性的脚手架。** 1.0 起按 semver 发版，开放接口、Webhook、数据库迁移链、插件接口、配置键都有兼容承诺；升级前先看[更新记录](https://github.com/yilecoding/fastapi-react-admin/releases)。
 
 ## 从哪来的
 
