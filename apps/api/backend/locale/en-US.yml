@@ -169,6 +169,8 @@ error:
     account_bound: This account is already bound to {source}
     account_bound_to_other: This {source} account is already bound to another user
     account_not_bound: This account is not bound to {source}
+    auto_register_disabled: This {source} account is not linked to any user yet. Sign in with your password first, then link it in your profile
+    auto_register_role_missing: 'The default role for auto-registered accounts is not configured or not available ({role}). Please contact the administrator'
     binding_unsupported: Binding {source} is not supported yet
     illegal_state_operation: 'Illegal operation: invalid OAuth2 state'
     social_login_unsupported: '{social} OAuth2 sign-in is not supported yet'

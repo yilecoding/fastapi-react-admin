@@ -352,9 +352,11 @@ class AuthService:
         captcha_code = await redis_client.get(key)
         if not captcha_code:
             raise errors.RequestError(msg=t('error.captcha.expired'))
+        # 🔴 比对之前就消费，答错也作废（#229）：原来只在答对时删，同一张图在有效期内可以反复猜，
+        # 每次只花一次登录限流的配额。前端答错后本来就会换一张（`shouldReloadCaptcha`），正常用户无感
+        await redis_client.delete(key)
         if captcha_code.lower() != captcha.lower():
             raise errors.CustomError(error=CustomErrorCode.CAPTCHA_ERROR)
-        await redis_client.delete(key)
 
     async def _open_session(
         self, *, db: AsyncSession, request: Request, response: Response, user: User, client: str
