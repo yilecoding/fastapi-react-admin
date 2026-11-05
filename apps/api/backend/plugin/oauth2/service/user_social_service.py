@@ -1,15 +1,12 @@
-import json
-import uuid
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.core.conf import settings
-from backend.database.redis import redis_client
 from backend.plugin.oauth2.crud.crud_user_social import user_social_dao
 from backend.plugin.oauth2.enums import UserSocialAuthType, UserSocialType
 from backend.plugin.oauth2.schema.user_social import CreateUserSocialParam
+from backend.plugin.oauth2.state_binding import authorize_url, issue_state
 
 
 class UserSocialService:
@@ -68,33 +65,16 @@ class UserSocialService:
 
     @staticmethod
     async def get_binding_auth_url(*, user_id: int, source: UserSocialType) -> str:
-        state = str(uuid.uuid4())
-
-        await redis_client.set(
-            f'{settings.OAUTH2_STATE_REDIS_PREFIX}:{state}',
-            json.dumps({'type': UserSocialAuthType.binding.value, 'user_id': user_id}),
-            ex=settings.OAUTH2_STATE_EXPIRE_SECONDS,
-        )
-
         match source:
             case UserSocialType.github:
-                from backend.plugin.oauth2.api.v1.github import github_client
-
-                auth_url = await github_client.get_authorization_url(
-                    redirect_uri=settings.OAUTH2_GITHUB_REDIRECT_URI,
-                    state=state,
-                )
+                redirect_uri = settings.OAUTH2_GITHUB_REDIRECT_URI
             case UserSocialType.google:
-                from backend.plugin.oauth2.api.v1.google import google_client
-
-                auth_url = await google_client.get_authorization_url(
-                    redirect_uri=settings.OAUTH2_GOOGLE_REDIRECT_URI,
-                    state=state,
-                )
+                redirect_uri = settings.OAUTH2_GOOGLE_REDIRECT_URI
             case _:
                 raise errors.ForbiddenError(msg=t('error.oauth2.binding_unsupported', source=source))
-
-        return auth_url
+        # 返回的是后端 authorize 入口 + 一次性 ticket（= 绑定 state），cookie 在那一跳上下发（#227）
+        state = await issue_state({'type': UserSocialAuthType.binding.value, 'user_id': user_id})
+        return authorize_url(redirect_uri, ticket=state)
 
 
 user_social_service: UserSocialService = UserSocialService()
