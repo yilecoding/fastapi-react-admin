@@ -1,5 +1,6 @@
 import { useRouter, type Href } from 'expo-router'
 import {
+  FilePlusIcon,
   BellIcon,
   FileCheckIcon,
   IdCardIcon,
@@ -65,6 +66,7 @@ const SECTIONS: Section[] = [
     tiles: [
       // 审批人人都可能是办理人，接口只要登录 —— 不挂权限码
       { key: 'workflow', label: '审批', icon: FileCheckIcon, bg: 'bg-orange-500/15', fg: 'text-orange-600 dark:text-orange-400', href: '/workflow' },
+      { key: 'workflow-start', label: '发起审批', icon: FilePlusIcon, bg: 'bg-amber-500/15', fg: 'text-amber-600 dark:text-amber-400', href: '/workflow/start' },
       { key: 'notifications', label: '通知', icon: BellIcon, bg: 'bg-sky-500/15', fg: 'text-sky-600 dark:text-sky-400', href: '/notifications' },
       { key: 'profile', label: '个人资料', icon: IdCardIcon, bg: 'bg-violet-500/15', fg: 'text-violet-600 dark:text-violet-400', href: '/profile/info' },
       { key: 'settings', label: '设置', icon: SettingsIcon, bg: 'bg-slate-500/15', fg: 'text-slate-600 dark:text-slate-300', href: '/settings' },
