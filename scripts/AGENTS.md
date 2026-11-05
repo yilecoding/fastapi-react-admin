@@ -160,6 +160,16 @@ JSON 字符串里的 glob 当成了块注释开头：`"@/*"` 里那两个字符�
 反向验证（各注入一处，改回即绿）：三元分支委托的组件加 `py-4` · 第二层 div 加 `py-4` · `cn("py-4 …")` · 根元素 `mt-4` ·
 `return renderIt()` → 前四个报 `page-root-padding`（行号指到真实那一行）、最后一个报 `page-root-unscanned`；`[&>section]:py-2` 不报。
 
+### 列表页那块不手写（`list-body-handwritten`）
+
+用了 `<QueryBar>` 的页面里，一个 `flex-col gap-*` 的类串同时带 `content-scroll:min-h-0` 和 `content-scroll:flex-1` 就报 ——
+那是「查询区 + 表格」外包又被手抄了，该用 `_shared/page-shell.tsx` 的 `<ListBody>`。原来 14 页各一份，调一次间距要改 14 处。
+
+⚠️ 第一版只看两个 `content-scroll:` 类，14 页全报：表格框外那层（`content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 …`）
+也是收缩链的一环、合法。加上「带 `gap-`」才只剩真外包。另有 `list-body-scanner-broken`：找到的 `<QueryBar>` 文件少于 10 个就报（防假绿）。
+
+**实测证据**：全仓 0 报；把短信日志页的 `<ListBody>` 换回手写 div → 报 `sms-log/index.tsx:223`，换回即绿。
+
 ### 组件库那三条（`orphan-component` / `unused-third-party` / `stale-registry`）
 
 都是为 `packages/ui`「**被下游整包拿走自己改**」这个定位服务的

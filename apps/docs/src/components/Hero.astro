@@ -2,87 +2,103 @@
 /**
  * 覆盖 Starlight 的 Hero（只在带 `hero` frontmatter 的页面出现 —— 也就是中英两个首页）。
  *
- * 版式照搬登录页左栏的品牌面板：渐变底 + 两团光晕，左边文案，右边立体榫卯。
+ * 版式走「克制」路线：不套面板、不铺渐变，白底 + 大留白，左边文案、右边立体榫卯，
+ * 榫卯后面是几圈发丝细的同心圆。按钮是一种墨色，技术栈是带色点的小标签。
  * 文案全部来自页面 frontmatter（`hero` 是 Starlight 自带的，`landing` 是 content.config.ts
  * 里扩出来的），组件里不写任何一句给人看的话 —— 中英文各管各的 frontmatter。
  */
 import { Icon } from '@astrojs/starlight/components'
-import logo from '../assets/logo.svg'
 import TenonStage from './TenonStage.astro'
 
 const { data } = Astro.locals.starlightRoute.entry
 const { title = data.title, tagline, actions = [] } = data.hero ?? {}
-const { eyebrow, chips = [] } = data.landing ?? {}
+const { chips = [] } = data.landing ?? {}
+// 技术栈标签的色点，按顺序取；颜色不是给人读的文字，放组件里
+const DOTS = ['oklch(0.62 0.13 175)', 'oklch(0.66 0.13 220)', 'oklch(0.55 0.17 262)', 'oklch(0.58 0.16 300)']
 ---
 
-<section class="hero-panel not-content" data-tenon-tilt>
-  <div class="hero-glow" aria-hidden="true"></div>
-  <div class="hero-glow hero-glow--2" aria-hidden="true"></div>
+<section class="hero not-content" data-tenon-tilt>
+  <svg class="hero-rings" viewBox="0 0 800 800" aria-hidden="true">
+    {[120, 200, 290, 390].map((r) => <circle cx="400" cy="400" r={r} />)}
+  </svg>
+  <div class="hero-glow-soft" aria-hidden="true"></div>
 
   <div class="hero-copy">
-    <p class="hero-brand"><img src={logo.src} alt="" width="28" height="28" /> fastapi-react-admin</p>
-    {eyebrow && <p class="hero-eyebrow">{eyebrow}</p>}
     <h1 id="_top" data-page-title set:html={title} />
     {tagline && <p class="hero-tagline" set:html={tagline} />}
+    {
+      chips.length > 0 && (
+        <ul class="hero-stack">
+          {chips.map((c, i) => (
+            <li style={`--dot: ${DOTS[i % DOTS.length]}`}>{c}</li>
+          ))}
+        </ul>
+      )
+    }
     {
       actions.length > 0 && (
         <div class="hero-actions">
           {actions.map(({ attrs: { class: cls, ...attrs } = {}, icon, link, text, variant }) => (
             <a class:list={['hero-btn', `hero-btn--${variant}`, cls]} href={link} {...attrs}>
               {text}
-              {icon?.name && <Icon name={icon.name} size="1.1em" />}
+              {icon?.name && <Icon name={icon.name} size="1.05em" />}
               {icon?.html && <Fragment set:html={icon.html} />}
             </a>
           ))}
         </div>
       )
     }
-    {chips.length > 0 && <ul class="hero-chips">{chips.map((c) => <li>{c}</li>)}</ul>}
   </div>
 
   <div class="hero-stage"><TenonStage /></div>
 </section>
 
 <style is:global>
-  .hero-panel {
+  .hero {
     position: relative;
     isolation: isolate;
     display: grid;
-    gap: 1rem;
-    overflow: hidden;
-    margin-top: 0.5rem;
-    padding: clamp(1.75rem, 4vw, 3.5rem);
-    padding-bottom: clamp(5rem, 9vw, 8rem);
-    border-radius: 2rem;
-    background: var(--brand-panel);
-    box-shadow: inset 0 0 0 1px var(--brand-ring);
-    color: var(--sl-color-white);
+    gap: 1.5rem;
+    padding: clamp(2.5rem, 7vw, 6rem) 0 clamp(2rem, 5vw, 4rem);
   }
   @media (min-width: 60rem) {
-    .hero-panel { grid-template-columns: 1.15fr 0.85fr; column-gap: 2rem; align-items: center }
+    .hero { grid-template-columns: 1.1fr 0.9fr; column-gap: 2rem; align-items: center; min-height: 34rem }
   }
-  .hero-glow {
-    position: absolute; z-index: -1; pointer-events: none;
-    top: -20%; left: 30%; width: 60rem; height: 60rem;
-    background: radial-gradient(closest-side, var(--brand-glow), transparent 70%);
-  }
-  .hero-glow--2 { top: auto; left: -18rem; bottom: -26rem; width: 40rem; height: 40rem; background: radial-gradient(closest-side, var(--brand-glow-2), transparent 70%) }
 
-  .hero-copy { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0 }
+  /* 同心圆：圆心落在榫卯上，线细到几乎看不见，只给画面一点纵深 */
+  .hero-rings {
+    position: absolute; z-index: -1; pointer-events: none;
+    top: 50%; right: -16rem; width: 52rem; height: 52rem; transform: translateY(-50%);
+    fill: none; stroke: var(--ring); stroke-width: 1;
+  }
+  .hero-glow-soft {
+    position: absolute; z-index: -2; pointer-events: none;
+    top: -14rem; left: -18rem; width: 44rem; height: 44rem;
+    background: radial-gradient(closest-side, color-mix(in oklab, var(--brand) 9%, transparent), transparent);
+  }
+  @media (max-width: 59.99rem) {
+    .hero-rings { right: 50%; top: 9rem; width: 34rem; height: 34rem; transform: translate(50%, -50%) }
+  }
+
+  .hero-copy { display: flex; flex-direction: column; gap: 1.4rem; min-width: 0 }
   .hero-copy > * { margin: 0 }
-  .hero-brand { display: flex; align-items: center; gap: 0.6rem; font-family: var(--__sl-font-mono); font-size: 0.875rem; letter-spacing: 0.04em; animation: hero-in 0.62s cubic-bezier(0.2, 0.7, 0.2, 1) both }
-  .hero-eyebrow { font-family: var(--__sl-font-mono); font-size: 0.72rem; letter-spacing: 0.32em; color: var(--brand); animation: hero-in 0.62s 0.08s cubic-bezier(0.2, 0.7, 0.2, 1) both }
-  .hero-panel h1 {
-    font-size: clamp(2.2rem, 4.4vw, 3.5rem);
-    line-height: 1.06;
-    font-weight: 800;
+  .hero h1 {
+    font-size: clamp(2.3rem, 4.6vw, 3.6rem);
+    line-height: 1.08;
+    font-weight: 750;
     letter-spacing: -0.035em;
     color: var(--sl-color-white);
-    animation: hero-in 0.62s 0.14s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation: hero-in 0.7s 0.05s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
-  .hero-tagline { max-width: 36rem; font-size: clamp(1rem, 1.4vw, 1.125rem); line-height: 1.7; color: var(--sl-color-gray-2); animation: hero-in 0.62s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both }
+  .hero-tagline {
+    max-width: 33rem;
+    font-size: clamp(1rem, 1.3vw, 1.075rem);
+    line-height: 1.8;
+    color: var(--sl-color-gray-3);
+    animation: hero-in 0.7s 0.12s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
 
-  /* 标题里那几个字的流光（登录页「咬合」同款） */
+  /* 标题里那几个字的流光（登录页「咬合」同款），只留这一处颜色 */
   .shine {
     background-image: linear-gradient(90deg, var(--brand) 0%, var(--brand-shine-mid) 35%, var(--brand-shine-hot) 50%, var(--brand-shine-mid) 65%, var(--brand) 100%);
     background-size: 200% 100%;
@@ -90,39 +106,38 @@ const { eyebrow, chips = [] } = data.landing ?? {}
     animation: hero-shimmer 6s linear infinite;
   }
 
-  .hero-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.5rem !important; animation: hero-in 0.62s 0.26s cubic-bezier(0.2, 0.7, 0.2, 1) both }
+  .hero-stack { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0; list-style: none; animation: hero-in 0.7s 0.18s cubic-bezier(0.2, 0.7, 0.2, 1) both }
+  .hero-stack li {
+    display: inline-flex; align-items: center; gap: 0.45rem; margin: 0;
+    height: 1.75rem; padding: 0 0.7rem; border-radius: 999px;
+    font-size: 0.8rem; font-weight: 500; color: var(--sl-color-gray-2);
+    background: color-mix(in oklab, var(--dot) 10%, transparent);
+  }
+  .hero-stack li::before { content: ''; width: 0.4rem; height: 0.4rem; border-radius: 99px; background: var(--dot) }
+
+  .hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; animation: hero-in 0.7s 0.24s cubic-bezier(0.2, 0.7, 0.2, 1) both }
   .hero-btn {
     display: inline-flex; align-items: center; gap: 0.5rem;
-    height: 2.9rem; padding: 0 1.35rem; border-radius: 999px;
-    font-weight: 600; font-size: 0.95rem; text-decoration: none;
-    transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+    height: 2.75rem; padding: 0 1.25rem; border-radius: 0.6rem;
+    font-weight: 600; font-size: 0.925rem; text-decoration: none;
+    transition: transform 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
   }
   .hero-btn:hover { transform: translateY(-1px) }
-  .hero-btn--primary {
-    color: #fff;
-    background: linear-gradient(135deg, oklch(0.58 0.23 282), oklch(0.457 0.24 277));
-    box-shadow: 0 10px 30px -10px oklch(0.457 0.24 277 / 0.8), inset 0 1px 0 oklch(1 0 0 / 0.25);
-  }
-  .hero-btn--primary:hover { box-shadow: 0 14px 36px -10px oklch(0.457 0.24 277 / 0.95), inset 0 1px 0 oklch(1 0 0 / 0.25) }
-  .hero-btn--secondary { color: var(--sl-color-white); background: var(--brand-chip-bg); box-shadow: inset 0 0 0 1px var(--brand-chip-line) }
-  .hero-btn--minimal { color: var(--sl-color-white); padding-inline: 0.6rem }
+  .hero-btn--primary { color: var(--ink-fg); background: var(--ink); box-shadow: 0 8px 20px -12px oklch(0.17 0.02 280 / 0.6) }
+  .hero-btn--primary:hover { color: var(--ink-fg) }
+  .hero-btn--secondary { color: var(--sl-color-white); background: var(--surface-hi); box-shadow: inset 0 0 0 1px var(--line-strong) }
+  .hero-btn--secondary:hover { color: var(--sl-color-white); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--brand) 45%, transparent) }
+  .hero-btn--minimal { color: var(--sl-color-gray-2); padding-inline: 0.5rem }
   .hero-btn--minimal:hover { color: var(--brand) }
 
-  .hero-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0; list-style: none; animation: hero-in 0.62s 0.32s cubic-bezier(0.2, 0.7, 0.2, 1) both }
-  .hero-chips li {
-    display: flex; align-items: center; height: 1.85rem; padding: 0 0.85rem; margin: 0;
-    border-radius: 999px; font-size: 0.8rem; font-weight: 500;
-    color: var(--brand); background: var(--brand-chip-bg); box-shadow: inset 0 0 0 1px var(--brand-chip-line);
-  }
-
-  .hero-stage { height: clamp(16rem, 34vw, 30rem); min-width: 0 }
+  .hero-stage { height: clamp(16rem, 32vw, 28rem); min-width: 0 }
   @media (max-width: 59.99rem) {
-    .hero-stage { order: -1; height: 15rem; margin: -1rem 0 -0.5rem }
+    .hero-stage { order: -1; height: 14rem; margin: -1.5rem 0 -1rem }
   }
 
   @keyframes hero-in { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
   @keyframes hero-shimmer { from { background-position: 200% 0 } to { background-position: -200% 0 } }
   @media (prefers-reduced-motion: reduce) {
-    .hero-panel *, .shine { animation: none !important }
+    .hero *, .shine { animation: none !important }
   }
 </style>
