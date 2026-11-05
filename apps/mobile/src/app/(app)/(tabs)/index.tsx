@@ -4,12 +4,12 @@ import { useTranslation } from 'react-i18next'
 import {
   BellIcon,
   CheckCheckIcon,
-  SendIcon,
-  type LucideIcon,
   ChevronRightIcon,
+  InboxIcon,
+  MailIcon,
+  SendIcon,
   TriangleAlertIcon,
-  UserRoundIcon,
-  UsersIcon,
+  type LucideIcon,
 } from 'lucide-react-native'
 import * as React from 'react'
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
@@ -26,7 +26,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
 import { noticesKey, useNoticeBanner, useNoticeFeed } from '@/lib/notices'
 import { useUnread } from '@/lib/notifications'
-import { usePerm } from '@/lib/perm'
 import { useSession } from '@/lib/session'
 import { relativeTime } from '@/lib/datetime'
 import { useInbox, useWorkflowCounts, type InboxTab } from '@/lib/workflow'
@@ -36,11 +35,15 @@ const HOME_NOTICE_COUNT = 3
 /** 首页放几条待办。复用收件箱「待办」那份缓存的第一页，不另起请求 */
 const HOME_TODO_COUNT = 3
 
-const WF_TILES: { tab: InboxTab; label: string; icon?: LucideIcon }[] = [
-  { tab: 'todo', label: '待办' },
+/**
+ * 四格**一律图标 + 字**，有计数的两格（待办 / 抄送未读）在图标右上角挂角标。
+ * 原来是「两格数字、两格图标」混排（已办 / 我发起的没有计数接口），一行里两种表达，读起来像没对齐
+ */
+const WF_TILES: { tab: InboxTab; label: string; icon: LucideIcon }[] = [
+  { tab: 'todo', label: '待办', icon: InboxIcon },
   { tab: 'done', label: '已办', icon: CheckCheckIcon },
   { tab: 'initiated', label: '我发起的', icon: SendIcon },
-  { tab: 'cc', label: '抄送我的' },
+  { tab: 'cc', label: '抄送我的', icon: MailIcon },
 ]
 
 export default function HomeScreen() {
@@ -52,7 +55,6 @@ export default function HomeScreen() {
   const qc = useQueryClient()
   // ⚠️ 只在**确实知道**有权限时才放这个入口。`known` 为假（权限码没问上）时
   // 不出现 —— 那一层的错误提示统一在「应用」那一屏兜住，首页不重复报一遍
-  const { can, known: permKnown } = usePerm()
   const router = useRouter()
   const [refreshing, setRefreshing] = React.useState(false)
   const todo = useInbox('todo')
@@ -165,88 +167,87 @@ export default function HomeScreen() {
               onPress={() => router.push({ pathname: '/workflow', params: { tab: x.tab } })}
               className="flex-1 items-center gap-1 rounded-lg py-1 active:bg-muted"
             >
-              {/* 已办 / 我发起的没有计数接口，给图标；硬塞「0」会被读成「一条都没有」 */}
-              {x.icon ? (
-                <View className="h-7 justify-center">
-                  <Icon as={x.icon} className="size-5 text-muted-foreground" />
-                </View>
-              ) : (
-                <Text className={`h-7 text-xl font-semibold ${n ? 'text-primary' : ''}`}>
-                  {n === undefined ? '–' : n > 99 ? '99+' : n}
-                </Text>
-              )}
+              <View className="h-7 justify-center">
+                <Icon as={x.icon} className="size-[22px] text-foreground" />
+                {n ? (
+                  // 计数是「值」，所以用主色（分册「主色只能出现在这几处」）
+                  <View className="absolute -top-1.5 left-3.5 min-w-[18px] items-center rounded-full bg-primary px-1">
+                    <Text className="text-[11px] leading-[18px] font-semibold text-primary-foreground">
+                      {n > 99 ? '99+' : n}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
               <Text className="text-xs text-muted-foreground">{t(x.label)}</Text>
             </Pressable>
           )
         })}
       </View>
 
-      <View className="flex-row items-end justify-between pr-8">
-        <GroupHeader>{t('待办')}</GroupHeader>
-        <Pressable onPress={() => router.push({ pathname: '/workflow', params: { tab: 'todo' } })} hitSlop={8}>
-          <Text className="pb-1.5 text-[13px] text-primary">{t('查看全部')}</Text>
-        </Pressable>
-      </View>
-      {todo.data ? (
-        <Group>
-          {todoItems.length === 0 ? (
-            <Row first>
-              <Text className="text-[14px] text-muted-foreground" testID="home-todo-empty">
-                {t('没有待你审批的单子')}
-              </Text>
-            </Row>
-          ) : (
-            todoItems.map((r, i) => (
-              <PressRow
-                key={`${r.id}:${r.task_id ?? ''}`}
-                first={i === 0}
-                // 🔴 ID 原样当字符串（硬纪律 6）
-                onPress={() =>
-                  router.push({
-                    pathname: '/workflow/[id]',
-                    params: { id: r.id },
-                  })
-                }
-              >
-                <View className="flex-1 gap-0.5">
-                  <View className="flex-row items-center gap-2">
-                    <Text className="flex-1 text-[15px]" numberOfLines={1}>
-                      {r.title}
+      {/* 没有待办就整段不出：上面的「待办」格子已经说了是 0，再来一块「没有待你审批的单子」是重复的空态 */}
+      {todo.data && todoItems.length === 0 ? null : (
+        <>
+          <View className="flex-row items-end justify-between pr-8">
+            <GroupHeader>{t('待办')}</GroupHeader>
+            <Pressable onPress={() => router.push({ pathname: '/workflow', params: { tab: 'todo' } })} hitSlop={8}>
+              <Text className="pb-1.5 text-[13px] text-primary">{t('查看全部')}</Text>
+            </Pressable>
+          </View>
+          {todo.data ? (
+            <Group>
+              {todoItems.map((r, i) => (
+                <PressRow
+                  key={`${r.id}:${r.task_id ?? ''}`}
+                  first={i === 0}
+                  // 🔴 ID 原样当字符串（硬纪律 6）
+                  onPress={() =>
+                    router.push({
+                      pathname: '/workflow/[id]',
+                      params: { id: r.id },
+                    })
+                  }
+                >
+                  <View className="flex-1 gap-0.5">
+                    <View className="flex-row items-center gap-2">
+                      <Text className="flex-1 text-[15px]" numberOfLines={1}>
+                        {r.title}
+                      </Text>
+                      {r.urgent ? (
+                        <Badge variant="destructive">
+                          <Text>{t('加急')}</Text>
+                        </Badge>
+                      ) : null}
+                    </View>
+                    <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+                      {[r.initiator_name, r.node_name, r.arrived_time ? relativeTime(r.arrived_time) : null]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </Text>
-                    {r.urgent ? (
-                      <Badge variant="destructive">
-                        <Text>{t('加急')}</Text>
-                      </Badge>
-                    ) : null}
                   </View>
-                  <Text className="text-xs text-muted-foreground" numberOfLines={1}>
-                    {[r.initiator_name, r.node_name, r.arrived_time ? relativeTime(r.arrived_time) : null]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </Text>
-                </View>
-                <Chevron icon={ChevronRightIcon} />
-              </PressRow>
-            ))
+                  <Chevron icon={ChevronRightIcon} />
+                </PressRow>
+              ))}
+            </Group>
+          ) : todo.isError ? (
+            <View className="px-4">
+              <Alert variant="destructive" icon={TriangleAlertIcon}>
+                <AlertTitle>{t('审批单拉取失败')}</AlertTitle>
+                <AlertDescription>{todo.error.message}</AlertDescription>
+                <Button variant="outline" size="sm" onPress={() => void todo.refetch()} className="mt-2 self-start">
+                  <Text>{t('重试')}</Text>
+                </Button>
+              </Alert>
+            </View>
+          ) : (
+            <View className="gap-2 px-4">
+              <Skeleton className="h-[56px] rounded-xl" />
+              <Skeleton className="h-[56px] rounded-xl" />
+            </View>
           )}
-        </Group>
-      ) : todo.isError ? (
-        <View className="px-4">
-          <Alert variant="destructive" icon={TriangleAlertIcon}>
-            <AlertTitle>{t('审批单拉取失败')}</AlertTitle>
-            <AlertDescription>{todo.error.message}</AlertDescription>
-            <Button variant="outline" size="sm" onPress={() => void todo.refetch()} className="mt-2 self-start">
-              <Text>{t('重试')}</Text>
-            </Button>
-          </Alert>
-        </View>
-      ) : (
-        <View className="gap-2 px-4">
-          <Skeleton className="h-[56px] rounded-xl" />
-          <Skeleton className="h-[56px] rounded-xl" />
-        </View>
+        </>
       )}
 
+      {/* 「个人中心」「用户」原来也挂在这里，和「我的」tab、「应用」宫格重复了；只留通知 —— 未读红点挂在首页 tab 上，入口就该在这一屏 */}
       <GroupHeader>{t('入口')}</GroupHeader>
       <Group>
         <PressRow first inset={56} onPress={() => router.push('/notifications')}>
@@ -260,20 +261,6 @@ export default function HomeScreen() {
           )}
           <Chevron icon={ChevronRightIcon} />
         </PressRow>
-        <PressRow inset={56} onPress={() => router.push('/profile')}>
-          <RowIcon icon={UserRoundIcon} />
-          <Text className="flex-1 text-[15px]">{t('个人中心')}</Text>
-          <Text className="text-[13px] text-muted-foreground">{t('资料 · 密码')}</Text>
-          <Chevron icon={ChevronRightIcon} />
-        </PressRow>
-        {permKnown && can('sys:user:list') ? (
-          <PressRow inset={56} onPress={() => router.push('/users')} testID="home-users">
-            <RowIcon icon={UsersIcon} />
-            <Text className="flex-1 text-[15px]">{t('用户')}</Text>
-            <Text className="text-[13px] text-muted-foreground">{t('查看 · 搜索')}</Text>
-            <Chevron icon={ChevronRightIcon} />
-          </PressRow>
-        ) : null}
       </Group>
 
       {/*

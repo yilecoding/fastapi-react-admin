@@ -1,9 +1,9 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Stack, useRouter } from 'expo-router'
-import { Pressable, ScrollView, View } from 'react-native'
+import { ScrollView, View } from 'react-native'
 
-import { Group, GroupHeader, Row } from '@/components/grouped'
+import { Group, GroupHeader, HeaderAction, Row } from '@/components/grouped'
 import { Text } from '@/components/ui/text'
 import { useSession } from '@/lib/session'
 
@@ -28,15 +28,7 @@ export default function ProfileInfoScreen() {
       <Stack.Screen
         options={{
           headerRight: () => (
-            <Pressable
-              onPress={() => router.push('/profile/edit')}
-              hitSlop={10}
-              accessibilityRole="button"
-              testID="profile-info-edit"
-              className="active:opacity-60"
-            >
-              <Text className="text-primary text-[15px] font-medium">{t('编辑')}</Text>
-            </Pressable>
+            <HeaderAction label={t('编辑')} onPress={() => router.push('/profile/edit')} testID="profile-info-edit" />
           ),
         }}
       />

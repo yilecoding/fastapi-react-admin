@@ -93,7 +93,7 @@ export function NoticeRow({
           <Text className={`flex-1 text-[15px] ${unread ? 'font-semibold' : ''}`} numberOfLines={1}>
             {notice.title}
           </Text>
-          <Text className="text-muted-foreground font-mono text-[11px]">{relativeTime(noticePublishedAt(notice))}</Text>
+          <Text className="text-muted-foreground text-[12px]">{relativeTime(noticePublishedAt(notice))}</Text>
         </View>
         {hasMeta ? (
           <View className="flex-row items-center gap-2">
