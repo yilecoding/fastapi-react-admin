@@ -51,6 +51,8 @@ export default function AppLayout() {
         <Stack.Screen name="notices/[id]" options={{ title: t('公告详情') }} />
         <Stack.Screen name="workflow/index" options={{ title: t('审批') }} />
         <Stack.Screen name="workflow/[id]" options={{ title: t('审批详情') }} />
+        <Stack.Screen name="workflow/start/index" options={{ title: t('发起审批') }} />
+        <Stack.Screen name="workflow/start/[code]" options={{ title: t('发起审批') }} />
       </Stack>
       {/*
         登录后弹窗（#190）。挂在这里 = 「外壳挂上之后」：这棵树只在已登录时存在（根 `_layout` 的 AuthGate），
