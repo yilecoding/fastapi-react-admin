@@ -34,6 +34,46 @@ Row-level permissions · multi-tab that keeps state · approval workflow · an A
 </tr>
 </table>
 
+## 🌱 Why build it?
+
+**One rewrite, distilled into a base you can start writing business logic on.**
+
+AI has made writing code faster, and there are more systems to build because of it: small tools that never made the roadmap are now worth doing, and systems that have run for years are due for a replacement. Yet the first weeks of every new system go to the same list — login, permissions, org structure, approvals, files, notifications.
+
+This project started as a rewrite of a few small Java + Vue 2 systems at work. Rather than patch the old architecture, we rebuilt them on FastAPI + React 19 and distilled everything that gets rebuilt every time into a base. **The next system starts with business logic.**
+
+### One repo for web, desktop and mobile
+
+The backend, the web admin console, a desktop template, a mobile template and the docs site live in one pnpm + turbo monorepo: install once, and one `pnpm dev` starts backend and frontend.
+
+```
+apps/
+├── api        backend · FastAPI + Celery
+├── web        web admin console · React 19
+├── desktop    desktop template · Electron
+├── mobile     mobile template · Expo / React Native
+└── docs       docs site · Astro
+packages/      one-way deps: i18n / api ← ui ← platform ← web
+├── api        frontend/backend type contract, generated from OpenAPI
+├── i18n       Chinese / English strings
+├── ui         component library, no business logic, portable as a whole
+└── platform   permissions, multi-tab, business pages
+```
+
+- **The web admin console** is the core, ready to use
+- **The desktop template** loads the web build and only adds what a browser can't do: silent printing, local hardware, auto-update
+- **The mobile template** has native screens and shares the API types and translations with web
+- **The layering is enforced**: dependencies flow one way, and `pnpm arch:check` checks it in CI
+
+### Built for working with AI
+
+AI changes code fast, so every change needs something to catch it:
+
+- **Tests** — 1,600+ tests against a real database and a real browser, no mocks, on every CI run; the [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) is public
+- **Types** — frontend/backend types are generated from OpenAPI, so an API change the pages didn't follow fails type checking
+- **Rules written for AI** — 50+ per-directory `CLAUDE.md` / `AGENTS.md` files record pitfalls found by testing; a coding assistant reads the one for whatever directory it edits
+- **A backend inside the AI ecosystem** — Python + FastAPI, with the built-in AI assistant on pydantic-ai
+
 ## ✨ Why this one
 
 - **Permissions down to which rows you see** — beyond menus and buttons there are data scopes: on the same user table, a department manager only sees their own department. Rules live on model columns, and the UI warns you when a rule is misconfigured
