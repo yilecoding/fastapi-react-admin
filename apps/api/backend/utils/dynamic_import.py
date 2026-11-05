@@ -51,7 +51,7 @@ def get_app_models() -> list[object]:
     from backend.core.path_conf import BASE_PATH
 
     app_path = BASE_PATH / 'app'
-    list_dirs = os.listdir(app_path)
+    list_dirs = sorted(os.listdir(app_path))  # 文件系统顺序因机器而异，见 plugin/core.py: get_plugins
 
     apps = [d for d in list_dirs if os.path.isdir(os.path.join(app_path, d)) and d != '__pycache__']
 

@@ -50,8 +50,9 @@ def get_plugins() -> tuple[str, ...]:
     """获取插件列表"""
     plugin_packages = []
 
-    # 遍历插件目录
-    for item in os.listdir(PLUGIN_DIR):
+    # 遍历插件目录。🔴 要排序（#234 顺带发现）：`os.listdir` 是文件系统自己的顺序，不同机器不同 ——
+    # 插件顺序决定路由注册顺序，于是同一份代码在两台机器上路由优先级可能不一样、导出的 OpenAPI 也不一样
+    for item in sorted(os.listdir(PLUGIN_DIR)):
         item_path = PLUGIN_DIR / item
         if not os.path.isdir(item_path) and item == '__pycache__':
             continue
