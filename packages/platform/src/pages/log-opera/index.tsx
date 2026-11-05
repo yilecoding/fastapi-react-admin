@@ -22,7 +22,7 @@ import { StatusPill } from '../_shared/status'
 import { OperaLogDetailSheet, formatLocation } from './detail-sheet'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { ExportButton } from '../_shared/data-io/export-button'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 /** 这一页列表 query 的 key 前缀。`useQuerySearch` 的 `refreshKey` 也用它 ——
  *  「点搜索必须真的重取」靠让这个前缀失效实现（见 use-query-search.ts） */
@@ -315,14 +315,7 @@ export function LogOperaPage({
         description={t('记录后台每一次接口调用的请求、响应与耗时。点操作时间看完整详情。')}
       />
 
-      {/*
-        🔴 查询区和表格是**同一个块的两半**（筛选 → 结果），所以包一层、
-        用 `gap-4`（16px）而不是页面级块之间的 `gap-4 md:gap-6`（24px）：
-        查询区内部两行只隔 8px，紧接着就跳 24px 到表格，节奏是断的。
-
-        ⚠️ 这一层也必须能收缩 —— 「只滚表格行」那条链断一层就整条失效。
-      */}
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         {/* 查询区不塞进 DataTable 的 toolbar 槽（那是一行） */}
         <QueryBar
           fields={FIELDS}
@@ -397,7 +390,7 @@ export function LogOperaPage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       <OperaLogDetailSheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)} log={detail} />
     </PageShell>

@@ -17,7 +17,7 @@ import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import { useUrlColumnOrder } from '../_shared/use-column-order'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { INVOCATION_STATUS, toolLogKeys, toolLogsQuery, type ToolInvocation } from './api'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 const FIELDS: FilterField[] = [
   {
@@ -220,9 +220,7 @@ export function AiToolLogPage({
         description={t('AI 每一次工具调用都会留痕，包括被权限拦下的那些。')}
       />
 
-      {/* 查询区和表格是同一个块的两半（筛选 → 结果），所以包一层用 gap-4；
-          这一层也必须能收缩 —— 「只滚表格行」那条链断一层就整条失效 */}
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         <QueryBar
           fields={FIELDS}
           value={q.value}
@@ -273,7 +271,7 @@ export function AiToolLogPage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
     </PageShell>
   )
 }
