@@ -36,39 +36,43 @@ Row-level permissions · multi-tab that keeps state · approval workflow · an A
 
 ## 🌱 Why build it?
 
-> **One rewrite, distilled into a base you can write business logic on from day one.**
+**One rewrite, distilled into a base you can start writing business logic on.**
 
-AI has made writing code faster, and that has created *more* internal-system work: small tools that never made the roadmap are now worth building, and systems that have run for years are due for a rewrite. Yet the first weeks of every new system go to the same list — login, permissions, org structure, approvals, files, notifications.
+AI has made writing code faster, and there are more systems to build because of it: small tools that never made the roadmap are now worth doing, and systems that have run for years are due for a replacement. Yet the first weeks of every new system go to the same list — login, permissions, org structure, approvals, files, notifications.
 
-This project grew out of rewriting a few small internal systems at work built on Java + Vue 2 (Vue 2 reached end of life at the end of 2023). Instead of patching the old architecture, we rebuilt from scratch on FastAPI + React 19, all on current stable releases, and distilled everything that gets rebuilt every time. **The next system starts straight on its own business logic.**
+This project started as a rewrite of a few small Java + Vue 2 systems at work. Rather than patch the old architecture, we rebuilt them on FastAPI + React 19 and distilled everything that gets rebuilt every time into a base. **The next system starts with business logic.**
 
-### One repo, three clients: web, desktop, mobile
+### One repo for web, desktop and mobile
+
+The backend, the web admin console, a desktop template, a mobile template and the docs site live in one pnpm + turbo monorepo: install once, and one `pnpm dev` starts backend and frontend.
 
 ```
-fastapi-react-admin/          pnpm + turbo monorepo · one install · one pnpm dev for backend + frontend
-├── apps/
-│   ├── api          FastAPI backend (+ Celery worker)
-│   ├── web          admin console · React 19
-│   ├── desktop      Electron · installers for 3 platforms · auto-update · silent printing · local hardware
-│   ├── mobile       native Expo app · not a WebView wrapper (preview)
-│   └── docs         docs site · Astro
-└── packages/        strictly one-way: i18n / api ← ui ← platform ← web
-    ├── api          type contract generated from the backend's OpenAPI — shared by web and mobile
-    ├── i18n         Chinese / English strings — shared by web and mobile
-    ├── ui           shadcn component library · zero business logic · portable as a whole
-    └── platform     permissions · multi-tab · pages — reused as-is by desktop
+apps/
+├── api        backend · FastAPI + Celery
+├── web        web admin console · React 19
+├── desktop    desktop template · Electron
+├── mobile     mobile template · Expo / React Native
+└── docs       docs site · Astro
+packages/      one-way deps: i18n / api ← ui ← platform ← web
+├── api        frontend/backend type contract, generated from OpenAPI
+├── i18n       Chinese / English strings
+├── ui         component library, no business logic, portable as a whole
+└── platform   permissions, multi-tab, business pages
 ```
 
-- **Desktop doesn't rewrite the app** — the Electron shell loads the web build and only adds what a browser can't do: silent printing, local hardware such as ID-card readers, auto-update. One installer serves any environment via runtime config
-- **Mobile is a native app** — Expo / React Native with its own screens, sharing the API contract and translations with web; change a backend field and both fail at compile time
-- **The layering is enforced** — dependency direction lives in `package.json`, and `pnpm arch:check` verifies it in CI, so a backwards import turns the build red
+- **The web admin console** is the core, ready to use
+- **The desktop template** loads the web build and only adds what a browser can't do: silent printing, local hardware, auto-update
+- **The mobile template** has native screens and shares the API types and translations with web
+- **The layering is enforced**: dependencies flow one way, and `pnpm arch:check` checks it in CI
 
-### Built for writing code with AI
+### Built for working with AI
 
-- **AI moves fast; the tests keep up** — 1,600+ automated tests against a real database and a real browser, no mocks, on every CI run; the [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) is public, with screenshots and video for failures
-- **A broken contract doesn't compile** — React + TypeScript with frontend/backend types generated from OpenAPI; if an AI changes an API but not the page, `pnpm typecheck` catches it
-- **AI assistants learn the rules per directory** — 50+ `CLAUDE.md` / `AGENTS.md` files record pitfalls and hard rules found by testing; a coding assistant loads the one for whatever directory it edits
-- **The backend lives in the AI ecosystem** — Python + FastAPI, with the built-in assistant on pydantic-ai, so models and tool calls need no second language
+AI changes code fast, so every change needs something to catch it:
+
+- **Tests** — 1,600+ tests against a real database and a real browser, no mocks, on every CI run; the [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) is public
+- **Types** — frontend/backend types are generated from OpenAPI, so an API change the pages didn't follow fails type checking
+- **Rules written for AI** — 50+ per-directory `CLAUDE.md` / `AGENTS.md` files record pitfalls found by testing; a coding assistant reads the one for whatever directory it edits
+- **A backend inside the AI ecosystem** — Python + FastAPI, with the built-in AI assistant on pydantic-ai
 
 ## ✨ Why this one
 
