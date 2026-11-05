@@ -554,7 +554,7 @@ export function DataTable<
      * 于是「谁要变成视区」只由**页面那一层**决定（给最外层块加
      * `content-scroll:min-h-0 content-scroll:flex-1`），这里不用知道调用方是谁。
      */
-    <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+    <div className="flex flex-col gap-3 content-scroll:min-h-0 content-scroll:flex-1">
       {/* ── Toolbar ── */}
       {(toolbar || actions || showColumnVisibility) && (
         <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

@@ -29,7 +29,7 @@ import {
 import { buildColumns, COLUMN_LABELS } from './columns'
 import { features } from './table-features'
 import { useNotificationOpen } from './use-open'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 /**
  * 可筛字段。`key` 是**地址栏参数名**，恰好和接口入参同名，所以不用 `param` 映射。
@@ -177,9 +177,7 @@ export function NotificationPage({
         description={t('系统消息与公告的收件箱。已读状态只属于你自己。')}
       />
 
-      {/* 查询区和表格是同一个块的两半；这一层也要能收缩，
-          否则「只滚表格行」那条链断在这里（见 shell 分册） */}
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         <QueryBar
           fields={FIELDS}
           value={q.value}
@@ -234,7 +232,7 @@ export function NotificationPage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       {/* 开在 URL 上 → 抽屉里用的是本 tab 的 portal 容器（reader-sheet 的注释） */}
       <NoticeReaderSheet
