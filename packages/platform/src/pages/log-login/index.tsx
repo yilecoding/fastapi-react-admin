@@ -24,7 +24,7 @@ import { LoginLogDetailSheet, formatLocation } from './detail-sheet'
 import type { LoginLog } from '../_shared/login-log'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { ExportButton } from '../_shared/data-io/export-button'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 /** 这一页列表 query 的 key 前缀。`useQuerySearch` 的 `refreshKey` 也用它 ——
  *  「点搜索必须真的重取」靠让这个前缀失效实现（见 use-query-search.ts） */
@@ -275,16 +275,7 @@ export function LogLoginPage({
     <PageShell fill="always">
       <PageHeader title={t('登录日志')} description={t('安全审计入口。失败尝试比成功登录更值得看。')} />
 
-      {/*
-        🔴 查询区和表格是**同一个块的两半**（筛选 → 结果），所以包一层、
-        用 `gap-4`（16px）而不是页面级块之间的 `gap-4 md:gap-6`（24px）：
-        查询区内部两行只隔 8px，紧接着就跳 24px 到表格，节奏是断的。
-
-        ⚠️ 这一层也必须能收缩（`content-scroll:min-h-0 flex-1 flex-col`）——
-        「只滚表格行」那条链从外壳一直到 `<table>`，中间**断一层就整条失效**
-        （表现是「设置生效了，但还是整块在滚」）。
-      */}
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         {/* 查询区不塞进 DataTable 的 toolbar 槽 ——
           toolbar 是一行（和「列」下拉、导出按钮同排），条件网格铺不进去 */}
         <QueryBar
@@ -361,7 +352,7 @@ export function LogLoginPage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       <LoginLogDetailSheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)} log={detail} />
     </PageShell>
