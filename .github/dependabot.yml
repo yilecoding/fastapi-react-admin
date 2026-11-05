@@ -6,6 +6,12 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    # 🔴 只把 minor / patch 打成一包；大版本各开一个 PR。
+    # 第一次跑（#245）把 11 个 action 的大版本塞进同一个 PR，其中 setup-uv v10 不再顺手装 Python，
+    # 三个 pytest / E2E job 全红在 uv sync —— 一包里只要一个不兼容，其余十个也跟着卡住，而且看不出是谁。
+    # 还要注意：Pages 和 GHCR 两个 job 只在 main 上跑，PR 里是 skipped，它们用到的 action 升大版本后
+    # 要合进去才知道行不行，合完盯一眼 main 的那一轮。
     groups:
       actions:
         patterns: ["*"]
+        update-types: [minor, patch]
