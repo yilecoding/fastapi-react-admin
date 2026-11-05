@@ -22,7 +22,7 @@ import { features } from './table-features'
 import { NoticeFormSheet } from './form'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { ExportButton } from '../_shared/data-io/export-button'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 /**
  * 通知公告。标准的三件套列表页，照 `pages/user/` 的模板。
@@ -199,8 +199,7 @@ export function NoticePage({
     <PageShell fill="always">
       <PageHeader title={t('通知公告')} description={t('发布系统通知与公告，状态控制是否对外展示。')} />
 
-      {/* 查询区和表格是同一个块的两半；这一层也要能收缩，否则「只滚表格行」那条链断在这里 */}
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         <QueryBar
           fields={FIELDS}
           value={q.value}
@@ -283,7 +282,7 @@ export function NoticePage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       <NoticeFormSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} />
       <NoticeDetailSheet notice={viewing} onOpenChange={(o) => !o && setViewing(null)} />

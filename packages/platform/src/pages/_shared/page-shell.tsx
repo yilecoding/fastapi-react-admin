@@ -50,3 +50,20 @@ export function PageShell({
     </div>
   )
 }
+
+/**
+ * 列表页的「查询区 + 表格」那一块：两者是同一件事的两半（筛选 → 结果），包成一块。
+ *
+ * - **`gap-3`（12px）**：介于查询区内部的 8px 和页面块之间的 16 / 24px 之间，组内组间分得开又不松。
+ *   原来 14 个 `QueryBar` 页各写一份 `gap-4`，部门 / 菜单两个树表页干脆没包、筛选行到表格吃的是
+ *   页面级的 24px；8 / 12 / 16 截图对比后定了 12（`DataTable` 自带工具栏那条路同值）。要调就只改这里
+ * - **`content-scroll:min-h-0 content-scroll:flex-1`**：「只滚表格行」那条收缩链从外壳一直到 `<table>`，
+ *   断一层就整条失效（表现是「设置生效了，但还是整块在滚」）
+ */
+export function ListBody({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <div data-slot="list-body" className={cn('flex flex-col gap-3 content-scroll:min-h-0 content-scroll:flex-1', className)}>
+      {children}
+    </div>
+  )
+}

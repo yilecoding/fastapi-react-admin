@@ -23,7 +23,7 @@ import { INSTANCE_STATUS } from '../workflow/status'
 import { COLUMN_LABELS, buildColumns } from './columns'
 import { AiReviewStatsSheet } from './ai-review-stats'
 import { HandoverDialog } from './handover-dialog'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 export type WorkflowMonitorSearch = {
   page?: number
@@ -138,7 +138,7 @@ export function WorkflowMonitorPage({
   return (
     <PageShell fill="always">
       <PageHeader title={t('实例监控')} description={t('查看全部审批单，处理卡住的待办。')} />
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         <QueryBar
           fields={fields}
           value={q.value}
@@ -194,7 +194,7 @@ export function WorkflowMonitorPage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
       <InstanceSheet id={search.id ?? null} onClose={() => patch({ id: undefined })} />
       <HandoverDialog open={handover} onOpenChange={setHandover} />
       <AiReviewStatsSheet open={search.stats === 1} onOpenChange={(o) => patch({ stats: o ? 1 : undefined })} />
