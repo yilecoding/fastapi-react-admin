@@ -24,7 +24,7 @@
 # 与 apps/api/docker-compose.yml 的关系：那份是**上游的**（主库 PostgreSQL、
 # broker RabbitMQ、挂的还是已废弃的 static/upload 路径），照它起不来。
 #
-# 🔴 **SQL Server 和 Redis 都不进这份编排**，各自独立部署、独立运维：
+# 🔴 **数据库（PostgreSQL / SQL Server / MySQL）和 Redis 都不进这份编排**，各自独立部署、独立运维：
 #   1. `docker compose down -v` 一条命令就能把生产数据（DB + 缓存）一起抹掉
 #   2. SQL Server 官方镜像默认 sa 账号，Developer 版授权只允许开发/测试用途；
 #      Redis 同理——测试用的 `redis:7-alpine` 直接进生产编排没有密码轮换、
@@ -65,7 +65,7 @@ x-api-base: &api-base
 
 services:
   # 跑一次性的 schema 迁移，跑完才允许 API 接流量。
-  # 部署前先备份外部 SQL Server；Alembic 没有自动回滚。
+  # 部署前先备份外部数据库；Alembic 没有自动回滚。
   migrate:
     <<: *api-base
     restart: "no"

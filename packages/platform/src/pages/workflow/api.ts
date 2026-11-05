@@ -322,6 +322,10 @@ export type DirectoryDept = { id: string; name: string; parent_id: string | null
 
 export type InboxTab = 'todo' | 'done' | 'initiated' | 'cc'
 
+/**
+ * `status` 只有「我发起的」认：后端 `/inbox/todo|done|cc` 都不收这个参数（OpenAPI 里没有），
+ * 传过去会被**静默忽略** —— 将来在别的 tab 上加状态筛选，表现是「选了没反应」（#234）
+ */
 export type InboxParams = { tab: InboxTab; page: number; size: number; keyword?: string; status?: string }
 
 export const workflowKeys = {
@@ -352,7 +356,7 @@ export const inboxQuery = (p: InboxParams) =>
     queryKey: workflowKeys.list(p),
     queryFn: () =>
       api.GET<PageData<InstanceRow>>(
-        `${BASE}/inbox/${p.tab}?${qs({ page: p.page, size: p.size, keyword: p.keyword, status: p.status })}`
+        `${BASE}/inbox/${p.tab}?${qs({ page: p.page, size: p.size, keyword: p.keyword, status: p.tab === 'initiated' ? p.status : undefined })}`
       ),
     placeholderData: (prev) => prev,
   })
