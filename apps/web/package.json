@@ -10,7 +10,8 @@
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "i18n:check": "pnpm --filter @admin/i18n check",
-    "e2e": "playwright test --config=e2e/playwright.config.ts"
+    "e2e": "playwright test --config=e2e/playwright.config.ts",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
     "@admin/i18n": "workspace:*",
