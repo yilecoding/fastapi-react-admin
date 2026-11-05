@@ -3562,6 +3562,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/oauth2/github/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 跳转到授权页（下发 state cookie） */
+        get: operations["github_oauth2_authorize_api_v1_oauth2_github_authorize_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/oauth2/github/callback": {
         parameters: {
             query?: never;
@@ -3591,6 +3608,23 @@ export interface paths {
         };
         /** 获取 google 授权链接 */
         get: operations["get_google_oauth2_url_api_v1_oauth2_google_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/oauth2/google/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 跳转到授权页（下发 state cookie） */
+        get: operations["google_oauth2_authorize_api_v1_oauth2_google_authorize_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -23161,6 +23195,37 @@ export interface operations {
             };
         };
     };
+    github_oauth2_authorize_api_v1_oauth2_github_authorize_get: {
+        parameters: {
+            query?: {
+                ticket?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     github_oauth2_callback_api_v1_oauth2_github_callback_get: {
         parameters: {
             query?: {
@@ -23215,6 +23280,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseSchemaModel_str_"];
+                };
+            };
+        };
+    };
+    google_oauth2_authorize_api_v1_oauth2_google_authorize_get: {
+        parameters: {
+            query?: {
+                ticket?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

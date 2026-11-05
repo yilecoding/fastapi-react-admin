@@ -1,10 +1,10 @@
 ---
 title: FastAPI + React 19 admin foundation
-description: Open-source admin foundation on FastAPI + React 19 + shadcn/ui — row-level data permissions, multi-tab that keeps state, approval workflow, a permission-bound AI assistant; PostgreSQL, SQL Server or MySQL.
+description: Open-source admin foundation on FastAPI + React 19 + shadcn/ui — web, desktop and mobile in one monorepo, row-level data permissions, multi-tab that keeps state, approval workflow, a permission-bound AI assistant; PostgreSQL, SQL Server or MySQL.
 template: splash
 hero:
   title: An admin foundation that <span class="shine">locks together</span> like joinery.
-  tagline: Open source, on FastAPI + React 19 + shadcn/ui. Permissions down to the rows a user sees, tabs that keep their state, an approval workflow and an AI assistant that can't overreach — on PostgreSQL, SQL Server or MySQL.
+  tagline: An open-source admin foundation on FastAPI and React 19. Web, desktop and mobile in one repo — row-level permissions, approvals and an AI assistant, the parts every system needs, are already done.
   actions:
     - text: Quick start
       link: getting-started/quick-start/
@@ -19,11 +19,11 @@ hero:
       icon: github
       variant: minimal
 landing:
-  eyebrow: FASTAPI + REACT 19 · MIT
   chips:
-    - Row-level data permissions
-    - Tabs that keep their state
-    - Native SQL Server
+    - FastAPI
+    - React 19
+    - TypeScript
+    - PostgreSQL · SQL Server · MySQL
 ---
 
 import { TabItem, Tabs } from '@astrojs/starlight/components'
@@ -33,55 +33,95 @@ import role from '../../../../../../docs/screenshots/role.png'
 import signIn from '../../../../../../docs/screenshots/sign-in.png'
 import workflowDesigner from '../../../../../../docs/screenshots/workflow-designer.png'
 import workflowInbox from '../../../../../../docs/screenshots/workflow-inbox.png'
-import CtaBand from '../../../components/CtaBand.astro'
-import Feature from '../../../components/Feature.astro'
+import Closing from '../../../components/Closing.astro'
+import DiagramAiGuard from '../../../components/DiagramAiGuard.astro'
+import DiagramDataScope from '../../../components/DiagramDataScope.astro'
+import DiagramMonorepo from '../../../components/DiagramMonorepo.astro'
+import FeatureLine from '../../../components/FeatureLine.astro'
 import ProductShot from '../../../components/ProductShot.astro'
 import SectionTitle from '../../../components/SectionTitle.astro'
-import Stats from '../../../components/Stats.astro'
+import Showcase from '../../../components/Showcase.astro'
 
-<ProductShot url="localhost:8888/dashboard" src={dashboard} alt="fastapi-react-admin dashboard" lift>
+<ProductShot url="localhost:8888/dashboard" src={dashboard} alt="fastapi-react-admin dashboard">
 
 Live demo account `admin` / `123456` — a public instance: other visitors can change or wipe its data, so don't store anything real there.
 
 </ProductShot>
 
-<Stats
-  items={[
-    { value: '1,400+', label: 'backend tests against a real database and Redis' },
-    { value: '150+', label: 'Playwright tests driving the real API' },
-    { value: '3', label: 'databases on one codebase and one migration chain' },
-    { value: 'MIT', label: 'licensed, fork it and build on it' },
-  ]}
-/>
+<SectionTitle id="why" title="One rewrite, distilled into a base you can start building on" more="Why we built it" href="getting-started/introduction/">
 
-<SectionTitle id="whats-in-the-box" eyebrow="WHAT'S IN THE BOX" title="The parts every internal system ends up needing">
-
-Users, roles and departments are the easy part. These are the pieces that usually get rebuilt from scratch.
+AI keeps adding systems worth building, yet every new one starts by redoing login, permissions and approvals. This project started as a rewrite of a few small Java + Vue 2 systems on FastAPI + React 19, keeping everything that gets rebuilt every time — so the next system starts with business logic.
 
 </SectionTitle>
 
-<div class="features">
-  <Feature title="Row-level data permissions" icon="rows" href="features/data-permissions/" more="How it works">
-    Beyond menus and buttons, a role decides which **rows** a user sees. A department manager opening the user list only gets their own department.
-  </Feature>
-  <Feature title="Tabs that keep their state" icon="tabs" href="features/multi-tab/" more="How it works">
-    Built on React 19's `<Activity>`: a half-filled form, the page you were on and an expanded tree are still there when you switch back. Filters live in the URL, so a refresh keeps them too.
-  </Feature>
-  <Feature title="Approval workflow" icon="flow" href="features/approval-workflow/" more="How it works">
-    Form designer and flow tree with or-sign / co-sign, send back, transfer, take back, add approvers and timeouts.
-  </Feature>
-  <Feature title="An AI assistant that can't overreach" icon="sparkles" href="features/ai-assistant/" more="How it works">
-    Tool calls run as the signed-in user, inside their permissions and data scopes. Writes are previewed and run only after the user confirms; every call is audited.
-  </Feature>
-  <Feature title="Large files, handled" icon="upload" href="features/file-storage/" more="How it works">
-    Local disk or S3-compatible storage, instant upload by hash, parallel chunks and resume after a page refresh.
-  </Feature>
-  <Feature title="Pick your database" icon="database" href="features/databases/" more="How it works">
-    PostgreSQL, SQL Server or MySQL with the same code and the same migration chain.
-  </Feature>
+<div class="showcases">
+
+<Showcase wide title="Web, desktop and mobile in one repo" lead="The backend, the web console, a desktop template, a mobile template and the docs site live in one pnpm + turbo monorepo." href="getting-started/introduction/#whats-in-the-repository" more="See the layout">
+
+- The web admin console is the core, ready to use
+- The desktop template loads the web build and only adds silent printing, local hardware and auto-update
+- The mobile template has native screens and shares the API types and translations with web
+- Dependencies flow one way, and `pnpm arch:check` enforces it in CI
+
+<DiagramMonorepo
+  slot="diagram"
+  apps={[
+    { name: 'Web admin console', sub: 'apps/web · React 19' },
+    { name: 'Desktop template', sub: 'apps/desktop · Electron' },
+    { name: 'Mobile template', sub: 'apps/mobile · Expo' },
+  ]}
+  caption="Lines are the real package dependencies · platform is shared by web and desktop"
+/>
+
+</Showcase>
+
+<Showcase title="Permissions down to the row" lead="Beyond menus and buttons there are data scopes: a role decides which rows a user sees." href="features/data-permissions/" more="Read the docs">
+
+- On the same user table, a manager only sees their own department and below
+- Rules live on model columns, and the UI warns you when one is misconfigured
+
+<DiagramDataScope
+  slot="diagram"
+  root="Company"
+  east="East"
+  south="South"
+  leaves={['Shanghai', 'Hangzhou', 'Shenzhen']}
+  scope="Manager: own department and below"
+  caption="Same table, different rows"
+/>
+
+</Showcase>
+
+<Showcase title="Built for working with AI" lead="AI changes code fast, so every change needs something to catch it." href="getting-started/introduction/#why-does-it-suit-writing-code-with-ai" more="Why">
+
+- 1,600+ tests against a real database and a real browser, no mocks
+- Frontend/backend types are generated from OpenAPI, so a mismatched API fails type checking
+
+<DiagramAiGuard
+  slot="diagram"
+  change="An AI change"
+  checks={['1,600+ tests', 'OpenAPI types', 'Per-dir CLAUDE.md']}
+  merge="Merge"
+  caption="Every change passes all three"
+/>
+
+</Showcase>
+
 </div>
 
-<SectionTitle id="screens" eyebrow="SEE IT" title="Screens from the latest version">
+<div class="feature-lines">
+  <FeatureLine title="Tabs that keep their state" href="features/multi-tab/">Built on React 19's Activity: a half-filled form and the page you were on survive switching back</FeatureLine>
+  <FeatureLine title="Approval workflow" href="features/approval-workflow/">Form designer and flow tree with or-sign / co-sign, send back, transfer, add approvers and timeouts</FeatureLine>
+  <FeatureLine title="An AI assistant that can't overreach" href="features/ai-assistant/">Tools run as the signed-in user; writes are previewed and confirmed first, and every call is audited</FeatureLine>
+  <FeatureLine title="Large files, handled" href="features/file-storage/">Local disk or S3-compatible storage, instant upload by hash, parallel chunks, resume after refresh</FeatureLine>
+  <FeatureLine title="Pick your database" href="features/databases/">PostgreSQL, SQL Server or MySQL with the same code and the same migration chain</FeatureLine>
+  <FeatureLine title="Open API" href="features/open-api/">AK/SK signing, rate limits and call logs, with Python / Node / Java SDKs and webhooks</FeatureLine>
+  <FeatureLine title="Messages and notifications" href="features/notifications/">Real-time inbox, scoped announcements, and email / SMS / chat-bot routing per event</FeatureLine>
+  <FeatureLine title="Desktop and mobile" href="features/clients/">An Electron desktop template and an Expo mobile template — start from a template, not from zero</FeatureLine>
+  <FeatureLine title="Everything else" href="features/overview/">Sign-in security, import / export, scheduled jobs, monitoring and logs, listed by area in the overview</FeatureLine>
+</div>
+
+<SectionTitle id="screens" title="Screens from the latest version">
 
 Taken from `main` on a local install. Every screen ships in Chinese and English, light and dark.
 
@@ -105,20 +145,19 @@ Taken from `main` on a local install. Every screen ships in Chinese and English,
   </TabItem>
 </Tabs>
 
-<CtaBand title="Running locally in five commands" primary={{ text: 'Quick start', href: 'getting-started/quick-start/' }} secondary={{ text: 'What it is and how it compares', href: 'getting-started/introduction/' }}>
+<Closing
+  title="Running locally in five commands"
+  terminal="Local setup"
+  lines={[
+    '# PostgreSQL + Redis',
+    'docker compose -f docker-compose.dev.yml up -d',
+    'pnpm install:all',
+    'cp apps/api/backend/.env.example apps/api/backend/.env',
+    'pnpm db:init',
+    'pnpm dev',
+  ]}
+>
 
-```bash
-docker compose -f docker-compose.dev.yml up -d          # PostgreSQL + Redis
-pnpm install:all
-cp apps/api/backend/.env.example apps/api/backend/.env
-pnpm db:init                                            # tables + seed data
-pnpm dev                                                # open http://localhost:8888
-```
+MIT licensed — take it and change anything. Step-by-step setup is in the <a href="getting-started/quick-start/">quick start</a>. The backend was originally forked from <a href="https://github.com/fastapi-practices/fastapi_best_architecture">fastapi-best-architecture</a> (FBA); the three-layer structure, plugin system and RBAC model come from its design.
 
-</CtaBand>
-
-<div class="landing-footnote">
-
-MIT licensed. The backend started as a fork of <a href="https://github.com/fastapi-practices/fastapi_best_architecture">fastapi-best-architecture</a>; its three-layer structure, plugin system and RBAC model come from that project.
-
-</div>
+</Closing>
