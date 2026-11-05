@@ -1,10 +1,10 @@
 ---
 title: FastAPI + React 19 admin foundation
-description: Open-source admin foundation on FastAPI + React 19 + shadcn/ui — row-level data permissions, multi-tab that keeps state, approval workflow, a permission-bound AI assistant; PostgreSQL, SQL Server or MySQL.
+description: Open-source admin foundation on FastAPI + React 19 + shadcn/ui — web, desktop and mobile in one monorepo, row-level data permissions, multi-tab that keeps state, approval workflow, a permission-bound AI assistant; PostgreSQL, SQL Server or MySQL.
 template: splash
 hero:
   title: An admin foundation that <span class="shine">locks together</span> like joinery.
-  tagline: Open source, on FastAPI + React 19 + shadcn/ui. Permissions down to the rows a user sees, tabs that keep their state, an approval workflow and an AI assistant that can't overreach — on PostgreSQL, SQL Server or MySQL.
+  tagline: Open source, on FastAPI + React 19 + shadcn/ui. Web, desktop and mobile in one repo; permissions down to the rows a user sees, tabs that keep their state, an approval workflow and an AI assistant that can't overreach — on PostgreSQL, SQL Server or MySQL.
   actions:
     - text: Quick start
       link: getting-started/quick-start/
@@ -21,6 +21,7 @@ hero:
 landing:
   eyebrow: FASTAPI + REACT 19 · MIT
   chips:
+    - Web · desktop · mobile
     - Row-level data permissions
     - Tabs that keep their state
     - Native SQL Server
@@ -78,6 +79,24 @@ Users, roles and departments are the easy part. These are the pieces that usuall
   </Feature>
   <Feature title="Pick your database" icon="database" href="features/databases/" more="How it works">
     PostgreSQL, SQL Server or MySQL with the same code and the same migration chain.
+  </Feature>
+</div>
+
+<SectionTitle id="why" eyebrow="WHY WE BUILT IT" title="One rewrite, distilled into a base you can build on from day one">
+
+AI keeps adding internal systems worth building, yet every new one starts by redoing login, permissions and approvals. This grew out of rewriting a few small Java + Vue 2 systems at work on FastAPI + React 19, keeping everything that gets rebuilt every time — so the next system starts straight on its own business logic.
+
+</SectionTitle>
+
+<div class="features">
+  <Feature title="Web, desktop and mobile in one repo" icon="devices" href="features/clients/" more="See the clients">
+    The Electron app loads the web build and only adds silent printing, local hardware and auto-update; the native Expo app shares the API contract and translations with web. One business app, not three copies.
+  </Feature>
+  <Feature title="A monorepo with enforced layers" icon="layers" href="getting-started/introduction/#whats-in-the-repository" more="See the layout">
+    One pnpm + turbo repo holds the backend, all three clients and the docs site; one `pnpm dev` starts backend and frontend. Dependencies flow one way, and `pnpm arch:check` turns CI red on a backwards import.
+  </Feature>
+  <Feature title="Built for writing code with AI" icon="shield" href="getting-started/introduction/#why-does-it-suit-writing-code-with-ai" more="Why">
+    1,600+ tests against a real database and browser catch what an AI breaks; types generated from OpenAPI make a broken contract fail to compile; 50+ per-directory `CLAUDE.md` files teach coding assistants the rules.
   </Feature>
 </div>
 
