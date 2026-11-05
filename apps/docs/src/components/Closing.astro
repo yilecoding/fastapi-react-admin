@@ -1,0 +1,75 @@
+---
+/**
+ * 首页收尾：左边一句话 + 出处（默认 slot），背后一枚很淡的大榫卯轮廓当水印；
+ * 右边一张「终端」卡片，放本地跑起来的那几条命令。
+ *
+ * 水印的轮廓直接 import 后台的 `tenon-outline.ts`（和 TenonStage 同一份），不抄坐标。
+ * `lines` 里以 `#` 开头的是注释行，其余是命令 —— 命令本身不翻译，注释由页面传进来。
+ */
+import { MORTISE_OUTLINE, TENON_OUTLINE, type Outline } from '../../../web/src/components/tenon-outline'
+
+interface Props {
+  title: string
+  terminal: string
+  lines: string[]
+}
+const { title, terminal, lines } = Astro.props
+const pts = (o: Outline) => o.map(([x, y]) => `${x},${y}`).join(' ')
+---
+
+<section class="closing not-content">
+  <svg class="closing-mark" viewBox="0 0 24 24" aria-hidden="true">
+    <polygon class="closing-mark-m" points={pts(MORTISE_OUTLINE)} />
+    <polygon class="closing-mark-t" points={pts(TENON_OUTLINE)} />
+  </svg>
+
+  <div class="closing-copy">
+    <h2 id="closing">{title}</h2>
+    <div class="closing-note"><slot /></div>
+  </div>
+
+  <div class="terminal">
+    <div class="terminal-bar" aria-hidden="true">
+      <span></span><span></span><span></span>
+      <em>{terminal}</em>
+    </div>
+    <pre><code>{lines.map((l) => (l.startsWith('#')
+      ? <span class="t-comment">{l}{'\n'}</span>
+      : <span class="t-line"><span class="t-prompt">$ </span>{l}{'\n'}</span>))}</code></pre>
+  </div>
+</section>
+
+<style is:global>
+  .closing {
+    position: relative; isolation: isolate;
+    display: grid; gap: 2.5rem; align-items: end;
+    margin: 8rem 0 0 !important; padding: 3rem 0 4rem;
+  }
+  @media (min-width: 56rem) { .closing { grid-template-columns: 1fr minmax(0, 30rem) } }
+  .closing > * { margin: 0 !important }
+
+  /* 水印：只描边、填一层极淡的底，往下渐隐 —— 实心色块压在字后面会显得脏 */
+  .closing-mark {
+    position: absolute; z-index: -1; left: -4rem; bottom: -6rem;
+    width: clamp(18rem, 42vw, 32rem); height: auto; pointer-events: none;
+    -webkit-mask-image: linear-gradient(180deg, #000 30%, transparent 95%); mask-image: linear-gradient(180deg, #000 30%, transparent 95%);
+  }
+  .closing-mark polygon { stroke-width: 0.06; vector-effect: none }
+  .closing-mark-m { fill: color-mix(in oklab, var(--sl-color-gray-4) 5%, transparent); stroke: color-mix(in oklab, var(--sl-color-gray-4) 35%, transparent) }
+  .closing-mark-t { fill: color-mix(in oklab, var(--brand) 6%, transparent); stroke: color-mix(in oklab, var(--brand) 40%, transparent) }
+
+  .closing-copy > * { margin: 0 }
+  .closing h2 { max-width: 22rem; font-size: clamp(1.5rem, 2.8vw, 2rem); line-height: 1.25; font-weight: 750; letter-spacing: -0.03em; color: var(--sl-color-white) }
+  .closing-note { margin-top: 1rem !important; max-width: 26rem; font-size: 0.875rem; line-height: 1.7; color: var(--sl-color-gray-3) }
+  .closing-note p { margin: 0 }
+  .closing-note a { color: var(--sl-color-gray-2) }
+
+  .terminal { overflow: hidden; border-radius: 1rem; background: var(--surface-hi); box-shadow: inset 0 0 0 1px var(--line-strong), 0 24px 60px -32px oklch(0.3 0.1 277 / 0.45) }
+  .terminal-bar { display: flex; align-items: center; gap: 0.4rem; height: 2.4rem; padding: 0 0.9rem; border-bottom: 1px solid var(--line) }
+  .terminal-bar span { width: 0.6rem; height: 0.6rem; border-radius: 99px; box-shadow: inset 0 0 0 1px var(--line-strong) }
+  .terminal-bar em { margin-left: auto; font-style: normal; font-size: 0.78rem; color: var(--sl-color-gray-3) }
+  .terminal pre { margin: 0; padding: 1.1rem 1.2rem 1.3rem; overflow-x: auto; background: transparent; border: 0 }
+  .terminal code { font-family: var(--__sl-font-mono); font-size: 0.8rem; line-height: 1.9; color: var(--sl-color-white); background: none; border: 0; padding: 0 }
+  .t-comment { color: var(--sl-color-gray-3) }
+  .t-prompt { color: var(--brand); user-select: none }
+</style>
