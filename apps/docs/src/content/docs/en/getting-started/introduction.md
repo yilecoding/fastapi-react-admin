@@ -9,47 +9,48 @@ fastapi-react-admin is an open-source (MIT) foundation for building admin and ba
 
 ## Why build an admin base in the age of AI?
 
-Because AI has increased the number of internal systems worth building, and every one of them starts with the same chores. Small tools that never made the roadmap are now worth doing, and systems that have run for years are due for a rewrite — yet login, permissions, org structure, approvals, files and notifications get rebuilt from scratch every time.
+Because AI has made more systems worth building, and every new one starts with the same chores. Small tools that never made the roadmap are now worth doing, and systems that have run for years are due for a replacement — yet login, permissions, org structure, approvals, files and notifications get rebuilt from scratch every time.
 
-The project grew out of rewriting a few small internal systems at work built on Java + Vue 2 (Vue 2 reached end of life at the end of 2023). Instead of patching the old architecture, they were rebuilt from scratch on FastAPI + React 19, all on current stable releases, and the parts that get rebuilt every time were distilled into this base: **the next system starts straight on its own business logic.**
+This project started as a rewrite of a few small Java + Vue 2 systems at work. Rather than patch the old architecture, we rebuilt them on FastAPI + React 19 and distilled everything that gets rebuilt every time into a base: **the next system starts with business logic.**
 
 ## What's in the repository?
 
-The web admin console, an Electron desktop app, a native Expo mobile app, the backend and the docs site all live in one pnpm + turbo monorepo: one `pnpm install:all`, and one `pnpm dev` starts backend and frontend.
+The backend, the web admin console, a desktop template, a mobile template and the docs site all live in one pnpm + turbo monorepo: one `pnpm install:all`, and one `pnpm dev` starts backend and frontend.
 
 ```
 apps/
-├── api          FastAPI backend (+ Celery worker)
-├── web          admin console · React 19
-├── desktop      Electron · installers for 3 platforms · auto-update · silent printing · local hardware
-├── mobile       native Expo app · not a WebView wrapper (preview)
-└── docs         docs site · Astro
-packages/        strictly one-way: i18n / api ← ui ← platform ← web
-├── api          type contract generated from the backend's OpenAPI — shared by web and mobile
-├── i18n         Chinese / English strings — shared by web and mobile
-├── ui           shadcn component library · zero business logic · portable as a whole
-└── platform     permissions · multi-tab · pages — reused as-is by desktop
+├── api        backend · FastAPI + Celery
+├── web        web admin console · React 19
+├── desktop    desktop template · Electron
+├── mobile     mobile template · Expo / React Native
+└── docs       docs site · Astro
+packages/      one-way deps: i18n / api ← ui ← platform ← web
+├── api        frontend/backend type contract, generated from OpenAPI
+├── i18n       Chinese / English strings
+├── ui         component library, no business logic, portable as a whole
+└── platform   permissions, multi-tab, business pages
 ```
 
-- **Desktop doesn't rewrite the app.** The Electron shell loads the `apps/web` build and only adds what a browser can't do: silent printing, local hardware such as ID-card readers, auto-update. The backend address is runtime config, so one installer serves any environment. See [Desktop and mobile](/en/features/clients/).
-- **Mobile is a native app.** Expo / React Native with its own screens, sharing the API contract (`@admin/api`) and translations (`@admin/i18n`) with web; change a backend field and both fail type checking.
-- **The layering is enforced.** Dependency direction lives in each package's `package.json`, and `pnpm arch:check` verifies it in CI, so a backwards import turns the build red.
+- **The web admin console** is the core, ready to use.
+- **The desktop template** loads the web build and only adds what a browser can't do: silent printing, local hardware, auto-update. See [Desktop and mobile](/en/features/clients/).
+- **The mobile template** has native screens and shares the API types (`@admin/api`) and translations (`@admin/i18n`) with web.
+- **The layering is enforced.** Dependencies flow one way, declared in each package's `package.json`, and `pnpm arch:check` checks it in CI.
 
 ## Why does it suit writing code with AI?
 
 Because AI changes code fast, and every change here has something to catch it:
 
-- **Tests keep up.** An AI touching a dozen files at once is routine, and nobody can click through all of that by hand. 1,400+ backend pytest cases run against a real database and Redis, 150+ Playwright cases drive a real browser, no mocks, on every CI run; failing cases come with screenshots and video (the [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) is public).
-- **A broken contract doesn't compile.** Frontend/backend types are generated from the backend's OpenAPI schema (`packages/api/src/schema.d.ts`); if an AI changes an API but not the page, `pnpm typecheck` catches it.
-- **Rules are written per directory, for AI to read.** 50+ `CLAUDE.md` / `AGENTS.md` files record pitfalls and hard rules found by testing, and coding assistants load the one for whatever directory they are editing.
-- **The backend lives in the AI ecosystem.** Python + FastAPI, with the built-in assistant on pydantic-ai, so models and tool calls need no second language.
+- **Tests.** An AI touching a dozen files at once is routine, and nobody can click through all of that by hand. 1,400+ backend pytest cases run against a real database and Redis, 150+ Playwright cases drive a real browser, no mocks, on every CI run; failing cases come with screenshots and video, and the [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) is public.
+- **Types.** Frontend/backend types are generated from the backend's OpenAPI schema (`packages/api/src/schema.d.ts`); an API change the pages didn't follow fails `pnpm typecheck`.
+- **Rules written for AI.** 50+ per-directory `CLAUDE.md` / `AGENTS.md` files record pitfalls and hard rules found by testing; a coding assistant reads the one for whatever directory it edits.
+- **A backend inside the AI ecosystem.** Python + FastAPI, with the built-in AI assistant on pydantic-ai.
 
 ## Who is it for?
 
 - Teams building an internal system (OA, ERP-style back office, operations console) who want Python on the backend and React on the frontend.
 - Teams on the Microsoft stack: SQL Server is a first-class database here, tested in CI on every run alongside PostgreSQL.
 - Teams that need permissions finer than "which menus can this role open" — for example, a manager should only see their own department's records.
-- Teams shipping the same business app to web, desktop and mobile: desktop reuses the web pages and mobile shares the API contract and translations, so there aren't three copies to maintain.
+- Teams that need a desktop or mobile app alongside the web one: both templates already have login, API types and translations wired up, so you start from a template rather than from zero.
 - Teams using AI coding assistants who worry about them breaking things.
 
 ## How does it differ from a typical admin template?

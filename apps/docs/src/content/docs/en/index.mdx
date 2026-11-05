@@ -82,21 +82,21 @@ Users, roles and departments are the easy part. These are the pieces that usuall
   </Feature>
 </div>
 
-<SectionTitle id="why" eyebrow="WHY WE BUILT IT" title="One rewrite, distilled into a base you can build on from day one">
+<SectionTitle id="why" eyebrow="WHY WE BUILT IT" title="One rewrite, distilled into a base you can start building on">
 
-AI keeps adding internal systems worth building, yet every new one starts by redoing login, permissions and approvals. This grew out of rewriting a few small Java + Vue 2 systems at work on FastAPI + React 19, keeping everything that gets rebuilt every time — so the next system starts straight on its own business logic.
+AI keeps adding systems worth building, yet every new one starts by redoing login, permissions and approvals. This project started as a rewrite of a few small Java + Vue 2 systems on FastAPI + React 19, keeping everything that gets rebuilt every time — so the next system starts with business logic.
 
 </SectionTitle>
 
 <div class="features">
   <Feature title="Web, desktop and mobile in one repo" icon="devices" href="features/clients/" more="See the clients">
-    The Electron app loads the web build and only adds silent printing, local hardware and auto-update; the native Expo app shares the API contract and translations with web. One business app, not three copies.
+    The web admin console is ready to use. The desktop template (Electron) loads the web build and only adds silent printing, local hardware and auto-update; the mobile template (Expo) has native screens and shares the API types and translations with web.
   </Feature>
   <Feature title="A monorepo with enforced layers" icon="layers" href="getting-started/introduction/#whats-in-the-repository" more="See the layout">
-    One pnpm + turbo repo holds the backend, all three clients and the docs site; one `pnpm dev` starts backend and frontend. Dependencies flow one way, and `pnpm arch:check` turns CI red on a backwards import.
+    One pnpm + turbo repo holds the backend, all three clients and the docs site; one `pnpm dev` starts backend and frontend. Dependencies flow one way, and `pnpm arch:check` fails CI on a backwards import.
   </Feature>
-  <Feature title="Built for writing code with AI" icon="shield" href="getting-started/introduction/#why-does-it-suit-writing-code-with-ai" more="Why">
-    1,600+ tests against a real database and browser catch what an AI breaks; types generated from OpenAPI make a broken contract fail to compile; 50+ per-directory `CLAUDE.md` files teach coding assistants the rules.
+  <Feature title="Built for working with AI" icon="shield" href="getting-started/introduction/#why-does-it-suit-writing-code-with-ai" more="Why">
+    1,600+ tests against a real database and a real browser catch what an AI breaks; types generated from OpenAPI make a mismatched API fail type checking; 50+ per-directory `CLAUDE.md` files teach coding assistants the rules.
   </Feature>
 </div>
 

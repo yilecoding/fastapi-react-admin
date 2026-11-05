@@ -36,39 +36,43 @@
 
 ## 🌱 为什么做它
 
-> **一次重构，沉淀成一个从第一天就能写业务的底座。**
+**一次重构，沉淀成一个拿来就能写业务的底座。**
 
-AI 让写代码变快了，内部系统的需求也跟着多了起来：以前排不上队的小工具值得做了，跑了多年的老系统也该重做了。可每个新系统开头那几周，都在重复同一批活——登录、权限、组织架构、审批、文件、通知。
+AI 让写代码变快了，要做的系统反而更多了：排不上队的小工具值得做了，跑了多年的老系统也该换了。可每个新系统的头几周，都在重复同一批活——登录、权限、组织架构、审批、文件、通知。
 
-这个项目源于公司里几套 Java + Vue 2 小系统的重构（Vue 2 已于 2023 年底停止维护）。我们没有在旧架构上修修补补，而是换上 FastAPI + React 19、全部用最新的稳定版本从头搭起，再把每次都要重做的部分沉淀下来。**下一个系统，拉下来就写业务。**
+这个项目起步于公司里几套 Java + Vue 2 小系统的重构。我们没有在旧架构上修补，而是用 FastAPI + React 19 从头搭了一遍，再把每次都要重做的部分沉淀成底座。**下一个系统，从写业务开始。**
 
-### 一个仓库，Web · 桌面 · 手机三端起步
+### 一个仓库，覆盖 Web、桌面和手机
+
+后端、Web 后台、桌面端模板、移动端模板和文档站都在一个 pnpm + turbo monorepo 里：一次安装，`pnpm dev` 一条命令起前后端。
 
 ```
-fastapi-react-admin/          pnpm + turbo monorepo · 一次 install · pnpm dev 一条命令起前后端
-├── apps/
-│   ├── api          FastAPI 后端（+ Celery worker）
-│   ├── web          管理后台 · React 19
-│   ├── desktop      Electron 桌面端 · 三平台安装包 · 自动更新 · 静默打印 · 接本地硬件
-│   ├── mobile       Expo 原生 App · 不是 WebView 套壳（预览版）
-│   └── docs         文档站 · Astro
-└── packages/        依赖严格单向：i18n / api ← ui ← platform ← web
-    ├── api          由后端 OpenAPI 生成的类型契约 —— web 与手机共用
-    ├── i18n         中英文案 —— web 与手机共用
-    ├── ui           shadcn 组件库 · 零业务 · 可整包搬进别的项目
-    └── platform     权限 · 多页签 · 业务页面 —— 桌面端直接复用
+apps/
+├── api        后端 · FastAPI + Celery
+├── web        Web 管理后台 · React 19
+├── desktop    桌面端模板 · Electron
+├── mobile     移动端模板 · Expo / React Native
+└── docs       文档站 · Astro
+packages/      依赖单向：i18n / api ← ui ← platform ← web
+├── api        前后端类型契约，由 OpenAPI 生成
+├── i18n       中英文案
+├── ui         组件库，不含业务，可整包带走
+└── platform   权限、多页签、业务页面
 ```
 
-- **桌面端不重写业务** —— Electron 外壳里装的就是 web 的构建产物，外壳只管浏览器做不到的事：静默打印、读卡器等本地硬件、自动更新。同一个安装包改个配置就能连不同环境
-- **手机端是原生 App** —— Expo / React Native 单独写界面，接口契约和语言包与 web 共用，后端改了字段，两边一起在编译期报错
-- **分层有闸门守着** —— 依赖方向写进 `package.json`，`pnpm arch:check` 在 CI 里核对，谁反向 import 谁当场红
+- **Web 管理后台**是主体，开箱即用
+- **桌面端模板**直接加载 Web 的构建产物，只补浏览器做不到的事：静默打印、本地硬件、自动更新
+- **移动端模板**是原生界面，和 Web 共用接口类型与语言包
+- **分层有约束**：依赖严格单向，`pnpm arch:check` 在 CI 里把关
 
-### 为和 AI 一起写代码而设计
+### 为 AI 协作而设计
 
-- **AI 改得快，测试兜得住** —— 1600+ 条自动化测试打真实数据库和真实浏览器、不 mock，CI 每次全跑；[E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/)公开，失败用例带截图和录像
-- **契约对不上，编译就不过** —— React + TypeScript，前后端类型由 OpenAPI 生成，AI 改了接口没改页面，`pnpm typecheck` 直接报出来
-- **AI 助手一进目录就懂规矩** —— 50 多份按目录拆开的 `CLAUDE.md` / `AGENTS.md`，记着实测踩出来的坑和硬纪律，编码助手改到哪个目录就读到哪一份
-- **后端就在 AI 生态里** —— Python + FastAPI，内置 AI 助手基于 pydantic-ai，接模型、做工具调用不用跨语言
+AI 改代码很快，所以每一处改动都得有东西兜底：
+
+- **测试兜底** —— 1600+ 条测试连真实数据库、跑真实浏览器，不用 mock；CI 每次全量跑，[E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/)公开
+- **类型兜底** —— 前后端类型由 OpenAPI 生成，接口改了而页面没跟上，类型检查直接报错
+- **规矩写给 AI 看** —— 50 多份按目录拆分的 `CLAUDE.md` / `AGENTS.md` 记着实测踩过的坑，编码助手改到哪个目录，就读到哪一份
+- **后端就在 AI 生态里** —— Python + FastAPI，内置的 AI 助手基于 pydantic-ai
 
 ## ✨ 为什么选它
 
