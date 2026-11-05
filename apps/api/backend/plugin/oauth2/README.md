@@ -55,6 +55,19 @@ OAUTH2_FRONTEND_LOGIN_REDIRECT_URI: str
 OAUTH2_FRONTEND_BINDING_REDIRECT_URI: str
 ```
 
+## 第三方账号第一次登录：默认不自动建号（#226）
+
+陌生的第三方账号（库里没有绑定、邮箱也对不上任何用户）**默认被拒绝**，提示「先用账号密码登录，再到个人中心绑定」。
+1.0.x 及之前是无条件自动建号，并挂上「第一个启用的角色」（没有排序，挂到哪个取决于数据库行序）——
+任何人用自己的 GitHub / Google 账号走一遍就成了系统用户。
+
+确实要开放自助注册的部署，在 `backend/.env` 里显式打开，并指定新用户挂的角色编码：
+
+```env
+OAUTH2_AUTO_REGISTER=true
+OAUTH2_AUTO_REGISTER_ROLE='STAFF'   # sys_role.code；找不到 / 已停用就拒绝登录，不会退回别的角色
+```
+
 ## 使用方式
 
 1. 安装并启用插件后，在 GitHub、Google 开放平台分别创建 OAuth 应用
