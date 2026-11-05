@@ -30,7 +30,7 @@ import {
   type TaskScheduler,
 } from './api'
 import { SchedulerFormSheet } from './form'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 export type SchedulerManageSearch = {
   page?: number
@@ -265,8 +265,7 @@ export function SchedulerManagePage({
     <PageShell fill="always">
       <PageHeader title={t('任务调度')} description={t('配置定时任务的触发策略；改完立刻生效，不用重启')} />
 
-      {/* 查询区和表格是同一个块的两半，gap-4 而不是页面级的 24px */}
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         <QueryBar
           fields={FIELDS}
           value={q.value}
@@ -325,7 +324,7 @@ export function SchedulerManagePage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       <SchedulerFormSheet open={formOpen} onOpenChange={setFormOpen} editing={editing} />
 

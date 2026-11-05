@@ -485,6 +485,29 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src', '
   }
 }
 
+// ── 列表页「查询区 + 表格」那一块走 `<ListBody>`，不手写 ─────────────────
+//
+// 原来 14 页各抄一份 `flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1`，
+// 想把间距从 16 调到 12 就得改 14 处，漏一页就是全站两种间距、没有测试会红。
+// 判据：用了 `<QueryBar>` 的页面里，一个 `flex-col gap-*` 的串同时带 `content-scroll:min-h-0` 和 `content-scroll:flex-1`。
+// ⚠️ 只看带 gap 的那层：表格框外那层 `content-scroll:flex content-scroll:min-h-0 content-scroll:flex-1 …` 也是收缩链的一环，
+// 第一版没区分，14 页全报
+{
+  const PAGES = path.join('packages', 'platform', 'src', 'pages')
+  let users = 0
+  for (const file of tsFiles(PAGES)) {
+    const src = stripComments(fs.readFileSync(file, 'utf8'))
+    if (!src.includes('<QueryBar')) continue
+    users++
+    src.split('\n').forEach((line, i) => {
+      if (/["'`][^"'`]*\bflex-col\b[^"'`]*\bgap-\d/.test(line) && /content-scroll:min-h-0[^"'`]*content-scroll:flex-1/.test(line)) {
+        add('error', `${rel(file)}:${i + 1}`, 'list-body-handwritten', '手写了查询区 + 表格的外包 —— 用 pages/_shared/page-shell.tsx 的 <ListBody>')
+      }
+    })
+  }
+  if (users < 10) add('error', PAGES, 'list-body-scanner-broken', `只找到 ${users} 个用 <QueryBar> 的文件，扫描器可能坏了`)
+}
+
 // ── 功能引导：tour 库不出 shell/tour/、目标标记不能是死的 ─────────────────
 //
 // driver.js 对字符串目标是 `document.querySelector(e)`，发生在 node_modules 里 ——

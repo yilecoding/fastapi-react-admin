@@ -19,7 +19,7 @@ import { useQuerySearch } from '../_shared/use-query-search'
 import { ERROR_KIND_LABELS, smsConfigsQuery, smsTemplatesQuery } from '../sms-config/api'
 import { LOG_STATUS, smsLogKeys, smsLogsQuery, type SmsLog } from './api'
 import { SmsLogDetailSheet, StatusBadgeFor } from './detail-sheet'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 const COLUMN_LABELS = {
   seq: '序号',
@@ -220,7 +220,7 @@ export function SmsLogPage({ search = {}, onSearchChange }: { search?: SmsLogSea
     <PageShell fill="always">
       <PageHeader title={t('发送日志')} description={t('每一次短信发送都会留痕，失败也记。点一行看完整手机号和厂商原文。')} />
 
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         <QueryBar
           fields={fields}
           value={q.value}
@@ -266,7 +266,7 @@ export function SmsLogPage({ search = {}, onSearchChange }: { search?: SmsLogSea
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       <SmsLogDetailSheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)} id={detail} />
     </PageShell>
