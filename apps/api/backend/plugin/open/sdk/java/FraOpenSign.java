@@ -13,8 +13,10 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import javax.crypto.Mac;
@@ -87,12 +89,17 @@ public final class FraOpenSign {
     //
     // 🔴 body 要传**收到的原始字节**，不要先反序列化再序列化回去 —— 字节一变签名就对不上。
     // 密钥轮换的那 24 小时里一条消息带两个签名（空格分隔），任一个对上即可。对方会重试，请按 webhook-id 去重。
-    // headers 的键请先统一成小写（各框架给的大小写不一样）。
+    // 头名不区分大小写（各框架给的大小写不一样，Servlet 在 HTTP/1.1 下是 Webhook-Id），这里统一转小写再取，
+    // 和 Python / Node 两份一致（#231：原来要求调用方自己转，照文档直接传进来的合法推送会被静默拒掉）。
     public static boolean verifyWebhook(Map<String, String> headers, byte[] body, String secret, long toleranceSeconds, long nowSeconds)
             throws Exception {
-        String id = headers.get("webhook-id");
-        String ts = headers.get("webhook-timestamp");
-        String sigs = headers.get("webhook-signature");
+        Map<String, String> lower = new HashMap<>();
+        headers.forEach((k, v) -> {
+            if (k != null) lower.put(k.toLowerCase(Locale.ROOT), v);
+        });
+        String id = lower.get("webhook-id");
+        String ts = lower.get("webhook-timestamp");
+        String sigs = lower.get("webhook-signature");
         if (id == null || ts == null || sigs == null) return false;
         long timestamp;
         try {

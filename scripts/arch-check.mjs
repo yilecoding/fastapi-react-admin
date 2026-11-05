@@ -537,21 +537,21 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src']) 
 //
 // 现在版本从 `package.json` 注入（`VITE_APP_VERSION`），实测 bump 成 9.9.9
 // 产物里就是 `v9.9.9`。这条守卫防的是有人再把它写死回去。
-{
-  const brandPath = path.join(ROOT, 'apps/web/src/lib/brand.ts')
+//
+// 移动端同理（#234）：它单独编号（预览版，不在 1.0 兼容约定里），`brand.ts` 从 `app.json` 读。
+for (const [file, source] of [
+  ['apps/web/src/lib/brand.ts', 'package.json（VITE_APP_VERSION）'],
+  ['apps/mobile/src/lib/brand.ts', 'app.json（expo.version）'],
+]) {
+  const brandPath = path.join(ROOT, file)
   if (fs.existsSync(brandPath)) {
     const src = stripComments(fs.readFileSync(brandPath, 'utf8'))
     const hardcoded = src.match(/version:\s*['"`](v?\d+\.\d+\.\d+)/)
     if (hardcoded) {
-      add(
-        'error',
-        'apps/web/src/lib/brand.ts',
-        'hardcoded-version',
-        `version 写死成了 ${hardcoded[1]} —— 它必须来自 package.json（VITE_APP_VERSION）`,
-      )
+      add('error', file, 'hardcoded-version', `version 写死成了 ${hardcoded[1]} —— 它必须来自 ${source}`)
     }
   } else {
-    add('error', 'apps/web/src/lib/brand.ts', 'missing-brand', '文件不在了，这条守卫已经罩不住了')
+    add('error', file, 'missing-brand', '文件不在了，这条守卫已经罩不住了')
   }
 }
 
@@ -792,6 +792,45 @@ for (const dir of ['packages/platform/src', 'packages/ui/src', 'apps/web/src']) 
   }
 }
 
+// ── 生产镜像：安装依赖前拷的清单要覆盖 web 的整条 workspace 依赖链（#233）─────────
+//
+// `apps/web/Dockerfile` 先只拷各包的 package.json、`pnpm install --filter web...`，再 `COPY . .`。
+// 漏拷哪个 workspace 包的清单，pnpm 在安装那一刻就看不见它 —— 它自己的第三方依赖一个都不装，
+// 而 `COPY . .` 之后源码又在，所以不一定当场炸：`@admin/api` 就这样漏了很久（推断：web 恰好只用到它
+// 不需要运行时依赖的导出）。和本文件开头那次事故同一类：一直是绿的，直到多 import 一个东西。
+{
+  const dockerfile = path.join(ROOT, 'apps/web/Dockerfile')
+  const src = fs.readFileSync(dockerfile, 'utf8')
+  const installAt = src.search(/^RUN\b[^\n]*\n?(?:[^\n]*\\\n)*[^\n]*pnpm install/m)
+  const head = installAt < 0 ? src : src.slice(0, installAt)
+  const copied = new Set([...head.matchAll(/^COPY\s+(\S+)\/package\.json\b/gm)].map((m) => m[1]))
+  if (installAt < 0) {
+    add('error', 'apps/web/Dockerfile', 'dockerfile-unparseable', '找不到 pnpm install 那一步，无法核对拷了哪些清单')
+  }
+
+  const dirOf = new Map(PACKAGES.map((d) => [readJson(path.join(ROOT, d, 'package.json')).name, d]))
+  const closure = new Set()
+  const visit = (dir) => {
+    if (closure.has(dir)) return
+    closure.add(dir)
+    const pj = readJson(path.join(ROOT, dir, 'package.json'))
+    for (const [name, spec] of Object.entries({ ...pj.dependencies, ...pj.devDependencies })) {
+      if (String(spec).startsWith('workspace:') && dirOf.has(name)) visit(dirOf.get(name))
+    }
+  }
+  visit('apps/web')
+  // 先断言「有」：闭包里至少要有 platform，否则是解析坏了，「全都拷了」会假绿
+  if (!closure.has('packages/platform')) {
+    add('error', 'apps/web/Dockerfile', 'dockerfile-closure-empty', 'web 的 workspace 依赖链里没算出 packages/platform，核对逻辑坏了')
+  }
+  for (const dir of closure) {
+    if (!copied.has(dir)) {
+      add('error', 'apps/web/Dockerfile', 'dockerfile-missing-manifest',
+        `pnpm install 之前没拷 ${dir}/package.json —— --filter web... 的裁剪范围里看不见它，它的依赖不会装`)
+    }
+  }
+}
+
 // ── 输出 ──────────────────────────────────────────────────────────────
 const errors = problems.filter((p) => p.level === 'error')
 const warns = problems.filter((p) => p.level === 'warn')
@@ -807,7 +846,7 @@ for (const [where, ps] of byWhere) {
 }
 
 console.log(
-  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 页面外壳三条 · 功能引导两条 · 组件孤儿 · registry · 品牌版本 · E2E 断言 · 错误 ${errors.length} · 警告 ${warns.length}`,
+  `\n依赖箭头 ${PACKAGES.length} 个包 · 多页签三条纪律 · 页面外壳三条 · 功能引导两条 · 组件孤儿 · registry · 品牌版本 · E2E 断言 · 镜像清单 · 错误 ${errors.length} · 警告 ${warns.length}`,
 )
 if (!problems.length) console.log('[ok] 没有漂')
 process.exit(errors.length ? 1 : 0)

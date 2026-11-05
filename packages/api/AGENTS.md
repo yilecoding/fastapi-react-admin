@@ -365,6 +365,27 @@ stdout 打几行插件探测日志，混在一起解析会失败，而失败信�
 也能用同一份 —— 移动端现在还有一份**手抄**的 DTO（`src/lib/contract.ts`），
 那是个待还的债：手抄的字段对不上时不会报错，只会在界面上空一格。
 
+⚠️ **「不需要起服务」只说对了一半：不用起 API，但 Redis 得连得上。** `import backend.main` 在导入期就连 Redis
+（实测：Redis 不通时报「Redis 服务器连接超时」，退出码 2，`schema.d.ts` 不会生成）。数据库碰不碰没单独验过。
+
+🔴 **CI 里有新鲜度闸门（#234）**：PostgreSQL job 末尾 `gen:api` 再 `git diff --exit-code src/schema.d.ts`。
+在那之前改了接口忘了生成，没有任何东西会发现 —— `2a2afec` 给 `/sys/dashboard/attention` 加了 `?tz=`，
+schema 里一直是 `query?: never`。web 端用 `api.GET<T>('字符串')` 不经过 schema 所以没事，移动端按 schema 推类型就会以为不能传。
+放在 PostgreSQL job 不放 static：后者没有 Redis。
+
+🔴 **这道闸门第一次跑就红了，而且红得不是因为 schema 过期** —— 是路由**顺序**：CI 上 `dict-types` 排在 `dict-datas` 前面，
+本机反过来。根因在后端：插件目录（`plugin/core.py: get_plugins`）、扩展插件的路由文件（`plugin/router.py`）、
+app 模型（`utils/dynamic_import.py`）都是 `os.listdir` / `os.walk` 的原始顺序，**文件系统给什么就是什么，因机器而异**。
+路由注册顺序跟着变，所以不只是生成的类型不稳定 —— FastAPI 按注册顺序匹配，两台机器上的路由优先级也可能不同。
+现在三处都排序（守卫：`backend/tests/test_plugin_order_is_deterministic.py`）。
+
+⚠️ **我自己验证「CI 生成不会误报」时漏掉了它**：拿 `.env.example` 和本机 `.env` 各导出一份比对，用了
+`json.dumps(..., sort_keys=True)` —— 排序把唯一会变的东西（顺序）抹平了，`cmp` 当然相同，结论却是错的。
+比「两份输出是否一致」时，**不要先对它做任何规范化**，规范化掉的那一维可能正是会漂的那一维。
+
+**实测证据**（2026-11-04）：把 `os.listdir` / `os.walk` 的结果反过来再导出（只取 `paths` 的键序，不排序）——
+不排序时路由在第 94 条分叉（`/sys/notifications` vs `/sys/configs/all`）；三处排序之后两次导出逐字节一致。
+
 ## 搬家留下的一层 re-export
 
 `packages/platform/src/api-client/errors.ts` 现在只是
