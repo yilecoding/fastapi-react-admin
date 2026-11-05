@@ -3,12 +3,12 @@ import { useTranslation } from 'react-i18next'
 import * as React from 'react'
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native'
 
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Group, Row } from '@/components/grouped'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { toast } from '@/components/ui/toast'
+import { UserAvatar } from '@/components/user-avatar'
 import { api } from '@/lib/api'
 import { pickAvatar, uploadAvatar } from '@/lib/avatar'
 import { parseFieldErrors, type FieldErrors } from '@/lib/field-errors'
@@ -98,14 +98,7 @@ export default function EditProfileScreen() {
       <ScrollView contentContainerClassName="gap-4 py-4" keyboardShouldPersistTaps="handled">
         <Group>
           <Row first className="gap-3.5 py-3">
-            <Avatar alt={user.nickname || user.username} className="size-[54px] rounded-[17px]">
-              {user.avatar ? <AvatarImage source={{ uri: user.avatar }} /> : null}
-              <AvatarFallback className="bg-primary rounded-[17px]">
-                <Text className="text-primary-foreground text-xl font-semibold">
-                  {(user.nickname || user.username).slice(0, 1).toUpperCase()}
-                </Text>
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar name={user.nickname || user.username} src={user.avatar} size={56} />
             <View className="flex-1 items-start gap-1">
               {/*
                * 🔴 上传接口挂着 `sys:file:upload`，而且是 POST —— 还要过 `is_staff` 那道闸
