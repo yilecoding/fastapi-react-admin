@@ -175,9 +175,11 @@ error:
     binding_unsupported: 暂不支持 {source} 绑定
     illegal_state_operation: 非法操作，OAuth2 状态信息无效
     social_login_unsupported: 暂不支持 {social} OAuth2 登录
+    state_already_claimed: 这个授权链接已经被打开过了，请回到页面重新发起
     state_invalid: OAuth2 状态信息无效
     state_invalid_or_missing: OAuth2 状态信息无效或缺失
     state_missing: OAuth2 状态信息缺失
+    state_not_bound: 授权请求不是从这个浏览器发起的，请回到页面重新发起
     username_exists: 用户名已存在，请重试
   open:
     app_disabled: 应用已停用，请联系管理员

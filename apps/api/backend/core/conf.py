@@ -450,6 +450,9 @@ class Settings(BaseSettings):
         f'{FASTAPI_API_V1_PATH}/auth/login/swagger',
         f'{FASTAPI_API_V1_PATH}/oauth2/github/callback',
         f'{FASTAPI_API_V1_PATH}/oauth2/google/callback',
+        # authorize 的 query 里是一次性绑定 ticket（= OAuth2 state，#227），和回调的 code 一样不进日志
+        f'{FASTAPI_API_V1_PATH}/oauth2/github/authorize',
+        f'{FASTAPI_API_V1_PATH}/oauth2/google/authorize',
     ]
     OPERA_LOG_REDACT_KEYS: list[str] = [
         'password',
