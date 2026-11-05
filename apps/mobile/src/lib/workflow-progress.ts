@@ -59,7 +59,7 @@ function modeTag(mode: string | undefined, count: number, t: T): string | undefi
 }
 
 /** 预告步骤 → 轨道条目（只在单子还在审批中时出现） */
-function forecastItems(steps: ForecastStep[], t: T): TrackItem[] {
+export function forecastItems(steps: ForecastStep[], t: T): TrackItem[] {
   return steps.map((s) => {
     const people = s.users.map((u) => ({ name: u.name }))
     if (s.type === 'cc') {

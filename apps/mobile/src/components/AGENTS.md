@@ -303,8 +303,28 @@ toast 进了 store、屏上没有，纯静默。
   后端补上 `ResponseSchemaModel[...]` 后删掉断言
 - 浮层（选人 / 动作面板）走 portal，**不用 `Modal`**，理由和代价同上一节「确认框走 portal」。
   ⚠️ 返回键关的是面板：键盘开着时按返回会连面板一起关（实测，Android 模拟器）
-- 不做的明说：审批人可填字段、被退回后重新提交 → 详情顶上提示去网页端，重新提交时「同意」禁用。AI 预审面板没做
-- 表单只读展示里**空字段整行不画**：没移植显示条件（`form-rules.ts`），画「—」分不清「没填」和「条件不成立」
+- 审批人可填字段 · 被退回后重新提交 · 重新发起：2b 起都在移动端办（见下一节的表单渲染器）。AI 预审面板没做
+- 纯只读的详情（`FormFields`）里**空字段整行不画**：它不跑显示条件，画「—」分不清「没填」和「条件不成立」。
+  有可填字段时换成 `WorkflowForm`，那边按 `lib/workflow-form.ts` 藏字段
 
 ✅ 实测（2026-11-04，Android 模拟器 + 本地 SQL Server）：待办角标 · 加急置顶 · 同意（带意见）· 转交（选人排除发起人和本步办理人）·
 驳回（不写原因提交按钮禁用）· 已办列表状态 · 驳回后的进度和意见。抄送 / 退回 / 加签 / 撤回 / 终止 / 改办理人只走过类型和 lint，没在设备上点过。
+
+## 发起 · 表单渲染器（`workflow-form.tsx` · `lib/workflow-form.ts`）
+
+#224 2b，发起人这一侧：选流程（`workflow/start/index`）→ 填写（`workflow/start/[code]`，`?from=<实例>` 是重新发起）。
+同一个 `WorkflowForm` 还接了详情里的审批人可填字段和被退回后重新提交。口径照 web `start-sheet.tsx` / `form-renderer.tsx`。
+
+- 🔴 **`lib/workflow-form.ts` 是 web `form-rules.ts` 的逐字副本**（显示条件 / 自动计算 / 必填），那一份又是后端
+  `engine/form.py` 的副本。三份一起改；对不上的表现是「界面上 5 天，提交后 4 天」
+- `perms` 不传 = 全部可填（发起页传的是补全过的发起人权限）；传了的话**没列出来的当只读**（审批节点没配 = 只读）
+- 日期是自己画的月历（周一开头，只拼 `YYYY-MM-DD`，不经过时区换算），不装 `datetimepicker`：系统框一次只能选一个日期
+- 附件走 `expo-document-picker`（Expo Go 里有）→ `/sys/workflow/files`（只要登录，**不是** `/sys/files/upload`）
+- 没做：AI 帮填（要把文件 / 图片交给模型，先留在网页端）
+
+🔴 **草稿查询必须 `gcTime: 0`，只有 `staleTime: Infinity` 会恢复不出草稿。**
+`staleTime: Infinity` 是为了进屏后不被后台重取盖掉正在填的（同 web）。但缓存不扔的话，第一次进来读到的
+「没有草稿」（`null`）会一直留着：填一半退出去 → 草稿存上了 → 再进来拿到的还是那个 `null`，一张白表。
+web 的抽屉每次打开是新挂载、碰巧没踩到。
+实测（2026-11-05，Android 模拟器）：「草稿已保存」亮了，API 日志里 `PUT /drafts/LEAVE 200`；退出再进，
+**一条 `GET /drafts/LEAVE` 都没发**，表单是空的。加了 `gcTime: 0` 之后（见下面的设备实测）再进是恢复的内容。

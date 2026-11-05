@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { FileCheckIcon, TriangleAlertIcon } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import * as React from 'react'
@@ -55,6 +55,22 @@ export default function WorkflowInboxScreen() {
 
   return (
     <View className="bg-background flex-1">
+      {/* 发起入口在导航栏右上角：收件箱是这一屏的主体，「发起」是一个动作 */}
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <Pressable
+              onPress={() => router.push('/workflow/start')}
+              hitSlop={10}
+              accessibilityRole="button"
+              testID="wf-start-entry"
+              className="active:opacity-60"
+            >
+              <Text className="text-primary text-[15px] font-medium">{t('发起')}</Text>
+            </Pressable>
+          ),
+        }}
+      />
       <View className="px-4 pt-3 pb-2">
         <Tabs value={tab} onValueChange={(v) => router.setParams({ tab: v })}>
           <TabsList className="flex-row">

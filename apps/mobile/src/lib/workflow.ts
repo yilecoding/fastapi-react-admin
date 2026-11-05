@@ -79,12 +79,25 @@ export type FormField = {
   id: string
   type: FieldType
   label: string
+  required?: boolean
+  placeholder?: string | null
   options?: { label: string; value: string }[] | null
   precision?: number | null
   multiple?: boolean
   content?: string | null
   columns?: FormField[] | null
+  /** 显示条件：只能引用排在前面的字段。不成立时不显示、不校验、不保存 */
+  visibleWhen?: Cond | null
+  /** 自动计算（number / amount）：服务端算，填了也不收 */
+  calc?: Calc | null
 }
+
+export type CondOp = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'not_in' | 'contains' | 'empty' | 'not_empty'
+export type Cond = { all: Cond[] } | { any: Cond[] } | { var: string; op: CondOp; value?: unknown }
+export type Calc = { kind: 'days'; field: string } | { kind: 'sum'; field: string; column: string }
+export type FormSchema = { fields: FormField[] }
+export type FormData = Record<string, unknown>
+export type FieldPerm = 'hidden' | 'readonly' | 'editable'
 
 export type TaskRow = {
   id: string
@@ -115,7 +128,7 @@ export type RecordRow = {
   node_name: string | null
   target_user_name: string | null
   opinion: string | null
-  detail: { to_name?: string; mode?: 'before' | 'after' } | null
+  detail: { to?: string; to_name?: string; mode?: 'before' | 'after' } | null
   created_time: string
 }
 
@@ -152,6 +165,8 @@ export type InstanceDetail = {
   forecast: ForecastStep[]
   /** 能退回到哪（只有当前能「退回」的人有）：第一个是发起人 */
   send_back_targets: { node_id: string; name: string }[]
+  /** 「发起人自选」节点和上次选的人：被退回后重新提交时要重选（预填上次的） */
+  select_nodes: { id: string; name: string; selected: string[] }[]
   /** 依次审批的当前节点上，排在后面还没轮到的人。`masked` = 来自看不到的人员字段 */
   waiting: { id: string | null; name: string | null; masked?: boolean }[]
 }
@@ -202,9 +217,10 @@ export function useWorkflowCounts() {
   })
 }
 
-export function useInstance(id: string) {
+export function useInstance(id: string, enabled = true) {
   return useQuery({
     queryKey: workflowKeys.detail(id),
+    enabled: enabled && !!id,
     queryFn: async () =>
       (await api.GET('/api/v1/sys/workflow/instances/{pk}', { params: { path: { pk: id } } })) as InstanceDetail,
   })
@@ -243,7 +259,7 @@ export function useDirectoryDepts(enabled: boolean) {
     queryKey: ['workflow', 'directory-depts'] as const,
     enabled,
     queryFn: async () =>
-      (await api.GET('/api/v1/sys/workflow/directory/depts')) as { id: string; name: string }[],
+      (await api.GET('/api/v1/sys/workflow/directory/depts')) as { id: string; name: string; parent_id: string | null }[],
     staleTime: 5 * 60_000,
   })
 }
@@ -280,6 +296,10 @@ export type ActBody = {
   task_id?: string
   resume?: boolean
   sign_mode?: 'before' | 'after'
+  /** 同意时带上审批人改过的字段（只带改了的） */
+  form?: FormData
+  /** 被退回后重新提交：发起人自选节点重选的人 */
+  selected?: Record<string, string[]>
 }
 
 export function useAct(instanceId: string) {
@@ -350,4 +370,143 @@ export const STATUS_TEXT: Record<InstanceStatus, string> = {
   rejected: '已驳回',
   withdrawn: '已撤回',
   terminated: '已终止',
+}
+
+/* ────────────────────────── 发起（#224 2b）────────────────────────── */
+
+export type Definition = {
+  id: string
+  code: string
+  name: string
+  category: string | null
+  icon: string | null
+  description: string | null
+  sort: number
+}
+
+export type StartForm = {
+  definition: Definition
+  version_id: string
+  form: FormSchema
+  /** 只用到开始节点上的发起人字段权限（没配 = 可填） */
+  model: { root: { id: string; fieldPerms?: Record<string, FieldPerm> } }
+  select_nodes: { id: string; name: string; mode: string }[]
+}
+
+export type Draft = { form: FormData; ai_filled: string[]; updated_time: string }
+
+const startKeys = {
+  startable: ['workflow', 'startable'] as const,
+  startForm: (code: string) => ['workflow', 'start-form', code] as const,
+  drafts: ['workflow', 'drafts'] as const,
+  draft: (code: string) => ['workflow', 'drafts', code] as const,
+}
+
+/** 我能发起的流程（已发布、发起范围里有我） */
+export function useStartable() {
+  return useQuery({
+    queryKey: startKeys.startable,
+    queryFn: async () => (await api.GET('/api/v1/sys/workflow/startable')) as Definition[],
+  })
+}
+
+/** 我存着草稿的流程：列表上标「草稿」 */
+export function useDrafts() {
+  return useQuery({
+    queryKey: startKeys.drafts,
+    queryFn: async () => (await api.GET('/api/v1/sys/workflow/drafts')) as { code: string; updated_time: string }[],
+  })
+}
+
+export function useStartForm(code: string) {
+  return useQuery({
+    queryKey: startKeys.startForm(code),
+    queryFn: async () =>
+      (await api.GET('/api/v1/sys/workflow/startable/{code}', { params: { path: { code } } })) as StartForm,
+  })
+}
+
+/**
+ * 这个流程的草稿（没有是 `null`）。
+ *
+ * - `staleTime: Infinity`：进屏之后不再重取 —— 回前台时后台重取会把正在填的盖回去（同 web）
+ * - 🔴 `gcTime: 0`：**离开这一屏就扔掉缓存**。只有 `staleTime: Infinity` 的话，第一次进来读到的
+ *   「没有草稿」会一直留在缓存里：填一半退出去（草稿已经存上了），再进来拿到的还是那个 `null`，
+ *   恢复不出来。实测踩过：「草稿已保存」亮了，退出再进是一张白表
+ */
+export function useDraft(code: string, enabled: boolean) {
+  return useQuery({
+    queryKey: startKeys.draft(code),
+    enabled,
+    staleTime: Infinity,
+    gcTime: 0,
+    queryFn: async () =>
+      (await api.GET('/api/v1/sys/workflow/drafts/{code}', { params: { path: { code } } })) as Draft | null,
+  })
+}
+
+/** 草稿列表（「发起审批」那一屏的「草稿」标记）。只刷列表本身，别连带把正在填的那份草稿重取 */
+export function invalidateDraftList(qc: ReturnType<typeof useQueryClient>) {
+  return qc.invalidateQueries({ queryKey: startKeys.drafts, exact: true })
+}
+
+export function saveDraft(code: string, form: FormData): Promise<unknown> {
+  return api.PUT('/api/v1/sys/workflow/drafts/{code}', { params: { path: { code } }, body: { form, ai_filled: [] } })
+}
+
+export function removeDraft(code: string): Promise<unknown> {
+  return api.DELETE('/api/v1/sys/workflow/drafts/{code}', { params: { path: { code } } })
+}
+
+/** 按当前填的内容试算流程（不写库）。`placeholderData` 留着上一次的：改一个字不让整条进度闪成骨架 */
+export function usePreview(code: string, form: FormData, selected: Record<string, string[]>) {
+  return useQuery({
+    queryKey: [...startKeys.startForm(code), 'preview', form, selected] as const,
+    queryFn: async () =>
+      (await api.POST('/api/v1/sys/workflow/startable/{code}/preview', {
+        params: { path: { code } },
+        body: { form, selected },
+      })) as { steps: ForecastStep[] },
+    placeholderData: (prev) => prev,
+    staleTime: 10_000,
+  })
+}
+
+export function useStartInstance() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (body: {
+      code: string
+      form: FormData
+      selected: Record<string, string[]>
+      key: string
+      urgent: boolean
+      /** 重新发起（内容来自旧单）：提交后别删这个流程的草稿 */
+      keep_draft: boolean
+    }) => (await api.POST('/api/v1/sys/workflow/instances', { body })) as { instance_id: string; replayed: boolean },
+    onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
+  })
+}
+
+export type UploadedFile = { id: string; name: string; size: number; ext: string }
+
+/**
+ * 审批附件上传。走 `/sys/workflow/files`（只要登录），**不是** `/sys/files/upload` —— 后者要
+ * `sys:file:upload`，普通员工在审批里传不了（同 web `uploadAttachment`）。
+ *
+ * 🔴 RN 的 `FormData` 收 `{ uri, name, type }` 描述对象（同 `lib/avatar.ts`）。后端**只按文件名扩展名**判类型，
+ * 所以 `name` 必须带原扩展名 —— 文档选择器给的 `name` 就是原名。
+ */
+export async function uploadWorkflowFile(file: { uri: string; name: string; mimeType?: string | null }) {
+  const form = new FormData()
+  form.append('file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.mimeType ?? 'application/octet-stream',
+  } as unknown as Blob)
+  const res = await api.sendUpload<{ id: string | number; name: string; size: number; ext: string }>(
+    '/api/v1/sys/workflow/files',
+    form,
+  )
+  return { ...res, id: String(res.id) } as UploadedFile
 }
