@@ -1,0 +1,59 @@
+---
+/**
+ * 「一个仓库三端」的线稿：左边 packages、右边 apps，连线就是各包 package.json 里**真实**的
+ * workspace 依赖（web ← i18n / ui / platform · desktop ← platform · mobile ← api / i18n），
+ * 改了依赖关系记得同步这里。platform 那两条（web 和桌面共用）用强调色。
+ * 给人读的字从 props 传进来，中英文首页各传各的。
+ */
+interface App { name: string; sub: string }
+interface Props { apps: [App, App, App]; caption: string }
+const { apps, caption } = Astro.props
+
+// 排列顺序是为了让连线交叉最少（只剩 i18n→web 和 platform→桌面 那一处）
+const PKG = ['ui', 'platform', 'i18n', 'api']
+const pkgY = (i: number) => 50 + i * 60 // 节点顶边
+const appY = (i: number) => 54 + i * 70
+const pc = (i: number) => pkgY(i) + 18 // 中线
+const ac = (i: number) => appY(i) + 24
+const edge = (p: number, a: number) => `M150 ${pc(p)} C 280 ${pc(p)}, 280 ${ac(a)}, 400 ${ac(a)}`
+const EDGES: Array<[number, number, boolean]> = [
+  [0, 0, false], [1, 0, true], [2, 0, false], // web ← ui / platform / i18n
+  [1, 1, true], // desktop ← platform
+  [2, 2, false], [3, 2, false], // mobile ← i18n / api
+]
+---
+
+<svg viewBox="0 0 560 290" role="img" aria-label={caption}>
+  <text class="d-head" x="20" y="30">packages/</text>
+  <text class="d-head" x="400" y="30">apps/</text>
+  {EDGES.map(([p, a, hl]) => <path class:list={['d-edge', { 'd-edge--hl': hl }]} d={edge(p, a)} />)}
+  {PKG.map((name, i) => (
+    <g>
+      <rect class:list={['d-node', { 'd-node--hl': name === 'platform' }]} x="20" y={pkgY(i)} width="130" height="36" rx="9" />
+      <text class="d-mono" x="38" y={pc(i) + 4.5}>{name}</text>
+    </g>
+  ))}
+  {apps.map((app, i) => (
+    <g>
+      <rect class="d-node" x="400" y={appY(i)} width="150" height="48" rx="10" />
+      <text class="d-label" x="416" y={appY(i) + 21}>{app.name}</text>
+      <text class="d-sub" x="416" y={appY(i) + 37}>{app.sub}</text>
+    </g>
+  ))}
+  <text class="d-caption" x="280" y="284" text-anchor="middle">{caption}</text>
+</svg>
+
+<style>
+  svg { font-family: var(--__sl-font) }
+  .d-head { font-family: var(--__sl-font-mono); font-size: 11px; letter-spacing: 0.04em; fill: var(--diagram-muted) }
+  .d-edge { fill: none; stroke: var(--diagram-line); stroke-width: 1.2 }
+  .d-edge--hl { stroke: var(--diagram-hl); stroke-width: 1.5; stroke-dasharray: 5 6; animation: d-flow 1.6s linear infinite }
+  .d-node { fill: var(--diagram-node); stroke: var(--line-strong); stroke-width: 1 }
+  .d-node--hl { fill: var(--diagram-hl-bg); stroke: color-mix(in oklab, var(--diagram-hl) 55%, transparent) }
+  .d-mono { font-family: var(--__sl-font-mono); font-size: 12.5px; fill: var(--diagram-text) }
+  .d-label { font-size: 13px; font-weight: 600; fill: var(--diagram-text) }
+  .d-sub { font-size: 11px; fill: var(--diagram-muted) }
+  .d-caption { font-size: 11.5px; fill: var(--diagram-muted) }
+  @keyframes d-flow { to { stroke-dashoffset: -22 } }
+  @media (prefers-reduced-motion: reduce) { .d-edge--hl { animation: none } }
+</style>
