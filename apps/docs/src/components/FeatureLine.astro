@@ -1,0 +1,28 @@
+---
+/** 首页最后那排「一行标题 + 一句话」的小功能：没有卡片框，只有顶上一根发丝线。悬停时标题变色、出箭头。 */
+interface Props {
+  title: string
+  href: string
+}
+const { title, href } = Astro.props
+---
+
+<a class="feature-line not-content" href={href}>
+  <span class="feature-line-title">{title} <span class="feature-line-arrow" aria-hidden="true">→</span></span>
+  <span class="feature-line-desc"><slot /></span>
+</a>
+
+<style is:global>
+  .feature-lines { display: grid; gap: 0 2rem; grid-template-columns: minmax(0, 1fr); margin-top: 3rem !important }
+  @media (min-width: 46rem) { .feature-lines { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+  @media (min-width: 66rem) { .feature-lines { grid-template-columns: repeat(3, minmax(0, 1fr)) } }
+  .feature-lines > * { margin: 0 !important }
+
+  .feature-line { display: flex; flex-direction: column; gap: 0.4rem; padding: 1.25rem 0 1.5rem; border-top: 1px solid var(--line); text-decoration: none }
+  .feature-line-title { font-size: 1rem; font-weight: 650; color: var(--sl-color-white); transition: color 0.18s ease }
+  .feature-line-arrow { display: inline-block; opacity: 0; transform: translateX(-4px); transition: opacity 0.18s ease, transform 0.18s ease }
+  .feature-line:hover .feature-line-title { color: var(--brand) }
+  .feature-line:hover .feature-line-arrow { opacity: 1; transform: none }
+  .feature-line-desc { font-size: 0.9rem; line-height: 1.7; color: var(--sl-color-gray-3) }
+  .feature-line-desc p { margin: 0 }
+</style>

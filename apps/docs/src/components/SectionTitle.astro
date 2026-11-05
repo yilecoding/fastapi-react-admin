@@ -1,24 +1,36 @@
 ---
-/** 首页每一节的标题：一行等宽小字 + 居中大标题 + 一句引言（slot）。 */
+/**
+ * 首页每一节的标题：左对齐的大标题 + 一句引言（slot），右边可选一个「看文档 →」。
+ * 不要眉标、不要居中 —— 跟正文同一条左边线，读起来像文档而不是广告。
+ */
 interface Props {
   id: string
-  eyebrow: string
   title: string
+  more?: string
+  href?: string
 }
-const { id, eyebrow, title } = Astro.props
+const { id, title, more, href } = Astro.props
 ---
 
 <header class="section-title not-content">
-  <p class="section-eyebrow">{eyebrow}</p>
-  <h2 id={id}>{title}</h2>
-  {Astro.slots.has('default') && <div class="section-lead"><slot /></div>}
+  <div class="section-title-main">
+    <h2 id={id}>{title}</h2>
+    {Astro.slots.has('default') && <div class="section-lead"><slot /></div>}
+  </div>
+  {more && href && <a class="section-more" href={href}>{more} <span aria-hidden="true">→</span></a>}
 </header>
 
 <style is:global>
-  .section-title { max-width: 44rem; margin: 6.5rem auto 2.5rem !important; text-align: center }
+  .section-title {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem 2rem;
+    margin: 7.5rem 0 2.25rem !important;
+  }
   .section-title > * { margin: 0 }
-  .section-eyebrow { font-family: var(--__sl-font-mono); font-size: 0.72rem; letter-spacing: 0.3em; color: var(--brand) }
-  .section-title h2 { margin-top: 0.8rem; font-size: clamp(1.8rem, 3.6vw, 2.6rem); line-height: 1.15; font-weight: 800; letter-spacing: -0.03em; color: var(--sl-color-white) }
-  .section-lead { margin-top: 1rem; font-size: 1.05rem; line-height: 1.7; color: var(--sl-color-gray-3) }
+  .section-title-main { max-width: 46rem }
+  .section-title-main > * { margin: 0 }
+  .section-title h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); line-height: 1.2; font-weight: 750; letter-spacing: -0.03em; color: var(--sl-color-white) }
+  .section-lead { margin-top: 0.75rem !important; font-size: 1rem; line-height: 1.75; color: var(--sl-color-gray-3) }
   .section-lead p { margin: 0 }
+  .section-more { font-size: 0.9rem; font-weight: 500; color: var(--sl-color-gray-3); text-decoration: none; white-space: nowrap }
+  .section-more:hover { color: var(--brand) }
 </style>
