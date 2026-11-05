@@ -1,6 +1,7 @@
 import { useRouter, type Href } from 'expo-router'
 import {
   BellIcon,
+  FileCheckIcon,
   IdCardIcon,
   LockIcon,
   SettingsIcon,
@@ -21,13 +22,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
 import { useUnread } from '@/lib/notifications'
 import { usePerm } from '@/lib/perm'
+import { useWorkflowCounts } from '@/lib/workflow'
 
 /**
  * 「应用」—— 启动台：按分组排的图标宫格（参考钉钉 / 企业微信的工作台），不是导航列表。
  *
  * 原来这一屏是一条「用户」列表 + 一段「还没做的」，和首页的「入口」组长得一样，
  * 看起来就是个导航页。#224 定了移动端不做角色 / 部门 / 菜单 / 文件 / 日志，
- * 所以「还没做的」那段删掉，宫格里只放**真能进**的。以后做了审批，往 `SECTIONS` 里加一格。
+ * 所以「还没做的」那段删掉，宫格里只放**真能进**的。新模块往 `SECTIONS` 里加一格。
  *
  * ## 🔴 三种「空」必须分开，否则全都长成「这 App 坏了」
  *
@@ -61,6 +63,8 @@ const SECTIONS: Section[] = [
     key: 'common',
     title: '常用',
     tiles: [
+      // 审批人人都可能是办理人，接口只要登录 —— 不挂权限码
+      { key: 'workflow', label: '审批', icon: FileCheckIcon, bg: 'bg-orange-500/15', fg: 'text-orange-600 dark:text-orange-400', href: '/workflow' },
       { key: 'notifications', label: '通知', icon: BellIcon, bg: 'bg-sky-500/15', fg: 'text-sky-600 dark:text-sky-400', href: '/notifications' },
       { key: 'profile', label: '个人资料', icon: IdCardIcon, bg: 'bg-violet-500/15', fg: 'text-violet-600 dark:text-violet-400', href: '/profile/info' },
       { key: 'settings', label: '设置', icon: SettingsIcon, bg: 'bg-slate-500/15', fg: 'text-slate-600 dark:text-slate-300', href: '/settings' },
@@ -80,12 +84,13 @@ export default function AppsScreen() {
   const router = useRouter()
   const { canAny, known, error, refresh } = usePerm()
   const { unread, refresh: refreshUnread } = useUnread()
+  const wfCounts = useWorkflowCounts()
   const [refreshing, setRefreshing] = React.useState(false)
 
   async function onRefresh() {
     setRefreshing(true)
     try {
-      await Promise.all([refresh(), refreshUnread()])
+      await Promise.all([refresh(), refreshUnread(), wfCounts.refetch()])
     } finally {
       setRefreshing(false)
     }
@@ -98,7 +103,7 @@ export default function AppsScreen() {
     tiles: s.tiles.filter((tile) => !tile.perms || (known && canAny(...tile.perms))),
   }))
   const noGranted = known && !SECTIONS.some((s) => s.tiles.some((tile) => tile.perms && canAny(...tile.perms)))
-  const badges: Record<string, number> = { notifications: unread?.total ?? 0 }
+  const badges: Record<string, number> = { notifications: unread?.total ?? 0, workflow: wfCounts.data?.todo ?? 0 }
 
   return (
     <ScrollView
