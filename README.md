@@ -71,7 +71,7 @@ Row-level permissions · multi-tab that keeps state · approval workflow · an A
 | **Messages & notifications** | in-app notifications (real-time) · notices (rich text + attachments · audiences · scheduled publishing · pinned / level / expiry · pop-up after sign-in with required acknowledgement · top banner · sign-in page notices · read stats) · notification routing (email / SMS / Feishu · DingTalk · WeCom group bots · per-event policies · delivery log) · SMS (Alibaba Cloud / Tencent Cloud) |
 | **Scheduled jobs** | online scheduling · cron preview · run history |
 | **Operations** | settings · dictionaries · sign-in / operation logs (redacted) · server & Redis monitoring · new-version prompt |
-| **Clients** | Electron desktop (installers for three platforms · silent printing · local hardware · auto-update) · native Expo app (not a WebView wrapper, **preview** — see below) |
+| **Clients** | Electron desktop (installers for three platforms · silent printing · local hardware · auto-update) · native Expo app (not a WebView wrapper; scope below) |
 | **Developers** | component sandbox (every component tweakable and copy-pasteable) · color palette · type-safe API contract generated from OpenAPI |
 
 ## Stack
@@ -84,13 +84,13 @@ Row-level permissions · multi-tab that keeps state · approval workflow · an A
 | **Clients** | Electron 42 · Expo 57 / React Native 0.86 |
 | **Tooling** | pnpm + turbo monorepo · uv · ruff · pytest · Playwright · GitHub Actions |
 
-## Mobile app (preview)
+## Mobile app
 
-The Expo app is shipped as a **preview** in 1.0 — it's real and usable, but not yet covered by the 1.0 compatibility promises.
+The Expo app covers **the things people actually do on a phone** ([#224](https://github.com/yilecoding/fastapi-react-admin/issues/224)); admin-console modules stay on the web. It is versioned separately from the web app.
 
-- **Has:** home · notices · notifications · users · profile · server monitoring · time zone · SMS code sign-in · session expiry reasons
-- **Not yet:** approvals · roles / departments / menus · files · operation & sign-in logs (the Apps screen lists them as "not built yet" rather than hiding them) · binding a phone number or turning on two-factor auth from the app
-- **Not yet verified:** no automated tests ([#137](https://github.com/yilecoding/fastapi-react-admin/issues/137)), most screens not run on a real device, no release pipeline
+- **Has:** home (my approvals · to-do) · approvals (to-do / done / CC'd / started by me · approve / reject / send back / transfer / add signer · start a request · drafts · resubmit after send-back · restart a closed request) · notices · notifications · users · profile (bind a phone number) · server monitoring · time zone · SMS code sign-in · two-factor sign-in · session expiry reasons
+- **Web only, by design:** roles / departments / menus · files · operation & sign-in logs · turning on two-factor auth · AI form filling and AI pre-review in approvals
+- **Not yet verified:** no automated tests ([#137](https://github.com/yilecoding/fastapi-react-admin/issues/137)), most screens only run on an emulator, no release pipeline
 
 ## Databases
 

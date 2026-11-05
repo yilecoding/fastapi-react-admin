@@ -11,7 +11,7 @@ How you upgrade depends on how you use the project. If you **deploy the publishe
 
 Semver: breaking any of the compatibility rules below bumps the major version (1.x → 2.0), a big feature bumps the minor version (1.0 → 1.1), fixes only bump the patch (1.0.0 → 1.0.1). From 1.0.0 these rules are formally in force.
 
-The mobile app is a **preview** in 1.0 and is not covered by these rules (see "Mobile app (preview)" in the README for what it has and lacks).
+The mobile app is versioned separately from the web app. It calls the internal API, so how an older app copes with a newer backend is covered by the "Internal API" row below; see "Mobile app" in the README for what it does and what stays on the web.
 
 ## What is promised not to break?
 

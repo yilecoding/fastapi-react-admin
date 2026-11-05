@@ -44,6 +44,29 @@ export function StatusBadge({ status }: { status: InstanceStatus }) {
   )
 }
 
+/* ────────────────────────── 流程方块 ────────────────────────── */
+
+/** 流程的小方块：名字第一个字 + 按名字固定挑一个底色（同一个流程每次颜色一样） */
+const TILE = [
+  'bg-blue-500/15 text-blue-600 dark:text-blue-400',
+  'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  'bg-orange-500/15 text-orange-600 dark:text-orange-400',
+  'bg-violet-500/15 text-violet-600 dark:text-violet-400',
+  'bg-rose-500/15 text-rose-600 dark:text-rose-400',
+  'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400',
+]
+
+export function Tile({ name, large }: { name: string; large?: boolean }) {
+  let h = 0
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0
+  const [bg, ...fg] = TILE[h % TILE.length].split(' ')
+  return (
+    <View className={`${bg} items-center justify-center rounded-xl ${large ? 'size-12' : 'size-9'}`}>
+      <Text className={`${fg.join(' ')} font-semibold ${large ? 'text-lg' : 'text-[15px]'}`}>{[...name][0] ?? '?'}</Text>
+    </View>
+  )
+}
+
 /* ────────────────────────── 只读表单 ────────────────────────── */
 
 function isEmpty(v: unknown): boolean {
@@ -94,6 +117,29 @@ export function FormFields({
       ))}
     </View>
   )
+}
+
+/**
+ * 单个字段的只读值（表单渲染器里「只能看」的那几个字段用）。名字自己查 —— 一张表单里只读字段不多，
+ * 每个各查一次走的是同一份缓存。
+ */
+export function ReadonlyValue({
+  field,
+  value,
+  files,
+}: {
+  field: FormField
+  value: unknown
+  files: Record<string, { name: string }>
+}) {
+  const ids =
+    field.type === 'user' && !isEmpty(value) ? (Array.isArray(value) ? (value as string[]) : [value as string]) : []
+  const users = useDirectoryUsersByIds(ids)
+  const depts = useDirectoryDepts(field.type === 'dept' && !isEmpty(value))
+  if (isEmpty(value)) return <Text className="text-muted-foreground text-[15px]">—</Text>
+  const userName = (id: string) => users.data?.find((u) => u.id === id)?.nickname ?? (users.isPending ? '…' : id)
+  const deptName = (id: string) => depts.data?.find((d) => d.id === id)?.name ?? (depts.isPending ? '…' : id)
+  return <FieldValue field={field} value={value} userName={userName} deptName={deptName} files={files} />
 }
 
 function plain(field: FormField, value: unknown, userName: (id: string) => string, deptName: (id: string) => string) {
