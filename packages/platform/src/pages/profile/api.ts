@@ -179,7 +179,9 @@ export const socialBindingsQuery = queryOptions({
 /**
  * 取绑定授权链接。
  *
- * 后端只负责生成 URL（带 state，存 Redis），**跳转要前端自己做**。
+ * 后端只负责生成 URL，**跳转要前端自己做**。URL 指向后端的 `/oauth2/{provider}/authorize`
+ * （带一次性 ticket），由它下发 state cookie 再 302 到第三方（#227）—— 所以必须是**顶层跳转**
+ * （新窗口 / `location.href`），不能改成 fetch：cookie 只在顶层导航的响应上才会被浏览器收下。
  * 授权完成后 provider 回调后端，后端再重定向到
  * `OAUTH2_FRONTEND_BINDING_REDIRECT_URI`。
  *
