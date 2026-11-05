@@ -113,12 +113,17 @@ Starlight 0.39 起不再支持 `autogenerate` 和 `label` 写在同一层。
 - **主题**在 `src/styles/theme.css`：品牌紫 + Inter / JetBrains Mono（`@fontsource-variable` 自托管 ——
   不走 Google Fonts，国内打不开会卡住首屏）。⚠️ Starlight 的 `:root` 是**深色**、浅色挂在
   `:root[data-theme='light']`，和后台的 `.dark` 方向相反，从后台抄颜色时别抄反
-- **首页**覆盖了 Starlight 的 `Hero`（`astro.config.mjs` 的 `components`），版式照搬登录页左栏：
-  渐变面板 + 立体榫卯（`src/components/TenonStage.astro`）。榫卯轮廓**直接 import**
-  `apps/web/src/components/tenon-outline.ts`，不抄坐标 —— 改了图形，侧边栏、登录页和这里一起变
-- 首页其余几块（截图窗框、数字条、功能卡、收尾面板）都在 `src/components/`，文案一律从
-  页面的 MDX / frontmatter 传进去（`landing` 字段是 `src/content.config.ts` 里扩出来的），
-  组件里不写给人看的话 —— 中英文各管各的
+- **首页**覆盖了 Starlight 的 `Hero`（`astro.config.mjs` 的 `components`）。2026-11-05 改成「克制」路线：
+  不套渐变面板，白底大留白 + 立体榫卯（`src/components/TenonStage.astro`）+ 几圈发丝细的同心圆，
+  按钮一种墨色，技术栈是带色点的小标签。榫卯轮廓**直接 import**
+  `apps/web/src/components/tenon-outline.ts`，不抄坐标 —— 改了图形，侧边栏、登录页、这里和收尾的水印一起变
+- 首页其余几块都在 `src/components/`：`SectionTitle`（左对齐标题 + 右侧「看文档」）· `Showcase`（大卡片：
+  要点 + 线稿图示）· `Diagram*`（三张 SVG 线稿）· `FeatureLine`（发丝线隔开的小功能）· `Closing`（水印 + 终端卡片）。
+  文案一律从页面的 MDX / frontmatter 传进去（`landing` 字段是 `src/content.config.ts` 里扩出来的），
+  组件里不写给人看的话 —— 中英文各管各的，图示里的字也走 props
+- ⚠️ `DiagramMonorepo` 的连线是各包 `package.json` 里**真实**的 workspace 依赖，改了依赖要同步那张图
+- ⚠️ hero 的同心圆和收尾水印会伸出内容列：横向溢出裁在 `.main-frame` 上（`overflow-x: clip`）。
+  裁 `html` / `body` 没用 —— 那会传给视口变成 `hidden`，实测 `scrollTo` 照样横移 230px（触屏能不能拖没测）
 - ⚠️ 只给首页加样式时选择器挂在 `:root[data-has-hero]` 上（Starlight 只给带 hero 的页加这个属性），
   否则会漏到功能页里
 - ⚠️ 顶栏要写 `header.header`：Starlight 里外两层都叫 `.header`，裸写会把那道渐变线画到里层，
