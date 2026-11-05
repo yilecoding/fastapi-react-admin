@@ -12,6 +12,12 @@ interface Props {
   lift?: boolean
 }
 const { src, alt, url = 'localhost:8888', lift = false } = Astro.props
+/**
+ * 内容列 68rem ≈ 1088px，2 倍屏要 2176 物理像素、3 倍屏要 3264 —— 候选宽度必须够到 2400 / 3200，
+ * 否则浏览器只能拿最大那张去放大，字就糊了（原来最大只给到 1600）。源图是 3200 宽的 2 倍截图
+ * （apps/web/scripts/screenshots.mjs）。webp 默认质量 80，彩色小标签的字边会发虚，提到 90。
+ */
+const WIDTHS = [800, 1200, 1600, 2400, 3200]
 ---
 
 <figure class:list={['shot not-content', { 'shot--lift': lift }]}>
@@ -20,7 +26,7 @@ const { src, alt, url = 'localhost:8888', lift = false } = Astro.props
       <span class="shot-dot"></span><span class="shot-dot"></span><span class="shot-dot"></span>
       <span class="shot-url">{url}</span>
     </div>
-    <Image src={src} alt={alt} widths={[800, 1200, 1600]} sizes="(min-width: 76rem) 72rem, 100vw" loading={lift ? 'eager' : 'lazy'} />
+    <Image src={src} alt={alt} widths={WIDTHS} sizes="(min-width: 72rem) 68rem, 100vw" quality={90} loading={lift ? 'eager' : 'lazy'} />
   </div>
   {Astro.slots.has('default') && <figcaption><slot /></figcaption>}
 </figure>
