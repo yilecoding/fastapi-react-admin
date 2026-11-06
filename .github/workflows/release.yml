@@ -82,7 +82,11 @@ jobs:
           for i in $(seq 1 90); do
             RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=1" \
               --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion) \(.html_url)"')
-            [ -z "$RUN" ] && fail "找不到 $GITHUB_SHA 在 main 上的 CI 运行"
+            # 合并后马上推 tag 时，push 触发的那轮 CI 可能还没登记 —— 先等，5 分钟还没有才算真找不到
+            if [ -z "$RUN" ]; then
+              [ "$i" -ge 10 ] && fail "找不到 $GITHUB_SHA 在 main 上的 CI 运行"
+              echo "CI 还没登记，30 秒后再看…"; sleep 30; continue
+            fi
             read -r STATUS CONCLUSION URL <<< "$RUN"
             if [ "$STATUS" = completed ]; then
               [ "$CONCLUSION" = success ] && { echo "CI 绿：$URL"; exit 0; }
