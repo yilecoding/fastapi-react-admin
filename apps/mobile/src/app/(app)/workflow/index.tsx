@@ -2,8 +2,9 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { FileCheckIcon, TriangleAlertIcon } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import * as React from 'react'
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native'
+import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native'
 
+import { HeaderAction, ListItem } from '@/components/grouped'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -59,15 +60,7 @@ export default function WorkflowInboxScreen() {
       <Stack.Screen
         options={{
           headerRight: () => (
-            <Pressable
-              onPress={() => router.push('/workflow/start')}
-              hitSlop={10}
-              accessibilityRole="button"
-              testID="wf-start-entry"
-              className="active:opacity-60"
-            >
-              <Text className="text-primary text-[15px] font-medium">{t('发起')}</Text>
-            </Pressable>
+            <HeaderAction label={t('发起')} onPress={() => router.push('/workflow/start')} testID="wf-start-entry" />
           ),
         }}
       />
@@ -110,7 +103,9 @@ export default function WorkflowInboxScreen() {
         <FlatList
           data={items}
           keyExtractor={(r) => `${r.id}:${r.task_id ?? r.cc_id ?? ''}`}
-          contentContainerClassName="gap-2.5 px-4 pt-1 pb-10"
+          contentContainerClassName="px-4 pt-1 pb-10"
+          // 🔴 行的圆角取决于「是不是末行」，翻页后旧的末行要重画 —— FlatList 默认不重画没变的行
+          extraData={items.length}
           refreshControl={
             <RefreshControl refreshing={q.isRefetching && !q.isFetchingNextPage} onRefresh={() => void onPullRefresh()} />
           }
@@ -122,6 +117,12 @@ export default function WorkflowInboxScreen() {
             <View className="items-center gap-2 py-16">
               <Icon as={FileCheckIcon} className="text-muted-foreground size-8" />
               <Text className="text-muted-foreground text-sm">{t(TABS.find((x) => x.value === tab)!.empty)}</Text>
+              {/* 空态给下一步：「我发起的」空着时最自然的动作就是发起一张 */}
+              {tab === 'initiated' ? (
+                <Button variant="outline" size="sm" className="mt-2" onPress={() => router.push('/workflow/start')}>
+                  <Text>{t('发起审批')}</Text>
+                </Button>
+              ) : null}
             </View>
           }
           ListFooterComponent={
@@ -138,8 +139,10 @@ export default function WorkflowInboxScreen() {
               </View>
             ) : null
           }
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <InboxRow
+              index={index}
+              count={items.length}
               row={item}
               tab={tab}
               onPress={() =>
@@ -153,7 +156,19 @@ export default function WorkflowInboxScreen() {
   )
 }
 
-function InboxRow({ row, tab, onPress }: { row: InstanceRow; tab: InboxTab; onPress: () => void }) {
+function InboxRow({
+  row,
+  tab,
+  index,
+  count,
+  onPress,
+}: {
+  row: InstanceRow
+  tab: InboxTab
+  index: number
+  count: number
+  onPress: () => void
+}) {
   const { t } = useTranslation()
   // 每个 tab 关心的时间不同：待办看「什么时候到我这」，已办看「我什么时候处理的」，抄送看「什么时候抄给我」
   const at =
@@ -161,12 +176,8 @@ function InboxRow({ row, tab, onPress }: { row: InstanceRow; tab: InboxTab; onPr
   const unreadCc = tab === 'cc' && !row.read_time
 
   return (
-    // `active:` 只在 Pressable 上生效（见 users/index.tsx 的注释），所以按下态挂在这一层
-    <Pressable
-      onPress={onPress}
-      testID={`wf-row-${row.id}`}
-      className="bg-card active:bg-muted gap-1.5 rounded-xl px-4 py-3"
-    >
+    // 形状 / 分隔线 / 按下态在 `ListItem` 里；行内是纵向三段，所以把它默认的横排换成竖排
+    <ListItem index={index} count={count} onPress={onPress} testID={`wf-row-${row.id}`} className="flex-col items-stretch gap-1.5">
       <View className="flex-row items-center gap-2">
         {unreadCc ? <View className="bg-primary size-2 rounded-full" /> : null}
         <Text className="flex-1 text-[15px] font-medium" numberOfLines={1}>
@@ -191,6 +202,6 @@ function InboxRow({ row, tab, onPress }: { row: InstanceRow; tab: InboxTab; onPr
         </Text>
         {at ? <Text className="text-muted-foreground/80 text-xs">{relativeTime(at)}</Text> : null}
       </View>
-    </Pressable>
+    </ListItem>
   )
 }

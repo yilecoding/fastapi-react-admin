@@ -50,7 +50,8 @@ npx @react-native-reusables/cli@latest add card avatar badge separator input lab
 
 | 用在哪 | 对不对 |
 |---|---|
-| 登录页那行品牌眉标、头像底 | ✅ **品牌陈述** |
+| 登录页那行品牌眉标、头像首字（主色浅底 + 主色字，见 `UserAvatar`） | ✅ **品牌陈述** |
+| 头像底用**实心**主色块 | ❌ 用户列表一屏十个一模一样的靛蓝方块，是全屏最重的东西，压过了名字 |
 | 未读数的**值**（`1 条未读`）、通知列表的未读**圆点** | ✅ **状态** |
 | 错误文案、`DangerRow`（退出登录） | ✅ **语义** |
 | 行左侧的**图标**按未读数染主色 | ❌ 一排灰图标里蹦出一个紫的，很突兀。`RowIcon` 现在**没有**高亮这个口子 |
@@ -104,16 +105,24 @@ wordmark。**这是全 App 唯一的品牌表达：不铺满、不饱和。**
 - iOS 大标题 `text-3xl font-bold` + `letterSpacing: -0.9`
 - 行内文字 15、值 14、说明 12、等宽标注 10–11
 - 行高 `min-h-[46px]`，主按钮 `h-[50px] rounded-xl`
-- 等宽字（JetBrains Mono）只给**数据**：ID、时区、用户名、时间戳
+- 等宽字（JetBrains Mono）只给**数据**：ID、时区、用户名、绝对时间戳
+- ⚠️ 相对时间（「1 天前」）**不用等宽字**：它是中文短语，等宽字体里的空格是半个 em 宽，
+  数字和「天前」之间被撑出一大截（实测首页公告、通知列表都是「1　天前」）
 - 🔴 **字没载完之前 `_layout` 直接 `return null`。** RN 里 `fontFamily` 指向一个
   还没注册的字族是**静默回落到系统字体**的（不报错），首帧会明显抖一下
 - ⚠️ `tracking` 在 RN 里是 `letterSpacing`（**绝对 px**），不是 em
 
 ### 导航容器要自己上色
 
-tab 栏和 Stack header 都设成 `--color-card` + `hairlineWidth` 边（不是 1 ——
-1px 在高密度屏上是两三个物理像素）。不设的话是系统默认白，和 grouped background
-之间有一道生硬的接缝。三个 tab 屏都自带品牌头，所以它们的 header 全关掉了。
+tab 栏设成 `--color-card` + `hairlineWidth` 顶边（不是 1 —— 1px 在高密度屏上是两三个物理像素）。
+
+Stack header 设成**页面底色**（`--color-background`）、无分隔线、标题居中、17 号半粗 ——
+iOS 分组列表的导航栏就是这样，分组块的白底已经把层级说清楚了。⚠️ 原来是「卡片白 + 发丝线」，
+实测是一条白带压着一片淡紫，两块颜色硬拼；标题又默认靠左（Material），和 tab 屏的大标题
+不是一套。三个 tab 屏都自带品牌头，所以它们的 header 全关掉了。
+
+右上角的文字动作（「发起」「编辑」「全部已读」）一律用 `grouped.tsx` 的 `HeaderAction`
+（带 `disabled` / `loading`），不要每屏手写一个 `Pressable`。
 
 ⚠️ 这些是**原生组件的 prop，不吃 `className`**，颜色只能从 `useCSSVariable` 取；
 写死 hex 的话深浅色主题里必有一头是错的。
@@ -244,8 +253,31 @@ toast 进了 store、屏上没有，纯静默。
 **只适合定长列表**（设置屏、详情页的资料块）。`FlatList` 只挂载可见的那几行，
 包不住一个跨全表的圆角容器，滚动时上下边缘的圆角会跟着行进出而闪。
 
-**要翻页的列表用独立卡片**（每条一个 `Card`，`contentContainerClassName` 里给
-`gap-2.5`），见 `src/app/(app)/users/index.tsx`。
+**要翻页的列表用 `ListItem`**（`grouped.tsx`）：每行自己画形状 —— 首行圆上角、末行圆下角、
+非首行顶部画内缩分隔线，拼起来读作一个分组块，圆角跟着行走、滚动不闪。见 `users/index.tsx`、
+`workflow/index.tsx`。⚠️ 原来的退路是「每条一张独立卡片 + `gap-2.5`」，一屏只放得下七八条，
+读起来像一叠名片。
+
+两个必须跟着做的点：
+
+- 🔴 **`FlatList` 要给 `extraData={items.length}`。** 行的下圆角取决于「是不是末行」，
+  翻页后旧的末行要重画；FlatList 默认不重画数据没变的行，旧末行会一直带着下圆角
+- 🔴 **非首行往上叠 1dp（`ListItem` 里已经做了）。** 行高是小数，逐行取整时偶尔在两行之间
+  漏出 1 个物理像素的页面底色，读起来像一条通栏分隔线。实测：用户列表第 5、6 行之间，
+  像素取样确认是底色 `#F4F2FA` 而不是 border 色；叠上之后整屏扫描 0 行漏缝
+
+### 共用件一览
+
+| 要做的 | 用 | 别再 |
+|---|---|---|
+| 定长列表（设置、资料） | `Group` + `Row` / `PressRow` | 手写白底圆角容器 |
+| 翻页列表 | `ListItem` | 每条一张 `Card` |
+| 搜索框 | `SearchField`（填充底、图标和输入框同一行） | 图标 `absolute` 叠在 `Input` 上 —— 实测落到了输入框**上方** |
+| 右上角动作 | `HeaderAction` | 每屏一个 `Pressable` + 主色字 |
+| 用户头像 | `components/user-avatar.tsx` 的 `UserAvatar` | 直接拼 `Avatar` / `AvatarFallback`（原来四个屏四种尺寸和圆角） |
+
+⚠️ 给 rnr 的 `Input` 卸样式时，`bg-transparent` 之外还要写 **`dark:bg-transparent`**：
+它自带 `dark:bg-input/30`，深色下只写前者会在搜索框里再套出一个灰框（实测）。
 
 ## 🔴 `active:` 只在 uniwind 的 `Pressable` 里解析 —— 挂在别的组件上是死代码
 

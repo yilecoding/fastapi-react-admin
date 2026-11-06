@@ -13,9 +13,9 @@ import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 import { BrandTop } from '@/components/brand-top'
 import { Chevron, DangerRow, Group, GroupHeader, PressRow, RowIcon } from '@/components/grouped'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Text } from '@/components/ui/text'
+import { UserAvatar } from '@/components/user-avatar'
 import { useSession } from '@/lib/session'
 
 export default function ProfileScreen() {
@@ -54,16 +54,7 @@ export default function ProfileScreen() {
     >
       <BrandTop>
         <Pressable onPress={() => router.push('/profile/info')} testID="profile-header" className="flex-row items-center gap-3.5 pt-1">
-          <Avatar alt={user.nickname || user.username} className="size-[54px] rounded-[17px]">
-            {/* 头像地址坏掉时 AvatarImage 静默不显示，AvatarFallback 兜住 ——
-                「没有头像」和「头像挂了」都有一个确定的样子 */}
-            {user.avatar ? <AvatarImage source={{ uri: user.avatar }} /> : null}
-            <AvatarFallback className="bg-primary rounded-[17px]">
-              <Text className="text-primary-foreground text-xl font-semibold">
-                {(user.nickname || user.username).slice(0, 1).toUpperCase()}
-              </Text>
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar name={user.nickname || user.username} src={user.avatar} size={56} />
           <View className="flex-1 gap-0.5">
             <Text className="text-lg font-semibold" testID="profile-nickname">
               {user.nickname || user.username}

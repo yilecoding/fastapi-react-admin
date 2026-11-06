@@ -1,6 +1,5 @@
 import { Stack } from 'expo-router'
 import { useTranslation } from 'react-i18next'
-import { StyleSheet } from 'react-native'
 import { useCSSVariable } from 'uniwind'
 
 import { NoticePopups } from '@/components/notice-popups'
@@ -18,8 +17,7 @@ import { NoticePopups } from '@/components/notice-popups'
  */
 export default function AppLayout() {
   const { t } = useTranslation()
-  const card = useCSSVariable('--color-card')
-  const line = useCSSVariable('--color-border')
+  const bg = useCSSVariable('--color-background')
   const fg = useCSSVariable('--color-foreground')
   const str = (v: unknown) => (typeof v === 'string' ? v : undefined)
 
@@ -28,12 +26,19 @@ export default function AppLayout() {
       <Stack
         screenOptions={{
           headerBackButtonDisplayMode: 'minimal',
-          // 导航头和 tab 栏用卡片色 + 发丝底边，和内容区的 background 区分开
-          headerStyle: { backgroundColor: str(card) },
+          /*
+           * 导航头和页面**同一个底色**、没有分隔线、标题居中 —— iOS 分组列表的导航栏就是这样，
+           * 分组块自己的白底已经把层级说清楚了。
+           *
+           * ⚠️ 原来是「卡片白 + 发丝线」，用意是和页面的淡紫底分开，实测效果是一条白带压着
+           * 一片紫，两块颜色硬拼；标题又默认靠左（Material），和三个 tab 屏的大标题不是一套。
+           */
+          headerStyle: { backgroundColor: str(bg) },
           headerTintColor: str(fg),
-          headerTitleStyle: { fontSize: 16, fontWeight: '600', color: str(fg) },
+          headerTitleAlign: 'center',
+          headerTitleStyle: { fontSize: 17, fontWeight: '600', color: str(fg) },
           headerShadowVisible: false,
-          contentStyle: { borderTopColor: str(line), borderTopWidth: StyleSheet.hairlineWidth },
+          contentStyle: { backgroundColor: str(bg) },
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
