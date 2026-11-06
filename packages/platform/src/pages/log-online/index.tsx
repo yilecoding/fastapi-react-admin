@@ -23,7 +23,7 @@ import {
 import { COLUMN_LABELS, buildColumns } from './columns'
 import { features } from './table-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 /**
  * 在线用户（会话监控）。
@@ -281,8 +281,7 @@ export function LogOnlinePage({
         />
       </div>
 
-      {/* 查询区和表格是同一个块的两半；这一层也要能收缩，否则「只滚表格行」那条链断在这里 */}
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         <QueryBar
           fields={FIELDS}
           value={qb.value}
@@ -345,7 +344,7 @@ export function LogOnlinePage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       {/* 二次确认必须是触发器的兄弟节点 —— 放进 DropdownMenuContent 会被一起卸载 */}
       <ConfirmDialog

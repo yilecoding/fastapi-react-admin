@@ -25,7 +25,7 @@ import {
   type TaskResult,
 } from './api'
 import { TaskResultDetailSheet } from './detail-sheet'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 export type SchedulerRecordSearch = {
   page?: number
@@ -215,8 +215,7 @@ export function SchedulerRecordPage({
     <PageShell fill="always">
       <PageHeader title={t('执行记录')} description={t('定时任务每一次执行的结果与异常栈')} />
 
-      {/* 查询区和表格是同一个块的两半，gap-4 而不是页面级的 24px */}
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         {/* 查询区与表格工具行合并成一行 —— 不合并是两条右对齐、左半边全空的按钮行 */}
         <QueryBar
           fields={FIELDS}
@@ -266,7 +265,7 @@ export function SchedulerRecordPage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       <TaskResultDetailSheet id={detailId} onClose={() => setDetailId(null)} />
     </PageShell>

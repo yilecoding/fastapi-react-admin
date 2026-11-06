@@ -1,0 +1,52 @@
+---
+/**
+ * 「为 AI 协作而设计」的线稿：一次改动 → 三道关（测试 · 类型契约 · 按目录的规矩）→ 合入。
+ * 三条线上有流动的虚线，表示每次都要过一遍。字从 props 传进来。
+ */
+interface Props {
+  change: string
+  checks: [string, string, string]
+  merge: string
+  caption: string
+}
+const { change, checks, merge, caption } = Astro.props
+const midY = [34, 98, 162]
+const C = 113 // 左右两个节点的中线
+---
+
+<svg viewBox="0 0 440 250" role="img" aria-label={caption}>
+  {midY.map((y) => <path class="d-edge" d={`M112 ${C} C 140 ${C}, 140 ${y + 15}, 164 ${y + 15}`} />)}
+  {midY.map((y) => <path class="d-edge d-edge--flow" d={`M326 ${y + 15} C 348 ${y + 15}, 348 ${C}, 368 ${C}`} />)}
+
+  <rect class="d-node" x="8" y={C - 22} width="104" height="44" rx="10" />
+  <text class="d-label" x="60" y={C + 4.5} text-anchor="middle">{change}</text>
+
+  {checks.map((label, i) => (
+    <g>
+      <rect class="d-node" x="164" y={midY[i]} width="162" height="30" rx="8" />
+      <circle class="d-tick-bg" cx="181" cy={midY[i] + 15} r="7" />
+      <path class="d-tick" d={`M177.5 ${midY[i] + 15} l2.5 2.5 l4.5 -5`} />
+      <text class="d-label" x="195" y={midY[i] + 19.5}>{label}</text>
+    </g>
+  ))}
+
+  <rect class="d-node d-node--hl" x="368" y={C - 22} width="66" height="44" rx="10" />
+  <text class="d-label d-label--hl" x="401" y={C + 4.5} text-anchor="middle">{merge}</text>
+
+  <text class="d-caption" x="220" y="232" text-anchor="middle">{caption}</text>
+</svg>
+
+<style>
+  svg { font-family: var(--__sl-font) }
+  .d-edge { fill: none; stroke: var(--diagram-line); stroke-width: 1.2 }
+  .d-edge--flow { stroke: var(--diagram-hl); stroke-dasharray: 4 6; animation: d-flow 1.4s linear infinite }
+  .d-node { fill: var(--diagram-node); stroke: var(--line-strong); stroke-width: 1 }
+  .d-node--hl { fill: var(--diagram-hl-bg); stroke: color-mix(in oklab, var(--diagram-hl) 55%, transparent) }
+  .d-label { font-size: 12.5px; font-weight: 500; fill: var(--diagram-text) }
+  .d-label--hl { font-weight: 650; fill: var(--diagram-hl) }
+  .d-tick-bg { fill: var(--diagram-hl-bg); stroke: color-mix(in oklab, var(--diagram-hl) 50%, transparent) }
+  .d-tick { fill: none; stroke: var(--diagram-hl); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round }
+  .d-caption { font-size: 11px; fill: var(--diagram-muted) }
+  @keyframes d-flow { to { stroke-dashoffset: -20 } }
+  @media (prefers-reduced-motion: reduce) { .d-edge--flow { animation: none } }
+</style>

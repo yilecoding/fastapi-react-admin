@@ -46,7 +46,7 @@ import {
 import { OpenAppFormSheet } from './form'
 import { SecretDialog } from './secret-dialog'
 import { WebhookSheet, type WebhookTab, type WebhookView } from './webhook-sheet'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 const col = createColumnHelper<typeof features, OpenApp>()
 
@@ -331,7 +331,7 @@ export function OpenAppPage({
     <PageShell fill="always">
       <PageHeader title={t('应用管理')} description={t('给对接的外部系统发一对 AK/SK，它就能带签名调用勾选的开放接口。SK 加密存储，明文只在创建和重置时显示一次。')} />
 
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         <QueryBar
           fields={FIELDS}
           value={q.value}
@@ -411,7 +411,7 @@ export function OpenAppPage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       <OpenAppFormSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} onIssued={setIssued} />
       <SecretDialog issued={issued} onClose={() => setIssued(null)} />
