@@ -11,7 +11,9 @@ from fastapi import Request, Response
 from fastapi_pagination.utils import is_async_callable
 from pyrate_limiter import AbstractBucket, BucketFactory, Limiter, Rate, RateItem
 from pyrate_limiter.buckets import RedisBucket
+from pyrate_limiter.buckets.redis_bucket import LuaScript
 from redis.asyncio import Redis
+from redis.exceptions import NoScriptError
 from starlette.concurrency import run_in_threadpool
 
 from backend.common.exception import errors
@@ -67,6 +69,21 @@ class RedisTimeBucket(RedisBucket):
     async def now(self) -> int:
         """获取 Redis 服务端当前时间"""
         return await _redis_time_ms(self.redis)
+
+    async def put(self, item: RateItem) -> bool:
+        """写入一个限流项；Redis 丢了脚本缓存就重新加载再试一次。
+
+        🔴 `RedisBucket` 只在创建时 `SCRIPT LOAD` 一次，之后一直 `EVALSHA` 那个哈希。
+        Redis 一重启（或 `SCRIPT FLUSH`）脚本缓存就空了，而 bucket 缓存在本进程里
+        （`RedisBucketFactory.buckets`），每次请求都刷新 `last_seen`、只要有人在请求就永远不淘汰 ——
+        实测（2026-11-06，WSL 里的 Redis 重启）：之后验证码接口每次都 500
+        「No matching script. Please use EVAL.」，**谁都登录不了**，直到重启 api
+        """
+        try:
+            return await super().put(item)
+        except NoScriptError:
+            self.script_hash = await self.redis.script_load(LuaScript.PUT_ITEM)
+            return await super().put(item)
 
 
 class RedisBucketFactory(BucketFactory):
