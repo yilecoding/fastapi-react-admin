@@ -16,18 +16,22 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
 import { toast } from '@/components/ui/toast'
 import { FormFields, Overlay, StatusBadge, Track, UserPicker } from '@/components/workflow'
+import { WorkflowForm } from '@/components/workflow-form'
 import { useSession } from '@/lib/session'
 import {
   ACTION_TEXT,
   DONE_TEXT,
   useAct,
+  useDirectoryUsersByIds,
   useInstance,
   useMarkRead,
   type ActBody,
   type Action,
   type Capability,
+  type FormData,
   type InstanceDetail,
 } from '@/lib/workflow'
+import { missingRequired } from '@/lib/workflow-form'
 import { progressItems } from '@/lib/workflow-progress'
 
 /**
@@ -39,10 +43,13 @@ import { progressItems } from '@/lib/workflow-progress'
  * 推出来的规则迟早和服务端漂移，表现是「按钮在、点了报 409」或者「该有的按钮没有」。
  * `enabled: false` 的也画出来（灰的 + 服务端给的原因），不画的话用户不知道为什么没有。
  *
- * ## 移动端没做的两件，明说
+ * ## 审批人可填的字段 · 被退回后重新提交 · 重新发起（#224 2b）
  *
- * - 这一步有**审批人可填**的字段：移动端只读展示，提示去网页端填（服务端照样校验必填）
- * - **被退回后重新提交**（我的待办在开始节点上）：要改申请内容、重选审批人，移动端不做，「同意」禁用并写明
+ * - 这一步有**审批人可填**的字段：表单换成 `WorkflowForm`，带输入框的那几个当场填，同意时只带**改了的**那几个
+ * - **被退回到发起人**（我的待办在开始节点上）：同一个表单改内容、重选自选节点的审批人，「同意」叫「重新提交」
+ * - 我发起的单**已驳回 / 已撤回**：底部给「重新发起」，内容复制进发起页（这一条照 web 按状态推，接口没有对应的能力项）
+ *
+ * 必填只在提交那一刻查（`missingRequired`，只查我能填的字段），服务端那份才算数。
  */
 
 /** 每个动作在面板里要填什么。照 web `instance-sheet.tsx: DIALOG`，同意 / 驳回也走面板（手机上没有常驻的意见框） */
@@ -87,14 +94,11 @@ const PRIMARY: Action[] = ['approve', 'reject']
 
 export default function WorkflowDetailScreen() {
   const { t } = useTranslation()
-  const router = useRouter()
-  const insets = useSafeAreaInsets()
   const { id } = useLocalSearchParams<{ id: string }>()
   const { user } = useSession()
   const q = useInstance(id)
   const markRead = useMarkRead()
   const [refreshing, setRefreshing] = React.useState(false)
-  const [sheet, setSheet] = React.useState<Action | 'more' | null>(null)
 
   const d = q.data
   const me = user ? String(user.id) : null
@@ -141,11 +145,51 @@ export default function WorkflowDetailScreen() {
     )
   }
 
+  // `key`：换了一张单 / 我的待办变了（别人办了、我刚提交）就是一份新的填写状态
+  return <Detail key={`${d.instance.id}:${d.my_task_id ?? ''}`} d={d} me={me} refreshing={refreshing} onRefresh={onRefresh} />
+}
+
+function Detail({
+  d,
+  me,
+  refreshing,
+  onRefresh,
+}: {
+  d: InstanceDetail
+  me: string | null
+  refreshing: boolean
+  onRefresh: () => Promise<void>
+}) {
+  const { t } = useTranslation()
+  const router = useRouter()
+  const insets = useSafeAreaInsets()
+  const [sheet, setSheet] = React.useState<Action | 'more' | null>(null)
+
   const caps = d.capabilities
   const resubmit = isResubmit(d)
-  const editable = Object.values(d.field_perms).some((p) => p === 'editable')
+  const editable = React.useMemo(
+    () => new Set(Object.entries(d.field_perms).filter(([, p]) => p === 'editable').map(([k]) => k)),
+    [d.field_perms],
+  )
+  // 审批人 / 被退回的发起人改的字段：只存改了的那几个，同意时一起提交
+  const [patch, setPatch] = React.useState<FormData>({})
+  const merged = React.useMemo(() => ({ ...d.form_data, ...patch }), [d.form_data, patch])
+  // 被退回后重新提交：「发起人自选」节点的人（预填上次选的）
+  const [picks, setPicks] = React.useState<Record<string, string[]>>(() =>
+    Object.fromEntries((d.select_nodes ?? []).map((n) => [n.id, n.selected])),
+  )
+  const [picking, setPicking] = React.useState<{ id: string; name: string } | null>(null)
+  const pickedUsers = useDirectoryUsersByIds(Object.values(picks).flat())
+  const nameOf = (id: string) => pickedUsers.data?.find((u) => u.id === id)?.nickname ?? '…'
   const primary = PRIMARY.flatMap((a) => caps.filter((c) => c.action === a))
   const more = caps.filter((c) => !PRIMARY.includes(c.action))
+  // 被退回到自己手上：最近那条退回记录说了什么
+  const sentBack = resubmit
+    ? [...d.records].reverse().find((r) => r.action === 'send_back' && r.detail?.to === d.model.root.id)
+    : undefined
+  const canRestart =
+    !!me && d.instance.initiator_id === me && (d.instance.status === 'rejected' || d.instance.status === 'withdrawn')
+  const showBar = caps.length > 0 || canRestart
 
   return (
     <View className="bg-background flex-1">
@@ -156,19 +200,66 @@ export default function WorkflowDetailScreen() {
         <Summary d={d} />
 
         {resubmit ? (
-          <Notice text={t('这张单被退回给你了。重新提交要改申请内容、重选审批人，请到网页端的审批中心办理。')} />
-        ) : editable ? (
-          <Notice text={t('这一步有需要你填写的内容，移动端只能查看。要填的话请到网页端的审批中心办理。')} />
+          <View className="mx-4 mt-3 gap-1 rounded-2xl bg-amber-500/15 px-4 py-3" testID="wf-sent-back">
+            <Text className="text-[14px] font-medium text-amber-900 dark:text-amber-200">
+              {t('{{n}} 退回了你的申请', { n: sentBack?.actor_name ?? '' })}
+            </Text>
+            {sentBack?.opinion ? (
+              <Text className="text-[13px] leading-5 text-amber-900 dark:text-amber-200">{sentBack.opinion}</Text>
+            ) : null}
+            <Text className="text-xs text-amber-900/80 dark:text-amber-200/80">{t('改好之后点「重新提交」，审批从头开始')}</Text>
+          </View>
+        ) : editable.size > 0 ? (
+          <Notice text={t('带输入框的字段由你在这一步填写，同意时一起提交')} />
         ) : null}
 
         <GroupHeader>{t('申请内容')}</GroupHeader>
-        <FormFields fields={d.form_schema.fields} data={d.form_data} files={d.files} />
+        {editable.size > 0 ? (
+          <WorkflowForm
+            schema={d.form_schema}
+            value={merged}
+            perms={d.field_perms}
+            files={d.files}
+            onChange={(v) => {
+              const next: FormData = {}
+              for (const k of editable) if (k in v) next[k] = v[k]
+              setPatch(next)
+            }}
+          />
+        ) : (
+          <FormFields fields={d.form_schema.fields} data={d.form_data} files={d.files} />
+        )}
+
+        {resubmit && (d.select_nodes ?? []).length > 0 ? (
+          <>
+            <GroupHeader>{t('选择审批人')}</GroupHeader>
+            <View className="bg-card mx-4 overflow-hidden rounded-2xl">
+              {d.select_nodes.map((n, i) => {
+                const ids = picks[n.id] ?? []
+                return (
+                  <Pressable
+                    key={n.id}
+                    onPress={() => setPicking(n)}
+                    testID={`wf-resubmit-select-${n.id}`}
+                    className={`active:bg-muted flex-row items-center gap-3 px-4 py-3.5 ${i > 0 ? 'border-border border-t' : ''}`}
+                  >
+                    <Text className="flex-1 text-[15px]">{n.name}</Text>
+                    <Text className={`max-w-[55%] text-[13px] ${ids.length ? '' : 'text-muted-foreground'}`} numberOfLines={1}>
+                      {ids.length ? ids.map(nameOf).join('、') : t('去选择')}
+                    </Text>
+                    <Icon as={ChevronRightIcon} className="text-muted-foreground size-4" />
+                  </Pressable>
+                )
+              })}
+            </View>
+          </>
+        ) : null}
 
         <GroupHeader>{t('审批进度')}</GroupHeader>
         <Track items={progressItems(d, t)} />
       </ScrollView>
 
-      {caps.length > 0 ? (
+      {showBar ? (
         <View
           className="bg-card border-border flex-row gap-2 border-t px-4 pt-3"
           style={{ paddingBottom: Math.max(insets.bottom, 12) }}
@@ -189,16 +280,30 @@ export default function WorkflowDetailScreen() {
             <Button
               key={c.action}
               variant={c.action === 'approve' ? 'default' : 'outline'}
-              disabled={!c.enabled || (c.action === 'approve' && resubmit)}
+              disabled={!c.enabled}
               className="h-12 flex-1 rounded-xl"
               onPress={() => setSheet(c.action)}
               testID={`wf-action-${c.action}`}
             >
               <Text className={`text-base font-semibold ${c.action === 'reject' ? 'text-destructive' : ''}`}>
-                {t(ACTION_TEXT[c.action])}
+                {c.action === 'approve' && resubmit ? t('重新提交') : t(ACTION_TEXT[c.action])}
               </Text>
             </Button>
           ))}
+          {canRestart ? (
+            <Button
+              className="h-12 flex-1 rounded-xl"
+              onPress={() =>
+                router.push({
+                  pathname: '/workflow/start/[code]',
+                  params: { code: d.instance.definition_code, from: d.instance.id },
+                })
+              }
+              testID="wf-restart"
+            >
+              <Text className="text-base font-semibold">{t('重新发起')}</Text>
+            </Button>
+          ) : null}
         </View>
       ) : null}
 
@@ -213,12 +318,29 @@ export default function WorkflowDetailScreen() {
           key={sheet}
           action={sheet}
           detail={d}
+          patch={patch}
+          picks={picks}
+          editable={editable}
+          resubmit={resubmit}
           onClose={() => setSheet(null)}
           onDone={(a) => {
             setSheet(null)
             if (LEAVE_AFTER.includes(a)) {
               if (router.canGoBack()) router.back()
             }
+          }}
+        />
+      ) : null}
+      {picking ? (
+        <UserPicker
+          open
+          multiple
+          initial={picks[picking.id] ?? []}
+          title={t('{{node}}：选择审批人', { node: picking.name })}
+          onClose={() => setPicking(null)}
+          onDone={(us) => {
+            setPicks((p) => ({ ...p, [picking.id]: us.map((u) => u.id) }))
+            setPicking(null)
           }}
         />
       ) : null}
@@ -317,11 +439,19 @@ function MoreSheet({
 function ActionSheet({
   action,
   detail: d,
+  patch,
+  picks,
+  editable,
+  resubmit,
   onClose,
   onDone,
 }: {
   action: Action
   detail: InstanceDetail
+  patch: FormData
+  picks: Record<string, string[]>
+  editable: Set<string>
+  resubmit: boolean
   onClose: () => void
   onDone: (a: Action) => void
 }) {
@@ -363,9 +493,26 @@ function ActionSheet({
     }
     if (need.task && task) body.task_id = task
     if (need.sign) body.sign_mode = signMode
+    // 「在我之后」加签 = 我这一票是同意：和同意一样要过本节点的必填、带上我改的字段（同 web）
+    if (action === 'approve' || (action === 'add_sign' && signMode === 'after')) {
+      const missing = missingRequired(d.form_schema, { ...d.form_data, ...patch }, editable)
+      if (Object.keys(missing).length) {
+        setError(t('请先填写：{{f}}', { f: Object.values(missing).join('、') }))
+        return
+      }
+      if (Object.keys(patch).length) body.form = patch
+      if (action === 'approve' && resubmit && (d.select_nodes ?? []).length) {
+        const empty = d.select_nodes.filter((n) => !picks[n.id]?.length)
+        if (empty.length) {
+          setError(t('请选择审批人：{{n}}', { n: empty.map((n) => n.name).join('、') }))
+          return
+        }
+        body.selected = picks
+      }
+    }
     try {
       await act.mutateAsync(body)
-      toast.success(t(DONE_TEXT[action]))
+      toast.success(resubmit && action === 'approve' ? t('已重新提交') : t(DONE_TEXT[action]))
       onDone(action)
     } catch (e) {
       // 409「已被他人处理」之类：留在面板里显示原因，详情已经在 `onSettled` 里重取了
@@ -387,7 +534,9 @@ function ActionSheet({
       <Overlay open onClose={onClose} busy={act.isPending} variant="bottom" testID="wf-action-sheet">
         <View className="gap-4">
           <View className="gap-1">
-            <Text className="text-lg font-semibold">{t(ACTION_TEXT[action])}</Text>
+            <Text className="text-lg font-semibold">
+              {resubmit && action === 'approve' ? t('重新提交') : t(ACTION_TEXT[action])}
+            </Text>
             {HINT[action] ? <Text className="text-muted-foreground text-[13px] leading-5">{t(HINT[action])}</Text> : null}
           </View>
 
@@ -498,7 +647,9 @@ function ActionSheet({
             testID="wf-action-submit"
           >
             {act.isPending ? <ActivityIndicator size="small" color="#fff" /> : null}
-            <Text className="text-base font-semibold">{t('确认{{a}}', { a: t(ACTION_TEXT[action]) })}</Text>
+            <Text className="text-base font-semibold">
+              {resubmit && action === 'approve' ? t('确认重新提交') : t('确认{{a}}', { a: t(ACTION_TEXT[action]) })}
+            </Text>
           </Button>
         </View>
       </Overlay>
