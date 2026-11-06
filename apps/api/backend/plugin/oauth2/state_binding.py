@@ -29,8 +29,11 @@ authorize 时没有登录态可以核对（顶层跳转带不了 Bearer 头）�
 import json
 import uuid
 
+from urllib.parse import urlencode
+
 from fastapi import Request, Response
 from fastapi_oauth20.oauth20 import OAuth20Base
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import RedirectResponse
 
 from backend.common.exception import errors
@@ -117,6 +120,22 @@ def require_state_cookie(request: Request) -> None:
     cookie = request.cookies.get(STATE_COOKIE_KEY)
     if not state or not cookie or state != cookie:
         raise errors.ForbiddenError(msg=t('error.oauth2.state_not_bound'))
+
+
+async def callback_failed(request: Request, db: AsyncSession, exc: errors.BaseExceptionError) -> RedirectResponse:
+    """回调里业务层拒绝了这次登录 / 绑定：带着原因回前端落地页，而不是抛出去
+
+    回调是「第三方 → 后端」的顶层跳转，抛出去 = 浏览器停在 API 域名上一页裸 JSON，回不到前端。
+    #226 之后陌生账号默认不自动建号，这条从边角路径变成了每个新用户第一次社交登录的必经之路。
+
+    🔴 必须先 rollback：处理函数跑在依赖的 exit stack **里面**，这里把异常吞掉，`CurrentSessionTransaction`
+    看到的就是正常返回、照样 commit —— 抛错之前写了一半的东西会被提交
+    """
+    await db.rollback()
+    query = urlencode({'error': exc.msg or ''})
+    redirect = RedirectResponse(url=f'{settings.OAUTH2_FRONTEND_LOGIN_REDIRECT_URI}?{query}')
+    clear_state_cookie(redirect, request)
+    return redirect
 
 
 async def authorize_redirect(

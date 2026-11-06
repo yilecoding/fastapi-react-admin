@@ -115,3 +115,41 @@ def test_binding_ticket_can_only_be_claimed_once(fresh_cookies: TestClient, toke
 def test_unknown_ticket_is_rejected(fresh_cookies: TestClient) -> None:
     res = fresh_cookies.get('/oauth2/github/authorize?ticket=not-a-real-state', follow_redirects=False)
     assert res.json()['code'] == 403
+
+
+def test_rejected_login_goes_back_to_the_frontend_with_the_reason(
+    fresh_cookies: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """业务层拒绝（这里是 #226 的「陌生账号不建号」）要 302 回前端落地页，带着原因
+
+    回调是第三方 → 后端的顶层跳转：原来异常直接抛出去，浏览器停在 API 域名上一页裸 JSON、回不到前端。
+    #226 之后这是每个新用户第一次社交登录的默认路径。
+    """
+    from backend.plugin.oauth2.api.v1 import github as github_api
+
+    async def token(*_: object, **__: object) -> dict:  # ruff:ignore[unused-async]
+        return {'access_token': 'gh-token'}
+
+    async def userinfo(*_: object, **__: object) -> dict:  # ruff:ignore[unused-async]
+        return {'id': 987654321123, 'login': 'stranger-0x', 'name': 'stranger', 'email': None}
+
+    async def unverified(*_: object, **__: object) -> bool:  # ruff:ignore[unused-async]
+        return False
+
+    monkeypatch.setattr(github_client, 'get_access_token', token)
+    monkeypatch.setattr(github_client, 'get_userinfo', userinfo)
+    monkeypatch.setattr(github_api, 'github_email_verified', unverified)
+    monkeypatch.setattr(settings, 'OAUTH2_AUTO_REGISTER', False)
+
+    state, jar = _authorize(fresh_cookies)
+    fresh_cookies.cookies.set(STATE_COOKIE_KEY, jar[STATE_COOKIE_KEY].value, path=STATE_COOKIE_PATH)
+    res = fresh_cookies.get(
+        '/oauth2/github/callback', params={'code': 'my-code', 'state': state}, follow_redirects=False
+    )
+
+    assert res.status_code in {302, 307}, res.text
+    location = urlparse(res.headers['location'])
+    assert f'{location.scheme}://{location.netloc}{location.path}' == settings.OAUTH2_FRONTEND_LOGIN_REDIRECT_URI
+    assert parse_qs(location.query)['error'][0], '要带上拒绝的原因，前端落地页拿它显示'
+    # 用过的 state cookie 一并清掉（同成功路径）
+    assert any(h.startswith(f'{STATE_COOKIE_KEY}=""') for h in res.headers.get_list('set-cookie'))

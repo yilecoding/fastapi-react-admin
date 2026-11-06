@@ -68,3 +68,23 @@
 三处变异 —— 回调去掉 `require_state_cookie` → 「没有 cookie」「别人的 state」两条红；认领不看 NX 结果 →
 「ticket 只能用一次」红；authorize 不下发 cookie → 三条红。⚠️ **真浏览器 + 真 OAuth 应用还没跑过**：
 顶层跳转能设 Lax cookie、回调能带上，是浏览器规范保证的行为，但这里没有亲眼看到过。
+
+## 🔴 回调里的业务拒绝要 302 回前端，不能抛出去（v1.0.1 发版前评审）
+
+**症状**：#226 之后，没绑定过的 GitHub / Google 账号第一次社交登录，浏览器停在 **API 域名**上一页裸 JSON
+（`{"code":403,"msg":"这个 Github 账号还没有绑定系统用户…"}`），回不到前端、也没有返回入口。原来只有 state 出错这种边角路径才这样，
+#226 把它变成了每个新用户的默认路径。
+
+**根因**：回调是「第三方 → 后端」的顶层跳转，不是 XHR —— 异常走全局处理器渲染成 JSON，直接显示给人看。
+
+**修法**：两个回调把 `login_or_binding` 包在 `try` 里，`errors.BaseExceptionError` 交给 `state_binding.callback_failed`：
+302 到 `OAUTH2_FRONTEND_LOGIN_REDIRECT_URI?error=<文案>` 并清掉 state cookie；前端落地页 `routes/oauth2/callback.tsx` 显示原因。
+
+- 🔴 **吞异常之前必须 `await db.rollback()`**：处理函数跑在依赖的 exit stack **里面**（fastapi 0.141 `routing.request_response`），
+  异常被吞掉后 `CurrentSessionTransaction` 看到的是正常返回、照样 commit —— 抛错之前写了一半的东西会被提交
+- ⚠️ 落地页**不能挂在 `_guest` 下面**：绑定失败也落到这里，发起绑定的人是已登录的，`_guest` 守卫会把他踢回工作台，错误被静默吞掉
+- ⚠️ `dependencies` 里抛的（`require_state_cookie` 403、限流 429、换 token 失败）不经过这个 `try`，仍然是 JSON —— 那几条是攻击 / 异常路径，没改
+
+**实测证据**：`tests/test_state_binding.py::test_rejected_login_goes_back_to_the_frontend_with_the_reason`（TestClient 真请求，
+换 token / 拉用户信息打桩）；变异 —— github 回调的 `except` 改成 `except KeyboardInterrupt` → 当场红，响应体正是上面那页 403 JSON。
+⚠️ 前端落地页的错误态只过了 typecheck / build，没在浏览器里点过。

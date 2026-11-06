@@ -228,6 +228,9 @@ function RemoveHint({ users, roleId, roleName }: { users: User[] | null; roleId:
   })
 
   const loading = results.some((r) => r.isPending)
+  // 查失败 ≠「不会被移空」：#228 之后这个接口对看不到的人会 403 / 404（数据范围、casbin 模式），
+  // 原来把失败当成「还有别的角色」，警告就被静默跳过了（硬纪律 9）
+  const failed = list.filter((_u, i) => results[i]?.isError)
   const naked = list.filter((_u, i) => {
     const owned = results[i]?.data
     return owned ? owned.filter((r) => r.id !== roleId).length === 0 : false
@@ -253,6 +256,20 @@ function RemoveHint({ users, roleId, roleName }: { users: User[] | null; roleId:
           })}
       {loading && (
         <span className="mt-2 block text-muted-foreground">{t('正在确认他们还剩哪些角色…')}</span>
+      )}
+      {!loading && failed.length > 0 && (
+        <span className="mt-2 block text-destructive" data-testid="remove-check-failed">
+          {t('没能确认 {{names}} 还剩哪些角色，移出后可能一个角色都不剩。', {
+            names: failed.map((u) => u.username).join('、'),
+          })}{' '}
+          <button
+            type="button"
+            className="underline underline-offset-2"
+            onClick={() => results.forEach((r) => r.isError && void r.refetch())}
+          >
+            {t('重试')}
+          </button>
+        </span>
       )}
       {!loading && naked.length > 0 && (
         <span className="mt-2 block text-amber-700 dark:text-amber-300" data-testid="remove-naked-warn">
