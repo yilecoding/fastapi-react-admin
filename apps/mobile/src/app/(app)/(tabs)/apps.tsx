@@ -23,7 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
 import { useUnread } from '@/lib/notifications'
 import { usePerm } from '@/lib/perm'
-import { useWorkflowCounts } from '@/lib/workflow'
+import { isWorkflowMissing, useWorkflowCounts } from '@/lib/workflow'
 
 /**
  * 「应用」—— 启动台：按分组排的图标宫格（参考钉钉 / 企业微信的工作台），不是导航列表。
@@ -55,6 +55,8 @@ type Tile = {
   href: Href
   /** 后端 `Depends(RequestPermission('…'))` 里那个码，任一满足即可进；不填 = 人人可进 */
   perms?: string[]
+  /** 靠哪个服务端插件。没装时接口 404，格子不出（`isWorkflowMissing`，#257） */
+  plugin?: 'workflow'
 }
 
 type Section = { key: string; title: string; tiles: Tile[] }
@@ -65,8 +67,8 @@ const SECTIONS: Section[] = [
     title: '常用',
     tiles: [
       // 审批人人都可能是办理人，接口只要登录 —— 不挂权限码
-      { key: 'workflow', label: '审批', icon: FileCheckIcon, bg: 'bg-orange-500/15', fg: 'text-orange-600 dark:text-orange-400', href: '/workflow' },
-      { key: 'workflow-start', label: '发起审批', icon: FilePlusIcon, bg: 'bg-amber-500/15', fg: 'text-amber-600 dark:text-amber-400', href: '/workflow/start' },
+      { key: 'workflow', label: '审批', icon: FileCheckIcon, bg: 'bg-orange-500/15', fg: 'text-orange-600 dark:text-orange-400', href: '/workflow', plugin: 'workflow' },
+      { key: 'workflow-start', label: '发起审批', icon: FilePlusIcon, bg: 'bg-amber-500/15', fg: 'text-amber-600 dark:text-amber-400', href: '/workflow/start', plugin: 'workflow' },
       { key: 'notifications', label: '通知', icon: BellIcon, bg: 'bg-sky-500/15', fg: 'text-sky-600 dark:text-sky-400', href: '/notifications' },
       { key: 'profile', label: '个人资料', icon: IdCardIcon, bg: 'bg-violet-500/15', fg: 'text-violet-600 dark:text-violet-400', href: '/profile/info' },
       { key: 'settings', label: '设置', icon: SettingsIcon, bg: 'bg-slate-500/15', fg: 'text-slate-600 dark:text-slate-300', href: '/settings' },
@@ -98,11 +100,15 @@ export default function AppsScreen() {
     }
   }
 
+  // 服务端没装审批插件：两个审批格子不出（点进去只会是一屏 404），不算错误
+  const wfMissing = isWorkflowMissing(wfCounts.error)
   const gated = SECTIONS.some((s) => s.tiles.some((tile) => tile.perms))
   // ⚠️ 只有 `known` 之后才谈「有哪些」—— 之前 `canAny` 一律 false
   const visible = SECTIONS.map((s) => ({
     ...s,
-    tiles: s.tiles.filter((tile) => !tile.perms || (known && canAny(...tile.perms))),
+    tiles: s.tiles.filter(
+      (tile) => (!tile.perms || (known && canAny(...tile.perms))) && !(tile.plugin === 'workflow' && wfMissing),
+    ),
   }))
   const noGranted = known && !SECTIONS.some((s) => s.tiles.some((tile) => tile.perms && canAny(...tile.perms)))
   const badges: Record<string, number> = { notifications: unread?.total ?? 0, workflow: wfCounts.data?.todo ?? 0 }

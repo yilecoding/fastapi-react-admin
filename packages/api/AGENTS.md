@@ -386,6 +386,20 @@ app 模型（`utils/dynamic_import.py`）都是 `os.listdir` / `os.walk` 的原�
 **实测证据**（2026-11-04）：把 `os.listdir` / `os.walk` 的结果反过来再导出（只取 `paths` 的键序，不排序）——
 不排序时路由在第 94 条分叉（`/sys/notifications` vs `/sys/configs/all`）；三处排序之后两次导出逐字节一致。
 
+## 审批的表单规则和轨道也在这里（#257）
+
+`workflow-form.ts`（表单 schema 的类型 · 显示条件 / 自动计算 · 必填检查）和 `workflow-progress.ts`（审批轨道的条目）。
+原来两端各一份：web 在 `pages/workflow`，移动端是逐字拷贝 / 移植，注释里写着「改的时候跟着改」，**没有任何东西核对** ——
+移动端那份已经悄悄漂过一次（预告文案，发起页上对发起人说的是详情页的第三人称，见移动端 components 分册「发起」）。
+
+- 本包仍然**零 workspace 依赖**：文案 key 写在这里（`t('…')`，i18n 扫描覆盖 `packages/api/src`），`t` 和时间格式化由调用方注入
+- 轨道的入参只声明**这里读的字段**（`ProgressDetail`），两端各自的 `InstanceDetail` 结构上满足它就能传 ——
+  哪一端的类型漂了，编译器在调用处报，而不是界面上空一格
+- 后端 `engine/form.py` 是联动规则的另一份（Python，没法共用），改规则时两边一起改
+
+单测：`pnpm --filter @admin/api test`（vitest；`turbo test` 按 task 名自动带上，CI 不用改）。
+变异验证（2026-11-06）：把 `forecastItems` 里的 `audience` 判断写死成 `false`，`workflow-progress.test.ts` 当场红。
+
 ## 搬家留下的一层 re-export
 
 `packages/platform/src/api-client/errors.ts` 现在只是

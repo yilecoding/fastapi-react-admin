@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDateTime } from '@admin/i18n'
+import { forecastItems, formRules, isEmpty, missingRequired } from '@admin/api'
 import { useQuery } from '@tanstack/react-query'
 import { IconLoader2 } from '@tabler/icons-react'
 
@@ -20,10 +21,8 @@ import {
   type FieldPerm, type FileMeta, type AiFill, type FormData, type StartForm,
 } from './api'
 import { AiFillPanel, AiMark, type AiFillOutcome } from './ai-fill-panel'
-import { FormRenderer, empty, missingRequired } from './form-renderer'
-import { formRules } from './form-rules'
+import { FormRenderer } from './form-renderer'
 import { UserSelect } from './pickers'
-import { forecastItems } from './progress'
 import { ApprovalTrack, TemplateTile, type TrackItem } from './track'
 
 /**
@@ -167,7 +166,7 @@ function Filler({
   const preview = useQuery(previewQuery(code, debounced.form, debounced.selected))
   const track: TrackItem[] = [
     { key: 'start', kind: 'start', title: t('发起申请'), state: 'done', people: [{ name: me?.nickname ?? '' }] },
-    ...forecastItems(preview.data?.steps ?? [], t),
+    ...forecastItems(preview.data?.steps ?? [], t, 'starter'),
     { key: 'end', kind: 'end', title: t('结束'), state: 'future' },
   ]
 
@@ -201,7 +200,7 @@ function Filler({
     let kept = 0
     for (const [id, v] of Object.entries(res.values)) {
       if (!editable.has(id)) continue
-      if (!empty(latest[id])) {
+      if (!isEmpty(latest[id])) {
         kept += 1
         continue
       }
