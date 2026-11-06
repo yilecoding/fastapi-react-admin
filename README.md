@@ -168,6 +168,7 @@ The [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) from eve
 
 | To… | Read |
 |---|---|
+| get started step by step: quick start, deployment, your first module, FAQ, upgrading | [docs site](https://yilecoding.github.io/fastapi-react-admin/en/) |
 | develop locally, run tests, open a PR, release | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | learn the engineering rules and pitfalls | [CLAUDE.md](./CLAUDE.md) — task-indexed, 40+ module notes, every claim backed by a test or measurement |
 | deploy to a server | [deploy/README.md](./deploy/README.md) |
