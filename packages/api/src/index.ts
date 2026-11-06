@@ -48,3 +48,30 @@ export {
 export { isSessionEndReason, SESSION_END_MESSAGE, type SessionEndReason } from './session-end'
 export { isPhoneNumber, normalizePhone, shouldReloadCaptcha, SMS_RESEND_SECONDS } from './login'
 export type { ApiMethod, ApiMethods, Payload } from './types'
+// 审批：两端共用的表单规则和进度轨道（#257 —— 原来两份手工同步）
+export {
+  evaluate,
+  formRules,
+  isEmpty,
+  missingRequired,
+  type Calc,
+  type Cond,
+  type CondOp,
+  type FieldOption,
+  type FieldType,
+  type FormData,
+  type FormField,
+  type FormSchema,
+} from './workflow-form'
+export {
+  forecastItems,
+  progressItems,
+  type ForecastAudience,
+  type ProgressDetail,
+  type ProgressForecastStep,
+  type ProgressOptions,
+  type Tone,
+  type TrackItem,
+  type TrackPerson,
+  type TrackState,
+} from './workflow-progress'

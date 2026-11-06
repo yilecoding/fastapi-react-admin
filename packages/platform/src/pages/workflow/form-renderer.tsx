@@ -11,6 +11,7 @@ import { MultiSelect } from '@admin/ui/components/multi-select'
 import { Textarea } from '@admin/ui/components/textarea'
 import { toast } from '@admin/ui/components/toast'
 import { cn } from '@admin/ui/lib/utils'
+import { formRules, isEmpty } from '@admin/api'
 
 import { api } from '../../api-client/client'
 import { ApiError } from '../../api-client/errors'
@@ -19,7 +20,6 @@ import {
   directoryDeptsQuery, directoryUsersQuery, downloadAttachment, uploadAttachment,
   type FieldPerm, type FileMeta, type FormData, type FormField, type FormSchema,
 } from './api'
-import { formRules } from './form-rules'
 import { DeptSelect, UserSelect } from './pickers'
 
 /**
@@ -33,7 +33,7 @@ import { DeptSelect, UserSelect } from './pickers'
  *
  * 值的形状和后端 `engine/form.py` 的表一致：金额是十进制**字符串**、人员 / 部门是 ID **字符串**。
  *
- * 联动（`form-rules.ts`）：显示条件不成立的字段不渲染；自动计算的字段只读，显示当场算出来的值。
+ * 联动（`@admin/api` 的 `formRules`，和移动端共用一份）：显示条件不成立的字段不渲染；自动计算的字段只读，显示当场算出来的值。
  * 父组件拿到的 `value` 里不含算出来的值 —— 提交时服务端自己算，前端算的只用来看。
  */
 export function FormRenderer({
@@ -86,7 +86,7 @@ export function FormRenderer({
                 data-field-id={f.id}
                 data-editable={false}
               >
-                <span className="tabular-nums">{empty(ruled.data[f.id]) ? '—' : String(ruled.data[f.id])}</span>
+                <span className="tabular-nums">{isEmpty(ruled.data[f.id]) ? '—' : String(ruled.data[f.id])}</span>
                 <span className="text-xs text-muted-foreground">{t('自动计算')}</span>
               </div>
             </Row>
@@ -131,10 +131,6 @@ const LOCATE_FLASH =
 
 const EMPTY_FILES: Record<string, FileMeta> = {}
 const FilesContext = React.createContext<Record<string, FileMeta>>(EMPTY_FILES)
-
-export function empty(v: unknown): boolean {
-  return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
-}
 
 function FieldInput({ field: f, value, onChange }: { field: FormField; value: unknown; onChange: (v: unknown) => void }) {
   const { t } = useTranslation()
@@ -201,7 +197,7 @@ function FieldInput({ field: f, value, onChange }: { field: FormField; value: un
         />
       )
     case 'user': {
-      const ids = empty(value) ? [] : Array.isArray(value) ? (value as string[]) : [value as string]
+      const ids = isEmpty(value) ? [] : Array.isArray(value) ? (value as string[]) : [value as string]
       return (
         <UserSelect
           value={ids}
@@ -273,7 +269,7 @@ function TableInput({
 
 function FieldDisplay({ field: f, value }: { field: FormField; value: unknown }) {
   const text = 'text-sm whitespace-pre-wrap break-words'
-  if (empty(value)) return <p className={cn(text, 'text-muted-foreground')}>—</p>
+  if (isEmpty(value)) return <p className={cn(text, 'text-muted-foreground')}>—</p>
   switch (f.type) {
     case 'select':
       return <p className={text}>{f.options?.find((o) => o.value === value)?.label ?? String(value)}</p>
@@ -465,20 +461,4 @@ export function UserNames({ ids, className }: { ids: string[]; className?: strin
 function DeptName({ id, className }: { id: string; className?: string }) {
   const { data } = useQuery(directoryDeptsQuery())
   return <p className={className}>{data?.find((d) => d.id === id)?.name ?? id}</p>
-}
-
-/**
- * 前端的必填检查 —— 只为当场提示，后端那份才算数（`validate_form_data`）。
- * 只查「必填但空」，格式交给后端：两边各写一套格式规则迟早对不上。
- */
-export function missingRequired(schema: FormSchema, value: FormData, only?: Set<string>): Record<string, string> {
-  const out: Record<string, string> = {}
-  // 显示条件不成立的不算必填；自动计算的不归人填（同后端 validate_form_data）
-  const { inactive } = formRules(schema, value)
-  for (const f of schema.fields) {
-    if (f.type === 'description' || !f.required || f.calc || inactive.has(f.id)) continue
-    if (only && !only.has(f.id)) continue
-    if (empty(value[f.id])) out[f.id] = f.label
-  }
-  return out
 }

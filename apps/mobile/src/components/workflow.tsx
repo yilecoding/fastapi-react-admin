@@ -21,7 +21,7 @@ import {
   type FormField,
   type InstanceStatus,
 } from '@/lib/workflow'
-import type { TrackItem, TrackState, Tone } from '@/lib/workflow-progress'
+import type { TrackItem, TrackState, Tone } from '@admin/api'
 
 /* ────────────────────────── 状态徽标 ────────────────────────── */
 
