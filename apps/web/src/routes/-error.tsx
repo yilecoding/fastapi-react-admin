@@ -77,7 +77,7 @@ export function ErrorPage({ error: thrown }: { error?: unknown }) {
         </p>
       </div>
       {/* 注意：这里不能用 <Link> —— 它可能渲染在 router 之外 */}
-      <Button render={<a href="/dashboard" />}>{t('回到首页')}</Button>
+      <Button nativeButton={false} render={<a href="/dashboard" />}>{t('回到首页')}</Button>
     </div>
   )
 }

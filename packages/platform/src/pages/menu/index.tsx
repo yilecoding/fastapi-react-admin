@@ -265,12 +265,11 @@ export function MenuPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除菜单")}
         description={
-          deleteError ? (
-            <span className="text-destructive">{deleteError}</span>
-          ) : pendingDelete ? (
+          pendingDelete ? (
             t('确定删除「{{title}}」吗？其下的子菜单与按钮权限也会一并移除。', { title: pendingDelete.title })
           ) : ''
         }
+        error={deleteError}
         confirmText={t("删除")} destructive pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return
