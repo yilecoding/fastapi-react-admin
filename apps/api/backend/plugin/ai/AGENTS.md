@@ -457,3 +457,22 @@ SQLAlchemy 把整个事务标成待回滚，这一轮对话里后面每个工具
 **实测证据**：`tests/test_ai_chat_limit.py`（额度 3，连发 4 次：3 × 200、1 × 429，且 429 暴露了 `Retry-After`）；
 变异：去掉限流 → 第 4 次是 200；`Retry-After` 不进暴露列表 → 红。E2E `ai-chat-limit.spec.ts`：去掉前端的 429 分支 → 红。
 
+
+## 🔴 一轮里界面上出现过的东西都要落库，读的那侧也不能滤掉（2026-11-06 本地真跑）
+
+| 症状（实测，浏览器 + 假模型） | 根因 | 修法 |
+|---|---|---|
+| 确认卡片一闪就没，写操作一个都确认不了 | 模型调写工具时不说话，`if text:` 才落库；前端流结束后重拉历史 | `tool_calls` 列存整轮：轨迹（无 `kind`）· `kind: confirm` · `kind: error`（`chat_service._persist_turn`） |
+| 落库修好了卡片照样没 | `conversation_service.get_messages` 用 `and m.content` 滤掉了没正文的消息 | 改成 `m.content or m.tool_calls` |
+| 「达到 5 轮上限」刷新后变成一句没有下文的提问 | 同第一行 | 同第一行 |
+| 流到第 9 段刷新，回来只剩用户那句话 | 客户端断开时 Starlette 取消生成器，抛 `CancelledError`（不是 `Exception`），写在 try 后面的落库不跑 | 落库挪进 `finally` 并 `anyio.CancelScope(shield=True)` |
+| 用户点了确认，下一轮模型还说「还没建」/ 再提议一遍 | 确认结果不写回会话；`_build_history` 只带正文 | `_settle_confirm` 把 `outcome` 写回卡片；历史里给模型附「（系统记录：… —— 用户已确认，执行成功）」 |
+
+- 🔴 **第二行是只测了一半的教训**：单测验的是「交给落库的是什么」，浏览器里才发现读出来是空的。改「存什么」时，同时测「读回来是什么」
+- 确认失败时 `ToolResultEvent.detail` 带原因：确认那条路上没有模型来转述结果，卡片得自己说清楚
+- 工具参数先按 `ToolSchema.parameters` 查必填 / 多余项（`_argument_problem`）；pydantic 报错走全站的 `localize_validation_errors`。
+  原来回给用户的是 `_preview_create() missing 2 required positional arguments` 和带 `errors.pydantic.dev` 链接的英文
+
+**实测证据**：`tests/test_ai_turn_persistence.py`。变异：只在有正文时落库 → 2 条红；落库不在 `finally` → 断开那条红；
+历史不附确认记录 → 2 条红；读接口退回 `and m.content` → 1 条红。浏览器全流程：卡片在 → 刷新还在 → 确认 → 刷新显示「已执行」→
+流到一半刷新半截回答还在 → 假模型收到的下一轮历史里有「用户已确认，执行成功」。
