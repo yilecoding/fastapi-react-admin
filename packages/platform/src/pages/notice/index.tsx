@@ -311,12 +311,11 @@ export function NoticePage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t('删除通知公告')}
         description={
-          deleteError ? (
-            <span className="text-destructive">{deleteError}</span>
-          ) : pendingDelete ? (
+          pendingDelete ? (
             t('确定删除「{{title}}」吗？此操作不可撤销。', { title: pendingDelete.title })
           ) : ''
         }
+        error={deleteError}
         confirmText={t('删除')}
         destructive
         pending={delOne.isPending}

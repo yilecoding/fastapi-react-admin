@@ -176,12 +176,11 @@ export function DataPermissionPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除数据范围")}
         description={
-          deleteError ? (
-            <span className="text-destructive">{deleteError}</span>
-          ) : pendingDelete ? (
+          pendingDelete ? (
             t('删除范围「{{name}}」？绑了它的角色会失去这部分数据权限。范围里的规则本身保留，可以挂到别的范围上。', { name: pendingDelete.name })
           ) : ''
         }
+        error={deleteError}
         confirmText={t("删除")}
         destructive
         pending={del.isPending}

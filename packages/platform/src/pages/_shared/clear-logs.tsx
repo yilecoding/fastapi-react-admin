@@ -112,9 +112,7 @@ export function ClearLogsButton({
         onOpenChange={(o) => !o && setOpen(false)}
         title={t('清空{{what}}', { what: label })}
         description={
-          error ? (
-            <span className="text-destructive">{error}</span>
-          ) : (
+          (
             <span className="flex flex-col gap-1.5">
               <span>
                 <Trans
@@ -138,6 +136,7 @@ export function ClearLogsButton({
             </span>
           )
         }
+        error={error}
         confirmText={t("清空")}
         destructive
         pending={clear.isPending}
