@@ -17,6 +17,7 @@ import { Route as AuthDashboardRouteImport } from './routes/_auth/dashboard'
 import { Route as AuthNotificationRouteImport } from './routes/_auth/notification'
 import { Route as AuthProfileRouteImport } from './routes/_auth/profile'
 import { Route as GuestSignInRouteImport } from './routes/_guest/sign-in'
+import { Route as Oauth2CallbackRouteImport } from './routes/oauth2/callback'
 import { Route as AuthAiChatRouteImport } from './routes/_auth/ai/chat'
 import { Route as AuthAiConfirmRouteImport } from './routes/_auth/ai/confirm'
 import { Route as AuthAiMcpClientRouteImport } from './routes/_auth/ai/mcp-client'
@@ -54,7 +55,6 @@ import { Route as AuthSystemUserRouteImport } from './routes/_auth/system/user'
 import { Route as AuthWorkflowDefinitionRouteImport } from './routes/_auth/workflow/definition'
 import { Route as AuthWorkflowInboxRouteImport } from './routes/_auth/workflow/inbox'
 import { Route as AuthWorkflowMonitorRouteImport } from './routes/_auth/workflow/monitor'
-import { Route as GuestOauth2CallbackRouteImport } from './routes/_guest/oauth2/callback'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -93,6 +93,11 @@ const GuestSignInRoute = GuestSignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
   getParentRoute: () => GuestRoute,
+} as any)
+const Oauth2CallbackRoute = Oauth2CallbackRouteImport.update({
+  id: '/oauth2/callback',
+  path: '/oauth2/callback',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthAiChatRoute = AuthAiChatRouteImport.update({
   id: '/ai/chat',
@@ -280,11 +285,6 @@ const AuthWorkflowMonitorRoute = AuthWorkflowMonitorRouteImport.update({
   path: '/workflow/monitor',
   getParentRoute: () => AuthRoute,
 } as any)
-const GuestOauth2CallbackRoute = GuestOauth2CallbackRouteImport.update({
-  id: '/oauth2/callback',
-  path: '/oauth2/callback',
-  getParentRoute: () => GuestRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -293,6 +293,7 @@ export interface FileRoutesByFullPath {
   '/notification': typeof AuthNotificationRoute
   '/profile': typeof AuthProfileRoute
   '/sign-in': typeof GuestSignInRoute
+  '/oauth2/callback': typeof Oauth2CallbackRoute
   '/ai/chat': typeof AuthAiChatRoute
   '/ai/confirm': typeof AuthAiConfirmRoute
   '/ai/mcp-client': typeof AuthAiMcpClientRoute
@@ -330,7 +331,6 @@ export interface FileRoutesByFullPath {
   '/workflow/definition': typeof AuthWorkflowDefinitionRoute
   '/workflow/inbox': typeof AuthWorkflowInboxRoute
   '/workflow/monitor': typeof AuthWorkflowMonitorRoute
-  '/oauth2/callback': typeof GuestOauth2CallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -339,6 +339,7 @@ export interface FileRoutesByTo {
   '/notification': typeof AuthNotificationRoute
   '/profile': typeof AuthProfileRoute
   '/sign-in': typeof GuestSignInRoute
+  '/oauth2/callback': typeof Oauth2CallbackRoute
   '/ai/chat': typeof AuthAiChatRoute
   '/ai/confirm': typeof AuthAiConfirmRoute
   '/ai/mcp-client': typeof AuthAiMcpClientRoute
@@ -376,7 +377,6 @@ export interface FileRoutesByTo {
   '/workflow/definition': typeof AuthWorkflowDefinitionRoute
   '/workflow/inbox': typeof AuthWorkflowInboxRoute
   '/workflow/monitor': typeof AuthWorkflowMonitorRoute
-  '/oauth2/callback': typeof GuestOauth2CallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -388,6 +388,7 @@ export interface FileRoutesById {
   '/_auth/notification': typeof AuthNotificationRoute
   '/_auth/profile': typeof AuthProfileRoute
   '/_guest/sign-in': typeof GuestSignInRoute
+  '/oauth2/callback': typeof Oauth2CallbackRoute
   '/_auth/ai/chat': typeof AuthAiChatRoute
   '/_auth/ai/confirm': typeof AuthAiConfirmRoute
   '/_auth/ai/mcp-client': typeof AuthAiMcpClientRoute
@@ -425,7 +426,6 @@ export interface FileRoutesById {
   '/_auth/workflow/definition': typeof AuthWorkflowDefinitionRoute
   '/_auth/workflow/inbox': typeof AuthWorkflowInboxRoute
   '/_auth/workflow/monitor': typeof AuthWorkflowMonitorRoute
-  '/_guest/oauth2/callback': typeof GuestOauth2CallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -436,6 +436,7 @@ export interface FileRouteTypes {
     | '/notification'
     | '/profile'
     | '/sign-in'
+    | '/oauth2/callback'
     | '/ai/chat'
     | '/ai/confirm'
     | '/ai/mcp-client'
@@ -473,7 +474,6 @@ export interface FileRouteTypes {
     | '/workflow/definition'
     | '/workflow/inbox'
     | '/workflow/monitor'
-    | '/oauth2/callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -482,6 +482,7 @@ export interface FileRouteTypes {
     | '/notification'
     | '/profile'
     | '/sign-in'
+    | '/oauth2/callback'
     | '/ai/chat'
     | '/ai/confirm'
     | '/ai/mcp-client'
@@ -519,7 +520,6 @@ export interface FileRouteTypes {
     | '/workflow/definition'
     | '/workflow/inbox'
     | '/workflow/monitor'
-    | '/oauth2/callback'
   id:
     | '__root__'
     | '/'
@@ -530,6 +530,7 @@ export interface FileRouteTypes {
     | '/_auth/notification'
     | '/_auth/profile'
     | '/_guest/sign-in'
+    | '/oauth2/callback'
     | '/_auth/ai/chat'
     | '/_auth/ai/confirm'
     | '/_auth/ai/mcp-client'
@@ -567,13 +568,13 @@ export interface FileRouteTypes {
     | '/_auth/workflow/definition'
     | '/_auth/workflow/inbox'
     | '/_auth/workflow/monitor'
-    | '/_guest/oauth2/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRouteWithChildren
   GuestRoute: typeof GuestRouteWithChildren
+  Oauth2CallbackRoute: typeof Oauth2CallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -633,6 +634,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/sign-in'
       preLoaderRoute: typeof GuestSignInRouteImport
       parentRoute: typeof GuestRoute
+    }
+    '/oauth2/callback': {
+      id: '/oauth2/callback'
+      path: '/oauth2/callback'
+      fullPath: '/oauth2/callback'
+      preLoaderRoute: typeof Oauth2CallbackRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_auth/ai/chat': {
       id: '/_auth/ai/chat'
@@ -893,13 +901,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthWorkflowMonitorRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/_guest/oauth2/callback': {
-      id: '/_guest/oauth2/callback'
-      path: '/oauth2/callback'
-      fullPath: '/oauth2/callback'
-      preLoaderRoute: typeof GuestOauth2CallbackRouteImport
-      parentRoute: typeof GuestRoute
-    }
   }
 }
 
@@ -995,12 +996,10 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 interface GuestRouteChildren {
   GuestSignInRoute: typeof GuestSignInRoute
-  GuestOauth2CallbackRoute: typeof GuestOauth2CallbackRoute
 }
 
 const GuestRouteChildren: GuestRouteChildren = {
   GuestSignInRoute: GuestSignInRoute,
-  GuestOauth2CallbackRoute: GuestOauth2CallbackRoute,
 }
 
 const GuestRouteWithChildren = GuestRoute._addFileChildren(GuestRouteChildren)
@@ -1009,6 +1008,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRouteWithChildren,
   GuestRoute: GuestRouteWithChildren,
+  Oauth2CallbackRoute: Oauth2CallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
