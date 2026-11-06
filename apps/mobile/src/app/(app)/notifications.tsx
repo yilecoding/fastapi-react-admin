@@ -1,13 +1,13 @@
-import { useRouter } from 'expo-router'
+import { Stack, useRouter } from 'expo-router'
 import { BellIcon, ChevronRightIcon, TriangleAlertIcon } from 'lucide-react-native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import * as React from 'react'
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native'
+import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Chevron, Group } from '@/components/grouped'
+import { Chevron, Group, HeaderAction } from '@/components/grouped'
 import { AttachmentCount } from '@/components/notice'
 import { Icon } from '@/components/ui/icon'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -140,8 +140,22 @@ export default function NotificationsScreen() {
 
   return (
     <View className="bg-background flex-1">
-      <View className="flex-row items-center gap-3 px-4 pt-3 pb-1">
-        <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)} className="flex-1">
+      {/* 「全部已读」是对整屏的一个动作，放导航栏右上角（同「发起」「编辑」），页签独占一整行 */}
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <HeaderAction
+              label={t('全部已读')}
+              onPress={() => markAll.mutate()}
+              disabled={!canMarkAll}
+              loading={markAll.isPending}
+              testID="notif-mark-all"
+            />
+          ),
+        }}
+      />
+      <View className="px-4 pt-3 pb-1">
+        <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)}>
           <TabsList className="flex-row">
             <TabsTrigger value="all" className="flex-1">
               <Text>{t('全部')}</Text>
@@ -151,10 +165,6 @@ export default function NotificationsScreen() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <Button size="sm" variant="ghost" disabled={!canMarkAll} onPress={() => markAll.mutate()}>
-          {markAll.isPending ? <ActivityIndicator size="small" /> : null}
-          <Text>{t('全部已读')}</Text>
-        </Button>
       </View>
 
       <ScrollView
@@ -229,7 +239,7 @@ function NotifRow({ n, first, onPress }: { n: Notification; first?: boolean; onP
               </Text>
             ) : null}
             <View className="flex-1" />
-            <Text className="text-muted-foreground font-mono text-[11px]">{relativeTime(n.created_time)}</Text>
+            <Text className="text-muted-foreground text-[12px]">{relativeTime(n.created_time)}</Text>
           </View>
           <Text className={`text-[15px] ${unread ? 'font-semibold' : ''}`}>{n.title}</Text>
           <Text variant="small" className="text-muted-foreground leading-5" numberOfLines={2}>

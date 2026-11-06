@@ -1,20 +1,20 @@
 import { useRouter } from 'expo-router'
-import { ChevronRightIcon, SearchIcon, TriangleAlertIcon, UsersIcon } from 'lucide-react-native'
+import { ChevronRightIcon, TriangleAlertIcon, UsersIcon } from 'lucide-react-native'
 import { useTranslation } from 'react-i18next'
 import * as React from 'react'
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from 'react-native'
+import { ActivityIndicator, FlatList, RefreshControl, View } from 'react-native'
 
+import { Chevron, ListItem, SearchField } from '@/components/grouped'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Icon } from '@/components/ui/icon'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Text } from '@/components/ui/text'
 import { toast } from '@/components/ui/toast'
+import { UserAvatar } from '@/components/user-avatar'
 import type { UserListItem } from '@/lib/contract'
 import { useDebounced } from '@/lib/debounce'
 import { useUsers, type UserFilter } from '@/lib/users'
@@ -86,18 +86,12 @@ export default function UsersScreen() {
   return (
     <View className="bg-background flex-1">
       <View className="gap-2.5 px-4 pt-3 pb-2">
-        <View className="relative justify-center">
-          <Icon as={SearchIcon} className="text-muted-foreground absolute left-3 z-10 size-4" />
-          <Input
-            value={keyword}
-            onChangeText={setKeyword}
-            placeholder={t('搜索用户名')}
-            autoCapitalize="none"
-            autoCorrect={false}
-            testID="users-search"
-            className="h-11 rounded-xl ps-9"
-          />
-        </View>
+        <SearchField
+          value={keyword}
+          onChangeText={setKeyword}
+          placeholder={t('搜索用户名')}
+          testID="users-search"
+        />
         <View className="flex-row items-center gap-3">
           <Tabs value={status} onValueChange={(v) => setStatus(v as StatusFilter)} className="flex-1">
             <TabsList className="flex-row">
@@ -145,7 +139,9 @@ export default function UsersScreen() {
         <FlatList
           data={items}
           keyExtractor={(u) => String(u.id)}
-          contentContainerClassName="gap-2.5 px-4 pt-1 pb-10"
+          contentContainerClassName="px-4 pt-1 pb-10"
+          // 🔴 行的圆角取决于「是不是末行」，翻页后旧的末行要重画 —— FlatList 默认不重画没变的行
+          extraData={items.length}
           refreshControl={
             <RefreshControl
               refreshing={q.isRefetching && !q.isFetchingNextPage}
@@ -187,8 +183,10 @@ export default function UsersScreen() {
               onRetry={() => void q.fetchNextPage()}
             />
           }
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <UserRow
+              index={index}
+              count={items.length}
               user={item}
               onPress={() => router.push({ pathname: '/users/[id]', params: { id: String(item.id) } })}
             />
@@ -246,34 +244,25 @@ function ListFooter({
  * 那屏的 `CurrentUser` 记的，而列表这个 DTO 的 `dept` / `roles` 是**对象**。
  * 手写声明会和契约分叉，编译器只会说「数据不匹配这个组件」。
  */
-function UserRow({ user, onPress }: { user: UserListItem; onPress: () => void }) {
+function UserRow({
+  user,
+  index,
+  count,
+  onPress,
+}: {
+  user: UserListItem
+  index: number
+  count: number
+  onPress: () => void
+}) {
   const { t } = useTranslation()
   const name = user.nickname || user.username
 
   return (
-    /*
-     * 🔴 **`active:` 只在 uniwind 的 `Pressable` 包装里解析，挂在别的组件上是死代码。**
-     * 这里原来是 `<Pressable><Card className="active:bg-muted …">`，那个 `active:`
-     * **一次都不会生效** —— 读 uniwind 的实现：`Pressable.js` 把 `style` 传成
-     * 函数并在 `state.pressed` 时带上 `isPressed` 重算，而 `View.js`（`Card` 就是
-     * 一个 View）只有 `useStyle(className, props)`，压根没有 pressed 这一维。
-     * 不报错、不警告，就是按下去没反应。
-     *
-     * 所以行本身就是 Pressable、自己画卡片表面，不再套 `Card`
-     * （仓库里其余 `active:` 也都在 Pressable 上：`grouped.tsx` 的 `PressRow` /
-     * `DangerRow`、通知列表那一行）。
-     */
-    <Pressable
-      onPress={onPress}
-      testID={`user-row-${user.id}`}
-      className="bg-card active:bg-muted flex-row items-center gap-3 rounded-xl px-4 py-3"
-    >
-      <Avatar alt={name} className="size-11 rounded-[14px]">
-        {user.avatar ? <AvatarImage source={{ uri: user.avatar }} /> : null}
-        <AvatarFallback className="bg-primary rounded-[14px]">
-          <Text className="text-primary-foreground font-semibold">{name.slice(0, 1).toUpperCase()}</Text>
-        </AvatarFallback>
-      </Avatar>
+    // 行的形状（圆角 / 分隔线 / 按下态）全在 `ListItem` 里；`active:` 只在 Pressable 上生效，它就是一个 Pressable
+    // 分隔线内缩 = 左内边距 16 + 头像 40 + 间距 12
+    <ListItem index={index} count={count} inset={68} onPress={onPress} testID={`user-row-${user.id}`}>
+      <UserAvatar name={name} src={user.avatar} size={40} />
       <View className="flex-1 gap-1">
         <View className="flex-row items-center gap-2">
           <Text className="shrink text-[15px] font-medium" numberOfLines={1}>
@@ -293,8 +282,8 @@ function UserRow({ user, onPress }: { user: UserListItem; onPress: () => void })
           {user.roles.length > 0 ? ` · ${user.roles.map((r) => r.name).join('、')}` : ''}
         </Text>
       </View>
-      <Icon as={ChevronRightIcon} className="text-muted-foreground size-4 opacity-40" />
-    </Pressable>
+      <Chevron icon={ChevronRightIcon} />
+    </ListItem>
   )
 }
 
