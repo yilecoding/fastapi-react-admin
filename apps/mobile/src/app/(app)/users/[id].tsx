@@ -8,7 +8,6 @@ import { ApiError } from '@admin/api'
 import { formatDateTime } from '@admin/i18n'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -17,6 +16,7 @@ import { Icon } from '@/components/ui/icon'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Text } from '@/components/ui/text'
 import { toast } from '@/components/ui/toast'
+import { UserAvatar } from '@/components/user-avatar'
 import { usePerm } from '@/lib/perm'
 import { useSession } from '@/lib/session'
 import { useDeleteUser, useUser } from '@/lib/users'
@@ -101,12 +101,7 @@ export default function UserDetailScreen() {
   return (
     <ScrollView className="bg-background flex-1" contentContainerClassName="pb-10">
       <View className="flex-row items-center gap-3.5 px-5 pt-4 pb-1">
-        <Avatar alt={name} className="size-[54px] rounded-[17px]">
-          {user.avatar ? <AvatarImage source={{ uri: user.avatar }} /> : null}
-          <AvatarFallback className="bg-primary rounded-[17px]">
-            <Text className="text-primary-foreground text-xl font-semibold">{name.slice(0, 1).toUpperCase()}</Text>
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar name={name} src={user.avatar} size={56} />
         <View className="flex-1 gap-1">
           <View className="flex-row items-center gap-2">
             <Text className="shrink text-lg font-semibold" numberOfLines={1} testID="user-detail-name">
