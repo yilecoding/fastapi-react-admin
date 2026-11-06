@@ -2,8 +2,11 @@
 
 先说清楚项目的状态，省得你白花时间：
 
-- **还在 0.x**（最新版见 [Releases](https://github.com/yilecoding/fastapi-react-admin/releases)）。
-  接口可以直接改、不留旧字段，不用为兼容性让设计将就；**表结构改动一律走 alembic 迁移**（见下文「后端」）
+- **已经发了 1.0**（最新版见 [Releases](https://github.com/yilecoding/fastapi-react-admin/releases)），按 semver 走。
+  开放接口、Webhook、迁移链、插件接口、配置键这几处有兼容承诺，动之前先看 [CLAUDE.md](./CLAUDE.md)「1.0 起的兼容约定」；
+  表外的页面、组件、内部实现照旧可以大胆改。**表结构改动一律走 alembic 迁移**（见下文「后端」）
+- **两份 README**：`README.md` 是英文（仓库首页）、`README.zh-CN.md` 是中文，顶部互相切换。
+  改其中一份时**同一次提交里同步另一份**
 - **后端最初基于 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) 构建，已经独立演进**：
   只 cherry-pick 上游的安全补丁，功能更新不跟。改 `apps/api/` 时不必考虑「怎么合回上游」
 - **前后端都有自动化测试，且都打真实依赖不 mock**：后端 767 条 pytest 对真实数据库 + Redis，
