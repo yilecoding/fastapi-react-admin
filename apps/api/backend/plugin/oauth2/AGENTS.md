@@ -41,6 +41,30 @@
 不看 `verified` → 两组参数红。⚠️ 第一次做第二个变异时 sed 没匹配上（ruff format 把那几行并成了一行），
 测试「全绿」是因为代码根本没变 —— 变异之后先 `grep` 确认改动真的落了。
 
-**没修的一半**：`state` 没绑定到发起登录的浏览器（login CSRF）。开发环境前端 `localhost:8888` 跨站直连
-`127.0.0.1:8088`，授权链接是 XHR 拿的；浏览器会不会存下跨站 XHR 响应里的 SameSite=Lax cookie、回调时带不带，
-要真浏览器 + 真 OAuth 应用才验得了，猜错就是全员第三方登录失效。分析留在 #227。
+## 🔴 state 绑在发起授权的浏览器上：cookie 在后端 authorize 那一跳下发（#227 后半）
+
+**症状**（修之前）：攻击者自己走一遍授权，把带着**自己** `code` + `state` 的回调地址发给受害者 → 受害者登进攻击者的账号，
+之后上传的文件、填的数据都落进去（login CSRF）。state 只是 Redis 里的裸 UUID，回调只看「存在且没用过」。
+
+**为什么不能在原来那个接口上设 cookie**：授权链接是前端 XHR 拿的，开发环境 `localhost:8888` → `127.0.0.1:8088` 是跨站
+（`localhost` 和 `127.0.0.1` 不是同一个 site），桌面端 `app://local` 也是 —— 跨站 XHR 响应里的 `SameSite=Lax` cookie
+浏览器**不保证**存下来、更不保证之后带上（推断，没在真浏览器里测过；同一类跨站问题让 refresh cookie 在桌面端走不通，
+那条是实测过的，见 `packages/platform/src/api-client/client.ts`）。猜错的代价是全员第三方登录失效，所以不赌。
+
+**修法**（`state_binding.py`）：`GET /oauth2/{github,google}` 和 `GET /oauth2/me/binding` 照旧返回一个字符串 URL，
+但 URL 换成后端自己的 `GET /oauth2/{provider}/authorize` —— 顶层跳转，在这一跳上设 `fba_oauth2_state`
+（HttpOnly · Lax · `Path=/api/v1/oauth2`）再 302 到第三方；回调的 `dependencies` 第一个就是 `require_state_cookie`，
+对不上直接 403，**不去第三方换 token、不消耗 Redis 里的 state**。前端一行没改。
+
+- ⚠️ **authorize 的地址从回调地址推出来**（`.../callback` → `.../authorize`），不要用 `request.url_for`：
+  cookie 设在哪个 host，回调就必须打到哪个 host；反代后面 `url_for` 拿到的 host 可能和配置的回调地址不同，
+  那样 cookie 永远带不回来，全员第三方登录 403
+- ⚠️ **绑定还留着一个口子**：绑定 state 带 user_id，authorize 是顶层跳转、带不了 Bearer 头，核对不了登录态。
+  现在绑定链接是**一次性 ticket**（第一个打开的浏览器认领），但攻击者把自己刚取到、还没打开的绑定链接
+  在 3 分钟内骗受害者点开并授权，受害者的第三方账号仍会绑到攻击者名下。要堵死得让绑定入口能核对登录态
+  （例如前端用表单 POST 把 access token 带过去）；桌面端怎么打开授权页没核实过，改之前先看那一边
+
+**实测证据**：`tests/test_state_binding.py` 7 条（TestClient 真请求，换 token 那一步打桩成抛哨兵异常）；
+三处变异 —— 回调去掉 `require_state_cookie` → 「没有 cookie」「别人的 state」两条红；认领不看 NX 结果 →
+「ticket 只能用一次」红；authorize 不下发 cookie → 三条红。⚠️ **真浏览器 + 真 OAuth 应用还没跑过**：
+顶层跳转能设 Lax cookie、回调能带上，是浏览器规范保证的行为，但这里没有亲眼看到过。

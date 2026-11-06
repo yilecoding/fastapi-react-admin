@@ -113,12 +113,17 @@ Starlight 0.39 起不再支持 `autogenerate` 和 `label` 写在同一层。
 - **主题**在 `src/styles/theme.css`：品牌紫 + Inter / JetBrains Mono（`@fontsource-variable` 自托管 ——
   不走 Google Fonts，国内打不开会卡住首屏）。⚠️ Starlight 的 `:root` 是**深色**、浅色挂在
   `:root[data-theme='light']`，和后台的 `.dark` 方向相反，从后台抄颜色时别抄反
-- **首页**覆盖了 Starlight 的 `Hero`（`astro.config.mjs` 的 `components`），版式照搬登录页左栏：
-  渐变面板 + 立体榫卯（`src/components/TenonStage.astro`）。榫卯轮廓**直接 import**
-  `apps/web/src/components/tenon-outline.ts`，不抄坐标 —— 改了图形，侧边栏、登录页和这里一起变
-- 首页其余几块（截图窗框、数字条、功能卡、收尾面板）都在 `src/components/`，文案一律从
-  页面的 MDX / frontmatter 传进去（`landing` 字段是 `src/content.config.ts` 里扩出来的），
-  组件里不写给人看的话 —— 中英文各管各的
+- **首页**覆盖了 Starlight 的 `Hero`（`astro.config.mjs` 的 `components`）。2026-11-05 改成「克制」路线：
+  不套渐变面板，白底大留白 + 立体榫卯（`src/components/TenonStage.astro`）+ 几圈发丝细的同心圆，
+  按钮一种墨色，技术栈是带色点的小标签。榫卯轮廓**直接 import**
+  `apps/web/src/components/tenon-outline.ts`，不抄坐标 —— 改了图形，侧边栏、登录页、这里和收尾的水印一起变
+- 首页其余几块都在 `src/components/`：`SectionTitle`（左对齐标题 + 右侧「看文档」）· `Showcase`（大卡片：
+  要点 + 线稿图示）· `Diagram*`（三张 SVG 线稿）· `FeatureLine`（发丝线隔开的小功能）· `Closing`（水印 + 终端卡片）。
+  文案一律从页面的 MDX / frontmatter 传进去（`landing` 字段是 `src/content.config.ts` 里扩出来的），
+  组件里不写给人看的话 —— 中英文各管各的，图示里的字也走 props
+- ⚠️ `DiagramMonorepo` 的连线是各包 `package.json` 里**真实**的 workspace 依赖，改了依赖要同步那张图
+- ⚠️ hero 的同心圆和收尾水印会伸出内容列：横向溢出裁在 `.main-frame` 上（`overflow-x: clip`）。
+  裁 `html` / `body` 没用 —— 那会传给视口变成 `hidden`，实测 `scrollTo` 照样横移 230px（触屏能不能拖没测）
 - ⚠️ 只给首页加样式时选择器挂在 `:root[data-has-hero]` 上（Starlight 只给带 hero 的页加这个属性），
   否则会漏到功能页里
 - ⚠️ 顶栏要写 `header.header`：Starlight 里外两层都叫 `.header`，裸写会把那道渐变线画到里层，
@@ -136,7 +141,20 @@ README、文档站首页和分享卡片（`og.png`）用的是同一批图，界
    种子里 admin 的昵称是「用户88888」，截图前只在这个库里改成「系统管理员」
 3. 起 api 时加 `REQUEST_LIMITER_ENABLED=false`：造数据要连着登录好几个账号，第 9 个就 429 了
 4. 造数据走接口（发起 / 审批请假、发公告），访问柱状图读 `sys_login_log`，直接插近 14 天的记录
-5. 1600×960、浅色、`zh-CN`；拍完跑 `pnpm --filter @admin/docs og` 更新分享卡片
+5. 拍：`SHOTS_PASSWORD=… pnpm --filter web screenshots`（`apps/web/scripts/screenshots.mjs`，
+   登录、逐页摆好状态、七张一次拍完；前端地址 / 取验证码的命令都能用环境变量换，见脚本头注释）。
+   拍完跑 `pnpm --filter @admin/docs og` 更新分享卡片
+6. 造的数据隔几天再拍会显示「4 天前到你这」：把 `wf_instance` / `wf_task` / `wf_action_record` /
+   `sys_notification` / `sys_notice` 的时间列整体往后挪，只在拍图库里改
+
+🔴 **截图要 2 倍图（视口 1600×960、`deviceScaleFactor: 2`，出 3200×1920），而且不做调色板量化。**
+症状：首页和 README 的截图在 Mac / 高分屏上发糊。根因有两层：原来那批是 1 倍图又压成了 255 色的
+调色板 PNG；`ProductShot` 的候选宽度最大只到 1600，而内容列 68rem 在 2 倍屏上要 2176 物理像素，
+浏览器只能拿 1600 那张放大 1.36 倍。修法：脚本出 2 倍真彩 PNG，`ProductShot` 的候选宽度补到
+2400 / 3200、webp 质量提到 90。
+实测（1440 宽、2 倍屏的 Playwright，看 `currentSrc` 再量那个文件）：线上旧站选中的是 1600×960 那张、
+显示在 1088 CSS 像素宽的框里；修后选中 2400×1440 那张。并排截图里修前的字边明显发虚。代价是体积：PNG 一张约 0.25–0.5 MB（登录页的渐变大，
+1.6 MB），文档站发出去的 webp 2400 宽一张约 150 KB
 
 🔴 **浏览器要开 `http://127.0.0.1:8888`，不能开 `localhost:8888`。** 前端默认直连
 `http://127.0.0.1:8088`（`packages/platform/src/api-client/client.ts` 的 `API_BASE`），

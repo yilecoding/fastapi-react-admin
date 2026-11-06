@@ -23,7 +23,7 @@ import { channelLabel } from '../notify-policy/labels'
 import { DELIVERY_STATUSES, RESENDABLE, deliveriesQuery, deliveryKeys, useResendDelivery, type Delivery } from './api'
 import { DeliveryDetailSheet } from './detail-sheet'
 import { DeliveryStatusPill, reasonLabel, statusMeta } from './status'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 const COLUMN_LABELS = {
   seq: '序号',
@@ -260,7 +260,7 @@ export function NotifyDeliveryPage({
         description={t('通知走邮件 / 短信的每一次投递都留痕，跳过和失败也记。点时间看完整地址和错误原文。')}
       />
 
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         <QueryBar
           fields={fields}
           value={q.value}
@@ -304,7 +304,7 @@ export function NotifyDeliveryPage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       <DeliveryDetailSheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)} id={detail} />
     </PageShell>

@@ -20,7 +20,7 @@ import { useQuerySearch } from '../_shared/use-query-search'
 import { allOpenAppsQuery } from '../open-app/api'
 import { OpenApiLogDetailSheet } from './detail-sheet'
 import { ERROR_META, ERROR_OPTIONS, type OpenApiLog } from './shared'
-import { PageShell } from '../_shared/page-shell'
+import { ListBody, PageShell } from '../_shared/page-shell'
 
 /** 这一页列表 query 的 key 前缀；`useQuerySearch` 的 `refreshKey` 也用它（点搜索必须真的重取） */
 const LOG_KEY = ['open-api-logs'] as const
@@ -231,7 +231,7 @@ export function OpenLogPage({
     <PageShell fill="always">
       <PageHeader title={t('开放接口日志')} description={t('外部系统每次调用开放接口都会记一条，成功失败都记。点时间看详情；日志保留 30 天，到期由定时任务清理。')} />
 
-      <div className="flex flex-col gap-4 content-scroll:min-h-0 content-scroll:flex-1">
+      <ListBody>
         <QueryBar
           fields={fields}
           value={q.value}
@@ -277,7 +277,7 @@ export function OpenLogPage({
             }}
           />
         </div>
-      </div>
+      </ListBody>
 
       <OpenApiLogDetailSheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)} log={detail} />
     </PageShell>
