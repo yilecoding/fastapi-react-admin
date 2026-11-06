@@ -4,11 +4,13 @@
 
 # fastapi-react-admin
 
+**English** | [简体中文](./README.zh-CN.md)
+
 **A batteries-included admin foundation · FastAPI + React 19 + shadcn/ui**
 
 Row-level permissions · multi-tab that keeps state · approval workflow · an AI assistant that can't overreach · S3 storage with resumable uploads · web, desktop and mobile
 
-[Live demo](https://fra.wubunan.com/sign-in) · [Docs](https://yilecoding.github.io/fastapi-react-admin/en/) · [Quick start](#quick-start) · [Features](#features) · [Releases](https://github.com/yilecoding/fastapi-react-admin/releases) · [简体中文](./README.zh-CN.md)
+[Live demo](https://fra.wubunan.com/sign-in) · [Docs](https://yilecoding.github.io/fastapi-react-admin/en/) · [Quick start](#quick-start) · [Features](#features) · [Releases](https://github.com/yilecoding/fastapi-react-admin/releases)
 
 [![Release](https://img.shields.io/github/v/release/yilecoding/fastapi-react-admin?style=flat-square)](https://github.com/yilecoding/fastapi-react-admin/releases)
 [![CI](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml/badge.svg)](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml)
@@ -166,6 +168,7 @@ The [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) from eve
 
 | To… | Read |
 |---|---|
+| get started step by step: quick start, deployment, your first module, FAQ, upgrading | [docs site](https://yilecoding.github.io/fastapi-react-admin/en/) |
 | develop locally, run tests, open a PR, release | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | learn the engineering rules and pitfalls | [CLAUDE.md](./CLAUDE.md) — task-indexed, 40+ module notes, every claim backed by a test or measurement |
 | deploy to a server | [deploy/README.md](./deploy/README.md) |

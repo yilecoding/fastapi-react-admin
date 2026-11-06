@@ -92,8 +92,11 @@ const ctxFiles = allFiles
    * `PORTING.md` 是同一个理由加进来的：它整篇都在报路径和依赖名
    * （「拷 `src/lib/i18n.ts`」「删掉 `@tiptap/*`」），而它面向的是
    * **拿走这个包的下家** —— 指错一个路径的代价比内部文档还高。
+   *
+   * `README.zh-CN.md` 这类语言变体原来也漏了（正则只认 `README.md`）：仓库首页的中文版
+   * 在流量统计里是被单独点开最多的文件，指错路径同样没人报。
    */
-  .filter((f) => /(^|\/)(CLAUDE|AGENTS|README|CONTRIBUTING|SECURITY|PORTING|PULL_REQUEST_TEMPLATE)\.md$/.test(f))
+  .filter((f) => /(^|\/)(CLAUDE|AGENTS|README(\.[A-Za-z-]+)?|CONTRIBUTING|SECURITY|PORTING|PULL_REQUEST_TEMPLATE)\.md$/.test(f))
   // 每个模块目录下是 AGENTS.md（真身）+ CLAUDE.md（符号链接），
   // 不去重的话同一条问题会报两遍
   .filter((f) => !lstatSync(join(ROOT, f)).isSymbolicLink())
