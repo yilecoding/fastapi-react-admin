@@ -4,11 +4,13 @@
 
 # fastapi-react-admin
 
+[English](./README.md) | **简体中文**
+
 **开箱即用的中后台底座 · FastAPI + React 19 + shadcn/ui**
 
 权限细到数据行 · 多页签真保状态 · 飞书式审批 · 不越权的 AI 助手 · S3 存储与断点续传 · Web / 桌面 / 移动三端
 
-[在线演示](https://fra.wubunan.com/sign-in) · [文档](https://yilecoding.github.io/fastapi-react-admin/) · [快速开始](#快速开始) · [功能一览](#功能一览) · [更新记录](https://github.com/yilecoding/fastapi-react-admin/releases) · [English](./README.md)
+[在线演示](https://fra.wubunan.com/sign-in) · [文档](https://yilecoding.github.io/fastapi-react-admin/) · [快速开始](#快速开始) · [功能一览](#功能一览) · [更新记录](https://github.com/yilecoding/fastapi-react-admin/releases)
 
 [![Release](https://img.shields.io/github/v/release/yilecoding/fastapi-react-admin?style=flat-square)](https://github.com/yilecoding/fastapi-react-admin/releases)
 [![CI](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml/badge.svg)](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml)
@@ -171,6 +173,7 @@ pnpm dev                                                # 打开 http://127.0.0.
 
 | 想做什么 | 看这里 |
 |---|---|
+| 从零上手：快速开始、部署、写第一个业务模块、常见问题、版本升级 | [文档站](https://yilecoding.github.io/fastapi-react-admin/)（演示站上也有一份：[fra.wubunan.com/docs](https://fra.wubunan.com/docs/)） |
 | 本地开发、跑测试、提 PR、发版 | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | 了解工程约定和踩过的坑 | [CLAUDE.md](./CLAUDE.md) —— 按任务导航，40 多份模块分册，每条结论都带实测证据 |
 | 部署到服务器 | [deploy/README.md](./deploy/README.md) |
