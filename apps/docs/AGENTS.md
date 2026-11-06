@@ -141,7 +141,20 @@ README、文档站首页和分享卡片（`og.png`）用的是同一批图，界
    种子里 admin 的昵称是「用户88888」，截图前只在这个库里改成「系统管理员」
 3. 起 api 时加 `REQUEST_LIMITER_ENABLED=false`：造数据要连着登录好几个账号，第 9 个就 429 了
 4. 造数据走接口（发起 / 审批请假、发公告），访问柱状图读 `sys_login_log`，直接插近 14 天的记录
-5. 1600×960、浅色、`zh-CN`；拍完跑 `pnpm --filter @admin/docs og` 更新分享卡片
+5. 拍：`SHOTS_PASSWORD=… pnpm --filter web screenshots`（`apps/web/scripts/screenshots.mjs`，
+   登录、逐页摆好状态、七张一次拍完；前端地址 / 取验证码的命令都能用环境变量换，见脚本头注释）。
+   拍完跑 `pnpm --filter @admin/docs og` 更新分享卡片
+6. 造的数据隔几天再拍会显示「4 天前到你这」：把 `wf_instance` / `wf_task` / `wf_action_record` /
+   `sys_notification` / `sys_notice` 的时间列整体往后挪，只在拍图库里改
+
+🔴 **截图要 2 倍图（视口 1600×960、`deviceScaleFactor: 2`，出 3200×1920），而且不做调色板量化。**
+症状：首页和 README 的截图在 Mac / 高分屏上发糊。根因有两层：原来那批是 1 倍图又压成了 255 色的
+调色板 PNG；`ProductShot` 的候选宽度最大只到 1600，而内容列 68rem 在 2 倍屏上要 2176 物理像素，
+浏览器只能拿 1600 那张放大 1.36 倍。修法：脚本出 2 倍真彩 PNG，`ProductShot` 的候选宽度补到
+2400 / 3200、webp 质量提到 90。
+实测（1440 宽、2 倍屏的 Playwright，看 `currentSrc` 再量那个文件）：线上旧站选中的是 1600×960 那张、
+显示在 1088 CSS 像素宽的框里；修后选中 2400×1440 那张。并排截图里修前的字边明显发虚。代价是体积：PNG 一张约 0.25–0.5 MB（登录页的渐变大，
+1.6 MB），文档站发出去的 webp 2400 宽一张约 150 KB
 
 🔴 **浏览器要开 `http://127.0.0.1:8888`，不能开 `localhost:8888`。** 前端默认直连
 `http://127.0.0.1:8088`（`packages/platform/src/api-client/client.ts` 的 `API_BASE`），
