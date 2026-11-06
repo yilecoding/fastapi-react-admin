@@ -1,4 +1,4 @@
-import { ApiError } from '@admin/api'
+import { ApiError, missingRequired, progressItems } from '@admin/api'
 import { formatDateTime } from '@admin/i18n'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ChevronRightIcon, EllipsisIcon, InfoIcon, TriangleAlertIcon } from 'lucide-react-native'
@@ -31,8 +31,6 @@ import {
   type FormData,
   type InstanceDetail,
 } from '@/lib/workflow'
-import { missingRequired } from '@/lib/workflow-form'
-import { progressItems } from '@/lib/workflow-progress'
 
 /**
  * 审批详情（#224 2a）：概要 · 申请内容 · 审批进度 · 底部动作栏。
@@ -145,8 +143,10 @@ export default function WorkflowDetailScreen() {
     )
   }
 
-  // `key`：换了一张单 / 我的待办变了（别人办了、我刚提交）就是一份新的填写状态
-  return <Detail key={`${d.instance.id}:${d.my_task_id ?? ''}`} d={d} me={me} refreshing={refreshing} onRefresh={onRefresh} />
+  // `key` 只认这张单。🔴 不能带上 `my_task_id`（#257 第 1 条）：或签上别人先办了，我再点「同意」→ 409 →
+  // `useAct` 重取详情 → `my_task_id` 变成 null → key 变了整个 `Detail` 重挂 → 面板连同里面那句
+  // 「已被他人处理」一起消失，什么都没说（硬纪律 9）。「我的待办变了要清掉填了一半的内容」在 `Detail` 里单独做
+  return <Detail key={d.instance.id} d={d} me={me} refreshing={refreshing} onRefresh={onRefresh} />
 }
 
 function Detail({
@@ -175,9 +175,16 @@ function Detail({
   const [patch, setPatch] = React.useState<FormData>({})
   const merged = React.useMemo(() => ({ ...d.form_data, ...patch }), [d.form_data, patch])
   // 被退回后重新提交：「发起人自选」节点的人（预填上次选的）
-  const [picks, setPicks] = React.useState<Record<string, string[]>>(() =>
-    Object.fromEntries((d.select_nodes ?? []).map((n) => [n.id, n.selected])),
-  )
+  const initialPicks = () => Object.fromEntries((d.select_nodes ?? []).map((n) => [n.id, n.selected]))
+  const [picks, setPicks] = React.useState<Record<string, string[]>>(initialPicks)
+  // 我的待办变了（别人办了 / 我刚提交 / 又轮到我）：上一份待办里填了一半的内容作废，重新开始。
+  // 只清填写状态，**不动打开着的面板** —— 409 之后它要留着把原因说出来（见上面 `key` 那条）
+  const [taskOf, setTaskOf] = React.useState(d.my_task_id)
+  if (taskOf !== d.my_task_id) {
+    setTaskOf(d.my_task_id)
+    setPatch({})
+    setPicks(initialPicks())
+  }
   const [picking, setPicking] = React.useState<{ id: string; name: string } | null>(null)
   const pickedUsers = useDirectoryUsersByIds(Object.values(picks).flat())
   const nameOf = (id: string) => pickedUsers.data?.find((u) => u.id === id)?.nickname ?? '…'
@@ -256,7 +263,8 @@ function Detail({
         ) : null}
 
         <GroupHeader>{t('审批进度')}</GroupHeader>
-        <Track items={progressItems(d, t)} />
+        {/* 被退回给我改：选审批人就在上面，预告要叫我去选；其他人看到的是陈述句（#257 第 3 条） */}
+        <Track items={progressItems(d, t, { audience: resubmit ? 'starter' : 'viewer', formatTime: formatDateTime })} />
       </ScrollView>
 
       {showBar ? (

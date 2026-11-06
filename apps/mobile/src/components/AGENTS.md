@@ -323,32 +323,48 @@ toast 进了 store、屏上没有，纯静默。
 已改的三处：`login.tsx`（4 处）· `profile/edit.tsx`（2 处）· `profile/password.tsx`。
 **新写表单行时直接用 `min-w-*`。**
 
-## 审批（`workflow.tsx` · `lib/workflow.ts` · `lib/workflow-progress.ts`）
+## 审批（`workflow.tsx` · `lib/workflow.ts`）
 
 #224 2a，审批人这一侧：收件箱四个 tab + 详情 + 全部 11 个动作。屏在 `src/app/(app)/workflow/`。
 
 - 🔴 **按钮只按能力信封（`capabilities`）出**，不自己按状态推（同 web `pages/workflow` 分册第一条）。
   `enabled: false` 的也画，灰的 + 服务端给的原因
-- 🔴 **进度是 web `progress.ts` 的移植**，分步规则（节点 + 轮次、AI 自动同意画「没经手」……）一条不改；
-  web 那份改了这里跟着改。只换了预告里两句发起页专用的文案
+- 🔴 **进度 / 预告和 web 是同一份代码**：`@admin/api` 的 `workflow-progress.ts`（#257 之前这里是一份手抄的移植，
+  注释写着「web 那份改了这里跟着改」）。分步规则（节点 + 轮次、AI 自动同意画「没经手」……）在那边改，两端一起变
 - 响应类型是**手写的**：这些接口后端返回裸 `ResponseModel`，`schema.d.ts` 里 `data` 是 `unknown`。
   后端补上 `ResponseSchemaModel[...]` 后删掉断言
 - 浮层（选人 / 动作面板）走 portal，**不用 `Modal`**，理由和代价同上一节「确认框走 portal」。
   ⚠️ 返回键关的是面板：键盘开着时按返回会连面板一起关（实测，Android 模拟器）
 - 审批人可填字段 · 被退回后重新提交 · 重新发起：2b 起都在移动端办（见下一节的表单渲染器）。AI 预审面板没做
 - 纯只读的详情（`FormFields`）里**空字段整行不画**：它不跑显示条件，画「—」分不清「没填」和「条件不成立」。
-  有可填字段时换成 `WorkflowForm`，那边按 `lib/workflow-form.ts` 藏字段
+  有可填字段时换成 `WorkflowForm`，那边按 `@admin/api` 的 `formRules` 藏字段
 
 ✅ 实测（2026-11-04，Android 模拟器 + 本地 SQL Server）：待办角标 · 加急置顶 · 同意（带意见）· 转交（选人排除发起人和本步办理人）·
 驳回（不写原因提交按钮禁用）· 已办列表状态 · 驳回后的进度和意见。抄送 / 退回 / 加签 / 撤回 / 终止 / 改办理人只走过类型和 lint，没在设备上点过。
 
-## 发起 · 表单渲染器（`workflow-form.tsx` · `lib/workflow-form.ts`）
+🔴 **详情的 `key` 只认单子，不能带上 `my_task_id`。** 或签上别人先办了，我再点「同意」→ 409 → `useAct` 的 `onSettled`
+重取详情 → `my_task_id` 变成 null → key 变了，整个 `Detail` 重挂 → 动作面板连同里面那句「已被他人处理」一起消失，
+什么都没说（硬纪律 9）。「我的待办变了要清掉填了一半的内容」改在 `Detail` 里比对 `my_task_id`、只清 `patch` / `picks`，
+不动打开着的面板。证据：#257 第 1 条，评审对照代码核实；修法只过了类型检查和 lint，**没在设备上复现过 409**（要两个人的或签）。
+
+🔴 **服务端没装审批插件时，收件箱 / 计数是 404 —— 入口整块不出，不画错误块。** 原来首页那块错误永远重试不好（#257 第 2 条）。
+首页「我的审批」「待办」和「应用」的两个审批格子按 `isWorkflowMissing` 藏，这两个查询对 404 不重试。
+只对**不带 ID** 的接口这么判：详情 `instances/{pk}` 的 404 是「这张单不存在 / 你看不到」，照旧是错误。
+实测（2026-11-06，直接 import 后端 app 发请求）：没注册的路径 → HTTP 404 + `code: 404`；注册了的 `/sys/workflow/inbox/counts`
+不带 token → 401（404 在路由匹配那一步就出来了，轮不到鉴权）。藏入口这一步没在设备上对着一个卸了插件的后端看过。
+
+## 发起 · 表单渲染器（`workflow-form.tsx`）
 
 #224 2b，发起人这一侧：选流程（`workflow/start/index`）→ 填写（`workflow/start/[code]`，`?from=<实例>` 是重新发起）。
 同一个 `WorkflowForm` 还接了详情里的审批人可填字段和被退回后重新提交。口径照 web `start-sheet.tsx` / `form-renderer.tsx`。
 
-- 🔴 **`lib/workflow-form.ts` 是 web `form-rules.ts` 的逐字副本**（显示条件 / 自动计算 / 必填），那一份又是后端
-  `engine/form.py` 的副本。三份一起改；对不上的表现是「界面上 5 天，提交后 4 天」
+- 🔴 **联动规则和 web 是同一份**：`@admin/api` 的 `workflow-form.ts`（显示条件 / 自动计算 / 必填）。#257 之前这里是
+  web 那份的逐字拷贝，注释写着「三份一起改」而没有任何东西核对。后端 `engine/form.py` 仍是另一份（Python），
+  对不上的表现是「界面上 5 天，提交后 4 天」
+- 🔴 **发起页的预告用 `forecastItems(…, 'starter')`**：「请在上面选择审批人」「提交后会被自动驳回」；详情页按
+  「是不是被退回给我改」选 `starter` / `viewer`。#257 第 3 条：移动端原来只有详情页那套陈述句，发起页也用了它。
+  实测（2026-11-05，Android 模拟器，英文界面）：发起页预告写的是「No approver found; it will be rejected automatically
+  at this step」，发起人读不出那是在说他提交之后
 - `perms` 不传 = 全部可填（发起页传的是补全过的发起人权限）；传了的话**没列出来的当只读**（审批节点没配 = 只读）
 - 日期是自己画的月历（周一开头，只拼 `YYYY-MM-DD`，不经过时区换算），不装 `datetimepicker`：系统框一次只能选一个日期
 - 附件走 `expo-document-picker`（Expo Go 里有）→ `/sys/workflow/files`（只要登录，**不是** `/sys/files/upload`）

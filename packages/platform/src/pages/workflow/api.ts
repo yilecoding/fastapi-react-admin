@@ -1,5 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 
+import type { Cond, FormData, FormSchema } from '@admin/api'
+
 import { api, fetchBytes, uploadFile, uploadForm, type PageData } from '../../api-client/client'
 
 /**
@@ -14,56 +16,11 @@ import { api, fetchBytes, uploadFile, uploadForm, type PageData } from '../../ap
 const BASE = '/api/v1/sys/workflow'
 
 // ── 表单 schema ──────────────────────────────────────────────────────────────
+// 类型和联动规则在 `@admin/api`（`workflow-form.ts`），和移动端共用一份（#257）。这里转出去，页面照旧从 `./api` 取
 
-export type FieldType =
-  | 'text'
-  | 'textarea'
-  | 'number'
-  | 'amount'
-  | 'date'
-  | 'daterange'
-  | 'select'
-  | 'multiselect'
-  | 'user'
-  | 'dept'
-  | 'attachment'
-  | 'description'
-  | 'table'
-
-export type FieldOption = { label: string; value: string }
-
-export type FormField = {
-  /** 生成的稳定 ID —— 条件和历史数据都按它引用，改标签不影响 */
-  id: string
-  type: FieldType
-  label: string
-  required?: boolean
-  placeholder?: string | null
-  options?: FieldOption[] | null
-  precision?: number | null
-  multiple?: boolean
-  content?: string | null
-  columns?: FormField[] | null
-  /** 显示条件：只能引用排在前面的字段。不成立时不显示、不校验、不保存 */
-  visibleWhen?: Cond | null
-  /** 自动计算（number / amount）：服务端算，填了也不收 */
-  calc?: Calc | null
-}
-
-export type Calc = { kind: 'days'; field: string } | { kind: 'sum'; field: string; column: string }
-
-export type FormSchema = { schemaVersion: 1; fields: FormField[] }
-
-export type FormData = Record<string, unknown>
+export type { Calc, Cond, CondOp, FieldOption, FieldType, FormData, FormField, FormSchema } from '@admin/api'
 
 // ── 流程模型（树）────────────────────────────────────────────────────────────
-
-export type Cond =
-  | { all: Cond[] }
-  | { any: Cond[] }
-  | { var: string; op: CondOp; value?: unknown }
-
-export type CondOp = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'not_in' | 'contains' | 'empty' | 'not_empty'
 
 export type AssigneeKind = 'user' | 'role' | 'dept_leader' | 'initiator' | 'var_user' | 'select_on_start'
 

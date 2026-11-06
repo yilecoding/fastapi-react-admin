@@ -1,6 +1,8 @@
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ApiError, type FormField, type FormData as FormValues } from '@admin/api'
 
 import { api } from '@/lib/api'
+import { retry } from '@/lib/query'
 
 /**
  * 审批（#224 2a：审批人这一侧）—— 收件箱 · 详情 · 动作。
@@ -60,43 +62,15 @@ export type InstanceRow = {
 
 type PageData<T> = { items: T[]; total: number; page: number; size: number; total_pages: number }
 
-export type FieldType =
-  | 'text'
-  | 'textarea'
-  | 'number'
-  | 'amount'
-  | 'date'
-  | 'daterange'
-  | 'select'
-  | 'multiselect'
-  | 'user'
-  | 'dept'
-  | 'attachment'
-  | 'description'
-  | 'table'
-
-export type FormField = {
-  id: string
-  type: FieldType
-  label: string
-  required?: boolean
-  placeholder?: string | null
-  options?: { label: string; value: string }[] | null
-  precision?: number | null
-  multiple?: boolean
-  content?: string | null
-  columns?: FormField[] | null
-  /** 显示条件：只能引用排在前面的字段。不成立时不显示、不校验、不保存 */
-  visibleWhen?: Cond | null
-  /** 自动计算（number / amount）：服务端算，填了也不收 */
-  calc?: Calc | null
-}
-
-export type CondOp = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'not_in' | 'contains' | 'empty' | 'not_empty'
-export type Cond = { all: Cond[] } | { any: Cond[] } | { var: string; op: CondOp; value?: unknown }
-export type Calc = { kind: 'days'; field: string } | { kind: 'sum'; field: string; column: string }
+// 表单 schema 的类型和联动规则在 `@admin/api`（`workflow-form.ts`），和 web 共用一份（#257）
+export type { Calc, Cond, CondOp, FieldType, FormField } from '@admin/api'
+/**
+ * 表单的值（字段 ID → 值）。⚠️ 写成本地别名而不是直接 `export type { FormData } from` ——
+ * 那样本文件里没有这个名字，类型位置上的 `FormData` 会落到 RN 全局的 multipart `FormData` 上（下面上传附件用的那个）
+ */
+export type FormData = FormValues
+/** 详情接口下发的是裁过隐藏字段的 schema，只用得到 `fields` */
 export type FormSchema = { fields: FormField[] }
-export type FormData = Record<string, unknown>
 export type FieldPerm = 'hidden' | 'readonly' | 'editable'
 
 export type TaskRow = {
@@ -198,9 +172,35 @@ function fetchInbox(tab: InboxTab, page: number) {
   }
 }
 
+/**
+ * 服务端**没装审批插件**（`plugin/workflow` 是插件）：这些路由根本不存在，审批接口一律 HTTP 404。
+ *
+ * 收件箱 / 计数这类**不带 ID** 的接口撞上 404 只有这一种意思 —— 是服务端明确说「没有这个功能」
+ * （硬纪律 9 的 `off`），不是取数失败：入口整块不出，不画「重试」（重试多少次都是 404）。#257 第 2 条：
+ * 原来首页那块错误永远重试不好。
+ *
+ * ⚠️ 只对不带 ID 的接口这么判。详情 `instances/{pk}` 的 404 是「这张单不存在 / 你看不到」，照旧是错误。
+ *
+ * 实测（2026-11-06，直接 import 后端 app 发请求）：没注册的路径 → HTTP 404 + `code: 404`；
+ * 注册了的 `/sys/workflow/inbox/counts` 不带 token → 401 —— 404 在路由匹配那一步就出来了，轮不到鉴权。
+ */
+export function isWorkflowMissing(error: unknown): boolean {
+  return error instanceof ApiError && error.httpStatus === 404
+}
+
+/**
+ * 没装插件时不重试（默认会再打两次必然的 404，入口要晚好几秒才藏掉）；其余照默认规则。
+ * ⚠️ 参数写 `Error` 不写 `unknown`：query 的错误类型是从这里反推的，写成 `unknown` 之后
+ * 所有 `.error.message` 都编译不过
+ */
+function retryUnlessMissing(count: number, error: Error): boolean {
+  return !isWorkflowMissing(error) && retry(count, error)
+}
+
 export function useInbox(tab: InboxTab) {
   return useInfiniteQuery({
     queryKey: workflowKeys.inbox(tab),
+    retry: retryUnlessMissing,
     initialPageParam: 1,
     queryFn: async ({ pageParam }) => (await fetchInbox(tab, pageParam)) as PageData<InstanceRow>,
     // 终点判据用 `total_pages`，不用 `items.length < size`（同 `lib/users.ts`）
@@ -212,6 +212,7 @@ export function useInbox(tab: InboxTab) {
 export function useWorkflowCounts() {
   return useQuery({
     queryKey: workflowKeys.counts,
+    retry: retryUnlessMissing,
     queryFn: async () =>
       (await api.GET('/api/v1/sys/workflow/inbox/counts')) as { todo: number; cc_unread: number },
   })

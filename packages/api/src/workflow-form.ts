@@ -1,14 +1,69 @@
 /**
- * 表单联动（显示条件 / 自动计算）+ 必填检查 —— web `packages/platform/src/pages/workflow/form-rules.ts`
- * 的**逐字副本**（只换了 import），那一份又是后端 `engine/form.py: form_rules` 的副本。纯函数，不 import React。
+ * 审批表单：schema 的类型 + 联动（显示条件 / 自动计算）+ 必填检查。纯函数，不 import React / RN。
  *
- * 🔴 **只为「填的时候当场看到」**：天数跟着日期区间变、选了病假才出现「病假证明」。
+ * 🔴 **web 和移动端共用这一份**（#257）。原来两端各一份：web `pages/workflow/form-rules.ts`，
+ * 移动端 `lib/workflow-form.ts` 是它的逐字拷贝，注释里写着「三份一起改」，却没有任何东西核对它们还对得上。
+ * 现在 TS 这边只剩这一份；另一份是后端 `engine/form.py: form_rules`（Python，没法共用），改规则时两边一起改。
+ *
+ * **只为「填的时候当场看到」**：天数跟着日期区间变、选了病假才出现「病假证明」。
  * 存什么、校验什么、走哪条分支，全按服务端那一份算（提交的天数服务端不收，自己重算）。
- * 改规则时三份一起改；对不上的表现是「界面上显示 5 天，提交后变成 4 天」。
+ * 对不上的表现是「界面上显示 5 天，提交后变成 4 天」。
  *
  * ⚠️ 金额求和用 `BigInt` —— Hermes 支持（RN 0.70 起），不要为了「兼容」改回浮点。
  */
-import type { Calc, Cond, FormData, FormField, FormSchema } from '@/lib/workflow'
+
+// ── 表单 schema ──────────────────────────────────────────────────────────────
+
+export type FieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'amount'
+  | 'date'
+  | 'daterange'
+  | 'select'
+  | 'multiselect'
+  | 'user'
+  | 'dept'
+  | 'attachment'
+  | 'description'
+  | 'table'
+
+export type FieldOption = { label: string; value: string }
+
+export type FormField = {
+  /** 生成的稳定 ID —— 条件和历史数据都按它引用，改标签不影响 */
+  id: string
+  type: FieldType
+  label: string
+  required?: boolean
+  placeholder?: string | null
+  options?: FieldOption[] | null
+  precision?: number | null
+  multiple?: boolean
+  content?: string | null
+  columns?: FormField[] | null
+  /** 显示条件：只能引用排在前面的字段。不成立时不显示、不校验、不保存 */
+  visibleWhen?: Cond | null
+  /** 自动计算（number / amount）：服务端算，填了也不收 */
+  calc?: Calc | null
+}
+
+export type Calc = { kind: 'days'; field: string } | { kind: 'sum'; field: string; column: string }
+
+export type FormSchema = { schemaVersion: 1; fields: FormField[] }
+
+export type FormData = Record<string, unknown>
+
+/** 条件（显示条件和流程分支共用同一套，后端 `engine/flow.py: evaluate`） */
+export type Cond = { all: Cond[] } | { any: Cond[] } | { var: string; op: CondOp; value?: unknown }
+
+export type CondOp = 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'not_in' | 'contains' | 'empty' | 'not_empty'
+
+/** 规则只读字段列表。详情接口下发的是裁过隐藏字段的 schema，不一定带 `schemaVersion` */
+type Fields = { fields: readonly FormField[] }
+
+// ── 规则 ─────────────────────────────────────────────────────────────────────
 
 export function isEmpty(v: unknown): boolean {
   return v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0)
@@ -25,7 +80,7 @@ type Dec = { neg: boolean; int: string; frac: string }
 
 const DEC_RE = /^\s*([+-]?)(\d+)(?:\.(\d+))?\s*$/
 
-export function toDec(v: unknown): Dec | null {
+function toDec(v: unknown): Dec | null {
   if (typeof v === 'boolean' || v === null || v === undefined) return null
   if (typeof v === 'number') {
     if (!Number.isFinite(v)) return null
@@ -155,7 +210,7 @@ function compute(f: FormField, calc: Calc, data: FormData): unknown {
 }
 
 /** 按字段顺序算一遍：返回算过之后的数据，和不显示的字段 */
-export function formRules(schema: FormSchema, data: FormData): { data: FormData; inactive: Set<string> } {
+export function formRules(schema: Fields, data: FormData): { data: FormData; inactive: Set<string> } {
   const out: FormData = { ...data }
   const inactive = new Set<string>()
   for (const f of schema.fields) {
@@ -174,10 +229,11 @@ export function formRules(schema: FormSchema, data: FormData): { data: FormData;
 }
 
 /**
- * 前端的必填检查 —— 只为当场提示，后端那份才算数（`validate_form_data`）。同 web `form-renderer.tsx: missingRequired`。
+ * 前端的必填检查 —— 只为当场提示，后端那份才算数（`validate_form_data`）。返回 字段 ID → 标签。
  * 只查「必填但空」，格式交给后端：两边各写一套格式规则迟早对不上。
+ * `only`：只查这几个（审批人只查自己这一步能填的）。
  */
-export function missingRequired(schema: FormSchema, value: FormData, only?: Set<string>): Record<string, string> {
+export function missingRequired(schema: Fields, value: FormData, only?: Set<string>): Record<string, string> {
   const out: Record<string, string> = {}
   // 显示条件不成立的不算必填；自动计算的不归人填（同后端 validate_form_data）
   const { inactive } = formRules(schema, value)

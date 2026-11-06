@@ -1,3 +1,4 @@
+import { ApiError, forecastItems, isEmpty, missingRequired, type TrackItem } from '@admin/api'
 import { formatDateTime } from '@admin/i18n'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { ChevronRightIcon, TriangleAlertIcon } from 'lucide-react-native'
@@ -16,7 +17,6 @@ import { Text } from '@/components/ui/text'
 import { toast } from '@/components/ui/toast'
 import { Tile, Track, UserPicker } from '@/components/workflow'
 import { WorkflowForm } from '@/components/workflow-form'
-import { ApiError } from '@admin/api'
 import { useDebounced } from '@/lib/debounce'
 import { useSession } from '@/lib/session'
 import {
@@ -34,8 +34,6 @@ import {
   type FormData,
   type StartForm,
 } from '@/lib/workflow'
-import { isEmpty, missingRequired } from '@/lib/workflow-form'
-import { forecastItems, type TrackItem } from '@/lib/workflow-progress'
 
 /**
  * 发起审批 · 填写（#224 2b）。口径照 web `start-sheet.tsx`，少了「AI 帮填」（那一块要传文件 / 图片给模型，
@@ -164,7 +162,7 @@ function Filler({
 
   const track: TrackItem[] = [
     { key: 'start', kind: 'start', title: t('发起申请'), state: 'done', people: [{ name: user?.nickname ?? '' }] },
-    ...forecastItems(preview.data?.steps ?? [], t),
+    ...forecastItems(preview.data?.steps ?? [], t, 'starter'),
     { key: 'end', kind: 'end', title: t('结束'), state: 'future' },
   ]
 
