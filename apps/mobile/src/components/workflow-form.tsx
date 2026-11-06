@@ -32,7 +32,7 @@ import {
   type FormField,
   type FormSchema,
 } from '@/lib/workflow'
-import { formRules, isEmpty } from '@/lib/workflow-form'
+import { formRules, isEmpty } from '@admin/api'
 
 /**
  * 审批表单渲染器（原生版）—— 发起页、审批人可编辑字段、被退回后重新提交**三处用同一个**。
