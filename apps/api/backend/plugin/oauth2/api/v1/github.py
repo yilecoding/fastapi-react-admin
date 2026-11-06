@@ -7,6 +7,7 @@ from pyrate_limiter import Duration, Rate
 from starlette.responses import RedirectResponse
 
 from backend.app.admin.schema.mfa import MfaChallenge
+from backend.common.exception import errors
 from backend.common.response.response_schema import ResponseSchemaModel, response_base
 from backend.core.conf import settings
 from backend.database.db import CurrentSessionTransaction
@@ -15,6 +16,7 @@ from backend.plugin.oauth2.service.oauth2_service import oauth2_service
 from backend.plugin.oauth2.state_binding import (
     authorize_redirect,
     authorize_url,
+    callback_failed,
     clear_state_cookie,
     require_state_cookie,
 )
@@ -57,16 +59,19 @@ async def github_oauth2_callback(  # ruff:ignore[missing-return-type-undocumente
     token_data, state = oauth2
     access_token = token_data['access_token']
     user = await github_client.get_userinfo(access_token)
-    data = await oauth2_service.login_or_binding(
-        db=db,
-        request=request,
-        response=response,
-        background_tasks=background_tasks,
-        user=user,
-        social=UserSocialType.github,
-        state=state,
-        email_verified=await github_email_verified(access_token, user.get('email')),
-    )
+    try:
+        data = await oauth2_service.login_or_binding(
+            db=db,
+            request=request,
+            response=response,
+            background_tasks=background_tasks,
+            user=user,
+            social=UserSocialType.github,
+            state=state,
+            email_verified=await github_email_verified(access_token, user.get('email')),
+        )
+    except errors.BaseExceptionError as exc:
+        return await callback_failed(request, db, exc)
 
     # 绑定流程
     if data is None:

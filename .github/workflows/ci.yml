@@ -407,7 +407,8 @@ jobs:
       - name: 迁移链：从最近一个 release 升到当前
         working-directory: apps/api
         run: |
-          TAG=$(git ls-remote --tags --refs --sort=-v:refname origin 'v*' | head -1 | sed 's#.*refs/tags/##')
+          # 只认正式版：预发布（v1.1.0-rc.1）在 v:refname 排序里会排到 v1.1.0 前面，而用户是从正式版升上来的
+          TAG=$(git ls-remote --tags --refs --sort=-v:refname origin 'v*' | sed 's#.*refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
           if [ -z "$TAG" ]; then echo "没有 release tag（fork？），跳过"; exit 0; fi
           echo "基线：$TAG"
           git fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
