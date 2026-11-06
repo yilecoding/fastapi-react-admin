@@ -7,6 +7,7 @@ import {
 
 import { cn } from '@admin/ui/lib/utils'
 import { formatDateTimeShort } from '@admin/i18n'
+import type { TrackItem, TrackState } from '@admin/api'
 
 /**
  * 审批轨道 —— 发起页的「流程预告」和详情页的「审批进度」是同一个东西的两个时态：
@@ -14,30 +15,12 @@ import { formatDateTimeShort } from '@admin/i18n'
  *
  * 飞书审批里最常被看的就是这一块（「现在卡在谁那儿」「后面还要谁批」），
  * 所以它是整套审批界面里唯一做得比较重的元素；其余地方保持安静。
+ *
+ * 条目怎么拼（`progressItems` / `forecastItems`）在 `@admin/api` 的 `workflow-progress.ts`，和移动端共用（#257）；
+ * 这里只管画。
  */
 
-export type TrackState = 'done' | 'current' | 'rejected' | 'future' | 'skipped' | 'warn' | 'withdrawn'
-
-export type TrackPerson = {
-  name: string
-  /** 这个人在这一步的结果，显示在名字后面 */
-  result?: { text: string; tone: 'ok' | 'bad' | 'muted' | 'pending' }
-  time?: string | null
-  opinion?: string | null
-}
-
-export type TrackItem = {
-  key: string
-  kind: 'start' | 'approval' | 'cc' | 'system' | 'end'
-  title: string
-  /** 标题后的小字：会签 / 或签 / 自动跳过 / 发起人自选… */
-  tag?: string
-  state: TrackState
-  people?: TrackPerson[]
-  /** 没有人可显示时的一句话（「找不到审批人，将自动驳回」） */
-  note?: string
-  time?: string | null
-}
+export type { TrackItem, TrackPerson, TrackState } from '@admin/api'
 
 const MARK: Record<TrackState, { cls: string; icon: React.ComponentType<{ className?: string }> }> = {
   done: { cls: 'bg-emerald-500 text-white', icon: IconCheck },
