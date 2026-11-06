@@ -24,6 +24,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from pydantic import ValidationError
+
 from backend.common.enums import StatusType
 from backend.common.log import log
 from backend.common.security.data_scope import scoped_to_user
@@ -74,8 +76,38 @@ def _redact(value: Any, _depth: int = 0) -> Any:
 
 
 def _error_text(e: Exception) -> str:
-    """业务异常（`errors.BaseExceptionError`）的可读消息在 `.msg` 上，`str(e)` 可能是空串"""
+    """给模型和用户看的失败原因。
+
+    - 业务异常（`errors.BaseExceptionError`）的可读消息在 `.msg` 上，`str(e)` 可能是空串
+    - pydantic 校验错误走全站同一套本地化（`localize_validation_errors`）。原来是 `str(e)`：
+      「1 validation error for CreateDeptParam … For further information visit https://errors.pydantic.dev/…」
+      整段英文连着链接一起出现在对话里（实测）
+    - 工具里 `int(dept_id)` 失败是 `invalid literal for int() with base 10: 'abc'` —— 模型把 ID 填成了名字
+    """
+    if isinstance(e, ValidationError):
+        from backend.common.exception.exception_handler import localize_validation_errors
+
+        return '；'.join(
+            f'{".".join(str(p) for p in err.get("loc") or ()) or "参数"} {err.get("msg")}'
+            for err in localize_validation_errors(e)
+        )
+    if isinstance(e, ValueError) and str(e).startswith('invalid literal for int()'):
+        return 'ID 格式不对：ID 是一串数字，请先用查询工具查到 ID 再调用'
     return getattr(e, 'msg', None) or str(e) or type(e).__name__
+
+
+def _argument_problem(spec: ToolSpec, arguments: dict[str, Any]) -> str | None:
+    """按工具声明的 JSON Schema 查必填项和多余项；类型 / 取值留给工具自己的校验"""
+    schema = spec.parameters or {}
+    properties = schema.get('properties') or {}
+    missing = [name for name in schema.get('required') or () if name not in arguments]
+    unknown = [name for name in arguments if properties and name not in properties]
+    problems = []
+    if missing:
+        problems.append(f'缺少必填参数 {"、".join(missing)}')
+    if unknown:
+        problems.append(f'没有这些参数 {"、".join(unknown)}')
+    return '；'.join(problems) or None
 
 
 def _stringify(result: Any) -> str:
@@ -174,6 +206,19 @@ class ToolDispatcher:
                 kind='denied',
                 payload=f'你没有执行 {spec.name} 所需的权限（{spec.perm}）。',
                 summary='权限不足',
+                perm=spec.perm,
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
+
+        # 参数形状先按工具自己声明的 schema 对一遍。不对的话直接调 handler / preview 拿到的是
+        # `_preview_create() missing 2 required positional arguments: 'name' and 'code'` ——
+        # 实测原样回给了模型和用户：Python 函数名对谁都没用，「缺少 name、code」才能让模型重填
+        if problem := _argument_problem(spec, call.arguments):
+            await self._audit(ctx, call, ToolInvocationStatus.FAILED, perm=spec.perm, error=problem, started=started)
+            return DispatchOutcome(
+                kind='failed',
+                payload=f'参数不正确：{problem}。请按工具说明补齐后重新调用。',
+                summary=f'{spec.name} 参数错误',
                 perm=spec.perm,
                 duration_ms=int((time.perf_counter() - started) * 1000),
             )
