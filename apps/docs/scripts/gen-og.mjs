@@ -24,7 +24,7 @@ const W = 1280
 const H = 640
 // 截图 1600×960 等比缩到 700 宽、靠右；再宽就会压住左边 44px 的项目名
 const SHOT_W = 700
-const SHOT_H = Math.round(SHOT_W * 960 / 1600)
+const SHOT_H = Math.round(SHOT_W * 3 / 5)
 const SHOT_X = W - SHOT_W - 48
 const SHOT_Y = (H - SHOT_H) / 2
 

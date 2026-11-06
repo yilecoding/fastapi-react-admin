@@ -1,0 +1,62 @@
+---
+/**
+ * 「行级数据权限」的线稿：一棵部门树，虚线框圈出「本部门及以下」—— 部门经理只看得到框里的人。
+ * 字从 props 传进来。
+ */
+interface Props {
+  root: string
+  east: string
+  south: string
+  leaves: [string, string, string]
+  scope: string
+  caption: string
+}
+const { root, east, south, leaves, scope, caption } = Astro.props
+const W = 84
+const H = 30
+const node = (cx: number, y: number) => ({ x: cx - W / 2, y })
+const N = {
+  root: node(220, 16),
+  east: node(122, 92),
+  south: node(318, 92),
+  sh: node(72, 168),
+  hz: node(172, 168),
+  sz: node(318, 168),
+}
+const link = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+  const ax = a.x + W / 2, ay = a.y + H, bx = b.x + W / 2, by = b.y, my = (ay + by) / 2
+  return `M${ax} ${ay} V${my} H${bx} V${by}`
+}
+---
+
+<svg viewBox="0 0 440 250" role="img" aria-label={caption}>
+  <rect class="d-scope" x="20" y="80" width="204" height="132" rx="14" />
+  <text class="d-scope-label" x="34" y="232">{scope}</text>
+  <path class="d-link" d={link(N.root, N.east)} />
+  <path class="d-link" d={link(N.root, N.south)} />
+  <path class="d-link d-link--hl" d={link(N.east, N.sh)} />
+  <path class="d-link d-link--hl" d={link(N.east, N.hz)} />
+  <path class="d-link" d={link(N.south, N.sz)} />
+  {[
+    [N.root, root, false], [N.east, east, true], [N.south, south, false],
+    [N.sh, leaves[0], true], [N.hz, leaves[1], true], [N.sz, leaves[2], false],
+  ].map(([n, label, hl]) => (
+    <g>
+      <rect class:list={['d-node', { 'd-node--hl': hl }]} x={(n as any).x} y={(n as any).y} width={W} height={H} rx="8" />
+      <text class="d-label" x={(n as any).x + W / 2} y={(n as any).y + 19.5} text-anchor="middle">{label as string}</text>
+    </g>
+  ))}
+  <text class="d-caption" x="420" y="232" text-anchor="end">{caption}</text>
+</svg>
+
+<style>
+  svg { font-family: var(--__sl-font) }
+  .d-scope { fill: var(--diagram-hl-bg); stroke: color-mix(in oklab, var(--diagram-hl) 50%, transparent); stroke-width: 1.2; stroke-dasharray: 5 5 }
+  .d-scope-label { font-size: 11.5px; font-weight: 600; fill: var(--diagram-hl) }
+  .d-link { fill: none; stroke: var(--diagram-line); stroke-width: 1.2 }
+  .d-link--hl { stroke: color-mix(in oklab, var(--diagram-hl) 70%, transparent) }
+  .d-node { fill: var(--diagram-node); stroke: var(--line-strong); stroke-width: 1 }
+  .d-node--hl { stroke: color-mix(in oklab, var(--diagram-hl) 60%, transparent) }
+  .d-label { font-size: 12.5px; font-weight: 500; fill: var(--diagram-text) }
+  .d-caption { font-size: 11px; fill: var(--diagram-muted) }
+</style>
