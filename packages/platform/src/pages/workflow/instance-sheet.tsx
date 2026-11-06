@@ -15,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/t
 import { Textarea } from '@admin/ui/components/textarea'
 import { toast } from '@admin/ui/components/toast'
 import { formatDateTime } from '@admin/i18n'
+import { missingRequired, progressItems } from '@admin/api'
 
 import { ApiError } from '../../api-client/errors'
 import { meQuery } from '../../auth/queries'
@@ -26,9 +27,8 @@ import {
 } from './api'
 import { AiReviewPanel } from './ai-review-panel'
 import { FlowView } from './flow-view'
-import { FormRenderer, missingRequired } from './form-renderer'
+import { FormRenderer } from './form-renderer'
 import { UserSelect } from './pickers'
-import { progressItems } from './progress'
 import { InstanceStatusPill } from './status'
 import { ApprovalTrack, PersonAvatar, UrgentTag } from './track'
 
@@ -162,7 +162,11 @@ function Detail({
   const [picks, setPicks] = React.useState<Record<string, string[]>>(() =>
     Object.fromEntries(d.select_nodes.map((n) => [n.id, n.selected]))
   )
-  const track = React.useMemo(() => progressItems(d, t), [d, t])
+  // 被退回给我（发起人）改：选审批人就在轨道上面，预告要叫我去选；其他人看到的是陈述句（#257）
+  const track = React.useMemo(
+    () => progressItems(d, t, { audience: isResubmit(d) ? 'starter' : 'viewer', formatTime: formatDateTime }),
+    [d, t],
+  )
   // 被退回到自己手上：最近那条退回记录说了什么
   const sentBack = isResubmit(d)
     ? [...d.records].reverse().find((r) => r.action === 'send_back' && r.detail?.to === d.model.root.id)

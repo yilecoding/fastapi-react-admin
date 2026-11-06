@@ -30,7 +30,7 @@ import { ApiError } from '@admin/api'
  *
  * 429（限流）同理：`/auth/captcha` 是 5 次/30 秒，重试就是拿配额换一次必然的失败。
  */
-function retry(count: number, error: unknown): boolean {
+export function retry(count: number, error: unknown): boolean {
   if (error instanceof ApiError && (error.isUnauthorized || error.isForbidden || error.isRateLimited)) return false
   if (error instanceof ApiError && error.isValidation) return false
   return count < 2
