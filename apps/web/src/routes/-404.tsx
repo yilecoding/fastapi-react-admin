@@ -10,7 +10,7 @@ export function NotFoundPage() {
         <h1 className="text-lg font-semibold">{t('页面不存在')}</h1>
         <p className="text-sm text-muted-foreground">{t('你访问的地址没有对应的页面。')}</p>
       </div>
-      <Button render={<a href="/dashboard" />}>{t('回到首页')}</Button>
+      <Button nativeButton={false} render={<a href="/dashboard" />}>{t('回到首页')}</Button>
     </div>
   )
 }
