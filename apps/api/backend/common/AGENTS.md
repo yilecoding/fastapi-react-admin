@@ -129,3 +129,17 @@ m2m 表名从 `model/m2m.py` 自动发现。全仓扫了一遍，只有 `crud_us
 那条假注释**误导过一次真实的分析**：正是它让「count 没被测到」看起来像个测试缺口，
 而真正的缺口在别处（上面那个扇出）。覆盖本身留着（安全原语的兜底，将来真有人
 `dao.count()` 就是静默 fail-open），但注释改成了实话。
+
+## 🔴 422 的中文文案：带 `ctx` 的校验错误不论有没有 `error` 键都要套模板
+
+**症状**：中文界面下 `string_too_long` / `string_pattern_mismatch` 这一大类校验错误**原样是英文**
+（实测：超长 AI 消息回「请求参数非法: content String should have at most 8000 characters」）。
+
+**根因**：`exception_handler` 只在 `ctx` 里有 `error` 键时才 `format` 中文模板，而这两类的 ctx 是 `max_length` / `pattern`。
+
+**修法**：抽成 `localize_validation_errors()`，有 ctx 就套模板（占位符对不上时保留原文，不把校验错误变成 500）；
+AI 工具的参数报错也走它。顺带：dev 下 422 文案回显的输入截到 200 字 —— 原来一条 10 万字的消息被拒，
+响应和日志里各躺一份 10 万字。
+
+**实测证据**：`plugin/ai/tests/test_ai_turn_persistence.py::TestArgumentErrorsAreReadable`（pattern 错误出来是 `code 字符串应匹配模式…`、
+不含 `errors.pydantic.dev`）。

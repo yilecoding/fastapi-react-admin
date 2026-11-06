@@ -47,6 +47,10 @@ class ToolResultEvent(AgentEventBase):
     # 而「这次调用凭什么被允许、花了多久」恰恰是这个产品区别于普通聊天框的地方。
     perm: str | None = Field(None, description='这次调用要求的权限码')
     duration_ms: int | None = Field(None, description='执行耗时（毫秒）')
+    detail: str | None = Field(
+        None,
+        description='失败原因（只在确认执行那条路上带：那里没有模型来转述结果，卡片要自己说清楚为什么没成）',
+    )
 
 
 class ConfirmRequiredEvent(AgentEventBase):
