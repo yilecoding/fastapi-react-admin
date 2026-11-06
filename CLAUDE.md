@@ -162,7 +162,7 @@ pnpm --filter web dev
 pnpm --filter worker dev                  # celery worker -B（worker + 内嵌 beat）
 ```
 
-`apps/worker` 里**没有代码**，只有那一个脚本 —— 存在的理由是让 worker 的日志有
+`apps/worker` 里只有一个起进程的 `dev.mjs`（Windows 上 celery 不支持 `-B`，要拆成 worker + beat 两个进程，见 [`task` 分册](apps/api/backend/app/task/AGENTS.md)）—— 存在的理由是让 worker 的日志有
 自己的窗格。写进 `apps/api` 的 `dev` 里（`uvicorn & celery & wait`）也能跑，
 但两份日志会挤在一个窗格里交替刷，而 worker 的日志很密。
 
@@ -187,7 +187,7 @@ pnpm --filter worker dev                  # celery worker -B（worker + 内嵌 b
 `strictPort: true` 是刻意的：不写它 Vite 会在端口被占时自己 +1 漂到 8889，
 而上面那三处都是写死的 —— 宁可起不来，也不要「起来了但接口全挂」。
 
-账号 `admin` / `123456`。登录要过验证码，验证码答案在 Redis：
+账号 `admin` / `123456`（种子值；`fba init` 会强制改掉 admin 的密码，那之后是你当时设的那个）。登录要过验证码，验证码答案在 Redis：
 `docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"`。
 
 后端契约改动后跑 `pnpm --filter @admin/api gen:api` 重新生成 `schema.d.ts`。
