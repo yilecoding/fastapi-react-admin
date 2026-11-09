@@ -7,12 +7,12 @@
 > **新增结论请追加到离代码最近的那一份**。
 
 ```
-registry.py   登记表：哪些表要记、每一列怎么记（普通 / 引用 / 敏感 / 忽略）· 关联表折叠成集合字段 · 来源和动作的中文名
+registry.py   登记表：哪些表要记、每一列怎么记（普通 / 引用 / 敏感 / 忽略）· 关联表折叠成集合字段 · 一对一子表折叠成开关字段 · 来源和动作的中文名
 capture.py    拦截层：挂在 Session 类上的五个事件 · 「第一次碰到时拍原样，提交时和现状比」· 同一个事务里写 sys_data_change
 ```
 
-内置登记在 `app/admin/data_change.py`（用户 / 部门 / 角色 / 菜单 + 三张关联表），插件放自己目录下的
-`data_change.py`（参数配置：`plugin/config/data_change.py`）。表是 `app/admin/model/data_change.py`，
+内置登记在 `app/admin/data_change.py`（用户 / 部门 / 角色 / 菜单 + 三张关联表 + 用户的二次验证），插件放自己目录下的
+`data_change.py`（参数配置：`plugin/config/data_change.py`；用户绑的第三方账号：`plugin/oauth2/data_change.py`）。表是 `app/admin/model/data_change.py`，
 接口 `GET /api/v1/logs/changes`（+ `/meta`），权限码 `log:change:list`，**不按数据权限过滤**（#260 拍板，同操作日志）。
 前端：「日志管理 → 数据变更」页（`pages/log-change`）· 五个页面的「变更记录」抽屉（`pages/_shared/data-change`）·
 操作日志详情的「这次改了什么」（按 `trace_id`）。保留期参数 `DATA_CHANGE_RETENTION_DAYS`（默认 180，参数配置「日志」组），
@@ -114,6 +114,32 @@ PR 第一版合并前跑了一次独立评审，下面五条都是**读代码能
 
 **修法**：去掉 `onupdate`。**实测证据**：第一次探针只改昵称，比对结果里 `last_login_time` 跟着变了；
 `test_updating_a_user_no_longer_touches_last_login_time` 守着（把 `onupdate` 加回去就红）。
+
+## 二期：用户的二次验证 · 第三方账号
+
+两张表都记在**用户**名下，不单独当对象 —— 单独记的话记录挂在子表自己的 ID 上，用户的「变更记录」里看不到
+「谁把他的二次验证关了」。
+
+| 表 | 怎么登记 | 用户名下出现的字段 |
+|---|---|---|
+| `sys_user_mfa`（开了才有这一行） | `register_audited_child`：有没有这一行 = 开关字段；`values` 从那一行算值，两边都有行时才比 | 二次验证（未开启 ↔ 已开启）· 恢复码（只记「改过」） |
+| `sys_user_social` | `register_audited_set(..., active='deleted', member_labels=...)` | 第三方账号（+ GitHub / − Google） |
+
+管理员重置和自己关是同一条「已开启 → 未开启」，区别在操作人。开启时只记开关，不另记「生成了恢复码」。
+
+| 症状（不处理的话） | 根因 | 修法 | 实测证据 |
+|---|---|---|---|
+| 🔴 开二次验证（`db.add`）、自己关（`db.delete`）、绑第三方账号（`create_model`）一条都不记，只有管理员重置（语句 `delete(UserMfa)`）记得到 | unit of work 在 flush 时发的 INSERT / UPDATE / DELETE **不经过** `do_orm_execute`（它只拦 `Session.execute()`）。一期的三张关联表都是 Core 表、只被语句写，碰不到这条 | `before_flush` 里 `_remember_flushed`：新建 / 改过 / 要删的子表对象按父对象拍原样 | 去掉这一句 → `test_mfa.py::TestChangeRecords` 和 `test_social_change_records.py` 红 |
+| 🔴 解绑不出记录 | 解绑是逻辑删除（`UPDATE … SET deleted = id`），查成员不过滤的话被标删的那行还算「绑着」，前后集合一样 | 关联表登记给 `active`：非 0 的行不算成员 | 去掉过滤 → 社交那条红 |
+| 🔴 登录过程中被强制绑定二次验证、第三方回调绑定账号，操作人是空、来源是「系统」 | 这两个请求不带登录态（还没登进来 / 第三方重定向回来），请求上下文里没有 `user_id` | `with data_change_source('web' / 'oauth2', actor_id=…)`，人从挑战令牌 / OAuth2 state 里取 | 去掉任一处 → 对应那条红 |
+| 每次用恢复码登录多一条「恢复码：已修改」，而且是「系统」改的 | 用掉一个恢复码会把 `used` 写进同一列 JSON | 比的是「这一批是哪几个哈希」（`_recovery_batch`），不是整段 JSON | 改成按整段比 → `test_using_a_recovery_code_is_not_a_change` 红 |
+| 每次用动态码登录前查后查两次 | 防重放要写 `last_step` | 进 `ignore`；ORM 改属性和语句 UPDATE 两条路都按「写的列全在忽略列里」跳过 | 去掉任一条跳过 → `test_writing_only_ignored_child_columns_skips_the_capture`（数 `_snapshot` 调用）红 |
+
+⚠️ 子表的列**不进审计表**，进的只是 `values` 算出来的东西，所以不像对象那样要求每一列归类（新加的列没人读就不会漏）。
+`ignore` 只决定「写这几列要不要抓」—— 把被 `values` 读的列写进去会漏记。
+
+**没接的**：个人偏好（工作台布局，拖一下就是一条）· 密码历史（派生数据，「密码：已修改」已经在用户上）·
+会话 / 强制下线（在 Redis，操作日志里有）。
 
 ## 性能
 

@@ -1393,6 +1393,7 @@
   "总开关只能是 0 或 1": "The master switch must be 0 or 1",
   "恢复": "Reset",
   "恢复 100%": "Reset to 100%",
+  "恢复码": "Recovery codes",
   "恢复码快用完了，建议重新生成一批。": "You're running low on recovery codes; consider generating a new set.",
   "恢复默认": "Restore defaults",
   "恢复默认偏好": "Restore default preferences",
