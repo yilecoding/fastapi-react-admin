@@ -90,7 +90,7 @@ class AuthService:
             # 🔴 必须跑一次等价的 bcrypt，否则「用户不存在」5ms、「密码错」190ms，
             # 状态码和文案统一了也白搭 —— 时间就是答案
             await run_in_threadpool(password_verify, password, _DUMMY_PASSWORD_HASH)
-            await password_security_service.handle_ip_login_failure(ip)
+            await password_security_service.handle_ip_login_failure(ip, username)
             # 🔴 和密码错误返回**同一个** AuthorizationError（403）。
             # 原来这里是 NotFoundError（404），文案虽然早就统一成「用户名或密码有误」，
             # 但状态码的差异让用户名枚举照样成立
@@ -109,7 +109,7 @@ class AuthService:
             # 锁定期内不再累加，避免攻击者靠持续尝试无限延长他人的锁定时间
             if lock_reason is None:
                 await password_security_service.handle_login_failure(db, user.id)
-            await password_security_service.handle_ip_login_failure(ip)
+            await password_security_service.handle_ip_login_failure(ip, username)
             raise errors.AuthorizationError(msg=t('error.auth.invalid_credentials'))
 
         # 密码正确 —— 到这里才可以如实告知状态。此时告知已无枚举价值，
@@ -489,7 +489,8 @@ class AuthService:
             if not eligible or verdict != 'ok' or user is None:
                 if user is not None and eligible and lock_reason is None:
                     await password_security_service.handle_login_failure(db, user.id)
-                await password_security_service.handle_ip_login_failure(ip)
+                masked = user.username if user else f'{obj.phone[:3]}****{obj.phone[-4:]}'
+                await password_security_service.handle_ip_login_failure(ip, masked)
                 raise errors.AuthorizationError(msg=t('error.auth.invalid_phone_credentials'))
             # 码对了 —— 到这里才可以如实告知状态
             if lock_reason is not None:
@@ -658,6 +659,7 @@ class AuthService:
 def session_meta(user: User) -> dict[str, str]:
     """存进会话、给在线用户页展示的那几样（登录那一刻的快照）"""
     return {
+        'uuid': user.uuid,
         'username': user.username,
         'nickname': user.nickname,
         'last_login_time': timezone.to_iso(timezone.now()),
