@@ -123,3 +123,90 @@ test("没送到（断网 / 网关 502）：按钮留着，再点一次就能执�
   await expect(page.getByTestId("ai-confirm-done")).toBeVisible()
   expect(calls).toBe(3)
 })
+
+/**
+ * 🔴 卡片要能从**历史**里还原（2026-11-06 本地真跑，假模型）。
+ *
+ * 流一结束前端就重拉历史并整体替换气泡。原来后端只在「有正文」时落库、也只存执行轨迹，
+ * 模型调写工具时一个字不说 → 历史里没有这张卡片 → 卡片一闪就没，网页上的写操作**一个都确认不了**。
+ * 上面几条没撞上，是因为它们只 mock 了流、历史接口两次都回空数组：react-query 的结构共享让
+ * 引用不变，冲刷历史的那个 effect 根本没跑。真实环境里历史多了一条用户消息，引用一变就冲掉了。
+ *
+ * 这里让历史接口回「新后端落库的样子」（`tool_calls` 里带 `kind: confirm`），而且每次内容都不同
+ */
+function historyWith(items: object[], userText = "建个部门") {
+  return JSON.stringify({
+    code: 200,
+    msg: "ok",
+    data: [
+      { id: "1", role: "user", content: userText, tool_calls: null, created_time: "2026-11-06T10:00:00+08:00" },
+      { id: "2", role: "assistant", content: "", tool_calls: JSON.stringify(items), created_time: "2026-11-06T10:00:01+08:00" },
+    ],
+  })
+}
+
+const CARD = { kind: "confirm", token: "cf_hist", name: "dept_create", preview: "将在顶级新建部门「AI测试部」" }
+
+test("流结束后重拉历史：确认卡片还在，而且能点", async ({ page }) => {
+  let streamed = false
+  await page.route("**/api/v1/ai/conversations/*/messages", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      // 那条轨迹只在历史里有（流里没发）：看见它 = 历史已经替换过气泡了，再断言卡片才不是在抢时序
+      body: streamed
+        ? historyWith([{ name: "dept_list", ok: true, perm: "sys:dept:list", duration_ms: 5 }, { ...CARD, outcome: null }])
+        : JSON.stringify({ code: 200, msg: "ok", data: [] }),
+    })
+  )
+  await page.route("**/api/v1/ai/chat/stream", (route) => {
+    streamed = true
+    return route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: sse([{ type: "confirm_required", ...CARD, arguments: {} }, { type: "done" }]),
+    })
+  })
+  await page.route("**/api/v1/ai/chat/tools/confirm", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: sse([
+        { type: "tool_result", call_id: "c", name: "dept_create", ok: false, summary: "失败", perm: null, duration_ms: 1, detail: "同级已有同名部门" },
+        { type: "done" },
+      ]),
+    })
+  )
+  await loginPageAs(page, "admin", "123456")
+  await page.goto("/ai/chat")
+  const box = page.getByPlaceholder("问点什么…")
+  await box.fill("建个部门")
+  await box.press("Enter")
+
+  // 等历史真的替换过气泡（那一刻正是原来卡片消失的时候）
+  await expect(page.getByText("dept_list")).toBeVisible()
+  await expect(page.getByText("将在顶级新建部门「AI测试部」")).toBeVisible()
+  await page.getByTestId("ai-confirm").click()
+  // 确认那条路上没有模型来转述结果：失败原因要写在卡片上
+  await expect(page.getByTestId("ai-confirm-failed")).toContainText("同级已有同名部门")
+})
+
+test("刷新之后：已执行的卡片显示结果、不再给按钮；这一轮的报错也还在", async ({ page }) => {
+  await page.route("**/api/v1/ai/conversations/*/messages", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: historyWith([
+        { name: "dept_list", ok: true, perm: "sys:dept:list", duration_ms: 5 },
+        { ...CARD, outcome: "done" },
+        { kind: "error", message: "已达到单轮最多 5 次工具调用的上限", code: "max_rounds" },
+      ]),
+    })
+  )
+  await loginPageAs(page, "admin", "123456")
+  await page.goto("/ai/chat?c=2229935699371491328")
+  await expect(page.getByTestId("ai-confirm-done")).toBeVisible()
+  await expect(page.getByTestId("ai-confirm")).toHaveCount(0)
+  await expect(page.getByText("已达到单轮最多 5 次工具调用的上限")).toBeVisible()
+  await expect(page.getByText("dept_list")).toBeVisible()
+})

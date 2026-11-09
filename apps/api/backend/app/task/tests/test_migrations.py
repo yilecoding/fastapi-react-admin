@@ -21,6 +21,20 @@ def alembic_cfg():
     return cfg
 
 
+def test_alembic_ini_is_ascii() -> None:
+    """`alembic.ini` 必须是纯 ASCII。
+
+    alembic 用 `encoding="locale"` 读它，这个读法**不认 PYTHONUTF8**：系统代码页不是 UTF-8 的 Windows
+    （实测：繁中 cp950）上，里面一个中文注释就让所有 alembic 命令 `UnicodeDecodeError` ——
+    `pnpm db:upgrade`、`pnpm test:db` 全挂，而 Linux CI 上一切正常
+    """
+    from backend.core.path_conf import BASE_PATH
+
+    raw = (BASE_PATH / 'alembic.ini').read_bytes()
+    bad = [i + 1 for i, line in enumerate(raw.splitlines()) if not line.isascii()]
+    assert not bad, f'alembic.ini 第 {bad} 行有非 ASCII 字符（注释也不行，见文件头）'
+
+
 def test_single_head(alembic_cfg) -> None:
     """🔴 只能有一条 head。
 
