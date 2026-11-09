@@ -193,7 +193,10 @@ export function Sparkline({
   const { t } = useTranslation()
   const W = 100
   const H = 32
-  const top = max ?? Math.max(1, ...points)
+  // 没给上限时按样本最大值留 25% 头顶空间。不留的话最大那个点就顶在框上 ——
+  // 只有一个采样点（平线）时整条线贴着顶边，面积填满整块，Redis 监控页刚打开时
+  // 「每秒操作数趋势」就是一整块实心色块，看着像出错了。给了 `max`（百分比那种）照旧按它画
+  const top = max ?? Math.max(1, ...points) * 1.25
   const stroke = {
     success: 'stroke-emerald-500', danger: 'stroke-destructive', warning: 'stroke-amber-500',
     info: 'stroke-sky-500', muted: 'stroke-muted-foreground',
@@ -234,7 +237,8 @@ export function Sparkline({
       data-samples={samples}
       aria-hidden
     >
-      <polygon points={area} className={cn('stroke-none', fill)} />
+      {/* 一个点画不出「趋势」，只画那条平线；面积填色等第二个点到了再上，否则就是一整块实心色块 */}
+      {samples > 1 && <polygon points={area} className={cn('stroke-none', fill)} />}
       <polyline points={line} className={cn('fill-none', stroke)} strokeWidth={1} vectorEffect="non-scaling-stroke" />
     </svg>
   )

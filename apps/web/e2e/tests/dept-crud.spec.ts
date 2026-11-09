@@ -101,4 +101,50 @@ test.describe("部门管理", () => {
     await api.del(`/api/v1/sys/depts/${parentAId}`)
     await api.del(`/api/v1/sys/depts/${parentBId}`)
   })
+
+  /**
+   * 删不掉的部门（2026-11-06 本地点出来的）。原来弹窗写的是「若该部门下仍有子部门或用户，后端会拒绝」，
+   * 点了「删除」之后那句问题被一行红字整个顶掉，按钮照样能点 —— 看不出在删谁、该怎么办。
+   */
+  test("删不掉的部门：有子部门时先说清楚、不给按钮；被接口拒绝时问题还在、原因另起一条", async ({ authedPage: page, api }) => {
+    const code = uniqueCode("E2EDEL")
+    const parentName = `E2E删父${code}`
+    const childName = `E2E删子${code}`
+    await api.post("/api/v1/sys/depts", { code, name: parentName, status: 1, sort: 0 })
+    const parentId = ((await api.get(`/api/v1/sys/depts?code=${code}`)) as Array<{ id: string }>)[0].id
+    await api.post("/api/v1/sys/depts", { code: `${code}K`, name: childName, parent_id: parentId, status: 1, sort: 0 })
+
+    try {
+      await page.goto("/system/dept")
+
+      // 树上看得见子部门 → 这一步一定会被拒：直接说怎么办，「删除」不可点
+      await page.getByTestId(`dept-actions-${parentName}`).click()
+      await page.getByTestId(`dept-delete-${parentName}`).click()
+      await expect(page.getByTestId("confirm-dialog")).toContainText("还有 1 个子部门")
+      await expect(page.getByTestId("confirm-ok")).toBeDisabled()
+      await page.keyboard.press("Escape")
+      await expect(page.getByTestId("confirm-dialog")).toHaveCount(0)
+
+      // 前端看不出来的（部门下有成员）：接口拒了，原来的问题留着，原因单独一条
+      await page.route("**/api/v1/sys/depts/*", (route) =>
+        route.request().method() === "DELETE"
+          ? route.fulfill({
+              status: 409,
+              contentType: "application/json",
+              body: JSON.stringify({ code: 409, msg: "部门下存在用户，无法删除", data: null }),
+            })
+          : route.fallback()
+      )
+      await page.getByTestId(`dept-actions-${childName}`).click()
+      await page.getByTestId(`dept-delete-${childName}`).click()
+      await page.getByTestId("confirm-ok").click()
+      await expect(page.getByTestId("confirm-error")).toContainText("部门下存在用户")
+      await expect(page.getByTestId("confirm-dialog")).toContainText(`确定删除「${childName}」`)
+    } finally {
+      await page.unrouteAll({ behavior: "ignoreErrors" })
+      const kids = (await api.get(`/api/v1/sys/depts?code=${code}K`)) as Array<{ id: string }>
+      for (const k of kids) await api.del(`/api/v1/sys/depts/${k.id}`)
+      await api.del(`/api/v1/sys/depts/${parentId}`)
+    }
+  })
 })

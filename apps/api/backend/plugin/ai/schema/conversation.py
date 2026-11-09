@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import ConfigDict, Field
+from pydantic import ConfigDict, Field, StringConstraints
 
 from backend.common.schema import SchemaBase, SnowflakeIdIn
 
@@ -46,7 +47,10 @@ class ChatParam(SchemaBase):
     """发起一轮对话"""
 
     conversation_id: SnowflakeIdIn = Field(description='会话 ID')
-    content: str = Field(description='用户输入', min_length=1, max_length=8000)
+    # 先去掉首尾空白再判空：原来 `min_length=1` 放行了纯空格，一句「   」照样发给模型、计费、落库
+    content: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=8000)] = Field(
+        description='用户输入'
+    )
 
 
 class ConfirmToolParam(SchemaBase):

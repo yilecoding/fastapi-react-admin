@@ -35,12 +35,14 @@ def _get_exception_code(status_code: int) -> int:
     return status_code
 
 
-async def _validation_exception_handler(exc: RequestValidationError | ValidationError):
-    """
-    数据验证异常处理
+def localize_validation_errors(exc: RequestValidationError | ValidationError) -> list[dict]:
+    """把 pydantic 的校验错误换成当前语言的文案（`locale/*.yml` 的 `pydantic.*`）。
 
-    :param exc: 验证异常
-    :return:
+    🔴 **带 `ctx` 的错误不论 `ctx` 里有没有 `error` 键都要套模板。** 原来只在有 `error` 键时
+    才 `format`，于是 `string_too_long`（ctx 是 `max_length`）、`string_pattern_mismatch`
+    （ctx 是 `pattern`）这一大类在中文界面下**原样是英文**：实测发一条超长的 AI 消息，
+    回的是「请求参数非法: content String should have at most 8000 characters」。
+    AI 工具的参数报错（`plugin/ai/core/dispatcher.py`）也走这里。
     """
     errors = []
     for error in exc.errors():
@@ -52,16 +54,38 @@ async def _validation_exception_handler(exc: RequestValidationError | Validation
                 if not error_ctx:
                     error['msg'] = custom_message
                 else:
-                    e = error_ctx.get('error')
-                    if e:
+                    try:
                         error['msg'] = custom_message.format(**error_ctx)
-                        error['ctx']['error'] = e.__str__().replace("'", '"') if isinstance(e, Exception) else None
+                    except (KeyError, IndexError, ValueError):
+                        # 模板里的占位符和 ctx 对不上：宁可保留原文，也不要把一个校验错误变成 500
+                        pass
+                    e = error_ctx.get('error')
+                    if isinstance(e, Exception):
+                        error['ctx']['error'] = e.__str__().replace("'", '"')
         errors.append(error)
+    return errors
+
+
+# 422 文案里回显的输入值上限。原来整段原样回显：一条 10 万字的消息被拒，
+# 响应和日志（`请求异常: …`）里各躺一份 10 万字
+_DEBUG_INPUT_MAX_CHARS = 200
+
+
+async def _validation_exception_handler(exc: RequestValidationError | ValidationError):
+    """
+    数据验证异常处理
+
+    :param exc: 验证异常
+    :return:
+    """
+    errors = localize_validation_errors(exc)
     error = errors[0]
     if error.get('type') == 'json_invalid':
         message = t('error.request.json_invalid')
     else:
         error_input = error.get('input')
+        if isinstance(error_input, str) and len(error_input) > _DEBUG_INPUT_MAX_CHARS:
+            error_input = f'{error_input[:_DEBUG_INPUT_MAX_CHARS]}…（共 {len(error_input)} 字符）'
         field = str(error.get('loc')[-1])
         error_msg = error.get('msg')
         # 「，输入：」这段是 dev 专属的调试后缀，也得跟着语言走。
