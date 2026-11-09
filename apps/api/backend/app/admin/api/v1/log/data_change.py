@@ -1,12 +1,16 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 
-from backend.app.admin.schema.data_change import GetDataChangeDetail, GetDataChangeMeta
+from backend.app.admin.dataio import DATA_CHANGE_EXPORT
+from backend.app.admin.schema.data_change import GetDataChangeDetail, GetDataChangeIntegrity, GetDataChangeMeta
+from backend.app.admin.schema.export_job import GetExportJobDetail, StartExportParam
 from backend.app.admin.service.data_change_service import data_change_service
+from backend.app.admin.service.export_service import export_service
 from backend.common.pagination import DependsPagination, PageData
 from backend.common.response.response_schema import ResponseSchemaModel, response_base
+from backend.common.security.jwt import DependsSuperUser
 from backend.common.security.permission import RequestPermission
 from backend.common.security.rbac import DependsRBAC
 from backend.database.db import CurrentSession
@@ -21,6 +25,29 @@ router = APIRouter()
 )
 async def get_data_change_meta() -> ResponseSchemaModel[GetDataChangeMeta]:
     return response_base.success(data=data_change_service.meta())
+
+
+@router.get(
+    '/integrity',
+    summary='校验数据变更记录有没有被改过、删过（防篡改链）',
+    # 超管才能点：整张表从头重算一遍，记录多的时候要几秒；结果里也会说密钥配没配
+    dependencies=[DependsSuperUser],
+)
+async def verify_data_changes(db: CurrentSession) -> ResponseSchemaModel[GetDataChangeIntegrity]:
+    return response_base.success(data=await data_change_service.verify(db))
+
+
+@router.post(
+    '/export',
+    summary='导出数据变更记录',
+    dependencies=[Depends(RequestPermission('log:change:export')), DependsRBAC],
+)
+async def export_data_changes(
+    request: Request, db: CurrentSession, obj: StartExportParam
+) -> ResponseSchemaModel[GetExportJobDetail]:
+    # 小批量当场生成完才返回（status=2，前端直接下载）；大批量返回排队（status=0），生成完发站内消息
+    data = await export_service.start(db=db, request=request, spec=DATA_CHANGE_EXPORT, obj=obj)
+    return response_base.success(data=data)
 
 
 @router.get(

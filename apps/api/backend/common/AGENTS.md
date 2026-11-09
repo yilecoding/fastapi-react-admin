@@ -34,12 +34,13 @@ pyodbc.ProgrammingError: ('42000', "... String or binary data would be
 truncated in table 'fba_test.dbo.sys_dept', column 'leader' ...")
 ```
 
-🔴 **这个洞不能靠全局异常处理器兜。** 加了
+🔴 **这个洞原来不能靠全局异常处理器兜。** 加了
 （`exception_handler.py: dbapi_exception_handler`，把三种方言的「值太长」
-翻译成 400），但它**盖不住 INSERT/UPDATE 这条路**：`get_db_transaction` 是在
-`begin()` 里 `yield` 的，commit 发生在**依赖收尾**，那时已经出了异常处理器的
-覆盖范围 —— 实测加了处理器之后冒出来的变成 `ContextDoesNotExistError`
-（连 starlette-context 都拆了）。**写入侧的闸门只能在 schema 那层。**
+翻译成 400），但它当时**盖不住 INSERT/UPDATE 这条路**：commit 发生在**依赖收尾**，
+那时已经出了异常处理器的覆盖范围 —— 实测冒出来的是 `ContextDoesNotExistError`
+（连 starlette-context 都拆了）。这个根因后来查清并修了（下面「写接口的事务要在响应之前提交」），
+提交时的错现在会走异常处理器；**schema 那层的闸门照样要**：它报的是字段名 + 上限，
+数据库报的是一句裸 SQL 错误。
 
 🔴 **也不逐个字段写 `max_length=32`。** 实测数过：全仓 **88 个**带长度的字符串列，
 Create/Update 系列里缺 `max_length` 的可写字符串字段 **327 处**（约 50 个不同
@@ -73,6 +74,25 @@ dict-data / dict-type / notice / config），三个插件端点实测都给出�
 约定对得上。第二条的判据**不能写成「至少有一个字段对得上」** —— 第一版就是
 那样，而突变（把 menu 的 schema 绑到 `Role`）照旧全绿，因为两个模型都有
 `name` / `remark` 这种同名带长度的列。按模型名核对才区分得开。
+
+## 🔴 写接口的事务要在响应之前提交（`CurrentSessionTransaction` 的 `scope='function'`）
+
+**症状**：E2E「建一个用户 → 马上用它登录」偶尔「用户名或密码有误」；单独重跑又过。
+实测（E2E 后端 + 私有库，脚本连发「`POST /sys/users` → 立刻 `POST /auth/login`」）**30 次失败 6 次**。
+更糟的一面：提交时出错（唯一约束、审计表写入失败…），客户端收到的是 `{"code":200,"msg":"请求成功"}`，而数据已经回滚了。
+
+**根因**：FastAPI 0.141 的 `yield` 依赖默认 `scope='request'`，收尾在 `await response(scope, receive, send)` **之后**
+（FastAPI 自己的路由层：`request_stack` 包在发响应那一步外面）。`get_db_transaction` 的提交就在收尾里 ——
+响应先发出去，事务后提交。数据变更审计（#260）让提交多做了几次查询，窗口更宽了。
+
+**修法**：`Depends(get_db_transaction, scope='function')`：在路由函数收尾时提交，响应等它；提交出的错走全局异常处理器（500 + 原因）。
+只改了带事务的那个；`CurrentSession`（不自动提交）和流式接口（AI 对话、插件下载自己开会话）不受影响。
+
+**实测证据**：同一个脚本修后 **60 次 0 失败**。`tests/test_commit_before_response.py` 两条：用 ASGI 的 `send` 记「响应开始」的时刻，
+和这个请求自己那次 `after_commit` 比先后；在 `before_commit` 里注入异常，断言客户端收到失败、数据没存上。
+去掉 `scope='function'`：两条都红（`['response', 'commit']` · `{"code":200,"msg":"请求成功"}`）。
+
+⚠️ 新写一个「`yield` 之后还有要紧事」的依赖（提交、释放锁），先想它该在响应之前还是之后 —— 默认是**之后**。
 
 ## 分页的 Select 里不能有 m2m join
 
@@ -143,3 +163,22 @@ AI 工具的参数报错也走它。顺带：dev 下 422 文案回显的输入�
 
 **实测证据**：`plugin/ai/tests/test_ai_turn_persistence.py::TestArgumentErrorsAreReadable`（pattern 错误出来是 `code 字符串应匹配模式…`、
 不含 `errors.pydantic.dev`）。
+
+## 🔴 操作日志：每次发版 / 重启都丢最后一批（上游 #1283 同类）
+
+**症状**：重启后去翻操作日志，重启前最后几十秒的操作**一条都没有**；没有任何报错。
+
+**根因**：消费者（`common/queue.py: batch_consume`）攒满 100 条或等满 `OPERA_LOG_QUEUE_TIMEOUT`（60 秒）才写一次库，
+手里常年攥着一批「已经出队、还没写」的。关停时 `registrar.py` 直接 `cancel()` 它，那一批连同队列里剩下的一起丢掉。
+另一头：入队原来是 `await queue.put()`，入库持续失败把队列塞满后，**业务请求跟着挂住**。
+
+**修法**：
+- 停消费者走 `OperaLogMiddleware.stop_consumer()`：置位 `stop_event`，消费者把手里的和队列里的写完再退出；
+  最多等 `OPERA_LOG_QUEUE_DRAIN_TIMEOUT`（5 秒，要短于 `docker stop` 的 10 秒宽限期），超时才放弃并告警
+- 入队走 `OperaLogMiddleware.enqueue()`：`put_nowait`，满了丢这一条，告警按分钟合并、带上丢了几条
+
+❌ 不要把关停改回 `cancel()`，也不要在请求路径上 `await put()`。
+
+**实测证据**（改之前的代码）：入队 3 条后按原来的方式取消，写进去 **0 条**、队列也空了；`maxsize=1` 的满队列上
+`await put()`，1 秒内不返回。修后见 `backend/tests/test_opera_log_queue.py`（已经出队的那批、超过一批的积压、
+空闲时 2.5 秒内停下、入库卡死时按超时放弃）。
