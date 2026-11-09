@@ -235,12 +235,14 @@ class OAuth2Service:
             user_id = state_info.get('user_id')
             if not user_id:
                 raise errors.ForbiddenError(msg=t('error.oauth2.illegal_state_operation'))
-            await user_social_service.binding_with_oauth2(
-                db=db,
-                user_id=user_id,
-                sid=str(sid),
-                source=social,
-            )
+            # 第三方回调过来的请求不带登录态：操作人从 state 里取（数据变更记录要写成「他自己绑的」）
+            with data_change_source('oauth2', social.value, actor_id=int(user_id)):
+                await user_social_service.binding_with_oauth2(
+                    db=db,
+                    user_id=user_id,
+                    sid=str(sid),
+                    source=social,
+                )
             return None
 
         # 登录流程

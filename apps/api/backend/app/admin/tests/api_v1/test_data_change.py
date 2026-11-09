@@ -18,7 +18,7 @@ import sqlalchemy as sa
 
 from sqlalchemy.orm import Session
 
-from backend.app.admin.model import DataChange, Role, User
+from backend.app.admin.model import DataChange, Role, User, UserMfa
 from backend.common.data_change import capture, registry
 from backend.tests.utils.db import sync_test_db_url
 from backend.utils.timezone import timezone
@@ -479,7 +479,9 @@ def test_every_label_is_translated_and_whitelisted() -> None:
         labels |= {spec.title, *spec.labels.values()}
         for values in spec.enums.values():
             labels |= set(values.values())
-    labels |= {s.label for s in registry.SETS.values()}
+        labels |= {label for _, label in registry.folded_fields(spec.entity)}
+    for child in registry.CHILDREN.values():
+        labels |= set(child.states)
 
     root = _repo_root() / 'packages/i18n/src'
     en = json.loads((root / 'locales/en-US.json').read_text(encoding='utf-8'))
@@ -490,7 +492,15 @@ def test_every_label_is_translated_and_whitelisted() -> None:
     assert not sorted(labels - whitelist), '这些标签 server-data-keys.json 里没有'
 
 
-_AUDITED_MODELS = ('User', 'Dept', 'Role', 'Menu', 'Config')
+def _audited_models() -> list[str]:
+    """登记成对象的映射类名（语句式 `insert(User)` 拿不到主键）。
+
+    关联表 / 子表的语句式 INSERT 拦得到（父 ID 在参数里），不在这份里
+    """
+    from backend.common.model import MappedBase
+
+    tables = {spec.table.name for spec in registry.ENTITIES.values()}
+    return sorted(m.class_.__name__ for m in MappedBase.registry.mappers if m.local_table.name in tables)
 
 
 def test_production_code_has_no_write_the_capture_cannot_see() -> None:
@@ -502,7 +512,9 @@ def test_production_code_has_no_write_the_capture_cannot_see() -> None:
     backend = _repo_root() / 'apps/api/backend'
     tables = '|'.join(sorted(registry.AUDITED_TABLES))
     text_dml = re.compile(rf"text\(\s*[rf]?['\"]\s*(?:UPDATE|DELETE|INSERT)\b[^'\"]*\b(?:{tables})\b", re.IGNORECASE)
-    stmt_insert = re.compile(rf'\binsert\(\s*(?:{"|".join(_AUDITED_MODELS)})\b')
+    models = _audited_models()
+    assert {'User', 'Config'} <= set(models)
+    stmt_insert = re.compile(rf'\binsert\(\s*(?:{"|".join(models)})\b')
     offenders = []
     for path in backend.rglob('*.py'):
         rel = path.relative_to(backend).as_posix()
@@ -522,6 +534,8 @@ def test_production_code_has_no_write_the_capture_cannot_see() -> None:
         'app/admin/crud/crud_role.py',
         'app/admin/crud/crud_menu.py',
         'plugin/config/crud/crud_config.py',
+        'plugin/oauth2/crud/crud_user_social.py',
+        'app/admin/service/mfa_service.py',
     ):
         body = (backend / rel).read_text(encoding='utf-8')
         for bad in ('pk_mode=False', '.connection()', 'bulk_create_models', 'text('):
@@ -767,3 +781,151 @@ def test_celery_tasks_record_their_changes_as_scheduled_tasks() -> None:
     finally:
         loop.close()
     assert origin.source == 'task' and origin.source_ref == 'api_v1.probe'
+
+
+# ── 二期：一对一子表（二次验证）· 逻辑删除的关联表（第三方账号）────────────────
+# 接口流程（开启 / 关闭 / 重置 / 重新生成恢复码 / 登录时绑定）在 `test_mfa.py::TestChangeRecords`，
+# 绑定 / 解绑在 `plugin/oauth2/tests/test_social_change_records.py`。这里只测拦截层自己的分支。
+
+
+def mfa_changes(uid: int) -> list[dict[str, Any]]:
+    """这个人名下和二次验证有关的记录（临时用户自己还有一条「新建」，别的种子用户可能有别的测试留下的记录）"""
+    return [r for r in changes_of('user', uid) if any(c['field'].startswith('mfa') for c in r['changes'])]
+
+
+@pytest.fixture
+def mfa_rows(temp_user: str) -> Iterator[list[int]]:
+    """两个人各一行二次验证（直接走连接写库，不经过会话 —— 这里测的是拦截层，不是开启流程）。
+    不用 admin：Swagger 调试口拒绝开了二次验证的账号"""
+    with engine().begin() as conn:
+        other = conn.execute(
+            sa
+            .select(User.id)
+            .where(User.username != 'admin', User.id != int(temp_user), User.deleted == 0)
+            .order_by(User.id)
+            .limit(1)
+        ).scalar_one()
+        users = [int(temp_user), other]
+        conn.execute(sa.delete(UserMfa.__table__).where(UserMfa.user_id.in_(users)))
+        conn.execute(
+            sa.insert(UserMfa.__table__),
+            [
+                {
+                    'id': 910000000000002901 + i,
+                    'user_id': uid,
+                    'secret_cipher': '00',
+                    'recovery_hashes': json.dumps([{'h': f'h{i}', 'used': None}]),
+                    'last_step': 1,
+                    'enabled_time': timezone.now(),
+                    'created_time': timezone.now(),
+                }
+                for i, uid in enumerate(users)
+            ],
+        )
+    yield users
+    with engine().begin() as conn:
+        conn.execute(sa.delete(UserMfa.__table__).where(UserMfa.user_id.in_(users)))
+
+
+def test_a_child_table_delete_over_the_limit_is_one_summary(
+    mfa_rows: list[int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(capture, 'BULK_LIMIT', 1)
+    with Session(engine()) as s:
+        s.execute(sa.delete(UserMfa).where(UserMfa.user_id.in_(mfa_rows)))
+        s.commit()
+    with engine().connect() as conn:
+        (bulk,) = (
+            conn
+            .execute(
+                sa.select(DataChange.__table__).where(DataChange.entity_type == 'user', DataChange.action == 'bulk')
+            )
+            .mappings()
+            .all()
+        )
+    assert bulk['entity_label'] == '2'
+    # 没有逐个人记
+    assert mfa_changes(mfa_rows[0]) == [] and mfa_changes(mfa_rows[1]) == []
+    assert bulk['changes'] == [{'field': 'mfa', 'label': '二次验证', 'varies': True}]
+
+
+def test_writing_only_ignored_child_columns_skips_the_capture(
+    mfa_rows: list[int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """每次用动态码登录都写 `last_step`：既不该出记录，也不该白查两次（ORM 改属性、语句 UPDATE 两条路都是）"""
+    calls: list[str] = []
+    real = capture._snapshot
+
+    def counting(session: Session, spec: Any, parents: list[Any]) -> dict[Any, Any]:
+        calls.append(spec.table.name)
+        return real(session, spec, parents)
+
+    monkeypatch.setattr(capture, '_snapshot', counting)
+    uid = mfa_rows[0]
+    with Session(engine()) as s:
+        row = s.scalars(sa.select(UserMfa).where(UserMfa.user_id == uid)).one()
+        row.last_step = 99
+        s.commit()
+        s.execute(sa.update(UserMfa).where(UserMfa.user_id == uid).values(last_step=100))
+        s.commit()
+    assert calls == []
+    assert mfa_changes(uid) == []
+
+    # 对照：改到别的列就会抓（不然上面那条「不查」可能只是什么都没装上）
+    with Session(engine()) as s:
+        row = s.scalars(sa.select(UserMfa).where(UserMfa.user_id == uid)).one()
+        row.recovery_hashes = json.dumps([{'h': 'new', 'used': None}])
+        s.commit()
+    assert calls
+    (record,) = mfa_changes(uid)
+    assert record['changes'] == [{'field': 'mfa_recovery_codes', 'label': '恢复码', 'secret': True}]
+    assert '"new"' not in json.dumps(record['changes'])
+
+
+def test_using_a_recovery_code_is_not_a_change(mfa_rows: list[int]) -> None:
+    """登录时用掉一个恢复码只是标上「用过」：比的是这一批是哪几个，不是整段 JSON"""
+    uid = mfa_rows[0]
+    with Session(engine()) as s:
+        row = s.scalars(sa.select(UserMfa).where(UserMfa.user_id == uid)).one()
+        row.recovery_hashes = json.dumps([{'h': 'h0', 'used': '2026-11-09T10:00:00+08:00'}])
+        s.commit()
+    assert mfa_changes(uid) == []
+
+
+@pytest.mark.parametrize(
+    ('kwargs', 'message'),
+    [
+        ({'ignore': {'nope'}}, '没有这些列'),
+        ({'ignore': {'user_id'}}, '父对象列不能忽略'),
+        ({'parent': 'nope'}, '没有父对象列'),
+    ],
+)
+def test_child_registration_refuses_bad_columns(kwargs: dict[str, Any], message: str) -> None:
+    base: dict[str, Any] = {
+        'entity': 'user',
+        'parent': 'user_id',
+        'field': 'probe',
+        'label': '探针',
+        'states': ('无', '有'),
+    }
+    with pytest.raises(ValueError, match=message):
+        registry.register_audited_child(_table('user_id', 'flag'), **{**base, **kwargs})
+    assert 'pytest_dc_probe' not in registry.CHILDREN
+
+
+def test_a_folded_field_cannot_shadow_a_column(monkeypatch: pytest.MonkeyPatch) -> None:
+    """子表 / 关联表的字段名和对象的普通列撞了：记录里两条变化同名，前端按字段名筛选时分不开"""
+    registry.load_data_change_extensions()
+    probe = registry.AuditedChild(
+        table=_table('user_id'),
+        entity='user',
+        parent_column='user_id',
+        field='nickname',
+        label='探针',
+        states=('无', '有'),
+        values={},
+        ignore=frozenset(),
+    )
+    monkeypatch.setitem(registry.CHILDREN, 'pytest_dc_probe', probe)
+    with pytest.raises(ValueError, match=r'user\.nickname 重名'):
+        registry._check_folded()
