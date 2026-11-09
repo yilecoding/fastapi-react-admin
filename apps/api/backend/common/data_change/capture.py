@@ -51,7 +51,7 @@ import sqlalchemy as sa
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
-from backend.common.data_change import registry
+from backend.common.data_change import chain, registry
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -785,7 +785,6 @@ def _resolve_labels(session: Session, records: list[_Record]) -> None:
 
 def _write(session: Session, records: list[_Record]) -> None:
     from backend.common.model import MappedBase
-    from backend.utils.timezone import timezone
 
     table = MappedBase.metadata.tables['sys_data_change']
     actor_ids = sorted({r.origin.actor_id for r in records if r.origin.actor_id is not None})
@@ -797,7 +796,6 @@ def _write(session: Session, records: list[_Record]) -> None:
                 session, sa.select(user_table.c.id, user_table.c.username).where(user_table.c.id.in_(actor_ids))
             ):
                 actors[r['id']] = r['username']
-    now = timezone.now()
     rows = []
     for r in records:
         fields = sorted({c['field'] for c in r.changes})
@@ -814,9 +812,10 @@ def _write(session: Session, records: list[_Record]) -> None:
             'source': r.origin.source,
             'source_ref': None if r.origin.source_ref is None else r.origin.source_ref[:128],
             'ip': r.origin.ip,
-            'created_time': now,
         })
     with _busy(session):
+        # 编号、签名、定 id 和 created_time（拿到链头那把锁之后才取时间）。见 chain.py
+        chain.link(session, rows)
         session.execute(sa.insert(table), rows)
 
 
