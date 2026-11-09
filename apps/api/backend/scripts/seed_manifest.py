@@ -64,7 +64,14 @@ def seed_files() -> list[Path]:
 
 
 def fingerprints() -> dict[str, str]:
-    return {p.relative_to(BASE_PATH).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in seed_files()}
+    """🔴 先把 CRLF 归一成 LF 再算。Windows 上 `core.autocrlf=true` 检出的种子文件是 CRLF，
+    按原始字节算的话**每一个**都「内容变了」—— 实测本机这条守卫 30 个文件全红，而一行都没改过。
+    清单里的值是在 LF 上算的，归一之后两边一致，清单不用动
+    """
+    return {
+        p.relative_to(BASE_PATH).as_posix(): hashlib.sha256(p.read_bytes().replace(b'\r\n', b'\n')).hexdigest()
+        for p in seed_files()
+    }
 
 
 def load_manifest() -> dict[str, str]:

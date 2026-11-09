@@ -3,23 +3,55 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
 
 import { aiKeys, messagesQuery, streamChat, useRenameConversation, type AgentEvent } from './api'
-import type { Bubble, ConfirmOutcome, ToolTrace } from './message'
+import type { Bubble, ConfirmCard, ConfirmOutcome, ToolTrace } from './message'
 
-/** 解析落库的执行轨迹。坏数据一律当成"没有轨迹"，不能让它把整条历史渲染崩掉 */
-function parseTraces(raw: string | null): ToolTrace[] | undefined {
-  if (!raw) return undefined
+/** 报错在气泡里的样子。流式时和从历史还原时必须是同一个样子，否则刷新一下报错就「变了」 */
+const errorLine = (message: string) => `\n\n> ⚠️ ${message}`
+
+/**
+ * 解析落库的 `tool_calls`：这一轮界面上出现过的东西（后端 `chat_service._load_items`）。
+ * 没有 `kind` 的是执行轨迹（老数据就是这个形状）；`confirm` 是确认卡片；`error` 是这一轮的报错。
+ *
+ * 🔴 卡片和报错必须从这里还原。原来只存轨迹，流一结束前端重拉历史，确认卡片当场被冲掉 ——
+ * 网页上的 AI 写操作**一个都确认不了**（实测）。坏数据一律当成「没有」，不能把整条历史渲染崩掉
+ */
+function parseTurnItems(raw: string | null): { tools?: ToolTrace[]; confirms?: ConfirmCard[]; errors: string[] } {
+  const out: { tools?: ToolTrace[]; confirms?: ConfirmCard[]; errors: string[] } = { errors: [] }
+  if (!raw) return out
+  let parsed: unknown
   try {
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return undefined
-    return parsed.map((trace) => ({
-      name: String(trace.name ?? ''),
-      ok: !!trace.ok,
-      perm: trace.perm ?? null,
-      durationMs: typeof trace.duration_ms === 'number' ? trace.duration_ms : null,
-    }))
+    parsed = JSON.parse(raw)
   } catch {
-    return undefined
+    return out
   }
+  if (!Array.isArray(parsed)) return out
+  const tools: ToolTrace[] = []
+  const confirms: ConfirmCard[] = []
+  for (const item of parsed) {
+    if (!item || typeof item !== 'object') continue
+    if (item.kind === 'confirm') {
+      if (!item.token) continue
+      confirms.push({
+        token: String(item.token),
+        name: String(item.name ?? ''),
+        preview: String(item.preview ?? ''),
+        outcome: item.outcome === 'done' || item.outcome === 'failed' ? item.outcome : undefined,
+        detail: item.detail ? String(item.detail) : undefined,
+      })
+    } else if (item.kind === 'error') {
+      if (item.message) out.errors.push(String(item.message))
+    } else {
+      tools.push({
+        name: String(item.name ?? ''),
+        ok: !!item.ok,
+        perm: item.perm ?? null,
+        durationMs: typeof item.duration_ms === 'number' ? item.duration_ms : null,
+      })
+    }
+  }
+  if (tools.length) out.tools = tools
+  if (confirms.length) out.confirms = confirms
+  return out
 }
 
 /** 会话默认标题。首条消息发出后会被替换掉，所以它只在"刚建好还没说话"那一瞬出现 */
@@ -78,14 +110,20 @@ export function useChatSession(
     // 用户刚打的那句话和已经出来的半截回答会当场消失，而且只在
     // "首条消息"这一条路径上发生，极难复现
     if (inFlight.current) return
-    setBubbles(
-      historyQuery.data.map((m) => ({
-        id: m.id,
-        role: m.role === 'user' ? 'user' : 'assistant',
-        content: m.content,
-        tools: parseTraces(m.tool_calls),
-      })),
-    )
+    setBubbles((prev) => {
+      // 本地已经有结论的卡片（刚点完确认）以本地为准：「已过期」只有前端知道，后端找不到令牌也就写不回去
+      const local = new Map(prev.flatMap((b) => b.confirms ?? []).map((c) => [c.token, c]))
+      return historyQuery.data.map((m) => {
+        const { tools, confirms, errors } = parseTurnItems(m.tool_calls)
+        return {
+          id: m.id,
+          role: m.role === 'user' ? 'user' : 'assistant',
+          content: m.content + errors.map(errorLine).join(''),
+          tools,
+          confirms: confirms?.map((c) => (c.outcome || !local.get(c.token)?.outcome ? c : { ...c, ...local.get(c.token) })),
+        }
+      })
+    })
   }, [historyQuery.data])
 
   const applyEvent = React.useCallback((event: AgentEvent) => {
@@ -109,12 +147,12 @@ export function useChatSession(
         case 'confirm_required':
           next[next.length - 1] = {
             ...last,
-            confirm: { token: event.token, name: event.name, preview: event.preview },
+            confirms: [...(last.confirms ?? []), { token: event.token, name: event.name, preview: event.preview }],
           }
           break
         case 'error':
           // 失败必须是可见状态，不是「没下文」（硬纪律 9）
-          next[next.length - 1] = { ...last, content: `${last.content}\n\n> ⚠️ ${event.message}`, pending: false }
+          next[next.length - 1] = { ...last, content: last.content + errorLine(event.message), pending: false }
           break
         case 'done':
           next[next.length - 1] = { ...last, pending: false }
@@ -165,26 +203,34 @@ export function useChatSession(
   // 成功 = 工具结果 ok；失败 = 工具结果不 ok、流里报了错；过期 = 令牌用过了或过期了（不一定没执行）。
   // 🔴 请求没送到（断网 / HTTP 层就被拒了：401 / 429 / 网关 5xx）不记：令牌还没动过，按钮要留着让人再点。
   // 原来一律记成「没执行成功」、按钮也没了，令牌明明还能用，只能让 AI 重新发起一次
-  const settle = React.useCallback((token: string, outcome: ConfirmOutcome) => {
+  const settle = React.useCallback((token: string, outcome: ConfirmOutcome, detail?: string) => {
     setBubbles((prev) =>
-      prev.map((b) => (b.confirm?.token === token ? { ...b, confirm: { ...b.confirm, outcome } } : b)),
+      prev.map((b) =>
+        b.confirms?.some((c) => c.token === token)
+          ? { ...b, confirms: b.confirms.map((c) => (c.token === token ? { ...c, outcome, detail } : c)) }
+          : b,
+      ),
     )
   }, [])
   const confirmTool = useMutation({
     mutationFn: async (token: string) => {
       let outcome: ConfirmOutcome | undefined
+      let detail: string | undefined
       await streamChat('/api/v1/ai/chat/tools/confirm', { token }, (event) => {
-        if (event.type === 'tool_result') outcome = event.ok ? 'done' : 'failed'
+        if (event.type === 'tool_result') {
+          outcome = event.ok ? 'done' : 'failed'
+          detail = event.detail ?? undefined
+        }
         // `streamChat` 把 HTTP 层的失败也报成 error 事件，code 是状态码 —— 那是没送到，不是结论
         if (event.type === 'error' && !/^\d+$/.test(event.code ?? '')) {
           outcome = event.code === 'confirm_expired' ? 'expired' : 'failed'
         }
         applyEvent(event)
       })
-      return outcome
+      return { outcome, detail }
     },
-    onSuccess: (outcome, token) => {
-      if (outcome) settle(token, outcome)
+    onSuccess: ({ outcome, detail }, token) => {
+      if (outcome) settle(token, outcome, detail)
     },
     // 连接断了：可能根本没送到，也可能执行到一半断开。再点一次是安全的 —— 令牌一次性，执行过的只会回「已经用过」
     onError: () =>
