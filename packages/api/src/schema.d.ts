@@ -3011,6 +3011,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/logs/changes/integrity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 校验数据变更记录有没有被改过、删过（防篡改链） */
+        get: operations["verify_data_changes_api_v1_logs_changes_integrity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/logs/changes/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 导出数据变更记录 */
+        post: operations["export_data_changes_api_v1_logs_changes_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/logs/changes": {
         parameters: {
             query?: never;
@@ -5550,6 +5584,34 @@ export interface components {
              */
             label: string;
         };
+        /** DataChangeIntegrityProblem */
+        DataChangeIntegrityProblem: {
+            /**
+             * Kind
+             * @description modified 内容被改过 · missing 中间少了几行 · tail 最新的几行没了或链头被改 · key 密钥对不上 · unchained 绕过应用写进来的行 · head 链头那一行不见了
+             */
+            kind: string;
+            /**
+             * Seq
+             * @description 序号（missing / tail：缺的那一段的起点）
+             */
+            seq?: number | null;
+            /**
+             * Seq To
+             * @description missing / tail：缺的那一段的终点（含）
+             */
+            seq_to?: number | null;
+            /**
+             * Record Id
+             * @description 记录 ID
+             */
+            record_id?: string | null;
+            /**
+             * Created Time
+             * @description 记录时间
+             */
+            created_time?: string | null;
+        };
         /** DataChangeOption */
         DataChangeOption: {
             /**
@@ -6283,6 +6345,52 @@ export interface components {
              * @description 时间
              */
             created_time: string;
+        };
+        /**
+         * GetDataChangeIntegrity
+         * @description 防篡改链的校验结果（`common/data_change/chain.py: verify`）
+         */
+        GetDataChangeIntegrity: {
+            /**
+             * Ok
+             * @description 没发现问题
+             */
+            ok: boolean;
+            /**
+             * Keyed
+             * @description 配了 DATA_CHANGE_CHAIN_KEY（没配时只防手滑改库）
+             */
+            keyed: boolean;
+            /**
+             * Checked
+             * @description 校验了几行
+             */
+            checked: number;
+            /**
+             * Head Seq
+             * @description 链头序号
+             */
+            head_seq: number;
+            /**
+             * Anchor Seq
+             * @description 锚点序号（保留期删到了这里）
+             */
+            anchor_seq: number;
+            /**
+             * Other Key
+             * @description 换密钥之前签的、校验不了的行数
+             */
+            other_key: number;
+            /**
+             * Problem Count
+             * @description 问题总数
+             */
+            problem_count: number;
+            /**
+             * Problems
+             * @description 问题（最多列 50 条）
+             */
+            problems: components["schemas"]["DataChangeIntegrityProblem"][];
         };
         /**
          * GetDataChangeMeta
@@ -11418,6 +11526,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["GetCurrentUserInfoWithRelationDetail"];
+        };
+        /** ResponseSchemaModel[GetDataChangeIntegrity] */
+        ResponseSchemaModel_GetDataChangeIntegrity_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetDataChangeIntegrity"];
         };
         /** ResponseSchemaModel[GetDataChangeMeta] */
         ResponseSchemaModel_GetDataChangeMeta_: {
@@ -22085,6 +22209,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseSchemaModel_GetDataChangeMeta_"];
+                };
+            };
+        };
+    };
+    verify_data_changes_api_v1_logs_changes_integrity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetDataChangeIntegrity_"];
+                };
+            };
+        };
+    };
+    export_data_changes_api_v1_logs_changes_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartExportParam"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetExportJobDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
