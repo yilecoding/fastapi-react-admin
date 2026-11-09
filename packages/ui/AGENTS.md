@@ -109,6 +109,12 @@ vite 解析 `exports` 时只取数组里的第一项、不会回退。**别指�
 实测：叫 `calendar-nav.ts` 时 `pnpm ui:registry` 生成了 `"registryDependencies": ["button", "calendar-nav", …]`，
 改名后变成 `files` 里多一项 `src/components/calendar-state.ts`。
 
+⚠️ **也不要直接引别的组件的 `-state.ts`**：生成器只把**自己名下**的 `-state` 归进 `files`，
+别人的照样当成一个条目。实测（2026-11-09）：`datetime-picker.tsx` 写
+`from "./time-picker-state"` 时生成了 `"registryDependencies": [… "time-picker", "time-picker-state", …]`，
+后一个不存在。修法是让主文件转出（`time-picker.tsx` 里 `export { joinTime, … } from "./time-picker-state"`），
+别的组件从 `@admin/ui/components/time-picker` 拿。
+
 ## 🔴 「demo 里的代码」也会教错人 —— 它是要被抄走的
 
 沙箱的代码块存在的意义就是「抄走就能用」，所以**写错的 demo 比没有 demo 更糟**。
@@ -287,6 +293,59 @@ Base UI 拿 `TooltipTrigger` 渲染出来的那个元素当**定位参照**。`d
 
 **实测**（2026-11-09）：中文下表头「2026年 11月」、星期「一 二 三 四 五 六 日」、今天那格读屏
 「今天，2026年11月9日 星期一」；`changeLanguage('en-US')` 后不用刷新变成「Mar 2032」·「Su Mo … Sa」。
+
+### 🔴 区间：别用 react-day-picker 算出来的区间，只用它给的 `triggerDate`（#266）
+
+**症状**：区间已经选好 `10-01 ~ 10-10`，再点 `10-20` 得到 `10-01 ~ 10-20`（把原区间拉长了），
+而不是从 `10-20` 重新开始；只点了第一下，值就已经是 `11-03 ~ 11-03`，这时关掉浮层，
+半截选择就留下来了。
+
+**根因**：这是 react-day-picker `mode="range"` 自己的规则 —— 第一下就给出 `from === to` 的完整区间，
+选好之后再点是在原区间上调整端点。Element Plus / antdv 的规则是「两下一组，选好再点就重新开始」。
+（它的 `resetOnSelect` 开关这里没用，没实测过它管到哪一步 —— 草稿自己维护之后用不上。）
+
+**修法**：`onSelect` 的第一个参数不要，只取第二个参数 `triggerDate`，自己维护
+`{from, to, pending}` 草稿（`datetime-picker-state.ts` 的 `pickRangeDay`，有单测）；
+悬停预览用 `onDayMouseEnter` 算一个排好前后的区间塞回 `selected`。值只在两端都有了才提交，
+关浮层（点外面 / Esc）丢掉草稿。
+
+**实测**：改之前的两个现象是 #266 里记的（2026-11-09 本地 dev）；改之后
+`apps/web/e2e/tests/date-picker.spec.ts` 的「第一下不提交；选好再点是重新开始」那条：
+第一下后值仍是 `null`，选好再点 20 之后开始框是 `…-20`、结束框为空，Esc 后值还是原来那段。
+
+### ⚠️ 面板里的时间列必须绝对定位，悬停预览不能用 `bg-muted/50`
+
+两条都是做 #266 P2/P3 时在浏览器里看出来的，代码层面都「没错」：
+
+- **时间三列按内容撑开会把浮层顶出视口。** 小时 24 行、分秒各 60 行，放在日历旁边的
+  flex 列里（第一版给的是 `flex-1`），实测浮层翻到了页面最上面、时间列的下半截看不到。修法：时间那一栏 `relative`，
+  三列 `absolute inset-x-0 top-14 bottom-0`，高度只跟日历走（`datetime-picker.tsx` 单值那段）
+- **`--muted` 的亮度是 0.97**，区间中段本来就是 `bg-muted`；预览想「淡一档」写成 `bg-muted/50`，
+  实测计算值 `oklab(0.97 0 0 / 0.5)`，在白底上完全看不出来。预览改用 `bg-primary/10`
+
+### 🔴 可以直接敲的触发器（`picker-field.tsx`）：点输入框本身会被当成「点在浮层外面」
+
+**症状**：面板开着时再点一下输入框（比如想把光标挪到年份上改字），面板先关再开，闪一下；
+草稿也跟着被重置。
+
+**根因**：输入框不能是 `PopoverTrigger`（那是个按钮，点它是切换开关，没法边敲边看面板），
+所以 `PickerField` 不用 Trigger，靠 `PopoverContent` 的 `anchor` 定位到整个输入框上。
+没有 Trigger 时，Base UI 只认浮层自己的 DOM 是「里面」，输入框算外面，按下鼠标就发
+`onOpenChange(false, {reason: 'outside-press'})`，抬起时 `onClick` 又把它打开。
+
+**修法**：`onOpenChange` 里看 `details.event.target`，落在输入框那个盒子里就不关。
+另外两件同源的事：面板打开时焦点要留在输入框里（`initialFocus={false}`，按 ↓ 才进面板），
+Tab 离开时自己关面板（焦点从来不在面板里，Base UI 的「焦点离开就关」管不到）。
+
+**实测**（2026-11-09，`@base-ui/react@1.7.0`，真实鼠标点两下输入框，MutationObserver 记面板的
+`data-open`）：去掉那行判断时记到「closing → open」两次变化；加回去后零次变化，面板一直开着。
+
+### 浮层里可以再套一个浮层（区间里的时间选择）
+
+带时间的区间面板底部，开始 / 结束时间各是一个 `TimePicker`（它自己也是 Popover）。
+Base UI 的嵌套浮层是对的：点里面那层不会被外面那层当成「点外面」，里面那层「确定」后
+只关自己。实测（`@base-ui/react@1.7.0`，真实鼠标点击）：点开始时间 → 选 05 时 → 里层「确定」，
+里层关闭、外层 `data-open` 还在、开始时间变成 `05:00:00`；E2E 里有同一条用例。
 
 ### 🔴 `line-clamp-*` 和 `block` 会互相打架，输的那个只剩「齐字切断」
 

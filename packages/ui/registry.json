@@ -344,19 +344,24 @@
       "name": "datetime-picker",
       "type": "registry:ui",
       "dependencies": [
-        "@tabler/icons-react",
-        "react-day-picker"
+        "@tabler/icons-react"
       ],
       "registryDependencies": [
         "button",
         "calendar",
         "i18n",
         "input",
+        "picker-field",
         "popover",
         "separator",
+        "time-picker",
         "utils"
       ],
       "files": [
+        {
+          "path": "src/components/datetime-picker-state.ts",
+          "type": "registry:ui"
+        },
         {
           "path": "src/components/datetime-picker.tsx",
           "type": "registry:ui"
@@ -563,6 +568,24 @@
       ]
     },
     {
+      "name": "picker-field",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "i18n",
+        "popover",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/picker-field.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "popover",
       "type": "registry:ui",
       "dependencies": [
@@ -613,6 +636,7 @@
         "popover",
         "select",
         "separator",
+        "time-picker",
         "toggle-group",
         "tooltip",
         "utils"
@@ -880,6 +904,29 @@
       "files": [
         {
           "path": "src/components/textarea.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "time-picker",
+      "type": "registry:ui",
+      "dependencies": [
+        "@tabler/icons-react"
+      ],
+      "registryDependencies": [
+        "button",
+        "i18n",
+        "picker-field",
+        "utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/time-picker-state.ts",
+          "type": "registry:ui"
+        },
+        {
+          "path": "src/components/time-picker.tsx",
           "type": "registry:ui"
         }
       ]
