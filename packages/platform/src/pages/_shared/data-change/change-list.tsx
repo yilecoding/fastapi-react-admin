@@ -105,10 +105,22 @@ function ChangeValue({ change, created }: { change: DataChangeItem; created: boo
   )
 }
 
-/** 一条变更记录里的字段变化：旧值 → 新值，集合字段是 +/− 标签，敏感字段只说「改过」 */
-export function ChangeList({ record, className }: { record: DataChange; className?: string }) {
+/** 一条变更记录里的字段变化：旧值 → 新值，集合字段是 +/− 标签，敏感字段只说「改过」。
+ *
+ *  给了 `onFieldClick`，字段名就是个按钮（单字段历史：点了只看这个字段）；给了 `onlyField` 就只列这一个字段 */
+export function ChangeList({
+  record,
+  className,
+  onlyField,
+  onFieldClick,
+}: {
+  record: DataChange
+  className?: string
+  onlyField?: string
+  onFieldClick?: (change: DataChangeItem) => void
+}) {
   const { t } = useTranslation()
-  const changes = record.changes ?? []
+  const changes = (record.changes ?? []).filter((c) => !onlyField || c.field === onlyField)
   if (record.action === 'delete' && changes.length === 0) {
     return <p className={cn('text-sm text-muted-foreground', className)}>{t('删除了这个对象')}</p>
   }
@@ -123,7 +135,21 @@ export function ChangeList({ record, className }: { record: DataChange; classNam
       <dl className="grid grid-cols-[max-content_minmax(0,1fr)] items-start gap-x-3 gap-y-1.5 text-sm">
         {changes.map((c) => (
           <div key={c.field} className="contents" data-testid={`change-field-${c.field}`}>
-            <dt className="text-muted-foreground">{t(c.label)}</dt>
+            <dt className="text-muted-foreground">
+              {onFieldClick ? (
+                <button
+                  type="button"
+                  className="text-start underline-offset-2 hover:text-foreground hover:underline"
+                  title={t('只看这个字段的历史')}
+                  onClick={() => onFieldClick(c)}
+                  data-testid={`field-history-${c.field}`}
+                >
+                  {t(c.label)}
+                </button>
+              ) : (
+                t(c.label)
+              )}
+            </dt>
             <dd className="min-w-0">
               <ChangeValue change={c} created={created} />
             </dd>

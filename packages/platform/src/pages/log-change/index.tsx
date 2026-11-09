@@ -10,11 +10,20 @@ import { QueryBar, countActive, type FilterField } from '@admin/ui/components/qu
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@admin/ui/components/sheet'
 
 import { api, type PageData } from '../../api-client/client'
+import { Can } from '../../auth/can'
+import { usePerm } from '../../auth/use-perm'
 import { PageHeader } from '../../shell/page-header'
 import { EmptyCell, TimeCell } from '../_shared/cells'
-import { type DataChange, type DataChangeMeta, dataChangeKeys, dataChangeMetaQuery } from '../_shared/data-change/api'
+import {
+  type DataChange,
+  type DataChangeItem,
+  type DataChangeMeta,
+  dataChangeKeys,
+  dataChangeMetaQuery,
+} from '../_shared/data-change/api'
 import { ACTION_LABEL, ActionPill, ChangeList } from '../_shared/data-change/change-list'
 import { ChangeMeta, useSourceLabel } from '../_shared/data-change/history-sheet'
+import { ExportButton } from '../_shared/data-io/export-button'
 import { DetailSection } from '../_shared/detail-sheet'
 import { RefreshButton, ResetButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
@@ -25,6 +34,7 @@ import { StatusPill } from '../_shared/status'
 import { useUrlColumnOrder } from '../_shared/use-column-order'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import { useQuerySearch } from '../_shared/use-query-search'
+import { IntegrityCheck } from './integrity'
 
 export type DataChangeSearch = {
   page?: number
@@ -148,6 +158,7 @@ export function LogChangePage({
     [meta.data, t]
   )
   const sourceLabel = useSourceLabel()
+  const { isSuperuser } = usePerm()
 
   const q = useQuerySearch({ fields, search, onSearchChange, refreshKey: dataChangeKeys.all, keep: ['hide', 'cols'] })
   const qs = buildQuery(q.params, search.page, search.size)
@@ -164,6 +175,22 @@ export function LogChangePage({
   const [columnVisibility, setColumnVisibility] = useUrlColumnVisibility(
     search.hide,
     React.useCallback((hide) => onSearchChange?.({ ...search, hide }), [onSearchChange, search])
+  )
+
+  /** 详情里点字段名 = 这个对象这一个字段的历史（单字段历史，条件进地址栏，能分享） */
+  const focusField = React.useCallback(
+    (r: DataChange, c: DataChangeItem) => {
+      if (!r.entity_id) return
+      setDetail(null)
+      onSearchChange?.({
+        ...search,
+        entity_type: r.entity_type,
+        entity_id: r.entity_id,
+        field: c.field,
+        page: undefined,
+      })
+    },
+    [onSearchChange, search]
   )
 
   /** 点对象名 = 只看这一个对象的记录（换条件就回到第一页） */
@@ -288,6 +315,16 @@ export function LogChangePage({
           loading={isFetching}
           actions={
             <>
+              <Can perm="log:change:export">
+                <ExportButton
+                  path="/api/v1/logs/changes/export"
+                  filters={q.params}
+                  total={data?.total}
+                  iconOnly
+                  testId="export-changes"
+                />
+              </Can>
+              {isSuperuser && <IntegrityCheck />}
               <RefreshButton busy={isFetching} onClick={list.onRetry} />
               <DataTableColumnVisibility table={table} columnLabels={COLUMN_LABELS} />
             </>
@@ -328,6 +365,7 @@ export function LogChangePage({
         record={detail}
         entityTitle={detail ? entityTitle(detail.entity_type) : ''}
         onOpenChange={(o) => !o && setDetail(null)}
+        onFieldHistory={focusField}
       />
     </PageShell>
   )
@@ -337,10 +375,12 @@ function DataChangeDetailSheet({
   record,
   entityTitle,
   onOpenChange,
+  onFieldHistory,
 }: {
   record: DataChange | null
   entityTitle: string
   onOpenChange: (o: boolean) => void
+  onFieldHistory: (record: DataChange, change: DataChangeItem) => void
 }) {
   const { t } = useTranslation()
   return (
@@ -357,7 +397,11 @@ function DataChangeDetailSheet({
             </SheetHeader>
             <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 pb-4">
               <DetailSection title={t('字段变化')}>
-                <ChangeList record={record} />
+                <ChangeList
+                  record={record}
+                  // 批量汇总行没有具体对象，看不了「这个对象的这个字段」
+                  onFieldClick={record.entity_id ? (c) => onFieldHistory(record, c) : undefined}
+                />
               </DetailSection>
               <DetailSection title={t('出处')}>
                 <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
