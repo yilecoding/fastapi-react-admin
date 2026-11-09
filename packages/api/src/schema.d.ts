@@ -7049,6 +7049,12 @@ export interface components {
              */
             login_time: string;
             /**
+             * Event
+             * @description 事件：login 登录 / locked 账号被锁 / ip_locked IP 被锁 / kicked 被强制下线
+             * @default login
+             */
+            event: string;
+            /**
              * Id
              * @description 日志 ID
              */
@@ -21812,6 +21818,8 @@ export interface operations {
                 start_time?: string | null;
                 /** @description 登录时间止 */
                 end_time?: string | null;
+                /** @description 事件：login 登录 / locked 账号被锁 / ip_locked IP 被锁 / kicked 被强制下线 */
+                event?: string | null;
                 /** @description 页码 */
                 page?: number;
                 /** @description 每页数量 */

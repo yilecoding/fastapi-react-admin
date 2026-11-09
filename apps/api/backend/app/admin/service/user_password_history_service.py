@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_user_password_history import user_password_history_dao
 from backend.app.admin.schema.user_password_history import CreateUserPasswordHistoryParam
+from backend.common.enums import LoginLogEvent
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.core.conf import settings
@@ -75,11 +76,12 @@ class UserPasswordHistoryService:
             raise errors.AuthorizationError(msg=t('error.auth.invalid_credentials'))
 
     @staticmethod
-    async def handle_ip_login_failure(ip: str) -> None:
+    async def handle_ip_login_failure(ip: str, username: str | None = None) -> None:
         """
         按 IP 累计登录失败，防跨账号密码喷洒
 
         :param ip: 请求来源 IP
+        :param username: 这次试的用户名（达到阈值那一次记进登录日志，#273）
         :return:
         """
         if settings.LOGIN_IP_LOCK_THRESHOLD == 0:
@@ -88,6 +90,16 @@ class UserPasswordHistoryService:
         count = await redis_client.incr(key)
         if count == 1:
             await redis_client.expire(key, settings.LOGIN_IP_LOCK_SECONDS)
+        if count == settings.LOGIN_IP_LOCK_THRESHOLD:
+            # 🔴 对方看到的仍是「用户名或密码有误」（check_ip_lock 不给攻击者反馈），所以**只有这一行**
+            # 让管理员知道这个 IP 被锁了。`==` 不是 `>=`：只在跨过阈值的那一次记，锁住之后的每次尝试不再记
+            await _record_lock(
+                LoginLogEvent.ip_locked,
+                key='login_event.ip_locked',
+                seconds=settings.LOGIN_IP_LOCK_SECONDS,
+                count=count,
+                username=username,
+            )
 
     @staticmethod
     async def handle_ip_login_success(ip: str) -> None:
@@ -118,12 +130,20 @@ class UserPasswordHistoryService:
         )
 
         if failure_count >= settings.USER_LOCK_THRESHOLD:
+            lock_key = f'{settings.USER_LOCK_REDIS_PREFIX}:{user_id}'
+            newly_locked = not await redis_client.exists(lock_key)
             locked_until = timezone.now() + timedelta(seconds=settings.USER_LOCK_SECONDS)
-            await redis_client.set(
-                f'{settings.USER_LOCK_REDIS_PREFIX}:{user_id}',
-                timezone.to_str(locked_until),
-                ex=settings.USER_LOCK_SECONDS,
-            )
+            await redis_client.set(lock_key, timezone.to_str(locked_until), ex=settings.USER_LOCK_SECONDS)
+            if newly_locked:
+                # #273：锁定那一刻记一行。原来只有那一次失败尝试的文案碰巧写着「账号已被锁定」，没法筛；
+                # 解锁是到期自动的（这里没有手动解锁），锁到几点写在这一行里
+                await _record_lock(
+                    LoginLogEvent.locked,
+                    key='login_event.locked',
+                    seconds=settings.USER_LOCK_SECONDS,
+                    count=failure_count,
+                    user_id=user_id,
+                )
             raise errors.AuthorizationError(msg=t('error.auth.too_many_failed_attempts'))
 
     @staticmethod
@@ -175,6 +195,21 @@ class UserPasswordHistoryService:
         :return:
         """
         await user_password_history_dao.create(db, obj)
+
+
+async def _record_lock(
+    event: str, *, key: str, seconds: int, count: int, user_id: int | None = None, username: str | None = None
+) -> None:
+    """锁定（账号 / IP）那一刻记进登录日志。IP / 设备取这次请求的 —— 正是在试密码的那一方"""
+    from backend.app.admin.service.login_log_service import login_log_service
+
+    until = timezone.now() + timedelta(seconds=seconds)
+    await login_log_service.record_event(
+        event=event,
+        msg=t(key, count=count, minutes=math.ceil(seconds / 60), until=until.strftime('%H:%M')),
+        user_id=user_id,
+        username=username,
+    )
 
 
 password_security_service: UserPasswordHistoryService = UserPasswordHistoryService()
