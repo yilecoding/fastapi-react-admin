@@ -182,12 +182,15 @@ export function LogChangePage({
     (r: DataChange, c: DataChangeItem) => {
       if (!r.entity_id) return
       setDetail(null)
+      // 🔴 只留对象 + 字段，别的筛选条件（trace_id、动作、时间段…）一律清掉：带着它们的话「这个字段的历史」
+      // 被悄悄缩成原来那个筛选范围里的一两条，分享出去的链接也带着（评审抓到的）。列显隐 / 顺序 / 每页条数是视图状态，留着
       onSearchChange?.({
-        ...search,
+        size: search.size,
+        hide: search.hide,
+        cols: search.cols,
         entity_type: r.entity_type,
         entity_id: r.entity_id,
         field: c.field,
-        page: undefined,
       })
     },
     [onSearchChange, search]

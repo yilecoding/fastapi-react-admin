@@ -65,8 +65,9 @@ export function DataChangeSheet({
   const { t } = useTranslation()
   // 单字段历史：点记录里的字段名只看那一个字段。换了对象 / 关了抽屉就回到全部字段
   const [field, setField] = React.useState<Pick<DataChangeItem, 'field' | 'label'> | null>(null)
+  // 关了抽屉、或者抽屉开着换了对象，都回到全部字段（只在关掉时清的话，换对象会带着上一个对象的筛选，评审抓到的）
   React.useEffect(() => {
-    if (!open) setField(null)
+    setField(null)
   }, [open, entity, entityId])
   const query = useInfiniteQuery({
     ...entityChangesQuery(entity, entityId ?? '', field?.field),

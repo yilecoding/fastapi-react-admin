@@ -20,11 +20,13 @@
   没改值的话后面那次 SELECT 读到的可能是事务开头的旧快照
 - 锁是这个事务**最后**拿的（业务写完、审计行算好之后），拿到之后只写这两张表 —— 不会和业务行锁成环
 
-链头那一行不存在（新库、`create_all` 建的测试库）时在保存点里建：两个请求同时第一次写，后到的撞主键、回滚保存点、
-再占锁一次。保存点提交也会走 `before_commit`，拦截层那边 `in_nested_transaction()` 跳过。
+链头那一行：升级上来的库由迁移建，新库（`fba init` / 测试库）在种子里。还是不存在时（自增主键模式没有种子、被人删了）
+在保存点里建：两个请求同时第一次写，后到的撞主键、回滚保存点、再占锁一次。保存点提交也会走 `before_commit`，
+拦截层那边 `in_nested_transaction()` 跳过。
+⚠️ MySQL 上两个首写可能死锁（评审推断，没实测）—— 种子里放这一行就是为了碰不到它。
 
-保留期删旧记录（`maintenance.prune_logs`）先把**锚点**（`anchor_seq` / `anchor_hash`）推到要删的最后一行，再删；
-校验从锚点往后算。中途失败的话锚点之前还没删的那几行只是不再校验，不会被报成「中间被删」。
+保留期删旧记录（`maintenance.prune_logs`）先把**锚点**（`anchor_seq` / `anchor_hash`）推到
+「第一条还要留的」前一行，再删；校验从锚点往后算。中途失败的话锚点之前还没删的那几行只是不再校验，不会被报成「中间被删」。
 """
 
 from __future__ import annotations
@@ -47,9 +49,10 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
 CHAIN_ID = 1
-#: 签进去的列。`chain_hash` 自己不在里面（它就是签名）
+#: 签进去的列。`chain_hash` 自己不在里面（它就是签名）。
+#: 🔴 `id` 也不在：自增主键模式（`DATABASE_PK_MODE=autoincrement`）下 INSERT 之前拿不到它，自己填的话 SQL Server
+#: 报「不能给 IDENTITY 列显式插值」，所有被审计的提交一起失败（评审抓到的）。记录靠 `chain_seq` 认，不靠 `id`
 SIGNED = (
-    'id',
     'chain_seq',
     'trace_id',
     'entity_type',
@@ -158,11 +161,11 @@ def _create_head(session: Session, records: sa.Table, chain: sa.Table) -> None:
 def link(session: Session, rows: list[dict[str, Any]]) -> None:
     """给这一批要写的记录编号、签名（就地改 `rows`），并把链头推到最后一条。调用方随后 INSERT 这些行。
 
-    `id` / `created_time` 在这里定：拿到锁之后才取时间，序号和时间同序（保留期按时间删，按序号推锚点）
+    `created_time` 在这里定：拿到锁之后才取时间，序号和时间大体同序（多实例时钟有偏差时不严格，见 `advance_anchor`）。
+    `id` 不在这里定，INSERT 时由列默认值（雪花）或数据库（自增）给
     """
     if not rows:
         return
-    from backend.utils.snowflake import snowflake
     from backend.utils.timezone import timezone
 
     records, chain = _tables()
@@ -178,8 +181,6 @@ def link(session: Session, rows: list[dict[str, Any]]) -> None:
     now = timezone.now()
     for row in rows:
         seq += 1
-        if 'id' not in row:
-            row['id'] = snowflake.generate()
         row['created_time'] = now
         row['chain_seq'] = seq
         prev = row['chain_hash'] = sign(prev, row, key, kid)
@@ -220,17 +221,31 @@ def backfill(conn: sa.Connection, records: sa.Table, chain: sa.Table) -> int:
 
 
 def advance_anchor(session: Session, cutoff: datetime) -> int | None:
-    """保留期：把锚点推到「早于 cutoff 的最后一个序号」，返回它（调用方删掉序号不超过它的行）。没有要删的返回 None"""
+    """保留期：把锚点推到「第一条还在保留期里的记录」的前一条，返回它（调用方删掉序号不超过它的行）。
+
+    没有要删的返回 None。
+
+    - 🔴 **不按「早于 cutoff 的最大序号」推**：多实例时钟有偏差时序号和时间不严格同序，那样会把还在保留期里、
+      只是序号小一点的行一起删掉。按「第一条还要留的」往前推，宁可多留几行，不少留（评审抓到的）
+    - 🔴 **链头那一行不在就不推、也不删**：推不了锚点还照删的话，链头重建之后锚点是 0，这段被删的就成了
+      永远报着的「缺口」，正常的清理被当成有人删记录（评审抓到的）
+    """
     records, chain = _tables()
+    head = session.execute(sa.select(chain.c.anchor_seq).where(chain.c.id == CHAIN_ID)).first()
+    if head is None:
+        return None
+    anchor = head.anchor_seq
+    seq = records.c.chain_seq
+    first_kept = session.execute(
+        sa.select(sa.func.min(seq)).where(seq > anchor, records.c.created_time >= cutoff)
+    ).scalar()
     upto = session.execute(
-        sa.select(sa.func.max(records.c.chain_seq)).where(
-            records.c.chain_seq.is_not(None), records.c.created_time < cutoff
-        )
+        sa.select(sa.func.max(seq)).where(seq > anchor, *([seq < first_kept] if first_kept is not None else []))
     ).scalar()
     if upto is None:
-        return None
-    anchor_hash = session.execute(sa.select(records.c.chain_hash).where(records.c.chain_seq == upto)).scalar_one()
-    # 只往前推：另一个清理任务（或这次重跑）已经推过更远的话不动
+        # 没有新的可删；上一次清理推了锚点、没删完的那几行（中途失败）照样删
+        return anchor or None
+    anchor_hash = session.execute(sa.select(records.c.chain_hash).where(seq == upto)).scalar_one()
     session.execute(
         sa
         .update(chain)
@@ -255,7 +270,8 @@ def head_summary(session: Session) -> str:
 @dataclass(slots=True)
 class ChainProblem:
     #: modified 内容被改过 · missing 中间少了几行 · tail 最新的几行没了（或链头被改过）·
-    #: key 密钥对不上 · unchained 不在链上的行（绕过应用写进来的）· head 链头那一行不见了
+    #: key 密钥对不上 · stale 最新的记录不是用现在的密钥签的 · unchained 不在链上的行（绕过应用写进来的）·
+    #: head 链头那一行不见了
     kind: str
     seq: int | None = None
     record_id: str | None = None
@@ -283,12 +299,15 @@ class ChainReport:
 class _Collector:
     def __init__(self) -> None:
         self.items: list[ChainProblem] = []
-        self.count = 0
+        #: 没列出来、只计数的（没有序号的行只列前 10 条）
+        self.unlisted = 0
 
     def add(self, problem: ChainProblem) -> None:
-        self.count += 1
-        if len(self.items) < MAX_PROBLEMS:
-            self.items.append(problem)
+        self.items.append(problem)
+
+    @property
+    def count(self) -> int:
+        return len(self.items) + self.unlisted
 
 
 def _problem(kind: str, row: Mapping[str, Any] | None = None, **extra: Any) -> ChainProblem:
@@ -304,15 +323,14 @@ def _problem(kind: str, row: Mapping[str, Any] | None = None, **extra: Any) -> C
     )
 
 
-def _chained_rows(session: Session, records: sa.Table, after: int) -> Iterable[Mapping[str, Any]]:
+def _chained_rows(session: Session, records: sa.Table, after: int, upto: int | None) -> Iterable[Mapping[str, Any]]:
     last = after
+    seq = records.c.chain_seq
     while True:
-        batch = list(
-            session
-            .execute(sa.select(records).where(records.c.chain_seq > last).order_by(records.c.chain_seq).limit(_BATCH))
-            .mappings()
-            .all()
-        )
+        stmt = sa.select(records).where(seq > last).order_by(seq).limit(_BATCH)
+        if upto is not None:
+            stmt = stmt.where(seq <= upto)
+        batch = list(session.execute(stmt).mappings().all())
         yield from batch
         if len(batch) < _BATCH:
             return
@@ -325,31 +343,36 @@ class _Walk:
     other_key: int = 0
     last_seq: int = 0
     last_hash: str = ''
+    last_kid: str | None = None
 
 
-def _walk(session: Session, records: sa.Table, anchor_seq: int, anchor_hash: str, found: _Collector) -> _Walk:
-    """沿着链从锚点往后走：序号连不连得上、签名重算对不对得上"""
+def _walk(session: Session, records: sa.Table, head: Mapping[str, Any] | None, found: _Collector) -> _Walk:
+    """沿着链从锚点往后走（只走到读链头那一刻的链头：校验期间新提交的行留给下一次）：序号连不连得上、签名重算对不对得上"""
     key, kid = current_key()
-    walk = _Walk(last_seq=anchor_seq, last_hash=anchor_hash)
+    # 没配密钥时签的行（配密钥之前的历史）用空密钥核对得了；换掉的旧密钥没有，那几行只能核对序号
+    keys = {kid: key, NO_KEY: b''}
+    anchor_seq = head['anchor_seq'] if head else 0
+    walk = _Walk(last_seq=anchor_seq, last_hash=(head['anchor_hash'] if head else '') or '')
     seen_current_key = False
-    for row in _chained_rows(session, records, anchor_seq):
+    for row in _chained_rows(session, records, anchor_seq, head['head_seq'] if head else None):
         walk.checked += 1
         stored = row['chain_hash'] or ''
+        row_kid = stored.split(':', 1)[0]
         gap = row['chain_seq'] != walk.last_seq + 1
         if gap:
             found.add(_problem('missing', seq=walk.last_seq + 1, seq_to=row['chain_seq'] - 1))
-        if stored.split(':', 1)[0] != kid:
-            # 换密钥之前签的：校验不了，但出现在当前密钥签过的行**之后**就不对 —— 那是有人改了内容、顺手换了个标识
-            if seen_current_key:
-                found.add(_problem('key', row))
-            else:
-                walk.other_key += 1
+        if seen_current_key and row_kid != kid:
+            # 当前密钥签过的行**之后**又出现别的标识（包括「没配密钥」）：有人改了内容、顺手换了个能自己算的签法
+            found.add(_problem('key', row))
+        elif row_kid not in keys:
+            walk.other_key += 1
         else:
-            seen_current_key = True
+            seen_current_key = seen_current_key or row_kid == kid
             # 前面少了几行时，这一行签名里的「上一行」已经不在了，重算不了；缺口已经报过
-            if not gap and not hmac.compare_digest(sign(walk.last_hash, row, key, kid), stored):
+            expected = sign(walk.last_hash, row, keys[row_kid], row_kid)
+            if not gap and not hmac.compare_digest(expected, stored):
                 found.add(_problem('modified', row))
-        walk.last_seq, walk.last_hash = row['chain_seq'], stored
+        walk.last_seq, walk.last_hash, walk.last_kid = row['chain_seq'], stored, row_kid
     return walk
 
 
@@ -357,34 +380,53 @@ def _find_unchained(session: Session, records: sa.Table, found: _Collector) -> N
     """没有序号的行：绕过应用写进来的（应用写的每一行都在链上，迁移也补签了已有的）"""
     no_seq = records.c.chain_seq.is_(None)
     rows = session.execute(sa.select(records).where(no_seq).order_by(records.c.created_time).limit(10)).mappings()
+    listed = 0
     for row in rows:
         found.add(_problem('unchained', row))
+        listed += 1
     total = session.execute(sa.select(sa.func.count()).select_from(records).where(no_seq)).scalar_one()
-    found.count += max(total - 10, 0)
+    found.unlisted += max(total - listed, 0)
 
 
 def verify(session: Session) -> ChainReport:
-    """从锚点往后逐行重算签名。只读，不拿锁（校验期间新写进来的行算在下一次里）"""
+    """从锚点往后逐行重算签名。只读，不拿锁"""
     records, chain = _tables()
-    key, _ = current_key()
+    key, kid = current_key()
     found = _Collector()
     head = session.execute(sa.select(chain).where(chain.c.id == CHAIN_ID)).mappings().first()
-    anchor_seq = head['anchor_seq'] if head else 0
-    walk = _walk(session, records, anchor_seq, (head['anchor_hash'] if head else '') or '', found)
+    walk = _walk(session, records, head, found)
     if head is None:
         if walk.checked:
             found.add(_problem('head'))
     elif walk.last_seq != head['head_seq'] or walk.last_hash != (head['head_hash'] or ''):
         # 最新的几行被删了，或者链头那一行被改过
         found.add(_problem('tail', seq=walk.last_seq + 1, seq_to=head['head_seq']))
+    if key and walk.last_kid is not None and walk.last_kid != kid:
+        # 🔴 配了密钥，最新那一行却不是用它签的：把整条链的标识换成假的 / 换成「没配密钥」再自己重算，
+        # 每一行都会落进「校验不了 / 用空密钥核对得上」，只有这一条拦得住（评审抓到的）。
+        # 刚配上密钥、之后还没有新的修改时也会报 —— 有一次修改之后就消失
+        found.add(_problem('stale', seq=walk.last_seq))
+    if head is not None:
+        # ⚠️ 先读最大序号、再读链头：反过来的话两次读之间别的事务一提交，「比链头还新」就成了误报
+        newest = session.execute(sa.select(sa.func.max(records.c.chain_seq))).scalar()
+        now = session.execute(sa.select(chain.c.anchor_seq, chain.c.head_seq).where(chain.c.id == CHAIN_ID)).first()
+        # 校验期间清理任务推了锚点、删了行：被删的那一段不是缺口
+        if now is not None and now.anchor_seq > head['anchor_seq']:
+            found.items = [p for p in found.items if not (p.kind == 'missing' and (p.seq_to or 0) <= now.anchor_seq)]
+        # 🔴 只走到「读链头那一刻的链头」是为了不把校验期间新提交的行报成问题；但不能因此给
+        # 「把链头往回改、藏起最新几行」留口子 —— 写记录和推链头在同一个事务里，任何提交过的状态下
+        # 最大序号都等于链头。比链头还新的行就是链头被改过
+        current_head = now.head_seq if now is not None else head['head_seq']
+        if newest is not None and newest > current_head:
+            found.add(_problem('tail', seq=current_head + 1, seq_to=newest))
     _find_unchained(session, records, found)
     return ChainReport(
         ok=found.count == 0,
         keyed=bool(key),
         checked=walk.checked,
         head_seq=head['head_seq'] if head else 0,
-        anchor_seq=anchor_seq,
+        anchor_seq=head['anchor_seq'] if head else 0,
         other_key=walk.other_key,
         problem_count=found.count,
-        problems=found.items,
+        problems=found.items[:MAX_PROBLEMS],
     )
