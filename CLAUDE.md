@@ -149,7 +149,7 @@ import 都没有，所以 `packages/ui` 对 workspace 零依赖 —— 刻意的
 
 ```bash
 docker start fba_postgres fba_redis       # PostgreSQL :5432 / Redis :6380（2026-09-08 起默认库，换回 SQL Server 见 docker-compose.dev.yml 的 mssql 注释）
-pnpm dev                                  # api :8088 · web :8888 · celery worker（含内嵌 beat）；对象存储另起 `--profile s3 up -d rustfs`（见 compose 注释）
+pnpm dev                                  # api :8088 · web :8888 · celery worker / beat；对象存储另起 `--profile s3 up -d rustfs`（见 compose 注释）
 ```
 
 `apps/api` 和 `apps/worker` 都是 pnpm workspace 成员（`package.json` 里只有一个
@@ -159,10 +159,10 @@ pnpm dev                                  # api :8088 · web :8888 · celery wor
 ```bash
 pnpm --filter api dev                     # 等价于 cd apps/api && uv run python -m uvicorn ...
 pnpm --filter web dev
-pnpm --filter worker dev                  # celery worker -B（worker + 内嵌 beat）
+pnpm --filter worker dev                  # worker + beat（Linux 内嵌，macOS / Windows 分开起）
 ```
 
-`apps/worker` 里只有一个起进程的 `dev.mjs`（Windows 上 celery 不支持 `-B`，要拆成 worker + beat 两个进程，见 [`task` 分册](apps/api/backend/app/task/AGENTS.md)）—— 存在的理由是让 worker 的日志有
+`apps/worker` 里只有一个起进程的 `dev.mjs`（Windows 不支持 `-B`，macOS 会触发 fork 崩溃，两者拆成 worker + beat 两个进程，见 [`task` 分册](apps/api/backend/app/task/AGENTS.md)）—— 存在的理由是让 worker 的日志有
 自己的窗格。写进 `apps/api` 的 `dev` 里（`uvicorn & celery & wait`）也能跑，
 但两份日志会挤在一个窗格里交替刷，而 worker 的日志很密。
 

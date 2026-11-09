@@ -23,7 +23,7 @@ model/ crud/ service/ schema/ api/  三层，和 admin 同构
 ## 起服务
 
 ```bash
-pnpm dev                        # api + web + worker（worker 含内嵌 beat）
+pnpm dev                        # api + web + worker / beat
 pnpm --filter worker dev        # 只起 worker
 ```
 
@@ -31,8 +31,20 @@ pnpm --filter worker dev        # 只起 worker
 （报「-B option does not work on Windows」直接退出）；而且 `VAR=x cmd` 这种行内设环境变量的写法，
 Windows 上的 pnpm（走 cmd）根本不认。原来那一行脚本在 Windows 上 worker 窗格直接挂掉，api / web 照常跑，
 定时任务和异步通知**全都静默不执行**（工作台显示「心跳停在 N 小时前」）。现在 Windows 上拆成 worker + beat
-两个进程，其他平台照旧 `-B`；环境变量在 node 里设。实测：本机（Windows）`pnpm --filter worker dev` 起来后
+两个进程；macOS 同样拆开（原因见下），Linux 照旧 `-B`；环境变量在 node 里设。实测：本机（Windows）`pnpm --filter worker dev` 起来后
 worker `ready`、beat 正常派发。
+
+🔴 **macOS 的 `-B` 也会坏，但不是「不支持」。** worker 可以 `ready`，内嵌 beat 随后报
+`+[NSCharacterSet initialize] may have been in progress in another thread when fork() was called` 并崩溃，
+只剩 worker 活着、定时任务停了。Celery 的 `EmbeddedService` 默认用子进程，
+不是线程；在 worker 已启动线程后 fork，子进程触发了 Objective-C 的安全检查。
+修在开发入口 `apps/worker/dev.mjs`：macOS 和 Windows 分别启动 worker / beat，
+继续使用 `--pool=custom` 执行异步任务。
+
+**实测证据**（2026-11-09，macOS 26.6 / Python 3.14.5 / Celery 5.6.3）：
+原来的内嵌 beat 报上述 fork 错误；拆开后 worker `ready`，beat 载入 11 条调度并派发到内存队列，
+Ctrl-C 后两个进程退出码都是 0。验证用 `CELERY_BROKER_URL=memory://` 隔离了队列，
+只证明启动、载入和退出正常，没有执行实际的业务任务。
 
 🔴 **`-B`（内嵌 beat）只用于开发。** 多副本部署时每个副本都跑一个 beat，
 同一条调度被触发 N 次。生产要分开，且 beat **只起一个**：
