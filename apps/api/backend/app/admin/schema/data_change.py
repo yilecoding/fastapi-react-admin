@@ -48,3 +48,27 @@ class GetDataChangeMeta(SchemaBase):
     entities: list[DataChangeEntity] = Field(description='登记过的对象')
     sources: list[DataChangeOption] = Field(description='来源')
     actions: list[DataChangeOption] = Field(description='动作')
+
+
+class DataChangeIntegrityProblem(SchemaBase):
+    kind: str = Field(
+        description='modified 内容被改过 · missing 中间少了几行 · tail 最新的几行没了或链头被改 · '
+        'key 密钥对不上 · unchained 绕过应用写进来的行 · head 链头那一行不见了'
+    )
+    seq: int | None = Field(None, description='序号（missing / tail：缺的那一段的起点）')
+    seq_to: int | None = Field(None, description='missing / tail：缺的那一段的终点（含）')
+    record_id: str | None = Field(None, description='记录 ID')
+    created_time: datetime | None = Field(None, description='记录时间')
+
+
+class GetDataChangeIntegrity(SchemaBase):
+    """防篡改链的校验结果（`common/data_change/chain.py: verify`）"""
+
+    ok: bool = Field(description='没发现问题')
+    keyed: bool = Field(description='配了 DATA_CHANGE_CHAIN_KEY（没配时只防手滑改库）')
+    checked: int = Field(description='校验了几行')
+    head_seq: int = Field(description='链头序号')
+    anchor_seq: int = Field(description='锚点序号（保留期删到了这里）')
+    other_key: int = Field(description='换密钥之前签的、校验不了的行数')
+    problem_count: int = Field(description='问题总数')
+    problems: list[DataChangeIntegrityProblem] = Field(description='问题（最多列 50 条）')

@@ -233,6 +233,7 @@ error:
     not_enabled: Plugin {plugin} is not enabled, please contact the administrator
     not_found: Plugin does not exist
     oauth2_import_failed: Failed to import OAuth2 plugin, please contact the administrator
+    reload_lock_busy: Another plugin is being installed or uninstalled, please try again later
     repo_already_installed: Plugin {repo_name} is already installed
     required_cannot_uninstall: Plugin {plugin} is required and cannot be uninstalled
     zip_required: ZIP archive cannot be empty
@@ -428,7 +429,9 @@ export:
   cell_truncated: '… (truncated: cells hold at most 32,767 characters)'
   list_separator: ', '
   column:
+    action: Action
     browser: Browser
+    changes: Changes
     color: Color
     content_text: Content (plain text)
     cost_ms: Duration (ms)
@@ -451,6 +454,7 @@ export:
     leader: Leader
     location: Location
     login_account: Login account
+    login_event: Event
     login_time: Login time
     message: Message
     method: Method
@@ -458,6 +462,9 @@ export:
     notice_id: Announcement ID
     notice_title: Title
     notice_type: Type
+    object: Object
+    object_id: Object ID
+    object_type: Object type
     opera_time: Time
     opera_title: Operation
     operator: Operator
@@ -466,13 +473,17 @@ export:
     parent_name: Parent department
     path: Endpoint
     phone: Phone
+    record_id: Record ID
     remark: Remark
     result: Result
     role_codes: Role codes
     role_names: Roles
     sort: Sort order
+    source: Source
+    source_ref: Source reference
     status: Status
     status_code: Status code
+    time: Time
     trace_id: Trace ID
     updated_time: Updated at
     user_id: User ID
@@ -482,6 +493,7 @@ export:
     dept: Department ID
     dict_type: Dictionary type ID
     end_time: Time to
+    field: Field changed
     role: Role ID
     start_time: Time from
   info:
@@ -500,6 +512,7 @@ export:
     done_title: 'Export ready: {title}'
     failed_title: 'Export failed: {title}'
   resource:
+    data_change: Data changes
     dept: Departments
     dict_data: Dictionary data
     login_log: Login logs
@@ -508,8 +521,16 @@ export:
     user: Users
   value:
     announcement: Announcement
+    change_bulk_rows: '{n} rows'
+    change_empty: empty
+    change_secret: changed (value not recorded)
+    change_varies: differs per row
     disabled: Disabled
     enabled: Active
+    event_ip_locked: IP locked
+    event_kicked: Forced logout
+    event_locked: Account locked
+    event_login: Sign-in
     failed: Failed
     hidden: Hidden
     notice: Notice
@@ -556,6 +577,16 @@ response:
   error: Request error
   success: Request success
   server_error: Internal server error
+
+login_event:
+  # Security events in the sign-in log (#273, `LoginLogEvent`). Written into `sys_login_log.msg` in the triggering request's language
+  disabled: Session ended because {operator} disabled or deleted the account
+  ip_locked: This IP was locked for {minutes} minutes (until {until}) after {count} failed sign-ins across accounts. It still only sees "Incorrect username or password"
+  kicked: Signed out by {operator}
+  locked: Locked for {minutes} minutes (until {until}) after {count} failed sign-ins in a row
+  password_changed: Session ended because {operator} changed the password
+  self: the user
+  system: the system
 
 success:
   login:

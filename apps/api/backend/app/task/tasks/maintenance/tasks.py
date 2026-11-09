@@ -8,7 +8,7 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import ColumnElement, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
@@ -44,13 +44,14 @@ async def _prune_table(
     本仓库还要跑 MySQL / PostgreSQL（`DataBaseType` 三个值）。
     `select(...).limit(n)` 在三种方言下都成立。
     """
+    return await _prune_where(db, model, time_col < cutoff, batch)
+
+
+async def _prune_where(db: AsyncSession, model: type[Any], condition: ColumnElement[bool], batch: int) -> int:
+    """`_prune_table` 的通用版：分批删满足 `condition` 的行（理由同上）"""
     total = 0
     while True:
-        ids = (
-            (await db.execute(select(model.id).where(time_col < cutoff).order_by(model.id).limit(batch)))
-            .scalars()
-            .all()
-        )
+        ids = (await db.execute(select(model.id).where(condition).order_by(model.id).limit(batch))).scalars().all()
         if not ids:
             break
         total += (await db.execute(delete(model).where(model.id.in_(ids)))).rowcount or 0
@@ -58,6 +59,28 @@ async def _prune_table(
         if len(ids) < batch:
             break
     return total
+
+
+async def _prune_data_changes(db: AsyncSession, model: type[Any], cutoff: datetime, batch: int) -> tuple[int, str]:
+    """数据变更记录带着防篡改链（`common/data_change/chain.py`）：先把锚点推到要删的最后一个序号、提交，再按序号删。
+
+    反过来（先删再推）的话，中途失败会留下「中间少了几行」—— 校验会把一次没跑完的清理报成有人删记录。
+    返回 (删了几行, 链头) —— 链头写进任务日志：日志在库外面，是一份事后对得上的旁证（库里的链头能被改，日志改不了）
+    """
+    from backend.common.data_change import chain
+
+    upto = await db.run_sync(lambda session: chain.advance_anchor(session, cutoff))
+    await db.commit()
+    total = 0
+    if upto is not None:
+        total += await _prune_where(db, model, model.chain_seq <= upto, batch)
+    head = await db.run_sync(lambda session: chain.head_summary(session))
+    # 🔴 没有序号的行**不删**：迁移已经把旧记录补签进了链，没有序号的就是绕过应用写进来的 —— 按时间删等于替伪造的人
+    # 销毁证据（评审抓到的）。留着给校验报，任务日志里也说一声
+    unchained = (await db.execute(select(func.count()).select_from(model).where(model.chain_seq.is_(None)))).scalar()
+    if unchained:
+        head += f'；没有序号的 {unchained} 行（绕过应用写进来的）没删，留给校验'
+    return total, head
 
 
 @celery_app.task(name='maintenance.prune_logs')
@@ -133,13 +156,13 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
         # 它和操作日志不是同一份东西：操作日志 30 天删掉之后，「谁把这个字段改了」还要查得到
         change_retention = await data_change_retention_days(db)
         change_cutoff = timezone.now() - timedelta(days=change_retention)
-        changes = await _prune_table(db, DataChange, DataChange.created_time, change_cutoff, batch)
+        changes, chain_head = await _prune_data_changes(db, DataChange, change_cutoff, batch)
 
     msg = (
         f'清理 {days} 天前的日志：登录日志 {login} 条、操作日志 {opera} 条、开放接口调用日志 {open_api} 条、'
         f'短信发送日志 {sms} 条；通知投递记录（保留 {retention} 天）{delivery} 条；'
         f'Webhook 事件 / 投递 / 尝试（保留 {webhook_retention} 天）{webhook} 条；'
-        f'数据变更记录（保留 {change_retention} 天）{changes} 条'
+        f'数据变更记录（保留 {change_retention} 天）{changes} 条；{chain_head}'
     )
     log.info(msg)
     return msg
