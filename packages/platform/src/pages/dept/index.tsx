@@ -79,6 +79,7 @@ export function DeptPage({
   const [deleteError, setDeleteError] = React.useState<string | null>(null)
   React.useEffect(() => setDeleteError(null), [pendingDelete])
   const del = useDeleteDept()
+  const pendingKids = pendingDelete?.children?.length ?? 0
 
   const foldAll = search.fold === 'all'
   const { isOpen, toggle } = useTreeFold(foldAll)
@@ -232,12 +233,16 @@ export function DeptPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除部门")}
         description={
-          deleteError ? (
-            <span className="text-destructive">{deleteError}</span>
-          ) : pendingDelete ? (
-            t('确定删除「{{name}}」吗？若该部门下仍有子部门或用户，后端会拒绝。', { name: pendingDelete.name })
-          ) : ''
+          !pendingDelete ? '' : pendingKids > 0 ? (
+            // 树上已经看得见子部门：这一步一定会被拒，直接说怎么办，不让人点了再碰壁。
+            // 反过来不成立 —— 筛选过的树可能没带上子部门，成员数前端也不知道，那两种留给接口说
+            t('「{{name}}」下还有 {{n}} 个子部门，要先删掉或移到别的部门下，才能删除它。', { name: pendingDelete.name, n: pendingKids })
+          ) : (
+            t('确定删除「{{name}}」吗？部门下还有成员时不能删除，要先把他们调到别的部门。', { name: pendingDelete.name })
+          )
         }
+        error={deleteError}
+        blocked={pendingKids > 0}
         confirmText={t("删除")} destructive pending={del.isPending}
         onConfirm={async () => {
           if (!pendingDelete) return

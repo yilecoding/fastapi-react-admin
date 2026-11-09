@@ -53,7 +53,10 @@ class ConversationService:
         # 只回放 user / assistant 两类：tool 消息是给模型看的中间过程，
         # 摊给用户只会让对话记录看起来像一堆乱码 JSON。要看工具做了什么去审计页。
         messages = await ai_message_dao.get_history(db, pk, limit=200)
-        return [m for m in messages if m.role in ('user', 'assistant') and m.content]
+        # 🔴 没有正文、只有 `tool_calls`（确认卡片 / 执行轨迹 / 报错）的助手消息也要回放。
+        # 原来是 `and m.content`：模型调写工具时一个字不说，那一轮落库了也被这里滤掉，
+        # 确认卡片照样在流结束后的历史刷新里消失（实测，落库那一侧已经修好之后才暴露）
+        return [m for m in messages if m.role in ('user', 'assistant') and (m.content or m.tool_calls)]
 
 
 conversation_service: ConversationService = ConversationService()

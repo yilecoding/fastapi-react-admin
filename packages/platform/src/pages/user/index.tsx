@@ -381,14 +381,13 @@ export function UserPage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t('删除用户')}
         description={
-          deleteError ? (
-            <span className="text-destructive">{deleteError}</span>
-          ) : pendingDelete ? (
+          pendingDelete ? (
             t('确定删除「{{who}}」吗？此操作不可撤销。', {
               who: pendingDelete.nickname || pendingDelete.username,
             })
           ) : ''
         }
+        error={deleteError}
         confirmText={t('删除')}
         destructive
         pending={del.isPending}

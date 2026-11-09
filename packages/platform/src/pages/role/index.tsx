@@ -267,12 +267,11 @@ export function RolePage({
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("删除角色")}
         description={
-          deleteError ? (
-            <span className="text-destructive">{deleteError}</span>
-          ) : pendingDelete ? (
+          pendingDelete ? (
             t('确定删除角色「{{name}}」吗？已分配该角色的用户会失去对应权限。', { name: pendingDelete.name })
           ) : ''
         }
+        error={deleteError}
         confirmText={t("删除")}
         destructive
         pending={del.isPending}

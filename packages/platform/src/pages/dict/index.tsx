@@ -394,12 +394,11 @@ export function DictPage({
         onOpenChange={(o) => !o && setDelType(null)}
         title={t("删除字典类型")}
         description={
-          typeError ? (
-            <span className="text-destructive">{typeError}</span>
-          ) : delType ? (
+          delType ? (
             t('确定删除「{{name}}」吗？其下的字典项也会一并失效。', { name: delType.name })
           ) : ''
         }
+        error={typeError}
         confirmText={t("删除")} destructive pending={rmType.isPending}
         onConfirm={async () => {
           if (!delType) return
@@ -420,12 +419,11 @@ export function DictPage({
         onOpenChange={(o) => !o && setDelData(null)}
         title={t("删除字典项")}
         description={
-          dataError ? (
-            <span className="text-destructive">{dataError}</span>
-          ) : delData ? (
+          delData ? (
             t('确定删除「{{label}}」吗？', { label: delData.label })
           ) : ''
         }
+        error={dataError}
         confirmText={t("删除")} destructive pending={rmDataOne.isPending}
         onConfirm={async () => {
           if (!delData) return

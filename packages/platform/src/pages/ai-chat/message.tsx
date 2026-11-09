@@ -21,11 +21,18 @@ export type Bubble = {
   pending?: boolean
   tools?: ToolTrace[]
   /**
-   * 写操作的确认卡片。`outcome`：点了确认之后的结果 —— 🔴 不记的话卡片原样留着、按钮又能点了，
-   * 再点一次只会拿到「已过期」（令牌是一次性的），看起来像「刚才没执行」
+   * 写操作的确认卡片，**一轮可以有几张**（模型一次提议两个写操作时，原来后一张把前一张盖掉、前一个令牌就丢了）。
+   * 刷新之后从历史里还原（后端把它们存进 `tool_calls`，见 `parseTurnItems`）。
    */
-  confirm?: { token: string; name: string; preview: string; outcome?: ConfirmOutcome }
+  confirms?: ConfirmCard[]
 }
+
+/**
+ * `outcome`：点了确认之后的结果 —— 🔴 不记的话卡片原样留着、按钮又能点了，
+ * 再点一次只会拿到「已过期」（令牌是一次性的），看起来像「刚才没执行」。
+ * `detail`：没执行成功的原因。确认那条路上没有模型来转述结果，卡片自己得说清楚
+ */
+export type ConfirmCard = { token: string; name: string; preview: string; outcome?: ConfirmOutcome; detail?: string }
 
 /** `expired`：令牌用过了或过期了 —— 可能是别处已经执行过，所以不说「没执行」 */
 export type ConfirmOutcome = 'done' | 'failed' | 'expired'
@@ -138,42 +145,40 @@ export function MessageBubble({
           <Thinking />
         ) : null}
 
-        {bubble.confirm ? (
-          <div className="rounded-lg border border-amber-300/70 bg-amber-50/60 p-3 dark:border-amber-800/60 dark:bg-amber-950/30">
+        {bubble.confirms?.map((card) => (
+          <div
+            key={card.token}
+            className="rounded-lg border border-amber-300/70 bg-amber-50/60 p-3 dark:border-amber-800/60 dark:bg-amber-950/30"
+          >
             <div className="flex items-start gap-2">
               <IconAlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
               <div className="min-w-0 flex-1 space-y-2">
                 <p className="text-sm font-medium">{t('这个操作会改变系统数据')}</p>
                 <pre className="overflow-x-auto rounded bg-background/60 p-2 font-mono text-[11px] whitespace-pre-wrap">
-                  {bubble.confirm.preview}
+                  {card.preview}
                 </pre>
-                {bubble.confirm.outcome === 'done' ? (
+                {card.outcome === 'done' ? (
                   <p className="flex items-center gap-1 text-sm text-emerald-700 dark:text-emerald-400" data-testid="ai-confirm-done">
                     <IconCheck className="size-4" />
                     {t('已执行')}
                   </p>
-                ) : bubble.confirm.outcome === 'failed' ? (
+                ) : card.outcome === 'failed' ? (
                   <p className="text-sm text-destructive" data-testid="ai-confirm-failed">
-                    {t('没执行成功，原因见上面的回复')}
+                    {card.detail ? t('没执行成功：{{reason}}', { reason: card.detail }) : t('没执行成功')}
                   </p>
-                ) : bubble.confirm.outcome === 'expired' ? (
+                ) : card.outcome === 'expired' ? (
                   <p className="text-sm text-muted-foreground" data-testid="ai-confirm-expired">
                     {t('这个确认已经用过或过期了，结果以单据 / 页面上的为准')}
                   </p>
                 ) : (
-                  <Button
-                    size="sm"
-                    disabled={confirming}
-                    onClick={() => onConfirm(bubble.confirm!.token)}
-                    data-testid="ai-confirm"
-                  >
+                  <Button size="sm" disabled={confirming} onClick={() => onConfirm(card.token)} data-testid="ai-confirm">
                     {t('确认执行')}
                   </Button>
                 )}
               </div>
             </div>
           </div>
-        ) : null}
+        ))}
 
         {/* 回答写完才给复制口。hover 才显形：常驻的话每条回答下面都挂一个按钮，
             一屏下来全是图标；而 `focus-visible:` 那条保证键盘用户仍然够得到 */}

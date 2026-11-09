@@ -170,3 +170,17 @@ xlsx 走 `excel_ops.xlsx_text`，⚠️ 那里**反着**用 `data_only=True`：�
 变异：去掉列上限 · 去掉行上限，各自红。PDF 那边原来 `list(pages)[:20]` 会先把每一页都建成对象，改成按下标取 ——
 这条只是省时间，**没有测试**（结果不变，测不出来）。
 
+
+## 🔴 限流：Redis 一重启，所有挂了限流的接口一直 500（`utils/limiter.py`）
+
+**症状**：Redis 重启之后，验证码接口每次都 500「No matching script. Please use EVAL.」—— **谁都登录不了**，直到重启 api
+（实测 2026-11-06：WSL 里的容器被重启了一轮）。
+
+**根因**：`pyrate_limiter` 的 `RedisBucket` 只在创建时 `SCRIPT LOAD` 一次，之后一直 `EVALSHA` 那个哈希；Redis 重启 /
+`SCRIPT FLUSH` 后脚本缓存是空的。bucket 缓存在进程里（`RedisBucketFactory.buckets`），**每次请求都刷新 `last_seen`**，
+只要还有人在请求就永远不淘汰 —— 故障会一直持续。
+
+**修法**：`RedisTimeBucket.put` 接住 `NoScriptError`，重新 `SCRIPT LOAD` 再试一次。
+
+**实测证据**：`tests/test_limiter_noscript.py`（真实 Redis，put → `SCRIPT FLUSH` → 再 put）；本机 api：
+`SCRIPT FLUSH` 之后验证码修复前 500、修复后 200。
