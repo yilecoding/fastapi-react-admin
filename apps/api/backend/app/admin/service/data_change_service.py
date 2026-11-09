@@ -16,6 +16,19 @@ class DataChangeService:
         return await paging_data(db, select)
 
     @staticmethod
+    async def verify(db: AsyncSession) -> dict[str, Any]:
+        """防篡改链从头重算一遍（`common/data_change/chain.py`）。结果也写一行应用日志 —— 日志在库外，是事后的旁证"""
+        from backend.common.data_change import chain
+        from backend.common.log import log
+
+        report = await db.run_sync(chain.verify)
+        log.info(
+            f'数据变更记录校验：{"通过" if report.ok else f"发现 {report.problem_count} 个问题"}，'
+            f'校验 {report.checked} 行，链头 #{report.head_seq}，锚点 #{report.anchor_seq}'
+        )
+        return report.as_dict()
+
+    @staticmethod
     def meta() -> dict[str, Any]:
         return {
             'entities': registry.describe(),

@@ -427,7 +427,9 @@ export:
   cell_truncated: …（超出单元格 32,767 字符上限，已截断）
   list_separator: '、'
   column:
+    action: 动作
     browser: 浏览器
+    changes: 改了什么
     color: 颜色
     content_text: 内容（纯文本）
     cost_ms: 耗时（毫秒）
@@ -458,6 +460,9 @@ export:
     notice_id: 公告 ID
     notice_title: 标题
     notice_type: 类型
+    object: 对象
+    object_id: 对象 ID
+    object_type: 对象类型
     opera_time: 操作时间
     opera_title: 操作内容
     operator: 操作人
@@ -466,13 +471,17 @@ export:
     parent_name: 上级部门
     path: 接口
     phone: 手机号
+    record_id: 记录 ID
     remark: 备注
     result: 结果
     role_codes: 角色编码
     role_names: 角色
     sort: 排序
+    source: 来源
+    source_ref: 来源引用
     status: 状态
     status_code: 状态码
+    time: 时间
     trace_id: Trace ID
     updated_time: 更新时间
     user_id: 用户 ID
@@ -482,6 +491,7 @@ export:
     dept: 部门 ID
     dict_type: 字典类型 ID
     end_time: 时间止
+    field: 改过的字段
     role: 角色 ID
     start_time: 时间起
   info:
@@ -500,6 +510,7 @@ export:
     done_title: 导出完成：{title}
     failed_title: 导出失败：{title}
   resource:
+    data_change: 数据变更记录
     dept: 部门列表
     dict_data: 字典数据
     login_log: 登录日志
@@ -508,6 +519,10 @@ export:
     user: 用户列表
   value:
     announcement: 公告
+    change_bulk_rows: '{n} 条'
+    change_empty: 空
+    change_secret: 已修改（不记录内容）
+    change_varies: 每一行改成的值不一样
     disabled: 停用
     enabled: 正常
     event_ip_locked: IP 被锁
