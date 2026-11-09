@@ -7,8 +7,10 @@
 """
 
 import asyncio
+import re
 
 from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import pytest
@@ -20,7 +22,7 @@ from backend.app.admin.model import LoginLog
 from backend.common.security.session import EndReason, session_store
 from backend.core.conf import settings
 from backend.database.redis import RedisCli, redis_client
-from backend.tests.utils.db import sync_test_db_url
+from backend.tests.utils.db import async_test_engine, sync_test_db_url
 from backend.utils.timezone import timezone
 
 USERNAME = 'pytest_tmp_writes'
@@ -139,17 +141,52 @@ def test_a_kick_records_the_kicked_device_and_who_kicked(
     assert 'admin' in kicked['msg'] and '强制下线' in kicked['msg']
 
 
+@contextmanager
+def _statements() -> Iterator[list[tuple[str, int, str]]]:
+    """测试库上的每一条语句和每一次提交，按发生顺序：(`execute` / `commit`, 哪个连接, SQL)"""
+    seen: list[tuple[str, int, str]] = []
+    engine = async_test_engine.sync_engine
+
+    def on_execute(conn: sa.Connection, _cursor: Any, statement: str, *_: Any) -> None:
+        seen.append(('execute', id(conn), statement))
+
+    def on_commit(conn: sa.Connection) -> None:
+        seen.append(('commit', id(conn), ''))
+
+    sa.event.listen(engine, 'before_cursor_execute', on_execute)
+    sa.event.listen(engine, 'commit', on_commit)
+    try:
+        yield seen
+    finally:
+        sa.event.remove(engine, 'before_cursor_execute', on_execute)
+        sa.event.remove(engine, 'commit', on_commit)
+
+
 def test_a_password_reset_records_every_session_it_ended(
     client: TestClient, token_headers: dict[str, str], account: int, since: dict[str, str]
 ) -> None:
     """改密码 / 停用连带撤销的会话原来什么记录都没有。撤销入口只有 `session_store.revoke` 一个，在那里统一记"""
     _login(client, 'web')
     _login(client, 'mobile')
-    res = client.put(f'/sys/users/{account}/password', headers=token_headers, json={'password': 'New@123456'})
+    with _statements() as seen:
+        res = client.put(f'/sys/users/{account}/password', headers=token_headers, json={'password': 'New@123456'})
     assert res.json()['code'] == 200, res.text
     rows = _rows(client, token_headers, username=USERNAME, event='kicked', **since)
     assert len(rows) == 2
     assert all('admin 改了密码' in r['msg'] for r in rows)
+
+    # 🔴 记这两行时，改密码的事务已经 UPDATE 了用户那一行、还没提交（它在等记录写完）。这期间另一个连接读那一行：
+    # SQL Server 上读要加共享锁，排在排他锁后面 → 两边互等，数据库看不见，请求永远挂着
+    # （CI 上整个 job 跑满 20 分钟被取消）。PostgreSQL 读不被写挡，所以按「窗口里有没有别的连接碰 sys_user」断言，
+    # 不按「挂没挂」
+    user_row = re.compile(r'\bsys_user\b')
+    start, writer = next(
+        (i, conn)
+        for i, (kind, conn, sql) in enumerate(seen)
+        if kind == 'execute' and sql.lstrip().upper().startswith('UPDATE') and user_row.search(sql)
+    )
+    end = next(i for i, (kind, conn, _) in enumerate(seen) if i > start and kind == 'commit' and conn == writer)
+    assert [sql for _, conn, sql in seen[start:end] if conn != writer and user_row.search(sql)] == []
 
 
 def test_logging_out_yourself_is_not_a_forced_logout(

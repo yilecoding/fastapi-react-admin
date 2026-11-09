@@ -2,11 +2,9 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_login_log import login_log_dao
-from backend.app.admin.model import User
 from backend.app.admin.schema.login_log import CreateLoginLogParam, DeleteLoginLogParam
 from backend.common.context import ctx
 from backend.common.enums import LoginLogEvent, LoginLogStatusType
@@ -98,7 +96,7 @@ class LoginLogService:
         *,
         event: str,
         msg: str,
-        user_id: int | None = None,
+        user_uuid: str | None = None,
         username: str | None = None,
         device: Mapping[str, Any] | None = None,
     ) -> None:
@@ -106,23 +104,24 @@ class LoginLogService:
 
         和 `create` 一样开自己的会话、吞掉异常：记不下来不能让触发它的那件事（拒绝登录、踢人）跟着失败。
 
+        🔴 **这里不读 `sys_user`，是谁由调用方给。** 改密码 / 停用 / 删除都是先 UPDATE 用户那一行、
+        再撤销会话（→ 这里），而调用方的事务要等这里返回才提交。这里另开的会话去读那一行，在 SQL Server 上
+        （读要加共享锁）就排在调用方的排他锁后面，调用方又在等这里 —— 应用层的死锁，数据库看不见，请求永远挂着。
+        PostgreSQL 读不被写挡，测不出来。见 `app/admin/AGENTS.md`「登录日志里的安全事件」
+
         :param event: `LoginLogEvent`
         :param msg: 说明（已经按当前语言翻好）
-        :param user_id: 是谁的事；没有（IP 被锁时试的那个用户名可能根本不存在）就只记 `username`
-        :param username: 查不到用户时记的名字
+        :param user_uuid: 是谁的事；不知道（IP 被锁时试的那个用户名可能根本不存在）就随机一个，同登录失败
+        :param username: 用户名
         :param device: 🔴 被踢下线那条要记**被踢的那个会话**的 IP / 浏览器，不是点按钮的管理员的。不给就取这次请求的
         """
         try:
             if device is None:
                 device = {k: getattr(ctx, k) for k in _REQUEST_FIELDS} if ctx.exists() else {}
             async with async_db_session.begin() as db:
-                user = None
-                if user_id is not None:
-                    # 系统内部读，不是展示给谁看：不按当前用户的数据范围过滤（自己改密码时，自己未必在自己的范围里）
-                    user = (await db.execute(select(User.uuid, User.username).where(User.id == user_id))).first()
                 obj = CreateLoginLogParam(
-                    user_uuid=user.uuid if user else uuid4_str(),
-                    username=(user.username if user else username) or '-',
+                    user_uuid=user_uuid or uuid4_str(),
+                    username=username or '-',
                     status=LoginLogStatusType.fail.value,
                     ip=device.get('ip') or '-',
                     country=device.get('country') or None,
@@ -169,14 +168,13 @@ _FORCED_LOGOUT = {
 }
 
 
-async def _operator_label(operator_id: int | None, user_id: int | None) -> str:
+def _operator_label(operator_id: int | None, user_id: int | None) -> str:
     if operator_id is None:
         return t('login_event.system')
     if operator_id == user_id:
         return t('login_event.self')
-    async with async_db_session() as db:
-        name = await db.scalar(select(User.username).where(User.id == operator_id))
-    return name or str(operator_id)
+    # 不查库（理由见 `record_event`）：JWT 认证时已经把当前用户名放进了请求上下文
+    return ctx.username or str(operator_id)
 
 
 @on_session_revoked
@@ -189,8 +187,9 @@ async def record_forced_logout(_session_uuid: str, reason: str, fields: Mapping[
     operator_id = ctx.user_id if ctx.exists() else None
     await login_log_service.record_event(
         event=LoginLogEvent.kicked,
-        msg=t(key, operator=await _operator_label(operator_id, user_id)),
-        user_id=user_id,
+        msg=t(key, operator=_operator_label(operator_id, user_id)),
+        # 登录时存进会话的快照（`auth_service.session_meta`）。升级前登录的会话里没有 uuid，那几天记一个随机的
+        user_uuid=fields.get('uuid'),
         username=fields.get('username'),
         # 会话里存的是登录那一刻的 IP / 设备（`auth_service.session_meta`），没有地点
         device={k: fields.get(k) for k in ('ip', 'browser', 'os', 'device')},

@@ -2,9 +2,11 @@ import math
 
 from datetime import datetime, timedelta
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_user_password_history import user_password_history_dao
+from backend.app.admin.model import User
 from backend.app.admin.schema.user_password_history import CreateUserPasswordHistoryParam
 from backend.common.enums import LoginLogEvent
 from backend.common.exception import errors
@@ -137,12 +139,15 @@ class UserPasswordHistoryService:
             if newly_locked:
                 # #273：锁定那一刻记一行。原来只有那一次失败尝试的文案碰巧写着「账号已被锁定」，没法筛；
                 # 解锁是到期自动的（这里没有手动解锁），锁到几点写在这一行里
+                # 用调用方自己的会话读：`record_event` 另开会话、不读 `sys_user`（理由见那里）
+                user = (await db.execute(select(User.uuid, User.username).where(User.id == user_id))).first()
                 await _record_lock(
                     LoginLogEvent.locked,
                     key='login_event.locked',
                     seconds=settings.USER_LOCK_SECONDS,
                     count=failure_count,
-                    user_id=user_id,
+                    user_uuid=user.uuid if user else None,
+                    username=user.username if user else None,
                 )
             raise errors.AuthorizationError(msg=t('error.auth.too_many_failed_attempts'))
 
@@ -198,7 +203,7 @@ class UserPasswordHistoryService:
 
 
 async def _record_lock(
-    event: str, *, key: str, seconds: int, count: int, user_id: int | None = None, username: str | None = None
+    event: str, *, key: str, seconds: int, count: int, user_uuid: str | None = None, username: str | None = None
 ) -> None:
     """锁定（账号 / IP）那一刻记进登录日志。IP / 设备取这次请求的 —— 正是在试密码的那一方"""
     from backend.app.admin.service.login_log_service import login_log_service
@@ -207,7 +212,7 @@ async def _record_lock(
     await login_log_service.record_event(
         event=event,
         msg=t(key, count=count, minutes=math.ceil(seconds / 60), until=until.strftime('%H:%M')),
-        user_id=user_id,
+        user_uuid=user_uuid,
         username=username,
     )
 
