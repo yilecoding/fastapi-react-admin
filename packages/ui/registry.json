@@ -115,9 +115,14 @@
       ],
       "registryDependencies": [
         "button",
+        "i18n",
         "utils"
       ],
       "files": [
+        {
+          "path": "src/components/calendar-state.ts",
+          "type": "registry:ui"
+        },
         {
           "path": "src/components/calendar.tsx",
           "type": "registry:ui"
