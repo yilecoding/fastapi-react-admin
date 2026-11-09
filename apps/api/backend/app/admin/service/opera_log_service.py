@@ -20,6 +20,7 @@ class OperaLogService:
         ip: str | None,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
+        trace_id: str | None = None,
     ) -> dict[str, Any]:
         """
         获取操作日志列表
@@ -30,10 +31,11 @@ class OperaLogService:
         :param ip: IP 地址
         :param start_time: 操作时间起
         :param end_time: 操作时间止
+        :param trace_id: 请求跟踪 ID
         :return:
         """
         log_select = await opera_log_dao.get_select(
-            username=username, status=status, ip=ip, start_time=start_time, end_time=end_time
+            username=username, status=status, ip=ip, start_time=start_time, end_time=end_time, trace_id=trace_id
         )
         return await paging_data(db, log_select)
 

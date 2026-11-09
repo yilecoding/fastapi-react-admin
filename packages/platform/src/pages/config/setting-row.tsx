@@ -1,4 +1,4 @@
-import { IconDeviceDesktop, IconPencil, IconTrash } from '@tabler/icons-react'
+import { IconDeviceDesktop, IconHistory, IconPencil, IconTrash } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@admin/ui/components/badge'
@@ -23,6 +23,7 @@ export function SettingRow({
   disabledReason,
   onChange,
   onEdit,
+  onHistory,
   onDelete,
 }: {
   item: ConfigItem
@@ -32,6 +33,8 @@ export function SettingRow({
   disabledReason?: string | null
   onChange: (v: string) => void
   onEdit: (c: ConfigItem) => void
+  /** 变更记录（#260）：这个键的值被谁、什么时候改过 */
+  onHistory: (c: ConfigItem) => void
   onDelete: (c: ConfigItem) => void
 }) {
   const { t } = useTranslation()
@@ -102,6 +105,7 @@ export function SettingRow({
           triggerClassName="size-8 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100 data-popup-open:opacity-100"
           items={[
             { key: 'edit', label: t('编辑键定义'), icon: IconPencil, perm: 'sys:config:edit', onClick: () => onEdit(item), testId: `edit-${item.key}` },
+            { key: 'history', label: t('变更记录'), icon: IconHistory, perm: 'log:change:list', onClick: () => onHistory(item), testId: `history-${item.key}` },
             { key: 'delete', label: t('删除'), icon: IconTrash, danger: true, perm: 'sys:config:del', onClick: () => onDelete(item), testId: `del-${item.key}` },
           ]}
         />

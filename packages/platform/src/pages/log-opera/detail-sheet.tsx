@@ -13,7 +13,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/tabs'
 import { cn } from '@admin/ui/lib/utils'
 
+import { Can } from '../../auth/can'
 import { formatMs } from '../_shared/cells'
+import { TraceChanges } from '../_shared/data-change/trace-changes'
 import { JsonViewer } from '../_shared/json-viewer'
 import { DetailIdRow, DetailSection } from '../_shared/detail-sheet'
 import { StatusPill } from '../_shared/status'
@@ -111,6 +113,16 @@ export function OperaLogDetailSheet({
               </Alert>
             )}
           </DetailSection>
+
+          {/* ── 这次改了什么（#260）：按 trace_id 关联数据变更记录。GET 不改数据，不查 ── */}
+          {/* trace_id 是占位的 `-`（没有 OTel span）时不查：按 `-` 筛出来的是所有定时任务 / 系统写入，跟这次请求无关 */}
+          {log.method !== 'GET' && log.trace_id && log.trace_id !== '-' && (
+            <Can perm="log:change:list">
+              <DetailSection title={t('这次改了什么')}>
+                <TraceChanges traceId={log.trace_id} />
+              </DetailSection>
+            </Can>
+          )}
 
           {/* ── 响应信息 ── */}
           <DetailSection title={t("响应信息")}>

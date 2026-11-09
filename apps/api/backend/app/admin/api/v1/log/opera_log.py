@@ -33,9 +33,10 @@ async def get_opera_logs_paginated(
     ip: Annotated[str | None, Query(description='IP 地址')] = None,
     start_time: Annotated[datetime | None, Query(description='操作时间起')] = None,
     end_time: Annotated[datetime | None, Query(description='操作时间止')] = None,
+    trace_id: Annotated[str | None, Query(description='请求跟踪 ID（数据变更记录跳过来用，#260）')] = None,
 ) -> ResponseSchemaModel[PageData[GetOperaLogDetail]]:
     page_data = await opera_log_service.get_list(
-        db=db, username=username, status=status, ip=ip, start_time=start_time, end_time=end_time
+        db=db, username=username, status=status, ip=ip, start_time=start_time, end_time=end_time, trace_id=trace_id
     )
 
     return response_base.success(data=page_data)

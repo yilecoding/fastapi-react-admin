@@ -263,12 +263,20 @@ class LogExportFilters(_Filters):
     end_time: datetime | None = Field(None, description='时间止（含）')
 
 
+class OperaLogExportFilters(LogExportFilters):
+    """操作日志多一个 `trace_id`（从数据变更记录跳过来，#260）。登录日志没有这一列，所以单独派生 ——
+    筛选模型是 `extra='forbid'`，页面带着它去导出、模型里没有的话是 422"""
+
+    trace_id: str | None = Field(None, description='请求跟踪 ID')
+
+
 _LOG_FILTER_LABELS = {
     'username': 'export.column.username',
     'status': 'export.column.result',
     'ip': 'export.column.ip',
     'start_time': 'export.filter.start_time',
     'end_time': 'export.filter.end_time',
+    'trace_id': 'export.column.trace_id',
 }
 
 
@@ -278,9 +286,9 @@ async def _login_log_select(f: LogExportFilters, _user: Any) -> Select:
     )
 
 
-async def _opera_log_select(f: LogExportFilters, _user: Any) -> Select:
+async def _opera_log_select(f: OperaLogExportFilters, _user: Any) -> Select:
     return await opera_log_dao.get_select(
-        username=f.username, status=f.status, ip=f.ip, start_time=f.start_time, end_time=f.end_time
+        username=f.username, status=f.status, ip=f.ip, start_time=f.start_time, end_time=f.end_time, trace_id=f.trace_id
     )
 
 
@@ -332,7 +340,7 @@ OPERA_LOG_EXPORT = register_export(
             ExportColumn('os', 'export.column.os', width=14),
             ExportColumn('trace_id', 'export.column.trace_id', width=34),
         ),
-        filters=LogExportFilters,
+        filters=OperaLogExportFilters,
         filter_labels=_LOG_FILTER_LABELS,
         select=_opera_log_select,
         id_column=OperaLog.id,

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from backend.common.data_change.capture import install_data_change_capture
 from backend.common.enums import DataBaseType
 from backend.common.log import log
 from backend.common.model import MappedBase
@@ -196,6 +197,9 @@ for source, url in settings.DATABASE_SOURCES.items():
     _database_engines[source] = create_database_async_engine(url)
 
 async_db_session = create_database_async_session(async_engine, source_binds=_database_engines)
+
+# 数据变更审计（#260）：挂在 Session 类上，API / worker / CLI / 测试的每个会话都有，见 `common/data_change/AGENTS.md`
+install_data_change_capture()
 
 
 def get_database_engines() -> Mapping[str, AsyncEngine]:

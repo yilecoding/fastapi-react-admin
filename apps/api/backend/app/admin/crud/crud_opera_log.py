@@ -19,6 +19,7 @@ class CRUDOperaLogDao(DataScopedCRUD[OperaLog]):
         ip: str | None,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
+        trace_id: str | None = None,
     ) -> Select:
         """
         获取操作日志列表查询表达式
@@ -43,6 +44,9 @@ class CRUDOperaLogDao(DataScopedCRUD[OperaLog]):
             filters['opera_time__ge'] = start_time
         if end_time is not None:
             filters['opera_time__le'] = end_time
+        # 精确匹配：从数据变更记录跳过来看「这次请求」（#260）
+        if trace_id is not None:
+            filters['trace_id'] = trace_id
 
         return await self.select_order('created_time', 'desc', **filters)
 
