@@ -12,6 +12,8 @@ const searchSchema = z.object({
   status: z.coerce.number().int().optional(),
   /** `2026-08-16~2026-08-22`，两端都可省 */
   time: z.string().optional(),
+  /** 数据变更记录跳过来看「这次请求」（#260），精确匹配 */
+  trace_id: z.string().optional(),
   /** 摆开但还没填值的格子 */
   f: z.string().optional(),
   /** 被隐藏的列 id，逗号分隔 */

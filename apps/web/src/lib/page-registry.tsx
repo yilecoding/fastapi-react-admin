@@ -1,6 +1,7 @@
 import type { PageRegistry } from "@admin/platform/shell/tab-outlet"
 import { UserPage } from "@admin/platform/pages/user"
 import { LogLoginPage } from "@admin/platform/pages/log-login"
+import { LogChangePage } from "@admin/platform/pages/log-change"
 import { LogOperaPage } from "@admin/platform/pages/log-opera"
 import { DeptPage } from "@admin/platform/pages/dept"
 import { RolePage } from "@admin/platform/pages/role"
@@ -75,6 +76,7 @@ export const pageRegistry: PageRegistry = {
   "/_auth/system/storage": StoragePage,
   "/_auth/log/login": LogLoginPage,
   "/_auth/log/opera": LogOperaPage,
+  "/_auth/log/change": LogChangePage,
   "/_auth/plugins/dict": DictPage,
   "/_auth/sandbox/table": PlaygroundTablePage,
   "/_auth/sandbox/query": PlaygroundQueryPage,

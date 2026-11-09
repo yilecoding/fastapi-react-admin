@@ -7,6 +7,7 @@ import {
   IconChevronRight,
   IconChevronsDown,
   IconChevronsUp,
+  IconHistory,
   IconPencil,
   IconPlus,
   IconTrash,
@@ -38,6 +39,7 @@ import {
 } from './api'
 import { countBroken, isBrokenMenu } from './dead-link'
 import { MenuFormSheet } from './form'
+import { DataChangeSheet } from '../_shared/data-change/history-sheet'
 import { ListBody, PageShell } from '../_shared/page-shell'
 
 /**
@@ -85,6 +87,7 @@ export function MenuPage({
 
   const [sheet, setSheet] = React.useState(false)
   const [editing, setEditing] = React.useState<Menu | null>(null)
+  const [historyOf, setHistoryOf] = React.useState<Menu | null>(null)
   const [presetParent, setPresetParent] = React.useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<Menu | null>(null)
   // 删除失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案
@@ -246,6 +249,7 @@ export function MenuPage({
                     onToggle={toggle}
                     onEdit={(x) => { setEditing(x); setPresetParent(null); setSheet(true) }}
                     onAddChild={(pid) => { setEditing(null); setPresetParent(pid); setSheet(true) }}
+                    onHistory={setHistoryOf}
                     onDelete={setPendingDelete}
                   />
                 ))
@@ -258,6 +262,10 @@ export function MenuPage({
       <MenuFormSheet
         open={sheet} onOpenChange={setSheet}
         editing={editing} presetParentId={presetParent} tree={tree}
+      />
+      <DataChangeSheet
+        entity="menu" entityId={historyOf?.id ?? null} name={historyOf?.title}
+        open={historyOf !== null} onOpenChange={(o) => !o && setHistoryOf(null)}
       />
 
       <ConfirmDialog
@@ -288,7 +296,7 @@ export function MenuPage({
 }
 
 function MenuRows({
-  node, depth, isOpen, isValidPath, onToggle, onEdit, onAddChild, onDelete,
+  node, depth, isOpen, isValidPath, onToggle, onEdit, onAddChild, onHistory, onDelete,
 }: {
   node: Menu
   depth: number
@@ -297,6 +305,8 @@ function MenuRows({
   onToggle: (id: string) => void
   onEdit: (m: Menu) => void
   onAddChild: (parentId: string) => void
+  /** 变更记录（#260） */
+  onHistory: (m: Menu) => void
   onDelete: (m: Menu) => void
 }) {
   const { t } = useTranslation()
@@ -368,6 +378,10 @@ function MenuRows({
               },
               { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'sys:menu:edit', testId: `menu-edit-${node.name}`, onClick: () => onEdit(node) },
               {
+                key: 'history', label: t('变更记录'), icon: IconHistory, perm: 'log:change:list',
+                testId: `menu-history-${node.name}`, onClick: () => onHistory(node),
+              },
+              {
                 key: 'del', label: t('删除'), icon: IconTrash, perm: 'sys:menu:del', danger: true,
                 testId: `menu-delete-${node.name}`, onClick: () => onDelete(node),
               },
@@ -379,7 +393,7 @@ function MenuRows({
       {hasKids && open &&
         kids.map((c) => (
           <MenuRows key={c.id} node={c} depth={depth + 1} isOpen={isOpen} isValidPath={isValidPath}
-                    onToggle={onToggle} onEdit={onEdit} onAddChild={onAddChild} onDelete={onDelete} />
+                    onToggle={onToggle} onEdit={onEdit} onAddChild={onAddChild} onHistory={onHistory} onDelete={onDelete} />
         ))}
     </>
   )

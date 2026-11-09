@@ -18,7 +18,7 @@ Everything below is on `main`. Areas with their own page are linked.
 | **AI assistant** | [full-page chat + side drawer](/en/features/ai-assistant/) · tool calls bound by permissions and data scopes · preview + confirm for writes · audit log · MCP gateway |
 | **Open API** | [AK/SK-signed endpoints](/en/features/open-api/) · scopes / IP allow-list / replay protection / rate limits · call logs · incremental sync · Python / Node / Java SDKs |
 | **Messages & jobs** | [in-app notifications, notices and channel routing](/en/features/notifications/) (email / SMS / group bots) · scheduled jobs (online scheduling · cron preview · run history) |
-| **Operations** | settings · dictionaries · sign-in / operation logs (redacted) · server & Redis monitoring · new-version prompt · one [health URL](/en/getting-started/deployment/#what-should-external-monitoring-check) for external monitoring |
+| **Operations** | settings · dictionaries · sign-in / operation logs (redacted) · data change history (who changed which field from what to what, when and from where) · server & Redis monitoring · new-version prompt · one [health URL](/en/getting-started/deployment/#what-should-external-monitoring-check) for external monitoring |
 | **Databases** | [PostgreSQL · SQL Server · MySQL](/en/features/databases/) with the same code and migration chain |
 | **Clients** | [Electron desktop](/en/features/clients/) (silent printing · local hardware · auto-update) · native Expo app (not a WebView wrapper) |
 | **Developers** | component sandbox (every component tweakable and copy-pasteable) · color palette · type-safe API contract generated from OpenAPI |

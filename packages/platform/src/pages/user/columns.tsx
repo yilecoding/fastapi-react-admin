@@ -1,5 +1,5 @@
 import { createColumnHelper } from '@tanstack/react-table'
-import { IconPencil, IconShieldLock, IconTrash } from '@tabler/icons-react'
+import { IconHistory, IconPencil, IconShieldLock, IconTrash } from '@tabler/icons-react'
 
 import { ACTIONS_COLUMN_ID } from '@admin/ui/components/data-table'
 import { Avatar, AvatarFallback, AvatarImage } from '@admin/ui/components/avatar'
@@ -17,6 +17,8 @@ export function buildColumns(
   onEdit: (u: User) => void,
   onDelete: (u: User) => void,
   onSecurity: (u: User) => void,
+  /** 变更记录（#260） */
+  onHistory: (u: User) => void,
   /** 普通函数不能自己调 hook —— 由组件传进来 */
   t: (k: string, vars?: Record<string, unknown>) => string
 ) {
@@ -101,6 +103,10 @@ export function buildColumns(
               {
                 key: 'security', label: t('权限与安全'), icon: IconShieldLock, superOnly: true,
                 testId: `security-${u.username}`, onClick: () => onSecurity(u),
+              },
+              {
+                key: 'history', label: t('变更记录'), icon: IconHistory, perm: 'log:change:list',
+                testId: `history-${u.username}`, onClick: () => onHistory(u),
               },
               {
                 key: 'del', label: t('删除'), icon: IconTrash, perm: 'sys:user:del', danger: true,

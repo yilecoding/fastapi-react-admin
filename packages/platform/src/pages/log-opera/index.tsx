@@ -90,6 +90,8 @@ const FIELDS: FilterField[] = [
       { value: 0, label: '异常' },
     ],
   },
+  // 精确匹配：从数据变更记录「看这次请求的操作日志」跳过来（#260）
+  { key: 'trace_id', label: '请求跟踪 ID', type: 'text', group: '请求' },
   {
     key: 'time',
     label: '操作时间',
@@ -123,6 +125,7 @@ export type OperaLogSearch = {
   ip?: string
   status?: number
   time?: string
+  trace_id?: string
   /** 摆开但没填值的格子 */
   f?: string
   /** 被隐藏的列 id，逗号分隔 */

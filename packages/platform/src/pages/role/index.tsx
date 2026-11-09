@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { IconPencil, IconPlus, IconTrash, IconUserShield } from '@tabler/icons-react'
+import { IconHistory, IconPencil, IconPlus, IconTrash, IconUserShield } from '@tabler/icons-react'
 
 import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/t
 
 import { Can } from '../../auth/can'
 import { cn } from '@admin/ui/lib/utils'
+import { DataChangeSheet } from '../_shared/data-change/history-sheet'
 import { listState } from '../_shared/list-query'
 import { MasterList, type MasterListItem } from '../_shared/master-list'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
@@ -112,6 +113,7 @@ export function RolePage({
     inPage ?? detail.data ?? (needLookup && detail.isPending ? null : (roles[0] ?? null))
 
   const [sheetOpen, setSheetOpen] = React.useState(false)
+  const [historyOpen, setHistoryOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<Role | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<Role | null>(null)
   const [pendingSelect, setPendingSelect] = React.useState<string | null>(null)
@@ -193,6 +195,7 @@ export function RolePage({
               <RoleDetailHeader
                 role={selected}
                 onEdit={() => { setEditing(selected); setSheetOpen(true) }}
+                onHistory={() => setHistoryOpen(true)}
                 onDelete={() => setPendingDelete(selected)}
               />
 
@@ -238,6 +241,13 @@ export function RolePage({
       </div>
 
       <RoleFormSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} />
+      <DataChangeSheet
+        entity="role"
+        entityId={selected?.id ?? null}
+        name={selected?.name}
+        open={historyOpen && !!selected}
+        onOpenChange={setHistoryOpen}
+      />
 
       <ConfirmDialog
         open={pendingSelect !== null}
@@ -284,10 +294,12 @@ export function RolePage({
 }
 
 function RoleDetailHeader({
-  role, onEdit, onDelete,
+  role, onEdit, onHistory, onDelete,
 }: {
   role: Role
   onEdit: () => void
+  /** 变更记录（#260）：基本信息、菜单权限、数据范围的每一次修改 */
+  onHistory: () => void
   onDelete: () => void
 }) {
   const { t } = useTranslation()
@@ -314,6 +326,11 @@ function RoleDetailHeader({
         <Can perm="sys:role:edit">
           <Button variant="outline" size="sm" className="h-8" onClick={onEdit} data-testid="role-detail-edit">
             <IconPencil className="size-4" />{t('编辑角色')}
+          </Button>
+        </Can>
+        <Can perm="log:change:list">
+          <Button variant="outline" size="sm" className="h-8" onClick={onHistory} data-testid="role-detail-history">
+            <IconHistory className="size-4" />{t('变更记录')}
           </Button>
         </Can>
         <Can perm="sys:role:del">
