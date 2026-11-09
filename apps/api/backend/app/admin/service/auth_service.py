@@ -659,6 +659,7 @@ class AuthService:
 def session_meta(user: User) -> dict[str, str]:
     """存进会话、给在线用户页展示的那几样（登录那一刻的快照）"""
     return {
+        'uuid': user.uuid,
         'username': user.username,
         'nickname': user.nickname,
         'last_login_time': timezone.to_iso(timezone.now()),

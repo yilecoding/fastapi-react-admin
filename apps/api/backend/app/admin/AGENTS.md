@@ -201,6 +201,17 @@ SQL Server 2022（`sys.identity_columns` 对这张表 0 行）/ MySQL 8.4；之�
 | 管理员踢人：操作日志里只有会话编号；改密码 / 停用连带撤销的会话**什么都没记** | 在会话层唯一的撤销入口 `session_store.revoke` 挂回调（`on_session_revoked`），登录日志服务登记 `record_forced_logout`：踢人 / 改密码 / 停用都记，以后新加的撤销路径自动记上；自己登出、被同浏览器新登录挤掉、空闲 / 到期不算 |
 
 - 🔴 **被踢那一行记的是被踢那个会话的 IP / 浏览器**（撤销之前先 `HGETALL` 会话），不是点按钮的管理员的。说明里写谁干的（`ctx.user_id`；就是本人时写「本人」，没有请求上下文时写「系统」）
+- 🔴 **记这一行时不能另开会话读 `sys_user`**（`record_event` 只收调用方给的 uuid / 用户名）。
+  **症状**：PR 第一版 CI 上「pytest · SQL Server」和「playwright · E2E」都跑满 20 分钟被取消，PostgreSQL 那个 job 5 分半全绿。
+  **根因**：改密码 / 停用 / 删除是先 UPDATE 用户那一行、再撤销会话（→ 回调），请求的事务要等回调返回才提交；回调另开会话读那一行，
+  SQL Server（RCSI 关着，读要加共享锁）上就排在请求的排他锁后面 —— 两边互等，而一边在应用层，数据库的死锁检测看不见，请求永远挂着。
+  **修法**：被踢的人取会话里的快照（`session_meta` 多存一个 `uuid`；升级前登录的会话没有，那几天记随机的），
+  点按钮的人取请求上下文（JWT 认证时放进 `ctx.username`），锁定那条用调用方自己的会话读。
+  **实测证据**（2026-11-09，本机 SQL Server 私有库）：修之前 `test_login_events.py` 卡住，`sys.dm_exec_requests` 里回调那条
+  `SELECT sys_user.uuid, sys_user.username` 在 `LCK_M_S` 上等改密码那个会话（它最后一句是 `UPDATE sys_user SET last_password_changed_time`）；
+  修后 6 条 6.4 秒。守卫不靠「挂没挂」（PostgreSQL 不挂）：`test_a_password_reset_records_every_session_it_ended` 记下每条语句和提交，
+  断言请求 UPDATE 用户行之后、提交之前没有别的连接碰 `sys_user` —— 把操作人改回查库，PostgreSQL 上当场红。
+  ⚠️ 以后往 `on_session_revoked` 上挂新回调，同一条：**它跑在调用方的事务中间**，别另开会话读调用方可能刚改过的行
 - 🔴 **数登录的地方只数 `login`**：工作台的「登录次数 / 失败」和「今天登录失败偏多」都过滤了。不过滤的话踢一次人就多一次「登录失败」
 - 记录写不进去只记日志、不往外抛：拒绝登录、踢人这两件事本身不能因为记不下来而失败
 - 解锁是到期自动的（没有手动解锁），锁到几点写在锁定那一行里；「用恢复码登录」还没做
@@ -209,7 +220,7 @@ SQL Server 2022（`sys.identity_columns` 对这张表 0 行）/ MySQL 8.4；之�
 - ⚠️ **别的测试收尾时撤销同一个临时账号的会话（`EndReason.disabled`），本身就会记成「被强制下线」**。单跑本文件全绿、
   和 `test_session.py` 一起跑就多出 26 行 —— 断言一律限定在本条测试开始之后，而且精确到微秒（按秒截的话上一条的收尾落在同一秒里就混进来）
 
-**实测证据**：`tests/api_v1/test_login_events.py` 6 条（经接口按 `event` 读回）+ E2E `login-events.spec.ts`。
+**实测证据**：`tests/api_v1/test_login_events.py` 6 条（经接口按 `event` 读回；改密码那条兼守上面的锁窗口）+ E2E `login-events.spec.ts`。
 变异 8 处各打红：锁定不记 · IP 锁定不记 · 撤销不登记回调 · 被踢那行记管理员的 IP · 什么原因下线都记 · 工作台不按事件过滤 ·
 接口不透传 `event` · 撤销之前不取会话字段。前端：查询区去掉「事件」→ E2E 红；路由 schema 去掉 `event` **不红**，是等价变异
 （叶子路由的 search 会合并根上没校验的那一份，见 `packages/ui` 分册「列顺序」那条）。迁移 `ao000000loginevent`（原 `an000000loginevent`，#271 先合后改接）：已有行回填 `login`、

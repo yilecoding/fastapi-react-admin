@@ -302,6 +302,10 @@ def on_session_revoked(fn: SessionRevokedListener) -> SessionRevokedListener:
 
     挂在 `SessionStore.revoke` 这个唯一的撤销入口上 —— 管理员踢人、改密码、停用账号、以后新加的撤销路径，
     一处登记全都覆盖（在调用处各记一笔的话，漏一处就是「这类下线没有记录」，而且是静默的）
+
+    🔴 回调跑在调用方的事务**中间**（改密码 / 停用是先改用户行、再撤销、最后才提交）。
+    回调里另开会话去读调用方刚改过的行，SQL Server 上会和调用方互等、请求永远挂着
+    （`login_log_service.record_event` 踩过，#273）
     """
     if fn not in _revoked_listeners:
         _revoked_listeners.append(fn)
