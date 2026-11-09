@@ -315,7 +315,8 @@ export const FORM_DEMOS: Demo[] = [
     zh: '日历',
     group: 'form',
     summary:
-      'react-day-picker 的皮肤层。**它是裸日历，不带输入框、不带浮层** —— ' +
+      'react-day-picker 管「日」那一层，表头和年 / 月面板是自己补的：点年份 / 月份切面板，« » 跳一年、‹ › 跳一月。' +
+      '**它是裸日历，不带输入框、不带浮层** —— ' +
       '日常选时间请用 DateTimePicker（那个把它塞进 Popover 并解决了值的格式问题）。' +
       '直接用 Calendar 的场景是「日历本身就是页面的主体」。',
     source: 'packages/ui/src/components/calendar.tsx',
@@ -323,14 +324,15 @@ export const FORM_DEMOS: Demo[] = [
     avoid: '🔴 表单和筛选栏里选时间用 DateTimePicker —— 直接用 Calendar 你得自己处理浮层、值的格式（本地时间串 vs Date）、以及区间的 00:00:00 / 23:59:59 补齐。',
     knobs: {
       mode: { kind: 'select', label: 'mode', options: ['single', 'range', 'multiple'], default: 'single' },
-      captionLayout: { kind: 'select', label: '标题栏', options: ['label', 'dropdown'], default: 'label', hint: 'dropdown 能直接跳年月' },
+      bounded: { kind: 'bool', label: '限定范围', default: false, hint: '默认不设上下限；这里演示 startMonth / endMonth = 去年 1 月 ~ 明年 12 月' },
       showOutsideDays: { kind: 'bool', label: '显示上下月余日', default: true },
       numberOfMonths: { kind: 'int', label: '月份数', default: 1, min: 1, max: 2 },
     },
     render: (v) => (
       <Calendar
         mode={s(v, 'mode') as 'single'}
-        captionLayout={s(v, 'captionLayout') as 'label'}
+        startMonth={b(v, 'bounded') ? new Date(new Date().getFullYear() - 1, 0, 1) : undefined}
+        endMonth={b(v, 'bounded') ? new Date(new Date().getFullYear() + 1, 11, 1) : undefined}
         showOutsideDays={b(v, 'showOutsideDays')}
         numberOfMonths={n(v, 'numberOfMonths')}
         className="rounded-lg border border-border"
@@ -341,7 +343,8 @@ export const FORM_DEMOS: Demo[] = [
         mode: s(v, 'mode'),
         selected: '{selected}',
         onSelect: '{setSelected}',
-        captionLayout: s(v, 'captionLayout') === 'label' ? undefined : s(v, 'captionLayout'),
+        startMonth: b(v, 'bounded') ? '{new Date(year - 1, 0, 1)}' : undefined,
+        endMonth: b(v, 'bounded') ? '{new Date(year + 1, 11, 1)}' : undefined,
         showOutsideDays: b(v, 'showOutsideDays') ? undefined : '{false}',
         numberOfMonths: n(v, 'numberOfMonths') === 1 ? undefined : n(v, 'numberOfMonths'),
       }),

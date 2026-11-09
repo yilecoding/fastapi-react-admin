@@ -114,6 +114,8 @@ const ALLOW = new Map(Object.entries({
   'storageState.json': 'Playwright 的概念，文档说的就是「这条路走不通」',
   'settings-layout.tsx': '已被 settings-shell.tsx 取代，文档在讲换掉它的理由',
   'command.tsx': 'cmdk 封装，零调用方已连依赖链一起删除；文档在讲「不要把它引回来」',
+  'calendar-nav.ts': '已改名为 calendar-state.ts；ui 分册讲的正是「叫别的名字 registry 会生成一个不存在的依赖条目」',
+  'dist/esm/helpers/getNavMonth.js': 'react-day-picker 包内的路径（在 node_modules 里），ui 分册引它当「年份下拉锁到今年」的根因出处',
   'version.json': '构建产物（vite 发到 dist 根目录），不进 git',
   'latest.yml': 'electron-builder 的产物（更新清单），不进 git',
   'latest-mac.yml': '同上，macOS 的更新清单',
