@@ -19,6 +19,7 @@ const PHRASING: Record<string, string> = {
   user_list: '系统里有哪些用户？',
   login_log_list: '最近 24 小时有登录失败吗？',
   opera_log_list: '最近有哪些人改过东西？',
+  data_change_history: '最近谁改过角色的菜单权限？',
   weather_query: '深圳今天天气怎么样？',
 }
 

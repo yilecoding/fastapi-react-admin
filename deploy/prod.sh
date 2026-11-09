@@ -109,7 +109,6 @@ case $env_rel in
   *) env_file="$project_dir/${env_rel#./}" ;;
 esac
 image_owner=$(setting IMAGE_OWNER yilecoding)
-image_tag=$(setting TAG latest)
 pull_mirror=$(setting FBA_PULL_MIRROR "")
 
 # ── 前置检查 ─────────────────────────────────────────────────────────────
@@ -214,18 +213,33 @@ cmd_status() {
 # 加速器只是同一份内容换了个路径前缀，不能直接写进 compose 的镜像名（那样
 # compose 记住的就是加速器地址了），所以拉完必须 retag 回 ghcr.io/<owner>/…；
 # 之后 `up` 发现本地已有同名镜像就不会再去拉。这一串以前是人手敲四条命令。
+#
+# 🔴 镜像名从 compose 展开（`config --images`），**不在这里再写一份**。原来
+# 这里写死了 `fba-api fba-web`，和 compose 是两份真相；镜像改名时只要服务器上
+# 两份文件有一份没更新，就是拉 A 起 B：加速器拉的是一个名字，`up` 用的是另一个，
+# 而 `up` 只要本地有那个名字的旧 `latest` 就直接起，不报错（按 compose 默认的
+# pull_policy: missing 推断，没在服务器上复现过，见 deploy/AGENTS.md）。
+# IMAGE_OWNER / TAG 也一并由 compose 自己解析，和 `up` 看到的是同一份。
 cmd_pull() {
   if [ -z "$pull_mirror" ]; then
     dc pull
     return
   fi
   info "走加速器 $pull_mirror（拉完自动 retag 回 ghcr.io）"
-  local repo
-  for repo in fba-api fba-web; do
-    docker pull "$pull_mirror/$image_owner/$repo:$image_tag"
-    docker tag "$pull_mirror/$image_owner/$repo:$image_tag" \
-      "ghcr.io/$image_owner/$repo:$image_tag"
-    ok "$repo:$image_tag"
+  local images image
+  images=$(dc config --images | sort -u) ||
+    fail "从 compose 展开镜像名失败" "先跑 bash prod.sh config 看报错"
+  for image in $images; do
+    case $image in
+      ghcr.io/*) ;;
+      *)
+        info "跳过 $image（不在 GHCR 上，加速器管不到，交给 up 按需拉）"
+        continue
+        ;;
+    esac
+    docker pull "$pull_mirror/${image#ghcr.io/}"
+    docker tag "$pull_mirror/${image#ghcr.io/}" "$image"
+    ok "${image##*/}"
   done
 }
 
