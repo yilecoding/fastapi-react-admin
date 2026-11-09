@@ -52,5 +52,16 @@ export function useT(): TFn {
   return t as TFn
 }
 
+/**
+ * 当前界面语言（`'zh-CN'` / `'en-US'` …），切语言时组件跟着重渲染。
+ *
+ * 没接实例时回落 `'zh-CN'` —— 和 `useT()` 的兜底同一个口径：那时候 `t()`
+ * 吐的是中文 key，日历之类跟语言走的东西也该是中文，不能一半中一半英。
+ */
+export function useLang(): string {
+  const { i18n } = useTranslation()
+  return (i18n?.isInitialized && i18n.language) || "zh-CN"
+}
+
 /** 兜底实现单独导出，给单测用 */
 export const __fallbackT = interpolateOnly

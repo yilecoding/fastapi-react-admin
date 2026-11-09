@@ -96,6 +96,19 @@ context** 里取翻译函数，而那个 i18next 实例是 `@admin/i18n` 建的�
 **新增 `src/components/*.ts` 时照这条办。** 判据很简单：
 拆纯逻辑出去是好事（能测），但别顺手用包自引用去 import 它。
 
+⚠️ **上面那条 `exports` 数组兜底，在 vite dev 下实测不起作用 —— 只有相对路径这一半是有效的。**
+2026-11-09 拆 `calendar.tsx` 的纯逻辑时又踩了一次：`from "@admin/ui/components/calendar-nav"`
+（`.ts` 文件），typecheck 绿，dev 下请求那个模块直接 500，原文
+`Failed to resolve import "@admin/ui/components/calendar-nav" from "../../packages/ui/src/components/calendar.tsx"`。
+vite 解析 `exports` 时只取数组里的第一项、不会回退。**别指望兜底，相对路径是唯一的修法。**
+
+⚠️ **拆出来的纯逻辑文件必须叫 `<组件名>-state.ts`**（`tree-state.ts` · `calendar-state.ts`）。
+`scripts/gen-ui-registry.mjs` 的 `filesOf()` 只认这个名字，把它归进主组件的 `files`；
+叫别的名字时，生成器把相对 import 当成**另一个条目**写进 `registryDependencies`，
+而那个条目根本不存在 —— 下游 `shadcn add calendar` 才会炸。
+实测：叫 `calendar-nav.ts` 时 `pnpm ui:registry` 生成了 `"registryDependencies": ["button", "calendar-nav", …]`，
+改名后变成 `files` 里多一项 `src/components/calendar-state.ts`。
+
 ## 🔴 「demo 里的代码」也会教错人 —— 它是要被抄走的
 
 沙箱的代码块存在的意义就是「抄走就能用」，所以**写错的 demo 比没有 demo 更糟**。
@@ -235,6 +248,45 @@ Base UI 拿 `TooltipTrigger` 渲染出来的那个元素当**定位参照**。`d
 `data-table.tsx` 里那一处已经改成 `getIsSelected?.()`。**再往 DataTable 里加
 「某个特性才有的方法」时，一律写成可选调用**，否则就是给「只注册了自己要用的
 特性」的调用方埋一个类型检查抓不到的雷。
+
+### 🔴 日历：react-day-picker 的年份下拉会静默把导航锁到「今年 12 月」（#264）
+
+**症状**：单值日期选择器（公告的「定时发布 / 过期时间」、开放应用的「失效时间」…）
+翻到当年 12 月，「下一月」就灰了；年份下拉只有 100 年前到今年；字段里已经存着
+明年的值时，打开面板停在今年 12 月，选中的那天看不到。
+
+**根因**：`captionLayout="dropdown"` 且调用方没传 `endMonth` 时，react-day-picker
+自己补默认值（`dist/esm/helpers/getNavMonth.js`）：`startMonth = 100 年前 1 月`、
+`endMonth = endOfYear(today)`。这对选生日合理，对选到期时间是错的；`label` 模式不加锁，
+所以只有用了下拉的那个组件中招，区间选择器没事 —— 更不容易被发现。
+
+**修法**：`calendar.tsx` 去掉了 `captionLayout`（类型上也删了，传了就报错），
+年 / 月跳转换成自己画的年面板、月面板，**默认不设上下限**；要限制就显式传
+`startMonth` / `endMonth`。导航算术在 `calendar-state.ts`，有单测守着「没有范围时翻到明年永远可以」。
+❌ 不要为了「能直接跳年」再把 `captionLayout="dropdown"` 加回来。
+
+**实测**（2026-11-09，`react-day-picker@10.0.1`）：改之前从 2026-11 点一次下一月到 2026-12，
+按钮 `aria-disabled="true"`，年份 `<select>` 101 项、`1926`…`2026`；`value="2027-06-15 10:00:00"`
+打开面板，标题「12月 2026」、没有选中格。改之后同一个值打开定位到 2027 年 6 月，
+年面板 → 选年 → 选月三次点击到达任意月份。
+
+### 🔴 日历：`locale` 不传就是英文，界面是中文也一样（#265）
+
+**症状**：中文界面里日历标题是 `November 2026`、星期是 `Su Mo Tu`、翻页按钮读屏念英文；
+用下拉标题时月份反倒是「11月」—— 那是**浏览器**语言，不是界面语言。
+
+**根因**：react-day-picker 不传 `locale` 默认 `enUS`，而原来没有任何调用方传；
+下拉的月份是 `toLocaleString(undefined, …)`，退回浏览器语言。两个来源，哪个都不跟界面。
+
+**修法**：`Calendar` 内部用 `useLang()`（`lib/i18n.ts`，和 `useT()` 一样没接实例时回落 `zh-CN`）
+映射到 `react-day-picker/locale`，表头和年 / 月面板用 `Intl.DateTimeFormat(locale.code)` 格式化。
+**`packages/i18n` 的 `LANGUAGES` 加一种语言时，`calendar.tsx` 的 `LOCALES` 也要加一项**，
+否则那种语言回落成英文，不报错。
+⚠️ `zhCN` 的一周从**周一**开始（date-fns 的 `weekStartsOn: 1`，Element Plus / antdv 中文版也是），
+`enUS` 从周日开始 —— 切语言时星期列会整体挪一格，这是对的。
+
+**实测**（2026-11-09）：中文下表头「2026年 11月」、星期「一 二 三 四 五 六 日」、今天那格读屏
+「今天，2026年11月9日 星期一」；`changeLanguage('en-US')` 后不用刷新变成「Mar 2032」·「Su Mo … Sa」。
 
 ### 🔴 `line-clamp-*` 和 `block` 会互相打架，输的那个只剩「齐字切断」
 

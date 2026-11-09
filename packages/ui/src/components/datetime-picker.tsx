@@ -184,7 +184,6 @@ export function DateTimeValuePicker({
           mode="single"
           selected={date}
           defaultMonth={date}
-          captionLayout="dropdown"
           onSelect={(d) => {
             if (!d) return onChange(undefined)
             onChange(stampValue(d, { withTime, time: withTime ? timePart(value, false) : undefined }))
