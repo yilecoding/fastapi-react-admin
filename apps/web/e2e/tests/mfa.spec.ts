@@ -3,7 +3,8 @@ import { createHmac } from "node:crypto"
 import { expect, loginPageAs, test } from "../fixtures/base"
 
 /**
- * 二次验证（#181）：个人中心开启 → 恢复码只显示一次 → 退出 → 密码登录停在第二步 → 动态码进系统。
+ * 二次验证（#181）：个人中心开启 → 恢复码只显示一次 → 退出 → 密码登录停在第二步 → 动态码进系统
+ * → 管理员重置 → 用户页「变更记录」里看得到开启和重置两条（#260 二期）。
  *
  * 会静默坏的两处：
  * - 开启之后登录照样一步进来（某条登录路径漏了第二步）—— 这里断言「密码对了之后看到的是动态码框，不是工作台」
@@ -86,6 +87,29 @@ test.describe("二次验证", () => {
       await page.getByTestId("mfa-otp").fill(totp(secret, 1))
       await page.getByTestId("mfa-submit").click()
       await expect(page.getByTestId("page-title")).toBeVisible()
+
+      // ── 数据变更审计（#260 二期）：本人开启、管理员重置都记在这个人名下 ──
+      await api.del(`/api/v1/sys/users/${user.id}/mfa`)
+      await page.context().clearCookies()
+      await loginPageAs(page, "admin", "123456")
+      await page.goto(`/system/user?username=${username}`)
+      const userTab = page.locator('[data-tab="/_auth/system/user"]')
+      await userTab.getByTestId(`row-actions-${username}`).click()
+      await page.getByTestId(`history-${username}`).click()
+      const records = page
+        .getByTestId("data-change-sheet")
+        .getByTestId("data-change-record")
+        .filter({ has: page.getByTestId("change-field-mfa") })
+      // 新的在前：管理员重置，再是本人开启
+      await expect(records).toHaveCount(2)
+      await expect(records.first()).toContainText("admin")
+      await expect(records.nth(1)).toContainText(username)
+      for (const record of [records.first(), records.nth(1)]) {
+        const mfa = record.getByTestId("change-field-mfa")
+        await expect(mfa).toContainText("二次验证")
+        await expect(mfa).toContainText("已开启")
+        await expect(mfa).toContainText("未开启")
+      }
     } finally {
       await api.del(`/api/v1/sys/users/${user.id}/mfa`).catch(() => undefined)
       await api.del(`/api/v1/sys/users/${user.id}`).catch(() => undefined)
