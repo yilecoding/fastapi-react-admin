@@ -30,6 +30,7 @@ import {
   sectionRank, sectionSummary, validateCross, validateOne,
 } from './registry'
 import { SettingRow } from './setting-row'
+import { DataChangeSheet } from '../_shared/data-change/history-sheet'
 
 /**
  * 小节图标——和个人中心 `Block` 的图标徽标同一个视觉语言
@@ -229,6 +230,7 @@ export function ConfigPage({
 
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<ConfigItem | null>(null)
+  const [historyOf, setHistoryOf] = React.useState<ConfigItem | null>(null)
   const [saveOpen, setSaveOpen] = React.useState(false)
   const [pendingDelete, setPendingDelete] = React.useState<ConfigItem | null>(null)
   const [err, setErr] = React.useState<string | null>(null)
@@ -463,6 +465,7 @@ export function ConfigPage({
                           setEditing(x)
                           setSheetOpen(true)
                         }}
+                        onHistory={setHistoryOf}
                         onDelete={setPendingDelete}
                       />
                     ))}
@@ -475,6 +478,10 @@ export function ConfigPage({
       </div>
 
       <ConfigSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} />
+      <DataChangeSheet
+        entity="config" entityId={historyOf?.id ?? null} name={historyOf?.key}
+        open={historyOf !== null} onOpenChange={(o) => !o && setHistoryOf(null)}
+      />
 
       <ConfirmDialog
         open={saveOpen}

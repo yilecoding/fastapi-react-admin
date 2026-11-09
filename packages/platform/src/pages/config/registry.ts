@@ -416,6 +416,18 @@ export const REGISTRY: Record<string, SettingMeta> = {
     max: 365,
     hint: '事件、投递和每一次尝试的记录，每天凌晨的日志清理一起删',
   },
+
+  // ── 数据变更记录（#260）。范围和后端 `dynamic_config.DYNAMIC_INT_BOUNDS` 对账 ──
+  DATA_CHANGE_RETENTION_DAYS: {
+    section: '数据变更记录',
+    order: 1,
+    label: '保留天数',
+    unit: '天',
+    widget: 'int',
+    min: 1,
+    max: 3650,
+    hint: '谁把哪个字段从什么改成了什么，每天凌晨的日志清理删掉超过这么多天的。网络安全法要求网络日志留存不少于六个月（180 天），调低之前先确认你们的合规要求',
+  },
 }
 
 export const metaOf = (key: string): SettingMeta | undefined => REGISTRY[key]
@@ -494,6 +506,16 @@ export const RAIL: RailGroup[] = [
     title: '文件',
     items: [
       { id: 'FILE', label: '文件上传', desc: '大文件分片上传的阈值与每片大小。改完对新开始的上传生效，传到一半的不受影响。' },
+    ],
+  },
+  {
+    title: '日志',
+    items: [
+      {
+        id: 'LOG',
+        label: '日志',
+        desc: '日志类记录保留多久。数据变更记录（谁把哪个字段从什么改成了什么）默认留 180 天，是网络安全法的六个月下限。',
+      },
     ],
   },
   {
