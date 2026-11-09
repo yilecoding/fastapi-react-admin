@@ -135,6 +135,8 @@ DYNAMIC_INT_BOUNDS: dict[str, tuple[int, int]] = {
     'OPEN_WEBHOOK_DISABLE_AFTER': (3, 1000),
     'OPEN_WEBHOOK_RETENTION_DAYS': (1, 365),
     'OPEN_WEBHOOK_MAX_PER_APP': (1, 100),
+    # 数据变更记录（#260）保留天数：低于 180 天时界面上提示法规下限，但不拦（有的部署有自己的留存要求）
+    'DATA_CHANGE_RETENTION_DAYS': (1, 3650),
     # 会话策略（#138）。空闲按分钟：下界 5 给等保那种「15 / 30 分钟无操作退出」留空间，上界 90 天；
     # 绝对有效期按天；会话上限 0 = 不限
     **{
