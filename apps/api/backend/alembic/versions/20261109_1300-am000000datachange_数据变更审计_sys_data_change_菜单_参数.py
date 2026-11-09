@@ -1,11 +1,14 @@
 """数据变更审计：sys_data_change 表 · 「日志管理 → 数据变更」页 + 查询按钮 · 参数配置「日志」组的保留天数
 
-Revision ID: al000000datachange
-Revises: ak000000noticehtml
-Create Date: 2026-11-09 12:00:00
+Revision ID: am000000datachange
+Revises: al000000wfopinioni18n
+Create Date: 2026-11-09 13:00:00
 
 issue #260。表 + 菜单 + 参数放在一条里：它们一起才构成「功能可用」
 （只建表的话记录照写，但没有地方看，保留天数也没处改）。
+
+⚠️ 原来叫 `al000000datachange`、接在 `ak000000noticehtml` 后面；main 先合进了同样接在那里的 `al000000wfopinioni18n`，
+按 alembic 分册「分叉了怎么接」改接到它后面、**ID 一起换**（只改 down_revision 的话，按旧 ID 升过的库会静默跳过它）。
 
 🔴 手写的建表要自己写 `autoincrement=False`：SQL Server 上会把雪花主键建成 IDENTITY（alembic 分册）。
 菜单 / 参数行照抄种子文件里那几个 ID（三个方言同一套），按业务键（`name` / `key`）判存在，幂等。
@@ -22,8 +25,8 @@ from backend.utils.data_migration import add_menu, delete_by_key, insert_if_abse
 from backend.utils.timezone import timezone
 
 # revision identifiers, used by Alembic.
-revision = 'al000000datachange'
-down_revision = 'ak000000noticehtml'
+revision = 'am000000datachange'
+down_revision = 'al000000wfopinioni18n'
 branch_labels = None
 depends_on = None
 

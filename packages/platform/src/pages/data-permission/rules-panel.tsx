@@ -192,12 +192,11 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
         onOpenChange={(o) => !o && setPendingUnbind(null)}
         title={t("从本范围移除规则")}
         description={
-          unbindError ? (
-            <span className="text-destructive">{unbindError}</span>
-          ) : pendingUnbind ? (
+          pendingUnbind ? (
             t('把「{{rule}}」从范围「{{scope}}」里摘掉？规则本身还在，其它范围不受影响。', { rule: pendingUnbind.name, scope: scope.name })
           ) : ''
         }
+        error={unbindError}
         confirmText={t("移除")}
         destructive
         pending={bind.isPending}
@@ -218,12 +217,11 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
         onOpenChange={(o) => !o && setPendingDelete(null)}
         title={t("彻底删除规则")}
         description={
-          deleteError ? (
-            <span className="text-destructive">{deleteError}</span>
-          ) : pendingDelete ? (
+          pendingDelete ? (
             t('删除规则「{{name}}」？这会从所有引用它的数据范围里一并消失，不只是本范围。', { name: pendingDelete.name })
           ) : ''
         }
+        error={deleteError}
         confirmText={t("删除")}
         destructive
         pending={delRule.isPending}

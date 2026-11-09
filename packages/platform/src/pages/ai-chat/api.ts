@@ -56,6 +56,8 @@ export type AgentEvent =
       /** 这次调用要求的权限码；界面上的「执行轨迹」要显示它 */
       perm: string | null
       duration_ms: number | null
+      /** 失败原因：只在确认执行那条路上带（那里没有模型来转述结果） */
+      detail?: string | null
     }
   | { type: 'confirm_required'; token: string; name: string; preview: string; arguments: Record<string, unknown> }
   | { type: 'usage'; prompt_tokens: number; completion_tokens: number }
