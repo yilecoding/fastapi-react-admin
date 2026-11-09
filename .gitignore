@@ -36,6 +36,19 @@ dist-ssr
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
+
+# Claude Code：.claude/ 下默认全忽略，只放行团队共享的「能力」（技能 / 子代理 / 命令）。
+# 其余都是本机的东西：settings.local.json（个人权限）、launch.json（本机起 dev server
+# 的配置）、worktrees/（会话开的工作树，整份仓库的副本）……
+# 用白名单而不是逐个列黑名单：Claude Code 会往这里写新的本地文件，worktrees/ 和
+# launch.json 都是这样冒出来的；之前不进仓库全靠个人的全局 gitignore 和
+# .git/info/exclude 兜着，换台机器 `git add .` 就带进去了。
+# 要共享项目级设置时再放行 settings.json —— 那是 Claude Code 约定的共享配置，
+# settings.local.json 才是个人的。
+.claude/*
+!.claude/skills/
+!.claude/agents/
+!.claude/commands/
 .idea
 .DS_Store
 *.suo
