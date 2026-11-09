@@ -253,6 +253,7 @@ async def jwt_authentication(
 
     user = await get_jwt_user(ctx.user_id)
     ctx.is_superuser = user.is_superuser
+    ctx.username = user.username
     return user
 
 
