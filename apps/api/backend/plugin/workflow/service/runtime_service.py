@@ -76,6 +76,7 @@ from backend.plugin.workflow.model import (
     WfTask,
 )
 from backend.plugin.workflow.service import ai_review_service
+from backend.plugin.workflow.sys_opinion import SysOpinion
 from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
@@ -283,8 +284,10 @@ async def _pending_tasks(db: AsyncSession, instance_id: int, node_id: str | None
 
 
 async def _close_task(
-    db: AsyncSession, task: WfTask, status: TaskStatus, decision: str | None, opinion: str | None
+    db: AsyncSession, task: WfTask, status: TaskStatus, decision: str | None, opinion: str | SysOpinion | None
 ) -> None:
+    # 系统意见：列里存默认语言的文本 + 消息键，读的时候再按请求语言渲染（见 sys_opinion.py）
+    opinion, opinion_i18n = _split_opinion(opinion)
     res = await db.execute(
         update(WfTask)
         .where(WfTask.id == task.id, WfTask.version == task.version, WfTask.status == TaskStatus.pending)
@@ -292,6 +295,7 @@ async def _close_task(
             status=status,
             decision=decision,
             opinion=opinion,
+            opinion_i18n=opinion_i18n,
             version=WfTask.version + 1,
             finished_time=timezone.now(),
         )
@@ -301,6 +305,14 @@ async def _close_task(
         # 实例已经认领过了，这里还失败只可能是读到的待办过期了 —— 重来
         raise _RetryError
     task.status, task.decision, task.opinion, task.version = status, decision, opinion, task.version + 1
+    task.opinion_i18n = opinion_i18n
+
+
+def _split_opinion(opinion: str | SysOpinion | None) -> tuple[str | None, str | None]:
+    """`(opinion 列, opinion_i18n 列)`。用户写的意见原样进 `opinion`、没有消息键"""
+    if isinstance(opinion, SysOpinion):
+        return opinion.stored_text(), opinion.dump()
+    return opinion, None
 
 
 def _record(
@@ -315,9 +327,10 @@ def _record(
     task: WfTask | None = None,
     node: dict[str, Any] | None = None,
     target: list[tuple[int, str]] | None = None,
-    opinion: str | None = None,
+    opinion: str | SysOpinion | None = None,
     detail: dict[str, Any] | None = None,
 ) -> WfActionRecord:
+    opinion, opinion_i18n = _split_opinion(opinion)
     rec = WfActionRecord(
         instance_id=inst.id,
         task_id=task.id if task else None,
@@ -335,6 +348,7 @@ def _record(
         # 系统动作没有客户端幂等键，生成一个占位 —— 列是 NOT NULL + 唯一
         idempotency_key=key or f'sys:{uuid.uuid4().hex}',
         detail=json.dumps(detail, ensure_ascii=False) if detail else None,
+        opinion_i18n=opinion_i18n,
     )
     ctx.db.add(rec)
     return rec
@@ -569,8 +583,11 @@ def _remember_undo(
 # ── 推进 ─────────────────────────────────────────────────────────────────────
 
 
-async def _finish(ctx: _Ctx, inst: WfInstance, status: InstanceStatus, opinion: str | None) -> None:
+async def _finish(ctx: _Ctx, inst: WfInstance, status: InstanceStatus, opinion: str | SysOpinion | None) -> None:
     """实例到终态：作废剩余待办、清 active_key、回调业务、通知发起人"""
+    # 业务回调和通知是当场用掉的文本，不落轨迹 —— 按当前语言渲染一次（和修之前一样）
+    if isinstance(opinion, SysOpinion):
+        opinion = opinion.text()
     for task in await _pending_tasks(ctx.db, inst.id):
         await _close_task(ctx.db, task, TaskStatus.canceled, None, None)
         ctx.push_todo([task.assignee_id])
@@ -650,13 +667,20 @@ async def _advance(ctx: _Ctx, inst: WfInstance, start_from: dict[str, Any] | Non
         if not users:
             on_empty = OnEmpty(node.get('onEmpty') or OnEmpty.reject)
             if on_empty == OnEmpty.skip:
-                _record(ctx, inst, 'skip', actor_type=ActorType.system, node=node, opinion=t('workflow.no_assignee'))
+                _record(
+                    ctx,
+                    inst,
+                    'skip',
+                    actor_type=ActorType.system,
+                    node=node,
+                    opinion=SysOpinion('workflow.no_assignee'),
+                )
                 node = nodes[node['id']].after
                 continue
             if on_empty == OnEmpty.admin:
                 users = await assignee_rules.superusers(ctx.db, initiator_id=inst.initiator_id)
             if not users:
-                reason = t('workflow.no_assignee_reject', node=node['name'])
+                reason = SysOpinion('workflow.no_assignee_reject', {'node': node['name']})
                 _record(ctx, inst, 'auto_reject', actor_type=ActorType.system, node=node, opinion=reason)
                 await _finish(ctx, inst, InstanceStatus.rejected, reason)
                 return
@@ -1177,7 +1201,10 @@ async def act(  # ruff:ignore[complex-structure]
     resume: bool = False,
     sign_mode: str | None = None,
     selected: dict[str, Any] | None = None,
+    sys_opinion: SysOpinion | None = None,
 ) -> dict[str, Any]:
+    """`sys_opinion`：意见不是人写的、是系统拟的（离职交接的改派）—— 轨迹里存消息键，读的时候按读的人的语言渲染。
+    目前只有改派认它"""
     # 接口层的 SchemaBase 会把枚举还原成 str —— 这里统一回枚举，后面 match / .value 都按枚举写
     action = Action(action)
     opinion = (opinion or '').strip() or None
@@ -1430,7 +1457,7 @@ async def act(  # ruff:ignore[complex-structure]
                     actor_name=actor.nickname,
                     task=task,
                     target=users,
-                    opinion=opinion,
+                    opinion=sys_opinion or opinion,
                     detail={'from': task.assignee_name},
                 )
                 ctx.push_todo([task.assignee_id, target_id])
@@ -1789,7 +1816,7 @@ async def handover(db: AsyncSession, *, from_user_id: int, to_user_id: int, acto
                 action=Action.reassign,
                 actor=actor,
                 key=sub_key,
-                opinion=t('workflow.handover_opinion'),
+                sys_opinion=SysOpinion('workflow.handover_opinion'),
                 target_user_ids=[to_user_id],
                 task_id=task_id,
             )
@@ -1869,7 +1896,7 @@ async def apply_timeout(db: AsyncSession, instance_id: int, task_id: int, now: d
             nodes = index_nodes(model)
             node = nodes[task.node_id].node
             if action == 'approve':
-                opinion = t('workflow.timeout_approved', hours=cfg['hours'])
+                opinion = SysOpinion('workflow.timeout_approved', {'hours': cfg['hours']})
                 await _close_task(db, task, TaskStatus.done, 'approve', opinion)
                 _record(ctx, inst, 'timeout_approve', actor_type=ActorType.system, task=task, opinion=opinion)
                 group = _sign_group(inst, task)
@@ -1880,7 +1907,7 @@ async def apply_timeout(db: AsyncSession, instance_id: int, task_id: int, now: d
                 ctx.push_todo([task.assignee_id])
                 result = 'approve'
             else:
-                opinion = t('workflow.timeout_rejected', hours=cfg['hours'])
+                opinion = SysOpinion('workflow.timeout_rejected', {'hours': cfg['hours']})
                 await _close_task(db, task, TaskStatus.done, 'reject', opinion)
                 _record(ctx, inst, 'timeout_reject', actor_type=ActorType.system, task=task, opinion=opinion)
                 ctx.push_todo([task.assignee_id])
@@ -1916,7 +1943,7 @@ async def apply_ai_approve(
     version: int,
     node_id: str,
     model_name: str | None,
-    opinion: str,
+    opinion: str | SysOpinion,
     detail: dict[str, Any],
 ) -> bool:
     """替这一步同意。🔴 只在「提交之后谁都没动过」时做（`version` = 提交那一刻的版本号）：

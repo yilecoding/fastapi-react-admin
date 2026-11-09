@@ -61,6 +61,7 @@ from backend.plugin.workflow.service.runtime_service import (
     send_back_targets,
     timeout_of,
 )
+from backend.plugin.workflow.sys_opinion import render as render_opinion
 from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
@@ -382,6 +383,7 @@ async def _with_progress(db: AsyncSession, insts: list[WfInstance], items: list[
                 WfActionRecord.action,
                 WfActionRecord.actor_name,
                 WfActionRecord.opinion,
+                WfActionRecord.opinion_i18n,
                 WfActionRecord.created_time,
             )
             .where(WfActionRecord.instance_id.in_(ids), WfActionRecord.result == 'ok')
@@ -392,9 +394,15 @@ async def _with_progress(db: AsyncSession, insts: list[WfInstance], items: list[
     for tk in tasks:
         by_inst.setdefault(tk.instance_id, []).append(tk)
     last: dict[int, dict[str, Any]] = {}
-    for iid, action, actor, opinion, at in records:
+    for iid, action, actor, opinion, opinion_i18n, at in records:
         if action in _DECISIVE:
-            last[iid] = {'action': action, 'actor_name': actor, 'opinion': opinion, 'time': at}
+            # 自动驳回 / 超时 / AI 同意是系统意见：按读的人的语言渲染（sys_opinion.py）
+            last[iid] = {
+                'action': action,
+                'actor_name': actor,
+                'opinion': render_opinion(opinion, opinion_i18n),
+                'time': at,
+            }
     backs = await _latest_send_back(db, ids)
 
     for inst, row in zip(insts, items, strict=True):
@@ -709,7 +717,7 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
                 # 节点配了超时：什么时候会被提醒 / 自动处理（前端在进度里写「X 点自动通过」）
                 'due_time': due_time(tk, model) if tk.status == TaskStatus.pending else None,
                 'decision': tk.decision,
-                'opinion': tk.opinion,
+                'opinion': render_opinion(tk.opinion, tk.opinion_i18n),
                 'created_time': tk.created_time,
                 'finished_time': tk.finished_time,
             }
@@ -726,7 +734,7 @@ async def detail(db: AsyncSession, pk: int, actor: Actor) -> dict[str, Any]:  # 
                 'node_id': r.node_id,
                 'node_name': r.node_name,
                 'target_user_name': r.target_user_name,
-                'opinion': r.opinion,
+                'opinion': render_opinion(r.opinion, r.opinion_i18n),
                 'detail': _strip_hidden(json.loads(r.detail), hidden) if r.detail else None,
                 'created_time': r.created_time,
             }
