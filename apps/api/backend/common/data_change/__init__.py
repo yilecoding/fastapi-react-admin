@@ -5,6 +5,7 @@
   （内置在 `app/admin/data_change.py`，插件放自己的 `data_change.py`）
 - 拦截：`capture.install_data_change_capture()`，`database/db.py` 导入时装上
 - 来源：`with data_change_source('ai', ref=…):` 包住的修改记成别的来源
+- 防篡改：`chain.py`（写入时编号 + 签名，`chain.verify` 校验，保留期推锚点）
 
 坑和实测见同目录 `AGENTS.md`。
 """

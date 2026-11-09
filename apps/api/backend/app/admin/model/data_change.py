@@ -18,6 +18,11 @@ class DataChange(DataClassBase):
     __table_args__ = (
         # 「某个对象的变更记录」抽屉按它倒序翻页
         sa.Index('ix_sys_data_change_entity', 'entity_type', 'entity_id', 'created_time'),
+        # 防篡改链的序号：唯一，兜住「两个事务拿到同一个序号」（正常情况下链头那把行锁已经排好队了）。
+        # 🔴 防篡改上线之前的旧行是 NULL：SQL Server 的唯一索引认为多个 NULL 相等，要筛掉（同 `user.py: _EMAIL_UNIQUE`）
+        sa.Index(
+            'uq_sys_data_change_chain_seq', 'chain_seq', unique=True, mssql_where=sa.text('chain_seq IS NOT NULL')
+        ),
         {'comment': '数据变更记录表'},
     )
 
@@ -38,3 +43,21 @@ class DataChange(DataClassBase):
     ip: Mapped[str | None] = mapped_column(UniversalStr(64), comment='IP 地址')
     # index：清理任务按它做范围删除（同操作日志），列表也按它倒序
     created_time: Mapped[datetime] = mapped_column(TimeZone, index=True, comment='创建时间')
+    # 防篡改链（`common/data_change/chain.py`）：写入时在同一个事务里编号、签名。旧行（上线之前的）是 NULL
+    chain_seq: Mapped[int | None] = mapped_column(sa.BigInteger, default=None, comment='防篡改链序号')
+    chain_hash: Mapped[str | None] = mapped_column(
+        sa.String(80), default=None, comment='防篡改链签名（密钥标识:HMAC-SHA256，含上一行的签名）'
+    )
+
+
+class DataChangeChain(DataClassBase):
+    """数据变更记录防篡改链的链头（只有一行）"""
+
+    __tablename__ = 'sys_data_change_chain'
+
+    # 固定是 1：写记录时 `UPDATE … WHERE id = 1` 占这一行的锁排队拿序号（chain.py）
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=False, comment='固定为 1')
+    head_seq: Mapped[int] = mapped_column(sa.BigInteger, comment='最后一条记录的序号')
+    head_hash: Mapped[str] = mapped_column(sa.String(80), comment='最后一条记录的签名')
+    anchor_seq: Mapped[int] = mapped_column(sa.BigInteger, comment='保留期删到了哪个序号（校验从它后面开始）')
+    anchor_hash: Mapped[str] = mapped_column(sa.String(80), comment='锚点那一行的签名')
