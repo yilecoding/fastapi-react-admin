@@ -56,6 +56,9 @@ async def _purge_user() -> None:
     async with async_test_db_session.begin() as db:
         ids = list((await db.execute(text('SELECT id FROM sys_user WHERE username = :u'), {'u': USERNAME})).scalars())
         for pk in ids:
+            await db.execute(
+                text("DELETE FROM sys_data_change WHERE entity_type = 'user' AND entity_id = :pk"), {'pk': pk}
+            )
             await db.execute(text('DELETE FROM sys_user_mfa WHERE user_id = :pk'), {'pk': pk})
             await db.execute(text('DELETE FROM sys_user_role WHERE user_id = :pk'), {'pk': pk})
             await db.execute(text('DELETE FROM sys_user WHERE id = :pk'), {'pk': pk})
@@ -272,3 +275,79 @@ class TestAdminAndSecrets:
             'otp': '[REDACTED]',
             'mfa_token': '[REDACTED]',
         }
+
+
+def _mfa_records(client: TestClient, token_headers: dict[str, str], uid: str) -> list[dict[str, Any]]:
+    """这个人名下和二次验证有关的数据变更记录，旧的在前"""
+    res = client.get(
+        '/logs/changes', headers=token_headers, params={'entity_type': 'user', 'entity_id': uid, 'size': 50}
+    ).json()
+    assert res['code'] == 200, res
+    return [r for r in reversed(res['data']['items']) if any(c['field'].startswith('mfa') for c in r['changes'])]
+
+
+_ON = {'field': 'mfa', 'label': '二次验证', 'old': False, 'new': True, 'old_label': '未开启', 'new_label': '已开启'}
+_OFF = {'field': 'mfa', 'label': '二次验证', 'old': True, 'new': False, 'old_label': '已开启', 'new_label': '未开启'}
+
+
+class TestChangeRecords:
+    """数据变更审计（#260 二期）：二次验证的开关记在**用户**名下 —— 「谁把他的二次验证关了」在用户的变更记录里看得到"""
+
+    def test_enable_regenerate_and_admin_reset(
+        self, client: TestClient, token_headers: dict[str, str], user_headers: dict[str, str]
+    ) -> None:
+        uid = client.get('/sys/users/me', headers=user_headers).json()['data']['id']
+        secret, codes = _enable(client, user_headers)
+        (on,) = _mfa_records(client, token_headers, uid)
+        assert on['action'] == 'update' and on['actor_name'] == USERNAME and on['source'] == 'web'
+        assert on['changes'] == [_ON], '开启时只记开关，不另记「生成了恢复码」'
+
+        # 用动态码登录写 last_step：不是改设置，不出记录
+        token = _login(client).json()['data']['mfa_token']
+        ok = client.post('/auth/mfa/verify', json={'mfa_token': token, 'otp': _code(secret, 1)}).json()
+        assert ok['code'] == 200, ok
+        fresh = {'Authorization': f'Bearer {ok["data"]["access_token"]}'}
+        assert len(_mfa_records(client, token_headers, uid)) == 1
+
+        # 重新生成恢复码（拿旧的一个恢复码当凭据）：只记「改过」，哈希一个字都不进审计表
+        regen = client.post(f'{MFA}/recovery-codes', headers=fresh, json={'otp': codes[0]}).json()
+        assert regen['code'] == 200, regen
+        _, renewed = _mfa_records(client, token_headers, uid)
+        assert renewed['actor_name'] == USERNAME
+        assert renewed['changes'] == [{'field': 'mfa_recovery_codes', 'label': '恢复码', 'secret': True}]
+
+        # 用新的恢复码登录：只是标上「用过」，不算改
+        token = _login(client).json()['data']['mfa_token']
+        new_code = regen['data']['recovery_codes'][0]
+        assert client.post('/auth/mfa/verify', json={'mfa_token': token, 'otp': new_code}).json()['code'] == 200
+        assert len(_mfa_records(client, token_headers, uid)) == 2
+
+        # 管理员重置：记在这个人名下，操作人是管理员
+        assert client.delete(f'/sys/users/{uid}/mfa', headers=token_headers).json()['code'] == 200
+        *_, reset = _mfa_records(client, token_headers, uid)
+        assert reset['actor_name'] == 'admin' and reset['changes'] == [_OFF]
+
+    def test_turning_it_off_yourself(
+        self, client: TestClient, token_headers: dict[str, str], user_headers: dict[str, str]
+    ) -> None:
+        uid = client.get('/sys/users/me', headers=user_headers).json()['data']['id']
+        secret, _ = _enable(client, user_headers)
+        assert client.post(f'{MFA}/disable', headers=user_headers, json={'otp': _code(secret, 1)}).json()['code'] == 200
+        _, off = _mfa_records(client, token_headers, uid)
+        assert off['actor_name'] == USERNAME and off['changes'] == [_OFF]
+
+    def test_enrolling_during_login_is_recorded_as_the_user(
+        self, client: TestClient, token_headers: dict[str, str], user_headers: dict[str, str]
+    ) -> None:
+        """登录还没完成，请求里没有操作人 —— 不显式给的话记成「系统」开的"""
+        uid = client.get('/sys/users/me', headers=user_headers).json()['data']['id']
+        settings.LOGIN_MFA_ENFORCE = 'all'
+        first = _login(client).json()['data']
+        setup = client.post('/auth/mfa/setup', json={'mfa_token': first['mfa_token']}).json()['data']
+        done = client.post(
+            '/auth/mfa/enroll', json={'mfa_token': first['mfa_token'], 'otp': _code(setup['totp_secret'])}
+        ).json()
+        assert done['code'] == 200, done
+        (on,) = _mfa_records(client, token_headers, uid)
+        assert on['actor_name'] == USERNAME and on['actor_id'] == uid and on['source'] == 'web'
+        assert on['changes'] == [_ON]
