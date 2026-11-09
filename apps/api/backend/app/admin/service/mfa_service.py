@@ -25,6 +25,7 @@ from sqlalchemy import delete, select
 from backend.app.admin.model import User, UserMfa
 from backend.app.admin.schema.mfa import GetMfaStatus, MfaChallenge, MfaRecoveryCodes, MfaSetupInfo
 from backend.app.admin.service.user_password_history_service import password_security_service
+from backend.common.data_change import data_change_source
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
@@ -182,7 +183,10 @@ async def challenge_enroll(db: AsyncSession, token: str, otp: str) -> tuple[dict
     if step is None:
         await _fail(db, token, payload)
         raise errors.AuthorizationError(msg=t('error.mfa.invalid_code'))
-    codes = await _enable(db, int(payload['user_id']), secret, step)
+    user_id = int(payload['user_id'])
+    # 登录还没完成，请求上下文里没有操作人：数据变更记录里要写成「他自己开的」，不是「系统」
+    with data_change_source('web', actor_id=user_id):
+        codes = await _enable(db, user_id, secret, step)
     await redis_client.delete(_key(_CHALLENGE, token), _key(_SETUP, f'login:{token}'))
     return payload, codes
 

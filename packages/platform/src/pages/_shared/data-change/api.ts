@@ -62,15 +62,16 @@ export const dataChangeMetaQuery = () =>
 
 const ENTITY_PAGE_SIZE = 20
 
-/** 某一个对象的变更记录（抽屉里滚到底取下一页） */
-export const entityChangesQuery = (entity: string, id: string) =>
+/** 某一个对象的变更记录（抽屉里滚到底取下一页）。给了 `field` 就只要改过这个字段的（单字段历史） */
+export const entityChangesQuery = (entity: string, id: string, field?: string) =>
   infiniteQueryOptions({
-    queryKey: [...dataChangeKeys.all, 'entity', entity, id] as const,
+    queryKey: [...dataChangeKeys.all, 'entity', entity, id, field ?? ''] as const,
     queryFn: ({ pageParam }) =>
       api.GET<PageData<DataChange>>(
         `/api/v1/logs/changes?${new URLSearchParams({
           entity_type: entity,
           entity_id: id,
+          ...(field ? { field } : {}),
           page: String(pageParam),
           size: String(ENTITY_PAGE_SIZE),
         })}`
@@ -88,3 +89,29 @@ export const traceChangesQuery = (traceId: string) =>
         `/api/v1/logs/changes?${new URLSearchParams({ trace_id: traceId, page: '1', size: '50' })}`
       ),
   })
+
+/** 防篡改链的一个问题（后端 `common/data_change/chain.py: ChainProblem`） */
+export type DataChangeIntegrityProblem = {
+  /** modified 内容被改过 · missing 中间少了几行 · tail 最新的几行没了或链头被改 · key 密钥对不上 ·
+   *  unchained 绕过应用写进来的行 · head 链头那一行不见了 */
+  kind: 'modified' | 'missing' | 'tail' | 'key' | 'unchained' | 'head'
+  seq: number | null
+  seq_to: number | null
+  record_id: string | null
+  created_time: string | null
+}
+
+export type DataChangeIntegrity = {
+  ok: boolean
+  /** 配了 DATA_CHANGE_CHAIN_KEY。没配时只防「手滑直接改库」 */
+  keyed: boolean
+  checked: number
+  head_seq: number
+  anchor_seq: number
+  other_key: number
+  problem_count: number
+  problems: DataChangeIntegrityProblem[]
+}
+
+/** 从头重算签名（超管）。记录多时要几秒，所以是点了才跑的动作，不是进页面就查 */
+export const verifyDataChanges = () => api.GET<DataChangeIntegrity>('/api/v1/logs/changes/integrity')

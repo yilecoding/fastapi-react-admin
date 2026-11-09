@@ -1,13 +1,18 @@
-"""数据变更审计（#260）的内置登记：用户 / 部门 / 角色 / 菜单 + 三张关联表。
+"""数据变更审计（#260）的内置登记：用户 / 部门 / 角色 / 菜单 + 三张关联表 + 用户的二次验证。
 
 🔴 **每一列都要归类**（`registry.register_audited` 当场校验）。给这几张表加列时，先想清楚它属于哪一类：
 普通（记旧值 → 新值）· 引用（另存当时的名字）· 敏感（只记「改过」）· 忽略（时间戳、冗余列）。
 字段的中文名同时要进 `packages/i18n` 的两个语言包和 `server-data-keys.json`（`test_data_change.py` 守着）。
 """
 
-from backend.app.admin.model import Dept, Menu, Role, User
+import json
+
+from collections.abc import Mapping
+from typing import Any
+
+from backend.app.admin.model import Dept, Menu, Role, User, UserMfa
 from backend.app.admin.model.m2m import role_data_scope, role_menu, user_role
-from backend.common.data_change import Ref, register_audited, register_audited_set
+from backend.common.data_change import ChildValue, Ref, register_audited, register_audited_child, register_audited_set
 
 _STATUS = {0: '停用', 1: '正常'}
 _YES_NO = {0: '否', 1: '是'}
@@ -47,6 +52,31 @@ register_audited_set(
     field='roles',
     label='角色',
     ref=Ref('sys_role', 'name'),
+)
+
+
+def _recovery_batch(row: Mapping[str, Any]) -> frozenset[str]:
+    """这一批恢复码是哪几个（哈希）。重新生成会换掉整批；登录时用掉一个只是标上「用过」，不算改"""
+    try:
+        items = json.loads(row['recovery_hashes'] or '[]')
+    except ValueError:
+        return frozenset()
+    return frozenset(str(i.get('h')) for i in items if isinstance(i, dict))
+
+
+# 二次验证（#181）：开了才有这一行。开启 / 自己关 / 管理员重置都记在**用户**名下 ——
+# 「谁把他的二次验证关了」要在用户的变更记录里看得到。管理员重置和自己关的区别是操作人。
+# 密钥密文、恢复码哈希一个字都不进审计表：恢复码只记「改过」
+register_audited_child(
+    UserMfa,
+    entity='user',
+    parent='user_id',
+    field='mfa',
+    label='二次验证',
+    states=('未开启', '已开启'),
+    values={'mfa_recovery_codes': ChildValue('恢复码', _recovery_batch, secret=True)},
+    # 每次用动态码登录都写 last_step（防重放）
+    ignore={'last_step', 'updated_time'},
 )
 
 register_audited(

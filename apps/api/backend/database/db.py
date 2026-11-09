@@ -233,4 +233,7 @@ for source, engine in _database_engines.items():
 
 # Session Annotated
 CurrentSession: TypeAlias = Annotated[AsyncSession, Depends(get_db)]
-CurrentSessionTransaction: TypeAlias = Annotated[AsyncSession, Depends(get_db_transaction)]
+# 🔴 `scope='function'`：提交在路由函数收尾时做，响应等它。FastAPI 0.141 的 yield 依赖默认在**响应发出之后**才收尾，
+# 于是客户端拿到 200 时事务可能还没提交（「建用户 → 马上登录」实测 30 次失败 6 次），提交出错时接口照样回「请求成功」。
+# 见 `common/AGENTS.md`「写接口的事务要在响应之前提交」· `tests/test_commit_before_response.py`
+CurrentSessionTransaction: TypeAlias = Annotated[AsyncSession, Depends(get_db_transaction, scope='function')]

@@ -428,7 +428,9 @@ export:
   cell_truncated: '… (truncated: cells hold at most 32,767 characters)'
   list_separator: ', '
   column:
+    action: Action
     browser: Browser
+    changes: Changes
     color: Color
     content_text: Content (plain text)
     cost_ms: Duration (ms)
@@ -458,6 +460,9 @@ export:
     notice_id: Announcement ID
     notice_title: Title
     notice_type: Type
+    object: Object
+    object_id: Object ID
+    object_type: Object type
     opera_time: Time
     opera_title: Operation
     operator: Operator
@@ -466,13 +471,17 @@ export:
     parent_name: Parent department
     path: Endpoint
     phone: Phone
+    record_id: Record ID
     remark: Remark
     result: Result
     role_codes: Role codes
     role_names: Roles
     sort: Sort order
+    source: Source
+    source_ref: Source reference
     status: Status
     status_code: Status code
+    time: Time
     trace_id: Trace ID
     updated_time: Updated at
     user_id: User ID
@@ -482,6 +491,7 @@ export:
     dept: Department ID
     dict_type: Dictionary type ID
     end_time: Time to
+    field: Field changed
     role: Role ID
     start_time: Time from
   info:
@@ -500,6 +510,7 @@ export:
     done_title: 'Export ready: {title}'
     failed_title: 'Export failed: {title}'
   resource:
+    data_change: Data changes
     dept: Departments
     dict_data: Dictionary data
     login_log: Login logs
@@ -508,6 +519,10 @@ export:
     user: Users
   value:
     announcement: Announcement
+    change_bulk_rows: '{n} rows'
+    change_empty: empty
+    change_secret: changed (value not recorded)
+    change_varies: differs per row
     disabled: Disabled
     enabled: Active
     failed: Failed
