@@ -93,8 +93,8 @@ export const traceChangesQuery = (traceId: string) =>
 /** 防篡改链的一个问题（后端 `common/data_change/chain.py: ChainProblem`） */
 export type DataChangeIntegrityProblem = {
   /** modified 内容被改过 · missing 中间少了几行 · tail 最新的几行没了或链头被改 · key 密钥对不上 ·
-   *  unchained 绕过应用写进来的行 · head 链头那一行不见了 */
-  kind: 'modified' | 'missing' | 'tail' | 'key' | 'unchained' | 'head'
+   *  stale 最新的记录不是用现在的密钥签的 · unchained 绕过应用写进来的行 · head 链头那一行不见了 */
+  kind: 'modified' | 'missing' | 'tail' | 'key' | 'stale' | 'unchained' | 'head'
   seq: number | null
   seq_to: number | null
   record_id: string | null

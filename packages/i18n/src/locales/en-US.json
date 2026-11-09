@@ -1819,6 +1819,7 @@
   "最小长度": "Minimum length",
   "最小频率": "Min freq",
   "最新的记录被删掉了（第 {{from}} – {{to}} 条），或者链头被改过": "The latest records were deleted (#{{from}} – #{{to}}), or the chain head was altered",
+  "最新的记录（第 {{seq}} 条）不是用现在的密钥签的：可能整条链被换了签法重算过；如果刚配上密钥、之后还没有新的修改，这是正常的": "The latest record (#{{seq}}) isn’t signed with the current key: the whole chain may have been re-signed another way. If the key was only just set and nothing has changed since, this is expected",
   "最紧张：{{dir}}（{{free}} 可用）": "Tightest: {{dir}} ({{free}} free)",
   "最近 1 小时": "last hour",
   "最近 24 小时": "last 24 hours",

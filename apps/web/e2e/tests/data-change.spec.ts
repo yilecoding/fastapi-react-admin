@@ -49,7 +49,8 @@ test.describe("数据变更审计", () => {
       await page.keyboard.press("Escape")
 
       // ── 数据变更页：按对象筛（地址栏带上 entity_type / entity_id）──
-      await page.goto(`/log/change?entity_type=dept&entity_id=${id}`)
+      // 多带一个无关的筛选（操作人）：后面点字段名时它要被清掉
+      await page.goto(`/log/change?entity_type=dept&entity_id=${id}&actor=admin`)
       const tab = page.locator('[data-tab="/_auth/log/change"]')
       const table = tab.getByTestId("change-table")
       await expect(table).toHaveAttribute("data-fetching", "false")
@@ -64,6 +65,8 @@ test.describe("数据变更审计", () => {
       // 详情里点字段名：这个对象这一个字段的历史，条件进地址栏（能分享）
       await detail.getByTestId("field-history-name").click()
       await expect(page).toHaveURL(/field=name/)
+      // 只留对象 + 字段：带着别的筛选，「这个字段的历史」会被悄悄缩小（评审抓到的）
+      await expect(page).not.toHaveURL(/actor=/)
       await expect(table).toHaveAttribute("data-fetching", "false")
       await expect(table.locator("tbody tr")).toHaveCount(2)
 
