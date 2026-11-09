@@ -494,6 +494,11 @@ class Settings(BaseSettings):
     # 数据变更记录（#260）保留天数。默认 180：《网络安全法》（2016 年版）第二十一条要求网络日志「留存不少于六个月」。
     # 参数配置「日志」组可覆盖；`maintenance.prune_logs` 每天按 created_time 分批删
     DATA_CHANGE_RETENTION_DAYS: int = 180
+    # 数据变更记录防篡改链的签名密钥（`common/data_change/chain.py`）。只放 .env，**不进库**：
+    # 拿到数据库权限的人改了记录、重算签名也对不上。留空 = 不加密钥的 SHA-256，只防「手滑直接改库」（校验结果会说明）。
+    # ⚠️ 设了就别换：换了之后旧记录用新密钥校验不了（校验会单独列出「换密钥之前签的」几行）。
+    # 生成：python -c "import os;print(os.urandom(32).hex())"
+    DATA_CHANGE_CHAIN_KEY: str = ''
     # 这些请求头会被打码 —— 它们要么是凭据，要么含会话信息
     OPERA_LOG_REDACT_HEADERS: list[str] = [
         'authorization',

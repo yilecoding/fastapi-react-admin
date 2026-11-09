@@ -827,3 +827,46 @@ def test_every_export_label_is_translated_in_both_languages() -> None:
             if not isinstance(node, str):
                 missing.append(key)
         assert not missing, f'{name} 缺这些导出文案：{missing}'
+
+
+CHANGES_EXPORT = '/logs/changes/export'
+
+
+def _csv(client: TestClient, headers: dict[str, str], body: dict[str, Any]) -> list[list[str]]:
+    job = start(client, headers, CHANGES_EXPORT, {'format': 'csv', **body})['data']
+    return list(csv.reader(io.StringIO(download(client, headers, job['id']).decode('utf-8-sig'))))
+
+
+def test_data_change_export_reads_like_the_change_list(
+    client: TestClient, token_headers: dict[str, str], temp_user: str
+) -> None:
+    """数据变更记录（#260）的导出：和列表同一批、同一个顺序；「改了什么」一格是旧值 → 新值，密码只说改过。
+
+    英文文件里字段名、动作、对象类型用代号：它们的英文译文在前端语言包里，后端读不到 —— 出代号好过出中文
+    """
+    detail = client.get(f'{USERS}/{temp_user}', headers=token_headers).json()['data']
+    update = {k: detail[k] for k in ('dept_id', 'username', 'email', 'phone')}
+    update |= {'nickname': '导出用昵称', 'roles': [r['id'] for r in detail['roles']]}
+    assert client.put(f'{USERS}/{temp_user}', headers=token_headers, json=update).json()['code'] == 200
+    filters = {'entity_type': 'user', 'entity_id': temp_user}
+    try:
+        header, *rows = _csv(client, token_headers, {'filters': filters})
+        assert header[:5] == ['时间', '对象类型', '对象', '动作', '改了什么']
+        listed = client.get('/logs/changes', headers=token_headers, params={**filters, 'size': 50}).json()
+        assert [r[header.index('记录 ID')] for r in rows] == [x['id'] for x in listed['data']['items']]
+        changed, created = rows[0], rows[-1]
+        assert changed[1:4] == ['用户', 'pytest_tmp_writes', '已修改']
+        assert '昵称：临时用户 → 导出用昵称' in changed[4]
+        assert created[3] == '已新建'
+        assert '密码：已修改（不记录内容）' in created[4]
+        assert 'Tmp@123456' not in ''.join(created)
+
+        en_header, en_changed, *_ = _csv(client, {**token_headers, 'Accept-Language': 'en-US'}, {'filters': filters})
+        assert en_header[4] == 'Changes'
+        assert en_changed[1:4] == ['user', 'pytest_tmp_writes', 'update']
+        assert 'nickname: 临时用户 → 导出用昵称' in en_changed[4]
+
+        # 拼错的筛选参数要拒绝（导出全表而用户以为是筛过的那批）
+        assert start(client, token_headers, CHANGES_EXPORT, {'filters': {'entity': 'user'}})['code'] != 200
+    finally:
+        asyncio.run(_sql('DELETE FROM sys_data_change WHERE entity_id = :pk', {'pk': int(temp_user)}))
