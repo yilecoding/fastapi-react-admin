@@ -21,6 +21,9 @@ class LoginLogSchemaBase(SchemaBase):
     device: str | None = Field(None, description='设备')
     msg: str = Field(description='消息')
     login_time: datetime = Field(description='登录时间')
+    event: str = Field(
+        'login', description='事件：login 登录 / locked 账号被锁 / ip_locked IP 被锁 / kicked 被强制下线'
+    )
 
 
 class CreateLoginLogParam(LoginLogSchemaBase):

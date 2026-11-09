@@ -18,6 +18,8 @@ const searchSchema = z.object({
   username: z.string().optional(),
   ip: z.string().optional(),
   status: z.coerce.number().int().optional(),
+  /** 事件（#273）：login / locked / ip_locked / kicked */
+  event: z.string().optional(),
   /** `2026-08-16~2026-08-22`，两端都可省（`~b` / `a~`） */
   time: z.string().optional(),
   /** 摆开但还没填值的格子，逗号分隔；运算符不是默认值时写成 `key:op` */
