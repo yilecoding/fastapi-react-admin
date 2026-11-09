@@ -517,3 +517,68 @@ def test_prunes_data_changes_with_their_own_retention(factory):
         with factory() as s:
             s.execute(delete(DataChange).where(DataChange.trace_id == MARK))
             s.commit()
+
+
+def test_pruning_chained_data_changes_keeps_the_chain_verifiable(factory, monkeypatch):
+    """防篡改链（#260）：清理先把锚点推到要删的最后一个序号、再按序号删。
+
+    反过来（按时间删、锚点不动）的话，校验会把一次正常的清理报成「中间被删了几行」
+    """
+    from backend.app.admin.model import DataChange
+    from backend.common.data_change import chain
+
+    _records, head_table = chain._tables()
+    with factory() as s:
+        s.execute(delete(DataChange).where(DataChange.trace_id == MARK))
+        # 校验只看这条测试写的：锚点挪到现在的链头（共用的测试库里别的测试删过自己的记录，链上有缺口）
+        head = s.execute(select(head_table)).mappings().first()
+        if head is not None:
+            s.execute(head_table.update().values(anchor_seq=head['head_seq'], anchor_hash=head['head_hash']))
+        s.commit()
+    real_now = timezone.now
+
+    def seed(days_ago: float) -> int:
+        row = {
+            'id': next(_next_id),
+            'trace_id': MARK,
+            'entity_type': 'user',
+            'entity_id': -1,
+            'entity_label': None,
+            'action': 'update',
+            'changes': [],
+            'fields': '',
+            'actor_id': None,
+            'actor_name': None,
+            'source': 'system',
+            'source_ref': None,
+            'ip': None,
+        }
+        with factory() as s:
+            # 记录的时间在拿到链头的锁之后才取（chain.link），要造「200 天前」的记录只能把那一刻的时钟拨回去
+            monkeypatch.setattr(timezone, 'now', lambda: real_now() - timedelta(days=days_ago))
+            try:
+                chain.link(s, [row])
+            finally:
+                monkeypatch.setattr(timezone, 'now', real_now)
+            s.execute(DataChange.__table__.insert(), [row])
+            s.commit()
+        return row['chain_seq']
+
+    try:
+        old = seed(200)  # 超过 180 天 → 删
+        seed(60)  # 留
+        with factory() as s:
+            assert chain.verify(s).ok, '前置：清理之前链是好的'
+        msg = run_prune(days=30)
+        with factory() as s:
+            left = s.execute(select(func.count()).select_from(DataChange).where(DataChange.trace_id == MARK)).scalar()
+            report = chain.verify(s)
+        assert left == 1, msg
+        assert report.anchor_seq == old
+        assert report.ok, report.problems
+        # 链头写进任务日志：库外的旁证
+        assert '防篡改链：链头 #' in msg
+    finally:
+        with factory() as s:
+            s.execute(delete(DataChange).where(DataChange.trace_id == MARK))
+            s.commit()
