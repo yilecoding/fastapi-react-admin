@@ -131,8 +131,8 @@ CI 给镜像打了 OCI 标签 `org.opencontainers.image.revision=<完整 SHA>`�
 路径前缀不一样；写进去 compose 记住的就是加速器地址了）。正确做法是拉完 retag：
 
 ```bash
-docker pull ghcr.nju.edu.cn/<owner>/fba-api:latest
-docker tag  ghcr.nju.edu.cn/<owner>/fba-api:latest ghcr.io/<owner>/fba-api:latest
+docker pull ghcr.nju.edu.cn/<owner>/fra-api:latest
+docker tag  ghcr.nju.edu.cn/<owner>/fra-api:latest ghcr.io/<owner>/fra-api:latest
 ```
 
 这一串现在由 `prod.sh pull` 在 `.env` 里配了 `FBA_PULL_MIRROR` 时自动做掉。
@@ -237,3 +237,61 @@ Webhook 端点的 URL 是管理员填的，worker 照着去 `POST`。代码里�
   单独拆成一个只出公网的 worker 队列，**还没做**
 
 **实测证据**：只有代码那一层的测试（`plugin/open/tests/test_webhooks.py::TestSsrf`，8 条）。部署层的网络隔离没做，也就没验。
+
+## 镜像改名 `fba-*` → `fra-*`（2026-11，1.1.x 是过渡期）
+
+镜像原来叫 `fba-api` / `fba-web`（沿用上游 FBA 的前缀），改成了 `fra-api` / `fra-web`。
+GHCR 不能给包改名，**换名字等于新建两个包**，所以下面几件事要一起做。漏了哪一件都不会报错：
+
+| 漏了什么 | 表现 | 怎么处理的 |
+|---|---|---|
+| 新包的可见性 | 用 `GITHUB_TOKEN` 推的包默认 private，照新 compose 拉镜像会被拒 | 合并后 CI 第一次推完，去网页上把 `fra-api` / `fra-web` 改成 public（`.github/workflows/ci.yml` 里 `build-images` 上方的注释） |
+| 照旧名字部署的人 | 旧名字不再出新镜像时，`docker compose pull` 不报错，**永远停在最后一个旧版本** | 1.1.x 期间 CI 两个名字都推（同一次构建、同一份镜像） |
+| `prod.sh` 里写死的镜像名 | 拉 A 起 B，见下 | 改成从 compose 展开 |
+| 改名之前的回滚标签 | `fra-*` 从改名那次合并才开始推，更早的 `sha-*` 只在 `fba-*` 下，新 compose 回滚到那之前拉不到 | 先 `bash prod.sh sync <那个提交>` 换回当时的 compose，再按 `TAG` 回滚 |
+| 数据卷 | compose 里的卷名也带 `fba`（`fba_upload_public` 等）。卷名一改，挂上的是新的空卷，已上传的文件就「没了」 | 🔴 **卷名不改**，这次只改镜像名 |
+
+### `prod.sh` 写死镜像名：拉 A 起 B
+
+加速器那条路原来写死了 `for repo in fba-api fba-web`，和 compose 里的 `image:` 是两份真相。
+服务器上这两份文件又是各自更新的：compose 走 `prod.sh sync`，`prod.sh` 自己没有同步机制。
+所以改名时只要有一份没跟上：
+
+- **只换了 compose**：脚本从加速器拉的是 `fba-*`，`up` 要的是 `fra-*`。本地没有，就直连 ghcr.io 去拉，
+  在国内是几十 KB/s（见上「GHCR 在国内会被限速」），看起来像卡死
+- **只换了脚本**：拉的是 `fra-*`，`up` 用的还是 compose 里的 `fba-*`。本地有上次的 `fba-*:latest`，
+  于是**起来的是旧镜像，部署显示成功**
+
+⚠️ 上面两条是按 compose 默认的 `pull_policy: missing` 推出来的，**没在服务器上复现过**。
+
+修法：`cmd_pull` 改用 `dc config --images` 展开镜像名，`IMAGE_OWNER` / `TAG` 也交给 compose 解析，
+和 `up` 看到的是同一份。脚本里不再出现镜像名。
+
+**实测证据**（桩 `docker`：`compose` 子命令转给真 docker，`pull` / `tag` 只打印命令；Docker Compose v5.6.0）：
+
+| compose | 结果 |
+|---|---|
+| 新（`fra-*`），默认值 | 拉 `<mirror>/yilecoding/fra-api:latest`、`fra-web:latest`，retag 回 `ghcr.io/yilecoding/…` |
+| 新，环境变量 `TAG=sha-abc1234` + `.env` 里 `IMAGE_OWNER=someone` | 拉 `<mirror>/someone/fra-*:sha-abc1234` |
+| 旧（`fba-*`，改名前 main 上那份） | 拉 `fba-*` —— **新脚本兼容旧 compose** |
+| compose 语法错误 | 打印 go-yaml 报错和「从 compose 展开镜像名失败」，exit 1 |
+
+### 服务器切换顺序
+
+先确认 GitHub 上 `fra-api` / `fra-web` 两个包已经是 Public，然后：
+
+```bash
+# 1. 先换脚本。新脚本兼容旧 compose（上表第三行），换完当前部署不受影响
+curl -fsSL https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/main/deploy/prod.sh -o prod.sh
+# 2. 再换 compose，diff 里两个 image: 应该变成 fra-*
+bash prod.sh sync
+bash prod.sh pull && bash prod.sh up && bash prod.sh status
+```
+
+反过来先 `sync` 再换脚本，中间那一次 `pull` 就是上面的「只换了 compose」。
+
+### 1.2.0 时
+
+- 删掉 `.github/workflows/ci.yml` 里两段 `fba-*` 的三行
+- 旧包删不删：删了，还在拉旧名字的人会**立刻报错**，比静默停在旧版本好；代价是改名之前的
+  `sha-*` 回滚标签一起没了。删之前先确认生产不会再回滚到改名之前
