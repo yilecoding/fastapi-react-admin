@@ -18,7 +18,7 @@ sidebar:
 | **AI 助手** | [整页对话 + 侧滑抽屉](/features/ai-assistant/) · 工具调用受权限和数据范围约束 · 写操作先预览再确认 · 审计日志 · MCP 网关 |
 | **开放平台** | [AK/SK 签名接口](/features/open-api/) · 权限范围 / IP 白名单 / 防重放 / 限流 · 调用日志 · 增量同步 · Python / Node / Java SDK |
 | **消息与任务** | [站内通知、通知公告与渠道路由](/features/notifications/)（邮件 / 短信 / 群机器人）· 定时任务（在线调度 · cron 预览 · 执行记录） |
-| **运维** | 参数配置 · 字典 · 登录 / 操作日志（已脱敏）· 服务器与 Redis 监控 · 新版本提示 · 给外部监控用的[统一健康检查地址](/getting-started/deployment/#外部监控探哪个地址) |
+| **运维** | 参数配置 · 字典 · 登录 / 操作日志（已脱敏）· 数据变更记录（谁、什么时候、从哪来，把哪个字段从什么改成了什么）· 服务器与 Redis 监控 · 新版本提示 · 给外部监控用的[统一健康检查地址](/getting-started/deployment/#外部监控探哪个地址) |
 | **数据库** | [PostgreSQL · SQL Server · MySQL](/features/databases/)，同一套代码、同一条迁移链 |
 | **客户端** | [Electron 桌面端](/features/clients/)（静默打印 · 本地硬件 · 自动更新）· 原生 Expo App（不是 WebView 套壳） |
 | **开发者** | 组件沙箱（每个组件都能调参、复制代码）· 调色板 · 从 OpenAPI 生成的类型安全接口契约 |

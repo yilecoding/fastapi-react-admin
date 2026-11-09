@@ -74,7 +74,8 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
     清理的话，用户看到「30 天前」的那条可能还在，看到「29 天前」的那条却没了，
     对不上账而且解释不清。
     """
-    from backend.app.admin.model import LoginLog, OperaLog
+    from backend.app.admin.model import DataChange, LoginLog, OperaLog
+    from backend.app.admin.service.data_change_service import data_change_retention_days
 
     # ⚠️ backend.utils.timezone 只有 now/from_str/to_str/to_utc 那几个，没有 timedelta
     cutoff = timezone.now() - timedelta(days=days)
@@ -128,11 +129,17 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
             # 先子后父：尝试 → 投递 → 事件（没有外键，但顺序反了中途失败会留下指向空的行）
             for model in (OpenWebhookAttempt, OpenWebhookDelivery, OpenEvent):
                 webhook += await _prune_table(db, model, model.created_time, webhook_cutoff, batch)
+        # 数据变更记录（#260）**自己的**保留期（参数配置「日志」组，默认 180 天 —— 网络安全法的六个月下限）。
+        # 它和操作日志不是同一份东西：操作日志 30 天删掉之后，「谁把这个字段改了」还要查得到
+        change_retention = await data_change_retention_days(db)
+        change_cutoff = timezone.now() - timedelta(days=change_retention)
+        changes = await _prune_table(db, DataChange, DataChange.created_time, change_cutoff, batch)
 
     msg = (
         f'清理 {days} 天前的日志：登录日志 {login} 条、操作日志 {opera} 条、开放接口调用日志 {open_api} 条、'
         f'短信发送日志 {sms} 条；通知投递记录（保留 {retention} 天）{delivery} 条；'
-        f'Webhook 事件 / 投递 / 尝试（保留 {webhook_retention} 天）{webhook} 条'
+        f'Webhook 事件 / 投递 / 尝试（保留 {webhook_retention} 天）{webhook} 条；'
+        f'数据变更记录（保留 {change_retention} 天）{changes} 条'
     )
     log.info(msg)
     return msg

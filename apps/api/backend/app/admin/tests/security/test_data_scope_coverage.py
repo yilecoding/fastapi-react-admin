@@ -57,6 +57,9 @@ EXEMPT: dict[str, str] = {
     'CRUDOpenWebhook': 'Webhook 端点挂在应用下，是系统级配置（同应用本身）；靠 open:webhook:* 权限码',
     'CRUDOpenEvent': 'Webhook 事件是对外的审计记录，产生于任何人的写操作；靠 open:webhook:list 权限码',
     'CRUDOpenWebhookDelivery': 'Webhook 投递记录是审计记录（同调用日志）；靠 open:webhook:list 权限码',
+    'CRUDDataChangeDao': (
+        '数据变更记录是审计记录（同操作日志），按操作人或对象过滤都会让记录凭空消失；靠 log:change:list 权限码（#260）'
+    ),
     'CRUDExportJob': (
         '导出记录按 created_by == 当前用户强制过滤（同收件箱），接口只挂登录；'
         '再叠部门维度会让受限用户连自己的导出都看不到'
