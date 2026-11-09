@@ -33,6 +33,11 @@ function useProblemText(): (p: DataChangeIntegrityProblem) => string {
         return t('最新的记录被删掉了（第 {{from}} – {{to}} 条），或者链头被改过', range)
       case 'key':
         return t('第 {{seq}} 条的签名密钥对不上', { seq: p.seq })
+      case 'stale':
+        return t(
+          '最新的记录（第 {{seq}} 条）不是用现在的密钥签的：可能整条链被换了签法重算过；如果刚配上密钥、之后还没有新的修改，这是正常的',
+          { seq: p.seq }
+        )
       case 'unchained':
         return t('这一条不在链上：没经过应用、直接写进表里的')
       case 'head':
