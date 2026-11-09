@@ -76,6 +76,25 @@ ORM 的 `before_update` / `after_update` 抓不到：crud-plus 发的是「按�
 现在第一次碰到某个父对象时拍一次成员集合，提交时再查一次，记差集；原样保存不出记录。
 变异：每条语句都重拍 → `test_updating_a_user_records_old_and_new_values_with_the_actor` 红。
 
+## 评审补的（#262）
+
+PR 第一版合并前跑了一次独立评审，下面五条都是**读代码能推出来、测试一条都不红**的：
+
+| 症状 | 根因 | 修法 | 实测证据 |
+|---|---|---|---|
+| 🔴 SMTP 密码明文进审计表，留 180 天 | `EMAIL_PASSWORD` 就存在 `sys_config` 里，`value` 第一版按普通列记 | 登记表加 `secret_when`：键名以 PASSWORD / SECRET / TOKEN / API_KEY 结尾的行只记「改过」（和前端参数配置打码同一条规则） | `test_a_password_like_config_value_is_recorded_as_secret` |
+| 一个请求拆成好几条记录；保存点里写记录出的错被吞掉、记录丢失 | **保存点提交也触发 `before_commit` / `after_commit`**（`_prepare_impl` 里 `if self._parent is None or self.nested`）。AI 工具每调用一次就开保存点写调用审计 | 两个钩子都 `session.in_nested_transaction()` 时跳过 | `test_a_savepoint_commit_does_not_split_or_drop_the_record`（去掉任一个跳过都红） |
+| 每次登录多查两次整行 | `update_login_time` 只写忽略列，照样前查后查 | 语句写的列全在忽略列里就不抓 | `test_writing_only_ignored_columns_skips_the_capture`（数 `_fetch` 调用） |
+| 从很多人身上摘掉一个角色：逐个拍集合、写几万行，全在业务事务里；按主键批量更新几千行在 SQL Server 上超 2100 个参数，业务 UPDATE 跟着失败 | 关联表没有 `BULK_LIMIT`；executemany 的主键一次塞进一个 IN | 关联表超限记一条汇总（哪个集合字段、多少个对象、加了 / 去了谁）；executemany 超限直接汇总（`varies`：每行值不同），不超限分批查 | `test_an_association_delete_over_the_limit_is_one_summary` · `test_executemany_over_the_limit_is_one_summary_without_a_pre_select` |
+| 改部分加载的对象，记出一串「从空改成了现值」的假变更；来源按 flush 时算 | 原样用属性历史拿：没加载过的属性历史是空的；会话 `autoflush=False`，flush 常在 `with data_change_source` 外面 | 原样改在 `before_flush` **从库里查**；登记过的模型的列属性挂 `set` 监听，改的那一刻把来源记在 `InstanceState.info` 上 | `test_editing_a_partially_loaded_object_records_only_what_changed`（`load_only` + `with` 外提交） |
+
+另外两条：「定时任务」来源原来没人设（worker 里的修改记成「系统」，筛选下拉里那一项永远是空的），现在 `app/task/tasks/base.py: with_timeout`
+统一包一层（`test_celery_tasks_record_their_changes_as_scheduled_tasks`）；操作日志详情的「这次改了什么」只取第一页 50 条，
+现在超出时给「还有 N 条」的链接，trace_id 是占位的 `-` 时不查。
+
+⚠️ 评审还提了一条**没改**的：trace_id 可以由客户端带 `X-Request-ID` 指定（`RequestIdPlugin(validate=True)` 接受任何合法 UUID），
+所以「这次改了什么」能被伪造成挂在别人的请求下。操作人照样记的是真的那个人，影响的只是关联关系 —— 这是 trace 机制本身的事，不在这里改。
+
 ## 来源：流式响应要显式传操作人
 
 `with data_change_source('ai', ref, actor_id=…)` 包住的修改记成别的来源。来源在**第一次碰到那一行**时就定下来
@@ -83,7 +102,7 @@ ORM 的 `before_update` / `after_update` 抓不到：crud-plus 发的是「按�
 
 🔴 AI 对话是 SSE 流式响应，生成器跑起来时请求上下文（starlette-context）可能已经收尾了，从上下文里取操作人会拿到空 ——
 `plugin/ai/core/dispatcher.py: _invoke` 显式传 `ctx.user.id`。批量导入（`import_service`）和第三方登录（建号 / 同步头像）同理。
-⚠️ 一期这五个对象**没有定时任务会改**，`task` 来源先留着。
+定时任务在 `with_timeout` 里统一包（一期这五个对象还没有任务会改，口子先接上）。
 
 ## 顺手修的：`last_login_time` 带 `onupdate`（上游带过来的）
 
@@ -106,12 +125,14 @@ ORM 的 `before_update` / `after_update` 抓不到：crud-plus 发的是「按�
 
 ## 实测证据 / 守卫
 
-`app/admin/tests/api_v1/test_data_change.py` 28 条（接口路径的五种写法 + 同步会话造的回滚 / 保存点 / 同一事务改两次 /
-没 flush 的新建 / 建了又删 / 批量汇总 + 登记守卫 + 静态守卫 + 接口）· `app/task/tests/test_prune_logs.py` 一条保留期 ·
-E2E `data-change.spec.ts`。
+`app/admin/tests/api_v1/test_data_change.py` 35 条（接口路径的五种写法 + 同步会话造的回滚 / 保存点 / 同一事务改两次 /
+没 flush 的新建 / 建了又删 / 批量汇总 + 评审补的七条 + 登记守卫 + 静态守卫 + 接口）· `app/task/tests/test_prune_logs.py` 一条保留期 ·
+E2E `data-change.spec.ts`。CI 的 PostgreSQL / SQL Server 两个 pytest job 都跑这份文件。
 
-变异 10 处各有测试红：不先 flush · 原样每次都覆盖 · 外层回滚不清缓冲 · 关联表每条语句都重拍 · 敏感列照记值 ·
-逻辑删除不认 · 来源不看 `add` 那一刻 · 不查引用的名字 · `last_login_time` 带回 `onupdate` · 批量上限失效。
+变异 18 处各有测试红：不先 flush · 原样每次都覆盖 · 外层回滚不清缓冲 · 关联表每条语句都重拍 · 敏感列照记值 ·
+逻辑删除不认 · 来源不看 `add` 那一刻 · 不查引用的名字 · `last_login_time` 带回 `onupdate` · 批量上限失效 ·
+参数配置不按行判敏感 · 保存点提交照写 · 保存点提交照清缓冲 · 只写忽略列照抓 · executemany 超限照逐行查 ·
+关联表没有上限 · 改属性的来源按 flush 时算 · 定时任务不设来源。
+E2E 那条第一版**变异不红**：新名字写成 `${旧名字}改`，「显示了旧值」那句永远成立 —— 改成不相交的名字之后才红。
 
-**没验过**：MySQL（本机没有容器）· 五种写法在 SQL Server 上（第二轮的提交时序在 SQL Server 上跑过）·
-提交时那一次 INSERT 的耗时 · 改已加载对象（`session.dirty` + 属性历史）这条路径 —— 五个对象现在都不这么改。
+**没验过**：MySQL（本机没有容器）· 提交时那一次 INSERT 的耗时。

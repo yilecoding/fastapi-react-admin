@@ -82,6 +82,9 @@ function ChangeValue({ change, created }: { change: DataChangeItem; created: boo
   if (change.secret) {
     return <span className="text-muted-foreground">{t('已修改（不记录内容）')}</span>
   }
+  if (change.varies) {
+    return <span className="text-muted-foreground">{t('每一行改成的值不一样')}</span>
+  }
   if (change.added || change.removed) {
     return (
       <span className="flex flex-wrap gap-1">

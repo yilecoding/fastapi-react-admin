@@ -15,11 +15,14 @@ import importlib.util
 import pkgutil
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import sqlalchemy as sa
 
 from backend.common.log import log
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,8 +45,17 @@ class AuditedEntity:
     #: 固定取值的列 → {值: 中文名}（状态、菜单类型…）
     enums: dict[str, dict[Any, str]] = field(default_factory=dict)
     secret: frozenset[str] = frozenset()
+    #: 按行判断要不要当敏感列（参数配置的 `value`：键名是 `EMAIL_PASSWORD` 的那一行才是密码）
+    secret_when: dict[str, Callable[[Mapping[str, Any]], bool]] = field(default_factory=dict)
     ignore: frozenset[str] = frozenset()
     soft_delete: str | None = None
+
+    def is_secret(self, column: str, row: Mapping[str, Any] | None) -> bool:
+        if column in self.secret:
+            return True
+        predicate = self.secret_when.get(column)
+        # 没有行（批量汇总）就按最坏情况算：宁可少记一个值，不能把密码写进审计表
+        return predicate is not None and (row is None or predicate(row))
 
     @property
     def pk(self) -> sa.Column:
@@ -136,6 +148,7 @@ def register_audited(
     refs: dict[str, tuple[str, Ref]] | None = None,
     enums: dict[str, dict[Any, str]] | None = None,
     secret: dict[str, str] | None = None,
+    secret_when: dict[str, Callable[[Mapping[str, Any]], bool]] | None = None,
     ignore: set[str] | frozenset[str] = frozenset(),
     soft_delete: str | None = None,
 ) -> AuditedEntity:
@@ -148,6 +161,7 @@ def register_audited(
     :param refs: 引用列 → (中文名, 指向哪张表的哪一列)
     :param enums: 固定取值的列 → {值: 中文名}，必须是 `fields` 里的列
     :param secret: 敏感列 → 中文名（只记「改过」，不记值）
+    :param secret_when: 普通列 → 按行判断这一行的值是不是敏感的（参数配置：键名像密码的那几行）
     :param ignore: 不记的列（时间戳、冗余列…）
     :param soft_delete: 逻辑删除标记列（`deleted` 从 0 变成非 0 记成「删除」，而不是一条字段变化）
     """
@@ -155,6 +169,11 @@ def register_audited(
     refs = refs or {}
     enums = enums or {}
     secret = secret or {}
+    secret_when = secret_when or {}
+    if set(secret_when) - set(fields):
+        raise ValueError(
+            f'数据变更登记：{table.name} 的 secret_when 只能给 fields 里的列：{sorted(set(secret_when) - set(fields))}'
+        )
 
     if not entity.replace('_', '').isalpha() or not entity.islower():
         raise ValueError(f'数据变更登记：entity {entity!r} 只能是小写字母和下划线')
@@ -195,6 +214,7 @@ def register_audited(
         refs={name: ref for name, (_, ref) in refs.items()},
         enums=enums,
         secret=frozenset(secret),
+        secret_when=dict(secret_when),
         ignore=frozenset(ignore) | frozenset(c.name for c in table.primary_key.columns),
         soft_delete=soft_delete,
     )
