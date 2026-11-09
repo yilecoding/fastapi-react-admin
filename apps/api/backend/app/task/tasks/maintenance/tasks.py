@@ -8,7 +8,7 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, delete, select
+from sqlalchemy import ColumnElement, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
@@ -74,9 +74,12 @@ async def _prune_data_changes(db: AsyncSession, model: type[Any], cutoff: dateti
     total = 0
     if upto is not None:
         total += await _prune_where(db, model, model.chain_seq <= upto, batch)
-    # 防篡改上线之前的旧行没有序号，照旧按时间删
-    total += await _prune_where(db, model, and_(model.chain_seq.is_(None), model.created_time < cutoff), batch)
     head = await db.run_sync(lambda session: chain.head_summary(session))
+    # 🔴 没有序号的行**不删**：迁移已经把旧记录补签进了链，没有序号的就是绕过应用写进来的 —— 按时间删等于替伪造的人
+    # 销毁证据（评审抓到的）。留着给校验报，任务日志里也说一声
+    unchained = (await db.execute(select(func.count()).select_from(model).where(model.chain_seq.is_(None)))).scalar()
+    if unchained:
+        head += f'；没有序号的 {unchained} 行（绕过应用写进来的）没删，留给校验'
     return total, head
 
 
