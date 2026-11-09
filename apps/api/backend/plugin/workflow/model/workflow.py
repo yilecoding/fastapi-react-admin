@@ -129,6 +129,10 @@ class WfTask(DataClassBase, DateTimeMixin):
     status: Mapped[str] = mapped_column(UniversalStr(16), comment='pending / done / canceled / transferred')
     decision: Mapped[str | None] = mapped_column(UniversalStr(16), default=None, comment='approve / reject')
     opinion: Mapped[str | None] = mapped_column(UniversalStr(512), default=None, comment='意见')
+    #: 系统意见的消息键 + 参数（JSON），读的时候按请求语言渲染 —— 见 `sys_opinion.py`。用户写的意见为空
+    opinion_i18n: Mapped[str | None] = mapped_column(
+        UniversalText, default=None, comment='系统意见的消息键与参数（JSON）'
+    )
     version: Mapped[int] = mapped_column(default=0, comment='版本号（乐观锁）')
     #: 同一个节点可能走不止一次（退回之后重走）。进入节点那一刻实例的 version 当轮次号：
     #: 一次进入里建的待办（含之后转交 / 依次审批轮到的）都是同一个值。
@@ -165,6 +169,10 @@ class WfActionRecord(DataClassBase):
     reject_reason: Mapped[str | None] = mapped_column(UniversalStr(256), comment='被拒绝的原因')
     idempotency_key: Mapped[str] = mapped_column(UniversalStr(64), comment='幂等键')
     detail: Mapped[str | None] = mapped_column(UniversalText, comment='补充信息（JSON，如表单改动前后）')
+    #: 同 `WfTask.opinion_i18n`
+    opinion_i18n: Mapped[str | None] = mapped_column(
+        UniversalText, default=None, comment='系统意见的消息键与参数（JSON）'
+    )
     created_time: Mapped[datetime] = mapped_column(
         TimeZone, init=False, default_factory=timezone.now, comment='创建时间'
     )

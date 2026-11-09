@@ -27,6 +27,13 @@ pnpm dev                        # api + web + worker（worker 含内嵌 beat）
 pnpm --filter worker dev        # 只起 worker
 ```
 
+🔴 **开发期的 worker 由 `apps/worker/dev.mjs` 起，不是一行脚本。** celery 在 Windows 上不支持 `-B`
+（报「-B option does not work on Windows」直接退出）；而且 `VAR=x cmd` 这种行内设环境变量的写法，
+Windows 上的 pnpm（走 cmd）根本不认。原来那一行脚本在 Windows 上 worker 窗格直接挂掉，api / web 照常跑，
+定时任务和异步通知**全都静默不执行**（工作台显示「心跳停在 N 小时前」）。现在 Windows 上拆成 worker + beat
+两个进程，其他平台照旧 `-B`；环境变量在 node 里设。实测：本机（Windows）`pnpm --filter worker dev` 起来后
+worker `ready`、beat 正常派发。
+
 🔴 **`-B`（内嵌 beat）只用于开发。** 多副本部署时每个副本都跑一个 beat，
 同一条调度被触发 N 次。生产要分开，且 beat **只起一个**：
 

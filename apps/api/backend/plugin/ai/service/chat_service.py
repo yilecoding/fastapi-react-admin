@@ -5,6 +5,8 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
+import anyio
+
 from backend.common.exception import errors
 from backend.common.log import log
 from backend.core.conf import settings
@@ -107,42 +109,49 @@ class ChatService:
                 )
 
                 assistant_parts: list[str] = []
-                # 这一轮发生过的工具调用，随助手消息一起落库（下面写进 `tool_calls` 列）。
-                # 🔴 不存的话，刷新页面之后「执行轨迹」就没了 —— 而那正是这个助手
-                # 区别于普通聊天框的地方：回答旁边写着它凭什么权限、查了什么、花了多久。
-                traces: list[dict[str, Any]] = []
+                # 这一轮界面上出现过的一切，随助手消息一起落库（`tool_calls` 列，格式见 `TurnItem`）：
+                # 执行轨迹、确认卡片、报错。🔴 只存正文的话，刷新页面之后它们全没了 ——
+                # 实测三种：确认卡片被流结束后的历史刷新**当场**冲掉（写操作永远确认不了）；
+                # 「达到 5 轮上限」的报错刷新后变成一句没有下文的提问；查了 5 次的轨迹整个消失
+                items: list[dict[str, Any]] = []
                 try:
                     async for event in engine.run(history, tools, ctx):
                         if event.type == 'delta':
                             assistant_parts.append(event.text)
                         elif event.type == 'tool_result':
-                            traces.append({
+                            items.append({
                                 'name': event.name,
                                 'ok': event.ok,
                                 'perm': event.perm,
                                 'duration_ms': event.duration_ms,
                             })
+                        elif event.type == 'confirm_required':
+                            items.append({
+                                'kind': 'confirm',
+                                'token': event.token,
+                                'name': event.name,
+                                'preview': event.preview,
+                                'outcome': None,
+                            })
+                        elif event.type == 'error':
+                            items.append({'kind': 'error', 'message': event.message, 'code': event.code})
                         yield _sse(event)
                 except Exception as e:
                     log.exception('AI 对话流失败')
-                    yield _sse(ErrorEvent(message=f'对话出错：{e}', code='stream_failed'))
-
-                # 不管中途出没出错，把已经产出的正文落库 ——
-                # 半截回答也是用户看见过的内容，刷新之后它不该凭空消失
-                text = ''.join(assistant_parts)
-                if text:
-                    await ai_message_dao.create(
-                        db,
-                        conversation_id=conversation_id,
-                        role=MessageRole.ASSISTANT.value,
-                        content=text,
-                        tool_calls=json.dumps(traces, ensure_ascii=False) if traces else None,
-                    )
-                await db.commit()
-                # 工具挂的提交后动作（清用户缓存等）—— 必须在 commit 之后，见 `RunContext.background_tasks`
-                await ctx.background_tasks()
+                    error = ErrorEvent(message=f'对话出错：{e}', code='stream_failed')
+                    items.append({'kind': 'error', 'message': error.message, 'code': error.code})
+                    yield _sse(error)
+                finally:
+                    # 🔴 落库放在 finally 里、并且屏蔽取消。用户流到一半刷新 / 关页面时，
+                    # Starlette 取消这个生成器，抛进来的是 `CancelledError` —— 它不是 `Exception`，
+                    # 原来写在 try 后面的落库一行都不跑：实测流到第 9 段刷新，回来只剩用户那句话，
+                    # 和上面「半截回答也要保留」的本意正相反。不屏蔽的话，anyio 的取消会在
+                    # 这里的每一个 await 上再抛一次
+                    with anyio.CancelScope(shield=True):
+                        await _persist_turn(db, ctx, conversation_id, ''.join(assistant_parts), items)
         finally:
-            await redis_client.delete(lock_key)
+            with anyio.CancelScope(shield=True):
+                await redis_client.delete(lock_key)
 
     @staticmethod
     async def confirm_tool(*, user: Any, token: str) -> AsyncIterator[str]:
@@ -199,7 +208,13 @@ class ChatService:
             await db.commit()
             await ctx.background_tasks()
 
-        yield _sse(ToolResultEvent(call_id=token, name=call.name, ok=outcome.kind == 'ok', summary=outcome.summary))
+        ok = outcome.kind == 'ok'
+        detail = None if ok else outcome.payload[:300]
+        # 结果写回那张卡片所在的消息：刷新之后卡片显示「已执行 / 没执行成功」而不是又一个能点的按钮，
+        # 下一轮对话的历史里模型也看得到「这件事已经办了」（见 `_build_history`）
+        await _settle_confirm(conversation_id, token, 'done' if ok else 'failed', detail)
+
+        yield _sse(ToolResultEvent(call_id=token, name=call.name, ok=ok, summary=outcome.summary, detail=detail))
         yield _sse(DoneEvent())
 
 
@@ -246,12 +261,115 @@ async def _build_history(db: Any, conversation_id: int) -> list[dict[str, Any]]:
     """
     rows = await ai_message_dao.get_history(db, conversation_id, limit=40)
     history: list[dict[str, Any]] = [{'role': 'system', 'content': _SYSTEM_PROMPT}]
-    history.extend(
-        {'role': row.role, 'content': row.content}
-        for row in rows
-        if row.role in (MessageRole.USER.value, MessageRole.ASSISTANT.value) and row.content
-    )
+    for row in rows:
+        if row.role not in (MessageRole.USER.value, MessageRole.ASSISTANT.value):
+            continue
+        content = row.content or ''
+        if row.role == MessageRole.ASSISTANT.value:
+            # 写操作的去向要让模型知道。只带正文的话，它提议过「新建部门」、用户点了确认，
+            # 下一轮模型看到的历史里这件事**没有下文** —— 它会再提议一遍，或者说「还没建」
+            notes = _confirm_notes(row.tool_calls)
+            if notes:
+                content = f'{content}\n\n{notes}'.strip()
+        if content:
+            history.append({'role': row.role, 'content': content})
     return history
+
+
+def _load_items(raw: str | None) -> list[dict[str, Any]]:
+    """`tool_calls` 列：一轮里界面上出现过的东西（执行轨迹 / 确认卡片 / 报错），JSON 数组。
+
+    没有 `kind` 的是执行轨迹（老数据就是这个形状，所以不加 `kind` 也能读）；
+    `kind: confirm` 是确认卡片，`outcome` 为 None = 还没点；`kind: error` 是这一轮的报错。
+    坏数据当成空：不能让一条脏数据把整段历史搞崩
+    """
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    return [item for item in parsed if isinstance(item, dict)] if isinstance(parsed, list) else []
+
+
+_OUTCOME_NOTE = {
+    None: '等待用户确认，尚未执行',
+    'done': '用户已确认，执行成功',
+    'failed': '用户已确认，但执行失败',
+}
+
+
+def _confirm_notes(raw: str | None) -> str:
+    notes = []
+    for item in _load_items(raw):
+        if item.get('kind') != 'confirm':
+            continue
+        what = item.get('preview') or item.get('name')
+        notes.append(f'（系统记录：{what} —— {_OUTCOME_NOTE.get(item.get("outcome"), "状态未知")}）')
+    return '\n'.join(notes)
+
+
+async def _persist_turn(db: Any, ctx: RunContext, conversation_id: int, text: str, items: list[dict[str, Any]]) -> None:
+    """把一轮的结果落库：正文 + 这一轮出现过的轨迹 / 确认卡片 / 报错。
+
+    🔴 **只要界面上出现过东西就要落库**，不只是有正文的时候。模型调写工具时常常一个字都不说，
+    原来 `if text:` 才存 —— 确认卡片随即被前端的历史刷新冲掉，写操作永远确认不了。
+
+    被取消之后会话可能已经坏了（取消发生在某个查询中途）：换一个新会话再试一次，
+    丢的只是工具那侧没提交的东西（它本来就该回滚），用户看见过的内容保住。
+    """
+    tool_calls = json.dumps(items, ensure_ascii=False) if items else None
+    try:
+        if text or items:
+            await ai_message_dao.create(
+                db,
+                conversation_id=conversation_id,
+                role=MessageRole.ASSISTANT.value,
+                content=text,
+                tool_calls=tool_calls,
+            )
+        await db.commit()
+    except Exception:
+        log.exception('AI 对话收尾落库失败，换新会话重试')
+        try:
+            await db.rollback()
+            if text or items:
+                async with async_db_session.begin() as fresh:
+                    await ai_message_dao.create(
+                        fresh,
+                        conversation_id=conversation_id,
+                        role=MessageRole.ASSISTANT.value,
+                        content=text,
+                        tool_calls=tool_calls,
+                    )
+        except Exception:
+            log.exception('AI 对话收尾落库重试仍失败')
+        return
+    # 工具挂的提交后动作（清用户缓存等）—— 必须在 commit 之后，见 `RunContext.background_tasks`
+    await ctx.background_tasks()
+
+
+async def _settle_confirm(conversation_id: int, token: str, outcome: str, detail: str | None) -> None:
+    """把确认结果写回卡片所在的那条助手消息。
+
+    用新会话：工具执行失败时原来那个会话可能处在待回滚状态。写不进去只记日志 ——
+    工具已经执行了，不能因为「卡片状态没更新」让用户以为没执行
+    """
+    try:
+        async with async_db_session.begin() as db:
+            rows = await ai_message_dao.get_history(db, conversation_id, limit=40)
+            for row in reversed(rows):
+                items = _load_items(row.tool_calls)
+                hit = next((i for i in items if i.get('kind') == 'confirm' and i.get('token') == token), None)
+                if hit is None:
+                    continue
+                hit['outcome'] = outcome
+                if detail:
+                    hit['detail'] = detail
+                row.tool_calls = json.dumps(items, ensure_ascii=False)
+                return
+    except Exception:
+        log.exception('AI 确认结果写回会话失败（工具本身已执行）')
 
 
 chat_service: ChatService = ChatService()

@@ -1,6 +1,24 @@
-import sqlalchemy as sa
+import sys
 
-from backend.utils.dynamic_import import get_all_models
+
+# 🔴 Windows 上标准输出强制 UTF-8。系统代码页不是 UTF-8 时（实测：繁中 cp950），启动期 rich 打印
+# 「检测插件依赖...」这种简体中文直接 `UnicodeEncodeError`，api 起不来（输出重定向 / 非 VT 终端时必现）；
+# celery 的日志则整片乱码。放在包的最顶上：api / celery / cli / pytest 都先 import 这里。
+# 不靠在 package.json 里写 `PYTHONUTF8=1 uv run …` —— 那种行内设环境变量的写法 Windows 上的 pnpm 不认
+def _force_utf8(stream: object) -> None:
+    try:
+        stream.reconfigure(encoding='utf-8', errors='backslashreplace')  # type: ignore[attr-defined]
+    except (AttributeError, ValueError):  # 被替换成了不支持 reconfigure 的对象（如 pytest 的捕获）
+        pass
+
+
+if sys.platform == 'win32':
+    _force_utf8(sys.stdout)
+    _force_utf8(sys.stderr)
+
+import sqlalchemy as sa  # ruff: ignore[module-import-not-at-top-of-file]
+
+from backend.utils.dynamic_import import get_all_models  # ruff: ignore[module-import-not-at-top-of-file]
 
 
 def _register_model_globals() -> None:

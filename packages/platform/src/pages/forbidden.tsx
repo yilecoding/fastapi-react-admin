@@ -28,7 +28,7 @@ export function ForbiddenPage({ search }: { search?: { from?: string; need?: str
           )}
         </div>
       )}
-      <Button variant="outline" render={<a href="/dashboard" />}>{t('返回仪表盘')}</Button>
+      <Button variant="outline" nativeButton={false} render={<a href="/dashboard" />}>{t('返回仪表盘')}</Button>
     </div>
   )
 }

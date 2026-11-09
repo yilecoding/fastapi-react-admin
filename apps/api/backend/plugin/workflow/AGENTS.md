@@ -19,6 +19,7 @@
 | `service/runtime_service.py` | `execute()` 统一入口 · 认领 · 推进 · 能力信封 |
 | `service/query_service.py` | 审批中心查询 · 详情（按查看人裁字段）· 通讯录 |
 | `handler.py` | 业务接入契约；表单审批是内置的 `FormHandler` |
+| `sys_opinion.py` | 系统意见（自动驳回 / 跳过 / 超时 / AI 同意 / 交接）落消息键、读时按请求语言渲染 |
 
 ## 🔴 认领实例在前，动待办在后
 
@@ -480,3 +481,20 @@ Qwen3-VL 采购那条要回喂一轮，DeepSeek-V3.2 把「财务总监」留空
 **实测证据**：`tests/test_dashboard_feeds.py` 12 条（新增 7 条），2026-11-01 在 PostgreSQL 16 / SQL Server 2022 / MySQL 8.4 私有库上全绿。
 变异 9 个各自当场红：不过 `_mask_forecast` · `_DECISIVE` 漏 `timeout_reject` · 退回画成同意 · 截断留最新的 · `total` 取条数 ·
 `urgent_total` 不按加急过滤 · `returned_total` 不按发起人过滤 · 转交来源用 `origin_assignee_id` · `due_time` 不传节点索引。
+
+## 🔴 系统意见存消息键，不存成品文本（`sys_opinion.py`）
+
+症状：中文界面的工作台「我发起的」里，三条里有一条是 `No approver found for "直属主管", rejected automatically`。
+根因：自动驳回 / 自动跳过 / 超时自动处理 / AI 自动同意 / 离职交接这几句是写入那一刻 `t()` 出来、直接当 `opinion` 落库的 ——
+语言是**触发那个请求**的，之后谁来读都不变；超时和 AI 同意跑在 Celery 里、没有请求语言，永远是默认语言（中文）。
+
+修法：`_record` / `_close_task` 收 `SysOpinion(key, args)`，`wf_task` / `wf_action_record` 多一列 `opinion_i18n`
+（`{"key", "args"}`，迁移 `al000000wfopinioni18n`），`query_service` 读的三处（详情 `tasks` / `records`、
+「我发起的」的 `last`）过 `render()`。**不改在前端、不把消息键塞进 `opinion` 列**：旧客户端（桌面安装包、移动端）
+和直接查库的报表都只认 `opinion`（1.0 兼容约定），那一列照旧存一份默认语言的成品文本；`opinion_i18n` 为空 = 人写的意见或老数据，原样返回。
+⚠️ 新加一种系统意见就传 `SysOpinion`，别传 `t(...)` —— 传字符串照样能跑，只是又落回成品文本。站内通知的正文仍是当场渲染的（不在这次范围）。
+
+**实测证据**：`tests/test_sys_opinion_i18n.py` 4 条（英文触发中文读 · 中文触发英文读 · 老数据原样 · 超时从 worker 落、按读的人渲染），
+2026-11-09 SQL Server 2022：旧代码上 4 条全红（老数据那条红在列不存在），新代码全绿；整个 `tests/` 164 条全绿。
+变异：去掉「我发起的」`last` 那处 `render()`，中文触发英文读那条当场红（英文触发中文读那条不红 —— `opinion` 列存的本来就是中文）。
+迁移在同一个库上 `downgrade -1` → `upgrade head` → 再 `upgrade head` 都过。

@@ -180,6 +180,21 @@ configuration; falling back to legacy splitting on spaces, commas, and colons」
 表现是 `env.py` 里 `from backend...` 突然 ImportError，而配置文件看着没问题。
 `os` = 用 `os.pathsep`（Linux 上是 `:`）。
 
+## 🔴 `alembic.ini` 必须是纯 ASCII（注释也不行）
+
+**症状**：系统代码页不是 UTF-8 的 Windows（实测：繁中 cp950）上，`pnpm db:upgrade`、`pnpm test:db`
+全部 `UnicodeDecodeError: 'cp950' codec can't decode byte 0xe9`，Linux CI 上一切正常。
+
+**根因**：alembic 用 `encoding="locale"` 读这个文件，这个读法**不认 PYTHONUTF8**；原来的中文注释就是那个字节。
+
+**修法**：注释改成英文（文件头写明原因）。守卫 `test_migrations.py::test_alembic_ini_is_ascii`。
+
+## 🔴 种子清单按 LF 算哈希（`scripts/seed_manifest.py`）
+
+Windows 上 `core.autocrlf=true` 检出的种子 SQL 是 CRLF，按原始字节算 sha256 的话
+`test_seed_files_have_a_matching_data_migration_decision` 把 **30 个文件全报成「内容变了」**（实测，一行没改）。
+现在先把 CRLF 归一成 LF 再算，和清单里在 Linux 上算的值一致，清单不用动。
+
 ## 后端侧要记的
 
 - 迁移在 `backend/alembic/versions/`，命令要在 `backend/` 下跑
