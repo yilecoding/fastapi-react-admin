@@ -8,6 +8,7 @@ import { Combobox } from "@admin/ui/components/combobox"
 import { DateTimeRangePicker, DateTimeValuePicker } from "@admin/ui/components/datetime-picker"
 import { Input } from "@admin/ui/components/input"
 import { MultiSelect } from "@admin/ui/components/multi-select"
+import { TimePicker } from "@admin/ui/components/time-picker"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@admin/ui/components/select"
@@ -153,6 +154,7 @@ export function FieldControl({
           value={value as string | undefined}
           onChange={onChange}
           withTime={field.type === "dateTime" || field.withTime}
+          picker={field.picker}
           placeholder={ph}
           size={size}
           disabled={field.disabled}
@@ -163,16 +165,17 @@ export function FieldControl({
       )
 
     case "time":
+      // 不用原生 `<input type="time">`：它跟着浏览器 / 系统走 12 小时制，见 `time-picker.tsx`
       return (
-        <Input
-          type="time" step={1}
-          className={cn(box, className)}
-          value={(value as string) ?? ""}
+        <TimePicker
+          value={(value as string) || undefined}
+          onChange={onChange}
+          placeholder={ph}
+          size={size}
           disabled={field.disabled}
+          className={cn(box, className)}
           aria-label={t(field.label)}
           data-testid={testId}
-          onChange={(e) => onChange(e.target.value || undefined)}
-          onKeyDown={submitOnEnter(onSubmit)}
         />
       )
 
@@ -255,6 +258,7 @@ function RangeControl({
         value={[a as string | undefined, b as string | undefined]}
         onChange={(r) => onChange(r === undefined ? undefined : [r[0], r[1]])}
         withTime={isDateTime || field.withTime}
+        picker={field.picker}
         presets={field.presets ?? true}
         placeholder={ph}
         size={size}
@@ -266,8 +270,41 @@ function RangeControl({
     )
   }
 
+  const halfBox = inline ? cn(INLINE, "min-w-0 flex-1 px-0") : cn(heights[size], "min-w-0 flex-1", invalid && INVALID)
+
+  if (field.type === "time") {
+    return (
+      <span
+        className={cn("flex min-w-0 items-center gap-1.5", inline ? "flex-1" : "flex-1 basis-56", className)}
+        data-testid={testId && `${testId}-range`}
+      >
+        <TimePicker
+          value={(a as string) || undefined}
+          onChange={(v) => onChange([v, b])}
+          placeholder={t("最小")}
+          size={size}
+          disabled={field.disabled}
+          className={halfBox}
+          aria-label={`${t(field.label)} ${t("最小")}`}
+          data-testid={testId && `${testId}-min`}
+        />
+        <span className="shrink-0 text-sm text-muted-foreground/60">–</span>
+        <TimePicker
+          value={(b as string) || undefined}
+          onChange={(v) => onChange([a, v])}
+          placeholder={t("最大")}
+          size={size}
+          disabled={field.disabled}
+          className={halfBox}
+          aria-label={`${t(field.label)} ${t("最大")}`}
+          data-testid={testId && `${testId}-max`}
+        />
+      </span>
+    )
+  }
+
   const numeric = field.type === "number"
-  const type = field.type === "time" ? "time" : numeric ? "number" : "text"
+  const type = numeric ? "number" : "text"
   const parse = (raw: string): unknown => (raw === "" ? undefined : numeric ? Number(raw) : raw)
 
   /**
@@ -275,12 +312,7 @@ function RangeControl({
    * 「一个框里套两个框」的现场：外层 `<span>` 拿着去边框的类，
    * 而边框长在里面两个 `Input` 上。
    */
-  const half = cn(
-    numeric && NO_SPIN,
-    inline
-      ? cn(INLINE, "min-w-0 flex-1 px-0")
-      : cn(heights[size], "min-w-0 flex-1", invalid && INVALID)
-  )
+  const half = cn(numeric && NO_SPIN, halfBox)
 
   return (
     <span
@@ -293,7 +325,7 @@ function RangeControl({
       data-testid={testId && `${testId}-range`}
     >
       <Input
-        type={type} step={field.type === "time" ? 1 : field.step}
+        type={type} step={field.step}
         className={half}
         value={(a as string) ?? ""}
         min={field.min} max={field.max}
@@ -307,7 +339,7 @@ function RangeControl({
           弱化只做颜色，字号仍跟着两侧的输入框 */}
       <span className="shrink-0 text-sm text-muted-foreground/60">–</span>
       <Input
-        type={type} step={field.type === "time" ? 1 : field.step}
+        type={type} step={field.step}
         className={half}
         value={(b as string) ?? ""}
         min={field.min} max={field.max}

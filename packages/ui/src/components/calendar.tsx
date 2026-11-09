@@ -243,15 +243,23 @@ function Calendar({
         ) : (
           <PanelGrid
             view={view}
-            month={month}
             bounds={bounds}
             fmtYear={fmtYear}
             fmtMonth={fmtMonth}
             buttonVariant={buttonVariant}
             t={t}
             onView={setView}
-            onPickMonth={(year, m, panel) => backToDay(firstMonthForPanel(year, m, panel), panel)}
-            onCancel={(panel) => backToDay(null, panel)}
+            onPick={(kind, year, value) =>
+              kind === "year"
+                ? setView({ kind: "month", year: value, panel: view.panel })
+                : backToDay(firstMonthForPanel(year, value, view.panel), view.panel)
+            }
+            onCancel={() => backToDay(null, view.panel)}
+            isCurrent={(kind, serial) => {
+              /** 进面板时那个面板正显示的月份 —— 面板里高亮它 */
+              const shown = addMonths(month, view.panel)
+              return serial === (kind === "year" ? shown.getFullYear() : monthSerial(shown))
+            }}
           />
         )}
       </div>
@@ -371,33 +379,45 @@ function CalendarCaption({ calendarMonth, displayIndex, className, children, ...
 
 /* ------------------------------------------------------------------ 年 / 月面板 */
 
+type PanelKind = "month" | "year"
+
+/** 区间里这一格的位置：两端 / 中间。`preview` = 鼠标悬停预览出来的，还没点 */
+type RangeMark = { edge?: boolean; middle?: boolean; preview?: boolean }
+
+/** 年格的序号是年份，月格是 `year * 12 + month` —— 同一种格子之间才比较 */
+const cellSerial = (kind: PanelKind, year: number, value: number) => (kind === "year" ? value : year * 12 + value)
+
 function PanelGrid({
   view,
-  month,
   bounds,
   fmtYear,
   fmtMonth,
   buttonVariant,
   t,
   onView,
-  onPickMonth,
+  onPick,
   onCancel,
+  isCurrent,
+  rangeMark,
+  onHover,
 }: {
   view: Exclude<View, { kind: "day" }>
-  month: Date
   bounds: MonthBounds
   fmtYear: (d: Date) => string
   fmtMonth: (d: Date) => string
   buttonVariant: React.ComponentProps<typeof Button>["variant"]
   t: (k: string) => string
   onView: (v: View) => void
-  onPickMonth: (year: number, month: number, panel: number) => void
-  onCancel: (panel: number) => void
+  /** 点了一格：年面板 `value` 是年份，月面板是 0–11 */
+  onPick: (kind: PanelKind, year: number, value: number) => void
+  /** 给了就拦 Esc（日历里是「退回日视图」）；不给就让 Esc 照常关浮层 */
+  onCancel?: () => void
+  isCurrent: (kind: PanelKind, serial: number) => boolean
+  rangeMark?: (kind: PanelKind, serial: number) => RangeMark | undefined
+  onHover?: (kind: PanelKind, serial: number | undefined) => void
 }) {
   const gridRef = React.useRef<HTMLDivElement>(null)
   const now = new Date()
-  /** 进面板时那个面板正显示的月份 —— 面板里高亮它 */
-  const shown = addMonths(month, view.panel)
   const minY = bounds.startMonth?.getFullYear()
   const maxY = bounds.endMonth?.getFullYear()
 
@@ -411,24 +431,26 @@ function PanelGrid({
     target?.focus()
   }, [view.kind])
 
-  const isYear = view.kind === "year"
+  const kind = view.kind
+  const isYear = kind === "year"
   const start = decadeStart(view.year)
   const cells = isYear ? yearCells(view.year, bounds) : monthCells(view.year, bounds)
   const step = isYear ? 10 : 1
   const canPrev = minY === undefined || (isYear ? start - 1 >= minY : view.year - 1 >= minY)
   const canNext = maxY === undefined || (isYear ? start + 10 <= maxY : view.year + 1 <= maxY)
+  const nowSerial = isYear ? now.getFullYear() : monthSerial(now)
 
   return (
     <div
       ref={gridRef}
-      data-testid={`calendar-${view.kind}-panel`}
+      data-testid={`calendar-${kind}-panel`}
       className="flex h-full flex-col gap-3"
       onKeyDown={(e) => {
         // Esc 先退回日视图，不要一下把整个浮层关掉
-        if (e.key !== "Escape") return
+        if (e.key !== "Escape" || !onCancel) return
         e.preventDefault()
         e.stopPropagation()
-        onCancel(view.panel)
+        onCancel()
       }}
     >
       <div className="flex h-(--cell-size) items-center gap-0.5">
@@ -465,35 +487,47 @@ function PanelGrid({
         />
       </div>
 
-      <div role="grid" className="grid flex-1 grid-cols-3 content-around gap-x-1 gap-y-2">
+      <div
+        role="grid"
+        className="grid flex-1 grid-cols-3 content-around gap-y-2"
+        onMouseLeave={() => onHover?.(kind, undefined)}
+      >
         {cells.map((c) => {
-          const current = isYear ? c.value === shown.getFullYear() : monthSerial(shown) === view.year * 12 + c.value
-          const isNow = isYear ? c.value === now.getFullYear() : monthSerial(now) === view.year * 12 + c.value
+          const serial = cellSerial(kind, view.year, c.value)
+          const current = isCurrent(kind, serial)
+          const mark = rangeMark?.(kind, serial)
           return (
-            <button
+            <div
               key={c.value}
-              type="button"
-              role="gridcell"
-              data-cell={c.value}
-              data-current={current}
-              disabled={c.disabled}
-              aria-selected={current}
+              // 区间中间那段的底色铺在格子外层，连成一条，和日视图的区间一个样子
               className={cn(
-                buttonVariants({ variant: "ghost", size: "sm" }),
-                "h-9 w-full font-normal",
-                c.outside && "text-muted-foreground",
-                isNow && !current && "font-medium text-primary",
-                current && "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
-                c.disabled && "opacity-50"
+                "flex items-center justify-center px-0.5",
+                mark?.middle && (mark.preview ? "bg-primary/10" : "bg-muted")
               )}
-              onClick={() =>
-                isYear
-                  ? onView({ kind: "month", year: c.value, panel: view.panel })
-                  : onPickMonth(view.year, c.value, view.panel)
-              }
             >
-              {isYear ? c.value : fmtMonth(new Date(view.year, c.value, 1))}
-            </button>
+              <button
+                type="button"
+                role="gridcell"
+                data-cell={c.value}
+                data-current={current}
+                data-range={mark?.edge ? "edge" : mark?.middle ? "middle" : undefined}
+                disabled={c.disabled}
+                aria-selected={current}
+                className={cn(
+                  buttonVariants({ variant: "ghost", size: "sm" }),
+                  "h-9 w-full font-normal",
+                  c.outside && "text-muted-foreground",
+                  serial === nowSerial && !current && "font-medium text-primary",
+                  mark?.middle && "hover:bg-background/60",
+                  current && "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground",
+                  c.disabled && "opacity-50"
+                )}
+                onMouseEnter={() => onHover?.(kind, serial)}
+                onClick={() => onPick(kind, view.year, c.value)}
+              >
+                {isYear ? c.value : fmtMonth(new Date(view.year, c.value, 1))}
+              </button>
+            </div>
           )
         })}
       </div>
@@ -526,6 +560,96 @@ function NavButtonStatic({
     >
       <Icon className="size-4 rtl:rotate-180" />
     </Button>
+  )
+}
+
+/* ------------------------------------------------------------------ 按月 / 按年 */
+
+export type PeriodCalendarProps = {
+  /** `month`：月面板，点年份进年面板；`year`：只有年面板 */
+  picker: PanelKind
+  /** 单值是一个 Date；区间是 `{from, to}`，`to` 为空 = 在等第二下（悬停时预览） */
+  selected?: Date | { from?: Date; to?: Date }
+  /** 点了一格：按月给那个月的 1 日，按年给那年的 1 月 1 日 */
+  onPick: (d: Date) => void
+  startMonth?: Date
+  endMonth?: Date
+  /** 打开时先显示哪一年。不给就按已选的值 / 今天 */
+  defaultMonth?: Date
+  buttonVariant?: React.ComponentProps<typeof Button>["variant"]
+  className?: string
+}
+
+/**
+ * 按月 / 按年选（#266 的「粒度」）：直接复用日历里的月 / 年面板，不另画一套。
+ *
+ * 只做「点哪格给哪格」和高亮，值的形状（单值 `'YYYY-MM'`、区间取整段边界）
+ * 归 `datetime-picker` 管 —— 见 `datetime-picker-state.ts` 的 `formatPeriod` / `periodRange`。
+ */
+export function PeriodCalendar({
+  picker,
+  selected,
+  onPick,
+  startMonth,
+  endMonth,
+  defaultMonth,
+  buttonVariant = "ghost",
+  className,
+}: PeriodCalendarProps) {
+  const t = useT()
+  const lang = useLang()
+  const localeCode = LOCALES[pickLocaleKey(lang, LOCALE_KEYS) ?? "en-US"].code ?? lang
+  const { fmtYear, fmtMonth } = useFormatters(localeCode)
+  const bounds: MonthBounds = { startMonth, endMonth }
+
+  const range = selected && !(selected instanceof Date) ? selected : undefined
+  const single = selected instanceof Date ? selected : undefined
+  const first = initialMonth({ defaultMonth, selected })
+  const [view, setView] = React.useState<Exclude<View, { kind: "day" }>>({ kind: picker, year: first.getFullYear(), panel: 0 })
+  const [hover, setHover] = React.useState<{ kind: PanelKind; serial: number } | undefined>()
+
+  const serialOf = (kind: PanelKind, d: Date | undefined) =>
+    d === undefined ? undefined : kind === "year" ? d.getFullYear() : monthSerial(d)
+
+  return (
+    <div
+      data-slot="calendar"
+      data-view={view.kind}
+      className={cn(
+        "group/calendar w-62 bg-background p-3 [--cell-radius:var(--radius-md)] [--cell-size:--spacing(8)] in-data-[slot=card-content]:bg-transparent in-data-[slot=popover-content]:bg-transparent",
+        className
+      )}
+    >
+      <PanelGrid
+        view={view}
+        bounds={bounds}
+        fmtYear={fmtYear}
+        fmtMonth={fmtMonth}
+        buttonVariant={buttonVariant}
+        t={t}
+        onView={(v) => v.kind !== "day" && setView(v)}
+        onPick={(kind, year, value) => {
+          // 按月时点了某一年 = 进那一年的月面板，还没选完
+          if (kind === "year" && picker === "month") return setView({ kind: "month", year: value, panel: 0 })
+          onPick(kind === "year" ? new Date(value, 0, 1) : new Date(year, value, 1))
+        }}
+        isCurrent={(kind, serial) => {
+          if (single) return serial === serialOf(kind, single)
+          return serial === serialOf(kind, range?.from) || serial === serialOf(kind, range?.to)
+        }}
+        rangeMark={(kind, serial) => {
+          if (!range?.from) return undefined
+          const a = serialOf(kind, range.from)!
+          const pending = !range.to
+          const b = pending ? (hover?.kind === kind ? hover.serial : undefined) : serialOf(kind, range.to)
+          if (b === undefined) return undefined
+          const [lo, hi] = a <= b ? [a, b] : [b, a]
+          if (serial < lo || serial > hi) return undefined
+          return { edge: serial === lo || serial === hi, middle: serial > lo && serial < hi, preview: pending }
+        }}
+        onHover={(kind, serial) => setHover(serial === undefined ? undefined : { kind, serial })}
+      />
+    </div>
   )
 }
 

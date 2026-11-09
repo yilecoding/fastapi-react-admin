@@ -167,6 +167,12 @@ export type FilterField = {
   withTime?: boolean
   /** 区间控件左侧的快捷区间（今天 / 近 7 天 …），默认开 */
   presets?: boolean
+  /**
+   * `date` / `dateRange` 的粒度：按月 / 按年选（报表按月筛选）。
+   * 单值出 `'YYYY-MM'` / `'YYYY'`；区间仍出起止日期（`2026-01-01 ~ 2026-03-31`），
+   * 这样 `between` 的出参和按日选时一模一样，后端不用改。
+   */
+  picker?: "date" | "month" | "year"
 
   /* -------- 数字类：校验用 -------- */
   min?: number
