@@ -234,6 +234,7 @@ error:
     not_enabled: 插件 {plugin} 未启用，请联系系统管理员
     not_found: 插件不存在
     oauth2_import_failed: OAuth2 插件用法导入失败，请联系系统管理员
+    reload_lock_busy: 另一个插件正在安装或卸载，请稍后重试
     repo_already_installed: '{repo_name} 插件已安装'
     required_cannot_uninstall: 插件 {plugin} 为必需插件，禁止卸载
     zip_required: ZIP 压缩包不能为空
@@ -427,7 +428,9 @@ export:
   cell_truncated: …（超出单元格 32,767 字符上限，已截断）
   list_separator: '、'
   column:
+    action: 动作
     browser: 浏览器
+    changes: 改了什么
     color: 颜色
     content_text: 内容（纯文本）
     cost_ms: 耗时（毫秒）
@@ -450,6 +453,7 @@ export:
     leader: 负责人
     location: 地点
     login_account: 登录账号
+    login_event: 事件
     login_time: 登录时间
     message: 说明
     method: 请求方法
@@ -457,6 +461,9 @@ export:
     notice_id: 公告 ID
     notice_title: 标题
     notice_type: 类型
+    object: 对象
+    object_id: 对象 ID
+    object_type: 对象类型
     opera_time: 操作时间
     opera_title: 操作内容
     operator: 操作人
@@ -465,13 +472,17 @@ export:
     parent_name: 上级部门
     path: 接口
     phone: 手机号
+    record_id: 记录 ID
     remark: 备注
     result: 结果
     role_codes: 角色编码
     role_names: 角色
     sort: 排序
+    source: 来源
+    source_ref: 来源引用
     status: 状态
     status_code: 状态码
+    time: 时间
     trace_id: Trace ID
     updated_time: 更新时间
     user_id: 用户 ID
@@ -481,6 +492,7 @@ export:
     dept: 部门 ID
     dict_type: 字典类型 ID
     end_time: 时间止
+    field: 改过的字段
     role: 角色 ID
     start_time: 时间起
   info:
@@ -499,6 +511,7 @@ export:
     done_title: 导出完成：{title}
     failed_title: 导出失败：{title}
   resource:
+    data_change: 数据变更记录
     dept: 部门列表
     dict_data: 字典数据
     login_log: 登录日志
@@ -507,8 +520,16 @@ export:
     user: 用户列表
   value:
     announcement: 公告
+    change_bulk_rows: '{n} 条'
+    change_empty: 空
+    change_secret: 已修改（不记录内容）
+    change_varies: 每一行改成的值不一样
     disabled: 停用
     enabled: 正常
+    event_ip_locked: IP 被锁
+    event_kicked: 被强制下线
+    event_locked: 账号被锁
+    event_login: 登录
     failed: 失败
     hidden: 隐藏
     notice: 通知
@@ -656,6 +677,16 @@ response:
   error: 请求错误
   server_error: 服务器内部错误
   success: 请求成功
+login_event:
+  # 登录日志里的安全事件（#273，`LoginLogEvent`）。写进 `sys_login_log.msg`，按触发那次请求的语言出
+  disabled: 账号被 {operator} 停用或删除，这个会话随之失效
+  ip_locked: 这个 IP 跨账号登录失败 {count} 次，锁定 {minutes} 分钟（到 {until}）。对方看到的仍是「用户名或密码有误」
+  kicked: 被 {operator} 强制下线
+  locked: 连续 {count} 次登录失败，账号锁定 {minutes} 分钟（到 {until}）
+  password_changed: '{operator} 改了密码，这个会话随之失效'
+  self: 本人
+  system: 系统
+
 success:
   login:
     mfa_success: 登录成功（二次验证）

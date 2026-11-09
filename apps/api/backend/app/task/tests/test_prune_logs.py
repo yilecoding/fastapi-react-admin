@@ -475,45 +475,151 @@ def test_prunes_webhook_records_with_their_own_retention(factory):
             s.commit()
 
 
-def test_prunes_data_changes_with_their_own_retention(factory):
-    """数据变更记录（#260）按自己的保留期删（参数配置「日志」组，默认 180 天），**不跟操作日志的 30 天**：
-    操作日志删掉之后，「谁把这个字段改了」还要查得到。网络安全法要求网络日志留存不少于六个月"""
+# ── 数据变更记录（#260）：自己的保留期 + 防篡改链 ───────────────────────────────
+
+
+def _fresh_anchor(factory) -> None:
+    """校验只看这条测试写的：锚点挪到现在的链头（共用的测试库里别的测试删过自己的记录，链上有缺口）"""
+    from backend.app.admin.model import DataChange
+    from backend.common.data_change import chain
+
+    _, head_table = chain._tables()
+    with factory() as s:
+        s.execute(delete(DataChange).where(DataChange.trace_id == MARK))
+        head = s.execute(select(head_table)).mappings().first()
+        if head is not None:
+            s.execute(head_table.update().values(anchor_seq=head['head_seq'], anchor_hash=head['head_hash']))
+        s.commit()
+
+
+def _seed_chained(factory, monkeypatch, days_ago: float) -> int:
+    """写一条 N 天前的、在链上的记录。记录的时间是拿到链头的锁之后才取的（chain.link），只能把那一刻的时钟拨回去"""
+    from backend.app.admin.model import DataChange
+    from backend.common.data_change import chain
+
+    row = {
+        'id': next(_next_id),
+        'trace_id': MARK,
+        'entity_type': 'user',
+        'entity_id': -1,
+        'entity_label': None,
+        'action': 'update',
+        'changes': [],
+        'fields': '',
+        'actor_id': None,
+        'actor_name': None,
+        'source': 'system',
+        'source_ref': None,
+        'ip': None,
+    }
+    real_now = timezone.now
+    with factory() as s:
+        monkeypatch.setattr(timezone, 'now', lambda: real_now() - timedelta(days=days_ago))
+        try:
+            chain.link(s, [row])
+        finally:
+            monkeypatch.setattr(timezone, 'now', real_now)
+        s.execute(DataChange.__table__.insert(), [row])
+        s.commit()
+    return row['chain_seq']
+
+
+def _left(factory) -> set[int]:
     from backend.app.admin.model import DataChange
 
-    def seed(days_ago: float) -> None:
-        with factory() as s:
-            s.execute(
-                DataChange.__table__.insert().values(
-                    id=next(_next_id),
-                    trace_id=MARK,
-                    entity_type='user',
-                    entity_id=-1,
-                    action='update',
-                    changes=[],
-                    fields='',
-                    source='system',
-                    created_time=timezone.now() - timedelta(days=days_ago),
-                )
-            )
-            s.commit()
+    with factory() as s:
+        return set(s.execute(select(DataChange.chain_seq).where(DataChange.trace_id == MARK)).scalars())
 
-    def remaining() -> int:
-        with factory() as s:
-            return s.execute(
-                select(func.count()).select_from(DataChange).where(DataChange.trace_id == MARK)
-            ).scalar_one()
 
+def _verify(factory):
+    from backend.common.data_change import chain
+
+    with factory() as s:
+        return chain.verify(s)
+
+
+@pytest.fixture
+def changes_db(factory):
+    from backend.app.admin.model import DataChange
+
+    _fresh_anchor(factory)
+    yield factory
     with factory() as s:
         s.execute(delete(DataChange).where(DataChange.trace_id == MARK))
         s.commit()
-    try:
-        seed(200)  # 超过 180 天 → 删
-        seed(60)  # 超过操作日志的 30 天、没到 180 → 留
-        assert remaining() == 2
-        msg = run_prune(days=30)
-        assert remaining() == 1, msg
-        assert '数据变更记录（保留 180 天）1 条' in msg
-    finally:
-        with factory() as s:
-            s.execute(delete(DataChange).where(DataChange.trace_id == MARK))
-            s.commit()
+
+
+def test_prunes_data_changes_with_their_own_retention(changes_db, monkeypatch):
+    """数据变更记录（#260）按自己的保留期删（参数配置「日志」组，默认 180 天），**不跟操作日志的 30 天**：
+    操作日志删掉之后，「谁把这个字段改了」还要查得到。网络安全法要求网络日志留存不少于六个月"""
+    old = _seed_chained(changes_db, monkeypatch, 200)  # 超过 180 天 → 删
+    kept = _seed_chained(changes_db, monkeypatch, 60)  # 超过操作日志的 30 天、没到 180 → 留
+    msg = run_prune(days=30)
+    assert _left(changes_db) == {kept}, msg
+    # ⚠️ 不断言删了几条：`_fresh_anchor` 把锚点人为挪到了链头，锚点之前别的测试留下的行这次也会被删
+    # （真实环境里锚点只会推到「第一条还要留的」前一条，锚点之前的行一定已经过了保留期）。单跑是 1 条，全套跑是几百条
+    assert '数据变更记录（保留 180 天）' in msg
+    assert old < kept
+
+
+def test_pruning_chained_data_changes_keeps_the_chain_verifiable(changes_db, monkeypatch):
+    """防篡改链：清理先把锚点推到要删的最后一个序号、再按序号删。反过来（按时间删、锚点不动）的话，
+    校验会把一次正常的清理报成「中间被删了几行」"""
+    old = _seed_chained(changes_db, monkeypatch, 200)
+    _seed_chained(changes_db, monkeypatch, 60)
+    assert _verify(changes_db).ok, '前置：清理之前链是好的'
+    msg = run_prune(days=30)
+    report = _verify(changes_db)
+    assert report.anchor_seq == old
+    assert report.ok, report.problems
+    # 链头写进任务日志：库外的旁证
+    assert '防篡改链：链头 #' in msg
+
+
+def test_pruning_never_takes_a_record_still_in_retention(changes_db, monkeypatch):
+    """🔴 评审抓到的：多实例时钟有偏差时序号和时间不严格同序。按「早于 cutoff 的最大序号」推锚点的话，
+    序号小、但还在保留期里的那一行会被一起删掉。现在推到「第一条还要留的」前一条：宁可多留，不少留"""
+    a = _seed_chained(changes_db, monkeypatch, 200)
+    b = _seed_chained(changes_db, monkeypatch, 60)  # 还在保留期里
+    c = _seed_chained(changes_db, monkeypatch, 200)  # 序号比 b 大、时间却更早（时钟偏了的那台实例写的）
+    run_prune(days=30)
+    assert _left(changes_db) == {b, c}
+    assert _verify(changes_db).anchor_seq == a
+
+
+def test_pruning_without_a_head_row_deletes_no_chained_record(changes_db, monkeypatch):
+    """🔴 评审抓到的：链头那一行不在时推不了锚点。原来照删不误，链头重建之后锚点是 0，
+    这段被删的就成了永远报着的「缺口」——正常的清理被当成有人删记录"""
+    from backend.common.data_change import chain
+
+    old = _seed_chained(changes_db, monkeypatch, 200)
+    _, head_table = chain._tables()
+    with changes_db() as s:
+        s.execute(head_table.delete())
+        s.commit()
+    run_prune(days=30)
+    assert old in _left(changes_db)
+
+
+def test_pruning_leaves_records_written_around_the_app(changes_db):
+    """🔴 评审抓到的：没有序号的行就是绕过应用写进来的（迁移已经把旧记录补签进链）。按时间删它等于替伪造的人销毁证据"""
+    from backend.app.admin.model import DataChange
+
+    with changes_db() as s:
+        s.execute(
+            DataChange.__table__.insert().values(
+                id=next(_next_id),
+                trace_id=MARK,
+                entity_type='user',
+                entity_id=-1,
+                action='update',
+                changes=[],
+                fields='',
+                source='system',
+                created_time=timezone.now() - timedelta(days=400),
+            )
+        )
+        s.commit()
+    msg = run_prune(days=30)
+    assert _left(changes_db) == {None}, msg
+    assert '没有序号的' in msg

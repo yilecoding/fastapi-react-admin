@@ -179,4 +179,8 @@ values
 (2049629108253622353, '导出', 'ExportLoginLog', null, 3, null, 2, 'log:login:export', 1, 0, '', null, 2049629108249427984, '2026-10-22 20:00:00', null),
 (2049629108253622354, '导出', 'ExportOperaLog', null, 4, null, 2, 'log:opera:export', 1, 0, '', null, 2049629108249427987, '2026-10-22 20:00:00', null),
 (2049629108253622359, '数据变更', 'DataChangeLog', '/log/change', 3, 'mdi:file-compare', 1, null, 1, 1, '', null, 2049629108249427983, '2026-11-09 00:00:00', null),
-(2049629108253622360, '查询', 'QueryDataChangeLog', null, 1, null, 2, 'log:change:list', 1, 0, '', null, 2049629108253622359, '2026-11-09 00:00:00', null);
+(2049629108253622360, '查询', 'QueryDataChangeLog', null, 1, null, 2, 'log:change:list', 1, 0, '', null, 2049629108253622359, '2026-11-09 00:00:00', null),
+(2049629108253622361, '导出', 'ExportDataChangeLog', null, 2, null, 2, 'log:change:export', 1, 0, '', null, 2049629108253622359, '2026-11-09 00:00:00', null);
+
+insert into sys_data_change_chain (id, head_seq, head_hash, anchor_seq, anchor_hash)
+values (1, 0, '', 0, '');

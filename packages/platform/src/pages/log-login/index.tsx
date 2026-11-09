@@ -21,7 +21,7 @@ import { useUrlColumnOrder } from '../_shared/use-column-order'
 import { logFeatures as features } from '../_shared/log-features'
 import { StatusPill } from '../_shared/status'
 import { LoginLogDetailSheet, formatLocation } from './detail-sheet'
-import type { LoginLog } from '../_shared/login-log'
+import { LOGIN_EVENT_LABEL, type LoginLog, type LoginLogEvent } from '../_shared/login-log'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { ExportButton } from '../_shared/data-io/export-button'
 import { ListBody, PageShell } from '../_shared/page-shell'
@@ -77,6 +77,15 @@ const FIELDS: FilterField[] = [
     ],
   },
   {
+    // #273：账号被锁 / IP 被锁 / 被强制下线也记在这里。「IP 被锁」只有这里看得到 —— 对方收到的仍是「用户名或密码有误」
+    key: 'event',
+    label: '事件',
+    type: 'select',
+    group: '结果',
+    defaultVisible: true,
+    options: (Object.entries(LOGIN_EVENT_LABEL) as [LoginLogEvent, string][]).map(([value, label]) => ({ value, label })),
+  },
+  {
     key: 'time',
     label: '登录时间',
     type: 'dateTimeRange',
@@ -90,6 +99,7 @@ const COLUMN_LABELS = {
   seq: '序号',
   login_time: '登录时间',
   username: '登录账号',
+  event: '事件',
   status: '结果',
   msg: '说明',
   ip: '登录 IP',
@@ -105,6 +115,7 @@ export type LoginLogSearch = {
   username?: string
   ip?: string
   status?: number
+  event?: string
   time?: string
   /** 摆开但没填值的格子（`_shared/use-query-search`） */
   f?: string
@@ -190,6 +201,15 @@ export function LogLoginPage({
       col.accessor('username', {
         header: t('登录账号'),
         cell: ({ getValue }) => <span className="text-sm font-medium">{getValue()}</span>,
+      }),
+      col.accessor('event', {
+        header: t('事件'),
+        cell: ({ getValue }) => {
+          const event = getValue() ?? 'login'
+          // 普通登录不着色，安全事件才显眼：一屏几百行登录里，被锁 / 被踢那几行要一眼找得到
+          const tone = event === 'login' ? 'muted' : event === 'kicked' ? 'warning' : 'danger'
+          return <StatusPill tone={tone}>{t(LOGIN_EVENT_LABEL[event] ?? event)}</StatusPill>
+        },
       }),
       col.accessor('status', {
         header: t('结果'),

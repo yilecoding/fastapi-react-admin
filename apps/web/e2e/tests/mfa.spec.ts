@@ -41,6 +41,9 @@ function totp(secret: string, stepsAhead = 0): string {
 
 test.describe("二次验证", () => {
   test("个人中心开启 → 退出 → 密码登录要动态码", async ({ page, api }) => {
+    // 开启 → 退出 → 二次验证登录 → 管理员重置 → 换管理员登录看变更记录，一条走完本地实测 24 秒，
+    // 默认 30 秒的时限下偶发超时（#260 二期加了后面那段之后）。同 dashboard-personalize 的 test.slow()
+    test.slow()
     const username = `e2e_mfa_${Date.now().toString(36)}`
     const password = "E2eMfa@123456"
     const depts = (await api.get("/api/v1/sys/depts")) as { id: string }[]

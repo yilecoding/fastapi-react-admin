@@ -34,8 +34,10 @@ def _window(hours: int | None) -> tuple[datetime | None, datetime | None]:
 @ai_tool(
     name='login_log_list',
     description=(
-        '查询登录日志，可按用户名、结果（status：0 失败 / 1 成功）、IP、最近 N 小时筛选。'
-        '用户问"有谁登录失败""某某最近登录过吗""有没有异常登录"时用它。'
+        '查询登录日志，可按用户名、结果（status：0 失败 / 1 成功）、IP、事件、最近 N 小时筛选。'
+        '事件（event）：login 登录 / locked 账号连续登录失败被锁 / ip_locked 某个 IP 跨账号失败太多被锁 / '
+        'kicked 被强制下线（管理员踢的、改密码或停用账号连带的）。'
+        '用户问"有谁登录失败""某某最近登录过吗""有没有异常登录""谁的账号被锁了""张三是被谁踢下线的"时用它。'
     ),
     domain='log',
     perm='log:login:list',
@@ -46,9 +48,12 @@ async def login_log_list(
     status: int | None = None,
     ip: str | None = None,
     recent_hours: int | None = 24,
+    event: str | None = None,
 ) -> dict[str, Any]:
     start, end = _window(recent_hours)
-    stmt = await login_log_dao.get_select(username=username, status=status, ip=ip, start_time=start, end_time=end)
+    stmt = await login_log_dao.get_select(
+        username=username, status=status, ip=ip, start_time=start, end_time=end, event=event
+    )
     rows = (await db.execute(stmt.limit(_MAX_ROWS))).scalars().all()
     return {
         'window_hours': recent_hours,
@@ -57,6 +62,7 @@ async def login_log_list(
         'logs': [
             {
                 'username': r.username,
+                'event': r.event,
                 'status': r.status,
                 'ip': r.ip,
                 'location': ' '.join(x for x in (r.country, r.region, r.city) if x) or None,

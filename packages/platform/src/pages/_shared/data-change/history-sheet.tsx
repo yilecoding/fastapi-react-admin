@@ -9,7 +9,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '
 import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { StatusPill } from '../status'
-import { type DataChange, dataChangeMetaQuery, entityChangesQuery } from './api'
+import { type DataChange, type DataChangeItem, dataChangeMetaQuery, entityChangesQuery } from './api'
 import { ActionPill, ChangeList } from './change-list'
 
 /** 来源的中文名从元数据接口来（后端 `registry.SOURCES`），取不到时退回原值 */
@@ -45,7 +45,8 @@ export function ChangeMeta({ record }: { record: DataChange }) {
 /**
  * 某一个对象的变更记录（#260）：用户 / 角色 / 部门 / 菜单 / 参数页行操作里的「变更记录」打开它。
  *
- * 开关和操作日志详情、用户「权限与安全」一样留在页面状态里，不进 URL。
+ * 开关和操作日志详情、用户「权限与安全」一样留在页面状态里，不进 URL；「只看某个字段」跟着抽屉走，同样不进 URL
+ * （要能分享的单字段历史在「数据变更」页：对象 + 字段都在地址栏里）。
  */
 export function DataChangeSheet({
   entity,
@@ -62,7 +63,16 @@ export function DataChangeSheet({
   onOpenChange: (open: boolean) => void
 }) {
   const { t } = useTranslation()
-  const query = useInfiniteQuery({ ...entityChangesQuery(entity, entityId ?? ''), enabled: open && !!entityId })
+  // 单字段历史：点记录里的字段名只看那一个字段。换了对象 / 关了抽屉就回到全部字段
+  const [field, setField] = React.useState<Pick<DataChangeItem, 'field' | 'label'> | null>(null)
+  // 关了抽屉、或者抽屉开着换了对象，都回到全部字段（只在关掉时清的话，换对象会带着上一个对象的筛选，评审抓到的）
+  React.useEffect(() => {
+    setField(null)
+  }, [open, entity, entityId])
+  const query = useInfiniteQuery({
+    ...entityChangesQuery(entity, entityId ?? '', field?.field),
+    enabled: open && !!entityId,
+  })
   const records = React.useMemo(() => query.data?.pages.flatMap((p) => p.items) ?? [], [query.data])
   const total = query.data?.pages[0]?.total ?? 0
 
@@ -74,6 +84,15 @@ export function DataChangeSheet({
           <SheetDescription>
             {name ? t('「{{name}}」的每一次修改：谁、什么时候、改了什么', { name }) : t('每一次修改：谁、什么时候、改了什么')}
           </SheetDescription>
+          {field && (
+            <div className="flex items-center gap-2 text-sm" data-testid="history-field-filter">
+              <span className="text-muted-foreground">{t('只看')}</span>
+              <StatusPill tone="info">{t(field.label)}</StatusPill>
+              <Button variant="ghost" size="sm" onClick={() => setField(null)} data-testid="history-field-clear">
+                {t('看全部字段')}
+              </Button>
+            </div>
+          )}
         </SheetHeader>
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
           {query.isPending && open ? (
@@ -86,7 +105,7 @@ export function DataChangeSheet({
             <QueryError error={query.error} onRetry={() => void query.refetch()} />
           ) : records.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground" data-testid="data-change-empty">
-              {t('还没有变更记录。这个功能上线之前的修改没有记录')}
+              {field ? t('这个字段还没有改过') : t('还没有变更记录。这个功能上线之前的修改没有记录')}
             </p>
           ) : (
             <ol className="flex flex-col">
@@ -97,7 +116,11 @@ export function DataChangeSheet({
                   data-testid="data-change-record"
                 >
                   <ChangeMeta record={r} />
-                  <ChangeList record={r} />
+                  <ChangeList
+                    record={r}
+                    onlyField={field?.field}
+                    onFieldClick={field ? undefined : (c) => setField({ field: c.field, label: c.label })}
+                  />
                 </li>
               ))}
             </ol>

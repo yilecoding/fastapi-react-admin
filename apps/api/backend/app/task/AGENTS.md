@@ -416,3 +416,21 @@ SQL Server（本机容器，RCSI 关着，同 CI）：本模块 + `test_health.p
 （原生 SQL、迁移）要等定时重读；更彻底的是在 Session 级挂 `do_orm_execute` / `after_flush` 统一登记，但要排除 beat 自己的
 回写，留给后续。③ 「提交后做一件事」后来抽成了公用的 `common/after_commit.py: run_after_commit`（通知推送 / 通知投递 /
 Webhook 投递都走它，#190 迁完）；**这里的变更标记刻意没迁**：它挂在同步会话上、提交后做的是一次同步的 Redis 写，公用那份派的是协程。
+
+## 🔴 Redis 密码带 `/`：网站正常，后台任务和实时推送连不上（上游 #1276 同类）
+
+**症状**：登录、页面都正常，`/api/health/ready` 也是 200；但 worker 起不来或一直连不上 broker，
+站内消息不实时推送。`/api/health/status` 里 worker 心跳是停的。
+
+**根因**：只认 URL 的两处（celery 的 broker、socket.io 的 `AsyncRedisManager`）拼地址时用了裸 `urllib.parse.quote(密码)`。
+`quote` 默认 `safe='/'`，密码里的 `/` 原样留在 URL 里，解析器把它当成路径开头，主机、端口全错。
+主站的 `redis_client` 是按参数分开传的、不走 URL，所以**只坏一半**，看着像 worker 自己的问题。
+`openssl rand -base64` 生成的密码经常带 `/`。结果后端用的是 `quote_plus`，密码里的空格会变成 `+`。
+
+**修法**：两处都走 `database/redis.py: get_redis_url()`，用户名 / 密码一律 `quote(..., safe='')`（`celery.py: _userinfo`）。
+
+**实测证据**：密码 `Ab3/x+Yz@9`，改之前 kombu 和 redis-py 都报
+`ValueError: Port could not be cast to integer value as 'Ab3'`；密码 `pass word` 经 `quote_plus` 后，
+SQLAlchemy 解析回来是 `pass+word`。修后 `backend/tests/test_connection_urls.py` 用 kombu `Connection` /
+redis-py `parse_url` / SQLAlchemy `make_url` 把四种密码（含 `/`、空格、`%`、中文）解析回原样，三种库都测；
+把修法退回旧写法，其中 6 条变红。

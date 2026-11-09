@@ -486,6 +486,9 @@ class Settings(BaseSettings):
     OPERA_LOG_QUEUE_MAXSIZE: int = 100000
     OPERA_LOG_QUEUE_BATCH_CONSUME_SIZE: int = 100
     OPERA_LOG_QUEUE_TIMEOUT: int = 60  # 1 分钟
+    # 进程关闭时排空操作日志队列最多等多久（秒），超时剩下的丢弃并告警。
+    # ⚠️ 要比 `docker stop` 的宽限期（默认 10 秒，之后 SIGKILL）短，还得给关闭流程的其余步骤留余量
+    OPERA_LOG_QUEUE_DRAIN_TIMEOUT: int = 5
     OPERA_LOG_BODY_MAX_SIZE: int = 10240  # 10 KB
     # 响应体记录：只记 JSON 类响应，超限截断（避免把文件下载/大列表灌进日志表）
     OPERA_LOG_RESPONSE_MAX_SIZE: int = 10240  # 10 KB
@@ -494,6 +497,11 @@ class Settings(BaseSettings):
     # 数据变更记录（#260）保留天数。默认 180：《网络安全法》（2016 年版）第二十一条要求网络日志「留存不少于六个月」。
     # 参数配置「日志」组可覆盖；`maintenance.prune_logs` 每天按 created_time 分批删
     DATA_CHANGE_RETENTION_DAYS: int = 180
+    # 数据变更记录防篡改链的签名密钥（`common/data_change/chain.py`）。只放 .env，**不进库**：
+    # 拿到数据库权限的人改了记录、重算签名也对不上。留空 = 不加密钥的 SHA-256，只防「手滑直接改库」（校验结果会说明）。
+    # ⚠️ 设了就别换：换了之后旧记录用新密钥校验不了（校验会单独列出「换密钥之前签的」几行）。
+    # 生成：python -c "import os;print(os.urandom(32).hex())"
+    DATA_CHANGE_CHAIN_KEY: str = ''
     # 这些请求头会被打码 —— 它们要么是凭据，要么含会话信息
     OPERA_LOG_REDACT_HEADERS: list[str] = [
         'authorization',

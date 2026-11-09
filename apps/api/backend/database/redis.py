@@ -1,10 +1,27 @@
 import sys
 
+from urllib.parse import quote
+
 from redis.asyncio import Redis
 from redis.exceptions import AuthenticationError, TimeoutError
 
 from backend.common.log import log
 from backend.core.conf import settings
+
+
+def get_redis_url(*, database: int) -> str:
+    """拼 Redis 连接串，给只认 URL 的地方用（celery broker、socket.io 的 AsyncRedisManager）。
+
+    🔴 **密码必须 `quote(..., safe='')`，不能裸 `quote()`。** `quote` 默认 `safe='/'`，
+    密码里的 `/` 原样留在 URL 里，解析器把它当成路径的开头，主机和端口就全错了。
+    实测（kombu 和 redis-py 两边都一样）：密码 `Ab3/x+Yz@9` 报
+    `ValueError: Port could not be cast to integer value as 'Ab3'`。
+    `openssl rand -base64` 生成的密码经常带 `/`。
+
+    ⚠️ 这个坏法**不会让网站起不来**：`redis_client` 是按参数分开传的，不走 URL，
+    登录、页面都正常，只有后台任务和实时推送连不上 Redis。
+    """
+    return f'redis://:{quote(settings.REDIS_PASSWORD, safe="")}@{settings.REDIS_HOST}:{settings.REDIS_PORT}/{database}'
 
 
 class RedisCli(Redis):

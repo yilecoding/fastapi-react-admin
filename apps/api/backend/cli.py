@@ -1047,6 +1047,33 @@ class Alembic:
     subcmd: cappa.Subcommands[Revision | Upgrade | Downgrade | Current | History | Heads]
 
 
+@cappa.command(name='verify', help='从头重算数据变更记录的签名链：有没有被改过、删过、塞进来过')
+@dataclass
+class DataChangeVerify:
+    async def __call__(self) -> None:
+        from backend.common.data_change import chain
+
+        async with async_db_session() as db:
+            report = await db.run_sync(chain.verify)
+        console.print(
+            f'校验 {report.checked} 行 · 链头 #{report.head_seq} · 锚点 #{report.anchor_seq} · '
+            f'{"已配密钥" if report.keyed else "没配 DATA_CHANGE_CHAIN_KEY（只防手滑改库）"}'
+        )
+        if report.other_key:
+            console.print(f'换密钥之前签的 {report.other_key} 条，当前密钥校验不了')
+        for p in report.problems:
+            console.print(f'  {p.kind}  序号 {p.seq}{f"–{p.seq_to}" if p.seq_to else ""}  记录 {p.record_id or "-"}')
+        if not report.ok:
+            raise cappa.Exit(f'发现 {report.problem_count} 个问题', code=1)
+        console.print('[green]没有发现问题[/]')
+
+
+@cappa.command(name='data-change', help='数据变更审计')
+@dataclass
+class DataChangeCli:
+    subcmd: cappa.Subcommands[DataChangeVerify]
+
+
 @cappa.command(help='一个高效的 fba 命令行界面', default_long=True)
 @dataclass
 class FbaCli:
@@ -1054,7 +1081,9 @@ class FbaCli:
         str,
         cappa.Arg(value_name='PATH', default='', show_default=False, help='在事务中执行 SQL 脚本'),
     ]
-    subcmd: cappa.Subcommands[Init | Run | Add | Remove | Deps | Format | Celery | Alembic | None] = None
+    subcmd: cappa.Subcommands[Init | Run | Add | Remove | Deps | Format | Celery | Alembic | DataChangeCli | None] = (
+        None
+    )
 
     async def __call__(self) -> None:
         if self.sql:

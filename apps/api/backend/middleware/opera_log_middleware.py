@@ -1,7 +1,8 @@
+import asyncio
 import json
 import time
 
-from asyncio import Queue
+from asyncio import Queue, QueueFull
 from typing import Any
 
 from fastapi import Response
@@ -14,7 +15,7 @@ from backend.app.admin.service.opera_log_service import opera_log_service
 from backend.common.context import ctx
 from backend.common.enums import StatusType
 from backend.common.log import log
-from backend.common.observability.prometheus.queue import observe_queue_size
+from backend.common.observability.prometheus.queue import inc_queue_exception, observe_queue_size
 from backend.common.queue import batch_consume
 from backend.common.response.response_code import StandardResponseCode
 from backend.core.conf import settings
@@ -25,12 +26,18 @@ from backend.utils.trace_id import get_request_trace_id
 #: 不是配置项：它只影响「记不记」，不影响业务，没有按环境调的理由
 _RESPONSE_PARSE_MAX_SIZE = 5 * 1024 * 1024
 
+#: 队列满、开始丢日志时，同一条告警最多多久打一次（丢了多少条会累计在里面）
+_QUEUE_FULL_WARN_INTERVAL = 60.0
+
 
 class OperaLogMiddleware(BaseHTTPMiddleware):
     """操作日志中间件"""
 
     opera_log_queue_name = 'opera_log_queue'
     opera_log_queue: Queue[CreateOperaLogParam] = Queue(maxsize=settings.OPERA_LOG_QUEUE_MAXSIZE)
+    opera_log_stop_event = asyncio.Event()
+    _dropped_since_warn = 0
+    _last_full_warn = 0.0
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:  # ruff:ignore[complex-structure]
         """
@@ -142,11 +149,39 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
                     cost_time=elapsed,
                     opera_time=ctx.start_time,
                 )
-                await self.opera_log_queue.put(opera_log_in)
-                if settings.GRAFANA_METRICS_ENABLE:
-                    observe_queue_size(self.opera_log_queue, queue_name=self.opera_log_queue_name)
+                self.enqueue(opera_log_in)
 
         return response
+
+    @classmethod
+    def enqueue(cls, opera_log_in: CreateOperaLogParam) -> bool:
+        """把一条操作日志放进队列；队列满了就丢掉这一条，返回 False。
+
+        🔴 **不能 `await queue.put()`。** 队列满（入库持续失败，比如数据库挂了）时它会一直等，
+        业务请求就跟着挂住、不返回 —— 写日志拖垮了被记录的那个请求。实测（改之前的写法）：
+        `maxsize=1` 的满队列上 `await put()`，1 秒内没有返回。
+
+        丢的时候要让人知道：告警按 `_QUEUE_FULL_WARN_INTERVAL` 合并，带上这段时间丢了多少条，
+        不至于每个请求刷一行
+        """
+        try:
+            cls.opera_log_queue.put_nowait(opera_log_in)
+        except QueueFull:
+            cls._dropped_since_warn += 1
+            now = time.monotonic()
+            if now - cls._last_full_warn >= _QUEUE_FULL_WARN_INTERVAL:
+                log.warning(
+                    f'操作日志队列已满（{settings.OPERA_LOG_QUEUE_MAXSIZE} 条，入库跟不上），'
+                    f'已丢弃 {cls._dropped_since_warn} 条操作日志'
+                )
+                cls._dropped_since_warn = 0
+                cls._last_full_warn = now
+            if settings.GRAFANA_METRICS_ENABLE:
+                inc_queue_exception(queue_name=cls.opera_log_queue_name)
+            return False
+        if settings.GRAFANA_METRICS_ENABLE:
+            observe_queue_size(cls.opera_log_queue, queue_name=cls.opera_log_queue_name)
+        return True
 
     @staticmethod
     def client_gone(method: str, path: str) -> Response:
@@ -413,6 +448,7 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
     @classmethod
     async def consumer(cls) -> None:
         """操作日志消费者"""
+        cls.opera_log_stop_event.clear()
 
         async def bulk_create_opera_log(logs: list[CreateOperaLogParam]) -> None:
             """批量创建操作日志"""
@@ -429,4 +465,24 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
             queue_name=cls.opera_log_queue_name,
             error_message='操作日志入库失败',
             item_name='日志',
+            stop_event=cls.opera_log_stop_event,
         )
+
+    @classmethod
+    async def stop_consumer(cls, task: asyncio.Task[None]) -> None:
+        """停掉消费者：先把队列里剩下的写完，超过 `OPERA_LOG_QUEUE_DRAIN_TIMEOUT` 才放弃。
+
+        原来是直接 `cancel()`，每次发版 / 重启都会丢掉消费者手里那一批（最多攒 60 秒），
+        见 `common/queue.py: batch_consume`
+        """
+        if task.done():
+            return
+        cls.opera_log_stop_event.set()
+        try:
+            # 超时时 wait_for 会顺带取消 task
+            await asyncio.wait_for(task, timeout=settings.OPERA_LOG_QUEUE_DRAIN_TIMEOUT)
+        except asyncio.TimeoutError:
+            log.warning(
+                f'操作日志没能在 {settings.OPERA_LOG_QUEUE_DRAIN_TIMEOUT} 秒内全部入库，没写完的已丢弃'
+                f'（队列里还剩 {cls.opera_log_queue.qsize()} 条，不含正在写的那一批）'
+            )
