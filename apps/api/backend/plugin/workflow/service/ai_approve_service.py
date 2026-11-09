@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
-from backend.common.i18n import t
 from backend.common.log import log
 from backend.core.conf import settings
 from backend.plugin.workflow.engine.flow import index_nodes
@@ -30,6 +29,7 @@ from backend.plugin.workflow.enums import DefinitionStatus, InstanceStatus, Task
 from backend.plugin.workflow.model import WfAiReview, WfDefinition, WfDefinitionVersion, WfInstance, WfTask
 from backend.plugin.workflow.service import runtime_service
 from backend.plugin.workflow.service.ai_review_service import decided_reviews, run_review
+from backend.plugin.workflow.sys_opinion import SysOpinion
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -100,7 +100,7 @@ async def maybe_approve(db: AsyncSession, review_id: int) -> str:
         version=review.instance_version,
         node_id=node_id,
         model_name=review.model,
-        opinion=t('workflow.ai_approved', n=samples, rate=f'{precision:.1%}'),
+        opinion=SysOpinion('workflow.ai_approved', {'n': samples, 'rate': f'{precision:.1%}'}),
         detail={
             'review_id': str(review.id),
             'model': review.model,
