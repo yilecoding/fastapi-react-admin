@@ -490,6 +490,10 @@ class Settings(BaseSettings):
     # 响应体记录：只记 JSON 类响应，超限截断（避免把文件下载/大列表灌进日志表）
     OPERA_LOG_RESPONSE_MAX_SIZE: int = 10240  # 10 KB
     OPERA_LOG_RESPONSE_CONTENT_TYPES: list[str] = ['application/json', 'text/plain']
+
+    # 数据变更记录（#260）保留天数。默认 180：《网络安全法》（2016 年版）第二十一条要求网络日志「留存不少于六个月」。
+    # 参数配置「日志」组可覆盖；`maintenance.prune_logs` 每天按 created_time 分批删
+    DATA_CHANGE_RETENTION_DAYS: int = 180
     # 这些请求头会被打码 —— 它们要么是凭据，要么含会话信息
     OPERA_LOG_REDACT_HEADERS: list[str] = [
         'authorization',

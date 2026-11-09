@@ -473,3 +473,47 @@ def test_prunes_webhook_records_with_their_own_retention(factory):
             s.execute(delete(OpenWebhookDelivery).where(OpenWebhookDelivery.webhook_id == -1))
             s.execute(delete(OpenEvent).where(OpenEvent.aggregate_id == -1))
             s.commit()
+
+
+def test_prunes_data_changes_with_their_own_retention(factory):
+    """数据变更记录（#260）按自己的保留期删（参数配置「日志」组，默认 180 天），**不跟操作日志的 30 天**：
+    操作日志删掉之后，「谁把这个字段改了」还要查得到。网络安全法要求网络日志留存不少于六个月"""
+    from backend.app.admin.model import DataChange
+
+    def seed(days_ago: float) -> None:
+        with factory() as s:
+            s.execute(
+                DataChange.__table__.insert().values(
+                    id=next(_next_id),
+                    trace_id=MARK,
+                    entity_type='user',
+                    entity_id=-1,
+                    action='update',
+                    changes=[],
+                    fields='',
+                    source='system',
+                    created_time=timezone.now() - timedelta(days=days_ago),
+                )
+            )
+            s.commit()
+
+    def remaining() -> int:
+        with factory() as s:
+            return s.execute(
+                select(func.count()).select_from(DataChange).where(DataChange.trace_id == MARK)
+            ).scalar_one()
+
+    with factory() as s:
+        s.execute(delete(DataChange).where(DataChange.trace_id == MARK))
+        s.commit()
+    try:
+        seed(200)  # 超过 180 天 → 删
+        seed(60)  # 超过操作日志的 30 天、没到 180 → 留
+        assert remaining() == 2
+        msg = run_prune(days=30)
+        assert remaining() == 1, msg
+        assert '数据变更记录（保留 180 天）1 条' in msg
+    finally:
+        with factory() as s:
+            s.execute(delete(DataChange).where(DataChange.trace_id == MARK))
+            s.commit()

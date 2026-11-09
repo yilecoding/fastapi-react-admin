@@ -84,9 +84,10 @@ class User(Base):
     is_superuser: Mapped[bool] = mapped_column(default=False, comment='超级权限(0否 1是)')
     is_staff: Mapped[bool] = mapped_column(default=False, comment='后台管理登陆(0否 1是)')
     join_time: Mapped[datetime] = mapped_column(TimeZone, init=False, default_factory=tz_helper.now, comment='注册时间')
-    last_login_time: Mapped[datetime | None] = mapped_column(
-        TimeZone, init=False, onupdate=tz_helper.now, comment='上次登录时间'
-    )
+    # 🔴 不能带 `onupdate`（上游带过来的）：那样**对用户表的任何 UPDATE** 都会把它刷成当前时间 ——
+    # 管理员改一下资料 / 状态 / 角色，个人中心、角色成员、导出、AI 工具里的「上次登录时间」就全成了「被改的时间」。
+    # 登录那条路径本来就显式写这一列（`crud_user.update_login_time`）。#260 的探针抓到的
+    last_login_time: Mapped[datetime | None] = mapped_column(TimeZone, init=False, comment='上次登录时间')
     last_password_changed_time: Mapped[datetime | None] = mapped_column(
         TimeZone, init=False, default_factory=tz_helper.now, comment='上次密码变更时间'
     )
