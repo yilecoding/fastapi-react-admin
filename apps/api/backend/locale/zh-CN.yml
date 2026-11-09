@@ -234,6 +234,7 @@ error:
     not_enabled: 插件 {plugin} 未启用，请联系系统管理员
     not_found: 插件不存在
     oauth2_import_failed: OAuth2 插件用法导入失败，请联系系统管理员
+    reload_lock_busy: 另一个插件正在安装或卸载，请稍后重试
     repo_already_installed: '{repo_name} 插件已安装'
     required_cannot_uninstall: 插件 {plugin} 为必需插件，禁止卸载
     zip_required: ZIP 压缩包不能为空

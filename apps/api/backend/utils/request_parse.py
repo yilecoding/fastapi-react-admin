@@ -1,5 +1,5 @@
 from functools import lru_cache
-from ipaddress import IPv4Network, IPv6Network, ip_address, ip_network
+from ipaddress import IPv4Network, IPv6Address, IPv6Network, ip_address, ip_network
 
 import httpx
 import ip2region.searcher as ip2region_xdb
@@ -111,11 +111,34 @@ def get_location_offline(ip: str) -> dict | None:
     """
     离线获取 IP 地址属地，无法保证准确率，100% 可用
 
+    🔴 **只带了 IPv4 的库，IPv6 地址要先分流，不能直接丢给 searcher。** 原来是直接 `search(ip)`，
+    实测 `::ffff:114.114.114.114`、`2408:8207:1234::1`、`::1` 全部
+    `ValueError: invalid ip address … (IPv4 expected)`：属地为空，**每个请求还打一条 error 日志**。
+    国内移动网络大量走 IPv6，登录日志里的属地会成片空着。
+
+    - IPv4 映射地址（`::ffff:a.b.c.d`，双栈代理后面常见）按 IPv4 查，查得到
+    - 真正的 IPv6 地址：没有库，返回 None，**不算错误**。上游（#1263）的做法是再带一个
+      37 MB 的 `ip2region_v6.xdb`，刻意没跟。要 IPv6 属地可以换 `IP_LOCATION_PARSE=online`
+      （走 ip-api.com，它对 IPv6 的支持没在这里测过）
+
+    `state_middleware` 每个请求都调一次这里，属地为空时又不进缓存 —— 所以报错的话就是每个请求一条
+
     :param ip: IP 地址
     :return:
     """
     try:
-        data = __xdb_searcher.search(ip)
+        addr = ip_address(ip)
+    except ValueError:
+        log.error(f'离线获取 IP 地址属地失败：不是合法的 IP 地址 {ip!r}')
+        return None
+    if isinstance(addr, IPv6Address):
+        if addr.ipv4_mapped is None:
+            return None
+        addr = addr.ipv4_mapped
+    try:
+        data = __xdb_searcher.search(str(addr))
+        if not data:
+            return None
         country, region_name, city, *_ = data.split('|')
     except Exception as e:
         log.error(f'离线获取 IP 地址属地失败：{e}')

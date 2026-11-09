@@ -486,6 +486,9 @@ class Settings(BaseSettings):
     OPERA_LOG_QUEUE_MAXSIZE: int = 100000
     OPERA_LOG_QUEUE_BATCH_CONSUME_SIZE: int = 100
     OPERA_LOG_QUEUE_TIMEOUT: int = 60  # 1 分钟
+    # 进程关闭时排空操作日志队列最多等多久（秒），超时剩下的丢弃并告警。
+    # ⚠️ 要比 `docker stop` 的宽限期（默认 10 秒，之后 SIGKILL）短，还得给关闭流程的其余步骤留余量
+    OPERA_LOG_QUEUE_DRAIN_TIMEOUT: int = 5
     OPERA_LOG_BODY_MAX_SIZE: int = 10240  # 10 KB
     # 响应体记录：只记 JSON 类响应，超限截断（避免把文件下载/大列表灌进日志表）
     OPERA_LOG_RESPONSE_MAX_SIZE: int = 10240  # 10 KB

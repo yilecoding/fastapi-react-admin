@@ -25,6 +25,7 @@ from celery.signals import worker_process_init
 from backend.common.enums import DataBaseType
 from backend.core.conf import settings
 from backend.core.path_conf import BASE_PATH
+from backend.database.redis import get_redis_url
 
 
 @worker_process_init.connect(weak=False)
@@ -87,15 +88,22 @@ def find_task_packages() -> list[str]:
     return packages
 
 
+def _userinfo(value: str) -> str:
+    """URL 里用户名 / 密码那一段的编码。
+
+    🔴 必须 `safe=''`：裸 `quote()` 不编码 `/`，密码带 `/` 时整条 URL 解析错位（见
+    `database/redis.py: get_redis_url`）。也不能用 `quote_plus`：它把空格编成 `+`，
+    而 SQLAlchemy 解析 URL 时只做 `unquote`，实测密码 `pass word` 解析回来是 `pass+word`。
+    """
+    return urllib.parse.quote(value, safe='')
+
+
 def get_broker_url() -> str:
     """broker 连接串。选哪个由 `.env` 的 CELERY_BROKER 决定，代码不覆盖。"""
     if settings.CELERY_BROKER == 'redis':
-        return (
-            f'redis://:{urllib.parse.quote(settings.REDIS_PASSWORD)}'
-            f'@{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.CELERY_BROKER_REDIS_DATABASE}'
-        )
+        return get_redis_url(database=settings.CELERY_BROKER_REDIS_DATABASE)
     return (
-        f'amqp://{settings.CELERY_RABBITMQ_USERNAME}:{urllib.parse.quote(settings.CELERY_RABBITMQ_PASSWORD)}'
+        f'amqp://{_userinfo(settings.CELERY_RABBITMQ_USERNAME)}:{_userinfo(settings.CELERY_RABBITMQ_PASSWORD)}'
         f'@{settings.CELERY_RABBITMQ_HOST}:{settings.CELERY_RABBITMQ_PORT}/{settings.CELERY_RABBITMQ_VHOST}'
     )
 
@@ -107,8 +115,8 @@ def get_result_backend() -> str:
     ⚠️ 这里是**同步**驱动，和应用主体的异步驱动是两套：
     mssql → pyodbc（不是 aioodbc）· postgresql → psycopg · mysql → pymysql。
     """
-    user = settings.DATABASE_USER
-    pwd = urllib.parse.quote_plus(settings.DATABASE_PASSWORD)
+    user = _userinfo(settings.DATABASE_USER)
+    pwd = _userinfo(settings.DATABASE_PASSWORD)
     host, port, db = settings.DATABASE_HOST, settings.DATABASE_PORT, settings.DATABASE_SCHEMA
 
     if DataBaseType.sqlserver == settings.DATABASE_TYPE:
