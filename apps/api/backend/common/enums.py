@@ -80,6 +80,15 @@ class LoginLogStatusType(IntEnum):
     success = 1
 
 
+class LoginLogEvent(StrEnum):
+    """登录日志里这一行是什么事（#273）。除了 `login`，都是不经过「登录」这个动作的安全事件"""
+
+    login = 'login'  # 一次登录尝试（成功 / 失败看 status）
+    locked = 'locked'  # 账号连续登录失败被锁
+    ip_locked = 'ip_locked'  # 一个 IP 跨账号登录失败太多被锁
+    kicked = 'kicked'  # 会话被强制结束：管理员踢下线 / 改密码 / 停用账号
+
+
 class BuildTreeType(StrEnum):
     """构建树形结构类型"""
 
