@@ -212,5 +212,5 @@ SQL Server 2022（`sys.identity_columns` 对这张表 0 行）/ MySQL 8.4；之�
 **实测证据**：`tests/api_v1/test_login_events.py` 6 条（经接口按 `event` 读回）+ E2E `login-events.spec.ts`。
 变异 8 处各打红：锁定不记 · IP 锁定不记 · 撤销不登记回调 · 被踢那行记管理员的 IP · 什么原因下线都记 · 工作台不按事件过滤 ·
 接口不透传 `event` · 撤销之前不取会话字段。前端：查询区去掉「事件」→ E2E 红；路由 schema 去掉 `event` **不红**，是等价变异
-（叶子路由的 search 会合并根上没校验的那一份，见 `packages/ui` 分册「列顺序」那条）。迁移 `an000000loginevent`：已有行回填 `login`、
+（叶子路由的 search 会合并根上没校验的那一份，见 `packages/ui` 分册「列顺序」那条）。迁移 `ao000000loginevent`（原 `an000000loginevent`，#271 先合后改接）：已有行回填 `login`、
 库上不留 DEFAULT，`test_model_matches_migrations` 对升级上来的库通过。
