@@ -53,4 +53,5 @@ values
 (2224875016875409430, '自动停用阈值', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_DISABLE_AFTER', '20', false, '连续失败这么多次、且第一次失败已过去 24 小时，自动停用端点并通知应用创建人', now(), null),
 (2224875016875409431, '记录保留（天）', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_RETENTION_DAYS', '30', false, '事件、投递、每次尝试的记录，每天凌晨的日志清理一起删', now(), null),
 (2224875016875409432, '每个应用最多端点数', 'OPEN_WEBHOOK', 'OPEN_WEBHOOK_MAX_PER_APP', '10', false, null, now(), null),
-(2224875016875409433, '二次验证强制', 'LOGIN', 'LOGIN_MFA_ENFORCE', 'off', false, 'off：自愿开启；superuser：超级管理员必须开；all：所有人必须开。被强制、还没绑定的人下次登录会先走绑定', now(), null);
+(2224875016875409433, '二次验证强制', 'LOGIN', 'LOGIN_MFA_ENFORCE', 'off', false, 'off：自愿开启；superuser：超级管理员必须开；all：所有人必须开。被强制、还没绑定的人下次登录会先走绑定', now(), null),
+(2224875016875409434, '数据变更记录保留（天）', 'LOG', 'DATA_CHANGE_RETENTION_DAYS', '180', false, '谁把哪个字段从什么改成了什么，每天凌晨的日志清理删掉超过这么多天的。网络安全法要求网络日志留存不少于六个月', now(), null);

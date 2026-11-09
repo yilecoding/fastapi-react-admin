@@ -45,7 +45,7 @@
 | 动后端模型 / 接口 / SQL · **解析上传的 xlsx** | [`apps/api/AGENTS.md`](apps/api/AGENTS.md) |
 | 动公共层（校验 / 异常 / 缓存 / 分页） | [`apps/api/backend/common/AGENTS.md`](apps/api/backend/common/AGENTS.md) |
 | 跑 pytest / 建测试库 / 测试跑不起来 | [`backend/tests/AGENTS.md`](apps/api/backend/tests/AGENTS.md)（admin 模块自己的在 [`app/admin/tests/`](apps/api/backend/app/admin/tests/AGENTS.md)） |
-| **动权限码 / 数据范围 / token 与 cookie 时长** | [`apps/api/backend/common/security/AGENTS.md`](apps/api/backend/common/security/AGENTS.md) |
+| **动权限码 / 数据范围 / token 与 cookie 时长** · **数据变更审计**（谁把哪个字段改了 · 给登记过的表加列） | [`common/security`](apps/api/backend/common/security/AGENTS.md) · [`common/data_change`](apps/api/backend/common/data_change/AGENTS.md) |
 | **动数据库结构 / 写迁移 / 改种子数据** | [`apps/api/backend/alembic/AGENTS.md`](apps/api/backend/alembic/AGENTS.md) |
 | 动定时任务 / Celery / 调度 | [`apps/api/backend/app/task/AGENTS.md`](apps/api/backend/app/task/AGENTS.md) |
 | 动命令面板 / 快捷键 / 功能引导 | [`packages/platform/src/shell/AGENTS.md`](packages/platform/src/shell/AGENTS.md) |

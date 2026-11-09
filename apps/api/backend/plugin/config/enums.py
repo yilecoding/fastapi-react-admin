@@ -13,3 +13,4 @@ class ConfigType(StrEnum):
     session = 'SESSION'
     notification = 'NOTIFICATION'
     open_webhook = 'OPEN_WEBHOOK'
+    log = 'LOG'

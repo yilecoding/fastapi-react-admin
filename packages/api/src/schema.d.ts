@@ -2994,6 +2994,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/logs/changes/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 数据变更记录的筛选项 */
+        get: operations["get_data_change_meta_api_v1_logs_changes_meta_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/logs/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 分页获取数据变更记录 */
+        get: operations["get_data_changes_paginated_api_v1_logs_changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/monitors/redis": {
         parameters: {
             query?: never;
@@ -5485,6 +5519,50 @@ export interface components {
              */
             app_id: number;
         };
+        /** DataChangeEntity */
+        DataChangeEntity: {
+            /**
+             * Entity
+             * @description 对象类型
+             */
+            entity: string;
+            /**
+             * Title
+             * @description 中文名
+             */
+            title: string;
+            /**
+             * Fields
+             * @description 记录的字段（含关联表折叠出来的集合字段）
+             */
+            fields: components["schemas"]["DataChangeField"][];
+        };
+        /** DataChangeField */
+        DataChangeField: {
+            /**
+             * Field
+             * @description 字段
+             */
+            field: string;
+            /**
+             * Label
+             * @description 中文名
+             */
+            label: string;
+        };
+        /** DataChangeOption */
+        DataChangeOption: {
+            /**
+             * Value
+             * @description 值
+             */
+            value: string;
+            /**
+             * Label
+             * @description 中文名
+             */
+            label: string;
+        };
         /**
          * DeleteDataRuleParam
          * @description 删除数据规则参数
@@ -6131,6 +6209,101 @@ export interface components {
              * @description 角色名称列表
              */
             roles: string[];
+        };
+        /**
+         * GetDataChangeDetail
+         * @description 数据变更记录（#260）
+         */
+        GetDataChangeDetail: {
+            /**
+             * Id
+             * @description 记录 ID
+             */
+            id: string | number;
+            /**
+             * Trace Id
+             * @description 请求跟踪 ID（和操作日志同一个）
+             */
+            trace_id: string;
+            /**
+             * Entity Type
+             * @description 对象类型
+             */
+            entity_type: string;
+            /**
+             * Entity Id
+             * @description 对象 ID（批量汇总行为空）
+             */
+            entity_id?: number | null;
+            /**
+             * Entity Label
+             * @description 对象当时的名字；批量汇总行是命中行数
+             */
+            entity_label?: string | null;
+            /**
+             * Action
+             * @description create / update / delete / bulk
+             */
+            action: string;
+            /**
+             * Changes
+             * @description 字段变化
+             */
+            changes?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Actor Id
+             * @description 操作人 ID
+             */
+            actor_id?: number | null;
+            /**
+             * Actor Name
+             * @description 操作人用户名（快照）
+             */
+            actor_name?: string | null;
+            /**
+             * Source
+             * @description 来源
+             */
+            source: string;
+            /**
+             * Source Ref
+             * @description 来源的引用（AI 工具调用 ID…）
+             */
+            source_ref?: string | null;
+            /**
+             * Ip
+             * @description IP 地址
+             */
+            ip?: string | null;
+            /**
+             * Created Time
+             * Format: date-time
+             * @description 时间
+             */
+            created_time: string;
+        };
+        /**
+         * GetDataChangeMeta
+         * @description 筛选下拉和字段翻译用的元数据
+         */
+        GetDataChangeMeta: {
+            /**
+             * Entities
+             * @description 登记过的对象
+             */
+            entities: components["schemas"]["DataChangeEntity"][];
+            /**
+             * Sources
+             * @description 来源
+             */
+            sources: components["schemas"]["DataChangeOption"][];
+            /**
+             * Actions
+             * @description 动作
+             */
+            actions: components["schemas"]["DataChangeOption"][];
         };
         /**
          * GetDataRuleColumnDetail
@@ -10093,6 +10266,32 @@ export interface components {
             total_pages: number;
             links: components["schemas"]["_Links"];
         };
+        /** PageData[GetDataChangeDetail] */
+        PageData_GetDataChangeDetail_: {
+            /** Items */
+            items: components["schemas"]["GetDataChangeDetail"][];
+            /**
+             * Total
+             * @description 数据总条数
+             */
+            total: number;
+            /**
+             * Page
+             * @description 当前页码
+             */
+            page: number;
+            /**
+             * Size
+             * @description 每页数量
+             */
+            size: number;
+            /**
+             * Total Pages
+             * @description 总页数
+             */
+            total_pages: number;
+            links: components["schemas"]["_Links"];
+        };
         /** PageData[GetDataRuleDetail] */
         PageData_GetDataRuleDetail_: {
             /** Items */
@@ -11214,6 +11413,22 @@ export interface components {
             msg: string;
             data: components["schemas"]["GetCurrentUserInfoWithRelationDetail"];
         };
+        /** ResponseSchemaModel[GetDataChangeMeta] */
+        ResponseSchemaModel_GetDataChangeMeta_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetDataChangeMeta"];
+        };
         /** ResponseSchemaModel[GetDataRuleDetail] */
         ResponseSchemaModel_GetDataRuleDetail_: {
             /**
@@ -11933,6 +12148,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["PageData_GetConversationDetail_"];
+        };
+        /** ResponseSchemaModel[PageData[GetDataChangeDetail]] */
+        ResponseSchemaModel_PageData_GetDataChangeDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["PageData_GetDataChangeDetail_"];
         };
         /** ResponseSchemaModel[PageData[GetDataRuleDetail]] */
         ResponseSchemaModel_PageData_GetDataRuleDetail__: {
@@ -21711,6 +21942,8 @@ export interface operations {
                 start_time?: string | null;
                 /** @description 操作时间止 */
                 end_time?: string | null;
+                /** @description 请求跟踪 ID（数据变更记录跳过来用，#260） */
+                trace_id?: string | null;
                 /** @description 页码 */
                 page?: number;
                 /** @description 每页数量 */
@@ -21824,6 +22057,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    get_data_change_meta_api_v1_logs_changes_meta_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetDataChangeMeta_"];
+                };
+            };
+        };
+    };
+    get_data_changes_paginated_api_v1_logs_changes_get: {
+        parameters: {
+            query?: {
+                /** @description 对象类型 */
+                entity_type?: string | null;
+                /** @description 对象 ID */
+                entity_id?: number | null;
+                /** @description 操作人用户名（模糊） */
+                actor?: string | null;
+                /** @description 来源 */
+                source?: string | null;
+                /** @description 动作 */
+                action?: string | null;
+                /** @description 改过的字段 */
+                field?: string | null;
+                /** @description 请求跟踪 ID */
+                trace_id?: string | null;
+                /** @description 时间起 */
+                start_time?: string | null;
+                /** @description 时间止 */
+                end_time?: string | null;
+                /** @description 页码 */
+                page?: number;
+                /** @description 每页数量 */
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_PageData_GetDataChangeDetail__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

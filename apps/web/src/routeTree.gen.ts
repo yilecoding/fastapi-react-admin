@@ -24,6 +24,7 @@ import { Route as AuthAiMcpClientRouteImport } from './routes/_auth/ai/mcp-clien
 import { Route as AuthAiProviderRouteImport } from './routes/_auth/ai/provider'
 import { Route as AuthAiToolLogRouteImport } from './routes/_auth/ai/tool-log'
 import { Route as AuthEmbeddedNameRouteImport } from './routes/_auth/embedded/$name'
+import { Route as AuthLogChangeRouteImport } from './routes/_auth/log/change'
 import { Route as AuthLogLoginRouteImport } from './routes/_auth/log/login'
 import { Route as AuthLogOperaRouteImport } from './routes/_auth/log/opera'
 import { Route as AuthMonitorOnlineRouteImport } from './routes/_auth/monitor/online'
@@ -127,6 +128,11 @@ const AuthAiToolLogRoute = AuthAiToolLogRouteImport.update({
 const AuthEmbeddedNameRoute = AuthEmbeddedNameRouteImport.update({
   id: '/embedded/$name',
   path: '/embedded/$name',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthLogChangeRoute = AuthLogChangeRouteImport.update({
+  id: '/log/change',
+  path: '/log/change',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthLogLoginRoute = AuthLogLoginRouteImport.update({
@@ -300,6 +306,7 @@ export interface FileRoutesByFullPath {
   '/ai/provider': typeof AuthAiProviderRoute
   '/ai/tool-log': typeof AuthAiToolLogRoute
   '/embedded/$name': typeof AuthEmbeddedNameRoute
+  '/log/change': typeof AuthLogChangeRoute
   '/log/login': typeof AuthLogLoginRoute
   '/log/opera': typeof AuthLogOperaRoute
   '/monitor/online': typeof AuthMonitorOnlineRoute
@@ -346,6 +353,7 @@ export interface FileRoutesByTo {
   '/ai/provider': typeof AuthAiProviderRoute
   '/ai/tool-log': typeof AuthAiToolLogRoute
   '/embedded/$name': typeof AuthEmbeddedNameRoute
+  '/log/change': typeof AuthLogChangeRoute
   '/log/login': typeof AuthLogLoginRoute
   '/log/opera': typeof AuthLogOperaRoute
   '/monitor/online': typeof AuthMonitorOnlineRoute
@@ -395,6 +403,7 @@ export interface FileRoutesById {
   '/_auth/ai/provider': typeof AuthAiProviderRoute
   '/_auth/ai/tool-log': typeof AuthAiToolLogRoute
   '/_auth/embedded/$name': typeof AuthEmbeddedNameRoute
+  '/_auth/log/change': typeof AuthLogChangeRoute
   '/_auth/log/login': typeof AuthLogLoginRoute
   '/_auth/log/opera': typeof AuthLogOperaRoute
   '/_auth/monitor/online': typeof AuthMonitorOnlineRoute
@@ -443,6 +452,7 @@ export interface FileRouteTypes {
     | '/ai/provider'
     | '/ai/tool-log'
     | '/embedded/$name'
+    | '/log/change'
     | '/log/login'
     | '/log/opera'
     | '/monitor/online'
@@ -489,6 +499,7 @@ export interface FileRouteTypes {
     | '/ai/provider'
     | '/ai/tool-log'
     | '/embedded/$name'
+    | '/log/change'
     | '/log/login'
     | '/log/opera'
     | '/monitor/online'
@@ -537,6 +548,7 @@ export interface FileRouteTypes {
     | '/_auth/ai/provider'
     | '/_auth/ai/tool-log'
     | '/_auth/embedded/$name'
+    | '/_auth/log/change'
     | '/_auth/log/login'
     | '/_auth/log/opera'
     | '/_auth/monitor/online'
@@ -682,6 +694,13 @@ declare module '@tanstack/react-router' {
       path: '/embedded/$name'
       fullPath: '/embedded/$name'
       preLoaderRoute: typeof AuthEmbeddedNameRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/log/change': {
+      id: '/_auth/log/change'
+      path: '/log/change'
+      fullPath: '/log/change'
+      preLoaderRoute: typeof AuthLogChangeRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/log/login': {
@@ -915,6 +934,7 @@ interface AuthRouteChildren {
   AuthAiProviderRoute: typeof AuthAiProviderRoute
   AuthAiToolLogRoute: typeof AuthAiToolLogRoute
   AuthEmbeddedNameRoute: typeof AuthEmbeddedNameRoute
+  AuthLogChangeRoute: typeof AuthLogChangeRoute
   AuthLogLoginRoute: typeof AuthLogLoginRoute
   AuthLogOperaRoute: typeof AuthLogOperaRoute
   AuthMonitorOnlineRoute: typeof AuthMonitorOnlineRoute
@@ -959,6 +979,7 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthAiProviderRoute: AuthAiProviderRoute,
   AuthAiToolLogRoute: AuthAiToolLogRoute,
   AuthEmbeddedNameRoute: AuthEmbeddedNameRoute,
+  AuthLogChangeRoute: AuthLogChangeRoute,
   AuthLogLoginRoute: AuthLogLoginRoute,
   AuthLogOperaRoute: AuthLogOperaRoute,
   AuthMonitorOnlineRoute: AuthMonitorOnlineRoute,
