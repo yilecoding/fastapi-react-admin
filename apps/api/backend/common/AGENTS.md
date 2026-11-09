@@ -163,3 +163,22 @@ AI 工具的参数报错也走它。顺带：dev 下 422 文案回显的输入�
 
 **实测证据**：`plugin/ai/tests/test_ai_turn_persistence.py::TestArgumentErrorsAreReadable`（pattern 错误出来是 `code 字符串应匹配模式…`、
 不含 `errors.pydantic.dev`）。
+
+## 🔴 操作日志：每次发版 / 重启都丢最后一批（上游 #1283 同类）
+
+**症状**：重启后去翻操作日志，重启前最后几十秒的操作**一条都没有**；没有任何报错。
+
+**根因**：消费者（`common/queue.py: batch_consume`）攒满 100 条或等满 `OPERA_LOG_QUEUE_TIMEOUT`（60 秒）才写一次库，
+手里常年攥着一批「已经出队、还没写」的。关停时 `registrar.py` 直接 `cancel()` 它，那一批连同队列里剩下的一起丢掉。
+另一头：入队原来是 `await queue.put()`，入库持续失败把队列塞满后，**业务请求跟着挂住**。
+
+**修法**：
+- 停消费者走 `OperaLogMiddleware.stop_consumer()`：置位 `stop_event`，消费者把手里的和队列里的写完再退出；
+  最多等 `OPERA_LOG_QUEUE_DRAIN_TIMEOUT`（5 秒，要短于 `docker stop` 的 10 秒宽限期），超时才放弃并告警
+- 入队走 `OperaLogMiddleware.enqueue()`：`put_nowait`，满了丢这一条，告警按分钟合并、带上丢了几条
+
+❌ 不要把关停改回 `cancel()`，也不要在请求路径上 `await put()`。
+
+**实测证据**（改之前的代码）：入队 3 条后按原来的方式取消，写进去 **0 条**、队列也空了；`maxsize=1` 的满队列上
+`await put()`，1 秒内不返回。修后见 `backend/tests/test_opera_log_queue.py`（已经出队的那批、超过一批的积压、
+空闲时 2.5 秒内停下、入库卡死时按超时放弃）。
