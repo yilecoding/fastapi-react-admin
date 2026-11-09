@@ -23,8 +23,10 @@ import { DataTable } from '@admin/ui/components/data-table'
 import {
   DateTimeRangePicker,
   DateTimeValuePicker,
+  type Picker,
   type RangeValue,
 } from '@admin/ui/components/datetime-picker'
+import { TimePicker } from '@admin/ui/components/time-picker'
 import { MultiSelect, type MultiSelectOption } from '@admin/ui/components/multi-select'
 import {
   Sidebar,
@@ -229,25 +231,40 @@ export const COMPLEX_DEMOS: Demo[] = [
     zh: '时间选择',
     group: 'form',
     summary:
-      '两个组件：DateTimeValuePicker（单个时刻）和 DateTimeRangePicker（区间，自带今天 / 昨天 / 近 7 天 / 近 30 天 / 本月 / 上月）。' +
+      '三个组件：DateTimeValuePicker（单个时刻，可以直接敲）、DateTimeRangePicker（区间，自带今天 / 昨天 / 近 7 天 / 近 30 天 / 本月 / 上月）、TimePicker（只选时刻，时 / 分 / 秒三列）。' +
+      '面板里点的、敲的先进草稿：不带时间的点一下就提交，带时间的点「确定」才提交，点外面 / Esc 丢掉。' +
+      '区间选好再点是重新开始，等第二下时悬停预览。按月 / 按年见「粒度」。' +
       '🔴 值是**本地时间串**（`2026-09-04 08:00:00`）不是 Date —— 它要原样进 URL 和接口入参，' +
       'Date 序列化成 ISO 会带上时区偏移，回来时又要解析一次，中间任何一步漏了都是「差 8 小时」。',
     source: 'packages/ui/src/components/datetime-picker.tsx',
     use: '筛选栏的时间范围、表单里的生效时间。区间几乎总是「近 N 天」，所以 presets 默认开。',
     avoid: '显示服务端时间不要用它 —— 那走 @admin/i18n 的 formatDateTime，时区口径只有那一处。',
     knobs: {
-      mode: { kind: 'select', label: '形态', options: ['单值', '区间'], default: '区间' },
-      withTime: { kind: 'bool', label: '带时分秒', default: false, hint: '关掉时区间自动补 00:00:00 / 23:59:59' },
+      mode: { kind: 'select', label: '形态', options: ['单值', '区间', '时间'], default: '区间' },
+      picker: {
+        kind: 'select', label: '粒度', options: ['date', 'month', 'year'], default: 'date',
+        hint: '按月 / 按年时单值出 YYYY-MM / YYYY，区间仍出整段的起止日期',
+      },
+      withTime: { kind: 'bool', label: '带时分秒', default: false, hint: '关掉时区间自动补 00:00:00 / 23:59:59；按月 / 按年时不起作用' },
       presets: { kind: 'bool', label: '快捷区间', default: true, hint: '只对区间有效' },
       size: { kind: 'select', label: 'size', options: ['sm', 'default'], default: 'sm' },
     },
     render: (v) => <DateTimeDemo v={v} />,
     code: (v) =>
-      s(v, 'mode') === '区间'
+      s(v, 'mode') === '时间'
+        ? jsx('TimePicker', {
+            value: '{value}',
+            onChange: '{setValue}',
+            minuteStep: '{5}',
+            size: s(v, 'size') === 'default' ? undefined : s(v, 'size'),
+            'aria-label': '提醒时间',
+          })
+        : s(v, 'mode') === '区间'
         ? jsx('DateTimeRangePicker', {
             value: '{[from, to]}',
             onChange: '{(r) => patch({ from: r?.[0], to: r?.[1], page: undefined })}',
             withTime: b(v, 'withTime') || undefined,
+            picker: s(v, 'picker') === 'date' ? undefined : s(v, 'picker'),
             presets: b(v, 'presets') ? undefined : '{false}',
             size: s(v, 'size') === 'default' ? undefined : s(v, 'size'),
             'aria-label': '登录时间',
@@ -256,6 +273,7 @@ export const COMPLEX_DEMOS: Demo[] = [
             value: '{value}',
             onChange: '{setValue}',
             withTime: b(v, 'withTime') || undefined,
+            picker: s(v, 'picker') === 'date' ? undefined : s(v, 'picker'),
             size: s(v, 'size') === 'default' ? undefined : s(v, 'size'),
             'aria-label': '生效时间',
           }),
@@ -535,34 +553,47 @@ function MultiSelectDemo({ v }: { v: KnobValues }) {
 function DateTimeDemo({ v }: { v: KnobValues }) {
   const [single, setSingle] = React.useState<string | undefined>(undefined)
   const [range, setRange] = React.useState<RangeValue | undefined>(undefined)
+  const [time, setTime] = React.useState<string | undefined>(undefined)
   const withTime = b(v, 'withTime')
+  const picker = s(v, 'picker') as Picker
   const size = s(v, 'size') as 'sm'
+  const mode = s(v, 'mode')
 
   return (
     <div className="flex w-72 flex-col gap-2">
-      {s(v, 'mode') === '区间' ? (
+      {mode === '时间' ? (
+        <TimePicker value={time} onChange={setTime} minuteStep={5} size={size} aria-label="提醒时间" data-testid="dt-demo" />
+      ) : mode === '区间' ? (
         <DateTimeRangePicker
+          // 换粒度 / 带不带时间时值的形状变了，旧值留着会显示成别的粒度
+          key={`${picker}-${withTime}`}
           value={range}
           onChange={setRange}
           withTime={withTime}
+          picker={picker}
           presets={b(v, 'presets')}
           size={size}
           aria-label="登录时间"
+          data-testid="dt-demo"
         />
       ) : (
         <DateTimeValuePicker
+          key={`${picker}-${withTime}`}
           value={single}
           onChange={setSingle}
           withTime={withTime}
+          picker={picker}
           size={size}
           aria-label="生效时间"
+          data-testid="dt-demo"
         />
       )}
       {/* 把真实的值打出来 —— 「它到底存的是什么」正是这个组件最容易搞错的地方 */}
-      <code className="rounded bg-muted/50 px-2 py-1 font-mono text-2xs break-all text-muted-foreground">
-        {s(v, 'mode') === '区间'
-          ? JSON.stringify(range ?? null)
-          : JSON.stringify(single ?? null)}
+      <code
+        className="rounded bg-muted/50 px-2 py-1 font-mono text-2xs break-all text-muted-foreground"
+        data-testid="dt-demo-value"
+      >
+        {JSON.stringify((mode === '时间' ? time : mode === '区间' ? range : single) ?? null)}
       </code>
     </div>
   )
