@@ -10,7 +10,7 @@
 # 不装 ODBC 驱动，照它构建出来的镜像连不上 SQL Server。
 # 保留它是为了对照上游，不要拿它部署。
 #
-#     docker build -f apps/api/Dockerfile.prod -t fba-api apps/api
+#     docker build -f apps/api/Dockerfile.prod -t fra-api apps/api
 #
 # 🔴 **基础镜像钉 digest，Python 版本因此长在镜像引用里，不再有 `ARG PY`。**
 # 原来是 `ARG PY=3.13` + `FROM …:python${PY}-bookworm-slim`。digest 一钉，那个 ARG
