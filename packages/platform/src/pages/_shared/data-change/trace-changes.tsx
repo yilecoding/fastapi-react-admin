@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
@@ -16,6 +17,7 @@ export function TraceChanges({ traceId }: { traceId: string }) {
   if (query.isPending) return <Skeleton className="h-16 w-full" />
   if (query.error) return <QueryError error={query.error} onRetry={() => void query.refetch()} />
   const records = query.data.items
+  const more = query.data.total - records.length
   if (records.length === 0) {
     return (
       <p className="text-sm text-muted-foreground" data-testid="trace-changes-empty">
@@ -40,6 +42,19 @@ export function TraceChanges({ traceId }: { traceId: string }) {
           </li>
         )
       })}
+      {/* 只取了第一页（50 条）：一次请求能改几百个对象（从角色里移走一批人），别让人以为看到的就是全部 */}
+      {more > 0 && (
+        <li>
+          <Link
+            to="/log/change"
+            search={{ trace_id: traceId }}
+            className="text-sm text-primary hover:underline"
+            data-testid="trace-changes-more"
+          >
+            {t('还有 {{n}} 条，去「数据变更」看全部', { n: more })}
+          </Link>
+        </li>
+      )}
     </ol>
   )
 }

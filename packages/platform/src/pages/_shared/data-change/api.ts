@@ -15,8 +15,10 @@ export type DataChangeItem = {
   /** 引用列（部门 / 上级菜单…）存 ID 也存当时的名字；固定取值的列（状态…）存取值的中文名 */
   old_label?: string
   new_label?: string
-  /** 敏感列（密码）：只记「改过」，不记值 */
+  /** 敏感列（密码 / 参数配置里键名像密码的那几行）：只记「改过」，不记值 */
   secret?: boolean
+  /** 批量汇总里按主键逐行更新的列：每一行的值不一样，只说改了这一列 */
+  varies?: boolean
   added?: DataChangeMember[]
   removed?: DataChangeMember[]
 }

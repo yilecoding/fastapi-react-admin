@@ -7,6 +7,7 @@ from typing import Any, TypeVar
 from celery import Task
 from sqlalchemy.exc import SQLAlchemyError
 
+from backend.common.data_change import data_change_source
 from backend.common.log import log
 from backend.common.socketio.actions import task_notification
 from backend.core.conf import settings
@@ -43,11 +44,16 @@ def with_timeout(seconds: float = settings.CELERY_TASK_TIME_LIMIT) -> Callable[.
     def decorator(fn: Callable[..., Awaitable[_T]]) -> Callable[..., Awaitable[_T]]:
         @functools.wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> _T:
-            try:
-                return await asyncio.wait_for(fn(*args, **kwargs), timeout=seconds)
-            except TimeoutError:
-                log.error(f'任务 {fn.__name__} 超过 {seconds}s 未完成，已强制中断')
-                raise
+            # 数据变更审计（#260）：任务里改的登记过的数据记成「定时任务」来源，
+            # 引用是任务名（`maintenance.prune_logs`）。
+            # 每个任务都套着这一层，所以接在这里 —— 不接的话 worker 里的修改没有请求上下文，记成「系统」，
+            # 而筛选下拉里的「定时任务」永远是空的（评审抓到的）。上下文变量在 wait_for 建任务之前设，子任务会继承
+            with data_change_source('task', f'{fn.__module__.rsplit(".", 2)[-2]}.{fn.__name__}'):
+                try:
+                    return await asyncio.wait_for(fn(*args, **kwargs), timeout=seconds)
+                except TimeoutError:
+                    log.error(f'任务 {fn.__name__} 超过 {seconds}s 未完成，已强制中断')
+                    raise
 
         return wrapper
 

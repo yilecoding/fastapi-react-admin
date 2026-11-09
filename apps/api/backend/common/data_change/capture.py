@@ -9,9 +9,18 @@
   Core 写关联表。执行**之前**按同一个 WHERE 把要动的行查出来，这个事务里第一次碰到的才存原样
 - `transient_to_pending`：`db.add()` 那一刻记下「谁、从哪来」
   （`add` 在 AI 工具那段 `with` 里，flush 可能到提交时才发生）
-- `after_flush`：unit of work 的 INSERT / UPDATE / DELETE。新建的记成「新建」；改已加载对象的用属性历史拿原值
+- 属性 `set`（登记过的模型的每个列属性）：改已加载对象（`role.status = 0`）的那一刻记下来源 —— 会话 `autoflush=False`，
+  flush 往往发生在 AI 工具那段 `with` 外面的提交时
+- `before_flush`：改已加载对象 / `session.delete()` 的原样**从库里查**（flush 之前库里还是旧值）。不用属性历史 ——
+  没加载过的属性（`load_only` / 过期）历史是空的，会被当成「从空改成了现值」（评审抓到的）
+- `after_flush`：unit of work 的 INSERT，记成「新建」
 - `before_commit`：🔴 **先 flush**，再按主键查现状、和原样比、批量查引用的名字，在**同一个事务里**写 `sys_data_change`
 - `after_soft_rollback`：外层回滚就丢掉缓冲。保存点回滚不丢 —— 比的是「原样 vs 提交时的现状」，回滚掉的改动比不出差别
+
+🔴 **保存点提交也会触发 `before_commit` / `after_commit`**（SQLAlchemy 2.0 `SessionTransaction._prepare_impl`：
+`if self._parent is None or self.nested`）。AI 工具每调用一次就开一个保存点写自己的调用审计、部门导入每行一个保存点 ——
+不跳过的话一个请求被拆成好几条记录，而保存点里那次写记录出的错会被调用方的 `except Exception` 吞掉、缓冲已经清了，
+记录静默丢失（评审抓到的）。所以两个钩子都只认最外层的提交。
 
 🔴 `before_commit` 里那句 `flush()` 不能省（PostgreSQL / SQL Server 都实测过）：提交时 SQLAlchemy 是**先**触发
 `before_commit`、**再**做最后一次 flush。`db.add()` 之后没 flush 的新对象（角色 / 菜单 / 参数的 `create_model`），
@@ -54,6 +63,10 @@ _MAX_SAFE_INT = 2**53 - 1
 
 _BUFFER = 'data_change_buffer'
 _BUSY = 'data_change_busy'
+#: 挂在 `InstanceState.info` 上：这个对象的属性第一次被改的那一刻是谁、从哪来
+_ORIGIN = 'data_change_origin'
+#: 批量汇总行里列出的集合成员最多几个（「从 1234 个用户身上去掉了『访客』」只需要那一个角色）
+_BULK_MEMBERS = 20
 
 _source: ContextVar[tuple[str, str | None, int | None] | None] = ContextVar('data_change_source', default=None)
 
@@ -153,6 +166,9 @@ def _chunks(values: list[Any]) -> Iterable[list[Any]]:
 
 
 def _on_execute(st: ORMExecuteState) -> None:
+    if not _ready:
+        # 第一条语句（通常是 SELECT）就装好登记表和属性监听：改已加载对象之前，那个对象总得先被查出来
+        _ensure()
     session = st.session
     if st.is_select or session.info.get(_BUSY):
         return
@@ -162,7 +178,7 @@ def _on_execute(st: ORMExecuteState) -> None:
     name = getattr(getattr(stmt, 'table', None), 'name', None)
     if name is None:
         return
-    registry.load_data_change_extensions()
+    _ensure()
     if name not in registry.AUDITED_TABLES:
         return
     spec = registry.entity_for_table(name)
@@ -182,32 +198,59 @@ def _capture_entity(st: ORMExecuteState, spec: registry.AuditedEntity) -> None:
     table = spec.table
     pk = spec.pk
     params = st.parameters
+    written = _written_columns(st)
+    if st.is_update and written and written <= spec.ignore:
+        # 只写忽略列（每次登录的 `update_login_time`）：比不出任何东西，不白查两次整行（评审抓到的）
+        return
+    origin = current_origin()
+    buf = _buffer(session)
     if isinstance(params, list):
-        # 按主键的批量 UPDATE（`bulk_update_models`）：主键在每组参数里
-        where = pk.in_([p[pk.key] for p in params if pk.key in p])
+        # 按主键的批量 UPDATE（`bulk_update_models`）：主键在每组参数里。
+        # 🔴 主键要分批放进 IN —— SQL Server 一条语句最多 2100 个参数，一次塞进去的话业务那条 UPDATE 跟着失败
+        ids = [p[pk.key] for p in params if pk.key in p]
+        if len(ids) > BULK_LIMIT:
+            buf.bulk.append({
+                'spec': spec,
+                'count': len(ids),
+                'varies': sorted(written - spec.ignore),
+                'origin': origin,
+            })
+            return
+        rows = [r for chunk in _chunks(ids) for r in _fetch(session, sa.select(table).where(pk.in_(chunk)))]
     else:
         where = st.statement.whereclause
         if where is None:
             where = sa.true()
-    rows = _fetch(session, sa.select(table).where(where).limit(BULK_LIMIT + 1))
-    origin = current_origin()
-    buf = _buffer(session)
-    if len(rows) > BULK_LIMIT:
-        with _busy(session):
-            count = session.execute(sa.select(sa.func.count()).select_from(table).where(where)).scalar_one()
-        buf.bulk.append({'spec': spec, 'count': count, 'values': _literal_values(st), 'origin': origin})
-        return
+        rows = _fetch(session, sa.select(table).where(where).limit(BULK_LIMIT + 1))
+        if len(rows) > BULK_LIMIT:
+            with _busy(session):
+                count = session.execute(sa.select(sa.func.count()).select_from(table).where(where)).scalar_one()
+            buf.bulk.append({'spec': spec, 'count': count, 'values': _literal_values(st), 'origin': origin})
+            return
     for row in rows:
         key = (table.name, row[pk.name])
         if key not in buf.rows:
             buf.rows[key] = _Row(original=dict(row), origin=origin)
 
 
+def _column_name(key: Any) -> str:
+    return getattr(key, 'name', None) or getattr(key, 'key', None) or str(key)
+
+
+def _written_columns(st: ORMExecuteState) -> set[str]:
+    """这条 UPDATE 要写哪些列（`.values(...)` 里的 + executemany 每组参数里的）。拿不准时返回空集 = 不跳过"""
+    names = {_column_name(k) for k in (getattr(st.statement, '_values', None) or {})}
+    params = st.parameters
+    for p in params if isinstance(params, list) else ([params] if params else []):
+        names |= set(p)
+    return names
+
+
 def _literal_values(st: ORMExecuteState) -> dict[str, Any]:
     """批量汇总行要写「改成了什么」：只认语句里的字面量（`.values(status=0)`），表达式不认"""
     out: dict[str, Any] = {}
     for col, bind in (getattr(st.statement, '_values', None) or {}).items():
-        name = getattr(col, 'name', None) or getattr(col, 'key', None) or str(col)
+        name = _column_name(col)
         value = getattr(bind, 'value', None)
         if isinstance(bind, sa.sql.elements.BindParameter):
             out[name] = value
@@ -218,22 +261,40 @@ def _capture_set(st: ORMExecuteState, spec: registry.AuditedSet) -> None:
     session = st.session
     table = spec.table
     parent = table.c[spec.parent_column]
+    member = table.c[spec.member_column]
+    buf = _buffer(session)
     if st.is_delete:
         where = st.statement.whereclause
         if where is None:
             where = sa.true()
-        parents = {r[spec.parent_column] for r in _fetch(session, sa.select(parent).where(where).distinct())}
+        parents = {
+            r[spec.parent_column]
+            for r in _fetch(session, sa.select(parent).where(where).distinct().limit(BULK_LIMIT + 1))
+        }
+        if len(parents) > BULK_LIMIT:
+            # 🔴 关联表也要有上限：从 2 万人身上摘掉一个角色，逐个父对象拍集合 + 写 2 万行记录，
+            # 全在业务事务里（评审抓到的）。只记一条汇总：哪个集合字段、多少个对象、去掉了谁
+            with _busy(session):
+                count = session.execute(sa.select(sa.func.count(sa.distinct(parent))).where(where)).scalar_one()
+            removed = [
+                r[spec.member_column]
+                for r in _fetch(session, sa.select(member).where(where).distinct().limit(_BULK_MEMBERS))
+            ]
+            buf.bulk.append({'set': spec, 'count': count, 'removed': removed, 'origin': current_origin()})
+            return
     elif st.is_insert:
         parents = set(_insert_values(st, spec.parent_column))
+        if len(parents) > BULK_LIMIT:
+            added = sorted(set(_insert_values(st, spec.member_column)), key=str)[:_BULK_MEMBERS]
+            buf.bulk.append({'set': spec, 'count': len(parents), 'added': added, 'origin': current_origin()})
+            return
     else:
         return
-    buf = _buffer(session)
     fresh = [p for p in parents if (table.name, p) not in buf.sets]
     if not fresh:
         return
     origin = current_origin()
     members: dict[Any, set[Any]] = {p: set() for p in fresh}
-    member = table.c[spec.member_column]
     for chunk in _chunks(fresh):
         for r in _fetch(session, sa.select(parent, member).where(parent.in_(chunk))):
             members[r[spec.parent_column]].add(r[spec.member_column])
@@ -257,7 +318,7 @@ def _spec_of(obj: Any) -> registry.AuditedEntity | None:
     table = getattr(type(obj), '__table__', None)
     if table is None:
         return None
-    registry.load_data_change_extensions()
+    _ensure()
     return registry.entity_for_table(table.name)
 
 
@@ -267,47 +328,56 @@ def _on_pending(session: Session, instance: Any) -> None:
     _buffer(session).pending[id(instance)] = current_origin()
 
 
-def _object_values(obj: Any, spec: registry.AuditedEntity, *, original: bool) -> dict[str, Any]:
-    """改已加载对象（unit of work）：用属性历史拿改之前的值"""
-    state = sa.inspect(obj)
-    out: dict[str, Any] = {}
-    for col in spec.table.columns:
-        prop = state.mapper.get_property_by_column(col)
-        hist = state.attrs[prop.key].history
-        if original and hist.deleted:
-            out[col.name] = hist.deleted[0]
-        elif hist.unchanged:
-            out[col.name] = hist.unchanged[0]
-        elif hist.added:
-            out[col.name] = hist.added[0]
-        else:
-            out[col.name] = None
-    return out
+def _on_attr_set(target: Any, value: Any, _old: Any, _initiator: Any) -> Any:
+    """改已加载对象的属性：第一次改的那一刻记下来源（flush 可能要到 `with data_change_source` 外面的提交时）"""
+    state = sa.inspect(target)
+    if state.persistent and _ORIGIN not in state.info:
+        state.info[_ORIGIN] = current_origin()
+    return value
 
 
-def _track(session: Session, obj: Any, *, created: bool) -> None:
-    spec = _spec_of(obj)
-    if spec is None:
+def _on_before_flush(session: Session, _flush_context: Any, _instances: Any) -> None:
+    """改已加载对象 / `session.delete()`：原样**从库里查**（flush 之前库里还是旧值）。
+
+    不用属性历史：没加载过的属性（`load_only` / 过期）历史是空的，拍出来是 None，
+    提交时就成了「从空改成了现值」—— 每个没加载的列都记一条假变更（评审抓到的）
+    """
+    if session.info.get(_BUSY):
         return
-    buf = _buffer(session)
-    added_at = buf.pending.pop(id(obj), None)
-    key = (spec.table.name, getattr(obj, spec.pk.key))
-    if key in buf.rows:
-        return
-    original = None if created else _object_values(obj, spec, original=True)
-    buf.rows[key] = _Row(original=original, origin=added_at or current_origin())
+    touched = [o for o in session.dirty if session.is_modified(o, include_collections=False)] + list(session.deleted)
+    wanted: dict[str, list[tuple[Any, Any, Origin]]] = {}
+    buf: _Buffer | None = None
+    for obj in touched:
+        spec = _spec_of(obj)
+        if spec is None:
+            continue
+        buf = buf or _buffer(session)
+        pk = getattr(obj, spec.pk.key)
+        state = sa.inspect(obj)
+        origin = state.info.pop(_ORIGIN, None) or current_origin()
+        if (spec.table.name, pk) not in buf.rows:
+            wanted.setdefault(spec.table.name, []).append((pk, obj, origin))
+    for table_name, items in wanted.items():
+        spec = registry.entity_for_table(table_name)
+        assert spec is not None and buf is not None
+        before = _current_rows(session, spec, [pk for pk, _, _ in items])
+        for pk, _obj, origin in items:
+            if pk in before:
+                buf.rows[table_name, pk] = _Row(original=before[pk], origin=origin)
 
 
 def _on_after_flush(session: Session, _flush_context: Any) -> None:
     if session.info.get(_BUSY):
         return
     for obj in session.new:
-        _track(session, obj, created=True)
-    for obj in session.dirty:
-        if session.is_modified(obj, include_collections=False):
-            _track(session, obj, created=False)
-    for obj in session.deleted:
-        _track(session, obj, created=False)
+        spec = _spec_of(obj)
+        if spec is None:
+            continue
+        buf = _buffer(session)
+        added_at = buf.pending.pop(id(obj), None)
+        key = (spec.table.name, getattr(obj, spec.pk.key))
+        if key not in buf.rows:
+            buf.rows[key] = _Row(original=None, origin=added_at or current_origin())
 
 
 def _on_rollback(session: Session, previous_transaction: SessionTransaction) -> None:
@@ -316,14 +386,17 @@ def _on_rollback(session: Session, previous_transaction: SessionTransaction) -> 
 
 
 def _on_after_commit(session: Session) -> None:
-    session.info.pop(_BUFFER, None)
+    # 保存点提交也会走到这里（见模块注释）：那时清缓冲 = 丢掉保存点之前抓到的改动
+    if not session.in_nested_transaction():
+        session.info.pop(_BUFFER, None)
 
 
 # ── 比 + 写 ──────────────────────────────────────────────────────────────────
 
 
 def _on_before_commit(session: Session) -> None:
-    if session.info.get(_BUSY):
+    # 🔴 只认最外层的提交：保存点提交也会触发 before_commit（见模块注释）
+    if session.info.get(_BUSY) or session.in_nested_transaction():
         return
     # 🔴 先 flush：见模块注释。没东西要 flush 时是空操作
     session.flush()
@@ -377,9 +450,11 @@ def _current_rows(session: Session, spec: registry.AuditedEntity, ids: list[Any]
     return out
 
 
-def _value_change(spec: registry.AuditedEntity, column: str, old: Any, new: Any, *, created: bool) -> dict[str, Any]:
+def _value_change(
+    spec: registry.AuditedEntity, column: str, old: Any, new: Any, *, created: bool, row: dict[str, Any] | None
+) -> dict[str, Any]:
     item: dict[str, Any] = {'field': column, 'label': spec.labels[column]}
-    if column in spec.secret:
+    if spec.is_secret(column, row):
         item['secret'] = True
         return item
     if not created:
@@ -419,7 +494,7 @@ def _build_records(session: Session, buf: _Buffer) -> list[_Record]:
             if cur is None or _is_deleted(spec, cur):
                 continue  # 同一个事务里建了又删了
             changes = [
-                _value_change(spec, col, None, cur[col], created=True)
+                _value_change(spec, col, None, cur[col], created=True, row=cur)
                 for col in spec.labels
                 if cur.get(col) is not None
             ]
@@ -427,8 +502,16 @@ def _build_records(session: Session, buf: _Buffer) -> list[_Record]:
         elif cur is None or (_is_deleted(spec, cur) and not _is_deleted(spec, orig)):
             records[spec.entity, pk] = _Record(spec, pk, 'delete', row.origin, orig[spec.label_column])
         else:
+            # 敏感与否按改前改后两行都看：键名改了的那一行，只要有一边像密码就不记值
             changes = [
-                _value_change(spec, col, orig.get(col), cur.get(col), created=False)
+                _value_change(
+                    spec,
+                    col,
+                    orig.get(col),
+                    cur.get(col),
+                    created=False,
+                    row=cur if spec.is_secret(col, cur) or not spec.is_secret(col, orig) else orig,
+                )
                 for col in spec.labels
                 if orig.get(col) != cur.get(col)
             ]
@@ -507,11 +590,27 @@ def _merge_sets(session: Session, buf: _Buffer, records: dict[tuple[str, Any], _
 
 
 def _bulk_record(bulk: dict[str, Any]) -> _Record:
-    """一条语句命中太多行：只记「哪类对象、多少行、改成了什么」。`entity_label` 存命中行数（前端按 action=bulk 认）"""
-    spec: registry.AuditedEntity = bulk['spec']
+    """一条语句命中太多行：只记「哪类对象、多少个、改成了什么」。`entity_label` 存命中的个数（前端按 action=bulk 认）"""
+    set_spec: registry.AuditedSet | None = bulk.get('set')
+    if set_spec is not None:
+        spec = registry.ENTITIES[set_spec.entity]
+        change = {
+            'field': set_spec.field,
+            'label': set_spec.label,
+            'added': [plain(m) for m in bulk.get('added', [])],
+            'removed': [plain(m) for m in bulk.get('removed', [])],
+        }
+        return _Record(spec, None, 'bulk', bulk['origin'], str(bulk['count']), [change])
+    spec = bulk['spec']
     changes = [
-        _value_change(spec, col, None, value, created=True)
-        for col, value in bulk['values'].items()
+        _value_change(spec, col, None, value, created=True, row=None)
+        for col, value in bulk.get('values', {}).items()
+        if col in spec.labels
+    ]
+    # 按主键的批量 UPDATE：每一行的值不一样，只说改了哪些列
+    changes += [
+        {'field': col, 'label': spec.labels[col], 'varies': True}
+        for col in bulk.get('varies', [])
         if col in spec.labels
     ]
     return _Record(spec, None, 'bulk', bulk['origin'], str(bulk['count']), changes)
@@ -605,6 +704,29 @@ def _write(session: Session, records: list[_Record]) -> None:
         session.execute(sa.insert(table), rows)
 
 
+_instrumented: set[str] = set()
+_ready = False
+
+
+def _ensure() -> None:
+    """装登记表（幂等），再给登记过的模型的列属性挂 `set` 监听（改已加载对象时记来源）"""
+    global _ready
+    registry.load_data_change_extensions()
+    _ready = True
+    if len(_instrumented) == len(registry.ENTITIES):
+        return
+    from backend.common.model import MappedBase
+
+    for spec in registry.ENTITIES.values():
+        if spec.table.name in _instrumented:
+            continue
+        for mapper in MappedBase.registry.mappers:
+            if mapper.local_table is spec.table:
+                for prop in mapper.column_attrs:
+                    event.listen(getattr(mapper.class_, prop.key), 'set', _on_attr_set, retval=True)
+        _instrumented.add(spec.table.name)
+
+
 _installed = False
 
 
@@ -615,6 +737,7 @@ def install_data_change_capture() -> None:
         return
     event.listen(Session, 'do_orm_execute', _on_execute)
     event.listen(Session, 'transient_to_pending', _on_pending)
+    event.listen(Session, 'before_flush', _on_before_flush)
     event.listen(Session, 'after_flush', _on_after_flush)
     event.listen(Session, 'before_commit', _on_before_commit)
     event.listen(Session, 'after_soft_rollback', _on_rollback)
