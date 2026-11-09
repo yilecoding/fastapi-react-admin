@@ -27,6 +27,13 @@ class LoginLog(DataClassBase):
     # index：清理任务按它做范围删除（`app/task/tasks/maintenance`），
     # 而日志表是全库长得最快的表 —— 没索引就是全表扫 + 锁升级 + 阻塞所有写日志的请求
     login_time: Mapped[datetime] = mapped_column(TimeZone, index=True, comment='登录时间')
+    # #273：除了登录尝试，账号被锁 / IP 被锁 / 被强制下线也记在这张表里（`LoginLogEvent`）。
+    # 🔴 数登录次数、登录失败的地方（工作台）要只数 `login`，不然一次踢人就是一次「登录失败」
+    event: Mapped[str] = mapped_column(
+        UniversalStr(16),
+        default='login',
+        comment='事件（login 登录 / locked 账号被锁 / ip_locked IP 被锁 / kicked 被强制下线）',
+    )
     created_time: Mapped[datetime] = mapped_column(
         TimeZone,
         init=False,

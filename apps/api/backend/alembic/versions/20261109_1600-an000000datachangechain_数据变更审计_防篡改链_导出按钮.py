@@ -10,7 +10,7 @@ issue #260 二期。
   不补签、按时间分「旧行 / 伪造的行」的话，伪造的人把时间写早一点就混进了旧行（chain.py 模块注释）。
   补签读的是库里的值（和校验同一条路），密钥用这次升级时 `.env` 里的 `DATA_CHANGE_CHAIN_KEY`。
   离线生成 SQL（`--sql`）时没有数据可读，跳过 —— 那时第一次写记录会由 chain.py 建链头，已有的行会被报成没有序号
-- 新库（`fba init`：create_all + 种子）没有这一步：链头那一行由 chain.py 在第一次写记录时建
+- 新库（`fba init`：create_all + 种子）没有这一步：链头那一行在三份种子里（`sql/*/init_snowflake_test_data.sql`）
 - 唯一索引在 SQL Server 上要筛掉 NULL（旧行全是 NULL，SQL Server 认为多个 NULL 相等）
 - 🔴 手写的建表要自己写 `autoincrement=False`（alembic 分册）。导出按钮照抄种子里的 ID，按 `name` 判存在，幂等
 """
