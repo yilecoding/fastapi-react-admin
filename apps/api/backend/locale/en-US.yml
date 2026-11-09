@@ -233,6 +233,7 @@ error:
     not_enabled: Plugin {plugin} is not enabled, please contact the administrator
     not_found: Plugin does not exist
     oauth2_import_failed: Failed to import OAuth2 plugin, please contact the administrator
+    reload_lock_busy: Another plugin is being installed or uninstalled, please try again later
     repo_already_installed: Plugin {repo_name} is already installed
     required_cannot_uninstall: Plugin {plugin} is required and cannot be uninstalled
     zip_required: ZIP archive cannot be empty

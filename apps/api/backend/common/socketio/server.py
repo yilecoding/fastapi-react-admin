@@ -1,4 +1,3 @@
-import urllib.parse
 import uuid
 
 import socketio
@@ -8,12 +7,13 @@ from starlette_context import request_cycle_context
 from backend.common.log import log
 from backend.common.security.jwt import jwt_authentication, jwt_decode
 from backend.core.conf import settings
-from backend.database.redis import redis_client
+from backend.database.redis import get_redis_url, redis_client
 
 # 创建 Socket.IO 服务器实例
 sio = socketio.AsyncServer(
     client_manager=socketio.AsyncRedisManager(
-        f'redis://:{urllib.parse.quote(settings.REDIS_PASSWORD)}@{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DATABASE}',
+        # 连接串走 get_redis_url：原来这里裸 quote() 密码，带 `/` 的密码会把整条 URL 拆错
+        get_redis_url(database=settings.REDIS_DATABASE),
         redis_options={
             'socket_timeout': None,
             'socket_connect_timeout': settings.REDIS_TIMEOUT,
