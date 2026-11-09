@@ -37,11 +37,11 @@ query-bar/
 | `select` | ≤8 项 Select，>8 项自动换 Combobox | `string` | 状态、团队 |
 | `multiSelect` | 带复选框的可搜索多选 | `string[]` | 角色、标签 |
 | `boolean` | 是 / 否 | `boolean` | 是否置顶 |
-| `date` | 日历 | `'YYYY-MM-DD'` | 入职日期 |
-| `dateRange` | 快捷区间 + 双月日历 | `[起, 止]` | 统计口径 |
+| `date` | 日历（可直接敲） | `'YYYY-MM-DD'`；`picker: 'month'/'year'` 时 `'YYYY-MM'` / `'YYYY'` | 入职日期 |
+| `dateRange` | 快捷区间 + 双月日历 | `[起, 止]`；按月 / 按年时仍是整段起止日期 | 统计口径、按月报表 |
 | `dateTime` | 日历 + 时分秒 | `'YYYY-MM-DD HH:mm:ss'` | 精确时刻 |
 | `dateTimeRange` | 快捷区间 + 双月日历 + 时分秒 | `[起, 止]` | **日志排查（最常用）** |
-| `time` | 时间框 | `'HH:mm:ss'` | 打卡时段 |
+| `time` | `TimePicker`（时 / 分 / 秒三列，可直接敲；**不是**原生 `<input type="time">`） | `'HH:mm:ss'` | 打卡时段 |
 | `tags` | 标签输入（回车/逗号/粘贴分隔） | `string[]` | 一次查多个工号 |
 | `custom` | `field.render` 自己画 | 随意（要能 JSON 往返） | 内置的都不合适时 |
 
