@@ -31,6 +31,7 @@ import secrets
 import time
 import uuid
 
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
 from backend.common.enums import StrEnum
@@ -291,6 +292,36 @@ async def _run(script: str, *args: Any) -> Any:
     return await redis_client.eval(script, 0, *_prefix_args(), *[_plain(a) for a in args])
 
 
+#: 会话被撤销之后要通知的（登录日志记「被强制下线」，#273）。common 层不 import app 层，由 app 层登记
+SessionRevokedListener = Callable[[str, str, Mapping[str, str]], Awaitable[None]]
+_revoked_listeners: list[SessionRevokedListener] = []
+
+
+def on_session_revoked(fn: SessionRevokedListener) -> SessionRevokedListener:
+    """登记一个「会话被撤销之后」的回调：`(会话 ID, 原因, 会话里存的东西)`。
+
+    挂在 `SessionStore.revoke` 这个唯一的撤销入口上 —— 管理员踢人、改密码、停用账号、以后新加的撤销路径，
+    一处登记全都覆盖（在调用处各记一笔的话，漏一处就是「这类下线没有记录」，而且是静默的）
+
+    🔴 回调跑在调用方的事务**中间**（改密码 / 停用是先改用户行、再撤销、最后才提交）。
+    回调里另开会话去读调用方刚改过的行，SQL Server 上会和调用方互等、请求永远挂着
+    （`login_log_service.record_event` 踩过，#273）
+    """
+    if fn not in _revoked_listeners:
+        _revoked_listeners.append(fn)
+    return fn
+
+
+async def _call_revoked_listener(
+    listener: SessionRevokedListener, session_uuid: str, reason: str, fields: Mapping[str, str]
+) -> None:
+    try:
+        await listener(session_uuid, reason, fields)
+    except Exception as e:
+        # 记不下来不能让撤销本身失败：人已经被踢了，报错只会让管理员以为没踢成
+        log.error(f'会话撤销之后的回调失败（{listener.__name__}）：{e}')
+
+
 async def _notify_ended(session_uuid: str, reason: str) -> None:
     """推给这个会话的 socket 连接：告诉它为什么结束、然后断开。推不出去不影响撤销本身"""
     # 延迟导入：socketio.server 依赖 jwt，jwt 依赖本模块
@@ -491,9 +522,16 @@ class SessionStore:
         :param notify: 推不推 socket（同一个请求里马上要建新会话的场景不用推）
         :return: 会话原来在不在
         """
+        # 撤销之前先把会话里存的东西拿出来（谁的、哪台设备、哪个 IP）—— 撤销之后就没了
+        fields = (
+            await redis_client.hgetall(f'{settings.SESSION_REDIS_PREFIX}:{session_uuid}') if _revoked_listeners else {}
+        )
         existed = bool(await _run(_REVOKE, session_uuid, reason))
         if existed and notify:
             await _notify_ended(session_uuid, reason)
+        if existed:
+            for listener in _revoked_listeners:
+                await _call_revoked_listener(listener, session_uuid, reason, fields)
         return existed
 
     @staticmethod

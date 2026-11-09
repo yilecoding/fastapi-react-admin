@@ -443,8 +443,8 @@ jobs:
     name: playwright · E2E
     runs-on: ubuntu-latest
     # 整套约 13 分钟（2 个 worker）；login-phone.spec.ts 要等一次 60 秒的短信冷却。15 分钟撞过一次上限（#171），
-    # 症状是 job 显示 cancelled 而列表报告里 121 条全过
-    timeout-minutes: 20
+    # 症状是 job 显示 cancelled 而列表报告里 121 条全过。2026-11-09 main 上已经要 19.5 分钟（20 分钟的上限只剩半分钟），放到 30
+    timeout-minutes: 30
 
     env:
       DATABASE_TYPE: sqlserver

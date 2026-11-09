@@ -18,6 +18,7 @@ from sqlalchemy import case, func, select
 
 from backend.app.admin.model import LoginLog
 from backend.app.task.model import TaskExtended, TaskScheduler
+from backend.common.enums import LoginLogEvent
 from backend.common.security.rbac import user_has_perm
 from backend.common.security.session import SessionClient, session_store
 from backend.core.conf import settings
@@ -44,11 +45,15 @@ def _day_start(day: datetime) -> datetime:
 
 
 async def _login_counts(db: AsyncSession, start: datetime, end: datetime) -> tuple[int, int]:
-    """[start, end) 之间的登录总数和失败数（一条查询，条件聚合）"""
+    """[start, end) 之间的登录总数和失败数（一条查询，条件聚合）。
+
+    🔴 只数登录尝试（`event = login`）：账号被锁 / IP 被锁 / 被强制下线也记在这张表里（#273），状态是失败 ——
+    不过滤的话踢一次人就多一次「登录失败」，锁一次账号「失败」多算一笔
+    """
     total, fails = (
         await db.execute(
             select(func.count(), func.sum(case((LoginLog.status == 0, 1), else_=0))).where(
-                LoginLog.login_time >= start, LoginLog.login_time < end
+                LoginLog.event == LoginLogEvent.login, LoginLog.login_time >= start, LoginLog.login_time < end
             )
         )
     ).one()
@@ -187,7 +192,12 @@ async def _login_fail_spike(db: AsyncSession, zone: Any) -> list[dict[str, Any]]
     top = (
         await db.execute(
             select(LoginLog.ip, func.count().label('n'))
-            .where(LoginLog.status == 0, LoginLog.login_time >= today, LoginLog.login_time < today + timedelta(days=1))
+            .where(
+                LoginLog.event == LoginLogEvent.login,
+                LoginLog.status == 0,
+                LoginLog.login_time >= today,
+                LoginLog.login_time < today + timedelta(days=1),
+            )
             .group_by(LoginLog.ip)
             .order_by(func.count().desc(), LoginLog.ip)
             .limit(1)

@@ -33,9 +33,12 @@ async def get_login_logs_paginated(
     ip: Annotated[str | None, Query(description='IP 地址')] = None,
     start_time: Annotated[datetime | None, Query(description='登录时间起')] = None,
     end_time: Annotated[datetime | None, Query(description='登录时间止')] = None,
+    event: Annotated[
+        str | None, Query(description='事件：login 登录 / locked 账号被锁 / ip_locked IP 被锁 / kicked 被强制下线')
+    ] = None,
 ) -> ResponseSchemaModel[PageData[GetLoginLogDetail]]:
     page_data = await login_log_service.get_list(
-        db=db, username=username, status=status, ip=ip, start_time=start_time, end_time=end_time
+        db=db, username=username, status=status, ip=ip, start_time=start_time, end_time=end_time, event=event
     )
 
     return response_base.success(data=page_data)

@@ -6,7 +6,7 @@ import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
 import { Skeleton } from '@admin/ui/components/skeleton'
 
-import { formatLocation } from '../_shared/login-log'
+import { formatLocation, LOGIN_EVENT_LABEL } from '../_shared/login-log'
 import { StatusPill } from '../_shared/status'
 import { myLoginHistoryQuery, RECENT_LOGIN_LIMIT } from './api'
 
@@ -99,9 +99,16 @@ export function RecentLogins({ username }: { username?: string }) {
                   {r.os && ` · ${r.os}`}
                 </span>
               </div>
-              <StatusPill tone={r.status === 1 ? 'success' : 'danger'}>
-                {r.status === 1 ? t('成功') : t('失败')}
-              </StatusPill>
+              {/* 账号被锁 / 被强制下线（#273）也在这里：有人在试你的密码、你的会话被谁结束了，都是这块要让你看见的 */}
+              {r.event && r.event !== 'login' ? (
+                <StatusPill tone={r.event === 'kicked' ? 'warning' : 'danger'} title={r.msg}>
+                  {t(LOGIN_EVENT_LABEL[r.event] ?? r.event)}
+                </StatusPill>
+              ) : (
+                <StatusPill tone={r.status === 1 ? 'success' : 'danger'}>
+                  {r.status === 1 ? t('成功') : t('失败')}
+                </StatusPill>
+              )}
             </li>
           ))}
         </ul>

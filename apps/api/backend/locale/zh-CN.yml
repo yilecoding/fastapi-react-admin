@@ -452,6 +452,7 @@ export:
     leader: 负责人
     location: 地点
     login_account: 登录账号
+    login_event: 事件
     login_time: 登录时间
     message: 说明
     method: 请求方法
@@ -524,6 +525,10 @@ export:
     change_varies: 每一行改成的值不一样
     disabled: 停用
     enabled: 正常
+    event_ip_locked: IP 被锁
+    event_kicked: 被强制下线
+    event_locked: 账号被锁
+    event_login: 登录
     failed: 失败
     hidden: 隐藏
     notice: 通知
@@ -671,6 +676,16 @@ response:
   error: 请求错误
   server_error: 服务器内部错误
   success: 请求成功
+login_event:
+  # 登录日志里的安全事件（#273，`LoginLogEvent`）。写进 `sys_login_log.msg`，按触发那次请求的语言出
+  disabled: 账号被 {operator} 停用或删除，这个会话随之失效
+  ip_locked: 这个 IP 跨账号登录失败 {count} 次，锁定 {minutes} 分钟（到 {until}）。对方看到的仍是「用户名或密码有误」
+  kicked: 被 {operator} 强制下线
+  locked: 连续 {count} 次登录失败，账号锁定 {minutes} 分钟（到 {until}）
+  password_changed: '{operator} 改了密码，这个会话随之失效'
+  self: 本人
+  system: 系统
+
 success:
   login:
     mfa_success: 登录成功（二次验证）
