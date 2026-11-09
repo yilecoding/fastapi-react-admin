@@ -16,17 +16,19 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from backend.app.admin.crud.crud_data_change import data_change_dao
 from backend.app.admin.crud.crud_dept import dept_dao
 from backend.app.admin.crud.crud_login_log import login_log_dao
 from backend.app.admin.crud.crud_opera_log import opera_log_dao
 from backend.app.admin.crud.crud_role import role_dao
 from backend.app.admin.crud.crud_user import user_dao
-from backend.app.admin.model import Dept, LoginLog, OperaLog, User
+from backend.app.admin.model import DataChange, Dept, LoginLog, OperaLog, User
 from backend.app.admin.schema.dept import CreateDeptParam, UpdateDeptParam
 from backend.app.admin.service.dept_service import dept_service, leader_names
 from backend.app.admin.service.import_service import pydantic_errors, required_error
 from backend.app.admin.service.user_service import UserService, emit_user_event
 from backend.app.admin.utils.password_security import validate_password_strength
+from backend.common.data_change import registry as data_change_registry
 from backend.common.dataio.exporting import ExportColumn, ExportSpec, register_export
 from backend.common.dataio.importing import (
     ENABLE_STATUS_ALIASES,
@@ -38,7 +40,7 @@ from backend.common.dataio.importing import (
     register_import,
 )
 from backend.common.exception import errors
-from backend.common.i18n import t
+from backend.common.i18n import i18n, t
 from backend.common.log import log
 from backend.common.schema import ColumnLengthChecked, CustomEmailStr, CustomPhoneNumber, SchemaBase
 from backend.common.security.data_scope import bypass_data_scope
@@ -360,6 +362,138 @@ OPERA_LOG_EXPORT = register_export(
         filter_labels=_LOG_FILTER_LABELS,
         select=_opera_log_select,
         id_column=OperaLog.id,
+        shape=_columns_only,
+    )
+)
+
+
+# ─────────────────────────────── 数据变更记录（#260）───────────────────────────────
+
+
+class DataChangeExportFilters(_Filters):
+    """和 `GET /logs/changes` 的查询参数同名（数据变更页带着地址栏里的条件来导出）"""
+
+    entity_type: str | None = Field(None, description='对象类型')
+    entity_id: int | None = Field(None, description='对象 ID')
+    actor: str | None = Field(None, description='操作人用户名（模糊）')
+    source: str | None = Field(None, description='来源')
+    action: str | None = Field(None, description='动作')
+    field: str | None = Field(None, description='改过的字段')
+    trace_id: str | None = Field(None, description='请求跟踪 ID')
+    start_time: datetime | None = Field(None, description='时间起（含）')
+    end_time: datetime | None = Field(None, description='时间止（含）')
+
+
+async def _data_change_select(f: DataChangeExportFilters, _user: Any) -> Select:
+    return await data_change_dao.get_select(**f.model_dump())
+
+
+def _zh() -> bool:
+    return i18n.current_language.startswith('zh')
+
+
+def _word(label: str, key: str) -> str:
+    """对象类型、字段、动作、来源的名字：中文文件用登记表里那份中文，别的语言用代号（`nickname` / `update`）。
+
+    🔴 这些名字的英文译文在前端语言包里（中文原文即 key），后端读不到 —— 英文文件里出中文字段名不如出代号
+    """
+    return label if _zh() else key
+
+
+def _change_value(row: Mapping[str, Any], change: Mapping[str, Any], side: str) -> str:
+    label = change.get(f'{side}_label')
+    value = change.get(side)
+    spec = data_change_registry.ENTITIES.get(row.get('entity_type') or '')
+    is_ref = spec is not None and change.get('field') in spec.refs
+    # 引用列的名字（部门名…）是业务数据，哪种语言都照摊；取值的中文名（「停用」）只给中文文件
+    if label is not None and (is_ref or _zh()):
+        return str(label)
+    # 0 / False 是正经的值，不能按「假」当成空
+    if value in (None, ''):
+        return t('export.value.change_empty')
+    if isinstance(value, bool):
+        return t('export.bool_yes' if value else 'export.bool_no')
+    return str(value)
+
+
+def _change_line(row: Mapping[str, Any], change: Mapping[str, Any]) -> str:
+    name = _word(change.get('label') or change.get('field', ''), change.get('field', ''))
+    sep = '：' if _zh() else ': '
+    if change.get('secret'):
+        return f'{name}{sep}{t("export.value.change_secret")}'
+    if change.get('varies'):
+        return f'{name}{sep}{t("export.value.change_varies")}'
+    if 'added' in change or 'removed' in change:
+        members = [f'+{m.get("label") or m.get("id")}' for m in change.get('added') or []]
+        members += [f'−{m.get("label") or m.get("id")}' for m in change.get('removed') or []]
+        return f'{name}{sep}{" ".join(members)}'
+    new = _change_value(row, change, 'new')
+    if row.get('action') in ('create', 'bulk') or 'old' not in change:
+        return f'{name}{sep}{new}'
+    return f'{name}{sep}{_change_value(row, change, "old")} → {new}'
+
+
+def _change_text(row: Mapping[str, Any]) -> str:
+    """「改了什么」一格：每个字段一段，旧值 → 新值；敏感字段只说改过"""
+    return ('；' if _zh() else '; ').join(_change_line(row, c) for c in row.get('changes') or [])
+
+
+def _entity_type_text(row: Mapping[str, Any]) -> str:
+    entity = row.get('entity_type') or ''
+    spec = data_change_registry.ENTITIES.get(entity)
+    return _word(spec.title, entity) if spec else entity
+
+
+def _entity_text(row: Mapping[str, Any]) -> str | None:
+    if row.get('action') == 'bulk':
+        # 批量汇总行的 entity_label 存的是命中的行数
+        return t('export.value.change_bulk_rows', n=row.get('entity_label') or '?')
+    return row.get('entity_label')
+
+
+def _action_text(row: Mapping[str, Any]) -> str:
+    action = row.get('action') or ''
+    return _word(data_change_registry.ACTIONS.get(action, action), action)
+
+
+def _source_text(row: Mapping[str, Any]) -> str:
+    source = row.get('source') or ''
+    return _word(data_change_registry.SOURCES.get(source, source), source)
+
+
+DATA_CHANGE_EXPORT = register_export(
+    ExportSpec(
+        resource='log.change',
+        label='export.resource.data_change',
+        perm='log:change:export',
+        columns=(
+            ExportColumn('created_time', 'export.column.time', kind='datetime', width=20),
+            ExportColumn('entity_type', 'export.column.object_type', get=_entity_type_text, width=10),
+            ExportColumn('entity_label', 'export.column.object', get=_entity_text, width=20),
+            ExportColumn('action', 'export.column.action', get=_action_text, width=10),
+            ExportColumn('changes', 'export.column.changes', get=_change_text, width=60),
+            ExportColumn('actor_name', 'export.column.operator', width=16),
+            ExportColumn('source', 'export.column.source', get=_source_text, width=10),
+            ExportColumn('source_ref', 'export.column.source_ref', width=24),
+            ExportColumn('ip', 'export.column.ip', width=16),
+            ExportColumn('trace_id', 'export.column.trace_id', width=34),
+            ExportColumn('entity_id', 'export.column.object_id', kind='id', width=22),
+            ExportColumn('id', 'export.column.record_id', kind='id', width=22),
+        ),
+        filters=DataChangeExportFilters,
+        filter_labels={
+            'entity_type': 'export.column.object_type',
+            'entity_id': 'export.column.object_id',
+            'actor': 'export.column.operator',
+            'source': 'export.column.source',
+            'action': 'export.column.action',
+            'field': 'export.filter.field',
+            'trace_id': 'export.column.trace_id',
+            'start_time': 'export.filter.start_time',
+            'end_time': 'export.filter.end_time',
+        },
+        select=_data_change_select,
+        id_column=DataChange.id,
         shape=_columns_only,
     )
 )

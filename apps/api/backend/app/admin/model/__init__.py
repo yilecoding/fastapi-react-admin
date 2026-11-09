@@ -1,4 +1,5 @@
 from backend.app.admin.model.data_change import DataChange as DataChange
+from backend.app.admin.model.data_change import DataChangeChain as DataChangeChain
 from backend.app.admin.model.data_rule import DataRule as DataRule
 from backend.app.admin.model.data_scope import DataScope as DataScope
 from backend.app.admin.model.dept import Dept as Dept

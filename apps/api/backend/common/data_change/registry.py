@@ -65,7 +65,7 @@ class AuditedEntity:
 
 @dataclass(slots=True)
 class AuditedSet:
-    """关联表：折叠成父对象的一个「集合」字段（用户的角色、角色的菜单…）"""
+    """关联表：折叠成父对象的一个「集合」字段（用户的角色、角色的菜单、用户绑的第三方账号…）"""
 
     table: sa.Table
     entity: str
@@ -74,6 +74,50 @@ class AuditedSet:
     field: str
     label: str
     ref: Ref | None = None
+    #: 成员没有引用表、值本身是个代号时的显示名（第三方账号的 `Github` → GitHub）
+    member_labels: dict[Any, str] | None = None
+    #: 逻辑删除标记列：非 0 的行不算成员（第三方账号解绑是逻辑删除）
+    active: str | None = None
+
+    @property
+    def watched(self) -> frozenset[str]:
+        """写到这几列才可能改变成员集合"""
+        return frozenset(c for c in (self.parent_column, self.member_column, self.active) if c)
+
+
+@dataclass(frozen=True, slots=True)
+class ChildValue:
+    """一对一子表里折叠到父对象上的一个字段：从那一行算出来的值，两边都有这一行时才比"""
+
+    label: str
+    of: Callable[[Mapping[str, Any]], Any]
+    #: 只记「改过」（恢复码：算出来的是哈希集合，哈希也不进审计表）
+    secret: bool = False
+
+
+@dataclass(slots=True)
+class AuditedChild:
+    """一对一子表：**有没有这一行**折叠成父对象的一个开关字段（用户的二次验证：开了才有这一行），
+    行里的几列折叠成父对象的另几个字段（重新生成恢复码）。
+
+    和关联表一样记到父对象名下 —— 单独当一个对象记的话，它的记录挂在子表自己的 ID 上，
+    用户的「变更记录」里看不到「谁把他的二次验证关了」。
+    """
+
+    table: sa.Table
+    entity: str
+    parent_column: str
+    field: str
+    label: str
+    #: (没有这一行时, 有这一行时) 的中文名
+    states: tuple[str, str]
+    values: dict[str, ChildValue]
+    #: 只写这些列的语句不用抓（每次用动态码登录都写的 `last_step`）
+    ignore: frozenset[str]
+
+    @property
+    def watched(self) -> frozenset[str]:
+        return frozenset(c.name for c in self.table.columns) - self.ignore
 
 
 #: entity → 登记
@@ -82,6 +126,8 @@ ENTITIES: dict[str, AuditedEntity] = {}
 _ENTITY_BY_TABLE: dict[str, AuditedEntity] = {}
 #: 关联表表名 → 登记
 SETS: dict[str, AuditedSet] = {}
+#: 一对一子表表名 → 登记
+CHILDREN: dict[str, AuditedChild] = {}
 #: 拦截层每条语句都要判一次「这张表管不管」，单独留一份
 AUDITED_TABLES: set[str] = set()
 
@@ -224,8 +270,17 @@ def register_audited(
     return spec
 
 
+def _check_folded_table(table: sa.Table, *, kind: str, columns: dict[str, str | None]) -> None:
+    names = {c.name for c in table.columns}
+    for what, name in columns.items():
+        if name is not None and name not in names:
+            raise ValueError(f'数据变更登记：{kind} {table.name} 没有{what}列 {name!r}')
+    if table.name in _ENTITY_BY_TABLE:
+        raise ValueError(f'数据变更登记：{table.name} 已经当成对象登记过，不能再当{kind}')
+
+
 def register_audited_set(
-    table: sa.Table,
+    model_or_table: Any,
     *,
     entity: str,
     parent: str,
@@ -233,23 +288,78 @@ def register_audited_set(
     field: str,
     label: str,
     ref: Ref | None = None,
+    member_labels: dict[Any, str] | None = None,
+    active: str | None = None,
 ) -> AuditedSet:
     """登记一张关联表：它的增删折叠成 `entity` 那个对象的一个集合字段（「角色：加了 A、去掉了 B」）。
 
     🔴 关联表的写入方式是「全删再全插」（改用户角色、存权限矩阵），所以记的是**提交时的净变化**，
     不是一条条 INSERT / DELETE —— 不然每次保存都是「删了 5 个、又加了同样 5 个」。
+
+    :param member_labels: 成员没有引用表时的显示名（`ref` 和它二选一）
+    :param active: 逻辑删除标记列（非 0 = 不算成员）。解绑是 `UPDATE … SET deleted = id` 的那种表要给
     """
-    columns = {c.name for c in table.columns}
-    for name in (parent, member):
-        if name not in columns:
-            raise ValueError(f'数据变更登记：关联表 {table.name} 没有列 {name!r}')
+    table = _table_of(model_or_table)
+    _check_folded_table(table, kind='关联表', columns={'父对象': parent, '成员': member, '逻辑删除标记': active})
+    if ref is not None and member_labels:
+        raise ValueError(f'数据变更登记：关联表 {table.name} 的 ref 和 member_labels 只能给一个')
     existing = SETS.get(table.name)
     if existing is not None and (existing.entity, existing.field) != (entity, field):
         raise ValueError(f'数据变更登记：关联表 {table.name} 已经登记过（{existing.entity}.{existing.field}）')
     spec = AuditedSet(
-        table=table, entity=entity, parent_column=parent, member_column=member, field=field, label=label, ref=ref
+        table=table,
+        entity=entity,
+        parent_column=parent,
+        member_column=member,
+        field=field,
+        label=label,
+        ref=ref,
+        member_labels=dict(member_labels) if member_labels else None,
+        active=active,
     )
     SETS[table.name] = spec
+    AUDITED_TABLES.add(table.name)
+    return spec
+
+
+def register_audited_child(
+    model: Any,
+    *,
+    entity: str,
+    parent: str,
+    field: str,
+    label: str,
+    states: tuple[str, str],
+    values: dict[str, ChildValue] | None = None,
+    ignore: set[str] | frozenset[str] = frozenset(),
+) -> AuditedChild:
+    """登记一张一对一子表：「有没有这一行」记成 `entity` 那个对象的开关字段 `field`，
+    `values` 里每一项从那一行算出一个值，两边都有这一行时比（「恢复码：已修改」）。
+
+    🔴 子表的列**不进审计表**，进的只是 `values` 算出来的东西 —— 所以不像对象那样要求每一列归类：
+    以后加的列不会被谁读到。`ignore` 只决定「写这几列的语句要不要抓」，读的列写进去会漏记，登记时挡着。
+    """
+    table = _table_of(model)
+    _check_folded_table(table, kind='子表', columns={'父对象': parent})
+    unknown = set(ignore) - {c.name for c in table.columns}
+    if unknown:
+        raise ValueError(f'数据变更登记：子表 {table.name} 没有这些列：{sorted(unknown)}')
+    if parent in ignore:
+        raise ValueError(f'数据变更登记：子表 {table.name} 的父对象列不能忽略')
+    existing = CHILDREN.get(table.name)
+    if existing is not None and (existing.entity, existing.field) != (entity, field):
+        raise ValueError(f'数据变更登记：子表 {table.name} 已经登记过（{existing.entity}.{existing.field}）')
+    spec = AuditedChild(
+        table=table,
+        entity=entity,
+        parent_column=parent,
+        field=field,
+        label=label,
+        states=states,
+        values=dict(values or {}),
+        ignore=frozenset(ignore),
+    )
+    CHILDREN[table.name] = spec
     AUDITED_TABLES.add(table.name)
     return spec
 
@@ -262,16 +372,37 @@ def set_for_table(name: str) -> AuditedSet | None:
     return SETS.get(name)
 
 
+def child_for_table(name: str) -> AuditedChild | None:
+    return CHILDREN.get(name)
+
+
 def sets_of(entity: str) -> list[AuditedSet]:
     return [s for s in SETS.values() if s.entity == entity]
 
 
-def _check_sets() -> None:
-    for spec in SETS.values():
+def children_of(entity: str) -> list[AuditedChild]:
+    return [c for c in CHILDREN.values() if c.entity == entity]
+
+
+def folded_fields(entity: str) -> list[tuple[str, str]]:
+    """关联表 / 子表折叠到这个对象上的字段（字段名, 中文名）"""
+    out = [(s.field, s.label) for s in sets_of(entity)]
+    for child in children_of(entity):
+        out.append((child.field, child.label))
+        out += [(name, v.label) for name, v in child.values.items()]
+    return out
+
+
+def _check_folded() -> None:
+    for spec in [*SETS.values(), *CHILDREN.values()]:
         if spec.entity not in ENTITIES:
-            raise ValueError(f'数据变更登记：关联表 {spec.table.name} 指向的对象 {spec.entity!r} 没有登记')
-        if spec.field in ENTITIES[spec.entity].labels:
-            raise ValueError(f'数据变更登记：{spec.entity}.{spec.field} 和普通列重名')
+            raise ValueError(f'数据变更登记：{spec.table.name} 指向的对象 {spec.entity!r} 没有登记')
+    for entity, owner in ENTITIES.items():
+        seen = set(owner.labels)
+        for name, _ in folded_fields(entity):
+            if name in seen:
+                raise ValueError(f'数据变更登记：{entity}.{name} 重名（普通列 / 关联表 / 子表的字段名不能撞）')
+            seen.add(name)
 
 
 _EXTENSION_MODULE = 'data_change'
@@ -302,7 +433,7 @@ def load_data_change_extensions(*, force: bool = False) -> None:
             # 不吞异常：列没归类 / 重复登记就该当场炸
             importlib.import_module(name)
             log.info(f'数据变更审计加载登记：{name}')
-        _check_sets()
+        _check_folded()
     except BaseException:
         _loaded = False
         raise
@@ -314,6 +445,6 @@ def describe() -> list[dict[str, Any]]:
     out = []
     for spec in ENTITIES.values():
         fields = [{'field': name, 'label': label} for name, label in spec.labels.items()]
-        fields += [{'field': s.field, 'label': s.label} for s in sets_of(spec.entity)]
+        fields += [{'field': name, 'label': label} for name, label in folded_fields(spec.entity)]
         out.append({'entity': spec.entity, 'title': spec.title, 'fields': fields})
     return out

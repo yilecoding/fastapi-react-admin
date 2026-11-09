@@ -6,13 +6,16 @@
 做法 —— 「第一次碰到时拍原样，提交时和现状比」：
 
 - `do_orm_execute`：按条件 UPDATE / DELETE（crud-plus 的 `update_model_by_column`、逻辑删除）· 按主键批量 UPDATE ·
-  Core 写关联表。执行**之前**按同一个 WHERE 把要动的行查出来，这个事务里第一次碰到的才存原样
+  Core 写关联表 · 语句写子表（`delete(UserMfa)`）。执行**之前**按同一个 WHERE 把要动的行查出来，
+  这个事务里第一次碰到的才存原样
 - `transient_to_pending`：`db.add()` 那一刻记下「谁、从哪来」
   （`add` 在 AI 工具那段 `with` 里，flush 可能到提交时才发生）
 - 属性 `set`（登记过的模型的每个列属性）：改已加载对象（`role.status = 0`）的那一刻记下来源 —— 会话 `autoflush=False`，
   flush 往往发生在 AI 工具那段 `with` 外面的提交时
 - `before_flush`：改已加载对象 / `session.delete()` 的原样**从库里查**（flush 之前库里还是旧值）。不用属性历史 ——
-  没加载过的属性（`load_only` / 过期）历史是空的，会被当成「从空改成了现值」（评审抓到的）
+  没加载过的属性（`load_only` / 过期）历史是空的，会被当成「从空改成了现值」（评审抓到的）。
+  ORM 写的关联表 / 子表（`db.add(UserSocial(...))`、`db.delete(mfa)`）也在这里按父对象拍原样 ——
+  flush 发的语句**不经过** `do_orm_execute`
 - `after_flush`：unit of work 的 INSERT，记成「新建」
 - `before_commit`：🔴 **先 flush**，再按主键查现状、和原样比、批量查引用的名字，在**同一个事务里**写 `sys_data_change`
 - `after_soft_rollback`：外层回滚就丢掉缓冲。保存点回滚不丢 —— 比的是「原样 vs 提交时的现状」，回滚掉的改动比不出差别
@@ -48,7 +51,7 @@ import sqlalchemy as sa
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
-from backend.common.data_change import registry
+from backend.common.data_change import chain, registry
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -65,6 +68,8 @@ _BUFFER = 'data_change_buffer'
 _BUSY = 'data_change_busy'
 #: 挂在 `InstanceState.info` 上：这个对象的属性第一次被改的那一刻是谁、从哪来
 _ORIGIN = 'data_change_origin'
+#: 折叠到父对象上的表：关联表（集合字段）/ 一对一子表（开关字段）
+_Folded = registry.AuditedSet | registry.AuditedChild
 #: 批量汇总行里列出的集合成员最多几个（「从 1234 个用户身上去掉了『访客』」只需要那一个角色）
 _BULK_MEMBERS = 20
 
@@ -126,8 +131,9 @@ class _Row:
 @dataclass(slots=True)
 class _Buffer:
     rows: dict[tuple[str, Any], _Row] = field(default_factory=dict)
-    #: (关联表, 父 ID) → (第一次碰到时的成员集合, 来源)
-    sets: dict[tuple[str, Any], tuple[frozenset[Any], Origin]] = field(default_factory=dict)
+    #: (关联表 / 子表, 父 ID) → (第一次碰到时的快照, 来源)。
+    #: 快照：关联表是成员集合，子表是那一行算出来的值（没有这一行是 None）
+    sets: dict[tuple[str, Any], tuple[Any, Origin]] = field(default_factory=dict)
     bulk: list[dict[str, Any]] = field(default_factory=list)
     #: id(新对象) → `add()` 那一刻的来源
     pending: dict[int, Origin] = field(default_factory=dict)
@@ -185,9 +191,9 @@ def _on_execute(st: ORMExecuteState) -> None:
     if spec is not None:
         _capture_entity(st, spec)
     else:
-        set_spec = registry.set_for_table(name)
-        if set_spec is not None:
-            _capture_set(st, set_spec)
+        folded = _folded_for_table(name)
+        if folded is not None:
+            _capture_folded(st, folded)
 
 
 def _capture_entity(st: ORMExecuteState, spec: registry.AuditedEntity) -> None:
@@ -257,13 +263,21 @@ def _literal_values(st: ORMExecuteState) -> dict[str, Any]:
     return out
 
 
-def _capture_set(st: ORMExecuteState, spec: registry.AuditedSet) -> None:
+def _folded_for_table(name: str) -> _Folded | None:
+    return registry.set_for_table(name) or registry.child_for_table(name)
+
+
+def _capture_folded(st: ORMExecuteState, spec: _Folded) -> None:
+    """语句写关联表 / 子表（Core 写 `sys_user_role`、`delete(UserMfa).where(...)`、逻辑删除解绑）：按父对象拍原样"""
     session = st.session
     table = spec.table
     parent = table.c[spec.parent_column]
-    member = table.c[spec.member_column]
     buf = _buffer(session)
-    if st.is_delete:
+    if st.is_delete or st.is_update:
+        if st.is_update:
+            written = _written_columns(st)
+            if written and not (written & spec.watched):
+                return
         where = st.statement.whereclause
         if where is None:
             where = sa.true()
@@ -276,30 +290,63 @@ def _capture_set(st: ORMExecuteState, spec: registry.AuditedSet) -> None:
             # 全在业务事务里（评审抓到的）。只记一条汇总：哪个集合字段、多少个对象、去掉了谁
             with _busy(session):
                 count = session.execute(sa.select(sa.func.count(sa.distinct(parent))).where(where)).scalar_one()
-            removed = [
-                r[spec.member_column]
-                for r in _fetch(session, sa.select(member).where(where).distinct().limit(_BULK_MEMBERS))
-            ]
-            buf.bulk.append({'set': spec, 'count': count, 'removed': removed, 'origin': current_origin()})
+            removed: list[Any] = []
+            if isinstance(spec, registry.AuditedSet):
+                member = table.c[spec.member_column]
+                removed = [
+                    r[spec.member_column]
+                    for r in _fetch(session, sa.select(member).where(where).distinct().limit(_BULK_MEMBERS))
+                ]
+            buf.bulk.append({'folded': spec, 'count': count, 'removed': removed, 'origin': current_origin()})
             return
     elif st.is_insert:
         parents = set(_insert_values(st, spec.parent_column))
         if len(parents) > BULK_LIMIT:
-            added = sorted(set(_insert_values(st, spec.member_column)), key=str)[:_BULK_MEMBERS]
-            buf.bulk.append({'set': spec, 'count': len(parents), 'added': added, 'origin': current_origin()})
+            added: list[Any] = []
+            if isinstance(spec, registry.AuditedSet):
+                added = sorted(set(_insert_values(st, spec.member_column)), key=str)[:_BULK_MEMBERS]
+            buf.bulk.append({'folded': spec, 'count': len(parents), 'added': added, 'origin': current_origin()})
             return
     else:
         return
-    fresh = [p for p in parents if (table.name, p) not in buf.sets]
+    _remember(session, spec, dict.fromkeys(parents))
+
+
+def _remember(session: Session, spec: _Folded, parents: dict[Any, Origin | None]) -> None:
+    """这个事务里第一次碰到的父对象：拍一次原样（关联表的成员集合 / 子表那一行算出来的值）"""
+    buf = _buffer(session)
+    fresh = [p for p in parents if (spec.table.name, p) not in buf.sets]
     if not fresh:
         return
-    origin = current_origin()
-    members: dict[Any, set[Any]] = {p: set() for p in fresh}
-    for chunk in _chunks(fresh):
-        for r in _fetch(session, sa.select(parent, member).where(parent.in_(chunk))):
-            members[r[spec.parent_column]].add(r[spec.member_column])
+    before = _snapshot(session, spec, fresh)
+    fallback: Origin | None = None
     for p in fresh:
-        buf.sets[table.name, p] = (frozenset(members[p]), origin)
+        origin = parents[p]
+        if origin is None:
+            fallback = fallback or current_origin()
+            origin = fallback
+        buf.sets[spec.table.name, p] = (before[p], origin)
+
+
+def _snapshot(session: Session, spec: _Folded, parents: list[Any]) -> dict[Any, Any]:
+    table = spec.table
+    p_col = table.c[spec.parent_column]
+    if isinstance(spec, registry.AuditedSet):
+        m_col = table.c[spec.member_column]
+        members: dict[Any, set[Any]] = {p: set() for p in parents}
+        for chunk in _chunks(parents):
+            stmt = sa.select(p_col, m_col).where(p_col.in_(chunk))
+            if spec.active:
+                stmt = stmt.where(table.c[spec.active] == 0)
+            for r in _fetch(session, stmt):
+                members[r[spec.parent_column]].add(r[spec.member_column])
+        return {p: frozenset(m) for p, m in members.items()}
+    rows: dict[Any, Any] = dict.fromkeys(parents)
+    for chunk in _chunks(parents):
+        for r in _fetch(session, sa.select(table).where(p_col.in_(chunk))):
+            # 只留算出来的值：子表那一行（二次验证的密钥密文）不在内存里多待
+            rows[r[spec.parent_column]] = {name: v.of(r) for name, v in spec.values.items()}
+    return rows
 
 
 def _insert_values(st: ORMExecuteState, column: str) -> list[Any]:
@@ -322,8 +369,16 @@ def _spec_of(obj: Any) -> registry.AuditedEntity | None:
     return registry.entity_for_table(table.name)
 
 
+def _folded_of(obj: Any) -> _Folded | None:
+    table = getattr(type(obj), '__table__', None)
+    if table is None:
+        return None
+    _ensure()
+    return _folded_for_table(table.name)
+
+
 def _on_pending(session: Session, instance: Any) -> None:
-    if session.info.get(_BUSY) or _spec_of(instance) is None:
+    if session.info.get(_BUSY) or (_spec_of(instance) is None and _folded_of(instance) is None):
         return
     _buffer(session).pending[id(instance)] = current_origin()
 
@@ -344,6 +399,7 @@ def _on_before_flush(session: Session, _flush_context: Any, _instances: Any) -> 
     """
     if session.info.get(_BUSY):
         return
+    _remember_flushed(session)
     touched = [o for o in session.dirty if session.is_modified(o, include_collections=False)] + list(session.deleted)
     wanted: dict[str, list[tuple[Any, Any, Origin]]] = {}
     buf: _Buffer | None = None
@@ -364,6 +420,37 @@ def _on_before_flush(session: Session, _flush_context: Any, _instances: Any) -> 
         for pk, _obj, origin in items:
             if pk in before:
                 buf.rows[table_name, pk] = _Row(original=before[pk], origin=origin)
+
+
+def _changed_columns(state: Any) -> set[str]:
+    out: set[str] = set()
+    for attr in state.attrs:
+        if attr.history.has_changes():
+            out.update(c.name for c in getattr(state.mapper.get_property(attr.key), 'columns', ()))
+    return out
+
+
+def _remember_flushed(session: Session) -> None:
+    """ORM 写的关联表 / 子表（`db.add(UserSocial(...))`、`db.delete(mfa)`、改 `mfa.recovery_hashes`）：
+    这些语句是 flush 发的，不经过 `do_orm_execute` —— 在 flush 之前按父对象拍原样"""
+    wanted: dict[str, dict[Any, Origin | None]] = {}
+    dirty = session.dirty
+    for obj in [*session.new, *dirty, *session.deleted]:
+        spec = _folded_of(obj)
+        if spec is None:
+            continue
+        state = sa.inspect(obj)
+        origin = state.info.pop(_ORIGIN, None)
+        if obj in dirty and not (_changed_columns(state) & spec.watched):
+            # 只改了忽略列（每次用动态码登录都写的 `last_step`）
+            continue
+        origin = _buffer(session).pending.pop(id(obj), None) or origin
+        key = state.mapper.get_property_by_column(spec.table.c[spec.parent_column]).key
+        wanted.setdefault(spec.table.name, {}).setdefault(getattr(obj, key), origin)
+    for table_name, parents in wanted.items():
+        spec = _folded_for_table(table_name)
+        assert spec is not None
+        _remember(session, spec, parents)
 
 
 def _on_after_flush(session: Session, _flush_context: Any) -> None:
@@ -525,31 +612,58 @@ def _build_records(session: Session, buf: _Buffer) -> list[_Record]:
     return out
 
 
-def _current_sets(session: Session, buf: _Buffer) -> dict[tuple[str, Any], set[Any]]:
+def _current_folded(session: Session, buf: _Buffer) -> dict[tuple[str, Any], Any]:
     by_table: dict[str, list[Any]] = {}
     for table_name, parent in buf.sets:
         by_table.setdefault(table_name, []).append(parent)
-    after: dict[tuple[str, Any], set[Any]] = {key: set() for key in buf.sets}
+    after: dict[tuple[str, Any], Any] = {}
     for table_name, parents in by_table.items():
-        spec = registry.set_for_table(table_name)
+        spec = _folded_for_table(table_name)
         assert spec is not None
-        p_col, m_col = spec.table.c[spec.parent_column], spec.table.c[spec.member_column]
-        for chunk in _chunks(parents):
-            for r in _fetch(session, sa.select(p_col, m_col).where(p_col.in_(chunk))):
-                after[table_name, r[spec.parent_column]].add(r[spec.member_column])
+        for parent, value in _snapshot(session, spec, parents).items():
+            after[table_name, parent] = value
     return after
 
 
-def _set_change(spec: registry.AuditedSet, before: frozenset[Any], now: set[Any]) -> dict[str, Any] | None:
-    added, removed = now - before, before - now
-    if not added and not removed:
-        return None
-    return {
-        'field': spec.field,
-        'label': spec.label,
-        'added': [plain(m) for m in sorted(added, key=str)],
-        'removed': [plain(m) for m in sorted(removed, key=str)],
-    }
+def _folded_changes(spec: _Folded, before: Any, now: Any) -> list[dict[str, Any]]:
+    if isinstance(spec, registry.AuditedSet):
+        added, removed = now - before, before - now
+        if not added and not removed:
+            return []
+        return [
+            {
+                'field': spec.field,
+                'label': spec.label,
+                'added': [plain(m) for m in sorted(added, key=str)],
+                'removed': [plain(m) for m in sorted(removed, key=str)],
+            }
+        ]
+    if (before is None) != (now is None):
+        # 有没有这一行就是开关本身（开了二次验证才有）；行里的值在这时不另记 —— 「开启时生成了恢复码」是废话
+        old, new = before is not None, now is not None
+        return [
+            {
+                'field': spec.field,
+                'label': spec.label,
+                'old': old,
+                'new': new,
+                'old_label': spec.states[int(old)],
+                'new_label': spec.states[int(new)],
+            }
+        ]
+    if before is None or now is None:
+        return []
+    out: list[dict[str, Any]] = []
+    for name, value in spec.values.items():
+        if before[name] == now[name]:
+            continue
+        item: dict[str, Any] = {'field': name, 'label': value.label}
+        if value.secret:
+            item['secret'] = True
+        else:
+            item['old'], item['new'] = plain(before[name]), plain(now[name])
+        out.append(item)
+    return out
 
 
 def _parent_labels(session: Session, missing: dict[str, set[Any]]) -> dict[tuple[str, Any], Any]:
@@ -566,40 +680,40 @@ def _parent_labels(session: Session, missing: dict[str, set[Any]]) -> dict[tuple
 def _merge_sets(session: Session, buf: _Buffer, records: dict[tuple[str, Any], _Record]) -> None:
     if not buf.sets:
         return
-    after = _current_sets(session, buf)
-    pending: list[tuple[registry.AuditedSet, Any, dict[str, Any], Origin]] = []
+    after = _current_folded(session, buf)
+    pending: list[tuple[_Folded, Any, list[dict[str, Any]], Origin]] = []
     missing: dict[str, set[Any]] = {}
     for (table_name, parent), (before, origin) in buf.sets.items():
-        spec = registry.set_for_table(table_name)
+        spec = _folded_for_table(table_name)
         assert spec is not None
-        change = _set_change(spec, before, after[table_name, parent])
-        if change is None:
+        changes = _folded_changes(spec, before, after[table_name, parent])
+        if not changes:
             continue
-        pending.append((spec, parent, change, origin))
+        pending.append((spec, parent, changes, origin))
         if (spec.entity, parent) not in records:
             missing.setdefault(spec.entity, set()).add(parent)
     labels = _parent_labels(session, missing)
-    for spec, parent, change, origin in pending:
+    for spec, parent, changes, origin in pending:
         key = (spec.entity, parent)
         record = records.get(key)
         if record is None and key in labels:
             record = records[key] = _Record(registry.ENTITIES[spec.entity], parent, 'update', origin, labels[key])
         # 父对象没了（删用户时顺手清的关联）/ 这个事务里它被删了：只记「删除」
         if record is not None and record.action != 'delete':
-            record.changes.append(change)
+            record.changes.extend(changes)
 
 
 def _bulk_record(bulk: dict[str, Any]) -> _Record:
     """一条语句命中太多行：只记「哪类对象、多少个、改成了什么」。`entity_label` 存命中的个数（前端按 action=bulk 认）"""
-    set_spec: registry.AuditedSet | None = bulk.get('set')
-    if set_spec is not None:
-        spec = registry.ENTITIES[set_spec.entity]
-        change = {
-            'field': set_spec.field,
-            'label': set_spec.label,
-            'added': [plain(m) for m in bulk.get('added', [])],
-            'removed': [plain(m) for m in bulk.get('removed', [])],
-        }
+    folded: _Folded | None = bulk.get('folded')
+    if folded is not None:
+        spec = registry.ENTITIES[folded.entity]
+        change: dict[str, Any] = {'field': folded.field, 'label': folded.label}
+        if isinstance(folded, registry.AuditedSet):
+            change['added'] = [plain(m) for m in bulk.get('added', [])]
+            change['removed'] = [plain(m) for m in bulk.get('removed', [])]
+        else:
+            change['varies'] = True
         return _Record(spec, None, 'bulk', bulk['origin'], str(bulk['count']), [change])
     spec = bulk['spec']
     changes = [
@@ -616,7 +730,8 @@ def _bulk_record(bulk: dict[str, Any]) -> _Record:
     return _Record(spec, None, 'bulk', bulk['origin'], str(bulk['count']), changes)
 
 
-_Pending = list[tuple[dict[str, Any], 'registry.Ref | None', str]]
+#: (变化, 引用表, 'set' / 'value', 没有引用表时成员的显示名)
+_Pending = list[tuple[dict[str, Any], 'registry.Ref | None', str, 'dict[Any, str] | None']]
 
 
 def _collect_refs(records: list[_Record]) -> tuple[dict[registry.Ref, set[Any]], _Pending]:
@@ -625,13 +740,14 @@ def _collect_refs(records: list[_Record]) -> tuple[dict[registry.Ref, set[Any]],
     for record in records:
         for change in record.changes:
             if 'added' in change:
-                ref = next(s.ref for s in registry.sets_of(record.spec.entity) if s.field == change['field'])
+                set_spec = next(s for s in registry.sets_of(record.spec.entity) if s.field == change['field'])
+                ref = set_spec.ref
                 values = [*change['added'], *change['removed']]
-                pending.append((change, ref, 'set'))
+                pending.append((change, ref, 'set', set_spec.member_labels))
             elif change['field'] in record.spec.refs:
                 ref = record.spec.refs[change['field']]
                 values = [change.get('old'), change.get('new')]
-                pending.append((change, ref, 'value'))
+                pending.append((change, ref, 'value', None))
             else:
                 continue
             if ref is not None:
@@ -655,8 +771,8 @@ def _resolve_labels(session: Session, records: list[_Record]) -> None:
     """引用列和集合成员：一次查出提交那一刻对方叫什么（对方后来改名 / 被删，记录照样看得懂）"""
     wanted, pending = _collect_refs(records)
     names = _lookup_names(session, wanted)
-    for change, ref, kind in pending:
-        found = names.get(ref, {}) if ref is not None else {}
+    for change, ref, kind, member_labels in pending:
+        found = names.get(ref, {}) if ref is not None else {str(k): v for k, v in (member_labels or {}).items()}
         if kind == 'set':
             for side in ('added', 'removed'):
                 change[side] = [{'id': m, 'label': found.get(str(m))} for m in change[side]]
@@ -669,7 +785,6 @@ def _resolve_labels(session: Session, records: list[_Record]) -> None:
 
 def _write(session: Session, records: list[_Record]) -> None:
     from backend.common.model import MappedBase
-    from backend.utils.timezone import timezone
 
     table = MappedBase.metadata.tables['sys_data_change']
     actor_ids = sorted({r.origin.actor_id for r in records if r.origin.actor_id is not None})
@@ -681,7 +796,6 @@ def _write(session: Session, records: list[_Record]) -> None:
                 session, sa.select(user_table.c.id, user_table.c.username).where(user_table.c.id.in_(actor_ids))
             ):
                 actors[r['id']] = r['username']
-    now = timezone.now()
     rows = []
     for r in records:
         fields = sorted({c['field'] for c in r.changes})
@@ -698,9 +812,10 @@ def _write(session: Session, records: list[_Record]) -> None:
             'source': r.origin.source,
             'source_ref': None if r.origin.source_ref is None else r.origin.source_ref[:128],
             'ip': r.origin.ip,
-            'created_time': now,
         })
     with _busy(session):
+        # 编号、签名、定 id 和 created_time（拿到链头那把锁之后才取时间）。见 chain.py
+        chain.link(session, rows)
         session.execute(sa.insert(table), rows)
 
 
@@ -713,18 +828,20 @@ def _ensure() -> None:
     global _ready
     registry.load_data_change_extensions()
     _ready = True
-    if len(_instrumented) == len(registry.ENTITIES):
+    if len(_instrumented) == len(registry.AUDITED_TABLES):
         return
     from backend.common.model import MappedBase
 
-    for spec in registry.ENTITIES.values():
-        if spec.table.name in _instrumented:
+    tables = [s.table for s in (*registry.ENTITIES.values(), *registry.SETS.values(), *registry.CHILDREN.values())]
+    for table in tables:
+        if table.name in _instrumented:
             continue
+        # 关联表多数是 Core 表（`sys_user_role`），没有映射类，跳过；第三方账号 / 二次验证是映射类
         for mapper in MappedBase.registry.mappers:
-            if mapper.local_table is spec.table:
+            if mapper.local_table is table:
                 for prop in mapper.column_attrs:
                     event.listen(getattr(mapper.class_, prop.key), 'set', _on_attr_set, retval=True)
-        _instrumented.add(spec.table.name)
+        _instrumented.add(table.name)
 
 
 _installed = False
