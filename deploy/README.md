@@ -13,8 +13,9 @@ pnpm deploy:test:down
 
 ## 生产环境
 
-镜像**不在部署机上构建**——CI 在 main 全绿后把 `fba-api` / `fba-web` 推到 GHCR
-（`ghcr.io/<owner>/…`），部署机只管拉。所有生产命令都走同一个脚本
+镜像**不在部署机上构建**——CI 在 main 全绿后把 `fra-api` / `fra-web` 推到 GHCR
+（`ghcr.io/<owner>/…`；1.1.x 期间旧名字 `fba-*` 也照推，切换步骤见
+[AGENTS「镜像改名」](./AGENTS.md)），部署机只管拉。所有生产命令都走同一个脚本
 `deploy/prod.sh`，它先检查配置文件存在、权限不向组 / 其他用户开放、没有
 `CHANGE_ME` 残留，然后才调 `docker compose`。`up` 会先跑 Alembic 迁移，
 成功了才启动 api / worker / beat / web。首次部署前先备份外部数据库。
@@ -100,6 +101,9 @@ TAG=sha-abc1234 bash prod.sh up
 ```
 
 ⚠️ 2026-09-02 之前构建的镜像**只有完整 SHA 标签**，回滚到更早的版本要用完整的。
+
+⚠️ 镜像改名（2026-11，`fba-*` → `fra-*`）之前的提交只在旧名字下有标签。回滚到那之前，
+先 `bash prod.sh sync <那个提交>` 换回当时的 compose，再按上面改 `TAG`。
 
 ### 离线 / 不走 GHCR
 
