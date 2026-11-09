@@ -16,6 +16,7 @@ from backend.app.admin.service.mfa_service import gate as mfa_gate
 from backend.app.admin.service.user_password_history_service import password_security_service
 from backend.app.admin.service.user_service import emit_user_event
 from backend.common.context import ctx
+from backend.common.data_change import data_change_source
 from backend.common.enums import LoginLogStatusType
 from backend.common.exception import errors
 from backend.common.i18n import t
@@ -57,7 +58,9 @@ async def _register_stranger(
     if picked is None:
         raise errors.ConflictError(msg=t('error.oauth2.username_exists'))
     new_sys_user = AddOAuth2UserParam(username=picked, password=None, nickname=nickname, email=email, avatar=avatar)
-    created = await user_dao.add_by_oauth2(db, new_sys_user, role_code=settings.OAUTH2_AUTO_REGISTER_ROLE)
+    # 数据变更审计（#260）：第三方登录首次建的号记成「第三方登录」来源（没有登录用户，操作人留空）
+    with data_change_source('oauth2', source.value):
+        created = await user_dao.add_by_oauth2(db, new_sys_user, role_code=settings.OAUTH2_AUTO_REGISTER_ROLE)
     await db.flush()
     # 第三方登录首次进来自动建的号同样是「用户已创建」（#167），漏了对方的用户副本就少一个人
     await emit_user_event(db, 'user.created', created.id)
@@ -106,7 +109,9 @@ class OAuth2Service:
                 raise errors.AuthorizationError(msg=t('error.user.not_found'))
             # 更新用户头像
             if not sys_user.avatar and avatar is not None:
-                await user_dao.update_avatar(db, sys_user.id, avatar)
+                # 数据变更审计（#260）：登录时从第三方同步头像，操作人是登录的这个人
+                with data_change_source('oauth2', source.value, actor_id=sys_user.id):
+                    await user_dao.update_avatar(db, sys_user.id, avatar)
         else:
             sys_user = None
             # 检测系统用户是否已存在

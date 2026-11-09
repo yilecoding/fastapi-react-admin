@@ -36,6 +36,7 @@ from backend.app.admin.schema.data_import import (
     ImportPreviewRow,
     ImportRowError,
 )
+from backend.common.data_change import data_change_source
 from backend.common.dataio.cells import int_cell, text_cell
 from backend.common.dataio.importing import ImportColumn, ImportContext, ImportMode, ImportRow, ImportSpec, get_import
 from backend.common.dataio.writers import SheetColumn, XlsxSheetWriter
@@ -348,7 +349,9 @@ class ImportService:
             await db.rollback()
             return await ImportService._result(obj.import_token, spec, user, rows, failed, committed=False)
 
-        outcome = await spec.commit(db, writable, ctx) if writable else None
+        # 数据变更审计（#260）：导入建的用户 / 部门记成「批量导入」来源，引用是这一次导入的令牌
+        with data_change_source('import', obj.import_token[:32], actor_id=getattr(user, 'id', None)):
+            outcome = await spec.commit(db, writable, ctx) if writable else None
         if outcome is not None:
             failed.update(outcome.failed)
         if obj.atomic and failed:

@@ -177,4 +177,6 @@ VALUES
 (2049629108253622351, N'导出', 'ExportSysDept', NULL, 3, NULL, 2, 'sys:dept:export', 1, 0, '', NULL, 2049629108245233668, '2026-10-22 20:00:00', NULL),
 (2049629108253622352, N'导入', 'ImportSysDept', NULL, 4, NULL, 2, 'sys:dept:import', 1, 0, '', NULL, 2049629108245233668, '2026-10-22 20:00:00', NULL),
 (2049629108253622353, N'导出', 'ExportLoginLog', NULL, 3, NULL, 2, 'log:login:export', 1, 0, '', NULL, 2049629108249427984, '2026-10-22 20:00:00', NULL),
-(2049629108253622354, N'导出', 'ExportOperaLog', NULL, 4, NULL, 2, 'log:opera:export', 1, 0, '', NULL, 2049629108249427987, '2026-10-22 20:00:00', NULL);
+(2049629108253622354, N'导出', 'ExportOperaLog', NULL, 4, NULL, 2, 'log:opera:export', 1, 0, '', NULL, 2049629108249427987, '2026-10-22 20:00:00', NULL),
+(2049629108253622359, N'数据变更', 'DataChangeLog', '/log/change', 3, 'mdi:file-compare', 1, NULL, 1, 1, '', NULL, 2049629108249427983, '2026-11-09 00:00:00', NULL),
+(2049629108253622360, N'查询', 'QueryDataChangeLog', NULL, 1, NULL, 2, 'log:change:list', 1, 0, '', NULL, 2049629108253622359, '2026-11-09 00:00:00', NULL);

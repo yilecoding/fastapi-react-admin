@@ -24,6 +24,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from backend.common.data_change import data_change_source
 from backend.common.enums import StatusType
 from backend.common.log import log
 from backend.common.security.data_scope import scoped_to_user
@@ -290,7 +291,10 @@ class ToolDispatcher:
             kwargs['db'] = ctx.db
         if 'ctx' in params:
             kwargs['ctx'] = ctx
-        with scoped_to_user(ctx.user):
+        # 数据变更审计（#260）：AI 工具改的数据记成「AI 助手」来源，操作人是发起对话的人。
+        # 操作人显式传：网页对话是流式响应，跑到这里时请求上下文可能已经收尾了
+        ref = f'{ctx.channel} {call.name}' if ctx.channel else call.name
+        with scoped_to_user(ctx.user), data_change_source('ai', ref, actor_id=getattr(ctx.user, 'id', None)):
             return await fn(**kwargs)
 
     async def _stage_confirm(self, spec: ToolSpec, call: ToolCallRequest, ctx: RunContext, preview: str) -> str:
