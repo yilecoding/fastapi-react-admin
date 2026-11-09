@@ -610,3 +610,160 @@ def test_opera_log_filters_by_trace_id(client: TestClient, token_headers: dict[s
     finally:
         with engine().begin() as conn:
             conn.execute(sa.delete(OperaLog.__table__).where(OperaLog.trace_id.in_([trace, other])))
+
+
+# ── 评审补的（#262）────────────────────────────────────────────────────────────
+
+
+def test_a_password_like_config_value_is_recorded_as_secret(client: TestClient, token_headers: dict[str, str]) -> None:
+    """🔴 `EMAIL_PASSWORD`（SMTP 密码 / 授权码）就存在参数配置里：键名像密码的那几行，值只记「改过」"""
+    configs = client.get('/sys/configs/all', headers=token_headers, params={'type': 'EMAIL'}).json()['data']
+    target = next(c for c in configs if c['key'] == 'EMAIL_PASSWORD')
+    body = [{k: target[k] for k in ('id', 'name', 'type', 'key', 'value', 'is_frontend', 'remark')}]
+    body[0]['value'] = 'smtp-app-code-pytest'
+    try:
+        assert client.put('/sys/configs', headers=token_headers, json=body).json()['code'] == 200
+        (record,) = changes_of('config', target['id'])
+        assert field(record, 'value') == {'field': 'value', 'label': '键值', 'secret': True}
+        assert 'smtp-app-code-pytest' not in json.dumps(record['changes'])
+    finally:
+        body[0]['value'] = target['value']
+        client.put('/sys/configs', headers=token_headers, json=body)
+
+
+def test_a_savepoint_commit_does_not_split_or_drop_the_record(role_row: int) -> None:
+    """🔴 保存点提交也会触发 before_commit / after_commit（AI 工具每调用一次就开一个保存点写调用审计）。
+    不跳过的话一个事务拆成两条，或者保存点之前抓到的改动被 after_commit 清掉"""
+    with Session(engine()) as s:
+        s.execute(sa.update(Role).where(Role.id == role_row).values(name='保存点之前'))
+        with s.begin_nested():
+            s.execute(sa.update(Role).where(Role.id == role_row).values(remark='保存点里'))
+        s.execute(sa.update(Role).where(Role.id == role_row).values(status=0))
+        s.commit()
+    (record,) = changes_of('role', role_row)
+    assert sorted(c['field'] for c in record['changes']) == ['name', 'remark', 'status']
+
+
+def test_writing_only_ignored_columns_skips_the_capture(temp_user: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """每次登录都 `update_login_time`（只写忽略列）：不该为它前后各查一次整行"""
+    calls: list[Any] = []
+    real = capture._fetch
+    monkeypatch.setattr(capture, '_fetch', lambda session, stmt: calls.append(stmt) or real(session, stmt))
+    with Session(engine()) as s:
+        s.execute(sa.update(User).where(User.id == int(temp_user)).values(last_login_time=timezone.now()))
+        s.commit()
+    assert calls == []
+    assert [r for r in changes_of('user', temp_user) if r['action'] == 'update'] == []
+
+
+@pytest.fixture
+def two_roles(role_row: int) -> Iterator[tuple[int, int]]:
+    second = role_row + 1
+    with engine().begin() as conn:
+        conn.execute(sa.text('DELETE FROM sys_role WHERE id = :pk'), {'pk': second})
+        conn.execute(
+            Role.__table__.insert().values(
+                id=second,
+                code='PYTEST_DC_ROW2',
+                name='会话测试角色2',
+                status=1,
+                is_filter_scopes=True,
+                deleted=0,
+                created_time=timezone.now(),
+            )
+        )
+    yield role_row, second
+    with engine().begin() as conn:
+        conn.execute(sa.text('DELETE FROM sys_user_role WHERE role_id IN (:a, :b)'), {'a': role_row, 'b': second})
+        conn.execute(sa.text('DELETE FROM sys_role WHERE id = :pk'), {'pk': second})
+
+
+def test_executemany_over_the_limit_is_one_summary_without_a_pre_select(
+    two_roles: tuple[int, int], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """按主键的批量 UPDATE 超过上限：不把几千个主键塞进一个 IN（SQL Server 2100 个参数的上限），直接记汇总"""
+    monkeypatch.setattr(capture, 'BULK_LIMIT', 1)
+    a, b = two_roles
+    with Session(engine()) as s:
+        s.execute(sa.update(Role), [{'id': a, 'remark': '甲'}, {'id': b, 'remark': '乙'}])
+        s.commit()
+    with engine().connect() as conn:
+        (bulk,) = (
+            conn
+            .execute(
+                sa.select(DataChange.__table__).where(DataChange.entity_type == 'role', DataChange.action == 'bulk')
+            )
+            .mappings()
+            .all()
+        )
+    assert bulk['entity_label'] == '2'
+    assert bulk['changes'] == [{'field': 'remark', 'label': '备注', 'varies': True}]
+
+
+def test_an_association_delete_over_the_limit_is_one_summary(
+    two_roles: tuple[int, int], temp_user: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 关联表也要有上限：从很多人身上摘掉一个角色，不能逐个父对象拍集合、写几万行记录"""
+    role, _ = two_roles
+    with engine().begin() as conn:
+        admin_id = conn.execute(sa.text("SELECT id FROM sys_user WHERE username = 'admin'")).scalar_one()
+        for i, uid in enumerate((admin_id, int(temp_user))):
+            conn.execute(
+                sa.text('INSERT INTO sys_user_role (id, user_id, role_id) VALUES (:id, :u, :r)'),
+                {'id': 910000000000002801 + i, 'u': uid, 'r': role},
+            )
+    monkeypatch.setattr(capture, 'BULK_LIMIT', 1)
+    from backend.app.admin.model import user_role
+
+    with Session(engine()) as s:
+        s.execute(sa.delete(user_role).where(user_role.c.role_id == role))
+        s.commit()
+    with engine().connect() as conn:
+        (bulk,) = (
+            conn
+            .execute(
+                sa.select(DataChange.__table__).where(DataChange.entity_type == 'user', DataChange.action == 'bulk')
+            )
+            .mappings()
+            .all()
+        )
+    assert bulk['entity_label'] == '2'
+    (change,) = bulk['changes']
+    assert change['field'] == 'roles' and change['added'] == []
+    assert [m['label'] for m in change['removed']] == ['会话测试角色']
+
+
+def test_editing_a_partially_loaded_object_records_only_what_changed(role_row: int) -> None:
+    """改已加载对象：原样从库里查。用属性历史的话，没加载过的列（`load_only`）会被当成「从空改成了现值」"""
+    from sqlalchemy.orm import load_only
+
+    with Session(engine()) as s:
+        role = s.get(Role, role_row, options=[load_only(Role.id, Role.name)])
+        assert role is not None
+        with capture.data_change_source('ai', 'rename_role'):
+            role.name = '改了名字'
+        # flush 和提交都在 `with` 外面：来源要按改属性的那一刻算
+        s.commit()
+    (record,) = changes_of('role', role_row)
+    assert record['changes'] == [{'field': 'name', 'label': '角色名称', 'old': '会话测试角色', 'new': '改了名字'}]
+    assert record['source'] == 'ai' and record['source_ref'] == 'rename_role'
+
+
+def test_celery_tasks_record_their_changes_as_scheduled_tasks() -> None:
+    """worker 里没有请求上下文：不接这一层的话任务改的数据记成「系统」，筛选里的「定时任务」永远是空的"""
+    import asyncio
+
+    from backend.app.task.tasks.base import with_timeout
+
+    @with_timeout(5)
+    async def probe() -> capture.Origin:
+        await asyncio.sleep(0)  # 真的过一次事件循环：wait_for 建的任务要继承上下文变量
+        return capture.current_origin()
+
+    # 一次性循环跑一个不碰 Redis / 数据库的协程（`backend/tests` 分册那条「不要 asyncio.run」说的是共享 Redis 的循环）
+    loop = asyncio.new_event_loop()
+    try:
+        origin = loop.run_until_complete(probe())
+    finally:
+        loop.close()
+    assert origin.source == 'task' and origin.source_ref == 'api_v1.probe'
