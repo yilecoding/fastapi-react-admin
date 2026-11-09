@@ -51,6 +51,13 @@ from backend.utils.serializers import select_columns_serialize, select_join_seri
 #: 状态类的取值 → 翻译键。表里存 0/1，导出要的是字
 _ENABLE_STATUS = {0: 'export.value.disabled', 1: 'export.value.enabled'}
 _RESULT_STATUS = {0: 'export.value.failed', 1: 'export.value.succeeded'}
+#: 登录日志的事件（#273）
+_LOGIN_EVENTS = {
+    'login': 'export.value.event_login',
+    'locked': 'export.value.event_locked',
+    'ip_locked': 'export.value.event_ip_locked',
+    'kicked': 'export.value.event_kicked',
+}
 
 
 class _Filters(SchemaBase):
@@ -265,6 +272,12 @@ class LogExportFilters(_Filters):
     end_time: datetime | None = Field(None, description='时间止（含）')
 
 
+class LoginLogExportFilters(LogExportFilters):
+    """登录日志多一个 `event`（#273：账号被锁 / IP 被锁 / 被强制下线也记在这张表里）"""
+
+    event: str | None = Field(None, description='事件')
+
+
 class OperaLogExportFilters(LogExportFilters):
     """操作日志多一个 `trace_id`（从数据变更记录跳过来，#260）。登录日志没有这一列，所以单独派生 ——
     筛选模型是 `extra='forbid'`，页面带着它去导出、模型里没有的话是 422"""
@@ -279,12 +292,13 @@ _LOG_FILTER_LABELS = {
     'start_time': 'export.filter.start_time',
     'end_time': 'export.filter.end_time',
     'trace_id': 'export.column.trace_id',
+    'event': 'export.column.login_event',
 }
 
 
-async def _login_log_select(f: LogExportFilters, _user: Any) -> Select:
+async def _login_log_select(f: LoginLogExportFilters, _user: Any) -> Select:
     return await login_log_dao.get_select(
-        username=f.username, status=f.status, ip=f.ip, start_time=f.start_time, end_time=f.end_time
+        username=f.username, status=f.status, ip=f.ip, start_time=f.start_time, end_time=f.end_time, event=f.event
     )
 
 
@@ -305,6 +319,8 @@ LOGIN_LOG_EXPORT = register_export(
             # 公式注入就是在这一列上实测的（见 common/dataio/AGENTS.md）
             ExportColumn('username', 'export.column.login_account', width=18),
             ExportColumn('status', 'export.column.result', kind='enum', choices=_RESULT_STATUS, width=8),
+            # #273。加在「结果」后面、不插到前面：已有的列不挪位置（有人按列位置用导出的文件）
+            ExportColumn('event', 'export.column.login_event', kind='enum', choices=_LOGIN_EVENTS, width=12),
             ExportColumn('msg', 'export.column.message', width=28),
             ExportColumn('ip', 'export.column.ip', width=16),
             ExportColumn('location', 'export.column.location', get=_location, width=18),
@@ -313,7 +329,7 @@ LOGIN_LOG_EXPORT = register_export(
             ExportColumn('device', 'export.column.device', width=12),
             ExportColumn('user_uuid', 'export.column.user_uuid', width=38),
         ),
-        filters=LogExportFilters,
+        filters=LoginLogExportFilters,
         filter_labels=_LOG_FILTER_LABELS,
         select=_login_log_select,
         id_column=LoginLog.id,

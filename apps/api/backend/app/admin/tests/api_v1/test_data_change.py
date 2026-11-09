@@ -1159,3 +1159,101 @@ def test_re_signing_one_record_breaks_the_next(
             .values(entity_label='被改了', chain_hash=chain.sign(first['chain_hash'], edited, key, kid))
         )
     assert [(p.kind, p.record_id) for p in verify().problems] == [('modified', str(after['id']))]
+
+
+# ── 评审补的（#271）─────────────────────────────────────────────────────────────
+
+
+def _resign_all(records: list[dict[str, Any]], *, key: bytes, kid: str, edit: dict[int, dict[str, Any]]) -> None:
+    """攻击者有库、有代码、没有密钥：按顺序重签锚点之后的每一行（顺手改几行内容），再把链头改成最后一行"""
+    _, head_table = chain._tables()
+    with engine().begin() as conn:
+        prev = conn.execute(sa.select(head_table.c.anchor_hash)).scalar() or ''
+        for r in records:
+            row = {**r, **edit.get(r['id'], {})}
+            prev = chain.sign(prev, row, key, kid)
+            conn.execute(
+                sa
+                .update(DataChange.__table__)
+                .where(DataChange.id == r['id'])
+                .values(**edit.get(r['id'], {}), chain_hash=prev)
+            )
+        conn.execute(sa.update(head_table).values(head_hash=prev))
+
+
+@pytest.mark.parametrize('forged_kid', ['deadbeef', chain.NO_KEY])
+def test_re_signing_the_whole_chain_another_way_is_caught(
+    role_row: int, chain_from_here: None, monkeypatch: pytest.MonkeyPatch, forged_kid: str
+) -> None:
+    """🔴 评审抓到的：整条链换成一个假的密钥标识（校验不了的那一类）或「没配密钥」（空密钥核对得上的那一类）
+    自己重算，每一行都不报 —— 原来的结果是「没有发现问题」。现在配了密钥时最新一行必须是用它签的"""
+    from backend.core.conf import settings
+
+    monkeypatch.setattr(settings, 'DATA_CHANGE_CHAIN_KEY', 'pytest-chain-key')
+    records = rename(role_row, '整条一', '整条二', '整条三')
+    assert verify().ok, '前置：没动之前是好的'
+    _resign_all(records, key=b'', kid=forged_kid, edit={records[1]['id']: {'entity_label': '被改了'}})
+    report = verify()
+    assert not report.ok
+    assert 'stale' in {p.kind for p in report.problems}
+
+
+def test_link_leaves_the_id_to_the_database(role_row: int) -> None:
+    """🔴 评审抓到的：自增主键模式下 INSERT 之前拿不到 id，链自己填雪花 ID 的话 SQL Server 报
+    「不能给 IDENTITY 列显式插值」，所有被审计的提交一起失败。签名不带 id，id 交给列默认值 / 数据库"""
+    assert 'id' not in chain.SIGNED
+    with Session(engine()) as s:
+        row = {'trace_id': '-', 'entity_type': 'role', 'action': 'update', 'changes': [], 'fields': ''}
+        rows = [{**row, 'source': 'system'}]
+        chain.link(s, rows)
+        assert 'id' not in rows[0] and rows[0]['chain_seq'] and rows[0]['chain_hash']
+        s.rollback()
+
+
+def test_records_committed_while_verifying_are_left_for_next_time(
+    role_row: int, chain_from_here: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 评审抓到的：校验先读链头、再一批批读记录。原来读记录不限上界，期间别的请求提交的行也读进来，
+    最后和读到的链头对不上 —— 报成「最新的记录被删掉了」"""
+    rename(role_row, '校验之前')
+    real_walk = chain._walk
+
+    def a_commit_lands_mid_walk(*args: Any, **kwargs: Any) -> Any:
+        rename(role_row, '校验期间')  # 另一个会话提交了一条
+        return real_walk(*args, **kwargs)
+
+    monkeypatch.setattr(chain, '_walk', a_commit_lands_mid_walk)
+    report = verify()
+    assert report.ok, report.problems
+    assert report.checked >= 1
+
+
+def test_rolling_the_head_back_to_hide_the_newest_records_is_caught(role_row: int, chain_from_here: None) -> None:
+    """只走到链头是为了不误报校验期间新提交的行，但不能因此留口子：把链头改回旧值、把最新几行「藏」到链头后面，
+    那几行就不校验了。写记录和推链头同一个事务，提交过的状态下最大序号一定等于链头"""
+    first, _, _ = rename(role_row, '藏一', '藏二', '藏三')
+    _, head_table = chain._tables()
+    with engine().begin() as conn:
+        conn.execute(sa.update(head_table).values(head_seq=first['chain_seq'], head_hash=first['chain_hash']))
+    report = verify()
+    assert not report.ok
+    assert 'tail' in {p.kind for p in report.problems}
+
+
+def test_records_signed_before_the_key_was_set_are_still_checked(
+    role_row: int, chain_from_here: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """配密钥之前签的行（标识是「没配密钥」）用空密钥照样核对：只当成「校验不了」的话，改了它的内容也发现不了 ——
+    它后面那一行（用密钥签的）引用的是它**存着的**签名，内容变了不影响那一环"""
+    from backend.core.conf import settings
+
+    before = rename(role_row, '配钥前一', '配钥前二')
+    monkeypatch.setattr(settings, 'DATA_CHANGE_CHAIN_KEY', 'pytest-chain-key')
+    rename(role_row, '配钥后')
+    report = verify()
+    assert report.ok and report.other_key == 0, report.problems
+    with engine().begin() as conn:
+        conn.execute(
+            sa.update(DataChange.__table__).where(DataChange.id == before[0]['id']).values(entity_label='被改了')
+        )
+    assert ('modified', str(before[0]['id'])) in {(p.kind, p.record_id) for p in verify().problems}

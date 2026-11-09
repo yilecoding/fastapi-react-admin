@@ -443,8 +443,8 @@ jobs:
     name: playwright · E2E
     runs-on: ubuntu-latest
     # 整套约 13 分钟（2 个 worker）；login-phone.spec.ts 要等一次 60 秒的短信冷却。15 分钟撞过一次上限（#171），
-    # 症状是 job 显示 cancelled 而列表报告里 121 条全过
-    timeout-minutes: 20
+    # 症状是 job 显示 cancelled 而列表报告里 121 条全过。2026-11-09 main 上已经要 19.5 分钟（20 分钟的上限只剩半分钟），放到 30
+    timeout-minutes: 30
 
     env:
       DATABASE_TYPE: sqlserver
@@ -698,6 +698,12 @@ jobs:
   # 建 PAT。**第一次跑完之后**要去 GitHub 网页上把这两个 package 的可见性改成
   # public——workflow 用 GITHUB_TOKEN 发布的包默认是 private,服务器上 `docker
   # compose pull` 要么公开、要么在服务器上 `docker login ghcr.io` 一次,选一样。
+  # **改包名等于新建包**,新名字第一次推完同样要去改一次可见性。
+  #
+  # 🔴 镜像从 `fba-*` 改名成 `fra-*`(2026-11),**1.1.x 期间两个名字都推**:
+  # 照旧名字部署的人不再收到新镜像时,`docker compose pull` 不报错,只是
+  # 永远停在最后一个旧版本上——静默的。1.2.0 起删掉下面两段里 `fba-*` 的三行,
+  # 旧包怎么处理见 deploy/AGENTS.md「镜像改名 fba-* → fra-*」。
   build-images:
     name: 构建镜像并推到 GHCR
     needs: [static, lint-frontend, lint-backend, test-backend, test-e2e]
@@ -737,14 +743,17 @@ jobs:
           file: ./apps/api/Dockerfile.prod
           push: true
           tags: |
+            ghcr.io/${{ github.repository_owner }}/fra-api:latest
+            ghcr.io/${{ github.repository_owner }}/fra-api:sha-${{ steps.sha.outputs.short }}
+            ghcr.io/${{ github.repository_owner }}/fra-api:sha-${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/fba-api:latest
             ghcr.io/${{ github.repository_owner }}/fba-api:sha-${{ steps.sha.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/fba-api:sha-${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha,scope=fba-api
-          cache-to: type=gha,mode=max,scope=fba-api
+          cache-from: type=gha,scope=fra-api
+          cache-to: type=gha,mode=max,scope=fra-api
 
       - name: Build & push web image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -755,11 +764,14 @@ jobs:
             VITE_API_BASE=
           push: true
           tags: |
+            ghcr.io/${{ github.repository_owner }}/fra-web:latest
+            ghcr.io/${{ github.repository_owner }}/fra-web:sha-${{ steps.sha.outputs.short }}
+            ghcr.io/${{ github.repository_owner }}/fra-web:sha-${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/fba-web:latest
             ghcr.io/${{ github.repository_owner }}/fba-web:sha-${{ steps.sha.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/fba-web:sha-${{ github.sha }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha,scope=fba-web
-          cache-to: type=gha,mode=max,scope=fba-web
+          cache-from: type=gha,scope=fra-web
+          cache-to: type=gha,mode=max,scope=fra-web

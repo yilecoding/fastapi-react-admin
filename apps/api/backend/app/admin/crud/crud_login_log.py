@@ -19,6 +19,7 @@ class CRUDLoginLog(DataScopedCRUD[LoginLog]):
         ip: str | None,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
+        event: str | None = None,
     ) -> Select:
         """
         获取登录日志列表查询表达式
@@ -28,9 +29,12 @@ class CRUDLoginLog(DataScopedCRUD[LoginLog]):
         :param ip: IP 地址
         :param start_time: 登录时间起（含）
         :param end_time: 登录时间止（含）
+        :param event: 事件（`LoginLogEvent`）
         :return:
         """
         filters = {}
+        if event is not None:
+            filters['event'] = event
 
         if username is not None:
             filters['username__like'] = f'%{username}%'

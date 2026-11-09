@@ -454,6 +454,7 @@ export:
     leader: Leader
     location: Location
     login_account: Login account
+    login_event: Event
     login_time: Login time
     message: Message
     method: Method
@@ -526,6 +527,10 @@ export:
     change_varies: differs per row
     disabled: Disabled
     enabled: Active
+    event_ip_locked: IP locked
+    event_kicked: Forced logout
+    event_locked: Account locked
+    event_login: Sign-in
     failed: Failed
     hidden: Hidden
     notice: Notice
@@ -572,6 +577,16 @@ response:
   error: Request error
   success: Request success
   server_error: Internal server error
+
+login_event:
+  # Security events in the sign-in log (#273, `LoginLogEvent`). Written into `sys_login_log.msg` in the triggering request's language
+  disabled: Session ended because {operator} disabled or deleted the account
+  ip_locked: This IP was locked for {minutes} minutes (until {until}) after {count} failed sign-ins across accounts. It still only sees "Incorrect username or password"
+  kicked: Signed out by {operator}
+  locked: Locked for {minutes} minutes (until {until}) after {count} failed sign-ins in a row
+  password_changed: Session ended because {operator} changed the password
+  self: the user
+  system: the system
 
 success:
   login:

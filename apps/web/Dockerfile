@@ -2,7 +2,7 @@
 #
 # 前端生产镜像。**构建上下文是仓库根**，不是 apps/web：
 #
-#     docker build -f apps/web/Dockerfile -t fba-web .
+#     docker build -f apps/web/Dockerfile -t fra-web .
 #
 # 🔴 **不能用 `pnpm deploy` 把依赖拍平。** 两个原因，任一都足够：
 #   1. `packages/{ui,platform,i18n}` 是**源码包** —— 没有 build 脚本，
