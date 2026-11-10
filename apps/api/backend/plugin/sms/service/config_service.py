@@ -178,6 +178,16 @@ class SmsConfigService:
     ) -> tuple[type[SmsProvider], dict[str, Any]]:
         """保存前的全部校验，返回 (厂商类, 归一化后的 templates)"""
         provider_cls = provider_or_raise(obj.provider)
+        # 🔴 凭据放进 options 里的要拒收：`build_provider_config` 只在自己的副本里把它们换成凭据栏的值，
+        # 而 `options` 是原样 `json.dumps` 进库的 —— 明文落库、详情接口原样下发，数据变更审计也按普通值记。
+        # 实测（修之前）：options 带 `access_key_secret` 保存，200，库里 options 原样留着那串明文
+        smuggled = sorted(set(provider_cls.credential_fields or ()) & set(obj.options))
+        if smuggled:
+            raise errors.RequestError(
+                msg=t(
+                    'error.sms.config_invalid', detail=f'{" / ".join(smuggled)} 是凭据，填在凭据栏，不能放在 options 里'
+                )
+            )
         build_provider_config(provider_cls, access_key_id=obj.access_key_id, secret=secret, options=obj.options)
         templates = validate_templates(provider_cls, obj.templates)
         if obj.is_default and obj.status != 1:
