@@ -6,6 +6,7 @@ import {
   type ColumnVisibilityState, type RowSelectionState,
 } from '@tanstack/react-table'
 import {
+  IconHistory,
   IconPencil,
   IconPlus,
   IconTrash,
@@ -17,6 +18,7 @@ import { ACTIONS_COLUMN_ID, DataTable } from '@admin/ui/components/data-table'
 import { cn } from '@admin/ui/lib/utils'
 
 import { RowActions } from '../_shared/cells'
+import { DataChangeSheet } from '../_shared/data-change/history-sheet'
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
@@ -138,6 +140,8 @@ export function DictPage({
   const [editingData, setEditingData] = React.useState<DictData | null>(null)
   const [delType, setDelType] = React.useState<DictType | null>(null)
   const [delData, setDelData] = React.useState<DictData | null>(null)
+  const [typeHistory, setTypeHistory] = React.useState<DictType | null>(null)
+  const [dataHistory, setDataHistory] = React.useState<DictData | null>(null)
   const [bulkOpen, setBulkOpen] = React.useState(false)
   const [importOpen, setImportOpen] = React.useState(false)
   const rmType = useDeleteDictTypes()
@@ -201,6 +205,10 @@ export function DictPage({
                 {
                   key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'dict:data:edit', testId: `data-edit-${d.value}`,
                   onClick: () => { setEditingData(d); setDataSheet(true) },
+                },
+                {
+                  key: 'history', label: t('变更记录'), icon: IconHistory, perm: 'log:change:list',
+                  testId: `data-history-${d.value}`, onClick: () => setDataHistory(d),
                 },
                 {
                   key: 'del', label: t('删除'), icon: IconTrash, perm: 'dict:data:del', danger: true,
@@ -268,6 +276,7 @@ export function DictPage({
             if (!ty) return []
             return [
               { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'dict:type:edit', onClick: () => { setEditingType(ty); setTypeSheet(true) } },
+              { key: 'history', label: t('变更记录'), icon: IconHistory, perm: 'log:change:list', testId: `type-history-${ty.id}`, onClick: () => setTypeHistory(ty) },
               { key: 'delete', label: t('删除'), icon: IconTrash, danger: true, perm: 'dict:type:del', onClick: () => setDelType(ty) },
             ]
           }}
@@ -389,6 +398,14 @@ export function DictPage({
         typeId={selected?.id ?? ''} typeName={selected?.name ?? ''}
       />
 
+      <DataChangeSheet
+        entity="dict_type" entityId={typeHistory?.id ?? null} name={typeHistory?.name}
+        open={typeHistory !== null} onOpenChange={(o) => !o && setTypeHistory(null)}
+      />
+      <DataChangeSheet
+        entity="dict_data" entityId={dataHistory?.id ?? null} name={dataHistory?.label}
+        open={dataHistory !== null} onOpenChange={(o) => !o && setDataHistory(null)}
+      />
       <ConfirmDialog
         open={delType !== null}
         onOpenChange={(o) => !o && setDelType(null)}
