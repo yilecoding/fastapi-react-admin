@@ -5,7 +5,12 @@ sidebar:
   order: 1
 ---
 
+import shot from '../../../../../../../docs/screenshots/scheduler.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 Scheduled jobs live in the database table `task_scheduler`; Celery beat reads them and dispatches on time, and workers run them. Creating, editing, enabling or disabling a job under **Scheduler → Tasks** needs **no beat restart**: every change tells beat to re-read the table. The result of each run (success or failure, return value, traceback, which worker ran it) is kept under **Task history** for 30 days. The system ships 11 jobs, and log cleanup, export expiry, notification delivery and approval timeouts all depend on them.
+
+<ProductShot src={shot} alt="Tasks: the built-in scheduled jobs" url="localhost:8888/scheduler/manage" />
 
 ## Where is it in the UI?
 

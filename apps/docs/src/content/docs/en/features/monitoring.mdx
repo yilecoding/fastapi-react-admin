@@ -5,7 +5,12 @@ sidebar:
   order: 2
 ---
 
+import shot from '../../../../../../../docs/screenshots/monitor-redis.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 The admin ships two monitoring pages. **Server** shows the CPU, memory and disks of the machine running the backend, and the backend process itself, right now. **Redis** shows memory, key count, operations per second, clients and the busiest commands. Both show **the present only**: the trend lines are the few dozen samples taken since you opened the page, and nothing is stored. External monitoring uses a different address, `/api/health/status`, which needs no sign-in and reports in one response whether the API, database, Redis, scheduler (beat) and worker are healthy.
+
+<ProductShot src={shot} alt="Redis monitoring" url="localhost:8888/monitor/redis" />
 
 ## Where is it in the UI?
 

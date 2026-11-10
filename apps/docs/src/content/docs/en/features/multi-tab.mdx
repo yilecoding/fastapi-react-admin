@@ -5,7 +5,12 @@ sidebar:
   order: 2
 ---
 
+import shot from '../../../../../../../docs/screenshots/tabs.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 The admin shell keeps every opened page mounted at the same time and hides the inactive ones with React 19.2's `<Activity>` component. Switching tabs keeps the DOM and React state — a half-filled form, a collapsed tree node, a typed-in filter — and view state such as filters, paging and the selected row is also written to the URL, so it survives a page refresh too.
+
+<ProductShot src={shot} alt="Tabs and the tab menu" url="localhost:8888/log/change" />
 
 ## Where is it in the UI?
 

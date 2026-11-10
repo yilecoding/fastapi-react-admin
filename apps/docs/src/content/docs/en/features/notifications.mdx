@@ -5,7 +5,12 @@ sidebar:
   order: 7
 ---
 
+import shot from '../../../../../../../docs/screenshots/notice.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 Notifications in fastapi-react-admin have three parts: an in-app inbox (the bell in the top bar plus a Message center page, updated over Socket.IO), notices that admins publish to everyone or to chosen departments, roles and users, and a routing layer that decides, per notification kind, whether a message also goes out by email, SMS or to a Feishu, DingTalk or WeCom group bot. External sends are written as delivery rows inside the caller's database transaction and sent by a Celery worker, so a rolled-back approval never emails anyone.
+
+<ProductShot src={shot} alt="Notices" url="localhost:8888/plugins/notice" />
 
 ## Where is it in the UI?
 

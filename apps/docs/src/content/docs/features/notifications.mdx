@@ -5,7 +5,12 @@ sidebar:
   order: 7
 ---
 
+import shot from '../../../../../../docs/screenshots/notice.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 fastapi-react-admin 的通知分三块：站内消息（顶栏铃铛 + 消息中心页，经 Socket.IO 实时更新）；管理员发给全员或指定部门 / 角色 / 人的通知公告；以及一层渠道路由 —— 按通知类型决定这条消息要不要再走邮件、短信，或推到飞书、钉钉、企业微信的群机器人。所有外部发送都先在调用方的数据库事务里写成投递行，再由 Celery worker 发出去，所以审批回滚了，邮件就不会先到。
+
+<ProductShot src={shot} alt="通知公告" url="localhost:8888/plugins/notice" />
 
 ## 在界面上哪里找？
 

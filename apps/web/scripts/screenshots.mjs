@@ -13,6 +13,12 @@
  *   SHOTS_CAPTCHA     取验证码答案的命令，`{uuid}` 会被替换；
  *                     默认 docker exec fba_redis redis-cli --raw GET "fba:login:captcha:{uuid}"
  *   SHOTS_ONLY        只拍其中几张，逗号分隔，如 role,dept
+ *   SHOTS_IMPORT_FILE 部门导入预览那张（`dept-import`）要上传的 xlsx；不给就跳过那一张
+ *   SHOTS_DEMO_USERS  在线用户那张（`online`）同时登着的演示账号，逗号分隔；默认 zhoumin,sunqiang,zhaolei
+ *   SHOTS_DEMO_PASSWORD 这些演示账号的密码，默认种子里的 123456（`fba init` 只改 admin 和 test）
+ *
+ * 后半段是文档站各功能页的首图（#285）：每张一个干净的会话，页签栏里只有工作台和它自己。
+ * 它们要的演示数据（在线会话、数据变更、公告、文件、开放应用）见 apps/docs/AGENTS.md「截图怎么重拍」。
  *
  * 🔴 视口 1600×960、**deviceScaleFactor 2**，出图 3200×1920 的真彩 PNG。
  * 原来那批是 1 倍图又压成了 255 色的调色板 PNG：文档站内容列 68rem，在 2 倍屏上要 2176 物理像素，
@@ -39,6 +45,9 @@ const USER = process.env.SHOTS_USER ?? 'admin'
 const PASSWORD = process.env.SHOTS_PASSWORD
 const CAPTCHA = process.env.SHOTS_CAPTCHA ?? 'docker exec fba_redis redis-cli --raw GET "fba:login:captcha:{uuid}"'
 const ONLY = process.env.SHOTS_ONLY?.split(',').map((s) => s.trim()).filter(Boolean)
+const IMPORT_FILE = process.env.SHOTS_IMPORT_FILE
+const DEMO_USERS = (process.env.SHOTS_DEMO_USERS ?? 'zhoumin,sunqiang,zhaolei').split(',').map((s) => s.trim()).filter(Boolean)
+const DEMO_PASSWORD = process.env.SHOTS_DEMO_PASSWORD ?? '123456'
 
 if (!PASSWORD) {
   console.error('缺 SHOTS_PASSWORD（拍图库里那个管理员的密码）')
@@ -46,7 +55,14 @@ if (!PASSWORD) {
 }
 
 const VIEWPORT = { width: 1600, height: 960 }
-const CONTEXT = { viewport: VIEWPORT, deviceScaleFactor: 2, colorScheme: 'light', locale: 'zh-CN' }
+// 🔴 UA 要换成普通浏览器的：默认的 HeadlessChrome 会原样出现在「在线用户」「登录日志」的浏览器一栏里
+const UA_MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+const DEMO_UAS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1',
+]
+const CONTEXT = { viewport: VIEWPORT, deviceScaleFactor: 2, colorScheme: 'light', locale: 'zh-CN', userAgent: UA_MAC }
 /** 动画、图表入场、骨架屏都要时间；拍之前统一等这么久 */
 const SETTLE_MS = 1500
 
@@ -63,9 +79,9 @@ async function shoot(page, name) {
   console.log(`  ✓ ${name}.png  ${head.readUInt32BE(0)}×${head.readUInt32BE(4)}`)
 }
 
-async function fillLogin(page) {
-  await page.getByTestId('username').fill(USER)
-  await page.getByTestId('password').fill(PASSWORD)
+async function fillLogin(page, user = USER, password = PASSWORD) {
+  await page.getByTestId('username').fill(user)
+  await page.getByTestId('password').fill(password)
   const cap = page.getByTestId('captcha')
   if (await cap.count()) {
     await page.waitForFunction(() => document.querySelector('[data-testid="captcha"]')?.getAttribute('data-captcha-uuid'))
@@ -100,11 +116,11 @@ async function markToursSeen(page, uid) {
 }
 
 /** 每个上下文自己登录一次：刷新令牌在 cookie 里，跨上下文不共享 */
-async function newSession(browser) {
-  const ctx = await browser.newContext(CONTEXT)
+async function newSession(browser, { user, password, userAgent } = {}) {
+  const ctx = await browser.newContext({ ...CONTEXT, ...(userAgent ? { userAgent } : {}) })
   const page = await ctx.newPage()
   await page.goto(`${BASE}/sign-in`)
-  await markToursSeen(page, await fillLogin(page))
+  await markToursSeen(page, await fillLogin(page, user, password))
   return { ctx, page }
 }
 
@@ -114,7 +130,8 @@ async function open(page, route) {
     window.history.pushState({}, '', to)
     window.dispatchEvent(new PopStateEvent('popstate'))
   }, route)
-  await tab(page, route).waitFor({ state: 'visible', timeout: 15_000 })
+  // 页签按 routeId 认，地址里带的 `?search` 不算在内
+  await tab(page, route.split('?')[0]).waitFor({ state: 'visible', timeout: 15_000 })
   await page.waitForLoadState('networkidle')
 }
 
@@ -176,6 +193,75 @@ try {
     await scope.getByTestId('flow-view').getByText('直属主管').first().click()
     await page.waitForLoadState('networkidle')
     await shoot(page, 'workflow-designer')
+    await ctx.close()
+  }
+
+  // ── 功能页首图（#285）────────────────────────────────────────────────────
+  // 文件名 → 打开哪一页。每张单独一个会话：页签栏干净，也不会被上一页留下的浮层盖住
+  const FEATURE_SHOTS = [
+    ['scheduler', '/scheduler/manage'],
+    ['config', '/plugins/config?group=USER_SECURITY'],
+    ['plugin', '/system/plugin'],
+    ['sandbox', '/sandbox/components?c=button'],
+    ['log-change', '/log/change'],
+    ['file', '/system/file'],
+    ['notice', '/plugins/notice'],
+    ['open-app', '/open/app'],
+  ]
+  for (const [name, route] of FEATURE_SHOTS) {
+    if (!want(name)) continue
+    const { ctx, page } = await newSession(browser)
+    await open(page, route)
+    await shoot(page, name)
+    await ctx.close()
+  }
+
+  // 在线用户：几个演示账号用不同的浏览器同时登着（页面默认只列有实时连接的会话，接口造的会话不算）
+  if (want('online')) {
+    const others = []
+    for (const [i, user] of DEMO_USERS.entries()) {
+      others.push(await newSession(browser, { user, password: DEMO_PASSWORD, userAgent: DEMO_UAS[i % DEMO_UAS.length] }))
+    }
+    const { ctx, page } = await newSession(browser)
+    await open(page, '/monitor/online')
+    await shoot(page, 'online')
+    await ctx.close()
+    for (const o of others) await o.ctx.close()
+  }
+
+  // Redis 监控：刷新调到 5 秒，等趋势线攒出几个点再拍。
+  // 🔴 不拍「服务器监控」：那一页有主机名、局域网 IP 和带本机用户名的解释器路径，不能进公开文档
+  if (want('monitor-redis')) {
+    const { ctx, page } = await newSession(browser)
+    await open(page, '/monitor/redis?refresh=5')
+    await page.waitForTimeout(22_000)
+    await shoot(page, 'monitor-redis')
+    await ctx.close()
+  }
+
+  // 部门导入：打开导入抽屉、上传文件，拍预览（有将新增的行，也有被指出问题的行）
+  if (want('dept-import') && IMPORT_FILE) {
+    const { ctx, page } = await newSession(browser)
+    await open(page, '/system/dept')
+    await tab(page, '/system/dept').getByTestId('import-depts').click()
+    const sheet = page.getByTestId('dept-import-sheet')
+    await sheet.waitFor({ state: 'visible' })
+    await sheet.getByTestId('import-file-input').setInputFiles(IMPORT_FILE)
+    await sheet.getByTestId('import-preview-table').waitFor({ state: 'visible', timeout: 20_000 })
+    await page.waitForLoadState('networkidle')
+    await shoot(page, 'dept-import')
+    await ctx.close()
+  }
+
+  // 多页签：连开几页，再在一个页签上点右键，把页签菜单也拍进去
+  if (want('tabs')) {
+    const { ctx, page } = await newSession(browser)
+    for (const route of ['/system/user', '/system/role', '/system/dept', '/plugins/notice', '/log/change']) {
+      await open(page, route)
+    }
+    await page.locator('[data-testid^="tab-"]', { hasText: '角色管理' }).first().click({ button: 'right' })
+    await page.getByRole('menu').waitFor({ state: 'visible' })
+    await shoot(page, 'tabs')
     await ctx.close()
   }
 } finally {
