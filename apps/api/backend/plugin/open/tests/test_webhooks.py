@@ -23,8 +23,10 @@ import httpx
 import pytest
 
 from sqlalchemy import delete, select, update
+from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
+from backend.common.data_change import capture
 from backend.core.conf import settings
 from backend.middleware.opera_log_middleware import OperaLogMiddleware
 from backend.plugin.open.events import WEBHOOK_EVENTS, load_webhook_extensions, matches
@@ -34,7 +36,7 @@ from backend.plugin.open.service import event_service, webhook_delivery, webhook
 from backend.plugin.open.service.webhook_delivery import check_target, deliver_one
 from backend.plugin.open.tests.conftest import CODE_PREFIX, SDK_DIR, create_app, run_db
 from backend.plugin.open.tests.test_open_api import _dept_id, _hard_delete_dept
-from backend.tests.utils.data_change import assert_never_recorded, changes_of, column_value, field
+from backend.tests.utils.data_change import assert_never_recorded, changes_of, column_value, engine, field
 from backend.utils.timezone import timezone
 
 HOOKS = '/open-webhooks'
@@ -750,7 +752,7 @@ class TestChangeRecords:
     每投递一次都要写的那几列（连续失败次数、最近投递时间）不出记录"""
 
     def test_lifecycle_is_recorded_without_url_or_secret(
-        self, client: TestClient, token_headers: dict[str, str]
+        self, client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         app = create_app(client, token_headers)
         url_a, url_b = f'{URL}?token=leak-a-{CODE_PREFIX}', f'{URL}?token=leak-b-{CODE_PREFIX}'
@@ -763,11 +765,21 @@ class TestChangeRecords:
         second_cipher = column_value(OpenWebhook, pk, 'secret_cipher')
         assert column_value(OpenWebhook, pk, 'secret_prev_cipher') == first_cipher  # 前置：旧密钥挪过去了
 
-        # 投递记账：只写忽略列，不出记录（走会话，和投递任务同一条路）
+        # 投递记账：和 `webhook_delivery._track_endpoint` 同一种写法（改已加载对象的属性），只动忽略列 ——
+        # 不出记录，而且连「拍原样」那两次整行查询都不该有（#284 评审：这条路原来没有捷径，测试也没走它）
         before = len(changes_of('open_webhook', pk))
-        set_hook(pk, consecutive_failures=3, last_delivery_time=timezone.now())
-        assert hook_row(pk).consecutive_failures == 3
+        snapshots: list[int] = []
+        real = capture._current_rows
+        monkeypatch.setattr(capture, '_current_rows', lambda *a, **k: snapshots.append(1) or real(*a, **k))
+        now = timezone.now()
+        with Session(engine()) as session:
+            row = session.get(OpenWebhook, int(pk))
+            row.consecutive_failures, row.first_failure_time = 3, now
+            row.last_delivery_time, row.last_success_time = now, now
+            session.commit()
+        assert hook_row(pk).consecutive_failures == 3  # 先断言「写了」
         assert len(changes_of('open_webhook', pk)) == before
+        assert snapshots == [], '只改了忽略列还去查了整行'
 
         assert client.delete(f'{HOOKS}/{pk}', headers=token_headers).json()['code'] == 200
         records = changes_of('open_webhook', pk)

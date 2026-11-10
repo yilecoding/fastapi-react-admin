@@ -748,7 +748,9 @@ class TestChangeRecords:
             'secret': True,
         }
         assert change_field(edited, 'secret_cipher') == {'field': 'secret_cipher', 'label': '加签密钥', 'secret': True}
-        assert change_field(edited, 'webhook_hint') is None
+        # 掩码照记（界面上本来就显示着）：看得出地址从飞书换成了钉钉，令牌本身由下面那句守着
+        hint = change_field(edited, 'webhook_hint')
+        assert 'open.feishu.cn' in hint['old'] and 'oapi.dingtalk.com' in hint['new'], hint
         assert_never_recorded(
             records, '0123456789abcdef-pytest', 'abcdef0123456789pytest', 'SECfeishu-leak', 'SECding-leak', *ciphers
         )
