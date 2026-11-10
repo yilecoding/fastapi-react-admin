@@ -459,6 +459,11 @@ E2E 实测弹窗带着 `data-closed` 在屏幕上停了 5 秒还 visible。
 `pages/sms-config/index.tsx` 的 `testDialogMounted` 就是这个形状。
 **实测证据**：`apps/web/e2e/tests/sms.spec.ts` 点日志链接那一步，修前 `toBeHidden` 超时，修后过。
 
+**又踩了三处（2026-11-09）**：数据变更详情的「看这次请求的操作日志」（连关都没做，抽屉开着压在操作日志页上，用户截图报的）· 操作日志详情的「还有 N 条」· 🔴 **下拉菜单也会**：`ExportButton` 的「导出记录」、`RowActions` 里 `render` 成 `<Link>` 的项，菜单飘在新页面左上角（锚点跟着 tab 藏了）。那条 E2E 只断言了地址栏 —— **跳页链接的用例要再断言浮层 `toBeHidden()`、在新页面上点一下**。
+抽屉照上面 `mounted` + `open`（`log-change` / `log-opera` 里挂载的就是记录本身，关只翻 `open`、`onLeave` 清记录）；菜单的开合在 Base UI 里、没有 `mounted` 可清，改成**换 `key` 重挂**（`useReducer((k) => k + 1, 0)`，链接 `onClick` 里 +1），两个共用组件已内置，页面用它们就不用管。只关不卸照样红（变异实测）。
+菜单没改走 `useTabPortalContainer`：挂进带滚动的内容区，靠近底部的菜单可能被裁 —— **推断，没实测**。
+**实测证据**：`overlay-leave.spec.ts`（两个共用组件）· `data-change.spec.ts`（两个抽屉），去掉修法四条都红在 `toBeHidden`（`Received: visible`）。
+
 ### 🔴 不在任何 tab 里的浮层：`container` 要给 `undefined`，不能给 `null`
 
 **症状**：同一个读者抽屉（`pages/notice/reader-sheet.tsx`，#186）在消息中心 / 工作台里开得好好的，
