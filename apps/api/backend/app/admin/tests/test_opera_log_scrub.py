@@ -18,7 +18,7 @@ import pytest
 import sqlalchemy as sa
 
 from backend.app.admin.model import OperaLog
-from backend.app.admin.utils.opera_log_scrub import SCRUBBED, scrub_logged_secrets
+from backend.app.admin.utils.opera_log_scrub import SCRUBBED, SCRUBBED_VIEW, scrub_logged_secrets
 from backend.database.db import create_database_async_engine, get_database_url
 from backend.utils.timezone import timezone
 
@@ -48,6 +48,28 @@ LEGACY: dict[str, tuple[str, Any, str | None]] = {
     'login': ('/api/v1/auth/login', None, json.dumps({'code': 200, 'data': {'access_token': 'leak-jwt', 'x': 1}})),
     'login-cut': ('/api/v1/auth/refresh', None, '{"code": 200, "data": {"access_token": "leak-jwt-cut", "access_tok'),
     'provider': ('/api/v1/ai/providers', {'json': {'name': 'DeepSeek', 'api_key': 'leak-sk'}}, None),
+    # 打开「操作日志」页那次请求自己的日志：响应是一页别人的日志，args 嵌在里面、响应体是转义过的字符串（#283 评审）
+    'opera-view': (
+        '/api/v1/logs/opera',
+        {'query_params': {'page': '1'}},
+        json.dumps({
+            'code': 200,
+            'data': {
+                'items': [
+                    {
+                        'args': {'json': {'api_key': 'leak-view-sk'}},
+                        'response_body': json.dumps({'data': [{'key': 'EMAIL_PASSWORD', 'value': 'leak-view-body'}]}),
+                    }
+                ]
+            },
+        }),
+    ),
+    # 对照：新中间件写下的「截断但已打码」—— 重跑不能把它整段换掉（#283 评审：原来不幂等）
+    'cut-redacted': (
+        f'{CONFIGS}/all',
+        None,
+        '{"code": 200, "data": [{"key": "EMAIL_PASSWORD", "value": "[REDACTED]", "name": "SMTP 授权码"}, {"ke',
+    ),
     # 对照：别的接口，不在扫描范围里，原样不动
     'other': ('/api/v1/sys/users', {'json': {'nickname': 'x'}}, '{"code": 200}'),
 }
@@ -133,11 +155,13 @@ def test_secrets_already_in_the_opera_log_are_scrubbed() -> None:
     assert json.loads(after['login'][1])['data'] == {'access_token': '[REDACTED]', 'x': 1}
     assert after['login-cut'][1] == SCRUBBED
     assert after['provider'][0] == {'json': {'name': 'DeepSeek', 'api_key': '[REDACTED]'}}
+    assert after['opera-view'][1] == SCRUBBED_VIEW
+    assert after['cut-redacted'] == before['cut-redacted']
     # 对照：没有密钥的截断响应、别的接口，原样不动
     assert after['truncated-plain'] == before['truncated-plain']
     assert after['other'] == before['other']
-    # 共享的测试库里可能还有别的日志在扫描范围里，所以只能断言「至少」这 7 行
-    assert changed >= 7
+    # 共享的测试库里可能还有别的日志在扫描范围里，所以只能断言「至少」这 8 行
+    assert changed >= 8
 
     # 再跑一遍：清过的行不再变
     _run(lambda conn: conn.run_sync(scrub_logged_secrets))

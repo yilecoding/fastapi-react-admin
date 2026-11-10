@@ -28,13 +28,30 @@ def test_the_rule_is_the_same_as_the_frontend_config_page() -> None:
 
 @pytest.mark.parametrize(
     'key',
-    ['EMAIL_PASSWORD', 'smtp_password', 'OSS_SECRET', 'WECHAT_TOKEN', 'MAP_API_KEY', 'MAP_APIKEY', 'GCP_CREDENTIALS'],
+    [
+        'EMAIL_PASSWORD',
+        'smtp_password',
+        'OSS_SECRET',
+        'WECHAT_TOKEN',
+        'MAP_API_KEY',
+        'MAP_APIKEY',
+        'GCP_CREDENTIALS',
+        # #283 评审补的
+        'JWT_SECRET_KEY',
+        'PRIVATE_KEY',
+        'SMTP_PASS',
+        'REDIS_PWD',
+        'WX_AUTH_CODE',
+    ],
 )
 def test_secret_by_suffix_ignoring_case(key: str) -> None:
     assert is_secret_key_name(key)
 
 
-# 后缀匹配：`USER_PASSWORD_MIN_LENGTH` 是策略不是密码；不是字符串的一律不算
-@pytest.mark.parametrize('key', ['USER_PASSWORD_MIN_LENGTH', 'TOKEN_EXPIRE_SECONDS', 'EMAIL_HOST', None, 123])
+# 后缀匹配：`USER_PASSWORD_MIN_LENGTH` 是策略不是密码；`LOGIN_BYPASS` 是开关；`ACCESS_KEY` 是公开标识；
+# 不是字符串的一律不算
+@pytest.mark.parametrize(
+    'key', ['USER_PASSWORD_MIN_LENGTH', 'TOKEN_EXPIRE_SECONDS', 'EMAIL_HOST', 'LOGIN_BYPASS', 'ACCESS_KEY', None, 123]
+)
 def test_not_secret(key: object) -> None:
     assert not is_secret_key_name(key)

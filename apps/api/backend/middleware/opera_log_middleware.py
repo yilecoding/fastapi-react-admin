@@ -237,9 +237,19 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
         # 请求体
         body_data = await request.body()
         if body_data and not is_form:
-            # 注意：非 json 数据默认使用 data 作为键
-            if 'application/json' not in content_types:
-                args['data'] = body_data.decode('utf-8', 'ignore') if isinstance(body_data, bytes) else str(body_data)
+            # `application/merge-patch+json` 这类 FastAPI 也按 JSON 解析（`subtype.endswith('+json')`），这里要认同一组
+            is_json = any(ct == 'application/json' or ct.endswith('+json') for ct in content_types)
+            if not is_json:
+                # 注意：非 json 数据默认使用 data 作为键
+                text = body_data.decode('utf-8', 'ignore') if isinstance(body_data, bytes) else str(body_data)
+                # 🔴 声明不是 JSON、内容却是 JSON 的（`text/plain` 发 `{"password": …}`）照样按字段打码：
+                # 路由层会把它 422 拒掉，但这个中间件在路由之前，原样记就是明文进日志（#283 评审）
+                try:
+                    parsed = json.loads(text)
+                except ValueError:
+                    args['data'] = text
+                else:
+                    args['json'] = self.desensitization(parsed)
             else:
                 # 🔴 请求体声明是 JSON、实际不是（截断 / 手写错了）时不能在这里炸：这个中间件在路由**之前**，
                 # 抛出去就是一个 500，路由层本该回的 422（`json_invalid`）永远轮不到。接住，交给路由层去拒。

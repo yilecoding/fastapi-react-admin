@@ -189,8 +189,8 @@ def test_a_client_that_left_while_the_route_ran_is_not_logged_as_a_success(monke
     assert queue.empty(), f'没执行完的请求不该进操作日志：{queue.get_nowait()}'
 
 
-def _request_args_for(path: str, body: bytes) -> dict | None:
-    """让中间件读一份 `Content-Type: application/json` 的请求体，返回它要记进操作日志的参数"""
+def _request_args_for(path: str, body: bytes, content_type: bytes = b'application/json') -> dict | None:
+    """让中间件读一份请求体（默认 `Content-Type: application/json`），返回它要记进操作日志的参数"""
     import asyncio
 
     from starlette.requests import Request
@@ -204,7 +204,7 @@ def _request_args_for(path: str, body: bytes) -> dict | None:
         'path': f'{settings.FASTAPI_API_V1_PATH}{path}',
         'raw_path': b'',
         'query_string': b'',
-        'headers': [(b'content-type', b'application/json'), (b'content-length', str(len(body)).encode())],
+        'headers': [(b'content-type', content_type), (b'content-length', str(len(body)).encode())],
         'path_params': {},
         'client': ('127.0.0.1', 1),
         'server': ('127.0.0.1', 8000),
@@ -353,3 +353,29 @@ def test_every_credential_like_field_in_the_api_is_redacted():
     assert {'password', 'api_key', 'access_token'} <= names, '前置：扫得到真接口的 schema'
     missing = sorted(names - set(settings.OPERA_LOG_REDACT_KEYS) - set(_NOT_CREDENTIALS))
     assert not missing, f'这些字段名像凭据、操作日志却不打码：{missing}'
+
+
+@pytest.mark.parametrize('content_type', [b'application/merge-patch+json', b'text/plain', b'application/x-unknown'])
+def test_a_json_body_under_another_content_type_is_still_redacted(content_type: bytes) -> None:
+    """#283 评审：FastAPI 把 `*+json` 也按 JSON 解析，中间件原来只认 `application/json`，其余一律原样记文本 ——
+    `merge-patch+json` 发的 `api_key`、`text/plain` 发的密码（路由层 422，但中间件在它前面）都明文进日志"""
+    body = json.dumps({'name': 'x', 'api_key': 'sk-live-plain', 'password': 'P@ss-plain'}).encode()
+    args = _request_args_for('/sys/users/me', body, content_type)
+    dumped = json.dumps(args, ensure_ascii=False)
+    assert '"name": "x"' in dumped  # 先断言「有」
+    assert 'sk-live-plain' not in dumped and 'P@ss-plain' not in dumped, dumped
+
+
+def test_a_non_json_text_body_is_still_logged_as_text() -> None:
+    """对照：读不成 JSON 的纯文本照旧原样记（没有可按字段打码的结构）"""
+    args = _request_args_for('/sys/users/me', b'just some text', b'text/plain')
+    assert args == {'data': 'just some text'}
+
+
+def test_a_broken_plus_json_body_is_not_logged_in_plain_text() -> None:
+    """`*+json` 要和 `application/json` 走同一支：解析不了就记占位。只靠「先当文本、能解析就打码」兜的话，
+    截断的 `merge-patch+json` 读不成 JSON，会原样当文本记下来"""
+    body = b'{"api_key": "sk-live-cut", "name": "x'
+    args = _request_args_for('/sys/users/me', body, b'application/merge-patch+json')
+    assert args and args['body']['_invalid_json'] is True
+    assert 'sk-live-cut' not in json.dumps(args, ensure_ascii=False)
