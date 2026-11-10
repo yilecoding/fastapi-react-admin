@@ -37,6 +37,7 @@ from starlette.testclient import TestClient
 from backend.app.admin.model import File, Storage
 from backend.core.conf import settings
 from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
+from backend.tests.utils.data_change import assert_never_recorded, changes_of, column_value, field
 
 STORAGES = '/sys/storages'
 FILES = '/sys/files'
@@ -686,3 +687,33 @@ def test_config_change_is_not_masked_by_operator_cache(
     body = {'name': 'pytest S3', 'endpoint': 'http://127.0.0.1:1', 'bucket': _BUCKET, 'access_key': 'pytest'}
     assert client.put(f'{STORAGES}/{pk}', headers=token_headers, json=body).status_code == 200
     assert client.post(f'{STORAGES}/{pk}/test', headers=token_headers).json()['data']['ok'] is False
+
+
+# ─── 数据变更记录（#281）──────────────────────────────────────────────────────
+
+
+def test_changes_are_recorded_without_the_secret(client: TestClient, token_headers: dict[str, str]) -> None:
+    """Secret Key 只记「改过」，明文、密文、前几位都不进数据变更记录"""
+    endpoint = 'http://10.0.0.1:9000'  # 私网不拦，也不连（建 / 改都不探活）
+    pk = _create_s3(client, token_headers, endpoint, code='DC')
+    ciphers = [column_value(Storage, pk, 'secret_cipher')]
+    new_secret = 'rotated-storage-secret-0123'
+    body = {
+        'name': 'pytest S3 改名',
+        'endpoint': endpoint,
+        'bucket': _BUCKET,
+        'access_key': _S3_ACCESS_KEY,
+        'secret_key': new_secret,
+    }
+    assert client.put(f'{STORAGES}/{pk}', headers=token_headers, json=body).status_code == 200
+    ciphers.append(column_value(Storage, pk, 'secret_cipher'))
+    assert client.delete(f'{STORAGES}/{pk}', headers=token_headers).status_code == 200
+
+    records = changes_of('storage', pk)
+    assert [r['action'] for r in records] == ['create', 'update', 'delete']
+    created, edited, _ = records
+    assert field(created, 'type')['new_label'] == 'S3 兼容'
+    assert field(edited, 'name') == {'field': 'name', 'label': '名称', 'old': 'pytest S3', 'new': 'pytest S3 改名'}
+    assert field(edited, 'secret_cipher') == {'field': 'secret_cipher', 'label': 'Secret Key', 'secret': True}
+    assert field(edited, 'secret_hint') is None
+    assert_never_recorded(records, _S3_SECRET_KEY, new_secret, *ciphers)
