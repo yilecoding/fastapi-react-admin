@@ -9,8 +9,12 @@ import { StatusPill } from '../status'
 import { dataChangeMetaQuery, traceChangesQuery } from './api'
 import { ActionPill, ChangeList } from './change-list'
 
-/** 一次请求（按 trace_id）改了哪些对象的哪些字段 —— 操作日志详情里用（#260） */
-export function TraceChanges({ traceId }: { traceId: string }) {
+/**
+ * 一次请求（按 trace_id）改了哪些对象的哪些字段 —— 操作日志详情里用（#260）
+ *
+ * @param onLeave 点「去数据变更看全部」时调：这个组件在抽屉里，跳走之前抽屉要整个卸载（见 `OperaLogDetailSheet`）
+ */
+export function TraceChanges({ traceId, onLeave }: { traceId: string; onLeave?: () => void }) {
   const { t } = useTranslation()
   const query = useQuery(traceChangesQuery(traceId))
   const meta = useQuery(dataChangeMetaQuery())
@@ -48,6 +52,7 @@ export function TraceChanges({ traceId }: { traceId: string }) {
           <Link
             to="/log/change"
             search={{ trace_id: traceId }}
+            onClick={onLeave}
             className="text-sm text-primary hover:underline"
             data-testid="trace-changes-more"
           >
