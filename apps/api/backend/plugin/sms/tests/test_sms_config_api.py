@@ -12,10 +12,12 @@ import pytest
 from backend.core.conf import settings
 from backend.database.redis import redis_client
 from backend.middleware.opera_log_middleware import OperaLogMiddleware
+from backend.plugin.sms.model import SmsConfig
 from backend.plugin.sms.sdk.base import SmsErrorKind, SmsMessage, SmsProvider, SmsResult, TemplateMapping
 from backend.plugin.sms.sdk.console import ConsoleConfig
 from backend.plugin.sms.sdk.registry import register_provider, unregister_provider
 from backend.plugin.sms.tests.conftest import CONFIGS, LOGS, NAME_PREFIX, PHONE_A
+from backend.tests.utils.data_change import assert_never_recorded, changes_of, column_value, field
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -109,6 +111,8 @@ class TestValidationAtSave:
         [
             ({'provider': 'huawei'}, 'huawei'),  # 未知厂商
             ({'options': {'endpiont': 'x'}}, 'endpiont'),  # options 键名拼错
+            # 🔴 凭据塞进 options：原来校验能过（只在副本里换掉），options 原样明文进库（#281 接审计时实测出来的）
+            ({'options': {'endpoint': 'dysmsapi.aliyuncs.com', 'access_key_secret': 'SMUGGLED'}}, 'access_key_secret'),
             ({'templates': {'captch': {'template_id': 'S', 'mapping': {'code': 'code'}}}}, 'captch'),  # 模板码拼错
             ({'templates': {'captcha': {'template_id': 'S', 'mapping': {'code': 'cdoe'}}}}, 'cdoe'),  # 参数名拼错
             ({'templates': {'captcha': {'template_id': 'S', 'mapping': ['code']}}}, '变量名'),  # 阿里云要按变量名
@@ -124,6 +128,19 @@ class TestValidationAtSave:
         res = client.post(CONFIGS, headers=token_headers, json={**ALIYUN_BODY, **patch})
         assert res.json()['code'] == 400, res.text
         assert fragment in res.json()['msg'], res.json()['msg']
+
+    def test_credentials_in_options_are_refused_on_update_too(
+        self, client: TestClient, token_headers: dict[str, str], make_config: Callable[..., dict[str, Any]]
+    ) -> None:
+        """编辑走同一个 `_validate`；只测新建的话，把检查挪出共用的那一步，编辑就悄悄放行了（#284 评审）"""
+        item = make_config('optcred', **{k: v for k, v in ALIYUN_BODY.items() if k != 'name'})
+        body = {
+            **ALIYUN_BODY,
+            'name': item['name'],
+            'options': {'endpoint': 'dysmsapi.aliyuncs.com', 'access_key_secret': 'SMUGGLED'},
+        }
+        res = client.put(f'{CONFIGS}/{item["id"]}', headers=token_headers, json=body).json()
+        assert res['code'] == 400 and 'access_key_secret' in res['msg'], res
 
     def test_tencent_mapping_must_be_ordered(
         self, client: TestClient, token_headers: dict[str, str], encrypt_key: str
@@ -346,3 +363,32 @@ class TestSendTest:
             client.post(f'{CONFIGS}/{c["id"]}/test', headers=token_headers, json=body).status_code for _ in range(7)
         ]
         assert codes.count(200) == 5 and codes.count(429) == 2, codes
+
+
+class TestChangeRecords:
+    """#281：短信配置的改动进数据变更记录，凭据 secret 只记「改过」，明文、密文、掩码都不进去"""
+
+    def test_lifecycle_is_recorded_without_the_secret(
+        self, client: TestClient, token_headers: dict[str, str], make_config: Callable[..., dict[str, Any]]
+    ) -> None:
+        item = make_config('dc', **{k: v for k, v in ALIYUN_BODY.items() if k != 'name'})
+        pk = item['id']
+        ciphers = [column_value(SmsConfig, pk, 'secret_cipher')]
+        new_secret = 'rotated-secret-value-9876543210'
+        body = {**ALIYUN_BODY, 'name': item['name'], 'sign_name': '改过的签名', 'access_key_secret': new_secret}
+        assert client.put(f'{CONFIGS}/{pk}', headers=token_headers, json=body).json()['code'] == 200
+        ciphers.append(column_value(SmsConfig, pk, 'secret_cipher'))
+
+        assert client.delete(f'{CONFIGS}/{pk}', headers=token_headers).json()['code'] == 200
+        records = changes_of('sms_config', pk)
+        assert [r['action'] for r in records] == ['create', 'update', 'delete']
+        edited = records[1]
+        assert field(edited, 'sign_name') == {
+            'field': 'sign_name',
+            'label': '短信签名',
+            'old': '测试签名',
+            'new': '改过的签名',
+        }
+        assert field(edited, 'secret_cipher') == {'field': 'secret_cipher', 'label': '凭据 Secret', 'secret': True}
+        assert field(edited, 'secret_mask') is None
+        assert_never_recorded(records, ALIYUN_BODY['access_key_secret'], new_secret, *ciphers)
