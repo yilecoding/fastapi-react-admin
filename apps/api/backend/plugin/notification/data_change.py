@@ -27,12 +27,13 @@ register_audited(
 )
 
 # 通知策略：一格（类型 × 渠道）一行，没有行 = 用注册表的默认值。所以「改回默认值」在记录里是「已删除」，
-# 第一次改某一格是「已新建」。对象名记类型码（`label='kind'`），渠道作为字段记在新建 / 删除那一条里
+# 第一次改某一格是「已新建」。🔴 对象名是「类型 · 渠道」：只记类型的话，「改」的记录里只有变了的「策略」、
+# 「删」的记录里什么字段都没有 —— 同一次保存改了同一类型的邮件和短信两格，列表上是两条分不开的记录（#286 评审）
 register_audited(
     NotificationPolicy,
     entity='notification_policy',
     title='通知策略',
-    label='kind',
+    label=('kind', 'channel'),
     fields={'kind': '通知类型', 'channel': '渠道', 'mode': '策略'},
     enums={
         'channel': {'inapp': '站内', 'email': '邮件', 'sms': '短信'},

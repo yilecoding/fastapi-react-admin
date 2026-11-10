@@ -63,7 +63,8 @@ test.describe("数据权限 · 通知策略的变更记录", () => {
       await expect(page).toHaveURL(/\/log\/change\?.*entity_type=notification_policy/)
       const table = page.locator('[data-tab="/_auth/log/change"]').getByTestId("change-table")
       await expect(table).toHaveAttribute("data-fetching", "false")
-      await expect(table.locator("tbody tr").first()).toContainText("workflow.timeout")
+      // 按对象名找这一格，不看「第一行」：notify-channels.spec.ts 并行地在改另一格，可能比这条新（#286 评审）
+      await expect(table.locator("tbody tr", { hasText: "workflow.timeout · sms" }).first()).toBeVisible()
     } finally {
       await api.put(POLICIES, { items: [{ kind: "workflow.timeout", channel: "sms", mode: cell!.default }] })
     }
