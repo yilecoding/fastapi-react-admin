@@ -8,6 +8,7 @@
 """
 
 import json
+import re
 
 import pytest
 
@@ -280,3 +281,75 @@ def test_a_secret_config_value_in_a_response_is_redacted():
     got = M.redact_body(raw, 'application/json').decode()
     assert 'EMAIL_PASSWORD' in got and '"h"' in got  # 先断言「有」
     assert 'smtp-auth-code' not in got
+
+
+# --------------------------------------------------------------------------- 名单漏掉的凭据字段
+
+
+def test_login_response_tokens_are_redacted():
+    """🔴 登录 / 刷新 / 二次验证的响应体里是 `access_token`，原来不在名单里 —— 本机开发库实测 109 条 `/auth/login`
+    的操作日志明文留着访问令牌，有操作日志查看权限的人在令牌有效期内拿它就能冒用"""
+    raw = json.dumps({'code': 200, 'data': {'access_token': 'eyJhbGciOi.payload.sig', 'session_uuid': 's'}}).encode()
+    got = M.redact_body(raw, 'application/json').decode()
+    assert 'session_uuid' in got  # 先断言「有」
+    assert 'eyJhbGciOi' not in got
+
+
+def test_ai_provider_api_key_is_redacted():
+    """🔴 模型密钥的请求体字段叫 `api_key`，原来不在名单里：新建 / 编辑时模型的 API Key 明文进操作日志"""
+    got = M.desensitization({'json': {'name': 'DeepSeek', 'api_key': 'sk-live-0123456789'}})
+    assert got['json']['name'] == 'DeepSeek'
+    assert got['json']['api_key'] == '[REDACTED]'
+
+
+#: 名字像凭据、其实不是的字段（各写一句为什么）。新加的字段名撞上 `_CREDENTIAL_LIKE` 又不在打码名单里，
+#: 守卫就红 —— 要么进 `OPERA_LOG_REDACT_KEYS`，要么在这里说清楚它为什么不是凭据
+_NOT_CREDENTIALS = {
+    'token_type': '固定值 Bearer',
+    'access_token_expire_time': '过期时间',
+    'refresh_token_expire_time': '过期时间',
+    'secret_hint': '密钥前几位，界面上就显示着',
+    'secret_mask': '掩码',
+    'api_key_mask': '掩码',
+    'token_hint': '令牌前几位',
+    'has_secret': '有没有配，布尔',
+    'clear_sign_secret': '要不要清掉，布尔',
+    'encrypt_key_ready': '服务端配没配加密密钥，布尔',
+    'secret_field': '凭据字段的名字（短信厂商描述）',
+    'secret_label': '凭据字段的显示名',
+    'keyed': '防篡改链配没配密钥，布尔',
+    'other_key': '换密钥之前签的行数',
+    'prompt_tokens': 'AI 用量计数',
+    'completion_tokens': 'AI 用量计数',
+    'credential': '短信厂商的凭据字段描述（字段名、显示名），不是值',
+    'secret_id': '腾讯云的 SecretId，相当于 AccessKey ID（公开标识）；只在 SDK 的配置模型里，请求里叫 access_key_id',
+    'secret_prev_expire_time': '旧签名密钥的过期时间',
+    'password_expire_days_remaining': '密码还剩几天过期',
+}
+_CREDENTIAL_LIKE = re.compile(r'password|secret|token|api_?key|credential', re.IGNORECASE)
+
+
+def test_every_credential_like_field_in_the_api_is_redacted():
+    """守卫：请求 / 响应 schema 里名字像凭据的字段，都要在 `OPERA_LOG_REDACT_KEYS` 里。
+    `api_key`、`access_token` 都是这么漏的：名单是按字段名一个个加的，新接口用了个新名字就没人想起来"""
+    from pydantic import BaseModel
+    from pydantic_settings import BaseSettings
+
+    import backend.main  # ruff: ignore[unused-import] —— 把各模块、各插件的 schema 都 import 进来
+
+    def walk(cls: type) -> set[type]:
+        out = set()
+        for sub in cls.__subclasses__():
+            out |= {sub, *walk(sub)}
+        return out
+
+    names = {
+        name
+        for model in walk(BaseModel)
+        if model.__module__.startswith('backend.') and not issubclass(model, BaseSettings)
+        for name in getattr(model, 'model_fields', {})
+        if _CREDENTIAL_LIKE.search(name)
+    }
+    assert {'password', 'api_key', 'access_token'} <= names, '前置：扫得到真接口的 schema'
+    missing = sorted(names - set(settings.OPERA_LOG_REDACT_KEYS) - set(_NOT_CREDENTIALS))
+    assert not missing, f'这些字段名像凭据、操作日志却不打码：{missing}'

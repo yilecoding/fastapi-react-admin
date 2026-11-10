@@ -1,7 +1,8 @@
-"""迁移 `aq000000operalogsecret`：已经写进 `sys_opera_log` 的参数配置密钥要清掉。
+"""迁移 `aq000000operalogsecret`：已经写进 `sys_opera_log` 的凭据要清掉。
 
-按修之前真会写出来的几种形状往库里垫行（新建的 JSON · 批量保存的 repr · 完整的响应体 · 截断过的响应体），
-跑 `scrub_config_secrets`，再从库里读回来。走真库是因为 `args` 是 JSON 列：三个方言的读写各不相同，
+按修之前真会写出来的几种形状往库里垫行（参数配置新建的 JSON · 批量保存的 repr · 完整的响应体 · 截断过的响应体 ·
+登录响应里的访问令牌 · 模型密钥的 api_key），
+跑 `scrub_logged_secrets`，再从库里读回来。走真库是因为 `args` 是 JSON 列：三个方言的读写各不相同，
 函数在内存里对了不等于在库里对了。
 """
 
@@ -17,7 +18,7 @@ import pytest
 import sqlalchemy as sa
 
 from backend.app.admin.model import OperaLog
-from backend.app.admin.utils.opera_log_scrub import SCRUBBED, scrub_config_secrets
+from backend.app.admin.utils.opera_log_scrub import SCRUBBED, scrub_logged_secrets
 from backend.database.db import create_database_async_engine, get_database_url
 from backend.utils.timezone import timezone
 
@@ -43,6 +44,10 @@ LEGACY: dict[str, tuple[str, Any, str | None]] = {
     ),
     # 对照：截断了但里面没有密钥类的行 —— 不该被清
     'truncated-plain': (f'{CONFIGS}/all', None, '{"code": 200, "data": [{"key": "EMAIL_HOST", "value": "h"}, {"ke'),
+    # 名单原来漏掉的字段名：登录响应里的访问令牌（完整的 / 截断的）· 模型密钥的 api_key
+    'login': ('/api/v1/auth/login', None, json.dumps({'code': 200, 'data': {'access_token': 'leak-jwt', 'x': 1}})),
+    'login-cut': ('/api/v1/auth/refresh', None, '{"code": 200, "data": {"access_token": "leak-jwt-cut", "access_tok'),
+    'provider': ('/api/v1/ai/providers', {'json': {'name': 'DeepSeek', 'api_key': 'leak-sk'}}, None),
     # 对照：别的接口，不在扫描范围里，原样不动
     'other': ('/api/v1/sys/users', {'json': {'nickname': 'x'}}, '{"code": 200}'),
 }
@@ -114,7 +119,7 @@ def test_secrets_already_in_the_opera_log_are_scrubbed() -> None:
     assert before['create'][0]['json']['value'] == 'leak-json'
     assert 'leak-repr' in before['bulk'][0]['data']
 
-    changed = _run(lambda conn: conn.run_sync(scrub_config_secrets))
+    changed = _run(lambda conn: conn.run_sync(scrub_logged_secrets))
     after = _read()
     dumped = {name: json.dumps(args, ensure_ascii=False) + (body or '') for name, (args, body) in after.items()}
     for name, text in dumped.items():
@@ -125,12 +130,15 @@ def test_secrets_already_in_the_opera_log_are_scrubbed() -> None:
     assert after['bulk'][0] == {'json': [{'id': 1, **_ROW, 'value': '[REDACTED]'}, {'id': 2, **_HOST}]}
     assert json.loads(after['page'][1])['data'] == [{**_ROW, 'value': '[REDACTED]'}, _HOST]
     assert after['truncated'][1] == SCRUBBED
+    assert json.loads(after['login'][1])['data'] == {'access_token': '[REDACTED]', 'x': 1}
+    assert after['login-cut'][1] == SCRUBBED
+    assert after['provider'][0] == {'json': {'name': 'DeepSeek', 'api_key': '[REDACTED]'}}
     # 对照：没有密钥的截断响应、别的接口，原样不动
     assert after['truncated-plain'] == before['truncated-plain']
     assert after['other'] == before['other']
-    # 共享的测试库里可能还有别人的 /configs 日志，所以只能断言「至少」这 4 行
-    assert changed >= 4
+    # 共享的测试库里可能还有别的日志在扫描范围里，所以只能断言「至少」这 7 行
+    assert changed >= 7
 
     # 再跑一遍：清过的行不再变
-    _run(lambda conn: conn.run_sync(scrub_config_secrets))
+    _run(lambda conn: conn.run_sync(scrub_logged_secrets))
     assert _read() == after
