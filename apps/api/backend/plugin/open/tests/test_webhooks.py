@@ -23,8 +23,10 @@ import httpx
 import pytest
 
 from sqlalchemy import delete, select, update
+from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
+from backend.common.data_change import capture
 from backend.core.conf import settings
 from backend.middleware.opera_log_middleware import OperaLogMiddleware
 from backend.plugin.open.events import WEBHOOK_EVENTS, load_webhook_extensions, matches
@@ -34,6 +36,7 @@ from backend.plugin.open.service import event_service, webhook_delivery, webhook
 from backend.plugin.open.service.webhook_delivery import check_target, deliver_one
 from backend.plugin.open.tests.conftest import CODE_PREFIX, SDK_DIR, create_app, run_db
 from backend.plugin.open.tests.test_open_api import _dept_id, _hard_delete_dept
+from backend.tests.utils.data_change import assert_never_recorded, changes_of, column_value, engine, field
 from backend.utils.timezone import timezone
 
 HOOKS = '/open-webhooks'
@@ -742,3 +745,50 @@ def test_signature_matches_the_shared_vectors() -> None:
     assert v['signature'] == 'v1,' + base64.b64encode(mac).decode()
     assert webhook_sign.verify(v['secret'], v['id'], v['timestamp'], f'v1,AAAA {v["signature"]}', body)
     assert not webhook_sign.verify(v['secret'], v['id'], v['timestamp'], v['signature'], body + b' ')
+
+
+class TestChangeRecords:
+    """#281：端点的改动进数据变更记录。接收地址和签名密钥只记「改过」（地址里常带着令牌）；
+    每投递一次都要写的那几列（连续失败次数、最近投递时间）不出记录"""
+
+    def test_lifecycle_is_recorded_without_url_or_secret(
+        self, client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        app = create_app(client, token_headers)
+        url_a, url_b = f'{URL}?token=leak-a-{CODE_PREFIX}', f'{URL}?token=leak-b-{CODE_PREFIX}'
+        hook = create_hook(client, token_headers, app['id'], url=url_a)
+        pk = hook['id']
+        first_cipher = column_value(OpenWebhook, pk, 'secret_cipher')
+        body = {'name': f'{CODE_PREFIX}改名', 'url': url_b, 'events': ['dept.*', 'user.*'], 'status': 1}
+        assert client.put(f'{HOOKS}/{pk}', headers=token_headers, json=body).json()['code'] == 200
+        rotated = client.post(f'{HOOKS}/{pk}/secret', headers=token_headers).json()['data']
+        second_cipher = column_value(OpenWebhook, pk, 'secret_cipher')
+        assert column_value(OpenWebhook, pk, 'secret_prev_cipher') == first_cipher  # 前置：旧密钥挪过去了
+
+        # 投递记账：和 `webhook_delivery._track_endpoint` 同一种写法（改已加载对象的属性），只动忽略列 ——
+        # 不出记录，而且连「拍原样」那两次整行查询都不该有（#284 评审：这条路原来没有捷径，测试也没走它）
+        before = len(changes_of('open_webhook', pk))
+        snapshots: list[int] = []
+        real = capture._current_rows
+        monkeypatch.setattr(capture, '_current_rows', lambda *a, **k: snapshots.append(1) or real(*a, **k))
+        now = timezone.now()
+        with Session(engine()) as session:
+            row = session.get(OpenWebhook, int(pk))
+            row.consecutive_failures, row.first_failure_time = 3, now
+            row.last_delivery_time, row.last_success_time = now, now
+            session.commit()
+        assert hook_row(pk).consecutive_failures == 3  # 先断言「写了」
+        assert len(changes_of('open_webhook', pk)) == before
+        assert snapshots == [], '只改了忽略列还去查了整行'
+
+        assert client.delete(f'{HOOKS}/{pk}', headers=token_headers).json()['code'] == 200
+        records = changes_of('open_webhook', pk)
+        assert [r['action'] for r in records] == ['create', 'update', 'update', 'delete']
+        created, edited, rerolled, _ = records
+        assert field(created, 'app_id')['new_label'] == '测试系统', '所属应用存当时的名字'
+        assert field(edited, 'url') == {'field': 'url', 'label': '接收地址', 'secret': True}
+        assert field(edited, 'name')['new'] == f'{CODE_PREFIX}改名'
+        assert [c['field'] for c in rerolled['changes']] == ['secret_cipher'], '旧密钥挪位、前几位都不另记'
+        assert_never_recorded(
+            records, 'leak-a-', 'leak-b-', hook['secret_key'], rotated['secret_key'], first_cipher, second_cipher
+        )

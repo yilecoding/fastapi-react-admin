@@ -403,13 +403,19 @@ def _on_before_flush(session: Session, _flush_context: Any, _instances: Any) -> 
     touched = [o for o in session.dirty if session.is_modified(o, include_collections=False)] + list(session.deleted)
     wanted: dict[str, list[tuple[Any, Any, Origin]]] = {}
     buf: _Buffer | None = None
+    deleted = session.deleted
     for obj in touched:
         spec = _spec_of(obj)
         if spec is None:
             continue
+        state = sa.inspect(obj)
+        if obj not in deleted and _changed_columns(state) <= spec.ignore:
+            # 只改了忽略列（Webhook 每投递一次写的计数 / 时间）：不拍原样，提交时也就不比。
+            # 语句式 UPDATE 那边早有这条捷径；这条路原来没有，每投递一次白查两次整行（#284 评审）
+            state.info.pop(_ORIGIN, None)
+            continue
         buf = buf or _buffer(session)
         pk = getattr(obj, spec.pk.key)
-        state = sa.inspect(obj)
         origin = state.info.pop(_ORIGIN, None) or current_origin()
         if (spec.table.name, pk) not in buf.rows:
             wanted.setdefault(spec.table.name, []).append((pk, obj, origin))
