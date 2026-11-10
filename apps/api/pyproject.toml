@@ -2,7 +2,7 @@
 name = "fastapi-react-admin-api"
 description = "fastapi-react-admin 的后端（fork 自 fastapi-best-architecture，适配 SQL Server）"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 # 分叉的包元数据要写分叉的维护者 —— 留着上游作者的姓名和邮箱等于冒认，
 # 而且别人会因为**这个 fork** 的问题去找他。上游的署名在
@@ -275,7 +275,10 @@ ignore = [
   "non-empty-init-module",
   "error-instead-of-exception",
   "raise-vanilla-args",
-  "raise-within-try"
+  "raise-within-try",
+  # Python 下限提到 3.11 之后 ruff 建议把 `class X(str, Enum)` 换成 `enum.StrEnum`（#294）。
+  # 那不是等价替换：`str()` 里前者是 `X.member`、后者是值（3.12 起 f-string 也是），换了会静默改掉日志和拼出来的文案
+  "replace-str-enum"
 ]
 
 [tool.ruff.lint.per-file-ignores]

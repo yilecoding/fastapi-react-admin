@@ -13,9 +13,10 @@ from fastapi_pagination.links.bases import create_links
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
+    from typing import Self
+
     from sqlalchemy import Select
     from sqlalchemy.ext.asyncio import AsyncSession
-    from typing_extensions import Self
 
 T = TypeVar('T')
 SchemaT = TypeVar('SchemaT')
