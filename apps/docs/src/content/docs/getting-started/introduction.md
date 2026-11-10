@@ -41,7 +41,7 @@ packages/      依赖单向：i18n / api ← ui ← platform ← web
 因为 AI 改代码很快，而这里每一处改动都有东西兜底：
 
 - **测试兜底。** AI 一次改十几个文件很常见，人工点一遍点不过来。后端 1400+ 条 pytest 连真实数据库和 Redis，前端 150+ 条 Playwright 跑真实浏览器，不用 mock，CI 每次全量跑；失败的用例带截图和录像，[E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/)公开。
-- **类型兜底。** 前后端类型由后端的 OpenAPI 生成（`packages/api/src/schema.d.ts`），接口改了而页面没跟上，`pnpm typecheck` 直接报错。
+- **类型兜底。** 前后端契约由后端的 OpenAPI 生成（`packages/api/src/schema.d.ts`）。移动端的每个请求都从它推断类型，接口改了而页面没跟上，`pnpm typecheck` 直接报错；网页端还在迁移，请求的返回类型目前在各调用点手写（见[开发者工具](/features/developer-tools/#前后端契约是怎么来的)）。
 - **规矩写给 AI 看。** 仓库里 50 多份按目录拆分的 `CLAUDE.md` / `AGENTS.md` 记着实测踩过的坑和硬纪律，编码助手改到哪个目录，就读到哪一份。
 - **后端就在 AI 生态里。** Python + FastAPI，内置的 AI 助手基于 pydantic-ai。
 
