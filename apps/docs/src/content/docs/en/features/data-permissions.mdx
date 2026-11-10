@@ -5,7 +5,21 @@ sidebar:
   order: 1
 ---
 
+import shot from '../../../../../../../docs/screenshots/data-permission.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 fastapi-react-admin has two independent permission layers. **RBAC** decides whether a user may open a page, see a button or call an endpoint (permission codes such as `sys:user:list`). **Data scopes** decide which rows that endpoint returns: a role's rules are compiled into a SQLAlchemy `WHERE` condition that the DAO layer appends to every read, so on the same Users list a department manager can be limited to their own department.
+
+<ProductShot src={shot} alt="Data permissions: scopes and rules" url="localhost:8888/system/data-permission" />
+
+## Where is it in the UI?
+
+| Screen | Path | Permission code | What it does |
+|---|---|---|---|
+| **System → Data permissions** | `/system/data-permission` | Scopes: `data:scope:list` · `add` · `edit` · `del`, changing which rules a scope holds `data:scope:rule:edit`; rules: `data:rule:list` · `add` · `edit` · `del` | Data scopes on the left, the rules of the selected scope on the right |
+| **System → Roles → Data scopes** | `/system/role` | View `sys:role:list`, change `sys:role:scope:edit` | Bind data scopes to a role; the role form also has an **Enable data-scope filtering** switch, and off means the role is not limited by data scopes (for a head-office role, say) |
+
+⚠️ Opening the Data permissions page currently requires `data:scope:add` in the frontend route guard, not `data:scope:list`, so a role granted only "query" cannot open it.
 
 ## What is the difference between RBAC and a data scope?
 
@@ -115,6 +129,17 @@ No. The user's permission snapshot (Redis key `fba:user:<id>`) is cleared when r
 - `exists()` is deliberately not scoped. It backs uniqueness checks; filtering it would let a user create a duplicate of a row they cannot see.
 - When a parent department is filtered out, its visible children are shown at the top level of the tree.
 - Superusers are never filtered. The open API (AK/SK-signed) reads the full data set on purpose; it is bounded by which endpoints each app is authorised for and by the fields its schemas expose.
+
+## Which settings are there?
+
+Data scopes themselves are configured in the UI. The keys below are for developers, set in `.env` / `conf.py`, and need a backend restart:
+
+| Key | Default | Notes |
+|---|---|---|
+| `DATA_PERMISSION_MODEL_EXCLUDE` | `DataScope` · `DataRule` · two link tables | Models excluded from data filtering (not selectable in the rule editor) |
+| `DATA_PERMISSION_COLUMN_EXCLUDE` | `id` · `sort` · `deleted` · `deleted_time` · `created_time` · `updated_time` | Columns that cannot be used in a rule |
+| `DATA_PERMISSION_TEMPLATE_VARIABLES` | `${user_id}` · `${dept_id}` · `${now}` | Template variables allowed in rule values |
+| `RBAC_ROLE_MENU_MODE` | `true` | `true` = permission-code mode (role → menus → permission codes); `false` = casbin mode, checking API path + method, in which features that rely on permission codes refuse every call |
 
 ## Where it lives in the code
 

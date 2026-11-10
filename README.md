@@ -72,7 +72,7 @@ packages/      one-way deps: i18n / api ← ui ← platform ← web
 AI changes code fast, so every change needs something to catch it:
 
 - **Tests** — 1,600+ tests against a real database and a real browser, no mocks, on every CI run; the [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) is public
-- **Types** — frontend/backend types are generated from OpenAPI, so an API change the pages didn't follow fails type checking
+- **Types** — the frontend/backend contract is generated from OpenAPI; mobile infers every request's types from it, so an API change the screens didn't follow fails type checking (the web client is still migrating, and its call sites currently declare response types by hand)
 - **Rules written for AI** — 50+ per-directory `CLAUDE.md` / `AGENTS.md` files record pitfalls found by testing; a coding assistant reads the one for whatever directory it edits
 - **A backend inside the AI ecosystem** — Python + FastAPI, with the built-in AI assistant on pydantic-ai
 

@@ -5,7 +5,25 @@ sidebar:
   order: 5
 ---
 
+import shot from '../../../../../../../docs/screenshots/file.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 The file module is a file manager (grid or list view, category rail, in-browser previews) on top of a storage layer that puts local disk and any S3-compatible bucket behind one [Apache OpenDAL](https://opendal.apache.org/) interface. Every upload goes through one global queue: the browser hashes the file with SHA-256 first and skips the transfer if the same file already exists; files of 16 MiB or more go up in 8 MiB chunks, three at a time, and resume after a page refresh. You can try it in the [live demo](https://fra.wubunan.com/sign-in) (`admin` / `123456`).
+
+<ProductShot src={shot} alt="Files" url="localhost:8888/system/file" />
+
+## Where is it in the UI?
+
+| Screen | Path | Permission code | What it does |
+|---|---|---|---|
+| **System → Files** | `/system/file` | `sys:file:list` | File list, preview, download; recycle bin |
+| Same page, upload | — | `sys:file:upload` | Every single and chunked upload endpoint, plus attaching / detaching files on records |
+| Same page, **Delete** / **Revert** / **Delete permanently** / **Empty recycle bin** | — | `sys:file:del` | |
+| **System → Storage** | `/system/storage` | `sys:storage:list` · `add` · `edit` · `del` | Create local / S3 storage, test the connection, set the default, enable or disable; `edit` covers testing and setting the default |
+| Attachment panel on any page | — | Reading needs only a sign-in; attaching needs `sys:file:upload` | See [How do I attach files to a record?](#how-do-i-attach-files-to-a-record) |
+| Upload tray, bottom right | — | — | The global upload queue; see [What is the upload tray?](#what-is-the-upload-tray) |
+
+Download, preview, direct-link and instant-upload checks only require a sign-in; whether a given file can be read is decided by the rules in [How do downloads work?](#how-do-downloads-work).
 
 ## What can the file manager preview?
 
@@ -96,6 +114,30 @@ docker compose -f docker-compose.dev.yml --profile s3 up -d rustfs   # S3 API on
 ```
 
 Set `STORAGE_ENCRYPT_SECRET_KEY` in `apps/api/backend/.env` (`openssl rand -hex 32`). Then add a storage with endpoint `http://127.0.0.1:9100`, a bucket you created, the access key pair from `docker-compose.dev.yml`, and path-style addressing (RustFS without `server-domains` only accepts path style).
+
+## Which settings are there?
+
+**Changed in the UI** (System → Config → **File uploads**); they apply to uploads that start afterwards, not to ones already in progress:
+
+| Key | Default | Notes |
+|---|---|---|
+| `FILE_CHUNK_THRESHOLD` | `16` (MiB) | Files at least this large are uploaded in chunks; maximum 99, which must stay below nginx's `client_max_body_size 100m` |
+| `FILE_CHUNK_SIZE` | `8` (MiB) | Size of each chunk, 1–64 |
+
+⚠️ Both also exist in `.env` **in bytes**; while the Config group is on, the database values win.
+
+**`.env` only**, restart the backend after changing:
+
+| Key | Default | Notes |
+|---|---|---|
+| `STORAGE_ENCRYPT_SECRET_KEY` | empty | Encrypts S3 secret keys; while empty, saving an S3 storage fails instead of storing plain text |
+| `STORAGE_PRESIGN_EXPIRE_SECONDS` | `300` | Lifetime of S3 pre-signed download URLs |
+| `FILE_RECYCLE_DAYS` | `30` | Days in the recycle bin; `0` = no recycle bin, deletes are permanent |
+| `FILE_MULTIPART_EXPIRE_SECONDS` | `86400` | How long an idle chunked-upload session lives |
+| `UPLOAD_IMAGE_SIZE_MAX` · `UPLOAD_DOCUMENT_SIZE_MAX` · `UPLOAD_VIDEO_SIZE_MAX` · `UPLOAD_AUDIO_SIZE_MAX` · `UPLOAD_ARCHIVE_SIZE_MAX` | 5 MB · 50 MB · 20 MB · 20 MB · 100 MB | Per-type size limit for one file (bytes) |
+| `UPLOAD_*_EXT_INCLUDE` | see `conf.py` | Allowed extensions per type |
+
+They are defined in the upload, recycle bin, chunked upload and storage sections of [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py).
 
 ## Where it lives in the code
 

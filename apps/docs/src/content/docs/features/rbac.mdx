@@ -1,0 +1,137 @@
+---
+title: 用户 · 角色 · 部门 · 菜单
+description: 后台权限的四个基础页怎么用：用户的启停、重置密码与「后台管理权限」，角色的权限矩阵，部门树的约束，菜单的五种类型（目录 / 菜单 / 按钮 / 内嵌页 / 外链）与死链检查；改了权限之后什么时候生效。
+sidebar:
+  order: 2
+---
+
+import shot from '../../../../../../docs/screenshots/role.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
+权限的基础是四张表、四个页面：**部门**组成一棵树，**用户**挂在一个部门上、可以有多个角色，**角色**勾选能用哪些**菜单**和按钮，菜单表同时决定侧边栏长什么样、每个按钮要什么权限码。这一页讲这四个页面怎么操作、各自有哪些限制；权限码和数据范围在服务端怎么判，见[数据权限](/features/data-permissions/)。
+
+<ProductShot src={shot} alt="角色管理：功能权限矩阵" url="localhost:8888/system/role" />
+
+## 在界面上哪里找？
+
+| 页面 | 路径 | 打开页面要 | 其余权限码 |
+|---|---|---|---|
+| **系统管理 → 用户管理** | `/system/user` | `sys:user:del` | 查看 `sys:user:list` · 导出 `sys:user:export`。新建、编辑、改权限、重置密码、重置二次验证、导入**只给超级管理员** |
+| **系统管理 → 角色管理** | `/system/role` | `sys:role:add` | 查看 `sys:role:list` · 编辑与增删角色用户 `sys:role:edit` · 改功能权限 `sys:role:menu:edit` · 改数据范围 `sys:role:scope:edit` · 删除 `sys:role:del` |
+| **系统管理 → 部门管理** | `/system/dept` | `sys:dept:add` | 查看 `sys:dept:list` · 编辑 `edit` · 删除 `del` · 导入 `sys:dept:import` · 导出 `sys:dept:export` |
+| **系统管理 → 菜单管理** | `/system/menu` | `sys:menu:add` | 查看 `sys:menu:list` · 编辑 `edit` · 删除 `del` |
+
+⚠️ 「打开页面要」那一列是前端路由守卫目前认的权限码：四个页面认的都是**新增或删除**，不是「查询」。只授了查询的角色会被重定向到 403 —— 种子里的 MANAGER 角色有「用户管理」「部门管理」菜单和两个查询码，但没有 `sys:user:del` / `sys:dept:add`。E2E 里实测踩过（[`e2e/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/AGENTS.md)：测试角色不绑「部门管理」那几个按钮，打开部门页就是 `/403`）。超级管理员不受路由守卫限制。
+
+## 「超级管理员」和「后台管理权限」有什么区别？
+
+用户上有两个开关，在用户列表的「权限与安全」里改（只有超级管理员能改，不能改自己）：
+
+| 开关 | 作用 |
+|---|---|
+| **超级管理员**（`is_superuser`） | 跳过所有权限码和数据范围检查，侧边栏显示全部菜单 |
+| **后台登录**（`is_staff`） | 没有它，账号能登录、能看，但所有写操作（GET 以外的请求）都被拒绝，提示「用户已被禁止后台管理操作，请联系系统管理员」 |
+
+只给超级管理员的接口要求**两个都开**。
+
+⚠️ **新建和导入的用户，「后台登录」默认是关的**，所以他们第一次登录后什么都保存不了，要超级管理员去打开。这个开关在界面上的说明是「关掉后账号仍在，但进不了这个系统」，实际上关掉之后照样能登录、能查看，只是不能做任何修改。
+
+## 用户能做哪些操作？
+
+- **新建**：必须选部门，密码要符合[密码规则](/features/login-security/#密码有哪些规则)，表单要求至少一个角色。一个用户只属于一个部门，可以有多个角色；保存时整组替换他的角色。
+- **停用 / 启用**：用户只有「正常」「停用」两种状态。停用**立即结束他的所有会话**，他开着的页面当场回到登录页。
+- **锁定**不是一种状态：密码连续输错 5 次锁 5 分钟（参数配置可改），到时间自动解开，界面上没有手动解锁。
+- **重置密码**：只给超级管理员，不需要旧密码；新密码同样不能和最近几次相同；重置后他的所有会话结束。
+- **删除**：可以多选批量删，逐条执行、哪几条失败会说出来。超级管理员那几行不能勾选。删除是**逻辑删除**（数据还在库里），但界面上没有恢复入口。
+- **手机号**全局唯一；管理员改了某人的手机号，这个号的「已验证」标记会被清掉，他要在个人中心重新验证后才能用手机验证码登录。
+- **批量导入**见[导入导出](/features/import-export/)：只给超级管理员，只能新增，初始密码来自 `USER_IMPORT_DEFAULT_PASSWORD`。
+
+列表的部门筛选只匹配**这一个部门**，不含下级。
+
+## 角色的权限矩阵怎么用？
+
+角色页左边是角色列表，右边三个页签：**功能权限**、**数据范围**、**角色用户**。
+
+- **角色编码**：大写字母开头，只能是大写字母、数字、下划线，2–32 位，**创建后不能改**（代码里按编码认角色）。编码和名称都不能重复。
+- **功能权限**是一棵菜单树，按钮收在所属菜单那一行右侧，显示「已授权 n/m」。两种勾选方式：
+  - **节点关联**：勾一个节点，连带勾上它的全部下级和所有上级。
+  - **节点独立**：只勾这一个。下级勾了、上级没勾时会提示，并给一个「一键补齐上级」。
+  - 搜索框能按菜单名搜，也能按权限码搜。改动先是草稿，「保存」才生效，「还原」丢掉没保存的改动。要 `sys:role:menu:edit` 才能改。
+- **数据范围**：给角色绑定数据范围。角色表单里还有一个「启用数据权限过滤」开关，关掉 = 这个角色看全部数据。规则怎么写见[数据权限](/features/data-permissions/)。
+- **角色用户**：只增减「这个用户有这个角色」的关联，不动用户本身。移除会让某人一个角色都不剩时会提示。
+
+删除角色是逻辑删除，删掉之后它不再给任何用户提供权限。
+
+## 改了权限，对方要重新登录吗？
+
+不用。角色的功能权限、数据范围、角色用户一改，受影响的人的权限缓存在事务提交后就清掉，**后端从他的下一个请求起**按新权限判。但浏览器里缓存的权限码和侧边栏不会自动刷新（没有实时推送），所以他要**刷新一下页面**才能看到新菜单、新按钮。E2E 实测过：解绑数据范围后，目标账号不重新登录、刷新即变。细节见[数据权限](/features/data-permissions/#改了权限要重新登录吗)。
+
+## 部门有哪些规则？
+
+- **部门编码**全局唯一、创建后不能改；**名称**只要求同级不重名。
+- **负责人**必须是一个已启用的用户（只在改负责人时校验）。
+- 不能把部门挪到它自己或它的下级下面。
+- 部门下**还有用户或下级部门时不能删**；有下级时删除按钮直接是灰的。
+- **停用**一个部门后，直接属于这个部门的用户再发请求会被拒绝（「用户所属部门已被锁定，请联系系统管理员」），会话本身不结束。
+- 部门树受数据范围约束：看的人只能看到自己范围里的部门。
+- 一份 xlsx 能建出整棵部门树，见[导入导出](/features/import-export/#一份文件怎么建出整棵部门树)。
+
+## 菜单有哪几种类型？
+
+| 类型 | 侧边栏里 | 必填 |
+|---|---|---|
+| **目录** | 一个可展开的分组；没有可见的下级时变成普通链接，路径也无效就不显示 | 路径 |
+| **菜单** | 一个页面；路径必须是前端真实存在的路由，否则不显示（控制台留一条警告） | 路径 |
+| **按钮** | 不显示，只承载权限码；一行可以写多个，用逗号隔开 | 权限码 |
+| **内嵌页** | 在页签里用 iframe 打开一个外部地址（路由 `/embedded/<名称>`）；只放行 http / https，页面上同时显示原地址和「在新标签页打开」 | 地址 |
+| **外链** | 点击在新标签页打开 | 地址 |
+
+- 菜单表单里的「路径」只能从前端已有的路由里选；「名称」只能是英文字母和数字、字母开头。
+- **隐藏**（不在侧边栏显示）的菜单照样能按地址打开 —— 「个人中心」就是这样。
+- **停用一个目录，它下面整枝都失效**：侧边栏里消失，权限码也一起不算数；重新启用就回来。超级管理员只是侧边栏里看不到，没加权限守卫的页面仍能按地址打开。
+- 菜单管理页会标出**死链**（「N 个死链」角标，可以只看死链）：路径在前端找不到对应路由的菜单。按钮、外链、内嵌页不算；目录只要有一个可见的下级就不算。
+- 菜单标题：中文界面显示库里的标题；其他语言按路径查内置的翻译（`menu:<路径>`），所以在菜单管理里改了中文标题，英文界面不会跟着变。表单上有这条提示。
+- 不能把菜单挪到它自己的下级下面；有下级时不能删。
+
+## 有哪些开关？
+
+这四个页面的行为几乎都在界面上配。相关的配置项：
+
+| 键 | 在哪改 | 默认值 | 说明 |
+|---|---|---|---|
+| `USER_LOCK_THRESHOLD` · `USER_LOCK_SECONDS` | 参数配置 →「口令与锁定」 | `5` · `300` | 连续输错几次、锁多少秒，见[登录与安全](/features/login-security/#有哪些开关) |
+| `USER_IMPORT_DEFAULT_PASSWORD` | `.env` | 空 | 导入用户的初始密码；留空 = 用户导入关闭 |
+| `RBAC_ROLE_MENU_MODE` | `.env` | `true` | 权限码模式；`false` 是 casbin 模式，见[数据权限](/features/data-permissions/#有哪些开关) |
+| `RBAC_ROLE_MENU_EXCLUDE` | `.env` | `[]` | 列在这里的权限码跳过检查 |
+
+## 给新页面加菜单和按钮权限码
+
+[从零加一个业务模块](/guides/first-module/#第-7-步加菜单和按钮权限码)的第 7 步讲了两种做法：本地试验时直接在「菜单管理」里点出目录、菜单和按钮；要随代码发布的，把菜单行写进三种数据库的种子 SQL（ID 相同）、再写一条数据迁移，跑 `pnpm seed:manifest --write`，`test_permission_codes.py` 会核对后端守卫、前端 `<Can perm>` 和种子菜单里的权限码是否对得上。
+
+## 已知的问题
+
+- 四个页面的前端路由守卫认的是新增 / 删除权限码，不是查询码，见[上文](#在界面上哪里找)。
+- 新建、导入的用户默认没有「后台登录」，第一次登录后什么都存不了；这个开关的界面说明和实际行为不一致，见[上文](#超级管理员和后台管理权限有什么区别)。
+- 删除用户的确认框写着「不可撤销」，实际是逻辑删除，只是没有恢复入口。
+- 数据范围没有「本部门及所有下级」这种模板，见[数据权限](/features/data-permissions/#做不到的事)。
+
+## 代码在哪
+
+- 接口：[`api/v1/sys/user.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/user.py) · [`role.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/role.py) · [`dept.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/dept.py) · [`menu.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/menu.py)
+- 权限判定：[`common/security/rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py) · 权限缓存的清理 [`app/admin/utils/cache.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/utils/cache.py)
+- 前端：[`pages/user/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/user) · [`pages/role/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/role)（权限矩阵 `perm-matrix.tsx` / `perm-tree.ts`）· [`pages/dept/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/dept) · [`pages/menu/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/menu)（死链判定 `dead-link.ts`，规则见 [`AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/menu/AGENTS.md)）· 侧边栏 [`shell/use-sidebar.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/use-sidebar.ts) · 路由守卫 [`auth/guards.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/auth/guards.ts)
+
+## 怎么测的
+
+后端（`apps/api/backend/app/admin/tests/`）：
+
+- [`security/test_rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_rbac.py)（12 条）、[`security/test_user_cache_invalidation.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_user_cache_invalidation.py)（6 条）：改角色菜单后，响应返回时权限快照已经清掉；不能改自己的权限。
+- [`api_v1/test_admin_writes.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_admin_writes.py)：没有「后台登录」的账号能读不能写。
+- [`security/test_permission_codes.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_permission_codes.py)：后端守卫、前端 `<Can perm>` 门控、种子菜单里的权限码三方对账。
+- [`api_v1/test_menu_disable.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_menu_disable.py)：停用目录，整个子树一起失效。[`test_dept_tree.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_dept_tree.py)：部门不能挪到自己的下级下面。
+
+浏览器端（Playwright）：[`perm-matrix.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/perm-matrix.spec.ts)（保存只写到地址栏里点名的那个角色上；「还原」丢掉没保存的改动；节点独立模式的缺上级提示和一键补齐）、[`dept-crud.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/dept-crud.spec.ts)（重复编码、编辑时编码不可改、同级不能重名、删不掉的部门）、[`menu-dead-link.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/menu-dead-link.spec.ts)、[`menu-rename-disable.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/menu-rename-disable.spec.ts)（改内置菜单标题；停用目录整枝消失、重新启用回来）、[`data-permission.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/data-permission.spec.ts)（解绑数据范围后目标账号不重新登录，刷新即变）。
+
+## 在演示站里试试
+
+[在线演示](https://fra.wubunan.com/sign-in)（`admin` / `123456`）：打开「系统管理 → 角色管理」，选一个角色，在「功能权限」里切换「节点关联 / 节点独立」看勾选的差别，搜一个权限码（如 `sys:user:list`）看它落在哪一行。「菜单管理」里能看到当前有没有死链。演示站是共用的，改了角色权限会影响所有用这个角色的演示账号，试完请「还原」。
