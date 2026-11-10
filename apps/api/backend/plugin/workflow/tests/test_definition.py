@@ -254,3 +254,35 @@ def test_required_editable_field_must_be_filled_before_approving(
     d = ok(client.get(f'/sys/workflow/instances/{inst}', headers=token_headers))
     assert d['instance']['status'] == 'approved'
     assert d['form_data'] == {'f_what': '入职', 'f_no': 'A-01'}
+
+
+def test_definition_changes_are_recorded_but_drafts_are_not(
+    client: TestClient, token_headers: dict[str, str], uid: Callable[[str], str]
+) -> None:
+    """#281：草稿（表单 / 流程 JSON）设计器里点一次保存就是一整段，不记；生效的是发布 —— 记「已发布版本：→ 1」和状态"""
+    from backend.tests.utils.data_change import changes_of, field
+
+    m1 = model([uid('zhaolei')], cond=False)
+    pk = ok(
+        client.post(
+            '/sys/workflow/definitions',
+            headers=token_headers,
+            json={'code': 'PYTEST_DC', 'name': '审计流程', 'form': FORM, 'model': m1},
+        )
+    )['id']
+    m2 = copy.deepcopy(m1)
+    m2['root']['next']['assignee']['user_ids'] = [uid('zhoumin')]
+    ok(client.put(f'/sys/workflow/definitions/{pk}', headers=token_headers, json={'model': m2}))
+    assert len(changes_of('wf_definition', pk)) == 1, '只改了草稿，不该出记录'
+    v1 = ok(client.post(f'/sys/workflow/definitions/{pk}/publish', headers=token_headers))
+    assert v1['published'] is True
+    ok(client.put(f'/sys/workflow/definitions/{pk}/status', headers=token_headers, json={'enabled': False}))
+    ok(client.delete(f'/sys/workflow/definitions/{pk}', headers=token_headers))
+
+    records = changes_of('wf_definition', pk)
+    assert [r['action'] for r in records] == ['create', 'update', 'update', 'delete']
+    _, published, disabled, _ = records
+    assert field(published, 'current_version_id')['new_label'] == '1'
+    assert field(published, 'status')['old_label'] == '草稿' and field(published, 'status')['new_label'] == '已发布'
+    assert field(disabled, 'status')['new_label'] == '已停用'
+    assert all(field(r, 'draft_model_json') is None for r in records)
