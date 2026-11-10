@@ -34,8 +34,8 @@
   密码 `USER_IMPORT_DEFAULT_PASSWORD`），请求、响应、Redis 里也都没有。
   理由是 `opera_log_middleware` 会把 JSON 响应体写进 `sys_opera_log.response_body`
   —— 把生成的密码放进响应 = 永久写进日志表，而那张表有自己的查看权限
-- 🔴 **默认密码放 `.env` 不放 `sys_config`**。那张表的值会原样显示在参数配置页上，
-  而且 `PUT /sys/configs` 的请求体会进操作日志（`value` 不在 `OPERA_LOG_REDACT_KEYS` 里）
+- 🔴 **默认密码放 `.env` 不放 `sys_config`**。那张表在库里是明文；#283 之前 `PUT /sys/configs` 的请求体
+  还原样进操作日志（现在键名像密钥的行会打码，见 [`middleware` 分册](../../middleware/AGENTS.md)）
 - 🔴 **默认密码必须自己过 `validate_password_strength()`**。`123456` 过不了
   （`is_has_letter`）。不校验的失败是**延迟且分裂**的：导入成功、用户能登录，
   但他改密码时被「必须含字母」挡住，两件事看不出是同一个原因。空串 = 功能关闭，
