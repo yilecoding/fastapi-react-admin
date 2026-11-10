@@ -21,7 +21,7 @@ sidebar:
 | **定时任务** | 在线调度 · cron 预览 · 执行记录 | [定时任务](/features/scheduler/) |
 | **运维** | 参数配置 · 数据字典 · 登录 / 操作日志（自动脱敏）· 数据变更记录（谁、什么时候、从哪来，把哪个字段从什么改成了什么 · 和操作日志互跳）· 服务器与 Redis 监控 · 发新版提示 · 给外部监控用的[统一健康检查地址](/getting-started/deployment/#外部监控探哪个地址) | [日志与审计](/features/audit-logs/) · [监控与健康检查](/features/monitoring/) · [参数配置与数据字典](/features/config-dict/) |
 | **多端** | Electron 桌面端（三平台安装包 · 静默打印 · 本地硬件 · 自动更新）· Expo 原生移动 App（不是 WebView 套壳） | [桌面端与移动端](/features/clients/) |
-| **开发者** | 组件沙箱（每个组件可调、可抄）· 调色盘 · 由 OpenAPI 生成的类型安全前后端契约 | [插件机制](/features/plugins/) |
+| **开发者** | 组件沙箱（每个组件可调、可抄）· 调色盘 · 由 OpenAPI 生成的类型安全前后端契约 | [开发者工具](/features/developer-tools/) · [插件机制](/features/plugins/) |
 | **数据库** | PostgreSQL · SQL Server · MySQL，同一套代码、同一条迁移链 | [数据库](/features/databases/) |
 
 ## 每项功能在哪个菜单？手机上能用吗？
