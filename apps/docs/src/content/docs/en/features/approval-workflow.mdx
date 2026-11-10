@@ -1,0 +1,149 @@
+---
+title: Approval workflow
+description: A Feishu-style approval engine for FastAPI + React — form designer, flow tree with conditional branches, or-sign / co-sign, send back, add approvers, timeouts.
+sidebar:
+  order: 3
+---
+
+import shot from '../../../../../../../docs/screenshots/workflow-designer.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
+fastapi-react-admin ships an approval workflow plugin (`plugin/workflow`): an admin designs a form and a flow tree in the browser, publishes it, and any signed-in user can submit requests against it. Approvers work from one **Approval center** (to approve / handled / my requests / CC'd to me), and every action — approve, reject, transfer, CC, send back, take back, add approvers, remind, withdraw, terminate, reassign — is checked by the same server-side function (`capabilities()`) that tells the UI which buttons to show, so the buttons and the API cannot drift apart.
+
+<ProductShot src={shot} alt="Workflow definitions: form designer and flow tree" url="localhost:8888/workflow/definition" />
+
+## Where is it in the UI?
+
+| Screen | Path | Who | What it does |
+|---|---|---|---|
+| **Approvals → Approval center** | `/workflow/inbox` | Every signed-in user | Start a request; To approve / Handled / My requests / CC'd to me |
+| **Approvals → Workflow definitions** | `/workflow/definition` | `workflow:definition:list` | Form designer + flow tree; creating needs `add`, saving drafts and AI generation need `edit`, deleting needs `del`, publishing and enabling / disabling need `publish` |
+| **Approvals → Instance monitor** | `/workflow/monitor` | `workflow:instance:list` | Every running and finished instance |
+| **Terminate** in the instance monitor | — | `workflow:instance:terminate` | Void a running request |
+| **Reassign** and **Handover** in the instance monitor | — | `workflow:instance:reassign` | Hand a stuck request, or all of one person's open tasks, to someone else. Kept separate from terminate: being able to reassign is not being able to void |
+| Dashboard cards "Waiting on me", "My requests" and "Quick start" · bell in the top bar | — | Every signed-in user | Tasks, CCs, reminders and results all go to the message center (the workflow plugin depends on the `notification` plugin) |
+
+The approval center only requires a sign-in, not a permission code: approvers are often outside the request's data scope, and gating it by menu permission or data scope would stop people from opening their own tasks. What each person may see and do on each request is decided per request by the server's `capabilities()`.
+
+## What can a workflow definition contain?
+
+A definition is two JSON documents: a form schema and a flow model. Both are validated by Pydantic shapes in [`engine/schema.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/engine/schema.py) on publish, and stored as raw JSON.
+
+- **Form fields** (13 types): text, textarea, number, amount, date, date range, single / multi select, user, department, attachment, description and detail table. A detail table is one level deep (no table inside a table).
+- **Conditional visibility** (`visibleWhen`): a field that is not visible is not validated and its value is not saved — for example a sick-note attachment that only appears when the leave type is "sick".
+- **Calculated fields** (`calc`): days in a date range (inclusive, 11-02 → 11-06 = 5) or the sum of a table column. The server recomputes them; submitted values are ignored.
+- **Flow nodes**: start, approval, CC and condition. Conditions are structured `all` / `any` trees with leaves like `{"var": "f_days", "op": "gt", "value": 3}` — no string expressions to parse or inject into. Publishing fails if a condition node does not have exactly one default branch.
+
+This is an excerpt of the seeded "请假" (leave) sample from [`sql/postgresql/init_snowflake.sql`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/sql/postgresql/init_snowflake.sql): direct manager first, an upper manager only for leave longer than 3 days, then HR.
+
+```json
+{"type": "approval", "id": "n_leader", "name": "直属主管", "mode": "any",
+ "assignee": {"kind": "dept_leader", "level": 1}, "onEmpty": "admin",
+ "next": {"type": "condition", "id": "c_days", "branches": [
+   {"id": "b_long", "when": {"all": [{"var": "f_days", "op": "gt", "value": 3}]},
+    "child": {"type": "approval", "id": "n_upper", "assignee": {"kind": "dept_leader", "level": 2}, "onEmpty": "skip"}},
+   {"id": "b_default", "default": true, "child": null}]}}
+```
+
+The designer edits a draft (saved without validation); **publish** validates it and copies it into a new version row. In-flight requests keep the snapshot they started with, so editing or disabling a definition never changes them. A definition that already has requests cannot be deleted, only disabled.
+
+## Who approves a step?
+
+Each approval node has an assignee rule ([`engine/assignee.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/engine/assignee.py)):
+
+| Rule | Resolves to |
+|---|---|
+| `user` | specific users |
+| `role` | members of roles, optionally limited to the initiator's department or department tree |
+| `dept_leader` | the leader N levels up from the initiator's department; levels with no leader, a disabled leader, or where the leader *is* the initiator are skipped |
+| `initiator` | the initiator (for "confirm" steps) |
+| `var_user` | the person picked in a user field of the form |
+| `select_on_start` | chosen by the initiator at submission — asked only for nodes the request will actually reach |
+
+Except for the `initiator` rule, the initiator is always removed from the result, so nobody approves their own request. If a rule resolves to nobody, the node's `onEmpty` decides: `reject` (default, with the reason in the history), `skip`, or `admin` (superusers, again minus the initiator). Nothing is silently approved.
+
+## How do or-sign, co-sign and sequential approval differ?
+
+`mode: any` (or-sign) passes on the first approval and cancels the other tasks. `mode: all` (co-sign) needs everyone; one rejection ends the request. `mode: seq` goes one person at a time; the order is fixed when the request enters the node, so later role changes do not affect it.
+
+## What can an approver do besides approve and reject?
+
+| Action | Behaviour |
+|---|---|
+| Transfer | Hands the task to someone else. Refused if that person already approved this step in the current round. |
+| CC | Copies people in; they see it under "CC'd to me". |
+| Send back | Returns the request to the initiator or to an earlier approval step that is still on the path for the *current* form data. Optionally "come straight back to me" after it is re-handled — the jump only happens if this step is still on the path after the initiator's edits. |
+| Add approver | Before me (they all approve, then it comes back to me) or after me (I approve now; the step moves on once they all approve). Added people can only approve / reject / transfer / CC; one rejection from them rejects the request. |
+| Take back | After you approve, until anyone on the next step acts. Restores the instance variables your approval consumed, not just your task. |
+
+The initiator can **withdraw** a running request and **remind** the current approvers at most once every 5 minutes. Users with `workflow:instance:terminate` can terminate and users with `workflow:instance:reassign` can reassign a stuck task. A node's `actions` list narrows the optional set: `null` inherits transfer / CC / send back / add approver, `[]` leaves only approve and reject.
+
+## What happens when an approver times out?
+
+An approval node can set `timeout: {hours, action}` with `hours` from 1 to 720 and `action` one of `remind`, `approve` or `reject`. The clock starts when the task reaches that person, so a transfer or the next person in a sequential step starts a fresh clock. Hours are calendar hours; there is no working-day calendar.
+
+The Celery task `workflow.handle_timeouts` scans every 5 minutes (seeded as cron `*/5 * * * *`). `remind` notifies at most 3 times. Auto-approve falls back to a reminder if the step has required editable fields that are still empty, and both auto-actions claim the request the same way a human click does — if someone is acting on it at that moment, it is retried on the next scan.
+
+:::caution
+If Celery beat is not running, or the seeded `workflow.handle_timeouts` entry under **Scheduler → Tasks** is disabled, timeout settings still save but nothing ever fires.
+:::
+
+## Drafts, urgent flag and read receipts
+
+- **Drafts** are stored server-side (`wf_draft`, one per user per workflow, up to 200 KB, not validated). The submit drawer autosaves 1.5 s after you stop typing; the draft is deleted in the same transaction that creates the request, so a failed submission keeps it.
+- **Urgent** only changes sort order: urgent requests come first in the approver's to-do list. The flow is unchanged.
+- **Read**: the first time a current approver opens the detail is recorded, and the initiator sees it.
+
+## How does handover work when someone leaves?
+
+**Instance monitor → Handover** moves every pending task from one person to another. The "from" list is built from people who currently hold tasks — including disabled and deleted accounts — because the normal user picker only lists active users, which would hide exactly the person who left. Each task is reassigned in its own transaction, the result lists a reason for any task that could not move, and a repeated click with the same idempotency key does not move anything twice.
+
+## Who can see which fields?
+
+Each node sets `hidden` / `readonly` / `editable` per field (start node defaults to editable, approval nodes to read-only). This is enforced on the server: the detail API removes hidden fields from the schema, the data and the before/after values in the history. Hidden values are also kept out of list summaries, branch records ("took the large-amount branch" reveals the amount range) and the path preview; publishing a condition on a hidden field gives a `CONDITION_VAR_HIDDEN` warning.
+
+## Is it safe when two people click at once?
+
+Every state change first claims the request with `UPDATE wf_instance SET version = version + 1 WHERE id = ? AND version = ? AND status = 'running'` and retries the whole transaction up to 3 times. Each action carries an idempotency key, replayed only for the same user. Rejected actions are still recorded, in a separate transaction.
+
+## Connecting your own business data
+
+Form approvals need no code. For a business table, implement `WorkflowBizHandler` in [`handler.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/handler.py), call `register_handler()`, and start the request with `runtime_service.start_for_biz()` inside your own transaction. `on_finished` runs inside the approval transaction and should only update business state. Five webhook events (`workflow.instance.started` / `approved` / `rejected` / `withdrawn` / `terminated`) are available through the [open API](/en/features/open-api/) and deliberately omit form contents. Approval notifications are routed like any other kind — see [Notifications](/en/features/notifications/).
+
+The plugin also has optional AI features (pre-review, generating a definition from one sentence, filling the form from a document, approving from chat, and data-gated auto-approval on or-sign nodes); see [AI assistant](/en/features/ai-assistant/).
+
+## Limits
+
+- No parallel branches: the flow is a tree, so a request is always at exactly one node.
+- The designer's condition editor edits one level of "all"; hand-written nested `any` conditions are kept but not editable in the UI.
+- Form fields are reordered with up / down buttons, not drag and drop.
+- Timeouts count calendar hours, not working days.
+
+## Which settings are there?
+
+Most approval behaviour is configured **per workflow and per node** in the designer (approval mode, timeout reminders and auto-actions, field permissions, AI nodes), not as global switches. There is one global switch, in `.env`; restart the backend after changing it:
+
+| Key | Default | Notes |
+|---|---|---|
+| `WORKFLOW_AI_APPROVE_ENABLED` | `true` | Master switch for AI auto-approval. `false` stops AI auto-approval in every workflow while AI pre-review keeps giving suggestions. Even when on it only *allows* it: the node has to enable it, and there must be enough data for that workflow × model before the AI actually approves on someone's behalf |
+
+## Where it lives in the code
+
+- [`apps/api/backend/plugin/workflow/engine/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/workflow/engine) — shapes, tree navigation and publish checks (`flow.py`), form rules and field permissions (`form.py`), assignee rules, path preview (`simulate.py`)
+- [`service/runtime_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/runtime_service.py) — every action, claiming, the capability list; [`service/query_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/query_service.py) — inbox and per-viewer detail; [`service/timeout_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/timeout_service.py)
+- Frontend: [`packages/platform/src/pages/workflow/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/workflow) (form renderer, flow view, detail drawer) plus `workflow-definition/`, `workflow-inbox/`, `workflow-monitor/`
+- Design notes and pitfalls: [`plugin/workflow/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/AGENTS.md), [`pages/workflow/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/workflow/AGENTS.md)
+
+## How it is tested
+
+[`plugin/workflow/tests/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/workflow/tests) collects 167 pytest cases, most of them running against a real test database and Redis (88 for the engine and actions, 79 for the AI features, of which 14 call a real model and are skipped without credentials). Some examples:
+
+- `test_concurrency.py` runs real concurrent sessions: co-sign approvals at the same time, or-sign at the same time, approve racing withdraw, and two co-signers editing different fields — the last one fails if the version check is removed.
+- `test_preview_matches_what_actually_happens` previews a path, then walks it for real and compares approvers step by step.
+- `test_timeouts.py` controls time (`handle_timeouts(..., now=...)`) instead of waiting.
+
+The notes record which tests were mutation-checked (fix reverted, test turns red). The browser suite [`workflow.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/workflow.spec.ts) has 14 Playwright tests covering submit → approve, send back and resubmit, reassign, take back, add approver, drafts, urgent and read receipts. CI runs the backend suite on PostgreSQL and SQL Server; MySQL has no CI job.
+
+## Try it in the demo
+
+Sign in at [fra.wubunan.com](https://fra.wubunan.com/sign-in) with `admin` / `123456`. **Approvals → Workflow definitions** opens the designer (Basics → Form → Workflow designer) with the seeded "请假" leave sample, **Approvals → Approval center** is where requests are submitted and handled, and **Approvals → Instance monitor** has terminate, reassign and handover.

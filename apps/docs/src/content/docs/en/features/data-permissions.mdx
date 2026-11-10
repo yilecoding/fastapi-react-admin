@@ -1,0 +1,162 @@
+---
+title: Data permissions (RBAC + row-level data scopes)
+description: RBAC for menus, buttons and endpoints, plus row-level data scopes — each role's rules compile into one SQL WHERE condition applied in the DAO layer.
+sidebar:
+  order: 1
+---
+
+import shot from '../../../../../../../docs/screenshots/data-permission.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
+fastapi-react-admin has two independent permission layers. **RBAC** decides whether a user may open a page, see a button or call an endpoint (permission codes such as `sys:user:list`). **Data scopes** decide which rows that endpoint returns: a role's rules are compiled into a SQLAlchemy `WHERE` condition that the DAO layer appends to every read, so on the same Users list a department manager can be limited to their own department.
+
+<ProductShot src={shot} alt="Data permissions: scopes and rules" url="localhost:8888/system/data-permission" />
+
+## Where is it in the UI?
+
+| Screen | Path | Permission code | What it does |
+|---|---|---|---|
+| **System → Data permissions** | `/system/data-permission` | Scopes: `data:scope:list` · `add` · `edit` · `del`, changing which rules a scope holds `data:scope:rule:edit`; rules: `data:rule:list` · `add` · `edit` · `del` | Data scopes on the left, the rules of the selected scope on the right |
+| **System → Roles → Data scopes** | `/system/role` | View `sys:role:list`, change `sys:role:scope:edit` | Bind data scopes to a role; the role form also has an **Enable data-scope filtering** switch, and off means the role is not limited by data scopes (for a head-office role, say) |
+
+⚠️ Opening the Data permissions page currently requires `data:scope:add` in the frontend route guard, not `data:scope:list`, so a role granted only "query" cannot open it.
+
+## What is the difference between RBAC and a data scope?
+
+| | RBAC (permission codes) | Data scope (row-level) |
+|---|---|---|
+| Question it answers | Can this user call `GET /sys/users`? | Which users does that call return? |
+| Configured in | **System → Menus** (codes on button rows) + **System → Roles → Permissions** | **System → Data permissions** + **System → Roles → Data scope** |
+| Enforced in | [`rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py) `rbac_verify`, per endpoint | [`data_scope.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py) `DataScopedCRUD`, per DAO |
+| Denied looks like | HTTP 403 | Fewer rows (or a 404 on a detail endpoint) |
+
+## How does RBAC work for menus, buttons and endpoints?
+
+Menus live in `sys_menu` (type 0 directory, 1 page, 2 button). Button rows carry a comma-separated `perms` string; roles are granted menus. An endpoint declares the code it needs:
+
+```python
+@router.get(
+    '/{pk}',
+    summary='获取用户信息',
+    dependencies=[Depends(RequestPermission('sys:user:list')), DependsRBAC],
+)
+```
+
+`rbac_verify` then checks, in order: superusers pass; the user needs at least one enabled role with at least one menu; any method other than `GET`/`OPTIONS` also needs `is_staff`; finally the code must be in the `perms` of an enabled menu of an enabled role. A menu counts as enabled only if it **and every ancestor** are enabled, so disabling a directory disables the buttons under it.
+
+The frontend reads the user's codes once from `/auth/codes`. [`<Can perm="…">`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/auth/can.tsx) hides buttons and `requirePerm()` in a route's `beforeLoad` redirects to `/403`. Both are display only — the backend check is the boundary.
+
+:::caution
+A route that declares no permission code passes `rbac_verify` untouched (it returns early). Read endpoints need a code too: before issue #30, several `GET` endpoints (`/sys/users`, `/logs/opera`, …) only required a login, and an account bound to just the dashboard could read the full user list.
+:::
+
+## How is a data rule turned into a SQL condition?
+
+The chain is **role → data scope (`sys_data_scope`) → data rule (`sys_data_rule`) → one condition**. A scope is just a named bundle of rules; a rule has five fields. Here is one from the seed data:
+
+| Field | Value | Meaning |
+|---|---|---|
+| model | `__ALL__` | every model that has the column (or a model name such as `Dept`, `User`) |
+| column | `__dept_id__` | template for `dept_id`; `__created_by__` is the other column template |
+| operator | `AND` | `AND` or `OR` — see the next section |
+| expression | `==` | also `!=`, `>`, `>=`, `<`, `<=`, `in`, `not in` |
+| value | `${dept_id}` | current user's department; `${user_id}` and `${now}` also exist |
+
+On the `User` model this becomes `sys_user.dept_id = <current user's dept_id>`. `Dept` has no `dept_id` column, so the same rule leaves departments unfiltered.
+
+[`filter_data_permission_for_user()`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/permission.py) evaluates it like this:
+
+1. Superuser → no filter.
+2. Any enabled role with **Enable data-scope filtering** switched off → no filter.
+3. Collect the rules of every enabled scope of every enabled role into one set. Filtering on but no rules → the user sees **nothing**.
+4. Compile each rule that applies to the queried model, then combine:
+
+```python
+where_list = []
+if where_and_list:
+    where_list.append(and_(*where_and_list))
+if where_or_list:
+    where_list.append(or_(*where_or_list))
+return or_(*where_list) if where_list else or_(1 == 1)
+```
+
+The final `or_(1 == 1)` only covers rules that are valid but target other models — a rule on `User` does not hide departments.
+
+## Why can one OR rule cancel all AND rules?
+
+Because of the shape above: `or_(and_(all ANDs), or_(all ORs))`. With `parent_id == RA` (AND) and `status == 1` (OR), a user sees the union, not the intersection — the OR rule lifts the restriction. Rules are flattened across scopes *and* roles before this step, so two AND rules from two different roles also intersect. The Data permissions page shows a warning whenever one scope mixes AND and OR rules.
+
+## What happens when a user has several roles?
+
+The widest role wins. One enabled role with filtering off makes every restrictive role irrelevant — granting a role adds capabilities *and* removes restrictions. Disabled roles and disabled scopes are ignored.
+
+## Do I have to add the filter to every endpoint?
+
+No. The JWT middleware puts the authenticated user into a `ContextVar`, and the `DataScopedCRUD` base class appends the condition in `select()`, `select_model()` (fetch by primary key) and `count()`. Overriding only `select()` would miss detail endpoints: `GET /sys/depts/{pk}` for a department outside the scope now returns 404, not the row.
+
+Every DAO must take a stance: inherit the default, or set `data_scope_enabled = False` with a reason. A test scans all `crud_*.py` files and fails on any class that still inherits `CRUDPlus` directly, and another checks the exemption list against the code. Scoped today: users, departments, roles, files, login and operation logs, scheduled tasks and their results. Exempt, with reasons in [`test_data_scope_coverage.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_data_scope_coverage.py): menus (the sidebar would go blank), dictionaries and settings (form dropdowns), the rule and scope tables themselves (an admin could lock themselves out), and notices (no ownership column to filter on).
+
+## What happens in background (Celery) tasks?
+
+Without a request there is no current user, and no current user means **no filter** — correct for cleanup jobs, CLI and startup code. Code that works *on behalf of a person* must say so:
+
+```python
+with scoped_to_user(user):
+    async with async_db_session() as db:
+        stmt = _restrict_ids(await spec.select(filters, user), spec, ids)
+        ...
+```
+
+That is the export worker in [`export_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/export_service.py): a large export queued by a department-limited user would otherwise read the whole table in the worker, without any error. `scoped_to_user(None)` raises `ValueError` on purpose. The [AI assistant](/en/features/ai-assistant/) runs every tool call through the same `scoped_to_user`. The opposite helper, `bypass_data_scope()`, is for system reads inside a request that are never shown to the user — login lookups and uniqueness checks.
+
+## What if a rule is misconfigured?
+
+Two layers:
+
+- **On save** ([`data_rule_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/data_rule_service.py)): unknown model or column, an excluded column (`id`, `sort`, `deleted`, `deleted_time`, `created_time`, `updated_time`), a value that does not convert to the column type (`abc` for a bigint), or `__ALL__` with a plain column name → rejected with a message.
+- **At runtime: fail closed.** If any rule cannot be interpreted, the whole filter becomes `false()` and the user sees nothing. A template that has no value — `${dept_id}` for a user without a department — makes that rule match nothing instead of putting the literal `'${dept_id}'` into SQL (on SQL Server that was a 500).
+
+Earlier versions skipped rules they could not apply. The seed's own "本部门数据权限" (own department) scope was once `Dept.__dept_id__` — `sys_dept` has no `dept_id`, so it silently showed every department.
+
+## Does a user have to sign in again after a change?
+
+No. The user's permission snapshot (Redis key `fba:user:<id>`) is cleared when roles, scopes or rules change, and the next request rebuilds it. Both the backend suite and the browser tests check this without a re-login.
+
+## Limits
+
+- Value templates are `${user_id}`, `${dept_id}` and `${now}` only. There is no "my department and all its sub-departments" template; the seed's "部门及以下数据权限" scope uses fixed rules on HQ's code and ID.
+- `DataScopedCRUD` scopes reads. It does not rewrite `UPDATE` or `DELETE` statements, so a write path that changes rows by ID without reading them through a scoped DAO first is not covered.
+- `exists()` is deliberately not scoped. It backs uniqueness checks; filtering it would let a user create a duplicate of a row they cannot see.
+- When a parent department is filtered out, its visible children are shown at the top level of the tree.
+- Superusers are never filtered. The open API (AK/SK-signed) reads the full data set on purpose; it is bounded by which endpoints each app is authorised for and by the fields its schemas expose.
+
+## Which settings are there?
+
+Data scopes themselves are configured in the UI. The keys below are for developers, set in `.env` / `conf.py`, and need a backend restart:
+
+| Key | Default | Notes |
+|---|---|---|
+| `DATA_PERMISSION_MODEL_EXCLUDE` | `DataScope` · `DataRule` · two link tables | Models excluded from data filtering (not selectable in the rule editor) |
+| `DATA_PERMISSION_COLUMN_EXCLUDE` | `id` · `sort` · `deleted` · `deleted_time` · `created_time` · `updated_time` | Columns that cannot be used in a rule |
+| `DATA_PERMISSION_TEMPLATE_VARIABLES` | `${user_id}` · `${dept_id}` · `${now}` | Template variables allowed in rule values |
+| `RBAC_ROLE_MENU_MODE` | `true` | `true` = permission-code mode (role → menus → permission codes); `false` = casbin mode, checking API path + method, in which features that rely on permission codes refuse every call |
+
+## Where it lives in the code
+
+- [`common/security/permission.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/permission.py) — `RequestPermission`, rule compilation
+- [`common/security/data_scope.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py) — `DataScopedCRUD`, `scoped_to_user`, `bypass_data_scope`
+- [`common/security/rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py) — `rbac_verify`, `user_has_perm`
+- [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) — `DATA_PERMISSION_*` templates and exclusions
+- [`pages/data-permission/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/data-permission) and [`pages/role/role-scopes.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/role/role-scopes.tsx) — the admin UI
+
+## How it is tested
+
+- [`test_data_permission.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_data_permission.py) — 29 tests. It builds its own graph (5 departments, 17 rules, 18 scopes, 20 roles, 23 users), signs each user in and asserts exactly which rows the real endpoints return.
+- [`test_data_permission_failclosed.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_data_permission_failclosed.py) (8), [`test_data_rule_validation.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_data_rule_validation.py) (9) and `test_data_scope_coverage.py` (10).
+- [`data-permission.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/data-permission.spec.ts) — Playwright, many accounts: the rows the Departments page actually renders, the AND/OR warning, and a rule created in the UI taking effect after the target user refreshes.
+
+CI runs the backend suite on PostgreSQL and SQL Server ([databases](/en/features/databases/)).
+
+## Try it in the demo
+
+Sign in at [the demo](https://fra.wubunan.com/sign-in) as `admin` / `123456` and open **System → Data permissions**. With the seed data, the scope "部门及以下数据权限" mixes an OR rule with an AND rule, so it shows the warning described above. **System → Roles → Data scope** shows which scopes a role has. `admin` is a superuser and is never filtered; to see filtering, create a user with a filtered role and sign in as that user. The demo is public and its data may change.
