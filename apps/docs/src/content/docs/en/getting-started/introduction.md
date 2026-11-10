@@ -41,7 +41,7 @@ packages/      one-way deps: i18n / api ← ui ← platform ← web
 Because AI changes code fast, and every change here has something to catch it:
 
 - **Tests.** An AI touching a dozen files at once is routine, and nobody can click through all of that by hand. 1,400+ backend pytest cases run against a real database and Redis, 150+ Playwright cases drive a real browser, no mocks, on every CI run; failing cases come with screenshots and video, and the [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) is public.
-- **Types.** Frontend/backend types are generated from the backend's OpenAPI schema (`packages/api/src/schema.d.ts`); an API change the pages didn't follow fails `pnpm typecheck`.
+- **Types.** The frontend/backend contract is generated from the backend's OpenAPI schema (`packages/api/src/schema.d.ts`). Mobile infers every request's types from it, so an API change the screens didn't follow fails `pnpm typecheck`; the web client is still migrating, and its call sites currently declare response types by hand (see [Developer tools](/en/features/developer-tools/#where-does-the-frontend--backend-contract-come-from)).
 - **Rules written for AI.** 50+ per-directory `CLAUDE.md` / `AGENTS.md` files record pitfalls and hard rules found by testing; a coding assistant reads the one for whatever directory it edits.
 - **A backend inside the AI ecosystem.** Python + FastAPI, with the built-in AI assistant on pydantic-ai.
 

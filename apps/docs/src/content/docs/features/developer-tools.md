@@ -1,0 +1,86 @@
+---
+title: 开发者工具
+description: 组件沙箱（49 个组件演示，旋钮实时调、代码只列和默认值不同的属性）、调色盘、查询区和表格的演练页；组件库 packages/ui 对其他包零依赖，可以整包搬进别的项目；前后端契约从后端 OpenAPI 离线生成。
+sidebar:
+  order: 5
+---
+
+写业务页面时最常用的三样东西：**组件沙箱**里能看到组件库的每个组件、调它的属性、直接复制代码；**组件库** `packages/ui` 不依赖仓库里的任何业务包，可以整包搬进别的 React 项目；**前后端契约** `packages/api` 从后端的 OpenAPI 离线生成类型。
+
+## 在界面上哪里找？
+
+| 入口 | 路径 | 谁能用 |
+|---|---|---|
+| 侧边栏「开发工具 → 组件沙箱」 | `/sandbox/components` | 登录即可；沙箱开着时才在侧边栏出现 |
+| 查询区演练 | `/sandbox/query` | 登录即可；从沙箱里的链接进，不在侧边栏 |
+| 表格演练 | `/sandbox/table` | 同上 |
+
+「开发工具」这个侧边栏节点不在菜单表里，是前端在沙箱开着时自己加上的，所以它不占权限码、在「菜单管理」里也看不到。**沙箱开不开**由参数配置「高级 → 开发」组里的 `DEV_SANDBOX_ENABLED` 决定：种子数据里是 `true`；库里没有这一项时，开发环境默认开、生产环境默认关。上线前不想让人看到，就在参数配置里关掉。沙箱判断开关走的是一个只读这两个布尔值的专用接口，不需要参数配置的查看权限。
+
+## 组件沙箱里有什么？
+
+49 个演示，分成输入与表单、数据展示、反馈与状态、弹层、导航、表格、成套能力、主题几组。页面三栏：
+
+- **左**：挑组件，可以搜索
+- **中**：舞台和代码。旋钮一改，舞台实时变，代码跟着变 —— 代码里**只列和默认值不同的属性**，复制走就能用
+- **右**：旋钮（这个组件能调的属性）
+
+每个演示还写着**用在哪**、**别用在哪**和源码路径。当前看的是哪个组件、搜索词写进地址栏，链接发给别人打开就是同一屏；旋钮值不进地址栏（它是草稿，换个组件就没意义了）。
+
+**调色盘**（主题分组里）读的是页面上**真实生效**的颜色令牌，不是硬编码的色卡：在个人中心切换主题色、深色模式，这一页跟着变。它还能看圆角和字级。业务代码里的颜色只该从这些令牌来，不手写 `#rrggbb` 或 `emerald-500`。
+
+查询区（QueryBar）和数据表格的可调项太多，沙箱的小舞台放不下，各有一个单独的演练页，把它们的配置项摆开来试（表格那页能切服务端分页 / 全量滚动、分组、排序、拖拽、密度和斑马纹）。
+
+## 能把组件库搬进别的项目吗？
+
+能，这是刻意设计的：`packages/ui` 对仓库里其他的包**一处 import 都没有**（连语言包都是运行时注入的），`pnpm arch:check` 在 CI 里守着这条。步骤在 [`packages/ui/PORTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/ui/PORTING.md)：
+
+1. 拷 `packages/ui` 下的组件和样式
+2. 装它依赖的 npm 包
+3. **`globals.css` 必须一起拿走**，并把 Tailwind 的 `@source` 指到你自己的源码目录 —— 指错了不会报错，表现是按钮全变成白底黑字
+4. 翻译三选一：什么都不接（显示中文原文）、接你自己的 i18next、或者把翻译拆掉
+5. 照文档最后的清单验一遍：按钮有没有底色、表格滚动时表头有没有钉住、分页条上是「共 42 条」还是「共 {{total}} 条」、深色模式是不是整体反过来
+
+还有一份可读的组件目录在 [`packages/ui/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/ui/AGENTS.md)，写着每个组件什么时候用、尺寸覆盖为什么不生效这类坑。
+
+## 前后端契约是怎么来的？
+
+`pnpm --filter @admin/api gen:api` 直接 import 后端的 FastAPI 应用拿 OpenAPI，生成 `packages/api/src/schema.d.ts`。**不用起后端服务**（生成契约和运行时无关）。后端接口改了之后跑一次。
+
+这个包里还有请求客户端和成败判定：**只有信封里 `code === 200` 才算成功**，HTTP 200 不够 —— 后端的 `fail()` 返回的是 HTTP 200 加 `code: 400`，只看 HTTP 状态码会把所有业务失败读成成功。
+
+类型推断的现状要说清楚：
+
+- **移动端**的每个请求都从 `schema.d.ts` 推断路径、参数、请求体和返回字段，接口改了而页面没跟上，`pnpm typecheck` 直接报错（突变验证过：写错字段名、路径、请求体字段、查询参数名，四种都报）。
+- **网页端还没切过去**：请求封装是 `api.GET<T>(path: string)`，路径是普通字符串、返回类型 `T` 在各调用点手写，所以后端改了字段名，网页端的类型检查发现不了。挡着它的是几处结构性问题（动态拼出来的路径、约 20 个页面用函数拼查询串），细节在 [`packages/api/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/api/AGENTS.md)。
+
+## 还有哪些守着代码的检查？
+
+都在 CI 里跑，本地也能跑：
+
+| 命令 | 查什么 |
+|---|---|
+| `pnpm typecheck --force` | 类型。要加 `--force`：turbo 缓存命中时打印的是上一次的日志 |
+| `pnpm lint` | 每个包的 ESLint（用 `pnpm <任务>` 跑，不要 `--filter` 某个包，否则别的包从来没被检查过） |
+| `pnpm arch:check` | 包之间的依赖方向、页面不许直接读路由、隐藏页签里的全局 DOM 查询、功能引导的目标元素存在…… |
+| `pnpm i18n:check` | 中英文案的键齐全 |
+| `pnpm ctx:check` | 各目录 `AGENTS.md` 里提到的文件、脚本、testid 还在不在 |
+
+这些规矩的来龙去脉写在根目录的 [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md)「硬纪律」一节。
+
+## 它不做什么
+
+- 组件沙箱只演示 `packages/ui` 的组件，不演示业务页面。
+- 「开发工具」节点不在菜单表里，没法用角色权限控制谁看得到 —— 开着就是所有登录用户都能看。
+- 网页端的接口类型还没从契约推断，见上文。
+
+## 代码在哪
+
+- 组件沙箱：[`pages/dev-sandbox/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/dev-sandbox)（`demos/` 是每个演示，`api.ts` 是开关判断）· 演练页 [`pages/playground-query/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/playground-query) · [`pages/playground-table/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/playground-table) · 侧边栏节点在 [`shell/use-sidebar.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/use-sidebar.ts)
+- 组件库：[`packages/ui/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/ui) · 主题令牌 [`packages/ui/src/styles/globals.css`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/ui/src/styles/globals.css)
+- 契约：[`packages/api/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/api)（生成脚本 `scripts/gen.mjs`）
+- 检查脚本：[`scripts/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/scripts)
+
+## 在演示站里试试
+
+[在线演示](https://fra.wubunan.com/sign-in)（`admin` / `123456`）：侧边栏最下面「开发工具 → 组件沙箱」，选「按钮」，在右边把变体改成 outline、尺寸改成 lg，看中间的代码只多了这两个属性；再到「调色盘」，去个人中心切一下主题色回来对比。
