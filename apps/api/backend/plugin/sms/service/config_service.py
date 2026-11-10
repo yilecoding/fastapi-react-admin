@@ -27,6 +27,7 @@ from backend.plugin.sms.templates import get_sms_template, list_sms_templates
 from backend.utils.encrypt import AESCipher
 
 if TYPE_CHECKING:
+    from sqlalchemy.engine import Connection
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.plugin.sms.schema.config import (
@@ -123,6 +124,42 @@ def parse_templates(config: SmsConfig) -> dict[str, dict[str, Any]]:
 
 def parse_options(config: SmsConfig) -> dict[str, Any]:
     return json.loads(config.options or '{}')
+
+
+def strip_credential_options(conn: Connection) -> tuple[int, int]:
+    """把混进 `options` 的凭据字段删掉（迁移 `ar000000smsoptcreds` 调它）。返回 (改了几行, 认不出厂商跳过几行)。
+
+    保存时现在拒收（`_validate`），但这之前存进去的行还在：详情接口原样下发明文；改那一行时旧 `options` 以明文进
+    数据变更记录（审计按普通值记 `options`）；而且那一行在界面上每次保存都 400，用户自己去不掉那个键（#284 评审）。
+    这些键本来就不起作用 —— 发送时 `build_provider_config` 用的是凭据栏的值。认不出的厂商不知道哪些是凭据，不动。
+    走连接，不经过数据变更审计（迁移本来就不记）。
+    """
+    import sqlalchemy as sa
+
+    from backend.plugin.sms.extensions import load_sms_extensions
+
+    load_sms_extensions()
+    table = sa.table('sms_config', sa.column('id', sa.BigInteger), sa.column('provider'), sa.column('options'))
+    changed = skipped = 0
+    for row in conn.execute(sa.select(table.c.id, table.c.provider, table.c.options)).all():
+        try:
+            options = json.loads(row.options or '{}')
+        except ValueError:
+            continue
+        if not isinstance(options, dict):
+            continue
+        cls = get_provider(row.provider)
+        if cls is None:
+            skipped += 1
+            continue
+        smuggled = set(cls.credential_fields or ()) & set(options)
+        if smuggled:
+            kept = {k: v for k, v in options.items() if k not in smuggled}
+            conn.execute(
+                sa.update(table).where(table.c.id == row.id).values(options=json.dumps(kept, ensure_ascii=False))
+            )
+            changed += 1
+    return changed, skipped
 
 
 class SmsConfigService:
