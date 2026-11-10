@@ -15,7 +15,9 @@ from starlette.testclient import TestClient
 
 from backend.core.conf import settings
 from backend.middleware.opera_log_middleware import OperaLogMiddleware
+from backend.plugin.open.model import OpenApp
 from backend.plugin.open.tests.conftest import CODE_PREFIX, MGMT, create_app, signed_get
+from backend.tests.utils.data_change import assert_never_recorded, changes_of, column_value, field
 from backend.utils.timezone import timezone
 
 
@@ -162,3 +164,33 @@ def test_every_plugin_setting_is_a_declared_field() -> None:
     keys = rtoml.load(PLUGIN_DIR / 'open' / 'plugin.toml')['settings']
     assert 'OPEN_SECRET_KEY' in keys
     assert set(keys) <= set(Settings.model_fields), set(keys) - set(Settings.model_fields)
+
+
+class TestChangeRecords:
+    """#281：开放应用的改动进数据变更记录，Secret Key 只记「改过」，明文和密文都不进去"""
+
+    def test_lifecycle_is_recorded_without_the_secret(self, client: TestClient, token_headers: dict[str, str]) -> None:
+        issued = create_app(client, token_headers, 'DC', remark='第一版')
+        pk = issued['id']
+        first_cipher = column_value(OpenApp, pk, 'secret_cipher')
+        body = {'name': '改名后的系统', 'scopes': ['user:read'], 'status': 1, 'remark': '第二版'}
+        assert client.put(f'{MGMT}/{pk}', headers=token_headers, json=body).json()['code'] == 200
+        reset = client.post(f'{MGMT}/{pk}/secret', headers=token_headers).json()['data']
+        second_cipher = column_value(OpenApp, pk, 'secret_cipher')
+
+        # 调一次开放接口：只写「最近调用时间」，不该出记录（先断言它真的写了）
+        before = len(changes_of('open_app', pk))
+        assert signed_get(client, reset, '/users', params='limit=1').json()['code'] == 200
+        assert column_value(OpenApp, pk, 'last_used_time') is not None
+        assert len(changes_of('open_app', pk)) == before
+
+        assert client.delete(f'{MGMT}/{pk}', headers=token_headers).json()['code'] == 200
+        records = changes_of('open_app', pk)
+        assert [r['action'] for r in records] == ['create', 'update', 'update', 'delete']
+        created, edited, rotated, _ = records
+        assert field(created, 'secret_cipher') == {'field': 'secret_cipher', 'label': 'Secret Key', 'secret': True}
+        assert field(edited, 'name')['old'] == '测试系统' and field(edited, 'name')['new'] == '改名后的系统'
+        assert field(edited, 'remark')['new'] == '第二版'
+        assert field(edited, 'secret_cipher') is None, '没换密钥就不该有密钥那一项'
+        assert [c['field'] for c in rotated['changes']] == ['secret_cipher'], '前几位（hint）跟着变，不另记'
+        assert_never_recorded(records, issued['secret_key'], reset['secret_key'], first_cipher, second_cipher)
