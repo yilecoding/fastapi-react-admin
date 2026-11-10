@@ -7,8 +7,12 @@
  * MDX 组件里写了 `/` 开头的链接（remark 插件管不到）、页面改名后旧链接还在、中文小标题的
  * 锚点和英文对不上。Astro 构建对这些一律放行，上线之后才是一个 404。
  *
- * 不查外链（GitHub、演示站）：那些不归本站管，查了会被网络抖动带红。
+ * 不查外链（演示站、别人的仓库）：那些不归本站管，查了会被网络抖动带红。
  * `/e2e/` 跳过：E2E 报告是 CI 的 pages job 在构建之后才拼进来的。
+ *
+ * **指向本仓库 `main` 的源码链接**（`github.com/…/fastapi-react-admin/blob|tree|edit/main/<路径>`）
+ * 例外：它们指向的就是这份检出，离线核对路径在不在，不联网（#285）。功能页靠「代码在哪」那一节
+ * 和代码对上，文件改名或挪目录时这些链接照样 404，而构建全绿。
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, posix, relative, resolve } from 'node:path'
@@ -18,6 +22,9 @@ const DIST = resolve(dirname(fileURLToPath(import.meta.url)), '../dist')
 // 和 astro.config.mjs 读同一对环境变量
 const SITE = process.env.DOCS_SITE ?? 'https://yilecoding.github.io'
 const BASE = process.env.DOCS_BASE ?? '/fastapi-react-admin'
+// 本仓库的源码链接 → 本地检出里的路径（dist 在 apps/docs/dist，仓库根在上三层）
+const REPO_SRC = /^https:\/\/github\.com\/yilecoding\/fastapi-react-admin\/(?:blob|tree|edit)\/main\/([^?#]+)/
+const REPO_ROOT = resolve(DIST, '../../..')
 
 const pages = []
 ;(function walk(dir) {
@@ -43,11 +50,19 @@ function idsOf(file) {
 
 const broken = []
 let ok = 0
+let srcOk = 0
 for (const file of pages) {
   const rel = relative(DIST, file).replaceAll('\\', '/')
   const pageUrl = `${BASE}/${rel.replace(/index\.html$/, '')}`
   for (const [, raw] of readFileSync(file, 'utf8').matchAll(/href="([^"]+)"/g)) {
     let href = raw.replaceAll('&amp;', '&')
+    const src = REPO_SRC.exec(href)
+    if (src) {
+      const path = decodeURIComponent(src[1]).replace(/\/$/, '')
+      if (existsSync(join(REPO_ROOT, path))) srcOk += 1
+      else broken.push(`${rel} → ${raw}（仓库里没有 ${path}）`)
+      continue
+    }
     if (href.startsWith(SITE + BASE)) href = href.slice(SITE.length)
     else if (/^[a-z]+:/i.test(href) || href.startsWith('//')) continue
     if (href.startsWith('#')) href = pageUrl + href
@@ -75,5 +90,5 @@ for (const file of pages) {
 }
 
 for (const b of new Set(broken)) console.log(`  ✗ ${b}`)
-console.log(`站内链接：${pages.length} 页 · ${ok} 条通过 · ${new Set(broken).size} 条断链`)
+console.log(`站内链接：${pages.length} 页 · ${ok} 条通过 · 源码链接 ${srcOk} 条通过 · ${new Set(broken).size} 条断链`)
 process.exit(broken.length ? 1 : 0)
