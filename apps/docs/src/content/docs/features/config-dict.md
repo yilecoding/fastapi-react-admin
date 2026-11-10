@@ -1,0 +1,98 @@
+---
+title: 参数配置与数据字典
+description: 参数配置让管理员在界面上改一部分运行时配置（登录策略、口令与锁定、会话、邮件、通知、Webhook、文件上传、日志保留），覆盖 .env、不用重启，写入时按范围校验；数据字典维护「类型 → 选项」的键值表，带缓存、能导入导出。
+sidebar:
+  order: 3
+---
+
+**参数配置**是一张键值表，后端在用到某组配置时从库里读出来、覆盖 `.env` 里的同名值，所以管理员在界面上改了不用重启。界面按用途分组（登录策略、口令与锁定、会话策略、邮件服务、通知推送、Webhook、文件上传、日志……），每一项有说明、单位、取值范围；写入时后端按范围校验，填错了不会落库。**数据字典**是另一张表：一个「字典类型」下面若干「字典项」（标签、值、颜色、排序），给业务页面当下拉选项、状态标签用。
+
+## 在界面上哪里找？
+
+| 入口 | 路径 | 打开页面要 | 其余权限码 |
+|---|---|---|---|
+| **系统管理 → 参数配置** | `/plugins/config` | `sys:config:edit` | 查看 `sys:config:list` · 新增键 `sys:config:add` · 删除 `sys:config:del`；每行的「变更记录」要 `log:change:list` |
+| **系统管理 → 数据字典** | `/plugins/dict` | `dict:type:add` | 类型 `dict:type:list` · `edit` · `del`；字典项 `dict:data:list` · `add` · `edit` · `del` · `import` · `export` |
+
+⚠️ 和其他几个管理页一样，这两页的前端路由守卫认的是编辑 / 新增码，不是查询码：只授了查询的角色打不开。
+
+## 参数配置页上有哪些分组？
+
+| 大类 | 分组 | 里面是什么 | 详见 |
+|---|---|---|---|
+| 安全策略 | 登录策略 | 图形验证码开关、二次验证强制 | [登录与安全](/features/login-security/#有哪些开关) |
+| | 口令与锁定 | 失败锁定、密码长度 / 特殊字符 / 历史 / 有效期 | 同上 |
+| | 会话策略 | 网页 / 桌面 / 移动三端的空闲超时、最长登录、会话上限、超限策略 | 同上 |
+| 通知与集成 | 邮件服务 | SMTP 地址、端口、SSL、账号、密码 | [消息与通知](/features/notifications/#有哪些开关) |
+| | 通知推送 | 外部渠道总闸、重试次数、投递记录保留天数 | 同上 |
+| | Webhook | 总闸、自动停用阈值、记录保留天数、每个应用最多端点数 | [能力开放](/features/open-api/#有哪些开关) |
+| 文件 | 文件上传 | 分片阈值、分片大小 | [文件与存储](/features/file-storage/#有哪些开关) |
+| 日志 | 日志 | 数据变更记录保留天数 | [日志与审计](/features/audit-logs/#记录保留多久) |
+| 高级 | AI · 开发 · 未纳管的键 | AI 是预留的空分组；开发里是组件沙箱开关；自己加的键落在「未纳管的键」 | |
+
+种子数据里一共 46 行。每一项的默认值、范围、生效时机写在对应功能页的「有哪些开关」里，这里不重复。
+
+## 改了之后多久生效？会不会改坏？
+
+- **不用重启。** 写入后清掉缓存，用到的地方下一次读就是新值：登录和验证码每次请求读、邮件每次发信读、Webhook 和保留天数每次直接查库。两组例外是「改了只影响之后」：**会话策略**只影响之后的登录（已经登录的人按登录时的规则走完），**文件上传**只影响之后开始的上传。
+- **每组有一个总开关** `<分组>_CONFIG_STATUS`。设成 `0` 时整组不读库，回落到 `.env` 的值。反过来，组开着时**库里的值覆盖 `.env`** —— 这就是为什么在 `.env` 里关验证码不管用（见[常见问题](/reference/faq/#env-里设了-login_captcha_enabledfalse登录页还是要验证码)）。
+- **写入时后端校验**，不只是界面上的输入框：整数有上下限（比如密码最小长度 1–128、会话空闲 5 分钟到 90 天），固定取值的只认那几个值，二次验证在没配 `MFA_SECRET_KEY` 时不许改成强制。曾经实测过：没有这道校验时，带管理员 token 直接调接口能把最小密码长度写成 999，所有人都改不了密码。
+- **读取时也兜底**：库里的值不合法（比如被清空、超出范围）时，这一项回落到 `.env` 的值并记一条错误日志，而不是让登录 500。
+
+## 能加自己的配置项吗？
+
+能，点「新增键」。但要清楚两点：
+
+- 自己加的键落在「未纳管的键」分组里，界面上没有说明、单位和范围校验。分组下拉里只有登录、口令与锁定、邮件、AI 四个可选。
+- **后端没有通用的读取方式**：内置的配置项是在代码里一项项写好映射才会覆盖 `settings` 的。自己加的键，业务代码要自己去查配置表才能用。
+
+要加一个**像内置项那样**的运行时配置（有说明、有范围、覆盖 `.env`），步骤见下面「给开发者」一节。
+
+## 数据字典是什么？
+
+两层：
+
+- **字典类型**：名称、编码（唯一）、备注。
+- **字典项**：所属类型的编码、标签、值、颜色、排序、状态（正常 / 停用）、备注。同一类型下标签不能重复。
+
+业务代码按类型编码取选项：`GET /api/v1/sys/dict-datas/type-codes/{编码}`，只返回状态正常的项，按排序值**从大到小**排；结果在 Redis 里缓存 2 小时，改字典项时清缓存。字典项能[导入导出](/features/import-export/)，按「类型编码 + 标签」匹配已有的项。
+
+⚠️ **目前内置的页面都没有读字典**：公告类型、状态这类标签是在各页面的代码里写死的，只有字典管理页自己在调字典接口。字典是留给你自己的业务页面用的，前端也还没有现成的「按类型取字典」的 hook。
+
+## 有哪些开关？
+
+参数配置和字典本身没有额外的开关。`dict` 是**必装插件**（`.env` 的 `PLUGIN_REQUIRED`），不能卸载。
+
+## 给开发者：加一个运行时配置项
+
+1. 种子数据：在 `plugin/config/sql/` 下五份初始化 SQL 里各加一行。
+2. 写一条数据迁移，用 `insert_if_absent` 插入这一行 —— 已经在跑的库不会重新执行种子 SQL，不写迁移就只有新装的环境有这一项。
+3. 在 `core/conf.py` 声明这个键并给默认值，那是组关掉或值不合法时的回落值。
+4. 加进对应分组的 `load_*` 映射（[`utils/dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py)），并确认读这个配置的代码路径上调用了这个 `load_*`；新分组还要加 `ConfigType`。
+5. 整数加进 `DYNAMIC_INT_BOUNDS`，并在前端 `pages/config/registry.ts` 里写同样的 `min` / `max` —— `test_dynamic_config_bounds.py` 会核对两边一致。固定取值的加进 `DYNAMIC_CHOICES`。
+6. 在 `registry.ts` 的 `REGISTRY` 里加说明、单位、控件类型；新分组还要加导航项、图标和中英文案。
+
+规矩和踩过的坑在 [`pages/config/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/config/AGENTS.md)。
+
+## 它不做什么
+
+- **密码类的值只在界面上遮住**：邮件密码这类键名像密钥的项，界面上用密码框显示、可以点开看，但接口返回的是明文 —— 能打开参数配置页的人都能拿到。数据变更记录对这些项只记「改了」，不记内容。
+- 自己加的键没有校验、没有通用读取方式；「是否前端可见」这个字段在后端没有任何作用。
+- 改或删字典**类型**时不清字典缓存，最多 2 小时后才看到变化；改类型编码不会同步改它下面字典项的类型编码。
+- 字典页的颜色选项和种子数据里用到的颜色对不上，部分种子字典项会显示成默认样式。
+- 参数配置页和字典页都没有专门的 E2E。
+
+## 代码在哪
+
+- 参数配置：[`plugin/config/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/config) · 运行时加载与校验 [`utils/dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py) · 前端 [`pages/config/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/config)（`registry.ts` 是每一项的元数据）
+- 数据字典：[`plugin/dict/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/dict) · 前端 [`pages/dict/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/dict)
+
+## 怎么测的
+
+- [`test_dynamic_config_bounds.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_dynamic_config_bounds.py)：后端范围和前端 `registry.ts` 对账、越界写入被拒。[`test_dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_dynamic_config.py)：读取时的回落。[`test_upload_policy_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_upload_policy_config.py)：文件上传组。`test_mfa.py` 里有「没配密钥不能强制二次验证」「配置列表不因一个已不合法的旧值整个 500」。
+- 字典的导入导出在 `test_import.py`、`test_export.py` 里。
+- 浏览器端没有专门的用例；E2E 的全局准备阶段通过接口关掉图形验证码，用的就是参数配置。
+
+## 在演示站里试试
+
+[在线演示](https://fra.wubunan.com/sign-in)（`admin` / `123456`）：打开「系统管理 → 参数配置」，在「口令与锁定」里把「最小长度」改成 200 试试保存，会被拒绝并说明范围；在「会话策略」里看三端的默认值。演示站是共用的，**别真的改登录策略**，改错了所有人都登不进来。
