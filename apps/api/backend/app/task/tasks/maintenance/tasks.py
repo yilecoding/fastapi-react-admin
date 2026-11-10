@@ -267,7 +267,7 @@ async def purge_stale_multipart() -> str:
         for row in await storage_dao.get_all(db):
             try:
                 targets.append(storage_service.row_target(row, public=False))
-            except Exception as e:  # ruff:ignore[try-except-in-loop]
+            except Exception as e:
                 log.warning(f'跳过存储 {row.id}：{e!s}')
 
     total = 0

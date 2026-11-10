@@ -458,8 +458,8 @@ Hermes 没有 JIT，只会更慢。同一个一次性探针还覆盖了 Tiptap �
 ⚠️ `npx expo install` 第一次连 `api.expo.dev` 是 `ETIMEDOUT`；`EXPO_OFFLINE=1` 能装（版本取本地 `expo` 的
 bundledNativeModules.json），但 offline 下 `--check` 只说 `Dependency validation is unreliable in offline-mode`
 —— **要联网再跑一次才算数**。2026-10-30 联网跑出的是整套 SDK 的补丁版漂移（`expo@57.0.19` 对 `~57.0.31`
-等 11 个包），早于本次改动；`expo-file-system` 刻意留在 57.0.6 —— 那正是 `expo@57.0.19` 自己依赖的版本，
-单独升会多出第二份。`expo-sharing` 装上时往 `app.json` 的 `plugins` 里加了一条，不带参数时是空操作
+等 11 个包），#294 用 `expo install --fix` 对齐到 `expo@57.0.32`。⚠️ `expo` 自己也依赖的包（`expo-file-system`）要跟着一起升，
+单独升会多出第二份；`babel-preset-expo` 不在 `--check` 的清单里，要对着 `expo` 的 dependencies 手改（#294 第一版漏了，锁里两份并存）。`expo-sharing` 装上时往 `app.json` 的 `plugins` 里加了一条，不带参数时是空操作
 （「分享进本 App」两端默认关，代码直读）。
 
 ### 🔴 正则字面量里的引号会把 `pnpm i18n:check` 的剥注释带偏
