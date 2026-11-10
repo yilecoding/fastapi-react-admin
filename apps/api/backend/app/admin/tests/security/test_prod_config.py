@@ -252,6 +252,21 @@ def test_init_handles_every_seeded_account() -> None:
         assert f"'{username}'" in src, f'_set_admin_password 没有处理种子账号 {username}'
 
 
+def test_init_initializes_snowflake_before_writing() -> None:
+    """`fba init` 改密码会写数据变更审计，审计行要雪花 ID；命令行不走 lifespan，必须自己 init
+
+    漏了的话 init 在提交那一刻失败、整个事务回滚（2026-11-10 实测，见 alembic 分册）。
+    真正的守卫是 CI 里对新库跑一遍 `fba init`（pytest · PostgreSQL 的「fba init（新库，非交互）」）——
+    pytest 里复现不了：这里的雪花节点早被应用的 lifespan 初始化好了。这条只在本地先挡一下。
+    """
+    import inspect
+
+    from backend import cli
+
+    assert 'snowflake.init()' in inspect.getsource(cli._set_admin_password)
+    assert 'snowflake.shutdown()' in inspect.getsource(cli.Init.__call__)
+
+
 # ── prod 启动时的数据库检查 ─────────────────────────────────────────────────
 #
 # 上面那批查的是**配置**（`check_production_settings`），下面这两条查的是
