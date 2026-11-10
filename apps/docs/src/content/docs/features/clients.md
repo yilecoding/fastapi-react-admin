@@ -80,6 +80,18 @@ if (isDesktop()) {
 
 本地跑起来：先 `pnpm --filter api dev:host`（后端绑 `0.0.0.0:8088`），再 `pnpm mobile:dev`，把打印出来的 `exp://…:8800` 地址填进 SDK 57 版的 Expo Go。
 
+## 有哪些开关？
+
+| 端 | 在哪设 | 键 | 默认 | 说明 |
+|---|---|---|---|---|
+| 网页 | 构建时的环境变量 | `VITE_API_BASE` | `http://127.0.0.1:8088` | 后端地址，打进前端产物 |
+| 桌面 | 应用数据目录下的 `config.json`，运行时读 | `serverUrl` | 空 | 后端地址；同一个安装包可以发到不同环境 |
+| 桌面 | 同上 | `printerName` | 空 | 静默打印用的打印机；空 = 系统默认 |
+| 桌面 | 同上 | `kiosk` | `false` | 全屏锁定模式 |
+| 桌面 | 同上 | `autoLaunch` | `false` | 开机自启（只对打包后的正式包生效） |
+| 桌面 | 同上 | `updateUrl` | 空 | 自动更新源；空 = GitHub Releases |
+| 移动 | App 里的服务器地址设置，存在设备上 | —— | 构建时的 `EXPO_PUBLIC_API_BASE`，没设是 `http://127.0.0.1:8088` | 保存前先探一次 `/auth/captcha` 确认连得通。`EXPO_PUBLIC_*` 是构建时替换的，打成安装包后只能在 App 里改 |
+
 ## 代码在哪
 
 - [`apps/desktop/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/desktop)：`src/main/`（窗口、`app://` 协议、`print.ts`、`updater.ts`、`auth.ts`、`devices/`）和 `electron-builder.yml`

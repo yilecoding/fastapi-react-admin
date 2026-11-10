@@ -5,7 +5,21 @@ sidebar:
   order: 1
 ---
 
+import shot from '../../../../../../docs/screenshots/data-permission.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 fastapi-react-admin 的权限分两道互相独立的闸。**RBAC** 管「能不能进这个页面、看到这个按钮、调这个接口」，靠 `sys:user:list` 这样的权限码；**数据范围**管「这个接口返回哪些行」：角色上配的规则被编译成一条 SQLAlchemy `WHERE` 条件，DAO 层在每次读取时自动拼上去。于是同一张用户表，部门经理可以只看到本部门的人。
+
+<ProductShot src={shot} alt="数据权限：数据范围与规则" url="localhost:8888/system/data-permission" />
+
+## 在界面上哪里找？
+
+| 入口 | 路径 | 权限码 | 做什么 |
+|---|---|---|---|
+| **系统管理 → 数据权限** | `/system/data-permission` | 范围：`data:scope:list` · `add` · `edit` · `del`，改范围里挂哪些规则 `data:scope:rule:edit`；规则：`data:rule:list` · `add` · `edit` · `del` | 左栏是数据范围，右栏是这个范围里的规则 |
+| **系统管理 → 角色管理 →「数据范围」** | `/system/role` | 查看 `sys:role:list`，修改 `sys:role:scope:edit` | 给角色绑定数据范围；角色表单里还有一个「启用数据权限过滤」开关，关掉 = 这个角色不受数据范围限制（如集团总部角色） |
+
+⚠️ 打开「数据权限」这一页，前端路由守卫目前认的是 `data:scope:add`，不是 `data:scope:list` —— 只授了「查询」的角色打不开这一页。
 
 ## RBAC 和数据范围有什么区别？
 
@@ -115,6 +129,17 @@ with scoped_to_user(user):
 - `exists()` 刻意不过滤：它被用来做唯一性校验，过滤之后用户会因为「看不见」而建出一条重复记录。
 - 上级部门被过滤掉时，可见的子部门会被提到树的顶层。
 - 超管永远不过滤。开放接口（AK/SK 签名）刻意读全量数据，它的边界靠「每个应用被授权调哪些接口」和「对外 schema 只放哪些字段」来守。
+
+## 有哪些开关？
+
+数据范围本身都在界面上配。下面几项是给开发者的，只能在 `.env` / `conf.py` 改，改完重启后端：
+
+| 键 | 默认值 | 说明 |
+|---|---|---|
+| `DATA_PERMISSION_MODEL_EXCLUDE` | `DataScope` · `DataRule` · 两张关联表 | 哪些模型不参与数据过滤（规则编辑器里选不到） |
+| `DATA_PERMISSION_COLUMN_EXCLUDE` | `id` · `sort` · `deleted` · `deleted_time` · `created_time` · `updated_time` | 哪些列不能作为规则的字段 |
+| `DATA_PERMISSION_TEMPLATE_VARIABLES` | `${user_id}` · `${dept_id}` · `${now}` | 规则值能用的模板变量 |
+| `RBAC_ROLE_MENU_MODE` | `true` | `true` = 权限码模式（角色 → 菜单 → 权限码）；`false` = casbin 模式，按接口路径 + 方法鉴权，依赖权限码的功能在这个模式下一律拒绝 |
 
 ## 代码在哪
 
