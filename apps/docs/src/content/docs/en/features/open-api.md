@@ -105,7 +105,7 @@ Every request to `/api/open/v1` adds one row to `open_api_log`, whether it succe
 - the response headers and the response body (truncated)
 - `ok` or the error code, the number of rows returned, and the duration
 
-`X-Sign` is kept unredacted on purpose: it is single-use, so it can't be replayed, and you need it to compare against the server's signature. Open the log from an application's row on the Applications page (route `/open/log`). It is pruned together with the login and operation logs, using the same retention (30 days in the seed data).
+`X-Sign` is kept unredacted on purpose: it is single-use, so it can't be replayed, and you need it to compare against the server's signature. Open the log from an application's row on the Applications page (route `/open/log`). It is pruned together with the login and operation logs, using the same retention (180 days by default).
 
 The general operation log only records `/api/v1` requests, and most integration failures happen before the application is even identified. That is why this log is a separate table.
 
