@@ -1,4 +1,4 @@
-"""数据变更审计（#260）的内置登记：用户 / 部门 / 角色 / 菜单 + 三张关联表 + 用户的二次验证。
+"""数据变更审计（#260）的内置登记：用户 / 部门 / 角色 / 菜单 + 三张关联表 + 用户的二次验证 · 存储（#281）。
 
 🔴 **每一列都要归类**（`registry.register_audited` 当场校验）。给这几张表加列时，先想清楚它属于哪一类：
 普通（记旧值 → 新值）· 引用（另存当时的名字）· 敏感（只记「改过」）· 忽略（时间戳、冗余列）。
@@ -10,7 +10,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from backend.app.admin.model import Dept, Menu, Role, User, UserMfa
+from backend.app.admin.model import Dept, Menu, Role, Storage, User, UserMfa
 from backend.app.admin.model.m2m import role_data_scope, role_menu, user_role
 from backend.common.data_change import ChildValue, Ref, register_audited, register_audited_child, register_audited_set
 
@@ -161,5 +161,33 @@ register_audited(
         'display': _YES_NO,
     },
     ignore=_TIMESTAMPS,
+    soft_delete='deleted',
+)
+
+# #281：存储。🔴 `secret_cipher` 只记「改过」—— 密文 + 加密密钥 = 明文，换密钥时还会显示成一串看不懂的变化；
+# `secret_hint` 跟着密文变，记了就是每次换密钥多一条重复的「前几位从 A 改成 B」
+register_audited(
+    Storage,
+    entity='storage',
+    title='存储',
+    label='name',
+    fields={
+        'name': '名称',
+        'code': '编码',
+        'type': '类型',
+        'root': '根目录',
+        'endpoint': '端点',
+        'bucket': '桶名',
+        'region': '区域',
+        'addressing': '寻址方式',
+        'access_key': 'Access Key',
+        'public_base_url': '公开访问地址',
+        'is_default': '默认存储',
+        'status': '状态',
+        'remark': '备注',
+    },
+    enums={'type': {'local': '本地', 's3': 'S3 兼容'}, 'is_default': _YES_NO, 'status': _STATUS},
+    secret={'secret_cipher': 'Secret Key'},
+    ignore={'secret_hint', *_TIMESTAMPS},
     soft_delete='deleted',
 )

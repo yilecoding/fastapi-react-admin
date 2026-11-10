@@ -20,6 +20,7 @@ import { Switch } from '@admin/ui/components/switch'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { ChangeHistoryButton } from '../_shared/data-change/history-button'
 import { AddCard, CardField, CardFields, CardPageRefresh, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
@@ -116,6 +117,7 @@ export function StoragePage() {
                   </div>
                   {storage.builtin ? null : (
                     <div className="flex shrink-0 gap-1">
+                      <ChangeHistoryButton entity="storage" entityId={storage.id} name={storage.name} testId={`storage-history-${storage.code}`} />
                       <Can perm="sys:storage:edit">
                         <Button
                           size="icon"
