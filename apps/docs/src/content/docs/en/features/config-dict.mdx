@@ -5,7 +5,12 @@ sidebar:
   order: 3
 ---
 
+import shot from '../../../../../../../docs/screenshots/config.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 **Config** is a key / value table. When the backend needs a group of settings it reads them from the database and overrides the same keys from `.env`, so a change an admin makes in the UI needs no restart. The page is grouped by purpose (sign-in policy, passwords and lockout, sessions, email, notification delivery, webhooks, file uploads, log…), and each item has a description, a unit and an allowed range; the backend validates the range on write, so a bad value never lands in the database. The **data dictionary** is a separate table: a "dictionary type" with a list of items (label, value, colour, sort order), meant for drop-down options and status labels in business pages.
+
+<ProductShot src={shot} alt="Config: passwords and lockout" url="localhost:8888/plugins/config" />
 
 ## Where is it in the UI?
 

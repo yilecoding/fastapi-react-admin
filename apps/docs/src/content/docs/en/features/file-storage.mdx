@@ -5,7 +5,12 @@ sidebar:
   order: 5
 ---
 
+import shot from '../../../../../../../docs/screenshots/file.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 The file module is a file manager (grid or list view, category rail, in-browser previews) on top of a storage layer that puts local disk and any S3-compatible bucket behind one [Apache OpenDAL](https://opendal.apache.org/) interface. Every upload goes through one global queue: the browser hashes the file with SHA-256 first and skips the transfer if the same file already exists; files of 16 MiB or more go up in 8 MiB chunks, three at a time, and resume after a page refresh. You can try it in the [live demo](https://fra.wubunan.com/sign-in) (`admin` / `123456`).
+
+<ProductShot src={shot} alt="Files" url="localhost:8888/system/file" />
 
 ## Where is it in the UI?
 

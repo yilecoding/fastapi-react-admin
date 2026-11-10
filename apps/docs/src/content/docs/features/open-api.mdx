@@ -5,7 +5,12 @@ sidebar:
   order: 6
 ---
 
+import shot from '../../../../../../docs/screenshots/open-app.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 能力开放插件让别的系统（HR、财务、数据仓库……）通过 `/api/open/v1` 从 fastapi-react-admin 拉取用户和部门，数据变了还能收到签名的 Webhook 推送。每个对接系统对应一个「应用」，发一对 Access Key / Secret Key。每个请求都用 HMAC-SHA256 签名（`FRA1-HMAC-SHA256`），再逐一核对应用的 scope、IP 白名单、有效期和限流。无论成功失败，每次调用都会落一条调用日志。
+
+<ProductShot src={shot} alt="能力开放：应用管理" url="localhost:8888/open/app" />
 
 ## 在界面上哪里找？
 

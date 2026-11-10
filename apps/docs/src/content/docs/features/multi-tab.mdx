@@ -5,7 +5,12 @@ sidebar:
   order: 2
 ---
 
+import shot from '../../../../../../docs/screenshots/tabs.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 登录后的外壳把所有打开过的页面**同时挂载**，用 React 19.2 的 `<Activity>` 把不在前台的那些藏起来。切页签时 DOM 和 React 状态都留着 —— 填了一半的表单、手动折叠的树节点、输入框里没提交的字；筛选、分页、选中项这些视图状态另外写进 URL，所以刷新页面也不会丢。
+
+<ProductShot src={shot} alt="多页签与右键菜单" url="localhost:8888/log/change" />
 
 ## 在界面上哪里找？
 

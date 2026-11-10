@@ -5,7 +5,12 @@ sidebar:
   order: 3
 ---
 
+import shot from '../../../../../../docs/screenshots/dept-import.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 导出在服务端做：列表页工具栏上点「导出」，按**当前的筛选条件**或**勾选的那几行**生成 xlsx / csv，数据范围和列表一样受约束。5000 行以内当场下载；更多的转成后台任务，做完发站内消息，文件在「个人中心 → 导出记录」里留 72 小时。导入走三步：下载带下拉选项的模板 → 上传后**先预览**（一行都不写，逐行告诉你哪里不对）→ 确认提交。用户、部门、字典项三处有导入，部门可以一份文件建出整棵树，上级写在下级后面也行。
+
+<ProductShot src={shot} alt="部门导入：提交前的预览" url="localhost:8888/system/dept" />
 
 ## 在界面上哪里找？
 

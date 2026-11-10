@@ -6,6 +6,7 @@ sidebar:
 ---
 
 import signIn from '../../../../../../../docs/screenshots/sign-in.png'
+import online from '../../../../../../../docs/screenshots/online.png'
 import ProductShot from '../../../../components/ProductShot.astro'
 
 There are three ways to sign in: username and password, an SMS code, or a GitHub / Google account. Once the identity is confirmed, all three go through the same two-factor step (a TOTP code, or a recovery code if the phone is lost). Facing outward there are two layers of failure lockout (per account and per IP) and an image captcha. Inside, every sign-in is a server-side **session** with its own rules for how long it may sit idle, how long it may last at most, and how many sessions one account may hold, set separately for web, desktop and mobile. Admins can see every session under Active sessions and sign any of them out; the person on the other end is sent straight back to the sign-in page with the reason, not a generic "please sign in again".
@@ -111,6 +112,8 @@ When a session ends the server records why; the next request from that person ge
 | Password changed or reset | Your password was changed, please sign in again |
 | Account disabled or deleted | Your account has been disabled, please contact the administrator |
 | Refresh token reused | Your sign-in credentials were used more than once, so you were signed out; change your password if this wasn't you |
+
+<ProductShot src={online} alt="Active sessions: client, live connection, browser and time left for each session" url="localhost:8888/monitor/online" />
 
 Active sessions lists every session on the site: user, client type, whether it has a live connection, IP, browser, operating system, sign-in time, last activity and time left. After **Force sign-out**, the other person's open page jumps to the sign-in screen over the live connection right away, without waiting for their next click. Within one browser, signing out in one tab sends the other tabs back to the sign-in page too.
 

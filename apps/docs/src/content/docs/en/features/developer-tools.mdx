@@ -5,7 +5,12 @@ sidebar:
   order: 5
 ---
 
+import shot from '../../../../../../../docs/screenshots/sandbox.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 Three things you reach for when writing business pages: the **component sandbox** shows every component in the library, lets you tweak its props and copy the code; the **component library** `packages/ui` depends on none of the repository's business packages and can be moved wholesale into another React project; the **frontend / backend contract** `packages/api` generates types offline from the backend's OpenAPI.
+
+<ProductShot src={shot} alt="Component sandbox: Button" url="localhost:8888/sandbox/components" />
 
 ## Where is it in the UI?
 
@@ -39,7 +44,7 @@ Yes, by design: `packages/ui` has **not a single import** from the repository's 
 2. Install the npm packages it depends on
 3. **Take `globals.css` along** and point Tailwind's `@source` at your own source directory; get it wrong and nothing errors, every button just turns black on white
 4. Translations, one of three: wire nothing (the original Chinese text shows), wire your own i18next, or strip translation out
-5. Check against the list at the end of the document: do buttons have a background, does the table header stick while scrolling, does the pager say "42 total" or "{{total}} total", does dark mode invert everything
+5. Check against the list at the end of the document: do buttons have a background, does the table header stick while scrolling, does the pager say `42 total` or `{{total}} total`, does dark mode invert everything
 
 There is also a readable component catalogue in [`packages/ui/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/ui/AGENTS.md), covering when to use each component and pitfalls such as size overrides that don't take effect.
 

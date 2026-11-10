@@ -5,7 +5,12 @@ sidebar:
   order: 0
 ---
 
+import shot from '../../../../../../docs/screenshots/plugin.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 后端的插件机制来自上游 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)（FBA）：每个插件是 `apps/api/backend/plugin/` 下的一个目录，里面一份 `plugin.toml` 声明它是什么、挂在哪、要什么配置、依赖哪些插件、支持哪几种数据库；后端启动时扫描这些目录，把路由、配置、钩子接进来。审批流、AI 助手、能力开放、短信、通知这些功能都是插件。**1.0 起插件接口在兼容承诺里**：`plugin.toml` 的字段、`fba add` 的安装流程、下面列的扩展点不做破坏性改动，第三方插件照旧能装能跑（见[版本升级](/reference/upgrade/)）。
+
+<ProductShot src={shot} alt="插件管理" url="localhost:8888/system/plugin" />
 
 ## 在界面上哪里找？
 

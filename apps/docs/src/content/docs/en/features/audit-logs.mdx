@@ -5,7 +5,12 @@ sidebar:
   order: 4
 ---
 
+import shot from '../../../../../../../docs/screenshots/log-change.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 The system keeps three kinds of records, each answering one question. The **sign-in log** answers "who signed in, when, from where, and did it work", and also holds security events such as an account being locked or signed out by force. The **operation log** answers "who called which endpoint with what, what came back, and how long it took", with passwords, tokens and similar fields masked before they are stored. **Data change history** answers "who changed which field of this record from what to what", and links both ways with the operation log entry that caused it. Data changes carry a signed chain, so a record that is edited, deleted or inserted afterwards shows up when the chain is checked. All three are kept for 180 days by default.
+
+<ProductShot src={shot} alt="Data change history" url="localhost:8888/log/change" />
 
 ## Where is it in the UI?
 

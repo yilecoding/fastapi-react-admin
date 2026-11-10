@@ -5,7 +5,12 @@ sidebar:
   order: 2
 ---
 
+import shot from '../../../../../../docs/screenshots/monitor-redis.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 后台自带两个监控页：**服务器监控**看跑后端的那台机器此刻的 CPU、内存、磁盘和后端进程本身；**Redis 监控**看内存、键数、每秒操作数、客户端和最耗时的命令。两页都**只显示此刻**，趋势线只是这次打开页面以来的几十个采样点，不落库。给外部监控系统用的是另一个地址：`/api/health/status`，不用登录，一次列出 API、数据库、Redis、调度器（beat）和 worker 是否正常。
+
+<ProductShot src={shot} alt="Redis 监控" url="localhost:8888/monitor/redis" />
 
 ## 在界面上哪里找？
 

@@ -5,7 +5,12 @@ sidebar:
   order: 0
 ---
 
+import shot from '../../../../../../../docs/screenshots/plugin.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 The backend's plugin system comes from upstream [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) (FBA). Each plugin is a directory under `apps/api/backend/plugin/` with a `plugin.toml` saying what it is, where it mounts, which settings it needs, which plugins it depends on and which databases it supports; at start-up the backend scans these directories and wires in their routes, settings and hooks. Approvals, the AI assistant, the open platform, SMS and notifications are all plugins. **Since 1.0 the plugin interface is part of the compatibility promise**: `plugin.toml` fields, the `fba add` install flow and the extension points listed below will not change in breaking ways, so third-party plugins keep installing and running (see [Upgrading](/en/reference/upgrade/)).
+
+<ProductShot src={shot} alt="Plugins" url="localhost:8888/system/plugin" />
 
 ## Where is it in the UI?
 

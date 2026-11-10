@@ -5,7 +5,12 @@ sidebar:
   order: 3
 ---
 
+import shot from '../../../../../../docs/screenshots/config.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 **参数配置**是一张键值表，后端在用到某组配置时从库里读出来、覆盖 `.env` 里的同名值，所以管理员在界面上改了不用重启。界面按用途分组（登录策略、口令与锁定、会话策略、邮件服务、通知推送、Webhook、文件上传、日志……），每一项有说明、单位、取值范围；写入时后端按范围校验，填错了不会落库。**数据字典**是另一张表：一个「字典类型」下面若干「字典项」（标签、值、颜色、排序），给业务页面当下拉选项、状态标签用。
+
+<ProductShot src={shot} alt="参数配置：口令与锁定" url="localhost:8888/plugins/config" />
 
 ## 在界面上哪里找？
 
