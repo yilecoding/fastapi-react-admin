@@ -63,7 +63,7 @@
   "devDependencies": {
     "@eslint/js": "^10",
     "@types/react": "~19.2.2",
-    "babel-preset-expo": "~57.0.10",
+    "babel-preset-expo": "~57.0.17",
     "eslint": "^10",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17",

@@ -25,7 +25,6 @@ minimumReleaseAgeExclude:
   - '@tanstack/router-generator'
   - '@tanstack/router-plugin'
   - i18next@26.4.0
-  - babel-preset-expo@57.0.10
 
 # 1.0 前的依赖审计（#193）：有漏洞的**间接**依赖抬到同一大版本里的修复版。
 # 每条选择器都带下界（`>=大版本 <修复版`）—— 只写 `<修复版` 的话，将来哪个包要旧大版本也会被静默抬过去。

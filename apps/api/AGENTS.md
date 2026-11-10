@@ -175,8 +175,8 @@ Excel 有一大票**「解析成功、有数据、就是错的」**的坑，一�
 workspace 成员纯粹为了让 `turbo dev` 给它一个日志窗格（同 `apps/worker`）。
 Python 依赖归 `uv` 管（`pyproject.toml` + `uv.lock`），pnpm 不知道它们存在。
 改了 `pyproject.toml` 要 `pnpm --filter api exec uv sync`（或 `pnpm install:all`）。
-⚠️ **重新锁之前先看 `uv.lock` 第二行的 `revision`，用写得出它的 uv**，锁完 `prek run --files uv.lock pyproject.toml requirements.txt`。换 revision 就是整份锁文件的噪音：revision 3 时本机 uv 0.13 加一个包 diff 近两万行（2026-10-24，用钉的 0.12.3 是 20 行）；
-#193 起 main 是 **5**，#294 实测 `uvx uv@0.12.3 lock` 把它降回 3、0.13 保持 5，pre-commit 的 `uv-lock`（0.12.3）对 5 照样 Passed。没过 tombi 的 diff 比过完大三倍，别拿它判断改动大小。
+⚠️ **加依赖用 pre-commit 钉的那个 uv 锁**（`uvx uv@<版本> lock`，版本见 `.pre-commit-config.yaml`），再 `prek run --files uv.lock pyproject.toml requirements.txt`。
+钉的 uv 要写得出 `uv.lock` 第二行的 `revision`：换 revision 就是整份锁文件的噪音（revision 3 时 uv 0.13 加一个包 diff 近两万行，2026-10-24）；#294 起锁是 5、钉 0.13.0（0.12.3 会把 5 降回 3，实测）。换了钉的版本，第一次 commit 要装钩子环境，**它不走 `pyproject` 里的阿里云镜像**：本机连不上 pypi.org 时一直卡着不报错，先 `UV_DEFAULT_INDEX=https://mirrors.aliyun.com/pypi/simple .venv/bin/prek install-hooks`。
 
 ⚠️ **「忘了同步」的表现取决于你跑哪个脚本**（空 venv 实测）：`dev` / `dev:host` /
 `db:init` / `db:reset` 是裸 `uv run`，**会自动同步**（当场装了 143 个包）；

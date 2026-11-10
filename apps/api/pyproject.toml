@@ -66,7 +66,7 @@ dependencies = [
   "pwdlib>=0.3.0",
   "py-ip2region>=3.0.4",
   "pydantic>=2.13.4",
-  "pydantic-ai-slim[openai]>=2.54.0",  # plugin/ai（AI_AGENT_ENGINE = "pydantic_ai"）
+  "pydantic-ai-slim[openai]>=2.57.0",  # plugin/ai（AI_AGENT_ENGINE = "pydantic_ai"）
   "pydantic-settings>=2.15.0",
   # JWT。原来是 python-jose：CVE-2026-85394 没有修复版、它带进来的 ecdsa 也没有（#193）
   "pyjwt>=2.10.1",
@@ -277,7 +277,7 @@ ignore = [
   "raise-vanilla-args",
   "raise-within-try",
   # Python 下限提到 3.11 之后 ruff 建议把 `class X(str, Enum)` 换成 `enum.StrEnum`（#294）。
-  # 那不是等价替换：`str()` 里前者是 `X.member`、后者是值（3.12 起 f-string 也是），换了会静默改掉日志和拼出来的文案
+  # 那不是等价替换：`str()` 里前者是 `X.member`、后者是值（f-string 里前者 3.12 起也是 `X.member`），换了会静默改掉日志和拼出来的文案
   "replace-str-enum"
 ]
 
