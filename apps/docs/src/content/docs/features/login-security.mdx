@@ -1,0 +1,192 @@
+---
+title: 登录与安全
+description: 密码、手机验证码、GitHub / Google 三种登录方式过同一道二次验证（TOTP + 恢复码）；账号和 IP 两层失败锁定、密码策略、按端的会话时长与上限，被踢下线时告诉本人原因。
+sidebar:
+  order: 1
+---
+
+import signIn from '../../../../../../docs/screenshots/sign-in.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
+登录有三种方式：账号密码、手机验证码、GitHub / Google 第三方账号。三种方式在确认身份之后都要经过同一道二次验证（TOTP 动态码，丢了手机用恢复码）。往外看是两层失败锁定（按账号、按 IP）和图形验证码；往里看，每一次登录都是服务端的一个**会话**：空闲多久退出、最长能登多久、同一账号最多同时登几台，网页、桌面、手机三端各一套规则。管理员能在「在线用户」里看到每一个会话并强制下线，被踢的人当场回到登录页，看到的是原因而不是一句笼统的「请重新登录」。
+
+<ProductShot src={signIn} alt="登录页：账号密码、手机验证码与第三方登录" url="localhost:8888/sign-in" />
+
+## 在界面上哪里找？
+
+| 入口 | 路径 | 谁能用 | 做什么 |
+|---|---|---|---|
+| 登录页 | `/sign-in` | 所有人 | 账号密码 / 手机验证码 / 第三方登录；动态码在第二步输入 |
+| **个人中心** | `/profile` | 本人 | 改密码 · 绑定手机号 · 开关二次验证、重新生成恢复码 · 绑定第三方账号 · 最近登录记录 |
+| **系统管理 → 用户管理** | `/system/user` | 超级管理员 | 重置某人的密码 · 重置某人的二次验证（手机丢了） |
+| **系统监控 → 在线用户** | `/monitor/online` | 超级管理员 | 全站会话列表 · 强制下线 |
+| **系统管理 → 参数配置** | `/plugins/config` | `sys:config:edit` | 「登录策略」「口令与锁定」「会话策略」三组开关，见[下文](#有哪些开关) |
+| **日志管理 → 登录日志** | `/log/login` | `log:login:list` | 每一次登录的成败、IP、浏览器 |
+
+重置密码、重置二次验证、看在线用户、强制下线这四个接口按**超级管理员**判（`DependsSuperUser`），不是按权限码：把「在线用户」菜单授给普通角色，页面能打开，接口会拒绝。
+
+## 有几种登录方式？
+
+| 方式 | 前提 | 说明 |
+|---|---|---|
+| 账号密码 | —— | 默认开着图形验证码 |
+| 手机验证码 | 装了短信插件（`plugin/sms`） | 只认**本人在个人中心用验证码绑过**的号。管理员录入、批量导入的号不算 —— 打错一位，号码的主人就能登进别人的账号 |
+| GitHub / Google | 装了 OAuth2 插件、在 `.env` 里配了 Client ID / Secret | 陌生的第三方账号**默认拒绝**，提示先用账号密码登录、再到个人中心绑定。要开放自助注册，显式设 `OAUTH2_AUTO_REGISTER=true` 并用 `OAUTH2_AUTO_REGISTER_ROLE` 指定挂哪个角色 |
+
+没有「忘记密码」的自助找回：登录页上写的是「忘记密码找管理员重置」。
+
+手机验证码这一路要先过图形验证码；同一个号 60 秒冷却、一天最多 10 条。**没注册、没验证过的号也返回「已发送」**，只是不真发：状态码、文案、冷却、耗时都和真发的一样，否则这个不用登录就能调的接口就成了一张号码核对表。短信厂商故障时也一样返回成功，失败记在短信发送日志里给管理员看。
+
+## 密码输错几次会被锁？
+
+两层计数，各管一种攻击：
+
+- **按账号**：连续错 5 次，锁 5 分钟（参数配置「口令与锁定」可改，阈值填 0 关闭）。挡的是对着一个账号猜密码。
+- **按 IP**：同一个 IP 不论换多少个账号，累计错 30 次就锁 15 分钟（只能在 `.env` 改）。挡的是密码喷洒 —— 200 个用户名各试 4 次，在账号阈值 5 之下，一次锁定都不会触发。这一层要配好 `TRUSTED_PROXIES`，否则取到的是反代的 IP。
+
+错误提示**不区分**「用户不存在」「密码错」「账号已锁」，耗时也抹平了：bcrypt 校验一次约 190 ms，而查无此人只要约 5 ms，40 倍的差距不用任何统计手段就能看出来。所以用户不存在时也拿一个假哈希跑一遍等价的校验（[`auth_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/auth_service.py) 顶部的 `_DUMMY_PASSWORD_HASH`）。
+
+登录接口本身还按「IP + 路径」限流：每分钟 5 次；取图形验证码的接口每 30 秒 5 次。
+
+## 密码有哪些规则？
+
+| 规则 | 默认 | 可改范围 |
+|---|---|---|
+| 长度 | 6–32 位 | 1–128 |
+| 必须包含特殊字符 | 否 | —— |
+| 不能和最近几次相同 | 3 次 | 0–24 |
+| 有效期 | 365 天（0 = 永不过期） | 0–3650 |
+| 到期提醒提前量 | 7 天（0 = 不提醒） | 0–365 |
+
+可改范围是**后端**卡的，不只是界面上的输入框（[`dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py) 的 `DYNAMIC_INT_BOUNDS`）。曾经实测过：带管理员 token 直接调接口，最小长度能被写成 999，结果是所有人都改不了密码。
+
+改自己的密码、或者被管理员重置密码之后，这个账号的**所有**会话都会结束（原因是「密码已修改」），包括当前这一个。
+
+:::caution[密码过期的两处现状]
+- 剩余天数进入提醒期后，登录接口会返回 `password_expire_days_remaining`，但**网页端目前没有把它显示出来**。
+- 过期后，账号密码和手机验证码两种登录都会被拒绝（第三方登录不检查密码有效期）。提示写的是「请修改密码后重新登录」，但本人这时已经登不进去，只能由超级管理员在「用户管理」里重置密码。
+:::
+
+## 二次验证（MFA）怎么用？
+
+用任何一款认证器 App（Google Authenticator、Microsoft Authenticator、1Password……）扫码即可，标准 TOTP：6 位、30 秒一换、SHA-1，前后各容忍一个时间片的时钟误差，**同一个码不能用第二次**。另外给 10 个一次性恢复码（`xxxx-xxxx`，去掉了容易看错的 0 / O / 1 / I / L），每个只能用一次，库里只存哈希。
+
+- **自己开**：个人中心扫码 → 输一次动态码确认 → 恢复码**只显示这一次**。之后可以凭动态码重新生成一批（旧的全部作废），或者关掉。
+- **强制开**：参数配置「登录策略」里的「二次验证强制」有三档 —— `off` 自愿、`superuser` 超级管理员必须开、`all` 所有人必须开。被强制、还没绑定的人下次登录时先扫码绑定，绑定之前进不了系统；被强制的人不能自己关。
+- **手机丢了**：超级管理员在「用户管理」里重置他的二次验证。被强制的人下次登录会重新走绑定。
+
+三种登录方式都过这一道（手机验证码登录、第三方登录也要输动态码），手机 App 上也能输。被强制、还没绑定的人在 App 上会被提示先到网页端扫码绑定。第二步有 5 分钟、最多试 5 次；**输错的动态码计入这个账号的密码失败次数**，而且「密码对了」不再把计数清零，要等第二步也过了才清零 —— 否则每登录一次就能试 5 次、登完清零，等于可以无限次猜一个 6 位数。
+
+:::note[先配密钥]
+TOTP 的密钥加密后入库，用的是 `.env` 里的 `MFA_SECRET_KEY`（64 位十六进制）。**它留空时不能开启二次验证，也不能把策略改成强制**，不会退而存明文：强制了却开不了，被强制的人一个都登不进来，包括改这个配置的管理员自己。生成方式：`python -c "import os;print(os.urandom(32).hex())"`。
+:::
+
+## 一个账号能同时登几台？多久不操作会退出？
+
+每次登录在服务端建一个会话，会话 ID 从登录到退出不变。登录时客户端说明自己是哪一端，三端各用一套规则：
+
+| | 网页端 | 桌面端 | 移动端 |
+|---|---|---|---|
+| 空闲超时 | 120 分钟 | 120 分钟 | 30 天 |
+| 最长登录（从登录那一刻算，一直在用也不延长） | 7 天 | 7 天 | 90 天 |
+| 同一账号在这一端的会话上限 | 不限 | 不限 | 1 |
+| 超过上限时 | 挤掉最久没活跃的 | 挤掉最久没活跃的 | 挤掉最久没活跃的 |
+
+都在参数配置「会话策略」里改；超限时也可以选「拒绝新登录」。要「单设备登录」，把上限填 1。改了只影响**之后的**登录，已经登录的人按登录那一刻的规则走完。
+
+**空闲按「人有没有在操作」算，不按请求算。** 在线用户页每 10 秒轮询一次，监控页、导出进度也在后台发请求 —— 按请求算的话，人走开了、浏览器开着，会话永远不会过期，而那正是空闲超时要防的场景。所以浏览器每个请求都带上「距上次键盘 / 鼠标 / 触屏操作过了几秒」，服务端据此推算最后活跃时间；在页面上有操作（滚动、打字）却一直没发请求的人，前端每 5 分钟补一次心跳。
+
+access token 30 分钟过期，靠 refresh token 续；refresh token 每用一次就换一枚新的。上一枚在 30 秒内再出示（多个标签页同时刷新、弱网重试）会拿到同一组新令牌；超过 30 秒再出示，判定凭据可能被盗，**整个会话立即作废**。
+
+## 被踢下线时，本人看到什么？
+
+会话结束时服务端记下原因，被踢的人下一次请求拿到的 401 里就带着它，页面直接回到登录页并显示：
+
+| 原因 | 登录页上的提示 |
+|---|---|
+| 管理员强制下线 | 你已被管理员强制下线，请重新登录 |
+| 超过会话上限被挤掉 / 在同一个浏览器里重新登录 | 账号已在其他设备登录，本设备已下线 |
+| 空闲超时 | 长时间未操作，已自动退出，请重新登录 |
+| 到了最长登录时间 | 登录已过期，请重新登录 |
+| 改了密码 / 被重置密码 | 密码已修改，请重新登录 |
+| 账号被停用或删除 | 账号已被停用，请联系管理员 |
+| refresh token 被重复使用 | 检测到登录凭据被重复使用，已强制下线；如果不是你本人操作，请尽快修改密码 |
+
+「在线用户」页列出全站每一个会话：用户、登录端、有没有实时连接、IP、浏览器、操作系统、登录时间、最后活跃、剩余有效期。点「强制下线」后，对方开着的页面通过实时连接当场跳回登录页，不用等他下一次点击。同一个浏览器里，一个标签页退出登录，其它标签页也跟着回到登录页。
+
+## 有哪些开关？
+
+**界面上改的**（系统管理 → 参数配置），下一次登录就生效，不用重启：
+
+| 分组 | 键 | 默认值 | 说明 |
+|---|---|---|---|
+| 登录策略 | `LOGIN_CAPTCHA_ENABLED` | `true` | 图形验证码；关掉立刻对所有人生效 |
+| 登录策略 | `LOGIN_MFA_ENFORCE` | `off` | `off` / `superuser` / `all`；没配 `MFA_SECRET_KEY` 时只能是 `off` |
+| 口令与锁定 | `USER_LOCK_THRESHOLD` · `USER_LOCK_SECONDS` | `5` · `300` | 账号连续失败几次、锁多少秒；阈值 0 = 不锁 |
+| 口令与锁定 | `USER_PASSWORD_MIN_LENGTH` · `USER_PASSWORD_MAX_LENGTH` | `6` · `32` | |
+| 口令与锁定 | `USER_PASSWORD_REQUIRE_SPECIAL_CHAR` | `false` | |
+| 口令与锁定 | `USER_PASSWORD_HISTORY_CHECK_COUNT` | `3` | 不能和最近几次相同 |
+| 口令与锁定 | `USER_PASSWORD_EXPIRY_DAYS` · `USER_PASSWORD_REMINDER_DAYS` | `365` · `7` | 0 = 永不过期 / 不提醒 |
+| 会话策略 | `SESSION_{WEB,DESKTOP,MOBILE}_IDLE_MINUTES` | `120` · `120` · `43200` | 5 分钟到 90 天 |
+| 会话策略 | `SESSION_{…}_ABSOLUTE_DAYS` | `7` · `7` · `90` | 1–365 |
+| 会话策略 | `SESSION_{…}_MAX` | `0` · `0` · `1` | 0 = 不限 |
+| 会话策略 | `SESSION_{…}_OVERFLOW` | `evict_idle` | 或 `deny` 拒绝新登录 |
+
+每组还有一个总开关 `<分组>_CONFIG_STATUS`，设成 0 时整组不读数据库、回落到 `.env` 的值。反过来，**这些键在 `.env` 里写了也会被数据库里的值覆盖** —— 常见问题里[「`.env` 关了验证码，登录页还要输」](/reference/faq/#env-里设了-login_captcha_enabledfalse登录页还是要验证码)就是这个原因。
+
+**只能在 `.env` 改的**，改完要重启后端：
+
+| 键 | 默认值 | 说明 |
+|---|---|---|
+| `MFA_SECRET_KEY` | 空 | 加密 TOTP 密钥用；留空 = 不能开二次验证 |
+| `LOGIN_IP_LOCK_THRESHOLD` · `LOGIN_IP_LOCK_SECONDS` | `30` · `900` | 单 IP 跨账号的失败锁定；阈值 0 = 关闭 |
+| `TRUSTED_PROXIES` | `[]` | 反代的地址或网段。空 = 不采信任何转发头；部署在反代后面却不填，后端看到的 IP 全是反代的，IP 锁定、限流、登录日志里的 IP 都跟着错 |
+| `TOKEN_EXPIRE_SECONDS` | `1800` | access token 有效期 |
+| `SESSION_REFRESH_GRACE_SECONDS` | `30` | 上一枚 refresh token 的宽限期；生产环境不许低于 10 秒 |
+| `LOGIN_CAPTCHA_EXPIRE_SECONDS` | `300` | 图形验证码有效期 |
+| `MFA_CHALLENGE_SECONDS` · `MFA_CHALLENGE_ATTEMPTS` | `300` · `5` | 登录第二步的时限和次数 |
+| `COOKIE_SECURE` | 跟着请求走 | HTTPS 请求下发带 `Secure` 的 cookie。前面的反代终结了 TLS、又把 `X-Forwarded-Proto` 改写成 `http` 的部署，要显式设 `true` |
+| `OAUTH2_GITHUB_*` · `OAUTH2_GOOGLE_*` | —— | 第三方登录的 Client ID / Secret |
+| `OAUTH2_AUTO_REGISTER` · `OAUTH2_AUTO_REGISTER_ROLE` | `false` · —— | 陌生第三方账号是否自动建号、挂哪个角色（角色编码找不到就拒绝登录） |
+
+完整的定义在 [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) 的「用户安全」「登录」「登录会话」三段。
+
+## 加一种登录方式或一个「踢人」入口要注意什么？
+
+- **新的登录方式要过 `mfa_service.gate()`**：身份确认之后调它，决定是直接开会话还是进入第二步。手机验证码登录就是逐条照抄了密码登录的检查（IP 锁定、停用判定、密码过期、成败计数），验证码替代的只是「密码对不对」这一步 —— 只复用「开会话」那一段的话，这些检查全会漏掉。
+- **不用登录就能调的新接口**，要加进 `TOKEN_REQUEST_PATH_EXCLUDE`，写完整路径、不要写成前缀。
+- **新的「让某人下线」的入口**，只调 `session_store.revoke` / `revoke_user`，不要自己删 `fba:session*` 的 Redis key：这两个函数会顺带写原因、推实时消息、断开连接。会话改造之前，有 7 个文件各自删 token，其中一处只删了 access token —— 被踢的人刷新一下就回来了。
+
+细节和踩过的坑在 [`common/security/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/AGENTS.md)「登录会话」一节。
+
+## 它不做什么
+
+- 第二因素只有 TOTP 和恢复码，没有通行密钥（WebAuthn）、硬件密钥，也没有用短信当第二因素。
+- 没有自助找回密码和自助注册（第三方登录显式打开自动建号的除外）。
+- 密码到期提醒在网页端还没显示出来；过期后本人不能自助改密码，见[上文](#密码有哪些规则)。
+- 会话的原子操作是 Redis Lua 脚本，按单实例 Redis 写的，没有在 Redis Cluster 上实测过。
+
+## 代码在哪
+
+- 登录流程：[`auth_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/auth_service.py) · 接口 [`api/v1/auth/auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/auth/auth.py)
+- 二次验证：[`mfa_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/mfa_service.py) · [`utils/totp.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/totp.py)
+- 会话：[`common/security/session.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/session.py) · 在线用户接口 [`monitor/online.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/monitor/online.py)
+- 密码策略：[`user_password_history_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/user_password_history_service.py) · 运行时配置 [`utils/dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py)
+- 第三方登录：[`plugin/oauth2/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/oauth2)
+- 前端：登录页 [`sign-in.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/routes/_guest/sign-in.tsx) · 个人中心 [`pages/profile/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/profile) · 在线用户 [`pages/log-online/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/log-online) · 会话与刷新 [`auth/session.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/auth/session.ts)
+
+## 怎么测的
+
+后端连真实的数据库和 Redis：
+
+- [`test_session.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_session.py)（29 条）：后台轮询不续命、离开超过空闲时长回来点一下也不复活、宽限期内回放同一组令牌、宽限期外作废整个会话、会话 ID 对得上但 secret 对不上**不**撤销（否则凭日志里看得到的会话 ID 就能把人踢下线）。其中几条做过变异检验：把对应的判断改掉，测试当场红。
+- [`test_mfa.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_mfa.py)（16 条）：恢复码只能用一次、密码对了不清零失败计数、试满次数后令牌作废、被强制的人登录时绑定且不能自己关、没配密钥不能强制。
+- [`test_auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_auth.py)：用户不存在和密码错的响应一样、**耗时**也一样、错密码不暴露账号已锁、强制下线连 refresh token 一起作废。
+- [`test_phone_login.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/sms/tests/test_phone_login.py)：没注册 / 没验证的号看起来也「发了」、厂商故障和陌生号码不可区分、手机登录也要过二次验证。
+- OAuth2 插件的 [`tests/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/oauth2/tests)：陌生账号默认不建号、state 绑定、只认已验证的邮箱。
+
+浏览器端（Playwright）：[`mfa.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/mfa.spec.ts)（个人中心开启 → 退出 → 再登录要动态码）、[`session.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/session.spec.ts)（被强制下线时页面当场回到登录页并说明原因；一个标签页登出，其它标签页跟着回去；刷新时后端暂时连不上，停在「连不上服务器」而不是踢回登录页）、[`login-phone.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/login-phone.spec.ts)。
+
+## 在演示站里试试
+
+[在线演示](https://fra.wubunan.com/sign-in)（`admin` / `123456`）：用两个浏览器（或一个普通窗口 + 一个无痕窗口）各登录一次，到「系统监控 → 在线用户」能看到两条会话，各自的登录端、浏览器、最后活跃时间都在。把**你自己的另一条**强制下线，那个窗口会当场回到登录页并显示原因。演示站所有人共用 `admin`，别踢别人的会话；演示站有没有配 `MFA_SECRET_KEY` 也不保证，二次验证建议在本地试。
