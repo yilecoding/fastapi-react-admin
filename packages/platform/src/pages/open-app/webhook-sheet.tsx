@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import {
+  IconHistory,
   IconPencil,
   IconPlayerPlay,
   IconPlus,
@@ -22,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/t
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { RowActions } from '../_shared/cells'
+import { DataChangeSheet } from '../_shared/data-change/history-sheet'
 import { StatusPill } from '../_shared/status'
 import { openAppQuery } from './api'
 import {
@@ -77,6 +79,7 @@ export function WebhookSheet({
   const [secret, setSecret] = React.useState<{ value: string; rotated: boolean } | null>(null)
   const [pendingReset, setPendingReset] = React.useState<Webhook | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<Webhook | null>(null)
+  const [historyOf, setHistoryOf] = React.useState<Webhook | null>(null)
   const [pingResult, setPingResult] = React.useState<{ hookId: string; result: PingResult } | null>(null)
   const [notice, setNotice] = React.useState<{ tone: 'danger' | 'success'; text: string } | null>(null)
 
@@ -165,6 +168,7 @@ export function WebhookSheet({
                       }
                       onEdit={() => openForm(h)}
                       onReset={() => setPendingReset(h)}
+                      onHistory={() => setHistoryOf(h)}
                       onDelete={() => setPendingDelete(h)}
                       onResend={(hours) =>
                         run(async () => {
@@ -243,6 +247,10 @@ export function WebhookSheet({
             if (target) await run(() => del.mutateAsync(target.id).then(() => undefined), t('删除失败'))
           }}
         />
+        <DataChangeSheet
+          entity="open_webhook" entityId={historyOf?.id ?? null} name={historyOf?.name}
+          open={historyOf !== null} onOpenChange={(o) => !o && setHistoryOf(null)}
+        />
       </SheetContent>
     </Sheet>
   )
@@ -266,6 +274,7 @@ function EndpointCard({
   onPing,
   onEdit,
   onReset,
+  onHistory,
   onDelete,
   onResend,
   onShowDeliveries,
@@ -276,6 +285,7 @@ function EndpointCard({
   onPing: () => void
   onEdit: () => void
   onReset: () => void
+  onHistory: () => void
   onDelete: () => void
   onResend: (hours: number) => void
   onShowDeliveries: () => void
@@ -311,6 +321,7 @@ function EndpointCard({
           items={[
             { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'open:webhook:edit', onClick: onEdit, testId: `webhook-edit-${h.name}` },
             { key: 'reset', label: t('重置签名密钥'), icon: IconRefresh, perm: 'open:webhook:reset', onClick: onReset, testId: `webhook-reset-${h.name}` },
+            { key: 'history', label: t('变更记录'), icon: IconHistory, perm: 'log:change:list', onClick: onHistory, testId: `webhook-history-${h.name}` },
             ...RESEND_WINDOWS.map((w, idx) => ({
               separatorBefore: idx === 0,
               key: `resend-${w.hours}`,
