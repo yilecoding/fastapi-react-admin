@@ -11,7 +11,7 @@ from backend import cli
 from backend.cli import _format_database_connection_error
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
+    from typing import Self
 
 
 def test_database_authentication_error_is_actionable_without_echoing_details() -> None:
