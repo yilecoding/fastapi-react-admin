@@ -33,14 +33,14 @@ async def sync_inbox_once() -> dict[str, int]:
         try:
             async with async_db_session.begin() as db:
                 stats['published'] += await notice_service.publish_scheduled(db=db, pk=pk)
-        except Exception as e:  # ruff:ignore[try-except-in-loop]
+        except Exception as e:
             stats['failed'] += 1
             log.error(f'定时发布公告 {pk} 失败（下一轮再试）：{e!s}')
     for pk in stale:
         try:
             async with async_db_session.begin() as db:
                 stats['retracted'] += await notice_service.retract_stale(db=db, pk=pk)
-        except Exception as e:  # ruff:ignore[try-except-in-loop]
+        except Exception as e:
             stats['failed'] += 1
             log.error(f'撤回过期公告 {pk} 的收件箱行失败（下一轮再试）：{e!s}')
     return stats

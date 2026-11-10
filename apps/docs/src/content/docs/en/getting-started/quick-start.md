@@ -10,7 +10,7 @@ Five commands bring up the whole stack locally: PostgreSQL and Redis in Docker, 
 ## What do I need installed?
 
 - Node.js ≥ 22.13 (pnpm is pinned in `package.json` and installed by corepack)
-- Python ≥ 3.10 and [uv](https://docs.astral.sh/uv/)
+- Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/)
 - Docker
 
 ## How do I run it?

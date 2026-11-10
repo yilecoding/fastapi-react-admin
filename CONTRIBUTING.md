@@ -25,7 +25,7 @@
 
 ## 本地开发
 
-**前置**：Node ≥ 22.13 · Python ≥ 3.10 · [uv](https://docs.astral.sh/uv/) · Docker。
+**前置**：Node ≥ 22.13 · Python ≥ 3.11 · [uv](https://docs.astral.sh/uv/) · Docker。
 pnpm 版本由 `package.json` 的 `packageManager` 精确锁定（corepack 会自动装对应版本）。
 
 ```bash

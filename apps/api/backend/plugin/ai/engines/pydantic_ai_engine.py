@@ -236,9 +236,7 @@ class PydanticAIEngine:
                         if event.delta.content_delta:
                             yield DeltaEvent(text=event.delta.content_delta)
                     elif isinstance(event, AgentRunResultEvent):
-                        # 2.57 起 `usage` 从方法改成了属性；Python 3.10 只装得到 2.54（见 pyproject 那行注释）
                         usage = event.result.usage
-                        usage = usage() if callable(usage) else usage
                         yield UsageEvent(prompt_tokens=usage.input_tokens, completion_tokens=usage.output_tokens)
         except UsageLimitExceeded:
             while pending:
