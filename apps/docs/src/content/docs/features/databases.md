@@ -81,6 +81,23 @@ pnpm db:history                # 看整条链
 
 新库走 `pnpm db:init`（按模型建表、灌种子、`alembic stamp head`），不靠重放迁移。基线 `b0000000baseline` 刻意是空的，唯一的真相源仍然是模型，所以整条链**不能**从空库重放，这是设计如此。生产上由一次性的 `migrate` 容器先跑 `alembic upgrade head`，跑完才起 API 和 worker。`ENVIRONMENT=prod` 时，库不在 head 应用就拒绝启动。详见[部署](/getting-started/deployment/)。
 
+## 有哪些开关？
+
+数据库连接只在 `.env` 里配，改完重启后端和 worker（模板见 [`.env.example`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/.env.example)）：
+
+| 键 | `.env.example` 里的值 | 说明 |
+|---|---|---|
+| `DATABASE_TYPE` | `postgresql` | `postgresql` / `sqlserver` / `mysql` |
+| `DATABASE_HOST` · `DATABASE_PORT` | `127.0.0.1` · `5432` | SQL Server 是 1433，MySQL 是 3306 |
+| `DATABASE_USER` · `DATABASE_PASSWORD` | `postgres` · `postgres` | 生产环境的弱密码会被启动检查拒绝 |
+| `DATABASE_SCHEMA` | `fba`（`conf.py` 默认） | 库名；跑测试、拍截图时换一个就是一套隔离的库 |
+| `DATABASE_PK_MODE` | `snowflake` | **必须是 `snowflake`**。`conf.py` 里的默认值是 `autoincrement`，但三种库的种子数据只有雪花版，用自增的话 `fba init` 找不到种子文件会静默跳过，库建好了却没有 admin 账号 |
+| `DATABASE_DRIVER` | `ODBC Driver 18 for SQL Server` | 只对 SQL Server 生效，要和 `odbcinst -q -d` 列出的名字一致 |
+| `DATABASE_TRUST_SERVER_CERTIFICATE` | `true` | 只对 SQL Server 生效 |
+| `DATABASE_CHARSET` | `utf8mb4` | 只对 MySQL 生效 |
+| `DATABASE_SOURCES` | `{}` | 额外的数据源，如 `{"read": "postgresql+asyncpg://…"}`；名字不能是空或 `default` |
+| `DATABASE_ECHO` · `DATABASE_POOL_ECHO` | `false` | 打印 SQL / 连接池日志，排查时临时打开 |
+
 ## 怎么测的
 
 [`app/task/tests/test_migrations.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_migrations.py) 里的守卫：
