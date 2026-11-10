@@ -80,6 +80,18 @@ Locally: `pnpm --filter web build`, then `pnpm --filter @admin/desktop package`.
 
 To run it: `pnpm --filter api dev:host` (backend on `0.0.0.0:8088`), then `pnpm mobile:dev`, and open the printed `exp://…:8800` address in Expo Go for SDK 57.
 
+## Which settings are there?
+
+| Client | Where | Key | Default | Notes |
+|---|---|---|---|---|
+| Web | Build-time environment variable | `VITE_API_BASE` | `http://127.0.0.1:8088` | Backend address, baked into the frontend build |
+| Desktop | `config.json` in the app data directory, read at run time | `serverUrl` | empty | Backend address; one installer can serve different environments |
+| Desktop | same | `printerName` | empty | Printer for silent printing; empty = system default |
+| Desktop | same | `kiosk` | `false` | Full-screen kiosk mode |
+| Desktop | same | `autoLaunch` | `false` | Start at login (packaged builds only) |
+| Desktop | same | `updateUrl` | empty | Auto-update feed; empty = GitHub Releases |
+| Mobile | The server address setting in the app, stored on the device | — | Build-time `EXPO_PUBLIC_API_BASE`, or `http://127.0.0.1:8088` if unset | Probes `/auth/captcha` before saving to confirm it is reachable. `EXPO_PUBLIC_*` is replaced at build time, so after packaging the address can only be changed in the app |
+
 ## Where it lives in the code
 
 - [`apps/desktop/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/desktop): `src/main/` (window, `app://` protocol, `print.ts`, `updater.ts`, `auth.ts`, `devices/`), `electron-builder.yml`
