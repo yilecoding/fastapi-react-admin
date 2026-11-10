@@ -213,6 +213,111 @@ def test_nothing_to_delete_is_not_an_error(db):
     assert count(db, LoginLog) == 1
 
 
+# ── 默认保留期：网络安全法的六个月（#261）────────────────────────────────────
+
+
+def test_default_retention_keeps_six_months(db):
+    """调度上没写 `days` 时按 180 天删：170 天前的留着，190 天前的删掉。
+
+    原来默认 30 天 —— 低于网络安全法第二十一条「网络日志留存不少于六个月」，而且没写在任何地方。
+    """
+    seed_login(db, days_ago=170)
+    seed_login(db, days_ago=190)
+    seed_opera(db, days_ago=170)
+    seed_opera(db, days_ago=190)
+
+    msg = run_prune()
+
+    assert '清理 180 天前的日志' in msg, msg
+    assert count(db, LoginLog) == 1, '默认保留期不是 180 天'
+    assert count(db, OperaLog) == 1
+
+
+def _load_retention_migration():
+    """按文件加载迁移模块（文件名以日期开头、带中文，不能 import）"""
+    import importlib.util
+
+    from backend.core.path_conf import BASE_PATH
+
+    (path,) = (BASE_PATH / 'alembic' / 'versions').glob('*-ap000000logretention_*.py')
+    spec = importlib.util.spec_from_file_location('ap000000logretention', path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_default_retention_agrees_everywhere_and_meets_the_six_month_floor():
+    """180 写在四处：任务默认值、三份种子的调度参数、给已装的库改值的迁移。任何一处掉回 30 都要红。
+
+    只改种子不改迁移，已经在跑的库还是 30 天；只改迁移不改种子，新装的库还是 30 天 —— 两边都不报错。
+    """
+    import json
+    import re
+
+    from backend.app.task.tasks.maintenance.tasks import LOG_RETENTION_DAYS
+    from backend.core.path_conf import BASE_PATH
+
+    assert LOG_RETENTION_DAYS >= 180, '网络安全法第二十一条：网络日志留存不少于六个月'
+    migration = _load_retention_migration()
+    assert json.loads(migration._NEW_KWARGS) == {'days': LOG_RETENTION_DAYS}
+    for dialect in ('mysql', 'postgresql', 'sqlserver'):
+        seed = (BASE_PATH / 'sql' / dialect / 'init_snowflake_test_data.sql').read_text(encoding='utf-8')
+        (line,) = [ln for ln in seed.splitlines() if "'maintenance.prune_logs'" in ln]
+        assert f'{migration._SCHEDULER_ID},' in line, f'{dialect} 种子里那条调度的 ID 和迁移对不上'
+        days = re.search(r'\{"days": (\d+)\}', line)
+        assert days is not None and int(days.group(1)) == LOG_RETENTION_DAYS, f'{dialect} 种子：{line}'
+        assert migration._NEW_REMARK in line, f'{dialect} 种子的备注和迁移写的不一样'
+
+
+def test_retention_migration_only_bumps_the_seed_row_still_at_30(factory):
+    """已经装了的库：种子那一行还是 30 才改成 180；管理员调过的不动。整个过程在一个回滚掉的事务里，不改 fba_test。"""
+    import json
+
+    from sqlalchemy import update
+
+    from backend.app.task.model import TaskScheduler
+
+    migration = _load_retention_migration()
+    t = TaskScheduler.__table__
+    engine = factory.kw['bind']
+
+    with engine.connect() as conn:
+        trans = conn.begin()
+        try:
+            assert conn.execute(select(t.c.id).where(t.c.id == migration._SCHEDULER_ID)).first(), (
+                'fba_test 里没有种子那条「清理历史日志」调度'
+            )
+
+            def set_row(kwargs: str | None, remark: str) -> None:
+                conn.execute(update(t).where(t.c.id == migration._SCHEDULER_ID).values(kwargs=kwargs, remark=remark))
+
+            def get_row() -> tuple[str | None, str | None]:
+                row = conn.execute(select(t.c.kwargs, t.c.remark).where(t.c.id == migration._SCHEDULER_ID)).one()
+                return row.kwargs, row.remark
+
+            # 种子原值；界面上保存过一次、空格没了也算
+            for raw in ('{"days": 30}', '{"days":30}'):
+                set_row(raw, migration._OLD_REMARK)
+                assert migration.bump_seed_retention(conn) is True, raw
+                kwargs, remark = get_row()
+                assert json.loads(kwargs) == {'days': 180}
+                assert remark == migration._NEW_REMARK
+
+            # 管理员改过备注：天数照改，备注不动
+            set_row('{"days": 30}', '我们自己写的备注')
+            assert migration.bump_seed_retention(conn) is True
+            assert get_row() == ('{"days": 180}', '我们自己写的备注')
+
+            # 管理员调过参数（含调得比 180 短的）、清空了、写坏了：一律不动
+            for raw in ('{"days": 90}', '{"days": 7}', '{"days": 30, "batch": 500}', None, '', '{days: 30}'):
+                set_row(raw, migration._OLD_REMARK)
+                assert migration.bump_seed_retention(conn) is False, raw
+                assert get_row() == (raw, migration._OLD_REMARK), raw
+        finally:
+            trans.rollback()
+
+
 # ── 分批 ────────────────────────────────────────────────────────────────────
 
 

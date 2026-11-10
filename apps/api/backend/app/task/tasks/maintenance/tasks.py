@@ -21,6 +21,10 @@ from backend.utils.timezone import timezone
 #: 每批删多少行。见 `_prune_table` 的注释 —— 这个值不是性能调优，是安全阀
 PRUNE_BATCH = 2000
 
+#: 登录 / 操作日志默认保留天数（#261）。《网络安全法》（2016 年版）第二十一条第（三）项：网络日志「留存不少于六个月」。
+#: 种子调度的参数（`sql/*/init_snowflake_test_data.sql`）和迁移 `ap000000logretention` 写的是同一个数，改要三处一起改
+LOG_RETENTION_DAYS = 180
+
 
 async def _prune_table(
     db: AsyncSession, model: type[Any], time_col: InstrumentedAttribute, cutoff: datetime, batch: int
@@ -85,8 +89,11 @@ async def _prune_data_changes(db: AsyncSession, model: type[Any], cutoff: dateti
 
 @celery_app.task(name='maintenance.prune_logs')
 @with_timeout()
-async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
+async def prune_logs(days: int = LOG_RETENTION_DAYS, batch: int = PRUNE_BATCH) -> str:
     """清理 N 天前的登录日志与操作日志。
+
+    天数是调度上的 `days` 参数，种子里写的是 180（`LOG_RETENTION_DAYS`）。原来是 30，低于网络安全法的六个月，
+    而且没写在任何地方 —— 用默认配置部署的人不会知道要去改（#261）。调低之前先确认合规要求。
 
     在这之前，界面上唯一的清理入口是「清空」—— 全删或不删，没有中间档。
 
@@ -104,7 +111,7 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
     cutoff = timezone.now() - timedelta(days=days)
 
     # 能力开放插件的调用日志（`open_api_log`）同一个保留期：它和操作日志同口径（含请求 / 响应体），
-    # 保留期不一致的话「操作日志 30 天、调用日志永久」，同一份数据留存规则两套。插件删掉了就跳过
+    # 保留期不一致的话「操作日志 180 天、调用日志永久」，同一份数据留存规则两套。插件删掉了就跳过
     try:
         from backend.plugin.open.model import OpenApiLog
     except ImportError:
@@ -153,7 +160,7 @@ async def prune_logs(days: int = 30, batch: int = PRUNE_BATCH) -> str:
             for model in (OpenWebhookAttempt, OpenWebhookDelivery, OpenEvent):
                 webhook += await _prune_table(db, model, model.created_time, webhook_cutoff, batch)
         # 数据变更记录（#260）**自己的**保留期（参数配置「日志」组，默认 180 天 —— 网络安全法的六个月下限）。
-        # 它和操作日志不是同一份东西：操作日志 30 天删掉之后，「谁把这个字段改了」还要查得到
+        # 它和操作日志不是同一份东西：管理员把操作日志的天数调低之后，「谁把这个字段改了」还要查得到
         change_retention = await data_change_retention_days(db)
         change_cutoff = timezone.now() - timedelta(days=change_retention)
         changes, chain_head = await _prune_data_changes(db, DataChange, change_cutoff, batch)
