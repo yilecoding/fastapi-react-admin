@@ -1,4 +1,7 @@
 // @ts-check
+import { readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 import starlight from '@astrojs/starlight'
 import { defineConfig } from 'astro/config'
 
@@ -38,6 +41,38 @@ const EN_HINT = `(() => {
     document.body.append(bar)
   })
 })()`
+
+/**
+ * 「功能」分组下的子分组（#285）。按能力领域分，不按后台的菜单树分 —— 菜单树是部署方可以改的。
+ *
+ * 🔴 页面文件仍然**平放**在 `features/` 下，分组只在这里：已有的 `/features/xxx/` 已经被搜索引擎
+ * 收录、首页和 README 也在链，挪进子目录就是一批 404。
+ *
+ * 手写分组的代价是「新加一页忘了登记」—— 那一页能访问、但侧边栏里没有，构建全绿。
+ * 所以下面的 `checkFeatureGroups()` 在加载配置时核对：中英两边 `features/` 下的每一页都要在这里出现
+ * 恰好一次，这里登记的每一页两边都要有文件。对不上就让 `astro build` / `astro dev` 直接失败。
+ */
+const FEATURE_GROUPS = [
+  { label: '权限与安全', en: 'Access & security', pages: ['login-security', 'data-permissions'] },
+  { label: '工作区', en: 'Workspace', pages: ['multi-tab'] },
+  { label: '协同', en: 'Collaboration', pages: ['approval-workflow', 'notifications'] },
+  { label: '文件与数据', en: 'Files & data', pages: ['file-storage', 'databases'] },
+  { label: '集成与多端', en: 'Integrations & clients', pages: ['ai-assistant', 'open-api', 'clients'] },
+]
+const FEATURE_TOP = ['overview']
+
+function checkFeatureGroups() {
+  const listed = [...FEATURE_TOP, ...FEATURE_GROUPS.flatMap((g) => g.pages)]
+  const problems = listed.filter((p, i) => listed.indexOf(p) !== i).map((p) => `「${p}」登记了不止一次`)
+  for (const dir of ['features', 'en/features']) {
+    const abs = fileURLToPath(new URL(`./src/content/docs/${dir}/`, import.meta.url))
+    const files = readdirSync(abs).filter((f) => /\.mdx?$/.test(f)).map((f) => f.replace(/\.mdx?$/, ''))
+    for (const f of files) if (!listed.includes(f)) problems.push(`${dir}/${f} 没有登记进 FEATURE_GROUPS，侧边栏里看不到它`)
+    for (const p of listed) if (!files.includes(p)) problems.push(`FEATURE_GROUPS 里的「${p}」在 ${dir}/ 下没有文件`)
+  }
+  if (problems.length) throw new Error(`astro.config.mjs 的功能分组对不上：\n  ${problems.join('\n  ')}`)
+}
+checkFeatureGroups()
 
 /** 正文里 `/` 开头的站内链接补上 base（`//host` 这种协议相对地址不动，已经带 base 的不重复补） */
 function remarkBaseLinks() {
@@ -99,7 +134,14 @@ export default defineConfig({
         {
           label: '功能',
           translations: { en: 'Features' },
-          items: [{ autogenerate: { directory: 'features' } }],
+          items: [
+            ...FEATURE_TOP.map((p) => `features/${p}`),
+            ...FEATURE_GROUPS.map((g) => ({
+              label: g.label,
+              translations: { en: g.en },
+              items: g.pages.map((p) => `features/${p}`),
+            })),
+          ],
         },
         {
           label: '参考',
