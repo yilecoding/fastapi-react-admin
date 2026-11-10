@@ -7,6 +7,14 @@ sidebar:
 
 能力开放插件让别的系统（HR、财务、数据仓库……）通过 `/api/open/v1` 从 fastapi-react-admin 拉取用户和部门，数据变了还能收到签名的 Webhook 推送。每个对接系统对应一个「应用」，发一对 Access Key / Secret Key。每个请求都用 HMAC-SHA256 签名（`FRA1-HMAC-SHA256`），再逐一核对应用的 scope、IP 白名单、有效期和限流。无论成功失败，每次调用都会落一条调用日志。
 
+## 在界面上哪里找？
+
+| 入口 | 路径 | 权限码 | 做什么 |
+|---|---|---|---|
+| **能力开放 → 应用管理** | `/open/app` | `open:app:list`；新建 `add` · 编辑 `edit` · 删除 `del` · 重置密钥 `reset` | 发 AK/SK，设 scope、IP 白名单、限流、失效时间、启停 |
+| 应用管理里每个应用的 Webhook 抽屉 | —— | `open:webhook:list`；`add` · `edit` · `del` · `test` · `reset`（重置签名密钥）· `resend` | 登记端点、订阅事件、看投递记录、批量重发 |
+| 开放接口日志（应用管理页里点进去，不在侧边栏） | `/open/log` | `open:log:list` | 每一次开放接口调用，见[调用日志记了什么](#调用日志记了什么) |
+
 ## 外部系统能调哪些接口？
 
 | 接口 | scope | 返回字段 |
@@ -168,6 +176,28 @@ nonce 存活时间是窗口的两倍，所以窗口内的重放一定撞上 nonc
 | `test_webhooks.py` | 35 | 签名、重试、自动停用、SSRF、真实写操作是否发出事件 |
 
 Python 和 Node 的签名在 pytest 里对测试向量。机器上有 `node` / JDK 时，Node 和 Java 的 Webhook 验签也会跑。Java 的 `signHeaders` 不在自动化测试里：最近一次是 2026-11-01 手动编译、跑了三组向量，签名全部对上。Playwright 用例 `webhook.spec.ts` 在本机起一个接收端，按规范自己重算每一条签名。
+
+## 有哪些开关？
+
+**界面上改的**（系统管理 → 参数配置 →「Webhook」），不用重启：
+
+| 键 | 默认值 | 说明 |
+|---|---|---|
+| `OPEN_WEBHOOK_ENABLED` | `true` | 总闸。关掉后事件照记，但不再给任何端点生成投递（已经在排队的照常发完） |
+| `OPEN_WEBHOOK_DISABLE_AFTER` | `20` | 连续失败这么多次、且这一轮第一次失败已过去 24 小时，自动停用端点并通知应用创建人 |
+| `OPEN_WEBHOOK_RETENTION_DAYS` | `30` | 事件、投递、每次尝试的记录保留天数 |
+| `OPEN_WEBHOOK_MAX_PER_APP` | `10` | 每个应用最多几个端点 |
+
+**只能在 `.env` 改的**，改完重启后端：
+
+| 键 | 默认值 | 说明 |
+|---|---|---|
+| `OPEN_SECRET_KEY` | 空 | SK 落库加密用；留空 = 新建应用和重置密钥都会报错拒绝 |
+| `OPEN_RATE_PER_MINUTE` | `120` | 应用没单独设限流时，每分钟请求上限（按应用计，不按 IP） |
+| `OPEN_SIGN_WINDOW_SECONDS` | `300` | 请求时间戳和服务端时间允许相差的秒数；nonce 在 Redis 里存它的 2 倍 |
+| `OPEN_WEBHOOK_TIMEOUT_SECONDS` | `15` | 投递一次的超时 |
+| `OPEN_WEBHOOK_RETRY_BACKOFF_SECONDS` | `15,300,3600,21600` | 失败后的重试间隔，共 5 次尝试、约 7 小时 |
+| `OPEN_WEBHOOK_ALLOW_PRIVATE_NETWORK` | `false` | 放行回环 / 私网地址和 http，**只给本地联调和 E2E**，生产保持 `false` |
 
 ## 代码在哪
 
