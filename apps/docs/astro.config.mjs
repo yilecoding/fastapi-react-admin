@@ -53,10 +53,10 @@ const EN_HINT = `(() => {
  * 恰好一次，这里登记的每一页两边都要有文件。对不上就让 `astro build` / `astro dev` 直接失败。
  */
 const FEATURE_GROUPS = [
-  { label: '权限与安全', en: 'Access & security', pages: ['login-security', 'data-permissions'] },
+  { label: '权限与安全', en: 'Access & security', pages: ['login-security', 'rbac', 'data-permissions'] },
   { label: '工作区', en: 'Workspace', pages: ['multi-tab'] },
   { label: '协同', en: 'Collaboration', pages: ['approval-workflow', 'notifications'] },
-  { label: '文件与数据', en: 'Files & data', pages: ['file-storage', 'databases'] },
+  { label: '文件与数据', en: 'Files & data', pages: ['import-export', 'file-storage', 'databases'] },
   { label: '集成与多端', en: 'Integrations & clients', pages: ['ai-assistant', 'open-api', 'clients'] },
 ]
 const FEATURE_TOP = ['overview']
