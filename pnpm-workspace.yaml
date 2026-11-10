@@ -25,21 +25,6 @@ minimumReleaseAgeExclude:
   - '@tanstack/router-generator'
   - '@tanstack/router-plugin'
   - i18next@26.4.0
-  - '@expo/cli@57.0.21'
-  - '@expo/fingerprint@0.20.12'
-  - '@expo/router-server@57.0.9'
-  - babel-preset-expo@57.0.10
-  - expo-asset@57.0.16
-  - expo-constants@57.0.17
-  - expo-font@57.0.3
-  - expo-modules-core@57.0.15
-  - expo-modules-jsi@57.0.7
-  - expo@57.0.19
-  - '@expo/metro-runtime@57.0.15'
-  - '@expo/ui@57.0.15'
-  - expo-linking@57.0.9
-  - expo-router@57.0.18
-  - expo-secure-store@57.0.3
 
 # 1.0 前的依赖审计（#193）：有漏洞的**间接**依赖抬到同一大版本里的修复版。
 # 每条选择器都带下界（`>=大版本 <修复版`）—— 只写 `<修复版` 的话，将来哪个包要旧大版本也会被静默抬过去。
@@ -56,3 +41,8 @@ overrides:
   source-map-js@>=1 <1.2.2: ^1.2.2
   '@xmldom/xmldom@>=0.8 <0.8.15': ^0.8.15
   brace-expansion@>=5 <5.0.11: ^5.0.11
+  # #294：Dependabot 剩下的那批同一大版本里能修的
+  undici@>=6 <6.29.1: ^6.29.1                      # electron-builder → node-gyp（打包期）
+  ip-address@>=10 <10.7.4: ^10.7.4                 # shadcn CLI → socks（开发期）
+  brace-expansion@>=1 <1.1.21: ^1.1.21             # 以下两条经 minimatch 旧版：electron 打包（asar）· openapi-typescript（开发期 / 打包期）
+  brace-expansion@>=2 <2.1.7: ^2.1.7
