@@ -768,7 +768,10 @@ def _lookup_names(session: Session, wanted: dict[registry.Ref, set[Any]]) -> dic
         found: dict[str, Any] = {}
         for chunk in _chunks([int(i) for i in ids]):
             for r in _fetch(session, sa.select(target.c.id, target.c[ref.label]).where(target.c.id.in_(chunk))):
-                found[str(r['id'])] = r[ref.label]
+                # 显示名一律字符串：前端拿它当文本（`t(label)`），而引用的列不一定是字符串 ——
+                # 流程定义引用的是版本号（#281）
+                label = r[ref.label]
+                found[str(r['id'])] = label if label is None else str(label)
         names[ref] = found
     return names
 
