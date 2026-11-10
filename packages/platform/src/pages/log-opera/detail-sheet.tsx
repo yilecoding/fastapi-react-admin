@@ -34,19 +34,23 @@ export function formatLocation(l: Pick<OperaLog, 'country' | 'region' | 'city'>)
   return parts.length ? parts.join(' ') : tr('内网')
 }
 
+/**
+ * 🔴 「这次改了什么」里的链接跳去数据变更页时要 `onLeave` —— 父组件把整个抽屉卸载掉，不是只关：
+ * 关闭和切 tab 落在同一次提交里，这个 tab 进了后台、effect 被销毁，Base UI 等不到退场动画结束，
+ * 抽屉留在前台关不掉（见 shell 分册「从浮层里 `<Link>` 跳走」）
+ */
 export function OperaLogDetailSheet({
   open,
   onOpenChange,
   log,
+  onLeave,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
-  log: OperaLog | null
+  log: OperaLog
+  onLeave: () => void
 }) {
   const { t } = useTranslation()
-  if (!log) {
-    return <Sheet open={open} onOpenChange={onOpenChange}><SheetContent /></Sheet>
-  }
 
   const ok = log.status === 1
   const uri = log.path
@@ -55,7 +59,7 @@ export function OperaLogDetailSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       {/* 基础类里是 data-[side=right]:sm:max-w-sm，带属性选择器优先级更高，
           纯 sm:max-w-* 压不过 —— 覆盖时必须带同样的前缀 */}
-      <SheetContent side="right" className="data-[side=right]:sm:max-w-2xl">
+      <SheetContent side="right" className="data-[side=right]:sm:max-w-2xl" data-testid="opera-log-detail">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <span className={cn('inline-flex rounded px-1.5 py-0.5 font-mono text-xs ring-1', METHOD_CLASS[log.method] ?? 'bg-muted ring-border')}>
@@ -119,7 +123,7 @@ export function OperaLogDetailSheet({
           {log.method !== 'GET' && log.trace_id && log.trace_id !== '-' && (
             <Can perm="log:change:list">
               <DetailSection title={t('这次改了什么')}>
-                <TraceChanges traceId={log.trace_id} />
+                <TraceChanges traceId={log.trace_id} onLeave={onLeave} />
               </DetailSection>
             </Can>
           )}
