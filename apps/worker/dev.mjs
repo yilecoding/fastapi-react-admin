@@ -3,7 +3,8 @@
 // 🔴 Windows 上 celery 不支持 `-B`（内嵌 beat）：原来的脚本在 Windows 上直接退出，
 // 报「-B option does not work on Windows」—— `pnpm dev` 里 worker 那一格挂掉，而 api / web 照常跑，
 // 定时任务和异步通知全都静默不执行（工作台显示「心跳停在 N 小时前」）。
-// 所以 Windows 上拆成两个进程，其他平台照旧 `-B`（一个进程、一个窗格）。
+// macOS 的内嵌 beat 会 fork，worker 已启动的线程会触发 Objective-C fork 安全检查而崩溃。
+// 这两个平台拆成两个进程，其他平台照旧 `-B`（仍共用一个日志窗格）。
 //
 // PYTHONUTF8=1：系统代码页不是 UTF-8 的 Windows（如繁中 cp950）上，日志里的简体中文
 // 会被写成乱码；api 那边同样的问题会直接让启动崩掉（见 apps/api/package.json）。
@@ -13,6 +14,7 @@ import { fileURLToPath } from "node:url"
 
 const apiDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../api")
 const isWin = process.platform === "win32"
+const separateBeat = isWin || process.platform === "darwin"
 const env = {
   ...process.env,
   PYTHONUTF8: "1",
@@ -21,8 +23,8 @@ const env = {
 const celery = ["run", "--no-sync", "celery", "-A", "backend.app.task.celery"]
 
 const procs = [
-  ["worker", [...celery, "worker", ...(isWin ? [] : ["-B"]), "-l", "info", "--pool=custom"]],
-  ...(isWin ? [["beat", [...celery, "beat", "-l", "info"]]] : []),
+  ["worker", [...celery, "worker", ...(separateBeat ? [] : ["-B"]), "-l", "info", "--pool=custom"]],
+  ...(separateBeat ? [["beat", [...celery, "beat", "-l", "info"]]] : []),
 ].map(([name, args]) => {
   const child = spawn("uv", args, { cwd: apiDir, env, stdio: "inherit", shell: isWin })
   child.on("exit", (code) => {

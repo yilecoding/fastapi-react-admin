@@ -7,11 +7,12 @@
 TUI 里独立一个日志窗格。写进 `apps/api` 的 `dev` 脚本里（`uvicorn & celery & wait`）
 也能跑，但那样两个进程的日志会挤在同一个窗格里交替刷，而 worker 的日志很密。
 
-## 为什么是 `-B`（内嵌 beat）而不是两个进程
+## worker 和 beat 怎么启动
 
-`celery worker -B` 把调度器跑在 worker 的一个线程里。**开发环境**这样最合适：
-一个进程、一份日志、Ctrl-C 一次全停。实测内嵌 beat 照常从
-`task_scheduler` 表载入调度并按时派发。
+Linux 开发环境使用 `celery worker -B`，默认把调度器跑在一个子进程里。
+Windows 不支持 `-B`；macOS 在 worker 启动线程后 fork 内嵌 beat 会触发
+Objective-C fork 安全检查而崩溃，所以这两个平台分别启动 worker 和 beat。
+三种平台都共用一个日志窗格，Ctrl-C 一次全停；beat 从 `task_scheduler` 表读取调度。
 
 🔴 **生产不要用 `-B`。** 多副本部署时每个副本都会跑一个 beat，
 同一条调度会被触发 N 次。生产要 worker 和 beat 分开部署，且 beat **只起一个**：
