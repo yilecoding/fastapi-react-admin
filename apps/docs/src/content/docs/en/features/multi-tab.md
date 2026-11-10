@@ -7,6 +7,19 @@ sidebar:
 
 The admin shell keeps every opened page mounted at the same time and hides the inactive ones with React 19.2's `<Activity>` component. Switching tabs keeps the DOM and React state — a half-filled form, a collapsed tree node, a typed-in filter — and view state such as filters, paging and the selected row is also written to the URL, so it survives a page refresh too.
 
+## Where is it in the UI?
+
+| Action | How |
+|---|---|
+| Open a tab | Click the sidebar, the ⌘K command palette or a link in a page; a page already open is not opened twice |
+| Tab menu | **Right-click** a tab: Reload · Pin / Unpin · Close · Close tabs to the left / right · Close other tabs · Close all tabs · Open in a new window |
+| Close | The × on the tab, or **middle-click** the tab |
+| Reorder | Drag a tab |
+| See every open tab | The overview drop-down at the right of the tab bar, with a count; click a row to jump there |
+| Appearance and switches | Profile → **Tabs**: show tab bar, tab appearance (Button / Card / Soft / Underline), icons, middle-click to close, drag to reorder. Stored in the browser, see [Dashboard and workspace](/en/features/workspace/#what-can-be-adjusted-in-the-appearance) |
+
+Turning off the tab bar only hides the bar; the tab mechanism itself keeps working (the switch only controls whether the bar is rendered), and the product tour skips its tabs step.
+
 ## How does it work?
 
 [`TabOutlet`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx) **replaces** the router's `<Outlet />`. `<Outlet />` renders only the matched route; `TabOutlet` renders one `<Activity>` per open tab:
