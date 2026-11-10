@@ -81,6 +81,23 @@ pnpm db:history                      # the chain
 
 A new database comes from `pnpm db:init` (create tables from the models, load the seed, `alembic stamp head`), not from replaying migrations. The baseline revision `b0000000baseline` is intentionally empty and the models stay the single source of truth, so the chain can't be replayed from an empty database. That is by design. In production, a one-shot `migrate` container runs `alembic upgrade head` before the API and workers start. With `ENVIRONMENT=prod` the app refuses to start unless the database is at head. See [Deployment](/en/getting-started/deployment/).
 
+## Which settings are there?
+
+The database connection is configured in `.env` only; restart the backend and the worker after changing it (template: [`.env.example`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/.env.example)):
+
+| Key | Value in `.env.example` | Notes |
+|---|---|---|
+| `DATABASE_TYPE` | `postgresql` | `postgresql` / `sqlserver` / `mysql` |
+| `DATABASE_HOST` · `DATABASE_PORT` | `127.0.0.1` · `5432` | 1433 for SQL Server, 3306 for MySQL |
+| `DATABASE_USER` · `DATABASE_PASSWORD` | `postgres` · `postgres` | Weak passwords are refused by the production start-up checks |
+| `DATABASE_SCHEMA` | `fba` (`conf.py` default) | Database name; a different one gives an isolated database for tests or screenshots |
+| `DATABASE_PK_MODE` | `snowflake` | **Must be `snowflake`**. The `conf.py` default is `autoincrement`, but all three databases only ship snowflake seed data; with autoincrement, `fba init` finds no seed file and silently skips it, leaving a database with no admin account |
+| `DATABASE_DRIVER` | `ODBC Driver 18 for SQL Server` | SQL Server only; must match a name listed by `odbcinst -q -d` |
+| `DATABASE_TRUST_SERVER_CERTIFICATE` | `true` | SQL Server only |
+| `DATABASE_CHARSET` | `utf8mb4` | MySQL only |
+| `DATABASE_SOURCES` | `{}` | Extra data sources, e.g. `{"read": "postgresql+asyncpg://…"}`; the name cannot be empty or `default` |
+| `DATABASE_ECHO` · `DATABASE_POOL_ECHO` | `false` | Log SQL / connection pool activity, for troubleshooting |
+
 ## How it is tested
 
 Guards in [`app/task/tests/test_migrations.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_migrations.py):
