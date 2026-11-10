@@ -8,6 +8,7 @@
 """
 
 import json
+import re
 
 import pytest
 
@@ -188,8 +189,8 @@ def test_a_client_that_left_while_the_route_ran_is_not_logged_as_a_success(monke
     assert queue.empty(), f'没执行完的请求不该进操作日志：{queue.get_nowait()}'
 
 
-def _request_args_for(path: str, body: bytes) -> dict | None:
-    """让中间件读一份 `Content-Type: application/json` 的请求体，返回它要记进操作日志的参数"""
+def _request_args_for(path: str, body: bytes, content_type: bytes = b'application/json') -> dict | None:
+    """让中间件读一份请求体（默认 `Content-Type: application/json`），返回它要记进操作日志的参数"""
     import asyncio
 
     from starlette.requests import Request
@@ -203,7 +204,7 @@ def _request_args_for(path: str, body: bytes) -> dict | None:
         'path': f'{settings.FASTAPI_API_V1_PATH}{path}',
         'raw_path': b'',
         'query_string': b'',
-        'headers': [(b'content-type', b'application/json'), (b'content-length', str(len(body)).encode())],
+        'headers': [(b'content-type', content_type), (b'content-length', str(len(body)).encode())],
         'path_params': {},
         'client': ('127.0.0.1', 1),
         'server': ('127.0.0.1', 8000),
@@ -240,3 +241,141 @@ def test_a_broken_json_body_with_a_password_is_not_logged_in_plain_text():
     assert args, '坏 JSON 的请求体一点痕迹都没留'
     assert 'Old-Secret-1' not in dumped, f'旧密码明文进了操作日志：{dumped}'
     assert 'New-Secret-2' not in dumped, f'新密码明文进了操作日志：{dumped}'
+
+
+# --------------------------------------------------------------------------- 参数配置那种 key / value 形状
+
+
+def test_a_secret_config_value_is_redacted_by_its_key_name():
+    """🔴 参数配置的一行是 `{"key": "EMAIL_PASSWORD", "value": "<SMTP 授权码>"}`：要打码的是 `value`，
+    而它就叫 `value` —— 按字段名的名单永远认不出来。保存参数配置、打开参数配置页，授权码原来都原样进了 sys_opera_log。
+    认的是键名（`common/secret_keys.py`，和前端参数配置页打码同一条规则）"""
+    rows = [
+        {'key': 'EMAIL_PASSWORD', 'value': 'smtp-auth-code'},
+        {'key': 'smtp_password', 'value': 'lower-case'},  # 不分大小写
+        {'key': 'OSS_CREDENTIALS', 'value': 'cred-json'},
+        {'key': 'EMAIL_HOST', 'value': 'smtp.example.com'},  # 对照：不是密钥的照记
+        {'key': 'USER_PASSWORD_MIN_LENGTH', 'value': '8'},  # 后缀匹配：策略类的键不受影响
+    ]
+    got = M.desensitization({'json': rows})['json']
+    assert [r['value'] for r in got] == ['[REDACTED]', '[REDACTED]', '[REDACTED]', 'smtp.example.com', '8']
+    assert [r['key'] for r in got] == [r['key'] for r in rows], '键名要留着，看得出改的是哪一项'
+
+
+def test_saving_a_secret_config_does_not_log_its_value():
+    """走中间件读请求体那条路：批量保存参数配置的请求体是一个列表"""
+    body = json.dumps([
+        {'id': 1, 'name': 'SMTP 授权码', 'key': 'EMAIL_PASSWORD', 'value': 'smtp-auth-code', 'is_frontend': False}
+    ]).encode()
+    dumped = json.dumps(_request_args_for('/sys/configs', body), ensure_ascii=False)
+    assert 'EMAIL_PASSWORD' in dumped  # 先断言「有」：这一行确实记下来了
+    assert 'smtp-auth-code' not in dumped, f'SMTP 授权码进了操作日志：{dumped}'
+
+
+def test_a_secret_config_value_in_a_response_is_redacted():
+    """打开参数配置页（`GET /sys/configs/all`）的响应体里也有这一行"""
+    raw = json.dumps({
+        'code': 200,
+        'data': [{'id': '1', 'key': 'EMAIL_PASSWORD', 'value': 'smtp-auth-code'}, {'key': 'EMAIL_HOST', 'value': 'h'}],
+    }).encode()
+    got = M.redact_body(raw, 'application/json').decode()
+    assert 'EMAIL_PASSWORD' in got and '"h"' in got  # 先断言「有」
+    assert 'smtp-auth-code' not in got
+
+
+# --------------------------------------------------------------------------- 名单漏掉的凭据字段
+
+
+def test_login_response_tokens_are_redacted():
+    """🔴 登录 / 刷新 / 二次验证的响应体里是 `access_token`，原来不在名单里 —— 本机开发库实测 109 条 `/auth/login`
+    的操作日志明文留着访问令牌，有操作日志查看权限的人在令牌有效期内拿它就能冒用"""
+    raw = json.dumps({'code': 200, 'data': {'access_token': 'eyJhbGciOi.payload.sig', 'session_uuid': 's'}}).encode()
+    got = M.redact_body(raw, 'application/json').decode()
+    assert 'session_uuid' in got  # 先断言「有」
+    assert 'eyJhbGciOi' not in got
+
+
+def test_ai_provider_api_key_is_redacted():
+    """🔴 模型密钥的请求体字段叫 `api_key`，原来不在名单里：新建 / 编辑时模型的 API Key 明文进操作日志"""
+    got = M.desensitization({'json': {'name': 'DeepSeek', 'api_key': 'sk-live-0123456789'}})
+    assert got['json']['name'] == 'DeepSeek'
+    assert got['json']['api_key'] == '[REDACTED]'
+
+
+#: 名字像凭据、其实不是的字段（各写一句为什么）。新加的字段名撞上 `_CREDENTIAL_LIKE` 又不在打码名单里，
+#: 守卫就红 —— 要么进 `OPERA_LOG_REDACT_KEYS`，要么在这里说清楚它为什么不是凭据
+_NOT_CREDENTIALS = {
+    'token_type': '固定值 Bearer',
+    'access_token_expire_time': '过期时间',
+    'refresh_token_expire_time': '过期时间',
+    'secret_hint': '密钥前几位，界面上就显示着',
+    'secret_mask': '掩码',
+    'api_key_mask': '掩码',
+    'token_hint': '令牌前几位',
+    'has_secret': '有没有配，布尔',
+    'clear_sign_secret': '要不要清掉，布尔',
+    'encrypt_key_ready': '服务端配没配加密密钥，布尔',
+    'secret_field': '凭据字段的名字（短信厂商描述）',
+    'secret_label': '凭据字段的显示名',
+    'keyed': '防篡改链配没配密钥，布尔',
+    'other_key': '换密钥之前签的行数',
+    'prompt_tokens': 'AI 用量计数',
+    'completion_tokens': 'AI 用量计数',
+    'credential': '短信厂商的凭据字段描述（字段名、显示名），不是值',
+    'secret_id': '腾讯云的 SecretId，相当于 AccessKey ID（公开标识）；只在 SDK 的配置模型里，请求里叫 access_key_id',
+    'secret_prev_expire_time': '旧签名密钥的过期时间',
+    'password_expire_days_remaining': '密码还剩几天过期',
+}
+_CREDENTIAL_LIKE = re.compile(r'password|secret|token|api_?key|credential', re.IGNORECASE)
+
+
+def test_every_credential_like_field_in_the_api_is_redacted():
+    """守卫：请求 / 响应 schema 里名字像凭据的字段，都要在 `OPERA_LOG_REDACT_KEYS` 里。
+    `api_key`、`access_token` 都是这么漏的：名单是按字段名一个个加的，新接口用了个新名字就没人想起来"""
+    from pydantic import BaseModel
+    from pydantic_settings import BaseSettings
+
+    import backend.main  # ruff: ignore[unused-import] —— 把各模块、各插件的 schema 都 import 进来
+
+    def walk(cls: type) -> set[type]:
+        out = set()
+        for sub in cls.__subclasses__():
+            out |= {sub, *walk(sub)}
+        return out
+
+    names = {
+        name
+        for model in walk(BaseModel)
+        if model.__module__.startswith('backend.') and not issubclass(model, BaseSettings)
+        for name in getattr(model, 'model_fields', {})
+        if _CREDENTIAL_LIKE.search(name)
+    }
+    assert {'password', 'api_key', 'access_token'} <= names, '前置：扫得到真接口的 schema'
+    missing = sorted(names - set(settings.OPERA_LOG_REDACT_KEYS) - set(_NOT_CREDENTIALS))
+    assert not missing, f'这些字段名像凭据、操作日志却不打码：{missing}'
+
+
+@pytest.mark.parametrize('content_type', [b'application/merge-patch+json', b'text/plain', b'application/x-unknown'])
+def test_a_json_body_under_another_content_type_is_still_redacted(content_type: bytes) -> None:
+    """#283 评审：FastAPI 把 `*+json` 也按 JSON 解析，中间件原来只认 `application/json`，其余一律原样记文本 ——
+    `merge-patch+json` 发的 `api_key`、`text/plain` 发的密码（路由层 422，但中间件在它前面）都明文进日志"""
+    body = json.dumps({'name': 'x', 'api_key': 'sk-live-plain', 'password': 'P@ss-plain'}).encode()
+    args = _request_args_for('/sys/users/me', body, content_type)
+    dumped = json.dumps(args, ensure_ascii=False)
+    assert '"name": "x"' in dumped  # 先断言「有」
+    assert 'sk-live-plain' not in dumped and 'P@ss-plain' not in dumped, dumped
+
+
+def test_a_non_json_text_body_is_still_logged_as_text() -> None:
+    """对照：读不成 JSON 的纯文本照旧原样记（没有可按字段打码的结构）"""
+    args = _request_args_for('/sys/users/me', b'just some text', b'text/plain')
+    assert args == {'data': 'just some text'}
+
+
+def test_a_broken_plus_json_body_is_not_logged_in_plain_text() -> None:
+    """`*+json` 要和 `application/json` 走同一支：解析不了就记占位。只靠「先当文本、能解析就打码」兜的话，
+    截断的 `merge-patch+json` 读不成 JSON，会原样当文本记下来"""
+    body = b'{"api_key": "sk-live-cut", "name": "x'
+    args = _request_args_for('/sys/users/me', body, b'application/merge-patch+json')
+    assert args and args['body']['_invalid_json'] is True
+    assert 'sk-live-cut' not in json.dumps(args, ensure_ascii=False)
