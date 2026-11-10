@@ -5,6 +5,8 @@ import secrets
 import subprocess
 import sys
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Final, Literal
@@ -258,7 +260,7 @@ async def auto_init() -> None:
         db=settings.REDIS_DATABASE,
     )
     await redis_init_client.init()
-    async with async_init_db_session.begin() as db:
+    async with snowflake_node(redis_init_client), async_init_db_session.begin() as db:
         created = await init(db, redis_init_client)
     if created:
         await run_in_threadpool(_stamp_alembic_head)
@@ -334,13 +336,6 @@ async def _set_admin_password(db: AsyncSession) -> None:
             code=1,
         )
 
-    # 🔴 改密码会进数据变更审计（#260），审计行用雪花主键。API 在 lifespan、worker 在 worker_init 里
-    # 初始化雪花节点，**命令行两条都不走** —— 不先 init，`fba init` 建完表、灌完种子，到提交那一刻才报
-    # 「雪花 ID 生成失败，雪花算法未初始化」，整个事务回滚、库里一张表都没有。
-    # CI 原来从不跑 `fba init`（测试库走 reset_test_db），所以 #260 合进来之后这条路一直是坏的；
-    # 现在 CI 的 pytest · PostgreSQL job 末尾对一个新库真跑一遍。释放在 `Init.__call__` 的 finally 里
-    await snowflake.init()
-
     admin = await user_dao.get_by_username(db, 'admin')
     if admin is None:
         raise cappa.Exit('种子数据里没有 admin 账号，初始化流程可能已经变了', code=1)
@@ -360,6 +355,33 @@ async def _set_admin_password(db: AsyncSession) -> None:
         await user_dao.reset_password(db, demo.id, secrets.token_urlsafe(24))
         await user_dao.set_status(db, demo.id, 0)
         console.note('已停用示例账号 test 并重置其密码')
+
+
+@asynccontextmanager
+async def snowflake_node(redis: RedisCli) -> AsyncIterator[None]:
+    """命令行写库期间占一个雪花节点，用完放掉 —— API 在 lifespan、worker 在 `worker_init` 里做的同一件事
+
+    🔴 `fba init` 改 admin / test 的密码会进数据变更审计（#260），审计行用雪花主键、在**提交那一刻**才写。
+    命令行不走 lifespan，不先占节点的话建完表、灌完种子，提交时报「雪花算法未初始化」、整个事务回滚（#292）。
+    要包在事务**外面**（`async with snowflake_node(...), session.begin()`）：提交发生在事务退出时，那时节点还得在。
+
+    - 条件和 lifespan 一样：自增主键模式下不占（审计行的主键交给数据库），也就不需要 Redis 里有空节点
+    - `redis` 传这一次真正要用的客户端：`--auto` 在进程里改过 Redis 配置，全局的 `redis_client` 还指着旧的
+    - 释放失败只告警：库已经建好、提交了，租约 `SNOWFLAKE_NODE_TTL_SECONDS` 秒后自己过期；
+      让它冒出去会把一次成功的初始化显示成崩溃，用户重跑就是再删一遍库
+    """
+    if not (settings.SNOWFLAKE_ENABLED or settings.DATABASE_PK_MODE == 'snowflake'):
+        yield
+        return
+    await snowflake.init(redis)
+    try:
+        yield
+    finally:
+        try:
+            await snowflake.shutdown()
+        except Exception as e:
+            ttl = settings.SNOWFLAKE_NODE_TTL_SECONDS
+            console.warning(f'释放雪花节点失败（不影响初始化结果，租约 {ttl} 秒后自动过期）：{e}')
 
 
 async def init(db: AsyncSession, redis: RedisCli) -> bool:
@@ -783,18 +805,14 @@ class Init:
     ]
 
     async def __call__(self) -> None:
-        try:
-            if self.auto:
-                await auto_init()
-            else:
-                async with async_db_session.begin() as db:
-                    created = await init(db, redis_client)
-                if created:
-                    await run_in_threadpool(_stamp_alembic_head)
-                    console.note('已把新库标记到迁移 head')
-        finally:
-            # `_set_admin_password` 里占了一个雪花节点（Redis 里有租约 + 心跳任务），用完放掉；没占过时是空操作
-            await snowflake.shutdown()
+        if self.auto:
+            await auto_init()
+        else:
+            async with snowflake_node(redis_client), async_db_session.begin() as db:
+                created = await init(db, redis_client)
+            if created:
+                await run_in_threadpool(_stamp_alembic_head)
+                console.note('已把新库标记到迁移 head')
 
 
 @cappa.command(help='运行 API 服务', default_long=True)
