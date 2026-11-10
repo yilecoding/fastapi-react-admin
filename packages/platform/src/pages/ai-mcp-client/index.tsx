@@ -11,6 +11,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { ChangeHistoryButton } from '../_shared/data-change/history-button'
 import { AddCard, CardField, CardFields, CardPageRefresh, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
@@ -77,6 +78,7 @@ export function AiMcpClientPage() {
                   <p className="mt-0.5 font-mono text-xs text-muted-foreground">mcp:{c.client_id}</p>
                 </div>
                 <div className="flex shrink-0 gap-1">
+                  <ChangeHistoryButton entity="ai_mcp_client" entityId={c.id} name={c.name} testId={`mcp-client-history-${c.client_id}`} />
                   <Can perm="ai:mcp:edit">
                     <Button size="icon" variant="ghost" className="size-7" aria-label={t('编辑')} onClick={() => openSheet(c)}>
                       <IconPencil className="size-4" />
