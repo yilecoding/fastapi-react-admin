@@ -5,7 +5,12 @@ sidebar:
   order: 3
 ---
 
+import shot from '../../../../../../docs/screenshots/workflow-designer.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 fastapi-react-admin 自带一个审批流插件（`plugin/workflow`）：管理员在浏览器里搭表单、画流程树、发布，之后所有登录用户都能按这个流程发起申请。审批人只在一个**审批中心**里干活（待我审批 / 我已审批 / 我发起的 / 抄送我的）；同意、驳回、转交、抄送、退回、拿回、加签、催办、撤回、终止、改办理人，执行前都由服务端同一个函数（`capabilities()`）判定能不能做 —— 界面上出哪些按钮也是它给的，按钮和接口不会各说各的。
+
+<ProductShot src={shot} alt="流程定义：表单设计器与流程树" url="localhost:8888/workflow/definition" />
 
 ## 在界面上哪里找？
 

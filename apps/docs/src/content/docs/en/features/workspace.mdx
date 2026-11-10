@@ -5,7 +5,12 @@ sidebar:
   order: 0
 ---
 
+import shot from '../../../../../../../docs/screenshots/dashboard.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 After sign-in the first page is the **dashboard**: a set of cards (Waiting on me, My requests, Quick start, Shortcuts, Messages for me, Announcement, Needs your attention, Service status, Sign-ins over the last 14 days). Each person chooses which to show, in what order and how wide; the layout is stored on the server, so signing in on another computer brings back the same one, and cards someone has no permission for never appear. Around the dashboard the interface has a few shared tools: the ⌘K command palette, keyboard shortcuts, a product tour on first sign-in, appearance settings in Profile, column visibility and order on lists, a per-user time zone and language, and a refresh prompt when a new version is deployed. Tabs are covered separately in [Multi-tab](/en/features/multi-tab/).
+
+<ProductShot src={shot} alt="Dashboard" url="localhost:8888/dashboard" />
 
 ## Where is it in the UI?
 

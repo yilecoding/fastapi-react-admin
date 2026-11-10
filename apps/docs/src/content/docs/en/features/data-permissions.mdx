@@ -5,7 +5,12 @@ sidebar:
   order: 1
 ---
 
+import shot from '../../../../../../../docs/screenshots/data-permission.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 fastapi-react-admin has two independent permission layers. **RBAC** decides whether a user may open a page, see a button or call an endpoint (permission codes such as `sys:user:list`). **Data scopes** decide which rows that endpoint returns: a role's rules are compiled into a SQLAlchemy `WHERE` condition that the DAO layer appends to every read, so on the same Users list a department manager can be limited to their own department.
+
+<ProductShot src={shot} alt="Data permissions: scopes and rules" url="localhost:8888/system/data-permission" />
 
 ## Where is it in the UI?
 

@@ -5,7 +5,12 @@ sidebar:
   order: 2
 ---
 
+import shot from '../../../../../../../docs/screenshots/role.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 Permissions rest on four tables and four screens: **departments** form a tree, a **user** belongs to one department and can have several roles, a **role** grants **menus** and buttons, and the menu table decides both what the sidebar shows and which permission code each button needs. This page covers how to operate those screens and their limits; how permission codes and data scopes are evaluated on the server is in [Data permissions](/en/features/data-permissions/).
+
+<ProductShot src={shot} alt="Roles: the permission matrix" url="localhost:8888/system/role" />
 
 ## Where is it in the UI?
 

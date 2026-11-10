@@ -5,7 +5,12 @@ sidebar:
   order: 1
 ---
 
+import shot from '../../../../../../docs/screenshots/data-permission.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 fastapi-react-admin 的权限分两道互相独立的闸。**RBAC** 管「能不能进这个页面、看到这个按钮、调这个接口」，靠 `sys:user:list` 这样的权限码；**数据范围**管「这个接口返回哪些行」：角色上配的规则被编译成一条 SQLAlchemy `WHERE` 条件，DAO 层在每次读取时自动拼上去。于是同一张用户表，部门经理可以只看到本部门的人。
+
+<ProductShot src={shot} alt="数据权限：数据范围与规则" url="localhost:8888/system/data-permission" />
 
 ## 在界面上哪里找？
 

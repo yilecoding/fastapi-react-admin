@@ -5,7 +5,12 @@ sidebar:
   order: 2
 ---
 
+import shot from '../../../../../../docs/screenshots/role.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 权限的基础是四张表、四个页面：**部门**组成一棵树，**用户**挂在一个部门上、可以有多个角色，**角色**勾选能用哪些**菜单**和按钮，菜单表同时决定侧边栏长什么样、每个按钮要什么权限码。这一页讲这四个页面怎么操作、各自有哪些限制；权限码和数据范围在服务端怎么判，见[数据权限](/features/data-permissions/)。
+
+<ProductShot src={shot} alt="角色管理：功能权限矩阵" url="localhost:8888/system/role" />
 
 ## 在界面上哪里找？
 
