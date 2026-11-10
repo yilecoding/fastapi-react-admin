@@ -371,9 +371,9 @@ class Settings(BaseSettings):
 
     # 用户批量导入
     #
-    # 🔴 **默认密码放这里而不是 sys_config**（参数配置插件那张表）。那张表的值
-    # 会**原样显示在参数配置页**上，而且 `PUT /sys/configs` 的请求体会进操作日志
-    # （`value` 不在 `OPERA_LOG_REDACT_KEYS` 里）—— 放进去等于同时在两个地方公开它。
+    # 🔴 **默认密码放这里而不是 sys_config**（参数配置插件那张表）。那张表在库里是明文，
+    # 能读库 / 能导出参数配置的人都看得到；#283 之前 `PUT /sys/configs` 的请求体还原样进操作日志
+    # （现在键名像密钥的行会打码，`common/secret_keys.py`）—— 放进去等于多一处公开它。
     #
     # 🔴 **空串 = 关掉导入功能**，不是「用某个内置默认值」。没有一个内置值是安全的：
     # 它会跟着仓库一起公开，而每套部署都会照抄。
@@ -482,6 +482,14 @@ class Settings(BaseSettings):
         # （钉钉 access_token / 企微 key / 飞书 hook ID，拿到地址就能往群里发），加签密钥同理。字段名同样起成专用的
         'webhook_url',
         'sign_secret',
+        # 🔴 下面这几个原来都漏了（`tests/test_opera_log_redaction.py` 的守卫扫 schema 扫出来的）：
+        # 登录 / 刷新 / 二次验证的响应体里是访问令牌（开发库实测上百条明文）· 模型密钥的请求体字段叫 api_key ·
+        # 导入提交的一次性令牌 · AI 写操作的二次确认令牌
+        'access_token',
+        'refresh_token',
+        'api_key',
+        'import_token',
+        'token',
     ]
     OPERA_LOG_QUEUE_MAXSIZE: int = 100000
     OPERA_LOG_QUEUE_BATCH_CONSUME_SIZE: int = 100
