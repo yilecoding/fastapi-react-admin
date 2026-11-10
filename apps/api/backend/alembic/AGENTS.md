@@ -146,14 +146,24 @@ PostgreSQL 两个方向都不挡。
 在**提交那一刻**才写。API 在 lifespan、worker 在 `worker_init` 里初始化雪花节点，命令行两条都不走。
 CI 的库全走 `reset_test_db`，`fba init` 这条路在 CI 里一次都没跑过，所以 #260 合进来就坏了、没人知道。
 
-**修法**：`_set_admin_password` 写库前 `await snowflake.init()`，`Init.__call__` 的 `finally` 里
-`snowflake.shutdown()` 放掉节点。**新增任何会写审计表的命令行入口，同样要先 init。**
+**修法**：`cli.snowflake_node(redis)` 包在事务**外面**（`async with snowflake_node(...), session.begin()`），
+`fba init` 和 `--auto` 两条路都走它。**新增任何会写审计表的命令行入口，同样包一层。** 评审补的四条（#292 之后）：
+
+| 不这样的话 | 为什么 | 测试（`tests/test_cli_snowflake.py`） |
+|---|---|---|
+| `pnpm db:reset`（`--auto` 向导）里填了别的 Redis：节点记到旧 Redis 上，连不上就整条回滚 | 雪花的节点管理器用全局 `redis_client`，那是进程启动时按旧配置建的 | 节点必须记在传进去的客户端上（用另一个库号区分） |
+| 自增主键模式下，Redis 里没空节点 / 节点配置只写了一半，init 白白失败 | 无条件占节点；lifespan 只在雪花模式下占 | 自增模式下不许碰 Redis |
+| 库已经提交了，放节点时 Redis 抖一下：用户看到崩溃、以为失败、重跑又删一遍库 | 释放写在 `finally` 里、异常照冒 | 释放失败只告警 |
+| 以后有人把节点挪到事务里面 / 漏了 `--auto` | 占在改密码的函数里、放在命令入口，不对称 | AST 看两条路的 `async with` 顺序 |
 CI 的 pytest · PostgreSQL job 末尾加了「fba init（新库，非交互）」，对一个新库真跑一遍再查库里的结果；
 它必须排在 pytest **之后** —— init 会按前缀清 Redis 里的会话，放前面会把测试套件的登录态清掉。
 
 **实测证据**（2026-11-10）：修前对空库 `fba init` 报上面那句并回滚（`sys_user` 不存在）；修后
 admin 启用、test 停用、2 条改密码的审计行、`alembic_version` 在 head。CI 那一步的命令在本地按
 `bash -e` 原样跑过：修前在 init 那行退出码 1，修后全部通过。
+评审之后：私有库上照 CI 那一步重跑，admin 启用 / test 停用 / 2 条审计行 / 版本等于 `alembic heads`、Redis 里没有残留节点；
+五处变异各打红一条（`--auto` 不包 · 顺序反了 · 不看主键模式 · 释放失败照抛 · 不传 Redis）。CI 那一步原来只查 `alembic_version` 非空，
+现在和 `alembic heads` 比（本地改成别的版本，那一句就红）。
 
 ## 种子的一致性有两维，行数/列清单只是其中一维
 

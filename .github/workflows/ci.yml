@@ -413,7 +413,10 @@ jobs:
           q() { docker exec "$PG_CID" psql -U postgres -d fba_init -tAc "$1"; }
           test "$(q "select status from sys_user where username='admin'")" = 1
           test "$(q "select status from sys_user where username='test'")" = 0
-          test -n "$(q "select version_num from alembic_version")"
+          # 要等于 head，不只是「有值」：标成了别的版本，下一次 `pnpm db:upgrade` 会在 create_all 建好的表上重放迁移
+          head="$(uv run --no-sync alembic heads 2>/dev/null | grep '(head)' | awk '{print $1}')"
+          test -n "$head"
+          test "$(q "select version_num from alembic_version")" = "$head"
 
       # 🔴 「改了模型就必须写迁移」真正的守卫（#230）。上面那轮 pytest 里的
       # test_model_matches_migrations 比的是 fba_test，而 fba_test 是**按当前模型** create_all 出来的 ——
