@@ -8,11 +8,17 @@
 
 🔴 **后缀匹配，不是包含**：`USER_PASSWORD_MIN_LENGTH` 是策略，不是密码。**不分大小写**：管理员自己加的键可能是小写。
 原来后端这份是区分大小写、没有 `CREDENTIALS` 的，和前端对不上（数据变更审计会把 `smtp_password` 的值原样记下来）。
+#283 评审又补了几种常见写法：`XXX_SECRET_KEY` · `PRIVATE_KEY` · `SMTP_PASS` · `REDIS_PWD` · `XXX_AUTH_CODE`
+（`PASS` / `PWD` 要求前面是下划线或开头，免得 `LOGIN_BYPASS` 这种开关被当成密钥藏起来）。
 """
 
 import re
 
-SECRET_KEY_NAME = re.compile(r'(PASSWORD|SECRET|TOKEN|API_?KEY|CREDENTIALS?)$', re.IGNORECASE)
+SECRET_KEY_NAME = re.compile(
+    r'(PASSWORD|PASSWD|(^|_)PASS|(^|_)PWD|SECRET|SECRET_?KEY|PRIVATE_?KEY'
+    r'|TOKEN|API_?KEY|CREDENTIALS?|AUTH_?CODE)$',
+    re.IGNORECASE,
+)
 
 
 def is_secret_key_name(key: object) -> bool:

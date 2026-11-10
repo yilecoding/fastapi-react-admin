@@ -103,6 +103,19 @@ fail-closed 判据，自己写的时候却漏了，是代码评审翻出来的�
   （`/configs` · `/auth/` · `/ai/` · `/import/`）；读得回结构的照新规则打码，repr 读回结构后按新写法放进 `json`；
   响应被截断、读不回结构又有凭据的，整段换成一句占位（同上面的 fail-closed）
 
+### 评审补的（#283）
+
+| 症状 | 根因 | 修法 | 测试 |
+|---|---|---|---|
+| 迁移清完了，打开「操作日志」页那次请求的日志里还躺着别人的密钥 | 它的响应体是一页别人的日志：`args` 嵌在 JSON 里，响应体是**转义过的字符串**，`desensitization` 递归不进字符串、正则也认不出转义的引号 | 清理扫 `/logs/opera`，这种行的响应体整段换占位 | `test_opera_log_scrub.py` 的 `opera-view` 行 |
+| 生产库上迁移长时间锁着日志表 | 全部改写在迁移那一个事务里，登录 / 刷新的日志一个活跃用户半小时一条 | `autocommit_block()` 里跑，逐行提交；每行幂等，断了重跑接着清 | PostgreSQL / SQL Server 私有库上 alembic 真跑 |
+| 重跑迁移把新中间件写下的截断响应整段换掉 | 截断文本里键名像密钥就算泄漏，没看 value 是不是已经 `[REDACTED]` | 只看同一个对象里的 value | `cut-redacted` 对照行 |
+| `merge-patch+json`、`text/plain` 发的 JSON 原样进日志 | 只认 `application/json`，其余当文本记（FastAPI 自己认 `*+json`） | `*+json` 和 `application/json` 同一支；别的类型先试着按 JSON 读，读得出就打码 | `test_a_json_body_under_another_content_type_is_still_redacted` 等三条 |
+| 管理员自己加的 `OSS_SECRET_KEY` / `SMTP_PASS` / `REDIS_PWD` 前端不打码、日志和审计照记 | 规则只认 PASSWORD / SECRET / TOKEN / API_KEY / CREDENTIALS 结尾 | 补 `SECRET_KEY` · `PRIVATE_KEY` · `PASS` · `PWD` · `AUTH_CODE`（`PASS` / `PWD` 前面要是下划线或开头，`LOGIN_BYPASS` 不算） | `test_secret_keys.py` |
+
+**没改的**（风险低，写清楚）：部署时旧进程在迁移扫完之后还写进来的那几十秒（日志队列最长 60 秒一批）扫不到；
+AI 确认令牌、导入报告令牌出现在 URL 路径里（`path` 列不打码），两个令牌都校验归属、一次性 / 短时效。
+
 ⚠️ 升级之后**建议把 SMTP 授权码、模型的 API Key 换掉**：迁移清得掉表里的，清不掉已经导出、备份、被人看过的。访问令牌会自己过期，不用管
 
 **实测证据**：
@@ -115,5 +128,5 @@ fail-closed 判据，自己写的时候却漏了，是代码评审翻出来的�
 - `app/admin/tests/test_opera_log_scrub.py` 在真库里垫修复前的七种形状（参数配置的 JSON · repr · 完整响应 · 截断响应 ·
   登录响应的令牌 · 截断的登录响应 · 模型密钥），外加两行对照（截断但没有密钥的 · 别的接口）；跑两遍，第二遍不变
 - 迁移在私有库（PostgreSQL 16）上用 alembic 真跑：插一行泄漏的旧日志 → `upgrade head` 报「1 行已打码」、读回来两处都是 `[REDACTED]` → `downgrade -1` → 再 `upgrade` 报「0 行」
-- 变异 10 处各有测试红：不认 key/value 形状 · 列表照旧 `str()` · `value` 一律打掉（对照组红）· 规则区分大小写 ·
+- 变异 15 处各有测试红（含评审补的 5 处：只认 `application/json` · 别的类型不试着解析 · 不扫操作日志页 · 截断文本不看 value · 规则退回旧的）：不认 key/value 形状 · 列表照旧 `str()` · `value` 一律打掉（对照组红）· 规则区分大小写 ·
   清理不管 repr · 截断的照留 · 名单去掉 `access_token` · 去掉 `api_key` · 清理不认名单里的字段 · 清理不扫 `/auth/`
