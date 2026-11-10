@@ -10,6 +10,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { ChangeHistoryButton } from '../_shared/data-change/history-button'
 import { AddCard, CardField, CardFields, CardPageRefresh, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
@@ -110,6 +111,7 @@ export function SmsConfigPage() {
                     ) : null}
                   </div>
                   <div className="flex shrink-0 gap-1">
+                    <ChangeHistoryButton entity="sms_config" entityId={config.id} name={config.name} testId={`sms-config-history-${config.name}`} />
                     <Can perm="sms:config:edit">
                       <Button
                         size="icon"

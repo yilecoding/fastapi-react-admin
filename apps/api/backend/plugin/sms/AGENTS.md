@@ -101,7 +101,9 @@ SDK 层  plugin/sms/sdk  SmsProvider 基类 · 厂商注册表 · 统一的结�
 ## 配置页保存时的闸门（`service/config_service.py`）
 
 写错的键名 / 模板码 / 参数名 / 缺凭据一律 400 —— 否则要到发送时才失败，看起来像通道坏了（MCP 凭据那轮踩过）。
-`options` 里**不认识的键也 400**（pydantic 默认忽略 extra，这里自己比一遍）。凭据不能从 `options` 里绕进来（会明文落库）。
+`options` 里**不认识的键也 400**（pydantic 默认忽略 extra，这里自己比一遍）。
+🔴 **凭据字段放进 `options` 也 400**（`_validate`）。原来 `build_provider_config` 只在副本里换掉、校验照过，`options` 原样明文进库
+（#281 接审计时实测：带 `access_key_secret` 保存 200，库里留着明文）；守卫 `TestValidationAtSave` 那一组参数。
 
 - `SMS_ENCRYPT_SECRET_KEY` 没配就拒绝保存带凭据的厂商，不静默存明文；独立于 `AI_ENCRYPT_SECRET_KEY`（两个插件可以单独装卸）
 - 🔴 **编辑时换了厂商就必须给新密钥**（400 `credential_required`）。「留空 = 不改」只对同厂商成立：旧密钥是上一家的，
