@@ -54,6 +54,7 @@ Back up the database before the first deployment against an existing one.
 - [ ] The database is backed up before the first deployment against it, and scheduled backups exist
 - [ ] TLS is provided by the reverse proxy or load balancer, and HTTP redirects to HTTPS
 - [ ] External monitoring probes `/api/health/status`, not `/healthz`
+- [ ] Log retention meets your compliance requirements. Login and operation logs are kept for 180 days by default, because China's Cybersecurity Law requires network logs to be kept for at least six months. To change it, edit the `days` argument of 清理历史日志 (prune old logs) under Scheduler → Task scheduling; data change records have their own retention setting under System config → Logs. An operation log row averages about 2 KB, so 10,000 rows a day for 180 days is roughly 4 GB; plan disk space accordingly
 - [ ] You noted the current image tag (`sha-<commit>`) so you know what to roll back to
 
 ## How do I update or roll back?

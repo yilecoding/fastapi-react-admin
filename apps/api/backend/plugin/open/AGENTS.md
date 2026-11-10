@@ -84,7 +84,7 @@ service/webhook_sign.py      出站签名（Standard Webhooks），和三份 SDK
 - 落库挂在响应的 `BackgroundTask` 上，自己开会话 → `service/api_log_service.py` 登记在
   `backend/conftest.py: _PATCHED_SESSION_MODULES`（不登记的话测试往开发库写日志）
 - `x-sign` **不打码**（一次性签名，nonce 已消费，不能重放），留着和服务端的签名比对；SK 本来不过网
-- 清理：挂在 `maintenance.prune_logs` 上，和登录 / 操作日志**同一个保留期**（`days` 参数，种子里是 30）
+- 清理：挂在 `maintenance.prune_logs` 上，和登录 / 操作日志**同一个保留期**（`days` 参数，默认 180，#261）
 
 ## 两个模型 / 迁移的坑
 
