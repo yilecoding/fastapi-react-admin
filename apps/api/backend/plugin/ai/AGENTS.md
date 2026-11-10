@@ -256,9 +256,8 @@ mock 掉 Redis 就把窗口一起 mock 没了。
 真实网关（Qwen3-VL，内网）上两个引擎各跑「查健康 + 部门」「在总部下新建部门」：
 工具调用序列逐条相同，新建都停在确认卡片上。
 
-⚠️ pydantic-ai 2.57 要求 Python ≥ 3.11，3.10 上 uv 会解析到 2.54（`pyproject` 下限因此是 2.54）。
-两版之间 `AgentRunResult.usage` 从方法改成了属性，适配器两种都接；**3.10 那条没有实跑过**
-（CI 和生产镜像都是 3.13）。
+⚠️ `AgentRunResult.usage` 在 2.57 从方法改成了属性。Python 下限是 3.10 时那边只装得到 2.54，适配器两种都接过；
+#294 把 Python 下限提到 3.11，`pyproject` 的 pydantic-ai 下限跟着提到 2.57、只按属性读。
 
 ## 🔴 只读工具要真跑一遍：service 签名会被别的 PR 改掉
 

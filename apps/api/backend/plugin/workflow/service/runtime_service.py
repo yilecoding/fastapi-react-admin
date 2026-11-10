@@ -237,7 +237,7 @@ async def _run_effects(effects: list[Callable[[], Awaitable[None]]]) -> None:
     for eff in effects:
         try:
             await eff()
-        except Exception as e:  # ruff:ignore[try-except-in-loop]
+        except Exception as e:
             log.warning(f'审批推送失败（不影响结果）：{e!s}')
 
 

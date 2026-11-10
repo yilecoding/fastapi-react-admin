@@ -494,7 +494,7 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
         try:
             # 超时时 wait_for 会顺带取消 task
             await asyncio.wait_for(task, timeout=settings.OPERA_LOG_QUEUE_DRAIN_TIMEOUT)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log.warning(
                 f'操作日志没能在 {settings.OPERA_LOG_QUEUE_DRAIN_TIMEOUT} 秒内全部入库，没写完的已丢弃'
                 f'（队列里还剩 {cls.opera_log_queue.qsize()} 条，不含正在写的那一批）'

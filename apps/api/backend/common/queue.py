@@ -50,14 +50,14 @@ async def batch_dequeue(
             else:
                 try:
                     item = await asyncio.wait_for(queue.get(), timeout=_STOP_CHECK_INTERVAL)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
             items.append(item)
             observe_queue_size(queue, queue_name=queue_name)
 
     try:
         await asyncio.wait_for(collector(), timeout=timeout)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         pass
     except Exception as e:
         inc_queue_exception(queue_name=queue_name)

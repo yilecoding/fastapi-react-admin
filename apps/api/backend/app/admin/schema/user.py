@@ -1,8 +1,7 @@
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import ConfigDict, Field, HttpUrl, PlainSerializer, model_validator
-from typing_extensions import Self
 
 from backend.app.admin.model import User
 from backend.app.admin.schema.dept import GetDeptDetail
