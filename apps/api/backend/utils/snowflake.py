@@ -11,7 +11,7 @@ from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
 from backend.core.conf import settings
-from backend.database.redis import redis_client
+from backend.database.redis import RedisCli, redis_client
 from backend.utils.timezone import timezone
 
 
@@ -44,8 +44,13 @@ class SnowflakeConfig:
 class SnowflakeNodeManager:
     """雪花算法节点管理器，负责从 Redis 分配和管理节点 ID"""
 
-    def __init__(self) -> None:
-        """初始化节点管理器"""
+    def __init__(self, redis: RedisCli | None = None) -> None:
+        """初始化节点管理器
+
+        :param redis: 抢节点用的 Redis。默认是全局那个（按进程启动时的配置建的）；`fba init --auto`
+            会在进程里改 Redis 配置、另建一个客户端，要把那个传进来，否则租约记到了旧的 Redis 上
+        """
+        self._redis = redis or redis_client
         self.datacenter_id: int | None = None
         self.worker_id: int | None = None
         self.node_redis_prefix: str = f'{settings.SNOWFLAKE_REDIS_PREFIX}:nodes'
@@ -54,7 +59,7 @@ class SnowflakeNodeManager:
     async def acquire_node_id(self) -> tuple[int, int]:
         """从 Redis 获取可用的 datacenter_id 和 worker_id"""
         occupied_nodes = set()
-        async for key in redis_client.scan_iter(match=f'{self.node_redis_prefix}:*'):
+        async for key in self._redis.scan_iter(match=f'{self.node_redis_prefix}:*'):
             parts = key.split(':')
             if len(parts) >= 5:
                 try:
@@ -75,7 +80,7 @@ class SnowflakeNodeManager:
     async def _register(self, datacenter_id: int, worker_id: int) -> bool:
         key = f'{self.node_redis_prefix}:{datacenter_id}:{worker_id}'
         value = f'pid:{os.getpid()}-ts:{timezone.now().timestamp()}'
-        return await redis_client.set(key, value, nx=True, ex=settings.SNOWFLAKE_NODE_TTL_SECONDS)
+        return await self._redis.set(key, value, nx=True, ex=settings.SNOWFLAKE_NODE_TTL_SECONDS)
 
     async def start_heartbeat(self, datacenter_id: int, worker_id: int) -> None:
         """启动节点心跳"""
@@ -87,7 +92,7 @@ class SnowflakeNodeManager:
             while True:
                 await asyncio.sleep(settings.SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS)
                 try:
-                    await redis_client.expire(key, settings.SNOWFLAKE_NODE_TTL_SECONDS)
+                    await self._redis.expire(key, settings.SNOWFLAKE_NODE_TTL_SECONDS)
                     log.debug(f'雪花算法节点心跳任务开始：datacenter_id={datacenter_id}, worker_id={worker_id}')
                 except Exception as e:
                     log.error(f'雪花算法节点心跳任务失败：{e}')
@@ -105,7 +110,7 @@ class SnowflakeNodeManager:
 
         if self.datacenter_id is not None and self.worker_id is not None:
             key = f'{self.node_redis_prefix}:{self.datacenter_id}:{self.worker_id}'
-            await redis_client.delete(key)
+            await self._redis.delete(key)
 
 
 class Snowflake:
@@ -123,8 +128,11 @@ class Snowflake:
         self._node_manager: SnowflakeNodeManager | None = None
         self._auto_allocated = False  # 标记是否由 Redis 自动分配 ID
 
-    async def init(self) -> None:
-        """初始化雪花算法"""
+    async def init(self, redis: RedisCli | None = None) -> None:
+        """初始化雪花算法
+
+        :param redis: 动态分配节点时用的 Redis，见 `SnowflakeNodeManager`
+        """
         if self._initialized:
             return
 
@@ -143,7 +151,7 @@ class Snowflake:
                 raise errors.ServerError(msg=t('error.snowflake.config_failed'))
             else:
                 # Redis 动态分配
-                self._node_manager = SnowflakeNodeManager()
+                self._node_manager = SnowflakeNodeManager(redis)
                 self.datacenter_id, self.worker_id = await self._node_manager.acquire_node_id()
                 self._auto_allocated = True
                 await self._node_manager.start_heartbeat(self.datacenter_id, self.worker_id)
