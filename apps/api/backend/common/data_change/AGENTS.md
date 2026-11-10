@@ -83,7 +83,7 @@ PR 第一版合并前跑了一次独立评审，下面五条都是**读代码能
 
 | 症状 | 根因 | 修法 | 实测证据 |
 |---|---|---|---|
-| 🔴 SMTP 密码明文进审计表，留 180 天 | `EMAIL_PASSWORD` 就存在 `sys_config` 里，`value` 第一版按普通列记 | 登记表加 `secret_when`：键名以 PASSWORD / SECRET / TOKEN / API_KEY 结尾的行只记「改过」（和前端参数配置打码同一条规则） | `test_a_password_like_config_value_is_recorded_as_secret` |
+| 🔴 SMTP 密码明文进审计表，留 180 天 | `EMAIL_PASSWORD` 就存在 `sys_config` 里，`value` 第一版按普通列记 | 登记表加 `secret_when`：键名像密钥的行只记「改过」。规则后来抽到 `common/secret_keys.py`，和前端参数配置页、操作日志共用一条（原来这里抄的那份区分大小写、少了 CREDENTIALS，和前端对不上；`tests/test_secret_keys.py` 对账） | `test_a_password_like_config_value_is_recorded_as_secret` |
 | 一个请求拆成好几条记录；保存点里写记录出的错被吞掉、记录丢失 | **保存点提交也触发 `before_commit` / `after_commit`**（`_prepare_impl` 里 `if self._parent is None or self.nested`）。AI 工具每调用一次就开保存点写调用审计 | 两个钩子都 `session.in_nested_transaction()` 时跳过 | `test_a_savepoint_commit_does_not_split_or_drop_the_record`（去掉任一个跳过都红） |
 | 每次登录多查两次整行 | `update_login_time` 只写忽略列，照样前查后查 | 语句写的列全在忽略列里就不抓 | `test_writing_only_ignored_columns_skips_the_capture`（数 `_fetch` 调用） |
 | 从很多人身上摘掉一个角色：逐个拍集合、写几万行，全在业务事务里；按主键批量更新几千行在 SQL Server 上超 2100 个参数，业务 UPDATE 跟着失败 | 关联表没有 `BULK_LIMIT`；executemany 的主键一次塞进一个 IN | 关联表超限记一条汇总（哪个集合字段、多少个对象、加了 / 去了谁）；executemany 超限直接汇总（`varies`：每行值不同），不超限分批查 | `test_an_association_delete_over_the_limit_is_one_summary` · `test_executemany_over_the_limit_is_one_summary_without_a_pre_select` |
