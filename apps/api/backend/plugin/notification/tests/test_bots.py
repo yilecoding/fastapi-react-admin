@@ -27,7 +27,7 @@ from urllib.parse import parse_qs, quote_plus, urlsplit
 import httpx
 import pytest
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from backend.core.conf import settings
 from backend.plugin.notification import bot_platforms as bp
@@ -37,6 +37,13 @@ from backend.plugin.notification.model import Notification, NotificationBot, Not
 from backend.plugin.notification.schema.bot import CreateBotParam, UpdateBotParam
 from backend.plugin.notification.service import delivery_service, senders
 from backend.plugin.notification.service.notification_service import create_in_tx, notification_service
+from backend.tests.utils.data_change import (
+    assert_never_recorded,
+    changes_of,
+    column_value,
+    write_in_session,
+)
+from backend.tests.utils.data_change import field as change_field
 from backend.tests.utils.db import async_test_db_session
 from backend.utils.timezone import timezone
 
@@ -699,3 +706,51 @@ class TestWorker:
             '/sys/notification-channels/deliveries', params={'bot_id': bot_id}, headers=token_headers
         ).json()['data']
         assert [(i['id'], i['address'], i['user_id']) for i in page['items']] == [(str(pk), f'{TITLE} 飞书', None)]
+
+
+class TestChangeRecords:
+    """#281：群机器人的改动进数据变更记录。Webhook 地址本身就是凭据，和加签密钥一样只记「改过」；
+    每发一次都要写的那两列（最近发送时间 / 失败原因）不出记录"""
+
+    def test_lifecycle_is_recorded_without_url_or_secret(
+        self, client: TestClient, token_headers: dict[str, str]
+    ) -> None:
+        pk = _create(client, token_headers, sign_secret='SECfeishu-leak')['id']
+        ciphers = [column_value(NotificationBot, pk, c) for c in ('webhook_cipher', 'secret_cipher')]
+        body = {
+            'name': f'{TITLE} 换钉钉',
+            'platform': 'dingtalk',
+            'webhook_url': DINGTALK,
+            'sign_secret': 'SECding-leak',
+            'kinds': ['pytest.bot'],
+            'status': 1,
+        }
+        assert client.put(f'{API}/{pk}', json=body, headers=token_headers).json()['code'] == 200
+        ciphers += [column_value(NotificationBot, pk, c) for c in ('webhook_cipher', 'secret_cipher')]
+
+        before = len(changes_of('notification_bot', pk))
+        stmt = update(NotificationBot).where(NotificationBot.id == int(pk))
+        write_in_session(stmt.values(last_error='pytest 失败', last_sent_time=timezone.now()))
+        assert column_value(NotificationBot, pk, 'last_error') == 'pytest 失败'  # 先断言「写了」
+        assert len(changes_of('notification_bot', pk)) == before
+
+        assert client.delete(f'{API}/{pk}', headers=token_headers).json()['code'] == 200
+        records = changes_of('notification_bot', pk)
+        assert [r['action'] for r in records] == ['create', 'update', 'delete']
+        edited = records[1]
+        assert (
+            change_field(edited, 'platform')['old_label'] == '飞书'
+            and change_field(edited, 'platform')['new_label'] == '钉钉'
+        )
+        assert change_field(edited, 'webhook_cipher') == {
+            'field': 'webhook_cipher',
+            'label': 'Webhook 地址',
+            'secret': True,
+        }
+        assert change_field(edited, 'secret_cipher') == {'field': 'secret_cipher', 'label': '加签密钥', 'secret': True}
+        # 掩码照记（界面上本来就显示着）：看得出地址从飞书换成了钉钉，令牌本身由下面那句守着
+        hint = change_field(edited, 'webhook_hint')
+        assert 'open.feishu.cn' in hint['old'] and 'oapi.dingtalk.com' in hint['new'], hint
+        assert_never_recorded(
+            records, '0123456789abcdef-pytest', 'abcdef0123456789pytest', 'SECfeishu-leak', 'SECding-leak', *ciphers
+        )

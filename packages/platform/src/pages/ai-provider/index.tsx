@@ -10,6 +10,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { ChangeHistoryButton } from '../_shared/data-change/history-button'
 import { AddCard, CardField, CardFields, CardPageRefresh, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import {
@@ -96,6 +97,7 @@ export function AiProviderPage() {
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-1">
+                    <ChangeHistoryButton entity="ai_provider" entityId={provider.id} name={provider.name} testId={`provider-history-${provider.name}`} />
                     <Can perm="ai:provider:edit">
                       <Button size="icon" variant="ghost" className="size-7" aria-label={t('编辑')} onClick={() => openEdit(provider)}>
                         <IconPencil className="size-4" />
