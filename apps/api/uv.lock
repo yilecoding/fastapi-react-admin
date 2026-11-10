@@ -3995,7 +3995,7 @@ requires-dist = [
   { name = "pwdlib", specifier = ">=0.3.0" },
   { name = "py-ip2region", specifier = ">=3.0.4" },
   { name = "pydantic", specifier = ">=2.13.4" },
-  { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=2.54.0" },
+  { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=2.57.0" },
   { name = "pydantic-settings", specifier = ">=2.15.0" },
   { name = "pyjwt", specifier = ">=2.10.1" },
   { name = "pymysql", specifier = ">=1.1.2" },
