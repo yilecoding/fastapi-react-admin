@@ -18,6 +18,7 @@ from backend.common.log import log
 from backend.common.observability.prometheus.queue import inc_queue_exception, observe_queue_size
 from backend.common.queue import batch_consume
 from backend.common.response.response_code import StandardResponseCode
+from backend.common.secret_keys import is_secret_key_name
 from backend.core.conf import settings
 from backend.database.db import async_db_session
 from backend.utils.trace_id import get_request_trace_id
@@ -236,9 +237,19 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
         # 请求体
         body_data = await request.body()
         if body_data and not is_form:
-            # 注意：非 json 数据默认使用 data 作为键
-            if 'application/json' not in content_types:
-                args['data'] = body_data.decode('utf-8', 'ignore') if isinstance(body_data, bytes) else str(body_data)
+            # `application/merge-patch+json` 这类 FastAPI 也按 JSON 解析（`subtype.endswith('+json')`），这里要认同一组
+            is_json = any(ct == 'application/json' or ct.endswith('+json') for ct in content_types)
+            if not is_json:
+                # 注意：非 json 数据默认使用 data 作为键
+                text = body_data.decode('utf-8', 'ignore') if isinstance(body_data, bytes) else str(body_data)
+                # 🔴 声明不是 JSON、内容却是 JSON 的（`text/plain` 发 `{"password": …}`）照样按字段打码：
+                # 路由层会把它 422 拒掉，但这个中间件在路由之前，原样记就是明文进日志（#283 评审）
+                try:
+                    parsed = json.loads(text)
+                except ValueError:
+                    args['data'] = text
+                else:
+                    args['json'] = self.desensitization(parsed)
             else:
                 # 🔴 请求体声明是 JSON、实际不是（截断 / 手写错了）时不能在这里炸：这个中间件在路由**之前**，
                 # 抛出去就是一个 500，路由层本该回的 422（`json_invalid`）永远轮不到。接住，交给路由层去拒。
@@ -253,10 +264,9 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
                         '_message': '请求体不是合法 JSON，无法脱敏，未记录原文',
                     }
                 else:
-                    if isinstance(json_data, dict):
-                        args['json'] = self.desensitization(json_data)
-                    else:
-                        args['data'] = str(json_data)
+                    # 🔴 列表也要过脱敏：原来只有 dict 走这里，列表（批量保存参数配置之类）被 `str()` 成一段 Python repr
+                    # 记进 `data`，一个字符都不打码
+                    args['json'] = self.desensitization(json_data)
 
         if is_form:
             # 表单参数
@@ -337,9 +347,12 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
             return args
 
         if isinstance(args, dict):
+            # 🔴 参数配置那种 `{"key": "EMAIL_PASSWORD", "value": "<授权码>"}`：要打码的字段就叫 `value`，
+            # 按字段名的名单永远认不出来，只能看同一行的键名（规则和前端参数配置页打码同一条）
+            secret_value = 'value' in args and is_secret_key_name(args.get('key'))
             return {
                 key: '[REDACTED]'
-                if key in settings.OPERA_LOG_REDACT_KEYS
+                if key in settings.OPERA_LOG_REDACT_KEYS or (secret_value and key == 'value')
                 else OperaLogMiddleware.desensitization(value, _depth + 1)
                 for key, value in args.items()
             }

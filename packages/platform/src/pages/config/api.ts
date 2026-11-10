@@ -158,7 +158,7 @@ export const isGroupSwitch = (key: string) => key.endsWith('_CONFIG_STATUS')
  * 不是口令本身。用包含匹配会把它们也当密码 —— 数字输入框变成小圆点、
  * 保存确认框里显示「（已隐藏）」，人根本不知道自己把最小长度改成了几。
  */
-export const isSecret = (key: string) => /(PASSWORD|SECRET|TOKEN|API_?KEY|CREDENTIALS?)$/i.test(key)
+export const isSecret = (key: string) => /(PASSWORD|PASSWD|(^|_)PASS|(^|_)PWD|SECRET|SECRET_?KEY|PRIVATE_?KEY|TOKEN|API_?KEY|CREDENTIALS?|AUTH_?CODE)$/i.test(key)
 
 /**
  * 改动会立刻放宽安全边界的键。页面上要单独标出来，
