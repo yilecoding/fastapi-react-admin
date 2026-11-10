@@ -12,8 +12,8 @@ capture.py    拦截层：挂在 Session 类上的五个事件 · 「第一次�
 chain.py      防篡改链：写入时编号 + 签名（含上一行的签名）· 校验 · 保留期推锚点 · 迁移补签
 ```
 
-内置登记在 `app/admin/data_change.py`（用户 / 部门 / 角色 / 菜单 + 三张关联表 + 用户的二次验证 · 存储），插件放自己目录下的
-`data_change.py`（参数配置 `config` · 第三方账号 `oauth2` · 开放应用 / Webhook 端点 `open` · 群机器人 `notification` · 短信配置 `sms` ·
+内置登记在 `app/admin/data_change.py`（用户 / 部门 / 角色 / 菜单 + 三张关联表 + 用户的二次验证 · 存储 · 数据范围 / 规则），插件放自己目录下的
+`data_change.py`（参数配置 `config` · 第三方账号 `oauth2` · 开放应用 / Webhook 端点 `open` · 群机器人 / 通知策略 `notification` · 短信配置 `sms` ·
 模型密钥 / MCP 凭据 `ai`）。表是 `app/admin/model/data_change.py`，
 接口 `GET /api/v1/logs/changes`（+ `/meta`），权限码 `log:change:list`，**不按数据权限过滤**（#260 拍板，同操作日志）。
 前端：「日志管理 → 数据变更」页（`pages/log-change`）· 各页的「变更记录」抽屉（`pages/_shared/data-change`；卡片页用 `ChangeHistoryButton`）·
@@ -237,6 +237,20 @@ Webhook 每投递一次）原来没有，每次白查两次整行。测试要走
 一个字都不在记录里；E2E `data-change-secrets.spec.ts`（开放应用的行操作 · MCP 凭据的卡片按钮）。
 变异 11 处各有测试红：7 个密钥列逐个改成普通值 · 4 个「每次都写」的列逐个移出忽略；评审补的：去掉改属性那条捷径 → Webhook 那条红在查询次数；守卫按 import 认文件，在三个新登记表的 DAO / service 里塞绕过写法各红一条；E2E 去掉两个入口各红一条
 （只改权限码是等价变异：admin 是超管）。
+
+## #281 第二批：数据权限 · 通知策略
+
+- **数据范围只是一捆规则的名字**（运行时不构成边界）：范围名下记「名称 / 状态」和挂了哪些规则（关联表 `sys_data_scope_rule`
+  折叠成集合字段 `rules`，+ / − 按规则名）；规则自己的改动记在规则名下。改一条规则会影响所有挂着它的范围 ——
+  **看范围的记录看不出来**，要去规则那边看。运算符 / 表达式的显示名和前端 `OPERATOR_ITEMS` / `EXPRESSION_ITEMS` 同一组
+- **通知策略一格一行，没有行 = 注册表默认值**：第一次改某一格是「新建」，改回默认值是「删除」（`delete_cell`）。
+  🔴 对象名是「类型 · 渠道」（`label=('kind', 'channel')`，登记支持多列拼名字）：第一版只记类型码，而「改」的记录里只有变了的
+  「策略」、「删」的记录里没有字段 —— 同一次保存改了同一类型的邮件和短信两格，列表上是两条分不开的记录（#286 评审）。策略页是矩阵、没有「一行一个对象」，
+  「变更记录」按钮带着 `entity_type=notification_policy` 跳「数据变更」页
+
+**实测证据**：`test_data_permission_changes.py`（建规则 → 建范围 → 挂上 → 改规则表达式 → 改范围名和状态 → 摘下 → 删）·
+`test_channels.py::test_policy_changes_are_recorded`（新建 → 改 → 改回默认值 = 删除）· E2E `data-change-perm.spec.ts`。
+变异各红：范围不折叠规则 · 规则不登记 · 表达式 / 策略各少一个显示名；E2E 去掉两个入口各红一条。
 
 ## 性能
 
