@@ -12,9 +12,9 @@ capture.py    拦截层：挂在 Session 类上的五个事件 · 「第一次�
 chain.py      防篡改链：写入时编号 + 签名（含上一行的签名）· 校验 · 保留期推锚点 · 迁移补签
 ```
 
-内置登记在 `app/admin/data_change.py`（用户 / 部门 / 角色 / 菜单 + 三张关联表 + 用户的二次验证 · 存储），插件放自己目录下的
-`data_change.py`（参数配置 `config` · 第三方账号 `oauth2` · 开放应用 / Webhook 端点 `open` · 群机器人 `notification` · 短信配置 `sms` ·
-模型密钥 / MCP 凭据 `ai`）。表是 `app/admin/model/data_change.py`，
+内置登记在 `app/admin/data_change.py`（用户 / 部门 / 角色 / 菜单 + 三张关联表 + 用户的二次验证 · 存储 · 数据范围 / 规则）和 `app/task/data_change.py`（定时任务），插件放自己目录下的
+`data_change.py`（参数配置 `config` · 第三方账号 `oauth2` · 开放应用 / Webhook 端点 `open` · 群机器人 / 通知策略 `notification` · 短信配置 `sms` ·
+模型密钥 / MCP 凭据 `ai` · 字典 `dict` · 流程定义 `workflow`）。表是 `app/admin/model/data_change.py`，
 接口 `GET /api/v1/logs/changes`（+ `/meta`），权限码 `log:change:list`，**不按数据权限过滤**（#260 拍板，同操作日志）。
 前端：「日志管理 → 数据变更」页（`pages/log-change`）· 各页的「变更记录」抽屉（`pages/_shared/data-change`；卡片页用 `ChangeHistoryButton`）·
 操作日志详情的「这次改了什么」（按 `trace_id`）。保留期参数 `DATA_CHANGE_RETENTION_DAYS`（默认 180，参数配置「日志」组），
@@ -237,6 +237,39 @@ Webhook 每投递一次）原来没有，每次白查两次整行。测试要走
 一个字都不在记录里；E2E `data-change-secrets.spec.ts`（开放应用的行操作 · MCP 凭据的卡片按钮）。
 变异 11 处各有测试红：7 个密钥列逐个改成普通值 · 4 个「每次都写」的列逐个移出忽略；评审补的：去掉改属性那条捷径 → Webhook 那条红在查询次数；守卫按 import 认文件，在三个新登记表的 DAO / service 里塞绕过写法各红一条；E2E 去掉两个入口各红一条
 （只改权限码是等价变异：admin 是超管）。
+
+## #281 第二批：数据权限 · 通知策略
+
+- **数据范围只是一捆规则的名字**（运行时不构成边界）：范围名下记「名称 / 状态」和挂了哪些规则（关联表 `sys_data_scope_rule`
+  折叠成集合字段 `rules`，+ / − 按规则名）；规则自己的改动记在规则名下。改一条规则会影响所有挂着它的范围 ——
+  **看范围的记录看不出来**，要去规则那边看。运算符 / 表达式的显示名和前端 `OPERATOR_ITEMS` / `EXPRESSION_ITEMS` 同一组
+- **通知策略一格一行，没有行 = 注册表默认值**：第一次改某一格是「新建」，改回默认值是「删除」（`delete_cell`）。
+  🔴 对象名是「类型 · 渠道」（`label=('kind', 'channel')`，登记支持多列拼名字）：第一版只记类型码，而「改」的记录里只有变了的
+  「策略」、「删」的记录里没有字段 —— 同一次保存改了同一类型的邮件和短信两格，列表上是两条分不开的记录（#286 评审）。策略页是矩阵、没有「一行一个对象」，
+  「变更记录」按钮带着 `entity_type=notification_policy` 跳「数据变更」页
+
+**实测证据**：`test_data_permission_changes.py`（建规则 → 建范围 → 挂上 → 改规则表达式 → 改范围名和状态 → 摘下 → 删）·
+`test_channels.py::test_policy_changes_are_recorded`（新建 → 改 → 改回默认值 = 删除）· E2E `data-change-perm.spec.ts`。
+变异各红：范围不折叠规则 · 规则不登记 · 表达式 / 策略各少一个显示名；E2E 去掉两个入口各红一条。
+
+## #281 第三批：定时任务 · 字典 · 流程定义
+
+| 坑 | 不处理会怎样 | 怎么做的 |
+|---|---|---|
+| 🔴 加载器原来只认 `app.admin` 和插件 | 登记写在 `app/task/data_change.py` **静默不生效**：不报错，改了定时任务就是没有记录 | 加载器扫 `backend/app/*` 和插件下所有的 `data_change.py`；`test_scheduler_api.py` 那条断言真的出了记录（改回只认 `app.admin` → 红） |
+| beat 每触发一次回写「累计触发 / 最近触发」 | 每触发一次一条记录 | 两列进 `ignore`；回写只动忽略列，拦截层直接跳过（测试照 `_persist` 的写法写一次，断言 0 条） |
+| 流程设计器每点一次保存，草稿 JSON 整段变 | 刷屏，而且草稿不生效 | 草稿两列进 `ignore`；记的是发布（`current_version_id` 引用版本号：「已发布版本：→ 1」）和状态 |
+| 引用的显示名不一定是字符串（版本号是整数） | 前端拿它当文本交给 `t()` | 拦截层把引用的显示名一律转成字符串 |
+| 🔴 发号器原来取 `timezone.now()`，假时钟测试（`test_scheduler_timing.py`）一改调度就要写审计行、要发 ID | 发号器记住假时钟下的时间戳，假时钟一撤，之后**整套 pytest 连环几百条**「时钟回拨」，红的全是不相干的测试 | `utils/snowflake.py` 改用系统时钟（`tests/test_snowflake_clock.py`；退回 → 红） |
+| 字典项折叠进类型 | 一个类型几十项，改一项就是类型上一条「字典项：…」，看不出改的是哪一项 | 字典项单独一类，所属类型按引用存当时的名字；`type_code` 是冗余副本，不另记 |
+
+定时任务的 `args` / `kwargs` 按普通值整段记：任务参数不该放凭据（要用的密钥放 `.env` 或参数配置）。
+
+**插件开关没接**：状态存在 Redis（`PLUGIN_REDIS_PREFIX`），不经过数据库会话，拦截层看不到；要接得先有「手动记一笔」的入口。
+
+**实测证据**：`test_scheduler_api.py::test_changes_are_recorded_but_beat_bookkeeping_is_not` · `plugin/dict/tests/test_dict_changes.py` ·
+`test_definition.py::test_definition_changes_are_recorded_but_drafts_are_not` · E2E `data-change-ops.spec.ts` 三条。
+变异各红：加载器只认 `app.admin` · 触发计数不忽略 · 草稿不忽略 · 引用显示名不转字符串 · 字典项不引用类型；E2E 去掉三个入口各红一条。
 
 ## 性能
 

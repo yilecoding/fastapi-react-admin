@@ -138,6 +138,24 @@ X-Acting-User: <用户名>
 
 凭据停用、删除、重新生成都在下一个请求就生效（每次现查，不缓存），停用 AI 插件也会一并关掉网关。插件分册记录过一次实测（起真实 uvicorn，用官方 `mcp` Python 客户端连）：代表 STAFF 账号调 `dept_list` 被拒；白名单外的用户在 HTTP 层就是 403；4 次调用对应 4 行 `channel=mcp:e2e` 审计；额度设成 5 时连发 7 次，结果是 5 × 200、2 × 429（`Retry-After: 60`）。
 
+## 有哪些开关？
+
+各页面的权限码：对话 `ai:chat:use` · 模型密钥管理 `ai:provider:list` / `add` / `edit` / `del` · 调用日志 `ai:log:list` · MCP 凭据 `ai:mcp:list` / `add` / `edit` / `del`。AI 插件没有放进参数配置页的项，下面全部在 `.env` 改（写在 `plugin/ai/plugin.toml` 的 `[settings]`），改完重启后端：
+
+| 键 | 默认值 | 说明 |
+|---|---|---|
+| `AI_ENCRYPT_SECRET_KEY` | 空 | 供应商 API Key 落库加密用；留空 = 拒绝保存密钥，不存明文 |
+| `AI_AGENT_ENGINE` | `native` | `native`（零额外依赖）或 `pydantic_ai`；权限、确认、审计不随引擎变 |
+| `AI_CONFIRM_MUTATING_TOOLS` | `true` | 写操作是否要本人确认；关掉 = 模型一调用就执行，谨慎 |
+| `AI_CONFIRM_TOKEN_EXPIRE_SECONDS` | `300` | 确认令牌的有效期 |
+| `AI_MAX_TOOL_ROUNDS` | `5` | 一句话里最多连续调用几轮工具 |
+| `AI_CHAT_RATE_PER_MINUTE` | `20` | 每人每分钟最多发几句（按人计，不按 IP） |
+| `AI_TOOL_DOMAINS` | `system` · `role` · `dept` · `menu` · `user` · `log` · `weather` · `workflow` | 开放给 AI 的工具域；注册了但不在这里的不会出现在工具清单里 |
+| `AI_MCP_ENABLED` | `false` | MCP 网关总开关 |
+| `AI_MCP_RATE_PER_MINUTE` | `120` | 每份 MCP 凭据每分钟的请求上限（按凭据计） |
+| `AI_WEB_BASE_URL` | `http://localhost:8888` | MCP 发起的写操作让本人确认时拼的地址，**上线前改成真实域名** |
+| `AI_EXTERNAL_HTTP_TIMEOUT` · `AI_EXTERNAL_HTTP_USE_PROXY` | `15` · `true` | 外部 HTTP 工具（如天气）的超时，是否走环境里配的代理 |
+
 ## 它不做什么？
 
 - 没有删除类工具。也没有「改菜单名」：菜单名按语言走翻译，做成工具的话卡片会说改好了，英文界面却没变。

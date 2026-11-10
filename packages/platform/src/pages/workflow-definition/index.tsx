@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAlertTriangle, IconArrowLeft, IconCircleX, IconDeviceFloppy, IconHierarchy2, IconLoader2,
+  IconAlertTriangle, IconArrowLeft, IconCircleX, IconDeviceFloppy, IconHierarchy2, IconHistory, IconLoader2,
   IconPencil, IconPlayerPause, IconPlayerPlay, IconPlus, IconRocket, IconSearch, IconSparkles, IconTrash,
 } from '@tabler/icons-react'
 
@@ -25,6 +25,7 @@ import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { RowActions } from '../_shared/cells'
+import { DataChangeSheet } from '../_shared/data-change/history-sheet'
 import { FormField as Row } from '../_shared/form-fields'
 import { RefreshButton } from '../_shared/filters'
 import { listState } from '../_shared/list-query'
@@ -97,6 +98,7 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
   const list = listState(query)
   const [creating, setCreating] = React.useState(false)
   const [deleting, setDeleting] = React.useState<Definition | null>(null)
+  const [historyOf, setHistoryOf] = React.useState<Definition | null>(null)
   const [keyword, setKeyword] = React.useState('')
   const del = useDeleteDefinition()
   const setStatus = useSetDefinitionStatus()
@@ -203,6 +205,10 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
                           icon: d.status === 'published' ? IconPlayerPause : IconPlayerPlay,
                           onClick: () => toggle(d),
                         },
+                        {
+                          key: 'history', label: t('变更记录'), icon: IconHistory, perm: 'log:change:list',
+                          testId: `wfd-history-${d.code}`, onClick: () => setHistoryOf(d),
+                        },
                         { key: 'delete', label: t('删除'), icon: IconTrash, danger: true, perm: 'workflow:definition:del', onClick: () => setDeleting(d) },
                       ]}
                     />
@@ -233,6 +239,10 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
       )}
 
       <CreateDialog open={creating} onOpenChange={setCreating} onCreated={onOpen} />
+      <DataChangeSheet
+        entity="wf_definition" entityId={historyOf?.id ?? null} name={historyOf?.name}
+        open={historyOf !== null} onOpenChange={(o) => !o && setHistoryOf(null)}
+      />
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}

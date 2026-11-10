@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { IconDeviceFloppy, IconRestore } from '@tabler/icons-react'
+import { Link } from '@tanstack/react-router'
+import { IconDeviceFloppy, IconHistory, IconRestore } from '@tabler/icons-react'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -86,6 +87,19 @@ export function NotifyPolicyPage() {
           <Button variant="outline" size="sm" disabled={!dirty || update.isPending} onClick={() => setDraft({})} data-testid="policy-discard">
             <IconRestore />
             {t('放弃修改')}
+          </Button>
+        </Can>
+        {/* 一格一行、没有对象详情可开：变更记录去「数据变更」页按类型筛（#281） */}
+        <Can perm="log:change:list">
+          <Button
+            variant="outline"
+            size="sm"
+            nativeButton={false}
+            render={<Link to="/log/change" search={{ entity_type: 'notification_policy' }} />}
+            data-testid="policy-history"
+          >
+            <IconHistory />
+            {t('变更记录')}
           </Button>
         </Can>
         <RefreshButton busy={query.isFetching} onClick={() => void query.refetch()} />
