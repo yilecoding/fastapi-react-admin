@@ -18,6 +18,7 @@ from backend.common.log import log
 from backend.common.observability.prometheus.queue import inc_queue_exception, observe_queue_size
 from backend.common.queue import batch_consume
 from backend.common.response.response_code import StandardResponseCode
+from backend.common.secret_keys import is_secret_key_name
 from backend.core.conf import settings
 from backend.database.db import async_db_session
 from backend.utils.trace_id import get_request_trace_id
@@ -253,10 +254,9 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
                         '_message': '请求体不是合法 JSON，无法脱敏，未记录原文',
                     }
                 else:
-                    if isinstance(json_data, dict):
-                        args['json'] = self.desensitization(json_data)
-                    else:
-                        args['data'] = str(json_data)
+                    # 🔴 列表也要过脱敏：原来只有 dict 走这里，列表（批量保存参数配置之类）被 `str()` 成一段 Python repr
+                    # 记进 `data`，一个字符都不打码
+                    args['json'] = self.desensitization(json_data)
 
         if is_form:
             # 表单参数
@@ -337,9 +337,12 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
             return args
 
         if isinstance(args, dict):
+            # 🔴 参数配置那种 `{"key": "EMAIL_PASSWORD", "value": "<授权码>"}`：要打码的字段就叫 `value`，
+            # 按字段名的名单永远认不出来，只能看同一行的键名（规则和前端参数配置页打码同一条）
+            secret_value = 'value' in args and is_secret_key_name(args.get('key'))
             return {
                 key: '[REDACTED]'
-                if key in settings.OPERA_LOG_REDACT_KEYS
+                if key in settings.OPERA_LOG_REDACT_KEYS or (secret_value and key == 'value')
                 else OperaLogMiddleware.desensitization(value, _depth + 1)
                 for key, value in args.items()
             }
