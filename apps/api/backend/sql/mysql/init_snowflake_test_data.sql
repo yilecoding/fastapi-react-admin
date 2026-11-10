@@ -74,7 +74,7 @@ values
 
 insert into task_scheduler (id, name, task, args, kwargs, queue, exchange, routing_key, start_time, expire_time, expire_seconds, type, interval_every, interval_period, crontab, one_off, enabled, total_run_count, last_run_time, remark, created_time, updated_time, deleted, deleted_time)
 values
-(2049629108253622320, '清理历史日志', 'maintenance.prune_logs', null, '{"days": 30}', null, null, null, null, null, null, 1, null, null, '15 3 * * *', 0, 1, 0, null, '保留 30 天。日志表是全库长得最快的表，不清理会一直涨', '2026-08-22 17:00:00', null, 0, null),
+(2049629108253622320, '清理历史日志', 'maintenance.prune_logs', null, '{"days": 180}', null, null, null, null, null, null, 1, null, null, '15 3 * * *', 0, 1, 0, null, '保留 180 天：网络安全法要求网络日志留存不少于六个月。日志表是全库长得最快的表，不清理会一直涨', '2026-08-22 17:00:00', null, 0, null),
 (2049629108253622321, '清理任务执行记录', 'maintenance.prune_task_results', null, '{"days": 30}', null, null, null, null, null, null, 1, null, null, '30 3 * * *', 0, 1, 0, null, '保留 30 天。celery 自带的 backend_cleanup 不会被装上（DatabaseScheduler 重写了 setup_schedule），必须自己排', '2026-08-22 17:00:00', null, 0, null),
 (2049629108253622322, '每日问候', 'notification.send_daily_greeting', null, null, null, null, null, null, null, null, 1, null, null, '0 9 * * *', 0, 1, 0, null, '每天 9:00 给全员发一条随机问候语，顺带验收消息中心链路（落库/未读数/socket 推送/前端红点）是否通畅', '2026-08-22 17:00:00', null, 0, null),
 (2049629108253622323, '清理回收站', 'maintenance.purge_recycled_files', null, null, null, null, null, null, null, null, 1, null, null, '45 3 * * *', 0, 1, 0, null, '彻底删除回收站里超过保留期的文件（保留天数是 FILE_RECYCLE_DAYS，默认 30，不在这里配）', '2026-10-22 12:00:00', null, 0, null),
