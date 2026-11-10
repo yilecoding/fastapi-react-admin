@@ -149,7 +149,7 @@ Expo App 的范围是**手机上真正要办的事**（[#224](https://github.com
 
 ## 快速开始
 
-需要 Node ≥ 22.13、Python ≥ 3.10、[uv](https://docs.astral.sh/uv/) 和 Docker。
+需要 Node ≥ 22.13、Python ≥ 3.11、[uv](https://docs.astral.sh/uv/) 和 Docker。
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d          # PostgreSQL + Redis

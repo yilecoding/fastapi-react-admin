@@ -20,9 +20,9 @@
   "devDependencies": {
     "@admin/platform": "workspace:*",
     "@types/node": "^24",
-    "electron": "^42.1.0",
+    "electron": "^42.11.18",
     "electron-builder": "^26.8.1",
     "typescript": "~6",
-    "vite": "^8"
+    "vite": "^8.2.4"
   }
 }

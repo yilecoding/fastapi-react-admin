@@ -10,7 +10,7 @@ sidebar:
 ## 需要装什么
 
 - Node.js ≥ 22.13（pnpm 版本由 `package.json` 锁定，corepack 会自动装）
-- Python ≥ 3.10 和 [uv](https://docs.astral.sh/uv/)
+- Python ≥ 3.11 和 [uv](https://docs.astral.sh/uv/)
 - Docker
 
 ## 怎么跑起来

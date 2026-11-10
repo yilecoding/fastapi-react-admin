@@ -41,7 +41,7 @@
     "globals": "^17",
     "typescript": "~6",
     "typescript-eslint": "^8",
-    "vitest": "^3.2.7"
+    "vitest": "^4.1.12"
   },
   "exports": {
     "./api-client/*": "./src/api-client/*.ts",

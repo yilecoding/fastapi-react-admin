@@ -146,7 +146,7 @@ Switch with `DATABASE_TYPE` in `.env` — same code, same migration chain, seed 
 
 ## Quick start
 
-You need Node ≥ 22.13, Python ≥ 3.10, [uv](https://docs.astral.sh/uv/) and Docker.
+You need Node ≥ 22.13, Python ≥ 3.11, [uv](https://docs.astral.sh/uv/) and Docker.
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d          # PostgreSQL + Redis
