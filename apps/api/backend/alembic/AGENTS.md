@@ -137,6 +137,24 @@ PostgreSQL 两个方向都不挡。
 **实测证据**（2026-10-30，SQL Server 2022，临时表 `a BIGINT` + 索引）：`ALTER COLUMN a BIGINT NULL` 成功（`is_nullable` = 1）；
 `ALTER COLUMN a INT NULL` 和反方向的 `BIGINT NOT NULL` 都报 5074。
 
+## 🔴 `fba init` 要自己初始化雪花节点 —— CI 原来从不跑它
+
+**症状**：全新环境 `pnpm db:init`，建表、灌种子都过了，最后报「雪花 ID 生成失败，雪花算法未初始化」，
+整个事务回滚，库里**一张表都没有**。快速开始的第一条命令就失败，而 CI 全绿。
+
+**根因**：`_set_admin_password` 改 admin / test 的密码会进数据变更审计（#260），审计行用雪花主键，
+在**提交那一刻**才写。API 在 lifespan、worker 在 `worker_init` 里初始化雪花节点，命令行两条都不走。
+CI 的库全走 `reset_test_db`，`fba init` 这条路在 CI 里一次都没跑过，所以 #260 合进来就坏了、没人知道。
+
+**修法**：`_set_admin_password` 写库前 `await snowflake.init()`，`Init.__call__` 的 `finally` 里
+`snowflake.shutdown()` 放掉节点。**新增任何会写审计表的命令行入口，同样要先 init。**
+CI 的 pytest · PostgreSQL job 末尾加了「fba init（新库，非交互）」，对一个新库真跑一遍再查库里的结果；
+它必须排在 pytest **之后** —— init 会按前缀清 Redis 里的会话，放前面会把测试套件的登录态清掉。
+
+**实测证据**（2026-11-10）：修前对空库 `fba init` 报上面那句并回滚（`sys_user` 不存在）；修后
+admin 启用、test 停用、2 条改密码的审计行、`alembic_version` 在 head。CI 那一步的命令在本地按
+`bash -e` 原样跑过：修前在 init 那行退出码 1，修后全部通过。
+
 ## 种子的一致性有两维，行数/列清单只是其中一维
 
 `tests/test_seed_dialects.py` 原来查四件事：三份文件都在 · 表相同 ·
