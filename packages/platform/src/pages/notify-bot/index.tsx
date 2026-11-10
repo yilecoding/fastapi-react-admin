@@ -13,6 +13,7 @@ import { toast } from '@admin/ui/components/toast'
 
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
+import { ChangeHistoryButton } from '../_shared/data-change/history-button'
 import { AddCard, CardField, CardFields, CardPageRefresh, ResourceCard } from '../_shared/resource-card'
 import { StatusBadge } from '../_shared/status'
 import { botOptionsQuery, botsQuery, useDeleteBot, useTestBot, type Bot } from './api'
@@ -91,6 +92,7 @@ export function NotifyBotPage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1">
+                  <ChangeHistoryButton entity="notification_bot" entityId={bot.id} name={bot.name} testId={`bot-history-${bot.name}`} />
                   <Can perm="sys:notification:bot:edit">
                     <Button
                       size="icon"
