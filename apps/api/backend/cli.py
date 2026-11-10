@@ -60,6 +60,7 @@ from backend.plugin.sql import build_sql_filename, get_plugin_destroy_sql, get_p
 from backend.plugin.validator import validate_plugin_config
 from backend.utils.console import console
 from backend.utils.dynamic_import import import_module_cached
+from backend.utils.snowflake import snowflake
 from backend.utils.sql_parser import parse_sql_script
 from backend.utils.timezone import timezone
 
@@ -332,6 +333,13 @@ async def _set_admin_password(db: AsyncSession) -> None:
             '（种子里的 admin/123456 不允许留到初始化完成）',
             code=1,
         )
+
+    # 🔴 改密码会进数据变更审计（#260），审计行用雪花主键。API 在 lifespan、worker 在 worker_init 里
+    # 初始化雪花节点，**命令行两条都不走** —— 不先 init，`fba init` 建完表、灌完种子，到提交那一刻才报
+    # 「雪花 ID 生成失败，雪花算法未初始化」，整个事务回滚、库里一张表都没有。
+    # CI 原来从不跑 `fba init`（测试库走 reset_test_db），所以 #260 合进来之后这条路一直是坏的；
+    # 现在 CI 的 pytest · PostgreSQL job 末尾对一个新库真跑一遍。释放在 `Init.__call__` 的 finally 里
+    await snowflake.init()
 
     admin = await user_dao.get_by_username(db, 'admin')
     if admin is None:
@@ -775,14 +783,18 @@ class Init:
     ]
 
     async def __call__(self) -> None:
-        if self.auto:
-            await auto_init()
-        else:
-            async with async_db_session.begin() as db:
-                created = await init(db, redis_client)
-            if created:
-                await run_in_threadpool(_stamp_alembic_head)
-                console.note('已把新库标记到迁移 head')
+        try:
+            if self.auto:
+                await auto_init()
+            else:
+                async with async_db_session.begin() as db:
+                    created = await init(db, redis_client)
+                if created:
+                    await run_in_threadpool(_stamp_alembic_head)
+                    console.note('已把新库标记到迁移 head')
+        finally:
+            # `_set_admin_password` 里占了一个雪花节点（Redis 里有租约 + 心跳任务），用完放掉；没占过时是空操作
+            await snowflake.shutdown()
 
 
 @cappa.command(help='运行 API 服务', default_long=True)
