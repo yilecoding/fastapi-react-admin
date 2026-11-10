@@ -630,3 +630,60 @@ def test_fresh_install_has_every_index_the_models_declare(client: TestClient, to
         '模型里声明了这些索引，库里却没有 —— 改了模型但没在库上建（没有 alembic，'
         '这两步靠人对账）：\n  ' + '\n  '.join(missing)
     )
+
+
+# ── 数据变更记录（#281）──────────────────────────────────────────────────────
+
+
+def test_changes_are_recorded_but_beat_bookkeeping_is_not(client: TestClient, token_headers, uniq):
+    """改 crontab / 参数、启停、删都有记录；beat 每触发一次回写的「累计触发 / 最近触发」不出记录。
+
+    🔴 登记写在 `app/task/data_change.py`：加载器原来只认 `app.admin` 和插件，
+    这个文件**静默不生效**（不报错，就是没记录）
+    """
+    import sqlalchemy as sa
+
+    from backend.app.task.model import TaskScheduler
+    from backend.tests.utils.data_change import changes_of, column_value, field, write_in_session
+    from backend.utils.timezone import timezone
+
+    body = {
+        'name': uniq,
+        'task': 'maintenance.prune_logs',
+        'type': 1,
+        'crontab': '15 3 * * *',
+        'kwargs': '{"days": 180}',
+    }
+    r = client.post(BASE, headers=token_headers, json=body)
+    assert r.status_code == 200, r.text
+    pk = r.json()['data']['id']
+    edited = {**body, 'crontab': '30 4 * * *', 'kwargs': '{"days": 200}'}
+    assert client.put(f'{BASE}/{pk}', headers=token_headers, json=edited).status_code == 200
+    assert client.put(f'{BASE}/{pk}/status', headers=token_headers, params={'enabled': False}).status_code == 200
+
+    # beat 的回写（`schedulers.ModelEntry._persist`）：同一种写法，只动忽略列
+    before = len(changes_of('task_scheduler', pk))
+    table = TaskScheduler.__table__
+    write_in_session(
+        sa
+        .update(table)
+        .where(table.c.id == int(pk))
+        .values(
+            last_run_time=timezone.now(), total_run_count=table.c.total_run_count + 1, updated_time=table.c.updated_time
+        )
+    )
+    assert column_value(TaskScheduler, pk, 'total_run_count') == 1  # 先断言「写了」
+    assert len(changes_of('task_scheduler', pk)) == before
+
+    client.request('DELETE', BASE, headers=token_headers, json={'pks': [pk]})
+    records = changes_of('task_scheduler', pk)
+    assert [r['action'] for r in records] == ['create', 'update', 'update', 'delete']
+    _, edit, toggle, _ = records
+    assert field(edit, 'crontab') == {
+        'field': 'crontab',
+        'label': 'Crontab 表达式',
+        'old': '15 3 * * *',
+        'new': '30 4 * * *',
+    }
+    assert field(edit, 'kwargs')['new'] == '{"days": 200}'
+    assert field(toggle, 'enabled')['old_label'] == '是' and field(toggle, 'enabled')['new_label'] == '否'
