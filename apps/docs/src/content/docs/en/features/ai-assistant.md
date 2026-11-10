@@ -136,6 +136,24 @@ The external system declares which user it is acting for, so the gateway trusts 
 
 Disabling, deleting or regenerating a credential takes effect on the next request, because nothing is cached. Disabling the AI plugin closes the gateway. The plugin notes record a test run against a real uvicorn server with the official `mcp` Python client: a STAFF account was refused `dept_list`, a user outside the allow-list got 403 at the HTTP layer, four calls left four audit rows tagged `mcp:e2e`, and with a quota of 5, seven requests returned 5 × 200 and 2 × 429 (`Retry-After: 60`).
 
+## Which settings are there?
+
+Permission codes per screen: chat `ai:chat:use` · model credentials `ai:provider:list` / `add` / `edit` / `del` · tool logs `ai:log:list` · MCP credentials `ai:mcp:list` / `add` / `edit` / `del`. The AI plugin has nothing on the Config page; everything below is set in `.env` (declared in the `[settings]` of `plugin/ai/plugin.toml`), and the backend needs a restart after a change:
+
+| Key | Default | Notes |
+|---|---|---|
+| `AI_ENCRYPT_SECRET_KEY` | empty | Encrypts provider API keys at rest; empty = keys cannot be saved, nothing is stored in plain text |
+| `AI_AGENT_ENGINE` | `native` | `native` (no extra dependencies) or `pydantic_ai`; permissions, confirmation and audit are the same either way |
+| `AI_CONFIRM_MUTATING_TOOLS` | `true` | Whether writes need the user's confirmation; off = the model's call executes immediately, use with care |
+| `AI_CONFIRM_TOKEN_EXPIRE_SECONDS` | `300` | Lifetime of a confirmation token |
+| `AI_MAX_TOOL_ROUNDS` | `5` | Tool-call rounds allowed per message |
+| `AI_CHAT_RATE_PER_MINUTE` | `20` | Messages per person per minute (per person, not per IP) |
+| `AI_TOOL_DOMAINS` | `system` · `role` · `dept` · `menu` · `user` · `log` · `weather` · `workflow` | Tool domains exposed to the AI; registered tools outside these never appear |
+| `AI_MCP_ENABLED` | `false` | Master switch for the MCP gateway |
+| `AI_MCP_RATE_PER_MINUTE` | `120` | Requests per minute per MCP credential (per credential) |
+| `AI_WEB_BASE_URL` | `http://localhost:8888` | Base URL for the confirmation link when MCP triggers a write; **set it to the real domain before going live** |
+| `AI_EXTERNAL_HTTP_TIMEOUT` · `AI_EXTERNAL_HTTP_USE_PROXY` | `15` · `true` | Timeout for external HTTP tools (such as weather), and whether to use the proxy configured in the environment |
+
 ## What does it not do?
 
 - It has no delete tools. There is also no "rename menu" tool: menu titles are translated per language, so a rename would appear to succeed but leave the English UI unchanged.
