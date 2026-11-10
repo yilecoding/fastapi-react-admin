@@ -57,6 +57,7 @@ const FEATURE_GROUPS = [
   { label: '工作区', en: 'Workspace', pages: ['multi-tab'] },
   { label: '协同', en: 'Collaboration', pages: ['approval-workflow', 'notifications'] },
   { label: '文件与数据', en: 'Files & data', pages: ['import-export', 'file-storage', 'databases'] },
+  { label: '运维', en: 'Operations', pages: ['scheduler', 'monitoring'] },
   { label: '集成与多端', en: 'Integrations & clients', pages: ['ai-assistant', 'open-api', 'clients'] },
 ]
 const FEATURE_TOP = ['overview']
