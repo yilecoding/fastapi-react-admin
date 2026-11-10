@@ -67,7 +67,7 @@ Locally: `pnpm --filter web build`, then `pnpm --filter @admin/desktop package`.
 
 - **Native screens, not a WebView.** Tabs for Home, Apps and Me, plus notifications, profile and password, settings, a users list → detail → delete flow written as the pattern to copy, and notice detail with attachments. Lists use `FlatList` with infinite queries. Notice bodies (HTML from the web's Tiptap editor) are turned into native components through an allow-list, not rendered in a WebView.
 - **Shared with web:** `@admin/api` (envelope handling, single-flight 401 refresh, request types inferred from the generated `schema.d.ts`) and `@admin/i18n`. It does not depend on `@admin/platform`, which is web-shaped.
-- **Sign-in:** password or SMS code, both behind the image captcha. The access token is stored in `expo-secure-store` (Keystore / Keychain), never `AsyncStorage`. The refresh token stays in the httpOnly cookie; on Android, React Native's cookie jar sends it back automatically and keeps it across cold starts.
+- **Sign-in:** password or SMS code, both behind the image captcha; accounts with two-factor enter their code as a second step (someone required to enrol but not yet enrolled must do it on the web first). The access token is stored in `expo-secure-store` (Keystore / Keychain), never `AsyncStorage`. The refresh token stays in the httpOnly cookie; on Android, React Native's cookie jar sends it back automatically and keeps it across cold starts.
 - **Server address is set in the app** and stored on the device. Before saving, the app probes `/auth/captcha` to confirm the address is a reachable backend. The same `oklch()` colour tokens as the web app render pixel-identical on Android.
 
 ## What doesn't the mobile app do yet?
@@ -76,9 +76,21 @@ Locally: `pnpm --filter web build`, then `pnpm --filter @admin/desktop package`.
 - There are no automated mobile tests. The CI gate is `pnpm build`, which includes `expo export --platform android` and catches bundle-time failures only.
 - No real-time updates (no socket.io; screens refresh on open and pull-to-refresh). System push, QR scanning and silent printing are out of scope.
 - No published APK. `pnpm --filter @admin/mobile apk` has only been run as far as native module compilation, and it signs with the template's debug keystore; generate your own keystore before shipping.
-- Changing phone number or email needs a verification-code flow that exists only on the web.
+- Changing the email address needs an email verification code, which only the web has; in the app the email is read-only. A phone number can be bound in the app's profile with an SMS code.
 
 To run it: `pnpm --filter api dev:host` (backend on `0.0.0.0:8088`), then `pnpm mobile:dev`, and open the printed `exp://…:8800` address in Expo Go for SDK 57.
+
+## Which settings are there?
+
+| Client | Where | Key | Default | Notes |
+|---|---|---|---|---|
+| Web | Build-time environment variable | `VITE_API_BASE` | `http://127.0.0.1:8088` | Backend address, baked into the frontend build |
+| Desktop | `config.json` in the app data directory, read at run time | `serverUrl` | empty | Backend address; one installer can serve different environments |
+| Desktop | same | `printerName` | empty | Printer for silent printing; empty = system default |
+| Desktop | same | `kiosk` | `false` | Full-screen kiosk mode |
+| Desktop | same | `autoLaunch` | `false` | Start at login (packaged builds only) |
+| Desktop | same | `updateUrl` | empty | Auto-update feed; empty = GitHub Releases |
+| Mobile | The server address setting in the app, stored on the device | — | Build-time `EXPO_PUBLIC_API_BASE`, or `http://127.0.0.1:8088` if unset | Probes `/auth/captcha` before saving to confirm it is reachable. `EXPO_PUBLIC_*` is replaced at build time, so after packaging the address can only be changed in the app |
 
 ## Where it lives in the code
 
