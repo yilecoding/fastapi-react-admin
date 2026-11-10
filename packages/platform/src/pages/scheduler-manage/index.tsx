@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
-import { IconAlertTriangle, IconPlayerPlay, IconPlus, IconTrash } from '@tabler/icons-react'
+import { IconAlertTriangle, IconHistory, IconPlayerPlay, IconPlus, IconTrash } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
 import { ACTIONS_COLUMN_ID, DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
@@ -15,6 +15,7 @@ import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { RowActions, TimeCell } from '../_shared/cells'
+import { DataChangeSheet } from '../_shared/data-change/history-sheet'
 import { RefreshButton, ResetButton } from '../_shared/filters'
 import { logFeatures as features } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
@@ -112,6 +113,7 @@ export function SchedulerManagePage({
   const [formOpen, setFormOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<TaskScheduler | null>(null)
   const [removing, setRemoving] = React.useState<TaskScheduler | null>(null)
+  const [historyOf, setHistoryOf] = React.useState<TaskScheduler | null>(null)
   const [ranId, setRanId] = React.useState<string | null>(null)
 
   const toggle = useToggleScheduler()
@@ -228,6 +230,10 @@ export function SchedulerManagePage({
                 },
               },
               {
+                key: 'history', label: t('变更记录'), icon: IconHistory, perm: 'log:change:list',
+                testId: `history-scheduler-${row.original.id}`, onClick: () => setHistoryOf(row.original),
+              },
+              {
                 key: 'del', label: t('删除'), icon: IconTrash, perm: 'task:scheduler:del', danger: true,
                 testId: `del-scheduler-${row.original.id}`, onClick: () => setRemoving(row.original),
               },
@@ -328,6 +334,10 @@ export function SchedulerManagePage({
 
       <SchedulerFormSheet open={formOpen} onOpenChange={setFormOpen} editing={editing} />
 
+      <DataChangeSheet
+        entity="task_scheduler" entityId={historyOf?.id ?? null} name={historyOf?.name}
+        open={historyOf !== null} onOpenChange={(o) => !o && setHistoryOf(null)}
+      />
       <ConfirmDialog
         open={removing !== null}
         onOpenChange={(o) => { if (!o) setRemoving(null) }}
