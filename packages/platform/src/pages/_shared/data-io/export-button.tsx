@@ -60,6 +60,9 @@ export function ExportButton({
   const { t } = useTranslation()
   const start = useStartExport(path)
   const [format, setFormat] = React.useState<ExportFormat>('xlsx')
+  // 🔴 点「导出记录」（跳去个人中心）时整个菜单换 key 重挂，不是只关 —— 不然菜单留在个人中心那一页上关不掉，
+  // 理由同 `RowActions`（见 shell 分册「从浮层里 `<Link>` 跳走」）
+  const [menuKey, remountMenu] = React.useReducer((k: number) => k + 1, 0)
 
   async function run(scope: 'filtered' | 'selected') {
     if (start.isPending) return
@@ -110,7 +113,7 @@ export function ExportButton({
   )
 
   return (
-    <DropdownMenu>
+    <DropdownMenu key={menuKey}>
       {iconOnly ? (
         <Tooltip>
           <TooltipTrigger render={trigger} />
@@ -151,6 +154,7 @@ export function ExportButton({
         <DropdownMenuSeparator />
         <DropdownMenuLinkItem
           render={<Link to="/profile" search={{ section: 'exports' }} />}
+          onClick={remountMenu}
           data-testid={`${testId}-history`}
         >
           <IconHistory />

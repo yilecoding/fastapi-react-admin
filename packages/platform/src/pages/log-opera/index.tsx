@@ -182,7 +182,14 @@ export function LogOperaPage({
   const list = listState(listQuery)
   const rows = data?.items ?? []
 
+  // 详情抽屉：挂载（`detail`）和打开（`detailOpen`）分开管 —— 理由同「数据变更」页：
+  // 正常关留着内容走完退场动画；从「这次改了什么」跳去数据变更页时整个卸载（见 `OperaLogDetailSheet` 的 `onLeave`）
   const [detail, setDetail] = React.useState<OperaLog | null>(null)
+  const [detailOpen, setDetailOpen] = React.useState(false)
+  const openDetail = React.useCallback((r: OperaLog) => {
+    setDetail(r)
+    setDetailOpen(true)
+  }, [])
   // 列显隐进 URL —— 12 列的表隐掉几列后刷新全冒出来，等于每次都要重新点一遍
   const [columnVisibility, setColumnVisibility] = useUrlColumnVisibility(
     search.hide,
@@ -204,7 +211,7 @@ export function LogOperaPage({
         header: t('操作时间'),
         // 点时间开详情 —— 与 ContiNew 的交互一致，比额外加一列「查看」省地方
         cell: ({ row, getValue }) => (
-          <TimeCell value={getValue()} onOpen={() => setDetail(row.original)} testId={`open-detail-${row.original.id}`} />
+          <TimeCell value={getValue()} onOpen={() => openDetail(row.original)} testId={`open-detail-${row.original.id}`} />
         ),
       }),
       col.accessor((r) => r.username ?? t('匿名'), {
@@ -283,7 +290,7 @@ export function LogOperaPage({
         cell: ({ getValue }) => <span className="text-sm text-muted-foreground">{getValue() || <EmptyCell />}</span>,
       }),
     ],
-    [page, size, t]
+    [page, size, t, openDetail]
   )
 
   // 列顺序进 URL（同列显隐）—— 走 onSearchChange 而不是 patch：换列序不该清勾选、也不该跳回第一页
@@ -395,7 +402,14 @@ export function LogOperaPage({
         </div>
       </ListBody>
 
-      <OperaLogDetailSheet open={detail !== null} onOpenChange={(o) => !o && setDetail(null)} log={detail} />
+      {detail && (
+        <OperaLogDetailSheet
+          open={detailOpen}
+          onOpenChange={setDetailOpen}
+          log={detail}
+          onLeave={() => setDetail(null)}
+        />
+      )}
     </PageShell>
   )
 }

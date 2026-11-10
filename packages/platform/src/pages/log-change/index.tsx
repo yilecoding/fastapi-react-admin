@@ -2,8 +2,10 @@ import * as React from 'react'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { createColumnHelper, useTable } from '@tanstack/react-table'
+import { IconExternalLink } from '@tabler/icons-react'
 import { useTranslation } from 'react-i18next'
 
+import { Button } from '@admin/ui/components/button'
 import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-table'
 import { CopyButton } from '@admin/ui/components/copy-button'
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
@@ -171,7 +173,14 @@ export function LogChangePage({
   const list = listState(listQuery)
   const rows = data?.items ?? []
 
+  // 详情抽屉：挂载（`detail`）和打开（`detailOpen`）分开管。正常关只翻 `detailOpen`，留着内容走完退场动画；
+  // 从抽屉里的链接跳去别的页时连 `detail` 一起清 —— 整个卸载，不等动画（见 `DataChangeDetailSheet` 的 `onLeave`）
   const [detail, setDetail] = React.useState<DataChange | null>(null)
+  const [detailOpen, setDetailOpen] = React.useState(false)
+  const openDetail = React.useCallback((r: DataChange) => {
+    setDetail(r)
+    setDetailOpen(true)
+  }, [])
   const [columnVisibility, setColumnVisibility] = useUrlColumnVisibility(
     search.hide,
     React.useCallback((hide) => onSearchChange?.({ ...search, hide }), [onSearchChange, search])
@@ -181,7 +190,7 @@ export function LogChangePage({
   const focusField = React.useCallback(
     (r: DataChange, c: DataChangeItem) => {
       if (!r.entity_id) return
-      setDetail(null)
+      setDetailOpen(false)
       // 🔴 只留对象 + 字段，别的筛选条件（trace_id、动作、时间段…）一律清掉：带着它们的话「这个字段的历史」
       // 被悄悄缩成原来那个筛选范围里的一两条，分享出去的链接也带着（评审抓到的）。列显隐 / 顺序 / 每页条数是视图状态，留着
       onSearchChange?.({
@@ -210,7 +219,7 @@ export function LogChangePage({
       col.accessor('created_time', {
         header: t('时间'),
         cell: ({ row, getValue }) => (
-          <TimeCell value={getValue()} onOpen={() => setDetail(row.original)} testId={`open-change-${row.original.id}`} />
+          <TimeCell value={getValue()} onOpen={() => openDetail(row.original)} testId={`open-change-${row.original.id}`} />
         ),
       }),
       col.accessor((r) => r.entity_label ?? '', {
@@ -276,7 +285,7 @@ export function LogChangePage({
           getValue() ? <span className="font-mono text-xs tabular-nums">{getValue()}</span> : <EmptyCell />,
       }),
     ],
-    [t, entityTitle, sourceLabel, focusEntity]
+    [t, entityTitle, sourceLabel, focusEntity, openDetail]
   )
 
   const [columnOrder, setColumnOrder] = useUrlColumnOrder(
@@ -364,79 +373,97 @@ export function LogChangePage({
         </div>
       </ListBody>
 
-      <DataChangeDetailSheet
-        record={detail}
-        entityTitle={detail ? entityTitle(detail.entity_type) : ''}
-        onOpenChange={(o) => !o && setDetail(null)}
-        onFieldHistory={focusField}
-      />
+      {detail && (
+        <DataChangeDetailSheet
+          record={detail}
+          open={detailOpen}
+          entityTitle={entityTitle(detail.entity_type)}
+          onOpenChange={setDetailOpen}
+          onFieldHistory={focusField}
+          onLeave={() => setDetail(null)}
+        />
+      )}
     </PageShell>
   )
 }
 
+/**
+ * 一条变更记录的详情：字段对比 + 出处。
+ *
+ * 🔴 从这里的链接跳去操作日志时要 `onLeave` —— 父组件把整个抽屉卸载掉，不是只关。
+ * 关闭和切 tab 落在同一次提交里：抽屉刚翻成「关」，这个 tab 就进了后台、effect 被 `<Activity>` 销毁，
+ * Base UI 等不到退场动画结束，portal（挂在 `<body>` 上）就一直留在前台，关不掉也点不动。
+ * 原来连「关」都没做，抽屉开着压在操作日志页上（见 shell 分册「从浮层里 `<Link>` 跳走」）
+ */
 function DataChangeDetailSheet({
   record,
+  open,
   entityTitle,
   onOpenChange,
   onFieldHistory,
+  onLeave,
 }: {
-  record: DataChange | null
+  record: DataChange
+  open: boolean
   entityTitle: string
   onOpenChange: (o: boolean) => void
   onFieldHistory: (record: DataChange, change: DataChangeItem) => void
+  onLeave: () => void
 }) {
   const { t } = useTranslation()
+  // 定时任务 / CLI 里的修改没有请求，trace_id 是占位的 `-`（`TRACE_ID_LOG_DEFAULT_VALUE`）
+  const traced = !!record.trace_id && record.trace_id !== '-'
   return (
-    <Sheet open={record !== null} onOpenChange={onOpenChange}>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="data-[side=right]:sm:max-w-xl" data-testid="data-change-detail">
-        {record && (
-          <>
-            <SheetHeader>
-              <SheetTitle>
-                {entityTitle} · {record.action === 'bulk' ? t('{{n}} 条', { n: record.entity_label ?? '?' }) : record.entity_label}
-              </SheetTitle>
-              <SheetDescription className="sr-only">{t('这一条变更记录的字段对比和出处')}</SheetDescription>
-              <ChangeMeta record={record} />
-            </SheetHeader>
-            <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 pb-4">
-              <DetailSection title={t('字段变化')}>
-                <ChangeList
-                  record={record}
-                  // 批量汇总行没有具体对象，看不了「这个对象的这个字段」
-                  onFieldClick={record.entity_id ? (c) => onFieldHistory(record, c) : undefined}
-                />
-              </DetailSection>
-              <DetailSection title={t('出处')}>
-                <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
-                  <dt className="text-muted-foreground">{t('IP 地址')}</dt>
-                  <dd className="font-mono text-xs">{record.ip ?? '—'}</dd>
-                  {record.source_ref && (
-                    <>
-                      <dt className="text-muted-foreground">{t('来源的引用')}</dt>
-                      <dd className="font-mono text-xs break-all">{record.source_ref}</dd>
-                    </>
-                  )}
-                  <dt className="text-muted-foreground">{t('请求跟踪 ID')}</dt>
-                  <dd className="flex min-w-0 items-center gap-1">
-                    <span className="truncate font-mono text-xs">{record.trace_id}</span>
-                    <CopyButton text={record.trace_id} />
-                  </dd>
-                </dl>
-                {/* 定时任务 / CLI 里的修改没有请求，trace_id 是占位的 `-`（`TRACE_ID_LOG_DEFAULT_VALUE`） */}
-                {record.trace_id && record.trace_id !== '-' && (
-                  <Link
-                    to="/log/opera"
-                    search={{ trace_id: record.trace_id }}
-                    className="self-start text-sm text-primary hover:underline"
+        <SheetHeader>
+          <SheetTitle>
+            {entityTitle} · {record.action === 'bulk' ? t('{{n}} 条', { n: record.entity_label ?? '?' }) : record.entity_label}
+          </SheetTitle>
+          <SheetDescription className="sr-only">{t('这一条变更记录的字段对比和出处')}</SheetDescription>
+          <ChangeMeta record={record} />
+        </SheetHeader>
+        <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 pb-4">
+          <DetailSection title={t('字段变化')}>
+            <ChangeList
+              record={record}
+              // 批量汇总行没有具体对象，看不了「这个对象的这个字段」
+              onFieldClick={record.entity_id ? (c) => onFieldHistory(record, c) : undefined}
+            />
+          </DetailSection>
+          <DetailSection title={t('出处')}>
+            <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+              <dt className="text-muted-foreground">{t('IP 地址')}</dt>
+              <dd className="font-mono text-xs">{record.ip ?? '—'}</dd>
+              {record.source_ref && (
+                <>
+                  <dt className="text-muted-foreground">{t('来源的引用')}</dt>
+                  <dd className="font-mono text-xs break-all">{record.source_ref}</dd>
+                </>
+              )}
+              <dt className="text-muted-foreground">{t('请求跟踪 ID')}</dt>
+              <dd className="flex min-w-0 items-center gap-1">
+                <span className="truncate font-mono text-xs">{record.trace_id}</span>
+                <CopyButton text={record.trace_id} />
+                {traced && (
+                  // 跟在复制按钮后面，和它同一个形状（图标 + 悬停提示）：拿着这个 ID 能做的两件事放在一起
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 shrink-0"
+                    nativeButton={false}
+                    render={<Link to="/log/opera" search={{ trace_id: record.trace_id }} onClick={onLeave} />}
+                    aria-label={t('看这次请求的操作日志')}
+                    title={t('看这次请求的操作日志')}
                     data-testid="change-to-opera-log"
                   >
-                    {t('看这次请求的操作日志')}
-                  </Link>
+                    <IconExternalLink className="size-3.5" />
+                  </Button>
                 )}
-              </DetailSection>
-            </div>
-          </>
-        )}
+              </dd>
+            </dl>
+          </DetailSection>
+        </div>
       </SheetContent>
     </Sheet>
   )

@@ -151,6 +151,10 @@ export function RowActions({
 }) {
   const { t } = useTranslation()
   const { can, isSuperuser } = usePerm()
+  // 🔴 渲染成链接的项（`render`，跳去别的页）点了之后整个菜单换 key 重挂，不是只关：跳走和关菜单落在同一次提交里，
+  // 这个 tab 进了后台、effect 被 `<Activity>` 销毁，Base UI 等不到退场动画结束，菜单（portal 在 `<body>` 上）
+  // 就留在前台那一页上。换 key = 同一次提交里同步卸掉旧的（见 shell 分册「从浮层里 `<Link>` 跳走」）
+  const [menuKey, remountMenu] = React.useReducer((k: number) => k + 1, 0)
   const visible = items.filter(
     (i) => !i.hidden && (!i.superOnly || isSuperuser) && (!i.perm || can(i.perm))
   )
@@ -164,7 +168,14 @@ export function RowActions({
         key={i.key}
         variant={i.danger ? 'destructive' : 'default'}
         disabled={i.disabled}
-        onClick={i.onClick}
+        onClick={
+          i.render
+            ? () => {
+                i.onClick?.()
+                remountMenu()
+              }
+            : i.onClick
+        }
         render={i.render}
         data-testid={i.testId}
       >
@@ -174,7 +185,7 @@ export function RowActions({
     )
   }
   return (
-    <DropdownMenu>
+    <DropdownMenu key={menuKey}>
       <DropdownMenuTrigger
         render={<Button variant="ghost" size="icon" className={cn('size-7', triggerClassName)} aria-label={t('操作 {{name}}', { name: label })} />}
         data-testid={testId}
