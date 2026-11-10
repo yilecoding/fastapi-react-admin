@@ -168,7 +168,10 @@ class Snowflake:
 
     @staticmethod
     def _current_ms() -> int:
-        return int(timezone.now().timestamp() * 1000)
+        # 🔴 用系统时钟，不用 `timezone.now()`：两者在生产上一样，但测试会把 `timezone.now` 换成假时钟模拟时间流逝
+        # （`test_scheduler_timing.py`）。发号器在假时钟下记住一个「未来」的时间戳，假时钟一撤，之后所有生成 ID 的地方
+        # 都报「时钟回拨」—— #281 登记了定时任务表、改调度要写审计行之后，整套 pytest 在那个文件之后连环红了几百条
+        return int(time.time() * 1000)
 
     def _till_next_ms(self, last_timestamp: int) -> int:
         """等待直到下一毫秒"""
