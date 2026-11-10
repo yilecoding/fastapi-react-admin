@@ -435,19 +435,21 @@ def load_data_change_extensions(*, force: bool = False) -> None:
         return
     _loaded = True
     try:
-        importlib.import_module('backend.app.admin.data_change')
-
+        import backend.app as app_pkg
         import backend.plugin as plugin_pkg
 
-        for module in pkgutil.iter_modules(plugin_pkg.__path__):
-            if not module.ispkg:
-                continue
-            name = f'backend.plugin.{module.name}.{_EXTENSION_MODULE}'
-            if importlib.util.find_spec(name) is None:
-                continue
-            # 不吞异常：列没归类 / 重复登记就该当场炸
-            importlib.import_module(name)
-            log.info(f'数据变更审计加载登记：{name}')
+        # 🔴 内置模块也要扫，不能只写死 `app.admin`：定时任务的登记在 `app/task/data_change.py`（#281），
+        # 写死的话那个文件**静默不生效** —— 不报错，改了定时任务就是没有记录
+        for package, prefix in ((app_pkg, 'backend.app'), (plugin_pkg, 'backend.plugin')):
+            for module in pkgutil.iter_modules(package.__path__):
+                if not module.ispkg:
+                    continue
+                name = f'{prefix}.{module.name}.{_EXTENSION_MODULE}'
+                if importlib.util.find_spec(name) is None:
+                    continue
+                # 不吞异常：列没归类 / 重复登记就该当场炸
+                importlib.import_module(name)
+                log.info(f'数据变更审计加载登记：{name}')
         _check_folded()
     except BaseException:
         _loaded = False
