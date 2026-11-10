@@ -5,7 +5,12 @@ sidebar:
   order: 6
 ---
 
+import shot from '../../../../../../../docs/screenshots/open-app.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 The open API plugin lets another system, such as an HR, finance or data-warehouse system, pull users and departments from fastapi-react-admin over `/api/open/v1`, and receive signed webhooks when they change. Each external system gets its own application with an Access Key / Secret Key pair. Every request is signed with HMAC-SHA256 (`FRA1-HMAC-SHA256`) and checked against the application's scopes, IP allow-list, expiry and rate limit. Every request is also written to a call log, whether it succeeds or not.
+
+<ProductShot src={shot} alt="Open platform: applications" url="localhost:8888/open/app" />
 
 ## Where is it in the UI?
 

@@ -5,7 +5,12 @@ sidebar:
   order: 4
 ---
 
+import shot from '../../../../../../docs/screenshots/log-change.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 系统留三种记录，回答三个问题：**登录日志**回答「谁、什么时候、从哪登录的，成没成功」，账号被锁、被强制下线这类安全事件也记在这里；**操作日志**回答「谁调了哪个接口、带了什么参数、结果如何、花了多久」，密码、令牌这类字段落库前就打码；**数据变更记录**回答「这条数据的哪个字段被谁从什么改成了什么」，和触发它的那次操作日志互相跳转。数据变更记录带一条签名链，记录被改、被删、被塞进来都能校验出来。三种记录默认都保留 180 天。
+
+<ProductShot src={shot} alt="数据变更记录" url="localhost:8888/log/change" />
 
 ## 在界面上哪里找？
 

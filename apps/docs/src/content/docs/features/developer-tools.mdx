@@ -5,7 +5,12 @@ sidebar:
   order: 5
 ---
 
+import shot from '../../../../../../docs/screenshots/sandbox.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 写业务页面时最常用的三样东西：**组件沙箱**里能看到组件库的每个组件、调它的属性、直接复制代码；**组件库** `packages/ui` 不依赖仓库里的任何业务包，可以整包搬进别的 React 项目；**前后端契约** `packages/api` 从后端的 OpenAPI 离线生成类型。
+
+<ProductShot src={shot} alt="组件沙箱：按钮" url="localhost:8888/sandbox/components" />
 
 ## 在界面上哪里找？
 
@@ -39,7 +44,7 @@ sidebar:
 2. 装它依赖的 npm 包
 3. **`globals.css` 必须一起拿走**，并把 Tailwind 的 `@source` 指到你自己的源码目录 —— 指错了不会报错，表现是按钮全变成白底黑字
 4. 翻译三选一：什么都不接（显示中文原文）、接你自己的 i18next、或者把翻译拆掉
-5. 照文档最后的清单验一遍：按钮有没有底色、表格滚动时表头有没有钉住、分页条上是「共 42 条」还是「共 {{total}} 条」、深色模式是不是整体反过来
+5. 照文档最后的清单验一遍：按钮有没有底色、表格滚动时表头有没有钉住、分页条上是 `共 42 条` 还是 `共 {{total}} 条`、深色模式是不是整体反过来
 
 还有一份可读的组件目录在 [`packages/ui/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/ui/AGENTS.md)，写着每个组件什么时候用、尺寸覆盖为什么不生效这类坑。
 

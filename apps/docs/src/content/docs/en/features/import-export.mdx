@@ -5,7 +5,12 @@ sidebar:
   order: 3
 ---
 
+import shot from '../../../../../../../docs/screenshots/dept-import.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 Export happens on the server: click **Export** in a list page's toolbar and an xlsx / csv is built from the **current filters** or the **selected rows**, limited by the same data scope as the list. Up to 5,000 rows download straight away; larger exports become background jobs that send an in-app message when done, and the file stays under **Profile → Exports** for 72 hours. Import is three steps: download a template with dropdowns → upload and **preview** (nothing is written; every row's problems are listed) → commit. Users, departments and dictionary items can be imported, and a whole department tree can come from one file, even with children listed before their parents.
+
+<ProductShot src={shot} alt="Department import: the preview before committing" url="localhost:8888/system/dept" />
 
 ## Where is it in the UI?
 

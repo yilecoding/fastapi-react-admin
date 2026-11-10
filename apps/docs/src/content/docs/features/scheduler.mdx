@@ -5,7 +5,12 @@ sidebar:
   order: 1
 ---
 
+import shot from '../../../../../../docs/screenshots/scheduler.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 定时任务存在数据库的 `task_scheduler` 表里，由 Celery beat 读出来按时派发、worker 执行。在「定时任务 → 任务调度」里新建、修改、启停一条任务，**不用重启 beat**：每次改动都会通知 beat 重新读表。每次执行的结果（成功 / 失败、返回值、异常栈、哪个 worker 跑的）记在「执行记录」里，保留 30 天。系统自带 11 条任务，日志清理、导出过期、通知投递、审批超时都靠它们。
+
+<ProductShot src={shot} alt="任务调度：内置的定时任务" url="localhost:8888/scheduler/manage" />
 
 ## 在界面上哪里找？
 

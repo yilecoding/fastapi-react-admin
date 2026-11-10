@@ -5,7 +5,12 @@ sidebar:
   order: 5
 ---
 
+import shot from '../../../../../../docs/screenshots/file.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 文件模块是一个文件管理器：宫格或列表视图、左侧分类栏、浏览器内预览。底下的存储层用 [Apache OpenDAL](https://opendal.apache.org/) 把本地盘和任意 S3 兼容的桶收成同一套接口。所有上传都进同一个全局队列。浏览器先给文件算 SHA-256，服务端已经有同一个文件就不再传。不小于 16 MiB 的文件按 8 MiB 一片、3 片并发上传，刷新页面后可以接着传。可以在[在线演示](https://fra.wubunan.com/sign-in)（`admin` / `123456`）里直接试。
+
+<ProductShot src={shot} alt="文件管理" url="localhost:8888/system/file" />
 
 ## 在界面上哪里找？
 
