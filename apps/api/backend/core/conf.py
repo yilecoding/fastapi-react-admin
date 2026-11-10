@@ -482,6 +482,14 @@ class Settings(BaseSettings):
         # （钉钉 access_token / 企微 key / 飞书 hook ID，拿到地址就能往群里发），加签密钥同理。字段名同样起成专用的
         'webhook_url',
         'sign_secret',
+        # 🔴 下面这几个原来都漏了（`tests/test_opera_log_redaction.py` 的守卫扫 schema 扫出来的）：
+        # 登录 / 刷新 / 二次验证的响应体里是访问令牌（开发库实测上百条明文）· 模型密钥的请求体字段叫 api_key ·
+        # 导入提交的一次性令牌 · AI 写操作的二次确认令牌
+        'access_token',
+        'refresh_token',
+        'api_key',
+        'import_token',
+        'token',
     ]
     OPERA_LOG_QUEUE_MAXSIZE: int = 100000
     OPERA_LOG_QUEUE_BATCH_CONSUME_SIZE: int = 100
