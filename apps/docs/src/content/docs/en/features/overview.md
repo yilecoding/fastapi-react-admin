@@ -21,7 +21,7 @@ Everything below is on `main`. The table matches the Features table in the [READ
 | **Scheduled jobs** | online scheduling · cron preview · run history | [Scheduled jobs](/en/features/scheduler/) |
 | **Operations** | settings · dictionaries · sign-in / operation logs (redacted) · data change history (who changed which field from what to what, when and from where · linked to the operation log) · server & Redis monitoring · new-version prompt · a single [health check URL](/en/getting-started/deployment/#what-should-external-monitoring-check) for external monitoring | [Logs and audit](/en/features/audit-logs/) · [Monitoring and health checks](/en/features/monitoring/) · [Config and data dictionary](/en/features/config-dict/) |
 | **Clients** | Electron desktop (installers for three platforms · silent printing · local hardware · auto-update) · native Expo app (not a WebView wrapper) | [Desktop and mobile](/en/features/clients/) |
-| **Developers** | component sandbox (every component tweakable and copy-pasteable) · color palette · type-safe API contract generated from OpenAPI | [Plugins](/en/features/plugins/) |
+| **Developers** | component sandbox (every component tweakable and copy-pasteable) · color palette · type-safe API contract generated from OpenAPI | [Developer tools](/en/features/developer-tools/) · [Plugins](/en/features/plugins/) |
 | **Databases** | PostgreSQL · SQL Server · MySQL, one codebase and one migration chain | [Databases](/en/features/databases/) |
 
 ## Which menu is each feature in, and does it work on the phone?
