@@ -364,7 +364,7 @@ jobs:
         env:
           PG_CID: ${{ job.services.postgres.id }}
         run: |
-          for db in fba fba_test fba_empty fba_upgrade fba_upgrade_test; do
+          for db in fba fba_test fba_empty fba_upgrade fba_upgrade_test fba_init; do
             docker exec "$PG_CID" psql -U postgres -c "CREATE DATABASE $db;"
           done
 
@@ -396,6 +396,24 @@ jobs:
       - name: pytest
         working-directory: apps/api
         run: uv run --no-sync pytest -rs
+
+      # 🔴 `fba init` 是快速开始让新用户跑的第一条命令（`pnpm db:init`），而上面的库全走 reset_test_db ——
+      # 这条路原来在 CI 里一次都不跑。#260 之后它在提交那一刻报「雪花 ID 生成失败，雪花算法未初始化」，
+      # 整个事务回滚、库里一张表都没有：新装的人第一步就失败，CI 全绿。
+      # 放在 pytest 之后：init 会按前缀清 Redis 里的会话，放前面会把测试套件的登录态清掉。
+      - name: fba init（新库，非交互）
+        working-directory: apps/api/backend
+        env:
+          DATABASE_SCHEMA: fba_init
+          FBA_INIT_ADMIN_PASSWORD: "Ci-init-only#2026"
+          PG_CID: ${{ job.services.postgres.id }}
+        run: |
+          printf 'y\n' | uv run --no-sync python -c "import sys; sys.argv=['fba','init']; from backend.cli import main; main()"
+          # 「成功」要看库里：admin 启用、示例账号 test 被停用、标记到了迁移 head
+          q() { docker exec "$PG_CID" psql -U postgres -d fba_init -tAc "$1"; }
+          test "$(q "select status from sys_user where username='admin'")" = 1
+          test "$(q "select status from sys_user where username='test'")" = 0
+          test -n "$(q "select version_num from alembic_version")"
 
       # 🔴 「改了模型就必须写迁移」真正的守卫（#230）。上面那轮 pytest 里的
       # test_model_matches_migrations 比的是 fba_test，而 fba_test 是**按当前模型** create_all 出来的 ——
