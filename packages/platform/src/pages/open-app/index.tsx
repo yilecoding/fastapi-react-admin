@@ -6,6 +6,7 @@ import { createColumnHelper, useTable } from '@tanstack/react-table'
 import {
   IconFileDescription,
   IconHistory,
+  IconListDetails,
   IconLoader2,
   IconPencil,
   IconPlus,
@@ -23,6 +24,7 @@ import { ACTIONS_COLUMN_ID, DataTable, DataTableColumnVisibility } from '@admin/
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 
 import { RowActions, TimeCell } from '../_shared/cells'
+import { DataChangeSheet } from '../_shared/data-change/history-sheet'
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
@@ -167,6 +169,7 @@ export function OpenAppPage({
   const [issued, setIssued] = React.useState<IssuedSecret | null>(null)
   const [pendingReset, setPendingReset] = React.useState<OpenApp | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<OpenApp | null>(null)
+  const [historyOf, setHistoryOf] = React.useState<OpenApp | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [exporting, setExporting] = React.useState(false)
 
@@ -284,9 +287,13 @@ export function OpenAppPage({
                   testId: `webhooks-${a.code}`, onClick: () => openWebhooks(a.id),
                 },
                 {
-                  key: 'logs', label: t('调用日志'), icon: IconHistory, perm: 'open:log:list', testId: `logs-${a.code}`,
+                  key: 'logs', label: t('调用日志'), icon: IconListDetails, perm: 'open:log:list', testId: `logs-${a.code}`,
                   // 🔴 用 `<Link>` 不用 `useNavigate()`：页面组件要 router-独立（硬纪律 1）
                   render: <Link to="/open/log" search={{ app: a.id }} />,
+                },
+                {
+                  key: 'history', label: t('变更记录'), icon: IconHistory, perm: 'log:change:list',
+                  testId: `history-${a.code}`, onClick: () => setHistoryOf(a),
                 },
                 {
                   key: 'reset', label: t('重置密钥'), icon: IconRefresh, perm: 'open:app:reset',
@@ -415,6 +422,10 @@ export function OpenAppPage({
 
       <OpenAppFormSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} onIssued={setIssued} />
       <SecretDialog issued={issued} onClose={() => setIssued(null)} />
+      <DataChangeSheet
+        entity="open_app" entityId={historyOf?.id ?? null} name={historyOf?.name}
+        open={historyOf !== null} onOpenChange={(o) => !o && setHistoryOf(null)}
+      />
       <WebhookSheet
         appId={search.webhook ?? null}
         view={webhookView(search)}
