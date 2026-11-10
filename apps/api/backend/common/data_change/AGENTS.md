@@ -211,14 +211,22 @@ SQL Server 的 `OUTPUT` 能省一次，但要按方言分叉、MySQL 没有 —�
 | 列 | 归类 | 为什么 |
 |---|---|---|
 | `*_cipher` · MCP 的 `token_sha256` | 敏感（只记「改过」） | 密文 + 加密密钥 = 明文；哈希能拿去撞 |
-| `*_hint` · `*_mask` | 忽略 | 跟着密文变，记了就是每次换密钥多一条「前几位从 A 改成 B」 |
+| `*_hint` · `*_mask` | 忽略 | 跟着密文变，记了就是每次换密钥多一条「前几位从 A 改成 B」。例外：群机器人地址的掩码（主机 + 打了码的令牌）照记，改了地址看得出指向了哪里（#284 评审） |
 | Webhook 的 `url` · 群机器人的地址 | 敏感 | 地址里就带着令牌（钉钉 access_token、企微 key、对接方的查询串）；有 `log:change:list` 的人不一定能看那一页 |
 | `last_used_time` · `last_sent_time` · `last_error` · 投递计数 | 忽略 | 每次调用 / 发送都写，记了就是刷屏。走的都是「只写忽略列 → 跳过」那条路，测试里先断言它真写了，再断言没出记录 |
 | Webhook 的 `secret_prev_*` · `disabled_reason` / `disabled_time` | 忽略 | 轮换时自动挪过去的旧密钥、自动停用的附带列；「签名密钥：已修改」「状态：正常 → 停用」已经说明了 |
 
 🔴 **接审计时顺带抓到的既有漏洞：短信配置的凭据能从 `options` 绕进库。** `build_provider_config` 只在自己的副本里
 把凭据字段换成凭据栏的值，`options` 却是原样 `json.dumps` 进库的 —— 带着 `access_key_secret` 保存，200，库里明文
-（详情接口原样下发）。审计按普通值记 `options` 的前提就是这里拦住，所以保存时拒收（`plugin/sms` 分册）。
+（详情接口原样下发）。审计按普通值记 `options` 的前提就是这里拦住，所以保存时拒收（`plugin/sms` 分册）；
+已经存进去的由迁移 `ar000000smsoptcreds` 清掉 —— 不清的话改那一行时旧 `options` 以明文进审计表（#284 评审）。
+
+🔴 **「只改忽略列就跳过」两条路都要有**：语句式 UPDATE 那条早有；改已加载对象的属性（`hook.last_delivery_time = …`，
+Webhook 每投递一次）原来没有，每次白查两次整行。测试要走真实的写法并数查询（`capture._current_rows`）——
+第一版用语句式 UPDATE 测，走的根本不是投递那条路（#284 评审）。
+
+⚠️ 静态守卫里 `pk_mode=False` / `bulk_create_models` / `.connection()` 那一项原来是手写的七个文件，新登记的表一个都不在里面；
+现在凡是 import 了登记模型的生产代码都查（`_ALLOWED` 里放行只读的那一处）。
 
 ⚠️ **测试收尾不要删审计记录**（`tests/utils/data_change.py` 刻意不提供）：删了就在链上挖出缺口。已有的
 `test_data_change.py` 收尾会删，所以**同一个库上先跑过 pytest，E2E `data-change.spec.ts` 的「校验完整性」必红**
@@ -227,7 +235,7 @@ SQL Server 的 `OUTPUT` 能省一次，但要按方言分叉、MySQL 没有 —�
 **实测证据**：各模块的测试各加一条生命周期（新建 → 改 → 换密钥 → 删）：`test_open_apps.py` · `test_webhooks.py` ·
 `test_bots.py` · `test_sms_config_api.py` · `test_storage.py` · `test_ai_change_records.py`（两条），都读库断言明文、密文、哈希
 一个字都不在记录里；E2E `data-change-secrets.spec.ts`（开放应用的行操作 · MCP 凭据的卡片按钮）。
-变异 11 处各有测试红：7 个密钥列逐个改成普通值 · 4 个「每次都写」的列逐个移出忽略；E2E 去掉两个入口各红一条
+变异 11 处各有测试红：7 个密钥列逐个改成普通值 · 4 个「每次都写」的列逐个移出忽略；评审补的：去掉改属性那条捷径 → Webhook 那条红在查询次数；守卫按 import 认文件，在三个新登记表的 DAO / service 里塞绕过写法各红一条；E2E 去掉两个入口各红一条
 （只改权限码是等价变异：admin 是超管）。
 
 ## 性能
