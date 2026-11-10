@@ -1,12 +1,13 @@
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { IconDatabaseCog, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react'
+import { IconDatabaseCog, IconHistory, IconPencil, IconPlus, IconTrash } from '@tabler/icons-react'
 
 import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
 
 import { Can } from '../../auth/can'
+import { DataChangeSheet } from '../_shared/data-change/history-sheet'
 import { listState } from '../_shared/list-query'
 import { MasterList, type MasterListItem } from '../_shared/master-list'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
@@ -81,6 +82,7 @@ export function DataPermissionPage({
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<DataScope | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<DataScope | null>(null)
+  const [historyOf, setHistoryOf] = React.useState<DataScope | null>(null)
   // 删除失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案
   const [deleteError, setDeleteError] = React.useState<string | null>(null)
   React.useEffect(() => setDeleteError(null), [pendingDelete])
@@ -122,6 +124,7 @@ export function DataPermissionPage({
             if (!scope) return []
             return [
               { key: 'edit', label: t('编辑'), icon: IconPencil, perm: 'data:scope:edit', onClick: () => { setEditing(scope); setSheetOpen(true) } },
+              { key: 'history', label: t('变更记录'), icon: IconHistory, perm: 'log:change:list', testId: `scope-history-${scope.id}`, onClick: () => setHistoryOf(scope) },
               { key: 'delete', label: t('删除'), icon: IconTrash, danger: true, perm: 'data:scope:del', onClick: () => setPendingDelete(scope) },
             ]
           }}
@@ -170,6 +173,10 @@ export function DataPermissionPage({
       </div>
 
       <ScopeFormSheet open={sheetOpen} onOpenChange={setSheetOpen} editing={editing} />
+      <DataChangeSheet
+        entity="data_scope" entityId={historyOf?.id ?? null} name={historyOf?.name}
+        open={historyOf !== null} onOpenChange={(o) => !o && setHistoryOf(null)}
+      />
 
       <ConfirmDialog
         open={pendingDelete !== null}

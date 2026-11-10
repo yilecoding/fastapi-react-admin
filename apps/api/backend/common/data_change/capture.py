@@ -591,9 +591,9 @@ def _build_records(session: Session, buf: _Buffer) -> list[_Record]:
                 for col in spec.labels
                 if cur.get(col) is not None
             ]
-            records[spec.entity, pk] = _Record(spec, pk, 'create', row.origin, cur[spec.label_column], changes)
+            records[spec.entity, pk] = _Record(spec, pk, 'create', row.origin, spec.label_of(cur), changes)
         elif cur is None or (_is_deleted(spec, cur) and not _is_deleted(spec, orig)):
-            records[spec.entity, pk] = _Record(spec, pk, 'delete', row.origin, orig[spec.label_column])
+            records[spec.entity, pk] = _Record(spec, pk, 'delete', row.origin, spec.label_of(orig))
         else:
             # 敏感与否按改前改后两行都看：键名改了的那一行，只要有一边像密码就不记值
             changes = [
@@ -609,7 +609,7 @@ def _build_records(session: Session, buf: _Buffer) -> list[_Record]:
                 if orig.get(col) != cur.get(col)
             ]
             if changes:
-                records[spec.entity, pk] = _Record(spec, pk, 'update', row.origin, cur[spec.label_column], changes)
+                records[spec.entity, pk] = _Record(spec, pk, 'update', row.origin, spec.label_of(cur), changes)
 
     _merge_sets(session, buf, records)
     out = list(records.values())
@@ -679,7 +679,7 @@ def _parent_labels(session: Session, missing: dict[str, set[Any]]) -> dict[tuple
         spec = registry.ENTITIES[entity]
         for pk, row in _current_rows(session, spec, list(ids)).items():
             if not _is_deleted(spec, row):
-                labels[entity, pk] = row[spec.label_column]
+                labels[entity, pk] = spec.label_of(row)
     return labels
 
 
@@ -768,7 +768,10 @@ def _lookup_names(session: Session, wanted: dict[registry.Ref, set[Any]]) -> dic
         found: dict[str, Any] = {}
         for chunk in _chunks([int(i) for i in ids]):
             for r in _fetch(session, sa.select(target.c.id, target.c[ref.label]).where(target.c.id.in_(chunk))):
-                found[str(r['id'])] = r[ref.label]
+                # 显示名一律字符串：前端拿它当文本（`t(label)`），而引用的列不一定是字符串 ——
+                # 流程定义引用的是版本号（#281）
+                label = r[ref.label]
+                found[str(r['id'])] = label if label is None else str(label)
         names[ref] = found
     return names
 

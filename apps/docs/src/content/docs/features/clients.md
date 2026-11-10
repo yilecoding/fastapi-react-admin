@@ -67,7 +67,7 @@ if (isDesktop()) {
 
 - **原生界面，不是 WebView。** 底部三个 tab：首页、应用、我的。另有通知、个人资料与改密码、设置、公告详情（带附件），以及「用户列表 → 详情 → 删除」这一组专门写成可照抄的范式。列表用 `FlatList` + 无限查询。公告正文是 web 端 Tiptap 产出的 HTML，按白名单转换成原生组件来渲染，不走 WebView。
 - **与 web 共用：** `@admin/api`（信封判定、401 单飞刷新、从生成的 `schema.d.ts` 推出请求类型）和 `@admin/i18n`。不依赖 `@admin/platform`，那个包是按 web 的形状写的。
-- **登录：** 密码和手机验证码两种方式，都要先过图形验证码。access token 存在 `expo-secure-store`（Keystore / Keychain），绝不放 `AsyncStorage`。refresh token 留在 httpOnly cookie 里：在 Android 上实测，React Native 自带的 cookie jar 会自动回传它，冷启动后依然有效。
+- **登录：** 密码和手机验证码两种方式，都要先过图形验证码；开了二次验证的账号第二步输动态码（被强制、还没绑定的人要先到网页端扫码绑定）。access token 存在 `expo-secure-store`（Keystore / Keychain），绝不放 `AsyncStorage`。refresh token 留在 httpOnly cookie 里：在 Android 上实测，React Native 自带的 cookie jar 会自动回传它，冷启动后依然有效。
 - **服务器地址在 App 里设置**，存在设备上。保存前会先探一次 `/auth/captcha`，确认这个地址确实是一个能连通的后端。颜色令牌与 web 端是同一份 `oklch()`，在 Android 上实测逐像素一致。
 
 ## 移动端还没做什么？
@@ -76,9 +76,21 @@ if (isDesktop()) {
 - 移动端没有自动化测试。CI 的闸门是 `pnpm build`，其中包括 `expo export --platform android`，只能挡住打包阶段的失败。
 - 没有实时推送：没接 socket.io，进入页面或下拉时刷新。系统推送、扫码、静默打印明确不在范围内。
 - 还没有发布过 APK。`pnpm --filter @admin/mobile apk` 只跑到原生模块编译那一步，而且用的是模板自带的 debug keystore，正式发布前要换成自己的 keystore。
-- 改手机号、邮箱要走验证码流程，目前只有网页端有。
+- 改邮箱要走邮件验证码，目前只有网页端有；App 里邮箱是只读的。手机号可以在 App 的个人中心用短信验证码绑定。
 
 本地跑起来：先 `pnpm --filter api dev:host`（后端绑 `0.0.0.0:8088`），再 `pnpm mobile:dev`，把打印出来的 `exp://…:8800` 地址填进 SDK 57 版的 Expo Go。
+
+## 有哪些开关？
+
+| 端 | 在哪设 | 键 | 默认 | 说明 |
+|---|---|---|---|---|
+| 网页 | 构建时的环境变量 | `VITE_API_BASE` | `http://127.0.0.1:8088` | 后端地址，打进前端产物 |
+| 桌面 | 应用数据目录下的 `config.json`，运行时读 | `serverUrl` | 空 | 后端地址；同一个安装包可以发到不同环境 |
+| 桌面 | 同上 | `printerName` | 空 | 静默打印用的打印机；空 = 系统默认 |
+| 桌面 | 同上 | `kiosk` | `false` | 全屏锁定模式 |
+| 桌面 | 同上 | `autoLaunch` | `false` | 开机自启（只对打包后的正式包生效） |
+| 桌面 | 同上 | `updateUrl` | 空 | 自动更新源；空 = GitHub Releases |
+| 移动 | App 里的服务器地址设置，存在设备上 | —— | 构建时的 `EXPO_PUBLIC_API_BASE`，没设是 `http://127.0.0.1:8088` | 保存前先探一次 `/auth/captcha` 确认连得通。`EXPO_PUBLIC_*` 是构建时替换的，打成安装包后只能在 App 里改 |
 
 ## 代码在哪
 

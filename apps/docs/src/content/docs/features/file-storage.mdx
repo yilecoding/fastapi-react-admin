@@ -5,7 +5,25 @@ sidebar:
   order: 5
 ---
 
+import shot from '../../../../../../docs/screenshots/file.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 文件模块是一个文件管理器：宫格或列表视图、左侧分类栏、浏览器内预览。底下的存储层用 [Apache OpenDAL](https://opendal.apache.org/) 把本地盘和任意 S3 兼容的桶收成同一套接口。所有上传都进同一个全局队列。浏览器先给文件算 SHA-256，服务端已经有同一个文件就不再传。不小于 16 MiB 的文件按 8 MiB 一片、3 片并发上传，刷新页面后可以接着传。可以在[在线演示](https://fra.wubunan.com/sign-in)（`admin` / `123456`）里直接试。
+
+<ProductShot src={shot} alt="文件管理" url="localhost:8888/system/file" />
+
+## 在界面上哪里找？
+
+| 入口 | 路径 | 权限码 | 做什么 |
+|---|---|---|---|
+| **系统管理 → 文件管理** | `/system/file` | `sys:file:list` | 文件列表、预览、下载；回收站 |
+| 同上，「上传」 | —— | `sys:file:upload` | 普通上传和分片上传的全部接口，以及给业务记录挂 / 卸附件 |
+| 同上，「删除」「还原」「彻底删除」「清空回收站」 | —— | `sys:file:del` | |
+| **系统管理 → 存储管理** | `/system/storage` | `sys:storage:list` · `add` · `edit` · `del` | 新建本地 / S3 存储、测试连接、设为默认、启停；`edit` 管测试连接和设默认 |
+| 任意页面的附件面板 | —— | 读取只要登录，挂载要 `sys:file:upload` | 见[怎么给业务记录挂附件](#怎么给业务记录挂附件) |
+| 右下角上传浮窗 | —— | —— | 全局上传队列，见[上传浮窗是什么](#上传浮窗是什么) |
+
+下载、预览、取直连地址、秒传探测这几个读接口只要求登录，能不能读到某个文件按下面[下载怎么走](#下载怎么走)那一节的规则判。
 
 ## 能预览哪些格式？
 
@@ -96,6 +114,30 @@ docker compose -f docker-compose.dev.yml --profile s3 up -d rustfs   # S3 接口
 ```
 
 先在 `apps/api/backend/.env` 里配好 `STORAGE_ENCRYPT_SECRET_KEY`（`openssl rand -hex 32`）。再到「存储管理」新建一个存储：端点填 `http://127.0.0.1:9100`，桶自己建一个，AK/SK 见 `docker-compose.dev.yml`，寻址方式选「路径风格」（没配 `server-domains` 的 RustFS 只认路径风格）。
+
+## 有哪些开关？
+
+**界面上改的**（系统管理 → 参数配置 →「文件上传」），对新开始的上传生效，传到一半的不受影响：
+
+| 键 | 默认值 | 说明 |
+|---|---|---|
+| `FILE_CHUNK_THRESHOLD` | `16`（MiB） | 不小于它的文件分片上传；上限 99，要小于 nginx 的 `client_max_body_size 100m` |
+| `FILE_CHUNK_SIZE` | `8`（MiB） | 每一片的大小，1–64 |
+
+⚠️ 这两项在 `.env` 里也有同名项，**单位是字节**；参数配置那一组开着时以库里的值为准。
+
+**只能在 `.env` 改的**，改完重启后端：
+
+| 键 | 默认值 | 说明 |
+|---|---|---|
+| `STORAGE_ENCRYPT_SECRET_KEY` | 空 | 加密 S3 的 SecretKey；留空时保存 S3 存储直接报错，不存明文 |
+| `STORAGE_PRESIGN_EXPIRE_SECONDS` | `300` | S3 预签名下载地址的有效期 |
+| `FILE_RECYCLE_DAYS` | `30` | 回收站保留天数；`0` = 不进回收站，删除即彻底删除 |
+| `FILE_MULTIPART_EXPIRE_SECONDS` | `86400` | 分片上传会话多久没动静就过期 |
+| `UPLOAD_IMAGE_SIZE_MAX` · `UPLOAD_DOCUMENT_SIZE_MAX` · `UPLOAD_VIDEO_SIZE_MAX` · `UPLOAD_AUDIO_SIZE_MAX` · `UPLOAD_ARCHIVE_SIZE_MAX` | 5 MB · 50 MB · 20 MB · 20 MB · 100 MB | 按类型的单文件上限（字节） |
+| `UPLOAD_*_EXT_INCLUDE` | 见 `conf.py` | 各类型允许的扩展名 |
+
+定义在 [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) 的上传、回收站、分片、存储几段。
 
 ## 代码在哪
 

@@ -5,7 +5,27 @@ sidebar:
   order: 7
 ---
 
+import shot from '../../../../../../docs/screenshots/notice.png'
+import ProductShot from '../../../components/ProductShot.astro'
+
 fastapi-react-admin 的通知分三块：站内消息（顶栏铃铛 + 消息中心页，经 Socket.IO 实时更新）；管理员发给全员或指定部门 / 角色 / 人的通知公告；以及一层渠道路由 —— 按通知类型决定这条消息要不要再走邮件、短信，或推到飞书、钉钉、企业微信的群机器人。所有外部发送都先在调用方的数据库事务里写成投递行，再由 Celery worker 发出去，所以审批回滚了，邮件就不会先到。
+
+<ProductShot src={shot} alt="通知公告" url="localhost:8888/plugins/notice" />
+
+## 在界面上哪里找？
+
+| 入口 | 路径 | 权限码 | 做什么 |
+|---|---|---|---|
+| 顶栏铃铛 · **消息中心** | `/notification` | 登录即可 | 自己的站内消息、未读数、全部已读 |
+| 工作台「公告」卡片 · 登录后弹窗 · 顶部横幅 | —— | 登录即可 | 读者侧的公告，谁看得见见[下文](#通知公告能带什么谁能看到) |
+| **系统管理 → 通知公告** | `/plugins/notice` | `sys:notice:add` 打开；`edit` · `del` · `export` | 发布、编辑、删除公告，看阅读统计 |
+| **消息推送 → 通知策略** | `/notify/policy` | `sys:notification:policy:list` · `edit` | 每种通知类型 × 每条渠道的系统策略 |
+| **消息推送 → 投递记录** | `/notify/delivery` | `sys:notification:delivery:list` · `resend` | 每一次外部发送的结果，失败的可以重发 |
+| 群机器人 | `/notify/bot` | `sys:notification:bot:list` · `add` · `edit` · `del` · `test` | 飞书 / 钉钉 / 企业微信群机器人的地址和加签密钥 |
+| **短信 → 短信配置 / 发送日志** | `/sms/config` · `/sms/log` | `sms:config:list` · `add` · `edit` · `del` · `test`；`sms:log:list` · `del` | 短信厂商凭据与模板、每条短信的发送结果 |
+| **个人中心 → 通知偏好** | `/profile` | 本人 | 每种通知要不要走邮件 / 短信；系统策略是「强制」的格子锁住 |
+
+另有一个 `POST /api/v1/sys/notifications`（`sys:notification:send`）给管理员手动发站内通知。
 
 ## 站内消息怎么做到实时？
 
@@ -110,6 +130,31 @@ Webhook 地址本身就是凭据：拿到它就能往群里发消息。地址和
 - 群机器人只按通知类型订阅，不能再按流程或部门过滤。
 - 推群和推人走同一个入口，所以一条可推群的通知如果一个收件人都没有（比如管理员终止自己发起的单），群里也收不到。[群机器人指南](https://github.com/yilecoding/fastapi-react-admin/blob/main/docs/guides/notify-bot.md)的练习 2 专门讲怎么把两者拆开。
 - 公告表单的发布范围下拉调的是用户 / 部门 / 角色列表接口，只有发公告权限、没有这三个列表权限的人，看到的是一行「没有权限查看这些数据」。
+
+## 有哪些开关？
+
+**界面上改的**（系统管理 → 参数配置），不用重启：
+
+| 分组 | 键 | 默认值 | 说明 |
+|---|---|---|---|
+| 通知推送 | `NOTIFICATION_EXTERNAL_ENABLED` | `true` | 外部渠道总闸。关掉后只写站内消息，邮件 / 短信一条都不发（已经在排队的照常发完） |
+| 通知推送 | `NOTIFICATION_RETRY_MAX` | `4` | 失败重试几次（不含第一次）；结果未知的不重试 |
+| 通知推送 | `NOTIFICATION_DELIVERY_RETENTION_DAYS` | `30` | 投递记录保留天数，每天凌晨的日志清理一起删 |
+| 邮件服务 | `EMAIL_HOST` · `EMAIL_PORT` · `EMAIL_SSL` | `smtp.qq.com` · `465` · `true` | 发信服务器 |
+| 邮件服务 | `EMAIL_USERNAME` · `EMAIL_PASSWORD` | —— | 多数邮箱这里填「授权码」而不是登录密码；界面上以密文展示 |
+
+**只能在 `.env` 改的**，改完重启后端（写在各插件 `plugin.toml` 的 `[settings]` 里，`conf.py` 里也声明成了字段，所以容器的环境变量能覆盖）：
+
+| 键 | 默认值 | 说明 |
+|---|---|---|
+| `NOTIFICATION_ENCRYPT_SECRET_KEY` | 空 | 群机器人的地址和加签密钥落库加密用；留空 = 拒绝保存机器人，不存明文 |
+| `NOTIFICATION_RETRY_BACKOFF_SECONDS` | `60,300,1800,7200` | 每次失败后等多久；次数比这张表长就一直用最后一档 |
+| `NOTIFICATION_WEB_BASE_URL` | `http://localhost:8888` | 邮件里「去处理」链接拼绝对地址用，**上线前要改成真实地址** |
+| `NOTIFICATION_BOT_TIMEOUT_SECONDS` | `5` | 调群机器人接口的超时 |
+| `NOTIFICATION_BOT_EXTRA_URL_PREFIXES` | 空 | 官方地址之外放行的地址前缀（私有化部署的飞书 / 钉钉 / 企微），生产只许 https |
+| `SMS_ENCRYPT_SECRET_KEY` | 空 | 短信厂商凭据落库加密用；留空 = 拒绝保存带凭据的配置 |
+| `SMS_GLOBAL_HOURLY_MAX` | `500` | 全站每小时最多发多少条短信，防写错的循环刷光余额；0 = 不限 |
+| `SMS_CAPTCHA_EXPIRE_SECONDS` · `SMS_CAPTCHA_MAX_ATTEMPTS` | `300` · `5` | 短信验证码的有效期和试错次数 |
 
 ## 代码在哪
 

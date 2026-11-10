@@ -38,7 +38,8 @@ class AuditedEntity:
     entity: str
     title: str
     table: sa.Table
-    label_column: str
+    #: 拿哪几列当对象的名字；多列用「 · 」拼（通知策略一格一行：类型 · 渠道）
+    label_columns: tuple[str, ...]
     #: 要记的列 → 中文名（普通 + 引用 + 敏感都在这里，顺序就是展示顺序）
     labels: dict[str, str]
     refs: dict[str, Ref] = field(default_factory=dict)
@@ -49,6 +50,13 @@ class AuditedEntity:
     secret_when: dict[str, Callable[[Mapping[str, Any]], bool]] = field(default_factory=dict)
     ignore: frozenset[str] = frozenset()
     soft_delete: str | None = None
+
+    def label_of(self, row: Mapping[str, Any]) -> Any:
+        """这个对象在记录里叫什么。单列照原样；多列拼起来 ——
+        只用一列的话，同一个类型的两格策略在列表上分不开（#286 评审）"""
+        if len(self.label_columns) == 1:
+            return row[self.label_columns[0]]
+        return ' · '.join(str(row[c]) for c in self.label_columns if row[c] is not None)
 
     def is_secret(self, column: str, row: Mapping[str, Any] | None) -> bool:
         if column in self.secret:
@@ -155,7 +163,12 @@ def _table_of(model_or_table: Any) -> sa.Table:
 
 
 def _validate(
-    table: sa.Table, groups: dict[str, set[str]], *, label: str, enums: dict[str, Any], fields: dict[str, str]
+    table: sa.Table,
+    groups: dict[str, set[str]],
+    *,
+    label: tuple[str, ...],
+    enums: dict[str, Any],
+    fields: dict[str, str],
 ) -> None:
     """每一列恰好归一类、写的列都存在、名字列和 enums 对得上"""
     seen: dict[str, str] = {}
@@ -177,8 +190,9 @@ def _validate(
         )
     if len(pk_names) != 1:
         raise ValueError(f'数据变更登记：{table.name} 不是单列主键')
-    if label not in columns:
-        raise ValueError(f'数据变更登记：{table.name} 没有名字列 {label!r}')
+    missing = [name for name in label if name not in columns]
+    if not label or missing:
+        raise ValueError(f'数据变更登记：{table.name} 没有名字列 {missing or label!r}')
     bad_enums = set(enums) - set(fields)
     if bad_enums:
         raise ValueError(f'数据变更登记：{table.name} 的 enums 只能给 fields 里的列：{sorted(bad_enums)}')
@@ -189,7 +203,7 @@ def register_audited(
     *,
     entity: str,
     title: str,
-    label: str,
+    label: str | tuple[str, ...],
     fields: dict[str, str],
     refs: dict[str, tuple[str, Ref]] | None = None,
     enums: dict[str, dict[Any, str]] | None = None,
@@ -202,7 +216,7 @@ def register_audited(
 
     :param entity: 对象类型（存进 `sys_data_change.entity_type`，前端按它筛），小写字母 + 下划线
     :param title: 对象的中文名（「用户」）
-    :param label: 拿哪一列当这个对象的名字（记录里显示「改了 zhangsan」）
+    :param label: 拿哪一列当这个对象的名字（记录里显示「改了 zhangsan」）；给几列就用「 · 」拼起来
     :param fields: 普通列 → 中文名
     :param refs: 引用列 → (中文名, 指向哪张表的哪一列)
     :param enums: 固定取值的列 → {值: 中文名}，必须是 `fields` 里的列
@@ -227,6 +241,7 @@ def register_audited(
     if existing is not None and existing.table is not table:
         raise ValueError(f'数据变更登记：entity {entity!r} 已经登记过（{existing.table.name}）')
 
+    label_columns = (label,) if isinstance(label, str) else tuple(label)
     _validate(
         table,
         {
@@ -236,7 +251,7 @@ def register_audited(
             'ignore': set(ignore),
             'soft_delete': {soft_delete} if soft_delete else set(),
         },
-        label=label,
+        label=label_columns,
         enums=enums,
         fields=fields,
     )
@@ -255,7 +270,7 @@ def register_audited(
         entity=entity,
         title=title,
         table=table,
-        label_column=label,
+        label_columns=label_columns,
         labels=labels,
         refs={name: ref for name, (_, ref) in refs.items()},
         enums=enums,
@@ -420,19 +435,21 @@ def load_data_change_extensions(*, force: bool = False) -> None:
         return
     _loaded = True
     try:
-        importlib.import_module('backend.app.admin.data_change')
-
+        import backend.app as app_pkg
         import backend.plugin as plugin_pkg
 
-        for module in pkgutil.iter_modules(plugin_pkg.__path__):
-            if not module.ispkg:
-                continue
-            name = f'backend.plugin.{module.name}.{_EXTENSION_MODULE}'
-            if importlib.util.find_spec(name) is None:
-                continue
-            # 不吞异常：列没归类 / 重复登记就该当场炸
-            importlib.import_module(name)
-            log.info(f'数据变更审计加载登记：{name}')
+        # 🔴 内置模块也要扫，不能只写死 `app.admin`：定时任务的登记在 `app/task/data_change.py`（#281），
+        # 写死的话那个文件**静默不生效** —— 不报错，改了定时任务就是没有记录
+        for package, prefix in ((app_pkg, 'backend.app'), (plugin_pkg, 'backend.plugin')):
+            for module in pkgutil.iter_modules(package.__path__):
+                if not module.ispkg:
+                    continue
+                name = f'{prefix}.{module.name}.{_EXTENSION_MODULE}'
+                if importlib.util.find_spec(name) is None:
+                    continue
+                # 不吞异常：列没归类 / 重复登记就该当场炸
+                importlib.import_module(name)
+                log.info(f'数据变更审计加载登记：{name}')
         _check_folded()
     except BaseException:
         _loaded = False

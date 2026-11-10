@@ -72,7 +72,7 @@ packages/      依赖单向：i18n / api ← ui ← platform ← web
 AI 改代码很快，所以每一处改动都得有东西兜底：
 
 - **测试兜底** —— 1600+ 条测试连真实数据库、跑真实浏览器，不用 mock；CI 每次全量跑，[E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/)公开
-- **类型兜底** —— 前后端类型由 OpenAPI 生成，接口改了而页面没跟上，类型检查直接报错
+- **类型兜底** —— 前后端契约由 OpenAPI 生成；移动端的请求全部从它推断类型，接口改了而页面没跟上，类型检查直接报错（网页端还在迁移，请求的返回类型目前在各调用点手写）
 - **规矩写给 AI 看** —— 50 多份按目录拆分的 `CLAUDE.md` / `AGENTS.md` 记着实测踩过的坑，编码助手改到哪个目录，就读到哪一份
 - **后端就在 AI 生态里** —— Python + FastAPI，内置的 AI 助手基于 pydantic-ai
 

@@ -33,6 +33,8 @@ from backend.plugin.notification.model import Notification, NotificationDelivery
 from backend.plugin.notification.service import delivery_service, senders
 from backend.plugin.notification.service.notification_service import create_in_tx
 from backend.plugin.notification.service.routing import effective_modes, wants
+from backend.tests.utils.data_change import changes_of
+from backend.tests.utils.data_change import field as change_field
 from backend.tests.utils.db import async_test_db_session
 from backend.utils.timezone import timezone
 
@@ -488,6 +490,35 @@ class TestApi:
                 )
 
         assert _call(client, _count) == 0
+
+    def test_policy_changes_are_recorded(self, client: TestClient, token_headers: dict[str, str]) -> None:
+        """#281：一格一行、没有行 = 默认值。所以第一次改是「新建」、改回默认值是「删除」"""
+
+        def put(mode: str) -> None:
+            item = {'kind': 'pytest.channel', 'channel': 'sms', 'mode': mode}
+            assert client.put(f'{API}/policies', json={'items': [item]}, headers=token_headers).status_code == 200
+
+        async def _row_id() -> int:
+            async with async_test_db_session() as db:
+                return await db.scalar(
+                    select(NotificationPolicy.id).where(
+                        NotificationPolicy.kind == 'pytest.channel', NotificationPolicy.channel == 'sms'
+                    )
+                )
+
+        put('forced')
+        pk = _call(client, _row_id)
+        put('off')
+        put(get_notification_kind('pytest.channel').defaults['sms'].value)  # 改回默认值 = 删掉那一格
+        records = changes_of('notification_policy', pk)
+        assert [r['action'] for r in records] == ['create', 'update', 'delete']
+        created, edited, _ = records
+        # 三条都看得出是哪一格：「改」只有 mode、「删」没有字段，渠道只能在对象名里（#286 评审）
+        assert {r['entity_label'] for r in records} == {'pytest.channel · sms'}
+        assert change_field(created, 'channel')['new_label'] == '短信'
+        assert (
+            change_field(edited, 'mode')['old_label'] == '必发' and change_field(edited, 'mode')['new_label'] == '不发'
+        )
 
     @pytest.mark.parametrize(
         'item',
