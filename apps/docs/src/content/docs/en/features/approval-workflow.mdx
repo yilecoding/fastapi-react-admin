@@ -5,7 +5,12 @@ sidebar:
   order: 3
 ---
 
+import shot from '../../../../../../../docs/screenshots/workflow-designer.png'
+import ProductShot from '../../../../components/ProductShot.astro'
+
 fastapi-react-admin ships an approval workflow plugin (`plugin/workflow`): an admin designs a form and a flow tree in the browser, publishes it, and any signed-in user can submit requests against it. Approvers work from one **Approval center** (to approve / handled / my requests / CC'd to me), and every action — approve, reject, transfer, CC, send back, take back, add approvers, remind, withdraw, terminate, reassign — is checked by the same server-side function (`capabilities()`) that tells the UI which buttons to show, so the buttons and the API cannot drift apart.
+
+<ProductShot src={shot} alt="Workflow definitions: form designer and flow tree" url="localhost:8888/workflow/definition" />
 
 ## Where is it in the UI?
 
