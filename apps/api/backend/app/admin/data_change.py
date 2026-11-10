@@ -1,4 +1,4 @@
-"""数据变更审计（#260）的内置登记：用户 / 部门 / 角色 / 菜单 + 三张关联表 + 用户的二次验证 · 存储（#281）。
+"""数据变更审计（#260）的内置登记：用户 / 部门 / 角色 / 菜单 + 三张关联表 + 用户的二次验证 · 存储 · 数据权限（#281）。
 
 🔴 **每一列都要归类**（`registry.register_audited` 当场校验）。给这几张表加列时，先想清楚它属于哪一类：
 普通（记旧值 → 新值）· 引用（另存当时的名字）· 敏感（只记「改过」）· 忽略（时间戳、冗余列）。
@@ -10,8 +10,8 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from backend.app.admin.model import Dept, Menu, Role, Storage, User, UserMfa
-from backend.app.admin.model.m2m import role_data_scope, role_menu, user_role
+from backend.app.admin.model import DataRule, DataScope, Dept, Menu, Role, Storage, User, UserMfa
+from backend.app.admin.model.m2m import data_scope_rule, role_data_scope, role_menu, user_role
 from backend.common.data_change import ChildValue, Ref, register_audited, register_audited_child, register_audited_set
 
 _STATUS = {0: '停用', 1: '正常'}
@@ -189,5 +189,58 @@ register_audited(
     enums={'type': {'local': '本地', 's3': 'S3 兼容'}, 'is_default': _YES_NO, 'status': _STATUS},
     secret={'secret_cipher': 'Secret Key'},
     ignore={'secret_hint', *_TIMESTAMPS},
+    soft_delete='deleted',
+)
+
+# #281：数据权限。范围只是一捆规则的名字（运行时不构成边界，见 `pages` 分册「数据权限为什么是一个页」），
+# 所以范围的「规则」折叠成集合字段记在范围名下；规则自己的改动记在规则名下 —— 改一条规则会影响所有挂着它的范围，
+# 看范围的记录看不出来，要去规则那边看
+register_audited(
+    DataScope,
+    entity='data_scope',
+    title='数据范围',
+    label='name',
+    fields={'name': '名称', 'status': '状态'},
+    enums={'status': _STATUS},
+    ignore=_TIMESTAMPS,
+    soft_delete='deleted',
+)
+register_audited_set(
+    data_scope_rule,
+    entity='data_scope',
+    parent='data_scope_id',
+    member='data_rule_id',
+    field='rules',
+    label='规则',
+    ref=Ref('sys_data_rule', 'name'),
+)
+register_audited(
+    DataRule,
+    entity='data_rule',
+    title='数据规则',
+    label='name',
+    fields={
+        'name': '名称',
+        'model': '模型',
+        'column': '字段',
+        'operator': '运算符',
+        'expression': '表达式',
+        'value': '规则值',
+    },
+    # 和前端 `pages/data-permission/api.ts` 的 OPERATOR_ITEMS / EXPRESSION_ITEMS 同一组显示名
+    enums={
+        'operator': {0: 'AND（且）', 1: 'OR（或）'},
+        'expression': {
+            0: '等于 ==',
+            1: '不等于 !=',
+            2: '大于 >',
+            3: '大于等于 >=',
+            4: '小于 <',
+            5: '小于等于 <=',
+            6: '包含 in',
+            7: '不包含 not in',
+        },
+    },
+    ignore=_TIMESTAMPS,
     soft_delete='deleted',
 )
