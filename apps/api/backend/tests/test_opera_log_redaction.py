@@ -240,3 +240,43 @@ def test_a_broken_json_body_with_a_password_is_not_logged_in_plain_text():
     assert args, '坏 JSON 的请求体一点痕迹都没留'
     assert 'Old-Secret-1' not in dumped, f'旧密码明文进了操作日志：{dumped}'
     assert 'New-Secret-2' not in dumped, f'新密码明文进了操作日志：{dumped}'
+
+
+# --------------------------------------------------------------------------- 参数配置那种 key / value 形状
+
+
+def test_a_secret_config_value_is_redacted_by_its_key_name():
+    """🔴 参数配置的一行是 `{"key": "EMAIL_PASSWORD", "value": "<SMTP 授权码>"}`：要打码的是 `value`，
+    而它就叫 `value` —— 按字段名的名单永远认不出来。保存参数配置、打开参数配置页，授权码原来都原样进了 sys_opera_log。
+    认的是键名（`common/secret_keys.py`，和前端参数配置页打码同一条规则）"""
+    rows = [
+        {'key': 'EMAIL_PASSWORD', 'value': 'smtp-auth-code'},
+        {'key': 'smtp_password', 'value': 'lower-case'},  # 不分大小写
+        {'key': 'OSS_CREDENTIALS', 'value': 'cred-json'},
+        {'key': 'EMAIL_HOST', 'value': 'smtp.example.com'},  # 对照：不是密钥的照记
+        {'key': 'USER_PASSWORD_MIN_LENGTH', 'value': '8'},  # 后缀匹配：策略类的键不受影响
+    ]
+    got = M.desensitization({'json': rows})['json']
+    assert [r['value'] for r in got] == ['[REDACTED]', '[REDACTED]', '[REDACTED]', 'smtp.example.com', '8']
+    assert [r['key'] for r in got] == [r['key'] for r in rows], '键名要留着，看得出改的是哪一项'
+
+
+def test_saving_a_secret_config_does_not_log_its_value():
+    """走中间件读请求体那条路：批量保存参数配置的请求体是一个列表"""
+    body = json.dumps([
+        {'id': 1, 'name': 'SMTP 授权码', 'key': 'EMAIL_PASSWORD', 'value': 'smtp-auth-code', 'is_frontend': False}
+    ]).encode()
+    dumped = json.dumps(_request_args_for('/sys/configs', body), ensure_ascii=False)
+    assert 'EMAIL_PASSWORD' in dumped  # 先断言「有」：这一行确实记下来了
+    assert 'smtp-auth-code' not in dumped, f'SMTP 授权码进了操作日志：{dumped}'
+
+
+def test_a_secret_config_value_in_a_response_is_redacted():
+    """打开参数配置页（`GET /sys/configs/all`）的响应体里也有这一行"""
+    raw = json.dumps({
+        'code': 200,
+        'data': [{'id': '1', 'key': 'EMAIL_PASSWORD', 'value': 'smtp-auth-code'}, {'key': 'EMAIL_HOST', 'value': 'h'}],
+    }).encode()
+    got = M.redact_body(raw, 'application/json').decode()
+    assert 'EMAIL_PASSWORD' in got and '"h"' in got  # 先断言「有」
+    assert 'smtp-auth-code' not in got

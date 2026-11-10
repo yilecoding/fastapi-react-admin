@@ -75,3 +75,36 @@ fail-closed 判据，自己写的时候却漏了，是代码评审翻出来的�
 `{"value": {"cards": [` —— 修之前测试红在 `JSONDecodeError`，栈顶是 `opera_log_middleware.py: get_request_args`；
 修之后 422。真起一个 uvicorn 用 curl 发同一份：不带修复 **500**、带修复 **422**。回归两条：`tests/test_opera_log_redaction.py::test_a_body_that_claims_json_but_is_not_does_not_blow_up_before_the_route`（中间件单测）+
 `app/admin/tests/api_v1/test_user_preference.py` 的「截断」参数。变异（`except ValueError` 改成别的异常）→ 两条都红。
+
+## 🔴 参数配置的密钥（SMTP 授权码）原样进了操作日志：字段就叫 `value`
+
+**症状**：保存参数配置、打开参数配置页之后去看操作日志，请求参数和响应体里 `EMAIL_PASSWORD` 那一行的值是明文。
+前端参数配置页把它藏起来了，数据变更审计也只记「改过」，唯独操作日志留着 —— 有操作日志查看权限的人都看得到，而且一直留在表里。
+
+**根因**两个，都是静默的：
+- 打码按**字段名**（`OPERA_LOG_REDACT_KEYS`）。参数配置的一行是 `{"key": "EMAIL_PASSWORD", "value": "…"}`，
+  要打码的字段就叫 `value`，名单里永远不会有它（也不能有：`value` 是到处都在用的普通字段名）
+- **列表请求体根本不过脱敏**：`get_request_args` 只给 dict 走 `desensitization`，列表被 `str()` 成一段 Python repr 记进 `data`。
+  批量保存参数配置的请求体正好是列表
+
+**修法**：
+- `desensitization` 认 key / value 形状：一个 dict 里有 `value`、同一层的 `key` 像密钥，就打掉 `value`。
+  「像密钥」的规则在 `common/secret_keys.py`，**和前端参数配置页打码、数据变更审计共用一条**（后缀匹配、不分大小写）。
+  原来后端那份区分大小写、没有 CREDENTIALS，和前端对不上 —— 现在 `tests/test_secret_keys.py` 读前端那行正则对账
+- 任何 JSON 请求体都记进 `json`、都过脱敏（前端详情把 `args` 整个当 JSON 显示，形状变了不受影响）
+- 已经写进去的行由迁移 `aq000000operalogsecret` 清（`app/admin/utils/opera_log_scrub.py`）：只扫路径带 `/configs` 的行
+  （会写出参数配置行的只有这一组接口）；读得回结构的照新规则打码，repr 读回结构后按新写法放进 `json`；
+  响应被截断、读不回结构又有像密钥的键的，整段换成一句占位（同上面的 fail-closed）
+
+⚠️ 升级之后**建议把 SMTP 授权码换掉**：迁移清得掉表里的，清不掉已经导出、备份、被人看过的。
+
+**实测证据**：
+- `tests/test_opera_log_redaction.py` 新增三条：键名判断、列表请求体、响应体。修之前三条都红，请求体那条红在
+  `{"data": "[{'id': 1, … 'value': 'smtp-auth-code' …}]"}`
+- `plugin/config/tests/test_opera_log_secret.py` 走真接口截住入队的那一条：新建、编辑、批量保存、两种列表读法，共 7 条日志。
+  对照组是普通参数的值，必须照记
+- `app/admin/tests/test_opera_log_scrub.py` 在真库里垫修复前的四种形状（JSON · repr · 完整响应 · 截断响应），
+  外加两行对照（截断但没有密钥的 · 别的接口）；跑两遍，第二遍不变
+- 迁移在私有库（PostgreSQL 16）上用 alembic 真跑：插一行泄漏的旧日志 → `upgrade head` 报「1 行已打码」、读回来两处都是 `[REDACTED]` → `downgrade -1` → 再 `upgrade` 报「0 行」
+- 变异 6 处各有测试红：不认 key/value 形状 · 列表照旧 `str()` · `value` 一律打掉（对照组红）· 规则区分大小写 ·
+  清理不管 repr · 截断的照留

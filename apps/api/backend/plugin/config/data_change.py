@@ -1,24 +1,21 @@
 """数据变更审计（#260）：参数配置。由 `common/data_change/registry.load_data_change_extensions()` 扫描导入。
 
 🔴 `value` **按行**判断敏感：`EMAIL_PASSWORD`（SMTP 密码 / 授权码）就存在这张表里。第一版把 `value` 一律当普通列记，
-评审指出之后改成：键名以 PASSWORD / SECRET / TOKEN / API_KEY 结尾的行只记「改过」—— 和前端参数配置页打码的规则
-（`pages/config` 分册「打码判断要用后缀匹配」）是同一条，`USER_PASSWORD_MIN_LENGTH` 这种策略类的键不受影响。
+评审指出之后改成：键名像密钥的行只记「改过」。规则在 `common/secret_keys.py`，和前端参数配置页打码、操作日志打码
+共用一条（后缀匹配、不分大小写，`USER_PASSWORD_MIN_LENGTH` 这种策略类的键不受影响）。
+原来这里自己抄了一份，区分大小写、没有 CREDENTIALS，和前端对不上。
 """
-
-import re
 
 from collections.abc import Mapping
 from typing import Any
 
 from backend.common.data_change import register_audited
+from backend.common.secret_keys import is_secret_key_name
 from backend.plugin.config.model import Config
-
-#: 和前端 `pages/config` 打码的判断同一条规则：后缀匹配，不是 includes
-SECRET_KEY = re.compile(r'(PASSWORD|SECRET|TOKEN|API_?KEY)$')
 
 
 def is_secret_row(row: Mapping[str, Any]) -> bool:
-    return bool(SECRET_KEY.search(str(row.get('key') or '')))
+    return is_secret_key_name(row.get('key'))
 
 
 register_audited(
