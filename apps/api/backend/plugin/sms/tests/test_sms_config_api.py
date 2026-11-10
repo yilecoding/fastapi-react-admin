@@ -129,6 +129,19 @@ class TestValidationAtSave:
         assert res.json()['code'] == 400, res.text
         assert fragment in res.json()['msg'], res.json()['msg']
 
+    def test_credentials_in_options_are_refused_on_update_too(
+        self, client: TestClient, token_headers: dict[str, str], make_config: Callable[..., dict[str, Any]]
+    ) -> None:
+        """编辑走同一个 `_validate`；只测新建的话，把检查挪出共用的那一步，编辑就悄悄放行了（#284 评审）"""
+        item = make_config('optcred', **{k: v for k, v in ALIYUN_BODY.items() if k != 'name'})
+        body = {
+            **ALIYUN_BODY,
+            'name': item['name'],
+            'options': {'endpoint': 'dysmsapi.aliyuncs.com', 'access_key_secret': 'SMUGGLED'},
+        }
+        res = client.put(f'{CONFIGS}/{item["id"]}', headers=token_headers, json=body).json()
+        assert res['code'] == 400 and 'access_key_secret' in res['msg'], res
+
     def test_tencent_mapping_must_be_ordered(
         self, client: TestClient, token_headers: dict[str, str], encrypt_key: str
     ) -> None:
