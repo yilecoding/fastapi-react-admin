@@ -504,6 +504,13 @@ def _audited_models() -> list[str]:
     return sorted(m.class_.__name__ for m in MappedBase.registry.mappers if m.local_table.name in tables)
 
 
+_IMPORT = re.compile(r'^\s*from backend\.[\w.]+ import (\([^)]*\)|[^\n(]+)', re.MULTILINE)
+#: 看起来像、其实不是写登记表的（写一句为什么）
+_ALLOWED = {
+    ('core/registrar.py', '.connection()'): '启动时只读：检查 alembic_version 在不在、有没有账号还用种子密码',
+}
+
+
 def test_production_code_has_no_write_the_capture_cannot_see() -> None:
     """🔴 拦截层看不见的写法：原生 SQL · 语句式 INSERT（拿不到主键）· 绕过 `Session.execute` 的连接级写入。
 
@@ -517,6 +524,7 @@ def test_production_code_has_no_write_the_capture_cannot_see() -> None:
     assert {'User', 'Config'} <= set(models)
     stmt_insert = re.compile(rf'\binsert\(\s*(?:{"|".join(models)})\b')
     offenders = []
+    scanned_daos = 0
     for path in backend.rglob('*.py'):
         rel = path.relative_to(backend).as_posix()
         # 拦截层自己的 docstring 里就写着这些写法（讲它为什么拦不到）
@@ -527,21 +535,22 @@ def test_production_code_has_no_write_the_capture_cannot_see() -> None:
         ):
             continue
         body = path.read_text(encoding='utf-8')
+        if '/crud/' in rel and any(m in body for m in models):
+            scanned_daos += 1
         offenders += [f'{rel}: text() 写登记表' for _ in text_dml.finditer(body)]
         offenders += [f'{rel}: 语句式 insert({m.group(0)})' for m in stmt_insert.finditer(body)]
-    for rel in (
-        'app/admin/crud/crud_user.py',
-        'app/admin/crud/crud_dept.py',
-        'app/admin/crud/crud_role.py',
-        'app/admin/crud/crud_menu.py',
-        'plugin/config/crud/crud_config.py',
-        'plugin/oauth2/crud/crud_user_social.py',
-        'app/admin/service/mfa_service.py',
-    ):
-        body = (backend / rel).read_text(encoding='utf-8')
-        for bad in ('pk_mode=False', '.connection()', 'bulk_create_models', 'text('):
-            if bad in body:
-                offenders.append(f'{rel}: {bad}')
+        # 连接级写入 / crud-plus 的两个绕过 Session 的批量写：凡是 import 了登记过的模型的文件都查。
+        # 原来是一份手写的七个文件的清单，#281 新登记的表一个都不在里面（#284 评审）
+        imported = {
+            name.strip().split(' as ')[0] for m in _IMPORT.finditer(body) for name in m.group(1).strip('()').split(',')
+        }
+        if not imported & set(models):
+            continue
+        bads = ['pk_mode=False', 'bulk_create_models', '.connection()']
+        if '/crud/' in rel:
+            bads.append('text(')  # DAO 里连只读的原生 SQL 也不要（动态拼表名的写法上面那条正则认不出）
+        offenders += [f'{rel}: {bad}' for bad in bads if bad in body and (rel, bad) not in _ALLOWED]
+    assert scanned_daos >= 10, f'前置：扫到的 DAO 太少（{scanned_daos}），按 import 认文件的那一步坏了'
     assert not offenders, '\n'.join(offenders)
 
 
