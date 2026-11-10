@@ -513,7 +513,8 @@ class TestApi:
         records = changes_of('notification_policy', pk)
         assert [r['action'] for r in records] == ['create', 'update', 'delete']
         created, edited, _ = records
-        assert created['entity_label'] == 'pytest.channel'
+        # 三条都看得出是哪一格：「改」只有 mode、「删」没有字段，渠道只能在对象名里（#286 评审）
+        assert {r['entity_label'] for r in records} == {'pytest.channel · sms'}
         assert change_field(created, 'channel')['new_label'] == '短信'
         assert (
             change_field(edited, 'mode')['old_label'] == '必发' and change_field(edited, 'mode')['new_label'] == '不发'
