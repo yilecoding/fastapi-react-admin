@@ -2,7 +2,7 @@ import * as React from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import {
-  IconAlertTriangle, IconLink, IconPencil, IconPlus, IconTrash, IconUnlink,
+  IconAlertTriangle, IconHistory, IconLink, IconPencil, IconPlus, IconTrash, IconUnlink,
 } from '@tabler/icons-react'
 
 import { Badge } from '@admin/ui/components/badge'
@@ -17,6 +17,7 @@ import { Can } from '../../auth/can'
 import { usePerm } from '../../auth/use-perm'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { RowActions } from '../_shared/cells'
+import { DataChangeSheet } from '../_shared/data-change/history-sheet'
 import { TONE_CLASS } from '../_shared/status'
 import {
   expressionSymbol, scopeRulesQuery, useDeleteDataRules, useUpdateScopeRules,
@@ -44,6 +45,7 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
   const [pickerOpen, setPickerOpen] = React.useState(false)
   const [pendingUnbind, setPendingUnbind] = React.useState<DataRule | null>(null)
   const [pendingDelete, setPendingDelete] = React.useState<DataRule | null>(null)
+  const [historyOf, setHistoryOf] = React.useState<DataRule | null>(null)
   // 失败留在弹窗里说清楚原因（流派一），换了目标要清掉上一次的错误文案
   const [unbindError, setUnbindError] = React.useState<string | null>(null)
   const [deleteError, setDeleteError] = React.useState<string | null>(null)
@@ -155,6 +157,10 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
                           onClick: () => { setEditing(r); setFormOpen(true) }, testId: `rule-edit-${r.id}`,
                         },
                         {
+                          key: 'history', label: t('变更记录'), icon: IconHistory, perm: 'log:change:list',
+                          onClick: () => setHistoryOf(r), testId: `rule-history-${r.id}`,
+                        },
+                        {
                           key: 'unbind', label: t('从本范围移除（规则本身保留）'), icon: IconUnlink,
                           perm: 'data:scope:rule:edit', onClick: () => setPendingUnbind(r), testId: `rule-unbind-${r.id}`,
                         },
@@ -235,6 +241,10 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
             setDeleteError(e instanceof Error ? e.message : t('删除失败'))
           }
         }}
+      />
+      <DataChangeSheet
+        entity="data_rule" entityId={historyOf?.id ?? null} name={historyOf?.name}
+        open={historyOf !== null} onOpenChange={(o) => !o && setHistoryOf(null)}
       />
     </div>
   )
