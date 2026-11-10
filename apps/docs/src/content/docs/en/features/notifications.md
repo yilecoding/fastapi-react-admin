@@ -7,6 +7,21 @@ sidebar:
 
 Notifications in fastapi-react-admin have three parts: an in-app inbox (the bell in the top bar plus a Message center page, updated over Socket.IO), notices that admins publish to everyone or to chosen departments, roles and users, and a routing layer that decides, per notification kind, whether a message also goes out by email, SMS or to a Feishu, DingTalk or WeCom group bot. External sends are written as delivery rows inside the caller's database transaction and sent by a Celery worker, so a rolled-back approval never emails anyone.
 
+## Where is it in the UI?
+
+| Screen | Path | Permission code | What it does |
+|---|---|---|---|
+| Bell in the top bar · **Message center** | `/notification` | Any signed-in user | Your own in-app messages, unread count, mark all as read |
+| Dashboard "Notices" card · pop-up after sign-in · top banner | — | Any signed-in user | Notices from the reader's side; who sees what is [below](#what-can-a-notice-carry-and-who-can-see-it) |
+| **System → Notices** | `/plugins/notice` | `sys:notice:add` to open; `edit` · `del` · `export` | Publish, edit and delete notices, read statistics |
+| **Notifications → Notification policy** | `/notify/policy` | `sys:notification:policy:list` · `edit` | System policy per notification type × channel |
+| **Notifications → Delivery records** | `/notify/delivery` | `sys:notification:delivery:list` · `resend` | The result of every external send; failed ones can be resent |
+| Group bots | `/notify/bot` | `sys:notification:bot:list` · `add` · `edit` · `del` · `test` | Feishu / DingTalk / WeCom bot URLs and signing secrets |
+| **SMS → SMS configurations / SMS logs** | `/sms/config` · `/sms/log` | `sms:config:list` · `add` · `edit` · `del` · `test`; `sms:log:list` · `del` | SMS provider credentials and templates, the result of every SMS |
+| **Profile → Notifications** | `/profile` | The user | Whether each notification type also goes by email / SMS; cells the system policy forces are locked |
+
+There is also `POST /api/v1/sys/notifications` (`sys:notification:send`) for admins to send an in-app notification by hand.
+
 ## How does the in-app inbox stay real-time?
 
 Inbox rows live in `sys_notification` under four categories: system, announcement, task (background exports) and workflow. When a row is written, the server emits a Socket.IO `notification:new` event **with an empty payload**; the browser refetches the list and unread count over REST. Permission checks therefore happen only in the REST API, and the unread badge is fetched over REST on every page load — a notification that arrived while the socket was disconnected still shows up. If the unread-count request fails, the bell shows `!` instead of an empty badge, which would look the same as "nothing unread".
@@ -110,6 +125,31 @@ The less obvious leak was httpx itself: at INFO level it logs `HTTP Request: POS
 - Group bots subscribe by kind only; there is no per-workflow or per-department filter.
 - Group delivery is written from the same entry point as person delivery, so a bot-subscribed event with no person recipient (for example, an admin terminating their own request) does not reach the group either. Exercise 2 of the [group bot guide](https://github.com/yilecoding/fastapi-react-admin/blob/main/docs/guides/notify-bot.md) works through how to separate the two.
 - The audience pickers on the notice form call the user, department and role list APIs; a notice editor without those permissions sees a "no permission" line instead of options.
+
+## Which settings are there?
+
+**Changed in the UI** (System → Config), no restart:
+
+| Group | Key | Default | Notes |
+|---|---|---|---|
+| Notification delivery | `NOTIFICATION_EXTERNAL_ENABLED` | `true` | Master switch for external channels. Off = only in-app messages are written, no email or SMS goes out (anything already queued still goes) |
+| Notification delivery | `NOTIFICATION_RETRY_MAX` | `4` | Retries after the first attempt; deliveries with an unknown outcome are not retried |
+| Notification delivery | `NOTIFICATION_DELIVERY_RETENTION_DAYS` | `30` | Days to keep delivery records; removed by the nightly log cleanup |
+| Email service | `EMAIL_HOST` · `EMAIL_PORT` · `EMAIL_SSL` | `smtp.qq.com` · `465` · `true` | Outgoing mail server |
+| Email service | `EMAIL_USERNAME` · `EMAIL_PASSWORD` | — | Most providers want an app password here, not the login password; shown masked in the UI |
+
+**`.env` only**, restart the backend after changing (they are in each plugin's `plugin.toml` `[settings]` and also declared as fields in `conf.py`, so container environment variables can override them):
+
+| Key | Default | Notes |
+|---|---|---|
+| `NOTIFICATION_ENCRYPT_SECRET_KEY` | empty | Encrypts group-bot URLs and signing secrets at rest; empty = bots cannot be saved, nothing is stored in plain text |
+| `NOTIFICATION_RETRY_BACKOFF_SECONDS` | `60,300,1800,7200` | Wait after each failure; past the end of the list the last value repeats |
+| `NOTIFICATION_WEB_BASE_URL` | `http://localhost:8888` | Base for absolute links in emails; **set it to the real address before going live** |
+| `NOTIFICATION_BOT_TIMEOUT_SECONDS` | `5` | Timeout when calling a bot |
+| `NOTIFICATION_BOT_EXTRA_URL_PREFIXES` | empty | URL prefixes allowed besides the official ones (self-hosted Feishu / DingTalk / WeCom); https only in production |
+| `SMS_ENCRYPT_SECRET_KEY` | empty | Encrypts SMS provider credentials at rest; empty = configurations with credentials cannot be saved |
+| `SMS_GLOBAL_HOURLY_MAX` | `500` | Site-wide SMS cap per hour, against a buggy loop draining the balance; 0 = unlimited |
+| `SMS_CAPTCHA_EXPIRE_SECONDS` · `SMS_CAPTCHA_MAX_ATTEMPTS` | `300` · `5` | Lifetime and allowed wrong attempts for SMS codes |
 
 ## Where it lives in the code
 

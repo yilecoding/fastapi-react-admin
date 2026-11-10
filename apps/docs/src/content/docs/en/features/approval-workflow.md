@@ -7,6 +7,19 @@ sidebar:
 
 fastapi-react-admin ships an approval workflow plugin (`plugin/workflow`): an admin designs a form and a flow tree in the browser, publishes it, and any signed-in user can submit requests against it. Approvers work from one **Approval center** (to approve / handled / my requests / CC'd to me), and every action — approve, reject, transfer, CC, send back, take back, add approvers, remind, withdraw, terminate, reassign — is checked by the same server-side function (`capabilities()`) that tells the UI which buttons to show, so the buttons and the API cannot drift apart.
 
+## Where is it in the UI?
+
+| Screen | Path | Who | What it does |
+|---|---|---|---|
+| **Approvals → Approval center** | `/workflow/inbox` | Every signed-in user | Start a request; To approve / Handled / My requests / CC'd to me |
+| **Approvals → Workflow definitions** | `/workflow/definition` | `workflow:definition:list` | Form designer + flow tree; creating needs `add`, saving drafts and AI generation need `edit`, deleting needs `del`, publishing and enabling / disabling need `publish` |
+| **Approvals → Instance monitor** | `/workflow/monitor` | `workflow:instance:list` | Every running and finished instance |
+| **Terminate** in the instance monitor | — | `workflow:instance:terminate` | Void a running request |
+| **Reassign** and **Handover** in the instance monitor | — | `workflow:instance:reassign` | Hand a stuck request, or all of one person's open tasks, to someone else. Kept separate from terminate: being able to reassign is not being able to void |
+| Dashboard cards "Waiting on me", "My requests" and "Quick start" · bell in the top bar | — | Every signed-in user | Tasks, CCs, reminders and results all go to the message center (the workflow plugin depends on the `notification` plugin) |
+
+The approval center only requires a sign-in, not a permission code: approvers are often outside the request's data scope, and gating it by menu permission or data scope would stop people from opening their own tasks. What each person may see and do on each request is decided per request by the server's `capabilities()`.
+
 ## What can a workflow definition contain?
 
 A definition is two JSON documents: a form schema and a flow model. Both are validated by Pydantic shapes in [`engine/schema.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/engine/schema.py) on publish, and stored as raw JSON.
@@ -100,6 +113,14 @@ The plugin also has optional AI features (pre-review, generating a definition fr
 - The designer's condition editor edits one level of "all"; hand-written nested `any` conditions are kept but not editable in the UI.
 - Form fields are reordered with up / down buttons, not drag and drop.
 - Timeouts count calendar hours, not working days.
+
+## Which settings are there?
+
+Most approval behaviour is configured **per workflow and per node** in the designer (approval mode, timeout reminders and auto-actions, field permissions, AI nodes), not as global switches. There is one global switch, in `.env`; restart the backend after changing it:
+
+| Key | Default | Notes |
+|---|---|---|
+| `WORKFLOW_AI_APPROVE_ENABLED` | `true` | Master switch for AI auto-approval. `false` stops AI auto-approval in every workflow while AI pre-review keeps giving suggestions. Even when on it only *allows* it: the node has to enable it, and there must be enough data for that workflow × model before the AI actually approves on someone's behalf |
 
 ## Where it lives in the code
 

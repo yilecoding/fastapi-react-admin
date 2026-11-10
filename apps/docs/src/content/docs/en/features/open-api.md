@@ -7,6 +7,14 @@ sidebar:
 
 The open API plugin lets another system, such as an HR, finance or data-warehouse system, pull users and departments from fastapi-react-admin over `/api/open/v1`, and receive signed webhooks when they change. Each external system gets its own application with an Access Key / Secret Key pair. Every request is signed with HMAC-SHA256 (`FRA1-HMAC-SHA256`) and checked against the application's scopes, IP allow-list, expiry and rate limit. Every request is also written to a call log, whether it succeeds or not.
 
+## Where is it in the UI?
+
+| Screen | Path | Permission code | What it does |
+|---|---|---|---|
+| **Open platform → Applications** | `/open/app` | `open:app:list`; create `add` · edit `edit` · delete `del` · reset key `reset` | Issue AK/SK; set scopes, IP allow-list, rate limit, expiry, enable / disable |
+| Webhook drawer on each application | — | `open:webhook:list`; `add` · `edit` · `del` · `test` · `reset` (signing secret) · `resend` | Register endpoints, subscribe to events, view deliveries, resend in bulk |
+| Open API call log (opened from the Applications page, not in the sidebar) | `/open/log` | `open:log:list` | Every open API call; see [What does the call log record?](#what-does-the-call-log-record) |
+
 ## What can an external system call?
 
 | Endpoint | Scope | Fields returned |
@@ -158,6 +166,28 @@ Each one is a single file that uses only the standard library; copy it into your
 | `test_webhooks.py` | 35 | signing, retries, auto-disable, SSRF, events emitted by real writes |
 
 The Python and Node signing code is checked against the vectors in pytest. The Node and Java webhook verification runs too when `node` or a JDK is installed. Java's `signHeaders` is not in the automated suite; it was last compiled and run by hand against the three vectors on 2026-11-01, and all three signatures matched. The Playwright spec `webhook.spec.ts` starts a local receiver that recomputes each signature per the spec.
+
+## Which settings are there?
+
+**Changed in the UI** (System → Config → **Webhook**), no restart:
+
+| Key | Default | Notes |
+|---|---|---|
+| `OPEN_WEBHOOK_ENABLED` | `true` | Master switch. Off = events are still recorded but no deliveries are created (anything already queued still goes) |
+| `OPEN_WEBHOOK_DISABLE_AFTER` | `20` | After this many consecutive failures, with the first failure of the streak over 24 hours old, the endpoint is disabled and the app's creator is notified |
+| `OPEN_WEBHOOK_RETENTION_DAYS` | `30` | Days to keep events, deliveries and attempts |
+| `OPEN_WEBHOOK_MAX_PER_APP` | `10` | Endpoints per application |
+
+**`.env` only**, restart the backend after changing:
+
+| Key | Default | Notes |
+|---|---|---|
+| `OPEN_SECRET_KEY` | empty | Encrypts SKs at rest; empty = creating an app and resetting its key are refused |
+| `OPEN_RATE_PER_MINUTE` | `120` | Requests per minute when an app has no limit of its own (per app, not per IP) |
+| `OPEN_SIGN_WINDOW_SECONDS` | `300` | Allowed difference between the request timestamp and server time; nonces are kept in Redis for twice as long |
+| `OPEN_WEBHOOK_TIMEOUT_SECONDS` | `15` | Timeout for one delivery attempt |
+| `OPEN_WEBHOOK_RETRY_BACKOFF_SECONDS` | `15,300,3600,21600` | Retry intervals: 5 attempts over about 7 hours |
+| `OPEN_WEBHOOK_ALLOW_PRIVATE_NETWORK` | `false` | Allows loopback / private addresses and plain http, **for local testing and E2E only**; keep it `false` in production |
 
 ## Where it lives in the code
 
