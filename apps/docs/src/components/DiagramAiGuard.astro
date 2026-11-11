@@ -1,52 +1,82 @@
 ---
-/**
- * 「为 AI 协作而设计」的线稿：一次改动 → 三道关（测试 · 类型契约 · 按目录的规矩）→ 合入。
- * 三条线上有流动的虚线，表示每次都要过一遍。字从 props 传进来。
- */
+interface Layer { name: string; title: string; detail: string; command: string }
 interface Props {
   change: string
-  checks: [string, string, string]
-  merge: string
+  checks: [Layer, Layer, Layer]
+  controls: string
   caption: string
+  context: string
+  contract: string
 }
-const { change, checks, merge, caption } = Astro.props
-const midY = [34, 98, 162]
-const C = 113 // 左右两个节点的中线
+const { change, checks, controls, caption, context, contract } = Astro.props
+const keys = ['tests', 'types', 'context']
 ---
 
-<svg viewBox="0 0 440 250" role="img" aria-label={caption}>
-  {midY.map((y) => <path class="d-edge" d={`M112 ${C} C 140 ${C}, 140 ${y + 15}, 164 ${y + 15}`} />)}
-  {midY.map((y) => <path class="d-edge d-edge--flow" d={`M326 ${y + 15} C 348 ${y + 15}, 348 ${C}, 368 ${C}`} />)}
+<guard-scene class="guard-scene">
+  <div class="guard-editor" aria-label={change}>
+    <div class="guard-editor-bar"><span><i></i><i></i><i></i></span><code>schema.d.ts</code><span class="guard-file-status">+2 −1</span></div>
+    <div class="guard-diff"><span class="guard-diff-label">{change}<b>{contract}</b></span><pre><span class="guard-code-muted">  export interface User &#123;</span>
+<span class="guard-code-remove">−   id: number</span>
+<span class="guard-code-add">+   id: string</span>
+<span class="guard-code-add">+   dept_id: string | null</span>
+<span class="guard-code-muted">  &#125;</span></pre></div>
+    <div class="guard-context"><span aria-hidden="true">⌁</span><code>CLAUDE.md</code><span>{context}</span></div>
+  </div>
+  <div class="guard-connector" aria-hidden="true"><span></span><b>↓</b></div>
+  <div class="guard-layers" role="group" aria-label={controls}>
+    {checks.map((check, i) => <button type="button" data-layer={keys[i]} aria-pressed={i === 0}><span class="guard-layer-icon" aria-hidden="true">{['✓', '⟨/⟩', '⌘'][i]}</span>{check.name}</button>)}
+  </div>
+  <div class="guard-explanation" aria-live="polite" aria-atomic="true">
+    {checks.map((check, i) => <div data-explanation={keys[i]} hidden={i !== 0}><strong>{check.title}</strong><p>{check.detail}</p><code><span aria-hidden="true">$ </span>{check.command}</code></div>)}
+  </div>
+  <p class="scene-caption"><span>{caption}</span><span aria-hidden="true">↗</span></p>
+</guard-scene>
 
-  <rect class="d-node" x="8" y={C - 22} width="104" height="44" rx="10" />
-  <text class="d-label" x="60" y={C + 4.5} text-anchor="middle">{change}</text>
-
-  {checks.map((label, i) => (
-    <g>
-      <rect class="d-node" x="164" y={midY[i]} width="162" height="30" rx="8" />
-      <circle class="d-tick-bg" cx="181" cy={midY[i] + 15} r="7" />
-      <path class="d-tick" d={`M177.5 ${midY[i] + 15} l2.5 2.5 l4.5 -5`} />
-      <text class="d-label" x="195" y={midY[i] + 19.5}>{label}</text>
-    </g>
-  ))}
-
-  <rect class="d-node d-node--hl" x="368" y={C - 22} width="66" height="44" rx="10" />
-  <text class="d-label d-label--hl" x="401" y={C + 4.5} text-anchor="middle">{merge}</text>
-
-  <text class="d-caption" x="220" y="232" text-anchor="middle">{caption}</text>
-</svg>
+<script>
+  class GuardScene extends HTMLElement {
+    connectedCallback() {
+      this.querySelectorAll<HTMLButtonElement>('[data-layer]').forEach(button => {
+        button.addEventListener('click', () => {
+          this.querySelectorAll<HTMLButtonElement>('[data-layer]').forEach(item => item.setAttribute('aria-pressed', String(item === button)))
+          this.querySelectorAll<HTMLElement>('[data-explanation]').forEach(item => { item.hidden = item.dataset.explanation !== button.dataset.layer })
+        })
+      })
+    }
+  }
+  if (!customElements.get('guard-scene')) customElements.define('guard-scene', GuardScene)
+</script>
 
 <style>
-  svg { font-family: var(--__sl-font) }
-  .d-edge { fill: none; stroke: var(--diagram-line); stroke-width: 1.2 }
-  .d-edge--flow { stroke: var(--diagram-hl); stroke-dasharray: 4 6; animation: d-flow 1.4s linear infinite }
-  .d-node { fill: var(--diagram-node); stroke: var(--line-strong); stroke-width: 1 }
-  .d-node--hl { fill: var(--diagram-hl-bg); stroke: color-mix(in oklab, var(--diagram-hl) 55%, transparent) }
-  .d-label { font-size: 12.5px; font-weight: 500; fill: var(--diagram-text) }
-  .d-label--hl { font-weight: 650; fill: var(--diagram-hl) }
-  .d-tick-bg { fill: var(--diagram-hl-bg); stroke: color-mix(in oklab, var(--diagram-hl) 50%, transparent) }
-  .d-tick { fill: none; stroke: var(--diagram-hl); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round }
-  .d-caption { font-size: 11px; fill: var(--diagram-muted) }
-  @keyframes d-flow { to { stroke-dashoffset: -20 } }
-  @media (prefers-reduced-motion: reduce) { .d-edge--flow { animation: none } }
+  .guard-scene { display: block }
+  .guard-editor { --editor-bg: #191827; --editor-text: #eeedf6; --editor-muted: #b2aec9; position: relative; background: var(--editor-bg); border: 1px solid #393548; border-radius: .9rem; color: var(--editor-text); overflow: hidden; box-shadow: 0 15px 32px -20px #19182766; transform: perspective(1100px) rotateY(-3deg) rotateX(2deg); transition: transform .5s }
+  .guard-scene:hover .guard-editor { transform: none }
+  .guard-editor-bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; border-bottom: 1px solid #ffffff16 }
+  .guard-editor-bar > span:first-child { display: flex; gap: .25rem }
+  .guard-editor-bar i { width: .4rem; height: .4rem; background: #706b88; border-radius: 50% }
+  .guard-editor-bar code { font-family: var(--__sl-font-mono); font-size: .65rem; color: var(--editor-muted) }
+  .guard-file-status { font-family: var(--__sl-font-mono); color: var(--scene-green); font-size: .6rem }
+  .guard-diff { padding: 1rem 0 .7rem }
+  .guard-diff-label { display: flex; justify-content: space-between; gap: .5rem; padding: 0 1rem .7rem; font-size: .63rem; color: var(--editor-muted) }
+  .guard-diff-label b { font-weight: 400; font-family: var(--__sl-font-mono); font-size: .58rem; color: #c5b7ff }
+  .guard-diff pre { margin: 0; padding: 0; font-family: var(--__sl-font-mono); font-size: clamp(.58rem, 1.2vw, .72rem); line-height: 1.9; background: transparent; border: 0; border-radius: 0; overflow-x: auto; white-space: normal }
+  .guard-diff pre > span { display: block; padding: 0 .9rem; white-space: pre }
+  .guard-code-muted { color: var(--editor-muted) }
+  .guard-code-remove { color: #efb0bd; background: #ed829910 }
+  .guard-code-add { color: var(--scene-green); background: #7fe0bb10; border-left: 2px solid #7fe0bb80 }
+  .guard-context { display: flex; align-items: center; gap: .6rem; padding: .65rem 1rem; border-top: 1px solid #ffffff16; font-size: .6rem; color: var(--editor-muted) }
+  .guard-context > span:first-child { font-size: 1rem; line-height: 1; color: #c5b7ff }
+  .guard-context code { font-family: var(--__sl-font-mono); color: #e1d8ff; font-size: .6rem }
+  .guard-context > span:last-child { margin-left: auto }
+  .guard-connector { display: flex; flex-direction: column; align-items: center; height: 2.1rem; color: var(--brand) }
+  .guard-connector span { width: 1px; flex: 1; background: var(--line-strong) }
+  .guard-connector b { font-weight: 400; font-size: 1rem; line-height: 1 }
+  .guard-layers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem }
+  .guard-layers button { display: flex; flex-direction: column; align-items: center; gap: .4rem; padding: .8rem .25rem; font-size: .65rem; border: 1px solid var(--line-strong); border-radius: .6rem; color: var(--sl-color-gray-3); background: var(--scene-paper); transition: border-color .2s, background .2s, color .2s }
+  .guard-layers button[aria-pressed='true'] { border-color: color-mix(in oklab, var(--brand) 45%, transparent); background: var(--diagram-hl-bg); color: var(--brand) }
+  .guard-layer-icon { font-family: var(--__sl-font-mono); font-size: 1rem; line-height: 1.3 }
+  .guard-explanation { min-height: 9.2rem; padding-top: 1rem }
+  .guard-explanation strong { display: block; font-size: .8rem; font-weight: 600; color: var(--sl-color-white) }
+  .guard-explanation p { margin: .3rem 0 .6rem; font-size: .74rem; line-height: 1.7; color: var(--sl-color-gray-3) }
+  .guard-explanation code { display: block; font-size: .6rem; overflow-wrap: anywhere; color: var(--brand); font-family: var(--__sl-font-mono) }
+  @media (max-width: 25rem) { .guard-context { gap: .35rem } .guard-context > span:last-child { font-size: .55rem } }
 </style>

@@ -1,61 +1,77 @@
 ---
-/**
- * 首页的「大卡片」：左边标题 + 一句话 + 几条发丝线隔开的要点（默认 slot，写 markdown 列表）+ 看文档，
- * 右边一张线稿图示（`slot="diagram"`）。`wide` 占满一行、左右排；不带 `wide` 的半宽、上下排。
- * 用图示不用截图：截图信息太满，线稿只画「这件事的形状」。
- */
+/** Homepage feature scene. Editorial copy comes from the localized MDX pages. */
 interface Props {
   title: string
   lead: string
   href: string
   more: string
+  eyebrow: string
   wide?: boolean
 }
-const { title, lead, href, more, wide = false } = Astro.props
+const { title, lead, href, more, eyebrow, wide = false } = Astro.props
 ---
 
 <article class:list={['showcase not-content', { 'showcase--wide': wide }]}>
   <div class="showcase-copy">
-    <h3>{title}</h3>
+    <span class="showcase-eyebrow">{eyebrow}</span>
+    <h3>{title.split('\n').map(line => <span>{line}</span>)}</h3>
     <p class="showcase-lead">{lead}</p>
-    <div class="showcase-points"><slot /></div>
-    <a class="showcase-more" href={href}>{more} <span aria-hidden="true">→</span></a>
+    {Astro.slots.has('default') && <div class="showcase-points"><slot /></div>}
+    <a class="showcase-more" href={href}>{more}<span aria-hidden="true">↗</span></a>
   </div>
   <div class="showcase-diagram"><slot name="diagram" /></div>
 </article>
 
 <style is:global>
-  .showcases { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) }
-  @media (min-width: 52rem) { .showcases { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+  .showcases {
+    --scene-paper: var(--sl-color-black);
+    --scene-mist: color-mix(in oklab, var(--brand) 5%, var(--sl-color-black));
+    --scene-green: #7fe0bb;
+    display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr);
+  }
+  @media (min-width: 56rem) { .showcases { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
   .showcases > * { margin: 0 !important }
-
   .showcase {
-    display: flex; flex-direction: column; gap: 2rem;
-    padding: clamp(1.1rem, 3vw, 2.25rem);
-    border-radius: 1.25rem;
-    background: var(--surface);
-    box-shadow: inset 0 0 0 1px var(--line);
-    transition: box-shadow 0.25s ease;
+    position: relative; min-width: 0; display: flex; flex-direction: column;
+    padding: clamp(1.25rem, 3vw, 2.25rem); gap: 2rem; overflow: hidden;
+    border: 1px solid var(--line-strong); border-radius: 1.5rem;
+    background: var(--scene-mist);
   }
-  .showcase:hover { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--brand) 35%, transparent) }
-  .showcase--wide { grid-column: 1 / -1 }
-  @media (min-width: 52rem) {
-    .showcase--wide { flex-direction: row; align-items: center; gap: 3rem }
-    .showcase--wide .showcase-copy { flex: 0 0 42% }
-    .showcase--wide .showcase-diagram { flex: 1 }
+  .showcase--wide { grid-column: 1 / -1; background: var(--scene-paper) }
+  @media (min-width: 56rem) {
+    .showcase--wide { gap: 2rem }
+    .showcase--wide .showcase-copy { display: grid; grid-template-columns: 1.1fr 1fr; grid-template-areas: 'eyebrow lead' 'title lead' 'more points'; column-gap: 4rem; align-items: start }
+    .showcase--wide .showcase-eyebrow { grid-area: eyebrow }
+    .showcase--wide h3 { grid-area: title }
+    .showcase--wide .showcase-lead { grid-area: lead; margin-top: .2rem !important }
+    .showcase--wide .showcase-points { grid-area: points; margin-top: .5rem }
+    .showcase--wide .showcase-more { grid-area: more; margin-top: 1rem !important }
   }
-
-  .showcase-copy { display: flex; flex-direction: column; min-width: 0 }
+  .showcase-copy { display: flex; flex-direction: column; align-items: flex-start; min-width: 0 }
   .showcase-copy > * { margin: 0 }
-  .showcase h3 { font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em; color: var(--sl-color-white) }
-  .showcase-lead { margin-top: 0.5rem !important; font-size: 0.95rem; line-height: 1.7; color: var(--sl-color-gray-3) }
-  .showcase-points ul { margin: 1.25rem 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line) }
-  .showcase-points li { margin: 0; padding: 0.7rem 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; line-height: 1.6; color: var(--sl-color-gray-2) }
-  .showcase-points code { font-size: 0.85em }
-  .showcase-more { margin-top: 1.25rem !important; font-size: 0.9rem; font-weight: 600; color: var(--brand); text-decoration: none }
-  .showcase-more span { display: inline-block; transition: transform 0.2s ease }
-  .showcase-more:hover span { transform: translateX(3px) }
-
-  .showcase-diagram { min-width: 0; color: var(--diagram-text) }
-  .showcase-diagram svg { display: block; width: 100%; height: auto; overflow: visible }
+  .showcase-eyebrow {
+    display: flex; align-items: center; gap: .55rem; margin-bottom: 1rem;
+    font-family: var(--__sl-font-mono); font-size: .68rem; font-weight: 500;
+    letter-spacing: .06em; color: var(--brand);
+  }
+  .showcase-eyebrow::before { content: ''; width: .42rem; height: .42rem; background: currentColor; border-radius: 2px }
+  .showcase h3 { font-size: 1.7rem; line-height: 1.3; font-weight: 730; letter-spacing: -.045em; color: var(--sl-color-white); text-wrap: balance }
+  .showcase h3 > span { display: block }
+  @media (min-width: 56rem) { .showcase--wide h3 { font-size: clamp(1.8rem, 2.5vw, 2.35rem) } }
+  .showcase-lead { margin-top: .9rem !important; font-size: .94rem; line-height: 1.8; color: var(--sl-color-gray-2); max-width: 36em }
+  .showcase-points { margin-top: 1rem; font-size: .8rem; line-height: 1.8; color: var(--sl-color-gray-3) }
+  .showcase-points p { margin: 0 }
+  .showcase-more { display: inline-flex; gap: 1rem; align-items: center; margin-top: 1.5rem !important; font-size: .84rem; font-weight: 600; color: var(--sl-color-white); text-decoration: none }
+  .showcase-more span { display: grid; place-items: center; width: 1.8rem; height: 1.8rem; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--brand); transition: background .2s, transform .2s }
+  .showcase-more:hover span { background: var(--diagram-hl-bg); transform: translate(2px, -2px) }
+  .showcase-diagram { min-width: 0 }
+  .showcases :not(pre) > code:not([data-package]) { background: transparent; border: 0; padding: 0; border-radius: 0 }
+  .showcases button { font-family: inherit; cursor: pointer; min-height: 2.75rem }
+  .showcases :is(button, a):focus-visible { outline: 2px solid var(--brand); outline-offset: 5px }
+  .scene-switch { display: flex; flex-wrap: wrap; gap: .35rem }
+  .scene-switch button { border: 1px solid transparent; border-radius: .5rem; background: transparent; color: var(--sl-color-gray-3); padding: .5rem .7rem; font-size: .75rem; transition: color .2s, background .2s, border-color .2s }
+  .scene-switch button:hover { color: var(--sl-color-white) }
+  .scene-switch button[aria-pressed='true'] { color: var(--brand); border-color: color-mix(in oklab, var(--brand) 28%, transparent); background: var(--diagram-hl-bg) }
+  .scene-caption { display: flex; justify-content: space-between; gap: 1rem; margin: 1rem 0 0; color: var(--sl-color-gray-3); font-size: .68rem; line-height: 1.6 }
+  @media (prefers-reduced-motion: reduce) { .showcases *, .showcases *::before, .showcases *::after { animation: none !important; transition: none !important } }
 </style>
