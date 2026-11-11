@@ -1,0 +1,203 @@
+---
+/**
+ * 首页（没有侧边栏的页）的顶栏：两块零件，滚动时像榫卯一样咬合。
+ *
+ * 左边一块是「榫」（品牌 + 文档分类，深紫），右边一块是「卯」（搜索 · GitHub · 主题 · 语言，浅色）——
+ * 就是 logo 里那一深一浅两块。停在页面顶部时两块分在两头、没有底色；往下一滚，中间的空隙收掉，
+ * 两块在屏幕中间合上：接缝是榫头的形状（左块中段凸出去一截，右块对应凹进来），合上的那一下接缝亮一次。
+ *
+ * 和 Starlight 默认顶栏比还多了：五个文档分类入口（默认顶栏在首页没有任何导航）、一条阅读进度线、
+ * 手机上也有主题和语言（默认顶栏在窄屏把这一组整个藏了，而首页没有侧边栏菜单兜底）。
+ *
+ * 内页不用它：内页的顶栏要和侧边栏、正文三栏对齐，是通栏的（DocsHeader.astro）。
+ * 外层那个 `<header class="header">` 是 Starlight 的 PageFrame 画的，这里只管里面这一条。
+ */
+import Search from '@astrojs/starlight/components/Search.astro'
+import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro'
+import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro'
+import { DOC_SECTIONS } from '../navigation.mjs'
+import LangSelect from './LangSelect.astro'
+import ThemeSelect from './ThemeSelect.astro'
+
+const en = Astro.locals.starlightRoute.locale === 'en'
+const root = `${import.meta.env.BASE_URL.replace(/\/$/, '')}${en ? '/en' : ''}`
+// 每个分类指向它的第一篇 —— 和内页顶栏同一份登记表
+const sections = DOC_SECTIONS.map((section) => ({ label: en ? section.en : section.label, href: `${root}/${section.pages[0]}/` }))
+---
+
+<div class="home-bar">
+  <div class="joint joint--tenon">
+    <div class="home-brand"><SiteTitle /></div>
+    <nav class="home-nav print:hidden" aria-label={en ? 'Documentation sections' : '文档分类'}>
+      {sections.map((section) => <a href={section.href}>{section.label}</a>)}
+    </nav>
+    <i class="scroll-progress" aria-hidden="true"></i>
+  </div>
+  <span class="joint-gap" aria-hidden="true"></span>
+  <div class="joint joint--mortise print:hidden">
+    <Search />
+    <span class="home-social"><SocialIcons /></span>
+    <ThemeSelect />
+    <LangSelect />
+    <i class="joint-seam" aria-hidden="true"></i>
+  </div>
+</div>
+
+<script>
+  // 「滚没滚」只是一个布尔：咬合的形态和过渡全在 CSS 里。放一个哨兵让浏览器自己判断，不监听 scroll
+  const sentinel = document.createElement('i')
+  sentinel.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:28px;pointer-events:none'
+  document.body.prepend(sentinel)
+  new IntersectionObserver(([entry]) => {
+    document.documentElement.toggleAttribute('data-scrolled', !entry.isIntersecting)
+  }).observe(sentinel)
+</script>
+
+<style is:global>
+  /* 外层 header：首页上不要底色、细线和毛玻璃，这些都交给里面两块零件。
+     pointer-events 关掉是因为合拢之后两边空出来的地方不该挡住下面的内容 */
+  :root[data-has-hero] header.header {
+    background: transparent; border: 0; border-image: none; pointer-events: none;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+  }
+
+  .home-bar {
+    --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --tab: 0.7rem;        /* 榫头凸出去多长 */
+    --tab-a: 30%;         /* 榫头占中段：从 30% 到 70% 的高度 */
+    --tab-b: 70%;
+    --seam: 1.5px;        /* 两块之间留的那道缝 */
+    --r: 0.8rem;
+    --tenon-bg: color-mix(in oklab, var(--brand-strong) 90%, transparent);
+    --tenon-fg: oklch(1 0 0);
+    --mortise-bg: color-mix(in oklab, color-mix(in oklab, var(--sl-color-accent) 13%, var(--sl-color-bg-nav)) 84%, transparent);
+    position: relative; pointer-events: auto;
+    /* 居中：空隙的 flex-grow 从 1 收到 0 的过程中，没分出去的那部分空白由它两边平分，两块就往中间走 */
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; max-width: 72rem; height: 100%; margin: 0 auto;
+    transition: height 0.5s var(--ease), margin-top 0.5s var(--ease);
+  }
+  :root[data-scrolled] .home-bar { height: 2.9rem; margin-top: 0.35rem }
+
+  /* 两块之间的空隙：没滚时把两块顶到两头，滚了之后收成 0，两块就合上了 */
+  .joint-gap { flex: 1 1 0; min-width: 0; transition: flex-grow 0.55s var(--ease) }
+  :root[data-scrolled] .joint-gap { flex-grow: 0 }
+
+  .joint { position: relative; display: flex; align-items: center; height: 100%; min-width: 0; transition: padding 0.5s var(--ease), color 0.3s ease }
+  /* 底色画在 ::before 上、形状用 clip-path 切 —— 不能切 .joint 本身，下拉菜单是它的后代，会被一起切掉 */
+  .joint::before {
+    content: ''; position: absolute; z-index: -1; inset: 0; opacity: 0;
+    backdrop-filter: saturate(1.6) blur(18px); -webkit-backdrop-filter: saturate(1.6) blur(18px);
+    transition: opacity 0.35s ease;
+  }
+  :root[data-scrolled] .joint::before { opacity: 1 }
+  /* 合拢后压在页面上的一团品牌色的影子，每块底下各一团。不能用 filter: drop-shadow 画在 .home-bar 上 ——
+     父元素一带 filter，两块零件的毛玻璃（backdrop-filter）取到的背景就只剩父元素自己 */
+  .joint::after {
+    content: ''; position: absolute; z-index: -2; pointer-events: none; inset: 50% 10% -28%;
+    background: var(--brand-strong); filter: blur(18px); opacity: 0; transition: opacity 0.5s ease;
+  }
+  :root[data-scrolled] .joint::after { opacity: 0.3 }
+
+  /* 榫：右边中段凸出去一截 */
+  .joint--tenon { flex: 0 1 auto; gap: 1.25rem }
+  :root[data-scrolled] .joint--tenon { padding: 0 0.9rem 0 0.7rem; color: var(--tenon-fg) }
+  .joint--tenon::before {
+    right: calc(-1 * var(--tab)); border-radius: var(--r) 0 0 var(--r); background: var(--tenon-bg);
+    clip-path: polygon(
+      0 0, calc(100% - var(--tab)) 0, calc(100% - var(--tab)) var(--tab-a), 100% var(--tab-a),
+      100% var(--tab-b), calc(100% - var(--tab)) var(--tab-b), calc(100% - var(--tab)) 100%, 0 100%
+    );
+  }
+  /* 卯：左边对应凹进来，四周比榫头大一道缝 */
+  .joint--mortise { flex: 0 0 auto; gap: 0.35rem }
+  :root[data-scrolled] .joint--mortise { padding: 0 0.4rem 0 calc(var(--tab) + 0.6rem) }
+  .joint--mortise::before {
+    border-radius: 0 var(--r) var(--r) 0; background: var(--mortise-bg);
+    clip-path: polygon(
+      var(--seam) 0, 100% 0, 100% 100%, var(--seam) 100%, var(--seam) calc(var(--tab-b) + var(--seam)),
+      calc(var(--tab) + var(--seam)) calc(var(--tab-b) + var(--seam)), calc(var(--tab) + var(--seam)) calc(var(--tab-a) - var(--seam)),
+      var(--seam) calc(var(--tab-a) - var(--seam))
+    );
+  }
+
+  /* 合上的那一下：接缝亮一次，榫往里再顶一点点又回来 */
+  .joint-seam {
+    position: absolute; left: 0; top: 12%; bottom: 12%; width: 2px; border-radius: 2px; pointer-events: none; opacity: 0;
+    background: oklch(1 0 0); box-shadow: 0 0 14px 4px var(--brand-shine-hot), 0 0 4px 1px oklch(1 0 0);
+  }
+  :root[data-scrolled] .joint-seam { animation: joint-seam 0.9s 0.36s ease-out both }
+  :root[data-scrolled] .joint--tenon { animation: joint-seat 0.5s 0.34s var(--ease) both }
+  @keyframes joint-seam { 0% { opacity: 0 } 18% { opacity: 1 } 100% { opacity: 0 } }
+  @keyframes joint-seat { 0% { transform: translateX(-5px) } 55% { transform: translateX(1.5px) } 100% { transform: none } }
+
+  /* —— 榫里面：品牌 + 分类 —— */
+  .home-brand { min-width: 0; flex-shrink: 0 }
+  .home-brand .site-title { gap: 0.6rem; font-size: 1.05rem; letter-spacing: -0.035em; color: inherit }
+  .home-brand .site-title img { width: 1.9rem; height: 1.9rem; transition: width 0.5s var(--ease), height 0.5s var(--ease), box-shadow 0.3s ease }
+  /* 合拢后只留图标：名字收成 0 宽，不是 display:none —— 要有过渡，读屏也还读得到 */
+  .home-brand .site-title span { display: inline-block; max-width: 14rem; overflow: hidden; transition: max-width 0.5s var(--ease), opacity 0.25s ease }
+  :root[data-scrolled] .home-brand .site-title { gap: 0 }
+  /* 图标本身是紫底的圆徽章，落在紫色的榫上会糊成一片，套一圈白边 */
+  :root[data-scrolled] .home-brand .site-title img { width: 1.6rem; height: 1.6rem; box-shadow: 0 0 0 1.5px oklch(1 0 0 / 0.75) }
+  :root[data-scrolled] .home-brand .site-title span { max-width: 0; opacity: 0 }
+
+  .home-nav { display: flex; align-items: center; gap: 0.15rem; min-width: 0; overflow-x: auto; scrollbar-width: none }
+  .home-nav::-webkit-scrollbar { display: none }
+  .home-nav a {
+    flex-shrink: 0; padding: 0.4rem 0.75rem; border-radius: 0.5rem;
+    font-size: 0.875rem; font-weight: 500; white-space: nowrap; text-decoration: none; color: var(--sl-color-gray-2);
+    transition: color 0.16s ease, background-color 0.16s ease;
+  }
+  .home-nav a:hover { color: var(--sl-color-white); background: color-mix(in oklab, var(--sl-color-accent) 12%, transparent) }
+  .home-nav a:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: -2px }
+  :root[data-scrolled] .home-nav a { color: oklch(1 0 0 / 0.86) }
+  :root[data-scrolled] .home-nav a:hover { color: oklch(1 0 0); background: oklch(1 0 0 / 0.16) }
+  :root[data-scrolled] .home-nav a:focus-visible { outline-color: oklch(1 0 0) }
+
+  /* —— 卯里面：工具 —— */
+  .home-social { display: inline-flex; align-items: center; padding-inline: 0.35rem }
+  /* 搜索框：分开时是一个带快捷键的小输入框样子，合拢后只剩放大镜 */
+  @media (min-width: 50rem) {
+    .joint--mortise button[data-open-modal] { width: 10.5rem; max-width: none; transition: width 0.5s var(--ease) }
+    :root[data-scrolled] .joint--mortise button[data-open-modal] { width: 2.25rem; padding-inline: 0; justify-content: center; border-color: transparent; background: transparent }
+    :root[data-scrolled] .joint--mortise button[data-open-modal] :is(span, kbd) { display: none !important }
+  }
+
+  /* 阅读进度：一条贴着底边的线，随整页滚动从左长到右。滚动驱动动画，不支持的浏览器就没有这条线 */
+  .scroll-progress { display: none }
+  @supports (animation-timeline: scroll()) {
+    .scroll-progress {
+      display: block; position: absolute; inset-inline: 0; bottom: 0; height: 2px; pointer-events: none;
+      background: linear-gradient(90deg, var(--brand-strong), var(--brand-shine-hot));
+      transform-origin: 0 50%; transform: scaleX(0);
+      animation: scroll-progress linear both; animation-timeline: scroll(root);
+    }
+    /* 首页这条画在榫的底边里面：紫底上一道白线，缩进去躲开左边的圆角；没滚的时候不显示 */
+    .home-bar .scroll-progress { inset-inline: var(--r) 0.3rem; bottom: 3px; border-radius: 2px; background: oklch(1 0 0 / 0.9); opacity: 0; transition: opacity 0.3s ease }
+    :root[data-scrolled] .home-bar .scroll-progress { opacity: 1 }
+  }
+  @keyframes scroll-progress { to { transform: scaleX(1) } }
+
+  @media (max-width: 49.99rem) {
+    .home-bar { --tab: 0.5rem }
+    .joint--tenon { gap: 0.4rem }
+    /* 窄屏放不下名字：一直只显示图标 */
+    .home-brand .site-title { gap: 0 }
+    .home-brand .site-title span { max-width: 0; opacity: 0 }
+    .home-nav { -webkit-mask-image: linear-gradient(90deg, #000 80%, transparent); mask-image: linear-gradient(90deg, #000 80%, transparent) }
+    .home-nav a { padding: 0.4rem 0.5rem; font-size: 0.8125rem }
+    .home-social { display: none }
+    .joint--mortise { gap: 0.05rem }
+    .joint--mortise .lang-select .dd-trigger > span, .joint--mortise .lang-select .dd-caret { display: none }
+    :root[data-scrolled] .home-bar { margin-top: 0.2rem }
+    :root[data-scrolled] .joint--tenon { padding: 0 0.5rem 0 0.5rem }
+    :root[data-scrolled] .joint--mortise { padding: 0 0.2rem 0 calc(var(--tab) + 0.3rem) }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .home-bar, .home-bar * { transition: none !important; animation: none !important }
+    @supports (animation-timeline: scroll()) {
+      .home-bar .scroll-progress { animation: scroll-progress linear both !important; animation-timeline: scroll(root) !important }
+    }
+  }
+</style>
