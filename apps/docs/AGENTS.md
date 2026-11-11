@@ -264,6 +264,26 @@ README、文档站首页和分享卡片（`og.png`）用的是同一批图，界
   `resolveEnvelope`、`stringify_unsafe_ints`）和权限码 `sys:user:list` 是 2026-11-11 逐个 grep 核对过的，重构这条链路时回来改这一页
 - 刻意没写行号（会漂），也没写路由守卫用的是哪个权限码
 
+## 顶栏：首页是两块咬合的榫卯，内页是通栏（2026-11-11）
+
+`DocsHeader.astro` 按有没有侧边栏分两路：首页走 `HomeHeader.astro`，内页走它自己那套三栏对齐的通栏。
+
+- **首页**是两块零件：左边「榫」（品牌 + 五个分类入口，深紫），右边「卯」（搜索 · GitHub · 主题 · 语言，浅色），对应 logo 里一深一浅两块。
+  停在顶部时两块分在两头、没有底色；滚过 28px 后中间的空隙收掉，两块在屏幕中间合上，接缝是榫头的形状，合上那一下接缝亮一次。
+  第一版做的是「收拢成一颗居中的胶囊」，和别家文档站撞了，所以换成只有这个项目讲得通的榫卯
+- 「滚没滚」是 `<html data-scrolled>` 一个布尔，由哨兵元素 + `IntersectionObserver` 置位，形态和过渡全在 CSS 里。
+  合拢靠中间那个空隙的 `flex-grow` 从 1 过渡到 0；外层 `justify-content: center`，所以没分出去的空白由两边平分，两块往中间走
+- 🔴 **零件的形状切在 `::before` 上，不能切零件本身**（`clip-path` / `overflow: clip` 都一样）：主题和语言的下拉菜单是零件的后代，
+  会被整块裁掉 —— 菜单「打开了」（`hidden` 去掉了、`aria-expanded` 是 true）但屏幕上什么都没有。
+  实测：合拢状态下点开语言菜单，`elementFromPoint` 命中的是菜单面板
+- 🔴 **不能给 `.home-bar` 加 `filter`（比如 `drop-shadow`）来画影子**：父元素一带 filter，子元素的 `backdrop-filter` 取到的背景就只剩
+  父元素自己，毛玻璃变成一块平色。影子画在每块零件各自的 `::after` 上
+- **阅读进度线**（`.scroll-progress`，首页和内页共用一份样式）是滚动驱动动画，包在 `@supports (animation-timeline: scroll())` 里，
+  不支持的浏览器没有这条线。首页那条画在榫的底边里面（紫底白线），内页贴在通栏底边
+- ⚠️ 首页外层的 `header.header` 设了 `pointer-events: none`（合拢后两边空出来的地方不该挡住下面的内容），`.home-bar` 自己再开回 `auto`。
+  往首页顶栏里加东西要放进两块零件里面，放在外面点不到
+- ⚠️ 内页不做这套：Starlight 的侧边栏、正文、目录三栏都按 `--sl-nav-height` 的通栏顶栏对位，顶栏浮起来它们的 `top` 全要跟着改
+
 ## 语言切换不用原生 `<select>`
 
 Starlight 自带的 `LanguageSelect` 是一个原生 `<select>`：下拉列表由操作系统画，Windows 上是一块蓝底的系统列表，
