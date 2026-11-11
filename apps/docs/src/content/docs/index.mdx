@@ -27,7 +27,6 @@ landing:
 ---
 
 import { TabItem, Tabs } from '@astrojs/starlight/components'
-import dashboard from '../../../../../docs/screenshots/dashboard.png'
 import dataPermission from '../../../../../docs/screenshots/data-permission.png'
 import role from '../../../../../docs/screenshots/role.png'
 import signIn from '../../../../../docs/screenshots/sign-in.png'
@@ -41,12 +40,6 @@ import FeatureLine from '../../components/FeatureLine.astro'
 import ProductShot from '../../components/ProductShot.astro'
 import SectionTitle from '../../components/SectionTitle.astro'
 import Showcase from '../../components/Showcase.astro'
-
-<ProductShot url="localhost:8888/dashboard" src={dashboard} alt="fastapi-react-admin 仪表盘">
-
-在线演示账号 `admin` / `123456`。这是公开实例，任何人都能登录，数据可能被其他访客改动或清空，请勿存放真实信息。
-
-</ProductShot>
 
 <SectionTitle id="为什么做它" title="一次重构，沉淀成一个拿来就能写业务的底座" more="为什么做它" href="getting-started/introduction/">
 
