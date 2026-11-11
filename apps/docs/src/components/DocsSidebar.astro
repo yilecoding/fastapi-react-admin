@@ -1,0 +1,52 @@
+---
+import MobileMenuFooter from '@astrojs/starlight/components/MobileMenuFooter.astro'
+import { DOC_LINKS } from '../navigation.mjs'
+
+const { sidebar, locale } = Astro.locals.starlightRoute
+const section = sidebar.find((entry) => entry.type === 'group' &&
+  entry.entries.some((page) => page.type === 'link' && page.isCurrent))
+const pages = section?.type === 'group' ? section.entries.filter((page) => page.type === 'link') : []
+const english = locale === 'en'
+---
+
+<div class="docs-sidebar">
+  <p class="section-label">{section?.label}</p>
+  <ul class="docs-page-list">
+    {pages.map((page) => (
+      <li><a href={page.href} aria-current={page.isCurrent ? 'page' : undefined} {...page.attrs}>{page.label}</a></li>
+    ))}
+  </ul>
+  <div class="docs-resources">
+    <p class="section-label">{english ? 'Resources' : '相关链接'}</p>
+    <ul>
+      {DOC_LINKS.map((link) => (
+        <li><a href={link.href} target="_blank" rel="noreferrer">
+          {english ? link.en : link.label}<span aria-hidden="true">↗</span>
+        </a></li>
+      ))}
+    </ul>
+  </div>
+</div>
+<div class="md:sl-hidden"><MobileMenuFooter /></div>
+
+<style>
+  .docs-sidebar { padding-block: 0.75rem 1rem }
+  .section-label { margin: 0 0 0.7rem; padding-inline: 0.9rem; color: var(--sl-color-white); font-size: 0.8rem; font-weight: 650; letter-spacing: 0.02em }
+  ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.15rem }
+  a {
+    position: relative; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+    min-height: 2.5rem; padding: 0.5rem 0.9rem; border-radius: 0.5rem;
+    color: var(--sl-color-gray-2); text-decoration: none; font-size: 0.875rem; line-height: 1.5;
+  }
+  a:hover { color: var(--sl-color-white); background: var(--sl-color-gray-6) }
+  a[aria-current='page']::before {
+    content: ''; position: absolute; inset-inline-start: 0; top: 0.7rem; bottom: 0.7rem;
+    width: 2px; border-radius: 2px; background: var(--sl-color-accent);
+  }
+  a:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px }
+  .docs-resources { border-top: 1px solid var(--sl-color-hairline-shade); margin-top: 1.5rem; padding-top: 1.5rem }
+  .docs-resources .section-label { color: var(--sl-color-gray-3) }
+  .docs-resources a { color: var(--sl-color-gray-3); font-size: 0.8rem; min-height: 2.25rem }
+  .docs-resources a:hover { color: var(--sl-color-white) }
+  .docs-resources span { font-size: 0.875rem; opacity: 0.65 }
+</style>

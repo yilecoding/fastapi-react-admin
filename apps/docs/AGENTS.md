@@ -91,11 +91,11 @@ Google 的 AI features 文档：
 | 7 | 代码在哪 · 怎么测的 | 完整 GitHub 链接（上面那道检查会核对）；测试写文件名、条数和它证明了什么 |
 | 8 | 在演示站里试试 | 推荐一条操作路径；演示站是共用的，会影响别人的操作要提醒 |
 
-🔴 **侧边栏分组是手写的**：`astro.config.mjs` 的 `FEATURE_GROUPS`。页面文件仍然**平放**在
-`features/` 下 —— 已有的 `/features/xxx/` 被搜索引擎收录了、首页和 README 也在链，挪进子目录就是一批 404。
-手写分组的失败方式是「新加一页忘了登记」：页面能访问、侧边栏里没有、构建全绿。所以 `checkFeatureGroups()`
-在加载配置时核对中英两边的文件和登记表，对不上就让 `astro build` / `astro dev` 直接失败
-（反向验证过：在 features 目录里放一个没登记的临时页，报「没有登记进 FEATURE_GROUPS」）。
+🔴 **内页的顶部分类和左侧文章来自同一份登记表**：`src/navigation.mjs` 的 `DOC_SECTIONS`。
+左侧只平铺当前分类的文章；原有页面路径保持不变，不能为了分类移动内容文件，否则已有链接会 404。
+手写分类的失败方式是「新加一页忘了登记」：页面能访问、导航里没有、构建全绿。
+`astro.config.mjs` 的 `checkDocSections()` 会核对中英两份**全部文章**（首页除外）恰好登记一次，
+漏页、重复登记或缺译都会让构建失败。新增页面时同时补中英文内容和登记表。
 
 **总览页（`features/overview.md`）和 README「功能一览」逐行对应。** 改 README 那张表时一起改这里，
 和测试条数同源是同一条规矩 —— 建这条规矩时两边已经漂开了（总览漏了 MFA、会话管理、Webhook、AI 预审）。
@@ -150,11 +150,14 @@ Starlight 0.39 起不再支持 `autogenerate` 和 `label` 写在同一层。
   不套渐变面板，白底大留白 + 立体榫卯（`src/components/TenonStage.astro`）+ 几圈发丝细的同心圆，
   按钮一种墨色，技术栈是带色点的小标签。榫卯轮廓**直接 import**
   `apps/web/src/components/tenon-outline.ts`，不抄坐标 —— 改了图形，侧边栏、登录页、这里和收尾的水印一起变
-- 首页其余几块都在 `src/components/`：`SectionTitle`（左对齐标题 + 右侧「看文档」）· `Showcase`（大卡片：
-  要点 + 线稿图示）· `Diagram*`（三张 SVG 线稿）· `FeatureLine`（发丝线隔开的小功能）· `Closing`（水印 + 终端卡片）。
+- 首页其余几块都在 `src/components/`：`SectionTitle`（左对齐标题 + 右侧「看文档」）· `Showcase`（特色场景卡片）·
+  `Diagram*`（多端界面切换 / 角色范围切换 / AI 工程保障）· `FeatureLine`（发丝线隔开的小功能）· `Closing`（水印 + 终端卡片）。
   文案一律从页面的 MDX / frontmatter 传进去（`landing` 字段是 `src/content.config.ts` 里扩出来的），
   组件里不写给人看的话 —— 中英文各管各的，图示里的字也走 props
-- ⚠️ `DiagramMonorepo` 的连线是各包 `package.json` 里**真实**的 workspace 依赖，改了依赖要同步那张图
+- ⚠️ `DiagramMonorepo` 的共享包高亮是各客户端 `package.json` 里**真实**的直接 workspace 依赖，改了依赖要同步组件里的映射
+- 多端展示的 Web 画面直接用 `docs/screenshots/dashboard.png`；桌面复用该画面。手机是按
+  `apps/mobile/src/components/brand-top.tsx`、`grouped.tsx` 和原生首页还原的示意，注明非设备实拍；
+  调整这块时对照现有客户端界面与 `features/clients.md`，不要为三端杜撰同一套仪表盘
 - ⚠️ hero 的同心圆和收尾水印会伸出内容列：横向溢出裁在 `.main-frame` 上（`overflow-x: clip`）。
   裁 `html` / `body` 没用 —— 那会传给视口变成 `hidden`，实测 `scrollTo` 照样横移 230px（触屏能不能拖没测）
 - ⚠️ 只给首页加样式时选择器挂在 `:root[data-has-hero]` 上（Starlight 只给带 hero 的页加这个属性），
