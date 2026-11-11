@@ -25,6 +25,7 @@ const { id, title, more, href } = Astro.props
     display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem 2rem;
     margin: 7.5rem 0 2.25rem !important;
   }
+  :root[data-has-hero] .sl-markdown-content > .section-title:first-child { margin-top: clamp(1.5rem, 4vw, 3rem) !important }
   .section-title > * { margin: 0 }
   .section-title-main { max-width: 46rem }
   .section-title-main > * { margin: 0 }
