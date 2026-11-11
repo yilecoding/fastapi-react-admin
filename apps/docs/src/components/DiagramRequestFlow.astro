@@ -1,0 +1,76 @@
+---
+/**
+ * 「项目结构」页开头那张请求流向图：几条横带（浏览器里 / 服务端），每条带里从左到右几个节点，
+ * 带与带之间是一句说明（走什么协议、带了什么）。纯 HTML + CSS，窄屏下节点自己换行。
+ * 文字全部走 props —— 中英文两页各传各的。节点对应的真实文件在页面正文的表里，这里只画形状。
+ */
+interface Node {
+  name: string
+  sub: string
+  /** 高亮：这一环是别的后台模板通常要你自己记得做的 */
+  hl?: boolean
+}
+interface Band {
+  label: string
+  nodes: Node[]
+  /** 这条带下面、去往下一条带的那句话 */
+  hop?: string
+}
+interface Props {
+  bands: Band[]
+  caption: string
+}
+const { bands, caption } = Astro.props
+---
+
+<figure class="flow not-content">
+  {bands.map((band) => (
+    <>
+      <div class="flow-band">
+        <span class="flow-label">{band.label}</span>
+        <ol style={`--n: ${band.nodes.length}`}>
+          {band.nodes.map((node) => (
+            <li class:list={{ 'flow-node--hl': node.hl }}>
+              <strong>{node.name}</strong>
+              <small>{node.sub}</small>
+            </li>
+          ))}
+        </ol>
+      </div>
+      {band.hop && <p class="flow-hop"><span>{band.hop}</span></p>}
+    </>
+  ))}
+  <figcaption>{caption}</figcaption>
+</figure>
+
+<style>
+  .flow { margin: 1.75rem 0; display: grid; gap: 0 }
+  .flow-band { padding: 0.9rem 1rem 1rem; border: 1px solid var(--line-strong); border-radius: 0.9rem; background: color-mix(in oklab, var(--sl-color-accent) 3%, transparent) }
+  .flow-label { display: block; margin-bottom: 0.7rem; font-family: var(--__sl-font-mono); font-size: 0.72rem; color: var(--sl-color-gray-3) }
+  /* 宽屏：一条带里的节点等宽排成一行；窄屏：竖着排，箭头朝下。不用 flex-wrap —— 折行后行尾会挂着一个指向空处的箭头 */
+  ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr) }
+  li {
+    position: relative; min-width: 0; margin: 0;
+    display: flex; flex-direction: column; gap: 0.2rem; padding: 0.65rem 0.8rem;
+    border-radius: 0.6rem; background: var(--sl-color-black); box-shadow: inset 0 0 0 1px var(--line-strong);
+  }
+  li:not(:last-child)::after {
+    content: '↓'; position: absolute; left: 50%; bottom: -1.35rem; transform: translateX(-50%);
+    font-size: 0.85rem; line-height: 1; color: var(--sl-color-accent);
+  }
+  @media (min-width: 50rem) {
+    ol { grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 1.4rem }
+    li:not(:last-child)::after { content: '→'; left: auto; bottom: auto; right: -1.15rem; top: 50%; transform: translateY(-50%) }
+  }
+  strong { font-size: 0.875rem; font-weight: 650; color: var(--sl-color-white); line-height: 1.4 }
+  small { font-size: 0.72rem; line-height: 1.5; color: var(--sl-color-gray-3) }
+  .flow-node--hl { background: var(--diagram-hl-bg); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--sl-color-accent) 55%, transparent) }
+  .flow-node--hl strong { color: var(--sl-color-accent-high) }
+  .flow-hop { margin: 0; display: grid; justify-items: center; padding: 0.15rem 0 }
+  .flow-hop::before, .flow-hop::after { content: ''; width: 1px; height: 0.7rem; border-left: 1px dashed var(--sl-color-accent) }
+  .flow-hop span {
+    padding: 0.25rem 0.75rem; border-radius: 999px; border: 1px dashed var(--line-strong);
+    font-family: var(--__sl-font-mono); font-size: 0.72rem; color: var(--sl-color-gray-2); text-align: center;
+  }
+  figcaption { margin-top: 0.8rem; text-align: center; font-size: 0.8rem; color: var(--sl-color-gray-3) }
+</style>
