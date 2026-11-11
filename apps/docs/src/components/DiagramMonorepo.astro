@@ -1,59 +1,235 @@
 ---
-/**
- * 「一个仓库三端」的线稿：左边 packages、右边 apps，连线就是各包 package.json 里**真实**的
- * workspace 依赖（web ← i18n / ui / platform · desktop ← platform · mobile ← api / i18n），
- * 改了依赖关系记得同步这里。platform 那两条（web 和桌面共用）用强调色。
- * 给人读的字从 props 传进来，中英文首页各传各的。
- */
-interface App { name: string; sub: string }
-interface Props { apps: [App, App, App]; caption: string }
-const { apps, caption } = Astro.props
+import { Image } from 'astro:assets'
+import dashboardShot from '../../../../docs/screenshots/dashboard.png'
+import { MORTISE_OUTLINE, TENON_OUTLINE } from '../../../web/src/components/tenon-outline'
+import { BRAND } from '../../../web/src/lib/brand'
 
-// 排列顺序是为了让连线交叉最少（只剩 i18n→web 和 platform→桌面 那一处）
-const PKG = ['ui', 'platform', 'i18n', 'api']
-const pkgY = (i: number) => 50 + i * 60 // 节点顶边
-const appY = (i: number) => 54 + i * 70
-const pc = (i: number) => pkgY(i) + 18 // 中线
-const ac = (i: number) => appY(i) + 24
-const edge = (p: number, a: number) => `M150 ${pc(p)} C 280 ${pc(p)}, 280 ${ac(a)}, 400 ${ac(a)}`
-const EDGES: Array<[number, number, boolean]> = [
-  [0, 0, false], [1, 0, true], [2, 0, false], // web ← ui / platform / i18n
-  [1, 1, true], // desktop ← platform
-  [2, 2, false], [3, 2, false], // mobile ← i18n / api
-]
+interface App {
+  name: string
+  sub: string
+  title: string
+  detail: string
+  features: string[]
+  source: string
+}
+interface MobilePreview {
+  greeting: string
+  user: string
+  notice: string
+  noticeTitle: string
+  noticeTime: string
+  approvals: string
+  tiles: [string, string, string, string]
+  todo: string
+  all: string
+  request: string
+  requestMeta: string
+  urgent: string
+  entry: string
+  notifications: string
+  unread: string
+  tabs: [string, string, string]
+}
+interface Props {
+  apps: [App, App, App]
+  controls: string
+  shared: string
+  packages: [string, string, string, string]
+  caption: string
+  screenshotAlt: string
+  mobile: MobilePreview
+}
+const { apps, controls, shared, packages, caption, screenshotAlt, mobile } = Astro.props
+// Direct workspace dependencies from each client's package.json. Electron loads the web build.
+const deps = [['ui', 'platform', 'i18n'], ['platform'], ['api', 'i18n']]
+const keys = ['web', 'desktop', 'mobile']
+const packageNames = ['ui', 'platform', 'i18n', 'api']
+const outline = (pts: typeof TENON_OUTLINE) => pts.map(p => p.join(',')).join(' ')
+const paths: Record<string, string> = {
+  web: 'M3 8h18M6 5h.01M9 5h.01M3 3h18v18H3z',
+  desktop: 'M3 3h18v13H3zM8 21h8M12 16v5',
+  mobile: 'M7 2h10v20H7zM11 18h2',
+  inbox: 'M4 4h16l2 12v4H2v-4zM2 16h6l2 3h4l2-3h6',
+  check: 'm5 12 4 4 10-10M3 6l2 2 4-4',
+  send: 'm22 2-7 20-4-9L2 9zM11 13 22 2',
+  mail: 'M3 5h18v14H3zM3 5l9 8 9-8',
+  home: 'm3 10 9-7 9 7v11h-6v-7H9v7H3z',
+  grid: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
+  person: 'M8 6a4 4 0 1 0 8 0a4 4 0 1 0-8 0M4 22v-3a8 8 0 0 1 16 0v3',
+  bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4',
+}
 ---
 
-<svg viewBox="0 0 560 290" role="img" aria-label={caption}>
-  <text class="d-head" x="20" y="30">packages/</text>
-  <text class="d-head" x="400" y="30">apps/</text>
-  {EDGES.map(([p, a, hl]) => <path class:list={['d-edge', { 'd-edge--hl': hl }]} d={edge(p, a)} />)}
-  {PKG.map((name, i) => (
-    <g>
-      <rect class:list={['d-node', { 'd-node--hl': name === 'platform' }]} x="20" y={pkgY(i)} width="130" height="36" rx="9" />
-      <text class="d-mono" x="38" y={pc(i) + 4.5}>{name}</text>
-    </g>
-  ))}
-  {apps.map((app, i) => (
-    <g>
-      <rect class="d-node" x="400" y={appY(i)} width="150" height="48" rx="10" />
-      <text class="d-label" x="416" y={appY(i) + 21}>{app.name}</text>
-      <text class="d-sub" x="416" y={appY(i) + 37}>{app.sub}</text>
-    </g>
-  ))}
-  <text class="d-caption" x="280" y="284" text-anchor="middle">{caption}</text>
-</svg>
+<repo-scene class="repo-scene" data-selected="web">
+  <div class="repo-tabs" role="group" aria-label={controls}>
+    {apps.map((app, i) => (
+      <button type="button" data-client={keys[i]} data-packages={deps[i].join(' ')} aria-pressed={i === 0}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d={paths[keys[i]]} /></svg>
+        <span>{app.name}</span><small>{app.sub.split(' · ')[1]}</small>
+      </button>
+    ))}
+  </div>
+  <div class="repo-workspace">
+    <div class="repo-preview">
+      <div class="repo-web-preview" data-web-preview>
+        <div class="repo-window-bar" aria-hidden="true"><span class="repo-window-controls"><i></i><i></i><i></i></span><span data-window-title>127.0.0.1:8888/dashboard</span><svg viewBox="0 0 24 24"><path d={paths.web} /></svg></div>
+        <Image class="repo-product-shot" src={dashboardShot} alt={screenshotAlt} widths={[800, 1200, 1600, 2400]} sizes="(min-width: 72rem) 720px, (min-width: 56rem) 65vw, 100vw" quality={90} loading="lazy" />
+      </div>
+      <!-- Illustration mirrors BrandTop, Group/PressRow, WF_TILES and the three native tabs.
+           Native UI has no browser screenshot; do not describe this as a device capture. -->
+      <div class="repo-mobile-preview" data-mobile-preview hidden>
+        <div class="native-phone" role="img" aria-label={apps[2].source}>
+          <div class="native-status" aria-hidden="true"><span>9:41</span><span>▮▮▮ &nbsp; ▰</span></div>
+          <div class="native-brand-top">
+            <div class="native-wordmark"><svg viewBox="0 0 24 24" aria-hidden="true"><polygon points={outline(TENON_OUTLINE)} /><polygon points={outline(MORTISE_OUTLINE)} /></svg><span>{BRAND.wordmark}</span></div>
+            <span class="native-greeting">{mobile.greeting}</span>
+            <strong>{mobile.user}</strong>
+          </div>
+          <div class="native-body">
+            <p class="native-label">{mobile.notice}</p>
+            <div class="native-group native-notice"><div><i></i><strong>{mobile.noticeTitle}</strong><small>{mobile.noticeTime}</small></div></div>
+            <p class="native-label">{mobile.approvals}</p>
+            <div class="native-group native-tiles">{mobile.tiles.map((label, i) => <div><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d={paths[['inbox','check','send','mail'][i]]} /></svg>{i===0 && <b>4</b>}</span><small>{label}</small></div>)}</div>
+            <p class="native-label">{mobile.todo}<span>{mobile.all}</span></p>
+            <div class="native-group native-todo"><div><strong>{mobile.request}</strong><em>{mobile.urgent}</em></div><small>{mobile.requestMeta}</small><span class="native-chevron" aria-hidden="true">›</span></div>
+            <p class="native-label">{mobile.entry}</p>
+            <div class="native-group native-entry"><svg viewBox="0 0 24 24" aria-hidden="true"><path d={paths.bell} /></svg><span>{mobile.notifications}</span><strong>{mobile.unread}</strong><span class="native-chevron" aria-hidden="true">›</span></div>
+          </div>
+          <div class="native-tabbar">{mobile.tabs.map((label,i) => <div class:list={{active:i===0}}><svg viewBox="0 0 24 24" aria-hidden="true"><path d={paths[['home','grid','person'][i]]}/></svg><span>{label}</span></div>)}</div>
+          <div class="native-home-indicator" aria-hidden="true"></div>
+        </div>
+      </div>
+      <div class="repo-source" aria-live="polite">{apps.map((app,i) => <span data-source={keys[i]} hidden={i!==0}>{app.source}</span>)}</div>
+    </div>
+    <div class="repo-inspector">
+      <div class="repo-detail" aria-live="polite" aria-atomic="true">
+        {apps.map((app,i) => <div data-detail={keys[i]} hidden={i!==0}>
+          <code>{app.sub.split(' · ')[0]}</code><h4>{app.title}</h4><p>{app.detail}</p>
+          <ul>{app.features.map(feature => <li><span aria-hidden="true">✓</span>{feature}</li>)}</ul>
+        </div>)}
+      </div>
+      <div class="repo-dependencies">
+        <span class="repo-dependency-label">{shared}</span>
+        {packageNames.map((pkg,i) => <div class="repo-package" data-package={pkg} data-used={deps[0].includes(pkg)}><span class="repo-package-connector" aria-hidden="true"></span><code>{pkg}</code><span>{packages[i]}</span></div>)}
+      </div>
+    </div>
+  </div>
+  <p class="scene-caption">{caption}</p>
+</repo-scene>
+
+<script>
+  class RepoScene extends HTMLElement {
+    connectedCallback() {
+      this.querySelectorAll<HTMLButtonElement>('[data-client]').forEach(button => {
+        button.addEventListener('click', () => {
+          const selected = button.dataset.client!
+          this.dataset.selected = selected
+          this.querySelectorAll<HTMLButtonElement>('[data-client]').forEach(item => item.setAttribute('aria-pressed', String(item === button)))
+          this.querySelectorAll<HTMLElement>('[data-detail], [data-source]').forEach(item => { item.hidden = (item.dataset.detail || item.dataset.source) !== selected })
+          this.querySelectorAll<HTMLElement>('[data-package]').forEach(item => { item.dataset.used = String(button.dataset.packages!.split(' ').includes(item.dataset.package!)) })
+          this.querySelector<HTMLElement>('[data-web-preview]')!.hidden = selected === 'mobile'
+          this.querySelector<HTMLElement>('[data-mobile-preview]')!.hidden = selected !== 'mobile'
+          this.querySelector<HTMLElement>('[data-window-title]')!.textContent = selected === 'desktop' ? 'fastapi-react-admin · Electron' : '127.0.0.1:8888/dashboard'
+        })
+      })
+    }
+  }
+  if (!customElements.get('repo-scene')) customElements.define('repo-scene', RepoScene)
+</script>
 
 <style>
-  svg { font-family: var(--__sl-font) }
-  .d-head { font-family: var(--__sl-font-mono); font-size: 11px; letter-spacing: 0.04em; fill: var(--diagram-muted) }
-  .d-edge { fill: none; stroke: var(--diagram-line); stroke-width: 1.2 }
-  .d-edge--hl { stroke: var(--diagram-hl); stroke-width: 1.5; stroke-dasharray: 5 6; animation: d-flow 1.6s linear infinite }
-  .d-node { fill: var(--diagram-node); stroke: var(--line-strong); stroke-width: 1 }
-  .d-node--hl { fill: var(--diagram-hl-bg); stroke: color-mix(in oklab, var(--diagram-hl) 55%, transparent) }
-  .d-mono { font-family: var(--__sl-font-mono); font-size: 12.5px; fill: var(--diagram-text) }
-  .d-label { font-size: 13px; font-weight: 600; fill: var(--diagram-text) }
-  .d-sub { font-size: 11px; fill: var(--diagram-muted) }
-  .d-caption { font-size: 11.5px; fill: var(--diagram-muted) }
-  @keyframes d-flow { to { stroke-dashoffset: -22 } }
-  @media (prefers-reduced-motion: reduce) { .d-edge--hl { animation: none } }
+  .repo-scene { display: block; min-width: 0 }
+  .repo-tabs { display: flex; border-bottom: 1px solid var(--line); gap: 1.5rem; margin-bottom: 1.5rem }
+  .repo-tabs button { display: flex; align-items: center; gap: .55rem; position: relative; padding: .8rem .15rem 1rem; border: 0; background: transparent; color: var(--sl-color-gray-3); font-size: .86rem; font-weight: 550 }
+  .repo-tabs button::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: transparent }
+  .repo-tabs button[aria-pressed='true'] { color: var(--brand) }
+  .repo-tabs button[aria-pressed='true']::after { background: currentColor }
+  .repo-tabs button:hover { color: var(--sl-color-white) }
+  .repo-tabs small { font-family: var(--__sl-font-mono); font-size: .6rem; font-weight: 400; color: var(--sl-color-gray-3) }
+  .repo-tabs svg, .repo-window-bar svg { width: 1.1rem; height: 1.1rem; stroke: currentColor; stroke-width: 1.5; fill: none; stroke-linejoin: round; stroke-linecap: round; flex-shrink: 0 }
+  .repo-workspace { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr); gap: clamp(1.5rem, 3vw, 2.5rem); align-items: center }
+  .repo-preview { min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center }
+  .repo-web-preview { border: 1px solid var(--line-strong); border-radius: .75rem; overflow: hidden; background: #fff; box-shadow: 0 14px 32px -22px #24203c45; animation: repo-reveal .35s ease-out both }
+  .repo-web-preview[hidden], .repo-mobile-preview[hidden] { display: none }
+  .repo-window-bar { height: 2rem; display: flex; justify-content: space-between; align-items: center; gap: .6rem; padding: 0 .8rem; color: var(--sl-color-gray-3); background: var(--scene-mist); border-bottom: 1px solid var(--line) }
+  .repo-window-bar > span:nth-child(2) { font-family: var(--__sl-font-mono); font-size: .56rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .repo-window-controls { display: flex; gap: .28rem; flex-shrink: 0 }
+  .repo-window-controls i { width: .4rem; height: .4rem; border-radius: 50%; background: var(--sl-color-gray-4) }
+  .repo-window-bar svg { width: .85rem; height: .85rem }
+  .repo-product-shot { display: block; width: 100%; height: auto }
+  .repo-source { min-height: 2rem; padding-top: .8rem; font-size: .62rem; color: var(--sl-color-gray-3); line-height: 1.6 }
+  .repo-detail code { font-family: var(--__sl-font-mono); font-size: .65rem; color: var(--brand) }
+  .repo-detail h4 { margin: .6rem 0 .7rem; font-size: 1.15rem; line-height: 1.5; letter-spacing: -.025em; color: var(--sl-color-white); font-weight: 650 }
+  .repo-detail p { margin: 0; color: var(--sl-color-gray-2); font-size: .78rem; line-height: 1.8 }
+  .repo-detail ul { list-style: none; padding: 0; margin: 1rem 0 0; display: grid; gap: .55rem }
+  .repo-detail li { display: flex; align-items: baseline; gap: .6rem; font-size: .72rem; line-height: 1.6; color: var(--sl-color-gray-2) }
+  .repo-detail li > span { color: var(--brand); font-size: .65rem }
+  .repo-dependencies { border-top: 1px solid var(--line); margin-top: 1.4rem; padding-top: 1rem }
+  .repo-dependency-label { display: block; margin-bottom: .6rem; font-size: .62rem; color: var(--sl-color-gray-3) }
+  .repo-package { display: flex; align-items: center; gap: .6rem; min-height: 1.8rem; color: var(--sl-color-gray-3); transition: color .2s }
+  .repo-package code { font-family: var(--__sl-font-mono); font-size: .65rem; width: 4rem }
+  .repo-package > span:last-child { font-size: .61rem; margin-left: auto }
+  .repo-package-connector { height: .4rem; width: .4rem; border: 1px solid var(--line-strong); border-radius: 2px }
+  .repo-package[data-used='true'] { color: var(--brand) }
+  .repo-package[data-used='true'] .repo-package-connector { background: currentColor; border-color: currentColor }
+  .scene-caption { border-top: 1px solid var(--line); padding-top: 1rem; margin-top: 1.5rem }
+  /* Native palette and grouping mirror apps/mobile/src/styles/global.css and components. */
+  .repo-mobile-preview { --native-bg: #000; --native-card: #1c1c1e; --native-fg: #fff; --native-muted: #8e8e93; --native-line: #2c2c2e; --native-primary: #6b57ff; --native-top: #000; --native-red: #ff453a; display: grid; place-items: center; background: var(--scene-mist); border: 1px solid var(--line); border-radius: .75rem; padding: 1.5rem; min-height: 29rem; animation: repo-reveal .35s ease-out both }
+  :global(:root[data-theme='light']) .repo-mobile-preview { --native-bg: #f4f2fa; --native-card: #fff; --native-fg: #171523; --native-muted: #6b6580; --native-line: #eeecf4; --native-primary: #4630db; --native-top: #e9e3ff; --native-red: #ff3b30 }
+  .native-phone { font-family: var(--__sl-font); width: 240px; border: 5px solid #292633; border-radius: 2rem; background: var(--native-bg); color: var(--native-fg); box-shadow: 0 15px 30px -20px #19182780; overflow: hidden }
+  .native-status { padding: .65rem 1rem .35rem; display: flex; justify-content: space-between; font-size: .55rem; font-weight: 650; background: var(--native-top) }
+  .native-brand-top { padding: .3rem .8rem .8rem; background: linear-gradient(var(--native-top), var(--native-bg)) }
+  .native-wordmark { display: flex; align-items: center; gap: .3rem; margin-bottom: .75rem; font-family: var(--__sl-font-mono); font-size: .4rem; color: var(--native-muted) }
+  .native-wordmark svg { width: .8rem; height: .8rem; fill: var(--native-primary) }
+  .native-greeting { display: block; font-size: .55rem; color: var(--native-muted) }
+  .native-brand-top > strong { display: block; margin-top: .2rem; font-size: 1.2rem; font-weight: 700; letter-spacing: -.04em }
+  .native-body { padding: 0 .6rem .9rem }
+  .native-label { display: flex; justify-content: space-between; margin: .6rem .2rem .3rem; font-size: .5rem; color: var(--native-muted) }
+  .native-label > span { color: var(--native-primary) }
+  .native-group { background: var(--native-card); border-radius: .55rem }
+  .native-notice { padding: .7rem .65rem }
+  .native-notice > div { display: flex; gap: .3rem; align-items: center }
+  .native-notice i { width: .22rem; height: .22rem; border-radius: 50%; background: var(--native-primary); flex-shrink: 0 }
+  .native-notice strong { font-size: .56rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+  .native-notice small { margin-left: auto; white-space: nowrap; color: var(--native-muted); font-size: .45rem }
+  .native-tiles { display: grid; grid-template-columns: repeat(4,1fr); padding: .65rem .1rem }
+  .native-tiles > div { display: flex; flex-direction: column; align-items: center; gap: .3rem }
+  .native-tiles > div > span { position: relative }
+  .native-tiles b { position: absolute; top: -.2rem; right: -.35rem; background: var(--native-primary); color: #fff; padding: 0 .16rem; border-radius: .5rem; font-size: .4rem; min-width: .65rem; text-align: center }
+  .native-tiles small { font-size: .43rem; color: var(--native-muted) }
+  .native-phone svg:not(.native-wordmark svg) { width: .95rem; height: .95rem; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round }
+  .native-todo { padding: .65rem 1.3rem .65rem .65rem; position: relative }
+  .native-todo > div { display: flex; justify-content: space-between; align-items: center; gap: .3rem }
+  .native-todo strong { font-size: .6rem; font-weight: 500 }
+  .native-todo em { font-style: normal; font-size: .4rem; color: var(--native-red); border: 1px solid var(--native-red); padding: 0 .18rem; border-radius: .2rem }
+  .native-todo small { display: block; margin-top: .2rem; font-size: .45rem; color: var(--native-muted) }
+  .native-chevron { color: var(--native-muted); opacity: .5; font-size: .8rem }
+  .native-todo > .native-chevron { position: absolute; right: .6rem; top: .8rem }
+  .native-entry { display: flex; align-items: center; gap: .4rem; padding: .65rem }
+  .native-entry svg { color: var(--native-muted) }
+  .native-entry > span:not(.native-chevron) { font-size: .6rem }
+  .native-entry strong { margin-left: auto; font-size: .47rem; font-weight: 500; color: var(--native-primary) }
+  .native-tabbar { background: var(--native-card); display: grid; grid-template-columns: repeat(3,1fr); padding: .55rem .3rem .2rem; border-top: 1px solid var(--native-line) }
+  .native-tabbar > div { display: flex; flex-direction: column; align-items: center; gap: .2rem; color: var(--native-muted); font-size: .45rem }
+  .native-tabbar > .active { color: var(--native-primary) }
+  .native-home-indicator { height: .8rem; background: var(--native-card); position: relative }
+  .native-home-indicator::after { content: ''; position: absolute; width: 30%; height: 3px; bottom: .25rem; left: 35%; background: var(--native-fg); border-radius: 9px }
+  @keyframes repo-reveal { from { opacity: .4; transform: translateY(5px) } to { opacity: 1; transform: none } }
+  @media (max-width: 55.99rem) {
+    .repo-workspace { grid-template-columns: minmax(0,1fr); gap: 1.25rem }
+    .repo-inspector { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; align-items: start }
+    .repo-dependencies { margin-top: 0; border-top: 0; border-left: 1px solid var(--line); padding: 0 0 0 1.5rem }
+  }
+  @media (max-width: 35rem) {
+    .repo-tabs { gap: .8rem; margin-bottom: 1rem; justify-content: space-between }
+    .repo-tabs button { font-size: .75rem; gap: .35rem }
+    .repo-tabs small { display: none }
+    .repo-tabs svg { width: .9rem; height: .9rem }
+    .repo-inspector { grid-template-columns: minmax(0,1fr); gap: 1.25rem }
+    .repo-dependencies { border-left: 0; border-top: 1px solid var(--line); padding: 1rem 0 0 }
+    .repo-package > span:last-child { margin-left: .5rem }
+    .repo-mobile-preview { padding: 1rem .5rem; min-height: 0 }
+    .repo-window-bar { height: 1.7rem; padding-inline: .5rem }
+    .repo-window-bar > span:nth-child(2) { font-size: .46rem }
+  }
 </style>
