@@ -87,12 +87,15 @@ export default defineConfig({
       // 主题和后台同一套：Inter / JetBrains Mono 自托管（不走 Google Fonts —— 国内打不开），品牌紫见 theme.css
       customCss: ['@fontsource-variable/inter', '@fontsource-variable/jetbrains-mono', './src/styles/theme.css'],
       // 首页 hero 换成登录页那套品牌面板 + 立体榫卯（src/components/Hero.astro）
-      // 顶栏的主题切换换成太阳 / 月亮两段式（src/components/ThemeSelect.astro）
+      // 顶栏的主题切换是一个图标按钮 + 「浅色 / 深色 / 跟随系统」菜单（src/components/ThemeSelect.astro）
       components: {
         Hero: './src/components/Hero.astro',
         ThemeSelect: './src/components/ThemeSelect.astro',
         Header: './src/components/DocsHeader.astro',
         Sidebar: './src/components/DocsSidebar.astro',
+        // 语言切换不用原生 <select>；内页标题下加「复制 Markdown / 打开方式」
+        LanguageSelect: './src/components/LangSelect.astro',
+        PageTitle: './src/components/PageTitle.astro',
       },
       social: [{ icon: 'github', label: 'GitHub', href: REPO }],
       editLink: { baseUrl: `${REPO}/edit/main/apps/docs/` },

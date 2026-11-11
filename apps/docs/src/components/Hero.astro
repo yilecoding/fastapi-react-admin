@@ -20,7 +20,12 @@ const DOTS = ['oklch(0.62 0.13 175)', 'oklch(0.66 0.13 220)', 'oklch(0.55 0.17 2
 <section class="hero not-content" data-tenon-tilt>
   <svg class="hero-rings" viewBox="0 0 800 800" aria-hidden="true">
     {[120, 200, 290, 390].map((r) => <circle cx="400" cy="400" r={r} />)}
+    <!-- 一圈慢慢转的刻度，和两颗沿着圆走的光点：画面里除了榫卯之外唯一在动的东西 -->
+    <circle class="hero-ring-ticks" cx="400" cy="400" r="245" />
+    <g class="hero-orbit"><circle cx="600" cy="400" r="3" /></g>
+    <g class="hero-orbit hero-orbit--far"><circle cx="400" cy="10" r="2.5" /></g>
   </svg>
+  <div class="hero-grid" aria-hidden="true"></div>
   <div class="hero-glow-soft" aria-hidden="true"></div>
 
   <div class="hero-copy">
@@ -71,13 +76,26 @@ const DOTS = ['oklch(0.62 0.13 175)', 'oklch(0.66 0.13 220)', 'oklch(0.55 0.17 2
     top: 50%; right: -16rem; width: 52rem; height: 52rem; transform: translateY(-50%);
     fill: none; stroke: var(--ring); stroke-width: 1;
   }
+  .hero-ring-ticks { stroke: var(--ring-strong); stroke-width: 6; stroke-dasharray: 1 15; transform-origin: 400px 400px; animation: hero-spin 160s linear infinite }
+  .hero-orbit { transform-origin: 400px 400px; animation: hero-spin 26s linear infinite }
+  .hero-orbit--far { animation-duration: 58s; animation-direction: reverse }
+  .hero-orbit circle { stroke: none; fill: var(--brand); filter: drop-shadow(0 0 6px var(--brand)) }
+  /* 点阵底：只在榫卯周围显出来，往四周淡掉 */
+  .hero-grid {
+    position: absolute; z-index: -1; pointer-events: none;
+    top: 50%; right: -16rem; width: 52rem; height: 52rem; transform: translateY(-50%);
+    background-image: radial-gradient(circle, var(--ring-strong) 1px, transparent 1.5px);
+    background-size: 22px 22px;
+    -webkit-mask-image: radial-gradient(closest-side, #000 10%, transparent 78%);
+    mask-image: radial-gradient(closest-side, #000 10%, transparent 78%);
+  }
   .hero-glow-soft {
     position: absolute; z-index: -2; pointer-events: none;
     top: -14rem; left: -18rem; width: 44rem; height: 44rem;
     background: radial-gradient(closest-side, color-mix(in oklab, var(--brand) 9%, transparent), transparent);
   }
   @media (max-width: 59.99rem) {
-    .hero-rings { right: 50%; top: 9rem; width: 34rem; height: 34rem; transform: translate(50%, -50%) }
+    .hero-rings, .hero-grid { right: 50%; top: 9rem; width: 34rem; height: 34rem; transform: translate(50%, -50%) }
   }
 
   .hero-copy { display: flex; flex-direction: column; gap: 1.4rem; min-width: 0 }
@@ -137,7 +155,35 @@ const DOTS = ['oklch(0.62 0.13 175)', 'oklch(0.66 0.13 220)', 'oklch(0.55 0.17 2
 
   @keyframes hero-in { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
   @keyframes hero-shimmer { from { background-position: 200% 0 } to { background-position: -200% 0 } }
+  @keyframes hero-spin { to { transform: rotate(360deg) } }
   @media (prefers-reduced-motion: reduce) {
     .hero *, .shine { animation: none !important }
   }
+
+  /*
+   * 首页往下滚时各块依次浮上来。隐藏态挂在 `.reveal-on` 上，而这个类是下面那段脚本加的 ——
+   * 脚本没跑（禁用 JS、爬虫、减少动效）时内容就是直接可见的，不会有「等一个永远不来的动画」的空白页。
+   */
+  :root.reveal-on [data-reveal] { opacity: 0; transform: translateY(22px); transition: opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1), transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1); transition-delay: calc(var(--reveal-i, 0) * 70ms) }
+  :root.reveal-on [data-reveal].is-in { opacity: 1; transform: none }
 </style>
+
+<script>
+  // 只在首页跑（这个组件只出现在带 hero 的页面）。减少动效时整段不启用
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches && 'IntersectionObserver' in window) {
+    const targets = document.querySelectorAll<HTMLElement>(
+      '.sl-markdown-content :is(.section-title, .showcase, .feature-line, .closing)',
+    )
+    const io = new IntersectionObserver((entries) => {
+      // 同一批进入视口的（一排三个小功能）按先后错开一点
+      entries.filter((e) => e.isIntersecting).forEach((entry, i) => {
+        const el = entry.target as HTMLElement
+        el.style.setProperty('--reveal-i', String(i))
+        el.classList.add('is-in')
+        io.unobserve(el)
+      })
+    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 })
+    targets.forEach((el) => { el.dataset.reveal = ''; io.observe(el) })
+    document.documentElement.classList.add('reveal-on')
+  }
+</script>
