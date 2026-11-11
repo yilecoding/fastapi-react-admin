@@ -235,3 +235,4 @@ README、文档站首页和分享卡片（`og.png`）用的是同一批图，界
 `robots.txt`。所以 sitemap（`/fastapi-react-admin/sitemap-index.xml`）要在 Google Search Console /
 Bing Webmaster 里手动提交。换成自己的域名后改 `astro.config.mjs` 的 `SITE` / `BASE` 两行，
 再在 `public/` 放一份 `robots.txt` 指向 sitemap。
+
