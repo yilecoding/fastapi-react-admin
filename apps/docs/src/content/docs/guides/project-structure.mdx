@@ -1,0 +1,133 @@
+---
+title: 技术架构与项目结构
+description: 前后端怎么分层、一次请求经过哪些文件：以用户列表为例，从前端路由文件一路跟到数据库：每一环在哪个文件、负责什么；以及想改表单、列表、接口字段、权限码、表结构时该去哪个目录找。
+---
+
+import DiagramRequestFlow from '../../../components/DiagramRequestFlow.astro'
+
+第一次打开这个仓库，最快的读法是跟着一次请求走一遍。这一页以**用户列表**（后台的「系统管理 → 用户管理」，接口是 `GET /api/v1/sys/users`）为例，列出它依次经过的文件，再给一张「想改什么去哪找」的表。要从头写一个新模块，看[从零加一个业务模块](/guides/first-module/)。
+
+<DiagramRequestFlow
+  bands={[
+    { label: '浏览器 · apps/web + packages/platform + packages/api', hop: 'GET /api/v1/sys/users · Authorization: Bearer <token>', nodes: [
+      { name: '路由文件', sub: '声明 URL 参数与守卫，不渲染' },
+      { name: '页面注册表', sub: '路由 → 页面组件' },
+      { name: '页面的 api.ts', sub: '拼查询串，发请求' },
+      { name: '请求客户端', sub: '带令牌 · 判定成败' },
+    ] },
+    { label: '服务端 · apps/api/backend', hop: 'SQL · 已带上数据范围条件', nodes: [
+      { name: 'JWT 中间件', sub: '解出当前用户' },
+      { name: '权限依赖', sub: '核对权限码' },
+      { name: 'api', sub: '收参数，调 service' },
+      { name: 'service', sub: '业务规则 · 分页' },
+      { name: 'crud', sub: '自动追加数据范围', hl: true },
+    ] },
+    { label: '数据库', nodes: [{ name: 'PostgreSQL · SQL Server · MySQL', sub: '三选一，同一套代码' }] },
+  ]}
+  caption="箭头是请求方向。高亮的那一环：行级数据范围由 crud 的基类自动加进查询，不用在每个方法里手写"
+/>
+
+## 仓库里有哪些目录？
+
+一个 pnpm + turbo 的 monorepo，后端、三个客户端和文档站都在里面。
+
+```text
+apps/
+├─ api/        后端（FastAPI，Python，uv 管理），代码在 apps/api/backend/
+├─ web/        Web 后台：路由文件 + 页面注册表，不写页面本身
+├─ desktop/    Electron 桌面端模板，加载 web 的构建产物
+├─ mobile/     Expo 移动端模板，原生界面
+├─ worker/     只有一个启动 Celery 的 dev 脚本
+└─ docs/       这个文档站
+packages/
+├─ api/        后端契约：请求客户端、成败判定、生成的 schema.d.ts
+├─ i18n/       语言包与校验脚本
+├─ ui/         通用组件，不含业务
+└─ platform/   页面、登录与权限、外壳（多页签、侧边栏）
+```
+
+包之间的依赖是单向的，写在各自 `package.json` 的 `dependencies` 里：
+
+| 包 | 直接依赖的 workspace 包 |
+|---|---|
+| `apps/web` | `@admin/platform` · `@admin/ui` · `@admin/i18n` |
+| `packages/platform` | `@admin/api` · `@admin/ui` · `@admin/i18n` |
+| `apps/mobile` | `@admin/api` · `@admin/i18n` |
+| `packages/api` · `packages/i18n` · `packages/ui` | 无 |
+
+方向反了（比如 `ui` 去 import `platform`）`pnpm arch:check` 会报错，CI 里也跑这一条。
+
+## 一次请求依次经过哪些文件？
+
+十个环节，前四个在浏览器里，后六个在服务端。
+
+| # | 文件 | 这一环做什么 |
+|---|---|---|
+| 1 | [`apps/web/src/routes/_auth/system/user.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/routes/_auth/system/user.tsx) | 路由文件。用 zod 声明 URL 上有哪些参数（页码、筛选项），挂权限守卫 `requirePerm`；`component: () => null`，自己不渲染页面 |
+| 2 | [`apps/web/src/lib/page-registry.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx) | 页面注册表。`"/_auth/system/user": UserPage` 这一行把路由对到页面组件，由多页签的 `TabOutlet` 挂载 |
+| 3 | [`packages/platform/src/pages/user/api.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/user/api.ts) | `usersQuery` 把参数拼成查询串，发 `GET /api/v1/sys/users`。页面 [`index.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/user/index.tsx) 用 `useQuery` 调它 |
+| 4 | [`packages/api/src/client.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/api/src/client.ts) · [`envelope.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/api/src/envelope.ts) | 请求客户端。加上 `Authorization: Bearer` 和 `Accept-Language`；遇到 401 刷新一次令牌后重放。`resolveEnvelope` 判定成败：HTTP 状态不对，或者 HTTP 200 但信封里的 `code` 不是 200，都算失败 |
+| 5 | [`apps/api/backend/middleware/jwt_auth_middleware.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/middleware/jwt_auth_middleware.py) | JWT 中间件。解令牌、填 `request.user`，并把当前用户放进上下文（第 9 环要用） |
+| 6 | [`apps/api/backend/app/admin/api/v1/sys/user.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/user.py) | 接口函数 `get_users_paginated`。装饰器上的 `dependencies` 声明三件事：`RequestPermission('sys:user:list')`（要哪个权限码）、`DependsRBAC`（核对）、`DependsPagination`（分页参数） |
+| 7 | [`apps/api/backend/common/security/rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py) | `rbac_verify` 核对权限：超级管理员放行，其余用户看他的角色勾选的菜单里有没有这个权限码 |
+| 8 | [`apps/api/backend/app/admin/service/user_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/user_service.py) | `get_list`。向 crud 要一条查询，交给 `paging_data` 分页，再给每个用户补上角色 |
+| 9 | [`apps/api/backend/app/admin/crud/crud_user.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/crud/crud_user.py) · [`common/security/data_scope.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py) | `CRUDUser` 继承 `DataScopedCRUD`。基类改写了 `select` / `select_model` / `count`，每次查询自动追加当前用户的数据范围条件 —— 部门经理因此只查得到本部门及以下的用户，分页总数也是过滤后的 |
+| 10 | [`apps/api/backend/common/response/response_schema.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/response/response_schema.py) · [`utils/serializers.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/serializers.py) | 返回。所有接口都包在 `{ code, msg, data }` 信封里；`stringify_unsafe_ints` 把超过 JS 安全整数范围的 ID 转成字符串，所以前端拿到的 ID 一律是 string |
+
+三处容易看漏的地方：
+
+- **路由文件不渲染页面。** 多页签要同时保留所有打开的页面，所以页面由 `TabOutlet` 按注册表挂载，路由文件只管 URL 参数和守卫。页面组件里也不能直接读路由，参数走 props。原因见[多页签](/features/multi-tab/)。
+- **数据范围不用手写。** 第 9 环是基类自动做的。确实要绕开时（比如后台任务要查全量）用 `bypass_data_scope()`。规则怎么配见[数据权限](/features/data-permissions/)。
+- **成败判定不在页面里。** HTTP 200 不代表成功，要看信封里的 `code`；这个判断集中在 `packages/api`，页面只处理成功的数据和抛出来的 `ApiError`。
+
+## 后端一个模块里有什么？
+
+内置功能在 [`apps/api/backend/app/admin/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/app/admin)，按层分目录，调用方向是 `api → service → crud`：
+
+```text
+apps/api/backend/app/admin/
+├─ api/v1/     接口函数：收参数、声明权限码，调 service
+├─ service/    业务规则、事务
+├─ crud/       查询（继承 DataScopedCRUD）
+├─ model/      SQLAlchemy 模型，一个类一张表
+├─ schema/     请求和响应的字段（Pydantic）
+└─ tests/      这个模块的测试
+```
+
+可拆卸的功能做成插件，放在 [`apps/api/backend/plugin/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin) 下：同样的五层，外加一个 `plugin.toml` 和自己的 `sql/` 种子。详见[插件机制](/features/plugins/)。
+
+## 前端一个页面里有什么？
+
+页面在 [`packages/platform/src/pages/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages) 下，一个页面一个目录。用户管理是这几个文件：
+
+| 文件 | 内容 |
+|---|---|
+| `api.ts` | 这个页面用到的接口函数、类型和查询 key |
+| `columns.tsx` | 列表的列定义和行内操作 |
+| `form.tsx` | 新增 / 编辑表单（react-hook-form + zod） |
+| `index.tsx` | 页面本身：查询区、表格、分页，把筛选条件写进 URL |
+| `table-features.ts` | 这张表启用了哪些表格功能 |
+
+## 想改某样东西，去哪找？
+
+| 要改什么 | 去哪找 |
+|---|---|
+| 表单字段和校验 | 页面目录的 `form.tsx` |
+| 列表的列 | 页面目录的 `columns.tsx` |
+| 筛选条件 | 三处要一起改：路由文件的 `searchSchema`、页面 `index.tsx` 的查询区字段、`api.ts` 里拼查询串的函数 |
+| 接口的请求 / 响应字段 | 后端 `app/admin/schema/`（插件在 `plugin/<名字>/schema/`）。改完跑 `pnpm --filter @admin/api gen:api` 重新生成 `packages/api/src/schema.d.ts`；页面 `api.ts` 里手写的类型也要跟着改 |
+| 业务规则 | `app/admin/service/` |
+| 查询怎么写 | `app/admin/crud/` |
+| 表结构 | 改 `app/admin/model/` 里的模型，再 `pnpm db:revision '说明'` 生成迁移、`pnpm db:upgrade` 升级。迁移文件在 [`apps/api/backend/alembic/versions/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/alembic/versions) |
+| 菜单和按钮权限码 | 种子在 `apps/api/backend/sql/` 下三种数据库各一份的 `init_snowflake_test_data.sql`；种子只在初始化时执行，已经在跑的库要再写一条数据迁移。后端用 `RequestPermission('…')` 声明，前端用 `requirePerm(…)` 守卫 |
+| 界面文案和翻译 | [`packages/i18n/src/locales/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/i18n/src/locales) 的 `zh-CN.json` 和 `en-US.json`，改完跑 `pnpm i18n:check`。后端的报错文案另在 `apps/api/backend/locale/` |
+| 环境变量 | [`apps/api/backend/.env.example`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/.env.example) 和 [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) |
+| 能在界面上改的参数 | 参数配置插件 `apps/api/backend/plugin/config/`，见[参数配置与数据字典](/features/config-dict/) |
+| 定时任务 | [`apps/api/backend/app/task/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/app/task)，见[定时任务](/features/scheduler/) |
+| 加一个侧边栏里看得见的页面 | 路由文件、页面注册表、页面目录、`sys_menu` 的菜单记录、语言包，五处都要有。逐步做法见[从零加一个业务模块](/guides/first-module/) |
+
+## 让 AI 读这个仓库，从哪开始？
+
+给编码代理的约定写在仓库里，不在这个文档站上：根目录的 [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md) 放跨模块的硬纪律，各模块目录下的 `AGENTS.md` 放那一层实测出来的坑。Claude Code 读到某个目录的文件时会自动加载那一份。
+
+文档站这边，每一页都有 Markdown 原文（页面标题下的「复制 Markdown」，或者把地址结尾的 `/` 换成 `.md`），全站索引在 [`llms.txt`](/llms.txt)。

@@ -18,7 +18,7 @@ export const DOC_SECTIONS = [
   {
     label: '开发指南', en: 'Development',
     pages: [
-      'guides/first-module', 'features/developer-tools', 'features/plugins', 'features/open-api',
+      'guides/project-structure', 'guides/first-module', 'features/developer-tools', 'features/plugins', 'features/open-api',
     ],
   },
   {
