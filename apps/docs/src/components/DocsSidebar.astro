@@ -7,6 +7,8 @@ const section = sidebar.find((entry) => entry.type === 'group' &&
   entry.entries.some((page) => page.type === 'link' && page.isCurrent))
 const pages = section?.type === 'group' ? section.entries.filter((page) => page.type === 'link') : []
 const english = locale === 'en'
+// 给 AI 读的索引（src/pages/[...locale]/llms.txt.ts），中英文各一份
+const llms = `${import.meta.env.BASE_URL.replace(/\/$/, '')}${english ? '/en' : ''}/llms.txt`
 ---
 
 <div class="docs-sidebar">
@@ -19,6 +21,7 @@ const english = locale === 'en'
   <div class="docs-resources">
     <p class="section-label">{english ? 'Resources' : '相关链接'}</p>
     <ul>
+      <li><a href={llms}>{english ? 'For AI: llms.txt' : '给 AI 读：llms.txt'}<span aria-hidden="true">↗</span></a></li>
       {DOC_LINKS.map((link) => (
         <li><a href={link.href} target="_blank" rel="noreferrer">
           {english ? link.en : link.label}<span aria-hidden="true">↗</span>

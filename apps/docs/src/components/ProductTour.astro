@@ -1,0 +1,190 @@
+---
+/**
+ * 首屏下面那台「自己会翻页」的产品窗口：几张真实截图轮播，下面一排页签，当前页签里有一条进度。
+ *
+ * 为什么是截图而不是用 HTML 画一个假后台：截图出自 `apps/web/scripts/screenshots.mjs`，界面一改重拍就对上；
+ * 画出来的假界面没有任何东西能核对它和真后台还像不像。
+ *
+ * 轮播的节拍是 CSS 动画（当前页签那条进度），脚本只听它的 `animationend` 翻下一张 ——
+ * 所以「悬停 / 聚焦 / 滚出屏幕就停」只是 `animation-play-state: paused`，不用自己管定时器；
+ * `prefers-reduced-motion` 下进度条没有动画，也就不会自动翻，页签照样能点。
+ * 文案（页签名、说明、alt）全部从 MDX 传进来，中英文各管各的。
+ */
+import { Image } from 'astro:assets'
+
+interface Slide {
+  label: string
+  src: ImageMetadata
+  alt: string
+  url: string
+  note: string
+}
+interface Props {
+  /** 页签组的无障碍名称 */
+  controls: string
+  slides: Slide[]
+}
+const { controls, slides } = Astro.props
+// 和 ProductShot 同一组候选宽度：内容列 68rem 在 2 倍屏上要 2176 物理像素
+const WIDTHS = [800, 1200, 1600, 2400, 3200]
+const first = slides[0]
+---
+
+<product-tour class="tour not-content" data-playing="false">
+  <div class="tour-glow" aria-hidden="true"></div>
+  <div class="tour-lens">
+    <div class="tour-window">
+      <div class="tour-bar" aria-hidden="true">
+        <span class="tour-dot"></span><span class="tour-dot"></span><span class="tour-dot"></span>
+        <span class="tour-url" data-tour-url>{first.url}</span>
+      </div>
+      <div class="tour-slides" style={`aspect-ratio: ${first.src.width} / ${first.src.height}`}>
+        {slides.map((s, i) => (
+          <div class="tour-slide" data-tour-slide data-active={i === 0} aria-hidden={i !== 0}>
+            <Image src={s.src} alt={s.alt} widths={WIDTHS} sizes="(min-width: 72rem) 68rem, 100vw" quality={90} loading={i === 0 ? 'eager' : 'lazy'} fetchpriority={i === 0 ? 'high' : 'auto'} />
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+
+  <div class="tour-tabs" role="group" aria-label={controls}>
+    {slides.map((s, i) => (
+      <button type="button" data-tour-tab data-url={s.url} aria-pressed={i === 0}>
+        <span>{s.label}</span>
+        <i aria-hidden="true"></i>
+      </button>
+    ))}
+  </div>
+  <div class="tour-notes" aria-live="polite">
+    {slides.map((s, i) => <p data-tour-note hidden={i !== 0}>{s.note}</p>)}
+  </div>
+</product-tour>
+
+<script>
+  class ProductTour extends HTMLElement {
+    connectedCallback() {
+      const tabs = [...this.querySelectorAll<HTMLButtonElement>('[data-tour-tab]')]
+      const slides = [...this.querySelectorAll<HTMLElement>('[data-tour-slide]')]
+      const notes = [...this.querySelectorAll<HTMLElement>('[data-tour-note]')]
+      const url = this.querySelector<HTMLElement>('[data-tour-url]')!
+
+      const show = (index: number) => {
+        tabs.forEach((tab, i) => tab.setAttribute('aria-pressed', String(i === index)))
+        slides.forEach((slide, i) => {
+          slide.dataset.active = String(i === index)
+          slide.setAttribute('aria-hidden', String(i !== index))
+        })
+        notes.forEach((note, i) => { note.hidden = i !== index })
+        url.textContent = tabs[index].dataset.url ?? ''
+        // 手机上页签是一条横向滚动的带子：把当前页签挪到中间。只动带子自己的 scrollLeft ——
+        // 用 scrollIntoView 的话，自动翻页时会把整页也拽着滚
+        const strip = tabs[index].parentElement!
+        strip.scrollTo({ left: tabs[index].offsetLeft - (strip.clientWidth - tabs[index].offsetWidth) / 2, behavior: 'smooth' })
+      }
+
+      tabs.forEach((tab, i) => {
+        tab.addEventListener('click', () => show(i))
+        // 进度条走完 = 这一页看够了，翻下一张
+        tab.addEventListener('animationend', (e) => {
+          if (e.animationName === 'tour-progress') show((i + 1) % tabs.length)
+        })
+      })
+
+      // 滚出屏幕就停：看不见的时候翻页没有意义，回来时也不该已经翻到不知哪一张
+      new IntersectionObserver(([entry]) => {
+        this.dataset.playing = String(entry.isIntersecting)
+      }, { threshold: 0.35 }).observe(this)
+    }
+  }
+  if (!customElements.get('product-tour')) customElements.define('product-tour', ProductTour)
+</script>
+
+<style is:global>
+  .tour { position: relative; isolation: isolate; display: block; margin: 0 0 1rem !important }
+  .tour > * { margin: 0 }
+
+  /* 窗口背后那团品牌色的光：只在窗口上半截，往下淡掉 */
+  .tour-glow {
+    position: absolute; z-index: -1; pointer-events: none;
+    inset: -8% -6% 30%;
+    background:
+      radial-gradient(50% 60% at 30% 40%, var(--brand-glow), transparent 70%),
+      radial-gradient(40% 55% at 75% 30%, var(--brand-glow-2), transparent 70%);
+    filter: blur(40px);
+  }
+
+  .tour-lens { perspective: 2400px }
+  .tour-window {
+    overflow: hidden; border-radius: 1rem; background: var(--brand-card);
+    box-shadow: 0 0 0 1px var(--brand-ring), var(--brand-shadow);
+    transform-origin: 50% 0;
+  }
+  /* 窗口随滚动从后仰摆正。只在支持滚动驱动动画的浏览器里做 —— 不支持就是一直摆正的，不靠脚本补 */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .tour-window { animation: tour-settle linear both; animation-timeline: view(); animation-range: entry 0% cover 38% }
+    }
+  }
+  @keyframes tour-settle { from { transform: rotateX(14deg) scale(0.94) } to { transform: none } }
+
+  .tour-bar {
+    display: flex; align-items: center; gap: 0.4rem; height: 2.4rem; padding: 0 0.9rem;
+    background: color-mix(in oklab, var(--sl-color-gray-6) 70%, var(--brand-card));
+    border-bottom: 1px solid var(--brand-ring);
+  }
+  .tour-dot { width: 0.65rem; height: 0.65rem; border-radius: 99px; background: var(--sl-color-gray-4); opacity: 0.55 }
+  .tour-url {
+    margin-inline: auto; padding: 0.2rem 1.4rem; border-radius: 99px; transform: translateX(-1.6rem);
+    font-family: var(--__sl-font-mono); font-size: 0.72rem; color: var(--sl-color-gray-3);
+    background: color-mix(in oklab, var(--sl-color-black) 55%, transparent);
+    max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* 所有截图叠在同一格里，只有当前那张不透明 —— 换页是交叉淡化，窗口高度不跳 */
+  .tour-slides { display: grid; background: #fff }
+  .tour-slide { grid-area: 1 / 1; opacity: 0; transition: opacity 0.6s ease }
+  .tour-slide[data-active='true'] { opacity: 1 }
+  .tour-slide img { display: block; width: 100%; height: auto }
+
+  .tour-tabs { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; margin-top: 1.5rem !important }
+  .tour-tabs button {
+    position: relative; overflow: hidden; cursor: pointer;
+    height: 2.3rem; padding: 0 1.05rem; border: 0; border-radius: 999px;
+    font: inherit; font-size: 0.875rem; font-weight: 500; color: var(--sl-color-gray-3);
+    background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong);
+    transition: color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .tour-tabs button:hover { color: var(--sl-color-white) }
+  .tour-tabs button:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px }
+  .tour-tabs button[aria-pressed='true'] {
+    color: var(--brand); font-weight: 600; background: var(--diagram-hl-bg);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--brand) 30%, transparent);
+  }
+  .tour-tabs button > span { position: relative; z-index: 1 }
+  /* 进度：当前页签底边的一条线，从左走到右 */
+  .tour-tabs button > i {
+    position: absolute; left: 0; bottom: 0; width: 100%; height: 2px;
+    background: var(--brand); transform: scaleX(0); transform-origin: 0 50%;
+  }
+  .tour-tabs button[aria-pressed='true'] > i { animation: tour-progress 5.5s linear both; animation-play-state: paused }
+  .tour[data-playing='true'] .tour-tabs button[aria-pressed='true'] > i { animation-play-state: running }
+  .tour:is(:hover, :focus-within) .tour-tabs button[aria-pressed='true'] > i { animation-play-state: paused }
+  @keyframes tour-progress { from { transform: scaleX(0) } to { transform: scaleX(1) } }
+
+  .tour-notes { margin-top: 1rem !important; min-height: 1.7rem; text-align: center; font-size: 0.9rem; line-height: 1.7; color: var(--sl-color-gray-3) }
+  .tour-notes p { margin: 0; animation: tour-note 0.4s ease both }
+  @keyframes tour-note { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+
+  @media (max-width: 40rem) {
+    .tour-tabs { position: relative; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; padding: 2px }
+    .tour-tabs::-webkit-scrollbar { display: none }
+    .tour-tabs button { flex-shrink: 0; font-size: 0.8125rem; padding: 0 0.85rem }
+    .tour-bar { height: 1.9rem }
+    .tour-url { font-size: 0.6rem; transform: none }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tour-slide { transition: none }
+    .tour-tabs button[aria-pressed='true'] > i, .tour-notes p { animation: none }
+  }
+</style>

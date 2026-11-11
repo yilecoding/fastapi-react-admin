@@ -147,13 +147,21 @@ Starlight 0.39 起不再支持 `autogenerate` 和 `label` 写在同一层。
   不走 Google Fonts，国内打不开会卡住首屏）。⚠️ Starlight 的 `:root` 是**深色**、浅色挂在
   `:root[data-theme='light']`，和后台的 `.dark` 方向相反，从后台抄颜色时别抄反
 - **首页**覆盖了 Starlight 的 `Hero`（`astro.config.mjs` 的 `components`）。2026-11-05 改成「克制」路线：
-  不套渐变面板，白底大留白 + 立体榫卯（`src/components/TenonStage.astro`）+ 几圈发丝细的同心圆，
+  不套渐变面板，白底大留白 + 立体榫卯（`src/components/TenonStage.astro`）+ 几圈发丝细的同心圆（外加一圈慢转的刻度、两颗绕行的光点和一片点阵底），
   按钮一种墨色，技术栈是带色点的小标签。榫卯轮廓**直接 import**
   `apps/web/src/components/tenon-outline.ts`，不抄坐标 —— 改了图形，侧边栏、登录页、这里和收尾的水印一起变
 - 首页其余几块都在 `src/components/`：`SectionTitle`（左对齐标题 + 右侧「看文档」）· `Showcase`（特色场景卡片）·
   `Diagram*`（多端界面切换 / 角色范围切换 / AI 工程保障）· `FeatureLine`（发丝线隔开的小功能）· `Closing`（水印 + 终端卡片）。
   文案一律从页面的 MDX / frontmatter 传进去（`landing` 字段是 `src/content.config.ts` 里扩出来的），
   组件里不写给人看的话 —— 中英文各管各的，图示里的字也走 props
+- hero 正下方是 `ProductTour`：真实截图自动轮播 + 一排带进度的页签（2026-11-11，原来压在页面最底部的「截图」一节挪上来的）。
+  **用截图、不用 HTML 画假后台**：截图重拍就和真界面对上，画出来的没有东西能核对。不放 `dashboard.png` —— 下面多端展示已经用了它
+- ⚠️ `ProductTour` 的翻页节拍是 CSS 动画（当前页签那条进度），脚本只听 `animationend`。所以悬停 / 滚出屏幕时的暂停
+  是 `animation-play-state`，减少动效时进度条没有动画、自然不自动翻。**别改成 `setInterval`**，那三种情况都得自己再管一遍。
+  实测（1440 宽）：停在视口里 7 秒后从第 1 张翻到第 2 张，地址栏和说明跟着换
+- ⚠️ 手机上把当前页签挪到中间只能动页签带自己的 `scrollLeft`：`scrollIntoView` 会在自动翻页时把整页也拽着滚
+- 首页各块滚动时浮现（脚本在 `Hero.astro` 末尾）。隐藏态挂在脚本加的 `:root.reveal-on` 上 —— 脚本没跑（爬虫、禁用 JS、减少动效）
+  时内容直接可见。**不要把 `opacity: 0` 写成默认样式**，那样脚本一挂就是一页空白，而且构建和链接检查全绿
 - ⚠️ `DiagramMonorepo` 的共享包高亮是各客户端 `package.json` 里**真实**的直接 workspace 依赖，改了依赖要同步组件里的映射
 - 多端展示的 Web 画面直接用 `docs/screenshots/dashboard.png`；桌面复用该画面。手机是按
   `apps/mobile/src/components/brand-top.tsx`、`grouped.tsx` 和原生首页还原的示意，注明非设备实拍；
@@ -221,6 +229,70 @@ README、文档站首页和分享卡片（`og.png`）用的是同一批图，界
 
 ⚠️ 正文里出现 `{{n}}` 这类花括号的页面转成 `.mdx` 后会被当成 JSX 表达式，构建报 `ReferenceError`；
 写成行内代码。转之前可以先扫一遍代码块之外的 `{` `}` `<`。
+
+## 给 AI 读的那一层：每页 `.md` · `llms.txt` · 页面上的按钮（2026-11-11）
+
+| 什么 | 在哪 | 地址 |
+|---|---|---|
+| 每页的 Markdown 原文 | `src/pages/[...slug].md.ts` | 页面地址结尾的 `/` 换成 `.md` |
+| 索引（每页一行） | `src/pages/[...locale]/llms.txt.ts` | `/llms.txt` · `/en/llms.txt` |
+| 全文合并 | `src/pages/[...locale]/llms-full.txt.ts` | `/llms-full.txt` · `/en/llms-full.txt` |
+| 标题下的「复制 Markdown / 打开方式」、回到顶部 | `src/components/PageTitle.astro`（覆盖 Starlight 的 `PageTitle`） | —— |
+
+三样都从 `src/lib/markdown.ts` 的 `toMarkdown()` 出：取的是 `.md` / `.mdx` 的**正文源码**，不是渲染后的 HTML。
+`.mdx` 里的 import 行和独占一行的组件标签（`<ProductShot … />`）会去掉，代码块里的内容一个字不动。
+索引的分类和顺序读 `DOC_SECTIONS`，所以新页面登记进去就自动出现在 `llms.txt` 里，不用另外维护一份。
+
+- 🔴 **「在 ChatGPT / Claude 中打开」带过去的是线上的 `.md` 地址**（`SITE` + `BASE`），不是当前页面的地址：
+  对方的服务器要自己去抓，本地预览的 `localhost` 它够不着。所以**新页面没发布之前，这两个入口在本地点了是抓不到的** —— 不是坏了
+- ⚠️ `llms.txt` 按约定该在域名根上，而两份站点都挂在子路径下（`/fastapi-react-admin/`、`/docs/`），
+  自动发现它的工具找不到。现在靠侧边栏「给 AI 读：llms.txt」那条链接和页面上的按钮把人和 AI 引过去；换成自己的域名根之后才算真正符合约定
+- ⚠️ 国内那份站点（宝塔 nginx）默认的 `mime.types` 里**没有 `.md`**，会按 `application/octet-stream` 发 ——
+  「查看 Markdown 原文」变成下载，「复制 Markdown」不受影响（脚本 `fetch` 后按文本读）。**没在那台服务器上实测过**；
+  要在 `docs.conf` 的 `location ^~ /docs/` 里加 `types { text/markdown md; } charset utf-8;`（`types` 会整块替换，记得把 html / css / js 等也带上，或改用 `location ~ \.md$` 单独一段）
+- 实测（本地 dev，2026-11-11）：`/guides/first-module.md` 返回 `text/markdown; charset=utf-8`、53 KB；`/llms-full.txt` 242 KB；
+  点「复制 Markdown」后按钮变成「已复制」。复制失败（取不到原文 / 浏览器不给剪贴板）时按钮显示「复制失败」——根 `CLAUDE.md` 硬纪律 9
+
+## 开发指南的「技术架构与项目结构」页（`guides/project-structure.mdx`）
+
+跟着用户列表这一次请求（`GET /api/v1/sys/users`）从路由文件走到数据库，再给一张「想改什么去哪找」的表。
+开头那张流向图是 `src/components/DiagramRequestFlow.astro`，文字全走 props，中英文各传各的。
+
+- 表里每个文件都写成指向 `main` 的完整 GitHub 链接 —— `check-links.mjs` 会离线核对路径在不在，文件挪了构建就红。
+  **所以别把路径写成不带链接的行内代码**，那样挪了目录没人知道
+- ⚠️ 链接只保证「文件还在」，不保证「说的还对」：符号名（`usersQuery`、`get_users_paginated`、`DataScopedCRUD`、
+  `resolveEnvelope`、`stringify_unsafe_ints`）和权限码 `sys:user:list` 是 2026-11-11 逐个 grep 核对过的，重构这条链路时回来改这一页
+- 刻意没写行号（会漂），也没写路由守卫用的是哪个权限码
+
+## 顶栏：首页是两块咬合的榫卯，内页是通栏（2026-11-11）
+
+`DocsHeader.astro` 按有没有侧边栏分两路：首页走 `HomeHeader.astro`，内页走它自己那套三栏对齐的通栏。
+
+- **首页**是两块零件：左边「榫」（品牌 + 五个分类入口，深紫），右边「卯」（搜索 · GitHub · 主题 · 语言，浅色），对应 logo 里一深一浅两块。
+  停在顶部时两块分在两头、没有底色；滚过 28px 后中间的空隙收掉，两块在屏幕中间合上，接缝是榫头的形状，合上那一下接缝亮一次。
+  第一版做的是「收拢成一颗居中的胶囊」，和别家文档站撞了，所以换成只有这个项目讲得通的榫卯
+- 「滚没滚」是 `<html data-scrolled>` 一个布尔，由哨兵元素 + `IntersectionObserver` 置位，形态和过渡全在 CSS 里。
+  合拢靠中间那个空隙的 `flex-grow` 从 1 过渡到 0；外层 `justify-content: center`，所以没分出去的空白由两边平分，两块往中间走
+- 🔴 **零件的形状切在 `::before` 上，不能切零件本身**（`clip-path` / `overflow: clip` 都一样）：主题和语言的下拉菜单是零件的后代，
+  会被整块裁掉 —— 菜单「打开了」（`hidden` 去掉了、`aria-expanded` 是 true）但屏幕上什么都没有。
+  实测：合拢状态下点开语言菜单，`elementFromPoint` 命中的是菜单面板
+- 🔴 **不能给 `.home-bar` 加 `filter`（比如 `drop-shadow`）来画影子**：父元素一带 filter，子元素的 `backdrop-filter` 取到的背景就只剩
+  父元素自己，毛玻璃变成一块平色。影子画在每块零件各自的 `::after` 上
+- **阅读进度线**（`.scroll-progress`，首页和内页共用一份样式）是滚动驱动动画，包在 `@supports (animation-timeline: scroll())` 里，
+  不支持的浏览器没有这条线。首页那条画在榫的底边里面（紫底白线），内页贴在通栏底边
+- ⚠️ 首页外层的 `header.header` 设了 `pointer-events: none`（合拢后两边空出来的地方不该挡住下面的内容），`.home-bar` 自己再开回 `auto`。
+  往首页顶栏里加东西要放进两块零件里面，放在外面点不到
+- ⚠️ 内页不做这套：Starlight 的侧边栏、正文、目录三栏都按 `--sl-nav-height` 的通栏顶栏对位，顶栏浮起来它们的 `top` 全要跟着改
+
+## 语言切换不用原生 `<select>`
+
+Starlight 自带的 `LanguageSelect` 是一个原生 `<select>`：下拉列表由操作系统画，Windows 上是一块蓝底的系统列表，
+字体、圆角、选中色都不归 CSS 管。换成了 `src/components/LangSelect.astro`（底下是 `Dropdown.astro`，「打开方式」也用它）：
+选项是指向「同一页另一种语言」的真链接，点的那一刻把当前 `#锚点` 接上去。
+
+- 🔴 **两处都要换**：`astro.config.mjs` 的 `components.LanguageSelect`（首页顶栏、手机菜单底部走这条），
+  和 `DocsHeader.astro` 里那句 import（内页顶栏是直接 import 的，覆盖配置管不到它）。只换一处，另一处还是系统下拉
+- ⚠️ 目标地址是自己拼的（base + 语言前缀 + 余下路径），前提是**每一页中英文都有** —— 这一点由 `checkDocSections()` 保证
 
 ## SEO 相关的配置在哪
 

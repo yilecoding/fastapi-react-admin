@@ -1,0 +1,120 @@
+---
+/**
+ * 内页标题：覆盖 Starlight 的 `PageTitle`，在标题下面加一排「交给 AI」的入口 ——
+ * 复制这一页的 Markdown、看原文、带着这一页去问 ChatGPT / Claude。外加一个回到顶部的按钮。
+ *
+ * 首页走的是 `Hero`，不经过这里。
+ */
+import Dropdown from './Dropdown.astro'
+import { hasMarkdown, markdownPath, markdownUrl } from '../lib/markdown'
+
+const { entry, locale } = Astro.locals.starlightRoute
+const en = locale === 'en'
+const md = hasMarkdown(entry)
+const t = en
+  ? { copy: 'Copy Markdown', copied: 'Copied', failed: 'Copy failed', open: 'Open in', raw: 'View Markdown source', ask: (name: string) => `Open in ${name}`, top: 'Back to top',
+      prompt: (url: string) => `Read ${url} — I have questions about this page of the fastapi-react-admin docs.` }
+  : { copy: '复制 Markdown', copied: '已复制', failed: '复制失败', open: '打开方式', raw: '查看 Markdown 原文', ask: (name: string) => `在 ${name} 中打开`, top: '回到顶部',
+      prompt: (url: string) => `阅读 ${url} ，我想就 fastapi-react-admin 文档的这一页提问。` }
+// 交给 AI 的是带域名的 .md 地址：对方的服务器要自己去抓，本地地址它够不着
+const prompt = encodeURIComponent(t.prompt(markdownUrl(entry.id)))
+const assistants = [
+  { name: 'ChatGPT', href: `https://chatgpt.com/?prompt=${prompt}` },
+  { name: 'Claude', href: `https://claude.ai/new?q=${prompt}` },
+]
+---
+
+<h1 id="_top">{entry.data.title}</h1>
+
+{md && (
+  <div class="page-actions not-content print:hidden">
+    <button type="button" class="page-copy" data-copy-md={markdownPath(entry.id)} data-label={t.copy} data-copied={t.copied} data-failed={t.failed}>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V6a2 2 0 0 1 2-2h9" /></svg>
+      <span aria-live="polite">{t.copy}</span>
+    </button>
+    <Dropdown align="start">
+      <span slot="trigger">{t.open}</span>
+      <a class="dd-item" href={markdownPath(entry.id)} target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+        <span>{t.raw}</span>
+      </a>
+      {assistants.map((a) => (
+        <a class="dd-item" href={a.href} target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2" /></svg>
+          <span>{t.ask(a.name)}</span>
+          <svg class="dd-end" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg>
+        </a>
+      ))}
+    </Dropdown>
+  </div>
+)}
+
+<button type="button" class="to-top print:hidden" aria-label={t.top} title={t.top} data-to-top hidden>
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+</button>
+
+<script>
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-copy-md]')) {
+    const label = button.querySelector('span')!
+    let timer = 0
+    const say = (state: 'copied' | 'failed') => {
+      button.dataset.state = state
+      label.textContent = button.dataset[state]!
+      clearTimeout(timer)
+      timer = window.setTimeout(() => { delete button.dataset.state; label.textContent = button.dataset.label! }, 2000)
+    }
+    button.addEventListener('click', async () => {
+      try {
+        const res = await fetch(button.dataset.copyMd!)
+        if (!res.ok) throw new Error(String(res.status))
+        await navigator.clipboard.writeText(await res.text())
+        say('copied')
+      } catch {
+        // 失败要看得见（取不到原文、或者浏览器不给剪贴板权限），不能假装什么都没发生
+        say('failed')
+      }
+    })
+  }
+
+  const top = document.querySelector<HTMLButtonElement>('[data-to-top]')
+  if (top) {
+    const sync = () => { top.hidden = scrollY < 700 }
+    addEventListener('scroll', sync, { passive: true })
+    sync()
+    top.addEventListener('click', () => scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }))
+  }
+</script>
+
+<style>
+  @layer starlight.core {
+    h1 { margin-top: 1rem; font-size: var(--sl-text-h1); line-height: var(--sl-line-height-headings); font-weight: 600; color: var(--sl-color-white) }
+  }
+  .page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 1rem }
+  .page-copy {
+    display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer;
+    height: 2.25rem; padding: 0 0.7rem; border: 0; border-radius: 0.55rem;
+    font: inherit; font-size: 0.8125rem; font-weight: 500; color: var(--sl-color-gray-2);
+    background: transparent; box-shadow: inset 0 0 0 1px var(--line-strong);
+    transition: color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+  }
+  .page-copy:hover { color: var(--sl-color-white); background: var(--sl-color-gray-6) }
+  .page-copy:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px }
+  .page-copy[data-state='copied'] { color: var(--sl-color-accent-high); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--sl-color-accent) 45%, transparent) }
+  .page-copy[data-state='failed'] { color: var(--sl-color-red-high, #f87171); box-shadow: inset 0 0 0 1px var(--sl-color-red, #ef4444) }
+  .page-copy svg, .to-top svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+
+  .to-top {
+    position: fixed; z-index: 50; right: 1.25rem; bottom: 1.25rem; cursor: pointer;
+    display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border: 0; border-radius: 999px;
+    color: var(--sl-color-gray-2); background: var(--sl-color-bg-nav);
+    box-shadow: 0 0 0 1px var(--line-strong), 0 10px 24px -14px oklch(0.15 0.05 280 / 0.6);
+    animation: to-top-in 0.2s ease-out both;
+  }
+  .to-top[hidden] { display: none }
+  .to-top:hover { color: var(--sl-color-accent-high) }
+  .to-top:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px }
+  /* 右下角还可能有「Read in English」那条提示，叠在它上面 */
+  :global(body:has(.en-hint)) .to-top { bottom: 4.75rem }
+  @keyframes to-top-in { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+  @media (prefers-reduced-motion: reduce) { .to-top { animation: none } }
+</style>
