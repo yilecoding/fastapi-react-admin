@@ -307,3 +307,4 @@ Starlight 自带的 `LanguageSelect` 是一个原生 `<select>`：下拉列表�
 `robots.txt`。所以 sitemap（`/fastapi-react-admin/sitemap-index.xml`）要在 Google Search Console /
 Bing Webmaster 里手动提交。换成自己的域名后改 `astro.config.mjs` 的 `SITE` / `BASE` 两行，
 再在 `public/` 放一份 `robots.txt` 指向 sitemap。
+
