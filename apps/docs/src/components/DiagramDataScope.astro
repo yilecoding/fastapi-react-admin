@@ -1,62 +1,102 @@
 ---
-/**
- * 「行级数据权限」的线稿：一棵部门树，虚线框圈出「本部门及以下」—— 部门经理只看得到框里的人。
- * 字从 props 传进来。
- */
+interface Role { name: string; summary: string }
 interface Props {
-  root: string
-  east: string
-  south: string
-  leaves: [string, string, string]
-  scope: string
+  roles: [Role, Role, Role]
+  controls: string
+  heading: string
+  columns: [string, string, string]
+  people: [string, string, string, string]
+  departments: [string, string, string, string]
+  regions: [string, string]
+  visible: string
+  excluded: string
   caption: string
 }
-const { root, east, south, leaves, scope, caption } = Astro.props
-const W = 84
-const H = 30
-const node = (cx: number, y: number) => ({ x: cx - W / 2, y })
-const N = {
-  root: node(220, 16),
-  east: node(122, 92),
-  south: node(318, 92),
-  sh: node(72, 168),
-  hz: node(172, 168),
-  sz: node(318, 168),
-}
-const link = (a: { x: number; y: number }, b: { x: number; y: number }) => {
-  const ax = a.x + W / 2, ay = a.y + H, bx = b.x + W / 2, by = b.y, my = (ay + by) / 2
-  return `M${ax} ${ay} V${my} H${bx} V${by}`
-}
+const { roles, controls, heading, columns, people, departments, regions, visible, excluded, caption } = Astro.props
+const keys = ['all', 'east', 'south']
+const regionKeys = ['east', 'east', 'south', 'south']
 ---
 
-<svg viewBox="0 0 440 250" role="img" aria-label={caption}>
-  <rect class="d-scope" x="20" y="80" width="204" height="132" rx="14" />
-  <text class="d-scope-label" x="34" y="232">{scope}</text>
-  <path class="d-link" d={link(N.root, N.east)} />
-  <path class="d-link" d={link(N.root, N.south)} />
-  <path class="d-link d-link--hl" d={link(N.east, N.sh)} />
-  <path class="d-link d-link--hl" d={link(N.east, N.hz)} />
-  <path class="d-link" d={link(N.south, N.sz)} />
-  {[
-    [N.root, root, false], [N.east, east, true], [N.south, south, false],
-    [N.sh, leaves[0], true], [N.hz, leaves[1], true], [N.sz, leaves[2], false],
-  ].map(([n, label, hl]) => (
-    <g>
-      <rect class:list={['d-node', { 'd-node--hl': hl }]} x={(n as any).x} y={(n as any).y} width={W} height={H} rx="8" />
-      <text class="d-label" x={(n as any).x + W / 2} y={(n as any).y + 19.5} text-anchor="middle">{label as string}</text>
-    </g>
-  ))}
-  <text class="d-caption" x="420" y="232" text-anchor="end">{caption}</text>
-</svg>
+<scope-scene class="scope-scene" data-scope="east">
+  <div class="scene-switch" role="group" aria-label={controls}>
+    {roles.map((role, i) => <button type="button" data-role={keys[i]} aria-pressed={i === 1}>{role.name}</button>)}
+  </div>
+  <div class="scope-map" aria-hidden="true">
+    <div class="scope-source"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 4 6v6c0 4 8 9 8 9s8-5 8-9V6z"/><path d="m8 12 3 3 5-6"/></svg><code>data_scope</code></div>
+    <div class="scope-branches"><span data-region="east">{regions[0]}<b>↙ ↘</b></span><span data-region="south">{regions[1]}<b>↙ ↘</b></span></div>
+  </div>
+  <div class="scope-table">
+    <div class="scope-table-title"><span>{heading}</span><code>sys_user</code></div>
+    <table>
+      <thead><tr>{columns.map(col => <th scope="col">{col}</th>)}</tr></thead>
+      <tbody>{people.map((person, i) => (
+        <tr data-row-region={regionKeys[i]} data-allowed={i < 2} aria-label={i < 2 ? undefined : excluded}>
+          <td><span class="scope-person"><i aria-hidden="true">{person.slice(0,1)}</i><span>{person}</span></span><span class="scope-redacted" aria-hidden="true">••••••</span></td>
+          <td><span class="scope-department">{departments[i]}</span><span class="scope-redacted" aria-hidden="true">••••</span></td>
+          <td><span class="scope-state">{visible}</span><span class="scope-lock" aria-hidden="true">—</span></td>
+        </tr>
+      ))}</tbody>
+    </table>
+    <div class="scope-result" aria-live="polite" aria-atomic="true">{roles.map((role, i) => <span data-summary={keys[i]} hidden={i !== 1}>{role.summary}</span>)}</div>
+  </div>
+  <p class="scene-caption"><span>{caption}</span><code>WHERE dept_id IN (…)</code></p>
+</scope-scene>
+
+<script>
+  class ScopeScene extends HTMLElement {
+    connectedCallback() {
+      const excluded = this.querySelector('[data-allowed="false"]')?.getAttribute('aria-label') || ''
+      this.querySelectorAll<HTMLButtonElement>('[data-role]').forEach(button => {
+        button.addEventListener('click', () => {
+          const selected = button.dataset.role!
+          this.dataset.scope = selected
+          this.querySelectorAll<HTMLButtonElement>('[data-role]').forEach(item => item.setAttribute('aria-pressed', String(item === button)))
+          this.querySelectorAll<HTMLElement>('[data-summary]').forEach(item => { item.hidden = item.dataset.summary !== selected })
+          this.querySelectorAll<HTMLElement>('[data-row-region]').forEach(row => {
+            const allowed = selected === 'all' || row.dataset.rowRegion === selected
+            row.dataset.allowed = String(allowed)
+            if (allowed) row.removeAttribute('aria-label')
+            else row.setAttribute('aria-label', excluded)
+          })
+        })
+      })
+    }
+  }
+  if (!customElements.get('scope-scene')) customElements.define('scope-scene', ScopeScene)
+</script>
 
 <style>
-  svg { font-family: var(--__sl-font) }
-  .d-scope { fill: var(--diagram-hl-bg); stroke: color-mix(in oklab, var(--diagram-hl) 50%, transparent); stroke-width: 1.2; stroke-dasharray: 5 5 }
-  .d-scope-label { font-size: 11.5px; font-weight: 600; fill: var(--diagram-hl) }
-  .d-link { fill: none; stroke: var(--diagram-line); stroke-width: 1.2 }
-  .d-link--hl { stroke: color-mix(in oklab, var(--diagram-hl) 70%, transparent) }
-  .d-node { fill: var(--diagram-node); stroke: var(--line-strong); stroke-width: 1 }
-  .d-node--hl { stroke: color-mix(in oklab, var(--diagram-hl) 60%, transparent) }
-  .d-label { font-size: 12.5px; font-weight: 500; fill: var(--diagram-text) }
-  .d-caption { font-size: 11px; fill: var(--diagram-muted) }
+  .scope-scene { display: block }
+  .scene-switch { gap: .1rem }
+  .scene-switch button { font-size: .7rem; padding: .5rem .6rem }
+  .scope-map { padding: 1.1rem 2rem .6rem; position: relative }
+  .scope-source { display: flex; align-items: center; justify-content: center; gap: .5rem; color: var(--brand) }
+  .scope-source svg { width: 1.7rem; height: 1.7rem; stroke: currentColor; stroke-width: 1.3 }
+  .scope-source code { font-size: .7rem; font-family: var(--__sl-font-mono) }
+  .scope-branches { display: flex; justify-content: space-around; position: relative; margin-top: 1.3rem }
+  .scope-branches::before { content: ''; position: absolute; width: 52%; top: -.75rem; left: 24%; height: .75rem; border: 1px solid var(--line-strong); border-bottom: 0; border-radius: .5rem .5rem 0 0 }
+  .scope-branches::after { content: ''; position: absolute; width: 1px; height: .6rem; top: -1.3rem; left: 50%; background: var(--brand) }
+  .scope-branches span { text-align: center; font-size: .7rem; color: var(--sl-color-gray-3); transition: color .2s }
+  .scope-branches b { display: block; font-size: .8rem; letter-spacing: .9rem; font-weight: 400; padding-left: .9rem; color: var(--line-strong); line-height: 2 }
+  [data-scope='east'] [data-region='east'], [data-scope='south'] [data-region='south'], [data-scope='all'] [data-region] { color: var(--brand) }
+  [data-scope='east'] [data-region='east'] b, [data-scope='south'] [data-region='south'] b, [data-scope='all'] [data-region] b { color: var(--brand) }
+  .scope-table { border: 1px solid var(--line-strong); border-radius: .8rem; background: var(--scene-paper); overflow: hidden; box-shadow: 0 14px 35px -22px color-mix(in oklab, var(--brand) 30%, transparent) }
+  .scope-table-title { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .75rem 1rem; border-bottom: 1px solid var(--line); font-size: .8rem; font-weight: 600; color: var(--sl-color-white) }
+  .scope-table-title code { color: var(--sl-color-gray-3); font-family: var(--__sl-font-mono); font-size: .6rem; font-weight: 400 }
+  table { width: 100%; border-collapse: collapse; font-size: .7rem; table-layout: fixed }
+  th { text-align: left; font-weight: 400; color: var(--sl-color-gray-3); padding: .55rem 1rem; background: var(--scene-mist) }
+  th:first-child { width: 42% }
+  th:last-child { width: 25% }
+  td { padding: .65rem 1rem; border-bottom: 1px solid var(--line); height: 3.2rem; color: var(--sl-color-gray-2) }
+  .scope-person { display: flex; align-items: center; gap: .55rem }
+  .scope-person i { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; flex-shrink: 0; border-radius: .45rem; font-style: normal; font-size: .65rem; background: var(--diagram-hl-bg); color: var(--brand) }
+  .scope-state { display: inline-flex; align-items: center; gap: .4rem; color: var(--brand); font-size: .65rem }
+  .scope-state::before { content: ''; width: .3rem; height: .3rem; border-radius: 50%; background: currentColor }
+  .scope-redacted, .scope-lock { display: none; color: var(--sl-color-gray-4); letter-spacing: .12em }
+  [data-allowed='false'] { background: repeating-linear-gradient(-45deg, transparent, transparent 4px, var(--line) 5px, transparent 6px) }
+  [data-allowed='false'] :is(.scope-person, .scope-department, .scope-state) { display: none }
+  [data-allowed='false'] :is(.scope-redacted, .scope-lock) { display: inline }
+  .scope-result { padding: .7rem 1rem; color: var(--brand); font-size: .68rem; background: var(--diagram-hl-bg); min-height: 2.5rem }
+  .scene-caption code { font-family: var(--__sl-font-mono); font-size: .6rem; white-space: nowrap }
+  @media (max-width: 25rem) { td, th { padding-inline: .65rem } .scene-caption { flex-wrap: wrap; gap: .25rem } }
 </style>

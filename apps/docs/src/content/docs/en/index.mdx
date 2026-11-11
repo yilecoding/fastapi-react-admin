@@ -49,53 +49,72 @@ AI keeps adding systems worth building, yet every new one starts by redoing logi
 
 <div class="showcases">
 
-<Showcase wide title="Web, desktop and mobile in one repo" lead="The backend, the web console, a desktop template, a mobile template and the docs site live in one pnpm + turbo monorepo." href="getting-started/introduction/#whats-in-the-repository" more="See the layout">
+<Showcase wide eyebrow="One foundation. Three experiences." title="Web, desktop and mobile in one repo" lead="A workspace and persistent tabs on web. Printing and hardware on desktop. Native approvals and notifications on mobile. Shared foundations, interfaces built for each client." href="getting-started/introduction/#whats-in-the-repository" more="Explore the structure">
 
-- The web admin console is the core, ready to use
-- The desktop template loads the web build and only adds silent printing, local hardware and auto-update
-- The mobile template has native screens and shares the API types and translations with web
-- Dependencies flow one way, and `pnpm arch:check` enforces it in CI
+Backend, clients and docs in one pnpm + turbo monorepo. Dependencies flow one way, enforced by architecture checks in CI.
 
 <DiagramMonorepo
   slot="diagram"
+  controls="Choose Web, desktop or mobile to explore the interface and shared capabilities"
   apps={[
-    { name: 'Web admin console', sub: 'apps/web · React 19' },
-    { name: 'Desktop template', sub: 'apps/desktop · Electron' },
-    { name: 'Mobile template', sub: 'apps/mobile · Expo' },
+    { name: 'Web console', sub: 'apps/web · React 19', title: 'Start with what needs your attention', detail: 'Tasks, approval progress, shortcuts and messages in a personal workspace. Card layouts are saved per user.', features: ['Tasks and approval progress', 'Tabs that preserve page state', 'Permission-aware navigation'], source: 'Web workspace · actual repository screenshot, Chinese UI' },
+    { name: 'Desktop', sub: 'apps/desktop · Electron', title: 'The same UI, connected to your machine', detail: 'Electron loads the web build. The workspace stays familiar, with a bridge to native capabilities.', features: ['Silent printing for HTML labels', 'Local hardware through native helpers', 'Runtime server and update source settings'], source: 'Desktop shell illustration · reuses the same web UI' },
+    { name: 'Mobile', sub: 'apps/mobile · Expo', title: 'A home screen built for the phone', detail: 'Native grouped lists for notices, approvals, tasks and notifications. Home, Apps and Me in the bottom bar.', features: ['Native screens and interactions', 'Shared API types and translations', 'Currently validated on Android'], source: 'Illustration based on native components · example data, not a device capture' },
   ]}
-  caption="Lines are the real package dependencies · platform is shared by web and desktop"
+  screenshotAlt="Actual admin workspace: pending tasks, initiated approvals, shortcuts and messages (Chinese UI)"
+  shared="Direct shared dependencies"
+  packages={['Components', 'Platform', 'Translations', 'API contract']}
+  caption="Web is the complete admin console; desktop and mobile start from client templates."
+  mobile={{
+    greeting: 'Good morning', user: 'Administrator', notice: 'Notices', noticeTitle: 'System update', noticeTime: '4h ago',
+    approvals: 'My approvals', tiles: ['To do', 'Done', 'Initiated', 'CC'], todo: 'To do', all: 'View all',
+    request: 'Leave request', requestMeta: 'Zhou Min · Manager · 4h ago', urgent: 'Urgent', entry: 'Shortcuts',
+    notifications: 'Notifications', unread: '6 unread', tabs: ['Home', 'Apps', 'Me'],
+  }}
 />
 
 </Showcase>
 
-<Showcase title="Permissions down to the row" lead="Beyond menus and buttons there are data scopes: a role decides which rows a user sees." href="features/data-permissions/" more="Read the docs">
+<Showcase eyebrow="One table. Different perspectives." title="Permissions down to the row" lead="Menus and buttons decide what you can do. Data scopes decide what you can see. Switch roles and watch the table change." href="features/data-permissions/" more="Explore data permissions">
 
-- On the same user table, a manager only sees their own department and below
-- Rules live on model columns, and the UI warns you when one is misconfigured
+Rules live on model columns. The UI warns you when a rule is misconfigured.
 
 <DiagramDataScope
   slot="diagram"
-  root="Company"
-  east="East"
-  south="South"
-  leaves={['Shanghai', 'Hangzhou', 'Shenzhen']}
-  scope="Manager: own department and below"
-  caption="Same table, different rows"
+  controls="Choose a role to explore data scopes"
+  heading="Users"
+  roles={[
+    { name: 'All data', summary: 'Full scope · 4 example rows visible' },
+    { name: 'East manager', summary: 'Own department and below · 2 East rows visible' },
+    { name: 'South manager', summary: 'Own department and below · 2 South rows visible' },
+  ]}
+  columns={['Name', 'Department', 'Visibility']}
+  people={['Lin', 'Chen', 'Zhou', 'Xu']}
+  departments={['Shanghai', 'Hangzhou', 'Shenzhen', 'Guangzhou']}
+  regions={['East', 'South']}
+  visible="Visible"
+  excluded="This row is outside the current role's data scope"
+  caption="Illustration · out-of-scope rows are excluded by the API"
 />
 
 </Showcase>
 
-<Showcase title="Built for working with AI" lead="AI changes code fast, so every change needs something to catch it." href="getting-started/introduction/#why-does-it-suit-writing-code-with-ai" more="Why">
+<Showcase eyebrow="Give every change a foundation." title="Built for working with AI" lead="Give AI the context. Keep verification in the workflow. Directory rules, real tests and API contracts support fast iteration." href="getting-started/introduction/#why-does-it-suit-writing-code-with-ai" more="Explore the workflow">
 
-- 1,600+ tests against a real database and a real browser, no mocks
-- The frontend/backend contract is generated from OpenAPI; on mobile a mismatched API fails type checking, the web client is still migrating
+1,600+ tests against real dependencies. OpenAPI types are in use on mobile; the web client is still migrating.
 
 <DiagramAiGuard
   slot="diagram"
-  change="An AI change"
-  checks={['1,600+ tests', 'OpenAPI types', 'Per-dir CLAUDE.md']}
-  merge="Merge"
-  caption="Every change passes all three"
+  change="A type change"
+  contract="OpenAPI → TypeScript"
+  context="Context for each directory"
+  controls="Explore the safeguards for AI collaboration"
+  checks={[
+    { name: 'Real tests', title: '1,600+ tests against real dependencies', detail: 'Backend tests use real databases. Frontend tests run real browsers. Verify behavior by running the code.', command: 'pnpm --filter web e2e' },
+    { name: 'API contracts', title: 'Types generated from OpenAPI', detail: 'On mobile, mismatched interfaces fail type checking. The web client is migrating toward the same contract.', command: 'pnpm --filter @admin/api gen:api' },
+    { name: 'Directory rules', title: 'Give AI the context for each layer', detail: 'CLAUDE.md / AGENTS.md document boundaries and observed pitfalls. A separate script validates documentation references.', command: 'pnpm ctx:check' },
+  ]}
+  caption="Workflow illustration · not a live CI result"
 />
 
 </Showcase>

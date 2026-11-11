@@ -49,53 +49,72 @@ AI 让要做的系统越来越多，可每个新系统开头都在重复登录�
 
 <div class="showcases">
 
-<Showcase wide title="Web · 桌面 · 手机，一个仓库" lead="后端、Web 后台、桌面端模板、移动端模板和文档站，都在同一个 pnpm + turbo monorepo 里。" href="getting-started/introduction/#一个仓库里有什么" more="看仓库结构">
+<Showcase wide eyebrow="一份底座，三种体验" title={'Web · 桌面 · 手机\n一个仓库。'} lead="Web 的工作台和多页签，桌面的打印与硬件桥接，手机的原生审批与通知。共用底层能力，各有适合自己的界面。" href="getting-started/introduction/#一个仓库里有什么" more="看仓库结构">
 
-- Web 管理后台是主体，开箱即用
-- 桌面端模板直接加载 Web 的构建产物，只补静默打印、本地硬件和自动更新
-- 移动端模板是原生界面，和 Web 共用接口类型与语言包
-- 依赖严格单向，`pnpm arch:check` 在 CI 里把关
+后端、客户端与文档站，都在同一个 pnpm + turbo monorepo。依赖严格单向，CI 用架构检查把关。
 
 <DiagramMonorepo
   slot="diagram"
+  controls="切换 Web、桌面与手机，查看界面和共享能力"
   apps={[
-    { name: 'Web 管理后台', sub: 'apps/web · React 19' },
-    { name: '桌面端模板', sub: 'apps/desktop · Electron' },
-    { name: '移动端模板', sub: 'apps/mobile · Expo' },
+    { name: 'Web 后台', sub: 'apps/web · React 19', title: '从今天的待办开始', detail: '工作台把待我处理、我发起的、常用入口与消息放在一起，卡片布局按人保存。', features: ['待办与审批进度', '多页签保留页面状态', '按权限显示功能入口'], source: 'Web 工作台 · 仓库实拍截图' },
+    { name: '桌面端', sub: 'apps/desktop · Electron', title: '同一份页面，延伸到本机', detail: 'Electron 加载 Web 构建产物，保留同一套工作台与操作习惯，通过桥接调用本机能力。', features: ['静默打印 HTML 标签', '原生助手对接本地硬件', '运行时设置服务器与更新源'], source: '桌面外壳示意 · 复用同一份 Web 页面' },
+    { name: '手机端', sub: 'apps/mobile · Expo', title: '为手机单独组织的首页', detail: '原生分组界面：公告、我的审批、待办与通知。首页、应用、我的，三个底部导航。', features: ['原生界面，独立的交互', '共用 API 类型与语言包', '目前在 Android 上验收'], source: '按现有原生首页组件还原 · 示例数据，非设备实拍' },
   ]}
-  caption="连线是各包真实的依赖 · platform 由 Web 和桌面端共用"
+  screenshotAlt="系统真实工作台：待我处理、我发起的审批、常用入口与消息"
+  shared="当前端直接复用的包"
+  packages={['通用组件', '平台能力', '语言包', '接口契约']}
+  caption="Web 是完整后台；桌面和手机从各自的客户端模板起步。"
+  mobile={{
+    greeting: '上午好', user: '系统管理员', notice: '公告', noticeTitle: '系统升级公告', noticeTime: '4 小时前',
+    approvals: '我的审批', tiles: ['待办', '已办', '我发起的', '抄送我的'], todo: '待办', all: '查看全部',
+    request: '请假申请', requestMeta: '周敏 · 部门审批 · 4 小时前', urgent: '加急', entry: '入口',
+    notifications: '通知', unread: '6 条未读', tabs: ['首页', '应用', '我的'],
+  }}
 />
 
 </Showcase>
 
-<Showcase title="权限细到数据行" lead="菜单、按钮之外还有数据范围：角色决定一个人能看到哪几行。" href="features/data-permissions/" more="看文档">
+<Showcase eyebrow="同一张表，不同视野" title="权限细到数据行" lead="菜单和按钮决定能做什么，数据范围决定能看见什么。切换一个角色，看看这张表。" href="features/data-permissions/" more="了解数据权限">
 
-- 同一张用户表，部门经理只看得到本部门及以下
-- 规则配在模型的列上，配错了界面会直接提示
+规则配在模型列上，配置有误时，界面直接提示。
 
 <DiagramDataScope
   slot="diagram"
-  root="公司"
-  east="华东区"
-  south="华南区"
-  leaves={['上海', '杭州', '深圳']}
-  scope="部门经理：本部门及以下"
-  caption="同一张表，各看各的行"
+  controls="切换角色，查看数据范围示意"
+  heading="用户列表"
+  roles={[
+    { name: '全部数据', summary: '全部范围 · 4 条示例数据可见' },
+    { name: '华东经理', summary: '本部门及以下 · 上海、杭州的 2 条数据可见' },
+    { name: '华南经理', summary: '本部门及以下 · 深圳、广州的 2 条数据可见' },
+  ]}
+  columns={['姓名', '部门', '可见性']}
+  people={['林晓', '陈禾', '周远', '许宁']}
+  departments={['上海', '杭州', '深圳', '广州']}
+  regions={['华东区', '华南区']}
+  visible="可见"
+  excluded="此行不在当前角色的数据范围内"
+  caption="交互示意 · 范围外的行不会由接口返回"
 />
 
 </Showcase>
 
-<Showcase title="为 AI 协作而设计" lead="AI 改代码很快，所以每一处改动都得有东西兜底。" href="getting-started/introduction/#为什么说它适合和-ai-一起写代码" more="为什么">
+<Showcase eyebrow="让每一次改动有据可依" title="为 AI 协作而设计" lead="把上下文交给 AI，把验证留给工程。目录规约、真实测试、接口契约，一起托住快速迭代。" href="getting-started/introduction/#为什么说它适合和-ai-一起写代码" more="了解协作方式">
 
-- 1600+ 条测试连真实数据库、跑真实浏览器，不用 mock
-- 前后端契约由 OpenAPI 生成；移动端接口对不上类型检查就报错，网页端在迁移中
+1600+ 条测试连接真实依赖；OpenAPI 类型已用于移动端，Web 客户端持续迁移中。
 
 <DiagramAiGuard
   slot="diagram"
-  change="AI 的一次改动"
-  checks={['1600+ 条测试', 'OpenAPI 类型契约', '按目录的 CLAUDE.md']}
-  merge="合入"
-  caption="每次改动都要过这三道关"
+  change="一次类型改动"
+  contract="OpenAPI → TypeScript"
+  context="按目录提供上下文"
+  controls="查看 AI 协作的工程保障"
+  checks={[
+    { name: '真实测试', title: '1600+ 条测试，连接真实依赖', detail: '后端连接真实数据库，前端运行真实浏览器。行为有没有改变，用运行结果说话。', command: 'pnpm --filter web e2e' },
+    { name: '接口契约', title: '从 OpenAPI 生成类型', detail: '移动端接口不匹配时，类型检查会报错。Web 客户端仍在迁移，逐步接入同一份契约。', command: 'pnpm --filter @admin/api gen:api' },
+    { name: '目录规约', title: '让 AI 先读懂这一层的边界', detail: 'CLAUDE.md / AGENTS.md 记录目录约定和实测过的坑，为 AI 提供上下文；文档引用另有脚本校验。', command: 'pnpm ctx:check' },
+  ]}
+  caption="工程流程示意 · 非实时 CI 运行结果"
 />
 
 </Showcase>
