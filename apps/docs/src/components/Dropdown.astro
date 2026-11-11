@@ -1,0 +1,104 @@
+---
+/**
+ * 一个按钮 + 一块浮层菜单。语言切换和每页的「打开方式」共用它。
+ *
+ * 为什么不用原生 `<select>`（Starlight 自带的语言切换就是）：下拉列表是操作系统画的，
+ * 字体、圆角、选中色都不归 CSS 管 —— 在 Windows 上是一块带蓝底的系统列表，和整站对不上。
+ * 这里的菜单项是普通的 `<a>` / `<button>`，所以语言切换是真链接：能右键新开、爬虫也能顺着走。
+ *
+ * 菜单项由调用方放进默认 slot，样式用全局类 `dd-item`（slot 里的元素带的是调用方的 scope，
+ * 这里的 scoped 样式够不着）。
+ */
+interface Props {
+  /** 按钮没有可见文字时的无障碍名称 */
+  label?: string
+  align?: 'start' | 'end'
+  class?: string
+}
+const { label, align = 'end', class: cls } = Astro.props
+---
+
+<fra-dropdown class:list={['dd', cls]} data-align={align}>
+  <button type="button" class="dd-trigger" aria-haspopup="true" aria-expanded="false" aria-label={label}>
+    <slot name="trigger" />
+    <svg class="dd-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+  </button>
+  <div class="dd-panel" hidden><slot /></div>
+</fra-dropdown>
+
+<script>
+  class Dropdown extends HTMLElement {
+    connectedCallback() {
+      const trigger = this.querySelector<HTMLButtonElement>('.dd-trigger')!
+      const panel = this.querySelector<HTMLElement>('.dd-panel')!
+      const items = () => [...panel.querySelectorAll<HTMLElement>('a, button')]
+      const set = (open: boolean) => {
+        panel.hidden = !open
+        trigger.setAttribute('aria-expanded', String(open))
+      }
+      trigger.addEventListener('click', () => set(panel.hidden))
+      // 点到外面、焦点移出去、按 Esc 都收起
+      document.addEventListener('pointerdown', (e) => { if (!this.contains(e.target as Node)) set(false) })
+      this.addEventListener('focusout', (e) => { if (!this.contains(e.relatedTarget as Node)) set(false) })
+      this.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !panel.hidden) { set(false); trigger.focus() }
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+        e.preventDefault()
+        set(true)
+        const list = items()
+        const at = list.indexOf(document.activeElement as HTMLElement)
+        list[(at + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length]?.focus()
+      })
+      // 点了菜单里的按钮（不是链接）之后收起；链接会直接离开页面
+      panel.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('button')) set(false) })
+    }
+  }
+  if (!customElements.get('fra-dropdown')) customElements.define('fra-dropdown', Dropdown)
+</script>
+
+<style is:global>
+  .dd { position: relative; display: inline-flex }
+  .dd-trigger {
+    display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer;
+    height: 2.25rem; padding: 0 0.65rem; border: 0; border-radius: 0.55rem;
+    font: inherit; font-size: 0.8125rem; font-weight: 500; white-space: nowrap;
+    color: var(--sl-color-gray-2); background: transparent;
+    box-shadow: inset 0 0 0 1px var(--line-strong);
+    transition: color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+  }
+  .dd-trigger:hover, .dd-trigger[aria-expanded='true'] { color: var(--sl-color-white); background: var(--sl-color-gray-6) }
+  /* 顶栏里的主题和语言：平时不画边框，只有图标和字；移上去 / 展开时才出底色（上面那条 hover 规则） */
+  :is(.theme-select, .lang-select) .dd-trigger { box-shadow: none; padding-inline: 0.5rem }
+  :is(.theme-select, .lang-select) .dd-trigger:is(:hover, [aria-expanded='true']) {
+    background: color-mix(in oklab, var(--sl-color-accent) 12%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--sl-color-accent) 22%, transparent);
+  }
+  .dd-trigger:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px }
+  .dd-trigger svg { width: 1rem; height: 1rem; flex-shrink: 0 }
+  .dd-caret { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.6; transition: transform 0.18s ease }
+  .dd-trigger[aria-expanded='true'] .dd-caret { transform: rotate(180deg) }
+
+  .dd-panel {
+    position: absolute; z-index: 60; top: calc(100% + 0.4rem); min-width: 100%;
+    display: grid; gap: 0.1rem; padding: 0.3rem; border-radius: 0.75rem;
+    background: var(--sl-color-bg-nav); box-shadow: 0 0 0 1px var(--line-strong), 0 18px 40px -18px oklch(0.15 0.05 280 / 0.55);
+    animation: dd-in 0.14s ease-out both;
+  }
+  .dd-panel[hidden] { display: none }
+  .dd[data-align='end'] .dd-panel { right: 0 }
+  .dd[data-align='start'] .dd-panel { left: 0 }
+  /* 手机菜单底部那一处贴着屏幕下沿，往上开 */
+  .mobile-preferences .dd-panel { top: auto; bottom: calc(100% + 0.4rem) }
+  .dd-item {
+    display: flex; align-items: center; gap: 0.6rem; width: 100%; cursor: pointer;
+    min-height: 2.15rem; padding: 0.35rem 0.6rem; border: 0; border-radius: 0.5rem;
+    font: inherit; font-size: 0.8125rem; text-align: start; text-decoration: none; white-space: nowrap;
+    color: var(--sl-color-gray-2); background: transparent;
+  }
+  .dd-item:hover, .dd-item:focus-visible { color: var(--sl-color-white); background: var(--sl-color-gray-6); outline: none }
+  .dd-item[aria-current='true'] { color: var(--sl-color-accent-high); font-weight: 600 }
+  .dd-item svg { width: 1rem; height: 1rem; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round }
+  .dd-item .dd-end { margin-inline-start: auto; opacity: 0.55 }
+  @keyframes dd-in { from { opacity: 0; transform: translateY(-4px) } to { opacity: 1; transform: none } }
+  @media (prefers-reduced-motion: reduce) { .dd-panel { animation: none } .dd-caret { transition: none } }
+</style>
