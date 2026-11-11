@@ -135,8 +135,66 @@ jobs:
         working-directory: apps/api
         run: uvx ruff@0.16.4 check --config pyproject.toml --no-fix backend/
 
+  # 纯文档 PR 不跑 E2E 和两个 pytest：它们合起来要 25 分钟左右，而文档改动碰不到
+  # 它们测的任何东西。文档自己的闸门（`pnpm build` 里的 Astro 构建 + 源码链接检查、
+  # `ctx:check`）在上面的 static job 里，照跑。
+  #
+  # 🔴 **用 job 级的 `if` 跳，不要用 workflow 级的 `paths-ignore`。** 下面三个 job 里
+  # 有两个是 ruleset 要求的检查：job 因为 `if` 被跳过时会上报 skipped，ruleset 把它
+  # 当作通过；整个 workflow 被 `paths` 过滤掉的话这些检查**根本不上报**，PR 永远卡在
+  # 「等待必需的检查」上（和 static job 改名那次同一个症状）。
+  #
+  # 🔴 **判断失败时要全跑，不能全跳。** 依赖它的 job 写的是
+  # `!cancelled() && docs_only != 'true'`：这个 job 自己挂了，`docs_only` 是空串，
+  # 照样全跑。要是写成默认的 `needs` 成功才跑，它一挂下游就全部 skipped，而
+  # skipped 算通过 —— 一个没跑测试的 PR 能直接合进去。
+  #
+  # 什么算「纯文档」：`apps/docs/**`、`docs/**`，以及 `apps/api/` 以外的 `*.md`。
+  # `apps/api/` 下的 Markdown 不算，因为有测试在读它
+  # （`plugin/open/tests/test_open_signature.py` 核对 `plugin/open/README.md` 里的签名示例）。
+  # 以后再有测试读 Markdown，就把那个目录也排除掉。
+  # main 上的 push 永远全跑：`pages` 要把 E2E 报告和文档站一起发，跳了会把 /e2e/ 冲掉。
+  changes:
+    name: 改动范围
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.diff.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          # pull_request 检出的是 refs/pull/N/merge，第一个父提交是 base 的最新提交，
+          # 和它比就是「合进去之后到底改了哪些文件」
+          fetch-depth: 2
+
+      - id: diff
+        run: |
+          if [ "${{ github.event_name }}" != pull_request ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # --no-renames：把 apps/web/x 挪进 apps/docs/ 要同时看到删掉的那一头
+          git diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed.txt"
+          docs_only=true
+          [ -s "$RUNNER_TEMP/changed.txt" ] || docs_only=false
+          # `|| [ -n "$f" ]`：最后一行没换行时 read 会返回失败、那一行被漏掉，漏掉的恰好可能是代码文件
+          while IFS= read -r f || [ -n "$f" ]; do
+            case "$f" in
+              apps/docs/* | docs/*) ;;
+              apps/api/*) docs_only=false ;;
+              *.md) ;;
+              *) docs_only=false ;;
+            esac
+          done < "$RUNNER_TEMP/changed.txt"
+          echo "改动的文件："
+          cat "$RUNNER_TEMP/changed.txt"
+          echo "docs_only=$docs_only"
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+
   test-backend:
     name: pytest · SQL Server
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -296,6 +354,8 @@ jobs:
   # 这个 job 比 test-backend 快得多：不用装 ODBC 驱动，postgres 容器几秒就绪。
   test-backend-postgres:
     name: pytest · PostgreSQL
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -462,6 +522,8 @@ jobs:
 
   test-e2e:
     name: playwright · E2E
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     # 整套约 13 分钟（2 个 worker）；login-phone.spec.ts 要等一次 60 秒的短信冷却。15 分钟撞过一次上限（#171），
     # 症状是 job 显示 cancelled 而列表报告里 121 条全过。2026-11-09 main 上已经要 19.5 分钟（20 分钟的上限只剩半分钟），放到 30
