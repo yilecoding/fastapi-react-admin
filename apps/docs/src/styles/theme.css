@@ -53,6 +53,7 @@
   --diagram-hl: oklch(0.74 0.16 277);
   --diagram-hl-bg: oklch(0.55 0.2 277 / 0.18);
   --ring: oklch(1 0 0 / 0.06);
+  --ring-strong: oklch(0.78 0.15 277 / 0.3);
 }
 
 :root[data-theme='light'] {
@@ -97,6 +98,7 @@
   --diagram-hl: oklch(0.5 0.2 277);
   --diagram-hl-bg: oklch(0.457 0.24 277 / 0.08);
   --ring: oklch(0.457 0.24 277 / 0.09);
+  --ring-strong: oklch(0.457 0.24 277 / 0.28);
 }
 
 /* ── 顶栏：半透明 + 一道品牌色的细线 ─────────────────────────────── */
@@ -144,6 +146,8 @@ h1#_top { letter-spacing: -0.03em; font-weight: 800 }
   border-radius: 0.75rem;
 }
 .sl-markdown-content :is(th, td):not(:where(.not-content *)) { border: none; border-bottom: 1px solid var(--sl-color-gray-5); padding: 0.6rem 0.9rem }
+/* 表格里的长路径（apps/api/backend/…）允许在任意位置折行，否则一列路径会把整张表撑出内容区 */
+.sl-markdown-content td :not(pre) > code { overflow-wrap: anywhere }
 .sl-markdown-content tr:last-child td:not(:where(.not-content *)) { border-bottom: none }
 .sl-markdown-content th:not(:where(.not-content *)) {
   background: color-mix(in oklab, var(--sl-color-accent) 8%, var(--sl-color-gray-6));
@@ -164,20 +168,6 @@ h1#_top { letter-spacing: -0.03em; font-weight: 800 }
 /* hero 的同心圆和收尾的水印会伸出内容列，铺到屏幕边上 —— 横向裁掉，不出滚动条（裁在铺满整宽的 .main-frame 上：clip 不建滚动容器；裁 html / body 没用，那会传给视口变成 hidden，scrollTo 照样能横移） */
 :root[data-has-hero] .main-frame { overflow-x: clip }
 :root[data-has-hero] .content-panel { border-top: none }
-
-/* ── 首页里的截图切换：居中的药丸标签，不是底部划线 ───────────────── */
-:root[data-has-hero] starlight-tabs [role='tablist'] {
-  justify-content: flex-start; flex-wrap: wrap; gap: 0.5rem; border: none; margin-bottom: 1.5rem;
-}
-:root[data-has-hero] starlight-tabs .tab > [role='tab'] {
-  height: 2.3rem; padding: 0 1.1rem; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line-strong);
-  font-size: 0.9rem; font-weight: 500; color: var(--sl-color-gray-3);
-  transition: background-color 0.18s ease, color 0.18s ease;
-}
-:root[data-has-hero] starlight-tabs .tab > [role='tab']:hover { color: var(--sl-color-white) }
-:root[data-has-hero] starlight-tabs .tab [role='tab'][aria-selected='true'] {
-  color: var(--ink-fg); font-weight: 600; background: var(--ink); box-shadow: none;
-}
 
 /* 非中文浏览器进中文页时的「Read in English」提示（脚本在 astro.config.mjs 的 EN_HINT） */
 .en-hint {

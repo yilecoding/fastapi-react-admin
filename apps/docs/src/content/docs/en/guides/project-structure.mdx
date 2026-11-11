@@ -1,0 +1,133 @@
+---
+title: Architecture and project structure
+description: How the front end and back end are layered and which files one request passes through, using the user list as the example — plus where to look when you want to change a form, a list, API fields, permission codes or a table.
+---
+
+import DiagramRequestFlow from '../../../../components/DiagramRequestFlow.astro'
+
+The fastest way to read this repository for the first time is to follow one request through it. This page uses the **user list** (System → Users in the admin, `GET /api/v1/sys/users`) as the example, lists the files it passes through in order, and ends with a "what to change, where to look" table. To write a new module from scratch, see [Add a business module from scratch](/en/guides/first-module/).
+
+<DiagramRequestFlow
+  bands={[
+    { label: 'Browser · apps/web + packages/platform + packages/api', hop: 'GET /api/v1/sys/users · Authorization: Bearer <token>', nodes: [
+      { name: 'Route file', sub: 'declares URL params and the guard; renders nothing' },
+      { name: 'Page registry', sub: 'route → page component' },
+      { name: "The page's api.ts", sub: 'builds the query string, sends the request' },
+      { name: 'Request client', sub: 'attaches the token · decides success or failure' },
+    ] },
+    { label: 'Server · apps/api/backend', hop: 'SQL · data-scope condition already attached', nodes: [
+      { name: 'JWT middleware', sub: 'resolves the current user' },
+      { name: 'Permission dependency', sub: 'checks the permission code' },
+      { name: 'api', sub: 'reads params, calls the service' },
+      { name: 'service', sub: 'business rules · pagination' },
+      { name: 'crud', sub: 'adds the data scope automatically', hl: true },
+    ] },
+    { label: 'Database', nodes: [{ name: 'PostgreSQL · SQL Server · MySQL', sub: 'pick one; same code' }] },
+  ]}
+  caption="Arrows show the request direction. The highlighted hop: row-level data scope is added to the query by the crud base class, not written by hand in each method"
+/>
+
+## What is in the repository?
+
+One pnpm + turbo monorepo holding the back end, three clients and this docs site.
+
+```text
+apps/
+├─ api/        back end (FastAPI, Python, managed by uv); code lives in apps/api/backend/
+├─ web/        web admin: route files + the page registry, not the pages themselves
+├─ desktop/    Electron desktop template; loads the web build
+├─ mobile/     Expo mobile template with a native UI
+├─ worker/     just a dev script that starts Celery
+└─ docs/       this docs site
+packages/
+├─ api/        back-end contract: request client, success/failure rules, generated schema.d.ts
+├─ i18n/       locale files and the check script
+├─ ui/         generic components, no business logic
+└─ platform/   pages, sign-in and permissions, the shell (tabs, sidebar)
+```
+
+Dependencies between packages go one way and are declared in each `package.json`:
+
+| Package | Workspace packages it depends on |
+|---|---|
+| `apps/web` | `@admin/platform` · `@admin/ui` · `@admin/i18n` |
+| `packages/platform` | `@admin/api` · `@admin/ui` · `@admin/i18n` |
+| `apps/mobile` | `@admin/api` · `@admin/i18n` |
+| `packages/api` · `packages/i18n` · `packages/ui` | none |
+
+Reverse the direction (say `ui` importing `platform`) and `pnpm arch:check` fails; CI runs it too.
+
+## Which files does one request pass through?
+
+Ten hops: the first four in the browser, the other six on the server.
+
+| # | File | What this hop does |
+|---|---|---|
+| 1 | [`apps/web/src/routes/_auth/system/user.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/routes/_auth/system/user.tsx) | The route file. Declares the URL parameters (page, filters) with zod and attaches the `requirePerm` guard; `component: () => null`, so it renders no page itself |
+| 2 | [`apps/web/src/lib/page-registry.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx) | The page registry. The line `"/_auth/system/user": UserPage` maps the route to its page component, which the multi-tab `TabOutlet` mounts |
+| 3 | [`packages/platform/src/pages/user/api.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/user/api.ts) | `usersQuery` turns the parameters into a query string and sends `GET /api/v1/sys/users`. The page's [`index.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/user/index.tsx) calls it through `useQuery` |
+| 4 | [`packages/api/src/client.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/api/src/client.ts) · [`envelope.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/api/src/envelope.ts) | The request client. Adds `Authorization: Bearer` and `Accept-Language`; on a 401 it refreshes the token once and replays. `resolveEnvelope` decides success: a bad HTTP status, or HTTP 200 with an envelope `code` other than 200, both count as failure |
+| 5 | [`apps/api/backend/middleware/jwt_auth_middleware.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/middleware/jwt_auth_middleware.py) | JWT middleware. Decodes the token, fills `request.user`, and puts the current user into context (hop 9 needs it) |
+| 6 | [`apps/api/backend/app/admin/api/v1/sys/user.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/user.py) | The endpoint, `get_users_paginated`. Its `dependencies` declare three things: `RequestPermission('sys:user:list')` (which code is required), `DependsRBAC` (the check) and `DependsPagination` (paging parameters) |
+| 7 | [`apps/api/backend/common/security/rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py) | `rbac_verify` checks the permission: superusers pass; everyone else needs the code among the menus their roles have ticked |
+| 8 | [`apps/api/backend/app/admin/service/user_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/user_service.py) | `get_list`. Asks crud for a query, hands it to `paging_data`, then attaches each user's roles |
+| 9 | [`apps/api/backend/app/admin/crud/crud_user.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/crud/crud_user.py) · [`common/security/data_scope.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py) | `CRUDUser` extends `DataScopedCRUD`. The base class overrides `select` / `select_model` / `count` and appends the current user's data-scope condition to every query — which is why a department manager only gets users in their own department and below, and the page total is filtered too |
+| 10 | [`apps/api/backend/common/response/response_schema.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/response/response_schema.py) · [`utils/serializers.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/serializers.py) | The response. Every endpoint wraps its result in a `{ code, msg, data }` envelope; `stringify_unsafe_ints` turns IDs beyond JavaScript's safe integer range into strings, so the front end always receives IDs as strings |
+
+Three things that are easy to miss:
+
+- **Route files do not render pages.** Multi-tab keeps every open page alive, so pages are mounted by `TabOutlet` from the registry and route files only handle URL parameters and guards. Page components must not read the router either; parameters arrive as props. See [Multi-tab](/en/features/multi-tab/).
+- **Data scope is not written by hand.** Hop 9 is done by the base class. When you really need to bypass it (a background job that must read everything), use `bypass_data_scope()`. Configuring the rules is covered in [Data permissions](/en/features/data-permissions/).
+- **Success is not decided in the page.** HTTP 200 does not mean success; the envelope `code` does. That check lives in `packages/api`, so pages only handle successful data and a thrown `ApiError`.
+
+## What is inside a back-end module?
+
+Built-in features live in [`apps/api/backend/app/admin/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/app/admin), one directory per layer, called in the order `api → service → crud`:
+
+```text
+apps/api/backend/app/admin/
+├─ api/v1/     endpoints: read parameters, declare permission codes, call the service
+├─ service/    business rules, transactions
+├─ crud/       queries (extending DataScopedCRUD)
+├─ model/      SQLAlchemy models, one class per table
+├─ schema/     request and response fields (Pydantic)
+└─ tests/      this module's tests
+```
+
+Removable features are plugins under [`apps/api/backend/plugin/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin): the same five layers plus a `plugin.toml` and their own `sql/` seeds. See [Plugins](/en/features/plugins/).
+
+## What is inside a front-end page?
+
+Pages live under [`packages/platform/src/pages/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages), one directory each. The user page has these files:
+
+| File | Contents |
+|---|---|
+| `api.ts` | The API functions, types and query keys this page uses |
+| `columns.tsx` | Column definitions and row actions |
+| `form.tsx` | The create / edit form (react-hook-form + zod) |
+| `index.tsx` | The page itself: query bar, table and pagination, with filters written to the URL |
+| `table-features.ts` | Which table features this table turns on |
+
+## I want to change something — where do I look?
+
+| What to change | Where |
+|---|---|
+| Form fields and validation | `form.tsx` in the page directory |
+| List columns | `columns.tsx` in the page directory |
+| Filters | Three places together: `searchSchema` in the route file, the query-bar fields in the page's `index.tsx`, and the function in `api.ts` that builds the query string |
+| Request / response fields | `app/admin/schema/` on the back end (`plugin/<name>/schema/` for plugins). Then run `pnpm --filter @admin/api gen:api` to regenerate `packages/api/src/schema.d.ts`; hand-written types in the page's `api.ts` need updating too |
+| Business rules | `app/admin/service/` |
+| How a query is written | `app/admin/crud/` |
+| Table structure | Change the model in `app/admin/model/`, then `pnpm db:revision 'message'` to generate a migration and `pnpm db:upgrade` to apply it. Migrations are in [`apps/api/backend/alembic/versions/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/alembic/versions) |
+| Menus and button permission codes | Seeds are the `init_snowflake_test_data.sql` files under `apps/api/backend/sql/`, one per database; seeds only run at initialisation, so a database already in use also needs a data migration. The back end declares codes with `RequestPermission('…')`, the front end guards with `requirePerm(…)` |
+| UI text and translations | `zh-CN.json` and `en-US.json` in [`packages/i18n/src/locales/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/i18n/src/locales), then `pnpm i18n:check`. Back-end messages are separate, in `apps/api/backend/locale/` |
+| Environment variables | [`apps/api/backend/.env.example`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/.env.example) and [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) |
+| Settings editable in the UI | The config plugin, `apps/api/backend/plugin/config/`; see [Config and data dictionary](/en/features/config-dict/) |
+| Scheduled jobs | [`apps/api/backend/app/task/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/app/task); see [Scheduled jobs](/en/features/scheduler/) |
+| A page visible in the sidebar | Five places: the route file, the page registry, the page directory, a `sys_menu` record and the locale files. Step by step in [Add a business module from scratch](/en/guides/first-module/) |
+
+## Where should an AI start reading this repository?
+
+Conventions for coding agents live in the repository, not on this site: [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md) at the root holds the cross-module rules, and an `AGENTS.md` in each module directory holds the pitfalls measured in that layer. Claude Code loads the relevant one automatically when it reads a file in that directory.
+
+On the docs side, every page has a Markdown source (the "Copy Markdown" button under the title, or replace the trailing `/` of the URL with `.md`), and the site index is [`llms.txt`](/en/llms.txt).
