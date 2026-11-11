@@ -1,5 +1,5 @@
 ---
-import DefaultHeader from '@astrojs/starlight/components/Header.astro'
+import HomeHeader from './HomeHeader.astro'
 import LanguageSelect from './LangSelect.astro'
 import Search from '@astrojs/starlight/components/Search.astro'
 import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro'
@@ -11,7 +11,7 @@ const sections = sidebar.filter((entry) => entry.type === 'group')
 const label = locale === 'en' ? 'Documentation sections' : '文档分类'
 ---
 
-{!hasSidebar ? <DefaultHeader /> : (
+{!hasSidebar ? <HomeHeader /> : (
   <div class="docs-header">
     <div class="docs-brand"><SiteTitle /></div>
     <fra-doc-sections class="docs-sections print:hidden">
@@ -29,6 +29,8 @@ const label = locale === 'en' ? 'Documentation sections' : '文档分类'
       <Search />
       <div class="docs-preferences"><SocialIcons /><ThemeSelect /><LanguageSelect /></div>
     </div>
+    <!-- 阅读进度线：样式和首页胶囊那条是同一份（HomeHeader.astro 的全局样式），这里贴在通栏顶栏的底边 -->
+    <i class="scroll-progress" aria-hidden="true"></i>
   </div>
 )}
 
