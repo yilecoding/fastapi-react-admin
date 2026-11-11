@@ -26,10 +26,10 @@ landing:
     - PostgreSQL · SQL Server · MySQL
 ---
 
-import { TabItem, Tabs } from '@astrojs/starlight/components'
 import dataPermission from '../../../../../docs/screenshots/data-permission.png'
 import role from '../../../../../docs/screenshots/role.png'
 import signIn from '../../../../../docs/screenshots/sign-in.png'
+import tabs from '../../../../../docs/screenshots/tabs.png'
 import workflowDesigner from '../../../../../docs/screenshots/workflow-designer.png'
 import workflowInbox from '../../../../../docs/screenshots/workflow-inbox.png'
 import Closing from '../../components/Closing.astro'
@@ -37,9 +37,21 @@ import DiagramAiGuard from '../../components/DiagramAiGuard.astro'
 import DiagramDataScope from '../../components/DiagramDataScope.astro'
 import DiagramMonorepo from '../../components/DiagramMonorepo.astro'
 import FeatureLine from '../../components/FeatureLine.astro'
-import ProductShot from '../../components/ProductShot.astro'
+import ProductTour from '../../components/ProductTour.astro'
 import SectionTitle from '../../components/SectionTitle.astro'
 import Showcase from '../../components/Showcase.astro'
+
+<ProductTour
+  controls="切换截图"
+  slides={[
+    { label: '角色管理', src: role, alt: '角色管理：菜单与按钮权限矩阵', url: 'localhost:8888/system/role', note: '菜单、按钮权限在一张矩阵里勾选，改完立即生效。' },
+    { label: '数据权限', src: dataPermission, alt: '数据权限：行级过滤规则', url: 'localhost:8888/system/data-permission', note: '规则配在模型的列上，决定一个角色能看到哪几行。' },
+    { label: '流程设计', src: workflowDesigner, alt: '审批流程设计器', url: 'localhost:8888/workflow/definition', note: '流程树上配置审批人、条件分支、会签与超时处理。' },
+    { label: '审批中心', src: workflowInbox, alt: '审批中心', url: 'localhost:8888/workflow/inbox', note: '待办、已办、我发起的、抄送我的，集中在一处办理。' },
+    { label: '多页签', src: tabs, alt: '多页签与右键菜单', url: 'localhost:8888/log/change', note: '填了一半的表单、翻到的页码，切回来都还在。' },
+    { label: '登录页', src: signIn, alt: '登录页：立体榫卯品牌面板', url: 'localhost:8888/sign-in', note: '用 main 最新代码在本地拍的；每个页面都有中英文、浅色和深色。' },
+  ]}
+/>
 
 <SectionTitle id="为什么做它" title="一次重构，沉淀成一个拿来就能写业务的底座" more="为什么做它" href="getting-started/introduction/">
 
@@ -132,30 +144,6 @@ AI 让要做的系统越来越多，可每个新系统开头都在重复登录�
   <FeatureLine title="桌面端与移动端" href="features/clients/">Electron 桌面端模板与 Expo 移动端模板，从模板起步，不用从零搭</FeatureLine>
   <FeatureLine title="全部功能" href="features/overview/">登录安全、导入导出、定时任务、监控与日志，按领域列在功能总览里</FeatureLine>
 </div>
-
-<SectionTitle id="截图" title="最新版本的几个页面">
-
-在本地用 `main` 最新代码拍的。每个页面都有中英文、浅色和深色。
-
-</SectionTitle>
-
-<Tabs>
-  <TabItem label="登录页">
-    <ProductShot src={signIn} alt="登录页：立体榫卯品牌面板" url="localhost:8888/sign-in" />
-  </TabItem>
-  <TabItem label="角色管理">
-    <ProductShot src={role} alt="角色管理：菜单与按钮权限矩阵" url="localhost:8888/system/role" />
-  </TabItem>
-  <TabItem label="数据权限">
-    <ProductShot src={dataPermission} alt="数据权限：行级过滤规则" url="localhost:8888/system/data-permission" />
-  </TabItem>
-  <TabItem label="流程设计">
-    <ProductShot src={workflowDesigner} alt="审批流程设计器" url="localhost:8888/workflow/definition" />
-  </TabItem>
-  <TabItem label="审批中心">
-    <ProductShot src={workflowInbox} alt="审批中心" url="localhost:8888/workflow/inbox" />
-  </TabItem>
-</Tabs>
 
 <Closing
   title="五条命令，在本地跑起来"

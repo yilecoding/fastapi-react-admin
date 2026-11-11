@@ -26,10 +26,10 @@ landing:
     - PostgreSQL · SQL Server · MySQL
 ---
 
-import { TabItem, Tabs } from '@astrojs/starlight/components'
 import dataPermission from '../../../../../../docs/screenshots/data-permission.png'
 import role from '../../../../../../docs/screenshots/role.png'
 import signIn from '../../../../../../docs/screenshots/sign-in.png'
+import tabs from '../../../../../../docs/screenshots/tabs.png'
 import workflowDesigner from '../../../../../../docs/screenshots/workflow-designer.png'
 import workflowInbox from '../../../../../../docs/screenshots/workflow-inbox.png'
 import Closing from '../../../components/Closing.astro'
@@ -37,9 +37,21 @@ import DiagramAiGuard from '../../../components/DiagramAiGuard.astro'
 import DiagramDataScope from '../../../components/DiagramDataScope.astro'
 import DiagramMonorepo from '../../../components/DiagramMonorepo.astro'
 import FeatureLine from '../../../components/FeatureLine.astro'
-import ProductShot from '../../../components/ProductShot.astro'
+import ProductTour from '../../../components/ProductTour.astro'
 import SectionTitle from '../../../components/SectionTitle.astro'
 import Showcase from '../../../components/Showcase.astro'
+
+<ProductTour
+  controls="Switch screenshot"
+  slides={[
+    { label: 'Roles', src: role, alt: 'Roles: menu and button permission matrix', url: 'localhost:8888/system/role', note: 'Menu and button permissions are ticked in one matrix and apply immediately.' },
+    { label: 'Data permissions', src: dataPermission, alt: 'Data permissions: row-level filter rules', url: 'localhost:8888/system/data-permission', note: 'Rules are set on model columns and decide which rows a role can see.' },
+    { label: 'Approval designer', src: workflowDesigner, alt: 'Approval flow designer', url: 'localhost:8888/workflow/definition', note: 'Approvers, conditional branches, co-sign and timeouts are set on a flow tree.' },
+    { label: 'Approval center', src: workflowInbox, alt: 'Approval center', url: 'localhost:8888/workflow/inbox', note: 'To-do, done, started by me and copied to me, handled in one place.' },
+    { label: 'Multi-tab', src: tabs, alt: 'Multi-tab with its context menu', url: 'localhost:8888/log/change', note: 'A half-filled form and the page you were on are still there when you switch back.' },
+    { label: 'Sign-in', src: signIn, alt: 'Sign-in page with the 3D joinery mark', url: 'localhost:8888/sign-in', note: 'Taken from main on a local install; every screen ships in Chinese and English, light and dark.' },
+  ]}
+/>
 
 <SectionTitle id="why" title="One rewrite, distilled into a base you can start building on" more="Why we built it" href="getting-started/introduction/">
 
@@ -132,30 +144,6 @@ Rules live on model columns. The UI warns you when a rule is misconfigured.
   <FeatureLine title="Desktop and mobile" href="features/clients/">An Electron desktop template and an Expo mobile template — start from a template, not from zero</FeatureLine>
   <FeatureLine title="Everything else" href="features/overview/">Sign-in security, import / export, scheduled jobs, monitoring and logs, listed by area in the overview</FeatureLine>
 </div>
-
-<SectionTitle id="screens" title="Screens from the latest version">
-
-Taken from `main` on a local install. Every screen ships in Chinese and English, light and dark.
-
-</SectionTitle>
-
-<Tabs>
-  <TabItem label="Sign-in">
-    <ProductShot src={signIn} alt="Sign-in page with the 3D joinery mark" url="localhost:8888/sign-in" />
-  </TabItem>
-  <TabItem label="Roles">
-    <ProductShot src={role} alt="Roles: menu and button permission matrix" url="localhost:8888/system/role" />
-  </TabItem>
-  <TabItem label="Data permissions">
-    <ProductShot src={dataPermission} alt="Data permissions: row-level filter rules" url="localhost:8888/system/data-permission" />
-  </TabItem>
-  <TabItem label="Approval designer">
-    <ProductShot src={workflowDesigner} alt="Approval flow designer" url="localhost:8888/workflow/definition" />
-  </TabItem>
-  <TabItem label="Approval center">
-    <ProductShot src={workflowInbox} alt="Approval center" url="localhost:8888/workflow/inbox" />
-  </TabItem>
-</Tabs>
 
 <Closing
   title="Running locally in five commands"
