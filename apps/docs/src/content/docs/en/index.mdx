@@ -27,7 +27,6 @@ landing:
 ---
 
 import { TabItem, Tabs } from '@astrojs/starlight/components'
-import dashboard from '../../../../../../docs/screenshots/dashboard.png'
 import dataPermission from '../../../../../../docs/screenshots/data-permission.png'
 import role from '../../../../../../docs/screenshots/role.png'
 import signIn from '../../../../../../docs/screenshots/sign-in.png'
@@ -41,12 +40,6 @@ import FeatureLine from '../../../components/FeatureLine.astro'
 import ProductShot from '../../../components/ProductShot.astro'
 import SectionTitle from '../../../components/SectionTitle.astro'
 import Showcase from '../../../components/Showcase.astro'
-
-<ProductShot url="localhost:8888/dashboard" src={dashboard} alt="fastapi-react-admin dashboard">
-
-Live demo account `admin` / `123456` — a public instance: other visitors can change or wipe its data, so don't store anything real there.
-
-</ProductShot>
 
 <SectionTitle id="why" title="One rewrite, distilled into a base you can start building on" more="Why we built it" href="getting-started/introduction/">
 
