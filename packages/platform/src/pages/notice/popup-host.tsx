@@ -10,7 +10,7 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@admin/ui/components/dialog'
 
-import { useHoldTour, useTourActive } from '../../shell/tour/gate'
+import { useTourActive } from '../../shell/tour/gate'
 import { toast } from '@admin/ui/components/toast'
 
 import {
@@ -75,10 +75,6 @@ export function NoticePopupHost() {
   const [last, setLast] = React.useState<NoticeFeedDetail | null>(current)
   if (current && current !== last) setLast(current)
   const shown = current ?? last
-
-  // 还在取、或者有一条要弹：按住外壳导览，别让它先弹出来压住弹窗（`gate.ts`）。
-  // 失败了 `isPending` 就是 false —— 取不到弹窗不该连导览也一起挡掉
-  useHoldTour('notice-popups', query.isPending || current !== null)
 
   React.useEffect(() => {
     if (query.error) {

@@ -8,7 +8,7 @@ sidebar:
 import shot from '../../../../../../../docs/screenshots/dashboard.png'
 import ProductShot from '../../../../components/ProductShot.astro'
 
-After sign-in the first page is the **dashboard**: a set of cards (Waiting on me, My requests, Quick start, Shortcuts, Messages for me, Announcement, Needs your attention, Service status, Sign-ins over the last 14 days). Each person chooses which to show, in what order and how wide; the layout is stored on the server, so signing in on another computer brings back the same one, and cards someone has no permission for never appear. Around the dashboard the interface has a few shared tools: the ⌘K command palette, keyboard shortcuts, a product tour on first sign-in, appearance settings in Profile, column visibility and order on lists, a per-user time zone and language, and a refresh prompt when a new version is deployed. Tabs are covered separately in [Multi-tab](/en/features/multi-tab/).
+After sign-in the first page is the **dashboard**: a set of cards (Waiting on me, My requests, Quick start, Shortcuts, Messages for me, Announcement, Needs your attention, Service status, Sign-ins over the last 14 days). Each person chooses which to show, in what order and how wide; the layout is stored on the server, so signing in on another computer brings back the same one, and cards someone has no permission for never appear. Around the dashboard the interface has a few shared tools: the ⌘K command palette, keyboard shortcuts, a product tour, appearance settings in Profile, column visibility and order on lists, a per-user time zone and language, and a refresh prompt when a new version is deployed. Tabs are covered separately in [Multi-tab](/en/features/multi-tab/).
 
 <ProductShot src={shot} alt="Dashboard" url="localhost:8888/dashboard" />
 
@@ -19,7 +19,7 @@ After sign-in the first page is the **dashboard**: a set of cards (Waiting on me
 | Dashboard and the **Custom** button | Dashboard `/dashboard`, every signed-in user | Server, per user (all devices) |
 | Command palette | ⌘K / Ctrl+K on any page | — |
 | Keyboard shortcuts | Press `?`, or **Help** in the top bar | — |
-| Product tour | Starts on first sign-in; replay from **Help → Product tour** or the command palette | Browser, per user |
+| Product tour | Open from **Help → Product tour** or the command palette; never starts on its own | Not stored |
 | Appearance and layout preferences | Profile → **Theme** / **Layout** / **Tabs** | Browser |
 | Display time zone | Profile → **Profile** | Server, per user |
 | Language | User menu at top right → **Language**; also on the sign-in page | Browser |
@@ -76,9 +76,7 @@ Shortcuts:
 
 ## What is the product tour?
 
-A seven-step tour that starts the first time you reach the dashboard: sidebar → tabs → page content → command palette → notifications → profile → help. If a notice pops up after sign-in, the tour waits until it is closed. To see it again, use **Help → Product tour** in the top bar or the command palette. People who turned tabs off skip that step automatically.
-
-"Seen" is stored **in the browser** (per user and tour version), so it appears once more on a new computer.
+A seven-step tour: sidebar → tabs → page content → command palette → notifications → profile → help. It never starts on its own; open it from **Help → Product tour** in the top bar or the command palette. People who turned tabs off skip that step automatically. A notice that pops up while the tour is open waits until the tour ends.
 
 ## What can be adjusted in the appearance?
 
@@ -95,7 +93,7 @@ In the **Theme**, **Layout** and **Tabs** sections of Profile; changes apply imm
 | Tab appearance | Card | Button / Card / Soft / Underline |
 | Tab icons · middle-click to close · drag to reorder | On | |
 
-These are stored **in the browser** (`admin:prefs` in `localStorage`) and do not follow the account: another browser starts from the defaults. **Restore defaults** resets all of them (tours already seen are kept). The sign-in page follows the theme too, and has its own theme and language switches.
+These are stored **in the browser** (`admin:prefs` in `localStorage`) and do not follow the account: another browser starts from the defaults. **Restore defaults** resets all of them. The sign-in page follows the theme too, and has its own theme and language switches.
 
 ## Columns, pagination and filters on lists
 
@@ -120,11 +118,11 @@ Every 10 minutes, and whenever the browser tab regains focus (at most once a min
 4. Add strings to both locale files.
 5. **Never change a card's `id`**: saved layouts identify cards by it, so a rename means one card removed and a new one added.
 
-**Adding a command palette action**: add it to `actionItems` in [`shell/command-menu.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/command-menu.tsx); new pages appear automatically once they have a menu row. **Adding a shortcut** has no registry: add your own listener, call `preventDefault` for modifier combinations, check that single keys are not typed into an input, and add a line to `shortcuts-dialog.tsx`. **Adding a tour step**: add the step in `shell/tour/shell-tour.ts`, put `data-tour` on the target element (`pnpm arch:check` fails if the target does not exist), and bump the version if people who saw it should see it again.
+**Adding a command palette action**: add it to `actionItems` in [`shell/command-menu.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/command-menu.tsx); new pages appear automatically once they have a menu row. **Adding a shortcut** has no registry: add your own listener, call `preventDefault` for modifier combinations, check that single keys are not typed into an input, and add a line to `shortcuts-dialog.tsx`. **Adding a tour step**: add the step in `shell/tour/shell-tour.ts`, put `data-tour` on the target element (`pnpm arch:check` fails if the target does not exist).
 
 ## What it does not do
 
-- Appearance preferences, language, saved views and "tour seen" live only in the current browser and are not synced with the account; only the dashboard layout and the time zone are stored on the server.
+- Appearance preferences, language and saved views live only in the current browser and are not synced with the account; only the dashboard layout and the time zone are stored on the server.
 - There is only the one shell tour; per-page tours do not exist yet.
 - The command palette does not match pinyin initials.
 - Changing the time zone does not convert already-open tabs until their data is refreshed.
