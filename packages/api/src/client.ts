@@ -256,12 +256,33 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
   // 但没必要让它兜
   let refreshing: Promise<RefreshOutcome> | null = null
 
+  function subject(token: string | null): string | null {
+    try {
+      const part = token?.split('.')[1]
+      if (!part) return null
+      const base64 = part.replace(/-/g, '+').replace(/_/g, '/')
+      const claims = JSON.parse(atob(base64 + '='.repeat((4 - base64.length % 4) % 4))) as { sub?: unknown }
+      return typeof claims.sub === 'string' && claims.sub ? claims.sub : null
+    } catch {
+      return null
+    }
+  }
+
+  const identityChanged = (): RefreshOutcome => ({ kind: 'ended', end: { reason: 'replaced', message: null } })
+
   async function refreshToken(): Promise<RefreshOutcome> {
     if (refreshing) return refreshing
+    const before = config.getToken()
     refreshing = (async () => {
       try {
         const outcome = await (config.refresh ?? cookieRefresh)()
-        if (outcome.kind === 'ok') await config.setToken(outcome.token)
+        // A different tab can replace the shared refresh cookie. Never adopt that
+        // identity into this account's page or revive a session ended while waiting.
+        if (config.getToken() !== before) return identityChanged()
+        if (outcome.kind === 'ok') {
+          if (before && (!subject(before) || subject(before) !== subject(outcome.token))) return identityChanged()
+          await config.setToken(outcome.token)
+        }
         return outcome
       } catch (err) {
         // 注入的 refresh 自己炸了（桌面端 IPC 断了之类）：当成这一次没刷成，不清登录态
@@ -280,17 +301,26 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
    * 401 之后：刷新成功 → 重放；会话结束 → 收尾；暂时失败 → 不清登录态，把那个错误抛给调用方。
    * 返回 true 表示可以重放；否则抛出该抛的错误
    *
-   * @param sentWithToken 这次请求发出去时带没带 token。🔴 **没带的 401 不刷新、不收尾**：
+   * @param sentWithToken 这次请求发出去时携带的 token，用于确认重试仍属同一账号。🔴 **没带的 401 不刷新、不收尾**：
    *   token 为空说明会话已经在本地结束了（页面加载时的恢复由守卫做，不走这里）。不拦的话：
    *   收尾里 `queryClient.clear()` 一清缓存，还没卸载的组件立刻重新取数，这批不带 token 的请求
    *   全部 401 → 又去刷新（cookie 已经删了）→ 拿到一个**不带原因**的 401 → 再收尾一次，
    *   把「因为什么被登出」的那次跳转覆盖掉。实测：另一个标签页登出后，这个标签页先跳到
    *   `/sign-in?reason=logout`、紧接着又被覆盖成 `/sign-in`，提示条没了
    */
-  async function recover(original: ApiError, sentWithToken: boolean): Promise<true> {
+  async function recover(original: ApiError, sentWithToken: string | null): Promise<true> {
     if (!sentWithToken) throw original
+    const current = config.getToken()
+    // A late 401 from the previous account must not replay against a new login.
+    if (!current || !subject(sentWithToken) || subject(current) !== subject(sentWithToken)) throw original
     const outcome = await refreshToken()
-    if (outcome.kind === 'ok') return true
+    const after = config.getToken()
+    if (after !== current && outcome.kind !== 'ok') throw original
+    if (after && subject(after) !== subject(sentWithToken)) throw original
+    if (outcome.kind === 'ok') {
+      if (subject(config.getToken()) === subject(sentWithToken)) return true
+      throw original
+    }
     if (outcome.kind === 'ended') {
       await expire(outcome.end)
       throw original
@@ -321,7 +351,7 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     retry = true,
   ): Promise<T> {
     const fn = (raw as unknown as Record<string, (p: string, i: unknown) => Promise<unknown>>)[method]
-    const sentWithToken = config.getToken() !== null
+    const sentWithToken = config.getToken()
     const merged = {
       baseUrl: config.getBaseUrl(),
       ...init,
@@ -367,7 +397,7 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
     // ⚠️ 绝对不要给 FormData 手写 Content-Type —— multipart 的 boundary 是运行时
     // 生成并塞进 header 的，手写一个不带 boundary 的 'multipart/form-data'
     // 会让后端解析不出任何字段（表现为「文件不能为空」）
-    const sentWithToken = config.getToken() !== null
+    const sentWithToken = config.getToken()
     const headers = { ...authHeaders(), Accept: accept }
 
     let res: Response
@@ -405,7 +435,7 @@ export function createApiClient<Paths extends {}>(config: ApiClientConfig): ApiC
         return
       }
       const xhr = new XMLHttpRequest()
-      const sentWithToken = config.getToken() !== null
+      const sentWithToken = config.getToken()
       xhr.open(options.method ?? 'POST', `${config.getBaseUrl()}${path}`)
       // 同 sendRaw：带上 httpOnly 的 refresh cookie（RN 忽略）
       xhr.withCredentials = true

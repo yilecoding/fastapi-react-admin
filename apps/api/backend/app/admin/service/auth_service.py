@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 
 from fastapi import Request, Response
 from fastapi.security import HTTPBasicCredentials
@@ -12,7 +13,12 @@ from backend.app.admin.crud.crud_user import user_dao
 from backend.app.admin.model import User
 from backend.app.admin.schema.mfa import MfaChallenge, MfaChallengeParam, MfaSetupInfo, MfaTokenParam
 from backend.app.admin.schema.token import GetLoginToken, GetMfaEnrollToken, GetNewToken
-from backend.app.admin.schema.user import AuthLoginParam, AuthPhoneCaptchaParam, AuthPhoneLoginParam
+from backend.app.admin.schema.user import (
+    CAPTCHA_UUID_PATTERN,
+    AuthLoginParam,
+    AuthPhoneCaptchaParam,
+    AuthPhoneLoginParam,
+)
 from backend.app.admin.service import mfa_service as mfa
 from backend.app.admin.service.login_log_service import login_log_service
 from backend.app.admin.service.mfa_service import gate as mfa_gate
@@ -346,15 +352,14 @@ class AuthService:
         """图形验证码开着时校验并消费。密码登录和手机号发码两个匿名接口共用（后者不过它就是免费的短信轰炸入口）"""
         if not settings.LOGIN_CAPTCHA_ENABLED:
             return
-        if not uuid or not captcha:
+        if not uuid or not re.fullmatch(CAPTCHA_UUID_PATTERN, uuid) or not captcha:
             raise errors.RequestError(msg=t('error.captcha.invalid'))
         key = f'{settings.LOGIN_CAPTCHA_REDIS_PREFIX}:{uuid}'
-        captcha_code = await redis_client.get(key)
+        captcha_code = await redis_client.getdel(key)
         if not captcha_code:
             raise errors.RequestError(msg=t('error.captcha.expired'))
         # 🔴 比对之前就消费，答错也作废（#229）：原来只在答对时删，同一张图在有效期内可以反复猜，
         # 每次只花一次登录限流的配额。前端答错后本来就会换一张（`shouldReloadCaptcha`），正常用户无感
-        await redis_client.delete(key)
         if captcha_code.lower() != captcha.lower():
             raise errors.CustomError(error=CustomErrorCode.CAPTCHA_ERROR)
 
@@ -388,7 +393,7 @@ class AuthService:
         tpl = get_sms_template('captcha')
         cooldown = tpl.cooldown_seconds if tpl else 60
         daily_max = tpl.daily_max_per_phone if tpl else 10
-        prefix = f'{settings.LOGIN_CAPTCHA_REDIS_PREFIX}:phone'
+        prefix = settings.LOGIN_PHONE_GUARD_REDIS_PREFIX
         verdict = await redis_client.eval(
             _PHONE_GUARD,
             2,

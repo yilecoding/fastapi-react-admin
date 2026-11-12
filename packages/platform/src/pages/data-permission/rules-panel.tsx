@@ -7,6 +7,7 @@ import {
 
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
+import { QueryError } from '@admin/ui/components/query-error'
 import { ACTIONS_CELL_CLASS, DataTableSkeletonRows } from '@admin/ui/components/data-table'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -38,7 +39,9 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
   const { can } = usePerm()
   const canBind = can('data:scope:rule:edit')
 
-  const { data: rules = [], isPending } = useQuery(scopeRulesQuery(scope.id))
+  const rulesQuery = useQuery(scopeRulesQuery(scope.id))
+  const { data: rules = [], isPending } = rulesQuery
+  const ready = rulesQuery.isSuccess && !rulesQuery.isFetching
 
   const [formOpen, setFormOpen] = React.useState(false)
   const [editing, setEditing] = React.useState<DataRule | null>(null)
@@ -66,13 +69,13 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
     <div className="flex flex-col gap-3 content-scroll:lg:min-h-0 content-scroll:lg:flex-1" data-testid="rules-panel">
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Can perm="data:rule:add">
-          <Button size="sm" onClick={() => { setEditing(null); setFormOpen(true) }} data-testid="rule-add">
+          <Button size="sm" disabled={!ready} onClick={() => { setEditing(null); setFormOpen(true) }} data-testid="rule-add">
             <IconPlus className="size-4" />{t('新建规则')}
           </Button>
         </Can>
         <Can perm="data:scope:rule:edit">
           <Button variant="outline" size="sm" className="h-8" onClick={() => setPickerOpen(true)}
-                  data-testid="rule-link">
+                  disabled={!ready} data-testid="rule-link">
             <IconLink className="size-4" />{t('引用已有规则')}
           </Button>
         </Can>
@@ -87,6 +90,7 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
         )}
       </div>
 
+      {rulesQuery.error && <QueryError error={rulesQuery.error} onRetry={() => { void rulesQuery.refetch() }} />}
       {mixed && (
         <p className={cn('flex items-start gap-2 rounded-md px-3 py-2 text-xs ring-1', TONE_CLASS.warning)}
            data-testid="rule-mixed-warn">
@@ -120,7 +124,7 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
           <TableBody>
             {isPending ? (
               <DataTableSkeletonRows rows={4} columns={5} />
-            ) : rules.length === 0 ? (
+            ) : rulesQuery.error ? null : rules.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="h-24 text-center text-sm text-muted-foreground">
                   {t('这个范围下还没有规则。绑到角色上也不会放行任何数据 —— 先加一条。')}
@@ -179,22 +183,26 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
       </div>
 
       <DataRuleSheet
-        open={formOpen}
+        open={formOpen && !rulesQuery.isError}
         onOpenChange={setFormOpen}
         editing={editing}
         // 新建即挂上 —— 不做这一步就是下一条孤儿规则
-        onCreated={canBind ? async (rule) => { await bind.mutateAsync({ id: scope.id, rules: [...ids, rule.id] }) } : undefined}
+        onCreated={canBind ? async (rule) => {
+          const current = await rulesQuery.refetch({ throwOnError: true })
+          if (!current.isSuccess) throw new Error(t('数据加载失败'))
+          await bind.mutateAsync({ id: scope.id, rules: [...new Set([...(current.data ?? []).map((r) => r.id), rule.id])] })
+        } : undefined}
       />
 
       <RulePicker
-        open={pickerOpen}
+        open={pickerOpen && !rulesQuery.isError}
         onOpenChange={setPickerOpen}
         scope={scope}
         boundIds={ids}
       />
 
       <ConfirmDialog
-        open={pendingUnbind !== null}
+        open={pendingUnbind !== null && ready}
         onOpenChange={(o) => !o && setPendingUnbind(null)}
         title={t("从本范围移除规则")}
         description={
@@ -207,7 +215,7 @@ export function RulesPanel({ scope }: { scope: DataScope }) {
         destructive
         pending={bind.isPending}
         onConfirm={async () => {
-          if (!pendingUnbind) return
+          if (!pendingUnbind || !ready) return
           setUnbindError(null)
           try {
             await bind.mutateAsync({ id: scope.id, rules: ids.filter((x) => x !== pendingUnbind.id) })

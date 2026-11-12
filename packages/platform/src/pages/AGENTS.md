@@ -86,6 +86,7 @@ ai-provider 等五页又是 12px。全站三种顶距，没有任何测试会因
 「`isPending ? <Skeleton…> : <DataTable/>`」—— 那会让筛选栏在加载完成时凭空出现。
 
 ### 🔴 取数状态一律走 `_shared/list-query.ts` 的 `listState()`，别手写那两行
+🔴 **整组覆盖式授权尤其不能把读取失败当空集（#327）**：菜单 / 数据范围 / 规则读取失败时，原先的 `?? []` 会让保存覆写已有授权。`role/perm-matrix.tsx`、`role/role-scopes.tsx`、`data-permission/rules-panel.tsx` / `rule-picker.tsx` 只有依赖查询成功且不在刷新时才允许写，失败显示 QueryError + 重试；追加规则先重读已绑定规则再合并，mutation 等待缓存失效。实测：`apps/web/e2e/tests/grant-read-error.spec.ts` 注入 502 的 5 条都显示错误、禁写、可重试并保留原授权，`data-permission.spec.ts` 的 29 条真实多账号权限回归通过。
 
 **症状**：`GET /sys/users` 挂了（500 / 网络抖动 / 鉴权过期），页面显示的是
 **「暂无数据」**—— 和「筛选条件太窄、真的没查到」一模一样。用户会反复调筛选，

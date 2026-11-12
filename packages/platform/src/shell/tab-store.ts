@@ -29,6 +29,8 @@ export type Tab = {
 const MAX_TABS = 20
 
 type TabState = {
+  ownerId: string | null
+  bindOwner: (userId: string | null) => void
   tabs: Tab[]
   activeKey: string | null
   open: (
@@ -61,6 +63,10 @@ export function isRemovable(t: Tab): boolean {
 export const useTabStore = create<TabState>()(
   persist(
     (set, get) => ({
+      ownerId: null,
+      bindOwner: (userId) => {
+        if (get().ownerId !== userId) set({ ownerId: userId, tabs: [], activeKey: null })
+      },
       tabs: [],
       activeKey: null,
 
