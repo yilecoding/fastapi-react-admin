@@ -1,10 +1,10 @@
-import { expect, loginPageAs, test } from "../fixtures/base"
+import { expect, test } from "../fixtures/base"
 
 /**
  * 功能引导（driver.js 外壳导览，`packages/platform/src/shell/tour/`）。
  *
  * 三条各守一个会**静默**坏的点：
- *   1. 首登自动弹、关掉后不再弹 —— 「看过了」这条记录是不是真的写进去、读出来
+ *   1. 不自动弹 —— 新人登录落到仪表盘，首屏没有导览遮罩（2026-11 去掉了首登自动启动）
  *   2. 开着两个页签时高亮的是**可见**页签 —— 硬纪律 5：隐藏页签的 DOM 也在文档树里，
  *      driver.js 的字符串目标是全局 `document.querySelector`，`arch:check` 又抓不到
  *      node_modules 里的查询。这条红了就是 `targets.ts` 的作用域没锁住
@@ -27,24 +27,22 @@ async function openTourFromPalette(page: import("@playwright/test").Page) {
 }
 
 test.describe("功能引导", () => {
-  test("首次登录在仪表盘自动弹出；关掉之后刷新不再弹", async ({ page }) => {
-    // 不用 authedPage —— 它会把导览标成已看过（fixtures/base.ts 的 seedTourSeen）
-    await loginPageAs(page, "admin", "123456", { tourSeen: false })
+  test("登录落到仪表盘不自动弹；从顶栏「帮助」点开才出现", async ({ authedPage: page }) => {
     await page.goto("/dashboard")
+    await expect(page.getByTestId("command-trigger")).toBeVisible()
+    // 原来的自动弹出在外壳挂上之后等 800ms 才起，等过这段再**不重试地**数一次 ——
+    // 立刻断言 / 用会重试的 `toHaveCount(0)` 都可能假绿：那一刻本来就还没到弹的时候
+    await page.waitForTimeout(1500)
+    expect(await popover(page).count(), "登录后不该自动弹导览").toBe(0)
 
+    await page.getByTestId("help-menu").click()
+    await page.getByTestId("help-tour").click()
     await expect(popover(page)).toBeVisible()
     await expect(popover(page)).toContainText("侧边栏")
     // 第一步高亮的是壳层侧边栏本体（`inShell('sidebar')`），不是页签里的什么东西
     await expect(page.locator(".driver-active-element")).toHaveAttribute("data-tour", "sidebar")
 
     await page.keyboard.press("Escape")
-    await expect(popover(page)).toBeHidden()
-
-    await page.reload()
-    await expect(page.getByTestId("command-trigger")).toBeVisible()
-    // 自动弹出有 800ms 的稳定期（tour-autostart.tsx 的 SETTLE_MS），等它过完再断言「没弹」——
-    // 立刻断言会假绿：那一刻本来就还没到弹的时候
-    await page.waitForTimeout(1500)
     await expect(popover(page)).toBeHidden()
   })
 
