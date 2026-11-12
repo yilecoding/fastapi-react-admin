@@ -1,0 +1,40 @@
+---
+const en = Astro.locals.starlightRoute.locale === 'en'
+const label = en ? 'Explore this project with DeepWiki' : '用 DeepWiki 理解项目'
+---
+
+<a
+  class="deepwiki-link"
+  href="https://deepwiki.com/yilecoding/fastapi-react-admin"
+  target="_blank"
+  rel="noopener noreferrer"
+  aria-label={label}
+  title={label}
+  data-testid="deepwiki-link"
+>
+  <img src="https://deepwiki.com/favicon.ico" alt="" aria-hidden="true" />
+</a>
+
+<style>
+  .deepwiki-link {
+    display: inline-flex;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    color: var(--sl-color-gray-2);
+    transition: color 0.16s ease, background-color 0.16s ease;
+  }
+  .deepwiki-link:hover {
+    color: var(--sl-color-white);
+    background: color-mix(in oklab, var(--sl-color-accent) 12%, transparent);
+  }
+  .deepwiki-link:focus-visible {
+    outline: 2px solid var(--sl-color-accent);
+    outline-offset: 2px;
+  }
+  .deepwiki-link img { width: 1rem; height: 1rem; object-fit: contain }
+</style>
