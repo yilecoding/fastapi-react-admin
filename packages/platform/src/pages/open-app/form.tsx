@@ -27,6 +27,7 @@ import { cn } from '@admin/ui/lib/utils'
 import { ApiError } from '../../api-client/errors'
 import { useFieldError } from '../_shared/form-error'
 import { FormField } from '../_shared/form-fields'
+import { toWallTime, wallTimeToIso } from '../_shared/wall-time'
 import {
   openScopesQuery,
   splitList,
@@ -65,22 +66,6 @@ const EMPTY: Values = {
   remark: '',
 }
 
-/** 后端下发带偏移的 ISO（`2026-10-21T15:00:00+08:00`），选择器要的是本地墙上时间 `YYYY-MM-DD HH:mm:ss` */
-function toPickerValue(iso: string | null): string | undefined {
-  if (!iso) return undefined
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return undefined
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-}
-
-/** 选择器给的是浏览器本地时间，带上偏移再交给后端 —— 不带的话后端按服务端时区解释，跨时区就差几小时 */
-function toIso(local: string | undefined): string | null {
-  if (!local) return null
-  const d = new Date(local.replace(' ', 'T'))
-  return Number.isNaN(d.getTime()) ? null : d.toISOString()
-}
-
 export function OpenAppFormSheet({
   open,
   onOpenChange,
@@ -114,7 +99,7 @@ export function OpenAppFormSheet({
             scopes: editing.scopes,
             ip_whitelist: (editing.ip_whitelist ?? []).join('\n'),
             rate_per_minute: editing.rate_per_minute === null ? '' : String(editing.rate_per_minute),
-            expire_time: toPickerValue(editing.expire_time),
+            expire_time: toWallTime(editing.expire_time),
             status: editing.status === 1,
             remark: editing.remark ?? '',
           }
@@ -131,7 +116,7 @@ export function OpenAppFormSheet({
       // 空 = 不限。**不要传 []**：空白名单在语义上是「谁都不许」，和「不限」正好相反
       ip_whitelist: ips.length ? ips : null,
       rate_per_minute: v.rate_per_minute ? Number(v.rate_per_minute) : null,
-      expire_time: toIso(v.expire_time),
+      expire_time: wallTimeToIso(v.expire_time),
       status: v.status ? 1 : 0,
       remark: v.remark?.trim() || null,
     }

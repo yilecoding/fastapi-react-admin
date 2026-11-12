@@ -22,6 +22,7 @@ import { Switch } from '@admin/ui/components/switch'
 import { ApiError } from '../../api-client/errors'
 import { useFieldError } from '../_shared/form-error'
 import { FormField, FormSection } from '../_shared/form-fields'
+import { toWallTime, wallTimeToIso } from '../_shared/wall-time'
 import { fileKeys } from '../file/api'
 import { useRichTextImages } from '../file/rich-text-images'
 import {
@@ -33,7 +34,6 @@ import {
   AUDIENCE_ALL, NoticeAudienceField, audienceDraftOf, audienceEntriesOf, audienceIsEmpty, sameAudience,
   type AudienceDraft,
 } from './audience-field'
-import { toWallTime, wallTimeToIso } from './wall-time'
 
 const schema = z.object({
   // 后端 `sys_notice.title` 是 UniversalStr(64)，超了会被数据库截断/报错
@@ -69,7 +69,7 @@ function toValues(n: Notice): Values {
     content: n.content,
     pinned: n.pinned,
     level: n.level,
-    // 过期时间 / 发布时间进出都按**显示时区**（`wall-time.ts`），和列表上印出来的是同一个钟点
+    // 过期时间 / 发布时间进出都按**显示时区**，和列表上印出来的是同一个钟点
     expire_time: toWallTime(n.expire_time),
     popup: n.popup,
     require_ack: n.require_ack,
