@@ -24,7 +24,6 @@ from backend.app.admin.utils.password_security import (
     validate_new_password,
     validate_password_strength,
 )
-from backend.common.context import ctx
 from backend.common.domain_events import emit
 from backend.common.enums import UserPermissionType
 from backend.common.exception import errors
@@ -352,17 +351,21 @@ class UserService:
         :param email: 邮箱
         :return:
         """
-        captcha_code = await redis_client.get(f'{settings.EMAIL_CAPTCHA_REDIS_PREFIX}:{ctx.ip}')
-        if not captcha_code:
+        from pydantic import EmailStr, TypeAdapter
+
+        from backend.plugin.email.utils.captcha import verify_captcha
+
+        email = str(TypeAdapter(EmailStr).validate_python(email))
+        verdict = await verify_captcha(user_id, email, captcha)
+        if verdict == 'expired':
             raise errors.RequestError(msg=t('error.user.captcha_expired'))
-        if captcha != captcha_code:
+        if verdict != 'ok':
             raise errors.CustomError(error=CustomErrorCode.CAPTCHA_ERROR)
         # 唯一性检查的豁免已经挪进 `user_dao.check_email` 内部了
         # （连同另外 6 个同类方法，见那里的注释）—— 这里不用再包一层
         email_user = await user_dao.check_email(db, email)
         if email_user and email_user.id != user_id:
             raise errors.ConflictError(msg=t('error.user.email_bound'))
-        await redis_client.delete(f'{settings.EMAIL_CAPTCHA_REDIS_PREFIX}:{ctx.ip}')
         count = await user_dao.update_email(db, user_id, email)
         await emit_user_event(db, 'user.updated', user_id)
         await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
