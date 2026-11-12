@@ -140,6 +140,9 @@ h1#_top { letter-spacing: -0.03em; font-weight: 800 }
 }
 
 .sl-markdown-content table:not(:where(.not-content *)) {
+  /* Starlight 用 block + overflow 实现横向滚动，外框应跟随实际表格宽度。 */
+  width: fit-content;
+  max-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--sl-color-gray-5);
@@ -153,6 +156,17 @@ h1#_top { letter-spacing: -0.03em; font-weight: 800 }
   background: color-mix(in oklab, var(--sl-color-accent) 8%, var(--sl-color-gray-6));
   font-weight: 600;
 }
+
+/* 参数和多端对照表保留可读列宽；小屏只在表格内滚动。 */
+.sl-markdown-content .doc-table-scroll { overflow-x: auto }
+.sl-markdown-content .doc-table-scroll > table {
+  display: table;
+  width: 100%;
+  max-width: none;
+  min-width: 40rem;
+}
+.sl-markdown-content .doc-table-scroll td:first-child { min-width: 10rem }
+.sl-markdown-content .doc-table-scroll td code { white-space: normal; overflow-wrap: anywhere }
 
 /* Starlight 自带的 Card / LinkCard（功能页里还在用）：圆角 + 悬停时浮起来 */
 .card, .sl-link-card {
