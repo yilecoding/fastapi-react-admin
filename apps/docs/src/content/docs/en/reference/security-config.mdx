@@ -1,0 +1,130 @@
+---
+title: Security configuration
+description: Sign-in, password and session setting keys, defaults and precedence, with extension notes and source references.
+---
+
+For step-by-step setup, start with [Sign-in and security](/en/features/login-security/) or [Session management](/en/features/login-sessions/). This page is a lookup reference for administrators and developers.
+
+## Which configuration takes precedence?
+
+Each group also has a master switch, `<GROUP>_CONFIG_STATUS`; set to 0, the whole group is ignored and the `.env` values apply. The other way round, **setting these keys in `.env` has no effect while the database rows are on**, which is the cause of the FAQ entry [captcha still required after disabling it in `.env`](/en/reference/faq/#login_captcha_enabledfalse-is-set-in-env-but-sign-in-still-asks-for-a-captcha).
+
+## Change settings in the UI
+
+Open **System → Config**. No restart is needed. Session policy changes apply to future sign-ins; disabling captcha takes effect immediately.
+
+### Sign-in policy
+
+<div className="doc-table-scroll" role="region" aria-label="Security setting tables" tabIndex={0}>
+
+| Key | Default | Notes |
+|---|---|---|
+| `LOGIN_CAPTCHA_ENABLED` | `true` | Image captcha; turning it off applies to everyone at once |
+| `LOGIN_MFA_ENFORCE` | `off` | `off` / `superuser` / `all`; must stay `off` while `MFA_SECRET_KEY` is empty |
+
+</div>
+
+### Passwords & lockout
+
+<div className="doc-table-scroll" role="region" aria-label="Security setting tables" tabIndex={0}>
+
+| Key | Default | Notes |
+|---|---|---|
+| `USER_LOCK_THRESHOLD` · `USER_LOCK_SECONDS` | `5` · `300` | Failures before lockout, and for how many seconds; 0 = never lock |
+| `USER_PASSWORD_MIN_LENGTH` · `USER_PASSWORD_MAX_LENGTH` | `6` · `32` | |
+| `USER_PASSWORD_REQUIRE_SPECIAL_CHAR` | `false` | |
+| `USER_PASSWORD_HISTORY_CHECK_COUNT` | `3` | Cannot repeat the last N |
+| `USER_PASSWORD_EXPIRY_DAYS` · `USER_PASSWORD_REMINDER_DAYS` | `365` · `7` | 0 = never expires / no reminder |
+
+</div>
+
+### Sessions
+
+<div className="doc-table-scroll" role="region" aria-label="Security setting tables" tabIndex={0}>
+
+| Key | Default | Notes |
+|---|---|---|
+| `SESSION_{WEB,DESKTOP,MOBILE}_IDLE_MINUTES` | `120` · `120` · `43200` | 5 minutes to 90 days |
+| `SESSION_{…}_ABSOLUTE_DAYS` | `7` · `7` · `90` | 1–365 |
+| `SESSION_{…}_MAX` | `0` · `0` · `1` | 0 = unlimited |
+| `SESSION_{…}_OVERFLOW` | `evict_idle` | Or `deny` to refuse the new sign-in |
+
+</div>
+
+## Change settings in .env
+
+Edit `apps/api/backend/.env` and restart the API.
+
+<div className="doc-table-scroll" role="region" aria-label="Security setting tables" tabIndex={0}>
+
+| Key | Default | Notes |
+|---|---|---|
+| `MFA_SECRET_KEY` | empty | Encrypts TOTP secrets; empty = two-factor cannot be turned on |
+| `LOGIN_IP_LOCK_THRESHOLD` · `LOGIN_IP_LOCK_SECONDS` | `30` · `900` | Per-IP lockout across accounts; threshold 0 = off |
+| `TRUSTED_PROXIES` | `[]` | Addresses or ranges of your reverse proxies. Empty = no forwarding header is trusted; behind a proxy without it, the backend sees only the proxy's IP, so IP lockout, rate limits and the sign-in log all use the wrong address |
+| `TOKEN_EXPIRE_SECONDS` | `1800` | Access token lifetime |
+| `SESSION_REFRESH_GRACE_SECONDS` | `30` | Grace period for the previous refresh token; production refuses anything under 10 seconds |
+| `LOGIN_CAPTCHA_EXPIRE_SECONDS` | `300` | Image captcha lifetime |
+| `MFA_CHALLENGE_SECONDS` · `MFA_CHALLENGE_ATTEMPTS` | `300` · `5` | Time and attempts allowed for the second step |
+| `COOKIE_SECURE` | follows the request | HTTPS requests get a `Secure` cookie. If a proxy terminates TLS and rewrites `X-Forwarded-Proto` to `http`, set it to `true` explicitly |
+| `OAUTH2_GITHUB_*` · `OAUTH2_GOOGLE_*` | — | Client ID / Secret for third-party sign-in |
+| `OAUTH2_AUTO_REGISTER` · `OAUTH2_AUTO_REGISTER_ROLE` | `false` · — | Whether unknown third-party accounts get an account, and with which role (an unknown role code refuses the sign-in) |
+
+</div>
+
+The full definitions are in the user security, sign-in and session sections of [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py).
+
+## Authentication and rate-limit details
+
+<details>
+<summary>SMS responses, failure counters and MFA validation</summary>
+
+The SMS route requires the image captcha first; each number has a 60-second cooldown and at most 10 codes a day. **Numbers that are not registered or not verified still get "sent"**, though nothing is actually sent: status code, message, cooldown and response time all match a real send, otherwise this anonymous endpoint would be a lookup table for which numbers have accounts. When the SMS provider is down the response is the same success; the failure is recorded in the SMS log for admins.
+
+The error message **does not distinguish** "no such user", "wrong password" and "account locked", and the timing is evened out too: a bcrypt check takes about 190 ms, while a lookup that finds no user takes about 5 ms, a 40x gap that needs no statistics to spot. So when the user does not exist, an equivalent check runs against a dummy hash (`_DUMMY_PASSWORD_HASH` at the top of [`auth_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/auth_service.py)).
+
+The sign-in endpoints are also rate-limited per IP and path: 5 a minute; the captcha endpoint allows 5 every 30 seconds.
+
+The allowed ranges are enforced by the **backend**, not just by the input boxes (`DYNAMIC_INT_BOUNDS` in [`dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py)). It was tested once: calling the API directly with an admin token could set the minimum length to 999, after which nobody could change their password.
+
+TOTP uses 6 digits, a 30-second step and SHA-1, with one step of clock drift allowed either way. A code cannot be reused. Recovery codes use the `xxxx-xxxx` format without 0 / O / 1 / I / L; only their hashes are stored.
+
+The second step lasts 5 minutes and allows 5 attempts. Failed codes count toward the account failure counter. A correct password alone does not reset it; the second step must pass too.
+
+</details>
+
+## What to watch when adding a sign-in method or a way to sign someone out
+
+- **A new sign-in method must call `mfa_service.gate()`** after confirming the identity; it decides whether to open the session or ask for the second step. SMS sign-in repeats every check that password sign-in makes (IP lockout, disabled accounts, password expiry, failure counting); the code replaces only the "is the password right" step. Reusing just the "open a session" part would skip all of them.
+- **A new endpoint that works without signing in** goes into `TOKEN_REQUEST_PATH_EXCLUDE` as a full path, not a prefix.
+- **A new way to sign someone out** calls only `session_store.revoke` / `revoke_user`; do not delete the `fba:session*` Redis keys yourself. Those two functions also record the reason, push the live message and close the connection. Before sessions were reworked, seven files each deleted tokens on their own, and one deleted only the access token, so a kicked user could refresh and be back.
+
+Details and the pitfalls behind them are in the sign-in sessions section of [`common/security/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/AGENTS.md).
+
+## Where is the code?
+
+- Sign-in flow: [`auth_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/auth_service.py) · endpoints in [`api/v1/auth/auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/auth/auth.py)
+- Two-factor: [`mfa_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/mfa_service.py) · [`utils/totp.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/totp.py)
+- Sessions: [`common/security/session.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/session.py) · active sessions endpoints in [`monitor/online.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/monitor/online.py)
+- Password rules: [`user_password_history_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/user_password_history_service.py) · runtime config in [`utils/dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py)
+- Third-party sign-in: [`plugin/oauth2/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/oauth2)
+- Frontend: sign-in page [`sign-in.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/routes/_guest/sign-in.tsx) · Profile [`pages/profile/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/profile) · Active sessions [`pages/log-online/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/log-online) · session and refresh [`auth/session.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/auth/session.ts)
+
+## How is it tested?
+
+Use the linked test files to inspect the assertions behind each behavior.
+
+<details>
+<summary>Existing backend and browser coverage</summary>
+
+Backend tests run against a real database and Redis:
+
+- [`test_session.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_session.py) (29 tests): background polling does not keep a session alive, coming back after the idle limit and clicking once does not revive it, the grace period replays the same pair, presenting an old token after it ends the session, and a matching session ID with the wrong secret does **not** revoke anything (otherwise a session ID seen in a log would be enough to sign someone out). Several were mutation-checked: break the condition and the test fails immediately.
+- [`test_mfa.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_mfa.py) (16 tests): recovery codes work once, a correct password does not reset the failure count, the token dies after too many attempts, required users enrol during sign-in and cannot turn it off, and it cannot be required without a key.
+- [`test_auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_auth.py): an unknown user and a wrong password look the same, **including timing**; a wrong password does not reveal a lockout; a forced sign-out also revokes the refresh token.
+- [`test_phone_login.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/sms/tests/test_phone_login.py): unknown and unverified numbers look "sent", a provider failure is indistinguishable from an unknown number, and SMS sign-in also requires two-factor.
+- The OAuth2 plugin's [`tests/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/oauth2/tests): unknown accounts are not auto-created by default, state binding, only verified emails are trusted.
+
+In the browser (Playwright): [`mfa.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/mfa.spec.ts) (turn it on in Profile → sign out → signing in asks for a code), [`session.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/session.spec.ts) (a forced sign-out sends the page back to the sign-in screen with the reason; signing out in one tab signs out the others; if the backend is briefly unreachable during a refresh, the page shows "can't reach the server" instead of signing out), and [`login-phone.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/login-phone.spec.ts).
+
+</details>

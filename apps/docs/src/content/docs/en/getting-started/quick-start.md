@@ -1,92 +1,160 @@
 ---
 title: Quick start
-description: Run fastapi-react-admin locally — PostgreSQL and Redis in Docker, five commands, set the admin password during init, then sign in at 127.0.0.1:8888.
+description: Start PostgreSQL and Redis in Docker, install dependencies, initialize a development database and sign in locally. Each step includes a check.
 sidebar:
   order: 1
 ---
 
-Five commands bring up the whole stack locally: PostgreSQL and Redis in Docker, the FastAPI backend on port 8088, the React frontend on port 8888 and a Celery worker. The account is `admin`, with the password you set during `pnpm db:init`.
+Follow these four steps to reach your local dashboard. The default stack uses PostgreSQL and Redis, with the API, web app and Celery worker running locally.
 
-## What do I need installed?
+**Working directory: the repository root**, which contains `pnpm-workspace.yaml`. Run every command below there.
 
-- Node.js ≥ 22.13 (pnpm is pinned in `package.json` and installed by corepack)
-- Python ≥ 3.11 and [uv](https://docs.astral.sh/uv/)
-- Docker
+<span id="what-do-i-need-installed"></span>
 
-## How do I run it?
+## Before you start
+
+| Tool | Requirement |
+|---|---|
+| Node.js | ≥ 22.13; use Corepack to install the pnpm version pinned in `package.json` |
+| Python | ≥ 3.11, with [uv](https://docs.astral.sh/uv/) installed |
+| Docker | Docker is running and `docker compose` is available |
+
+<span id="how-do-i-run-it"></span>
+
+## 1. Start the database and Redis
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d          # PostgreSQL 16 + Redis
-pnpm install:all                                        # JS workspace, Python deps, git hooks, Playwright Chromium
-cp apps/api/backend/.env.example apps/api/backend/.env  # defaults already match the containers above
-pnpm db:init                                            # tables + seed data + a new admin password (first run only)
-pnpm dev                                                # api :8088 · web :8888 · celery worker
-                                                        # open http://127.0.0.1:8888
+docker compose -f docker-compose.dev.yml up -d
 ```
 
-Open <http://127.0.0.1:8888> and sign in as `admin` with the password you set during `pnpm db:init`.
+Check their status:
 
-:::note[Why not admin / 123456?]
-The seed's `123456` is not allowed to survive initialization: `pnpm db:init` asks for a new admin password (non-interactively it reads `FBA_INIT_ADMIN_PASSWORD`) and disables the sample `test` account. `admin` / `123456` is only the [live demo](https://fra.wubunan.com/sign-in) account.
+```bash
+docker compose -f docker-compose.dev.yml ps
+```
+
+**Expected result:** both `fba_postgres` and `fba_redis` report `healthy`. On the first start, wait for their health checks before continuing.
+
+## 2. Install dependencies and prepare configuration
+
+```bash
+pnpm install:all
+```
+
+This installs JavaScript and Python dependencies, Git hooks and Playwright Chromium. **Continue when it finishes without errors and `apps/api/.venv` exists.**
+
+Copy the backend configuration, keeping an existing `.env` file:
+
+```bash
+cp -n apps/api/backend/.env.example apps/api/backend/.env
+```
+
+The example defaults match the containers above. If you already had a configuration file, check its database and Redis connections.
+
+Keep `DATABASE_PK_MODE='snowflake'`. The seeds use snowflake IDs; switching to autoincrement or omitting this line makes initialization fail to find the admin account.
+
+## 3. Initialize the development database
+
+:::caution[Confirm the target database can be cleared]
+`pnpm db:init` deletes and recreates the **entire configured database**. Check the connections and `DATABASE_SCHEMA` in `apps/api/backend/.env` (the example uses `fba`), and any environment variables overriding them. To preserve existing data, back it up and use `pnpm db:upgrade` for schema changes.
 :::
 
-:::caution[Use 127.0.0.1, not localhost]
-The frontend calls `http://127.0.0.1:8088` directly. Opened from `localhost:8888`, the browser treats that as cross-site and does not keep the refresh-token cookie: sign-in works, but **a page refresh sends you back to the sign-in page**.
+```bash
+pnpm db:init
+```
+
+Follow the prompts to confirm the target and set a new password for `admin`. Keep this password for sign-in. Initialization also disables the sample `test` account; automation supplies the password through `FBA_INIT_ADMIN_PASSWORD`.
+
+**Expected result:** the last message says the new database was stamped at the migration head. Check the revision:
+
+```bash
+pnpm db:current
+```
+
+The revision should be marked `(head)`.
+
+<span id="how-do-i-know-each-step-worked"></span>
+
+## 4. Start the app and sign in
+
+```bash
+pnpm dev
+```
+
+Leave this terminal running and open <http://127.0.0.1:8888>.
+
+:::note[Local address]
+Use `127.0.0.1:8888`. The default API is at `127.0.0.1:8088`; accessing it from `localhost:8888` is cross-site, so the browser cannot keep the refresh-token cookie and a page refresh returns you to sign-in.
 :::
 
-### How do I know each step worked?
+Check these in order:
 
-| Step | Check |
-|---|---|
-| `docker compose … up -d` | `docker ps` shows `fba_postgres` and `fba_redis` as `healthy` |
-| `pnpm install:all` | finishes without errors, and `apps/api/.venv` exists |
-| `pnpm db:init` | the last line says the new database was stamped at the migration head; `pnpm db:current` shows a revision marked `(head)` |
-| `pnpm dev` | the sign-in page shows a **captcha image** — the backend serves it, so seeing it means frontend and backend are connected |
-| Sign in | you land on the dashboard, which starts with "you have N things waiting" |
+1. The sign-in page shows a captcha image, confirming the frontend reaches the backend (captcha is enabled by default).
+2. Sign in as `admin` with **the password you set during initialization** and reach the dashboard.
+3. Refresh the page and remain signed in.
 
-Stuck on a step? Search the error text in the [FAQ](/en/reference/faq/).
+Your local environment is ready once all three work. Next time, check the containers are running and run `pnpm dev`.
 
-:::caution
-`pnpm db:init` drops and recreates every table. Run it on the first setup or when you want a clean database; after that, schema changes go through `pnpm db:upgrade` (Alembic).
-:::
+## Common questions
 
-## Why does the sign-in page ask for a captcha?
+<details>
+<summary>Why does admin / 123456 fail?</summary>
 
-The image captcha is on by default. To skip it locally, set `LOGIN_CAPTCHA_ENABLED` to `false` under **System → Config**; it takes effect immediately. To type it instead, take the `uuid` from the `GET /api/v1/auth/captcha` response and read the answer from Redis:
+Use the password chosen during initialization. `admin` / `123456` belongs to the [live demo](https://fra.wubunan.com/sign-in); initialization refuses to keep the seed password.
+
+</details>
+
+<span id="why-does-the-sign-in-page-ask-for-a-captcha"></span>
+
+<details>
+<summary>Can I disable the captcha locally?</summary>
+
+Yes. After signing in, set `LOGIN_CAPTCHA_ENABLED` to `false` under **System → Config**; it takes effect immediately. Database settings can override `.env`; see [captcha configuration troubleshooting](/en/reference/faq/#login_captcha_enabledfalse-is-set-in-env-but-sign-in-still-asks-for-a-captcha).
+
+For debugging, use the `uuid` from `GET /api/v1/auth/captcha` to read the answer in Redis:
 
 ```bash
 docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 ```
 
-## How do I use SQL Server, MySQL or S3 instead?
+</details>
 
-Everything optional is in the same `docker-compose.dev.yml`; turn it on and change `DATABASE_*` in `.env`.
+<span id="what-runs-where"></span>
 
-| To use | Command | Notes |
+<details>
+<summary>Which ports are used? What if 8888 is occupied?</summary>
+
+| Service | Port | Started by |
 |---|---|---|
-| **SQL Server** | `docker compose -f docker-compose.dev.yml --profile sqlserver up -d mssql` | The host also needs [Microsoft ODBC Driver 18](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) — the backend connects through `aioodbc`, so the driver inside the container doesn't count |
-| **MySQL** | bring your own MySQL 8.x | `DATABASE_TYPE='mysql'`, charset `utf8mb4` |
-| **S3-compatible storage** (RustFS) | `docker compose -f docker-compose.dev.yml --profile s3 up -d rustfs` | Set `STORAGE_ENCRYPT_SECRET_KEY` in `.env` (`openssl rand -hex 32`) before adding a storage under **System → Storage** |
-
-:::caution
-Keep `DATABASE_PK_MODE='snowflake'` as in `.env.example`. Seed data only exists for snowflake IDs; in autoincrement mode (or if `.env` lacks the line — the code default is `autoincrement`) initialization exits with an error saying the seed has no admin account.
-:::
-
-See [Databases](/en/features/databases/) for how the three databases are supported and tested.
-
-## What runs where?
-
-| Process | Port | Started by |
-|---|---|---|
-| FastAPI backend (uvicorn, `--reload`) | 8088 | `pnpm dev` |
-| React frontend (Vite) | 8888 (fixed — `strictPort`) | `pnpm dev` |
+| FastAPI (uvicorn, auto-reload) | 8088 | `pnpm dev` |
+| React (Vite) | 8888 | `pnpm dev` |
 | Celery worker with embedded beat | — | `pnpm dev` |
 | PostgreSQL / Redis | 5432 / 6380 | `docker compose` |
 
-The frontend port is fixed on purpose: CORS, OAuth2 redirect URIs and the desktop app's dev URL all point at 8888, so Vite fails instead of drifting to 8889.
+The frontend uses a fixed port: CORS, OAuth2 callbacks and the desktop dev URL all use 8888. If it is occupied, Vite fails; identify the process before deciding whether to stop it. For other startup failures, search the error text in the [FAQ](/en/reference/faq/).
+
+</details>
+
+<span id="how-do-i-use-sql-server-mysql-or-s3-instead"></span>
+
+<details>
+<summary>Can I use SQL Server, MySQL or S3?</summary>
+
+Yes. Optional services are listed below; switching databases also requires changing `DATABASE_*` in `.env`.
+
+| Service | Setup |
+|---|---|
+| SQL Server | `docker compose -f docker-compose.dev.yml --profile sqlserver up -d mssql`; also install [ODBC Driver 18](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) on the host |
+| MySQL | Bring MySQL 8.x; set `DATABASE_TYPE='mysql'` and use `utf8mb4` |
+| S3-compatible storage (RustFS) | `docker compose -f docker-compose.dev.yml --profile s3 up -d rustfs`; set `STORAGE_ENCRYPT_SECRET_KEY` (generate with `openssl rand -hex 32`) before adding storage in the UI |
+
+Continue with [Databases](/en/features/databases/) or [File storage](/en/features/file-storage/).
+
+</details>
 
 ## Where to go next
 
-- [Feature overview](/en/features/overview/) — what you can build on.
-- [Deployment](/en/getting-started/deployment/) — run it on a server from prebuilt images.
-- [CONTRIBUTING.md](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md) — tests, branches and releases (in Chinese; the commands are language-independent).
+- [Feature overview](/en/features/overview/): what the system can do.
+- [Sign-in and security](/en/features/login-security/): password policies and two-factor setup.
+- [Deployment](/en/getting-started/deployment/): deploy prebuilt images to a server.
+- [Contributing](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md): tests, branches and releases (in Chinese).
