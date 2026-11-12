@@ -145,6 +145,7 @@ Starlight 0.39 起不再支持 `autogenerate` 和 `label` 写在同一层。
 
 ## 视觉：和后台、登录页同一套品牌
 
+- 正文表格沿用 Starlight 的 `display: block; overflow: auto`，圆角外框配 `width: fit-content; max-width: 100%`。否则外框占满正文、表头只占实际列宽，短表右侧就会留下大块空白。实测登录安全页的二次验证表修前外框 720px、表头 283px；修后外框 285px、表头 283px。显式的 `.doc-table-scroll` 宽表仍铺满容器，小屏只在表格区域滚动。
 - **主题**在 `src/styles/theme.css`：品牌紫 + Inter / JetBrains Mono（`@fontsource-variable` 自托管 ——
   不走 Google Fonts，国内打不开会卡住首屏）。⚠️ Starlight 的 `:root` 是**深色**、浅色挂在
   `:root[data-theme='light']`，和后台的 `.dark` 方向相反，从后台抄颜色时别抄反
