@@ -2229,6 +2229,7 @@
   "生成一把新密钥。旧的那把还会一起签名 24 小时，对方在这一天里换成新的就不会丢事件。": "A new secret will be generated. The old one keeps signing alongside it for 24 hours, so the receiver loses no events as long as it switches within that day.",
   "生成中": "Generating",
   "生成中，通常要半分钟左右。关掉弹窗就不要这次的结果。": "Generating, usually takes about half a minute. Closing the dialog discards this result.",
+  "用 DeepWiki 理解项目": "Explore the project with DeepWiki",
   "用于发布系统内部通知、公告": "Publishes internal notices and announcements",
   "用于安全审计：确认是谁、从哪里、用什么设备登录，失败时看清原因。": "For security audits: who signed in, from where, on what device, and why it failed.",
   "用其他应用打开": "Open in another app",

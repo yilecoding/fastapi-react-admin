@@ -88,6 +88,8 @@ The frontend, the desktop and mobile clients, and most business features (approv
 
 ## Next steps
 
+- [DeepWiki project guide](https://deepwiki.com/yilecoding/fastapi-react-admin) — explore the repository structure and code through AI-assisted Q&A.
+
 - [Quick start](/en/getting-started/quick-start/) — run it locally in five commands.
 - [Feature overview](/en/features/overview/) — everything that ships, by area.
 - [Live demo](https://fra.wubunan.com/sign-in) — `admin` / `123456`.

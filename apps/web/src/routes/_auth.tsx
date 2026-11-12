@@ -34,6 +34,7 @@ import { NoticeBanner } from "@admin/platform/pages/notice/banner"
 import { NoticePopupHost } from "@admin/platform/pages/notice/popup-host"
 import { AiDrawer, AiDrawerTrigger } from "@admin/platform/pages/ai-chat/drawer"
 import { GithubLink } from "@/components/github-link"
+import { DeepWikiLink } from "@/components/deepwiki-link"
 import { UserMenu } from "@/components/user-menu"
 
 export const Route = createFileRoute("/_auth")({
@@ -127,6 +128,7 @@ function AuthLayout() {
           {/* 命令面板入口：⌘K 也能开，但快捷键不摆出来就等于只有作者知道 */}
           <div className="ms-auto flex items-center gap-2">
             <CommandTrigger />
+            <DeepWikiLink />
             <GithubLink />
             {/* 帮助：重看功能引导 / 快捷键清单。没有这个按钮，那两样只有知道的人才找得到 */}
             <HelpMenu />

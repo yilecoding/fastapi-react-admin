@@ -10,7 +10,7 @@
 
 Row-level permissions · multi-tab that keeps state · approval workflow · an AI assistant that can't overreach · S3 storage with resumable uploads · web, desktop and mobile
 
-[Live demo](https://fra.wubunan.com/sign-in) · [Docs](https://yilecoding.github.io/fastapi-react-admin/en/) · [Quick start](#quick-start) · [Features](#features) · [Releases](https://github.com/yilecoding/fastapi-react-admin/releases)
+[Live demo](https://fra.wubunan.com/sign-in) · [Docs](https://yilecoding.github.io/fastapi-react-admin/en/) · [DeepWiki project guide](https://deepwiki.com/yilecoding/fastapi-react-admin) · [Quick start](#quick-start) · [Features](#features) · [Releases](https://github.com/yilecoding/fastapi-react-admin/releases)
 
 [![Release](https://img.shields.io/github/v/release/yilecoding/fastapi-react-admin?style=flat-square)](https://github.com/yilecoding/fastapi-react-admin/releases)
 [![CI](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml/badge.svg)](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml)
