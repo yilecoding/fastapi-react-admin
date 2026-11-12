@@ -81,6 +81,13 @@ test("审批末页办完回到第一页，待办仍可见，详情参数正常�
     } } },
   }) as { id: string }
   const ids: string[] = []
+  let holdCounts = false
+  let releaseCounts: (() => void) | undefined
+  const countsGate = new Promise<void>(resolve => { releaseCounts = resolve })
+  await page.route('**/api/v1/sys/workflow/inbox/counts', async route => {
+    if (holdCounts) await countsGate
+    await route.fallback()
+  })
   try {
     await api.post('/api/v1/sys/workflow/definitions/' + definition.id + '/publish')
     for (let i = 0; i < 2; i++) {
@@ -94,7 +101,13 @@ test("审批末页办完回到第一页，待办仍可见，详情参数正常�
     const tab = page.locator('[data-tab="/_auth/workflow/inbox"]')
     await tab.locator('[data-testid^="wf-row-"]').click()
     const sheet = page.getByTestId("wf-instance-sheet")
+    // 列表先重取完、其他失效查询仍在路上：人为拉开「回页」与「关闭详情」的窗口。
+    holdCounts = true
     await sheet.getByTestId("wf-act-approve").click()
+    await expect(tab.getByTestId("wf-inbox-empty")).toBeAttached()
+    await expect(tab.getByTestId("list-refresh")).toHaveAttribute("aria-busy", "false")
+    expect(new URL(page.url()).searchParams.get("page")).toBe("2")
+    releaseCounts?.()
     await expect(sheet).toBeHidden()
     await expect.poll(() => Number(new URL(page.url()).searchParams.get("page") ?? 1)).toBe(1)
     await expect(tab.locator('[data-testid^="wf-row-"]')).toHaveCount(1)
@@ -104,6 +117,7 @@ test("审批末页办完回到第一页，待办仍可见，详情参数正常�
     await page.reload()
     await expect(tab.locator('[data-testid^="wf-row-"]')).toHaveCount(1)
   } finally {
+    releaseCounts?.()
     for (const id of ids) {
       const detail = await api.get('/api/v1/sys/workflow/instances/' + id) as { instance: { status: string } }
       if (detail.instance.status === "running") await api.post('/api/v1/sys/workflow/instances/' + id + '/actions', { action: "withdraw", key: code + '-cleanup-' + id, opinion: "E2E 清理" })
@@ -173,12 +187,9 @@ test("换筛选后的慢响应不能用上次的空结果把有效末页拉回�
       const code = prefix + i
       await api.post("/api/v1/open-apps", { code, name: code, scopes: ["user:read"] })
     }
-    // 给浏览器后退准备两个真实历史条目，应用内的筛选 / 分页用 replace 写 URL。
-    await page.goto('/open/app?name=' + prefix + '&page=3&size=1')
+    // 先留下一组空结果，再在同一个页面内换查询，真正触发 placeholderData。
+    await page.goto('/open/app?name=' + prefix + '-missing&size=1')
     const tab = page.locator('[data-tab="/_auth/open/app"]')
-    await expect(tab.locator('[data-testid^="row-actions-"]')).toHaveCount(1)
-    await page.goto('/open/app?name=' + prefix + '-missing&page=3&size=1')
-    await expect.poll(() => new URL(page.url()).searchParams.has("page")).toBe(false)
     await expect(tab.locator('[data-slot="pagination"]')).toContainText("第 1 / 1 页")
 
     await page.route(/\/api\/v1\/open-apps\?/, async route => {
@@ -188,7 +199,9 @@ test("换筛选后的慢响应不能用上次的空结果把有效末页拉回�
       await pending
       await route.fallback()
     })
-    await page.goBack()
+    // E2E 的 Node tsconfig 不带 DOM lib；字符串只在浏览器上下文求值。
+    const href = '/open/app?name=' + prefix + '&page=3&size=1'
+    await page.evaluate('history.pushState({}, "", ' + JSON.stringify(href) + '); dispatchEvent(new PopStateEvent("popstate"))')
     await started
     // 等 UI 消化历史导航：新页正在请求，表体仍是上一组筛选的空占位。
     await expect(tab.locator('[aria-busy="true"]').first()).toBeVisible()
