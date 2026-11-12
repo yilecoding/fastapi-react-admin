@@ -400,6 +400,10 @@ app 模型（`utils/dynamic_import.py`）都是 `os.listdir` / `os.walk` 的原�
 单测：`pnpm --filter @admin/api test`（vitest；`turbo test` 按 task 名自动带上，CI 不用改）。
 变异验证（2026-11-06）：把 `forecastItems` 里的 `audience` 判断写死成 `false`，`workflow-progress.test.ts` 当场红。
 
+## 🔴 刷新必须保持账号身份（#324）
+
+🔴 **刷新不能换账号后重放旧请求（#324）**：共享 refresh cookie 可被另一个浏览器标签页换成别人的。`src/client.ts` 比较原请求、当前 token 和刷新结果的字符串 sub，不转 Number；跨账号结束会话，刷新期间本地退出 / 新登录也不接受旧结果。这个判断放共享 recover，覆盖 JSON、原始字节和上传。`src/client.test.ts` 验证跨账号写只发一次、同人轮换、暂时故障、退出 / 新登录竞争和并发单飞；浏览器 `refresh-identity.spec.ts` 验证拒绝重放并跳登录页。
+
 ## 搬家留下的一层 re-export
 
 `packages/platform/src/api-client/errors.ts` 现在只是

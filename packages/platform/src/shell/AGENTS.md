@@ -163,7 +163,7 @@ inset（SidebarInset）       content-scroll:min-h-0
 | 改哪 | 为什么 |
 |---|---|
 | `tab-store.reset()` | 连固定的一起清 —— 上一个账号固定的页面，下一个账号可能连权限都没有（和 `closeAll` 刻意不同，后者保留固定的） |
-| `auth/session.ts` 的 `login()` + `logout()` | 换身份的入口有三个（退出菜单、登录页、401 失效后重新登录），放调用方就是三处都要记得。`login()` 里那次不能省 —— 401 那条链根本不走 `logout()` |
+| `auth/session.ts` 的 `login()` + `logout()`，以及 API `setToken` / `clearToken`（#324） | 显式登录 / 退出清理外，`tab-store.ts` 持久化 ownerId、恢复前 bindOwner；401 clearToken 同时 reset 并解绑。实测 `apps/web/e2e/tests/refresh-identity.spec.ts`：原先跳登录页仍残留部门页，补清理后两条通过，换 owner 恢复也不挂旧页；查询缓存由 app 失效回调及显式登录清空 |
 | `useSyncTabs` 里 `if (!isAuthenticated()) return` | 挡住上面第 2 条那次「补加回来」。语义上也对：没有登录态就不该往标签条里加东西 |
 
 ⚠️ **偏好设置（`admin:prefs`，localStorage）刻意不清** —— 主题 / 圆角 / 标签条外观

@@ -12,7 +12,7 @@ from backend.common.log import log
 from backend.core.conf import settings
 from backend.database.db import async_db_session
 from backend.database.redis import redis_client
-from backend.plugin.ai.core.dispatcher import tool_dispatcher
+from backend.plugin.ai.core.dispatcher import DispatchOutcome, _error_text, tool_dispatcher
 from backend.plugin.ai.core.events import AgentEvent, DoneEvent, ErrorEvent, ToolResultEvent
 from backend.plugin.ai.core.ports import RunContext, ToolCallRequest
 from backend.plugin.ai.core.registry import get_tool
@@ -204,9 +204,25 @@ class ChatService:
                 pinned=staged.get('pinned') or {},
             )
             call = ToolCallRequest(call_id=token, name=staged['tool'], arguments=staged['arguments'])
-            outcome = await tool_dispatcher.dispatch(call, ctx, pre_approved=True)
-            await db.commit()
-            await ctx.background_tasks()
+            try:
+                outcome = await tool_dispatcher.dispatch(call, ctx, pre_approved=True)
+                await db.commit()
+            except Exception as exc:
+                await db.rollback()
+                ctx.background_tasks.tasks.clear()
+                log.exception('AI 确认执行或提交失败')
+                outcome = DispatchOutcome(
+                    kind='failed',
+                    payload=f'执行失败：{_error_text(exc)}',
+                    summary='操作未提交',
+                )
+            else:
+                try:
+                    await ctx.background_tasks()
+                except Exception:
+                    # The transaction is already committed. A cache invalidation
+                    # failure must not invite the user to repeat the business write.
+                    log.exception('AI 确认提交后任务失败')
 
         ok = outcome.kind == 'ok'
         detail = None if ok else outcome.payload[:300]

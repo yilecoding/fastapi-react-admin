@@ -10,6 +10,11 @@ import { ApiError, createApiClient, type ApiClientConfig, type SessionEnd } from
  * 快照走了（`packages/api` 分册「怎么验」那条）—— 建完再换是无效的，测试会先假绿一次
  */
 const realFetch = globalThis.fetch
+const jwt = (session: string) => `e30.${btoa(JSON.stringify({ sub: '2048601263834267648', session_uuid: session }))}.sig`
+const oldToken = jwt('old')
+const newToken = jwt('new')
+const desktopToken = jwt('desk')
+const restoredToken = jwt('restored')
 
 afterEach(() => {
   globalThis.fetch = realFetch
@@ -34,7 +39,7 @@ function setup(
     return handle(url, headers)
   }) as typeof fetch
 
-  let token: string | null = 'old'
+  let token: string | null = oldToken
   const ended: SessionEnd[] = []
   const client = createApiClient<Record<string, never>>({
     getBaseUrl: () => 'http://api',
@@ -64,7 +69,7 @@ describe('401 之后的刷新分三种结果', () => {
     expect(err).toBeInstanceOf(ApiError)
     expect((err as ApiError).httpStatus).toBe(502)
     expect(t.ended).toEqual([])
-    expect(t.token()).toBe('old')
+    expect(t.token()).toBe(oldToken)
   })
 
   it('刷新被拒（401 带原因码）：清登录态，并把原因交给收尾回调', async () => {
@@ -86,13 +91,13 @@ describe('401 之后的刷新分三种结果', () => {
     const err = await t.get('/api/v1/x').catch((e: unknown) => e)
     expect((err as ApiError).isNetwork).toBe(true)
     expect(t.ended).toEqual([])
-    expect(t.token()).toBe('old')
+    expect(t.token()).toBe(oldToken)
   })
 
   it('三个请求同时 401：只刷新一次，三个都拿新 token 重放成功', async () => {
     const t = setup((url, headers) => {
-      if (isRefresh(url)) return ok({ access_token: 'new' })
-      return headers.authorization === 'Bearer new' ? ok(1) : unauthorized()
+      if (isRefresh(url)) return ok({ access_token: newToken })
+      return headers.authorization === `Bearer ${newToken}` ? ok(1) : unauthorized()
     })
     await expect(Promise.all([t.get('/api/v1/a'), t.get('/api/v1/b'), t.get('/api/v1/c')])).resolves.toEqual([1, 1, 1])
     expect(t.seen.filter((s) => isRefresh(s.url))).toHaveLength(1)
@@ -113,8 +118,8 @@ describe('注入点', () => {
   it('每个请求都带上用户多少秒没操作（X-Client-Idle），刷新请求不带 Authorization', async () => {
     const t = setup(
       (url, headers) => {
-        if (isRefresh(url)) return ok({ access_token: 'new' })
-        return headers.authorization === 'Bearer new' ? ok(1) : unauthorized()
+        if (isRefresh(url)) return ok({ access_token: newToken })
+        return headers.authorization === `Bearer ${newToken}` ? ok(1) : unauthorized()
       },
       { getClientIdle: () => 42.7 },
     )
@@ -125,19 +130,19 @@ describe('注入点', () => {
   })
 
   it('注入了 refresh（桌面端走主进程）就不发 cookie 刷新', async () => {
-    const t = setup((url, headers) => (headers.authorization === 'Bearer desk' ? ok(1) : unauthorized()), {
-      refresh: async () => ({ kind: 'ok', token: 'desk' }),
+    const t = setup((url, headers) => (headers.authorization === `Bearer ${desktopToken}` ? ok(1) : unauthorized()), {
+      refresh: async () => ({ kind: 'ok', token: desktopToken }),
     })
     await expect(t.get('/api/v1/x')).resolves.toBe(1)
     expect(t.seen.some((s) => isRefresh(s.url))).toBe(false)
   })
 
   it('restoreSession：手里没有 token 时静默换一枚（页面加载 / 新标签页）', async () => {
-    const t = setup((url) => (isRefresh(url) ? ok({ access_token: 'restored' }) : unauthorized()))
+    const t = setup((url) => (isRefresh(url) ? ok({ access_token: restoredToken }) : unauthorized()))
     t.client.endSession()
     t.ended.length = 0
-    await expect(t.client.restoreSession()).resolves.toEqual({ kind: 'ok', token: 'restored' })
-    expect(t.token()).toBe('restored')
+    await expect(t.client.restoreSession()).resolves.toEqual({ kind: 'ok', token: restoredToken })
+    expect(t.token()).toBe(restoredToken)
     // 恢复失败不走收尾回调 —— 去不去登录页由守卫决定
     expect(t.ended).toEqual([])
   })

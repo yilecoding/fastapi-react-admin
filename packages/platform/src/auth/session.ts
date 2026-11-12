@@ -11,7 +11,6 @@ export { isSessionEndReason, SESSION_END_MESSAGE, type SessionEndReason } from '
 /** 手机号格式 · 发码倒计时 · 失败后要不要换图形验证码 —— 同上，和移动端登录屏共用一份 */
 export { isPhoneNumber, shouldReloadCaptcha, SMS_RESEND_SECONDS } from '@admin/api'
 import { useTabStore } from '../shell/tab-store'
-import { authKeys } from './queries'
 
 /**
  * 换身份要清掉的**客户端**状态。
@@ -160,9 +159,10 @@ export async function enrollMfa(mfaToken: string, otp: string): Promise<{ recove
 function afterLogin(qc: QueryClient, token: string) {
   // 会话 ID 在 token 的载荷里（`tokenStore.getSessionUuid`），不用另存
   tokenStore.set(token)
+  useTabStore.getState().bindOwner(tokenStore.getUserId())
   endingLocally = false
   // 换了身份，整份服务端状态都要重取 —— 不能只失效 me
-  qc.removeQueries({ queryKey: authKeys.all })
+  qc.clear()
   // 上一个账号残留的标签页在这里清掉。**必须在 login 里也清**，不能只靠 logout：
   // 401 会话失效那条链（`setSessionExpiredHandler`）根本不走 logout
   clearClientSessionState()

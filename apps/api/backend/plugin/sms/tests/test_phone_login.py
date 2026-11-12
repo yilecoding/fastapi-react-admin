@@ -68,7 +68,7 @@ def _clean(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> Iterator[None
 
     async def _flush() -> None:
         for prefix in (
-            f'{settings.LOGIN_CAPTCHA_REDIS_PREFIX}:phone',
+            settings.LOGIN_PHONE_GUARD_REDIS_PREFIX,
             settings.SMS_REDIS_PREFIX,
             settings.LOGIN_FAILURE_PREFIX,
             settings.USER_LOCK_REDIS_PREFIX,

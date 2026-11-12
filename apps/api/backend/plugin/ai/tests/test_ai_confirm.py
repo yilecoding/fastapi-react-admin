@@ -45,7 +45,7 @@ async def _fake_session() -> AsyncIterator[Any]:
     async def _commit() -> None:  # ruff: ignore[unused-async]
         return
 
-    yield SimpleNamespace(commit=_commit)
+    yield SimpleNamespace(commit=_commit, rollback=_commit)
 
 
 @pytest.fixture
@@ -125,6 +125,46 @@ async def _stage(client: RedisCli, *, owner: int) -> str:
 
 
 class TestConfirmToken:
+    @pytest.mark.parametrize('failure', ['dispatch', 'commit'])
+    def test_failure_settles_card_and_completes_stream(self, harness: dict[str, Any], failure: str) -> None:
+        settled = []
+        rolled_back = []
+
+        async def settle(*args):  # ruff: ignore[unused-async]
+            settled.append(args)
+
+        async def dispatch(*args, **kwargs):  # ruff: ignore[unused-async]
+            if failure == 'dispatch':
+                raise RuntimeError('handler failed')
+            return DispatchOutcome(kind='ok', payload='saved', summary='saved')
+
+        @asynccontextmanager
+        async def session():
+            async def commit():  # ruff: ignore[unused-async]
+                raise RuntimeError('commit failed')
+
+            async def rollback():  # ruff: ignore[unused-async]
+                rolled_back.append(True)
+
+            yield SimpleNamespace(commit=commit, rollback=rollback)
+
+        patch = harness['monkeypatch']
+        patch.setattr(chat_module, '_settle_confirm', settle)
+        patch.setattr(chat_module.tool_dispatcher, 'dispatch', dispatch)
+        patch.setattr(chat_module, 'async_db_session', session)
+
+        async def scenario(client):
+            token = await _stage(client, owner=1)
+            frames = await _consume(_user(1), token)
+            assert not await client.exists(f'{settings.AI_CONFIRM_REDIS_PREFIX}:{token}')
+            return frames
+
+        frames = _run(harness, scenario)
+        assert _codes(frames) == ['tool_result', 'done']
+        assert json.loads(frames[0].removeprefix('data: ').strip())['ok'] is False
+        assert rolled_back == [True]
+        assert settled[0][2] == 'failed'
+
     def test_concurrent_confirms_execute_once(self, harness: dict[str, Any]) -> None:
         async def scenario(client: RedisCli) -> list[list[str]]:
             token = await _stage(client, owner=1)
