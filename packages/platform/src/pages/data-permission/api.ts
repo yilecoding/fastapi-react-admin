@@ -135,11 +135,12 @@ export function useUpdateScopeRules() {
     meta: { suppressErrorToast: true },
     mutationFn: ({ id, rules }: { id: string; rules: string[] }) =>
       api.PUT(`/api/v1/sys/data-scopes/${id}/rules`, { body: { rules } }),
-    onSuccess: (_d, v) => {
-      qc.invalidateQueries({ queryKey: scopeKeys.rules(v.id) })
-      qc.invalidateQueries({ queryKey: scopeKeys.all })
-      // 规则变了，用户能看到的数据跟着变
-      qc.invalidateQueries({ queryKey: ['auth'] })
+    onSuccess: () => {
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: scopeKeys.all }),
+        // 规则变了，用户能看到的数据跟着变
+        qc.invalidateQueries({ queryKey: ['auth'] }),
+      ])
     },
   })
 }

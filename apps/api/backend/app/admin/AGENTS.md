@@ -225,3 +225,16 @@ SQL Server 2022（`sys.identity_columns` 对这张表 0 行）/ MySQL 8.4；之�
 接口不透传 `event` · 撤销之前不取会话字段。前端：查询区去掉「事件」→ E2E 红；路由 schema 去掉 `event` **不红**，是等价变异
 （叶子路由的 search 会合并根上没校验的那一份，见 `packages/ui` 分册「列顺序」那条）。迁移 `ao000000loginevent`（原 `an000000loginevent`，#271 先合后改接）：已有行回填 `login`、
 库上不留 DEFAULT，`test_model_matches_migrations` 对升级上来的库通过。
+
+## 🔴 邮箱验证码必须绑定用户和目标邮箱（#303）
+
+**症状**：邮箱 A 收到的验证码能把账号绑定到邮箱 B，同 IP 的用户也共用同一份码。
+**根因**：邮件验证码只按 IP 存，校验不检查用户和目标邮箱。
+**修法**：按用户 ID + 校验后的目标邮箱哈希存，Lua 原子校验消费、最多猜 5 次；SMTP 成功才发布新码，失败重发保留旧码。
+**实测证据**（2026-11-12，SQL Server / Redis 私有验证库）：`tests/test_email_binding.py` 经真实接口覆盖错邮箱、同 IP 跨用户、重放、猜测上限、非法目标和重发失败；修前错邮箱返回 200。
+
+## 🔴 图形验证码 uuid 不能指向限流键（#310）
+
+**症状**：传手机号冷却键后缀与答案 `1` 就通过图形验证，并删掉冷却状态。
+**根因 / 修法**：外部 uuid 直接拼进共用 Redis 前缀，GET / DEL 也不原子。schema 和 service 校验 UUID4，图形码用 GETDEL 消费，短信限流改用独立前缀。
+**实测证据**（2026-11-12，真实 Redis + HTTP）：`tests/test_captcha_consume.py` 修前接受限流键 `1`，修后 HTTP 返回 422、限流键保留；5 个并发验证只通过 1 个，答错仍作废。
