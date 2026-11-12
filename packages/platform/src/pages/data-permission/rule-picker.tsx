@@ -6,6 +6,7 @@ import { IconLoader2, IconSearch } from '@tabler/icons-react'
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { Checkbox } from '@admin/ui/components/checkbox'
+import { QueryError } from '@admin/ui/components/query-error'
 import {
   Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@admin/ui/components/dialog'
@@ -17,7 +18,7 @@ import { cn } from '@admin/ui/lib/utils'
 
 import { ApiError } from '../../api-client/errors'
 import {
-  allRulesQuery, expressionSymbol, useUpdateScopeRules, type DataScope,
+  allRulesQuery, expressionSymbol, scopeRulesQuery, useUpdateScopeRules, type DataScope,
 } from './api'
 
 /**
@@ -35,7 +36,10 @@ export function RulePicker({
   boundIds: string[]
 }) {
   const { t } = useTranslation()
-  const { data: all = [], isPending } = useQuery({ ...allRulesQuery, enabled: open })
+  const allQuery = useQuery({ ...allRulesQuery, enabled: open })
+  const { data: all = [], isPending } = allQuery
+  const ownedQuery = useQuery({ ...scopeRulesQuery(scope.id), enabled: open })
+  const ready = allQuery.isSuccess && !allQuery.isFetching && ownedQuery.isSuccess && !ownedQuery.isFetching
   const [keyword, setKeyword] = React.useState('')
   const [picked, setPicked] = React.useState<Set<string>>(new Set())
   const [err, setErr] = React.useState<string | null>(null)
@@ -71,10 +75,12 @@ export function RulePicker({
     })
 
   async function handleBind() {
-    if (picked.size === 0) return
+    if (picked.size === 0 || !ready) return
     setErr(null)
     try {
-      await bind.mutateAsync({ id: scope.id, rules: [...new Set([...boundIds, ...picked])] })
+      const current = await ownedQuery.refetch({ throwOnError: true })
+      if (!current.isSuccess) throw new Error(t('数据加载失败'))
+      await bind.mutateAsync({ id: scope.id, rules: [...new Set([...(current.data ?? []).map((r) => r.id), ...picked])] })
       onOpenChange(false)
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : t('保存失败，请稍后重试'))
@@ -105,7 +111,9 @@ export function RulePicker({
           </InputGroup>
 
           <div className="max-h-80 min-h-56 overflow-y-auto rounded-md border p-1" data-testid="rule-picker-list">
-            {isPending ? (
+            {allQuery.error || ownedQuery.error ? (
+              <QueryError error={allQuery.error ?? ownedQuery.error} onRetry={() => { void allQuery.refetch(); void ownedQuery.refetch() }} />
+            ) : isPending ? (
               <div className="flex flex-col gap-1 p-1">
                 {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
               </div>
@@ -160,7 +168,7 @@ export function RulePicker({
 
         <DialogFooter>
           <DialogClose render={<Button variant="outline" type="button" />}>{t('取消')}</DialogClose>
-          <Button onClick={handleBind} disabled={picked.size === 0 || bind.isPending}
+          <Button onClick={handleBind} disabled={picked.size === 0 || bind.isPending || !ready}
                   data-testid="rule-picker-submit">
             {bind.isPending && <IconLoader2 className="size-4 animate-spin" />}
             {picked.size > 0 ? t('引用 {{n}} 条', { n: picked.size }) : t('引用')}
