@@ -111,7 +111,7 @@ export function WorkflowMonitorPage({
   const listQuery = useQuery(monitorQuery({ page, size, ...(q.params as Record<string, string | number | undefined>) }))
   const { data, isFetching } = listQuery
   const list = listState(listQuery)
-  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
+  usePageRecovery(listQuery, { page, size, enabled: !search.id, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const rows = data?.items ?? []
   const total = data?.total ?? 0
 
