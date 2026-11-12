@@ -31,6 +31,7 @@ from backend.plugin.ai.core import dispatcher as dispatcher_module
 from backend.plugin.ai.core.dispatcher import tool_dispatcher
 from backend.plugin.ai.core.ports import RunContext, ToolCallRequest
 from backend.plugin.ai.core.registry import load_builtin_tools
+from backend.plugin.ai.model.conversation import AiToolInvocation
 from backend.plugin.workflow.tests.conftest import key, ok
 from backend.plugin.workflow.tests.test_ops import _detail
 from backend.plugin.workflow.tests.test_review_fixes import _approval, _model, _publish
@@ -73,7 +74,12 @@ def _start(client: TestClient, login: Any, code: str, reason: str = '去上海�
 
 
 def _run(
-    monkeypatch: pytest.MonkeyPatch, user: Any, calls: list[tuple[str, dict, bool]], said: list[str] | None = None
+    monkeypatch: pytest.MonkeyPatch,
+    user: Any,
+    calls: list[tuple[str, dict, bool]],
+    said: list[str] | None = None,
+    *,
+    preserve_turn: bool = False,
 ) -> tuple[list[Any], int]:
     """按顺序调工具（`(工具名, 参数, 是否已确认)`）；已确认的那次之后像网页确认一样提交。返回（结果们, 会话 ID）
 
@@ -88,6 +94,12 @@ def _run(
             outcomes = []
             for name, args, approved in calls:
                 async with create_database_async_session(engine)() as db:
+                    if preserve_turn:
+                        db.add(
+                            AiToolInvocation(
+                                conversation_id=conversation_id, user_id=user.id, tool_name='earlier_tool', status=0
+                            )
+                        )
                     ctx = RunContext(user=user, conversation_id=conversation_id, db=db, provider=None, user_said=said)
                     call = ToolCallRequest(call_id=uuid.uuid4().hex, name=name, arguments=args)
                     outcomes.append(await tool_dispatcher.dispatch(call, ctx, pre_approved=approved))
@@ -149,6 +161,46 @@ def test_a_non_staff_approver_can_approve_in_chat(
     assert approve and approve[-1]['actor_name'] == '赵磊', '执行人要是用户本人'
     # `act()` 进来会回滚会话上的事务 —— 审计行得还在（它是在工具跑完之后才写的）
     assert ('wf_approve', 0) in _audits(conv), _audits(conv)
+
+
+@pytest.mark.parametrize('fail_after_write', [False, True])
+def test_approval_owns_its_transaction_without_rolling_back_the_turn(
+    client: TestClient,
+    token_headers: dict[str, str],
+    login: Any,
+    uid: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    fail_after_write: bool,
+) -> None:
+    from backend.plugin.workflow.service import runtime_service
+
+    code = f'PYTEST_AIWF_TX_{int(fail_after_write)}'
+    _setup(client, token_headers, uid, code)
+    pk = _start(client, login, code)
+    if fail_after_write:
+        original = runtime_service._Ctx.flush_assigned
+
+        async def fail(ctx: Any) -> None:
+            await original(ctx)
+            raise RuntimeError('failure after workflow writes')
+
+        monkeypatch.setattr(runtime_service._Ctx, 'flush_assigned', fail)
+
+    (done,), conv = _run(
+        monkeypatch,
+        _person(uid('zhaolei'), '赵磊'),
+        [('wf_approve', {'instance_id': pk}, True)],
+        preserve_turn=True,
+    )
+    assert done.kind == ('failed' if fail_after_write else 'ok'), done
+    detail = _detail(client, token_headers, pk)
+    assert detail['instance']['status'] == ('running' if fail_after_write else 'approved')
+    approvals = [r for r in detail['records'] if r['action'] == 'approve']
+    assert bool(approvals) is not fail_after_write, 'failed workflow writes must roll back'
+    audits = _audits(conv)
+    assert ('earlier_tool', 0) in audits, 'workflow rollback discarded earlier turn data'
+    assert ('wf_approve', 1 if fail_after_write else 0) in audits
 
 
 def test_hidden_fields_never_reach_the_model(

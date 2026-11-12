@@ -179,9 +179,17 @@ async def _doable(db: AsyncSession, ctx: RunContext, instance_id: str, action: A
 
 async def _act(db: AsyncSession, ctx: RunContext, instance_id: str, action: Action, **kwargs: Any) -> dict[str, Any]:
     # 幂等键每次新生成：确认令牌本身就是一次性的（`chat_service.confirm_tool` 抢占），同一次确认不会执行两遍
-    await runtime_service.act(
-        db, instance_id=_pk(instance_id), action=action, actor=_actor(ctx), key=f'ai-{uuid.uuid4().hex}', **kwargs
-    )
+    # execute() 自己管理事务、重试与提交后推送，不能回滚 dispatcher 的保存点。
+    # 从当前会话的 bind 建独立会话，也沿用调用方选择的数据库（含测试库）。
+    async with AsyncSession(bind=db.bind, expire_on_commit=False) as action_db:
+        await runtime_service.act(
+            action_db,
+            instance_id=_pk(instance_id),
+            action=action,
+            actor=_actor(ctx),
+            key=f'ai-{uuid.uuid4().hex}',
+            **kwargs,
+        )
     return {'instance_id': instance_id, 'action': action.value, 'done': True}
 
 
