@@ -16,6 +16,7 @@ import Search from '@astrojs/starlight/components/Search.astro'
 import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro'
 import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro'
 import { DOC_SECTIONS } from '../navigation.mjs'
+import DeepWikiLink from './DeepWikiLink.astro'
 import LangSelect from './LangSelect.astro'
 import ThemeSelect from './ThemeSelect.astro'
 
@@ -36,6 +37,7 @@ const sections = DOC_SECTIONS.map((section) => ({ label: en ? section.en : secti
   <span class="joint-gap" aria-hidden="true"></span>
   <div class="joint joint--mortise print:hidden">
     <Search />
+    <DeepWikiLink />
     <span class="home-social"><SocialIcons /></span>
     <ThemeSelect />
     <LangSelect />
