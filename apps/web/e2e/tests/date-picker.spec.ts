@@ -16,6 +16,7 @@ import { expect, test } from "../fixtures/base"
 
 const SANDBOX = "/sandbox/components"
 const TAB = '[data-tab="/_auth/sandbox/components"]'
+test.use({ locale: "en-US" })
 
 async function openDemo(page: Page, id: "datetime-picker" | "calendar") {
   await page.goto(`${SANDBOX}?c=${id}`)
@@ -40,6 +41,40 @@ const day = (panel: Locator, n: number) =>
 const valueOf = async (tab: Locator) => JSON.parse((await tab.getByTestId("dt-demo-value").textContent()) ?? "null")
 
 test.describe("日期选择 · 表头与跳转（#264 #265）", () => {
+  test("浏览器为英文时日历仍跟随界面语言，切换后无需刷新", async ({ authedPage: page }) => {
+    const tab = await openDemo(page, "calendar")
+    const cal = tab.locator('[data-slot="calendar"]')
+    const documentId = await page.evaluate(() => performance.timeOrigin)
+    await page.getByTestId("user-menu").click()
+    await page.getByTestId("lang-en-US").click()
+    await expect(cal.getByTestId("calendar-month")).toHaveText(new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date()))
+    await expect(cal.locator("thead th").first()).toHaveText("Su")
+    await expect(cal.getByRole("button", { name: "Next month", exact: true })).toBeVisible()
+    await cal.getByTestId("calendar-month").click()
+    await expect(cal.getByTestId("calendar-month-panel").locator('[data-cell="0"]')).toHaveText("Jan")
+    await page.getByTestId("user-menu").click()
+    await page.getByTestId("lang-zh-CN").click()
+    await expect(cal.getByTestId("calendar-month-panel").locator('[data-cell="0"]')).toHaveText("1月")
+    await cal.getByTestId("calendar-month-panel").locator('[data-cell="0"]').click()
+    await expect(cal.locator("thead th").first()).toHaveText("一")
+    await expect(cal.getByRole("button", { name: "下个月", exact: true })).toBeVisible()
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId)
+  })
+
+  test("双月右面板三次点击跳到目标年月，左右月份保持联动", async ({ authedPage: page }) => {
+    const tab = await openDemo(page, "datetime-picker")
+    await tab.getByTestId("dt-demo").click()
+    const panel = page.getByTestId("dt-demo-panel")
+    await panel.getByTestId("calendar-year").nth(1).click()
+    await panel.getByTestId("calendar-year-panel").locator('[data-cell="2028"]').click()
+    await panel.getByTestId("calendar-month-panel").locator('[data-cell="2"]').click()
+    await expect(panel.getByTestId("calendar-year")).toHaveText(["2028年", "2028年"])
+    await expect(panel.getByTestId("calendar-month")).toHaveText(["2月", "3月"])
+    await expect(panel.getByRole("button", { name: "上一年", exact: true })).toHaveCount(1)
+    await expect(panel.getByRole("button", { name: "下一年", exact: true })).toHaveCount(1)
+    expect(await valueOf(tab)).toBeNull()
+  })
+
   test("🔴 中文表头是「2026年 11月」、周一开头；3 次点击跳到 3 年前的 3 月", async ({ authedPage: page }) => {
     const tab = await openDemo(page, "calendar")
     const cal = tab.locator('[data-slot="calendar"]')
@@ -80,6 +115,44 @@ test.describe("日期选择 · 表头与跳转（#264 #265）", () => {
 })
 
 test.describe("日期选择 · 单值（草稿 / 确定 / 手输）", () => {
+  test("不带时间的今天可直接提交，按年选择输出 YYYY", async ({ authedPage: page }) => {
+    const tab = await openDemo(page, "datetime-picker")
+    await pick(tab, "mode", "单值")
+    await tab.getByTestId("dt-demo").click()
+    await page.getByTestId("dt-demo-now").click()
+    const now = new Date()
+    expect(await valueOf(tab)).toBe(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`)
+    await pick(tab, "picker", "year")
+    await tab.getByTestId("dt-demo").click()
+    await page.getByTestId("calendar-year-panel").locator('[data-cell="2028"]').click()
+    expect(await valueOf(tab)).toBe("2028")
+  })
+
+  test("此刻只更新草稿，非法手输不能用确定提交上一次的日期", async ({ authedPage: page }) => {
+    const tab = await openDemo(page, "datetime-picker")
+    await pick(tab, "mode", "单值")
+    await toggle(tab, "withTime", true)
+    const input = tab.getByTestId("dt-demo")
+    const panel = page.getByTestId("dt-demo-panel")
+    await input.click()
+    await panel.getByTestId("dt-demo-now").click()
+    await expect(panel).toBeVisible()
+    expect(await valueOf(tab)).toBeNull()
+    await expect(input).toHaveValue(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+    await input.fill("2028-02-30 09:00:00")
+    await expect(input).toHaveAttribute("aria-invalid", "true")
+    await expect(panel.getByTestId("dt-demo-ok")).toBeDisabled()
+    await input.press("Enter")
+    expect(await valueOf(tab)).toBeNull()
+    await input.fill("2028/3/5 8:15")
+    await panel.getByTestId("dt-demo-ok").click()
+    expect(await valueOf(tab)).toBe("2028-03-05 08:15:00")
+    await input.click()
+    await expect(panel.getByTestId("calendar-year")).toHaveText("2028年")
+    await expect(panel.getByTestId("calendar-month")).toHaveText("3月")
+    await expect(panel.locator('[data-selected-single="true"]')).toHaveText("5")
+  })
+
   test("🔴 带时间：点的先进草稿，Esc 丢掉；点「确定」才提交", async ({ authedPage: page }) => {
     const tab = await openDemo(page, "datetime-picker")
     await pick(tab, "mode", "单值")
@@ -153,6 +226,46 @@ test.describe("日期选择 · 单值（草稿 / 确定 / 手输）", () => {
 })
 
 test.describe("日期选择 · 区间（重选 / 预览 / 丢半截）", () => {
+  test("手输清空或非法端点不提交残留日期，反向日期按先后排序", async ({ authedPage: page }) => {
+    const tab = await openDemo(page, "datetime-picker")
+    await pick(tab, "mode", "区间")
+    await toggle(tab, "withTime", true)
+    await tab.getByTestId("dt-demo").click()
+    const panel = page.getByTestId("dt-demo-panel")
+    const start = panel.getByTestId("dt-demo-start")
+    const end = panel.getByTestId("dt-demo-end")
+    const ok = panel.getByTestId("dt-demo-ok")
+    await start.fill("2028-03-10")
+    await end.fill("2028-03-20")
+    await end.fill("")
+    await expect(ok).toBeDisabled()
+    await end.press("Enter")
+    await expect(panel).toBeVisible()
+    expect(await valueOf(tab)).toBeNull()
+    await end.fill("2028-02-30")
+    await expect(end).toHaveAttribute("aria-invalid", "true")
+    await expect(ok).toBeDisabled()
+    await end.fill("2028-03-05")
+    await ok.click()
+    expect(await valueOf(tab)).toEqual(["2028-03-05 00:00:00", "2028-03-10 23:59:59"])
+
+    await tab.getByTestId("dt-demo").click()
+    await start.fill("2028-03-05")
+    await end.fill("2028-03-05")
+    await panel.getByTestId("dt-demo-start-time").fill("18:00")
+    await panel.getByTestId("dt-demo-start-time").press("Enter")
+    await panel.getByTestId("dt-demo-end-time").fill("09:00")
+    await panel.getByTestId("dt-demo-end-time").press("Enter")
+    await expect(ok).toBeDisabled()
+    await end.press("Enter")
+    await expect(panel).toHaveAttribute("data-open", "")
+    expect(await valueOf(tab)).toEqual(["2028-03-05 00:00:00", "2028-03-10 23:59:59"])
+    await panel.getByTestId("dt-demo-end-time").fill("20:00")
+    await panel.getByTestId("dt-demo-end-time").press("Enter")
+    await ok.click()
+    expect(await valueOf(tab)).toEqual(["2028-03-05 18:00:00", "2028-03-05 20:00:00"])
+  })
+
   test("🔴 第一下不提交；选好再点是重新开始；只点了一端就关掉，那一端丢掉", async ({ authedPage: page }) => {
     const tab = await openDemo(page, "datetime-picker")
     await pick(tab, "mode", "区间")
@@ -233,6 +346,22 @@ test.describe("日期选择 · 区间（重选 / 预览 / 丢半截）", () => {
 })
 
 test.describe("时间选择 · TimePicker", () => {
+  test("此刻先进草稿，非法手输后确定不可用", async ({ authedPage: page }) => {
+    const tab = await openDemo(page, "datetime-picker")
+    await pick(tab, "mode", "时间")
+    const input = tab.getByTestId("dt-demo")
+    const panel = page.getByTestId("dt-demo-panel")
+    await input.click()
+    await panel.getByTestId("dt-demo-now").click()
+    await expect(panel).toBeVisible()
+    expect(await valueOf(tab)).toBeNull()
+    await input.fill("25:00")
+    await expect(panel.getByTestId("dt-demo-ok")).toBeDisabled()
+    await input.fill("09:45")
+    await panel.getByTestId("dt-demo-ok").click()
+    expect(await valueOf(tab)).toBe("09:45:00")
+  })
+
   test("🔴 三列按步长出格子；点选进草稿、「确定」提交；手输 1405 回车 = 14:05:00", async ({ authedPage: page }) => {
     const tab = await openDemo(page, "datetime-picker")
     await pick(tab, "mode", "时间")
