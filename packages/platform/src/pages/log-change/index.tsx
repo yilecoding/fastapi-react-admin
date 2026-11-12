@@ -28,7 +28,7 @@ import { ChangeMeta, useSourceLabel } from '../_shared/data-change/history-sheet
 import { ExportButton } from '../_shared/data-io/export-button'
 import { DetailSection } from '../_shared/detail-sheet'
 import { RefreshButton, ResetButton } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import { logFeatures as features } from '../_shared/log-features'
 import { ListBody, PageShell } from '../_shared/page-shell'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
@@ -171,6 +171,7 @@ export function LogChangePage({
   })
   const { data, isFetching } = listQuery
   const list = listState(listQuery)
+  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const rows = data?.items ?? []
 
   // 详情抽屉：挂载（`detail`）和打开（`detailOpen`）分开管。正常关只翻 `detailOpen`，留着内容走完退场动画；

@@ -9,7 +9,7 @@ import { QueryBar, countActive, type FilterField } from '@admin/ui/components/qu
 import { DurationCell, EmptyCell, TimeCell } from '../_shared/cells'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import { logFeatures as features } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { StatusPill } from '../_shared/status'
@@ -122,6 +122,7 @@ export function AiToolLogPage({
   const listQuery = useQuery(toolLogsQuery(qs))
   const { data, isFetching } = listQuery
   const list = listState(listQuery)
+  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const rows = data?.items ?? []
 
   // 列显隐进 URL —— 隐掉几列后刷新全冒出来，等于每次都要重新点一遍
