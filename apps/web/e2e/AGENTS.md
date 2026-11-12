@@ -430,10 +430,6 @@ CPU 降速 6 倍各跑 4 次都复现不出来。人按不了这么快，所以�
 CI 上读成了两个「侧边栏」（首跑 + 重试都红，本地一直绿）。**读之前先等一个会变的东西变到位**（这里是进度
 `2 / 6`），`textContent()` / `innerText()` 这类不重试的读法前面都要有这么一句。
 
-同样，URL 带上筛选不等于列表已经换完：`workflow.spec.ts` 的实例监控按孙强筛选后立刻 `allInnerTexts()`，
-实测读到管理员发起的旧占位行。用 `expect.poll` 等非空结果的每一行都满足筛选，再继续；
-只等「第一行可见」会立即命中 placeholder，守不住这个时序。
-
 🔴 **「关不掉」的浮层断言 `data-open`，不要断言 `toBeVisible()`。** `notice-phase2.spec.ts` 第一版写的是按 Esc 之后 `expect(popup).toBeVisible()` —— 变异成「Esc 能关」之后**这句照样过**：关掉之后还有一段退场动画，那段时间里它就是看得见的。用例最后是红了，但红在后面一句不相干的 `click` 超时上。改成 `toHaveAttribute("data-open", "")`（Base UI 关的那一刻就摘掉）之后，同一个变异红在 Esc 那一句。
 
 ### 🔴 CI 的 E2E 跑在 SQL Server 上：并行 spec 建 / 删用户会互相死锁
