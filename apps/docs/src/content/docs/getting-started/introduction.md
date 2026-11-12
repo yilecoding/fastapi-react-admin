@@ -88,6 +88,8 @@ packages/      依赖单向：i18n / api ← ui ← platform ← web
 
 ## 下一步
 
+- [DeepWiki 项目解析](https://deepwiki.com/yilecoding/fastapi-react-admin) —— 通过 AI 对话快速了解仓库结构和代码。
+
 - [快速开始](/getting-started/quick-start/)——五条命令在本地跑起来。
 - [功能总览](/features/overview/)——按领域列出所有功能。
 - [在线演示](https://fra.wubunan.com/sign-in)——`admin` / `123456`。
