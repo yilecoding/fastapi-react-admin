@@ -17,7 +17,7 @@ import { formatDateTimeShort } from '@admin/i18n'
 import { PageHeader } from '../../shell/page-header'
 import { useSocketEvent } from '../../shell/socket-events'
 import { RefreshButton, TextFilter } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import {
   countsQuery, draftsQuery, inboxQuery, startableQuery, workflowKeys,
@@ -74,6 +74,7 @@ export function WorkflowInboxPage({
 
   const listQuery = useQuery(inboxQuery({ tab, page, size, keyword: search.keyword }))
   const list = listState(listQuery)
+  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const counts = useQuery(countsQuery()).data
 
   // 待办变了（新来 / 被别人办掉 / 实例结束）：服务端只推一个空事件，这里重取

@@ -12,7 +12,7 @@ import { Can, SuperOnly } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { BulkBar, RefreshButton, ResetButton } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
 import { useUrlColumnOrder } from '../_shared/use-column-order'
@@ -182,6 +182,7 @@ export function UserPage({
   const { data, isFetching } = listQuery
   // 刷新/重试前清掉选中：重取回来的行可能已经不在了（见 list-query.ts 的注释）
   const list = listState(listQuery, { onBeforeRefetch: () => setRowSelection({}) })
+  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const rows = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 1

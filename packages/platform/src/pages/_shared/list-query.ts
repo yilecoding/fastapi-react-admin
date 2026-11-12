@@ -1,4 +1,35 @@
+import * as React from 'react'
 import type { QueryObserverBaseResult } from '@tanstack/react-query'
+
+type PageResult = { page: number; size: number; total: number; total_pages: number }
+
+/** 删除 / 办理 / 刷新后总页数缩小：等当前查询成功结束，再回写最后一页。 */
+export function usePageRecovery(
+  query: {
+    data: PageResult | undefined
+    isSuccess: boolean
+    isFetching: boolean
+    isPlaceholderData: boolean
+  },
+  { page, size, onPageChange, enabled = true }: {
+    page: number
+    size: number
+    onPageChange: (page: number) => void
+    enabled?: boolean
+  }
+) {
+  const { data, isSuccess, isFetching, isPlaceholderData } = query
+  // 页签快照要等导航结束才更新。回调每次渲染都会变，不能让它反复触发导航；
+  // Effect Event 同时保证回写时使用最新的筛选 / 抽屉参数。
+  const recover = React.useEffectEvent(onPageChange)
+  React.useEffect(() => {
+    // placeholder 是上一页 / 上一组筛选的总数；失败保留的旧数据也不能用来改 URL。
+    if (!enabled || !isSuccess || isFetching || isPlaceholderData || !data) return
+    if (data.page !== page || data.size !== size) return
+    const last = Math.max(1, data.total_pages)
+    if (page > last) recover(last)
+  }, [data, enabled, isSuccess, isFetching, isPlaceholderData, page, size])
+}
 
 /**
  * 列表页取数状态 → 组件 props 的**唯一一处映射**。

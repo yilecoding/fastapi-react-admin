@@ -10,7 +10,7 @@ import { DurationCell, EmptyCell, TimeCell } from '../_shared/cells'
 import { api, type PageData } from '../../api-client/client'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import { logFeatures as features } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { StatusPill } from '../_shared/status'
@@ -136,6 +136,7 @@ export function OpenLogPage({
   })
   const { data, isFetching } = listQuery
   const list = listState(listQuery)
+  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const rows = data?.items ?? []
 
   const [detail, setDetail] = React.useState<OpenApiLog | null>(null)
