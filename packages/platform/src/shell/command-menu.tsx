@@ -2,7 +2,6 @@ import * as React from 'react'
 import { menuTitle } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from '@tanstack/react-router'
-import { useQuery } from '@tanstack/react-query'
 import {
   IconCompass, IconExternalLink, IconKeyboard, IconPin, IconRefresh, IconSearch, IconX,
 } from '@tabler/icons-react'
@@ -10,7 +9,6 @@ import {
 import { CommandPalette, type CommandItem } from '@admin/ui/components/command-palette'
 import { Kbd, KbdGroup } from '@admin/ui/components/kbd'
 
-import { meQuery } from '../auth/queries'
 import { useCommandStore } from './command-store'
 import { isEditableTarget, MOD_LABEL } from './hotkeys'
 import { MenuIcon } from './icon-registry'
@@ -49,8 +47,6 @@ export function CommandMenu({ options }: { options: SidebarOptions }) {
   const tabs = useTabStore((s) => s.tabs)
   const activeKey = useTabStore((s) => s.activeKey)
   const act = useTabActions()
-  // 「功能引导」要按人记「看过了」，所以要 userId（和顶栏的用户菜单同一个 query 缓存）
-  const userId = useQuery(meQuery).data?.id
 
   // ── 全局快捷键 ──
   React.useEffect(() => {
@@ -195,20 +191,18 @@ export function CommandMenu({ options }: { options: SidebarOptions }) {
       icon: <IconKeyboard className="size-4" />,
       onSelect: () => setShortcutsOpen(true),
     })
-    if (userId) {
-      out.push({
-        id: 'action:tour',
-        group: t('操作'),
-        label: t('功能引导'),
-        hint: t('重新看一遍外壳的使用导览。'),
-        keywords: 'tour guide onboarding walkthrough help 引导 导览 新手',
-        icon: <IconCompass className="size-4" />,
-        // 面板先关（CommandPalette 在 onSelect 之前 onOpenChange(false)），导览再起，两层浮层不叠
-        onSelect: () => void startTour(SHELL_TOUR, { userId }),
-      })
-    }
+    out.push({
+      id: 'action:tour',
+      group: t('操作'),
+      label: t('功能引导'),
+      hint: t('看一遍外壳的使用导览。'),
+      keywords: 'tour guide onboarding walkthrough help 引导 导览 新手',
+      icon: <IconCompass className="size-4" />,
+      // 面板先关（CommandPalette 在 onSelect 之前 onOpenChange(false)），导览再起，两层浮层不叠
+      onSelect: () => void startTour(SHELL_TOUR),
+    })
     return out
-  }, [tabs, activeKey, act, setShortcutsOpen, userId, t])
+  }, [tabs, activeKey, act, setShortcutsOpen, t])
 
   const items = React.useMemo(
     () => [...tabItems, ...pageItems, ...actionItems],

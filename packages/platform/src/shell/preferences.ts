@@ -173,12 +173,6 @@ export type Preferences = {
    * 所以放这里而不是落服务端。开没开着是瞬时状态，在 `ai-chat/drawer-store.ts`。
    */
   aiDrawerWidth: number
-  /**
-   * 看过的功能引导：`"<userId>:<tourId>" → 看过的版本号`。
-   * 按 shell 分册「设备 vs 人」那张表它是**人**的属性、该落服务端；v1 先放这里，
-   * key 带 userId 防公用机器串号。读写只走 `shell/tour/tour.ts` 的 `tourSeen` / `markTourSeen`。
-   */
-  toursSeen: Record<string, number>
 }
 
 export const PREF_DEFAULTS: Preferences = {
@@ -195,7 +189,6 @@ export const PREF_DEFAULTS: Preferences = {
   tabShowIcon: true,
   tabDraggable: true,
   aiDrawerWidth: 420,
-  toursSeen: {},
 }
 
 type PrefState = Preferences & {
@@ -209,17 +202,18 @@ export const usePreferences = create<PrefState>()(
     (set) => ({
       ...PREF_DEFAULTS,
       patch: (next) => set(next),
-      // 「恢复默认」是外观上的事，不该把人看过的引导忘掉 —— 否则点一次重置就重新被弹一遍导览
-      reset: () => set((s) => ({ ...PREF_DEFAULTS, toursSeen: s.toursSeen })),
+      reset: () => set(PREF_DEFAULTS),
     }),
     {
       name: "admin:prefs",
       storage: createJSONStorage(() => localStorage),
       // 新增字段时老用户的本地记录里没有它 —— 用默认值补齐，别让 undefined 漏进 UI。
       // `fontSize` 是旧版独立偏好，密度合并后已统一负责字号，读取时顺便丢弃旧字段。
+      // `toursSeen` 是功能引导自动弹出时记的「看过了」，自动弹出去掉后没人读，同样丢弃。
       merge: (persisted, current) => {
-        const { fontSize: _legacyFontSize, ...rest } = persisted as Partial<PrefState> & {
+        const { fontSize: _legacyFontSize, toursSeen: _legacyToursSeen, ...rest } = persisted as Partial<PrefState> & {
           fontSize?: unknown
+          toursSeen?: unknown
         }
         return { ...current, ...rest }
       },
