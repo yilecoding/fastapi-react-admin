@@ -13,6 +13,7 @@ import { toast } from '@admin/ui/components/toast'
 
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { StatusPill, type Tone } from '../_shared/status'
+import { usePageRecovery } from '../_shared/list-query'
 import {
   EXPORT_STATUS,
   downloadExport,
@@ -54,6 +55,7 @@ export function ExportsPanel() {
   const [size, setSize] = React.useState(PAGE_SIZE)
   const query = useQuery(myExportsQuery({ page, size }))
   const { data, isPending, error, refetch, isFetching } = query
+  usePageRecovery(query, { page, size, onPageChange: setPage })
   const del = useDeleteExport()
   const [pendingDelete, setPendingDelete] = React.useState<ExportJob | null>(null)
   const [downloading, setDownloading] = React.useState<string | null>(null)
