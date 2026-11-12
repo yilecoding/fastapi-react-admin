@@ -5,7 +5,7 @@ import { formatDateTime, setDisplayTimeZone } from '@admin/i18n'
 import { toWallTime, wallTimeToIso } from './wall-time'
 
 /**
- * 过期时间的选择器值按**显示时区**进出（不是浏览器时区）。
+ * 公告与开放应用的选择器值按**显示时区**进出（不是浏览器时区）。
  * 测试进程的时区由 `TZ` 定，这里刻意把显示时区设成和它无关的几个，
  * 「碰巧和浏览器同一个时区所以对了」就测不出来。
  */

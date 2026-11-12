@@ -17,6 +17,9 @@ from backend.common.schema import (
 )
 from backend.core.conf import settings
 
+CAPTCHA_UUID_PATTERN = r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+CaptchaUuid = Annotated[str, Field(pattern=CAPTCHA_UUID_PATTERN, max_length=36)]
+
 
 class AuthSchemaBase(SchemaBase):
     """用户认证基础模型"""
@@ -28,7 +31,7 @@ class AuthSchemaBase(SchemaBase):
 class AuthLoginParam(AuthSchemaBase):
     """用户登录参数"""
 
-    uuid: str | None = Field(None, description='验证码 UUID')
+    uuid: CaptchaUuid | None = Field(None, description='验证码 UUID')
     captcha: str | None = Field(None, description='验证码')
     # 自报的登录端，只用来选会话时长和上限（参数配置「会话策略」），不决定任何安全相关的行为（#138）
     client: Literal['web', 'desktop', 'mobile'] = Field('web', description='登录端')
@@ -39,7 +42,7 @@ class AuthPhoneCaptchaParam(SchemaBase):
 
     phone: CustomPhoneNumber = Field(description='手机号')
     # 图形验证码开着时必填：否则这个匿名接口就是免费的短信轰炸入口
-    uuid: str | None = Field(None, description='图形验证码 UUID')
+    uuid: CaptchaUuid | None = Field(None, description='图形验证码 UUID')
     captcha: str | None = Field(None, description='图形验证码')
 
 

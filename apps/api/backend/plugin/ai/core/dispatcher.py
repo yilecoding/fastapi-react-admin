@@ -283,10 +283,15 @@ class ToolDispatcher:
                     preview=preview,
                 )
 
+        task_count = len(ctx.background_tasks.tasks)
         try:
-            # 数据范围在 `_invoke` 里锚定（见那里的注释）
-            result = await self._invoke(spec.handler, call, ctx)
+            # Flush and rollback the handler inside a savepoint before auditing its
+            # outcome. A failed handler must not poison or partially commit the turn.
+            async with ctx.db.begin_nested():
+                result = await self._invoke(spec.handler, call, ctx)
+                await ctx.db.flush()
         except TypeError as e:
+            del ctx.background_tasks.tasks[task_count:]
             # 模型填错参数属于日常，不是系统故障——把错误回给它让它重填
             await self._audit(ctx, call, ToolInvocationStatus.FAILED, perm=spec.perm, error=str(e), started=started)
             return DispatchOutcome(
@@ -297,6 +302,7 @@ class ToolDispatcher:
                 duration_ms=int((time.perf_counter() - started) * 1000),
             )
         except Exception as e:
+            del ctx.background_tasks.tasks[task_count:]
             log.exception(f'AI 工具 {spec.name} 执行失败')
             reason = _error_text(e)
             await self._audit(ctx, call, ToolInvocationStatus.FAILED, perm=spec.perm, error=reason, started=started)

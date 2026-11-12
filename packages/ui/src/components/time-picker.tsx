@@ -21,7 +21,7 @@ import {
   type TimeUnit,
 } from "./time-picker-state"
 
-export { joinTime, parseTimeTyped, snapTime, splitTime, type TimeDisabled, type TimeSteps } from "./time-picker-state"
+export { isTimeDisabled, joinTime, parseTimeTyped, snapTime, splitTime, type TimeDisabled, type TimeSteps } from "./time-picker-state"
 
 /**
  * 时间选择：时 / 分 / 秒三列滚动（对齐 Element Plus / antdv 的时间面板，#266）。
@@ -224,7 +224,8 @@ export function TimePicker({
   const [open, setOpen] = React.useState(false)
   const [draft, setDraft] = React.useState<string | undefined>(value)
   const [text, setText] = React.useState(display(value, hideSeconds))
-  const typedBad = text.trim() !== "" && parseTimeTyped(text) === null
+  const parsed = parseTimeTyped(text)
+  const typedBad = text.trim() !== "" && (!parsed || isTimeDisabled(splitTime(parsed)!, rules))
 
   // 关着的时候外面改了值（重置表单之类），文本跟上
   React.useEffect(() => {
@@ -298,7 +299,7 @@ export function TimePicker({
           onClick={() => {
             const n = new Date()
             const v = joinTime(snapTime([n.getHours(), n.getMinutes(), hideSeconds ? 0 : n.getSeconds()], rules))
-            if (!isTimeDisabled(splitTime(v)!, rules)) commit(v)
+            if (!isTimeDisabled(splitTime(v)!, rules)) pickDraft(v)
           }}
         >
           {t("此刻")}
@@ -307,9 +308,11 @@ export function TimePicker({
           type="button"
           size="sm"
           className="h-7 px-3"
-          disabled={!draftTuple || draftOff}
+          disabled={!draftTuple || draftOff || !parsed || typedBad}
           data-testid={testId && `${testId}-ok`}
-          onClick={() => commit(draft)}
+          onClick={() => {
+            if (parsed && !typedBad) commit(draft)
+          }}
         >
           {t("确定")}
         </Button>
