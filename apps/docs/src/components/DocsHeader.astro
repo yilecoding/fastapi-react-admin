@@ -4,6 +4,7 @@ import LanguageSelect from './LangSelect.astro'
 import Search from '@astrojs/starlight/components/Search.astro'
 import SiteTitle from '@astrojs/starlight/components/SiteTitle.astro'
 import SocialIcons from '@astrojs/starlight/components/SocialIcons.astro'
+import DeepWikiLink from './DeepWikiLink.astro'
 import ThemeSelect from './ThemeSelect.astro'
 
 const { hasSidebar, sidebar, locale } = Astro.locals.starlightRoute
@@ -27,6 +28,7 @@ const label = locale === 'en' ? 'Documentation sections' : '文档分类'
     </fra-doc-sections>
     <div class="docs-tools print:hidden">
       <Search />
+      <DeepWikiLink />
       <div class="docs-preferences"><SocialIcons /><ThemeSelect /><LanguageSelect /></div>
     </div>
     <!-- 阅读进度线：样式和首页胶囊那条是同一份（HomeHeader.astro 的全局样式），这里贴在通栏顶栏的底边 -->
