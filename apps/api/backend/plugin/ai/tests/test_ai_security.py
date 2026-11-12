@@ -334,8 +334,18 @@ class TestDispatcherAnchorsDataScope:
 
     @staticmethod
     async def _dispatch(user: Any) -> Any:
+        from contextlib import asynccontextmanager
+
+        class Session:
+            @asynccontextmanager
+            async def begin_nested(self):
+                yield
+
+            async def flush(self):
+                return
+
         call = ToolCallRequest(call_id='c1', name='_probe_scope', arguments={})
-        ctx = RunContext(user=user, conversation_id=1, db=None, provider=None)  # type: ignore[arg-type]
+        ctx = RunContext(user=user, conversation_id=1, db=Session(), provider=None)  # type: ignore[arg-type]
         original = tool_dispatcher._audit
         tool_dispatcher._audit = _noop_audit  # type: ignore[method-assign]
         try:
