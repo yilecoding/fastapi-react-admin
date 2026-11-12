@@ -113,6 +113,7 @@ export function NoticeFormSheet({
     resolver: zodResolver(schema) as never,
     defaultValues: EMPTY,
   })
+  const submitting = React.useRef(false)
 
   const attachments = useNoticeAttachments({ open, noticeId: editing?.id ?? null })
 
@@ -129,10 +130,23 @@ export function NoticeFormSheet({
     form.reset(editing ? toValues(editing) : EMPTY)
   }, [open, editing, form, initialAudience])
 
-  const pending = create.isPending || update.isPending
+  // 保存接口结束后还有图片关联同步；按钮要等整个提交流程结束才恢复（#330）。
+  const pending = form.formState.isSubmitting
   // 还有文件在传就不能提交：提交出去的 `attachment_ids` 里会少了它们，
   // 而广播已经随这次保存发出去了 —— 正是 #186 要堵的「读者收到通知时附件还没挂上」
   const blocked = attachments.pending > 0 || attachments.tooMany
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    // handleSubmit 自身不阻止并发提交，在校验之前同步上锁，避免回车 / submit 事件绕过按钮。
+    if (submitting.current) return
+    submitting.current = true
+    try {
+      await form.handleSubmit(onSubmit)(event)
+    } finally {
+      submitting.current = false
+    }
+  }
 
   async function onSubmit(v: Values) {
     setServerError(null)
@@ -213,7 +227,7 @@ export function NoticeFormSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-1 flex-col overflow-hidden">
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-hidden">
           <div className="flex flex-1 flex-col gap-6 overflow-y-auto overflow-x-hidden px-4 py-2">
             {/* 字段从 7 个长到 13 个（#190），按「写什么 / 给谁 / 怎么推 / 什么时候」分四组 */}
             <FormSection title={t('内容')}>
