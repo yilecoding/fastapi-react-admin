@@ -15,7 +15,7 @@ import { uniqueCode } from "../utils/ids"
  * 账号：
  * - `liuyang`（后端组，技术中心下面）/ `sunqiang`（市场运营中心）：定向那一条。发的是**普通公告**（不弹窗、不横幅），
  *   只往他们的收件箱里加一行 —— 别的 spec 也用这两个人（审批），一行未读不影响它们
- * - 现建的 7 个账号（`beforeAll`，普通员工 · 市场运营中心）：弹窗 / 横幅 / 阅读统计 / 读者确认 / 让行导览 / 消息中心 / 弹窗撤回各用一个，互不干扰。
+ * - 现建的 6 个账号（`beforeAll`，普通员工 · 市场运营中心）：弹窗 / 横幅 / 阅读统计 / 读者确认 / 消息中心 / 弹窗撤回各用一个，互不干扰。
  *   🔴 账号要**先于公告**建好：新账号规则是「建号之前发的广播算已读」（必须确认的除外）
  * - 登录页那条只能发给全员（登录页可见 + 有范围 = 422），所以断言完立刻删掉，缩短它在别人收件箱里的时间
  */
@@ -31,7 +31,7 @@ test.describe("公告二期 · 定向 / 弹窗 / 横幅 / 登录页 / 阅读统�
   const notices: string[] = []
   /** 走界面建的公告拿不到 id（表单不回显），按标题收尾 —— 用例中途红了也不会漏在库里（变异测试时实测漏过一条） */
   const uiTitles: string[] = []
-  const users: Record<"popup" | "banner" | "reads" | "ack" | "tour" | "inbox" | "gone", { id: string; username: string }> =
+  const users: Record<"popup" | "banner" | "reads" | "ack" | "inbox" | "gone", { id: string; username: string }> =
     {} as never
   let techDeptId = ""
   let sunqiangId = ""
@@ -50,7 +50,7 @@ test.describe("公告二期 · 定向 / 弹窗 / 横幅 / 登录页 / 阅读统�
     const sq = (await admin.get("/api/v1/sys/users?username=sunqiang")) as { items: { id: string; username: string }[] }
     sunqiangId = sq.items.find((u) => u.username === "sunqiang")!.id
 
-    for (const key of ["popup", "banner", "reads", "ack", "tour", "inbox", "gone"] as const) {
+    for (const key of ["popup", "banner", "reads", "ack", "inbox", "gone"] as const) {
       const username = `np2_${key}_${uniqueCode("U").slice(2).toLowerCase()}`.slice(0, 30)
       const user = (await admin.post("/api/v1/sys/users", {
         username,
@@ -246,26 +246,6 @@ test.describe("公告二期 · 定向 / 弹窗 / 横幅 / 登录页 / 阅读统�
     await popup.getByTestId("notice-popup-ack").click()
     await expect(popup).toBeHidden()
     expect((await feedDetailAs(users.gone.username, next.id)).read).toBe(true)
-  })
-
-  test("🔴 首次登录：弹窗先、外壳导览后 —— 两个全屏浮层不叠在一起", async ({ page }) => {
-    const must = await publish({ popup: true, requireAck: true, audience: toUser("tour") })
-    // 没看过导览的新人（fixture 默认会把导览标成看过，这里关掉）
-    await loginPageAs(page, users.tour.username, PASSWORD, { tourSeen: false })
-    await page.goto("/dashboard")
-
-    const popup = page.getByTestId("notice-popup")
-    await expect(popup.getByTestId("notice-popup-title")).toHaveText(must.title)
-    // 导览自动启动要等 800ms 稳定期；多给一倍，弹窗开着时它不能出来（shell/tour/gate.ts 按住了它）
-    await page.waitForTimeout(1600)
-    await expect(page.locator(".driver-popover")).toHaveCount(0)
-
-    await popup.getByTestId("notice-popup-ack").click()
-    await expect(popup).toBeHidden()
-    // 放开之后导览照常弹出，而且点得动（没有被 modal 压住）
-    await expect(page.locator(".driver-popover")).toBeVisible()
-    await page.getByRole("button", { name: "下一步" }).click()
-    await expect(page.locator(".driver-popover-progress-text")).toHaveText(/^2 \/ /)
   })
 
   test("🔴 横幅：置顶 + 紧急的出现在顶栏下；点 × = 已读，刷新也不再出现；点标题打开正文", async ({ page }) => {

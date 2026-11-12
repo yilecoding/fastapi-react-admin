@@ -5,7 +5,6 @@ import { requireAuth } from "@admin/platform/auth/guards"
 import { AppSidebar } from "@admin/platform/shell/app-sidebar"
 import { CommandMenu, CommandTrigger } from "@admin/platform/shell/command-menu"
 import { HelpMenu } from "@admin/platform/shell/help-menu"
-import { TourAutostart } from "@admin/platform/shell/tour/tour-autostart"
 import { UploadTray } from "@admin/platform/shell/upload-tray"
 import { TenonMark } from "@/components/tenon-mark"
 import { BRAND } from "@/lib/brand"
@@ -163,10 +162,8 @@ function AuthLayout() {
 
         {/* 命令面板 + 快捷键帮助。挂在外壳里（不是页面里）—— 它要在任何 tab 上都能呼出 */}
         <CommandMenu options={options} />
-        {/* 登录后弹窗（#190）。排在导览前面：取数中 / 弹着的时候它按住导览（shell/tour/gate.ts），弹窗先、导览后 */}
+        {/* 登录后弹窗（#190）。外壳导览不自动弹，只从顶栏「帮助」/ ⌘K 手动开；开着时新到的弹窗等它结束（shell/tour/gate.ts） */}
         <NoticePopupHost />
-        {/* 首次登录在仪表盘自动弹一次外壳导览；之后从 ⌘K 的「功能引导」重放 */}
-        <TourAutostart />
         {/* 右下角上传浮窗。外壳家具：队列在 store 里，切 tab / 关 tab 都不影响 */}
         <UploadTray />
       </SidebarInset>

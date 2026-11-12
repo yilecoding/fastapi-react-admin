@@ -39,40 +39,12 @@ export async function loginSession(username = "admin", password = "123456") {
   }
 }
 
-/** 当前登录用户的 id（雪花 ID 字符串）。`seedTourSeen` 要按人写「看过了」 */
+/** 当前登录用户的 id（雪花 ID 字符串）。踢会话的用例（session.spec.ts）要拿它拼路径 */
 async function fetchMeId(ctx: APIRequestContext, token: string): Promise<string> {
   const res = await ctx.get("/api/v1/sys/users/me", { headers: { Authorization: `Bearer ${token}` } })
   const body = (await res.json()) as { data?: { id?: string } }
   if (!body.data?.id) throw new Error(`拿不到当前用户 id（HTTP ${res.status()}）：${JSON.stringify(body)}`)
   return body.data.id
-}
-
-/**
- * 把外壳导览标成「这个人已经看过」。
- *
- * 🔴 不种这一条，**每一条**落到 /dashboard 的用例都会先弹出导览遮罩，把页面上所有点击
- * 都挡住（driver.js 给 body 之外的一切 `pointer-events: none`）—— 整套用例一起红，
- * 而报错是各自的「元素不可点」，没有一条会指向导览。
- *
- * 写的是 `shell/preferences.ts` 的持久化格式（zustand persist：`{ state, version }`），
- * 和真实用户看完一遍留下的记录一样；**合并**进已有的 `admin:prefs` 而不是覆盖 ——
- * 用例自己改过的偏好（关掉多页签之类）在 reload 后要还在。
- * 版本号写 999：`tourSeen()` 判的是 `已看版本 >= 当前版本`，不用跟着 SHELL_TOUR.version 改。
- * 导览自己的用例（tour.spec.ts）用 `loginPageAs(…, { tourSeen: false })` 绕开它。
- */
-export async function seedTourSeen(page: Page, userId: string): Promise<void> {
-  await page.addInitScript((uid) => {
-    const KEY = "admin:prefs"
-    let data: { state?: Record<string, unknown>; version?: number } = {}
-    try {
-      data = JSON.parse(localStorage.getItem(KEY) ?? "{}") as typeof data
-    } catch {
-      data = {}
-    }
-    const state = data.state ?? {}
-    const seen = { ...((state.toursSeen as Record<string, number> | undefined) ?? {}), [`${uid}:shell`]: 999 }
-    localStorage.setItem(KEY, JSON.stringify({ version: data.version ?? 0, state: { ...state, toursSeen: seen } }))
-  }, userId)
 }
 
 export type ApiClient = {
@@ -143,16 +115,9 @@ export async function createApiClient(): Promise<{ api: ApiClient; dispose: () =
  * `authedPage` 写死了 admin；测数据权限要的正是「换个账号看见的不一样」，
  * 所以需要一个能指定用户名的版本。注入方式同 `authedPage`（往 context 里塞 refresh cookie）。
  */
-export async function loginPageAs(
-  page: Page,
-  username: string,
-  password: string,
-  opts: { tourSeen?: boolean } = {}
-): Promise<void> {
+export async function loginPageAs(page: Page, username: string, password: string): Promise<void> {
   const session = await loginSession(username, password)
   await page.context().addCookies(session.cookies)
-  // 默认把外壳导览标成已看过，理由见 seedTourSeen；只有导览自己的用例关掉它
-  if (opts.tourSeen !== false) await seedTourSeen(page, session.userId)
 }
 
 export const test = base.extend<{ authedPage: Page; api: ApiClient }>({
@@ -174,8 +139,6 @@ export const test = base.extend<{ authedPage: Page; api: ApiClient }>({
   authedPage: async ({ page }, use) => {
     const session = await loginSession()
     await page.context().addCookies(session.cookies)
-    // 外壳导览标成已看过，否则首屏就是一层遮罩 —— 见 seedTourSeen
-    await seedTourSeen(page, session.userId)
 
     await use(page)
   },
