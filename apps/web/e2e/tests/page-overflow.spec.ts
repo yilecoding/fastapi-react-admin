@@ -190,6 +190,7 @@ test("换筛选后的慢响应不能用上次的空结果把有效末页拉回�
     // 先留下一组空结果，再在同一个页面内换查询，真正触发 placeholderData。
     await page.goto('/open/app?name=' + prefix + '-missing&size=1')
     const tab = page.locator('[data-tab="/_auth/open/app"]')
+    await expect(tab).toContainText("没有匹配的应用")
     await expect(tab.locator('[data-slot="pagination"]')).toContainText("第 1 / 1 页")
 
     await page.route(/\/api\/v1\/open-apps\?/, async route => {
