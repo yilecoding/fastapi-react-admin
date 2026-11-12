@@ -1,4 +1,4 @@
-import { API_BASE, expect, loginSession, seedTourSeen, test } from "../fixtures/base"
+import { API_BASE, expect, loginSession, test } from "../fixtures/base"
 
 /**
  * 登录会话（#138）：access token 只在内存里、页面加载时用 refresh cookie 静默恢复；
@@ -27,7 +27,6 @@ test.describe("登录会话", () => {
   test("被管理员强制下线：页面当场回到登录页并说明原因", async ({ page, api }) => {
     const session = await loginSession()
     await page.context().addCookies(session.cookies)
-    await seedTourSeen(page, session.userId)
     await page.goto("/dashboard")
     await expect(page.getByTestId("user-menu")).toBeVisible()
     await expect(page.locator("html")).toHaveAttribute("data-presence", "on")
