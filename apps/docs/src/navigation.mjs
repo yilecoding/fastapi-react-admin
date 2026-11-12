@@ -8,7 +8,7 @@ export const DOC_SECTIONS = [
   {
     label: '功能指南', en: 'Features',
     pages: [
-      'features/overview', 'features/login-security', 'features/rbac',
+      'features/overview', 'features/login-security', 'features/login-sessions', 'features/rbac',
       'features/data-permissions', 'features/audit-logs', 'features/workspace',
       'features/multi-tab', 'features/approval-workflow', 'features/notifications',
       'features/import-export', 'features/file-storage', 'features/ai-assistant',
@@ -24,7 +24,7 @@ export const DOC_SECTIONS = [
   {
     label: '部署运维', en: 'Operations',
     pages: [
-      'getting-started/deployment', 'features/databases', 'features/config-dict',
+      'getting-started/deployment', 'features/databases', 'features/config-dict', 'reference/security-config',
       'features/scheduler', 'features/monitoring', 'reference/upgrade',
     ],
   },
