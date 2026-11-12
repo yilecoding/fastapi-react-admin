@@ -17,7 +17,7 @@ import { formatDateTimeShort } from '@admin/i18n'
 import { PageHeader } from '../../shell/page-header'
 import { useSocketEvent } from '../../shell/socket-events'
 import { RefreshButton, TextFilter } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import {
   countsQuery, draftsQuery, inboxQuery, startableQuery, workflowKeys,
@@ -74,6 +74,9 @@ export function WorkflowInboxPage({
 
   const listQuery = useQuery(inboxQuery({ tab, page, size, keyword: search.keyword }))
   const list = listState(listQuery)
+  // 办理会同时重取列表和详情，随后关闭抽屉（写 id）。等抽屉关完再回页，
+  // 避免两次导航拿同一份旧 search，把已清掉的 id / page 互相写回来。
+  usePageRecovery(listQuery, { page, size, enabled: !search.id, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const counts = useQuery(countsQuery()).data
 
   // 待办变了（新来 / 被别人办掉 / 实例结束）：服务端只推一个空事件，这里重取

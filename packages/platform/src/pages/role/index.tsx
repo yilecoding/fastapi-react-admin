@@ -231,7 +231,7 @@ export function RolePage({
                     key={selected.id}
                     role={selected}
                     page={upage}
-                    onPage={(p) => patch({ upage: p })}
+                    onPage={(p) => patch({ upage: p === 1 ? undefined : p })}
                   />
                 </TabsContent>
               </Tabs>

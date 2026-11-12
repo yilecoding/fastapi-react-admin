@@ -12,7 +12,7 @@ import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { NoticeReaderSheet } from '../notice/reader-sheet'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { useQuerySearch } from '../_shared/use-query-search'
 import {
@@ -130,6 +130,7 @@ export function NotificationPage({
   const listQuery = useQuery(notificationsQuery(params))
   const { data, isFetching } = listQuery
   const list = listState(listQuery)
+  usePageRecovery(listQuery, { page, size, onPageChange: (page) => onSearchChange?.({ ...search, page: page === 1 ? undefined : page }) })
   const rows = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 1
