@@ -672,8 +672,11 @@ test("实例监控：和列表页同一套查询区；按发起人筛、刷新�
   await expect(page).toHaveURL(/initiator=/)
   const rows = scope.locator('[data-testid^="wf-monitor-row-"]')
   await expect(rows.first()).toBeVisible()
-  // 每一行的发起人都是孙强
-  for (const text of await rows.allInnerTexts()) expect(text).toContain("孙强")
+  // URL 先更新，placeholder 仍可能是未筛选的旧行；等新结果真正落地再读。
+  await expect.poll(async () => {
+    const texts = await rows.allInnerTexts()
+    return texts.length > 0 && texts.every(text => text.includes("孙强"))
+  }).toBe(true)
   // 视图状态进 URL：刷新之后条件还在
   await page.reload()
   await expect(scope.getByTestId("qb-input-initiator")).toHaveValue("孙强")
