@@ -99,7 +99,7 @@ import ProductShot from '../../../components/ProductShot.astro'
 
 | 键 | 在哪改 | 默认值 | 说明 |
 |---|---|---|---|
-| `USER_LOCK_THRESHOLD` · `USER_LOCK_SECONDS` | 参数配置 →「口令与锁定」 | `5` · `300` | 连续输错几次、锁多少秒，见[登录与安全](/features/login-security/#有哪些开关) |
+| `USER_LOCK_THRESHOLD` · `USER_LOCK_SECONDS` | 参数配置 →「口令与锁定」 | `5` · `300` | 连续输错几次、锁多少秒，见[登录安全配置](/reference/security-config/#在参数配置中修改) |
 | `USER_IMPORT_DEFAULT_PASSWORD` | `.env` | 空 | 导入用户的初始密码；留空 = 用户导入关闭 |
 | `RBAC_ROLE_MENU_MODE` | `.env` | `true` | 权限码模式；`false` 是 casbin 模式，见[数据权限](/features/data-permissions/#有哪些开关) |
 | `RBAC_ROLE_MENU_EXCLUDE` | `.env` | `[]` | 列在这里的权限码跳过检查 |
