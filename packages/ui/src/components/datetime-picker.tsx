@@ -13,8 +13,10 @@ import { Separator } from "@admin/ui/components/separator"
 // 时间那一半的纯函数从 `time-picker` 主文件拿，不直接引 `./time-picker-state` ——
 // 引别的组件的 `-state` 文件，ui:registry 会生成一个不存在的依赖条目 `time-picker-state`
 import {
+  isTimeDisabled,
   joinTime,
   snapTime,
+  splitTime,
   TimeColumns,
   TimePicker,
   type TimeDisabled,
@@ -177,7 +179,9 @@ export function DateTimeValuePicker({
   const [text, setText] = React.useState(value ?? "")
   /** 日视图显示哪个月 —— 受控，手输一个合法日期时跳过去 */
   const [month, setMonth] = React.useState<Date | undefined>(undefined)
-  const typedBad = text.trim() !== "" && parseTyped(text, { picker, withTime: hasTime }) === null
+  const parsed = parseTyped(text, { picker, withTime: hasTime })
+  const timeOff = (v: string) => hasTime && isTimeDisabled(splitTime(timePart(v, false))!, timeOptions)
+  const typedBad = text.trim() !== "" && (!parsed || timeOff(parsed))
 
   React.useEffect(() => {
     if (!open) setText(value ?? "")
@@ -225,7 +229,7 @@ export function DateTimeValuePicker({
           return true
         }
         const v = parseTyped(text, { picker, withTime: hasTime })
-        if (!v) return false
+        if (!v || timeOff(v)) return false
         commit(v)
         return true
       }}
@@ -291,7 +295,11 @@ export function DateTimeValuePicker({
           data-testid={testId && `${testId}-now`}
           onClick={() => {
             const now = new Date()
-            commit(hasTime ? `${toDateStr(now)} ${nowTime(timeOptions)}` : formatPeriod(now, picker))
+            if (!hasTime) return commit(formatPeriod(now, picker))
+            const v = `${toDateStr(now)} ${nowTime(timeOptions)}`
+            if (timeOff(v)) return
+            putDraft(v)
+            setMonth(now)
           }}
         >
           {hasTime ? t("此刻") : picker === "year" ? t("今年") : picker === "month" ? t("本月") : t("今天")}
@@ -301,9 +309,11 @@ export function DateTimeValuePicker({
             type="button"
             size="sm"
             className="h-7 px-3"
-            disabled={!draftDate}
+            disabled={!parsed || typedBad}
             data-testid={testId && `${testId}-ok`}
-            onClick={() => commit(draft)}
+            onClick={() => {
+              if (parsed && !typedBad) commit(parsed)
+            }}
           >
             {t("确定")}
           </Button>
@@ -408,17 +418,26 @@ export function DateTimeRangePicker({
     onChange(v)
     setOpen(false)
   }
-  /** 草稿 → 值。只有两端都有了才提交得了 */
-  const commitDraft = (st: RangeState) => {
-    if (!st.from || !st.to || st.pending) return false
+  /** 草稿 → 合法值。按钮和回车共用，不能提交清空 / 非法输入之前的残留日期。 */
+  const valueOfDraft = (st: RangeState): RangeValue | undefined => {
+    if (!st.from || !st.to || st.pending) return undefined
     if (!byDay) {
-      commit(periodRange(st.from, st.to, picker, withTime))
-      return true
+      return periodRange(st.from, st.to, picker, withTime)
     }
-    commit([
-      stampValue(st.from, { withTime: hasTime, time: hasTime ? st.startTime : undefined }),
-      stampValue(st.to, { withTime: hasTime, endOfDay: true, time: hasTime ? st.endTime : undefined }),
-    ])
+    if (!parseTyped(st.startText) || !parseTyped(st.endText)) return undefined
+    const [from, to] = st.from.getTime() <= st.to.getTime() ? [st.from, st.to] : [st.to, st.from]
+    const a = stampValue(from, { withTime: hasTime, time: hasTime ? st.startTime : undefined })
+    const b = stampValue(to, { withTime: hasTime, endOfDay: true, time: hasTime ? st.endTime : undefined })
+    if (hasTime && (a > b || [st.startTime, st.endTime].some((v) => {
+      const tuple = splitTime(v)
+      return !tuple || isTimeDisabled(tuple, timeOptions)
+    }))) return undefined
+    return [a, b]
+  }
+  const commitDraft = (st: RangeState) => {
+    const next = valueOfDraft(st)
+    if (!next) return false
+    commit(next)
     return true
   }
 
@@ -443,7 +462,6 @@ export function DateTimeRangePicker({
     const d = v ? parseDateStr(v) : undefined
     setS((prev) => {
       const next = { ...prev, [which === "start" ? "startText" : "endText"]: text }
-      if (!d) return next
       if (which === "start") next.from = d
       else next.to = d
       next.pending = false
@@ -457,10 +475,9 @@ export function DateTimeRangePicker({
     if (!typedOk(s.startText) || !typedOk(s.endText)) return
     // 两个框都清空 + 回车 = 清掉值
     if (!s.startText.trim() && !s.endText.trim()) return commit(undefined)
-    const [a, b] = [s.from, s.to]
-    if (a && b && a.getTime() > b.getTime()) return commitDraft({ ...s, from: b, to: a })
     commitDraft(s)
   }
+  const canConfirm = Boolean(valueOfDraft(s))
 
   const preview = previewRange(s, hover)
   const calendarSelected = preview ?? (s.from ? { from: s.from, to: s.to } : undefined)
@@ -612,7 +629,7 @@ export function DateTimeRangePicker({
               type="button"
               size="sm"
               className="h-7 px-3"
-              disabled={!s.from || !s.to || s.pending}
+              disabled={!canConfirm}
               data-testid={testId && `${testId}-ok`}
               onClick={() => commitDraft(s)}
             >

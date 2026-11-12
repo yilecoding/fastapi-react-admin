@@ -4,6 +4,7 @@ import type { paths } from '@admin/api/schema'
 import { clientIdleSeconds } from '../auth/activity'
 import { tryDesktop } from '../desktop'
 import { tokenStore } from './token-store'
+import { useTabStore } from '../shell/tab-store'
 
 export const API_BASE = import.meta.env?.VITE_API_BASE ?? 'http://127.0.0.1:8088'
 
@@ -42,8 +43,15 @@ async function desktopRefresh(): Promise<RefreshOutcome> {
 const client = createApiClient<paths>({
   getBaseUrl: () => API_BASE,
   getToken: () => tokenStore.get(),
-  setToken: (t) => tokenStore.set(t),
-  clearToken: () => tokenStore.clear(),
+  setToken: (t) => {
+    tokenStore.set(t)
+    useTabStore.getState().bindOwner(tokenStore.getUserId())
+  },
+  clearToken: () => {
+    tokenStore.clear()
+    useTabStore.getState().reset()
+    useTabStore.getState().bindOwner(null)
+  },
   getLanguage: () => uiLanguage,
   getClientIdle: () => clientIdleSeconds(),
   refresh: tryDesktop() ? desktopRefresh : undefined,

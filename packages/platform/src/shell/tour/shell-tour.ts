@@ -6,8 +6,7 @@ import { inShell, tabFrame } from './targets'
 import type { TourDef } from './tour'
 
 /**
- * 外壳导览 —— 首次登录在仪表盘自动弹一次（`tour-autostart.tsx`），
- * 之后从顶栏「帮助」菜单或 ⌘K 的「功能引导」重放。
+ * 外壳导览 —— 不自动弹，从顶栏「帮助」菜单或 ⌘K 的「功能引导」手动打开。
  *
  * 七步里六步是壳层元素（`inShell`），第三步「页面内容」故意指向**当前页签的内容框**
  * （`tabFrame(activeKey)`）：它是唯一一个在 `TabOutlet` 里的目标，E2E 就靠它验证
@@ -18,7 +17,6 @@ import type { TourDef } from './tour'
  */
 export const SHELL_TOUR: TourDef = {
   id: 'shell',
-  version: 1,
   steps: () => {
     const activeKey = useTabStore.getState().activeKey
     return [

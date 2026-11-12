@@ -156,9 +156,11 @@ export function useUpdateRoleMenus() {
     mutationFn: ({ id, menus }: { id: string; menus: string[] }) =>
       api.PUT(`/api/v1/sys/roles/${id}/menus`, { body: { menus } }),
     onSuccess: (_d, v) => {
-      qc.invalidateQueries({ queryKey: roleKeys.menus(v.id) })
-      // 授权变了，当前用户的侧边栏与权限码可能随之变化
-      qc.invalidateQueries({ queryKey: ['auth'] })
+      return Promise.all([
+        qc.invalidateQueries({ queryKey: roleKeys.menus(v.id) }),
+        // 授权变了，当前用户的侧边栏与权限码可能随之变化
+        qc.invalidateQueries({ queryKey: ['auth'] }),
+      ])
     },
   })
 }
@@ -204,7 +206,7 @@ export function useUpdateRoleScopes() {
     mutationFn: ({ id, scopes }: { id: string; scopes: string[] }) =>
       api.PUT(`/api/v1/sys/roles/${id}/scopes`, { body: { scopes } }),
     onSuccess: (_d, v) => {
-      qc.invalidateQueries({ queryKey: roleKeys.scopes(v.id) })
+      return qc.invalidateQueries({ queryKey: roleKeys.scopes(v.id) })
     },
   })
 }

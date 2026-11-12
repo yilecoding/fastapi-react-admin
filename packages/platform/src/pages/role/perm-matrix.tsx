@@ -10,6 +10,7 @@ import {
 import { Badge } from '@admin/ui/components/badge'
 import { Button } from '@admin/ui/components/button'
 import { Checkbox } from '@admin/ui/components/checkbox'
+import { QueryError } from '@admin/ui/components/query-error'
 import { DataTableSkeletonRows } from '@admin/ui/components/data-table'
 import {
   InputGroup, InputGroupAddon, InputGroupInput,
@@ -53,8 +54,12 @@ export function PermMatrix({
   const { can } = usePerm()
   const editable = can('sys:role:menu:edit')
 
-  const { data: allMenus = [], isPending: loadingAll } = useQuery(allMenuTreeQuery)
-  const { data: owned, isPending: loadingOwned, isFetching } = useQuery(roleMenusQuery(role.id))
+  const allQuery = useQuery(allMenuTreeQuery)
+  const ownedQuery = useQuery(roleMenusQuery(role.id))
+  const { data: allMenus = [], isPending: loadingAll } = allQuery
+  const { data: owned, isPending: loadingOwned, isFetching } = ownedQuery
+  const ready = allQuery.isSuccess && ownedQuery.isSuccess && !allQuery.isFetching && !ownedQuery.isFetching
+  const readError = allQuery.error ?? ownedQuery.error
 
   const idx = React.useMemo<MenuIndex>(() => indexMenus(allMenus), [allMenus])
   const tree = React.useMemo(() => toPermTree(allMenus), [allMenus])
@@ -99,6 +104,7 @@ export function PermMatrix({
   const rootState = stateOfAll(idx.allIds, checked)
 
   const apply = (next: Set<string>) => {
+    if (!ready || save.isPending) return
     setError(null)
     setDraft(next)
   }
@@ -112,6 +118,7 @@ export function PermMatrix({
   const loading = loadingAll || loadingOwned
 
   async function handleSave() {
+    if (!ready || save.isPending) return
     setError(null)
     try {
       await save.mutateAsync({ id: role.id, menus: [...checked] })
@@ -131,7 +138,7 @@ export function PermMatrix({
       */}
       <div className="sticky top-0 content-scroll:-top-4 z-20 -mx-1 flex shrink-0 flex-wrap items-center gap-2 bg-background px-1 py-2 content-scroll:lg:static">
         <WhenEditable editable={editable}>
-          <Button size="sm" disabled={!dirty || save.isPending} onClick={handleSave} data-testid="perm-save">
+          <Button size="sm" disabled={!ready || !dirty || save.isPending} onClick={handleSave} data-testid="perm-save">
             {save.isPending ? <IconLoader2 className="size-4 animate-spin" /> : <IconDeviceFloppy className="size-4" />}
             {t('保存权限')}
           </Button>
@@ -217,6 +224,7 @@ export function PermMatrix({
       </div>
 
       {error && <p className="text-sm text-destructive" data-testid="perm-error">{error}</p>}
+      {readError && <QueryError error={readError} onRetry={() => { void allQuery.refetch(); void ownedQuery.refetch() }} />}
 
       <div
         className={cn(
@@ -238,7 +246,7 @@ export function PermMatrix({
                   <Checkbox
                     checked={rootState === 'checked'}
                     indeterminate={rootState === 'indeterminate'}
-                    disabled={!editable || loading}
+                    disabled={!editable || !ready || save.isPending}
                     onCheckedChange={toggleAll}
                     data-testid="perm-check-all"
                     aria-label={t("全选所有菜单与按钮")}
@@ -253,7 +261,7 @@ export function PermMatrix({
           <TableBody>
             {loading ? (
               <DataTableSkeletonRows rows={8} columns={3} />
-            ) : shown.length === 0 ? (
+            ) : readError ? null : shown.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
                   {keyword ? t('没有匹配的菜单或权限码') : t('还没有配置任何菜单')}
@@ -264,7 +272,7 @@ export function PermMatrix({
                 <PermRows
                   key={n.id} node={n} depth={0}
                   menuTitle={menuTitle}
-                  checked={checked} idx={idx} editable={editable}
+                  checked={checked} idx={idx} editable={editable && ready && !save.isPending}
                   collapsed={collapsed}
                   openPerm={openPerm}
                   autoOpen={autoOpen}

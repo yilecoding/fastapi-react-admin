@@ -90,28 +90,8 @@ async function fillLogin(page, user = USER, password = PASSWORD) {
     if (!code) throw new Error(`验证码取不到：${CAPTCHA.replace('{uuid}', uuid)}`)
     await cap.fill(code)
   }
-  const login = page.waitForResponse((r) => r.request().method() === 'POST' && /\/auth\/login\b/.test(r.url()))
   await page.getByTestId('submit').click()
-  const body = await (await login).json()
   await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 20_000 })
-  return String(body.data.user.id)
-}
-
-/**
- * 把功能导览标成看过，不然驱动导览的遮罩盖住整页，点什么都点不动（实测卡在角色列表上 30 秒）。
- * 写法和 e2e/fixtures/base.ts 的 seedTourSeen 一样：合并进 `admin:prefs`，版本号写 999。
- * 写完要整页刷新一次，偏好 store 才会重新读 localStorage。
- */
-async function markToursSeen(page, uid) {
-  await page.evaluate((id) => {
-    const KEY = 'admin:prefs'
-    let data = {}
-    try { data = JSON.parse(localStorage.getItem(KEY) ?? '{}') } catch { data = {} }
-    const state = data.state ?? {}
-    const seen = { ...(state.toursSeen ?? {}), [`${id}:shell`]: 999 }
-    localStorage.setItem(KEY, JSON.stringify({ version: data.version ?? 0, state: { ...state, toursSeen: seen } }))
-  }, uid)
-  await page.reload()
   await page.waitForLoadState('networkidle')
 }
 
@@ -120,7 +100,7 @@ async function newSession(browser, { user, password, userAgent } = {}) {
   const ctx = await browser.newContext({ ...CONTEXT, ...(userAgent ? { userAgent } : {}) })
   const page = await ctx.newPage()
   await page.goto(`${BASE}/sign-in`)
-  await markToursSeen(page, await fillLogin(page, user, password))
+  await fillLogin(page, user, password)
   return { ctx, page }
 }
 

@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Path, Query, Request, UploadFile
 from fastapi.responses import Response
-from pydantic import HttpUrl
+from pydantic import EmailStr, HttpUrl
 from pyrate_limiter import Duration, Rate
 
 from backend.app.admin.dataio import USER_EXPORT, USER_IMPORT
@@ -271,7 +271,7 @@ async def update_user_email(
     db: CurrentSessionTransaction,
     request: Request,
     captcha: Annotated[str, Body(embed=True, description='邮箱验证码')],
-    email: Annotated[str, Body(embed=True, description='用户邮箱')],
+    email: Annotated[EmailStr, Body(embed=True, description='用户邮箱')],
 ) -> ResponseModel:
     count = await user_service.update_email(db=db, user_id=request.user.id, captcha=captcha, email=email)
     if count > 0:
