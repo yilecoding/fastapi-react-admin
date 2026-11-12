@@ -3,7 +3,7 @@ import { formatDateTime, type ServerTime } from '@admin/i18n'
 /**
  * 日期时间选择器的值（`YYYY-MM-DD HH:mm:ss` 墙上时间）↔ 接口要的带偏移 ISO，**按显示时区**。
  *
- * 为什么不照 `open-app/form.tsx` 那样 `new Date(local)`：那是按**浏览器**时区解释的，
+ * 不能用 `new Date(local)`：那是按**浏览器**时区解释的，
  * 而列表、详情里的时间都按显示时区（`sys_user.timezone`，i18n 分册）印 ——
  * 两者不一样时，填「18:00 过期」存进去的是另一个钟点，回显也对不上，而且不报错。
  *
