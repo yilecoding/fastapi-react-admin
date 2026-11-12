@@ -12,7 +12,7 @@ import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { BulkBar, RefreshButton, ResetButton } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import { useQuerySearch } from '../_shared/use-query-search'
 import { noticeKeys, noticesQuery, useDeleteNotices, type Notice, type NoticeListParams } from './api'
 import { COLUMN_LABELS, buildColumns } from './columns'
@@ -134,6 +134,7 @@ export function NoticePage({
   const listQuery = useQuery(noticesQuery(params))
   const { data, isFetching } = listQuery
   const list = listState(listQuery, { onBeforeRefetch: () => setRowSelection({}) })
+  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const rows = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 1

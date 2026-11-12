@@ -17,6 +17,7 @@ import { Can } from '../../auth/can'
 import { usePerm } from '../../auth/use-perm'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { StatusBadge } from '../_shared/status'
+import { usePageRecovery } from '../_shared/list-query'
 import { roleUsersQuery, useRemoveRoleUsers, userRolesQuery, type Role } from './api'
 import { UserPicker } from './user-picker'
 import type { User } from '../user/api'
@@ -43,9 +44,11 @@ export function RoleUsers({
   const { can } = usePerm()
   const editable = can('sys:role:edit')
 
-  const { data, isPending, isFetching } = useQuery(
+  const query = useQuery(
     roleUsersQuery({ role: role.id, page, size: SIZE })
   )
+  const { data, isPending, isFetching } = query
+  usePageRecovery(query, { page, size: SIZE, onPageChange: onPage })
 
   const rows = data?.items ?? []
   const total = data?.total ?? 0

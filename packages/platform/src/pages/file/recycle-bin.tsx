@@ -17,7 +17,7 @@ import { cn } from '@admin/ui/lib/utils'
 import { Can } from '../../auth/can'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { RefreshButton, ResetButton, TextFilter } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import {
   fileStatisticsQuery,
   formatBytes,
@@ -73,6 +73,8 @@ export function RecycleBin({
     setSelected(new Set())
     onSearchChange({ page, size, name, ...next })
   }
+
+  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
 
   const toggle = (id: string) =>
     setSelected((prev) => {

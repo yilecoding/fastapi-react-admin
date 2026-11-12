@@ -11,7 +11,7 @@ import { QueryBar, countActive, type FilterField } from '@admin/ui/components/qu
 import { Can } from '../../auth/can'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import { logFeatures } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { useUrlColumnVisibility } from '../_shared/use-column-visibility'
@@ -111,6 +111,7 @@ export function WorkflowMonitorPage({
   const listQuery = useQuery(monitorQuery({ page, size, ...(q.params as Record<string, string | number | undefined>) }))
   const { data, isFetching } = listQuery
   const list = listState(listQuery)
+  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const rows = data?.items ?? []
   const total = data?.total ?? 0
 
