@@ -5,6 +5,7 @@ import { IconDeviceFloppy, IconInfoCircle, IconLoader2, IconRotate } from '@tabl
 
 import { Button } from '@admin/ui/components/button'
 import { Checkbox } from '@admin/ui/components/checkbox'
+import { QueryError } from '@admin/ui/components/query-error'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { cn } from '@admin/ui/lib/utils'
 
@@ -31,8 +32,12 @@ export function RoleScopes({
   const { can } = usePerm()
   const editable = can('sys:role:scope:edit')
 
-  const { data: page, isPending: loadingAll } = useQuery(allDataScopesQuery)
-  const { data: owned, isPending: loadingOwned } = useQuery(roleScopesQuery(role.id))
+  const allQuery = useQuery(allDataScopesQuery)
+  const ownedQuery = useQuery(roleScopesQuery(role.id))
+  const { data: page, isPending: loadingAll } = allQuery
+  const { data: owned, isPending: loadingOwned } = ownedQuery
+  const ready = allQuery.isSuccess && ownedQuery.isSuccess && !allQuery.isFetching && !ownedQuery.isFetching
+  const readError = allQuery.error ?? ownedQuery.error
 
   const scopes = page?.items ?? []
   const baseline = React.useMemo(() => new Set(owned ?? []), [owned])
@@ -48,6 +53,7 @@ export function RoleScopes({
   const loading = loadingAll || loadingOwned
 
   const toggle = (id: string) => {
+    if (!ready || save.isPending) return
     const next = new Set(checked)
     if (next.has(id)) next.delete(id)
     else next.add(id)
@@ -56,6 +62,7 @@ export function RoleScopes({
   }
 
   async function handleSave() {
+    if (!ready || save.isPending) return
     setError(null)
     try {
       await save.mutateAsync({ id: role.id, scopes: [...checked] })
@@ -70,7 +77,7 @@ export function RoleScopes({
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         {editable && (
           <>
-            <Button size="sm" disabled={!dirty || save.isPending} onClick={handleSave} data-testid="scope-save">
+            <Button size="sm" disabled={!ready || !dirty || save.isPending} onClick={handleSave} data-testid="scope-save">
               {save.isPending ? <IconLoader2 className="size-4 animate-spin" /> : <IconDeviceFloppy className="size-4" />}
               {t('保存绑定')}
             </Button>
@@ -95,6 +102,7 @@ export function RoleScopes({
       )}
 
       {error && <p className="text-sm text-destructive" data-testid="scope-error">{error}</p>}
+      {readError && <QueryError error={readError} onRetry={() => { void allQuery.refetch(); void ownedQuery.refetch() }} />}
 
       {/* 定高时这一层就是滚动区；高度 auto 时三条都是空操作 */}
       <div className="rounded-lg border p-2 content-scroll:lg:min-h-0 content-scroll:lg:flex-1 content-scroll:lg:overflow-y-auto">
@@ -102,7 +110,7 @@ export function RoleScopes({
           <div className="flex flex-col gap-2">
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
           </div>
-        ) : scopes.length === 0 ? (
+        ) : readError ? null : scopes.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
             {t('还没有数据范围。先去「系统管理 › 数据权限」建一个，再回来绑定。')}
           </p>
@@ -112,7 +120,7 @@ export function RoleScopes({
               <div key={s.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/60">
                 <Checkbox
                   checked={checked.has(s.id)}
-                  disabled={!editable}
+                  disabled={!editable || !ready || save.isPending}
                   onCheckedChange={() => toggle(s.id)}
                   data-testid={`scope-check-${s.id}`}
                   aria-label={s.name}

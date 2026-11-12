@@ -145,6 +145,7 @@ class Settings(BaseSettings):
     # 登录
     LOGIN_CAPTCHA_ENABLED: bool = True
     LOGIN_CAPTCHA_REDIS_PREFIX: str = 'fba:login:captcha'
+    LOGIN_PHONE_GUARD_REDIS_PREFIX: str = 'fba:login:phone-guard'
     LOGIN_CAPTCHA_EXPIRE_SECONDS: int = 60 * 5  # 5 分钟
     LOGIN_FAILURE_PREFIX: str = 'fba:login:failure'
 

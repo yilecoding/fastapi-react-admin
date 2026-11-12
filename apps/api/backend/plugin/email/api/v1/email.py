@@ -1,16 +1,18 @@
-import random
+import secrets
+import string
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Request
+from pydantic import EmailStr
 from pyrate_limiter import Duration, Rate
 
-from backend.common.context import ctx
 from backend.common.response.response_schema import ResponseModel, response_base
 from backend.common.security.jwt import DependsJwtAuth
 from backend.core.conf import settings
 from backend.database.db import CurrentSession
 from backend.database.redis import redis_client
+from backend.plugin.email.utils.captcha import captcha_key
 from backend.plugin.email.utils.send import send_email
 from backend.utils.limiter import RateLimiter
 
@@ -30,15 +32,16 @@ router = APIRouter()
 )
 async def send_email_captcha(
     db: CurrentSession,
-    recipients: Annotated[str | list[str], Body(embed=True, description='邮件接收者')],
+    request: Request,
+    recipients: Annotated[EmailStr, Body(embed=True, description='邮件接收者')],
 ) -> ResponseModel:
-    code = ''.join([str(random.randint(1, 9)) for _ in range(6)])
-    ip = ctx.ip
-    await redis_client.set(
-        f'{settings.EMAIL_CAPTCHA_REDIS_PREFIX}:{ip}',
-        code,
-        ex=settings.EMAIL_CAPTCHA_EXPIRE_SECONDS,
-    )
+    code = ''.join(secrets.choice(string.digits) for _ in range(6))
+    key = captcha_key(request.user.id, recipients)
     content = {'code': code, 'expired': int(settings.EMAIL_CAPTCHA_EXPIRE_SECONDS / 60)}
     await send_email(db, recipients, 'FBA 验证码', content, 'captcha.html')
+    # Publish only delivered codes; a failed resend keeps the previous code usable.
+    async with redis_client.pipeline(transaction=True) as pipe:
+        pipe.set(key, code, ex=settings.EMAIL_CAPTCHA_EXPIRE_SECONDS)
+        pipe.delete(f'{key}:attempts')
+        await pipe.execute()
     return response_base.success()
