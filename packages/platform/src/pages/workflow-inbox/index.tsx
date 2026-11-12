@@ -74,7 +74,9 @@ export function WorkflowInboxPage({
 
   const listQuery = useQuery(inboxQuery({ tab, page, size, keyword: search.keyword }))
   const list = listState(listQuery)
-  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
+  // 办理会同时重取列表和详情，随后关闭抽屉（写 id）。等抽屉关完再回页，
+  // 避免两次导航拿同一份旧 search，把已清掉的 id / page 互相写回来。
+  usePageRecovery(listQuery, { page, size, enabled: !search.id, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const counts = useQuery(countsQuery()).data
 
   // 待办变了（新来 / 被别人办掉 / 实例结束）：服务端只推一个空事件，这里重取
