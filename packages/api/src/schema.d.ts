@@ -4426,9 +4426,10 @@ export interface components {
         Body_send_email_captcha_api_v1_emails_captcha_post: {
             /**
              * Recipients
+             * Format: email
              * @description 邮件接收者
              */
-            recipients: string | string[];
+            recipients: string;
         };
         /** Body_send_phone_captcha_api_v1_sys_users_me_phone_captcha_post */
         Body_send_phone_captcha_api_v1_sys_users_me_phone_captcha_post: {
@@ -4463,6 +4464,7 @@ export interface components {
             captcha: string;
             /**
              * Email
+             * Format: email
              * @description 用户邮箱
              */
             email: string;

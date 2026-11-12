@@ -82,8 +82,7 @@ export function useSaveTimeZone() {
  * ⚠️ 这个接口会**真的发一封邮件**，SMTP 没配就会失败。失败必须显示出来 ——
  * 吞掉的话用户会对着一个永远填不对的验证码框发呆。
  *
- * ⚠️ 验证码存的 key 是 `fba:email:captcha:{IP}`，**按 IP 不按邮箱**：
- * 同一出口 IP 下后发的会覆盖先发的。
+ * 验证码按当前用户和目标邮箱隔离，只能使用一次，连续输错五次后作废。
  */
 export function useSendEmailCaptcha() {
   return useMutation({
