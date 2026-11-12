@@ -12,7 +12,7 @@ import { usePerm } from '../../auth/use-perm'
 import { PageHeader } from '../../shell/page-header'
 import { EmptyCell, RowActions, TimeCell } from '../_shared/cells'
 import { RefreshButton, ResetButton } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import { logFeatures as features } from '../_shared/log-features'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { useUrlColumnOrder } from '../_shared/use-column-order'
@@ -132,6 +132,7 @@ export function NotifyDeliveryPage({
   const listQuery = useQuery(deliveriesQuery(qs))
   const { data, isFetching } = listQuery
   const list = listState(listQuery)
+  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const rows = data?.items ?? []
 
   const [columnVisibility, setColumnVisibility] = useUrlColumnVisibility(

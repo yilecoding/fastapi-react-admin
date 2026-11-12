@@ -32,7 +32,7 @@ import {
   useDeleteDictDatas, useDeleteDictTypes, type DictData, type DictType,
 } from './api'
 import { DictDataSheet, DictTypeSheet } from './forms'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import { DEFAULT_PAGE_SIZE } from '../_shared/pagination'
 import { ExportButton } from '../_shared/data-io/export-button'
 import { ImportSheet } from '../_shared/data-io/import-sheet'
@@ -132,6 +132,7 @@ export function DictPage({
     enabled: Boolean(selectedId),
     onBeforeRefetch: () => setRowSelection({}),
   })
+  usePageRecovery(datasQuery, { page, size, enabled: Boolean(selectedId), onPageChange: (page) => patch({ page: page === 1 ? undefined : page }) })
   const datas = datasPage?.items ?? []
 
   const [typeSheet, setTypeSheet] = React.useState(false)

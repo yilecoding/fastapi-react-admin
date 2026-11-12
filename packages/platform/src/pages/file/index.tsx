@@ -20,7 +20,7 @@ import { fetchBytes } from '../../api-client/client'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { RefreshButton, ResetButton, TextFilter } from '../_shared/filters'
-import { listState } from '../_shared/list-query'
+import { listState, usePageRecovery } from '../_shared/list-query'
 import {
   fetchFileLink,
   fileStatisticsQuery,
@@ -106,6 +106,7 @@ export function FilePage({
   const { data, isPending, isFetching } = listQuery
   // 刷新/重试前清掉选中：重取回来可能已经少了几个文件（见 list-query.ts）
   const list = listState(listQuery, { onBeforeRefetch: () => setSelected(new Set()) })
+  usePageRecovery(listQuery, { page, size, onPageChange: (page) => patch({ page: page === 1 ? undefined : page }), enabled: !inRecycle })
   const files = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 1
