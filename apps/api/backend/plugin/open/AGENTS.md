@@ -186,3 +186,19 @@ Servlet 在 HTTP/1.1 下给的是 `Webhook-Id`，照 README 直接传进来，�
 
 **实测证据**（JDK 本机）：变异 —— 去掉转小写 → `test_java_sdk_verifies_webhooks` 红；去掉 `.replace("+", "%20")` →
 `test_java_sdk_matches_vectors` 红。⚠️ 这几条在缺 JDK 时是 skip：CI 的 PostgreSQL job 加了 `-rs`，看日志里有没有它们的 skip 行。
+
+## 🔴 连续重置不能缩短任何一把旧密钥的宽限期（#308）
+
+**症状**：24 小时内重置两次，仍用最初密钥的接收方立即验签失败；接收方若丢弃消息却回 200，投递记录仍显示成功。
+**根因**：每次都覆盖 `secret_prev_cipher`。只保留最早的密钥同样不够：已经切到中间那把的接收方会失效。
+
+**修法**：最近一次被替换的密钥仍在 `secret_prev_*`，更早的密文与各自期限保存在 `secret_history`；
+每次重置只清掉已到期历史，不给旧期限续期。投递用当前密钥和全部未到期旧密钥签名。
+重置必须先经 `crud_webhook.get_for_update` 锁端点并刷新已加载实例，锁持有到提交；SQL Server 要带 UPDLOCK 表提示。
+迁移 `as000000whsecrets` 只加可空列，兼容升级前的宽限期；历史列不下发接口、不进数据变更记录。
+
+**实测证据**（2026-11-13，独立临时库）：`tests/test_webhooks.py::TestSecret` 的 7 条在 PostgreSQL / SQL Server 均通过，
+覆盖三把同时验签、各自到期边界、清理到期历史、升级前旧密钥、并发且预读旧实例、事务回滚及明文/密文不外泄。
+PostgreSQL 的开放插件 + 迁移守卫 102 passed / 2 skipped；SQL Server 的 Webhook + SDK + 迁移守卫 66 passed / 2 skipped。
+两种数据库都实际执行本条迁移的 up → down → up，原密钥和期限不变；三方言离线编译通过。
+Python / Node SDK 已验证有效签名排第三个仍能验签；两条 Java 测试因本机缺 JDK 跳过。
