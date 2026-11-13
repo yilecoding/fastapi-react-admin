@@ -151,6 +151,8 @@ class _Ctx:
     effects: list[Callable[[], Awaitable[None]]] = field(default_factory=list)
     #: 这个事务里新建的待办（拿回要知道「我这次同意之后冒出来了哪些待办」）
     spawned: list[WfTask] = field(default_factory=list)
+    #: 本次同意 / 后加签取消的同节点待办，拿回时要和操作人的待办一起恢复。
+    canceled: list[WfTask] = field(default_factory=list)
 
     def push_todo(self, user_ids: list[int]) -> None:
         for uid in dict.fromkeys(user_ids):
@@ -531,7 +533,7 @@ _PROGRESS = (
 async def _take_back_ctx(db: AsyncSession, inst: WfInstance, actor_id: int) -> dict[str, Any] | None:
     """能不能拿回：这张单**最近一次推进**是我的同意，而且我同意之后新建的待办都还没人动。
 
-    同意时把「同意之前的实例变量」和「这次新建了哪些待办」记在 `variables['undo']`。
+    同意时把「同意之前的实例变量」以及「本次新建 / 取消的待办」记在 `variables['undo']`。
     """
     undo = _json(inst.variables).get('undo')
     if not undo or undo.get('actor') != actor_id:
@@ -563,7 +565,13 @@ async def _take_back_ctx(db: AsyncSession, inst: WfInstance, actor_id: int) -> d
 
 
 def _remember_undo(
-    inst: WfInstance, rec: WfActionRecord, task: WfTask, prev_vars: dict[str, Any], actor_id: int, spawned: list[WfTask]
+    inst: WfInstance,
+    rec: WfActionRecord,
+    task: WfTask,
+    prev_vars: dict[str, Any],
+    actor_id: int,
+    spawned: list[WfTask],
+    canceled: list[WfTask],
 ) -> None:
     prev = {k: v for k, v in prev_vars.items() if k != 'undo'}
     _set_var(
@@ -576,6 +584,7 @@ def _remember_undo(
             'node': task.node_id,
             'vars': prev,
             'spawned': [x.id for x in spawned],
+            'canceled': [x.id for x in canceled],
         },
     )
 
@@ -1294,6 +1303,7 @@ async def act(  # ruff:ignore[complex-structure]
                     detail=detail,
                 )
                 ctx.spawned.clear()
+                ctx.canceled.clear()
                 group = _sign_group(inst, my_task)
                 if group is not None:
                     await _sign_member_done(ctx, inst, nodes, node, my_task, group)
@@ -1301,7 +1311,7 @@ async def act(  # ruff:ignore[complex-structure]
                     await _after_approve(ctx, inst, nodes, node, my_task)
                 ctx.push_todo([actor.id])
                 await ctx.db.flush()  # 新待办 / 这条记录要有 ID，拿回靠它们
-                _remember_undo(inst, rec, my_task, prev_vars, actor.id, ctx.spawned)
+                _remember_undo(inst, rec, my_task, prev_vars, actor.id, ctx.spawned, ctx.canceled)
 
             case Action.take_back:
                 undo = await _take_back_ctx(ctx.db, inst, actor.id)
@@ -1318,18 +1328,24 @@ async def act(  # ruff:ignore[complex-structure]
                 old.decision = 'take_back'
                 # 实例变量（依次审批队列、加签组、直达标记）回到同意之前
                 inst.variables = json.dumps(undo['vars'], ensure_ascii=False)
-                _new_task(
-                    ctx,
-                    inst,
-                    old.node_id,
-                    old.node_name,
-                    (actor.id, old.assignee_name),
-                    batch=old.batch,
-                    origin=old.origin_assignee_id,
-                )
+                restored = [old]
+                for tid in undo.get('canceled') or []:
+                    canceled = await ctx.db.get(WfTask, tid, populate_existing=True)
+                    assert canceled is not None
+                    restored.append(canceled)
+                for task in restored:
+                    _new_task(
+                        ctx,
+                        inst,
+                        task.node_id,
+                        task.node_name,
+                        (task.assignee_id, task.assignee_name),
+                        batch=task.batch,
+                        origin=task.origin_assignee_id,
+                    )
+                    ctx.push_todo([task.assignee_id])
                 inst.current_node_id = old.node_id
                 _record(ctx, inst, action, key=key, actor_id=actor.id, actor_name=actor.nickname, task=old)
-                ctx.push_todo([actor.id])
 
             case Action.add_sign:
                 assert my_task is not None
@@ -1338,6 +1354,7 @@ async def act(  # ruff:ignore[complex-structure]
                 users = await _sign_targets(ctx, inst, my_task, target_user_ids, actor.id)
                 prev_vars = _json(inst.variables)
                 ctx.spawned.clear()
+                ctx.canceled.clear()
                 node = nodes[my_task.node_id].node
                 detail: dict[str, Any] = {'mode': sign_mode}
                 if sign_mode == 'after':
@@ -1375,10 +1392,11 @@ async def act(  # ruff:ignore[complex-structure]
                     for other in await _pending_tasks(ctx.db, inst.id, my_task.node_id):
                         if _sign_group(inst, other) is None:
                             await _close_task(ctx.db, other, TaskStatus.canceled, None, None)
+                            ctx.canceled.append(other)
                             ctx.push_todo([other.assignee_id])
                 ctx.push_todo([actor.id, *(u for u, _ in users)])
                 await ctx.db.flush()
-                _remember_undo(inst, rec, my_task, prev_vars, actor.id, ctx.spawned)
+                _remember_undo(inst, rec, my_task, prev_vars, actor.id, ctx.spawned, ctx.canceled)
 
             case Action.send_back:
                 assert my_task is not None
@@ -1575,6 +1593,7 @@ async def _after_approve(ctx: _Ctx, inst: WfInstance, nodes: dict[str, Any], nod
     elif mode == ApprovalMode.any or not rest:
         for other in rest:
             await _close_task(ctx.db, other, TaskStatus.canceled, None, None)
+            ctx.canceled.append(other)
             ctx.push_todo([other.assignee_id])
         await _leave_node(ctx, inst, nodes, task.node_id)
 
