@@ -57,4 +57,5 @@ def sign(secret: str, text: str) -> str:
 
 def verify(secret: str, text: str, signature: str) -> bool:
     # 常量时间比较：逐字节比较的响应时间会泄露「前几位对了」
-    return hmac.compare_digest(sign(secret, text), signature.lower())
+    # X-Sign 来自未受信任的 HTTP 头，可能包含非 ASCII 字符；compare_digest 的 str 模式会因此抛 TypeError。
+    return hmac.compare_digest(sign(secret, text).encode(), signature.lower().encode())
