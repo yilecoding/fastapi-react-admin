@@ -15,7 +15,7 @@ const searchSchema = z.object({
 /** 页面由 TabOutlet 挂载；这里只声明 search schema / staticData / 权限 */
 export const Route = createFileRoute("/_auth/plugins/dict")({
   validateSearch: searchSchema,
-  beforeLoad: requirePerm("dict:type:add"),
+  beforeLoad: requirePerm("dict:type:list"),
   staticData: { title: "数据字典" },
   component: () => null,
 })

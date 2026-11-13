@@ -268,7 +268,7 @@ await expect(page.locator('[data-visible="true"] table tbody tr').first()).toBeV
   超了 SQL Server 报的是 `String or binary data would be truncated`，
   一句不说是哪张表哪一列的 500。实测踩过（`E2E角色-DPE_XXXXXXXXXXXX-UNFILTERED` = 34 字符）
 - 🔴 **测试角色必须绑「部门管理」那几个菜单。** `/system/dept` 的守卫是
-  `requirePerm('sys:dept:add')`，权限码来自角色菜单。不绑的话每个账号打开部门页
+  `requirePerm('sys:dept:list')`，权限码来自角色菜单。不绑的话每个账号打开部门页
   都被重定向到 `/403`，而断言「看不到任何部门」照样**通过** —— 它压根没进那一页。
   菜单 id 按 `path`/`perms` 现查，不要硬编码种子里的雪花 ID
 - 🔴 **断言顺序：先断言「应该看见的」，再断言「不该看见的」。** 反过来就是假绿 ——
