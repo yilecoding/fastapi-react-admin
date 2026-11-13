@@ -3,6 +3,8 @@ import { ApiError } from '@admin/api'
 
 import { api, endSession, restoreSession } from '../api-client/client'
 import { tokenStore } from '../api-client/token-store'
+import { useAiDrawerStore } from '../pages/ai-chat/drawer-store'
+import { useUploadStore } from '../shell/upload-store'
 import { tryDesktop } from '../desktop'
 import type { AuthLoginOutcome } from '../desktop/contract'
 
@@ -32,6 +34,8 @@ import { useTabStore } from '../shell/tab-store'
  */
 function clearClientSessionState() {
   useTabStore.getState().reset()
+  useUploadStore.getState().reset()
+  useAiDrawerStore.getState().reset()
 }
 
 export type LoginParam = {
