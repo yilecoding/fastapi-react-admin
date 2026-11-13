@@ -1,3 +1,4 @@
+import logging
 import math
 import os
 import shutil
@@ -931,6 +932,17 @@ def _check_bot_url_prefixes(s: Settings) -> str | None:
     return None
 
 
+def _warn_insecure_production_cookies(s: Settings) -> None:
+    # 配置加载早于应用日志初始化，用标准 logging，避免 common.log 反向导入 settings。
+    # 这是部署提示而非硬约束：None 的自动模式和显式 false 仍支持 HTTP 部署。
+    if s.COOKIE_SECURE is not True:
+        logging.getLogger(__name__).warning(
+            'COOKIE_SECURE 未设为 true：HTTPS 生产站点请在 .env.server 中设置 COOKIE_SECURE=true，'
+            '确保 refresh / OAuth2 cookie 始终带 Secure；自动模式依赖可信代理正确转发 X-Forwarded-Proto。'
+            '仅明文 HTTP 部署保留自动模式或显式设为 false。'
+        )
+
+
 def check_production_settings(s: Settings) -> None:
     """prod 启动前置校验 —— 一次性收集**全部**问题后 fail-fast
 
@@ -1006,6 +1018,7 @@ def check_production_settings(s: Settings) -> None:
             f'配置文件：{ENV_FILE_PATH}\n'
             f'生成一个合格的签名密钥：python -c "import secrets;print(secrets.token_urlsafe(32))"\n'
         )
+    _warn_insecure_production_cookies(s)
 
 
 def _ensure_env_file() -> None:

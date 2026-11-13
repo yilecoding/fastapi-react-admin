@@ -66,11 +66,13 @@ Edit `apps/api/backend/.env` and restart the API.
 | `SESSION_REFRESH_GRACE_SECONDS` | `30` | Grace period for the previous refresh token; production refuses anything under 10 seconds |
 | `LOGIN_CAPTCHA_EXPIRE_SECONDS` | `300` | Image captcha lifetime |
 | `MFA_CHALLENGE_SECONDS` · `MFA_CHALLENGE_ATTEMPTS` | `300` · `5` | Time and attempts allowed for the second step |
-| `COOKIE_SECURE` | follows the request | HTTPS requests get a `Secure` cookie. If a proxy terminates TLS and rewrites `X-Forwarded-Proto` to `http`, set it to `true` explicitly |
+| `COOKIE_SECURE` | follows the request | Set `true` for HTTPS production sites (enabled in the production template) so refresh / OAuth2 state cookies always carry `Secure`. Production warns otherwise. Leave unset for local HTTP; HTTP-only deployments may set `false` |
 | `OAUTH2_GITHUB_*` · `OAUTH2_GOOGLE_*` | — | Client ID / Secret for third-party sign-in |
 | `OAUTH2_AUTO_REGISTER` · `OAUTH2_AUTO_REGISTER_ROLE` | `false` · — | Whether unknown third-party accounts get an account, and with which role (an unknown role code refuses the sign-in) |
 
 </div>
+
+When TLS terminates upstream, the edge proxy must overwrite any client-supplied `X-Forwarded-Proto`. The web container preserves valid `http` / `https` values and falls back to its connection scheme for missing or invalid values. Restrict its HTTP port to trusted proxies and configure Uvicorn's `--forwarded-allow-ips` accordingly.
 
 The full definitions are in the user security, sign-in and session sections of [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py).
 
