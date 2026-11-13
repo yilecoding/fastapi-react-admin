@@ -72,6 +72,13 @@ bash prod.sh pull && bash prod.sh up
 [`deploy/AGENTS.md`](./AGENTS.md)。TLS 交给上游 LB / Caddy / 宝塔反代，
 这份编排只出一个明文端口。
 
+HTTPS 站点请保留 `.env.server` 模板里的 `COOKIE_SECURE=true`，已有部署也需补上并重启 API 容器；
+该设置同时保护 refresh 和 OAuth2 state cookie。仅明文 HTTP 部署才设为 `false`。
+外层代理应覆盖客户端的协议头（nginx 示例：`proxy_set_header X-Forwarded-Proto $scheme;`），
+web 容器会保留有效的 `http` / `https`，缺失或异常时回退到自身连接协议。
+web 的明文端口仅应对可信代理开放，API 的 Uvicorn 转发信任范围也应与代理网段一致。
+部署后检查登录响应中认证路径下的 refresh `Set-Cookie` 是否带 `Secure`（清理旧路径 Cookie 的头可忽略）。
+
 ### 日常更新
 
 ```bash

@@ -91,6 +91,13 @@ jobs:
       - name: arch
         run: pnpm arch:check
 
+  test-nginx:
+    name: nginx forwarded protocol
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 -m unittest discover -s deploy/tests -v
+
   lint-frontend:
     name: eslint
     runs-on: ubuntu-latest
