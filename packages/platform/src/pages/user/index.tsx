@@ -9,6 +9,7 @@ import { DataTable, DataTableColumnVisibility } from '@admin/ui/components/data-
 import { QueryBar, countActive, type FilterField } from '@admin/ui/components/query-bar'
 
 import { Can, SuperOnly } from '../../auth/can'
+import { meQuery } from '../../auth/queries'
 import { ConfirmDialog } from '../../shell/confirm-dialog'
 import { PageHeader } from '../../shell/page-header'
 import { BulkBar, RefreshButton, ResetButton } from '../_shared/filters'
@@ -203,6 +204,11 @@ export function UserPage({
   const [importOpen, setImportOpen] = React.useState(false)
   const del = useDeleteUser()
   const delMany = useDeleteUsers()
+  const { data: me } = useQuery(meQuery)
+  const canDelete = React.useCallback(
+    (u: User) => Boolean(me) && !u.is_superuser && u.id !== me?.id,
+    [me]
+  )
 
   const handleEdit = React.useCallback((u: User) => {
     setEditing(u)
@@ -210,8 +216,8 @@ export function UserPage({
   }, [])
 
   const columns = React.useMemo(
-    () => buildColumns(handleEdit, setPendingDelete, (u) => setSecurityId(u.id), setHistoryOf, t),
-    [handleEdit, t]
+    () => buildColumns(handleEdit, setPendingDelete, (u) => setSecurityId(u.id), setHistoryOf, t, canDelete),
+    [handleEdit, t, canDelete]
   )
 
   // 列顺序进 URL（同列显隐）—— 走 onSearchChange 而不是 patch：换列序不该清勾选、也不该跳回第一页
@@ -232,7 +238,7 @@ export function UserPage({
     // 分页/筛选都在服务端 —— 关掉客户端分页，否则会出现「只筛当前页」
     manualPagination: true,
     rowCount: total,
-    enableRowSelection: (row) => !row.original.is_superuser,
+    enableRowSelection: (row) => canDelete(row.original),
     onColumnVisibilityChange: setColumnVisibility,
     onColumnOrderChange: setColumnOrder,
     onRowSelectionChange: setRowSelection,
