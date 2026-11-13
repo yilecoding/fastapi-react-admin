@@ -247,6 +247,22 @@ test("附件上传 / 下载 + 驳回后重新发起（带着原来的内容）",
   await a.reload()
   const again = a.getByTestId("wf-instance-sheet")
   await expect(again.getByTestId("wf-status")).toHaveText("已驳回")
+  // 另一份没写完的单：重新发起 / 提交旧单都不能清掉它的服务端草稿或缓存。
+  await again.locator('[data-slot="sheet-close"]').click()
+  await expect(again).toBeHidden()
+  async function openNew() {
+    await a.locator('[data-tab="/_auth/workflow/inbox"]').getByTestId("wf-start-menu").click()
+    await a.getByTestId("wf-template-search").fill(code)
+    await a.getByTestId(`wf-start-${code}`).click()
+    await expect(sheet.getByTestId("wf-start-title")).toBeVisible()
+  }
+  await openNew()
+  const saved = a.waitForResponse((r) => r.url().endsWith(`/drafts/${code}`) && r.request().method() === "PUT")
+  await sheet.getByTestId("wf-field-f_what").locator("input").fill("另一份未完成的报销")
+  expect((await saved).ok()).toBe(true)
+  await sheet.getByRole("button", { name: "取消", exact: true }).click()
+  await expect(sheet).toBeHidden()
+  await a.getByTestId(`wf-row-${id}`).click()
   await again.getByTestId("wf-resubmit").click()
   const sheet2 = a.getByTestId("wf-start-sheet")
   await expect(sheet2.getByTestId("wf-field-f_what").locator("input")).toHaveValue("报销打车费")
@@ -256,6 +272,11 @@ test("附件上传 / 下载 + 驳回后重新发起（带着原来的内容）",
   const id2 = new URL(a.url()).searchParams.get("id")
   expect(id2).toBeTruthy()
   expect(id2).not.toBe(id)
+  await again.locator('[data-slot="sheet-close"]').click()
+  await expect(again).toBeHidden()
+  await openNew()
+  await expect(sheet.getByTestId("wf-field-f_what").locator("input")).toHaveValue("另一份未完成的报销")
+  await expect(sheet.getByTestId("wf-draft-restored")).toBeVisible()
 
   await a.close()
   await b.close()
@@ -583,13 +604,48 @@ test("草稿：关掉再打开内容还在；加急排在审批人列表里；�
   await loginPageAs(a, "sunqiang", "123456")
   await a.goto(`/workflow/inbox?start=${code}`)
   const sheet = a.getByTestId("wf-start-sheet")
-  await sheet.getByTestId("wf-field-f_reason").locator("input").fill("写到一半")
-  await expect(sheet.getByTestId("wf-draft-status")).toContainText("草稿已保存")
-  // 关掉抽屉、整页刷新再打开：内容从服务端的草稿恢复
-  await a.goto("/workflow/inbox")
-  await a.goto(`/workflow/inbox?start=${code}`)
+  async function saveReason(value: string) {
+    // 上一版的「已保存」在防抖期间仍在，必须等这次请求完成才关闭。
+    const saved = a.waitForResponse((r) => r.url().endsWith(`/drafts/${code}`) && r.request().method() === (value ? "PUT" : "DELETE"))
+    await sheet.getByTestId("wf-field-f_reason").locator("input").fill(value)
+    expect((await saved).ok()).toBe(true)
+    await expect(sheet.getByTestId("wf-draft-status")).toContainText("草稿已保存")
+  }
+  await saveReason("写到一半")
+  // 必须在应用内关闭、重开；goto / reload 会清掉 QueryClient，测不出旧缓存（#328）。
+  async function reopen() {
+    await sheet.getByRole("button", { name: "取消", exact: true }).click()
+    await expect(sheet).toBeHidden()
+    await openFromMenu()
+  }
+  async function openFromMenu() {
+    await a.locator('[data-tab="/_auth/workflow/inbox"]').getByTestId("wf-start-menu").click()
+    await a.getByTestId("wf-template-search").fill(code)
+    await a.getByTestId(`wf-start-${code}`).click()
+    await expect(sheet.getByTestId("wf-start-title")).toBeVisible()
+  }
+  await reopen()
   await expect(sheet.getByTestId("wf-draft-restored")).toBeVisible()
   await expect(sheet.getByTestId("wf-field-f_reason").locator("input")).toHaveValue("写到一半")
+
+  // 再改一版后重开也必须是最新内容，不能回到上一次 GET 的旧版。
+  await saveReason("写到一半，补充交接安排")
+  await reopen()
+  await expect(sheet.getByTestId("wf-field-f_reason").locator("input")).toHaveValue("写到一半，补充交接安排")
+
+  // 清空也不能留下旧缓存：再打开仍是空表，然后重填提交。
+  await sheet.getByTestId("wf-draft-clear").click()
+  await expect(sheet.getByTestId("wf-field-f_reason").locator("input")).toHaveValue("")
+  await reopen()
+  await expect(sheet.getByTestId("wf-draft-restored")).toHaveCount(0)
+  await expect(sheet.getByTestId("wf-field-f_reason").locator("input")).toHaveValue("")
+  // 手动删光字段走自动删除，同样要同步缓存。
+  await saveReason("临时内容")
+  await saveReason("")
+  await reopen()
+  await expect(sheet.getByTestId("wf-draft-restored")).toHaveCount(0)
+  await expect(sheet.getByTestId("wf-field-f_reason").locator("input")).toHaveValue("")
+  await saveReason("加急申请")
 
   // 标加急提交
   await sheet.getByTestId("wf-start-urgent").click()
@@ -598,8 +654,9 @@ test("草稿：关掉再打开内容还在；加急排在审批人列表里；�
   await expect(detail.getByTestId("wf-urgent")).toBeVisible()
   const id = new URL(a.url()).searchParams.get("id") as string
   // 提交之后草稿没了：再打开是空的
-  await a.goto(`/workflow/inbox?start=${code}`)
-  await expect(sheet.getByTestId("wf-start-title")).toBeVisible()
+  await detail.locator('[data-slot="sheet-close"]').click()
+  await expect(detail).toBeHidden()
+  await openFromMenu()
   await expect(sheet.getByTestId("wf-draft-restored")).toHaveCount(0)
   await expect(sheet.getByTestId("wf-field-f_reason").locator("input")).toHaveValue("")
 
