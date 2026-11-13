@@ -49,6 +49,13 @@ class CRUDUser(DataScopedCRUD[User]):
         """
         return await self.select_model(db, user_id, deleted=0)
 
+    async def get_for_delete(self, db: AsyncSession, user_id: int) -> User | None:
+        """按数据范围锁住待删用户，避免校验后被并发提升为超管。锁持有到事务结束"""
+        stmt = await self.select(id=user_id, deleted=0)
+        # SQL Server 会忽略 FOR UPDATE，必须显式给它更新锁。
+        stmt = stmt.with_for_update().with_hint(self.model, 'WITH (UPDLOCK, HOLDLOCK)', dialect_name='mssql')
+        return await db.scalar(stmt.execution_options(populate_existing=True))
+
     async def get_by_username(self, db: AsyncSession, username: str) -> User | None:
         """
         通过用户名获取用户

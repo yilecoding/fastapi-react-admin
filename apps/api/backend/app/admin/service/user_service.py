@@ -5,6 +5,7 @@ from fastapi import Request
 from pydantic import HttpUrl
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTasks
 
 from backend.app.admin.crud.crud_dept import dept_dao
 from backend.app.admin.crud.crud_role import role_dao
@@ -472,21 +473,38 @@ class UserService:
         return count
 
     @staticmethod
-    async def delete(*, db: AsyncSession, pk: int) -> int:
+    async def delete(*, db: AsyncSession, request: Request, background_tasks: BackgroundTasks, pk: int) -> int:
         """
         删除用户
 
         :param db: 数据库会话
+        :param request: FastAPI 请求对象
+        :param background_tasks: 提交成功后撤销会话、清理缓存
         :param pk: 用户 ID
         :return:
         """
-        user = await user_dao.get(db, pk)
+        if pk == request.user.id:
+            raise errors.ForbiddenError(msg=t('error.user.self_delete_forbidden'))
+        user = await user_dao.get_for_delete(db, pk)
         if not user:
             raise errors.NotFoundError(msg=t('error.user.not_found'))
+        # 与前端一致：任何超管都不能直接删除，包括最后一个超管。
+        # 必须先由另一名超管降权；update_permission 已禁止修改自己的权限。
+        if user.is_superuser:
+            raise errors.ForbiddenError(msg=t('error.user.superuser_delete_forbidden'))
         count = await user_dao.delete(db, user.id)
-        await emit_user_event(db, 'user.deleted', user.id)
-        await session_store.revoke_user(user.id, EndReason.disabled)
-        await redis_client.delete_by_prefix(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
+        if count > 0:
+            await emit_user_event(db, 'user.deleted', user.id)
+            user_id = user.id
+
+            async def _end_sessions() -> None:
+                # CurrentSessionTransaction 在响应之前提交；回滚时不会执行这些后台任务。
+                try:
+                    await session_store.revoke_user(user_id, EndReason.disabled)
+                finally:
+                    await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+
+            background_tasks.add_task(_end_sessions)
         return count
 
 
