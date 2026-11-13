@@ -11,7 +11,7 @@ from backend.utils.timezone import timezone
 # Webhook 端点（#167）：外部系统登记一个 URL + 想听的事件，事件发生后这边带签名 POST 过去。
 #
 # 🔴 **密钥加密存、不是哈希**（同 SK）：每次投递都要拿它重算签名。详情 / 列表里只给 `secret_hint`。
-# 重置密钥后旧密钥留 24 小时、这期间**两把都签**（Standard Webhooks 允许一次带多个签名做无停机轮换）。
+# 每把被替换的密钥独立保留 24 小时，连续重置时用所有未过期的密钥签名。
 #
 # 硬删、不走逻辑删除：删了的端点没有「还原」的需要，留着只会让 fan-out 的查询多一个条件
 #
@@ -33,6 +33,9 @@ class OpenWebhook(DataClassBase, DateTimeMixin):
     )
     secret_prev_expire_time: Mapped[datetime | None] = mapped_column(
         TimeZone, default=None, comment='旧密钥停止签名的时间'
+    )
+    secret_history: Mapped[str | None] = mapped_column(
+        UniversalText, default=None, comment='更早的签名密钥密文与各自到期时间（JSON）'
     )
     status: Mapped[int] = mapped_column(default=1, comment='状态（0：停用、1：正常）')
     disabled_reason: Mapped[str | None] = mapped_column(
