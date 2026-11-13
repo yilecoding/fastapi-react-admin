@@ -85,7 +85,7 @@ test.describe("换身份", () => {
   test("无权访问页进标签条时要有名字，不是裸 /403", async ({ authedPage: page }) => {
     // 语言包里 `menu:/403` 曾经被写成字面量 "/403"（en-US 是 Access denied），
     // 于是中文界面上这个 tab 显示成一段路径
-    await page.goto("/403?from=/system/dept&need=sys:dept:add")
+    await page.goto("/403?from=/system/dept&need=sys:dept:list")
     const bar = page.getByTestId("tab-bar")
     await expect(bar).toContainText("无权访问")
     await expect(bar).not.toContainText("/403")
