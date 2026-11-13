@@ -14,7 +14,7 @@ const searchSchema = z.object({
 /** 页面由 TabOutlet 挂载；这里只声明 search schema / staticData / 权限 */
 export const Route = createFileRoute("/_auth/system/data-permission")({
   validateSearch: searchSchema,
-  beforeLoad: requirePerm("data:scope:add"),
+  beforeLoad: requirePerm("data:scope:list"),
   staticData: { title: "数据权限" },
   component: () => null,
 })
