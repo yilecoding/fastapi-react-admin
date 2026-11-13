@@ -23,6 +23,17 @@ class CRUDOpenWebhook(DataScopedCRUD[OpenWebhook]):
     async def get(self, db: AsyncSession, pk: int) -> OpenWebhook | None:
         return await self.select_model(db, pk)
 
+    async def get_for_update(self, db: AsyncSession, pk: int) -> OpenWebhook | None:
+        """串行化同一端点的密钥重置；锁持有到调用方提交或回滚。"""
+        stmt = (
+            select(OpenWebhook)
+            .where(OpenWebhook.id == pk)
+            .with_for_update()
+            .with_hint(OpenWebhook.__table__, 'WITH (UPDLOCK, ROWLOCK)', 'mssql')
+            .execution_options(populate_existing=True)
+        )
+        return await db.scalar(stmt)
+
     async def get_by_app(self, db: AsyncSession, app_id: int) -> Sequence[OpenWebhook]:
         stmt = select(OpenWebhook).where(OpenWebhook.app_id == app_id).order_by(OpenWebhook.id)
         return (await db.scalars(stmt)).all()
