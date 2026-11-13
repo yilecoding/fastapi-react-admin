@@ -66,11 +66,13 @@ description: 登录、密码与会话的配置键、默认值和生效顺序，�
 | `SESSION_REFRESH_GRACE_SECONDS` | `30` | 上一枚 refresh token 的宽限期；生产环境不许低于 10 秒 |
 | `LOGIN_CAPTCHA_EXPIRE_SECONDS` | `300` | 图形验证码有效期 |
 | `MFA_CHALLENGE_SECONDS` · `MFA_CHALLENGE_ATTEMPTS` | `300` · `5` | 登录第二步的时限和次数 |
-| `COOKIE_SECURE` | 跟着请求走 | HTTPS 请求下发带 `Secure` 的 cookie。前面的反代终结了 TLS、又把 `X-Forwarded-Proto` 改写成 `http` 的部署，要显式设 `true` |
+| `COOKIE_SECURE` | 跟着请求走 | HTTPS 生产站点显式设 `true`（生产模板已开启），refresh / OAuth2 state cookie 始终带 `Secure`；生产未设为 `true` 会告警。本地 HTTP 保持不配置，纯 HTTP 部署可设 `false` |
 | `OAUTH2_GITHUB_*` · `OAUTH2_GOOGLE_*` | —— | 第三方登录的 Client ID / Secret |
 | `OAUTH2_AUTO_REGISTER` · `OAUTH2_AUTO_REGISTER_ROLE` | `false` · —— | 陌生第三方账号是否自动建号、挂哪个角色（角色编码找不到就拒绝登录） |
 
 </div>
+
+TLS 在上游终结时，入口代理必须覆盖客户端传入的 `X-Forwarded-Proto`，web 容器会保留有效的 `http` / `https`，缺失或异常值回退到当前连接协议。web 明文端口仅对可信代理开放，并正确配置 Uvicorn 的 `--forwarded-allow-ips`。
 
 完整的定义在 [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) 的「用户安全」「登录」「登录会话」三段。
 
