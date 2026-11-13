@@ -80,6 +80,14 @@ class TestAuthFailures:
         assert sts.replace('\n', '\\n') in log.response_body, '详情页靠响应体里的 StringToSign 排查'
         assert log.request_headers['x-sign'] == response.request.headers['x-sign'], 'x-sign 不打码，留着比对'
 
+    def test_non_ascii_signature_returns_mismatch_instead_of_500(self, client: TestClient, token_headers: dict) -> None:
+        issued = create_app(client, token_headers)
+        response = signed_get(client, issued, '/users', extra_headers={'X-Sign': 'é'})
+
+        assert response.status_code == 401
+        assert response.json()['code'] == 401
+        assert self._last_log(issued['id']).error_code == 'open.sign_mismatch'
+
     def test_replay_is_rejected_by_nonce(self, client: TestClient, token_headers: dict) -> None:
         issued = create_app(client, token_headers)
         ts, nonce = str(int(time.time() * 1000)), 'pytest-replay-nonce'
