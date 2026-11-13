@@ -43,7 +43,7 @@ import { ListBody, PageShell } from '../_shared/page-shell'
  * 引入 `rowExpandingFeature` 需要先把树拍平再让它重新分组，绕了一圈。
  * 直接递归渲染 `<TableRow>` 更直观，缩进用 padding-inline-start 表达层级。
  *
- * 权限守卫在路由层（`requirePerm('sys:dept:add')`），
+ * 查询权限守卫在路由层（`requirePerm('sys:dept:list')`），
  * 行内操作再用 `<Can>` 做二次门禁 —— 后者只管显隐，真正的拦截在后端。
  */
 export type DeptPageSearch = {
