@@ -31,7 +31,7 @@ const searchSchema = z.object({
  */
 export const Route = createFileRoute("/_auth/system/user")({
   validateSearch: searchSchema,
-  beforeLoad: requirePerm("sys:user:del"),
+  beforeLoad: requirePerm("sys:user:list"),
   staticData: { title: "用户管理" },
   component: () => null,
 })
