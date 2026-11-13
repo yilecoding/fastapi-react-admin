@@ -20,11 +20,12 @@ export function buildColumns(
   /** 变更记录（#260） */
   onHistory: (u: User) => void,
   /** 普通函数不能自己调 hook —— 由组件传进来 */
-  t: (k: string, vars?: Record<string, unknown>) => string
+  t: (k: string, vars?: Record<string, unknown>) => string,
+  canDelete: (u: User) => boolean
 ) {
   return [
-    // 超管不可删 —— 那一行也不给勾，免得批量删除里凑进一条注定失败的
-    buildSelectColumn(col, { canSelect: (u: User) => !u.is_superuser }, t),
+    // 超管与本人不可删，单条按钮和批量选择共用同一条规则。
+    buildSelectColumn(col, { canSelect: canDelete }, t),
     col.accessor('username', {
       header: t('用户'),
       cell: ({ row }) => {
@@ -110,7 +111,7 @@ export function buildColumns(
               },
               {
                 key: 'del', label: t('删除'), icon: IconTrash, perm: 'sys:user:del', danger: true,
-                disabled: u.is_superuser, testId: `delete-${u.username}`, onClick: () => onDelete(u),
+                disabled: !canDelete(u), testId: `delete-${u.username}`, onClick: () => onDelete(u),
               },
             ]}
           />

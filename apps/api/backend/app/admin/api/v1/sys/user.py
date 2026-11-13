@@ -358,8 +358,13 @@ async def unbind_user_phone(db: CurrentSessionTransaction, request: Request) -> 
         DependsRBAC,
     ],
 )
-async def delete_user(db: CurrentSessionTransaction, pk: Annotated[int, Path(description='用户 ID')]) -> ResponseModel:
-    count = await user_service.delete(db=db, pk=pk)
+async def delete_user(
+    db: CurrentSessionTransaction,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    pk: Annotated[int, Path(description='用户 ID')],
+) -> ResponseModel:
+    count = await user_service.delete(db=db, request=request, background_tasks=background_tasks, pk=pk)
     if count > 0:
         return response_base.success()
     return response_base.fail()

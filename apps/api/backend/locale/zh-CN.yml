@@ -361,6 +361,8 @@ error:
     permission_type_not_found: 权限类型不存在
     preference_too_many: '个人偏好最多存 {limit} 项'
     self_permission_forbidden: 禁止修改自身权限
+    self_delete_forbidden: 禁止删除当前登录账号
+    superuser_delete_forbidden: 超级管理员不能直接删除，请先由其他超级管理员取消其超级管理员权限
     sms_plugin_required: 短信插件未安装，无法发送验证码
     username_registered: 用户名已注册
     wrong_old_password: 原密码错误
