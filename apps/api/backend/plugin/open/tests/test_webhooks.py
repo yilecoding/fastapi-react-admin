@@ -9,6 +9,7 @@
 """
 
 import ast
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -17,6 +18,7 @@ import json
 from collections.abc import Iterator
 from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -33,7 +35,10 @@ from backend.plugin.open.events import WEBHOOK_EVENTS, load_webhook_extensions, 
 from backend.plugin.open.gateway.auth import SCOPES
 from backend.plugin.open.model import OpenEvent, OpenWebhook, OpenWebhookAttempt, OpenWebhookDelivery
 from backend.plugin.open.service import event_service, webhook_delivery, webhook_sign
+from backend.plugin.open.service import webhook_service as webhook_service_module
+from backend.plugin.open.service.secret import decrypt
 from backend.plugin.open.service.webhook_delivery import check_target, deliver_one
+from backend.plugin.open.service.webhook_service import webhook_service
 from backend.plugin.open.tests.conftest import CODE_PREFIX, SDK_DIR, create_app, run_db
 from backend.plugin.open.tests.test_open_api import _dept_id, _hard_delete_dept
 from backend.tests.utils.data_change import assert_never_recorded, changes_of, column_value, engine, field
@@ -490,6 +495,19 @@ class TestOutcomes:
 
 
 class TestSecret:
+    @staticmethod
+    def _reset(client: TestClient, headers: dict[str, str], pk: Any) -> str:
+        response = client.post(f'{HOOKS}/{pk}/secret', headers=headers).json()
+        assert response['code'] == 200, response
+        return response['data']['secret_key']
+
+    @staticmethod
+    def _ping(client: TestClient, headers: dict[str, str], pk: Any, receiver: Receiver) -> httpx.Request:
+        response = client.post(f'{HOOKS}/{pk}/ping', headers=headers).json()
+        assert response['code'] == 200, response
+        assert receiver.requests, response
+        return receiver.requests[-1]
+
     def test_plaintext_only_in_the_create_response(
         self, client: TestClient, token_headers: dict[str, str], subscribed: dict[str, Any]
     ) -> None:
@@ -530,6 +548,114 @@ class TestSecret:
             assert verify(new, request)
         finally:
             run_db(lambda db: _hard_delete_dept(db, dept_id))
+
+    def test_repeated_rotation_keeps_every_key_until_its_own_deadline(
+        self, client, token_headers, subscribed, receiver, monkeypatch
+    ) -> None:
+        hook = subscribed['hook']
+        pk, original = hook['id'], hook['secret_key']
+        clock = [timezone.now()]
+        test_clock = SimpleNamespace(now=lambda: clock[0])
+        monkeypatch.setattr(webhook_service_module, 'timezone', test_clock)
+        monkeypatch.setattr(webhook_delivery, 'timezone', test_clock)
+        first = self._reset(client, token_headers, pk)
+        first_deadline = hook_row(pk).secret_prev_expire_time
+        clock[0] += timedelta(hours=1)
+        second = self._reset(client, token_headers, pk)
+        second_deadline = hook_row(pk).secret_prev_expire_time
+        assert second_deadline == first_deadline + timedelta(hours=1)
+
+        request = self._ping(client, token_headers, pk, receiver)
+        assert len(request.headers['webhook-signature'].split()) == 3
+        assert all(verify(secret, request) for secret in (original, first, second))
+        history = json.loads(hook_row(pk).secret_history)
+        assert decrypt(history[0]['cipher']) == original
+        assert history[0]['expires_at'] == first_deadline.isoformat()
+        detail = client.get(f'{HOOKS}/{pk}', headers=token_headers)
+        listing = client.get(HOOKS, headers=token_headers, params={'app_id': subscribed['app']['id']})
+        for response in (detail, listing):
+            assert 'secret_history' not in response.text
+            assert all(secret not in response.text for secret in (original, first, second, history[0]['cipher']))
+        assert_never_recorded(changes_of('open_webhook', pk), original, first, second, history[0]['cipher'])
+
+        clock[0] = first_deadline
+        request = self._ping(client, token_headers, pk, receiver)
+        assert not verify(original, request), '到期边界立即停止使用 A，不能被后续重置续期'
+        assert verify(first, request) and verify(second, request)
+        assert len(request.headers['webhook-signature'].split()) == 2
+
+        third = self._reset(client, token_headers, pk)
+        assert all(decrypt(item['cipher']) != original for item in json.loads(hook_row(pk).secret_history))
+        request = self._ping(client, token_headers, pk, receiver)
+        assert not verify(original, request)
+        assert all(verify(secret, request) for secret in (first, second, third))
+
+        clock[0] = second_deadline
+        request = self._ping(client, token_headers, pk, receiver)
+        assert not verify(first, request)
+        assert verify(second, request) and verify(third, request)
+        clock[0] = hook_row(pk).secret_prev_expire_time
+        request = self._ping(client, token_headers, pk, receiver)
+        assert len(request.headers['webhook-signature'].split()) == 1
+        assert verify(third, request)
+
+    def test_rotation_preserves_the_previous_key_from_before_the_upgrade(
+        self, client, token_headers, subscribed, receiver
+    ) -> None:
+        hook = subscribed['hook']
+        first = self._reset(client, token_headers, hook['id'])
+        assert hook_row(hook['id']).secret_history is None, '旧版本的数据只有 secret_prev_*'
+        deadline = hook_row(hook['id']).secret_prev_expire_time
+        second = self._reset(client, token_headers, hook['id'])
+        request = self._ping(client, token_headers, hook['id'], receiver)
+        assert all(verify(secret, request) for secret in (hook['secret_key'], first, second))
+        assert json.loads(hook_row(hook['id']).secret_history)[0]['expires_at'] == deadline.isoformat()
+
+    def test_concurrent_rotations_keep_both_issued_keys_even_after_a_stale_read(
+        self, client, token_headers, subscribed, receiver
+    ) -> None:
+        from backend.tests.utils.db import async_test_db_session
+
+        pk = int(subscribed['hook']['id'])
+
+        async def _race() -> list[str]:
+            ready = asyncio.Barrier(2)
+
+            async def _rotate() -> str:
+                async with async_test_db_session.begin() as db:
+                    # 两边先读同一份旧状态；加锁后必须刷新 identity map 中的实例。
+                    stale = await db.get(OpenWebhook, pk)
+                    assert stale is not None
+                    await ready.wait()
+                    issued = await webhook_service.reset_secret(db=db, pk=pk)
+                return issued.secret_key
+
+            return await asyncio.wait_for(asyncio.gather(_rotate(), _rotate()), timeout=15)
+
+        issued = client.portal.call(_race)
+        assert len(set(issued)) == 2
+        request = self._ping(client, token_headers, pk, receiver)
+        assert len(request.headers['webhook-signature'].split()) == 3
+        assert all(verify(secret, request) for secret in [subscribed['hook']['secret_key'], *issued])
+
+    def test_rollback_restores_the_current_and_all_previous_keys(self, client, token_headers, subscribed) -> None:
+        from backend.tests.utils.db import async_test_db_session
+
+        pk = int(subscribed['hook']['id'])
+        self._reset(client, token_headers, pk)
+        self._reset(client, token_headers, pk)
+        before = hook_row(pk)
+
+        async def _rollback() -> None:
+            async with async_test_db_session() as db:
+                await webhook_service.reset_secret(db=db, pk=pk)
+                await db.flush()
+                await db.rollback()
+
+        client.portal.call(_rollback)
+        after = hook_row(pk)
+        for name in ('secret_cipher', 'secret_prev_cipher', 'secret_prev_expire_time', 'secret_history'):
+            assert getattr(after, name) == getattr(before, name)
 
 
 # ── 保存前的检查 ─────────────────────────────────────────────────────────────
@@ -709,7 +835,7 @@ def test_every_emitted_type_is_registered() -> None:
     names = {'emit', 'emit_user_event', 'emit_dept_event'}
     found: set[str] = set()
     for path in root.rglob('*.py'):
-        if '/tests/' in str(path) or 'alembic' in path.parts:
+        if 'tests' in path.parts or 'alembic' in path.parts:
             continue
         tree = ast.parse(path.read_text(encoding='utf-8'))
         for node in ast.walk(tree):

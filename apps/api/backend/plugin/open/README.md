@@ -148,7 +148,7 @@ POST <你的地址>
 content-type: application/json
 webhook-id: 2227231048117391360          # 事件 ID：重试时不变，按它去重
 webhook-timestamp: 1761750000            # 这一次尝试的时间（秒）
-webhook-signature: v1,<base64>           # 密钥轮换的 24 小时里会有两个，空格分隔
+webhook-signature: v1,<base64>           # 轮换期间可能有多个，空格分隔
 
 {"type":"dept.updated","timestamp":"2026-10-29T18:00:00+08:00","data":{"id":"2048601263515500544","code":"HQ","name":"总部","parent_id":null,"status":1}}
 ```
@@ -175,7 +175,7 @@ key  = 去掉 whsec_ 前缀之后 base64 解码得到的字节
 
 - 🔴 **拿收到的原始字节算**，不要先 `json.loads` 再 `json.dumps` 回去 —— 字节一变签名就对不上
 - `webhook-timestamp` 和你的时间差超过 5 分钟就拒掉（防重放）
-- 头里可能有两个签名（管理员刚重置过密钥，旧的还会一起签 24 小时），**任一个**对上即可
+- 头里可能有多个签名，**任一个**对上即可。每把被替换的密钥从被替换时起继续签名 24 小时；连续重置不会缩短已有的宽限期
 
 三份参考实现里都有 `verify_webhook`（Python `verify_webhook(headers, body, secret)` · Node `verifyWebhook(headers, body, secret)` ·
 Java `FraOpenSign.verifyWebhook(headers, body, secret)`），也可以直接用 Standard Webhooks 各语言的官方库。
