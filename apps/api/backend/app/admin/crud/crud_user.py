@@ -522,11 +522,14 @@ class CRUDUser(DataScopedCRUD[User]):
         :param username: 用户名
         :return:
         """
+        if user_id is None and username is None:
+            return None
+
         filters = {'deleted': 0}
 
-        if user_id:
+        if user_id is not None:
             filters['id'] = user_id
-        if username:
+        if username is not None:
             filters['username'] = username
 
         result = await self.select_models(
