@@ -82,7 +82,8 @@ class TestAuthFailures:
 
     def test_non_ascii_signature_returns_mismatch_instead_of_500(self, client: TestClient, token_headers: dict) -> None:
         issued = create_app(client, token_headers)
-        response = signed_get(client, issued, '/users', extra_headers={'X-Sign': 'é'})
+        # httpx 的 str header 值只接受 ASCII；传入原始 HTTP header 字节，Starlette 会按 Latin-1 解码。
+        response = signed_get(client, issued, '/users', extra_headers={'X-Sign': b'\xe9'})
 
         assert response.status_code == 401
         assert response.json()['code'] == 401
