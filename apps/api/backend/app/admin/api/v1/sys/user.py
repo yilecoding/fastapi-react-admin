@@ -174,10 +174,11 @@ async def create_user(
 @router.put('/{pk}', summary='更新用户信息', dependencies=[DependsSuperUser])
 async def update_user(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     pk: Annotated[int, Path(description='用户 ID')],
     obj: UpdateUserParam,
 ) -> ResponseModel:
-    count = await user_service.update(db=db, pk=pk, obj=obj)
+    count = await user_service.update(db=db, background_tasks=background_tasks, pk=pk, obj=obj)
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -186,11 +187,14 @@ async def update_user(
 @router.put('/{pk}/permissions', summary='更新用户权限', dependencies=[DependsSuperUser])
 async def update_user_permission(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     request: Request,
     pk: Annotated[int, Path(description='用户 ID')],
     type: Annotated[UserPermissionType, Query(description='权限类型')],
 ) -> ResponseModel:
-    count = await user_service.update_permission(db=db, request=request, pk=pk, type=type)
+    count = await user_service.update_permission(
+        db=db, background_tasks=background_tasks, request=request, pk=pk, type=type
+    )
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -198,9 +202,11 @@ async def update_user_permission(
 
 @router.put('/me/password', summary='更新当前用户密码', dependencies=[DependsJwtAuth])
 async def update_user_password(
-    db: CurrentSessionTransaction, request: Request, obj: ResetPasswordParam
+    db: CurrentSessionTransaction, background_tasks: BackgroundTasks, request: Request, obj: ResetPasswordParam
 ) -> ResponseModel:
-    count = await user_service.update_password(db=db, user_id=request.user.id, obj=obj)
+    count = await user_service.update_password(
+        db=db, background_tasks=background_tasks, user_id=request.user.id, obj=obj
+    )
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -209,10 +215,11 @@ async def update_user_password(
 @router.put('/{pk}/password', summary='重置用户密码', dependencies=[DependsSuperUser])
 async def reset_user_password(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     pk: Annotated[int, Path(description='用户 ID')],
     password: Annotated[str, Body(embed=True, description='新密码')],
 ) -> ResponseModel:
-    count = await user_service.reset_password(db=db, pk=pk, password=password)
+    count = await user_service.reset_password(db=db, background_tasks=background_tasks, pk=pk, password=password)
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -221,10 +228,13 @@ async def reset_user_password(
 @router.put('/me/nickname', summary='更新当前用户昵称', dependencies=[DependsJwtAuth])
 async def update_user_nickname(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     request: Request,
     nickname: Annotated[str, Body(embed=True, description='用户昵称')],
 ) -> ResponseModel:
-    count = await user_service.update_nickname(db=db, user_id=request.user.id, nickname=nickname)
+    count = await user_service.update_nickname(
+        db=db, background_tasks=background_tasks, user_id=request.user.id, nickname=nickname
+    )
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -233,6 +243,7 @@ async def update_user_nickname(
 @router.put('/me/avatar', summary='更新当前用户头像', dependencies=[DependsJwtAuth])
 async def update_user_avatar(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     request: Request,
     # 🔴 入参必须是 HttpUrl | None，**不能是裸 str**。
     # 读取侧（GetUserInfoDetail.avatar）是 `HttpUrl | None`，写入侧原来收裸 str ——
@@ -242,7 +253,9 @@ async def update_user_avatar(
     # None 表示「清空头像」，service 会写 NULL 而不是空串。
     avatar: Annotated[HttpUrl | None, Body(embed=True, description='头像地址，null 表示清空')] = None,
 ) -> ResponseModel:
-    count = await user_service.update_avatar(db=db, user_id=request.user.id, avatar=avatar)
+    count = await user_service.update_avatar(
+        db=db, background_tasks=background_tasks, user_id=request.user.id, avatar=avatar
+    )
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -251,6 +264,7 @@ async def update_user_avatar(
 @router.put('/me/timezone', summary='更新当前用户显示时区', dependencies=[DependsJwtAuth])
 async def update_user_timezone(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     request: Request,
     # 只挂 DependsJwtAuth，不挂权限码：这是**个人偏好**，和头像/邮箱同一类，
     # 每个登录用户都该能改自己的，不需要管理员授权。
@@ -260,7 +274,9 @@ async def update_user_timezone(
     # 那个用户所有带时间的页面都会白屏，而且自己改不回来）。
     timezone: Annotated[IanaTimeZone, Body(embed=True, description='IANA 时区标识，如 Asia/Shanghai')],
 ) -> ResponseModel:
-    count = await user_service.update_timezone(db=db, user_id=request.user.id, tz=timezone)
+    count = await user_service.update_timezone(
+        db=db, background_tasks=background_tasks, user_id=request.user.id, tz=timezone
+    )
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -269,11 +285,14 @@ async def update_user_timezone(
 @router.put('/me/email', summary='更新当前用户邮箱', dependencies=[DependsJwtAuth])
 async def update_user_email(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     request: Request,
     captcha: Annotated[str, Body(embed=True, description='邮箱验证码')],
     email: Annotated[EmailStr, Body(embed=True, description='用户邮箱')],
 ) -> ResponseModel:
-    count = await user_service.update_email(db=db, user_id=request.user.id, captcha=captcha, email=email)
+    count = await user_service.update_email(
+        db=db, background_tasks=background_tasks, user_id=request.user.id, captcha=captcha, email=email
+    )
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -332,19 +351,24 @@ async def send_phone_captcha(
 @router.put('/me/phone', summary='用验证码绑定当前用户的手机号', dependencies=[DependsJwtAuth])
 async def update_user_phone(
     db: CurrentSessionTransaction,
+    background_tasks: BackgroundTasks,
     request: Request,
     captcha: Annotated[str, Body(embed=True, min_length=1, max_length=8, description='短信验证码')],
     phone: Annotated[CustomPhoneNumber, Body(embed=True, description='手机号')],
 ) -> ResponseModel:
-    count = await user_service.update_phone(db=db, user_id=request.user.id, captcha=captcha, phone=phone)
+    count = await user_service.update_phone(
+        db=db, background_tasks=background_tasks, user_id=request.user.id, captcha=captcha, phone=phone
+    )
     if count > 0:
         return response_base.success()
     return response_base.fail()
 
 
 @router.delete('/me/phone', summary='解绑当前用户的手机号', dependencies=[DependsJwtAuth])
-async def unbind_user_phone(db: CurrentSessionTransaction, request: Request) -> ResponseModel:
-    count = await user_service.unbind_phone(db=db, user_id=request.user.id)
+async def unbind_user_phone(
+    db: CurrentSessionTransaction, background_tasks: BackgroundTasks, request: Request
+) -> ResponseModel:
+    count = await user_service.unbind_phone(db=db, background_tasks=background_tasks, user_id=request.user.id)
     if count > 0:
         return response_base.success()
     return response_base.fail()
