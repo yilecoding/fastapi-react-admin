@@ -14,7 +14,7 @@
 不限次数就是可以枚举的。
 
 🔴 **发送失败必须让调用方看到。** 邮件插件 #64 修过同款：吞掉异常返回成功，用户对着一个永远填不对的验证码框等。
-`sms_service.send()` 失败抛 `SmsSendError`，这里不接，并且把刚存的码删掉 —— 没发出去的码留着只会让人猜。
+`sms_service.send()` 成功后才更新码；失败原样抛出，保留上一条已发出的码及其试错计数和剩余有效期。
 
 验证码用 `secrets` 生成（邮件插件那份用的是 `random.randint(1, 9)`，没有 0、也不是密码学随机），6 位纯数字：
 阿里云「验证码类模板变量限制为 4～6 个字符」、腾讯云「只能传入 0 - 6 位纯数字」，6 位两家都收。
@@ -67,28 +67,27 @@ def generate_code() -> str:
 class SmsCaptchaService:
     @staticmethod
     async def send(*, scene: str, subject: str, phone: str, user_id: int | None) -> None:
-        """生成一个新码、存 Redis、走业务模板 `captcha` 发出去。
+        """生成新码、走业务模板 `captcha` 发送，成功后存 Redis。
 
-        同一个 (scene, subject, phone) 再发一次会**覆盖**旧码（旧码作废），试错计数一起清零 ——
-        用户点「重新发送」就是不想要上一个了。频率由 `captcha` 模板声明的冷却 / 号码日上限兜着（`sms_guard`）。
+        同一个 (scene, subject, phone) 重发成功才覆盖旧码，试错计数一起清零。
+        频率由 `captcha` 模板声明的冷却 / 号码日上限兜着（`sms_guard`）。
 
-        :raises SmsSendError: 没发出去（被频率防护拦下 / 厂商拒收 / 没有可用配置）。码已删，调用方原样抛给前端
+        :raises SmsSendError: 被频率防护拦下 / 厂商拒收 / 没有可用配置等；旧码不变，调用方原样处理
         """
         key = captcha_key(scene, subject, phone)
         code = generate_code()
-        await redis_client.set(key, code, ex=settings.SMS_CAPTCHA_EXPIRE_SECONDS)
-        await redis_client.delete(f'{key}:attempts')
-        try:
-            await sms_service.send(
-                phone=phone,
-                template='captcha',
-                params={'code': code, 'minutes': str(max(settings.SMS_CAPTCHA_EXPIRE_SECONDS // 60, 1))},
-                user_id=user_id,
-            )
-        except Exception:
-            # 没发出去的码不能留着：留着就是「用户收不到、但接口说发了」
-            await redis_client.delete(key, f'{key}:attempts')
-            raise
+        await sms_service.send(
+            phone=phone,
+            template='captcha',
+            params={'code': code, 'minutes': str(max(settings.SMS_CAPTCHA_EXPIRE_SECONDS // 60, 1))},
+            user_id=user_id,
+        )
+        # #304：限流或发送失败不能覆盖 / 删除用户手里仍有效的旧码，也不能重置它的试错次数。
+        # 新码与试错计数原子切换，避免验码 Lua 在两次写入之间消耗新码或继承旧计数。
+        async with redis_client.pipeline(transaction=True) as pipe:
+            pipe.set(key, code, ex=settings.SMS_CAPTCHA_EXPIRE_SECONDS)
+            pipe.delete(f'{key}:attempts')
+            await pipe.execute()
 
     @staticmethod
     async def verify(*, scene: str, subject: str, phone: str, code: str) -> str:
