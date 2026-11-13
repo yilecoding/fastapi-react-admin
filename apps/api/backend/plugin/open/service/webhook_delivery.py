@@ -39,6 +39,7 @@ from backend.plugin.open.model import OpenWebhookAttempt
 from backend.plugin.open.service import webhook_sign
 from backend.plugin.open.service.secret import decrypt
 from backend.plugin.open.service.webhook_config import backoff_schedule, max_attempts, webhook_settings
+from backend.plugin.open.service.webhook_secrets import active_previous_secrets
 from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
@@ -123,14 +124,9 @@ class AttemptResult:
 
 
 def _signing_secrets(hook: OpenWebhook) -> list[str]:
-    out = [decrypt(hook.secret_cipher)]
-    if (
-        hook.secret_prev_cipher
-        and hook.secret_prev_expire_time is not None
-        and hook.secret_prev_expire_time > timezone.now()
-    ):
-        out.append(decrypt(hook.secret_prev_cipher))
-    return out
+    return [decrypt(hook.secret_cipher)] + [
+        decrypt(cipher) for cipher, _ in active_previous_secrets(hook, timezone.now())
+    ]
 
 
 async def _post(hook: OpenWebhook, event: OpenEvent) -> AttemptResult:

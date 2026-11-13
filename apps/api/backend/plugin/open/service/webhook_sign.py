@@ -3,7 +3,7 @@
 ```
 webhook-id: <事件 id>            重试不变，对方拿它去重
 webhook-timestamp: <秒>          每次尝试的时间
-webhook-signature: v1,<base64> [v1,<base64>]   空格分隔；密钥轮换期两把各签一个
+webhook-signature: v1,<base64> [v1,<base64>]   空格分隔；每把未过期的密钥各签一个
 签名 = base64(HMAC-SHA256(key, f"{id}.{timestamp}.{body}"))，key = 去掉 whsec_ 前缀后 base64 解码的字节
 ```
 

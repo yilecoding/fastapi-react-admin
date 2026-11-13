@@ -53,6 +53,7 @@ register_audited(
         'secret_hint',
         'secret_prev_cipher',
         'secret_prev_expire_time',
+        'secret_history',
         'disabled_reason',
         'disabled_time',
         'consecutive_failures',
