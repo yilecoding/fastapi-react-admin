@@ -88,7 +88,7 @@ def signed_get(
     secret: str | None = None,
     timestamp: str | None = None,
     nonce: str | None = None,
-    extra_headers: dict[str, str] | None = None,
+    extra_headers: dict[str, str | bytes] | None = None,
 ) -> Any:
     url = f'{OPEN_BASE}{path}' + (f'?{params}' if params else '')
     headers = sdk.sign_headers(
