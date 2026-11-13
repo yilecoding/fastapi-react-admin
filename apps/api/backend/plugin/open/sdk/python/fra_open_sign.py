@@ -72,7 +72,7 @@ def verify_webhook(headers: dict[str, str], body: bytes, secret: str, *, toleran
     """验一条推过来的事件：签名对、时间戳在 ±tolerance 秒内，返回 True。
 
     🔴 `body` 要传**收到的原始字节**，不要先 `json.loads` 再 `json.dumps` 回去 —— 字节一变签名就对不上。
-    密钥轮换的那 24 小时里一条消息带两个签名（空格分隔），任一个对上即可。
+    轮换期可能带多个签名（空格分隔），任一个对上即可；每把被替换的密钥继续签名 24 小时。
     对方会重试（至少一次投递），请按 `webhook-id` 去重。
 
     用法（Flask）::
