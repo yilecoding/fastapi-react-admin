@@ -16,7 +16,7 @@ const searchSchema = z.object({
 /** 页面由 TabOutlet 挂载；这里只声明 search schema / staticData / 权限 */
 export const Route = createFileRoute("/_auth/system/menu")({
   validateSearch: searchSchema,
-  beforeLoad: requirePerm("sys:menu:add"),
+  beforeLoad: requirePerm("sys:menu:list"),
   staticData: { title: "菜单管理" },
   component: () => null,
 })
