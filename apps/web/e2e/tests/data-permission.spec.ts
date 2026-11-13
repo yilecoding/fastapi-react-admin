@@ -322,7 +322,7 @@ async function createRole(
  * 🔴 不能硬编码种子里的雪花 ID —— 那串数字只在这一份种子里成立（同 CLAUDE.md
  * 「部门与角色的编码」那节的理由）。按 `perms` / `path` 找。
  *
- * 为什么非要绑菜单：`/system/dept` 的路由守卫是 `requirePerm('sys:dept:add')`，
+ * 为什么非要绑菜单：`/system/dept` 的路由守卫是 `requirePerm('sys:dept:list')`，
  * 权限码来自**角色菜单**。不绑的话每个测试账号打开部门页都会被重定向到 /403，
  * 测出来的「看不见任何部门」是假的 —— 它压根没进到那一页。
  */

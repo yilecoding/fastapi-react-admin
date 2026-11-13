@@ -6,8 +6,8 @@ import { requirePerm } from "@admin/platform/auth/guards"
 /**
  * 参数配置（`plugin/config` 插件）。
  *
- * 读接口只要 `DependsJwtAuth`，但这一页的用途就是改配置，
- * 所以守卫按「能编辑」来 —— 只能看的人进来只会看到一堆改不动的输入框。
+ * 页面入口与后端查询接口统一要求 `sys:config:list`，
+ * 保存配置由页面内的 `sys:config:edit` 单独控制。
  */
 const searchSchema = z.object({
   /** 左栏选中的分类：LOGIN / USER_SECURITY / EMAIL / AI / other */
@@ -21,7 +21,7 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/_auth/plugins/config")({
   validateSearch: searchSchema,
-  beforeLoad: requirePerm("sys:config:edit"),
+  beforeLoad: requirePerm("sys:config:list"),
   staticData: { title: "参数配置" },
   component: () => null,
 })
