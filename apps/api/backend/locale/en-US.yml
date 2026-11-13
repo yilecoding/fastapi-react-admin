@@ -360,6 +360,8 @@ error:
     permission_type_not_found: Permission type does not exist
     preference_too_many: 'You can store at most {limit} personal preferences'
     self_permission_forbidden: You cannot change your own permissions
+    self_delete_forbidden: You cannot delete your current account
+    superuser_delete_forbidden: A superuser cannot be deleted directly. Ask another superuser to remove their superuser privileges first
     sms_plugin_required: The SMS plugin is not installed, so a verification code cannot be sent
     username_registered: Username is already registered
     wrong_old_password: Current password is incorrect
