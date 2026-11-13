@@ -56,6 +56,21 @@ def _unbind_admin_afterwards(client: TestClient, token_headers: dict[str, str]) 
 
 
 class TestBindFlow:
+    def test_cooldown_resend_keeps_the_received_code_usable(
+        self, client: TestClient, token_headers: dict[str, str], make_config: Callable[..., dict[str, Any]]
+    ) -> None:
+        make_config('bind-resend', is_default=True)
+        me = _me(client, token_headers)
+        assert client.post(CAPTCHA, headers=token_headers, json={'phone': PHONE_A}).json()['code'] == 200
+        code = _peek_code(client, me['id'], PHONE_A)
+        assert code
+        again = client.post(CAPTCHA, headers=token_headers, json={'phone': PHONE_A})
+        assert again.status_code == 400, again.text
+        assert _peek_code(client, me['id'], PHONE_A) == code
+        bound = client.put(PHONE, headers=token_headers, json={'phone': PHONE_A, 'captcha': code})
+        assert bound.json()['code'] == 200, bound.text
+        assert _me(client, token_headers)['phone'] == PHONE_A
+
     def test_send_verify_bind_then_unbind(
         self, client: TestClient, token_headers: dict[str, str], make_config: Callable[..., dict[str, Any]]
     ) -> None:
