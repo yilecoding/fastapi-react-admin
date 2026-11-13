@@ -1,4 +1,5 @@
 import { fingerprint, type ResumeStore } from './resume'
+import { UploadSessionEndedError } from './errors'
 
 /** 服务端的分片会话（`/sys/files/multipart`） */
 export interface MultipartSession {
@@ -64,97 +65,135 @@ const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
  * - **失败**（重试用尽）= 留着会话和续传记录，下次「重试」或刷新后重新选这个文件，从断的地方接着传
  */
 export async function uploadChunked<R>(file: File, api: ChunkedApi<R>, opts: ChunkedOptions): Promise<R> {
-  const { signal, resume } = opts
+  const { resume } = opts
+  // 单片失败只终止本轮 worker，不能把调用方的 signal 标成「用户取消」而删掉续传会话。
+  const controller = new AbortController()
+  const { signal } = controller
+  const cancel = () => controller.abort(opts.signal.reason)
+  opts.signal.addEventListener('abort', cancel, { once: true })
+  if (opts.signal.aborted) cancel()
   const sleep = opts.sleep ?? defaultSleep
   const fp = fingerprint(file)
 
   let session: MultipartSession | null = null
-  const known = resume?.get(fp)
-  if (known) {
-    session = await api.status(known.upload_id)
-    // 会话还活着但对不上（服务端换了分片大小、文件被改过）就不续了，重开一个
-    if (session && session.size !== file.size) session = null
-    if (!session) resume?.remove(fp)
-  }
-  if (!session) {
-    session = await api.init(file, { public: opts.meta?.public })
-    resume?.set(fp, {
-      upload_id: session.upload_id,
-      name: file.name,
-      size: file.size,
-      lastModified: file.lastModified,
-      source: opts.meta?.source,
-      public: opts.meta?.public,
-      created_at: Date.now(),
-    })
-  }
-  const s = session
+  try {
+    signal.throwIfAborted()
+    const known = resume?.get(fp)
+    if (known) {
+      session = await api.status(known.upload_id)
+      signal.throwIfAborted()
+      // 会话还活着但对不上（服务端换了分片大小、文件被改过）就不续了，重开一个
+      if (session && session.size !== file.size) session = null
+      if (!session) resume?.remove(fp)
+    }
+    if (!session) {
+      session = await api.init(file, { public: opts.meta?.public })
+      signal.throwIfAborted()
+      resume?.set(fp, {
+        upload_id: session.upload_id,
+        name: file.name,
+        size: file.size,
+        lastModified: file.lastModified,
+        source: opts.meta?.source,
+        public: opts.meta?.public,
+        created_at: Date.now(),
+      })
+    }
+    const s = session
 
-  const done = new Set(s.uploaded_parts)
-  let doneBytes = 0
-  for (const n of done) {
-    const [a, b] = partRange(n, s.chunk_size, s.size)
-    doneBytes += b - a
-  }
-  const inflight = new Map<number, number>()
-  const report = () => {
-    let sum = doneBytes
-    for (const v of inflight.values()) sum += v
-    opts.onBytes(Math.min(sum, s.size), s.size)
-  }
-  report()
+    const done = new Set(s.uploaded_parts)
+    let doneBytes = 0
+    for (const n of done) {
+      const [a, b] = partRange(n, s.chunk_size, s.size)
+      doneBytes += b - a
+    }
+    const inflight = new Map<number, number>()
+    const report = () => {
+      if (signal.aborted) return
+      let sum = doneBytes
+      for (const v of inflight.values()) sum += v
+      opts.onBytes(Math.min(sum, s.size), s.size)
+    }
+    report()
 
-  const queue: number[] = []
-  for (let n = 1; n <= s.total_parts; n++) if (!done.has(n)) queue.push(n)
+    const queue: number[] = []
+    for (let n = 1; n <= s.total_parts; n++) if (!done.has(n)) queue.push(n)
 
-  const sendPart = async (n: number) => {
-    const [a, b] = partRange(n, s.chunk_size, s.size)
-    const blob = file.slice(a, b)
-    const attempts = (opts.retries ?? 3) + 1
-    for (let attempt = 1; ; attempt++) {
-      if (signal.aborted) throw new DOMException('upload aborted', 'AbortError')
-      try {
-        await api.putPart(s.upload_id, n, blob, {
-          signal,
-          onProgress: (loaded) => {
-            inflight.set(n, loaded)
-            report()
-          },
-        })
-        inflight.delete(n)
-        doneBytes += b - a
-        report()
-        return
-      } catch (err) {
-        inflight.delete(n)
-        report()
-        if (attempt >= attempts || !isRetryable(err) || signal.aborted) throw err
-        // 指数退避：1s / 2s / 4s
-        await sleep(1000 * 2 ** (attempt - 1))
+    const sendPart = async (n: number) => {
+      const [a, b] = partRange(n, s.chunk_size, s.size)
+      const blob = file.slice(a, b)
+      const attempts = (opts.retries ?? 3) + 1
+      for (let attempt = 1; ; attempt++) {
+        if (signal.aborted) throw new DOMException('upload aborted', 'AbortError')
+        try {
+          await api.putPart(s.upload_id, n, blob, {
+            signal,
+            onProgress: (loaded) => {
+              if (signal.aborted) return
+              inflight.set(n, loaded)
+              report()
+            },
+          })
+          signal.throwIfAborted()
+          inflight.delete(n)
+          doneBytes += b - a
+          report()
+          return
+        } catch (err) {
+          inflight.delete(n)
+          report()
+          if (attempt >= attempts || !isRetryable(err) || signal.aborted) throw err
+          // 指数退避：1s / 2s / 4s
+          // 退避中的 worker 也要立即停，不能等定时器结束才让本轮上传退出。
+          await new Promise<void>((resolve, reject) => {
+            const onAbort = () => reject(signal.reason)
+            signal.addEventListener('abort', onAbort, { once: true })
+            void sleep(1000 * 2 ** (attempt - 1))
+              .then(resolve, reject)
+              .finally(() => {
+                signal.removeEventListener('abort', onAbort)
+              })
+            if (signal.aborted) onAbort()
+          })
+        }
       }
     }
-  }
 
-  try {
     const workers = Array.from({ length: Math.min(opts.concurrency ?? 3, queue.length) }, async () => {
-      for (;;) {
-        const n = queue.shift()
-        if (n === undefined) return
-        await sendPart(n)
+      try {
+        for (;;) {
+          signal.throwIfAborted()
+          const n = queue.shift()
+          if (n === undefined) return
+          await sendPart(n)
+        }
+      } catch (err) {
+        // 保留第一个失败原因，同时中止其余片及它们的重试。
+        controller.abort(err)
+        throw err
       }
     })
-    await Promise.all(workers)
-    if (signal.aborted) throw new DOMException('upload aborted', 'AbortError')
+    // 所有 worker 真正退出后才向队列报失败，下一文件 / 重试不会和本轮 PUT 重叠。
+    await Promise.allSettled(workers)
+    signal.throwIfAborted()
     opts.onFinalizing?.()
+    signal.throwIfAborted()
     const result = await api.complete(s.upload_id)
+    signal.throwIfAborted()
     resume?.remove(fp)
     return result
   } catch (err) {
-    if (signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
+    if (
+      session &&
+      !(opts.signal.reason instanceof UploadSessionEndedError) &&
+      (opts.signal.aborted || (err instanceof Error && err.name === 'AbortError'))
+    ) {
       // 取消 = 放弃：服务端的分片和会话一起清（失败了也无所谓，定时清理会兜底）
       resume?.remove(fp)
-      await api.abort(s.upload_id).catch(() => {})
+      await api.abort(session.upload_id).catch(() => {})
     }
     throw err
+  } finally {
+    opts.signal.removeEventListener('abort', cancel)
   }
 }

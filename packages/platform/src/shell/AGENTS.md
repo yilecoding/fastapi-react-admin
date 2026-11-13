@@ -412,6 +412,9 @@ Google Drive 那种：标题「正在上传 N 项内容」、副栏「还剩 X�
   「有队列项**或**有未完成的分片」—— 只看队列项的话，刷新后那几行永远显示不出来
 - 完成后浮窗**留着**直到用户关掉；一有新文件入队就展开弹出
 - 列表刷新由浮窗组件挂载时 `bind()` 进 store（store 里没有 queryClient）
+- 🔴 **队列和 AI 抽屉都是账号状态**（#326）：显式登录 / 退出及 `tokenStore.subscribeIdentity` 换人时 reset，同账号刷新 token 不 reset。
+  只靠卸载不够：旧 `File`、业务回调和续传核对仍会存活。reset 要取消队列、保留订阅，并在 await 后挡住旧代次结果。
+  实测：`packages/platform/src/auth/session-state.test.ts` 覆盖退出 / 失效 / 换人和迟到结果；分片、按用户隔离续传见 [file 分册](../pages/file/AGENTS.md)。
 - 窄屏贴底全宽；桌面端 `sm:w-[22rem]` 固定在右下，`z-40` 在 Dialog 之下
 
 ⚠️ 写 E2E 时注意：**折叠态下行是不渲染的**，等「传完」要等 toast 或先展开，不要等行的 `data-status`
