@@ -1,6 +1,6 @@
 import asyncio
 import datetime
-import os
+import secrets
 import threading
 import time
 
@@ -13,6 +13,27 @@ from backend.common.log import log
 from backend.core.conf import settings
 from backend.database.redis import RedisCli, redis_client
 from backend.utils.timezone import timezone
+
+_RENEW_NODE_LEASE = """
+local current = redis.call('GET', KEYS[1])
+if current == ARGV[1] then
+    return redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+if not current then
+    local registered = redis.call('SET', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2])
+    if registered then
+        return 2
+    end
+end
+return 0
+"""
+
+_RELEASE_NODE_LEASE = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
 
 
 @dataclass(frozen=True)
@@ -55,6 +76,16 @@ class SnowflakeNodeManager:
         self.worker_id: int | None = None
         self.node_redis_prefix: str = f'{settings.SNOWFLAKE_REDIS_PREFIX}:nodes'
         self._heartbeat_task: asyncio.Task | None = None
+        self._node_token = secrets.token_hex(16)
+        self._lease_valid = True
+        self._lease_deadline: float | None = None
+
+    @property
+    def lease_valid(self) -> bool:
+        """Redis 已确认当前进程仍持有节点租约。"""
+        if self._lease_deadline is not None and time.monotonic() >= self._lease_deadline:
+            self._lease_valid = False
+        return self._lease_valid
 
     async def acquire_node_id(self) -> tuple[int, int]:
         """从 Redis 获取可用的 datacenter_id 和 worker_id"""
@@ -79,8 +110,34 @@ class SnowflakeNodeManager:
 
     async def _register(self, datacenter_id: int, worker_id: int) -> bool:
         key = f'{self.node_redis_prefix}:{datacenter_id}:{worker_id}'
-        value = f'pid:{os.getpid()}-ts:{timezone.now().timestamp()}'
-        return await self._redis.set(key, value, nx=True, ex=settings.SNOWFLAKE_NODE_TTL_SECONDS)
+        request_started = time.monotonic()
+        registered = await self._redis.set(key, self._node_token, nx=True, ex=settings.SNOWFLAKE_NODE_TTL_SECONDS)
+        if registered:
+            self._lease_deadline = request_started + settings.SNOWFLAKE_NODE_TTL_SECONDS
+        return bool(registered)
+
+    async def _renew_lease(self, key: str) -> int:
+        """续期当前 token 的租约；key 丢失时尝试原子重占。"""
+        request_started = time.monotonic()
+        renewed = await self._redis.eval(
+            _RENEW_NODE_LEASE,
+            1,
+            key,
+            self._node_token,
+            str(settings.SNOWFLAKE_NODE_TTL_SECONDS),
+        )
+        if renewed:
+            self._lease_valid = True
+            self._lease_deadline = request_started + settings.SNOWFLAKE_NODE_TTL_SECONDS
+            if renewed == 2:
+                log.warning(f'雪花算法节点租约丢失后已重新占位：key={key}')
+            else:
+                log.debug(f'雪花算法节点心跳成功：key={key}')
+        else:
+            self._lease_valid = False
+            self._lease_deadline = None
+            log.error(f'雪花算法节点租约已被其他进程占用，停止发号：key={key}')
+        return renewed
 
     async def start_heartbeat(self, datacenter_id: int, worker_id: int) -> None:
         """启动节点心跳"""
@@ -92,9 +149,9 @@ class SnowflakeNodeManager:
             while True:
                 await asyncio.sleep(settings.SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS)
                 try:
-                    await self._redis.expire(key, settings.SNOWFLAKE_NODE_TTL_SECONDS)
-                    log.debug(f'雪花算法节点心跳任务开始：datacenter_id={datacenter_id}, worker_id={worker_id}')
+                    await self._renew_lease(key)
                 except Exception as e:
+                    self._lease_valid = False
                     log.error(f'雪花算法节点心跳任务失败：{e}')
 
         self._heartbeat_task = asyncio.create_task(heartbeat())
@@ -110,7 +167,7 @@ class SnowflakeNodeManager:
 
         if self.datacenter_id is not None and self.worker_id is not None:
             key = f'{self.node_redis_prefix}:{self.datacenter_id}:{self.worker_id}'
-            await self._redis.delete(key)
+            await self._redis.eval(_RELEASE_NODE_LEASE, 1, key, self._node_token)
 
 
 class Snowflake:
@@ -195,6 +252,9 @@ class Snowflake:
             raise errors.ServerError(msg=t('error.snowflake.generation_failed'))
 
         with self._lock:
+            if self._auto_allocated and self._node_manager and not self._node_manager.lease_valid:
+                raise errors.ServerError(msg=t('error.snowflake.generation_failed'))
+
             timestamp = self._current_ms()
 
             # 时钟回拨处理
