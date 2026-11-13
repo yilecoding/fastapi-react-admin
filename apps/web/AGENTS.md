@@ -90,3 +90,18 @@ E2E 靠 `page.route` 造一个不同的 `buildId` 来验，见
 ⚠️ 换主题、换语言都不用碰舞台：配色是 `.tenon-stage-box` / `.dark .tenon-stage-box` 上的一组
 自定义属性，文案在 `-sign-in-brand.tsx`。验收截图要覆盖 390 / 1024 / 1280 / 1440 / 1920 五档宽度、
 浅深两套、英文一套、减弱动效一套 —— 英文标题会换成三行，最容易在 1024 宽把舞台挤扁。
+
+## TLS 在外层终结时，容器的 `$scheme` 仍是 HTTP（#322）
+
+**症状**：HTTPS 站点登录正常，但 refresh / OAuth2 state cookie 不带 `Secure`，不会有报错。
+**根因**：外层 LB / 宝塔把 HTTPS 转成 HTTP，`nginx.conf` 原来用 `$scheme` 覆盖了上游协议；
+后端 `COOKIE_SECURE=None` 跟着 `request.url.scheme` 走，看到的一直是 HTTP。
+**修法**：web 的 API / uploads / ws 代理保留单个 `http` / `https`，缺失、非法协议和逗号列表回退到连接协议。
+外层入口必须覆盖客户端传入的协议头，web 端口仅对可信入口开放；Uvicorn 的转发信任范围仍须限到代理网段。
+HTTPS 生产配置另外显式设 `COOKIE_SECURE=true`（生产示例已开启），prod 未开启时告警，HTTP 开发保留自动模式。
+
+**实测证据**（2026-11-13）：[`deploy/tests/test_forwarded_proto.py`](../../deploy/tests/test_forwarded_proto.py)
+用真实 nginx 容器覆盖 3 条代理路径 × 8 种协议头，共 24 组，URI / 查询串也原样到达后端；恢复旧转发后 6 组失败。
+本地使用缓存的 nginx 1.31.3（生产固定镜像拉取超时），CI 默认读取 Dockerfile 中固定的镜像版本。
+后端 `test_cookie_transport.py` 用真实 Uvicorn 代理中间件验证 refresh / OAuth2 cookie 的设置与清除，12 条通过：
+可信 HTTPS 加 Secure、HTTP 不加、不可信代理头不生效、显式 true / false 优先；移除 prod 告警后对应 2 条测试失败。
