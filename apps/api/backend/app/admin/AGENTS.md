@@ -3,6 +3,23 @@
 > 这份文件是 [`apps/api/AGENTS.md`](../../../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的文件时才加载。
 > 跨模块的硬纪律仍然只在根 `CLAUDE.md` 里有一份。
 
+## 用户快照：刷新身份查询与提交后清理（#313）
+
+🔴 **受限用户带有效 Bearer 调 `/auth/refresh`，会误报「账号已停用」并撤销会话。**
+中间件已设置数据范围上下文，而 `refresh_token` 的 `user_dao.get` 会应用范围过滤；
+STAFF 这类「启用过滤、没有规则」的用户连自己也查不到。认证身份查询必须在调用点包
+`bypass_data_scope()`，保留 DAO 在用户详情等展示路径上的过滤。
+
+🔴 **降权接口返回成功，旧超管 / staff 权限仍可能在 Redis 快照里存活 30 分钟。**
+`user_service` 在写事务里直接删快照，并发请求可把提交前的旧行重新缓存。各用户编辑入口
+统一传入 `BackgroundTasks`、调用 `user_cache_manager.clear`；`CurrentSessionTransaction` 的
+`scope='function'` 保证先提交，再执行成功响应上的后台清理，回滚时不清。
+
+**实测证据**：`tests/api_v1/test_user_snapshot.py`，真实 SQL Server + Redis：修复前带 Bearer 刷新为
+401 `reason=disabled`；在提交前暂停写请求、让另一请求回填旧权限，提交后超管 / staff 仍为 True；
+回滚昵称编辑也会提前删快照。修复后上述场景通过。测试先读出旧行、再延迟 Redis 回填，不依赖 SQL Server
+是否开启 `READ_COMMITTED_SNAPSHOT`，也不靠 sleep 碰运气。
+
 ## 批量建号：不要循环调 `user_service.create()`
 
 `crud_user.add()` 每建一个用户都跑一次 `bcrypt.gensalt()` + `get_hash_password()`，
