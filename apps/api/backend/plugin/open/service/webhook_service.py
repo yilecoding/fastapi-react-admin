@@ -32,6 +32,7 @@ from backend.plugin.open.service.event_service import kick, record_ping, scope_g
 from backend.plugin.open.service.secret import encrypt
 from backend.plugin.open.service.webhook_config import webhook_settings
 from backend.plugin.open.service.webhook_delivery import check_target, deliver_one
+from backend.plugin.open.service.webhook_secrets import active_previous_secrets, encode_previous_secrets
 from backend.utils.timezone import timezone
 
 if TYPE_CHECKING:
@@ -144,11 +145,15 @@ class WebhookService:
         _apply_status(row, obj.status)
 
     async def reset_secret(self, *, db: AsyncSession, pk: int) -> IssuedWebhookSecret:
-        """换新密钥。旧的再签 24 小时（两把一起签），对方有一天时间换配置，不丢事件"""
-        row = await self.get(db=db, pk=pk)
+        """换新密钥；每把被替换的密钥从被替换时起继续签名 24 小时。"""
+        row = await open_webhook_dao.get_for_update(db, pk)
+        if row is None:
+            raise errors.NotFoundError(msg=t('error.open.webhook_not_found'))
         secret, cipher, hint = _issue_secret()
+        now = timezone.now()
+        row.secret_history = encode_previous_secrets(active_previous_secrets(row, now))
         row.secret_prev_cipher = row.secret_cipher
-        row.secret_prev_expire_time = timezone.now() + SECRET_ROTATION_GRACE
+        row.secret_prev_expire_time = now + SECRET_ROTATION_GRACE
         row.secret_cipher, row.secret_hint = cipher, hint
         return IssuedWebhookSecret(id=row.id, secret_key=secret)
 

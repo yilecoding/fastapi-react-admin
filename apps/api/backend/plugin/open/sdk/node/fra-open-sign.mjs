@@ -54,7 +54,7 @@ export function signHeaders(method, url, body, { accessKey, secretKey, timestamp
 //
 // 🔴 body 要传**收到的原始字节**（Express 里用 express.raw({ type: 'application/json' })），
 // 不要先 JSON.parse 再 JSON.stringify 回去 —— 字节一变签名就对不上。
-// 密钥轮换的那 24 小时里一条消息带两个签名（空格分隔），任一个对上即可。对方会重试，请按 webhook-id 去重。
+// 轮换期可能带多个签名（空格分隔），任一个对上即可；每把被替换的密钥继续签名 24 小时。对方会重试，请按 webhook-id 去重。
 export function verifyWebhook(headers, body, secret, { tolerance = 300, now = Date.now() / 1000 } = {}) {
   const h = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), String(v)]))
   const id = h['webhook-id']
@@ -73,4 +73,3 @@ export function verifyWebhook(headers, body, secret, { tolerance = 300, now = Da
     return got.length === expected.length && timingSafeEqual(got, expected)
   })
 }
-

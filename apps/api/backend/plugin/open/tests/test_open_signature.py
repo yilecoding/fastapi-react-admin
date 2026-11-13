@@ -144,8 +144,8 @@ def test_python_sdk_verifies_webhooks(monkeypatch: pytest.MonkeyPatch) -> None:
     body = v['body'].encode()
     monkeypatch.setattr(sdk.time, 'time', lambda: v['timestamp'] + 10)
     assert sdk.verify_webhook(_webhook_headers(v), body, v['secret'])
-    # 轮换期两个签名，任一个对上即可
-    assert sdk.verify_webhook(_webhook_headers(v, f'v1,bm9wZQ== {v["signature"]}'), body, v['secret'])
+    # 连续轮换可以超过两个签名，接收方不能只检查前两个。
+    assert sdk.verify_webhook(_webhook_headers(v, f'v1,bm9wZQ== v1,bm9wZTI= {v["signature"]}'), body, v['secret'])
     # body 改一个字节 / 时间戳超出窗口 / 换一把密钥 —— 都要拒
     assert not sdk.verify_webhook(_webhook_headers(v), body + b' ', v['secret'])
     assert not sdk.verify_webhook(_webhook_headers(v), body, 'whsec_' + 'A' * 32)
@@ -162,15 +162,17 @@ def test_node_sdk_verifies_webhooks() -> None:
         "const h = { 'Webhook-Id': w.id, 'Webhook-Timestamp': String(w.timestamp), 'Webhook-Signature': w.signature };"
         'const now = w.timestamp + 10;'
         'const ok = verifyWebhook(h, Buffer.from(w.body), w.secret, { now });'
+        "const rotated = verifyWebhook({ ...h, 'Webhook-Signature': 'v1,bm9wZQ== v1,bm9wZTI= ' + w.signature },"
+        'Buffer.from(w.body), w.secret, { now });'
         "const tampered = verifyWebhook(h, Buffer.from(w.body + ' '), w.secret, { now });"
         'const stale = verifyWebhook(h, Buffer.from(w.body), w.secret, { now: w.timestamp + 301 });'
-        "console.log([ok, tampered, stale].join(','))"
+        "console.log([ok, rotated, tampered, stale].join(','))"
     )
     result = subprocess.run(
         ['node', '--input-type=module', '-e', script], cwd=SDK_DIR, capture_output=True, text=True, timeout=60
     )
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == 'true,false,false'
+    assert result.stdout.strip() == 'true,true,false,false'
 
 
 @pytest.mark.skipif(shutil.which('javac') is None or shutil.which('java') is None, reason='没有 JDK')
@@ -185,7 +187,8 @@ public class Harness {{
     public static void main(String[] a) throws Exception {{
         // 大小写混合：Servlet 在 HTTP/1.1 下给的就是 Webhook-Id 这种（#231）
         Map<String, String> h = Map.of("Webhook-Id", {_json.dumps(v['id'])},
-            "WEBHOOK-TIMESTAMP", "{v['timestamp']}", "webhook-signature", {_json.dumps(v['signature'])});
+            "WEBHOOK-TIMESTAMP", "{v['timestamp']}",
+            "webhook-signature", "v1,bm9wZQ== v1,bm9wZTI= " + {_json.dumps(v['signature'])});
         byte[] body = {_json.dumps(v['body'])}.getBytes(StandardCharsets.UTF_8);
         byte[] tampered = ({_json.dumps(v['body'])} + " ").getBytes(StandardCharsets.UTF_8);
         long now = {v['timestamp']}L + 10;

@@ -153,7 +153,7 @@ nonce 存活时间是窗口的两倍，所以窗口内的重放一定撞上 nonc
 签名遵循 [Standard Webhooks](https://www.standardwebhooks.com/)：
 
 - `签名 = base64(HMAC-SHA256(key, "{webhook-id}.{webhook-timestamp}.{请求体原文}"))`，其中 `key` 是去掉 `whsec_` 前缀后 base64 解码得到的字节。
-- 重置密钥后的 24 小时内，`webhook-signature` 里会有两个签名（空格分隔），任一个对上即可。
+- 轮换期间，`webhook-signature` 里可能有多个签名（空格分隔），任一个对上即可。每把被替换的密钥从被替换时起继续签名 24 小时，连续重置不缩短已有的宽限期。
 
 投递规则：15 秒内回 2xx 算成功；3xx 算失败，**不跟随重定向**；回 `410 Gone` 端点立即停用；其他情况在 15 秒、5 分钟、1 小时、6 小时后重试，共 5 次。投递是**至少一次**、不保证顺序，请按 `webhook-id` 去重。连续失败 20 次**且**持续超过 24 小时，端点会被自动停用，并给应用创建人发一条[通知](/features/notifications/)。
 

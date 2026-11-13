@@ -35,7 +35,7 @@ export function WebhookSecretDialog({
           <DialogTitle>{t('保存签名密钥')}</DialogTitle>
           <DialogDescription>
             {rotated
-              ? t('旧密钥还会一起签名 24 小时（每条消息带两个签名），对方在这一天里换成新的就不会丢事件。')
+              ? t('每把被替换的密钥还会继续签名 24 小时。消息可能带多个签名，任一个验证通过即可。')
               : t('交给接收方，用来验证推过去的每一条事件确实是这边发的。关掉之后就再也看不到了，丢了只能重置。')}
           </DialogDescription>
         </DialogHeader>
