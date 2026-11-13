@@ -88,7 +88,11 @@ test("只填还空着的字段、标「AI 填的」；没核对不许提交；�
 
   // 关掉再打开：值和标记都还在（草稿存了 ai_filled）
   await expect(page.getByTestId("wf-draft-status")).toContainText("草稿已保存")
-  await page.reload()
+  await page.getByTestId("wf-start-sheet").getByRole("button", { name: "取消", exact: true }).click()
+  await expect(page.getByTestId("wf-start-sheet")).toBeHidden()
+  await page.locator('[data-tab="/_auth/workflow/inbox"]').getByTestId("wf-start-menu").click()
+  await page.getByTestId("wf-template-search").fill(CODE)
+  await page.getByTestId(`wf-start-${CODE}`).click()
   await expect(page.getByTestId("wf-start-title")).toBeVisible()
   await expect(field(page, "f_reason")).toHaveValue("去上海见客户")
   await expect(page.getByTestId("wf-ai-mark")).toHaveCount(2)
