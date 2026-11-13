@@ -3,6 +3,15 @@
 > 这份文件是 [`apps/api/AGENTS.md`](../../AGENTS.md) 的**子分册**，Claude Code 读到本目录下的文件时才加载。
 > 跨模块的硬纪律仍然只在根 `CLAUDE.md` 里有一份。
 
+## 雪花 ID 节点租约（`snowflake.py` · #333）
+
+Redis 心跳必须按进程随机 token 原子续租：同 token 才能延长 TTL；key 不存在时用 `SET NX EX` 重占。
+如果 key 已被其他 token 占用，或 Redis 心跳失败导致本地租约安全期限过去，自动分配的雪花发号器必须停止发号，
+直到重新初始化取得新节点。释放时也按 token 比对，避免旧进程删掉新持有者的租约。直接 `EXPIRE` 的返回值为 0
+只表示 key 不存在，忽略它会让旧进程继续使用已经可被重新分配的 worker ID。
+
+回归覆盖：`backend/tests/test_snowflake_node_lease.py`（丢失后重占 · 被抢占后停止发号 · 释放不删别人的租约）。
+
 ## 上传的表格一律过 `utils/excel_ops.py`，不要自己 `load_workbook`
 
 Excel 有一大票**「解析成功、有数据、就是错的」**的坑，没有一个会报错。
