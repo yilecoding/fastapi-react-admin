@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDateTime } from '@admin/i18n'
 import { forecastItems, formRules, isEmpty, missingRequired } from '@admin/api'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { IconLoader2 } from '@tabler/icons-react'
 
 import { Button } from '@admin/ui/components/button'
@@ -371,6 +371,7 @@ function Filler({
  * 服务端刚删掉的草稿又被存回来，下次打开「已恢复没提交的内容」，而那张单其实已经交了
  */
 function useDraftAutosave(code: string, form: FormData, aiFilled: string[], enabled: boolean) {
+  const qc = useQueryClient()
   const [status, setStatus] = React.useState<'idle' | 'saving' | 'error'>('idle')
   const [savedAt, setSavedAt] = React.useState<string | null>(null)
   const stopped = React.useRef(false)
@@ -390,7 +391,7 @@ function useDraftAutosave(code: string, form: FormData, aiFilled: string[], enab
       try {
         // 全清空了：删草稿而不是存一份空的（否则下次打开是「已恢复你没提交的内容」+ 一张白表）
         const blank = Object.values(form).every((v) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0))
-        await (blank ? removeDraft(code) : saveDraft(code, form, aiFilled))
+        await (blank ? removeDraft(qc, code) : saveDraft(qc, code, form, aiFilled))
         last.current = raw
         setSavedAt(new Date().toISOString())
         setStatus('idle')
@@ -402,7 +403,7 @@ function useDraftAutosave(code: string, form: FormData, aiFilled: string[], enab
       }
     }, 1500)
     return () => clearTimeout(h)
-  }, [code, form, aiFilled, enabled])
+  }, [qc, code, form, aiFilled, enabled])
   return {
     status,
     savedAt,

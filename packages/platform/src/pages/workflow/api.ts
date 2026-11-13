@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
+import { queryOptions, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import type { Cond, FormData, FormSchema } from '@admin/api'
 
@@ -437,7 +437,10 @@ export function useStartInstance() {
       /** 重新发起（内容来自旧单）：提交后别删这个流程的草稿 */
       keep_draft?: boolean
     }) => api.POST<{ instance_id: string; replayed: boolean }>(`${BASE}/instances`, { body }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: workflowKeys.all }),
+    onSuccess: (_data, body) => {
+      if (!body.keep_draft) qc.setQueryData(draftQuery(body.code).queryKey, null)
+      return qc.invalidateQueries({ queryKey: workflowKeys.all })
+    },
   })
 }
 
@@ -495,20 +498,20 @@ export const draftsQuery = () =>
     queryFn: () => api.GET<{ code: string; updated_time: string }[]>(`${BASE}/drafts`),
   })
 
+type Draft = { form: FormData; ai_filled: string[]; updated_time: string }
+
 export const draftQuery = (code: string) =>
   queryOptions({
     queryKey: [...workflowKeys.all, 'drafts', code] as const,
-    queryFn: () =>
-      api.GET<{ form: FormData; ai_filled: string[]; updated_time: string } | null>(
-        `${BASE}/drafts/${encodeURIComponent(code)}`
-      ),
-    // 草稿只在打开抽屉时读一次：之后以手上正在填的为准，别让后台重取把它盖回去
+    queryFn: () => api.GET<Draft | null>(`${BASE}/drafts/${encodeURIComponent(code)}`),
+    // 填写时别让后台重取干扰表单；保存 / 删除成功同步缓存，应用内重开才不会拿旧值
     staleTime: Infinity,
   })
 
 /** `aiFilled`：AI 填了、发起人还没核对的字段 —— 跟着草稿存，关掉再打开标记还在 */
-export function saveDraft(code: string, form: FormData, aiFilled: string[] = []): Promise<unknown> {
-  return api.PUT(`${BASE}/drafts/${encodeURIComponent(code)}`, { body: { form, ai_filled: aiFilled } })
+export async function saveDraft(qc: QueryClient, code: string, form: FormData, aiFilled: string[] = []): Promise<void> {
+  await api.PUT(`${BASE}/drafts/${encodeURIComponent(code)}`, { body: { form, ai_filled: aiFilled } })
+  qc.setQueryData(draftQuery(code).queryKey, (): Draft => ({ form, ai_filled: aiFilled, updated_time: new Date().toISOString() }))
 }
 
 export type AiFill = {
@@ -532,14 +535,15 @@ export function useAiFill(code: string) {
   })
 }
 
-export function removeDraft(code: string): Promise<unknown> {
-  return api.DELETE(`${BASE}/drafts/${encodeURIComponent(code)}`)
+export async function removeDraft(qc: QueryClient, code: string): Promise<void> {
+  await api.DELETE(`${BASE}/drafts/${encodeURIComponent(code)}`)
+  qc.setQueryData(draftQuery(code).queryKey, null)
 }
 
 export function useDeleteDraft() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (code: string) => api.DELETE(`${BASE}/drafts/${encodeURIComponent(code)}`),
+    mutationFn: (code: string) => removeDraft(qc, code),
     onSuccess: () => qc.invalidateQueries({ queryKey: [...workflowKeys.all, 'drafts'] }),
   })
 }
