@@ -32,6 +32,7 @@ class _FakeSettings:
 
     def __init__(self, **overrides: object) -> None:
         self.ENVIRONMENT = 'prod'
+        self.COOKIE_SECURE = True
         self.TOKEN_SECRET_KEY = 'S7xK2mQ9vR4tW8yZ1aB6cD3eF5gH0jLnP'
         self.TOKEN_ALGORITHM = 'HS256'
         self.DATABASE_HOST = 'sqlserver.internal'
@@ -91,6 +92,32 @@ def test_weak_import_default_password_is_rejected() -> None:
 def test_empty_import_default_password_is_fine() -> None:
     """空串是「关掉导入功能」，不是「配错了」—— 误杀它等于强迫每套部署都开这个功能"""
     check_production_settings(_FakeSettings(USER_IMPORT_DEFAULT_PASSWORD=''))
+
+
+@pytest.mark.parametrize('cookie_secure', [None, False])
+def test_prod_warns_without_forced_secure_cookies(caplog, cookie_secure) -> None:
+    check_production_settings(_FakeSettings(COOKIE_SECURE=cookie_secure))
+    assert 'COOKIE_SECURE=true' in caplog.text
+    assert 'X-Forwarded-Proto' in caplog.text
+
+
+@pytest.mark.parametrize('cookie_secure', [None, False, True])
+def test_dev_does_not_warn_about_secure_cookies(caplog, cookie_secure) -> None:
+    check_production_settings(_FakeSettings(ENVIRONMENT='dev', COOKIE_SECURE=cookie_secure))
+    assert 'COOKIE_SECURE' not in caplog.text
+
+
+def test_prod_does_not_warn_with_forced_secure_cookies(caplog) -> None:
+    check_production_settings(_FakeSettings())
+    assert 'COOKIE_SECURE' not in caplog.text
+
+
+def test_production_template_forces_secure_cookies(monkeypatch) -> None:
+    from backend.core.path_conf import BASE_PATH
+
+    monkeypatch.delenv('COOKIE_SECURE', raising=False)
+    template = BASE_PATH.parent / 'deploy/backend/docker-compose/.env.server.example'
+    assert Settings(_env_file=template).COOKIE_SECURE is True
 
 
 def test_dev_is_never_checked() -> None:
