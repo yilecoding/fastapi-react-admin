@@ -26,7 +26,7 @@ const searchSchema = z.object({
 /** 页面由 TabOutlet 挂载；这里只声明 search schema / staticData / 权限 */
 export const Route = createFileRoute("/_auth/log/opera")({
   validateSearch: searchSchema,
-  beforeLoad: requirePerm("log:opera:del"),
+  beforeLoad: requirePerm("log:opera:list"),
   staticData: { title: "操作日志" },
   component: () => null,
 })

@@ -35,7 +35,7 @@ const searchSchema = z.object({
 /** 页面由 TabOutlet 挂载；这里只声明 search schema / staticData / 权限 */
 export const Route = createFileRoute("/_auth/log/login")({
   validateSearch: searchSchema,
-  beforeLoad: requirePerm("log:login:del"),
+  beforeLoad: requirePerm("log:login:list"),
   staticData: { title: "登录日志" },
   component: () => null,
 })

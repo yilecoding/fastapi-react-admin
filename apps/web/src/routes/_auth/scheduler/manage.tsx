@@ -20,12 +20,12 @@ const searchSchema = z.object({
 })
 
 /**
- * 用 `task:scheduler:edit` 当门槛：这一页的主要用途就是改调度，
- * 只读的人去「执行记录」页看结果就够了（那页不设权限）。
+ * 页面入口与后端列表接口统一要求 `task:scheduler:list`，
+ * 调度的新增、编辑和删除由页面内的操作权限单独控制。
  */
 export const Route = createFileRoute("/_auth/scheduler/manage")({
   validateSearch: searchSchema,
-  beforeLoad: requirePerm("task:scheduler:edit"),
+  beforeLoad: requirePerm("task:scheduler:list"),
   staticData: { title: "任务调度" },
   component: () => null,
 })
