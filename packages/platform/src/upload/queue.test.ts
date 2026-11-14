@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { createUploadQueue } from './queue'
 import type { UploadItem, UploadTransport } from './types'
+import { deferred } from './test-utils'
 
 type R = { id: string }
 
@@ -30,6 +31,66 @@ const immediate: UploadTransport<R> = {
 }
 
 describe('createUploadQueue', () => {
+  it.each(['hashing', 'checking'] as const)('换身份 reset 后，迟到的 %s 不能继续检查或上传旧文件', async (stage) => {
+    const pending = deferred<string | R | null>()
+    const transport: UploadTransport<R> = {
+      hash: vi.fn(async () => (stage === 'hashing' ? (pending.promise as Promise<string>) : 'hash')),
+      check: vi.fn(async () => pending.promise as Promise<R | null>),
+      upload: vi.fn(immediate.upload),
+    }
+    const onDone = vi.fn()
+    const q = createUploadQueue(transport, { onDone })
+    q.add([file('private'), file('queued')])
+    await vi.waitFor(() => expect(q.getItems()[0]?.status).toBe(stage))
+    q.reset()
+    pending.resolve(stage === 'hashing' ? 'late-hash' : { id: 'late-file' })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(q.getItems()).toEqual([])
+    expect(transport.upload).not.toHaveBeenCalled()
+    expect(onDone).not.toHaveBeenCalled()
+    expect(transport.check).toHaveBeenCalledTimes(stage === 'checking' ? 1 : 0)
+  })
+
+  it.each(['resolve', 'reject'] as const)(
+    'reset 后新用户能立即上传，旧请求晚到的 %s 和进度不能污染新队列',
+    async (result) => {
+      const old = deferred<R>()
+      let oldContext!: Parameters<UploadTransport<R>['upload']>[1]
+      const onDone = vi.fn()
+      const onError = vi.fn()
+      const q = createUploadQueue<R>(
+        {
+          upload: (f, ctx) => {
+            if (f.name === 'old') {
+              oldContext = ctx
+              return old.promise
+            }
+            return immediate.upload(f, ctx, {})
+          },
+        },
+        { onDone, onError },
+      )
+      const notify = vi.fn()
+      q.subscribe(notify)
+      q.add([file('old'), file('old-queued')])
+      q.reset()
+      expect(oldContext.signal.aborted).toBe(true)
+      expect(q.getItems()).toEqual([])
+      q.add([file('new')])
+      await settled(q)
+      oldContext.onBytes(9, 10)
+      oldContext.onFinalizing()
+      if (result === 'resolve') old.resolve({ id: 'old' })
+      else old.reject(new Error('late failure'))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(q.getItems().map((item) => [item.name, item.status])).toEqual([['new', 'done']])
+      expect(onDone).toHaveBeenCalledOnce()
+      expect(onDone.mock.calls[0]?.[0].name).toBe('new')
+      expect(onError).not.toHaveBeenCalled()
+      expect(notify).toHaveBeenCalled()
+    },
+  )
+
   it('只给 upload：排队、串行、每个都 done，结果带回来', async () => {
     const order: string[] = []
     const q = createUploadQueue<R>({

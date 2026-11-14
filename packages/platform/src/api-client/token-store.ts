@@ -15,6 +15,15 @@
  * 当前会话、socket 把正连着的会话标成离线。现在会话 ID 整个会话不变，读 token 就够了。
  */
 let token: string | null = null
+const identityListeners = new Set<() => void>()
+
+function setToken(value: string | null) {
+  const before = claimsOf(token)?.sub ?? null
+  token = value
+  if (before !== (claimsOf(value)?.sub ?? null)) {
+    for (const listener of identityListeners) listener()
+  }
+}
 
 type Claims = { session_uuid?: string; sub?: string }
 
@@ -37,7 +46,12 @@ export const tokenStore = {
     return token
   },
   set(value: string | null) {
-    token = value
+    setToken(value)
+  },
+  /** 换人 / 清 token 时通知客户端状态；同一个用户刷新 access token 不触发。 */
+  subscribeIdentity(listener: () => void): () => void {
+    identityListeners.add(listener)
+    return () => { identityListeners.delete(listener) }
   },
   /** 当前会话 ID（「在线用户」页靠它认出自己那一行，免得管理员把自己踢下线） */
   getSessionUuid(): string | null {
@@ -48,6 +62,6 @@ export const tokenStore = {
     return claimsOf(token)?.sub ?? null
   },
   clear() {
-    token = null
+    setToken(null)
   },
 }

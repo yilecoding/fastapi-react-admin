@@ -1,4 +1,5 @@
 import type { StepContext, UploadHooks, UploadItem, UploadItemOptions, UploadTransport } from './types'
+import { UploadSessionEndedError } from './errors'
 
 /**
  * 上传队列：headless 的状态机，不渲染、不知道接口。
@@ -19,6 +20,8 @@ export interface UploadQueue<R> {
   remove: (id: string) => void
   /** 清掉所有已结束的（done / failed / canceled），进行中的留着 */
   clear: () => void
+  /** 换身份时取消并清空，保留订阅，之后仍可添加新文件 */
+  reset: () => void
   /** 取消进行中的、丢掉全部 */
   destroy: () => void
 }
@@ -36,6 +39,7 @@ export function createUploadQueue<R>(transport: UploadTransport<R>, hooks: Uploa
   const listeners = new Set<() => void>()
   const controllers = new Map<string, AbortController>()
   let running = false
+  let generation = 0
 
   const emit = () => {
     for (const fn of listeners) fn()
@@ -47,27 +51,37 @@ export function createUploadQueue<R>(transport: UploadTransport<R>, hooks: Uploa
   const get = (id: string) => items.find((it) => it.id === id)
 
   const finish = (id: string) => {
-    const done = get(id)!
+    const done = get(id)
+    if (!done || controllers.get(id)?.signal.aborted) return
     // 先这一项自己的回调（附件面板的「挂载」），再全局的（刷新列表）
     done.opts.onDone?.(done)
-    hooks.onDone?.(done)
+    if (get(id) && !controllers.get(id)?.signal.aborted) hooks.onDone?.(done)
   }
 
   async function run(item: UploadItem<R>): Promise<void> {
     const controller = new AbortController()
     controllers.set(item.id, controller)
     const { signal } = controller
+    const current = () => !signal.aborted && controllers.get(item.id) === controller && get(item.id) !== undefined
     const step = (status: UploadItem['status']): StepContext => {
+      signal.throwIfAborted()
       patch(item.id, { status, progress: 0, loaded: 0, speed: null, error: null })
-      return { signal, onProgress: (fraction) => patch(item.id, { progress: Math.max(0, Math.min(1, fraction)) }) }
+      return {
+        signal,
+        onProgress: (fraction) => {
+          if (current()) patch(item.id, { progress: Math.max(0, Math.min(1, fraction)) })
+        },
+      }
     }
 
     try {
       let sha256: string | null = null
       if (transport.hash && transport.check) {
         sha256 = await transport.hash(item.file, step('hashing'))
+        signal.throwIfAborted()
         patch(item.id, { status: 'checking', progress: 0 })
         const existing = await transport.check(item.file, sha256, signal, item.opts)
+        signal.throwIfAborted()
         if (existing !== null) {
           patch(item.id, { status: 'done', progress: 1, loaded: item.size, result: existing, reused: true })
           finish(item.id)
@@ -85,31 +99,37 @@ export function createUploadQueue<R>(transport: UploadTransport<R>, hooks: Uploa
         {
           ...ctx,
           onBytes: (loaded, total) => {
-          const now = Date.now()
-          const dt = (now - lastAt) / 1000
-          if (dt >= 0.25) {
-            const instant = (loaded - lastLoaded) / dt
-            speed = speed === null ? instant : speed * 0.6 + instant * 0.4
-            lastAt = now
-            lastLoaded = loaded
-          }
+            if (!current()) return
+            const now = Date.now()
+            const dt = (now - lastAt) / 1000
+            if (dt >= 0.25) {
+              const instant = (loaded - lastLoaded) / dt
+              speed = speed === null ? instant : speed * 0.6 + instant * 0.4
+              lastAt = now
+              lastLoaded = loaded
+            }
             patch(item.id, { loaded, progress: total > 0 ? loaded / total : 0, speed })
           },
-          onFinalizing: () => patch(item.id, { status: 'finalizing', progress: 1, speed: null }),
+          onFinalizing: () => {
+            if (current()) patch(item.id, { status: 'finalizing', progress: 1, speed: null })
+          },
         },
         item.opts,
       )
+      signal.throwIfAborted()
       patch(item.id, { status: 'done', progress: 1, loaded: item.size, speed: null, result })
       finish(item.id)
     } catch (err) {
+      if (!get(item.id)) return // reset / remove 之后，迟到的完成和失败都不能再触发业务回调
       if (signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
         patch(item.id, { status: 'canceled', speed: null })
         return
       }
       patch(item.id, { status: 'failed', speed: null, error: err instanceof Error ? err.message : String(err) })
-      const failed = get(item.id)!
+      const failed = get(item.id)
+      if (!failed || !current()) return
       failed.opts.onError?.(failed)
-      hooks.onError?.(failed)
+      if (current()) hooks.onError?.(failed)
     } finally {
       controllers.delete(item.id)
     }
@@ -118,15 +138,27 @@ export function createUploadQueue<R>(transport: UploadTransport<R>, hooks: Uploa
   async function pump(): Promise<void> {
     if (running) return
     running = true
+    const started = generation
     try {
       for (;;) {
+        if (started !== generation) break
         const next = items.find((it) => it.status === 'queued')
         if (!next) break
         await run(next)
       }
     } finally {
-      running = false
+      if (started === generation) running = false
     }
+  }
+
+  const reset = () => {
+    generation++
+    for (const c of controllers.values()) c.abort(new UploadSessionEndedError())
+    controllers.clear()
+    items = []
+    // 旧传输可能忽略 abort；不能让它阻塞下一位用户的新队列。
+    running = false
+    emit()
   }
 
   return {
@@ -185,9 +217,9 @@ export function createUploadQueue<R>(transport: UploadTransport<R>, hooks: Uploa
       items = items.filter((it) => it.status === 'queued' || isActive(it))
       emit()
     },
+    reset,
     destroy: () => {
-      for (const c of controllers.values()) c.abort()
-      items = []
+      reset()
       listeners.clear()
     },
   }

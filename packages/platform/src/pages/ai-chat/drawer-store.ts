@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 
+import { tokenStore } from '../../api-client/token-store'
+
 /**
  * AI 抽屉的开合。
  *
@@ -11,18 +13,25 @@ import { create } from 'zustand'
  * 是设备属性；开没开着是此刻的瞬时状态。两者分开存，见 shell 分册「设备 vs 人」。
  */
 type AiDrawerState = {
+  /** 让还在创建会话的旧回调识别一次 reset。 */
+  generation: number
   open: boolean
   /** 抽屉里当前看的会话；和整页的 URL 参数各自独立 —— 两边可以停在不同会话上 */
   conversationId?: string
   setOpen: (v: boolean) => void
   toggle: () => void
   setConversationId: (id: string | undefined) => void
+  reset: () => void
 }
 
 export const useAiDrawerStore = create<AiDrawerState>()((set) => ({
+  generation: 0,
   open: false,
   conversationId: undefined,
   setOpen: (v) => set({ open: v }),
   toggle: () => set((s) => ({ open: !s.open })),
   setConversationId: (id) => set({ conversationId: id }),
+  reset: () => set((s) => ({ generation: s.generation + 1, open: false, conversationId: undefined })),
 }))
+
+tokenStore.subscribeIdentity(() => useAiDrawerStore.getState().reset())
