@@ -10,7 +10,19 @@ arch-check.mjs       `pnpm arch:check` —— 依赖箭头 / 多页签纪律 / �
 gen-ui-registry.mjs  `pnpm ui:registry` —— 从源码 import 生成 packages/ui/registry.json
 gen-brand-icons.mjs  `pnpm brand:icons` —— 从一份图形生成 favicon / 桌面 / 移动端图标
 deploy-prod.mjs      `pnpm deploy:prod:*` —— 生产部署编排
+check-main-head.mjs  发布前查询远端 main，阻止旧提交覆盖 latest / Pages
 ```
+
+## 发布前要查远端 main（#320）
+
+仅检查分支名会让旧 CI 重跑覆盖生产 latest 和 Pages；本地的 origin/main 也可能
+停在 checkout 时的值。发布检查用 `git ls-remote` 读取远端当前提交，查询失败就停止。
+镜像先以 SHA 标签构建，两端成功后才核对并按 digest 更新 latest；Pages 部署前同样核对。
+镜像发布的 needs 必须包含 PostgreSQL 检查，否则默认数据库的迁移守卫失败仍能发镜像。
+
+实测：`pnpm test:ci` 创建本地 bare 远端，先允许提交 A，推入 B 后把 checkout 留在 A，
+A 输出 false、B 输出 true；删除远端 main、远端不可达、SHA 非法均失败且不输出许可。
+这组测试已接入 CI；未实际推送 GHCR 镜像或部署 Pages。
 
 🔴 **`gen-brand-icons.mjs` 是品牌图形的唯一真相源。** 改了图形或配色跑
 `pnpm brand:icons` 重新生成，**不要手改生成产物**（favicon / 桌面图标 /

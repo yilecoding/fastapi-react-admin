@@ -70,6 +70,7 @@ jobs:
       # 合并后马上打 tag 时 CI 多半还在跑（E2E 约 20 分钟），所以这里等它跑完，最多 45 分钟。
       # ⚠️ ci.yml 在 main 上是 cancel-in-progress：tag 的提交后面又合了别的 PR，这个提交的 CI 会被取消 →
       # 这里报错。到 Actions 里把那一轮 re-run 绿了，再重跑本 workflow 即可。
+      # 旧提交重跑只补质量检查和 SHA 镜像；latest 与 Pages 仅发布 main 当前提交。
       # 预发布 tag（v1.2.0-rc.1）只警告不拦：那是用来试发布流水线本身的口子。
       - name: tag 的提交在 main 上，且 CI 已经绿了
         env:
