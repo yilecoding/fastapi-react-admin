@@ -70,7 +70,9 @@ export function AiDrawer() {
   const createConversation = useCreateConversation()
   /** 没有会话时现建一个，返回 id 给 hook 直接发 —— 和整页同一条行为，见 hook 里的注释 */
   const ensureConversation = React.useCallback(async () => {
+    const generation = useAiDrawerStore.getState().generation
     const conversation = await createConversation.mutateAsync(DEFAULT_CONVERSATION_TITLE)
+    if (generation !== useAiDrawerStore.getState().generation) return undefined
     setConversationId(conversation.id)
     return conversation.id
   }, [createConversation, setConversationId])

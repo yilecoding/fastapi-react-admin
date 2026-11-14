@@ -113,6 +113,15 @@ up → down → up（开发库 11 条存量已删记录全变墓碑、回收站�
 
 ### 分片上传 / 断点续传（#122 第三期）
 
+🔴 **一片失败要中止同轮所有 worker，而且等它们退出再向队列报失败**（#326）。
+`Promise.all` 只会提前 reject，不会取消其他 PUT；原来失败行进度还在涨、下一文件 / 重试和旧 worker 并发上传。
+`packages/platform/src/upload/chunked.ts` 用内部 AbortController 联动外部取消、任一 worker 最终失败就 abort，
+进度和重试等待都观察内部 signal，`allSettled` 收齐后再抛最初错误。
+内部失败不等于用户取消，不能删续传会话；换账号的 `UploadSessionEndedError` 也保留断点，主动取消才放弃。
+续传以 `admin:uploads:resume:<userId>` 分键，旧的无归属记录不认领给当前登录人。
+实测：`packages/platform/src/upload/chunked.test.ts` 控制 413 / 503 重试用尽时其余 PUT 尚未返回，确认它们收到 abort、
+错误在它们退出后才抛、迟到的进度不再上报；`packages/platform/src/upload/resume.test.ts` 验证同一指纹在两账号间独立，B 清记录后 A 的断点还在。
+
 不小于 `FILE_CHUNK_THRESHOLD` 的文件，`upload-store.ts` 的 `upload` 换成 `packages/platform/src/upload/chunked.ts` 的 `uploadChunked`：
 `POST /multipart`（init）→ 并发 3 片 `PUT /multipart/{id}/{n}`（裸字节，`FILE_CHUNK_SIZE` 一片，默认 8 MiB）→
 `POST /multipart/{id}/complete`。sha256 预检（`/check`）照旧在前面，命中了一片都不传。

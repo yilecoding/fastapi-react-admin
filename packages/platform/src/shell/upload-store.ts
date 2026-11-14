@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 
 import { api, uploadBlob, uploadFile } from '../api-client/client'
+import { tokenStore } from '../api-client/token-store'
 import type { FileItem } from '../pages/file/api'
 import {
   createResumeStore,
@@ -53,10 +54,18 @@ type UploadTrayState = {
   continueResumable: (fp: string, file: File) => boolean
   /** 放弃一个没传完的：删服务端会话和分片 */
   discardResumable: (fp: string) => void
+  /** 会话结束 / 换人时清理内存状态；各用户的续传记录保留。 */
+  reset: () => void
 }
 
 let invalidateFiles: Invalidate = () => {}
-const resume = createResumeStore()
+let generation = 0
+let binding: AbortController | null = null
+
+function currentResumeStore() {
+  const userId = tokenStore.getUserId()
+  return userId ? createResumeStore(userId) : null
+}
 
 type Policy = { chunk_threshold: number; chunk_size: number }
 let policy: Promise<Policy> | null = null
@@ -68,13 +77,14 @@ let policyAt = 0
  */
 const POLICY_TTL_MS = 10_000
 /** 分片阈值由服务端下发（参数配置「文件上传」组，`.env` 是默认值）；取失败就当「不分片」，下次再取 */
-function getPolicy(): Promise<Policy> {
+function getPolicy(signal: AbortSignal): Promise<Policy> {
   if (!policy || Date.now() - policyAt > POLICY_TTL_MS) {
     policyAt = Date.now()
-    policy = api.GET<Policy>('/api/v1/sys/files/upload-policy').catch(() => {
-      policy = null
+    const requested = api.GET<Policy>('/api/v1/sys/files/upload-policy', { signal }).catch(() => {
+      if (policy === requested) policy = null
       return { chunk_threshold: Number.POSITIVE_INFINITY, chunk_size: 0 }
     })
+    policy = requested
   }
   return policy
 }
@@ -82,42 +92,68 @@ function getPolicy(): Promise<Policy> {
 const MP = '/api/v1/sys/files/multipart'
 
 /** 会话不存在 / 过期 / 不是自己的，服务端一律 404 —— 对续传来说就是「没有」 */
-async function sessionOrNull(uploadId: string): Promise<MultipartSession | null> {
+async function sessionOrNull(uploadId: string, signal?: AbortSignal): Promise<MultipartSession | null> {
   try {
-    return await api.GET<MultipartSession>(`${MP}/${uploadId}`)
+    return await api.GET<MultipartSession>(`${MP}/${uploadId}`, { signal })
   } catch (err) {
     if ((err as { httpStatus?: number }).httpStatus === 404) return null
     throw err
   }
 }
 
-const chunkedApi: ChunkedApi<FileItem> = {
-  init: (file, { public: isPublic }) =>
-    api.POST<MultipartSession>(MP, { body: { name: file.name, size: file.size, public: isPublic ?? false } }),
-  status: sessionOrNull,
-  putPart: (uploadId, part, blob, { signal, onProgress }) =>
-    uploadBlob<unknown>(`${MP}/${uploadId}/${part}`, blob, { signal, onProgress }).then(() => undefined),
-  complete: (uploadId) => api.POST<FileItem>(`${MP}/${uploadId}/complete`),
-  abort: (uploadId) => api.DELETE(`${MP}/${uploadId}`).then(() => undefined),
+function chunkedApiFor(signal: AbortSignal): ChunkedApi<FileItem> {
+  const started = generation
+  const owner = tokenStore.getUserId()
+  const current = () => started === generation && owner === tokenStore.getUserId()
+  const check = () => {
+    signal.throwIfAborted()
+    if (!current()) throw new DOMException('session ended', 'AbortError')
+  }
+  return {
+    init: (file, { public: isPublic }) => {
+      check()
+      return api.POST<MultipartSession>(MP, {
+        body: { name: file.name, size: file.size, public: isPublic ?? false },
+        signal,
+      })
+    },
+    status: (uploadId) => {
+      check()
+      return sessionOrNull(uploadId, signal)
+    },
+    putPart: (uploadId, part, blob, opts) => {
+      check()
+      return uploadBlob<unknown>(`${MP}/${uploadId}/${part}`, blob, opts).then(() => undefined)
+    },
+    complete: (uploadId) => {
+      check()
+      return api.POST<FileItem>(`${MP}/${uploadId}/complete`, { signal })
+    },
+    // 取消后的清理可能在下一位用户登录后才运行；不能借用新账号的 token 删除旧会话。
+    abort: (uploadId) => (current() ? api.DELETE(`${MP}/${uploadId}`).then(() => undefined) : Promise.resolve()),
+  }
 }
 
 const queue = createUploadQueue<FileItem>(
   {
     hash: (file, ctx) => sha256File(file, { signal: ctx.signal, onProgress: ctx.onProgress }),
-    check: async (file, sha256, _signal, opts) => {
+    check: async (file, sha256, signal, opts) => {
       const params = new URLSearchParams({ sha256, name: file.name })
       if (opts.public) params.set('public', 'true')
       // 「没传过」是 data: null（success），不是 fail —— 首次上传不是错误
-      return api.GET<FileItem | null>(`/api/v1/sys/files/check?${params.toString()}`)
+      return api.GET<FileItem | null>(`/api/v1/sys/files/check?${params.toString()}`, { signal })
     },
     upload: async (file, ctx, opts) => {
-      const { chunk_threshold } = await getPolicy()
+      ctx.signal.throwIfAborted()
+      const resume = currentResumeStore()
+      const { chunk_threshold } = await getPolicy(ctx.signal)
+      ctx.signal.throwIfAborted()
       if (file.size >= chunk_threshold) {
-        return uploadChunked<FileItem>(file, chunkedApi, {
+        return uploadChunked<FileItem>(file, chunkedApiFor(ctx.signal), {
           signal: ctx.signal,
           onBytes: ctx.onBytes,
           onFinalizing: ctx.onFinalizing,
-          resume,
+          resume: resume ?? undefined,
           meta: { source: opts.source, public: opts.public },
         })
       }
@@ -141,6 +177,7 @@ export const useUploadStore = create<UploadTrayState>()((set, get) => {
     open: false,
     collapsed: false,
     enqueue: (files, opts) => {
+      if (!tokenStore.getUserId()) return
       const list = Array.from(files)
       // 重新选的正好是一个「没传完的」：它会自己续上，浮窗里那一行可以撤了
       for (const f of list) dropResumable(fingerprint(f))
@@ -152,7 +189,8 @@ export const useUploadStore = create<UploadTrayState>()((set, get) => {
     retry: queue.retry,
     remove: queue.remove,
     cancelAll: () => {
-      for (const it of queue.getItems()) if (it.status !== 'done' && it.status !== 'failed' && it.status !== 'canceled') queue.cancel(it.id)
+      for (const it of queue.getItems())
+        if (it.status !== 'done' && it.status !== 'failed' && it.status !== 'canceled') queue.cancel(it.id)
     },
     clearFinished: queue.clear,
     setCollapsed: (v) => set({ collapsed: v }),
@@ -161,19 +199,28 @@ export const useUploadStore = create<UploadTrayState>()((set, get) => {
       set({ open: false, collapsed: false })
     },
     bind: (fn) => {
+      binding?.abort()
+      const controller = (binding = new AbortController())
+      const started = generation
+      const resume = currentResumeStore()
+      const current = () => started === generation && !controller.signal.aborted
       invalidateFiles = fn
+      if (!resume) return
       // 去服务端核一遍 localStorage 里那些还能不能续：过期的（404）直接丢掉，活着的显示出来
       void (async () => {
         const found: ResumableUpload[] = []
         for (const [fp, entry] of resume.list()) {
-          const session = await sessionOrNull(entry.upload_id).catch(() => undefined)
+          if (!current()) return
+          const session = await sessionOrNull(entry.upload_id, controller.signal).catch(() => undefined)
+          if (!current()) return
           if (session === null) {
             resume.remove(fp)
             continue
           }
           if (session === undefined) continue // 网络问题：这次不显示，也别删
           let sent = 0
-          for (const n of session.uploaded_parts) sent += Math.min(session.chunk_size, session.size - (n - 1) * session.chunk_size)
+          for (const n of session.uploaded_parts)
+            sent += Math.min(session.chunk_size, session.size - (n - 1) * session.chunk_size)
           found.push({ fp, entry, progress: session.size > 0 ? sent / session.size : 0 })
         }
         if (found.length) set({ resumable: found, open: true })
@@ -188,8 +235,21 @@ export const useUploadStore = create<UploadTrayState>()((set, get) => {
     discardResumable: (fp) => {
       const target = get().resumable.find((r) => r.fp === fp)
       dropResumable(fp)
-      resume.remove(fp)
-      if (target) void chunkedApi.abort(target.entry.upload_id).catch(() => {})
+      currentResumeStore()?.remove(fp)
+      if (target) void api.DELETE(`${MP}/${target.entry.upload_id}`).catch(() => {})
+    },
+    reset: () => {
+      generation++
+      binding?.abort()
+      binding = null
+      invalidateFiles = () => {}
+      policy = null
+      policyAt = 0
+      queue.reset()
+      set({ items: [], resumable: [], open: false, collapsed: false })
     },
   }
 })
+
+// 包括 401 会话失效以及静默恢复为另一身份；不只依赖显式 logout 的调用方。
+tokenStore.subscribeIdentity(() => useUploadStore.getState().reset())

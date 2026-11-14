@@ -26,9 +26,9 @@ export function fingerprint(file: Pick<File, 'name' | 'size' | 'lastModified'>):
   return `${file.name}|${file.size}|${file.lastModified}`
 }
 
-function readAll(storage: Storage | undefined = globalThis.localStorage): Record<string, ResumeEntry> {
+function readAll(key: string, storage: Storage | undefined = globalThis.localStorage): Record<string, ResumeEntry> {
   try {
-    const raw = storage?.getItem(KEY)
+    const raw = storage?.getItem(key)
     const all = raw ? (JSON.parse(raw) as Record<string, ResumeEntry>) : {}
     const now = Date.now()
     for (const [fp, entry] of Object.entries(all)) {
@@ -40,25 +40,27 @@ function readAll(storage: Storage | undefined = globalThis.localStorage): Record
   }
 }
 
-function writeAll(all: Record<string, ResumeEntry>, storage: Storage | undefined = globalThis.localStorage): void {
+function writeAll(key: string, all: Record<string, ResumeEntry>, storage: Storage | undefined = globalThis.localStorage): void {
   try {
-    if (Object.keys(all).length === 0) storage?.removeItem(KEY)
-    else storage?.setItem(KEY, JSON.stringify(all))
+    if (Object.keys(all).length === 0) storage?.removeItem(key)
+    else storage?.setItem(key, JSON.stringify(all))
   } catch {
     /* 存不下就算了：最坏是刷新之后从头传 */
   }
 }
 
-export function createResumeStore(storage?: Storage) {
+export function createResumeStore(userId: string, storage?: Storage) {
+  // 旧的无归属记录不能安全地认领给当前用户，不读取 / 迁移它们。
+  const key = `${KEY}:${encodeURIComponent(userId)}`
   return {
-    get: (fp: string): ResumeEntry | undefined => readAll(storage)[fp],
-    set: (fp: string, entry: ResumeEntry): void => writeAll({ ...readAll(storage), [fp]: entry }, storage),
+    get: (fp: string): ResumeEntry | undefined => readAll(key, storage)[fp],
+    set: (fp: string, entry: ResumeEntry): void => writeAll(key, { ...readAll(key, storage), [fp]: entry }, storage),
     remove: (fp: string): void => {
-      const all = readAll(storage)
+      const all = readAll(key, storage)
       delete all[fp]
-      writeAll(all, storage)
+      writeAll(key, all, storage)
     },
-    list: (): Array<[string, ResumeEntry]> => Object.entries(readAll(storage)),
+    list: (): Array<[string, ResumeEntry]> => Object.entries(readAll(key, storage)),
   }
 }
 
