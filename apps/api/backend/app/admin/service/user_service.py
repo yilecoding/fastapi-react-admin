@@ -20,6 +20,7 @@ from backend.app.admin.schema.user import (
 )
 from backend.app.admin.schema.user_password_history import CreateUserPasswordHistoryParam
 from backend.app.admin.service.user_password_history_service import password_security_service
+from backend.app.admin.utils.cache import user_cache_manager
 from backend.app.admin.utils.password_security import (
     password_verify,
     validate_new_password,
@@ -179,11 +180,12 @@ class UserService:
         await emit_user_event(db, 'user.created', user.id)
 
     @staticmethod
-    async def update(*, db: AsyncSession, pk: int, obj: UpdateUserParam) -> int:
+    async def update(*, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, obj: UpdateUserParam) -> int:
         """
         更新用户信息
 
         :param db: 数据库会话
+        :param background_tasks: 提交成功后清理用户快照
         :param pk: 用户 ID
         :param obj: 用户更新参数
         :return:
@@ -212,15 +214,18 @@ class UserService:
         if 'phone' in obj.model_fields_set and obj.phone != user.phone:
             await user_dao.clear_phone_verification(db, user.id)
         await emit_user_event(db, 'user.updated', user.id)
-        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
+        user_cache_manager.clear(background_tasks, [user.id])
         return count
 
     @staticmethod
-    async def update_permission(*, db: AsyncSession, request: Request, pk: int, type: UserPermissionType) -> int:  # ruff:ignore[complex-structure]
+    async def update_permission(  # ruff:ignore[complex-structure]
+        *, db: AsyncSession, request: Request, background_tasks: BackgroundTasks, pk: int, type: UserPermissionType
+    ) -> int:
         """
         更新用户权限
 
         :param db: 数据库会话
+        :param background_tasks: 提交成功后清理用户快照
         :param request: FastAPI 请求对象
         :param pk: 用户 ID
         :param type: 权限类型
@@ -256,15 +261,16 @@ class UserService:
             case _:
                 raise errors.RequestError(msg=t('error.user.permission_type_not_found'))
 
-        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
+        user_cache_manager.clear(background_tasks, [user.id])
         return count
 
     @staticmethod
-    async def reset_password(*, db: AsyncSession, pk: int, password: str) -> int:
+    async def reset_password(*, db: AsyncSession, background_tasks: BackgroundTasks, pk: int, password: str) -> int:
         """
         重置用户密码
 
         :param db: 数据库会话
+        :param background_tasks: 提交成功后清理用户快照
         :param pk: 用户 ID
         :param password: 新密码
         :return:
@@ -290,41 +296,47 @@ class UserService:
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
         await session_store.revoke_user(user.id, EndReason.password_changed)
-        await redis_client.delete_by_prefix(f'{settings.JWT_USER_REDIS_PREFIX}:{user.id}')
+        user_cache_manager.clear(background_tasks, [user.id])
         return count
 
     @staticmethod
-    async def update_nickname(*, db: AsyncSession, user_id: int, nickname: str) -> int:
+    async def update_nickname(
+        *, db: AsyncSession, background_tasks: BackgroundTasks, user_id: int, nickname: str
+    ) -> int:
         """
         更新当前用户昵称
 
         :param db: 数据库会话
+        :param background_tasks: 提交成功后清理用户快照
         :param user_id: 用户 ID
         :param nickname: 用户昵称
         :return:
         """
         count = await user_dao.update_nickname(db, user_id, nickname)
         await emit_user_event(db, 'user.updated', user_id)
-        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+        user_cache_manager.clear(background_tasks, [user_id])
         return count
 
     @staticmethod
-    async def update_avatar(*, db: AsyncSession, user_id: int, avatar: HttpUrl | None) -> int:
+    async def update_avatar(
+        *, db: AsyncSession, background_tasks: BackgroundTasks, user_id: int, avatar: HttpUrl | None
+    ) -> int:
         """
         更新当前用户头像
 
         :param db: 数据库会话
+        :param background_tasks: 提交成功后清理用户快照
         :param user_id: 头像地址为 None 时清空（写 NULL，**不要写空串** ——
             读取侧是 HttpUrl，空串会让登录 422）
         :param avatar: 头像地址
         :return:
         """
         count = await user_dao.update_avatar(db, user_id, str(avatar) if avatar else None)
-        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+        user_cache_manager.clear(background_tasks, [user_id])
         return count
 
     @staticmethod
-    async def update_timezone(*, db: AsyncSession, user_id: int, tz: str) -> int:
+    async def update_timezone(*, db: AsyncSession, background_tasks: BackgroundTasks, user_id: int, tz: str) -> int:
         """
         更新当前用户显示时区
 
@@ -333,20 +345,24 @@ class UserService:
         表现是「点了保存但没生效」，刷新也一样，要等 token 过期。
 
         :param db: 数据库会话
+        :param background_tasks: 提交成功后清理用户快照
         :param user_id: 用户 ID
         :param tz: IANA 时区标识（已由 schema 校验过）
         :return:
         """
         count = await user_dao.update_timezone(db, user_id, tz)
-        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+        user_cache_manager.clear(background_tasks, [user_id])
         return count
 
     @staticmethod
-    async def update_email(*, db: AsyncSession, user_id: int, captcha: str, email: str) -> int:
+    async def update_email(
+        *, db: AsyncSession, background_tasks: BackgroundTasks, user_id: int, captcha: str, email: str
+    ) -> int:
         """
         更新当前用户邮箱
 
         :param db: 数据库会话
+        :param background_tasks: 提交成功后清理用户快照
         :param user_id: 用户 ID
         :param captcha: 邮箱验证码
         :param email: 邮箱
@@ -369,7 +385,7 @@ class UserService:
             raise errors.ConflictError(msg=t('error.user.email_bound'))
         count = await user_dao.update_email(db, user_id, email)
         await emit_user_event(db, 'user.updated', user_id)
-        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+        user_cache_manager.clear(background_tasks, [user_id])
         return count
 
     @staticmethod
@@ -393,11 +409,14 @@ class UserService:
         await sms_captcha_service.send(scene='bind', subject=str(user_id), phone=phone, user_id=user_id)
 
     @staticmethod
-    async def update_phone(*, db: AsyncSession, user_id: int, captcha: str, phone: str) -> int:
+    async def update_phone(
+        *, db: AsyncSession, background_tasks: BackgroundTasks, user_id: int, captcha: str, phone: str
+    ) -> int:
         """
         用验证码绑定手机号（issue #168）：验证通过才写，并记下验证时间
 
         :param db: 数据库会话
+        :param background_tasks: 提交成功后清理用户快照
         :param user_id: 用户 ID
         :param captcha: 发到这个号上的验证码
         :param phone: 手机号
@@ -417,22 +436,25 @@ class UserService:
             raise errors.ConflictError(msg=t('error.user.phone_bound'))
         count = await user_dao.update_phone(db, user_id, phone, verified_time=timezone.now())
         await emit_user_event(db, 'user.updated', user_id)
-        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+        user_cache_manager.clear(background_tasks, [user_id])
         return count
 
     @staticmethod
-    async def unbind_phone(*, db: AsyncSession, user_id: int) -> int:
+    async def unbind_phone(*, db: AsyncSession, background_tasks: BackgroundTasks, user_id: int) -> int:
         """解绑手机号：号码和验证时间一起清掉"""
         count = await user_dao.update_phone(db, user_id, None, verified_time=None)
-        await redis_client.delete(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+        user_cache_manager.clear(background_tasks, [user_id])
         return count
 
     @staticmethod
-    async def update_password(*, db: AsyncSession, user_id: int, obj: ResetPasswordParam) -> int:
+    async def update_password(
+        *, db: AsyncSession, background_tasks: BackgroundTasks, user_id: int, obj: ResetPasswordParam
+    ) -> int:
         """
         更新当前用户密码
 
         :param db: 数据库会话
+        :param background_tasks: 提交成功后清理用户快照
         :param user_id: 用户 ID
         :param obj: 密码重置参数
         :return:
@@ -469,7 +491,7 @@ class UserService:
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
         await session_store.revoke_user(user_id, EndReason.password_changed)
-        await redis_client.delete_by_prefix(f'{settings.JWT_USER_REDIS_PREFIX}:{user_id}')
+        user_cache_manager.clear(background_tasks, [user_id])
         return count
 
     @staticmethod

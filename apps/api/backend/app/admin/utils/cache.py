@@ -21,12 +21,11 @@ class UserCacheManager:
     `await redis_client.delete(...)`，删除会发生在**提交之前**——命中这个窗口的
     并发请求用另一个会话查库读到的还是旧数据，会把旧快照连同完整 TTL 重新写回
     Redis，之后即便我们的事务提交了，也没有人再清一次，缓存会锁死在旧值上
-    直到 TTL 到期（默认 `TOKEN_EXPIRE_SECONDS` = 1 天）。
+    直到 TTL 到期（默认 `TOKEN_EXPIRE_SECONDS` = 30 分钟）。
 
-    FastAPI 的 `BackgroundTasks` 保证在响应对象送回 ASGI 服务器**之前**才执行——
-    而依赖的退出栈（含事务提交）在响应对象组装完成之后、发送之前就已经关闭，
-    所以背景任务里做的事必然发生在 commit 之后。这比"两侧都清一次"更彻底：
-    不需要额外补一次提交后的清理，天生就晚于提交。
+    `CurrentSessionTransaction` 显式使用 `scope='function'`，依赖退出时先提交，
+    再发送响应、执行 `BackgroundTasks`。因此后台清理在提交之后执行；提交失败时
+    也不会执行原成功响应上的清理任务。不能依赖 yield 依赖的默认 scope 推断这个顺序。
     """
 
     @staticmethod
