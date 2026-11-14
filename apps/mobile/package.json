@@ -12,7 +12,7 @@
     "build": "expo export --platform android --output-dir dist",
     "lint": "eslint",
     "start:plain": "expo start",
-    "prebuild": "expo prebuild --platform android --clean",
+    "native:prebuild": "expo prebuild --platform android --clean",
     "apk": "node scripts/apk.mjs"
   },
   "dependencies": {
