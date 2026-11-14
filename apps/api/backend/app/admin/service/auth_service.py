@@ -30,6 +30,7 @@ from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
 from backend.common.response.response_code import CustomErrorCode
+from backend.common.security.data_scope import bypass_data_scope
 from backend.common.security.jwt import (
     AccessToken,
     clear_refresh_cookie,
@@ -580,7 +581,9 @@ class AuthService:
         :return:
         """
         session = await session_store.rotate(request.cookies.get(settings.COOKIE_REFRESH_TOKEN_KEY))
-        user = await user_dao.get(db, session.user_id)
+        # 刷新是在核验会话所有者，不是展示用户数据；带 Bearer 时中间件已设置数据范围上下文。
+        with bypass_data_scope():
+            user = await user_dao.get(db, session.user_id)
         if not user or not user.status:
             await session_store.revoke(session.session_uuid, EndReason.disabled)
             raise ended_error(EndReason.disabled)
