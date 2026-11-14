@@ -17,6 +17,17 @@ apk.mjs   `pnpm --filter @admin/mobile apk` —— 打 release APK（流程只�
 pnpm --filter @admin/mobile apk     # = node scripts/apk.mjs
 ```
 
+### 🔴 原生工程重建命令不能叫 `prebuild`（#321）
+
+普通构建原本会先清空 android 原生目录，再导出 JS；签名文件和手工 Gradle 配置
+随之丢失，构建却仍然成功。原因是 pnpm 把同名脚本自动当成 build 的前置钩子。
+现在重建只通过 `pnpm --filter @admin/mobile native:prebuild` 显式执行。
+APK 脚本仍在原生目录缺失时直接调用 Expo，无需经过这个带 `--clean` 的重建入口。
+
+实测（pnpm 11.21.0，使用仓库实际脚本清单、用记录桩代替 Expo）：旧清单的 build
+依次运行 `prebuild --platform android --clean` 和 export，标记文件被删除；改名后
+只运行 export，标记文件保留。显式执行新命令仍会调用原生重建。未执行真实 APK 编译。
+
 ⚠️ **2026-09-02 这条只验到「原生模块逐个编 .aar」那一步就按用户要求停了**，
 没有产出过一个真的 APK。下面三条是这一轮**实测出来的**，不是推测。
 
@@ -68,7 +79,7 @@ transformer，在 store 里看得见。gradle 的 `createBundleReleaseJsAndAsset
 
 ### 其他
 
-- `android/` 和 `local.properties` 都是 gitignore 的（CNG：原生工程可再生）。
+- android 原生目录和 `local.properties` 都是 gitignore 的（CNG：原生工程可再生）。
   所以 gradle 镜像、代理、SDK 路径这些**只能在 `scripts/apk.mjs` 里每次重写** ——
   改完提交不进版本库，下一次 `prebuild --clean` 就回到原样
 - `release` 用的是模板自带的 **debug keystore**，所以能直接出可安装的包。
