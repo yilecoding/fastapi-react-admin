@@ -3,8 +3,11 @@
 from collections.abc import Callable
 from typing import Any
 
+import pytest
+
 from starlette.testclient import TestClient
 
+from backend.plugin.workflow.service import runtime_service
 from backend.plugin.workflow.tests.conftest import key, ok
 from backend.plugin.workflow.tests.test_ops import FORM, _act, _caps, _detail, _start, _todo
 from backend.plugin.workflow.tests.test_review_fixes import _approval, _model, _publish
@@ -153,6 +156,94 @@ def test_take_back_in_sequential_keeps_the_queue(
     # 队列没乱：还是轮到周敏，然后陈静
     ok(_act(client, login('zhoumin'), pk, 'approve'))
     assert _todo(client, login, 'chenjing', pk) is not None
+
+
+@pytest.mark.parametrize('after_sign', [False, True], ids=['approve', 'after-sign'])
+@pytest.mark.parametrize('transferred', [False, True], ids=['original', 'transferred'])
+def test_take_back_restores_every_canceled_or_task(
+    client: TestClient,
+    token_headers: dict[str, str],
+    login: Login,
+    uid: Uid,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    after_sign: bool,
+    transferred: bool,
+) -> None:
+    pushed: list[int] = []
+    original_push = runtime_service.workflow_todo_changed
+
+    async def record_push(user_id: int) -> None:
+        pushed.append(user_id)
+        await original_push(user_id)
+
+    monkeypatch.setattr(runtime_service, 'workflow_todo_changed', record_push)
+    code = f'PYTEST_TAKE_OR_{int(after_sign)}_{int(transferred)}'
+    _publish(
+        client,
+        token_headers,
+        code,
+        FORM,
+        _model(
+            _approval(
+                'n1',
+                {'kind': 'user', 'user_ids': [uid('zhaolei'), uid('zhoumin')]},
+                nxt=_approval('n2', {'kind': 'user', 'user_ids': [uid('wangfang')]}),
+            )
+        ),
+    )
+    pk = _start(client, login, code)
+    if transferred:
+        ok(_act(client, login('zhoumin'), pk, 'transfer', target_user_ids=[uid('chenjing')]))
+    other = 'chenjing' if transferred else 'zhoumin'
+    fields = ('node_id', 'node_name', 'assignee_id', 'assignee_name', 'origin_assignee_id', 'batch')
+
+    def pending_snapshot() -> list[tuple]:
+        tasks = _detail(client, login('sunqiang'), pk)['tasks']
+        return sorted(tuple(task[field] for field in fields) for task in tasks if task['status'] == 'pending')
+
+    before = pending_snapshot()
+    assert len(before) == 2
+    # 连续拿回也只能恢复本次取消的待办，不能复活历史行或重复建待办。
+    for _ in range(2):
+        if after_sign:
+            ok(_act(client, login('zhaolei'), pk, 'add_sign', sign_mode='after', target_user_ids=[uid('wangfang')]))
+        else:
+            ok(_act(client, login('zhaolei'), pk, 'approve'))
+        assert _todo(client, login, other, pk) is None
+        pushed.clear()
+        ok(_act(client, login('zhaolei'), pk, 'take_back'))
+        assert {int(uid('zhaolei')), int(uid(other))} <= set(pushed)
+        assert pending_snapshot() == before
+        assert _todo(client, login, other, pk) is not None
+        assert _todo(client, login, 'wangfang', pk) is None
+        if transferred:
+            assert _todo(client, login, 'zhoumin', pk) is None
+    # 恢复的另一位审批人确实能办，并且恢复后的加签组不会残留。
+    ok(_act(client, login(other), pk, 'approve'))
+    assert _current(client, login, pk) == 'n2'
+    assert _todo(client, login, 'zhaolei', pk) is None
+    ok(_act(client, login('wangfang'), pk, 'approve'))
+    assert _detail(client, login('sunqiang'), pk)['instance']['status'] == 'approved'
+
+
+def test_take_back_after_sign_is_rejected_once_a_member_acts(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid
+) -> None:
+    code = 'PYTEST_TAKE_OR_TOUCHED'
+    _publish(
+        client,
+        token_headers,
+        code,
+        FORM,
+        _model(_approval('n1', {'kind': 'user', 'user_ids': [uid('zhaolei'), uid('zhoumin')]})),
+    )
+    pk = _start(client, login, code)
+    ok(_act(client, login('zhaolei'), pk, 'add_sign', sign_mode='after', target_user_ids=[uid('wangfang')]))
+    ok(_act(client, login('wangfang'), pk, 'transfer', target_user_ids=[uid('chenjing')]))
+    assert 'take_back' not in _caps(_detail(client, login('zhaolei'), pk))
+    assert _act(client, login('zhaolei'), pk, 'take_back').json()['code'] == 409
+    assert _todo(client, login, 'zhoumin', pk) is None
 
 
 # ── 加签 ─────────────────────────────────────────────────────────────────────
