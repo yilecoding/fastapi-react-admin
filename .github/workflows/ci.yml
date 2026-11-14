@@ -75,6 +75,9 @@ jobs:
       - name: unit
         run: pnpm test:js
 
+      - name: CI publication guard tests
+        run: pnpm test:ci
+
       # 🔴 **文档的机器可核对部分也要在 CI 里核对。**
       # `ctx:check` 抓死引用 / 死链接 / 死脚本 / 死 testid / 跨文件章节引用，
       # 它整份存在的理由就是「凡是能被机器核对的断言就让机器核对」——
@@ -778,7 +781,12 @@ jobs:
         with:
           path: apps/docs/dist
 
+      - name: 部署前核对 main 当前提交
+        id: pages-head
+        run: node scripts/check-main-head.mjs
+
       - name: Deploy to GitHub Pages
+        if: steps.pages-head.outputs.current == 'true'
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
   # 构建生产镜像，推到 GHCR（GitHub Container Registry）。
@@ -792,11 +800,11 @@ jobs:
   #
   # 🔴 镜像从 `fba-*` 改名成 `fra-*`(2026-11),**1.1.x 期间两个名字都推**:
   # 照旧名字部署的人不再收到新镜像时,`docker compose pull` 不报错,只是
-  # 永远停在最后一个旧版本上——静默的。1.2.0 起删掉下面两段里 `fba-*` 的三行,
+  # 永远停在最后一个旧版本上——静默的。1.2.0 起删掉下面构建及 latest 发布里的 `fba-*`,
   # 旧包怎么处理见 deploy/AGENTS.md「镜像改名 fba-* → fra-*」。
   build-images:
     name: 构建镜像并推到 GHCR
-    needs: [static, lint-frontend, lint-backend, test-backend, test-e2e]
+    needs: [static, lint-frontend, lint-backend, test-backend, test-backend-postgres, test-e2e]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
@@ -827,16 +835,15 @@ jobs:
         run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Build & push api image
+        id: api
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./apps/api
           file: ./apps/api/Dockerfile.prod
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/fra-api:latest
             ghcr.io/${{ github.repository_owner }}/fra-api:sha-${{ steps.sha.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/fra-api:sha-${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/fba-api:latest
             ghcr.io/${{ github.repository_owner }}/fba-api:sha-${{ steps.sha.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/fba-api:sha-${{ github.sha }}
           labels: |
@@ -846,6 +853,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=fra-api
 
       - name: Build & push web image
+        id: web
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -854,10 +862,8 @@ jobs:
             VITE_API_BASE=
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/fra-web:latest
             ghcr.io/${{ github.repository_owner }}/fra-web:sha-${{ steps.sha.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/fra-web:sha-${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/fba-web:latest
             ghcr.io/${{ github.repository_owner }}/fba-web:sha-${{ steps.sha.outputs.short }}
             ghcr.io/${{ github.repository_owner }}/fba-web:sha-${{ github.sha }}
           labels: |
@@ -865,3 +871,25 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=fra-web
           cache-to: type=gha,mode=max,scope=fra-web
+
+      # 两个镜像都构建成功后再查远端，避免长时间构建期间 main 已经前进。
+      # 旧提交重跑仍保留 SHA 镜像供回滚，但不能覆盖生产的 latest。
+      - name: 更新 latest 前核对 main 当前提交
+        id: images-head
+        run: node scripts/check-main-head.mjs
+
+      - name: Publish latest images
+        if: steps.images-head.outputs.current == 'true'
+        env:
+          IMAGE_OWNER: ${{ github.repository_owner }}
+          API_DIGEST: ${{ steps.api.outputs.digest }}
+          WEB_DIGEST: ${{ steps.web.outputs.digest }}
+        run: |
+          docker buildx imagetools create \
+            --tag "ghcr.io/$IMAGE_OWNER/fra-api:latest" \
+            --tag "ghcr.io/$IMAGE_OWNER/fba-api:latest" \
+            "ghcr.io/$IMAGE_OWNER/fra-api@$API_DIGEST"
+          docker buildx imagetools create \
+            --tag "ghcr.io/$IMAGE_OWNER/fra-web:latest" \
+            --tag "ghcr.io/$IMAGE_OWNER/fba-web:latest" \
+            "ghcr.io/$IMAGE_OWNER/fra-web@$WEB_DIGEST"
