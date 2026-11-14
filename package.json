@@ -35,6 +35,7 @@
     "db:reset": "pnpm --filter api db:reset",
     "test": "turbo test",
     "test:js": "turbo test --filter=!api",
+    "test:ci": "node --test scripts/tests/*.test.mjs",
     "e2e": "turbo e2e",
     "e2e:install": "pnpm --filter web exec playwright install chromium",
     "hooks:install": "apps/api/.venv/bin/prek install -C apps/api -f",
