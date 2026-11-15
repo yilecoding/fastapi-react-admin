@@ -1,5 +1,6 @@
 import io
 import json
+import re
 
 from typing import Any
 
@@ -18,6 +19,24 @@ from backend.plugin.core import get_required_plugins
 from backend.plugin.installer import install_git_plugin, install_zip_plugin, remove_plugin, zip_plugin
 from backend.plugin.requirements import uninstall_requirements_async
 from backend.utils.timezone import timezone
+
+
+async def _get_plugin_dir(plugin: str) -> anyio.Path:
+    """Resolve only a named plugin package directly inside the plugin root."""
+    if not re.fullmatch(r'[A-Za-z0-9_-]+', plugin):
+        raise errors.NotFoundError(msg=t('error.plugin.not_found'))
+
+    root = await anyio.Path(PLUGIN_DIR).resolve()
+    plugin_dir = await (root / plugin).resolve()
+    # Also reject aliases to other packages and links/junctions outside the root.
+    if (
+        plugin_dir.parent != root
+        or plugin_dir.name != plugin
+        or not await plugin_dir.is_dir()
+        or not await (plugin_dir / '__init__.py').is_file()
+    ):
+        raise errors.NotFoundError(msg=t('error.plugin.not_found'))
+    return plugin_dir
 
 
 class PluginService:
@@ -79,11 +98,9 @@ class PluginService:
         """
         if settings.ENVIRONMENT != 'dev':
             raise errors.RequestError(msg=t('error.plugin.dev_only_uninstall'))
+        plugin_dir = await _get_plugin_dir(plugin)
         if plugin in get_required_plugins():
             raise errors.RequestError(msg=t('error.plugin.required_cannot_uninstall', plugin=plugin))
-        plugin_dir = anyio.Path(PLUGIN_DIR / plugin)
-        if not await plugin_dir.exists():
-            raise errors.NotFoundError(msg=t('error.plugin.not_found'))
         await uninstall_requirements_async(plugin)
         backup_file = PLUGIN_DIR / f'{plugin}.{timezone.now().strftime("%Y%m%d%H%M%S")}.backup.zip'
         await run_in_threadpool(zip_plugin, plugin_dir, backup_file)
@@ -99,6 +116,7 @@ class PluginService:
         :param plugin: 插件名称
         :return:
         """
+        await _get_plugin_dir(plugin)
         plugin_key = f'{settings.PLUGIN_REDIS_PREFIX}:{plugin}'
         plugin_info = await redis_client.get(plugin_key)
         if not plugin_info:
@@ -123,9 +141,7 @@ class PluginService:
         :param plugin: 插件名称
         :return:
         """
-        plugin_dir = anyio.Path(PLUGIN_DIR / plugin)
-        if not await plugin_dir.exists():
-            raise errors.NotFoundError(msg=t('error.plugin.not_found'))
+        plugin_dir = await _get_plugin_dir(plugin)
 
         bio = io.BytesIO()
         await run_in_threadpool(zip_plugin, plugin_dir, bio)
