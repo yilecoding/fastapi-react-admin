@@ -21,7 +21,7 @@ import { ApiError } from '../../api-client/errors'
 import { useFieldError } from '../_shared/form-error'
 import { FormField } from '../_shared/form-fields'
 import {
-  CONFIG_TYPES, TYPE_LABEL, useCreateConfig, useUpdateConfig, type ConfigItem,
+  CONFIG_TYPES, TYPE_LABEL, isSecret, useCreateConfig, useUpdateConfig, type ConfigItem,
 } from './api'
 
 
@@ -32,6 +32,7 @@ const schema = z.object({
     .regex(/^[A-Z][A-Z0-9_]*$/, '键名请用大写字母、数字和下划线，且以字母开头'),
   type: z.string().optional(),
   value: z.string().max(2000),
+  clear_secret: z.boolean(),
   is_frontend: z.boolean(),
   remark: z.string().max(200).optional(),
 })
@@ -64,7 +65,7 @@ export function ConfigSheet({
 
   const form = useForm<Values>({
     resolver: zodResolver(schema) as never,
-    defaultValues: { name: '', key: '', type: NONE, value: '', is_frontend: false, remark: '' },
+    defaultValues: { name: '', key: '', type: NONE, value: '', clear_secret: false, is_frontend: false, remark: '' },
   })
 
   React.useEffect(() => {
@@ -76,11 +77,12 @@ export function ConfigSheet({
             name: editing.name,
             key: editing.key,
             type: editing.type ?? NONE,
-            value: editing.value,
+            value: editing.is_secret || isSecret(editing.key) ? '' : editing.value,
+            clear_secret: false,
             is_frontend: editing.is_frontend,
             remark: editing.remark ?? '',
           }
-        : { name: '', key: '', type: NONE, value: '', is_frontend: false, remark: '' }
+        : { name: '', key: '', type: NONE, value: '', clear_secret: false, is_frontend: false, remark: '' }
     )
   }, [open, editing, form])
 
@@ -88,6 +90,8 @@ export function ConfigSheet({
   const errs = form.formState.errors
   const isFrontend = form.watch('is_frontend')
   const type = form.watch('type')
+  const secret = editing?.is_secret || isSecret(form.watch('key'))
+  const clearSecret = form.watch('clear_secret')
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -111,7 +115,8 @@ export function ConfigSheet({
               key: v.key.trim(),
               type: v.type && v.type !== NONE ? v.type : null,
               value: v.value,
-              is_frontend: v.is_frontend,
+              ...(isEdit && secret ? { clear_secret: v.clear_secret } : {}),
+              is_frontend: secret ? false : v.is_frontend,
               remark: v.remark?.trim() || null,
             }
             try {
@@ -163,9 +168,39 @@ export function ConfigSheet({
                 </SelectContent>
               </Select>
             </FormField>
-            <FormField label={t("键值")} error={fe(errs.value?.message)}>
-              <Textarea {...form.register('value')} data-testid="cfg-value" rows={3} className="font-mono" />
+            <FormField
+              label={t("键值")}
+              error={fe(errs.value?.message)}
+              hint={secret && isEdit ? t('留空保留已保存的密钥；清空请使用下方开关。') : undefined}
+            >
+              {secret ? (
+                <Input
+                  {...form.register('value')}
+                  type="password"
+                  autoComplete="new-password"
+                  disabled={clearSecret}
+                  placeholder={editing?.is_configured ? t('已配置，留空不修改') : t('未设置')}
+                  data-testid="cfg-value"
+                  className="font-mono"
+                />
+              ) : (
+                <Textarea {...form.register('value')} data-testid="cfg-value" rows={3} className="font-mono" />
+              )}
             </FormField>
+            {secret && isEdit && (
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="cfg-clear-secret">{t('清空已保存的密钥')}</Label>
+                <Switch
+                  id="cfg-clear-secret"
+                  data-testid="cfg-clear-secret"
+                  checked={clearSecret}
+                  onCheckedChange={(checked) => {
+                    form.setValue('clear_secret', checked === true)
+                    if (checked) form.setValue('value', '')
+                  }}
+                />
+              </div>
+            )}
             <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
               <div className="flex flex-col">
                 <Label>{t('前端可读')}</Label>
@@ -174,7 +209,8 @@ export function ConfigSheet({
                 </span>
               </div>
               <Switch
-                checked={isFrontend}
+                checked={!secret && isFrontend}
+                disabled={secret}
                 data-testid="cfg-frontend"
                 onCheckedChange={(c) => form.setValue('is_frontend', c === true)}
               />
