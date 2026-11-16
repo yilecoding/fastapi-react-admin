@@ -448,14 +448,17 @@ class OperaLogMiddleware(BaseHTTPMiddleware):
         return json.dumps(OperaLogMiddleware.desensitization(payload), ensure_ascii=False).encode()
 
     @staticmethod
-    def truncate_body(raw: bytes) -> str | None:
-        """响应体转字符串并按上限截断。**截断发生在脱敏之后**，顺序反了等于没脱敏"""
+    def truncate_body(raw: bytes, *, full_size: str | None = None) -> str | None:
+        """响应体转字符串并按上限截断。**截断发生在脱敏之后**，顺序反了等于没脱敏。
+
+        `full_size`：调用方只读了前一段（Webhook 出站，#307）时，`len(raw)` 不是完整大小，由调用方给出
+        """
         if not raw:
             return None
         limit = settings.OPERA_LOG_RESPONSE_MAX_SIZE
         if len(raw) > limit:
             head = raw[:limit].decode('utf-8', 'ignore')
-            return f'{head}\n\n…[已截断，完整响应 {len(raw)} 字节，上限 {limit} 字节]'
+            return f'{head}\n\n…[已截断，完整响应 {full_size or len(raw)} 字节，上限 {limit} 字节]'
         return raw.decode('utf-8', 'ignore')
 
     @classmethod
