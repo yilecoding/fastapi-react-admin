@@ -16,6 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@admin/ui/components/dropdown-menu"
+import { toast } from "@admin/ui/components/toast"
 
 import { LANGUAGES, changeLanguage, currentLanguage } from "@/i18n"
 
@@ -26,7 +27,14 @@ export function UserMenu() {
   const { data: me } = useQuery(meQuery)
 
   async function handleLogout() {
-    await logout(qc)
+    try {
+      await logout(qc)
+    } catch (err) {
+      // 没退成：登录态原样留着（见 `logout` 的注释），说清楚、让人再点一次 —— 不能静默停在原地（硬纪律 9）
+      const reason = err instanceof Error && err.message ? err.message : String(err)
+      toast.error(t('退出登录失败，你仍处于登录状态，请重试：{{reason}}', { reason }), { timeout: 8000 })
+      return
+    }
     await navigate({ to: "/sign-in", search: { redirect: undefined, reason: undefined } })
   }
 

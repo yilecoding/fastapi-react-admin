@@ -1,4 +1,5 @@
 import { QueryClient } from '@tanstack/react-query'
+import { ApiError } from '@admin/api'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { tokenStore } from '../api-client/token-store'
@@ -143,5 +144,36 @@ describe('上传与 AI 状态的身份边界', () => {
     expect(client.uploadFile).not.toHaveBeenCalled()
     expect(client.api.POST).not.toHaveBeenCalled()
     expect(useUploadStore.getState().items).toEqual([])
+  })
+})
+
+describe('登出请求失败（#319）', () => {
+  it.each([
+    ['网络不通', new ApiError(0, 0, 'Failed to fetch')],
+    ['服务端 502', new ApiError(502, 500, 'Bad Gateway')],
+    ['限流 429', new ApiError(429, 429, 'Too Many Requests')],
+  ])('%s：不清本地登录态、把错误抛给调用方', async (_label, error) => {
+    client.api.POST.mockRejectedValueOnce(error)
+    useAiDrawerStore.getState().setConversationId('A-conversation')
+    const qc = new QueryClient()
+    qc.setQueryData(['me'], { id: a })
+
+    await expect(logout(qc)).rejects.toBe(error)
+
+    // 服务端会话和 httpOnly cookie 都还活着：本地清了就是「刷新又登回去」的半死状态
+    expect(tokenStore.get()).toBe(jwt(a))
+    expect(qc.getQueryData(['me'])).toEqual({ id: a })
+    expect(useAiDrawerStore.getState().conversationId).toBe('A-conversation')
+  })
+
+  it.each([401, 403])('%s：会话本来就结束了，按登出成功收尾', async (status) => {
+    client.api.POST.mockRejectedValueOnce(new ApiError(status, status, 'ended'))
+    const qc = new QueryClient()
+    qc.setQueryData(['me'], { id: a })
+
+    await expect(logout(qc)).resolves.toBeUndefined()
+
+    expect(tokenStore.get()).toBeNull()
+    expect(qc.getQueryData(['me'])).toBeUndefined()
   })
 })
