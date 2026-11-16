@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import Select, and_, delete, func, or_, select, update
+from sqlalchemy import Select, and_, case, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.common.security.data_scope import DataScopedCRUD
@@ -174,12 +174,16 @@ class CRUDOpenWebhookDelivery(DataScopedCRUD[OpenWebhookDelivery]):
         )
         return result.rowcount or 0
 
-    async def reclaim_stale(self, db: AsyncSession, *, before: datetime) -> int:
-        """停在「发送中」太久的行（worker 发到一半被杀）→ 失败、马上重试。
+    async def reclaim_stale(self, db: AsyncSession, *, before: datetime, max_attempts: int) -> int:
+        """停在「发送中」太久的行（worker 发到一半被杀）→ 失败、马上重试；**这一次也算一次尝试**。
 
         ⚠️ 和通知那边**相反**（那边归成「结果未知」不重发）：Webhook 是至少一次，对方按 `webhook-id` 去重
+
+        🔴 回收时不加次数的话，一个每次都能把 worker 拖死 / 撑爆的端点会被无限重发：`attempts` 永远不涨，
+        退避和「用完就放弃」都不生效（#307）。次数用完直接放弃
         """
         now = timezone.now()
+        used_up = OpenWebhookDelivery.attempts + 1 >= max_attempts
         result = await db.execute(
             update(OpenWebhookDelivery)
             .where(
@@ -187,9 +191,10 @@ class CRUDOpenWebhookDelivery(DataScopedCRUD[OpenWebhookDelivery]):
                 OpenWebhookDelivery.updated_time < before,
             )
             .values(
-                status=WebhookDeliveryStatus.failed.value,
+                status=case((used_up, WebhookDeliveryStatus.exhausted.value), else_=WebhookDeliveryStatus.failed.value),
+                attempts=OpenWebhookDelivery.attempts + 1,
                 last_error='stale: worker 在发送中退出',
-                next_attempt_time=now,
+                next_attempt_time=case((used_up, None), else_=now),
                 updated_time=now,
             )
         )
