@@ -51,17 +51,30 @@ const showEmpty = !conversationId || (bubbles.length === 0 && !historyQuery.isPe
 而回放历史那个 effect 判的是 `if (!historyQuery.data) return` —— **空数组是 truthy**，
 于是 `setBubbles([])` 把正在流的内容清了。
 
-**修法**：流式进行中不接受历史覆盖（复用已有的单飞 ref）：
+**修法**：**眼前这个会话**正在流式产出、且流写的那条气泡还在时，不接受历史覆盖：
 
 ```ts
-React.useEffect(() => {
-  if (!historyQuery.data) return
-  if (inFlight.current) return        // ← 这一行
-  setBubbles(historyQuery.data.map(...))
-}, [historyQuery.data])
+const s = stream.current             // { conversationId, bubbleId }：在途的流属于谁
+if (inFlight.current && s?.conversationId === conversationId && prev.some((b) => b.id === s.bubbleId)) return prev
 ```
 
 ⚠️ 顺带挡住了另一种：后台 refetch 恰好在流式途中返回。
+
+## 🔴 流式途中切会话：挡历史只能挡「自己那个会话」（#329）
+
+**症状**：会话甲出字时点左栏的会话乙（或「新建」），界面停在「选中乙、显示甲的全文」，
+再发一句就带着 `conversation_id: 乙` 发出去；从「新建」进去的会话因为气泡不空，一直不被命名。
+
+**根因**：上面那条修法第一版写的是 `if (inFlight.current) return` —— 只要有流在跑就挡，
+乙的历史被挡掉；流结束只失效 `messages(甲)`，乙的 `data` 引用不变，回放 effect 不再跑。
+
+**修法**：流绑定到发起它的会话和那条助手气泡（`stream` ref），事件按 `bubbleId` 落，气泡不在眼前就丢弃；
+回放 effect 依赖加上 `conversationId`，换会话时历史没回来就先清空。
+
+同一个 issue 的另一半：`fetch()` / `reader.read()` 直接 reject 时 `send` 原来没有 catch，
+气泡永远「思考中」（硬纪律 9）；流正常关了却没收到 `done` / `error` 也一样。现在两种都落成一句报错。
+
+**实测证据**：E2E `ai-chat-stream.spec.ts` 三条（切会话 · 断网 · 无 done）已写，**尚未实跑**（写的那台机器没有测试库）——跑过之后把结果补在这里。
 
 ## 会话列表必须按时间分段
 
