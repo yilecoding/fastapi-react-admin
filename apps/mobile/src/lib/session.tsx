@@ -1,12 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
 
-import { ApiError, isSessionEndReason, type SessionEndReason } from '@admin/api'
+import { ApiError, confirmsLogout, isSessionEndReason, type SessionEndReason } from '@admin/api'
 import type { components } from '@admin/api/schema'
 import { setDisplayTimeZone } from '@admin/i18n'
 
 import { api, setSessionExpiredHandler } from '@/lib/api'
 import type { CurrentUser } from '@/lib/contract'
+import { logoutPending } from '@/lib/logout-pending'
 import { serverStore } from '@/lib/server'
 import { tokenStore } from '@/lib/token-store'
 
@@ -49,6 +50,47 @@ export function useSession(): Session {
   const ctx = React.useContext(SessionContext)
   if (!ctx) throw new Error('useSession 必须在 <SessionProvider> 里用')
   return ctx
+}
+
+/**
+ * 让服务端把当前服务器上的这个会话作废（#138 之后一个会话就是一个 key）。确认了就删「待撤销」标记，
+ * 没确认（网络 / 5xx / 429）就留着，下次冷启动再补发。
+ *
+ * 401 / 403 也算确认（`confirmsLogout`）。后端的登出接口对「没有凭据」是幂等成功，
+ * 只带 cookie（没有 access token）也认得出会话 —— 所以调用方可以先清本地、再在后台发它。
+ *
+ * ⚠️ **后台发，不要 await 在界面前面**：请求没有超时，服务器不可达时 RN 的 fetch 要等 10～60 秒，
+ * 点了「退出」没反应 / 冷启动卡在闪屏上。
+ */
+async function revokeOnServer(): Promise<void> {
+  const base = serverStore.current()
+  try {
+    await api.POST('/api/v1/auth/logout')
+  } catch (err) {
+    if (!confirmsLogout(err)) return
+  }
+  await logoutPending.remove(base)
+}
+
+/** 后台那次撤销。登录前要等它落地，见 `startRevoke` */
+let revoking: Promise<void> | null = null
+
+/**
+ * 🔴 **登录前要等上一次撤销落地**：登出响应会带一条清空 refresh cookie 的 `Set-Cookie`。
+ * 它要是晚于新登录的响应到达，cookie jar 里**新**会话的 refresh cookie 就被清掉了 ——
+ * 新登录照常进去，半小时后 access token 到期、刷新失败，被莫名其妙踢回登录屏
+ */
+function startRevoke(): void {
+  // 🔴 同步调用：`revokeOnServer` 在第一个 await 之前就读了地址、发出了请求 —— 改服务器地址的屏紧接着
+  // 就换地址（`src/app/(app)/server.tsx`），这里要是先 await 一下，登出就打到新服务器上去了
+  const p = revokeOnServer().finally(() => {
+    if (revoking === p) revoking = null
+  })
+  revoking = p
+}
+
+async function settleRevoke(): Promise<void> {
+  await revoking
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -129,6 +171,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // 🔴 顺序不能换：地址要先读出来，否则第一个请求打的是编译期默认地址
       await serverStore.hydrate()
       await tokenStore.hydrate()
+      await logoutPending.hydrate()
+      // 🔴 上次在这台服务器上登出、服务端没确认（离线 / 服务器不可达）：cookie jar 里的 refresh cookie 还活着，
+      // 下面的静默恢复会把原用户登回去（#319）。不恢复，先补发一次登出，成不成都停在登录屏
+      if (logoutPending.has(serverStore.current())) {
+        await tokenStore.clear()
+        startRevoke()
+        if (!alive) return
+        setBootstrapError(null)
+        setEndReason(null)
+        applyAnonymous()
+        return
+      }
       // 🔴 SecureStore 里没有 token 时先**显式**静默恢复（cookie jar 跨冷启动是持久的）。
       // 原来是「无条件打 `/me`，没 token 的 401 由 api 层刷新兜住」—— #138 之后 api 层对
       // **没带 token** 的 401 不再刷新（那是「会话已经在本地结束了」，见 packages/api 分册），
@@ -172,6 +226,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // 开了二次验证：这一步没有 token、也没有 refresh cookie（#181）
       if ('mfa_required' in result) return { token: result.mfa_token, setup: result.mfa_setup }
       await tokenStore.set(result.access_token)
+      // 新登录已经把 cookie jar 里那个没撤掉的 refresh cookie 换掉了，不用再拦冷启动的恢复
+      await logoutPending.remove(serverStore.current())
       setEndReason(null)
       // 登录响应里的 user 是 `GetUserInfoDetail`，**没有 dept / roles 的名字**；
       // 个人中心要显示它们，所以再问一次 `/me` 拿摊平后的那份。
@@ -182,8 +238,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   )
 
   const login = React.useCallback<Session['login']>(
-    async (input) =>
-      finishFirstStep(
+    async (input) => {
+      await settleRevoke()
+      return finishFirstStep(
         await api.POST('/api/v1/auth/login', {
           body: {
             username: input.username,
@@ -194,19 +251,22 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
             client: 'mobile',
           },
         }),
-      ),
+      )
+    },
     [finishFirstStep],
   )
 
   const loginByPhone = React.useCallback<Session['loginByPhone']>(
-    async (input) =>
-      finishFirstStep(
+    async (input) => {
+      await settleRevoke()
+      return finishFirstStep(
         await api.POST('/api/v1/auth/phone/login', {
           // 🔴 `client` 不能省：后端默认 `'web'`，省了这个会话就按网页端的策略算（空闲时长 / 同端设备数都不对）。
           // 短信验证码的字段叫 `captcha` 不叫 `code`：后端按这个键名把它从操作日志里脱掉
           body: { phone: input.phone, captcha: input.captcha, client: 'mobile' },
         }),
-      ),
+      )
+    },
     [finishFirstStep],
   )
 
@@ -215,6 +275,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // 字段叫 `otp`：后端按这个键名把它从操作日志里脱掉
       const result = await api.POST('/api/v1/auth/mfa/verify', { body: { mfa_token: mfaToken, otp } })
       await tokenStore.set(result.access_token)
+      await logoutPending.remove(serverStore.current())
       setEndReason(null)
       await reload()
     },
@@ -222,14 +283,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   )
 
   const logout = React.useCallback(async () => {
-    try {
-      // 让服务端把这个会话真正作废（#138 之后一个会话就是一个 key，`session_store.revoke`）。
-      // 失败也要继续往下清本地 —— 否则用户会卡在一个「点了登出还登着」的状态。
-      await api.POST('/api/v1/auth/logout')
-    } catch {
-      // 忽略：本地清干净才是登出的语义底线
-    }
+    // 🔴 先落「待撤销」标记、服务端确认了再删（#319）。本地照样当场登出 —— 手机上点了退出就要退出，
+    // 不能因为没网卡在已登录态；但 refresh cookie 只有登出接口的响应删得掉，没删掉的那个要靠标记
+    // 拦住下次冷启动的静默恢复。标记要在请求**之前**落：请求半路 App 被杀也算没确认。
+    // 请求在后台发、只带 cookie（token 已经清了，后端认 cookie）
+    await logoutPending.add(serverStore.current())
     await tokenStore.clear()
+    startRevoke()
     // 自己登出不需要「为什么」
     setEndReason(null)
     applyAnonymous()
