@@ -77,11 +77,8 @@ def _put_raw(client: TestClient, headers: dict[str, str], row: dict, value: str)
     但读取侧的回落**仍然要测**：脏数据现在只可能来自直接写库、
     迁移、或者闸门上线之前留下的历史行。这个 helper 造的正是那种。
 
-    ⚠️ 写完必须**顺手清缓存**：`config_service.get_all` 是 `@cached` 的，
-    直接改库不会触发 `@cache_invalidate`，`load_config` 会读到缓存里的旧值，
-    于是测试以「回落没生效」的样子绿/红，而原因完全在别处。
-    这里用一次**接口写入合法值**来触发失效（`update` 挂着 `@cache_invalidate`），
-    再直接改库 —— 顺序不能反。
+    #305 后原始配置不再缓存。先经接口写入合法基线，再直接造脏值，
+    验证读取侧仍能独立处理绕过写入校验的历史数据。
     """
     import asyncio
 
@@ -89,7 +86,7 @@ def _put_raw(client: TestClient, headers: dict[str, str], row: dict, value: str)
 
     from backend.database.db import create_database_async_engine, create_database_async_session, get_database_url
 
-    # 先用接口写一发合法值：目的是触发 @cache_invalidate 把整个命名空间清掉
+    # 先用接口写入合法基线
     _put(client, headers, row, BASELINE[row['key']])
 
     async def _write() -> None:
@@ -179,13 +176,7 @@ def test_the_dirty_key_falls_back_and_the_siblings_still_load(
 def test_updating_a_config_is_visible_on_the_next_read(
     client: TestClient, token_headers: dict[str, str], configs: dict
 ) -> None:
-    """改了参数配置，下一次读必须是新值 —— 也就是缓存真的失效了。
-
-    ⚠️ 读取侧是 `@cached(namespace=CACHE_CONFIG_REDIS_PREFIX, key='pk')`，
-    写入侧是 `@cache_invalidate(namespace=...)`。两个 namespace 对不上时
-    **什么都不会清、也不会报错**，表现为「改完保存成功，页面上还是旧值」。
-    先读一次把缓存灌满，再改，再读 —— 这条路径才走得到。
-    """
+    """改了参数配置，下一次读必须是新值；原始配置不再缓存（#305）。"""
     row = configs[SIBLING_KEY]
     pk = row['id']
     first = client.get(f'/sys/configs/{pk}', headers=token_headers).json()['data']['value']
