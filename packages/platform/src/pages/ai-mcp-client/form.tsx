@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import * as React from 'react'
 import { useForm } from 'react-hook-form'
@@ -19,6 +20,7 @@ import { Switch } from '@admin/ui/components/switch'
 import { Textarea } from '@admin/ui/components/textarea'
 
 import { ApiError } from '../../api-client/errors'
+import { meQuery } from '../../auth/queries'
 import { useFieldError } from '../_shared/form-error'
 import { FormField } from '../_shared/form-fields'
 import { splitList, useCreateMcpClient, useUpdateMcpClient, type IssuedToken, type McpClient } from './api'
@@ -67,6 +69,8 @@ export function McpClientFormSheet({
 }) {
   const { t } = useTranslation()
   const fe = useFieldError()
+  // 「允许代表超管」和 act_as 里的 * 只有超管能设（后端 `_check_grantable`，#314）：别让人填完再吃一个 403
+  const isSuperuser = useQuery(meQuery).data?.is_superuser === true
   const isEdit = editing !== null
   const create = useCreateMcpClient()
   const update = useUpdateMcpClient()
@@ -152,16 +156,25 @@ export function McpClientFormSheet({
               label={t('可代表的用户')}
               error={fe(errs.act_as?.message)}
               required
-              hint={t('每行一个用户名；填 * 表示任何普通用户。用户名不存在会保存失败')}
+              hint={
+                isSuperuser
+                  ? t('每行一个用户名；填 * 表示任何普通用户。用户名不存在会保存失败')
+                  : t('每行一个用户名，只能填你的数据范围内的人。用户名不存在会保存失败')
+              }
             >
               <Textarea {...form.register('act_as')} rows={3} className="font-mono text-xs" />
             </FormField>
 
             <FormField
               label={t('允许代表超级管理员')}
-              hint={t('超管绕过所有权限码和数据范围：凭据一旦泄露就是整个系统。没有明确需要不要打开')}
+              hint={
+                isSuperuser
+                  ? t('超管绕过所有权限码和数据范围：凭据一旦泄露就是整个系统。没有明确需要不要打开')
+                  : t('只有超级管理员能打开')
+              }
             >
               <Switch
+                disabled={!isSuperuser}
                 checked={form.watch('allow_superuser')}
                 onCheckedChange={(c) => form.setValue('allow_superuser', c, { shouldDirty: true })}
               />
