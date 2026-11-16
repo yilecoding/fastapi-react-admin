@@ -220,6 +220,69 @@ def test_corrupt_ciphertext_is_not_treated_as_plaintext():
             decrypt_secret(value)
 
 
+@pytest.mark.parametrize('bulk', [False, True])
+@pytest.mark.parametrize('failure', ['clear_and_replace', 'invalid_metadata', 'invalid_value'])
+@pytest.mark.parametrize('language', ['zh-CN', 'en-US'])
+def test_validation_errors_do_not_echo_config_secrets(
+    client, token_headers, rows, monkeypatch, bulk, failure, language
+):
+    from backend.middleware.opera_log_middleware import OperaLogMiddleware
+
+    group, engine, create = rows
+    item, body = create(f'{group}_PASSWORD', 'stored-secret')
+    original = stored(engine, item['id'])['value']
+    submitted = 'rejected-smtp-secret-305'
+    payload = {**body, 'value': submitted}
+    if failure == 'clear_and_replace':
+        payload['clear_secret'] = True
+    elif failure == 'invalid_metadata':
+        payload['name'] = 'x' * 33
+    else:
+        payload['value'] = [submitted]
+    logged = []
+    enqueue = OperaLogMiddleware.enqueue
+
+    def capture(entry):
+        logged.append(entry)
+        return enqueue(entry)
+
+    monkeypatch.setattr(OperaLogMiddleware, 'enqueue', staticmethod(capture))
+    response = client.put(
+        '/sys/configs' if bulk else f'/sys/configs/{item["id"]}',
+        headers={**token_headers, 'Accept-Language': language},
+        json=[{**payload, 'id': item['id']}] if bulk else payload,
+    )
+    assert response.status_code == 422, response.text
+    assert submitted not in response.text, '422 响应和操作日志不能再次回显密钥'
+    assert response.json()['data']['errors'], '仍须返回可定位的校验错误'
+    entry = next(entry for entry in logged if entry.trace_id == response.json()['trace_id'])
+    assert submitted not in entry.model_dump_json(), '入队的日志参数、响应和异常消息均须脱敏'
+    assert stored(engine, item['id'])['value'] == original
+
+
+def test_create_validation_errors_do_not_echo_config_secrets(client, token_headers, rows):
+    group, _, _ = rows
+    submitted = 'rejected-create-secret-305'
+    response = client.post(
+        '/sys/configs',
+        headers=token_headers,
+        json={'name': 'x' * 33, 'key': f'{group}_TOKEN', 'value': submitted, 'is_frontend': False},
+    )
+    assert response.status_code == 422, response.text
+    assert submitted not in response.text
+
+
+def test_ordinary_validation_errors_keep_debug_input(client, token_headers, rows):
+    group, _, _ = rows
+    response = client.post(
+        '/sys/configs',
+        headers=token_headers,
+        json={'name': 'x' * 33, 'key': f'{group}_HOST', 'value': 'smtp.example.test', 'is_frontend': False},
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()['data']['errors'][0]['input']['value'] == 'smtp.example.test'
+
+
 def test_startup_removes_old_config_caches_only(client):
     from backend.plugin.config.hooks import lifespan
 
