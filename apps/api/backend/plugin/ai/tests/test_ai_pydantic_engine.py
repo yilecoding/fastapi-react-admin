@@ -194,7 +194,9 @@ class TestToolsGoThroughDispatcher:
         events = _run(_engine(stream))
         assert events[-1].type == 'error'
         assert events[-1].code == 'llm_error'
-        assert '502' in events[-1].message
+        # 认不出来的异常只说类型，原文进日志（#317：异常文字里可能是上游响应体 / 内网地址）
+        assert 'RuntimeError' in events[-1].message
+        assert '网关 502' not in events[-1].message
 
 
 class TestRegistry:

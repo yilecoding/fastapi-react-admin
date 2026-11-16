@@ -44,8 +44,12 @@ export default function ServerScreen() {
       const body = (await res.json()) as { code?: number }
       // FBA 的所有响应都带 code；不带说明这不是本项目的后端
       if (typeof body?.code !== 'number') throw new Error(t('这个地址不像是本项目的后端'))
-      await serverStore.set(normalized === API_BASE_DEFAULT ? null : normalized)
+      // 🔴 先登出、再换地址：登出请求要打到**旧**服务器上，cookie jar 按主机分，打到新服务器上的那次登出
+      // 带不上旧服务器的 refresh cookie —— 旧会话撤不掉，以后切回来冷启动会被静默登回去（#319）。
+      // ⚠️ `logout()` 的撤销请求在后台发，但地址是在 `api.POST()` **同步**调用时取的（`@admin/api` 的 `send`
+      // 第一个 await 之前），所以紧接着换地址不影响它。别在 `startRevoke` 和 `api.POST` 之间加 await
       await logout()
+      await serverStore.set(normalized === API_BASE_DEFAULT ? null : normalized)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -54,9 +58,10 @@ export default function ServerScreen() {
   }
 
   async function reset() {
+    // 同上：先在旧服务器上登出
+    await logout()
     await serverStore.set(null)
     setValue(API_BASE_DEFAULT)
-    await logout()
   }
 
   return (
