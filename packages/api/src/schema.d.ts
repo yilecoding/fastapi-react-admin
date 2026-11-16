@@ -6151,6 +6151,16 @@ export interface components {
              * @description 更新时间
              */
             updated_time?: string | null;
+            /**
+             * Is Secret
+             * @description 是否为密钥配置
+             */
+            readonly is_secret: boolean;
+            /**
+             * Is Configured
+             * @description 密钥是否已配置；仅表示数据库中有值
+             */
+            readonly is_configured: boolean;
         };
         /**
          * GetConversationDetail
@@ -14075,7 +14085,8 @@ export interface components {
             key: string;
             /**
              * Value
-             * @description 参数配置值
+             * @description 参数配置值；密钥留空或不传表示不修改
+             * @default
              */
             value: string;
             /**
@@ -14088,6 +14099,12 @@ export interface components {
              * @description 备注
              */
             remark?: string | null;
+            /**
+             * Clear Secret
+             * @description 显式清空密钥；不能同时提交新值
+             * @default false
+             */
+            clear_secret: boolean;
         };
         /**
          * UpdateConfigsParam
@@ -14111,7 +14128,8 @@ export interface components {
             key: string;
             /**
              * Value
-             * @description 参数配置值
+             * @description 参数配置值；密钥留空或不传表示不修改
+             * @default
              */
             value: string;
             /**
@@ -14124,6 +14142,12 @@ export interface components {
              * @description 备注
              */
             remark?: string | null;
+            /**
+             * Clear Secret
+             * @description 显式清空密钥；不能同时提交新值
+             * @default false
+             */
+            clear_secret: boolean;
             /**
              * Id
              * @description 参数配置 ID
