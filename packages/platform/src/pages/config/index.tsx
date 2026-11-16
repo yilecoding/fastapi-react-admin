@@ -498,7 +498,7 @@ export function ConfigPage({
                 {t('其中 {{n}} 项会影响登录或口令安全策略：', { n: dangerDirty.length })}
                 {dangerDirty.map((c) => (
                   <span key={c.id} className="mt-1 block font-mono text-xs">
-                    {t(metaOf(c.key)?.label ?? c.name)}：{c.value} →{' '}
+                    {t(metaOf(c.key)?.label ?? c.name)}：{isSecret(c.key) ? t('（已隐藏）') : c.value} →{' '}
                     {isSecret(c.key) ? t('（已隐藏）') : draft[c.id]}
                   </span>
                 ))}
