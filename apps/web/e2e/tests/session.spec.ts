@@ -54,6 +54,29 @@ test.describe("登录会话", () => {
     await expect(other.getByTestId("session-end-notice")).toContainText("其他标签页")
   })
 
+  test("登出请求失败：说清楚、仍是完整的登录态；重试成功后刷新也回不去（#319）", async ({ authedPage: page }) => {
+    await page.goto("/dashboard")
+    await expect(page.getByTestId("user-menu")).toBeVisible()
+
+    // 登出请求打不到服务端：httpOnly 的 refresh cookie 只有它的响应删得掉
+    await page.route(`${API_BASE}/api/v1/auth/logout`, (route) => route.abort("internetdisconnected"))
+    await page.getByTestId("user-menu").click()
+    await page.getByTestId("logout").click()
+
+    await expect(page.getByTestId("toast")).toContainText("退出登录失败")
+    await expect(page).toHaveURL(/\/dashboard/)
+    // 不是「清了一半」的空壳：页面还能正常取数（me 还在、会话可用）
+    await expect(page.getByTestId("me-nickname")).not.toHaveText("…")
+
+    // 网络回来了：再点一次就真退出，cookie 被服务端清掉 —— 刷新不会被静默登回去
+    await page.unroute(`${API_BASE}/api/v1/auth/logout`)
+    await page.getByTestId("user-menu").click()
+    await page.getByTestId("logout").click()
+    await expect(page).toHaveURL(/\/sign-in/)
+    await page.goto("/dashboard")
+    await expect(page).toHaveURL(/\/sign-in/)
+  })
+
   test("刷新时后端暂时不可用：停在「连不上服务器」，不踢回登录页", async ({ authedPage: page }) => {
     // 页面加载时手里没有 token，第一件事就是刷新 —— 让它撞上 502
     await page.route(`${API_BASE}/api/v1/auth/refresh`, (route) => route.fulfill({ status: 502, body: "Bad Gateway" }))
