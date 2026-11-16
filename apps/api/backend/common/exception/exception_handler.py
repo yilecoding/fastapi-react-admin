@@ -11,6 +11,7 @@ from backend.common.exception.errors import BaseExceptionError, TokenError
 from backend.common.i18n import i18n, t, tm
 from backend.common.response.response_code import CustomResponseCode, StandardResponseCode
 from backend.common.response.response_schema import response_base
+from backend.common.secret_keys import is_secret_key_name
 from backend.core.conf import settings
 from backend.utils.serializers import MsgSpecJSONResponse
 from backend.utils.trace_id import get_request_trace_id
@@ -71,6 +72,15 @@ def localize_validation_errors(exc: RequestValidationError | ValidationError) ->
 _DEBUG_INPUT_MAX_CHARS = 200
 
 
+def _contains_secret_config(value: object) -> bool:
+    """校验失败时不能依赖 DTO；从原始单条／批量请求识别密钥配置。"""
+    if isinstance(value, dict):
+        return is_secret_key_name(value.get('key')) or any(_contains_secret_config(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_contains_secret_config(v) for v in value)
+    return False
+
+
 async def _validation_exception_handler(exc: RequestValidationError | ValidationError):
     """
     数据验证异常处理
@@ -79,6 +89,15 @@ async def _validation_exception_handler(exc: RequestValidationError | Validation
     :return:
     """
     errors = localize_validation_errors(exc)
+    # model_validator 的 input 是整行，字段类型错误的 input 则只剩 value。
+    # 两种都检查，且在生成调试文案、记录异常上下文之前移除，避免密钥再次进入日志。
+    hide_input = _contains_secret_config(getattr(exc, 'body', None)) or any(
+        _contains_secret_config(error.get('input')) for error in errors
+    )
+    if hide_input:
+        for validation_error in errors:
+            validation_error.pop('input', None)
+            validation_error.pop('ctx', None)
     error = errors[0]
     if error.get('type') == 'json_invalid':
         message = t('error.request.json_invalid')
@@ -89,7 +108,7 @@ async def _validation_exception_handler(exc: RequestValidationError | Validation
         field = str(error.get('loc')[-1])
         error_msg = error.get('msg')
         # 「，输入：」这段是 dev 专属的调试后缀，也得跟着语言走。
-        suffix = t('error.request.debug_input_suffix', input=error_input)
+        suffix = '' if hide_input else t('error.request.debug_input_suffix', input=error_input)
         message = f'{field} {error_msg}{suffix}' if settings.ENVIRONMENT == 'dev' else error_msg
     # 外壳也要翻 —— 原来 en-US 下是「请求参数非法: Input should be a valid string」
     msg = t('error.request.invalid_parameter', message=message)
