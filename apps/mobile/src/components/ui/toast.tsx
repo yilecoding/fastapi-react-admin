@@ -186,6 +186,7 @@ export function Toaster() {
           <Pressable
             key={item.id}
             onPress={() => dismiss(item.id)}
+            testID={`toast-${item.tone}`}
             className="bg-card border-border flex-row items-start gap-2.5 rounded-xl border px-3.5 py-3 shadow-lg shadow-black/10"
           >
             <Icon as={TONE_ICON[item.tone]} className={cn('mt-0.5 size-[18px]', TONE_CLASS[item.tone])} />
