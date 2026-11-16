@@ -100,6 +100,47 @@ def _check_code(row: UserMfa, otp: str) -> bool:
 
 _CHALLENGE = 'challenge'
 _SETUP = 'setup'
+_RESERVE_CHALLENGE_ATTEMPT = """
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl < 0 then
+    return -1
+end
+local count = redis.call('INCR', KEYS[2])
+if count == 1 then
+    redis.call('PEXPIRE', KEYS[2], ttl)
+end
+if count > tonumber(ARGV[1]) then
+    return 0
+end
+redis.call('INCR', KEYS[3])
+redis.call('PEXPIRE', KEYS[3], ttl)
+return count
+"""
+_FINISH_CHALLENGE_ATTEMPT = """
+if redis.call('EXISTS', KEYS[1]) == 0 then
+    redis.call('DEL', KEYS[2], KEYS[3])
+    return 0
+end
+local ttl = redis.call('PTTL', KEYS[1])
+if ttl < 0 then
+    redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4])
+    return 0
+end
+local failures = redis.call('INCR', KEYS[2])
+if failures == 1 then
+    redis.call('PEXPIRE', KEYS[2], ttl)
+end
+local pending = redis.call('DECR', KEYS[3])
+if pending <= 0 and failures >= tonumber(ARGV[1]) then
+    redis.call('DEL', KEYS[1], KEYS[2], KEYS[3], KEYS[4])
+    redis.call('DEL', ARGV[2])
+    return 1
+end
+return 0
+"""
+_CONSUME_CHALLENGE = """
+return redis.call('GETDEL', KEYS[1]) or 0
+"""
 
 
 def _key(kind: str, token: str) -> str:
@@ -116,7 +157,7 @@ async def gate(
     if not enabled and not is_enforced(user):
         return None
     token = secrets.token_urlsafe(32)
-    payload = {'user_id': user.id, 'client': client, 'setup': not enabled, 'attempts': 0, **(extra or {})}
+    payload = {'user_id': user.id, 'client': client, 'setup': not enabled, **(extra or {})}
     await redis_client.set(_key(_CHALLENGE, token), json.dumps(payload), ex=settings.MFA_CHALLENGE_SECONDS)
     return MfaChallenge(mfa_token=token, mfa_setup=not enabled)
 
@@ -128,15 +169,33 @@ async def _load(token: str) -> dict[str, Any]:
     return json.loads(raw)
 
 
+async def _reserve_attempt(token: str) -> int:
+    """在校验 OTP 前原子占用一次名额；过期令牌或超限令牌都不能进入验证码校验。"""
+    result = await redis_client.eval(
+        _RESERVE_CHALLENGE_ATTEMPT,
+        3,
+        _key(_CHALLENGE, token),
+        _key('attempts', token),
+        _key('pending', token),
+        str(settings.MFA_CHALLENGE_ATTEMPTS),
+    )
+    if result < 0 or result == 0:
+        raise errors.AuthorizationError(msg=t('error.mfa.challenge_expired'))
+    return int(result)
+
+
 async def _fail(db: AsyncSession, token: str, payload: dict[str, Any]) -> None:
-    """错一次：令牌上记一次（满了作废），账号的登录失败计数也记一次（满了按密码错的同一套规则锁定）"""
-    payload['attempts'] = int(payload.get('attempts', 0)) + 1
-    key = _key(_CHALLENGE, token)
-    if payload['attempts'] >= settings.MFA_CHALLENGE_ATTEMPTS:
-        await redis_client.delete(key)
-    else:
-        ttl = await redis_client.ttl(key)
-        await redis_client.set(key, json.dumps(payload), ex=max(int(ttl), 1))
+    """错一次：所有占用名额都完成且全部错误时作废令牌。"""
+    await redis_client.eval(
+        _FINISH_CHALLENGE_ATTEMPT,
+        4,
+        _key(_CHALLENGE, token),
+        _key('failures', token),
+        _key('pending', token),
+        _key(_SETUP, f'login:{token}'),
+        str(settings.MFA_CHALLENGE_ATTEMPTS),
+        _key('attempts', token),
+    )
     await password_security_service.handle_login_failure(db, int(payload['user_id']))
 
 
@@ -149,12 +208,27 @@ async def verify_challenge(db: AsyncSession, token: str, otp: str) -> dict[str, 
     row = await _row(db, int(payload['user_id']))
     if row is None:
         # 发令牌之后被管理员重置了：重新登录会走绑定
-        await redis_client.delete(_key(_CHALLENGE, token))
+        await redis_client.delete(
+            _key(_CHALLENGE, token),
+            _key('attempts', token),
+            _key('failures', token),
+            _key('pending', token),
+            _key(_SETUP, f'login:{token}'),
+        )
         raise errors.AuthorizationError(msg=t('error.mfa.challenge_expired'))
+    await _reserve_attempt(token)
     if not _check_code(row, otp):
         await _fail(db, token, payload)
         raise errors.AuthorizationError(msg=t('error.mfa.invalid_code'))
-    await redis_client.delete(_key(_CHALLENGE, token))
+    consumed = await redis_client.eval(
+        _CONSUME_CHALLENGE,
+        1,
+        _key(_CHALLENGE, token),
+    )
+    if not consumed:
+        await db.rollback()
+        raise errors.AuthorizationError(msg=t('error.mfa.challenge_expired'))
+    await redis_client.delete(_key('attempts', token), _key('failures', token), _key('pending', token))
     return payload
 
 
@@ -179,15 +253,26 @@ async def challenge_enroll(db: AsyncSession, token: str, otp: str) -> tuple[dict
     secret = await redis_client.get(_key(_SETUP, f'login:{token}'))
     if not secret:
         raise errors.RequestError(msg=t('error.mfa.setup_expired'))
+    await _reserve_attempt(token)
     step = totp.verify(secret, otp)
     if step is None:
         await _fail(db, token, payload)
         raise errors.AuthorizationError(msg=t('error.mfa.invalid_code'))
+    consumed = await redis_client.eval(
+        _CONSUME_CHALLENGE,
+        1,
+        _key(_CHALLENGE, token),
+    )
+    if not consumed:
+        await db.rollback()
+        raise errors.AuthorizationError(msg=t('error.mfa.challenge_expired'))
     user_id = int(payload['user_id'])
     # 登录还没完成，请求上下文里没有操作人：数据变更记录里要写成「他自己开的」，不是「系统」
     with data_change_source('web', actor_id=user_id):
         codes = await _enable(db, user_id, secret, step)
-    await redis_client.delete(_key(_CHALLENGE, token), _key(_SETUP, f'login:{token}'))
+    await redis_client.delete(
+        _key('attempts', token), _key('failures', token), _key('pending', token), _key(_SETUP, f'login:{token}')
+    )
     return payload, codes
 
 

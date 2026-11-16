@@ -7,8 +7,12 @@
 - 有密码的人能无限试动态码（密码一对就把失败计数清零）
 - 被强制的人能自己关掉 / 没配密钥也能改成强制（改完谁都登不进来）
 - 动态码、恢复码、绑定密钥原样落进操作日志
+
+回归覆盖：同一挑战 32 个并发错码最多只有 5 个进入校验；并发正确码只消费成功一次；账号并发失败计数不丢，
+锁定事件只记一次。
 """
 
+import asyncio
 import time
 
 from collections.abc import Iterator
@@ -154,6 +158,247 @@ class TestEnableAndLogin:
         client.portal.call(_flush_counters_except_mfa)
         late = client.post('/auth/mfa/verify', json={'mfa_token': token, 'otp': _code(secret, 1)}).json()
         assert late['code'] == 403 and '过期' in late['msg'], late
+
+    @pytest.mark.parametrize('setup', [False, True])
+    def test_concurrent_challenge_attempts_are_reserved_before_code_check(
+        self, client: TestClient, user_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch, *, setup: bool
+    ) -> None:
+        """真实数据库和 Redis：验证 / 首次绑定两条路径都只能校验五次。"""
+        import json
+
+        from backend.app.admin.service import mfa_service
+        from backend.common.exception import errors
+
+        if setup:
+            settings.LOGIN_MFA_ENFORCE = 'all'
+        else:
+            _enable(client, user_headers)
+        token = _login(client).json()['data']['mfa_token']
+        key = mfa_service._key('challenge', token)
+        if setup:
+            assert client.post('/auth/mfa/setup', json={'mfa_token': token}).json()['code'] == 200
+        checks = 0
+        arrivals = 0
+        all_arrived = asyncio.Event()
+        original_load = mfa_service._load
+        original_check = totp.verify if setup else mfa_service._check_code
+
+        async def load_together(value: str) -> dict[str, Any]:
+            nonlocal arrivals
+            payload = await original_load(value)
+            arrivals += 1
+            if arrivals == 32:
+                all_arrived.set()
+            await all_arrived.wait()
+            return payload
+
+        def count_check(*args: Any, **kwargs: Any) -> Any:
+            nonlocal checks
+            checks += 1
+            return original_check(*args, **kwargs)
+
+        monkeypatch.setattr(mfa_service, '_load', load_together)
+        monkeypatch.setattr(totp if setup else mfa_service, 'verify' if setup else '_check_code', count_check)
+
+        async def race() -> list[object]:
+            async def attempt() -> object:
+                async with async_test_db_session.begin() as db:
+                    if setup:
+                        return await mfa_service.challenge_enroll(db, token, 'invalid-recovery-code')
+                    return await mfa_service.verify_challenge(db, token, 'invalid-recovery-code')
+
+            return await asyncio.wait_for(asyncio.gather(*(attempt() for _ in range(32)), return_exceptions=True), 15)
+
+        # Capture the actual user before the token is invalidated by the fifth failure.
+        raw = client.portal.call(redis_client.get, key)
+        user_id = json.loads(raw)['user_id']
+        results = client.portal.call(race)
+        assert checks == settings.MFA_CHALLENGE_ATTEMPTS
+        assert all(isinstance(result, errors.AuthorizationError) for result in results), results
+        for kind in ('challenge', 'attempts', 'failures', 'pending'):
+            assert client.portal.call(redis_client.exists, mfa_service._key(kind, token)) == 0
+        assert client.portal.call(redis_client.exists, mfa_service._key('setup', f'login:{token}')) == 0
+        assert client.portal.call(redis_client.get, f'{settings.LOGIN_FAILURE_PREFIX}:{user_id}') == '5'
+
+    def test_concurrent_valid_challenge_is_consumed_only_once(
+        self, client: TestClient, user_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """真实会话并发校验同一个恢复码：挑战只成功一次，其他事务回滚。"""
+        from backend.app.admin.service import mfa_service
+        from backend.common.exception import errors
+
+        _, codes = _enable(client, user_headers)
+        token = _login(client).json()['data']['mfa_token']
+        checks = 0
+        arrivals = 0
+        all_arrived = asyncio.Event()
+        consume_arrivals = 0
+        all_ready_to_consume = asyncio.Event()
+        # 每个请求持有真实连接；低于共享连接池上限，避免屏障自己耗尽连接池。
+        concurrency = 24
+        original_row = mfa_service._row
+        original_check = mfa_service._check_code
+        original_eval = redis_client.eval
+
+        async def rows_together(db: Any, user_id: int) -> Any:
+            nonlocal arrivals
+            row = await original_row(db, user_id)
+            arrivals += 1
+            if arrivals == concurrency:
+                all_arrived.set()
+            await all_arrived.wait()
+            return row
+
+        def count_check(row: Any, otp: str) -> bool:
+            nonlocal checks
+            checks += 1
+            return original_check(row, otp)
+
+        async def gate_consumption(script: str, numkeys: int, *keys_and_args: Any) -> Any:
+            nonlocal consume_arrivals
+            if script == mfa_service._CONSUME_CHALLENGE:
+                consume_arrivals += 1
+                if consume_arrivals == settings.MFA_CHALLENGE_ATTEMPTS:
+                    all_ready_to_consume.set()
+                await all_ready_to_consume.wait()
+            return await original_eval(script, numkeys, *keys_and_args)
+
+        monkeypatch.setattr(mfa_service, '_row', rows_together)
+        monkeypatch.setattr(mfa_service, '_check_code', count_check)
+        monkeypatch.setattr(redis_client, 'eval', gate_consumption)
+
+        async def race() -> list[object]:
+            async def attempt() -> object:
+                async with async_test_db_session.begin() as db:
+                    return await mfa_service.verify_challenge(db, token, codes[0])
+
+            return await asyncio.wait_for(
+                asyncio.gather(*(attempt() for _ in range(concurrency)), return_exceptions=True), 15
+            )
+
+        results = client.portal.call(race)
+        assert checks == settings.MFA_CHALLENGE_ATTEMPTS
+        assert consume_arrivals == settings.MFA_CHALLENGE_ATTEMPTS
+        assert sum(isinstance(result, dict) for result in results) == 1, results
+        assert sum(isinstance(result, errors.AuthorizationError) for result in results) == concurrency - 1, results
+        for kind in ('challenge', 'attempts', 'failures', 'pending'):
+            assert client.portal.call(redis_client.exists, mfa_service._key(kind, token)) == 0
+        assert client.get(MFA, headers=user_headers).json()['data']['recovery_remaining'] == 9
+
+    def test_concurrent_account_failures_keep_count_and_lock_once(
+        self, client: TestClient, user_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """真实会话和 Redis：32 次失败完整累加，只持久化一次锁定事件。"""
+        from backend.app.admin.service import user_password_history_service as security
+        from backend.common.exception import errors
+
+        user_id = int(client.get('/sys/users/me', headers=user_headers).json()['data']['id'])
+        counter_key = f'{settings.LOGIN_FAILURE_PREFIX}:{user_id}'
+        lock_key = f'{settings.USER_LOCK_REDIS_PREFIX}:{user_id}'
+        monkeypatch.setattr(settings, 'USER_LOCK_THRESHOLD', 12)
+        arrivals = 0
+        all_arrived = asyncio.Event()
+
+        async def config_barrier(_db: Any) -> None:
+            nonlocal arrivals
+            arrivals += 1
+            if arrivals == 32:
+                all_arrived.set()
+            await all_arrived.wait()
+
+        monkeypatch.setattr(security, 'load_user_security_config', config_barrier)
+
+        async def lock_events() -> int:
+            async with async_test_db_session() as db:
+                return await db.scalar(
+                    text("SELECT COUNT(*) FROM sys_login_log WHERE username=:name AND event='locked'"),
+                    {'name': USERNAME},
+                )
+
+        before = client.portal.call(lock_events)
+
+        async def race() -> list[object]:
+            async def attempt() -> None:
+                async with async_test_db_session.begin() as db:
+                    await security.password_security_service.handle_login_failure(db, user_id)
+
+            return await asyncio.wait_for(asyncio.gather(*(attempt() for _ in range(32)), return_exceptions=True), 15)
+
+        results = client.portal.call(race)
+        assert client.portal.call(redis_client.get, counter_key) == '32'
+        assert 0 < client.portal.call(redis_client.ttl, counter_key) <= settings.USER_LOCK_SECONDS
+        assert 0 < client.portal.call(redis_client.ttl, lock_key) <= settings.USER_LOCK_SECONDS
+        assert client.portal.call(lock_events) == before + 1
+        assert sum(result is None for result in results) == 11
+        assert sum(isinstance(result, errors.AuthorizationError) for result in results) == 21, results
+
+    def test_last_reserved_valid_attempt_survives_other_failures(
+        self, client: TestClient, user_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """五个名额同时获准：四个失败先完成，不能删掉第五个正确请求的挑战。"""
+        from backend.app.admin.service import mfa_service
+        from backend.common.exception import errors
+
+        _, codes = _enable(client, user_headers)
+        token = _login(client).json()['data']['mfa_token']
+        limit = settings.MFA_CHALLENGE_ATTEMPTS
+        reserved = 0
+        finished = 0
+        all_reserved = asyncio.Event()
+        failures_finished = asyncio.Event()
+        observed_ttls: dict[str, int] = {}
+        original_reserve = mfa_service._reserve_attempt
+        original_eval = redis_client.eval
+
+        async def reserve_together(value: str) -> int:
+            nonlocal reserved
+            result = await original_reserve(value)
+            reserved += 1
+            if reserved == limit:
+                observed_ttls['challenge'] = await redis_client.pttl(mfa_service._key('challenge', token))
+                observed_ttls['attempts'] = await redis_client.pttl(mfa_service._key('attempts', token))
+                observed_ttls['pending'] = await redis_client.pttl(mfa_service._key('pending', token))
+                all_reserved.set()
+            await all_reserved.wait()
+            return result
+
+        async def failures_before_success(script: str, numkeys: int, *args: Any) -> Any:
+            nonlocal finished
+            if script == mfa_service._CONSUME_CHALLENGE:
+                await failures_finished.wait()
+                observed_ttls['failures'] = await redis_client.pttl(mfa_service._key('failures', token))
+            result = await original_eval(script, numkeys, *args)
+            if script == mfa_service._FINISH_CHALLENGE_ATTEMPT:
+                finished += 1
+                if finished == limit - 1:
+                    failures_finished.set()
+            return result
+
+        monkeypatch.setattr(mfa_service, '_reserve_attempt', reserve_together)
+        monkeypatch.setattr(redis_client, 'eval', failures_before_success)
+
+        async def race() -> list[object]:
+            async def attempt(otp: str) -> object:
+                async with async_test_db_session.begin() as db:
+                    return await mfa_service.verify_challenge(db, token, otp)
+
+            return await asyncio.wait_for(
+                asyncio.gather(
+                    *(attempt('invalid-recovery-code') for _ in range(limit - 1)),
+                    attempt(codes[0]),
+                    return_exceptions=True,
+                ),
+                15,
+            )
+
+        results = client.portal.call(race)
+        assert all(isinstance(result, errors.AuthorizationError) for result in results[:-1]), results
+        assert isinstance(results[-1], dict), results
+        assert 0 < min(observed_ttls.values()) <= max(observed_ttls.values()) <= settings.MFA_CHALLENGE_SECONDS * 1000
+        assert set(observed_ttls) == {'challenge', 'attempts', 'pending', 'failures'}
+        assert client.get(MFA, headers=user_headers).json()['data']['recovery_remaining'] == 9
+        for kind in ('challenge', 'attempts', 'failures', 'pending'):
+            assert client.portal.call(redis_client.exists, mfa_service._key(kind, token)) == 0
 
     def test_swagger_shortcut_is_refused(self, client: TestClient, user_headers: dict[str, str]) -> None:
         _enable(client, user_headers)
