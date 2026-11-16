@@ -271,7 +271,7 @@ root / 越狱设备直接可读，备份也会带走。这条**和 web 端不一
 cookie，隔夜 + 多次 `am force-stop` + 重装 bundle 之后，冷启动仍然刷新成功）。
 所以「SecureStore 里没有 token」不等于「没登录」—— 🔴 冷启动时没有 token 要先显式
 `api.restoreSession()`（#138 之后 api 层对**没带 token** 的 401 不再刷新，见 [`packages/api` 分册](../../packages/api/AGENTS.md)，
-原来「无条件打 `/me`、401 刷新兜住」那条路断了）。结束原因交给登录屏，见 [`src/app/` 分册](src/app/AGENTS.md)「登录屏」。
+原来「无条件打 `/me`、401 刷新兜住」那条路断了）。🔴 反面：这个 cookie 我们删不掉，离线登出要记一笔，见 [`packages/api` 分册](../../packages/api/AGENTS.md)「登出失败不能当成登出成功」（#319）。结束原因交给登录屏，见 [`src/app/` 分册](src/app/AGENTS.md)「登录屏」。
 ⚠️ refresh cookie 的 `Path` 在 #138 改成了 `/api/v1/auth`（上面实测输出里还是 `Path=/`），没在真机上重跑过。
 
 🔴 **`AuthGate` 用「渲染哪一棵树」切换登录态，不要用 `router.replace` 跳转。**
