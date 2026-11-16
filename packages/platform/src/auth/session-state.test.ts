@@ -166,14 +166,29 @@ describe('登出请求失败（#319）', () => {
     expect(useAiDrawerStore.getState().conversationId).toBe('A-conversation')
   })
 
-  it.each([401, 403])('%s：会话本来就结束了，按登出成功收尾', async (status) => {
+  it.each([401, 403])('%s：会话本来就结束了，按登出成功收尾、由调用方跳登录页', async (status) => {
     client.api.POST.mockRejectedValueOnce(new ApiError(status, status, 'ended'))
     const qc = new QueryClient()
     qc.setQueryData(['me'], { id: a })
 
-    await expect(logout(qc)).resolves.toBeUndefined()
+    await expect(logout(qc)).resolves.toBe(false)
 
     expect(tokenStore.get()).toBeNull()
     expect(qc.getQueryData(['me'])).toBeUndefined()
+  })
+
+  it('401 且 api 层已经收过尾（token 已清）：告诉调用方别再跳一次，免得冲掉原因码', async () => {
+    // api 层的 expire()：先清 token，再调 onSessionExpired 带着原因码跳登录页
+    client.api.POST.mockImplementationOnce(async () => {
+      tokenStore.clear()
+      throw new ApiError(401, 401, 'kicked', { reason: 'kicked' })
+    })
+
+    await expect(logout(new QueryClient())).resolves.toBe(true)
+  })
+
+  it('登出成功：由调用方跳登录页', async () => {
+    await expect(logout(new QueryClient())).resolves.toBe(false)
+    expect(tokenStore.get()).toBeNull()
   })
 })
