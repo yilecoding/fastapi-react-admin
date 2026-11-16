@@ -909,12 +909,18 @@ jobs:
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 34
-          target: google_apis
+          # 🔴 用纯 AOSP 镜像，不用 google_apis：后者带 Pixel Launcher 和一堆 Google 服务，
+          # 开机后桌面会 ANR，弹一个「Pixel Launcher isn't responding」盖在 App 上 ——
+          # App 明明渲染好了，Maestro 报的却是「login-username 不可见」
+          target: default
           arch: x86_64
           profile: pixel_6
+          cores: 3
+          ram-size: 4096M
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
+            adb shell settings put global hide_error_dialogs 1
             adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
             maestro --version
             maestro test --debug-output ${{ runner.temp }}/maestro --flatten-debug-output apps/mobile/e2e/flows
