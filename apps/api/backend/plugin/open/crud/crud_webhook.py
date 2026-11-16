@@ -180,10 +180,11 @@ class CRUDOpenWebhookDelivery(DataScopedCRUD[OpenWebhookDelivery]):
         ⚠️ 和通知那边**相反**（那边归成「结果未知」不重发）：Webhook 是至少一次，对方按 `webhook-id` 去重
 
         🔴 回收时不加次数的话，一个每次都能把 worker 拖死 / 撑爆的端点会被无限重发：`attempts` 永远不涨，
-        退避和「用完就放弃」都不生效（#307）。次数用完直接放弃
+        退避和「用完就放弃」都不生效（#307）。次数用完（或是测试事件）直接放弃
         """
         now = timezone.now()
-        used_up = OpenWebhookDelivery.attempts + 1 >= max_attempts
+        # 测试事件不重试（同 `_settle_values`）：管理员在界面上等结果，重试只会让失败几小时后才冒出来
+        used_up = or_(OpenWebhookDelivery.attempts + 1 >= max_attempts, OpenWebhookDelivery.event_type == 'ping')
         result = await db.execute(
             update(OpenWebhookDelivery)
             .where(
