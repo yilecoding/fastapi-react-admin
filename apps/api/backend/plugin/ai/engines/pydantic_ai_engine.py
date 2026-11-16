@@ -66,7 +66,7 @@ from backend.plugin.ai.core.events import (
     UsageEvent,
 )
 from backend.plugin.ai.core.ports import RunContext, ToolCallRequest, ToolSchema
-from backend.plugin.ai.llm.client import OpenAICompatClient
+from backend.plugin.ai.llm.client import OpenAICompatClient, user_facing_error
 
 # 服务进程的输出归我们管。它只在第一次运行时打一次，但那一次正好落在生产日志里
 pydantic_ai.BANNER_ENABLED = False
@@ -252,7 +252,7 @@ class PydanticAIEngine:
             while pending:
                 yield pending.pop(0)
             log.exception('AI 引擎（pydantic-ai）运行失败')
-            yield ErrorEvent(message=str(e), code='llm_error')
+            yield ErrorEvent(message=user_facing_error(e), code='llm_error')
             return
 
         while pending:

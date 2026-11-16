@@ -110,8 +110,10 @@ async def _call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.Cal
             db=db,
             provider=None,
             channel=principal.channel,
-            # 没开 allow_write 的凭据：dispatcher 直接拒绝写操作并审计。开了也只走到预演 + 确认令牌
+            # 没开 allow_write 的凭据：dispatcher 直接拒绝写操作并审计。开了也只走到预演 + 确认令牌 ——
+            # 不论 `AI_CONFIRM_MUTATING_TOOLS` 怎么配：身份是外部系统声明的，`user_present` 恒为假（#314）
             read_only=not principal.client.allow_write,
+            user_present=False,
         )
         outcome = await tool_dispatcher.dispatch(
             ToolCallRequest(call_id=f'mcp-{ctx.request_id}', name=params.name, arguments=params.arguments or {}),
