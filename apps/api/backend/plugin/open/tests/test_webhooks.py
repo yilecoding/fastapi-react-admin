@@ -491,6 +491,148 @@ class TestOutcomes:
             run_db(lambda db: _hard_delete_dept(db, dept_id))
 
 
+# ── 拖住 worker 的接收端（#307）──────────────────────────────────────────────
+
+
+@pytest.fixture
+def trickle_url() -> Iterator[str]:
+    """真的本机接收端：回完响应头之后每 0.3 秒滴一个字节、永不结束。
+
+    要用真 socket：httpx 的 read 超时在传输层里算，`MockTransport` 根本不经过它
+    """
+    import socket
+    import threading
+
+    stop = threading.Event()
+    srv = socket.create_server(('127.0.0.1', 0))
+    srv.settimeout(0.2)
+
+    def _serve() -> None:
+        while not stop.is_set():
+            try:
+                conn, _ = srv.accept()
+            except TimeoutError:
+                continue
+            with conn:
+                conn.recv(65536)
+                conn.sendall(b'HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ncontent-length: 100000\r\n\r\n')
+                while not stop.wait(0.3):
+                    try:
+                        conn.sendall(b'x')
+                    except OSError:
+                        break
+
+    thread = threading.Thread(target=_serve, daemon=True)
+    thread.start()
+    yield f'http://127.0.0.1:{srv.getsockname()[1]}/hook'
+    stop.set()
+    thread.join(5)
+    srv.close()
+
+
+class TestSlowOrHugeReceiver:
+    def test_trickling_receiver_hits_the_total_deadline_and_counts_as_a_failure(
+        self,
+        client: TestClient,
+        token_headers: dict[str, str],
+        subscribed: dict[str, Any],
+        trickle_url: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """🔴 httpx 的 timeout 是「每次读」的上限：每 0.3 秒一个字节永远不触发 1 秒的 read 超时。
+        没有总时长时这一次投递挂到任务级 with_timeout（1800 秒）才被取消，而取消不落库 —— attempts / 连续失败都不涨"""
+        import time
+
+        monkeypatch.setattr(settings, 'OPEN_WEBHOOK_TIMEOUT_SECONDS', 1.0)
+        hook_id = subscribed['hook']['id']
+        set_hook(hook_id, url=trickle_url)
+        dept_id = create_dept(client, token_headers, 'T')
+        [row] = deliveries_of(hook_id)
+        try:
+            started = time.monotonic()
+            # portal 外层再兜 10 秒：修法失效时这条红在这里，而不是把整个测试进程挂住
+            status = client.portal.call(lambda: asyncio.wait_for(deliver_one(row.id), 10))
+            assert time.monotonic() - started < 5
+            assert status == 'failed'
+            [row] = deliveries_of(hook_id)
+            assert row.attempts == 1
+            assert row.last_error.startswith('timeout')
+            assert hook_row(hook_id).consecutive_failures == 1
+        finally:
+            run_db(lambda db: _hard_delete_dept(db, dept_id))
+
+    def test_huge_response_is_not_read_into_memory(
+        self, client: TestClient, token_headers: dict[str, str], subscribed: dict[str, Any], monkeypatch
+    ) -> None:
+        """🔴 `client.post()` 先把整个响应读进内存再截断 —— 对方回多大，worker 就吃多大"""
+        chunk = b'y' * 65536
+        total = 800  # 50 MB
+        pulled: list[int] = []
+
+        async def _body() -> Any:  # ruff: ignore[unused-async] —— 异步生成器才能当 AsyncClient 的流式响应体
+            for _ in range(total):
+                pulled.append(1)
+                yield chunk
+
+        def _handler(_request: httpx.Request) -> httpx.Response:
+            headers = {'content-type': 'text/plain', 'content-length': str(len(chunk) * total)}
+            return httpx.Response(200, headers=headers, content=_body())
+
+        monkeypatch.setattr(webhook_delivery, 'transport', httpx.MockTransport(_handler))
+        hook_id = subscribed['hook']['id']
+        dept_id = create_dept(client, token_headers, 'H')
+        [row] = deliveries_of(hook_id)
+        try:
+            assert client.portal.call(deliver_one, row.id) == 'success'
+            assert len(pulled) <= 2, f'读了 {len(pulled)} 块，应在够了上限之后就停'
+            stored = run_db(
+                lambda db: db.scalar(
+                    select(OpenWebhookAttempt.response_body).where(OpenWebhookAttempt.delivery_id == row.id)
+                )
+            )
+            assert len(stored) < settings.OPERA_LOG_RESPONSE_MAX_SIZE + 200
+            assert f'完整响应 {len(chunk) * total} 字节' in stored, '截断提示要报对方声明的大小，不是读到的那一段'
+        finally:
+            run_db(lambda db: _hard_delete_dept(db, dept_id))
+
+    @pytest.mark.parametrize(('attempts_before', 'status'), [(0, 'failed'), (4, 'exhausted')])
+    def test_reclaiming_a_stuck_send_counts_the_attempt(
+        self,
+        client: TestClient,
+        token_headers: dict[str, str],
+        subscribed: dict[str, Any],
+        attempts_before: int,
+        status: str,
+    ) -> None:
+        """worker 发到一半被杀（OOM / 任务级超时）的那一次也是一次尝试：不计的话这一行永远用不完重试次数"""
+        from backend.plugin.open.crud.crud_webhook import open_webhook_delivery_dao
+        from backend.plugin.open.service.webhook_config import max_attempts
+
+        hook_id = subscribed['hook']['id']
+        dept_id = create_dept(client, token_headers, f'K{attempts_before}')
+        [row] = deliveries_of(hook_id)
+        try:
+            long_ago = timezone.now() - timedelta(hours=1)
+            run_db(
+                lambda db: db.execute(
+                    update(OpenWebhookDelivery)
+                    .where(OpenWebhookDelivery.id == row.id)
+                    .values(status='sending', attempts=attempts_before, updated_time=long_ago)
+                )
+            )
+            reclaimed = run_db(
+                lambda db: open_webhook_delivery_dao.reclaim_stale(
+                    db, before=timezone.now() - timedelta(minutes=2), max_attempts=max_attempts()
+                )
+            )
+            assert reclaimed >= 1
+            [row] = deliveries_of(hook_id)
+            assert (row.status, row.attempts) == (status, attempts_before + 1)
+            assert (row.next_attempt_time is None) is (status == 'exhausted')
+        finally:
+            run_db(lambda db: _hard_delete_dept(db, dept_id))
+
+
 # ── 密钥 ───────────────────────────────────────────────────────────────────
 
 
