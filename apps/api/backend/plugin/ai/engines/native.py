@@ -28,7 +28,7 @@ from backend.plugin.ai.core.events import (
     UsageEvent,
 )
 from backend.plugin.ai.core.ports import RunContext, ToolCallRequest, ToolSchema
-from backend.plugin.ai.llm.client import OpenAICompatClient, accumulate_tool_calls
+from backend.plugin.ai.llm.client import OpenAICompatClient, accumulate_tool_calls, user_facing_error
 
 
 def to_openai_tools(tools: list[ToolSchema]) -> list[dict[str, Any]]:
@@ -83,7 +83,7 @@ class NativeLoopEngine:
                         yield UsageEvent(**delta.usage)
             except Exception as e:
                 log.exception('AI 引擎调用模型失败')
-                yield ErrorEvent(message=str(e), code='llm_error')
+                yield ErrorEvent(message=user_facing_error(e), code='llm_error')
                 return
 
             assistant_text = ''.join(text_parts)

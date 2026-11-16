@@ -20,6 +20,7 @@ from backend.plugin.ai.crud.crud_conversation import ai_message_dao
 from backend.plugin.ai.crud.crud_provider import ai_provider_dao
 from backend.plugin.ai.engines.registry import build_engine
 from backend.plugin.ai.enums import MessageRole
+from backend.plugin.ai.llm.client import user_facing_error
 from backend.plugin.ai.service.conversation_service import conversation_service
 from backend.plugin.ai.service.provider_service import ai_provider_service
 
@@ -106,6 +107,8 @@ class ChatService:
                     provider=provider,
                     max_tool_rounds=settings.AI_MAX_TOOL_ROUNDS,
                     user_said=[m['content'] for m in history if m['role'] == MessageRole.USER.value],
+                    # 本人在网页上发话：`AI_CONFIRM_MUTATING_TOOLS = false` 只对这个入口生效
+                    user_present=True,
                 )
 
                 assistant_parts: list[str] = []
@@ -138,7 +141,7 @@ class ChatService:
                         yield _sse(event)
                 except Exception as e:
                     log.exception('AI 对话流失败')
-                    error = ErrorEvent(message=f'对话出错：{e}', code='stream_failed')
+                    error = ErrorEvent(message=f'对话出错：{user_facing_error(e)}', code='stream_failed')
                     items.append({'kind': 'error', 'message': error.message, 'code': error.code})
                     yield _sse(error)
                 finally:
