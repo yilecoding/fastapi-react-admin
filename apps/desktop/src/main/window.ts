@@ -1,6 +1,7 @@
 import { BrowserWindow, shell } from "electron"
 import fs from "node:fs"
 import path from "node:path"
+import { httpUrl } from "@admin/platform/desktop/http-url"
 
 import { readConfig } from "./config"
 import { APP_ORIGIN } from "./protocol"
@@ -20,6 +21,31 @@ export const DEV_SERVER_URL = process.env.DESKTOP_DEV_SERVER_URL
  * 里静默画一个空图标。
  */
 const DEV_ICON = path.join(__dirname, "../../build/icon.png")
+
+function openExternalPage(raw: string): void {
+  const url = httpUrl(raw)
+  if (!url) {
+    // 不记录完整地址：查询串可能含凭据。
+    console.warn("[desktop] Blocked external URL: expected an absolute HTTP(S) URL")
+    return
+  }
+  void shell.openExternal(url).catch(() => {
+    console.warn("[desktop] Failed to open external URL")
+  })
+}
+
+function isAppNavigation(raw: string): boolean {
+  try {
+    const url = new URL(raw)
+    // 自定义 app: 协议的 URL.origin 是 null，必须分别比协议和主机。
+    return [APP_ORIGIN, ...(DEV_SERVER_URL ? [DEV_SERVER_URL] : [])].some((value) => {
+      const allowed = new URL(value)
+      return url.protocol === allowed.protocol && url.host === allowed.host
+    })
+  } catch {
+    return false
+  }
+}
 
 export function createMainWindow(): BrowserWindow {
   const cfg = readConfig()
@@ -51,14 +77,13 @@ export function createMainWindow(): BrowserWindow {
   // 外链一律交给系统浏览器。让它在应用窗口里打开等于把一个没有地址栏的
   // 浏览器交给用户,自助终端上尤其不行
   win.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    openExternalPage(url)
     return { action: "deny" }
   })
   win.webContents.on("will-navigate", (event, url) => {
-    const allowed = DEV_SERVER_URL ? [DEV_SERVER_URL, APP_ORIGIN] : [APP_ORIGIN]
-    if (!allowed.some((prefix) => url.startsWith(prefix))) {
+    if (!isAppNavigation(url)) {
       event.preventDefault()
-      void shell.openExternal(url)
+      openExternalPage(url)
     }
   })
 
