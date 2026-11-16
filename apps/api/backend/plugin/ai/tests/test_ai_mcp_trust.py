@@ -165,6 +165,18 @@ class TestOnlyGrantWhatYouHave:
         in_scope_missing, nonexistent = _run(monkeypatch, scenario)
         assert in_scope_missing == nonexistent
 
+    def test_non_superuser_cannot_delete_a_superuser_credential(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """改不了就也删不掉：删了外部系统那条集成当场 401"""
+
+        async def scenario(db: Any) -> None:
+            obj = self._param(CreateAiMcpClientParam, allow_superuser=True, act_as=['admin'])
+            issued = await ai_mcp_client_service.create(db=db, obj=obj, operator=_user(superuser=True))
+            with pytest.raises(errors.ForbiddenError):
+                await ai_mcp_client_service.delete(db=db, pk=issued.id, operator=_user(superuser=False))
+            assert (await db.get(AiMcpClient, issued.id)).deleted == 0
+
+        _run(monkeypatch, scenario)
+
     def test_non_superuser_cannot_rotate_a_superuser_credential(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """换令牌 = 拿到一把能代表超管的明文令牌"""
 
