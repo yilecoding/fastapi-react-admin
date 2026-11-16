@@ -16,6 +16,14 @@ from backend.database.redis import redis_client
 from backend.utils.dynamic_config import load_user_security_config
 from backend.utils.timezone import timezone
 
+_INCREMENT_LOGIN_FAILURE = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+end
+return count
+"""
+
 
 class UserPasswordHistoryService:
     """用户密码历史服务类"""
@@ -122,20 +130,20 @@ class UserPasswordHistoryService:
         if settings.USER_LOCK_THRESHOLD == 0:
             return
 
-        failure_count = await redis_client.get(f'{settings.LOGIN_FAILURE_PREFIX}:{user_id}')
-        failure_count = int(failure_count) if failure_count else 0
-        failure_count += 1
-        await redis_client.set(
-            f'{settings.LOGIN_FAILURE_PREFIX}:{user_id}',
-            str(failure_count),
-            ex=settings.USER_LOCK_SECONDS,
+        key = f'{settings.LOGIN_FAILURE_PREFIX}:{user_id}'
+        failure_count = await redis_client.eval(
+            _INCREMENT_LOGIN_FAILURE,
+            1,
+            key,
+            str(settings.USER_LOCK_SECONDS),
         )
 
         if failure_count >= settings.USER_LOCK_THRESHOLD:
             lock_key = f'{settings.USER_LOCK_REDIS_PREFIX}:{user_id}'
-            newly_locked = not await redis_client.exists(lock_key)
             locked_until = timezone.now() + timedelta(seconds=settings.USER_LOCK_SECONDS)
-            await redis_client.set(lock_key, timezone.to_str(locked_until), ex=settings.USER_LOCK_SECONDS)
+            newly_locked = await redis_client.set(
+                lock_key, timezone.to_str(locked_until), ex=settings.USER_LOCK_SECONDS, nx=True
+            )
             if newly_locked:
                 # #273：锁定那一刻记一行。原来只有那一次失败尝试的文案碰巧写着「账号已被锁定」，没法筛；
                 # 解锁是到期自动的（这里没有手动解锁），锁到几点写在这一行里
