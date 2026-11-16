@@ -595,21 +595,93 @@ class TestSlowOrHugeReceiver:
         finally:
             run_db(lambda db: _hard_delete_dept(db, dept_id))
 
-    @pytest.mark.parametrize(('attempts_before', 'status'), [(0, 'failed'), (4, 'exhausted')])
+    def test_compressed_response_is_not_decompressed(
+        self, client: TestClient, token_headers: dict[str, str], subscribed: dict[str, Any], monkeypatch
+    ) -> None:
+        """🔴 `accept-encoding: identity` 只是请求：对方照样回 gzip 的话，解压按网络块整块做，50 KB 能解出 50 MB"""
+        import gzip
+
+        bomb = gzip.compress(b'\0' * (50 * 1024 * 1024))
+        decoded: list[int] = []
+        real_decode = httpx._decoders.GZipDecoder.decode
+
+        def _spy(self: Any, data: bytes) -> bytes:
+            out = real_decode(self, data)
+            decoded.append(len(out))
+            return out
+
+        monkeypatch.setattr(httpx._decoders.GZipDecoder, 'decode', _spy)
+
+        async def _stream() -> Any:  # ruff: ignore[unused-async] —— 传 bytes 的话 Response 构造时就自己解压了
+            for i in range(0, len(bomb), 65536):
+                yield bomb[i : i + 65536]
+
+        def _handler(request: httpx.Request) -> httpx.Response:
+            assert request.headers['accept-encoding'] == 'identity'
+            headers = {'content-encoding': 'gzip', 'content-type': 'text/plain'}
+            return httpx.Response(200, headers=headers, content=_stream())
+
+        monkeypatch.setattr(webhook_delivery, 'transport', httpx.MockTransport(_handler))
+        hook_id = subscribed['hook']['id']
+        dept_id = create_dept(client, token_headers, 'Z')
+        [row] = deliveries_of(hook_id)
+        try:
+            assert client.portal.call(deliver_one, row.id) == 'success'
+            assert sum(decoded) == 0, f'解压了 {sum(decoded)} 字节'
+            stored = run_db(
+                lambda db: db.scalar(
+                    select(OpenWebhookAttempt.response_body).where(OpenWebhookAttempt.delivery_id == row.id)
+                )
+            )
+            assert 'gzip 压缩的响应' in stored
+        finally:
+            run_db(lambda db: _hard_delete_dept(db, dept_id))
+
+    def test_slow_dns_counts_against_the_total_deadline(
+        self, client: TestClient, token_headers: dict[str, str], subscribed: dict[str, Any], monkeypatch
+    ) -> None:
+        """SSRF 检查的 DNS 解析也算在总时长里：域名的权威 DNS 是对方的，可以慢慢回"""
+        import time
+
+        async def _slow_resolve(_host: str, _port: int) -> list[str]:
+            await asyncio.sleep(30)
+            return ['93.184.216.34']
+
+        monkeypatch.setattr(webhook_delivery, '_resolve', _slow_resolve)
+        monkeypatch.setattr(settings, 'OPEN_WEBHOOK_ALLOW_PRIVATE_NETWORK', False)
+        monkeypatch.setattr(settings, 'OPEN_WEBHOOK_TIMEOUT_SECONDS', 1.0)
+        hook_id = subscribed['hook']['id']
+        dept_id = create_dept(client, token_headers, 'N')
+        [row] = deliveries_of(hook_id)
+        try:
+            started = time.monotonic()
+            status = client.portal.call(lambda: asyncio.wait_for(deliver_one(row.id), 10))
+            assert time.monotonic() - started < 5
+            assert status == 'failed'
+            assert deliveries_of(hook_id)[0].last_error.startswith('timeout')
+        finally:
+            run_db(lambda db: _hard_delete_dept(db, dept_id))
+
+    @pytest.mark.parametrize(
+        ('attempts_before', 'event_type', 'status'),
+        [(0, None, 'failed'), (4, None, 'exhausted'), (0, 'ping', 'exhausted')],
+    )
     def test_reclaiming_a_stuck_send_counts_the_attempt(
         self,
         client: TestClient,
         token_headers: dict[str, str],
         subscribed: dict[str, Any],
         attempts_before: int,
+        event_type: str | None,
         status: str,
     ) -> None:
-        """worker 发到一半被杀（OOM / 任务级超时）的那一次也是一次尝试：不计的话这一行永远用不完重试次数"""
+        """worker 发到一半被杀（OOM / 任务级超时）的那一次也是一次尝试：不计的话这一行永远用不完重试次数。
+        测试事件不重试，回收时直接放弃"""
         from backend.plugin.open.crud.crud_webhook import open_webhook_delivery_dao
         from backend.plugin.open.service.webhook_config import max_attempts
 
         hook_id = subscribed['hook']['id']
-        dept_id = create_dept(client, token_headers, f'K{attempts_before}')
+        dept_id = create_dept(client, token_headers, f'K{attempts_before}{"P" if event_type else ""}')
         [row] = deliveries_of(hook_id)
         try:
             long_ago = timezone.now() - timedelta(hours=1)
@@ -617,7 +689,12 @@ class TestSlowOrHugeReceiver:
                 lambda db: db.execute(
                     update(OpenWebhookDelivery)
                     .where(OpenWebhookDelivery.id == row.id)
-                    .values(status='sending', attempts=attempts_before, updated_time=long_ago)
+                    .values(
+                        status='sending',
+                        attempts=attempts_before,
+                        updated_time=long_ago,
+                        event_type=event_type or OpenWebhookDelivery.event_type,
+                    )
                 )
             )
             reclaimed = run_db(

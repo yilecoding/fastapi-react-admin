@@ -211,15 +211,20 @@ Python / Node SDK 已验证有效签名排第三个仍能验签；两条 Java �
 **根因**：httpx 的 `timeout=15` 是 connect / read / write / pool **各自**的上限，不是整次请求的；`resp.content` 是全量读。
 
 **修法**（`service/webhook_delivery.py: _post`）：
-- 外面套 `asyncio.timeout(limit)` 作总时长，超了按普通 `timeout` 失败落库。`limit` 再夹到 `OPEN_WEBHOOK_SENDING_STALE_SECONDS / 2` 以下 ——
+- 外面套 `asyncio.timeout(limit)` 作总时长，超了按普通 `timeout` 失败落库；**SSRF 检查的 DNS 解析也在里面**（域名的权威 DNS 是对方的）。`limit` 再夹到 `OPEN_WEBHOOK_SENDING_STALE_SECONDS / 2` 以下 ——
   否则还在发的那一行会被 `reclaim_stale` 当成死掉的抢回去，同时发两遍
-- `client.stream()` + `_read_capped` 只读 `OPERA_LOG_RESPONSE_MAX_SIZE + 1` 字节，读够就关连接；请求带 `accept-encoding: identity`
-  （解压是按块整块做的，一小段 gzip 能解出几十 MB）。截断提示里的「完整大小」取对方声明的 `content-length`，没声明写「超过上限」
-- `crud_webhook.reclaim_stale` 回收时 `attempts + 1`，用完直接 `exhausted`：worker 被这一行拖死 / 撑爆时，不能无限重来
+- `client.stream()` + `_read_capped` 只读 `OPERA_LOG_RESPONSE_MAX_SIZE + 1` 字节，读够就关连接。请求带 `accept-encoding: identity`，
+  🔴 但那只是请求：对方照样回压缩的（`content-encoding` 非 identity）就**一个字节都不读**、记一句占位 ——
+  解压是按网络块整块做的，64 KB 的 gzip 能解出几十 MB，读到上限再停已经晚了。截断提示里的「完整大小」取对方声明的 `content-length`，没声明写「超过上限」
+- `crud_webhook.reclaim_stale` 回收时 `attempts + 1`，用完直接 `exhausted`：worker 被这一行拖死 / 撑爆时，不能无限重来。
+  测试事件（ping）回收时直接 `exhausted`，同「ping 不重试」那条
 
 ⚠️ 截断后的 JSON 解析不了，`redact_body` 会按 fail-closed 记一句占位而不是原文 —— 超过 10 KB 的 JSON 响应在投递记录里看不到内容，是刻意的（实测：截到 10241 字节的 JSON 记成 `[未记录：响应体不是可解析的 JSON，无法确认已脱敏]`）。
 
 **实测证据**（2026-11-16）：修之前，本机起一个回完头每秒滴 1 字节的 socket 接收端、超时设 2 秒，`_post` 12 秒后仍未返回；
 50 MB 响应体被整个读进来再截断（提示「完整响应 52428800 字节」）。修之后同一脚本 2.0 秒返回 `timeout: 2s`，大响应只读 10241 字节。
-`tests/test_webhooks.py::TestSlowOrHugeReceiver` 4 条（真 socket 滴流 / 流式 50 MB 数块数 / 回收加次数 ×2），PostgreSQL 上 51 条全过。
-变异：去掉 `asyncio.timeout` → 滴流那条红；`_read_capped` 不 break → 大响应那条红；回收不加次数 → 回收两条红。SQL Server 只靠 CI。
+`tests/test_webhooks.py::TestSlowOrHugeReceiver` 7 条（真 socket 滴流 / 流式 50 MB 数块数 / 回 gzip 炸弹数解压字节 / DNS 慢 30 秒 /
+回收加次数 ×2 + ping），PostgreSQL 上 54 条全过、SQL Server 过 CI。变异：去掉 `asyncio.timeout` → 滴流那条红；`_read_capped` 不 break →
+大响应那条红；回收不加次数 → 回收两条红；不看 `content-encoding` → gzip 那条红（实测解压了 52428800 字节）；DNS 挪到总时长外 → DNS 那条红；
+回收不看 ping → ping 那条红。⚠️ 写 gzip 用例时假接收端要给**异步生成器**：`httpx.Response(content=bytes)` 在构造时就把内容读出来解压了，
+用例会红在接收端自己身上。
