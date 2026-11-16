@@ -18,7 +18,7 @@
 > 扫码 / 静默打印都**明确不做**，理由在那条 issue 里。
 >
 > ✅ **登录 → 权限门控 → 列表翻页 → 详情 → 删除确认 → toast 这条链在 Android 上有自动化了**（#137）：
-> CI 的 `maestro · 移动端 E2E` 把 release APK 装进模拟器真点一遍，见 [`e2e/` 分册](e2e/AGENTS.md)。⚠️ iOS 一次没跑过（#97）；这道闸门不在必需检查里，也挡不住视觉问题。
+> `.github/workflows/mobile-e2e.yml` 的 `maestro · 移动端 E2E` 把 release APK 装进模拟器真点一遍，见 [`e2e/` 分册](e2e/AGENTS.md)。⚠️ iOS 一次没跑过（#97）；这道闸门不在必需检查里，也挡不住视觉问题。
 
 ## 按任务导航
 
