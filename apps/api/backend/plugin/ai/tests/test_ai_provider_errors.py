@@ -108,6 +108,27 @@ class TestUserFacingError:
         assert '500' in message
         assert SECRET not in message
 
+    def test_pydantic_ai_connection_failures_read_the_same_as_native(self) -> None:
+        """pydantic-ai 把 openai 的连接 / 超时错误包成 `ModelAPIError`（`raise … from e`）：只看最外层的话，
+        同一次断网 pydantic_ai 引擎说「ModelAPIError」、native 引擎说「连不上」"""
+        import httpx
+        import openai
+
+        from pydantic_ai.exceptions import ModelAPIError
+
+        request = httpx.Request('POST', 'http://10.0.0.5/v1/chat/completions')
+        for inner, expected in [
+            (openai.APIConnectionError(request=request), CONNECT_FAILED),
+            (openai.APITimeoutError(request=request), '模型响应超时，请稍后再试'),
+        ]:
+            try:
+                try:
+                    raise inner
+                except openai.APIConnectionError as cause:
+                    raise ModelAPIError(model_name='m', message=str(cause)) from cause
+            except ModelAPIError as wrapped:
+                assert user_facing_error(wrapped) == expected
+
     def test_unknown_exception_text_is_not_shown(self) -> None:
         message = user_facing_error(RuntimeError(f'connect to http://10.0.0.5:9200/{SECRET} failed'))
         assert SECRET not in message

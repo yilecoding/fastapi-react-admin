@@ -135,8 +135,13 @@ class AiMcpClientService:
         row.token_sha256, row.token_hint = digest, hint
         return IssuedAiMcpToken(id=row.id, client_id=row.client_id, mcp_token=token)
 
-    @staticmethod
-    async def delete(*, db: AsyncSession, pk: int) -> int:
+    @classmethod
+    async def delete(cls, *, db: AsyncSession, pk: int, operator: Any) -> int:
+        """删除也过同一道闸：超管发的凭据非超管改不了，也不该删得掉（删了外部系统那条集成当场 401）"""
+        row = await cls.get(db=db, pk=pk)
+        await _check_grantable(
+            db, act_as=json.loads(row.act_as), allow_superuser=row.allow_superuser, operator=operator
+        )
         return await ai_mcp_client_dao.delete(db, pk)
 
 
