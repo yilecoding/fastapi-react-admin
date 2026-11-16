@@ -2,7 +2,7 @@ import * as React from 'react'
 import { io, type Socket } from 'socket.io-client'
 import { toast } from '@admin/ui/components/toast'
 
-import { API_BASE } from '../api-client/client'
+import { API_BASE, endSession, restoreSession } from '../api-client/client'
 import { tokenStore } from '../api-client/token-store'
 import { handleSessionEnded } from '../auth/session'
 import { dispatchSocketEvent } from './socket-events'
@@ -50,15 +50,75 @@ export function usePresence(enabled: boolean) {
     if (!enabled) return
     if (!tokenStore.get()) return
 
+    let disposed = false
+    let recovering = false
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+    let retryDelay = 2000
     let socket: Socket | null = null
+
+    const clearRetry = () => {
+      clearTimeout(retryTimer)
+      retryTimer = undefined
+    }
+    const scheduleRecovery = () => {
+      if (
+        disposed ||
+        recovering ||
+        retryTimer !== undefined ||
+        !tokenStore.get()
+      )
+        return
+      retryTimer = setTimeout(() => {
+        retryTimer = undefined
+        void recover()
+      }, retryDelay)
+      retryDelay = Math.min(retryDelay * 2, 30_000)
+    }
+    const recover = async () => {
+      // Transport failures are already retried by the Manager. A rejected
+      // namespace handshake destroys that subscription and needs explicit recovery.
+      if (
+        disposed ||
+        recovering ||
+        !socket ||
+        socket.connected ||
+        socket.active ||
+        !tokenStore.get()
+      )
+        return
+      recovering = true
+      const before = tokenStore.get()
+      try {
+        const outcome = await restoreSession()
+        if (disposed) return
+        if (outcome.kind === 'ok') {
+          socket.connect()
+        } else if (outcome.kind === 'ended') {
+          // Do not end a newer login while an older refresh was in flight.
+          if (tokenStore.get() === before) endSession(outcome.end)
+        } else {
+          recovering = false
+          scheduleRecovery()
+        }
+      } finally {
+        recovering = false
+      }
+    }
+
+    const resume = () => {
+      if (document.visibilityState === 'hidden' || socket?.connected) return
+      // Respect an existing backoff, including bursts of online/visibility events.
+      scheduleRecovery()
+    }
+
     try {
       // 注意是 API_BASE 本身（默认命名空间 `/`），不要拼 `/ws` —— 见上面的注释
       socket = io(API_BASE, {
         path: '/ws/socket.io',
         transports: ['websocket', 'polling'],
         auth: (cb) => cb({ token: tokenStore.get() }),
-        // 后端拒绝握手时不要无限重试打后端
-        reconnectionAttempts: 5,
+        // 服务端长时间停机后仍要恢复；握手拒绝由下面的退避刷新单独处理。
+        reconnectionAttempts: Infinity,
         reconnectionDelay: 2000,
         reconnectionDelayMax: 30_000,
         withCredentials: true,
@@ -86,13 +146,19 @@ export function usePresence(enabled: boolean) {
       // 连接状态挂到 <html> 上：E2E 要等 socket 连上再去踢人 / 登出，否则那条推送会落空、
       // 用例只能靠猜一个毫秒数（e2e 分册：不要靠 waitForTimeout）。顺带也方便现场排查
       socket.on('connect', () => {
+        clearRetry()
+        retryDelay = 2000
         document.documentElement.dataset.presence = 'on'
       })
-      socket.on('disconnect', () => {
+      socket.on('disconnect', (reason) => {
         document.documentElement.dataset.presence = 'off'
+        // A session:ended recovery may have adopted the same user's newer session.
+        if (reason === 'io server disconnect') scheduleRecovery()
       })
 
       socket.on('connect_error', (err) => {
+        document.documentElement.dataset.presence = 'off'
+        if (!socket?.active) scheduleRecovery()
         if (import.meta.env?.DEV && !warned.current) {
           warned.current = true
           console.warn(
@@ -101,14 +167,22 @@ export function usePresence(enabled: boolean) {
           )
         }
       })
+      window.addEventListener('online', resume)
+      document.addEventListener('visibilitychange', resume)
     } catch {
       /* 构造失败（极少见）同样静默 —— 这是可选能力 */
       return
     }
 
     return () => {
+      disposed = true
+      clearRetry()
+      window.removeEventListener('online', resume)
+      document.removeEventListener('visibilitychange', resume)
       socket?.removeAllListeners()
+      socket?.offAny()
       socket?.disconnect()
+      document.documentElement.dataset.presence = 'off'
     }
   }, [enabled])
 }
