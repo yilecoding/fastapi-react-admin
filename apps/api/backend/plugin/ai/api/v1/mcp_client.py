@@ -89,9 +89,9 @@ async def rotate_mcp_client_token(
     dependencies=[Depends(RequestPermission('ai:mcp:del')), DependsRBAC],
 )
 async def delete_mcp_client(
-    db: CurrentSessionTransaction, pk: Annotated[int, Path(description='记录 ID')]
+    request: Request, db: CurrentSessionTransaction, pk: Annotated[int, Path(description='记录 ID')]
 ) -> ResponseModel:
-    count = await ai_mcp_client_service.delete(db=db, pk=pk)
+    count = await ai_mcp_client_service.delete(db=db, pk=pk, operator=request.user)
     if count > 0:
         return response_base.success()
     return response_base.fail()
