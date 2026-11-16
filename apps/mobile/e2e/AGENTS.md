@@ -35,6 +35,11 @@ flows/perm-gate.yaml     没角色的账号：应用页没有「用户」，并�
 
 要强制跑一次：Actions 页面对这个 workflow 点 Run workflow。
 
+实测（2026-11-16）：改了 workflow 文件的那次 push，`CI` 和 `移动端 E2E` 两个都触发；
+另开一个只在 `apps/mobile/e2e/AGENTS.md` 里加一行的 PR，只触发了 `CI`，`移动端 E2E` 没有出现。
+⚠️ PR 上 `paths` 比的是**整个 PR 的改动**，不是最新那个提交 —— 一个改过 App 的 PR 后面再推
+纯文档提交，照样会跑。main 上的 push 触发还没发生过，没验。
+
 🔴 **它是独立的 workflow 而不在 `.github/workflows/ci.yml` 里，前提是它不是必需检查。** `.github/workflows/ci.yml` 里立过一条
 「用 job 级的 `if` 跳，不要用 workflow 级的 `paths`」—— 被 `paths` 滤掉的 workflow 根本不上报，
 必需检查会永远卡在「等待」。哪天把这个 job 设成必需检查，就得搬回 `.github/workflows/ci.yml`。
