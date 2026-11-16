@@ -172,6 +172,18 @@ function afterLogin(qc: QueryClient, token: string) {
   clearClientSessionState()
 }
 
+/**
+ * 登出。**服务端确认了才清本地**；没确认（断网 / 5xx / 429）就原样留着登录态、把错误抛给调用方提示重试。
+ *
+ * 🔴 网页端的 refresh cookie 是 httpOnly 的，**只有登出接口的响应能删掉它**。原来是 `finally` 里无条件清本地、
+ * 异常照抛：请求一失败，本地 token / 缓存 / 标签页都没了，可服务端会话和 cookie 都还活着 ——
+ * 调用方的跳转被异常跳过，用户停在一个空壳里，之后每个请求都 401；**刷新页面又被 cookie 静默登回去**（#319）。
+ * 「清一半」比「没退出」更糟：用户以为退出了。
+ *
+ * 401 / 403 算登出成功：会话本来就已经结束了（api 层的收尾已经清过 token）。
+ * 桌面端的 refresh token 在主进程手里，`desktop.auth.logout()` 先删本地凭据再发请求、吞掉网络错误 ——
+ * 那边本地删了就真的回不去，不受这条影响。
+ */
 export async function logout(qc: QueryClient) {
   endingLocally = true
   try {
@@ -179,14 +191,19 @@ export async function logout(qc: QueryClient) {
     const desktop = tryDesktop()
     if (desktop) await desktop.auth.logout()
     else await api.POST('/api/v1/auth/logout')
-  } finally {
-    tokenStore.clear()
-    // 清全部缓存，避免下一个登录的人看到上一个人的数据
-    qc.clear()
-    // 标签条要当场空掉，而不是等下一次登录才清 —— 退出后停在登录页时，
-    // 上一个人开过哪些页面不该还留在浏览器里
-    clearClientSessionState()
+  } catch (err) {
+    const sessionAlreadyGone = err instanceof ApiError && (err.isUnauthorized || err.isForbidden)
+    if (!sessionAlreadyGone) {
+      endingLocally = false
+      throw err
+    }
   }
+  tokenStore.clear()
+  // 清全部缓存，避免下一个登录的人看到上一个人的数据
+  qc.clear()
+  // 标签条要当场空掉，而不是等下一次登录才清 —— 退出后停在登录页时，
+  // 上一个人开过哪些页面不该还留在浏览器里
+  clearClientSessionState()
 }
 
 /**

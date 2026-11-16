@@ -339,6 +339,28 @@ api.GET('/api/v1/sys/users', { params: { query: { usernamee: 'x' } } })     // �
 `/sign-in?reason=logout`、紧接着被覆盖成 `/sign-in`（Playwright 记下的导航和请求顺序里看得到那批
 不带 token 的重新取数），提示条没了。
 
+## 🔴 登出失败不能当成登出成功：refresh cookie 只有登出接口的响应删得掉（#319）
+
+refresh token 在 httpOnly cookie 里 —— 浏览器 JS 碰不到，RN 的 cookie jar 我们也没有删它的接口（而且跨冷启动持久）。
+**只有 `/auth/logout` 的响应（`Set-Cookie` 清空）能删掉它。** 所以登出请求没到服务端时，只清本地 token 的结果是
+「看起来退出了，一刷新 / 一冷启动就被 `restoreSession()` 静默登回去」。两端各踩一次：
+
+| | 原来 | 现在 |
+|---|---|---|
+| web（`platform/src/auth/session.ts: logout`） | `finally` 里无条件清 token / 缓存 / 标签页、异常照抛，`user-menu.tsx` 的跳转被跳过：停在空壳里全 401，刷新又登回去 | 服务端确认了才清本地；没确认就**留着完整的登录态**，抛给调用方弹「退出登录失败，你仍处于登录状态，请重试」 |
+| mobile（`src/lib/session.tsx`） | 吞掉失败、只清 SecureStore 的 token，下次冷启动带着 cookie 恢复成功 | 本地照样当场登出（手机上不能卡在已登录），但**先**按服务器地址落「待撤销」标记（`src/lib/logout-pending.ts`），确认了才删；冷启动见到标记 → 不恢复、补发一次只带 cookie 的登出；重新登录成功删标记 |
+
+两端都把 **401 / 403 当成确认**（会话本来就结束了）；网络 / 5xx / 429 才是「没确认」。
+标记按地址记：cookie jar 按主机分。同一个物种还有一处 —— 移动端「改服务器地址」原来**先换地址再登出**，
+登出打到新服务器、带不上旧服务器的 cookie，**联网时也撤不掉**旧会话；现在先登出再换（`src/app/(app)/server.tsx`）。
+桌面端不受影响：refresh token 在主进程手里，`desktop.auth.logout()` 先删本地再发请求。
+
+**实测证据**（2026-11-16，web）：`platform/src/auth/session-state.test.ts`「登出请求失败」5 条；E2E `session.spec.ts`「登出请求失败」
+拦掉 `/auth/logout` → toast、仍在 `/dashboard`、昵称还在 → 放行再点 → `/sign-in`，重开 `/dashboard` 仍是 `/sign-in`。
+变异：换回旧 `logout()` 单测 5 条全红；换回旧 `session.ts` + `user-menu.tsx` 后 E2E 红在 toast 那句。
+⚠️ **移动端没在真机上验过**（没有自动化测试），只过了 typecheck / lint；「离线登出后冷启动登回去」「切回旧地址被登回去」
+都是按 mobile 分册「cookie jar 跨冷启动是持久的」那条实测推出来的，没有复现。
+
 ## 🔴 判断错误必须同时看 `httpStatus` 和 `bizCode`
 
 `_get_exception_code` 会把**非法 HTTP 状态码降级成 400**。所以

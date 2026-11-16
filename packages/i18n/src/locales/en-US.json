@@ -2978,6 +2978,7 @@
   "迪拜": "Dubai",
   "退出": "Sign out",
   "退出登录": "Sign out",
+  "退出登录失败，你仍处于登录状态，请重试：{{reason}}": "Sign-out failed and you're still signed in. Please try again: {{reason}}",
   "退回": "Send back",
   "退回到": "Send back to",
   "退回到你": "Returned to you",
