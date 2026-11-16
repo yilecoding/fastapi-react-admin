@@ -73,3 +73,49 @@ def test_menus_missing_what_their_type_needs_are_rejected(
     res = client.post(MENUS, headers=token_headers, json=_body(title=title, **overrides))
     assert res.status_code == 422, res.text
     assert expect in res.json()['msg'], res.json()
+
+
+@pytest.mark.parametrize('menu_type', [3, 4])
+@pytest.mark.parametrize(
+    'link',
+    [
+        'file://///attacker/share/x.exe',
+        'ms-msdt:probe',
+        'search-ms:probe',
+        'custom://probe',
+        'javascript:alert(1)',
+        'data:text/html,probe',
+        'mailto:a@example.com',
+        '//example.com',
+        '/help',
+        'https://',
+        'https:example.com',
+        'https:///example.com',
+        'https://example.com:99999',
+        'ht\ntps://example.com',
+        'https://exam\tple.com',
+        'https://example.com\\path',
+    ],
+)
+def test_menu_urls_reject_non_http_protocols(client, token_headers, menu_type, link):
+    res = client.post(MENUS, headers=token_headers, json=_body(type=menu_type, link=link))
+    assert res.status_code == 422, res.text
+    assert 'http(s)' in res.json()['msg'], res.json()
+
+
+@pytest.mark.parametrize('menu_type', [3, 4])
+def test_menu_url_update_rejects_bad_protocol_and_preserves_existing_url(client, token_headers, menu_type):
+    title = f'规则测试{RUN}{uuid.uuid4().hex[:4]}'
+    valid = _body(title=title, type=menu_type, link='  HTTPS://example.com/help  ')
+    created = client.post(MENUS, headers=token_headers, json=valid)
+    assert created.json()['code'] == 200, created.text
+    rows = client.get(MENUS, headers=token_headers, params={'title': title}).json()['data']
+    assert len(rows) == 1, rows
+    pk = rows[0]['id']
+    assert rows[0]['link'] == 'HTTPS://example.com/help'
+    rejected = client.put(f'{MENUS}/{pk}', headers=token_headers, json={**valid, 'link': 'file:///C:/probe.txt'})
+    assert rejected.status_code == 422, rejected.text
+    assert client.get(f'{MENUS}/{pk}', headers=token_headers).json()['data']['link'] == 'HTTPS://example.com/help'
+    updated = client.put(f'{MENUS}/{pk}', headers=token_headers, json={**valid, 'link': 'http://localhost:8318/docs'})
+    assert updated.json()['code'] == 200, updated.text
+    assert client.get(f'{MENUS}/{pk}', headers=token_headers).json()['data']['link'] == 'http://localhost:8318/docs'

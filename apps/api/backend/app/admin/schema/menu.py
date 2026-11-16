@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 from typing import Self
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, HttpUrl, TypeAdapter, ValidationError, model_validator
 
 from backend.app.admin.model import Menu
 from backend.common.enums import MenuType, StatusType
@@ -28,6 +28,7 @@ class MenuSchemaBase(SchemaBase):
 
 
 _ROUTE_NAME = re.compile(r'^[A-Za-z][A-Za-z0-9]*$')
+_HTTP_URL = TypeAdapter(HttpUrl)
 
 
 class MenuWriteParam(ColumnLengthChecked, MenuSchemaBase):
@@ -48,8 +49,18 @@ class MenuWriteParam(ColumnLengthChecked, MenuSchemaBase):
             if not (self.perms or '').strip():
                 raise ValueError('按钮必须填写权限标识')
             return self
-        if self.type in {MenuType.embedded, MenuType.link} and not (self.link or '').strip():
-            raise ValueError('外链 / 内嵌必须填写地址')
+        if self.type in {MenuType.embedded, MenuType.link}:
+            link = (self.link or '').strip()
+            if not link:
+                raise ValueError('外链 / 内嵌必须填写地址')
+            message = '外链/内嵌地址必须是完整的 http(s) 地址'
+            if not re.match(r'^https?://[^/]', link, re.IGNORECASE) or re.search(r'[\x00-\x20\x7f\\]', link):
+                raise ValueError(message)
+            try:
+                _HTTP_URL.validate_python(link)
+            except ValidationError as exc:
+                raise ValueError(message) from exc
+            self.link = link
         if not (self.path or '').strip():
             raise ValueError('请填写路由地址')
         return self
