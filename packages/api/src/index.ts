@@ -32,7 +32,7 @@
  * ⚠️ 本包**仍然零 workspace 依赖** —— 所以 i18n 是注入的（`getLanguage`），
  * 不是 import 的。
  */
-export { ApiError, UploadAbortedError, isEnvelope, type Envelope } from './errors'
+export { ApiError, UploadAbortedError, confirmsLogout, isEnvelope, type Envelope } from './errors'
 export { NETWORK_STATUS, resolveEnvelope, type EnvelopeResult } from './envelope'
 export type { PageData } from './page'
 export {

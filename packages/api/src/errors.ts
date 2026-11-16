@@ -70,6 +70,16 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 登出请求的失败算不算「服务端已经确认登出了」（#319）：401 / 403 = 会话本来就结束了，算；
+ * 网络 / 5xx / 429 = 请求没被处理，refresh cookie 还活着，不算。
+ *
+ * 🔴 两端（web 的 `logout`、移动端的 `revokeOnServer`）共用这一个判定 —— 各写一份迟早一边改了另一边没改
+ */
+export function confirmsLogout(err: unknown): boolean {
+  return err instanceof ApiError && (err.isUnauthorized || err.isForbidden)
+}
+
 /** FBA 统一响应包封 */
 export type Envelope<T> = { code: number; msg: string; data: T }
 

@@ -116,6 +116,13 @@ class RunContext:
     """调用入口，原样进审计（`None` = 网页对话，`mcp:<client id>` = 外部系统）"""
     read_only: bool = False
     """只读入口：dispatcher 直接拒绝变更类工具（并审计），不出预演、不发确认令牌"""
+    user_present: bool = False
+    """被代表的那个人此刻就在这个会话里亲手发话（只有网页对话是）。
+
+    🔴 **`AI_CONFIRM_MUTATING_TOOLS = false` 只对本人在场的入口生效**（#314）。
+    那个开关的本意是「我自己聊天时别老弹卡片」；原来 dispatcher 只看开关，于是关掉它的同时也放开了 MCP：
+    外部系统带 `X-Acting-User: 张三` 调写工具，不经张三确认直接执行。
+    **默认 `False`（fail-closed）**：以后加入口忘了设它，结果是照样要确认，而不是悄悄放开写操作"""
     user_said: list[str] | None = None
     """这段对话里用户**亲口**说过的话（网页对话从历史里取）。给「参数必须是用户原话」的工具核对用 ——
     审批意见：工具描述里写了「不要替他拟」，真模型（Qwen3-VL）照样填了一句「用户未提供驳回理由」。

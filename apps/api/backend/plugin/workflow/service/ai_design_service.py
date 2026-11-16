@@ -36,7 +36,7 @@ from backend.common.i18n import t
 from backend.common.log import log
 from backend.plugin.workflow.engine.flow import index_nodes, validate_publish
 from backend.plugin.workflow.engine.schema import FlowModel, FormSchema
-from backend.plugin.workflow.service.ai_assist import build_client, complete, record, release
+from backend.plugin.workflow.service.ai_assist import build_client, complete, explain_failure, record, release
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -294,7 +294,7 @@ async def generate(db: AsyncSession, *, definition_id: int, prompt: str, user_id
         error = e.msg
     except Exception as e:
         log.exception('设计器 AI 生成调用模型失败')
-        error = str(e) or type(e).__name__
+        error = explain_failure(e)
     await record(
         db,
         kind='design',
