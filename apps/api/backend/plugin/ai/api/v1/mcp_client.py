@@ -52,7 +52,7 @@ async def get_mcp_client(
 async def create_mcp_client(
     request: Request, db: CurrentSessionTransaction, obj: CreateAiMcpClientParam
 ) -> ResponseSchemaModel[IssuedAiMcpToken]:
-    data = await ai_mcp_client_service.create(db=db, obj=obj, user_id=request.user.id)
+    data = await ai_mcp_client_service.create(db=db, obj=obj, operator=request.user)
     return response_base.success(data=data)
 
 
@@ -62,9 +62,12 @@ async def create_mcp_client(
     dependencies=[Depends(RequestPermission('ai:mcp:edit')), DependsRBAC],
 )
 async def update_mcp_client(
-    db: CurrentSessionTransaction, pk: Annotated[int, Path(description='记录 ID')], obj: UpdateAiMcpClientParam
+    request: Request,
+    db: CurrentSessionTransaction,
+    pk: Annotated[int, Path(description='记录 ID')],
+    obj: UpdateAiMcpClientParam,
 ) -> ResponseModel:
-    await ai_mcp_client_service.update(db=db, pk=pk, obj=obj)
+    await ai_mcp_client_service.update(db=db, pk=pk, obj=obj, operator=request.user)
     return response_base.success()
 
 
@@ -74,9 +77,9 @@ async def update_mcp_client(
     dependencies=[Depends(RequestPermission('ai:mcp:edit')), DependsRBAC],
 )
 async def rotate_mcp_client_token(
-    db: CurrentSessionTransaction, pk: Annotated[int, Path(description='记录 ID')]
+    request: Request, db: CurrentSessionTransaction, pk: Annotated[int, Path(description='记录 ID')]
 ) -> ResponseSchemaModel[IssuedAiMcpToken]:
-    data = await ai_mcp_client_service.rotate(db=db, pk=pk)
+    data = await ai_mcp_client_service.rotate(db=db, pk=pk, operator=request.user)
     return response_base.success(data=data)
 
 
