@@ -849,6 +849,17 @@ jobs:
           cat "$RUNNER_TEMP/maestro.env" >> "$GITHUB_ENV"
 
       # ── 打 APK ──────────────────────────────────────────────────────────
+      # 🔴 钉 JDK 17（RN 要求的版本）。runner 默认的 JDK 更新，原生模块的
+      # `configureCMake` 会把 JVM 打到 stderr 的一句警告当成失败：
+      # 「WARNING: A restricted method in java.lang.System has been called」，
+      # 一个字不提 JDK 版本。runner 镜像自带 17，不用再装
+      - name: JDK 17
+        run: |
+          java -version 2>&1 | head -1
+          test -x "$JAVA_HOME_17_X64/bin/java"
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
+
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: expo prebuild
