@@ -639,10 +639,18 @@ def test_opera_log_filters_by_trace_id(client: TestClient, token_headers: dict[s
 # ── 评审补的（#262）────────────────────────────────────────────────────────────
 
 
-def test_a_password_like_config_value_is_recorded_as_secret(client: TestClient, token_headers: dict[str, str]) -> None:
+def test_a_password_like_config_value_is_recorded_as_secret(
+    client: TestClient, token_headers: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     """🔴 `EMAIL_PASSWORD`（SMTP 密码 / 授权码）就存在参数配置里：键名像密码的那几行，值只记「改过」"""
+    from backend.core.conf import settings
+    from backend.plugin.config.model import Config
+
+    monkeypatch.setattr(settings, 'CONFIG_ENCRYPT_SECRET_KEY', 'ab' * 32)
     configs = client.get('/sys/configs/all', headers=token_headers, params={'type': 'EMAIL'}).json()['data']
     target = next(c for c in configs if c['key'] == 'EMAIL_PASSWORD')
+    with engine().connect() as conn:
+        original = conn.scalar(sa.select(Config.value).where(Config.id == int(target['id'])))
     body = [{k: target[k] for k in ('id', 'name', 'type', 'key', 'value', 'is_frontend', 'remark')}]
     body[0]['value'] = 'smtp-app-code-pytest'
     try:
@@ -651,8 +659,9 @@ def test_a_password_like_config_value_is_recorded_as_secret(client: TestClient, 
         assert field(record, 'value') == {'field': 'value', 'label': '键值', 'secret': True}
         assert 'smtp-app-code-pytest' not in json.dumps(record['changes'])
     finally:
-        body[0]['value'] = target['value']
-        client.put('/sys/configs', headers=token_headers, json=body)
+        # 读接口不会返回原值；恢复数据库原始存储值，不能把掩码/空串当旧密钥回传。
+        with engine().begin() as conn:
+            conn.execute(sa.update(Config.__table__).where(Config.id == int(target['id'])).values(value=original))
 
 
 def test_a_savepoint_commit_does_not_split_or_drop_the_record(role_row: int) -> None:

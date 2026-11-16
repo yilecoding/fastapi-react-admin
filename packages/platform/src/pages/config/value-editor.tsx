@@ -36,7 +36,7 @@ export function ValueEditor({
 }) {
   const { t } = useTranslation()
   const meta = metaOf(item.key)
-  const kind = meta?.widget ?? valueKind(item)
+  const kind = item.is_secret ? 'secret' : (meta?.widget ?? valueKind(item))
   const [reveal, setReveal] = React.useState(false)
 
   const ring = invalid
@@ -118,7 +118,7 @@ export function ValueEditor({
           type={reveal ? 'text' : 'password'}
           value={value}
           disabled={disabled}
-          placeholder={t("未设置")}
+          placeholder={item.is_configured ? t('已配置，留空不修改') : t('未设置')}
           autoComplete="new-password"
           data-testid={`v-${item.key}`}
           onChange={(e) => onChange(e.target.value)}

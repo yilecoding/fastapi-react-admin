@@ -12,3 +12,8 @@ extend = "admin"
 [api.config]
 prefix = "/configs"
 tags = "系统参数配置"
+
+[settings]
+# 参数密钥的落库加密密钥，真值放环境变量 / .env（32 字节的十六进制字符串）。
+# 生成：python -c "import secrets; print(secrets.token_hex(32))"
+CONFIG_ENCRYPT_SECRET_KEY = ""
