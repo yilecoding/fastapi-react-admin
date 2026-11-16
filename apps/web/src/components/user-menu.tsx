@@ -27,14 +27,17 @@ export function UserMenu() {
   const { data: me } = useQuery(meQuery)
 
   async function handleLogout() {
+    let endedElsewhere: boolean
     try {
-      await logout(qc)
+      endedElsewhere = await logout(qc)
     } catch (err) {
       // 没退成：登录态原样留着（见 `logout` 的注释），说清楚、让人再点一次 —— 不能静默停在原地（硬纪律 9）
       const reason = err instanceof Error && err.message ? err.message : String(err)
       toast.error(t('退出登录失败，你仍处于登录状态，请重试：{{reason}}', { reason }), { timeout: 8000 })
       return
     }
+    // 会话本来就结束了：api 层已经带着原因码跳过登录页，再跳一次会把那条提示冲掉
+    if (endedElsewhere) return
     await navigate({ to: "/sign-in", search: { redirect: undefined, reason: undefined } })
   }
 
