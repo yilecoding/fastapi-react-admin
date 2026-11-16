@@ -44,8 +44,10 @@ export default function ServerScreen() {
       const body = (await res.json()) as { code?: number }
       // FBA 的所有响应都带 code；不带说明这不是本项目的后端
       if (typeof body?.code !== 'number') throw new Error(t('这个地址不像是本项目的后端'))
-      await serverStore.set(normalized === API_BASE_DEFAULT ? null : normalized)
+      // 🔴 先登出、再换地址：登出请求要打到**旧**服务器上，cookie jar 按主机分，打到新服务器上的那次登出
+      // 带不上旧服务器的 refresh cookie —— 旧会话撤不掉，以后切回来冷启动会被静默登回去（#319）
       await logout()
+      await serverStore.set(normalized === API_BASE_DEFAULT ? null : normalized)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -54,9 +56,10 @@ export default function ServerScreen() {
   }
 
   async function reset() {
+    // 同上：先在旧服务器上登出
+    await logout()
     await serverStore.set(null)
     setValue(API_BASE_DEFAULT)
-    await logout()
   }
 
   return (
