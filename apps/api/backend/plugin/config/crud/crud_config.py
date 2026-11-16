@@ -1,11 +1,12 @@
 from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.common.security.data_scope import DataScopedCRUD
 from backend.plugin.config.model import Config
-from backend.plugin.config.schema.config import CreateConfigParam, UpdateConfigParam
+from backend.plugin.config.schema.config import CreateConfigParam
 from backend.utils.timezone import timezone
 
 
@@ -98,7 +99,7 @@ class CRUDConfig(DataScopedCRUD[Config]):
         """
         await self.create_model(db, obj)
 
-    async def update(self, db: AsyncSession, pk: int, obj: UpdateConfigParam) -> int:
+    async def update(self, db: AsyncSession, pk: int, obj: dict[str, Any]) -> int:
         """
         更新参数配置
 
@@ -109,7 +110,7 @@ class CRUDConfig(DataScopedCRUD[Config]):
         """
         return await self.update_model_by_column(db, obj, id=pk, deleted=0)
 
-    async def bulk_update(self, db: AsyncSession, objs: list[UpdateConfigParam]) -> int:
+    async def bulk_update(self, db: AsyncSession, objs: list[dict[str, Any]]) -> int:
         """
         批量更新参数配置
 

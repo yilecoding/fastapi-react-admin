@@ -314,6 +314,7 @@ _NOT_CREDENTIALS = {
     'token_hint': '令牌前几位',
     'has_secret': '有没有配，布尔',
     'clear_sign_secret': '要不要清掉，布尔',
+    'clear_secret': '参数配置的显式清空开关，布尔，不含密钥值',
     'encrypt_key_ready': '服务端配没配加密密钥，布尔',
     'secret_field': '凭据字段的名字（短信厂商描述）',
     'secret_label': '凭据字段的显示名',
