@@ -72,7 +72,8 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:  # ruff: ignore[
         return rows[-limit:]
 
     class _Engine:
-        async def run(self, *_a: Any) -> AsyncIterator[Any]:
+        async def run(self, *a: Any) -> AsyncIterator[Any]:
+            state['ctx'] = a[2]
             for ev in state['events']:
                 if ev == 'hang':
                     await asyncio.sleep(30)
@@ -253,3 +254,11 @@ def test_history_api_replays_turns_without_text(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(conv_module.ai_message_dao, 'get_history', _history)
     got = asyncio.run(conv_module.conversation_service.get_messages(db=None, pk=1, user_id=1))
     assert [(m.role, m.tool_calls is not None) for m in got] == [('user', False), ('assistant', True)]
+
+
+def test_web_chat_marks_the_user_present(harness: dict[str, Any]) -> None:
+    """🔴 #314：`AI_CONFIRM_MUTATING_TOOLS = false` 只对本人在场的入口生效，网页对话要把这件事告诉 dispatcher ——
+    少了这一句，关掉开关的部署照样每次弹确认卡片（不报错，只是开关失灵）"""
+    harness['events'] = [DoneEvent()]
+    asyncio.run(_drain(ChatService.stream(user=_USER, conversation_id=1, content='你好')))
+    assert harness['ctx'].user_present is True
