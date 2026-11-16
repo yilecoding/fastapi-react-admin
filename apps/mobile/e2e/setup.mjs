@@ -14,9 +14,16 @@
  * 用它拿 token；开关**无条件写一次再回读**，不先读再判断（参数配置有两级缓存，
  * 读到的可能是上一轮留下的值，理由见那个文件的头注释）。
  */
+import { readFileSync } from 'node:fs'
+
 const API = process.env.E2E_API_BASE ?? 'http://127.0.0.1:8001'
-/** 和 `src/lib/users.ts` 的 PAGE_SIZE 一致 —— 第二页第一条要按 App 自己的分页去问 */
-const PAGE_SIZE = 20
+/**
+ * 每页几条，**直接从 App 的源码里读**，不手抄一份 —— 第二页第一条要按 App 自己的分页去问。
+ * 手抄的话 App 那边改大了这里不会报错：第一页就把所有人拉回来了，
+ * 「翻页」那一步不用翻也找得到那一行，流程照绿，测的东西却没了。
+ */
+const usersSrc = readFileSync(new URL('../src/lib/users.ts', import.meta.url), 'utf8')
+const PAGE_SIZE = Number(usersSrc.match(/^const PAGE_SIZE = (\d+)$/m)?.[1])
 const PASSWORD = 'E2eMobile@123456'
 
 const log = (...a) => console.error('[mobile-e2e]', ...a)
@@ -24,6 +31,10 @@ const log = (...a) => console.error('[mobile-e2e]', ...a)
 function fail(msg) {
   console.error(`\n[mobile-e2e] ❌ ${msg}\n`)
   process.exit(1)
+}
+
+if (!Number.isInteger(PAGE_SIZE) || PAGE_SIZE < 1) {
+  fail('从 src/lib/users.ts 里读不出 `const PAGE_SIZE = <数字>` —— 那一行是不是改了写法？')
 }
 
 let token = ''
