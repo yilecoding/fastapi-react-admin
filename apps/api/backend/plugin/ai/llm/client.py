@@ -152,15 +152,36 @@ def user_facing_error(e: BaseException) -> str:
     if isinstance(e, errors.BaseExceptionError):
         # 自己抛的（`stream_chat` 里那几句）：本来就是给人看的
         return str(e.msg)
-    status = getattr(e, 'status_code', None)
-    if isinstance(status, int):
-        # pydantic-ai 的 ModelHTTPError / openai 的 APIStatusError
-        return _explain_http_error(status)
-    if isinstance(e, (httpx.TimeoutException, TimeoutError)) or 'Timeout' in type(e).__name__:
-        return '模型响应超时，请稍后再试'
-    if isinstance(e, httpx.ConnectError) or 'Connection' in type(e).__name__:
-        return CONNECT_FAILED
+    # 顺着异常链按**类型**认：pydantic-ai 把 openai 的连接 / 超时错误包成 `ModelAPIError` 再 `raise … from e`，
+    # 只看最外层的话 pydantic_ai 引擎说「ModelAPIError」、native 引擎说「连不上」—— 同一次断网两种说法
+    for cause in _chain(e):
+        status = getattr(cause, 'status_code', None)
+        if isinstance(status, int):
+            # pydantic-ai 的 ModelHTTPError / openai 的 APIStatusError
+            return _explain_http_error(status)
+        if isinstance(cause, (httpx.TimeoutException, TimeoutError, *_OPENAI_TIMEOUT)):
+            return '模型响应超时，请稍后再试'
+        if isinstance(cause, (httpx.ConnectError, ConnectionError, *_OPENAI_CONNECT)):
+            return CONNECT_FAILED
     return f'模型调用失败（{type(e).__name__}），详情见服务端日志'
+
+
+try:  # openai 只有 pydantic_ai 引擎用得到（`requirements.txt`），native 引擎不依赖它
+    import openai
+
+    _OPENAI_TIMEOUT: tuple[type[BaseException], ...] = (openai.APITimeoutError,)
+    _OPENAI_CONNECT: tuple[type[BaseException], ...] = (openai.APIConnectionError,)
+except ImportError:  # pragma: no cover
+    _OPENAI_TIMEOUT = _OPENAI_CONNECT = ()
+
+
+def _chain(e: BaseException) -> list[BaseException]:
+    seen: list[BaseException] = []
+    current: BaseException | None = e
+    while current is not None and current not in seen and len(seen) < 8:
+        seen.append(current)
+        current = current.__cause__ or current.__context__
+    return seen
 
 
 def _parse_sse_line(line: str) -> StreamDelta | None:
