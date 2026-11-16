@@ -1,0 +1,32 @@
+# 冷启动 → 清掉上一次的登录态 → 用账号密码登录，停在首页。
+# 调用方传 USERNAME / PASSWORD。
+#
+# 全程按 testID 找元素，不按文字：界面语言跟着设备语言走，模拟器默认是英文。
+appId: com.fastapireactadmin.mobile
+---
+# 🔴 启动要包一层 retry。上一条流程把 App 留在前台时，`clearState` 杀掉旧进程、
+# 紧接着拉起新进程，而系统清理旧任务的那一下晚到（logcat：`Destroy timeout of
+# remove-task` → `Killing <新 pid> … remove task`），把**刚起来的新进程**一起杀了，
+# 屏上只剩一张启动图，等多久都不会动。这是系统侧的竞态，不是 App 卡死；重启一次就过
+- retry:
+    maxRetries: 2
+    commands:
+      - stopApp
+      - launchApp:
+          clearState: true
+      - extendedWaitUntil:
+          visible:
+            id: login-username
+          timeout: 40000
+- tapOn:
+    id: login-username
+- inputText: ${USERNAME}
+- tapOn:
+    id: login-password
+- inputText: ${PASSWORD}
+- tapOn:
+    id: login-submit
+- extendedWaitUntil:
+    visible:
+      id: tab-apps
+    timeout: 30000

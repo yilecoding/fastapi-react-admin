@@ -1,0 +1,295 @@
+name: 移动端 E2E
+
+# 移动端的冒烟链（#137）：真的把 APK 装进模拟器，点一遍 登录 → 应用页 → 用户列表翻页 →
+# 详情 → 删除确认 → toast，外加一条「没角色的账号看不到用户模块」。
+# `expo export` 那道闸门只挡「打不出包」，挡不住「打出来了但登录坏了」。
+# 只跑 Android —— iOS 要 macOS runner。
+#
+# ── 什么时候跑 ──────────────────────────────────────────────────────────
+# 这个 job 一次 17 分钟左右，所以**只在改到它测得到的东西时跑**，PR 和 main 同一套规则：
+#
+#   跑    apps/mobile（App 本身）· packages/api · packages/i18n（App 直接依赖的两个包）· 这份文件
+#         · 这个 job 起后端用到的三个文件（e2e_server.py / .env.e2e.example / reset_test_db.py）
+#   不跑  任何 `*.md` —— 分册文档改得很勤，而它们不进 APK
+#   不跑  后端 —— 接口**形状**变了会连带改 `packages/api/src/schema.d.ts`（CI 有新鲜度检查逼着
+#         重新生成），那就落进上面的规则里；只改行为的后端改动由 web 的 E2E 管
+#   不跑  `ci.yml` / 锁文件 / web / desktop / docs
+#
+# 手动跑一次：Actions 页面点 Run workflow（`workflow_dispatch`）。
+#
+# 🔴 **之所以单独一个 workflow、用 workflow 级的 `paths`，是因为它不在 ruleset 的必需检查里。**
+# `ci.yml` 里那条「不要用 `paths-ignore`」的纪律是给必需检查立的：被 `paths` 滤掉的 workflow
+# 根本不上报，必需检查会永远卡在「等待」。哪天把这个 job 设成必需检查，就得搬回 `ci.yml`、
+# 改成 job 级的 `if`。
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/mobile/**
+      - packages/api/**
+      - packages/i18n/**
+      - .github/workflows/mobile-e2e.yml
+      # 这个 job 自己起后端用到的三个文件：它们坏了要在改它们的那个 PR 上红
+      - apps/api/e2e_server.py
+      - apps/api/backend/.env.e2e.example
+      - apps/api/backend/scripts/reset_test_db.py
+      # 否定项要放在最后：后面的规则盖前面的
+      - "!**/*.md"
+  pull_request:
+    # 和上面那份一字不差 —— 改一处要改另一处
+    paths:
+      - apps/mobile/**
+      - packages/api/**
+      - packages/i18n/**
+      - .github/workflows/mobile-e2e.yml
+      # 这个 job 自己起后端用到的三个文件：它们坏了要在改它们的那个 PR 上红
+      - apps/api/e2e_server.py
+      - apps/api/backend/.env.e2e.example
+      - apps/api/backend/scripts/reset_test_db.py
+      - "!**/*.md"
+  workflow_dispatch:
+
+# 只读代码、传 artifact，用不着别的权限
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  maestro:
+    name: maestro · 移动端 E2E
+    runs-on: ubuntu-latest
+    # 正常 17 分钟左右（Gradle 冷缓存）。模拟器或 driver 挂住时别占满一小时
+    timeout-minutes: 35
+
+    env:
+      DATABASE_TYPE: sqlserver
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: "1433"
+      DATABASE_USER: sa
+      DATABASE_PASSWORD: "YourStrong!Passw0rd"
+      DATABASE_SCHEMA: fba
+      DATABASE_PK_MODE: snowflake
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: "6380"
+      REDIS_DATABASE: "2"
+      TOKEN_SECRET_KEY: ci-only-not-a-real-secret-Ku3Jd9wQpZ2vLxR7
+      PLUGIN_PIP_CHINA: "false"
+      LOGIN_CAPTCHA_ENABLED: "false"
+      ENV_FILE: .env.e2e
+      # 模拟器里 10.0.2.2 就是宿主机的 127.0.0.1，后端绑在回环上就够了。
+      # 🔴 这是**构建期**焊进 APK 的字符串，打包那一步之前就要在
+      EXPO_PUBLIC_API_BASE: http://10.0.2.2:8001
+      MAESTRO_CLI_NO_ANALYTICS: "1"
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: "180000"
+
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest@sha256:ba4c8329f48fb8f02e1416be6a930ebfd71268caee78aa985f3af4315e457c89
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: "YourStrong!Passw0rd"
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'YourStrong!Passw0rd' -C -Q 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+          --health-start-period 20s
+
+      redis:
+        image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: uv python install 3.13
+
+      - name: ODBC Driver 18
+        run: |
+          if ! command -v odbcinst >/dev/null || ! odbcinst -q -d | grep -q 'ODBC Driver 18 for SQL Server'; then
+            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+              | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
+            curl -fsSL "https://packages.microsoft.com/config/ubuntu/$(. /etc/os-release && echo "$VERSION_ID")/prod.list" \
+              | sudo tee /etc/apt/sources.list.d/mssql-release.list > /dev/null
+            sudo apt-get update -qq
+            sudo ACCEPT_EULA=Y apt-get install -y -qq msodbcsql18 unixodbc-dev
+          fi
+          odbcinst -q -d
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: uv sync
+        working-directory: apps/api
+        run: uv sync --locked --no-group lint
+
+      # 后端这一段照 `playwright · E2E` 那个 job：同一份 .env.e2e、同一个 fba_test
+      - name: .env.e2e
+        working-directory: apps/api
+        run: cp backend/.env.e2e.example backend/.env.e2e
+
+      - name: 建库（fba + fba_test）
+        env:
+          MSSQL_CID: ${{ job.services.mssql.id }}
+        run: |
+          SQLCMD="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P $DATABASE_PASSWORD -C -l 5"
+          for i in $(seq 1 40); do
+            if docker exec "$MSSQL_CID" $SQLCMD -Q "SELECT 1" > /dev/null 2>&1; then
+              echo "SQL Server 就绪（第 $i 次探测）"; break
+            fi
+            if [ "$i" -eq 40 ]; then
+              echo "SQL Server 120s 内没起来，容器日志："; docker logs --tail 80 "$MSSQL_CID"; exit 1
+            fi
+            sleep 3
+          done
+          docker exec "$MSSQL_CID" $SQLCMD -Q \
+            "IF DB_ID('fba') IS NULL CREATE DATABASE [fba]; IF DB_ID('fba_test') IS NULL CREATE DATABASE [fba_test];"
+
+      - name: 重建测试库
+        working-directory: apps/api
+        run: uv run --no-sync python -m backend.scripts.reset_test_db
+
+      - name: 测试库升到 head
+        working-directory: apps/api/backend
+        env:
+          DATABASE_SCHEMA: fba_test
+        run: uv run --no-sync alembic upgrade head
+
+      # 🔴 DATABASE_SCHEMA 要在这里盖回 fba_test，理由同 `playwright · E2E` 的「E2E test」那一步
+      - name: 起后端（:8001）
+        working-directory: apps/api
+        env:
+          DATABASE_SCHEMA: fba_test
+        run: |
+          nohup uv run --no-sync python e2e_server.py > "$RUNNER_TEMP/api.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8001/health/ready > /dev/null 2>&1; then
+              echo "后端就绪（第 $i 次探测）"; exit 0
+            fi
+            sleep 2
+          done
+          echo "后端 120s 内没起来："; tail -n 80 "$RUNNER_TEMP/api.log"; exit 1
+
+      - name: 关验证码 · 造测试数据
+        run: |
+          # 不写成 `node … | tee -a`：默认的 shell 没开 pipefail，脚本挂了这一步照样绿
+          node apps/mobile/e2e/setup.mjs > "$RUNNER_TEMP/maestro.env"
+          cat "$RUNNER_TEMP/maestro.env"
+          cat "$RUNNER_TEMP/maestro.env" >> "$GITHUB_ENV"
+
+      # ── 打 APK ──────────────────────────────────────────────────────────
+      # 🔴 钉 JDK 17（RN 要求的版本）。runner 默认的 JDK 更新，原生模块的
+      # `configureCMake` 会把 JVM 打到 stderr 的一句警告当成失败：
+      # 「WARNING: A restricted method in java.lang.System has been called」，
+      # 一个字不提 JDK 版本。runner 镜像自带 17，不用再装
+      - name: JDK 17
+        run: |
+          java -version 2>&1 | head -1
+          test -x "$JAVA_HOME_17_X64/bin/java"
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
+
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: expo prebuild
+        working-directory: apps/mobile
+        run: pnpm exec expo prebuild --platform android --no-install
+
+      # CI 里的后端只有 http，而 prebuild 生成的 main 清单里没有 `usesCleartextTraffic`
+      # （只有 debug 那份有）。按 Android 的文档 release 包因此不许走明文 HTTP ——
+      # ⚠️ 这一条没做对照（没跑过不加这一行的包），只验了加上之后是通的。
+      # 只在这里给测试用的包放开，不改 app.json —— 发出去的包不该带这个口子。
+      # 后面那句 grep 是守卫：prebuild 模板哪天换了写法、sed 没替换上，要当场红，
+      # 而不是攒到登录那一步变成一句「连不上服务器」
+      - name: 测试包放开明文 HTTP
+        working-directory: apps/mobile/android
+        run: |
+          sed -i 's|<application |<application android:usesCleartextTraffic="true" |' app/src/main/AndroidManifest.xml
+          grep -q 'android:usesCleartextTraffic="true"' app/src/main/AndroidManifest.xml
+
+      # 只编模拟器那一个架构，其余三个用不上（全编要多花多少没测过）
+      - name: assembleRelease（x86_64）
+        working-directory: apps/mobile/android
+        run: |
+          ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --console=plain
+          # daemon 留着会和模拟器抢内存
+          ./gradlew --stop
+
+      # ── 模拟器 + Maestro ────────────────────────────────────────────────
+      # 钉版本 + 校验和：不走官方那条 `curl | bash`
+      - name: 装 Maestro
+        env:
+          MAESTRO_VERSION: 2.12.1
+          MAESTRO_SHA256: 54dbb0716425626604973cbb374c585ca30272375d9ce15177a1152765ddd9d7
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/maestro.zip" \
+            "https://github.com/mobile-dev-inc/Maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
+          echo "$MAESTRO_SHA256  $RUNNER_TEMP/maestro.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$HOME/.maestro-dist"
+          echo "$HOME/.maestro-dist/maestro/bin" >> "$GITHUB_PATH"
+
+      # ubuntu runner 有 KVM，但默认当前用户没权限用。这是 android-emulator-runner
+      # 文档给的写法（不加这一步会怎样没试过）
+      - name: 开 KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: 模拟器里跑 Maestro
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          # 🔴 用纯 AOSP 镜像，不用 google_apis：后者带 Pixel Launcher 和一堆 Google 服务，
+          # 开机后桌面会 ANR，弹一个「Pixel Launcher isn't responding」盖在 App 上 ——
+          # App 明明渲染好了，Maestro 报的却是「login-username 不可见」
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          cores: 3
+          ram-size: 4096M
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb shell settings put global hide_error_dialogs 1
+            adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            maestro --version
+            maestro test --debug-output ${{ runner.temp }}/maestro --flatten-debug-output apps/mobile/e2e/flows
+
+      - name: 后端日志（失败时）
+        if: failure()
+        run: tail -n 200 "$RUNNER_TEMP/api.log" || true
+
+      # 失败那一步的截图和界面层级都在里面 —— 没有它，CI 上的失败只剩一句「元素没找到」
+      - name: Upload Maestro 调试输出
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: maestro-debug
+          path: ${{ runner.temp }}/maestro/
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: ignore

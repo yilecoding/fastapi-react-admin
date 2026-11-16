@@ -1,0 +1,58 @@
+# #96 验收时手工点通的那条链：
+# 登录 → 应用页看得到「用户」→ 列表翻页 → 搜索 → 详情 → 删除确认 → toast。
+#
+# 变量来自 `e2e/setup.mjs`（`MAESTRO_` 开头的环境变量 Maestro 会自动带进来）。
+appId: com.fastapireactadmin.mobile
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      USERNAME: admin
+      PASSWORD: "123456"
+
+- tapOn:
+    id: tab-apps
+- tapOn:
+    id: module-users
+- extendedWaitUntil:
+    visible:
+      id: users-total
+    timeout: 15000
+
+# 翻页：第二页的第一条只有滚到底、拉了下一页才会出现
+- scrollUntilVisible:
+    element:
+      id: ${MAESTRO_PAGE2_ROW}
+    direction: DOWN
+    timeout: 60000
+
+# 搜出那个专门建来删的用户
+- tapOn:
+    id: users-search
+- inputText: ${MAESTRO_DEL_USERNAME}
+- extendedWaitUntil:
+    visible:
+      id: ${MAESTRO_DEL_ROW}
+    timeout: 15000
+- hideKeyboard
+- tapOn:
+    id: ${MAESTRO_DEL_ROW}
+
+- extendedWaitUntil:
+    visible:
+      id: user-detail-name
+    timeout: 15000
+- tapOn:
+    id: user-delete
+- tapOn:
+    id: user-delete-confirm-confirm
+
+# 删完退回列表、出成功提示，那一行不在了
+- extendedWaitUntil:
+    visible:
+      id: toast-success
+    timeout: 15000
+- assertVisible:
+    id: users-total
+- assertNotVisible:
+    id: ${MAESTRO_DEL_ROW}

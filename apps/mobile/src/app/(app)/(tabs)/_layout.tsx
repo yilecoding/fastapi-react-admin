@@ -58,6 +58,8 @@ export default function AppLayout() {
       <Tabs.Screen
         name="index"
         options={{
+          // Maestro 按它找页签：标签文字跟着设备语言走，模拟器默认是英文
+          tabBarButtonTestID: 'tab-home',
           title: t('首页'),
           headerShown: false,
           // 未读红点挂在**首页**：通知的入口就在这一屏。
@@ -69,6 +71,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="apps"
         options={{
+          tabBarButtonTestID: 'tab-apps',
           title: t('应用'),
           headerShown: false,
           tabBarIcon: ({ color }) => <Icon as={LayoutGridIcon} color={color} />,
@@ -77,6 +80,7 @@ export default function AppLayout() {
       <Tabs.Screen
         name="profile"
         options={{
+          tabBarButtonTestID: 'tab-profile',
           title: t('我的'),
           headerShown: false,
           tabBarIcon: ({ color }) => <Icon as={UserRoundIcon} color={color} />,
