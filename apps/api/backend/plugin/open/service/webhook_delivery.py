@@ -129,12 +129,36 @@ def _signing_secrets(hook: OpenWebhook) -> list[str]:
     ]
 
 
+async def _read_capped(resp: httpx.Response) -> bytes:
+    """只读前 `OPERA_LOG_RESPONSE_MAX_SIZE` 字节（再多一个字节，让截断提示知道「被截断了」），其余不读。
+
+    🔴 `client.post()` 会把整个响应读进内存、之后才截断 —— 对方回一个超大 body 就是 worker 的内存（#307）。
+    读够就停：连接随 `stream()` 退出直接关掉，不再排空。请求里声明了 `accept-encoding: identity`，
+    否则一小段 gzip 解出来可以是几十 MB（解压是按块整块做的）
+    """
+    cap = settings.OPERA_LOG_RESPONSE_MAX_SIZE + 1
+    buf = bytearray()
+    async for chunk in resp.aiter_bytes():
+        buf += chunk
+        if len(buf) >= cap:
+            break
+    return bytes(buf[:cap])
+
+
+def _full_size(resp: httpx.Response) -> str:
+    """没读完的响应有多大：对方声明了就用声明值，没声明（分块传输）只知道「超过上限」"""
+    declared = resp.headers.get('content-length', '')
+    return declared if declared.isdigit() else f'超过 {settings.OPERA_LOG_RESPONSE_MAX_SIZE}'
+
+
 async def _post(hook: OpenWebhook, event: OpenEvent) -> AttemptResult:
     body = event.payload.encode()
     ts = int(time.time())
     headers = {
         'content-type': 'application/json',
         'user-agent': USER_AGENT,
+        # 不要压缩：响应只读前 10 KB，压缩了反而让一小段网络字节解出一大块内存（见 _read_capped）
+        'accept-encoding': 'identity',
         webhook_sign.HEADER_ID: str(event.id),
         webhook_sign.HEADER_TIMESTAMP: str(ts),
     }
@@ -155,21 +179,30 @@ async def _post(hook: OpenWebhook, event: OpenEvent) -> AttemptResult:
     blocked = await check_target(hook.url)
     if blocked:
         return AttemptResult(None, blocked, _ms(), logged)
+    # 总时长还要明显短于「停在发送中多久算 worker 死了」：否则还在发的这一行会被 reclaim_stale 抢回去再发一遍
+    limit = min(settings.OPEN_WEBHOOK_TIMEOUT_SECONDS, settings.OPEN_WEBHOOK_SENDING_STALE_SECONDS / 2)
     try:
-        async with httpx.AsyncClient(
-            timeout=settings.OPEN_WEBHOOK_TIMEOUT_SECONDS,
-            follow_redirects=False,
-            transport=transport,
-            # 代理只认进程环境变量（短信插件那条结论），配置里不做代理字段
-            trust_env=True,
-        ) as client:
-            resp = await client.post(hook.url, content=body, headers=headers)
-    except httpx.TimeoutException:
-        return AttemptResult(None, f'timeout: {settings.OPEN_WEBHOOK_TIMEOUT_SECONDS}s', _ms(), logged)
+        # 🔴 httpx 的 timeout 是 connect / read / write / pool **各自**的上限，不是整次请求的：对方每隔不到 limit 秒
+        # 回一个字节，这次投递就一直挂着，直到任务级 with_timeout 把它取消 —— 取消时不落库，这一行停在 sending，
+        # attempts / 连续失败都不涨（#307，实测）。所以外面再套一层**总时长**，超了按普通失败落库
+        async with (
+            asyncio.timeout(limit),
+            httpx.AsyncClient(
+                timeout=limit,
+                follow_redirects=False,
+                transport=transport,
+                # 代理只认进程环境变量（短信插件那条结论），配置里不做代理字段
+                trust_env=True,
+            ) as client,
+            client.stream('POST', hook.url, content=body, headers=headers) as resp,
+        ):
+            content = await _read_capped(resp)
+    except (TimeoutError, httpx.TimeoutException):
+        return AttemptResult(None, f'timeout: {limit}s', _ms(), logged)
     except httpx.HTTPError as e:
         return AttemptResult(None, f'{type(e).__name__}: {e!s}', _ms(), logged)
     content_type = (resp.headers.get('content-type') or '').split(';')[0].strip().lower()
-    raw = OperaLogMiddleware.redact_body(resp.content, content_type)
+    raw = OperaLogMiddleware.redact_body(content, content_type)
     error = None
     if 300 <= resp.status_code < 400:
         error = f'redirect: 不跟随重定向（Location: {resp.headers.get("location", "")}），请把地址改成最终那一个'
@@ -181,7 +214,7 @@ async def _post(hook: OpenWebhook, event: OpenEvent) -> AttemptResult:
         duration_ms=_ms(),
         request_headers=logged,
         response_headers=OperaLogMiddleware.collect_headers(resp.headers),
-        response_body=OperaLogMiddleware.truncate_body(raw),
+        response_body=OperaLogMiddleware.truncate_body(raw, full_size=_full_size(resp)),
     )
 
 
@@ -365,7 +398,9 @@ async def deliver_pending() -> dict[str, int]:
     stats: dict[str, int] = {}
     async with async_db_session.begin() as db:
         stale = await open_webhook_delivery_dao.reclaim_stale(
-            db, before=timezone.now() - timedelta(seconds=settings.OPEN_WEBHOOK_SENDING_STALE_SECONDS)
+            db,
+            before=timezone.now() - timedelta(seconds=settings.OPEN_WEBHOOK_SENDING_STALE_SECONDS),
+            max_attempts=max_attempts(),
         )
     if stale:
         stats['stale'] = stale
