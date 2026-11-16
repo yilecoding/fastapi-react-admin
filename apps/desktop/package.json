@@ -12,7 +12,8 @@
     "package": "pnpm build && electron-builder --config electron-builder.yml",
     "package:ci": "pnpm build && electron-builder --config electron-builder.yml --publish never",
     "package:dir": "pnpm build && electron-builder --config electron-builder.yml --dir",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test tests/*.test.ts"
   },
   "dependencies": {
     "electron-updater": "^6.8.11"
