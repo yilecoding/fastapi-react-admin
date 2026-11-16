@@ -9,6 +9,7 @@ name: 移动端 E2E
 # 这个 job 一次 17 分钟左右，所以**只在改到它测得到的东西时跑**，PR 和 main 同一套规则：
 #
 #   跑    apps/mobile（App 本身）· packages/api · packages/i18n（App 直接依赖的两个包）· 这份文件
+#         · 这个 job 起后端用到的三个文件（e2e_server.py / .env.e2e.example / reset_test_db.py）
 #   不跑  任何 `*.md` —— 分册文档改得很勤，而它们不进 APK
 #   不跑  后端 —— 接口**形状**变了会连带改 `packages/api/src/schema.d.ts`（CI 有新鲜度检查逼着
 #         重新生成），那就落进上面的规则里；只改行为的后端改动由 web 的 E2E 管
@@ -28,6 +29,10 @@ on:
       - packages/api/**
       - packages/i18n/**
       - .github/workflows/mobile-e2e.yml
+      # 这个 job 自己起后端用到的三个文件：它们坏了要在改它们的那个 PR 上红
+      - apps/api/e2e_server.py
+      - apps/api/backend/.env.e2e.example
+      - apps/api/backend/scripts/reset_test_db.py
       # 否定项要放在最后：后面的规则盖前面的
       - "!**/*.md"
   pull_request:
@@ -37,8 +42,16 @@ on:
       - packages/api/**
       - packages/i18n/**
       - .github/workflows/mobile-e2e.yml
+      # 这个 job 自己起后端用到的三个文件：它们坏了要在改它们的那个 PR 上红
+      - apps/api/e2e_server.py
+      - apps/api/backend/.env.e2e.example
+      - apps/api/backend/scripts/reset_test_db.py
       - "!**/*.md"
   workflow_dispatch:
+
+# 只读代码、传 artifact，用不着别的权限
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -48,7 +61,8 @@ jobs:
   maestro:
     name: maestro · 移动端 E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 正常 17 分钟左右（Gradle 冷缓存）。模拟器或 driver 挂住时别占满一小时
+    timeout-minutes: 35
 
     env:
       DATABASE_TYPE: sqlserver
@@ -203,7 +217,9 @@ jobs:
         working-directory: apps/mobile
         run: pnpm exec expo prebuild --platform android --no-install
 
-      # 🔴 release 包默认**不许走明文 HTTP**（Android 9 起），而 CI 里的后端只有 http。
+      # CI 里的后端只有 http，而 prebuild 生成的 main 清单里没有 `usesCleartextTraffic`
+      # （只有 debug 那份有）。按 Android 的文档 release 包因此不许走明文 HTTP ——
+      # ⚠️ 这一条没做对照（没跑过不加这一行的包），只验了加上之后是通的。
       # 只在这里给测试用的包放开，不改 app.json —— 发出去的包不该带这个口子。
       # 后面那句 grep 是守卫：prebuild 模板哪天换了写法、sed 没替换上，要当场红，
       # 而不是攒到登录那一步变成一句「连不上服务器」
@@ -213,7 +229,7 @@ jobs:
           sed -i 's|<application |<application android:usesCleartextTraffic="true" |' app/src/main/AndroidManifest.xml
           grep -q 'android:usesCleartextTraffic="true"' app/src/main/AndroidManifest.xml
 
-      # 只编模拟器那一个架构：四个架构全编，原生那一段要多花几倍时间
+      # 只编模拟器那一个架构，其余三个用不上（全编要多花多少没测过）
       - name: assembleRelease（x86_64）
         working-directory: apps/mobile/android
         run: |
@@ -234,7 +250,8 @@ jobs:
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$HOME/.maestro-dist"
           echo "$HOME/.maestro-dist/maestro/bin" >> "$GITHUB_PATH"
 
-      # ubuntu runner 有 KVM，但默认当前用户没权限用；不开的话模拟器退回软件模拟，开机要十几分钟
+      # ubuntu runner 有 KVM，但默认当前用户没权限用。这是 android-emulator-runner
+      # 文档给的写法（不加这一步会怎样没试过）
       - name: 开 KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \

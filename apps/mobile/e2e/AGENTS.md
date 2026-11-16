@@ -29,6 +29,7 @@ flows/perm-gate.yaml     没角色的账号：应用页没有「用户」，并�
 | | 路径 | 理由 |
 |---|---|---|
 | 跑 | `apps/mobile/**` · `packages/api/**` · `packages/i18n/**` · 这份 workflow 自己 | App 本身和它直接依赖的两个包 |
+| 跑 | `apps/api/e2e_server.py` · `apps/api/backend/.env.e2e.example` · `apps/api/backend/scripts/reset_test_db.py` | 这个 job 自己起后端要用，坏了要在改它们的那个 PR 上红 |
 | 不跑 | 任何 `*.md` | 分册改得很勤，而它们不进 APK |
 | 不跑 | 后端（`apps/api`） | 接口**形状**变了会连带改 `packages/api/src/schema.d.ts`（`.github/workflows/ci.yml` 的新鲜度检查逼着重新生成），那就落进「跑」里；只改行为的由 web 的 E2E 管 |
 | 不跑 | `.github/workflows/ci.yml` · 锁文件 · web · desktop · docs | 碰不到 App。⚠️ 只动锁文件的间接依赖升级因此不触发 —— 直接依赖升级会改 `apps/mobile/package.json`，照跑 |
@@ -129,7 +130,8 @@ App 从模拟器里经 `http://10.0.2.2:8001` 打通了后端（后端日志里�
 - 「第二页第一条」的 ID 是脚本按 App 自己的分页参数（`page=2&size=20`）问后端问出来的，
   流程里 `scrollUntilVisible` 等的就是它 —— 只有真的拉了下一页它才会出现
 - `roles: []` 的用户能建、能登录，应用页显示 `apps-none-granted`、没有 `module-users`（`perm-gate` 那条过了）
-- 🔴 `PAGE_SIZE` 和 `src/lib/users.ts` 里那个**是两份**，改一处要改另一处
+- `PAGE_SIZE` 是脚本从 `src/lib/users.ts` 里**读出来的**（正则匹配那一行，读不出就报错退出），不手抄。
+  实测：本地 `node` 跑到这一步读出 20；把那一行改成 `const PAGE_SIZE: number = 20`（匹配不上），脚本报错、退出码 1
 - `MAESTRO_` 开头的环境变量 Maestro 会自动带进流程，所以 CI 把脚本的输出追加进 `$GITHUB_ENV`。
   🔴 **不要写成 `node setup.mjs | tee -a "$GITHUB_ENV"`**：那一步的 shell 没开 `pipefail`，
   脚本挂了管道照样返回 0（这条是按 bash 的语义写的，没在 CI 上故意弄挂验过）
