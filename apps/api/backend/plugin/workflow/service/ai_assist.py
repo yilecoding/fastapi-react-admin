@@ -29,6 +29,16 @@ async def build_client(db: AsyncSession) -> Any:
     return ai_provider_service.build_client(provider)
 
 
+def explain_failure(e: BaseException) -> str:
+    """模型调用失败时给人看的那句话：交给 AI 插件的 `user_facing_error`（不带上游响应体 / 地址，#317）。
+    调用方先 `log.exception` 留全文"""
+    try:
+        from backend.plugin.ai.llm.client import user_facing_error
+    except ImportError:
+        return type(e).__name__
+    return user_facing_error(e)
+
+
 async def release(db: AsyncSession) -> None:
     """等模型之前把连接还回池。
 

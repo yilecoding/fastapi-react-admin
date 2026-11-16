@@ -31,7 +31,7 @@ from backend.common.i18n import t
 from backend.common.log import log
 from backend.plugin.workflow.engine.form import normalize_value, start_editable_fields
 from backend.plugin.workflow.engine.schema import COLUMN_TYPES
-from backend.plugin.workflow.service.ai_assist import build_client, complete, record, release
+from backend.plugin.workflow.service.ai_assist import build_client, complete, explain_failure, record, release
 from backend.utils.doc_text import extract_text
 
 if TYPE_CHECKING:
@@ -206,11 +206,11 @@ async def fill(
     except TimeoutError:
         error = t('error.workflow.ai_model_timeout')
     except errors.BaseExceptionError as e:
-        # 网关报的错（含「这个模型读不了图片」）原样给人：`_explain_http_error` 已经翻成人话了
+        # 网关报的错原样给人：`_explain_http_error` 已经翻成人话了（不带上游响应体，#317）
         error = e.msg
     except Exception as e:
         log.exception('发起填单调用模型失败')
-        error = str(e) or type(e).__name__
+        error = explain_failure(e)
     values, dropped = pick_values(reply if isinstance(reply, dict) else None, fillable)
     await record(
         db,

@@ -1,5 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
-import { ApiError } from '@admin/api'
+import { ApiError, confirmsLogout } from '@admin/api'
 
 import { api, endSession, restoreSession } from '../api-client/client'
 import { tokenStore } from '../api-client/token-store'
@@ -172,21 +172,43 @@ function afterLogin(qc: QueryClient, token: string) {
   clearClientSessionState()
 }
 
-export async function logout(qc: QueryClient) {
+/**
+ * 登出。**服务端确认了才清本地**；没确认（断网 / 5xx / 429）就原样留着登录态、把错误抛给调用方提示重试。
+ *
+ * 🔴 网页端的 refresh cookie 是 httpOnly 的，**只有登出接口的响应能删掉它**。原来是 `finally` 里无条件清本地、
+ * 异常照抛：请求一失败，本地 token / 缓存 / 标签页都没了，可服务端会话和 cookie 都还活着 ——
+ * 调用方的跳转被异常跳过，用户停在一个空壳里，之后每个请求都 401；**刷新页面又被 cookie 静默登回去**（#319）。
+ * 「清一半」比「没退出」更糟：用户以为退出了。
+ *
+ * 401 / 403 算登出成功：会话本来就已经结束了（`confirmsLogout`）。
+ *
+ * @returns `true` = api 层已经替我们收过尾、带着原因码跳过登录页了（401 → 刷新也被拒 → `expire()` 先清 token
+ *   再调 `onSessionExpired`）。调用方**不要再跳一次**：再跳一次不带原因码，会把「被管理员下线」那条提示冲掉
+ * 桌面端的 refresh token 在主进程手里，`desktop.auth.logout()` 先删本地凭据再发请求、吞掉网络错误 ——
+ * 那边本地删了就真的回不去，不受这条影响。
+ */
+export async function logout(qc: QueryClient): Promise<boolean> {
   endingLocally = true
+  let endedByApiLayer = false
   try {
     // 桌面端只有主进程手里有 refresh token；它只带 cookie 登出，后端按 cookie 认会话
     const desktop = tryDesktop()
     if (desktop) await desktop.auth.logout()
     else await api.POST('/api/v1/auth/logout')
-  } finally {
-    tokenStore.clear()
-    // 清全部缓存，避免下一个登录的人看到上一个人的数据
-    qc.clear()
-    // 标签条要当场空掉，而不是等下一次登录才清 —— 退出后停在登录页时，
-    // 上一个人开过哪些页面不该还留在浏览器里
-    clearClientSessionState()
+  } catch (err) {
+    if (!confirmsLogout(err)) {
+      endingLocally = false
+      throw err
+    }
+    endedByApiLayer = tokenStore.get() === null
   }
+  tokenStore.clear()
+  // 清全部缓存，避免下一个登录的人看到上一个人的数据
+  qc.clear()
+  // 标签条要当场空掉，而不是等下一次登录才清 —— 退出后停在登录页时，
+  // 上一个人开过哪些页面不该还留在浏览器里
+  clearClientSessionState()
+  return endedByApiLayer
 }
 
 /**

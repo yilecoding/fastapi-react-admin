@@ -5,10 +5,11 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.common.exception import errors
+from backend.common.log import log
 from backend.common.pagination import paging_data
 from backend.core.conf import settings
 from backend.plugin.ai.crud.crud_provider import ai_provider_dao
-from backend.plugin.ai.llm.client import OpenAICompatClient
+from backend.plugin.ai.llm.client import OpenAICompatClient, user_facing_error
 from backend.plugin.ai.model import AiProvider
 from backend.plugin.ai.schema.provider import CreateAiProviderParam, TestAiProviderResult, UpdateAiProviderParam
 from backend.utils.encrypt import AESCipher
@@ -136,7 +137,10 @@ class AiProviderService:
                 # 拿到第一帧就够了：证明鉴权、地址、模型名三样都是对的
                 break
         except Exception as e:
-            return TestAiProviderResult(ok=False, message=str(e), latency_ms=None)
+            # 🔴 不回 `str(e)`（#317）：`base_url` 能指向任意内网地址，回显上游响应体 / 地址就是一个能读内网报错的探针。
+            # 管理员要的「哪里不对」由状态码翻成的那句话给（401 / 404 / 400 …），全文进日志
+            log.warning(f'AI 供应商 {pk} 连通性测试失败：{e!r}')
+            return TestAiProviderResult(ok=False, message=user_facing_error(e), latency_ms=None)
         return TestAiProviderResult(ok=True, message='连接正常', latency_ms=int((time.perf_counter() - started) * 1000))
 
 
