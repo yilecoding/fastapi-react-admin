@@ -98,22 +98,32 @@ export function useChatSession(
   const [streaming, setStreaming] = React.useState(false)
   // 🔴 单飞：StrictMode 双跑 + 用户连点两次发送都会打两条流（硬纪律 10）
   const inFlight = React.useRef(false)
+  // 在途的流**属于谁**：发起它的会话 + 它往里写的那条助手气泡。
+  // 🔴 流式途中切会话 / 点「新建」时，原来只认 `inFlight` —— B 的历史被挡掉、界面停在「选中 B、显示 A 的全文」，
+  // 再发一句就带着 `conversation_id: B` 发出去了（#329）。现在流只往自己那条气泡里写，气泡不在眼前就丢弃
+  const stream = React.useRef<{ conversationId: string; bubbleId: string } | null>(null)
 
   const historyQuery = useQuery(messagesQuery(conversationId))
 
-  // ⚠️ 依赖只放 `historyQuery.data`：放整个 query 对象会让每次后台 refetch
+  // ⚠️ 依赖只放 `historyQuery.data` 和会话 id：放整个 query 对象会让每次后台 refetch
   // 都把用户正在看的流式内容冲掉
   React.useEffect(() => {
-    if (!historyQuery.data) return
-    // 🔴 正在流式产出时不接受历史覆盖。新建会话后立刻发第一条消息时，
-    // 那个新会话的历史（空数组）会在流跑到一半时返回 —— 不挡住的话
-    // 用户刚打的那句话和已经出来的半截回答会当场消失，而且只在
-    // "首条消息"这一条路径上发生，极难复现
-    if (inFlight.current) return
+    const data = historyQuery.data
     setBubbles((prev) => {
+      // 🔴 眼前这个会话正在流式产出时不接受历史覆盖。新建会话后立刻发第一条消息时，
+      // 那个新会话的历史（空数组）会在流跑到一半时返回 —— 不挡住的话
+      // 用户刚打的那句话和已经出来的半截回答会当场消失，而且只在
+      // "首条消息"这一条路径上发生，极难复现。
+      // ⚠️ 只挡「流属于眼前这个会话、且它的气泡还在」：切去别的会话时必须照常换成那个会话的历史
+      const s = stream.current
+      if (inFlight.current && s && s.conversationId === conversationId && prev.some((b) => b.id === s.bubbleId)) {
+        return prev
+      }
+      // 换了会话、新会话的历史还没回来（或压根没有会话）：先清空，不能留着上一个会话的气泡
+      if (!data) return []
       // 本地已经有结论的卡片（刚点完确认）以本地为准：「已过期」只有前端知道，后端找不到令牌也就写不回去
       const local = new Map(prev.flatMap((b) => b.confirms ?? []).map((c) => [c.token, c]))
-      return historyQuery.data.map((m) => {
+      return data.map((m) => {
         const { tools, confirms, errors } = parseTurnItems(m.tool_calls)
         return {
           id: m.id,
@@ -124,41 +134,43 @@ export function useChatSession(
         }
       })
     })
-  }, [historyQuery.data])
+  }, [conversationId, historyQuery.data])
 
-  const applyEvent = React.useCallback((event: AgentEvent) => {
+  /** 把一个事件落到助手气泡上：给了 `bubbleId` 就只写那一条（不在了就丢弃），否则写最后一条 */
+  const applyEvent = React.useCallback((event: AgentEvent, bubbleId?: string) => {
     setBubbles((prev) => {
+      const i = bubbleId ? prev.findIndex((b) => b.id === bubbleId) : prev.length - 1
+      const target = prev[i]
+      if (!target || target.role !== 'assistant') return prev
       const next = [...prev]
-      const last = next[next.length - 1]
-      if (!last || last.role !== 'assistant') return prev
       switch (event.type) {
         case 'delta':
-          next[next.length - 1] = { ...last, content: last.content + event.text }
+          next[i] = { ...target, content: target.content + event.text }
           break
         case 'tool_result':
-          next[next.length - 1] = {
-            ...last,
+          next[i] = {
+            ...target,
             tools: [
-              ...(last.tools ?? []),
+              ...(target.tools ?? []),
               { name: event.name, ok: event.ok, perm: event.perm, durationMs: event.duration_ms },
             ],
           }
           break
         case 'confirm_required':
-          next[next.length - 1] = {
-            ...last,
-            confirms: [...(last.confirms ?? []), { token: event.token, name: event.name, preview: event.preview }],
+          next[i] = {
+            ...target,
+            confirms: [...(target.confirms ?? []), { token: event.token, name: event.name, preview: event.preview }],
           }
           break
         case 'error':
           // 失败必须是可见状态，不是「没下文」（硬纪律 9）
-          next[next.length - 1] = { ...last, content: last.content + errorLine(event.message), pending: false }
+          next[i] = { ...target, content: target.content + errorLine(event.message), pending: false }
           break
         case 'done':
-          next[next.length - 1] = { ...last, pending: false }
+          next[i] = { ...target, pending: false }
           break
         default:
-          break
+          return prev
       }
       return next
     })
@@ -175,22 +187,37 @@ export function useChatSession(
       if (!id) id = await ensureConversation?.()
       if (!id) return
 
+      const stamp = Date.now()
+      const bubbleId = `a-${stamp}`
       inFlight.current = true
+      stream.current = { conversationId: id, bubbleId }
       setStreaming(true)
       // 首条消息 = 给这个会话命名。判据是"当前一条气泡都没有"，
       // ⚠️ 要在 setBubbles 之前算：那之后 bubbles 里已经有两条了
       const isFirstMessage = bubbles.length === 0
       setBubbles((prev) => [
         ...prev,
-        { id: `u-${Date.now()}`, role: 'user', content },
-        { id: `a-${Date.now()}`, role: 'assistant', content: '', pending: true },
+        { id: `u-${stamp}`, role: 'user', content },
+        { id: bubbleId, role: 'assistant', content: '', pending: true },
       ])
       // 不 await：命名失败不该挡住对话本身（标题只是列表上的一个便利）
       if (isFirstMessage) rename.mutate({ id, title: deriveTitle(content) })
+      let ended = false
+      const onEvent = (event: AgentEvent) => {
+        if (event.type === 'done' || event.type === 'error') ended = true
+        applyEvent(event, bubbleId)
+      }
       try {
-        await streamChat('/api/v1/ai/chat/stream', { conversation_id: id, content }, applyEvent)
+        await streamChat('/api/v1/ai/chat/stream', { conversation_id: id, content }, onEvent)
+        // 流正常关了却没收到 done / error（代理掐断、服务端崩在半路）：pending 不落下的话气泡永远「思考中」
+        if (!ended) onEvent({ type: 'error', message: t('连接中途断开，回答可能不完整'), code: 'incomplete' })
+      } catch {
+        // 🔴 `fetch()` / `reader.read()` 直接 reject（断网、流中途断开）：原来没有 catch，
+        // 气泡永远停在「思考中」，调用方 `void send()` 吞掉了 rejection —— 用户什么也看不到（硬纪律 9，#329）
+        if (!ended) onEvent({ type: 'error', message: t('连接断了，请检查网络后重新发送'), code: 'network' })
       } finally {
         inFlight.current = false
+        stream.current = null
         setStreaming(false)
         qc.invalidateQueries({ queryKey: aiKeys.messages(id) })
         qc.invalidateQueries({ queryKey: aiKeys.conversations() })
