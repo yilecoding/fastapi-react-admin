@@ -84,6 +84,8 @@ class Settings(BaseSettings):
     CACHE_LOCAL_TTL: int = 60 * 60 * 2  # 2 小时
     CACHE_REDIS_TTL: int = 60 * 60 * 2  # 2 小时
     CACHE_CONFIG_REDIS_PREFIX: str = 'fba:cache:config'
+    # 参数密钥落库加密；独立于 JWT / 其他插件密钥。留空时拒绝写入非空密钥。
+    CONFIG_ENCRYPT_SECRET_KEY: str = ''
     CACHE_DICT_REDIS_PREFIX: str = 'fba:cache:dict'
     CACHE_PUBSUB_CHANNEL: str = 'fba:cache:invalidate'
     CACHE_PUBSUB_RECONNECT_DELAY: int = 5  # 重连延迟（秒）
