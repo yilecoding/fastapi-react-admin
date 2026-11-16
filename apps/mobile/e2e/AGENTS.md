@@ -11,18 +11,33 @@ flows/admin-users.yaml   登录 → 应用页 → 用户列表翻页 → 搜索 
 flows/perm-gate.yaml     没角色的账号：应用页没有「用户」，并且明说「没有授权」
 ```
 
-跑的地方是 `.github/workflows/ci.yml` 的 `maestro · 移动端 E2E`（#137）：起后端（和
+跑的地方是 `.github/workflows/mobile-e2e.yml`（#137）：起后端（和 `.github/workflows/ci.yml` 里
 `playwright · E2E` 同一份 `.env.e2e`、同一个 `fba_test`）→ 打 x86_64 的 release APK →
 起模拟器 → `maestro test apps/mobile/e2e/flows`。
 
 - **只跑 Android。** iOS 要 macOS runner，没做
 - **不在 ruleset 的必需检查里。** 先观察稳定性再决定进不进
-- **PR 上按路径触发**（`changes` job 的 `mobile` 输出）：`apps/mobile` · `packages/api` ·
-  `packages/i18n` · `pnpm-lock.yaml` · `.github/workflows/ci.yml`。后端改动不触发；main 上每次 push 都跑
 - ⚠️ **本地没跑过。** 这台机器 WSL 里起模拟器那条路已经放弃（见 [`scripts/` 分册](../scripts/AGENTS.md)），
   这一套从头到尾是在 CI 上调通的。本地要跑的话思路是：后端起在一个测试库上 →
   `export $(node apps/mobile/e2e/setup.mjs)` → 设备上装一个连得到它的包 → `maestro test`，
   但**这条没验过**
+
+## 什么时候跑：只在改到它测得到的东西时
+
+一次 17 分钟左右，所以 PR 和 main 用同一套路径规则（workflow 级的 `paths`）：
+
+| | 路径 | 理由 |
+|---|---|---|
+| 跑 | `apps/mobile/**` · `packages/api/**` · `packages/i18n/**` · 这份 workflow 自己 | App 本身和它直接依赖的两个包 |
+| 不跑 | 任何 `*.md` | 分册改得很勤，而它们不进 APK |
+| 不跑 | 后端（`apps/api`） | 接口**形状**变了会连带改 `packages/api/src/schema.d.ts`（`.github/workflows/ci.yml` 的新鲜度检查逼着重新生成），那就落进「跑」里；只改行为的由 web 的 E2E 管 |
+| 不跑 | `.github/workflows/ci.yml` · 锁文件 · web · desktop · docs | 碰不到 App。⚠️ 只动锁文件的间接依赖升级因此不触发 —— 直接依赖升级会改 `apps/mobile/package.json`，照跑 |
+
+要强制跑一次：Actions 页面对这个 workflow 点 Run workflow。
+
+🔴 **它是独立的 workflow 而不在 `.github/workflows/ci.yml` 里，前提是它不是必需检查。** `.github/workflows/ci.yml` 里立过一条
+「用 job 级的 `if` 跳，不要用 workflow 级的 `paths`」—— 被 `paths` 滤掉的 workflow 根本不上报，
+必需检查会永远卡在「等待」。哪天把这个 job 设成必需检查，就得搬回 `.github/workflows/ci.yml`。
 
 ## 它挡什么、不挡什么
 
