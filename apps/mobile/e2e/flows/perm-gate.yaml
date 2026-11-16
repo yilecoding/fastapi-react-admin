@@ -1,0 +1,21 @@
+# 权限门控：一个角色都没有的账号，应用页上不该有「用户」，而且要明说「没有授权」，
+# 不是一片空白。
+appId: com.fastapireactadmin.mobile
+---
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      USERNAME: ${MAESTRO_LIMITED_USERNAME}
+      PASSWORD: ${MAESTRO_E2E_PASSWORD}
+
+- tapOn:
+    id: tab-apps
+- extendedWaitUntil:
+    visible:
+      id: apps-none-granted
+    timeout: 15000
+- assertNotVisible:
+    id: module-users
+# 不要权限的格子照常在
+- assertVisible:
+    id: module-settings
