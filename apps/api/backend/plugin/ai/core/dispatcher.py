@@ -248,7 +248,8 @@ class ToolDispatcher:
                 )
                 return DispatchOutcome(kind='denied', payload='你不具备后台管理操作权限。', summary='无后台操作权限')
 
-            if settings.AI_CONFIRM_MUTATING_TOOLS and not pre_approved:
+            # 开关只能免掉「本人在场」时的确认（`ctx.user_present`，#314）：替别人发起的写操作永远要本人确认
+            if (settings.AI_CONFIRM_MUTATING_TOOLS or not ctx.user_present) and not pre_approved:
                 # 先预演再请人确认：预演就会失败的调用（部门不存在 / 不在你的数据范围 /
                 # 同级重名…）不该先弹一张确认卡片，等人点了才报错
                 try:
