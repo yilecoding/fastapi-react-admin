@@ -104,7 +104,7 @@ service 层时**自动**继承调用者的可见范围。反过来说：谁在�
 | `trust_env=False` | 企业代理到不了内网网关，请求被代理吞掉，表现是**超时**——而网关本身是好的 |
 
 `base_url` **刻意不强制要求带 `/v1`**（不是所有网关都用这个版本段，硬卡会把合法配置拒掉）。
-漏写的后果（404）由 `_explain_http_error` 在出错那一刻解释清楚。
+漏写的后果（404）由 `_explain_http_error` 在出错那一刻解释清楚。报错里不带上游响应体和地址（#317）见 [`llm` 子分册](llm/AGENTS.md)。
 
 ## 🔴 布尔列不能用 `.is_(True)` —— SQL Server 上是非法语法
 
@@ -288,7 +288,7 @@ SQLAlchemy 把整个事务标成待回滚，这一轮对话里后面每个工具
 
 第二个入口：外部系统（pis-agent、Claude Desktop、Cursor…）以 MCP Streamable HTTP（无状态 + JSON）
 调 `@ai_tool`。**它不执行工具**：清单走 `visible_schemas()`，调用走 `dispatch()`，
-和网页对话同一份权限 / 数据范围 / 审计。开关在 `plugin.toml` 末尾；凭据在「AI 助手 → MCP 凭据」页里发（`ai_mcp_client` 表）。
+和网页对话同一份权限 / 数据范围 / 审计。开关在 `plugin.toml` 末尾；凭据在「AI 助手 → MCP 凭据」页里发（`ai_mcp_client` 表）。人工确认与发凭据的身份边界（#314）见 [`mcp_gateway` 子分册](mcp_gateway/AGENTS.md)。
 
 🔴 **身份是外部系统声明的**（M2M 凭据 + `X-Acting-User`），所以只能信到「这个凭据被允许代表谁」：
 
