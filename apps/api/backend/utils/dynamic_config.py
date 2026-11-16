@@ -3,6 +3,7 @@ from collections.abc import Callable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.common.log import log
+from backend.common.secret_keys import is_secret_key_name
 from backend.core.conf import settings
 from backend.plugin.core import check_plugin_installed
 from backend.utils.serializers import select_list_serialize
@@ -49,6 +50,7 @@ async def load_config(
 
     try:
         from backend.plugin.config.enums import ConfigType
+        from backend.plugin.config.secret import decrypt_secret
         from backend.plugin.config.service.config_service import config_service
     except ImportError as e:
         raise ImportError('参数配置插件用法导入失败，请联系系统管理员') from e
@@ -68,6 +70,9 @@ async def load_config(
             setattr(settings, config_key, default)
             continue
         raw = configs[config_key]
+        # 原始配置不缓存。只在内部消费时解密，不改 ORM，也不把明文传回管理接口。
+        if is_secret_key_name(config_key):
+            raw = decrypt_secret(raw)
         # 读取侧也要卡范围：写入侧的闸门挡不住直接写库 / 迁移 / 闸门上线前的历史行。
         # `FILE_CHUNK_SIZE = '0'` 能通过 int()，然后在 init 里 `ceil(size / 0)` —— 每次分片上传都 500
         problem = check_dynamic_int_bounds(config_key, raw)
@@ -90,7 +95,7 @@ async def load_config(
             # 现在退化成「这一个键回落到 .env 默认值 + 一条 error 日志」。
             # 写入侧现在有 `DYNAMIC_INT_BOUNDS` 闸门（schema 层），
             # 但读取侧不能依赖写入侧的自觉。
-            log.error(f'参数配置 {config_key} 的值 {raw!r} 无法转换，已忽略并回落到默认值')
+            log.error(f'参数配置 {config_key} 无法转换，已忽略并回落到默认值')
             value = default
         setattr(settings, config_key, value)
 

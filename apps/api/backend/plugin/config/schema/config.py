@@ -1,9 +1,11 @@
 from datetime import datetime
 from typing import Self
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, computed_field, field_serializer, model_validator
 
+from backend.common.i18n import t
 from backend.common.schema import ColumnLengthChecked, SchemaBase
+from backend.common.secret_keys import is_secret_key_name
 from backend.plugin.config.model import Config
 from backend.utils.dynamic_config import check_dynamic_choice, check_dynamic_dependency, check_dynamic_int_bounds
 
@@ -60,6 +62,17 @@ class UpdateConfigParam(ColumnLengthChecked, _WriteChecked):
 
     __sa_model__ = Config
 
+    value: str = Field('', description='参数配置值；密钥留空或不传表示不修改')
+    clear_secret: bool = Field(False, description='显式清空密钥；不能同时提交新值')
+
+    @model_validator(mode='after')
+    def check_secret_action(self) -> Self:
+        if self.clear_secret and (not is_secret_key_name(self.key) or self.value):
+            raise ValueError(t('error.config.clear_secret_invalid'))
+        if not is_secret_key_name(self.key) and 'value' not in self.model_fields_set:
+            raise ValueError(t('error.config.value_required'))
+        return self
+
 
 class UpdateConfigsParam(UpdateConfigParam):
     """批量更新参数配置参数"""
@@ -75,3 +88,18 @@ class GetConfigDetail(ConfigSchemaBase):
     id: int = Field(description='参数配置 ID')
     created_time: datetime = Field(description='创建时间')
     updated_time: datetime | None = Field(None, description='更新时间')
+
+    @computed_field(description='是否为密钥配置')
+    @property
+    def is_secret(self) -> bool:
+        return is_secret_key_name(self.key)
+
+    @computed_field(description='密钥是否已配置；仅表示数据库中有值')
+    @property
+    def is_configured(self) -> bool:
+        return self.is_secret and bool(self.value)
+
+    @field_serializer('value')
+    def serialize_value(self, value: str) -> str:
+        # 只在出参 DTO 脱敏，绝不改 ORM / 内部 loader 正在使用的值。
+        return '' if self.is_secret else value

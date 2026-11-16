@@ -24,6 +24,9 @@ export type ConfigItem = {
   type: string | null
   key: string
   value: string
+  /** 密钥的 value 恒为空；仅回显数据库中是否已配置 */
+  is_secret: boolean
+  is_configured: boolean
   /** 是否是给前端工程读的配置 */
   is_frontend: boolean
   remark: string | null
@@ -38,6 +41,7 @@ export type ConfigBody = {
   value: string
   is_frontend: boolean
   remark: string | null
+  clear_secret?: boolean
 }
 
 export const configKeys = { all: ['sys', 'config', 'all'] as const }
@@ -50,8 +54,7 @@ export const configKeys = { all: ['sys', 'config', 'all'] as const }
  * 数据量也小 —— 种子 17 条，实际长到几百条也就是一次请求。
  * 筛选/分页照旧在前端做，但游标仍然进 URL（硬纪律 2）。
  *
- * 注意后端 `get_all` 带 `@cached`（Redis），增删改都有 `@cache_invalidate`，
- * 所以改完立刻读回是新值 —— 实测确认过。
+ * 后端不缓存原始配置；密钥只回配置状态，不会进入浏览器查询缓存。
  */
 export const configsQuery = queryOptions({
   queryKey: configKeys.all,
@@ -139,7 +142,7 @@ export const TYPE_LABEL: Record<string, string> = {
 export const TYPE_DESC: Record<string, string> = {
   LOGIN: '登录流程开关。关掉验证码会立刻对所有人生效。',
   USER_SECURITY: '口令强度与账号锁定策略。放宽会直接降低系统的抗暴力破解能力。',
-  EMAIL: '发信服务器。密码字段以密文展示，留空表示不改动。',
+  EMAIL: '发信服务器。密码仅显示配置状态，留空表示不改动。',
   AI: '预留分组，种子数据里没有条目。',
 }
 
@@ -151,7 +154,7 @@ export const typeLabel = (type: string | null | undefined) =>
 export const isGroupSwitch = (key: string) => key.endsWith('_CONFIG_STATUS')
 
 /**
- * 值要打码的键 —— 这些会以明文存库，但至少别在屏幕上晃。
+ * 密钥控件的回落判断；响应中的 is_secret 由后端统一判定。
  *
  * ⚠️ 必须是**后缀**匹配，不能用 `includes('PASSWORD')`：
  * `USER_PASSWORD_MIN_LENGTH` / `USER_PASSWORD_EXPIRY_DAYS` 这些是**口令策略**，
