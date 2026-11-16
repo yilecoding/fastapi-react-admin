@@ -1,0 +1,24 @@
+# 冷启动 → 清掉上一次的登录态 → 用账号密码登录，停在首页。
+# 调用方传 USERNAME / PASSWORD。
+#
+# 全程按 testID 找元素，不按文字：界面语言跟着设备语言走，模拟器默认是英文。
+appId: com.fastapireactadmin.mobile
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: login-username
+    timeout: 60000
+- tapOn:
+    id: login-username
+- inputText: ${USERNAME}
+- tapOn:
+    id: login-password
+- inputText: ${PASSWORD}
+- tapOn:
+    id: login-submit
+- extendedWaitUntil:
+    visible:
+      id: tab-apps
+    timeout: 30000
