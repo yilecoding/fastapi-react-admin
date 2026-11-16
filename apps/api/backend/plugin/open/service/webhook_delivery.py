@@ -129,13 +129,17 @@ def _signing_secrets(hook: OpenWebhook) -> list[str]:
     ]
 
 
-async def _read_capped(resp: httpx.Response) -> bytes:
+async def _read_capped(resp: httpx.Response) -> bytes | None:
     """只读前 `OPERA_LOG_RESPONSE_MAX_SIZE` 字节（再多一个字节，让截断提示知道「被截断了」），其余不读。
 
     🔴 `client.post()` 会把整个响应读进内存、之后才截断 —— 对方回一个超大 body 就是 worker 的内存（#307）。
-    读够就停：连接随 `stream()` 退出直接关掉，不再排空。请求里声明了 `accept-encoding: identity`，
-    否则一小段 gzip 解出来可以是几十 MB（解压是按块整块做的）
+    读够就停：连接随 `stream()` 退出直接关掉，不再排空。
+
+    🔴 压缩的响应**一个字节都不读**，返回 None：解压是按网络块整块做的，64 KB 的 gzip 能解出几十 MB，
+    读到上限再停已经晚了。请求里声明了 `accept-encoding: identity`，但那只是请求 —— 对方照样可以回压缩的
     """
+    if resp.headers.get('content-encoding', '').strip().lower() not in ('', 'identity'):
+        return None
     cap = settings.OPERA_LOG_RESPONSE_MAX_SIZE + 1
     buf = bytearray()
     async for chunk in resp.aiter_bytes():
@@ -176,33 +180,38 @@ async def _post(hook: OpenWebhook, event: OpenEvent) -> AttemptResult:
     def _ms() -> int:
         return int((time.perf_counter() - started) * 1000)
 
-    blocked = await check_target(hook.url)
-    if blocked:
-        return AttemptResult(None, blocked, _ms(), logged)
     # 总时长还要明显短于「停在发送中多久算 worker 死了」：否则还在发的这一行会被 reclaim_stale 抢回去再发一遍
     limit = min(settings.OPEN_WEBHOOK_TIMEOUT_SECONDS, settings.OPEN_WEBHOOK_SENDING_STALE_SECONDS / 2)
     try:
         # 🔴 httpx 的 timeout 是 connect / read / write / pool **各自**的上限，不是整次请求的：对方每隔不到 limit 秒
         # 回一个字节，这次投递就一直挂着，直到任务级 with_timeout 把它取消 —— 取消时不落库，这一行停在 sending，
-        # attempts / 连续失败都不涨（#307，实测）。所以外面再套一层**总时长**，超了按普通失败落库
-        async with (
-            asyncio.timeout(limit),
-            httpx.AsyncClient(
-                timeout=limit,
-                follow_redirects=False,
-                transport=transport,
-                # 代理只认进程环境变量（短信插件那条结论），配置里不做代理字段
-                trust_env=True,
-            ) as client,
-            client.stream('POST', hook.url, content=body, headers=headers) as resp,
-        ):
-            content = await _read_capped(resp)
+        # attempts / 连续失败都不涨（#307，实测）。所以外面再套一层**总时长**，超了按普通失败落库。
+        # SSRF 检查的 DNS 解析也在里面：域名的权威 DNS 是对方的，慢慢回也能拖住
+        async with asyncio.timeout(limit):
+            blocked = await check_target(hook.url)
+            if blocked:
+                return AttemptResult(None, blocked, _ms(), logged)
+            async with (
+                httpx.AsyncClient(
+                    timeout=limit,
+                    follow_redirects=False,
+                    transport=transport,
+                    # 代理只认进程环境变量（短信插件那条结论），配置里不做代理字段
+                    trust_env=True,
+                ) as client,
+                client.stream('POST', hook.url, content=body, headers=headers) as resp,
+            ):
+                content = await _read_capped(resp)
     except (TimeoutError, httpx.TimeoutException):
         return AttemptResult(None, f'timeout: {limit}s', _ms(), logged)
     except httpx.HTTPError as e:
         return AttemptResult(None, f'{type(e).__name__}: {e!s}', _ms(), logged)
     content_type = (resp.headers.get('content-type') or '').split(';')[0].strip().lower()
-    raw = OperaLogMiddleware.redact_body(content, content_type)
+    if content is None:
+        response_body = f'[未记录：对方返回了 {resp.headers.get("content-encoding")} 压缩的响应，没有解压]'
+    else:
+        raw = OperaLogMiddleware.redact_body(content, content_type)
+        response_body = OperaLogMiddleware.truncate_body(raw, full_size=_full_size(resp))
     error = None
     if 300 <= resp.status_code < 400:
         error = f'redirect: 不跟随重定向（Location: {resp.headers.get("location", "")}），请把地址改成最终那一个'
@@ -214,7 +223,7 @@ async def _post(hook: OpenWebhook, event: OpenEvent) -> AttemptResult:
         duration_ms=_ms(),
         request_headers=logged,
         response_headers=OperaLogMiddleware.collect_headers(resp.headers),
-        response_body=OperaLogMiddleware.truncate_body(raw, full_size=_full_size(resp)),
+        response_body=response_body,
     )
 
 
