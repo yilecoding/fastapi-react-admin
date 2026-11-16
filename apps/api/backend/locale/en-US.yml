@@ -27,6 +27,11 @@ error:
     invalid: Captcha is invalid, please try again
     expired: Captcha has expired, please try again
   config:
+    encrypt_key_invalid: Configure a valid CONFIG_ENCRYPT_SECRET_KEY (16/24/32 bytes encoded as hexadecimal)
+    secret_decrypt_failed: Cannot decrypt config secret; check the encryption key and database migration status
+    key_immutable: Existing config keys cannot be renamed
+    clear_secret_invalid: clear_secret only clears secrets and cannot be combined with a new value
+    value_required: Ordinary config items require a value
     duplicate_key: Duplicate config key
     key_exists: Config key {key} already exists
     not_found: Config item does not exist
