@@ -104,31 +104,63 @@ class OpenAICompatClient:
                 async with client.stream('POST', f'{self.base_url}/chat/completions', json=payload) as response:
                     if response.status_code != 200:
                         body = (await response.aread()).decode('utf-8', errors='replace')
-                        log.error(f'LLM 网关返回 {response.status_code}: {body[:500]}')
-                        # 把网关的状态码翻译成一句人能懂的话。直接把上游 JSON 糊给用户
-                        # 是最没用的做法 —— 它通常是一段英文的 provider 内部错误
-                        raise errors.ServerError(msg=_explain_http_error(response.status_code, body))
+                        log.error(f'LLM 网关 {self.base_url} 返回 {response.status_code}: {body[:500]}')
+                        # 把网关的状态码翻译成一句人能懂的话；响应体只进日志（见 `_explain_http_error`）
+                        raise errors.ServerError(msg=_explain_http_error(response.status_code))
 
                     async for line in response.aiter_lines():
                         delta = _parse_sse_line(line)
                         if delta is not None:
                             yield delta
             except httpx.ConnectError as e:
-                raise errors.ServerError(msg=f'连不上模型网关（{self.base_url}）：{e}') from e
+                # 🔴 地址只进日志：这句话会经对话的错误帧发给每一个能聊天的普通用户（#317）
+                log.error(f'连不上模型网关 {self.base_url}：{e}')
+                raise errors.ServerError(msg=CONNECT_FAILED) from e
             except httpx.ReadTimeout as e:
                 raise errors.ServerError(msg=f'模型响应超时（{self.timeout} 秒）') from e
 
 
-def _explain_http_error(status: int, body: str) -> str:
-    """把网关 HTTP 状态翻译成面向用户的话"""
+CONNECT_FAILED = '连不上模型网关，请检查供应商的接口地址和网络（详情见服务端日志）'
+
+
+def _explain_http_error(status: int) -> str:
+    """把网关 HTTP 状态翻译成面向用户的话。
+
+    🔴 **不带上游响应体、不带地址**（#317）。这句话会出现在两个地方：「测试连接」的结果，
+    和对话里的错误帧（发给每一个有 `ai:chat:use` 的普通用户）。`base_url` 可以指向任意内网地址，
+    回显响应体 = 能读内网服务报错内容的半盲 SSRF。响应体只进服务端日志
+    """
+    if status == 400:
+        return (
+            '模型网关拒绝了这个请求（400）：常见原因是模型名不对、或这个模型不支持图片 / 工具调用（详情见服务端日志）'
+        )
     if status == 401:
         return 'API Key 无效或已过期，请在「模型密钥管理」里更新'
     if status == 404:
         return '接口地址不对：请确认 base_url 带 /v1（例如 https://host/v1）'
     if status == 429:
         return '模型网关限流，请稍后再试'
-    snippet = body.strip()[:200]
-    return f'模型网关返回 {status}：{snippet}'
+    return f'模型网关返回 {status}（详情见服务端日志）'
+
+
+def user_facing_error(e: BaseException) -> str:
+    """模型调用失败时**给人看**的那句话。调用方自己先 `log.exception` 留全文。
+
+    🔴 不要把 `str(e)` 直接给人（#317）：pydantic-ai 的 `ModelHTTPError` 里带着上游响应体，httpx / openai 的
+    连接错误里可能带地址，未知异常里可能是 SQL。认得出的翻成人话，认不出的只说类型
+    """
+    if isinstance(e, errors.BaseExceptionError):
+        # 自己抛的（`stream_chat` 里那几句）：本来就是给人看的
+        return str(e.msg)
+    status = getattr(e, 'status_code', None)
+    if isinstance(status, int):
+        # pydantic-ai 的 ModelHTTPError / openai 的 APIStatusError
+        return _explain_http_error(status)
+    if isinstance(e, (httpx.TimeoutException, TimeoutError)) or 'Timeout' in type(e).__name__:
+        return '模型响应超时，请稍后再试'
+    if isinstance(e, httpx.ConnectError) or 'Connection' in type(e).__name__:
+        return CONNECT_FAILED
+    return f'模型调用失败（{type(e).__name__}），详情见服务端日志'
 
 
 def _parse_sse_line(line: str) -> StreamDelta | None:

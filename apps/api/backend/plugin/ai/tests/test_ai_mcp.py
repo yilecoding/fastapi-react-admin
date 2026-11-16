@@ -386,6 +386,17 @@ class TestWriteViaWebConfirm:
         # 执行那一行审计仍记作 MCP 发起（确认令牌把 channel 带过来了）
         assert (ToolInvocationStatus.SUCCESS.value, _CHANNEL) in _audit_rows('dept_create')
 
+    def test_turning_off_web_confirmation_does_not_open_mcp(
+        self, client: TestClient, gateway: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """🔴 #314：`AI_CONFIRM_MUTATING_TOOLS = false` 是「我自己聊天时别老弹卡片」，不是「外部系统可以替任何人写」"""
+        monkeypatch.setattr(settings, 'AI_CONFIRM_MUTATING_TOOLS', False)
+        gateway(allow_superuser=True, allow_write=True)
+        result, token = self._stage(client)
+        assert result['isError'] is False, result
+        assert token.startswith('cf_'), result
+        assert not self._dept_exists(self._CODE), '开关一关，MCP 就不经本人确认直接建出来了'
+
     def test_someone_elses_token_reveals_nothing(self, client: TestClient, token_headers: dict[str, str]) -> None:
         """链接会经过外部系统、聊天记录 —— 别人拿到也看不到要改什么"""
 
