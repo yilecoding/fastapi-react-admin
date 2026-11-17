@@ -19,6 +19,8 @@ for (const { type, address, link } of [
     authedPage: page,
     api,
   }) => {
+    // 创建、编辑与多次整页刷新走完整链路；CI 外链实测 26s，内嵌在最后一次刷新耗尽默认 30s。
+    test.slow()
     const name = `E2EExternal${uniqueCode("M").replaceAll("_", "")}`
     const urlError = type === "外链" ? LINK_ERROR : EMBEDDED_ERROR
     try {
@@ -92,7 +94,8 @@ for (const { type, address, link } of [
         const frame = page.getByTestId("embedded-frame")
         await expect(frame).toBeVisible()
         await expect(frame).toHaveAttribute("src", src)
-        await page.reload()
+        // iframe 文档可能引用站外资源；等宿主 DOM 后，下面的断言等待实际内容。
+        await page.reload({ waitUntil: "domcontentloaded" })
         await expect(page.getByTestId("embedded-frame")).toHaveAttribute("src", src)
         if (link.startsWith("/")) {
           await expect(page.frameLocator('[data-testid="embedded-frame"]').locator("svg")).toBeVisible()
