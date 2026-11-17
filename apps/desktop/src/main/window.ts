@@ -1,7 +1,7 @@
 import { BrowserWindow, shell } from "electron"
 import fs from "node:fs"
 import path from "node:path"
-import { httpUrl } from "@admin/platform/desktop/http-url"
+import { externalUrl } from "@admin/platform/desktop/http-url"
 
 import { readConfig } from "./config"
 import { APP_ORIGIN } from "./protocol"
@@ -23,10 +23,10 @@ export const DEV_SERVER_URL = process.env.DESKTOP_DEV_SERVER_URL
 const DEV_ICON = path.join(__dirname, "../../build/icon.png")
 
 function openExternalPage(raw: string): void {
-  const url = httpUrl(raw)
+  const url = externalUrl(raw)
   if (!url) {
     // 不记录完整地址：查询串可能含凭据。
-    console.warn("[desktop] Blocked external URL: expected an absolute HTTP(S) URL")
+    console.warn("[desktop] Blocked external URL: expected HTTP(S) or mailto")
     return
   }
   void shell.openExternal(url).catch(() => {
@@ -38,10 +38,12 @@ function isAppNavigation(raw: string): boolean {
   try {
     const url = new URL(raw)
     // 自定义 app: 协议的 URL.origin 是 null，必须分别比协议和主机。
-    return [APP_ORIGIN, ...(DEV_SERVER_URL ? [DEV_SERVER_URL] : [])].some((value) => {
-      const allowed = new URL(value)
-      return url.protocol === allowed.protocol && url.host === allowed.host
-    })
+    return [APP_ORIGIN, ...(DEV_SERVER_URL ? [DEV_SERVER_URL] : [])].some(
+      (value) => {
+        const allowed = new URL(value)
+        return url.protocol === allowed.protocol && url.host === allowed.host
+      }
+    )
   } catch {
     return false
   }

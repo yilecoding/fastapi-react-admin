@@ -31,6 +31,13 @@ _ROUTE_NAME = re.compile(r'^[A-Za-z][A-Za-z0-9]*$')
 _HTTP_URL = TypeAdapter(HttpUrl)
 
 
+def _valid_embedded_path(value: str) -> bool:
+    """内嵌页面允许同源根相对路径；拒绝协议相对 URL、反斜杠和控制字符。"""
+    if not value.startswith('/') or value.startswith('//'):
+        return False
+    return not re.search(r'[\x00-\x20\x7f\\]', value)
+
+
 class MenuWriteParam(ColumnLengthChecked, MenuSchemaBase):
     """新建 / 修改菜单共用的写入规则
 
@@ -53,14 +60,22 @@ class MenuWriteParam(ColumnLengthChecked, MenuSchemaBase):
             link = (self.link or '').strip()
             if not link:
                 raise ValueError('外链 / 内嵌必须填写地址')
-            message = '外链/内嵌地址必须是完整的 http(s) 地址'
-            if not re.match(r'^https?://[^/]', link, re.IGNORECASE) or re.search(r'[\x00-\x20\x7f\\]', link):
-                raise ValueError(message)
-            try:
-                _HTTP_URL.validate_python(link)
-            except ValidationError as exc:
-                raise ValueError(message) from exc
-            self.link = link
+            is_embedded_path = self.type == MenuType.embedded and _valid_embedded_path(link)
+            message = (
+                '内嵌地址必须是完整的 http(s) 地址或同源根相对路径'
+                if self.type == MenuType.embedded
+                else '外链地址必须是完整的 http(s) 地址'
+            )
+            if is_embedded_path:
+                self.link = link
+            else:
+                if not re.match(r'^https?://[^/]', link, re.IGNORECASE) or re.search(r'[\x00-\x20\x7f\\]', link):
+                    raise ValueError(message)
+                try:
+                    _HTTP_URL.validate_python(link)
+                except ValidationError as exc:
+                    raise ValueError(message) from exc
+                self.link = link
         if not (self.path or '').strip():
             raise ValueError('请填写路由地址')
         return self

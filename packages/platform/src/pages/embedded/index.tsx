@@ -7,6 +7,7 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { sidebarQuery } from '../../auth/queries'
 import { MenuType, type SidebarNode } from '../../api-client/sidebar-types'
+import { embeddedUrl } from '../../desktop/http-url'
 
 /**
  * 内嵌页面的宿主（`MenuType.embedded = 3`）。
@@ -21,8 +22,10 @@ import { MenuType, type SidebarNode } from '../../api-client/sidebar-types'
 
 /** 只放行 http(s)。`javascript:` 开头的 iframe src 会**继承父页面的源**执行 —— 那是 XSS，不是内嵌 */
 function safeSrc(raw: string): string | null {
+  const safe = embeddedUrl(raw)
+  if (!safe) return null
   try {
-    const url = new URL(raw, window.location.origin)
+    const url = new URL(safe, window.location.origin)
     return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null
   } catch {
     return null
