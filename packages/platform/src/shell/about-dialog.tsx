@@ -51,7 +51,10 @@ export function AboutDialog({
     // 每次打开都重新问：这一屏要答的就是「此刻线上是哪一版」，缓存住的答案在发版之后是错的
     staleTime: 0,
   })
-  const backend = query.data
+  // 🔴 **只认这一次打开问到的答案。** 再次打开时 react-query 会留着上一次的 `data`：重查失败（发版后断网、
+  // 后端 5xx）它照样在，于是这里静默显示旧的后端版本、错误块不出、「不一致」也可能该出不出（#379 评审）。
+  // 所以正在取、取失败时一律当成没有 —— 上一次的值不拿来顶替，这一屏答的是「此刻」
+  const backend = query.isFetching || query.isError ? undefined : query.data
   const frontendVersion = about.version.replace(/^v/, '')
   const mismatch =
     !!backend &&
@@ -75,7 +78,7 @@ export function AboutDialog({
           <dd className="font-mono select-all" data-testid="about-backend">
             {backend ? (
               <BuildLabel version={backend.version} commit={backend.commit} />
-            ) : query.isError ? (
+            ) : query.isError && !query.isFetching ? (
               // 失败要看得见（硬纪律 9）：原因和重试在下面那一块，这里不留空也不写成「未知版本」
               <span className="font-sans text-destructive select-none">{t('获取失败')}</span>
             ) : (
@@ -84,7 +87,7 @@ export function AboutDialog({
           </dd>
         </dl>
 
-        {query.isError && !backend && (
+        {query.isError && !query.isFetching && (
           <QueryError error={query.error} onRetry={() => void query.refetch()} testId="about-error" />
         )}
 
