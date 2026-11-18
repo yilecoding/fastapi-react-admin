@@ -289,6 +289,11 @@ export function MenuFormSheet({
             {isExternal && (
               <FormField label={type === MENU_TYPE.LINK ? t('外链地址') : t('内嵌地址')} error={fe(errs.link?.message)} required>
                 <Input {...form.register('link')} data-testid="m-link" placeholder="https://…" />
+                {type === MENU_TYPE.IFRAME && (
+                  <p className="text-xs text-muted-foreground">
+                    {t('Web 端支持 /help 这样的同源根相对路径。桌面客户端需填写完整的 http(s) 地址。')}
+                  </p>
+                )}
               </FormField>
             )}
 
