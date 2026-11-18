@@ -28,6 +28,9 @@ end
 return 0
 """
 
+#: 心跳续租失败后的重试间隔（秒）。比心跳间隔短得多，好在本地租约到期前续上
+_HEARTBEAT_RETRY_SECONDS = 2
+
 _RELEASE_NODE_LEASE = """
 if redis.call('GET', KEYS[1]) == ARGV[1] then
     return redis.call('DEL', KEYS[1])
@@ -146,13 +149,19 @@ class SnowflakeNodeManager:
 
         async def heartbeat() -> None:
             key = f'{self.node_redis_prefix}:{datacenter_id}:{worker_id}'
+            delay = settings.SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS
             while True:
-                await asyncio.sleep(settings.SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS)
+                await asyncio.sleep(delay)
                 try:
                     await self._renew_lease(key)
+                    delay = settings.SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS
                 except Exception as e:
-                    self._lease_valid = False
-                    log.error(f'雪花算法节点心跳任务失败：{e}')
+                    # ⚠️ 不在这里把 `_lease_valid` 置 False（#369）：一次 Redis 抖动不代表租约丢了 ——
+                    # Redis 里的 key 还剩大半个 TTL，`lease_valid` 按 `_lease_deadline` 到期自然失效。
+                    # 原来这里直接判死，一次连接重置 = 这个进程最长一个心跳间隔（30 秒）写入全挂。
+                    # 失败后改短间隔重试，赶在期限前续上
+                    delay = min(_HEARTBEAT_RETRY_SECONDS, settings.SNOWFLAKE_HEARTBEAT_INTERVAL_SECONDS)
+                    log.error(f'雪花算法节点心跳失败，{delay} 秒后重试：{e!r}')
 
         self._heartbeat_task = asyncio.create_task(heartbeat())
 
@@ -253,7 +262,9 @@ class Snowflake:
 
         with self._lock:
             if self._auto_allocated and self._node_manager and not self._node_manager.lease_valid:
-                raise errors.ServerError(msg=t('error.snowflake.generation_failed'))
+                # 和「未初始化」分开报：这里是初始化过、但节点租约没续上（心跳没跑 / 被别的进程占了），
+                # 报成「未初始化」会把人带去查启动流程（#369 就是这么被带偏的）
+                raise errors.ServerError(msg=t('error.snowflake.lease_lost'))
 
             timestamp = self._current_ms()
 
