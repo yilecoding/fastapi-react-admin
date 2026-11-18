@@ -48,6 +48,10 @@ x-api-base: &api-base
   build:
     context: ./apps/api
     dockerfile: Dockerfile.prod
+    # 提交号烙进镜像，`/api/health/status` 的 commit 读它（#378）。`prod.sh build` 会自己从 git 取；
+    # 裸跑 `docker compose build` 不带它，接口上是 commit: null（不影响健康判定）
+    args:
+      GIT_SHA: ${GIT_SHA:-}
   restart: unless-stopped
   environment:
     TZ: Asia/Shanghai
@@ -174,6 +178,8 @@ services:
       args:
         # 空串 = 同源相对路径，由 nginx 反代到 api。见 apps/web/Dockerfile 的说明
         VITE_API_BASE: ""
+        # 同上面 api 的 GIT_SHA：写进 version.json 的 commit
+        GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     ports:
       # TLS 建议交给上游 LB / Caddy / 宝塔的反代，这里只出一个明文端口。

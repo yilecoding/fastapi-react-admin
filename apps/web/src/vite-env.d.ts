@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_BUILD_ID?: string
   /** 产品版本，来自 apps/web/package.json，构建和开发期都注入 */
   readonly VITE_APP_VERSION?: string
+  /** 这次构建出自哪个提交（7 位），取不到时是空串。见 `vite.config.ts` 的 `resolveCommit` */
+  readonly VITE_GIT_SHA?: string
 
   /** 开发期显式设为 `true` 时挂载 TanStack Router Devtools，默认关闭。 */
   readonly VITE_ROUTER_DEVTOOLS?: string
