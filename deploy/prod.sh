@@ -41,6 +41,11 @@ fail() {
   exit 1
 }
 info() { printf '\033[36m·\033[0m %s\n' "$*" >&2; }
+warn() {
+  printf '\033[33m!\033[0m %s\n' "$1" >&2
+  shift
+  for line in "$@"; do printf '  %s\n' "$line" >&2; done
+}
 ok() { printf '\033[32m✓\033[0m %s\n' "$*" >&2; }
 
 command=${1:-}
@@ -170,6 +175,18 @@ remote_head() {
   esac
 }
 
+# image_label <容器 id> <标签名>：读容器所用镜像的 OCI 标签，没有就是空串
+image_label() {
+  local value
+  value=$(docker inspect "$1" --format "{{index .Config.Labels \"$2\"}}" 2>/dev/null || true)
+  [ "$value" = '<no value>' ] && value=''
+  printf '%s\n' "$value"
+}
+
+# json_str <字段名>：从标准输入的紧凑 JSON 里取一个**字符串**字段的值；字段不在或是 null 时输出空。
+# 不用 jq —— 服务器上不保证有，而这里读的两份 JSON（/api/health/status、/version.json）都是我们自己出的紧凑格式
+json_str() { sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" | head -n1; }
+
 cmd_status() {
   dc ps
   echo
@@ -183,15 +200,15 @@ cmd_status() {
   fi
   # 只让 ASCII 的两列参与对齐 —— printf 的宽度是按**字节**算的，中文列
   # 混进来必然错位（一个汉字 3 字节、显示 2 格）
-  info "各容器跑的是哪个提交："
-  local id name rev short state
+  info "各容器跑的是哪个版本 / 提交："
+  local id name rev ver short state
   for id in "${ids[@]}"; do
     [ -n "$id" ] || continue
     name=$(docker inspect "$id" --format '{{.Name}}' 2>/dev/null || true)
     name=${name#/}
-    rev=$(docker inspect "$id" \
-      --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null || true)
-    [ "$rev" = '<no value>' ] && rev=''
+    rev=$(image_label "$id" org.opencontainers.image.revision)
+    # 版本号标签是 #378 才加的，更早的镜像没有 —— 显示 `-`，不影响下面按提交号的判断
+    ver=$(image_label "$id" org.opencontainers.image.version)
     if [ -z "$rev" ]; then
       short='-'
       state='镜像没带 revision 标签（CI 加标签之前构建的），只能靠 pull 时间判断新旧'
@@ -205,7 +222,7 @@ cmd_status() {
         state="落后于 main（${head:0:7}）"
       fi
     fi
-    printf '  %-30s %-8s %s\n' "$name" "$short" "$state"
+    printf '  %-30s %-9s %-8s %s\n' "$name" "${ver:--}" "$short" "$state"
   done
 }
 
@@ -294,8 +311,107 @@ probe_after_up() {
     "容器起来了，但站点不可用。看日志：bash prod.sh logs" \
     "503 + body 里列着 database / redis 哪项坏了；503 带 X-FBA-Updating 头 = api 没起来；404 = web 的 nginx 配置没跟上"
   ok "经 web 探 /api/health/ready → 200"
-  info "各服务状态 /api/health/status → $(curl -s -m 10 "$base/api/health/status" || echo 无响应)"
+  local status_body
+  status_body=$(fetch_status_body "$base")
+  info "各服务状态 /api/health/status → ${status_body:-无响应}"
   info "scheduler / worker 不是 ok 的话过 3 分钟再看一次，还不是就查那个容器"
+  verify_deployed_commit "$base" "$status_body"
+}
+
+# 取 /api/health/status 的响应体，**认得出来才算数**（里面有 `"services"`，200 和 503 降级都有）。
+# 超时、回了 HTML、nginx 替挂掉的 api 回的 `{"status":"unavailable"}` 都不算，隔 3 秒再取，最多 5 次。
+# 🔴 不重试的话，这一下恰好没取到就会被下面当成「旧镜像，没法核对」放行 —— 提交号核对**静默**地没做，
+# 而部署照样报成功（#379 评审）。重试完还取不到，原样交回去，由 verify_deployed_commit 大声说出来
+fetch_status_body() {
+  local base=$1 body=""
+  for _ in 1 2 3 4 5; do
+    body=$(curl -s -m 10 "$base/api/health/status" || true)
+    case $body in *'"services"'*) break ;; esac
+    sleep 3
+  done
+  printf '%s' "$body"
+}
+
+# ── up 之后核对：线上答的提交号，是不是刚部署的那个（#378）────────────────────
+# 「容器都起来了、探活也 200」不等于「跑的是你要的那一版」：拉 A 起 B、只换了 web 没换 api、
+# nginx 还指着旧容器，这些情形探活全绿。这里拿**接口实际答的**提交号对三样东西：
+#   1. TAG=sha-<提交号> 时，对你点名要的那个提交
+#   2. api 容器镜像的 revision 标签（CI 打的）—— 对不上说明构建时提交号没烙进镜像
+#   3. web 的 /version.json —— 对不上说明前后端不是同一次构建
+# 🔴 只在**两边都拿得到**时才判失败。回滚到 #378 之前的镜像时接口里根本没有 commit 字段，
+# 本机 `build` 的镜像没有 revision 标签 —— 这两种都是「没法核对」，不是「不一致」，拦下来等于把回滚堵死
+verify_deployed_commit() {
+  local base=$1 body=$2 served tag api_id label web_commit
+  # 三种响应分开说，别揉成一句「跳过」：只有第二种是真的「没法核对」
+  case $body in
+    *'"commit"'*) ;;
+    *'"services"'*)
+      info "api 没报提交号（镜像早于 #378），跳过提交号核对"
+      return 0
+      ;;
+    *)
+      # 重试过了还是认不出来。不判失败：这一步原来就只打印不卡，而回滚时最不该被一个新加的检查拦住。
+      # 但要用警告而不是 info —— 「没核对」和「核对过了」不能长得一样
+      warn "/api/health/status 没给出认得出来的响应，提交号**没有核对**" \
+        "这不是「一致」。过一会儿手工看：curl -s $base/api/health/status"
+      return 0
+      ;;
+  esac
+  served=$(printf '%s' "$body" | json_str commit || true)
+  api_id=$(dc ps -q api 2>/dev/null | head -n1 || true)
+  label=''
+  [ -n "$api_id" ] && label=$(image_label "$api_id" org.opencontainers.image.revision)
+
+  if [ -z "$served" ]; then
+    [ -z "$label" ] || fail \
+      "api 镜像的 revision 标签是 ${label:0:7}，但 /api/health/status 报 commit: null" \
+      "提交号没烙进镜像：构建时漏了 --build-arg GIT_SHA（CI 里是 build-images 的 build-args）"
+    info "api 没带提交号（本机构建且没传 GIT_SHA），跳过提交号核对"
+    return 0
+  fi
+
+  tag=$(setting TAG latest)
+  case $tag in
+    sha-*)
+      tag=${tag#sha-}
+      [ "${tag:0:7}" = "$served" ] || fail \
+        "要部署的是 TAG=sha-$tag，线上 api 答的却是 $served" \
+        "api 容器没换成这一版。看 bash prod.sh status 各容器的提交号"
+      ;;
+  esac
+  [ -z "$label" ] || [ "${label:0:7}" = "$served" ] || fail \
+    "api 镜像的 revision 标签是 ${label:0:7}，接口答的却是 $served" \
+    "经 web 的 nginx 到达的不是这个 api 容器，或镜像的标签和内容不是同一次构建"
+
+  web_commit=$(curl -s -m 5 "$base/version.json" | json_str commit || true)
+  if [ -n "$web_commit" ] && [ "$web_commit" != "$served" ]; then
+    fail \
+      "前后端不是同一个提交：web 是 $web_commit，api 是 $served" \
+      "多半是只拉到 / 只换了其中一个镜像。重跑 bash prod.sh pull 再 up；看 bash prod.sh status"
+  fi
+  ok "线上提交号 $served（api${web_commit:+ · web}${label:+ · 镜像标签} 一致）"
+}
+
+# ── build 时烙进镜像的提交号 ─────────────────────────────────────────────
+# 显式给了 GIT_SHA 就用它；否则取仓库的 HEAD。
+# 🔴 **工作区有没提交的改动时不烙**（输出空串 → 接口上是 commit: null）。那样构建出来的镜像，内容比 HEAD 多，
+# 烙上 HEAD 的提交号等于让线上自称是一份它不是的源码 —— 「不知道」比「错的」好（#379 评审）。
+# 未跟踪的文件也算：它们一样会被 COPY 进镜像
+build_commit() {
+  if [ -n "${GIT_SHA:-}" ]; then
+    printf '%s\n' "$GIT_SHA"
+    return 0
+  fi
+  local sha dirty
+  sha=$(git -C "$project_dir" rev-parse HEAD 2>/dev/null || true)
+  [ -n "$sha" ] || return 0
+  dirty=$(git -C "$project_dir" status --porcelain 2>/dev/null || true)
+  if [ -n "$dirty" ]; then
+    warn "工作区有没提交的改动，这次构建不烙提交号（接口上会是 commit: null）" \
+      "要烙就先提交，或显式指定：GIT_SHA=<提交号> bash prod.sh build"
+    return 0
+  fi
+  printf '%s\n' "$sha"
 }
 
 # ── 分发 ─────────────────────────────────────────────────────────────────
@@ -309,7 +425,14 @@ case $command in
     ;;
   # build 不挂 .env.server（构建期用不到它），所以不跑前置检查 —— 服务器上没有
   # 源码，这条会在 compose 找不到 ./apps/api 时**大声**失败，不是静默的
-  build) dc build ;;
+  #
+  # 提交号从仓库里取了传给构建（compose 的 `args: GIT_SHA`），`/api/health/status` 和 `/version.json`
+  # 才报得出 commit（#378）。
+  build)
+    GIT_SHA=$(build_commit)
+    export GIT_SHA
+    dc build
+    ;;
   pull)
     check_env_file
     cmd_pull
