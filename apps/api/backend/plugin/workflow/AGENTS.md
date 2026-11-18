@@ -328,6 +328,10 @@ Qwen3-VL 和 DeepSeek-V3.2 都给 `reject`，理由原话「报销金额 1280 �
   现在预演核对意见在用户这段对话里说过的话里（`ctx.user_said`，可以只是一段、忽略空白和句末标点），否则拦下、不发令牌。
   变异：去掉核对 → `test_an_opinion_the_user_never_said_is_refused` 红
 - `act()` 进来会回滚会话上的事务 —— dispatcher 的审计行写在工具**之后**，所以不受影响；测试读回了那一行（status 0）
+- ⚠️ **写工具走的是独立会话**（`_act` 从调用方的 bind 新开 `AsyncSession`，#315 之后），和对话那一轮不是同一个事务。
+  `AI_CONFIRM_MUTATING_TOOLS=false` 的网页对话里，同一轮先由别的写工具改了用户 / 部门行（整轮结束才提交）、再调审批工具：
+  独立会话读那些行时，**没开 RCSI 的 SQL Server 上可能被外层事务的行锁挡住**，等到锁超时。**未实测**（#372 复核时推断出来的，
+  默认配置开着确认，走不到这条路）—— 有条件时在 SQL Server 上实跑一次再改成结论
 
 **实测证据**：`tests/test_ai_workflow_tools.py` 6 条（真实测试库 + 真实 Redis，写操作像网页确认那样提交、读回库里断言），
 PG 和 SQL Server 都过。真模型 `tests/test_ai_workflow_tools_real_model.py` 3 条（2026-10-24，内网网关）：

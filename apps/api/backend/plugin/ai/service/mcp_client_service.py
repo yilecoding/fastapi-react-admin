@@ -114,8 +114,13 @@ class AiMcpClientService:
     @classmethod
     async def update(cls, *, db: AsyncSession, pk: int, obj: UpdateAiMcpClientParam, operator: Any) -> None:
         row = await cls.get(db=db, pk=pk)
-        # 按**改完之后**的值判：PUT 带回的是整份配置，超管发的凭据非超管改不了（哪怕只改备注）——
-        # 改了就等于他重新发了一次
+        # 🔴 旧值、新值都要判（#372）。只判新值的话，非超管把一份 `act_as=["*"]` + `allow_superuser` 的凭据
+        # PUT 成「只代表自己范围内的人」照样过 —— 没有提权，但超管发的那条集成被他改坏了。
+        # 旧值这一道和 delete / rotate 同一个判据：超管发的凭据非超管碰不了，哪怕只改备注
+        await _check_grantable(
+            db, act_as=json.loads(row.act_as), allow_superuser=row.allow_superuser, operator=operator
+        )
+        # 新值：改了就等于他重新发了一次
         await _check_grantable(db, act_as=obj.act_as, allow_superuser=obj.allow_superuser, operator=operator)
         await _check(db, obj)
         for key, value in _columns(obj).items():
