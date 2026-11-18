@@ -136,6 +136,32 @@ class TestOnlyGrantWhatYouHave:
 
         _run(monkeypatch, scenario)
 
+    def test_non_superuser_cannot_downgrade_a_superuser_credential(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """🔴 #372：update 只按新值判的话，把超管发的凭据「改小」照样能过 —— 不提权，但那条集成被改坏了"""
+
+        async def scenario(db: Any) -> None:
+            obj = self._param(CreateAiMcpClientParam, allow_superuser=True, act_as=['*'])
+            issued = await ai_mcp_client_service.create(db=db, obj=obj, operator=_user(superuser=True))
+            downgrade = self._param(UpdateAiMcpClientParam, act_as=['admin'], allow_superuser=False)
+            with pytest.raises(errors.ForbiddenError):
+                await ai_mcp_client_service.update(db=db, pk=issued.id, obj=downgrade, operator=_user(superuser=False))
+            row = await db.get(AiMcpClient, issued.id)
+            assert json.loads(row.act_as) == ['*']
+            assert row.allow_superuser
+            # 普通的那份非超管照常能改
+            plain = await ai_mcp_client_service.create(
+                db=db, obj=self._param(CreateAiMcpClientParam), operator=_user(superuser=True)
+            )
+            await ai_mcp_client_service.update(
+                db=db,
+                pk=plain.id,
+                obj=self._param(UpdateAiMcpClientParam, act_as=['admin']),
+                operator=_user(superuser=False),
+            )
+            assert json.loads((await db.get(AiMcpClient, plain.id)).act_as) == ['admin']
+
+        _run(monkeypatch, scenario)
+
     def test_superuser_can(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def scenario(db: Any) -> None:
             obj = self._param(CreateAiMcpClientParam, allow_superuser=True, act_as=['*'])

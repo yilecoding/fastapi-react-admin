@@ -74,7 +74,17 @@ if (inFlight.current && s?.conversationId === conversationId && prev.some((b) =>
 同一个 issue 的另一半：`fetch()` / `reader.read()` 直接 reject 时 `send` 原来没有 catch，
 气泡永远「思考中」（硬纪律 9）；流正常关了却没收到 `done` / `error` 也一样。现在两种都落成一句报错。
 
-**实测证据**：E2E `ai-chat-stream.spec.ts` 三条（切会话 · 断网 · 无 done）已写，**尚未实跑**（写的那台机器没有测试库）——跑过之后把结果补在这里。
+**实测证据**：E2E `ai-chat-stream.spec.ts` 三条（切会话 · 断网 · 无 done），2026-11-18 本机实跑（Chromium + PostgreSQL 私有库）全过。
+
+### 🔴 确认流也要按卡片找气泡，不能写「最后一条」（#372）
+
+**症状**：在会话甲点确认卡片，确认流还没结束就切到乙 —— 工具结果和报错行追加到了**乙**的最后一条助手气泡上。
+切走再切回会按历史重建，所以只是显示错位，但用户看到的是「乙那句回答后面跟着一句不相干的报错」。
+**根因**：#329 只修了 `send` 那条流；`confirmTool` 的 `applyEvent(event)` 不带目标，`onError` 同样，默认落最后一条。
+**修法**：落点抽成 `bubble-target.ts: targetBubbleIndex`，对话流按 `bubbleId`、确认流按卡片的 `token` 找，**没有「不给就写最后一条」的默认值** ——
+目标是必填参数，以后再加一条流也绕不过去。找不到（卡片不在眼前）就丢弃。
+**实测证据**（2026-11-18，Chromium + PostgreSQL 私有库）：E2E `ai-chat-stream.spec.ts`「确认途中切到另一个会话」通过；
+把 `token` 分支改回 `bubbles.length - 1`，同一条当场红（`确认流的报错` 在乙里出现了 1 次）。单测 `bubble-target.test.ts` 3 条。
 
 ## 会话列表必须按时间分段
 
