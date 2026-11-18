@@ -69,7 +69,7 @@ celery worker **不执行 FastAPI 的 lifespan**（`core/registrar.py` 那段）
 `'NoneType' object has no attribute 'tb_frame'` —— 日志里最显眼的是那句
 AttributeError，真因要往上翻十几行。
 
-补在 `celery.py` 的 `worker_process_init` 里。只补「任务代码会用到的全局单例」，
+Redis 补在 `celery.py` 的 `worker_process_init` 里，雪花补在 `worker_ready` 里（为什么分开见下面 #369 那一节）。只补「任务代码会用到的全局单例」，
 不碰 lifespan 里属于 web 进程的东西（操作日志消费者、缓存 Pub/Sub 监听器）——
 那些在 worker 里跑起来只会重复消费。
 
@@ -94,16 +94,36 @@ RuntimeError: Event loop is closed
 第一拍 `succeeded`。单测 `test_health.py::test_worker_init_leaves_no_connection_bound_to_its_throwaway_loop`
 去掉那一行就报上面两条原文。
 
-### ⚠️ 同一个函数里的 `snowflake.init()` 有同类问题，**还没修**
+### 🔴 雪花节点要在 AsyncIOPool 自己的循环里初始化 —— 否则 worker 启动 60 秒后拒绝一切发号（#369）
 
-它在临时循环里 `create_task` 起了节点续期（`utils/snowflake.py: start_heartbeat`），`asyncio.run` 一结束就被取消 ——
-worker 占的雪花节点 key 过了 TTL 就没了，下一个起来的进程会拿到同一个节点号，两个进程用同一组
-datacenter / worker 发 ID。
+**症状**：`DATABASE_PK_MODE='snowflake'` 且没配固定的 `SNOWFLAKE_DATACENTER_ID` / `SNOWFLAKE_WORKER_ID`
+（两份 `.env.*.example` 都是这个组合）时，worker 起来 `SNOWFLAKE_NODE_TTL_SECONDS`（默认 60）秒之后，
+凡是插雪花主键行的任务全挂。修之前报的是 `雪花 ID 生成失败，雪花算法未初始化`，会把人带去查启动流程。
+最糟的是 Webhook：POST 已经发出去，投递记录写不进去 → 行停在 sending → 被回收、**再发一遍**。
 
-**实测证据**（同一次演练，`SNOWFLAKE_NODE_TTL_SECONDS=60`、续期间隔 30 秒）：worker 起来 4 秒时
-`fba:snowflake:nodes:0:1` TTL 56，40 秒时 TTL 20（api 那把 `0:0` 同期被续回 37 → 42），66 秒时 worker 还活着、
-它那把 key 已经没了；这时再起一个 worker，拿到的还是 `0:1`，两个 worker 同时活着。
-**这只证明了「节点号会重复」**，重复的 ID 本身没有实测（要两个进程在同一毫秒、同一序号上发号）。
+**根因**：原来在 `worker_process_init` 的 `asyncio.run` 临时循环里 `snowflake.init()`，里面 `create_task` 起的续租心跳
+随循环一起被取消。#333 之前后果只是节点 key 过期、节点号可能重复；#333 加了本地租约期限（只有心跳能往后推），
+心跳不跑，期限就停在启动后 60 秒，之后 `generate()` 一律拒绝。
+
+**修法**：雪花挪到 `celery.py: init_worker_snowflake`，挂 `worker_ready`，用 `run_coroutine_threadsafe` 投到
+`sender.pool.loop`（AsyncIOPool 在独立线程里 `run_forever()` 的那个循环）上执行、`.result()` 等它完成。
+❌ 不能挂 `worker_process_init`：那个信号是 `AsyncIOPool.__init__` 自己发的，发的时候 `self.loop` 还没建。
+`worker_ready` 在 consumer 开始处理消息之前同步发出，主线程等着初始化做完，不会有任务抢在前面跑。
+找不到 pool 的循环时只记 ERROR，**不退回 `asyncio.run`**（那正是这个 bug 的起法）。
+顺带两处：租约失效改报 `error.snowflake.lease_lost`，和「未初始化」分开；单次心跳抛异常不再当场判死
+（Redis 里的 key 还剩大半个 TTL），改成 2 秒后重试，只按本地期限判失效。
+
+**实测证据**（2026-11-18，本机真 worker：`--pool=custom` + 一次性 Redis 容器，`SNOWFLAKE_NODE_TTL_SECONDS=6`、
+心跳 2 秒；加了一个临时任务调 `snowflake.generate()`）：
+
+| | 结果 |
+|---|---|
+| 修之前（main） | 启动后 15 秒发号：`ServerError('雪花 ID 生成失败，雪花算法未初始化')` |
+| 修之后 | 心跳每 2 秒续一次，节点 key 的 TTL 在 4～6 之间来回；启动后 26 秒发号成功 `2234334186804609024` |
+
+单测在 `backend/tests/test_snowflake_node_lease.py`：`test_worker_startup_keeps_issuing_ids_past_the_lease_ttl`（仿 AsyncIOPool 的线程循环，
+1 秒租约，等 1.6 秒后仍能发号）把投递改回 `asyncio.run(snowflake.init())` 就红；
+`test_one_failed_heartbeat_does_not_stop_the_generator` 把心跳异常分支改回 `_lease_valid = False` 就红。
 
 ## 🔴 `task_result` / `task_set_result` 不用雪花主键
 
