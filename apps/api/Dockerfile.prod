@@ -97,6 +97,12 @@ RUN mkdir -p /app/backend/log /app/backend/upload /app/backend/upload-public \
 USER fba
 EXPOSE 8000
 
+# 提交号写进镜像，`/health/status` 的 `commit` 读它（backend/common/build_info.py，#378）——
+# 镜像里没有 .git，运行时读不到。CI 用 `build-args` 传 `github.sha`；不传就是空串，接口返回 `commit: null`。
+# 🔴 放在**最后**：这个值每次提交都变，`ARG` 之后的层全部缓存失效，写在上面的话每次构建都重装 ODBC 驱动
+ARG GIT_SHA=""
+ENV GIT_SHA=${GIT_SHA}
+
 # 刻意不写 HEALTHCHECK：同一个镜像要跑 api / worker / beat / migrate 四种进程，各自该探什么不一样，
 # 健康检查只在 docker-compose.prod.yml 里按服务写一份（原来这里那条会被 compose 盖掉，等于第二份真相）
 
