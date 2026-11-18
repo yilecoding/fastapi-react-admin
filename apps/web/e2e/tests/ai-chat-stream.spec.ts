@@ -24,7 +24,9 @@ const conv = (id: string, title: string) => ({
   updated_time: null,
 })
 
-const history = (id: string, user: string, answer: string) => [
+type Msg = { id: string; role: string; content: string; tool_calls: string | null; created_time: string }
+
+const history = (id: string, user: string, answer: string): Msg[] => [
   { id: `${id}-1`, role: "user", content: user, tool_calls: null, created_time: "2026-11-16T10:00:00+08:00" },
   { id: `${id}-2`, role: "assistant", content: answer, tool_calls: null, created_time: "2026-11-16T10:00:01+08:00" },
 ]
