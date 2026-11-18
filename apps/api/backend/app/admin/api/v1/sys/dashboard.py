@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request
 
 from backend.app.admin.service import dashboard_service
+from backend.common.build_info import build_info
 from backend.common.response.response_schema import ResponseModel, response_base
 from backend.common.schema import IanaTimeZone
 from backend.common.security.jwt import DependsJwtAuth, DependsSuperUser
@@ -29,6 +30,13 @@ async def get_attention(
 async def get_services() -> ResponseModel:
     # 超管：在线会话来自会话索引，和在线用户页（`/monitors/sessions`）同一个门槛
     return response_base.success(data=await dashboard_service.services())
+
+
+@router.get('/about', summary='后端版本号 + 提交号（「关于」弹窗用）', dependencies=[DependsJwtAuth])
+async def get_about() -> ResponseModel:
+    # 只挂登录：这两个值在不鉴权的 `/health/status` 里本来就有，没有可藏的。单开一条是因为那条的地址
+    # 随部署形态变（经 nginx 是 `/api/health/status`，直连后端是 `/health/status`），前端拼不出一个到处都对的
+    return response_base.success(data=build_info())
 
 
 @router.get(
