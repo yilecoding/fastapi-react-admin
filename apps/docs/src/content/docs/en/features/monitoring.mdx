@@ -63,6 +63,8 @@ A heartbeat older than 180 seconds is `stale`, one never written is `missing`, a
 
 **All healthy returns 200; anything else returns 503**, with each item's status and heartbeat age in the body. Errors carry only the exception type name, never its message, so nothing like a connection string leaks to anonymous callers. When the backend is down entirely, nginx returns 503 with `{"status":"unavailable"}` and `Retry-After: 15`.
 
+The body ends with `version` and `commit` (a 7-character commit hash), so you can tell which release is live; they never affect the 200 / 503 result, and `commit` is `null` when no commit was baked into the image. The frontend's own copy is in `/version.json`, and after signing in, **Help → About** in the top bar shows both side by side and flags a mismatch.
+
 Which address external monitoring should probe, and why not `/healthz`, is in [Deploying to a server](/en/getting-started/deployment/#what-should-external-monitoring-check). Container orchestration uses a separate `/health/ready` that checks only the database and Redis.
 
 The dashboard's **Service status** card reads the same checks, plus how many sessions are online on web, desktop and mobile; it does not poll, and re-opening it within 20 seconds uses the cached result.

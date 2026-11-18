@@ -1646,6 +1646,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/dashboard/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 后端版本号 + 提交号（「关于」弹窗用） */
+        get: operations["get_about_api_v1_sys_dashboard_about_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/dashboard/visits": {
         parameters: {
             query?: never;
@@ -18994,6 +19011,26 @@ export interface operations {
         };
     };
     get_services_api_v1_sys_dashboard_services_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseModel"];
+                };
+            };
+        };
+    };
+    get_about_api_v1_sys_dashboard_about_get: {
         parameters: {
             query?: never;
             header?: never;
