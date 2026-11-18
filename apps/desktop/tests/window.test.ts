@@ -107,7 +107,7 @@ test("both external entry points block system protocols and malformed URLs", () 
     "custom://probe",
     "javascript:alert(1)",
     "data:text/html,probe",
-    "mailto:a@example.com",
+    "tel:+88612345678",
     "https://",
     "https:///example.com",
     "//example.com",
@@ -117,6 +117,34 @@ test("both external entry points block system protocols and malformed URLs", () 
   }
   assert.equal(win.opened.length, 0)
   assert.equal(win.warnings.length, 20)
+})
+
+test("mailto links are opened by the system handler", () => {
+  const win = loadWindow()
+  assert.equal(win.newWindow("mailto:a@example.com"), "deny")
+  assert.equal(win.navigate("mailto:a@example.com"), true)
+  assert.deepEqual(win.opened, ["mailto:a@example.com", "mailto:a@example.com"])
+  assert.equal(win.warnings.length, 0)
+})
+
+test("both entry points validate mailto parameters before calling the system handler", () => {
+  const win = loadWindow()
+  for (const url of [
+    "mailto:a@example.com?attach=//host/share/x",
+    "MAILTO:a@example.com?%61ttach=file:///tmp/x",
+    "mailto:a@example.com?subject=Hi%0d%0aAttach:x",
+  ]) {
+    assert.equal(win.newWindow(url), "deny")
+    assert.equal(win.navigate(url), true)
+  }
+  assert.equal(win.opened.length, 0)
+  const safe = "MAILTO:a@example.com?subject=Hello&body=First%0D%0ASecond"
+  assert.equal(win.newWindow(safe), "deny")
+  assert.equal(win.navigate(safe), true)
+  assert.deepEqual(win.opened, [
+    safe.replace("MAILTO:", "mailto:"),
+    safe.replace("MAILTO:", "mailto:"),
+  ])
 })
 
 test("both entry points open HTTP(S), deny child windows, and preserve app navigation", () => {

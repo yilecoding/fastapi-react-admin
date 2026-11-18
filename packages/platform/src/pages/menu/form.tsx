@@ -20,7 +20,7 @@ import {
 import { Switch } from '@admin/ui/components/switch'
 
 import { ApiError } from '../../api-client/errors'
-import { httpUrl } from '../../desktop/http-url'
+import { embeddedUrl, httpUrl } from '../../desktop/http-url'
 import { usePlatform } from '../../shell/platform-context'
 import { useFieldError } from '../_shared/form-error'
 import { FormField, FormSection } from '../_shared/form-fields'
@@ -60,8 +60,14 @@ const schema = z
     if (v.type === MENU_TYPE.LINK || v.type === MENU_TYPE.IFRAME) {
       if (!v.link?.trim()) {
         ctx.addIssue({ code: 'custom', path: ['link'], message: '外链/内嵌必须填写地址' })
-      } else if (!httpUrl(v.link)) {
-        ctx.addIssue({ code: 'custom', path: ['link'], message: '外链/内嵌地址必须是完整的 http(s) 地址' })
+      } else if (v.type === MENU_TYPE.IFRAME ? !embeddedUrl(v.link) : !httpUrl(v.link)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['link'],
+          message: v.type === MENU_TYPE.IFRAME
+            ? '内嵌地址必须是完整的 http(s) 地址或同源根相对路径'
+            : '外链地址必须是完整的 http(s) 地址',
+        })
       }
     }
     if (!v.path?.trim()) {
@@ -283,6 +289,11 @@ export function MenuFormSheet({
             {isExternal && (
               <FormField label={type === MENU_TYPE.LINK ? t('外链地址') : t('内嵌地址')} error={fe(errs.link?.message)} required>
                 <Input {...form.register('link')} data-testid="m-link" placeholder="https://…" />
+                {type === MENU_TYPE.IFRAME && (
+                  <p className="text-xs text-muted-foreground">
+                    {t('Web 端支持 /help 这样的同源根相对路径。桌面客户端需填写完整的 http(s) 地址。')}
+                  </p>
+                )}
               </FormField>
             )}
 
