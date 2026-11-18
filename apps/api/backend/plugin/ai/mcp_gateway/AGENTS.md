@@ -38,3 +38,9 @@ MCP 显式置 `False`。🔴 **默认 `False`（fail-closed）**：以后加的�
 先查存在再查范围 → 1 条（两句报错对不上）。删除不查 → 1 条 · `chat_service` 不置 `user_present=True` → `test_ai_turn_persistence.py::test_web_chat_marks_the_user_present` 红
 （评审补的：第一版测试直接造 `RunContext`，这处装配没人守）。⚠️ 没打红的一处：改范围外那句报错的措辞（两种情况走的是同一行，
 改了一起变 —— 等价变异）。
+
+## 🔴 凭据 `update` 旧值、新值都要过 `_check_grantable`（#372）
+
+只判新值时，非超管能把超管发的 `act_as=["*"]` +
+`allow_superuser` 凭据 PUT 成「只代表自己范围内的人」—— 不提权，但那条集成被他改坏了；`delete` / `rotate` 一直是按旧值判的，只有 `update` 漏了。
+`test_ai_mcp_trust.py::test_non_superuser_cannot_downgrade_a_superuser_credential`：去掉旧值那一道就红。
