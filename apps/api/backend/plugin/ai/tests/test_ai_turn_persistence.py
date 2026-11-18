@@ -224,6 +224,32 @@ class TestArgumentErrorsAreReadable:
         except ValueError as e:
             assert 'ID 格式不对' in _error_text(e)
 
+    def test_database_error_does_not_echo_sql_or_parameters(self) -> None:
+        """🔴 #372：`str(IntegrityError)` 带 SQL 和参数，会原样进工具结果（发给模型供应商）、确认卡片和审计"""
+        from sqlalchemy.exc import IntegrityError, OperationalError
+
+        e = IntegrityError(
+            'INSERT INTO sys_dept (name, phone) VALUES (?, ?)',
+            ('研发部', '13800000000'),
+            Exception('UNIQUE constraint failed: sys_dept.name'),
+        )
+        assert '13800000000' in str(e), '前提：原文里确实带参数'
+        for err in (e, OperationalError('SELECT secret FROM t WHERE id = ?', (42,), Exception('timeout'))):
+            text = _error_text(err)
+            for leaked in ('INSERT', 'SELECT', 'SQL', 'parameters', '研发部', '13800000000', 'secret'):
+                assert leaked not in text, text
+        assert '已存在同名' in _error_text(e)
+
+    def test_business_error_wrapped_by_flush_keeps_its_message(self) -> None:
+        """flush 里抛的业务异常（雪花发号失败之类）会被包成 StatementError：说里面那层的话，不说「数据库操作失败」"""
+        from sqlalchemy.exc import StatementError
+
+        from backend.common.exception import errors
+
+        inner = errors.ServerError(msg='雪花 ID 生成失败')
+        e = StatementError('wrapped', 'INSERT INTO t VALUES (?)', ('x',), inner)
+        assert _error_text(e) == '雪花 ID 生成失败'
+
 
 def test_whitespace_only_message_is_rejected() -> None:
     with pytest.raises(ValidationError):

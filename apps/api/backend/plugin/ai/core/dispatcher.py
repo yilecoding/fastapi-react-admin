@@ -25,9 +25,11 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from backend.common.data_change import data_change_source
 from backend.common.enums import StatusType
+from backend.common.exception.errors import BaseExceptionError
 from backend.common.log import log
 from backend.common.security.data_scope import scoped_to_user
 from backend.core.conf import settings
@@ -94,6 +96,16 @@ def _error_text(e: Exception) -> str:
         )
     if isinstance(e, ValueError) and str(e).startswith('invalid literal for int()'):
         return 'ID 格式不对：ID 是一串数字，请先用查询工具查到 ID 再调用'
+    if isinstance(e, SQLAlchemyError):
+        # 🔴 不能 `str(e)`（#372）：SQLAlchemy 的异常文本带 `[SQL: INSERT …] [parameters: ('研发部', '13800000000')]`，
+        # 这句话会原样进工具结果（发给模型供应商）、确认卡片和 `ai_tool_invocation.error`。全文由调用方记进服务端日志
+        orig = getattr(e, 'orig', None)
+        if isinstance(orig, BaseExceptionError):
+            # flush 里抛的业务异常（如雪花发号失败）被包成 StatementError，可读消息在里面那层
+            return orig.msg
+        if isinstance(e, IntegrityError):
+            return '数据库拒绝了这次写入：违反唯一或关联约束，常见原因是已存在同名 / 同编码的记录'
+        return '数据库操作失败，详情已记入服务端日志'
     return getattr(e, 'msg', None) or str(e) or type(e).__name__
 
 
@@ -255,6 +267,9 @@ class ToolDispatcher:
                 try:
                     preview = await self._invoke(spec.preview, call, ctx) if spec.preview else None
                 except Exception as e:
+                    if isinstance(e, SQLAlchemyError):
+                        # `_error_text` 只给一句通用话，原文得留在日志里，不然没法查
+                        log.exception(f'AI 工具 {spec.name} 预演失败')
                     reason = _error_text(e)
                     await self._audit(
                         ctx,

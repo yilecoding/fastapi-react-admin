@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
 
 import { aiKeys, messagesQuery, streamChat, useRenameConversation, type AgentEvent } from './api'
+import { targetBubbleIndex, type BubbleTarget } from './bubble-target'
 import type { Bubble, ConfirmCard, ConfirmOutcome, ToolTrace } from './message'
 
 /** 报错在气泡里的样子。流式时和从历史还原时必须是同一个样子，否则刷新一下报错就「变了」 */
@@ -136,10 +137,10 @@ export function useChatSession(
     })
   }, [conversationId, historyQuery.data])
 
-  /** 把一个事件落到助手气泡上：给了 `bubbleId` 就只写那一条（不在了就丢弃），否则写最后一条 */
-  const applyEvent = React.useCallback((event: AgentEvent, bubbleId?: string) => {
+  /** 把一个事件落到它所属的那条助手气泡上（见 `bubble-target.ts`）；那条气泡不在眼前就丢弃 */
+  const applyEvent = React.useCallback((event: AgentEvent, where: BubbleTarget) => {
     setBubbles((prev) => {
-      const i = bubbleId ? prev.findIndex((b) => b.id === bubbleId) : prev.length - 1
+      const i = targetBubbleIndex(prev, where)
       const target = prev[i]
       if (!target || target.role !== 'assistant') return prev
       const next = [...prev]
@@ -205,7 +206,7 @@ export function useChatSession(
       let ended = false
       const onEvent = (event: AgentEvent) => {
         if (event.type === 'done' || event.type === 'error') ended = true
-        applyEvent(event, bubbleId)
+        applyEvent(event, { bubbleId })
       }
       try {
         await streamChat('/api/v1/ai/chat/stream', { conversation_id: id, content }, onEvent)
@@ -252,7 +253,8 @@ export function useChatSession(
         if (event.type === 'error' && !/^\d+$/.test(event.code ?? '')) {
           outcome = event.code === 'confirm_expired' ? 'expired' : 'failed'
         }
-        applyEvent(event)
+        // 🔴 按卡片找气泡，不写「最后一条」：确认途中切到别的会话，结果会落到那个会话的气泡上（#372）
+        applyEvent(event, { token })
       })
       return { outcome, detail }
     },
@@ -260,8 +262,11 @@ export function useChatSession(
       if (outcome) settle(token, outcome, detail)
     },
     // 连接断了：可能根本没送到，也可能执行到一半断开。再点一次是安全的 —— 令牌一次性，执行过的只会回「已经用过」
-    onError: () =>
-      applyEvent({ type: 'error', message: t('连接断了，可以再点一次确认（执行过的不会重复执行）'), code: 'network' }),
+    onError: (_error, token) =>
+      applyEvent(
+        { type: 'error', message: t('连接断了，可以再点一次确认（执行过的不会重复执行）'), code: 'network' },
+        { token },
+      ),
   })
 
   return { bubbles, streaming, send, confirmTool, historyQuery }
