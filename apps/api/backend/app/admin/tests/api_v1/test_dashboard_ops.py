@@ -352,3 +352,18 @@ def test_services_reports_each_service_and_sessions_by_client(
     assert sessions['total'] == len(online)
     # 超管专属（在线会话和在线用户页同一个门槛）
     assert client.get('/sys/dashboard/services', headers=staff_headers).status_code == 403
+
+
+def test_about_gives_any_signed_in_user_the_backend_version(
+    client: TestClient, staff_headers: dict[str, str], monkeypatch
+) -> None:
+    """「关于」弹窗谁都能开（#378）：只要登录，不要超管；值和 `/health/status` 是同一份"""
+    from backend import __version__
+
+    monkeypatch.setenv('GIT_SHA', '2b41a75c0ffee0123456789abcdef0123456789a')
+    res = client.get('/sys/dashboard/about', headers=staff_headers)
+    assert res.status_code == 200, res.text
+    assert res.json()['data'] == {'version': __version__, 'commit': '2b41a75'}
+    status = client.get('http://testserver/health/status').json()
+    assert {k: status[k] for k in ('version', 'commit')} == res.json()['data']
+    assert client.get('/sys/dashboard/about').status_code == 401

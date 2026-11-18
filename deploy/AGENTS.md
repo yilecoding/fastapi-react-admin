@@ -119,6 +119,51 @@ CI 给镜像打了 OCI 标签 `org.opencontainers.image.revision=<完整 SHA>`�
 ⚠️ 加 OCI 标签之前构建的镜像没有这个字段，`status` 会明说「无标签」，不要把它
 读成「和 main 一致」。
 
+## 线上是哪一版：不登服务器也要看得出来（#378）
+
+### 症状
+
+想确认生产站发没发到 v1.1.1，**没有任何一个公开地址答得出来**：`/version.json` 只有
+`buildId` / `builtAt`，`/api/health/status` 不带版本，只能拿构建时间对 Release 时间猜。
+上一节的 revision 标签要登进服务器 `docker inspect` 才读得到。
+
+### 修法
+
+提交号走**两条路**进镜像，缺一条都不行：
+
+| 走哪 | 谁读 | 没有它会怎样 |
+|---|---|---|
+| OCI 标签 `revision` / `version`（CI 的 `labels:`） | `prod.sh status`（`docker inspect`） | status 那一列是 `-` |
+| 构建参数 `GIT_SHA`（CI 的 `build-args:` → Dockerfile 的 `ARG`） | api：环境变量 → `/api/health/status` 的 `commit`；web：`vite.config.ts` → `/version.json` 的 `commit` | 接口上是 `commit: null` |
+
+🔴 **只打标签不传 `build-args`，镜像照常构建、照常跑，接口上就是 `commit: null`**——标签在镜像的
+元数据里，容器里的进程读不到。`prod.sh up` 会拦这种情形：镜像有 revision 标签而接口报 `null` → 失败。
+
+`prod.sh up` 探活之后拿接口**实际答的**提交号对三样（`verify_deployed_commit`）：
+`TAG=sha-…` 点名的提交、api 容器镜像的 revision 标签、web 的 `/version.json`。任一对不上就失败。
+
+🔴 **只在两边都拿得到时才判失败。** 回滚到 #378 之前的镜像，接口里根本没有 `commit` 字段；
+本机 `prod.sh build` 的镜像没有 revision 标签。这两种是「没法核对」不是「不一致」——拦下来等于把回滚堵死，
+而回滚是出事那一刻才跑的命令。
+
+⚠️ `prod.sh` 没有 jq，按 `"commit":"…"` 的字面形状取值，所以两份 JSON 都必须是**紧凑的一行**
+（`/health/status` 是 starlette 的 `JSONResponse`，`version.json` 是 `JSON.stringify`，都满足）。
+给 `version.json` 加缩进，自检会**静默跳过**（取不到 = 当成旧镜像），不会报错。
+
+`/health/status` 不鉴权，所以对外只给 `version` + 7 位 `commit`，分支名 / 构建时间 / 依赖版本都不给
+（`backend/common/build_info.py`）。Grafana 的 `/api/health` 是同一个取舍：匿名可读，返回 `version` + `commit`。
+
+**实测证据**（2026-11-17）：
+
+- `test_health.py` 32 条全过（SQL Server）：字段排在原有三个之后、响应仍以 `{"status":"ok","services"` 开头、
+  `GIT_SHA` 缺失 / 空串 / `unknown` / `<script>` 都是 `commit: null` 且照常 200、降级时照常 503
+- `verify_deployed_commit` 抽出来用假的 `curl` / `docker` 喂了 13 种情形：三种不一致 + 「有标签但 null」失败，
+  回滚到旧镜像 / 本机构建 / web 是旧镜像 / 接口没响应 / web 回了 HTML 都放行
+- `GIT_SHA=<40 位> pnpm --filter web build` → 构建产物里的 `version.json` 是 `{"buildId":"2b41a75-…","builtAt":"…","version":"1.1.1","commit":"2b41a75"}`，带 `version` 和 7 位 `commit`
+- ⚠️ **没验的**：真镜像里 `curl /health/status`（这台机器的 Docker 在 WSL 里，没构建镜像）、
+  CI 的 `build-args` 真的传进去了没有。合并后第一次 `build-images` 跑完，在服务器上 `prod.sh up` 看那一行
+  「线上提交号 … 一致」才算验完
+
 ## GHCR 在国内会被限速到几十 KB/s
 
 不是断连、也不报错：`docker compose pull` 挂着不动，看着像卡住了，其实是在以
