@@ -87,7 +87,6 @@ def test_menus_missing_what_their_type_needs_are_rejected(
         'data:text/html,probe',
         'mailto:a@example.com',
         '//example.com',
-        '/help',
         'https://',
         'https:example.com',
         'https:///example.com',
@@ -100,7 +99,33 @@ def test_menus_missing_what_their_type_needs_are_rejected(
 def test_menu_urls_reject_non_http_protocols(client, token_headers, menu_type, link):
     res = client.post(MENUS, headers=token_headers, json=_body(type=menu_type, link=link))
     assert res.status_code == 422, res.text
-    assert 'http(s)' in res.json()['msg'], res.json()
+    assert '地址' in res.json()['msg'], res.json()
+
+
+@pytest.mark.parametrize('link', ['/help', '/help?q=1#top'])
+def test_embedded_menu_accepts_same_origin_root_relative_url(client, token_headers, link):
+    body = _body(type=3, link=link)
+    created = client.post(MENUS, headers=token_headers, json=body)
+    assert created.json()['code'] == 200, created.text
+    rows = client.get(MENUS, headers=token_headers, params={'title': body['title']}).json()['data']
+    assert len(rows) == 1, rows
+    pk = rows[0]['id']
+    assert rows[0]['link'] == link
+    updated = client.put(f'{MENUS}/{pk}', headers=token_headers, json={**body, 'title': f'{body["title"]}改'})
+    assert updated.json()['code'] == 200, updated.text
+    assert client.get(f'{MENUS}/{pk}', headers=token_headers).json()['data']['link'] == link
+
+
+@pytest.mark.parametrize('link', ['/help', '/help?q=1'])
+def test_external_menu_rejects_relative_url(client, token_headers, link):
+    res = client.post(MENUS, headers=token_headers, json=_body(type=4, link=link))
+    assert res.status_code == 422, res.text
+
+
+@pytest.mark.parametrize('link', ['//attacker.example/path', 'help', r'/help\evil'])
+def test_embedded_menu_rejects_unsafe_or_ambiguous_relative_url(client, token_headers, link):
+    res = client.post(MENUS, headers=token_headers, json=_body(type=3, link=link))
+    assert res.status_code == 422, res.text
 
 
 @pytest.mark.parametrize('menu_type', [3, 4])

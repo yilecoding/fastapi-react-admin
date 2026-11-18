@@ -11,6 +11,7 @@ import {
 
 import { tabCapabilities, useTabActions } from './use-tab-actions'
 import { useTabStore, type Tab } from './tab-store'
+import { tryDesktop } from '../desktop'
 
 /**
  * 标签页的右键菜单。
@@ -41,6 +42,7 @@ export function TabMenu({
   }, [target])
 
   const { t } = useTranslation()
+  const canOpenInNewWindow = !tryDesktop()
   const tab: Tab | undefined = target ? tabs.find((x) => x.key === target.key) : undefined
   const cap = target ? tabCapabilities(tabs, target.key) : null
   if (!target || !tab || !cap) return null
@@ -71,12 +73,14 @@ export function TabMenu({
         <DropdownMenuItem data-testid="tab-menu-reload" onClick={run(() => act.reload(tab.key))}>
           <IconRefresh className="size-4" />{t('重新加载')}
         </DropdownMenuItem>
-        <DropdownMenuItem
-          data-testid="tab-menu-new-window"
-          onClick={run(() => act.openInNewWindow(tab))}
-        >
-          <IconExternalLink className="size-4" />{t('在新窗口打开')}
-        </DropdownMenuItem>
+        {canOpenInNewWindow && (
+          <DropdownMenuItem
+            data-testid="tab-menu-new-window"
+            onClick={run(() => act.openInNewWindow(tab))}
+          >
+            <IconExternalLink className="size-4" />{t('在新窗口打开')}
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuSeparator />
         <DropdownMenuItem
