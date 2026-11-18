@@ -592,73 +592,14 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      # 装 uv / ODBC / 后端依赖，建好并灌好 fba_test —— 和移动端 E2E（`mobile-e2e.yml`）共用，
+      # 步骤在 `.github/actions/e2e-backend/action.yml`
+      - uses: ./.github/actions/e2e-backend
         with:
-          python-version: "3.13"
-          enable-cache: true
-          cache-dependency-glob: apps/api/uv.lock
-      # 升到 setup-uv v10 后 `python-version` 只设了 UV_PYTHON、没装 Python（#245 实测：uv sync 报
-      # 「No interpreter found for Python 3.13」）。pyproject 是 python-downloads = "manual"，所以显式装一次。
-      - run: uv python install 3.13
-
-      - name: ODBC Driver 18
-        run: |
-          if ! command -v odbcinst >/dev/null || ! odbcinst -q -d | grep -q 'ODBC Driver 18 for SQL Server'; then
-            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-              | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
-            curl -fsSL "https://packages.microsoft.com/config/ubuntu/$(. /etc/os-release && echo "$VERSION_ID")/prod.list" \
-              | sudo tee /etc/apt/sources.list.d/mssql-release.list > /dev/null
-            sudo apt-get update -qq
-            sudo ACCEPT_EULA=Y apt-get install -y -qq msodbcsql18 unixodbc-dev
-          fi
-          odbcinst -q -d
+          mssql-container-id: ${{ job.services.mssql.id }}
 
       - name: pnpm install
         run: pnpm install --frozen-lockfile
-
-      - name: uv sync
-        working-directory: apps/api
-        run: uv sync --locked --no-group lint
-
-      # 🔴 这一步以前写的是 `cp backend/.env.example backend/.env` —— 而这个 job 的
-      # `ENV_FILE` 是 `.env.e2e`，没有任何一个进程会去读 `.env`。`backend/.env.e2e`
-      # 因此在 CI 里从来没被真正创建过：`_ensure_env_file()` 发现它缺失，会静默地
-      # 从 `.env.example` 自动生成一份空白替身（这是给本地开发用的兜底，触发在 CI
-      # 里纯属意外），日志里只有一行不起眼的警告。表现：E2E 的 REQUEST_LIMITER_ENABLED
-      # 拿不到 e2e 专用的 false，退回类定义的默认值 true。
-      #
-      # 现在照本地开发的路子来：直接复用 `.env.e2e.example`，它的 DB/Redis 主机、
-      # 端口、密码本来就是照这个 job 的 service 配置写的，不用再替换任何字段。
-      - name: .env.e2e
-        working-directory: apps/api
-        run: cp backend/.env.e2e.example backend/.env.e2e
-
-      - name: 建库（fba + fba_test）
-        env:
-          MSSQL_CID: ${{ job.services.mssql.id }}
-        run: |
-          SQLCMD="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P $DATABASE_PASSWORD -C -l 5"
-          for i in $(seq 1 40); do
-            if docker exec "$MSSQL_CID" $SQLCMD -Q "SELECT 1" > /dev/null 2>&1; then
-              echo "SQL Server 就绪（第 $i 次探测）"; break
-            fi
-            if [ "$i" -eq 40 ]; then
-              echo "SQL Server 120s 内没起来，容器日志："; docker logs --tail 80 "$MSSQL_CID"; exit 1
-            fi
-            sleep 3
-          done
-          docker exec "$MSSQL_CID" $SQLCMD -Q \
-            "IF DB_ID('fba') IS NULL CREATE DATABASE [fba]; IF DB_ID('fba_test') IS NULL CREATE DATABASE [fba_test];"
-
-      - name: 重建测试库
-        working-directory: apps/api
-        run: uv run --no-sync python -m backend.scripts.reset_test_db
-
-      - name: 测试库升到 head
-        working-directory: apps/api/backend
-        env:
-          DATABASE_SCHEMA: fba_test
-        run: uv run --no-sync alembic upgrade head
 
       - name: Install Playwright browsers
         run: pnpm --filter web exec playwright install chromium
