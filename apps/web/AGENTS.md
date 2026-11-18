@@ -54,6 +54,12 @@ file-viewer 一条真的懒加载链。所以那个触发点很窄，而更常�
   `git sha + 时间戳`（`vite.config.ts` 的 `buildIdPlugin`），生产镜像里没有
   `.git`（Dockerfile 只 COPY 源码），所以真正兜底的是时间戳 —— 每次构建必然不同
 
+- 🔴 **`version.json` 里的 `version` / `commit`（#378）不参与新版检测，`buildId` 才是判据。** 两者回答的不是
+  一个问题：`buildId` 每次构建必然不同；`commit` 是「哪份源码」，同一个提交重新构建（换了构建参数 / 基础镜像）
+  还是同一个值，拿它做判据就检测不到那次发版。`commit` 来自环境变量 `GIT_SHA`（Dockerfile 的 `ARG`），
+  给 `deploy/prod.sh` 和后端对账、给「关于」弹窗（帮助菜单，`shell/about-dialog.tsx`）显示用。
+  ⚠️ 那份 JSON 要保持紧凑的一行，原因见 [`deploy` 分册](../../deploy/AGENTS.md)「线上是哪一版」
+
 开发期 `apply: 'build'` 让插件整个不生效，`BUILD_ID` 回落成 `dev`，
 `/version.json` 404 → 检测静默跳过（dev 没有「发版」这件事）。
 E2E 靠 `page.route` 造一个不同的 `buildId` 来验，见

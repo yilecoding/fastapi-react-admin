@@ -178,7 +178,8 @@ def heartbeats(monkeypatch) -> Generator[Callable[..., None], None, None]:
 def _services(resp) -> dict:
     body = resp.json()
     assert 'code' not in body and 'data' not in body, f'被套进了响应信封：{body}'
-    assert list(body) == ['status', 'services', 'heartbeat_max_age_seconds'], body
+    # 🔴 顺序是契约：`version` / `commit`（#378）只能排在原有三个字段之后
+    assert list(body) == ['status', 'services', 'heartbeat_max_age_seconds', 'version', 'commit'], body
     assert list(body['services']) == _SERVICES, body
     return body['services']
 
@@ -221,6 +222,62 @@ def test_status_body_matches_the_monitor_keywords(client: TestClient, heartbeats
     assert not degraded.startswith('{"status":"ok","services"'), degraded
     assert '"worker":{"status":"ok"' not in degraded, degraded
     assert '"scheduler":{"status":"ok"' in degraded, degraded
+
+
+# ── 版本 / 提交号（#378）：顺带报出来，不参与健康判定 ──────────────────────────
+
+_FULL_SHA = '2b41a75c0ffee0123456789abcdef0123456789a'
+
+
+def test_status_reports_version_and_short_commit(client: TestClient, heartbeats, monkeypatch) -> None:
+    """镜像构建时写进 `GIT_SHA` 的是完整 40 位，对外只给前 7 位"""
+    from backend import __version__
+
+    heartbeats(scheduler=5, worker=5)
+    monkeypatch.setenv('GIT_SHA', _FULL_SHA)
+    resp = client.get(_STATUS)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body['version'] == __version__
+    assert body['commit'] == _FULL_SHA[:7]
+    assert _FULL_SHA not in resp.text, '完整提交号被下发了'
+    # 加了字段之后，监控方认的那个开头不能变
+    assert resp.text.startswith('{"status":"ok","services"'), resp.text
+
+
+@pytest.mark.parametrize('raw', [None, '', 'unknown', 'dev', 'abc', '<script>'])
+def test_status_without_a_commit_is_still_healthy(client: TestClient, heartbeats, monkeypatch, raw: str | None) -> None:
+    """🔴 提交号没带进来（本地开发 / 构建参数没传）是 `null`，不能 500，更不能把健康检查判红
+
+    不是提交号的值也当成没有：这条不鉴权，环境变量里写了什么不能原样吐出去
+    """
+    heartbeats(scheduler=5, worker=5)
+    if raw is None:
+        monkeypatch.delenv('GIT_SHA', raising=False)
+    else:
+        monkeypatch.setenv('GIT_SHA', raw)
+    resp = client.get(_STATUS)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()['status'] == 'ok'
+    assert resp.json()['commit'] is None
+    assert resp.text.startswith('{"status":"ok","services"'), resp.text
+
+
+def test_status_keeps_version_when_degraded(client: TestClient, heartbeats, monkeypatch) -> None:
+    """503 时照样带版本 —— 出事的时候正是最想知道「线上是哪一版」的时候；有没有提交号也不改变 503"""
+    heartbeats(scheduler=5, worker=settings.HEARTBEAT_MAX_AGE_SECONDS + 60)
+    for raw in (_FULL_SHA, ''):
+        monkeypatch.setenv('GIT_SHA', raw)
+        resp = client.get(_STATUS)
+        assert resp.status_code == 503, resp.text
+        assert resp.json()['status'] == 'degraded'
+        assert resp.json()['commit'] == (raw[:7] or None)
+
+
+def test_readiness_does_not_carry_version(client: TestClient, monkeypatch) -> None:
+    """ready 是 compose healthcheck 用的，保持最小 —— 版本只在 status 上"""
+    monkeypatch.setenv('GIT_SHA', _FULL_SHA)
+    assert list(client.get(_READY).json()) == ['status', 'checks']
 
 
 def test_status_503_when_worker_stops(client: TestClient, heartbeats) -> None:
