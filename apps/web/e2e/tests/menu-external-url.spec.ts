@@ -35,6 +35,10 @@ for (const { type, address, link } of [
       await page.getByRole("option", { name: "/profile", exact: true }).click()
       const rejected = ["file://///attacker/share/x.exe", "//attacker.example/page"]
       if (type === "外链") rejected.push("/favicon.svg")
+      else {
+        await expect(create.getByText("Web 端支持 /help 这样的同源根相对路径。桌面客户端需填写完整的 http(s) 地址。", { exact: true })).toBeVisible()
+        rejected.push("help", "./x", "docs/a")
+      }
       for (const invalid of rejected) {
         await create.getByTestId("m-link").fill(invalid)
         await create.getByTestId("m-submit").click()
@@ -109,3 +113,31 @@ for (const { type, address, link } of [
     }
   })
 }
+
+test("模拟桌面桥：相对内嵌菜单显示平台限制和修改方式", async ({
+  authedPage: page,
+  api,
+}) => {
+  const name = `E2EDesktop${uniqueCode("M").replaceAll("_", "")}`
+  await api.post(MENUS, {
+    name, title: name, type: 3, path: "/profile", link: "/favicon.svg",
+    sort: 0, status: 1, display: 1,
+  })
+  try {
+    // 先走真实 Web 会话恢复，再设置能力标记；此用例不模拟 Electron IPC/认证。
+    await page.goto("/system/menu")
+    const link = page.locator('[data-sidebar="sidebar"]').getByRole("link", { name, exact: true })
+    await expect(link).toBeVisible()
+    await page.evaluate(() => Object.defineProperty(window, "desktop", { value: {}, configurable: true }))
+    await link.click()
+    await expect(page.getByTestId("embedded-notice")).toContainText(
+      "桌面客户端无法加载相对内嵌地址。请到「菜单管理」将地址改为完整的 http(s) 地址，或在 Web 端打开。"
+    )
+    await expect(page.getByTestId("embedded-frame")).toHaveCount(0)
+  } finally {
+    const menus = flatten((await api.get(MENUS)) as Menu[])
+    for (const menu of menus.filter((row) => row.name === name)) {
+      await api.del(`${MENUS}/${menu.id}`)
+    }
+  }
+})
