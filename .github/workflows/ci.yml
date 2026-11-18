@@ -830,9 +830,17 @@ jobs:
       # `labels` 把提交号写进镜像（OCI 标准字段），`deploy/prod.sh status` 靠它
       # 回答「服务器上跑的是哪个提交、落后 main 多少」——没有这个标签就只能比
       # 镜像摘要，而摘要在走加速器 retag 之后本地根本对不上。
-      - name: 短 SHA
+      #
+      # 🔴 提交号要**同时**走 `build-args: GIT_SHA`（#378）。标签只有登进服务器 `docker inspect`
+      # 才读得到；`/api/health/status` 和 `/version.json` 要的是烙进镜像**内容**里的那一份
+      # （api 是环境变量，web 是构建产物）。只打标签不传参数，接口上就是 `commit: null`。
+      # `org.opencontainers.image.version` 取 `apps/web/package.json`（和后端 `__version__`
+      # 同值，release.yml 校验）；main 上两次发版之间的镜像带的是「上一个版本号」，区分靠 revision。
+      - name: 短 SHA 与版本号
         id: sha
-        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./apps/web/package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Build & push api image
         id: api
@@ -840,6 +848,8 @@ jobs:
         with:
           context: ./apps/api
           file: ./apps/api/Dockerfile.prod
+          build-args: |
+            GIT_SHA=${{ github.sha }}
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/fra-api:sha-${{ steps.sha.outputs.short }}
@@ -849,6 +859,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.sha.outputs.version }}
           cache-from: type=gha,scope=fra-api
           cache-to: type=gha,mode=max,scope=fra-api
 
@@ -860,6 +871,7 @@ jobs:
           file: ./apps/web/Dockerfile
           build-args: |
             VITE_API_BASE=
+            GIT_SHA=${{ github.sha }}
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/fra-web:sha-${{ steps.sha.outputs.short }}
@@ -869,6 +881,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.sha.outputs.version }}
           cache-from: type=gha,scope=fra-web
           cache-to: type=gha,mode=max,scope=fra-web
 

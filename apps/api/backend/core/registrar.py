@@ -20,6 +20,7 @@ from starlette_context.middleware import ContextMiddleware
 from starlette_context.plugins import RequestIdPlugin
 
 from backend import __version__
+from backend.common.build_info import build_info
 from backend.common.cache.pubsub import cache_pubsub_manager
 from backend.common.exception.exception_handler import register_exception
 from backend.common.lifespan import lifespan_manager
@@ -320,6 +321,10 @@ def register_health(app: FastAPI) -> None:
         那是对方的事，报进来就是天天误报，监控方很快就会把它静音。
 
         字段顺序是契约的一部分：监控方会按 `{"status":"ok","services"` 这类关键字匹配。
+        🔴 **新字段只能追加在最后**（`version` / `commit` 就是这么加的，#378），插到前面会让监控静默失配。
+
+        `version` / `commit` 只是顺带报出来，**不参与 200 / 503 判定**：提交号没带进镜像时是 `null`，
+        不能因此把健康检查判红。这条不鉴权，能放什么见 `common/build_info.py`。
         """
         # 三项并发，各自带超时：最慢的 DB 那项 5 秒封顶，不会叠加成 5 + 3 + 3
         db_err, redis_err, heartbeats = await asyncio.gather(_check_database(), _check_redis(), _check_heartbeats())
@@ -336,6 +341,7 @@ def register_health(app: FastAPI) -> None:
                 'status': 'ok' if ok else 'degraded',
                 'services': services,
                 'heartbeat_max_age_seconds': settings.HEARTBEAT_MAX_AGE_SECONDS,
+                **build_info(),
             },
             status_code=200 if ok else 503,
         )
