@@ -41,6 +41,11 @@ fail() {
   exit 1
 }
 info() { printf '\033[36m·\033[0m %s\n' "$*" >&2; }
+warn() {
+  printf '\033[33m!\033[0m %s\n' "$1" >&2
+  shift
+  for line in "$@"; do printf '  %s\n' "$line" >&2; done
+}
 ok() { printf '\033[32m✓\033[0m %s\n' "$*" >&2; }
 
 command=${1:-}
@@ -307,10 +312,24 @@ probe_after_up() {
     "503 + body 里列着 database / redis 哪项坏了；503 带 X-FBA-Updating 头 = api 没起来；404 = web 的 nginx 配置没跟上"
   ok "经 web 探 /api/health/ready → 200"
   local status_body
-  status_body=$(curl -s -m 10 "$base/api/health/status" || true)
+  status_body=$(fetch_status_body "$base")
   info "各服务状态 /api/health/status → ${status_body:-无响应}"
   info "scheduler / worker 不是 ok 的话过 3 分钟再看一次，还不是就查那个容器"
   verify_deployed_commit "$base" "$status_body"
+}
+
+# 取 /api/health/status 的响应体，**认得出来才算数**（里面有 `"services"`，200 和 503 降级都有）。
+# 超时、回了 HTML、nginx 替挂掉的 api 回的 `{"status":"unavailable"}` 都不算，隔 3 秒再取，最多 5 次。
+# 🔴 不重试的话，这一下恰好没取到就会被下面当成「旧镜像，没法核对」放行 —— 提交号核对**静默**地没做，
+# 而部署照样报成功（#379 评审）。重试完还取不到，原样交回去，由 verify_deployed_commit 大声说出来
+fetch_status_body() {
+  local base=$1 body=""
+  for _ in 1 2 3 4 5; do
+    body=$(curl -s -m 10 "$base/api/health/status" || true)
+    case $body in *'"services"'*) break ;; esac
+    sleep 3
+  done
+  printf '%s' "$body"
 }
 
 # ── up 之后核对：线上答的提交号，是不是刚部署的那个（#378）────────────────────
@@ -323,10 +342,18 @@ probe_after_up() {
 # 本机 `build` 的镜像没有 revision 标签 —— 这两种都是「没法核对」，不是「不一致」，拦下来等于把回滚堵死
 verify_deployed_commit() {
   local base=$1 body=$2 served tag api_id label web_commit
+  # 三种响应分开说，别揉成一句「跳过」：只有第二种是真的「没法核对」
   case $body in
     *'"commit"'*) ;;
+    *'"services"'*)
+      info "api 没报提交号（镜像早于 #378），跳过提交号核对"
+      return 0
+      ;;
     *)
-      info "api 没报提交号（镜像早于 #378，或接口没响应），跳过提交号核对"
+      # 重试过了还是认不出来。不判失败：这一步原来就只打印不卡，而回滚时最不该被一个新加的检查拦住。
+      # 但要用警告而不是 info —— 「没核对」和「核对过了」不能长得一样
+      warn "/api/health/status 没给出认得出来的响应，提交号**没有核对**" \
+        "这不是「一致」。过一会儿手工看：curl -s $base/api/health/status"
       return 0
       ;;
   esac
@@ -365,6 +392,28 @@ verify_deployed_commit() {
   ok "线上提交号 $served（api${web_commit:+ · web}${label:+ · 镜像标签} 一致）"
 }
 
+# ── build 时烙进镜像的提交号 ─────────────────────────────────────────────
+# 显式给了 GIT_SHA 就用它；否则取仓库的 HEAD。
+# 🔴 **工作区有没提交的改动时不烙**（输出空串 → 接口上是 commit: null）。那样构建出来的镜像，内容比 HEAD 多，
+# 烙上 HEAD 的提交号等于让线上自称是一份它不是的源码 —— 「不知道」比「错的」好（#379 评审）。
+# 未跟踪的文件也算：它们一样会被 COPY 进镜像
+build_commit() {
+  if [ -n "${GIT_SHA:-}" ]; then
+    printf '%s\n' "$GIT_SHA"
+    return 0
+  fi
+  local sha dirty
+  sha=$(git -C "$project_dir" rev-parse HEAD 2>/dev/null || true)
+  [ -n "$sha" ] || return 0
+  dirty=$(git -C "$project_dir" status --porcelain 2>/dev/null || true)
+  if [ -n "$dirty" ]; then
+    warn "工作区有没提交的改动，这次构建不烙提交号（接口上会是 commit: null）" \
+      "要烙就先提交，或显式指定：GIT_SHA=<提交号> bash prod.sh build"
+    return 0
+  fi
+  printf '%s\n' "$sha"
+}
+
 # ── 分发 ─────────────────────────────────────────────────────────────────
 require_docker
 info "compose: $compose"
@@ -378,11 +427,9 @@ case $command in
   # 源码，这条会在 compose 找不到 ./apps/api 时**大声**失败，不是静默的
   #
   # 提交号从仓库里取了传给构建（compose 的 `args: GIT_SHA`），`/api/health/status` 和 `/version.json`
-  # 才报得出 commit（#378）。⚠️ 取的是 HEAD：工作区有没提交的改动时，镜像里的内容比这个提交号多
+  # 才报得出 commit（#378）。
   build)
-    if [ -z "${GIT_SHA:-}" ]; then
-      GIT_SHA=$(git -C "$project_dir" rev-parse HEAD 2>/dev/null || true)
-    fi
+    GIT_SHA=$(build_commit)
     export GIT_SHA
     dc build
     ;;
