@@ -12,6 +12,7 @@ import {
   InputGroup, InputGroupAddon, InputGroupInput,
 } from '@admin/ui/components/input-group'
 import { Skeleton } from '@admin/ui/components/skeleton'
+import { QueryError } from '@admin/ui/components/query-error'
 import { Switch } from '@admin/ui/components/switch'
 import { cn } from '@admin/ui/lib/utils'
 
@@ -80,7 +81,8 @@ export function ConfigPage({
   onSearchChange?: (n: ConfigSearch) => void
 }) {
   const { t } = useTranslation()
-  const { data, isPending } = useQuery(configsQuery)
+  const query = useQuery(configsQuery)
+  const { data, isPending } = query
   const all = React.useMemo(() => data ?? [], [data])
 
   const [draft, setDraft] = React.useState<Record<string, string>>({})
@@ -285,6 +287,7 @@ export function ConfigPage({
               size="sm"
               variant="outline"
               className="h-9"
+              disabled={query.isError}
               data-testid="add-config"
               onClick={() => {
                 setEditing(null)
@@ -299,7 +302,7 @@ export function ConfigPage({
             size="sm"
             variant="ghost"
             className="h-9"
-            disabled={dirty.length === 0}
+            disabled={query.isError || dirty.length === 0}
             data-testid="discard-draft"
             onClick={() => setDraft({})}
           >
@@ -311,7 +314,7 @@ export function ConfigPage({
               size="sm"
               className="h-9"
               data-testid="save-draft"
-              disabled={dirty.length === 0 || blocking.length > 0 || save.isPending}
+              disabled={query.isError || dirty.length === 0 || blocking.length > 0 || save.isPending}
               onClick={() => {
                 setErr(null)
                 setSaveOpen(true)
@@ -346,134 +349,140 @@ export function ConfigPage({
         {/* 和主从页共用「固定宽左栏 + 自适应右区」的几何关系。
             min-w-0 让右区在空间不足时真正收缩，不被行内控件顶出横向滚动条。 */}
         <section className="@container/panel min-w-0 flex-1" data-testid="config-panel">
-          {isPending && (
-            <div className="flex flex-col gap-3" data-testid="config-skeleton">
-              {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
-            </div>
-          )}
-
-          {!isPending && searching && (
-            <p className="pb-3 text-sm text-muted-foreground" data-testid="search-scope">
-              {t('全部分类中匹配「{{q}}」的 {{n}} 项', { q: search.q, n: matched.length })}
-            </p>
-          )}
-
-          {/* 分类头：图标 + 标题 + 说明 + 组总开关。
-              图标徽标和下面每个小节、以及个人中心 Block 同一套视觉——
-              一屏扫下来「这是哪个分类」不用读字 */}
-          {!isPending && !searching && (
-            <div className="flex flex-col gap-3 pb-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-2.5">
-                  <span className="mt-0.5 grid size-7 shrink-0 place-content-center rounded-md bg-primary/10 text-primary [&>svg]:size-4">
-                    {railIcon(group)}
-                  </span>
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <h2 className="text-base font-semibold" data-testid="panel-title">
-                      {t(railItem(group)?.label ?? group)}
-                    </h2>
-                    {desc && <p className="text-xs text-muted-foreground">{t(desc)}</p>}
-                  </div>
+          {query.isError ? (
+            <QueryError error={query.error} onRetry={() => { void query.refetch() }} />
+          ) : (
+            <>
+              {isPending && (
+                <div className="flex flex-col gap-3" data-testid="config-skeleton">
+                  {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)}
                 </div>
-                {groupSwitch && (
-                  <div className="flex shrink-0 items-center gap-2.5 rounded-md border border-border px-3 py-2">
-                    <div className="flex flex-col items-end">
-                      <span className="text-xs font-medium">{t('本组配置生效')}</span>
-                      <code className="text-2xs text-muted-foreground">{groupSwitch.key}</code>
-                    </div>
-                    <Switch
-                      checked={valueOf(groupSwitch) === '1'}
-                      data-testid={`v-${groupSwitch.key}`}
-                      onCheckedChange={(c) =>
-                        setDraft((d) => ({ ...d, [groupSwitch.id]: c ? '1' : '0' }))
-                      }
-                      className={cn(
-                        valueOf(groupSwitch) !== groupSwitch.value &&
-                          'ring-2 ring-amber-500/40 ring-offset-2 ring-offset-background'
-                      )}
-                    />
-                  </div>
-                )}
-              </div>
-              {groupOff && (
-                <Alert tone="warning" className="py-2 text-xs" data-testid="group-off-banner">
-                  <Trans
-                    t={t}
-                    i18nKey="这一组的总开关是关的 —— 后端整组不加载，下面的值改了也不会生效，实际用的是 <c>.env</c> 里的默认值。"
-                    components={{ c: <code /> }}
-                  />
-                </Alert>
               )}
-            </div>
-          )}
 
-          {!isPending && sections.length === 0 && (
-            <p className="py-12 text-center text-sm text-muted-foreground" data-testid="panel-empty">
-              {searching ? t('没有匹配的设置项') : t('这一类还没有参数')}
-            </p>
-          )}
+              {!isPending && searching && (
+                <p className="pb-3 text-sm text-muted-foreground" data-testid="search-scope">
+                  {t('全部分类中匹配「{{q}}」的 {{n}} 项', { q: search.q, n: matched.length })}
+                </p>
+              )}
 
-          {/* 小节：图标徽标 + 标题，和个人中心 Block 同一套版式 ——
-              不套卡片框，块与块的分隔交给一根 border-b。原来每个小节自己是一张
-              `rounded-lg border` 卡片、标题栏还带 `bg-muted/30` 底色，
-              一屏堆 5～6 个小节看着比个人中心「重」不少，而这里并不需要
-              这层框：左边已有分类导航，右侧小节边界也足够明确，
-              「这一块到哪为止」本来就看得出来 */}
-          <div className={cn('flex flex-col gap-5', groupOff && 'opacity-60')}>
-            {sections.map(([title, items]) => {
-              const summary = sectionSummary(title, getValue)
-              return (
-                <section
-                  key={title}
-                  className="flex flex-col gap-3 border-b border-border/60 pb-5 last:border-0 last:pb-0"
-                  data-testid={`section-${title}`}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="flex items-start gap-2.5">
+              {/* 分类头：图标 + 标题 + 说明 + 组总开关。
+                  图标徽标和下面每个小节、以及个人中心 Block 同一套视觉——
+                  一屏扫下来「这是哪个分类」不用读字 */}
+              {!isPending && !searching && (
+                <div className="flex flex-col gap-3 pb-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-2.5">
                       <span className="mt-0.5 grid size-7 shrink-0 place-content-center rounded-md bg-primary/10 text-primary [&>svg]:size-4">
-                        {sectionIcon(title)}
+                        {railIcon(group)}
                       </span>
-                      <div className="flex min-w-0 flex-col gap-0.5">
-                        <h3 className="text-sm font-semibold">{t(title)}</h3>
-                        {/* 参照产品在控件右上角回显当前值；策略型参数单个值回显没意义，
-                            组合起来的**效果**才是人要确认的 */}
-                        {summary && (
-                          <p className="text-xs leading-relaxed text-muted-foreground" data-testid={`summary-${title}`}>
-                            {summary}
-                          </p>
-                        )}
+                      <div className="flex min-w-0 flex-col gap-1">
+                        <h2 className="text-base font-semibold" data-testid="panel-title">
+                          {t(railItem(group)?.label ?? group)}
+                        </h2>
+                        {desc && <p className="text-xs text-muted-foreground">{t(desc)}</p>}
                       </div>
                     </div>
-                    {title === UNMANAGED_SECTION && (
-                      <StatusPill tone="muted">{t('控件按值推断')}</StatusPill>
+                    {groupSwitch && (
+                      <div className="flex shrink-0 items-center gap-2.5 rounded-md border border-border px-3 py-2">
+                        <div className="flex flex-col items-end">
+                          <span className="text-xs font-medium">{t('本组配置生效')}</span>
+                          <code className="text-2xs text-muted-foreground">{groupSwitch.key}</code>
+                        </div>
+                        <Switch
+                          checked={valueOf(groupSwitch) === '1'}
+                          data-testid={`v-${groupSwitch.key}`}
+                          onCheckedChange={(c) =>
+                            setDraft((d) => ({ ...d, [groupSwitch.id]: c ? '1' : '0' }))
+                          }
+                          className={cn(
+                            valueOf(groupSwitch) !== groupSwitch.value &&
+                              'ring-2 ring-amber-500/40 ring-offset-2 ring-offset-background'
+                          )}
+                        />
+                      </div>
                     )}
                   </div>
-                  {/* 内容缩进到和标题文字对齐（图标 28px + gap 10px = 2.375rem），
-                      和个人中心 Block 同一条规则 —— 窄屏不缩进，那时是可用宽度 */}
-                  <div className="flex flex-col overflow-hidden rounded-lg border border-border/60 sm:ms-[2.375rem]">
-                    {items.map((c) => (
-                      <SettingRow
-                        key={c.id}
-                        item={c}
-                        value={valueOf(c)}
-                        error={errors[c.key]}
-                        disabledReason={groupOff ? null : (metaOf(c.key)?.disabledBy?.(
-                          (k) => getValue(k) ?? ''
-                        ) ?? null)}
-                        onChange={(v) => setDraft((d) => ({ ...d, [c.id]: v }))}
-                        onEdit={(x) => {
-                          setEditing(x)
-                          setSheetOpen(true)
-                        }}
-                        onHistory={setHistoryOf}
-                        onDelete={setPendingDelete}
+                  {groupOff && (
+                    <Alert tone="warning" className="py-2 text-xs" data-testid="group-off-banner">
+                      <Trans
+                        t={t}
+                        i18nKey="这一组的总开关是关的 —— 后端整组不加载，下面的值改了也不会生效，实际用的是 <c>.env</c> 里的默认值。"
+                        components={{ c: <code /> }}
                       />
-                    ))}
-                  </div>
-                </section>
-              )
-            })}
-          </div>
+                    </Alert>
+                  )}
+                </div>
+              )}
+
+              {!isPending && sections.length === 0 && (
+                <p className="py-12 text-center text-sm text-muted-foreground" data-testid="panel-empty">
+                  {searching ? t('没有匹配的设置项') : t('这一类还没有参数')}
+                </p>
+              )}
+
+              {/* 小节：图标徽标 + 标题，和个人中心 Block 同一套版式 ——
+                  不套卡片框，块与块的分隔交给一根 border-b。原来每个小节自己是一张
+                  `rounded-lg border` 卡片、标题栏还带 `bg-muted/30` 底色，
+                  一屏堆 5～6 个小节看着比个人中心「重」不少，而这里并不需要
+                  这层框：左边已有分类导航，右侧小节边界也足够明确，
+                  「这一块到哪为止」本来就看得出来 */}
+              <div className={cn('flex flex-col gap-5', groupOff && 'opacity-60')}>
+                {sections.map(([title, items]) => {
+                  const summary = sectionSummary(title, getValue)
+                  return (
+                    <section
+                      key={title}
+                      className="flex flex-col gap-3 border-b border-border/60 pb-5 last:border-0 last:pb-0"
+                      data-testid={`section-${title}`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5">
+                          <span className="mt-0.5 grid size-7 shrink-0 place-content-center rounded-md bg-primary/10 text-primary [&>svg]:size-4">
+                            {sectionIcon(title)}
+                          </span>
+                          <div className="flex min-w-0 flex-col gap-0.5">
+                            <h3 className="text-sm font-semibold">{t(title)}</h3>
+                            {/* 参照产品在控件右上角回显当前值；策略型参数单个值回显没意义，
+                                组合起来的**效果**才是人要确认的 */}
+                            {summary && (
+                              <p className="text-xs leading-relaxed text-muted-foreground" data-testid={`summary-${title}`}>
+                                {summary}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {title === UNMANAGED_SECTION && (
+                          <StatusPill tone="muted">{t('控件按值推断')}</StatusPill>
+                        )}
+                      </div>
+                      {/* 内容缩进到和标题文字对齐（图标 28px + gap 10px = 2.375rem），
+                          和个人中心 Block 同一条规则 —— 窄屏不缩进，那时是可用宽度 */}
+                      <div className="flex flex-col overflow-hidden rounded-lg border border-border/60 sm:ms-[2.375rem]">
+                        {items.map((c) => (
+                          <SettingRow
+                            key={c.id}
+                            item={c}
+                            value={valueOf(c)}
+                            error={errors[c.key]}
+                            disabledReason={groupOff ? null : (metaOf(c.key)?.disabledBy?.(
+                              (k) => getValue(k) ?? ''
+                            ) ?? null)}
+                            onChange={(v) => setDraft((d) => ({ ...d, [c.id]: v }))}
+                            onEdit={(x) => {
+                              setEditing(x)
+                              setSheetOpen(true)
+                            }}
+                            onHistory={setHistoryOf}
+                            onDelete={setPendingDelete}
+                          />
+                        ))}
+                      </div>
+                    </section>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </section>
       </div>
 
