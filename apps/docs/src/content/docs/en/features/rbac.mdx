@@ -86,6 +86,10 @@ No. When a role's permissions, data scopes or members change, the affected users
 | **Embedded page** | Opens an external address in an iframe inside a tab (route `/embedded/<name>`); only http / https are loaded, and the page also shows the address and an "open in new tab" button | Address |
 | **External link** | Opens in a new browser tab | Address |
 
+In the web app, embedded URLs accept complete HTTP(S) URLs and same-origin root-relative paths such as `/help`. The desktop client requires a complete HTTP(S) URL; opening a relative menu displays instructions to update the URL or use the web app. External links always require complete HTTP(S) URLs.
+
+When upgrading, check existing embedded URLs: relative values without a leading `/`, such as `help`, `./x`, and `docs/a`, no longer load and are rejected on save. Confirm the intended destination before changing them to root-relative paths such as `/help`, `/x`, and `/docs/a`, or to complete HTTP(S) URLs.
+
 - The menu form's **path** can only be picked from existing frontend routes; the **name** must be English letters and digits, starting with a letter.
 - A **hidden** menu (not shown in the sidebar) still opens by URL; Profile is one.
 - **Disabling a directory disables its whole branch**: it disappears from the sidebar and its permission codes stop counting; re-enabling brings it back. Superusers only lose the sidebar entry; pages without a permission guard still open by URL.

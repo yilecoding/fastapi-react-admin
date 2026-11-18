@@ -7,7 +7,8 @@ import { Skeleton } from '@admin/ui/components/skeleton'
 
 import { sidebarQuery } from '../../auth/queries'
 import { MenuType, type SidebarNode } from '../../api-client/sidebar-types'
-import { embeddedUrl } from '../../desktop/http-url'
+import { isDesktop } from '../../desktop'
+import { embeddedSrc, embeddedUrl } from '../../desktop/http-url'
 
 /**
  * 内嵌页面的宿主（`MenuType.embedded = 3`）。
@@ -19,18 +20,6 @@ import { embeddedUrl } from '../../desktop/http-url'
  * 标题不写在路由的 `staticData` 里：内嵌页每个的名字都不一样，
  * `use-sync-tabs` 会在 `staticData.title` 缺失时回退到后端菜单的 `meta.title`。
  */
-
-/** 只放行 http(s)。`javascript:` 开头的 iframe src 会**继承父页面的源**执行 —— 那是 XSS，不是内嵌 */
-function safeSrc(raw: string): string | null {
-  const safe = embeddedUrl(raw)
-  if (!safe) return null
-  try {
-    const url = new URL(safe, window.location.origin)
-    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null
-  } catch {
-    return null
-  }
-}
 
 function findByName(nodes: SidebarNode[], name: string): SidebarNode | undefined {
   for (const n of nodes) {
@@ -93,16 +82,20 @@ export function EmbeddedPage({ params }: { params?: { name?: string } }) {
     )
   }
 
-  const src = safeSrc(node.meta.iframeSrc)
+  const desktop = isDesktop()
+  const src = embeddedSrc(node.meta.iframeSrc, window.location.origin, desktop)
+  const desktopRelative = desktop && embeddedUrl(node.meta.iframeSrc)?.startsWith('/')
 
   if (!src) {
     return (
       <Notice
         title={t("内嵌地址不可用")}
         detail={
-          node.meta.iframeSrc
-            ? t('地址 "{{src}}" 不是 http(s)。只有 http 和 https 会被加载 —— 其它协议（尤其 javascript:）在 iframe 里会继承本站的源执行。', { src: node.meta.iframeSrc })
-            : t('这条菜单的内嵌地址是空的。去「菜单管理」补上。')
+          desktopRelative
+            ? t('桌面客户端无法加载相对内嵌地址。请到「菜单管理」将地址改为完整的 http(s) 地址，或在 Web 端打开。')
+            : node.meta.iframeSrc
+              ? t('地址 "{{src}}" 无效。请填写完整的 http(s) 地址；Web 端也支持以单个 / 开头的同源根相对路径。', { src: node.meta.iframeSrc })
+              : t('这条菜单的内嵌地址是空的。去「菜单管理」补上。')
         }
       />
     )
