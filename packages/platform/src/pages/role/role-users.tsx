@@ -9,6 +9,7 @@ import { formatDateTime } from '@admin/i18n'
 import { Button } from '@admin/ui/components/button'
 import { Checkbox } from '@admin/ui/components/checkbox'
 import { DataTableSkeletonRows } from '@admin/ui/components/data-table'
+import { QueryError } from '@admin/ui/components/query-error'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@admin/ui/components/table'
@@ -77,14 +78,19 @@ export function RoleUsers({
     <div className="flex flex-col gap-3 content-scroll:lg:min-h-0 content-scroll:lg:flex-1" data-testid="role-users">
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         <Can perm="sys:role:edit">
-          <Button size="sm" onClick={() => setPickerOpen(true)} data-testid="role-users-add">
+          <Button
+            size="sm"
+            disabled={query.isError}
+            onClick={() => setPickerOpen(true)}
+            data-testid="role-users-add"
+          >
             <IconUserPlus className="size-4" />{t('添加用户')}
           </Button>
           {pickedOnPage.length > 0 && (
             <Button
               variant="outline" size="sm"
               className="h-8 text-destructive hover:text-destructive"
-              disabled={remove.isPending}
+              disabled={remove.isPending || query.isError}
               onClick={() => setPendingRemove(pickedOnPage)}
               data-testid="role-users-bulk-remove"
             >
@@ -92,14 +98,16 @@ export function RoleUsers({
             </Button>
           )}
         </Can>
-        <span className="flex items-start gap-1.5 text-xs text-muted-foreground" data-testid="role-users-hint">
-          <IconInfoCircle className="mt-px size-3.5 shrink-0" />
-          {/* 整句一条 key：前半以「，」结尾的碎 key 换成英文语序就散架 */}
-          {t('共 {{n}} 人持有「{{role}}」，改这个角色的权限会同时影响他们全部。', {
-            n: total,
-            role: role.name,
-          })}
-        </span>
+        {!query.isError && (
+          <span className="flex items-start gap-1.5 text-xs text-muted-foreground" data-testid="role-users-hint">
+            <IconInfoCircle className="mt-px size-3.5 shrink-0" />
+            {/* 整句一条 key：前半以「，」结尾的碎 key 换成英文语序就散架 */}
+            {t('共 {{n}} 人持有「{{role}}」，改这个角色的权限会同时影响他们全部。', {
+              n: total,
+              role: role.name,
+            })}
+          </span>
+        )}
       </div>
 
       <div
@@ -107,89 +115,97 @@ export function RoleUsers({
         data-testid="role-users-table"
         aria-busy={isFetching}
       >
-        <Table>
-          <TableHeader className="sticky top-0 z-10 bg-muted shadow-[inset_0_-1px_0_var(--border)]">
-            <TableRow>
-              {editable && (
-                <TableHead className="w-10">
-                  <Checkbox
-                    checked={allChecked}
-                    indeterminate={pickedOnPage.length > 0 && !allChecked}
-                    disabled={rows.length === 0}
-                    onCheckedChange={() =>
-                      setPicked(allChecked ? new Set() : new Set(rows.map((u) => u.id)))
-                    }
-                    data-testid="role-users-check-all"
-                    aria-label={t("全选本页用户")}
-                  />
-                </TableHead>
-              )}
-              <TableHead>{t('用户名')}</TableHead>
-              <TableHead>{t('昵称')}</TableHead>
-              <TableHead>{t('部门')}</TableHead>
-              <TableHead>{t('状态')}</TableHead>
-              <TableHead>{t('最后登录')}</TableHead>
-              <TableHead className="w-16" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isPending ? (
-              <DataTableSkeletonRows rows={5} columns={editable ? 7 : 6} />
-            ) : rows.length === 0 ? (
+        {query.isError ? (
+          <QueryError
+            error={query.error}
+            onRetry={() => { void query.refetch() }}
+            className="m-3"
+          />
+        ) : (
+          <Table>
+            <TableHeader className="sticky top-0 z-10 bg-muted shadow-[inset_0_-1px_0_var(--border)]">
               <TableRow>
-                <TableCell colSpan={editable ? 7 : 6} className="h-24 text-center text-muted-foreground">
-                  {t('还没有用户持有这个角色')}
-                </TableCell>
+                {editable && (
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allChecked}
+                      indeterminate={pickedOnPage.length > 0 && !allChecked}
+                      disabled={rows.length === 0}
+                      onCheckedChange={() =>
+                        setPicked(allChecked ? new Set() : new Set(rows.map((u) => u.id)))
+                      }
+                      data-testid="role-users-check-all"
+                      aria-label={t("全选本页用户")}
+                    />
+                  </TableHead>
+                )}
+                <TableHead>{t('用户名')}</TableHead>
+                <TableHead>{t('昵称')}</TableHead>
+                <TableHead>{t('部门')}</TableHead>
+                <TableHead>{t('状态')}</TableHead>
+                <TableHead>{t('最后登录')}</TableHead>
+                <TableHead className="w-16" />
               </TableRow>
-            ) : (
-              rows.map((u) => (
-                  <TableRow key={u.id} data-testid={`role-user-${u.username}`}>
-                    {editable && (
-                      <TableCell>
-                        <Checkbox
-                          checked={picked.has(u.id)}
-                          onCheckedChange={() => toggle(u.id)}
-                          data-testid={`role-user-check-${u.username}`}
-                          aria-label={t('选择 {{name}}', { name: u.username })}
-                        />
+            </TableHeader>
+            <TableBody>
+              {isPending ? (
+                <DataTableSkeletonRows rows={5} columns={editable ? 7 : 6} />
+              ) : rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={editable ? 7 : 6} className="h-24 text-center text-muted-foreground">
+                    {t('还没有用户持有这个角色')}
+                  </TableCell>
+                </TableRow>
+              ) : (
+                rows.map((u) => (
+                    <TableRow key={u.id} data-testid={`role-user-${u.username}`}>
+                      {editable && (
+                        <TableCell>
+                          <Checkbox
+                            checked={picked.has(u.id)}
+                            onCheckedChange={() => toggle(u.id)}
+                            data-testid={`role-user-check-${u.username}`}
+                            aria-label={t('选择 {{name}}', { name: u.username })}
+                          />
+                        </TableCell>
+                      )}
+                      <TableCell className="text-sm font-medium">{u.username}</TableCell>
+                      <TableCell className="text-sm">{u.nickname || '—'}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{u.dept?.name ?? '—'}</TableCell>
+                      <TableCell><StatusBadge value={u.status} /></TableCell>
+                      <TableCell className="text-sm tabular-nums text-muted-foreground">
+                        {formatDateTime(u.last_login_time)}
                       </TableCell>
-                    )}
-                    <TableCell className="text-sm font-medium">{u.username}</TableCell>
-                    <TableCell className="text-sm">{u.nickname || '—'}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{u.dept?.name ?? '—'}</TableCell>
-                    <TableCell><StatusBadge value={u.status} /></TableCell>
-                    <TableCell className="text-sm tabular-nums text-muted-foreground">
-                      {formatDateTime(u.last_login_time)}
-                    </TableCell>
-                    <TableCell>
-                      <Can perm="sys:role:edit">
-                        <Button
-                          variant="ghost" size="sm"
-                          className="h-7 text-destructive hover:text-destructive"
-                          disabled={remove.isPending}
-                          onClick={() => setPendingRemove([u])}
-                          data-testid={`role-user-remove-${u.username}`}
-                        >
-                          {t('移出')}
-                        </Button>
-                      </Can>
-                    </TableCell>
-                  </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+                      <TableCell>
+                        <Can perm="sys:role:edit">
+                          <Button
+                            variant="ghost" size="sm"
+                            className="h-7 text-destructive hover:text-destructive"
+                            disabled={remove.isPending}
+                            onClick={() => setPendingRemove([u])}
+                            data-testid={`role-user-remove-${u.username}`}
+                          >
+                            {t('移出')}
+                          </Button>
+                        </Can>
+                      </TableCell>
+                    </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        )}
       </div>
 
       {totalPages > 1 && (
         <div className="flex shrink-0 items-center justify-end gap-1 text-xs text-muted-foreground">
           <Button variant="ghost" size="icon" className="size-6" aria-label={t("上一页")}
-                  disabled={page <= 1} onClick={() => onPage(page - 1)} data-testid="role-users-prev">
+                  disabled={query.isError || page <= 1} onClick={() => onPage(page - 1)} data-testid="role-users-prev">
             <IconChevronLeft className="size-3.5" />
           </Button>
           <span className="tabular-nums">{page} / {totalPages}</span>
           <Button variant="ghost" size="icon" className="size-6" aria-label={t("下一页")}
-                  disabled={page >= totalPages} onClick={() => onPage(page + 1)} data-testid="role-users-next">
+                  disabled={query.isError || page >= totalPages} onClick={() => onPage(page + 1)} data-testid="role-users-next">
             <IconChevronRight className="size-3.5" />
           </Button>
         </div>
