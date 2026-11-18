@@ -15,6 +15,11 @@ flows/perm-gate.yaml     没角色的账号：应用页没有「用户」，并�
 `playwright · E2E` 同一份 `.env.e2e`、同一个 `fba_test`）→ 打 x86_64 的 release APK →
 起模拟器 → `maestro test apps/mobile/e2e/flows`。
 
+🔴 **后端准备那一段（uv / ODBC / 建库 / 重建测试库 / 迁移）不在 workflow 里，在
+`.github/actions/e2e-backend/action.yml`**，和 `playwright · E2E` 共用一份 —— 原来两边各抄一份。
+⚠️ `services:`（mssql + redis）和 job 级的 `env:` 仍然是**两份**：service 容器只能声明在 job 上，
+composite action 给不了。改库的密码、端口、镜像时两个 workflow 要一起改。
+
 - **只跑 Android。** iOS 要 macOS runner，没做
 - **不在 ruleset 的必需检查里。** 先观察稳定性再决定进不进
 - ⚠️ **本地没跑过。** 这台机器 WSL 里起模拟器那条路已经放弃（见 [`scripts/` 分册](../scripts/AGENTS.md)），
@@ -39,7 +44,8 @@ flows/perm-gate.yaml     没角色的账号：应用页没有「用户」，并�
 实测（2026-11-16）：改了 workflow 文件的那次 push，`CI` 和 `移动端 E2E` 两个都触发；
 另开一个只在 `apps/mobile/e2e/AGENTS.md` 里加一行的 PR，只触发了 `CI`，`移动端 E2E` 没有出现。
 ⚠️ PR 上 `paths` 比的是**整个 PR 的改动**，不是最新那个提交 —— 一个改过 App 的 PR 后面再推
-纯文档提交，照样会跑。main 上的 push 触发还没发生过，没验。
+纯文档提交，照样会跑。
+main 上也验过了：#365 合并的那次 push（`2b41a75`）两个 workflow 都触发，都绿。
 
 🔴 **它是独立的 workflow 而不在 `.github/workflows/ci.yml` 里，前提是它不是必需检查。** `.github/workflows/ci.yml` 里立过一条
 「用 job 级的 `if` 跳，不要用 workflow 级的 `paths`」—— 被 `paths` 滤掉的 workflow 根本不上报，
@@ -145,7 +151,9 @@ App 从模拟器里经 `http://10.0.2.2:8001` 打通了后端（后端日志里�
 - 没缓存 AVD 快照：仓库缓存上限 10 GB，怕挤掉 pnpm / uv / Gradle 的
 - 耗时（2026-11-16 跑通的那一轮，Gradle 冷缓存）：整个 job **17 分钟**，其中打 APK 12 分半、
   起模拟器 + 装包 + 两条流程 2 分 40 秒（流程本身 1 分 21 秒）。
-  ⚠️ Gradle 缓存只有 main 上的运行会写（`setup-gradle` 的默认行为），所以 PR 上要等这个 job
-  在 main 跑过一次之后才吃得到缓存 —— 缓存命中后能快多少**还没测**
+  Gradle 缓存只有 main 上的运行会写（`setup-gradle` 的默认行为）。main 上跑过一次之后，
+  2026-11-18 两个 PR 上的运行（日志里有 `Cache hit for restore-key: gradle-home-v2|…`）：
+  整个 job **11 分钟 / 13 分钟**，打 APK 6 分 25 秒 / 7 分 26 秒 —— 省下来的是依赖下载，
+  原生那一段还是每次从头编
 - 失败时的截图、界面层级、logcat 都在 `maestro-debug` 这个 artifact 里。
   **排错先看截图** —— 上面两个坑都是截图和 logcat 说清楚的，Maestro 自己那句报错两次都指错了方向
