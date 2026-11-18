@@ -273,6 +273,7 @@ error:
     config_failed: Invalid snowflake configuration, please contact the administrator
     datacenter_config_failed: Invalid snowflake datacenter id, please contact the administrator
     generation_failed: 'Snowflake ID generation failed: the generator is not initialised'
+    lease_lost: 'Snowflake ID generation failed: this process no longer holds its snowflake node lease (heartbeat not renewed, or the node was taken by another process), please contact the administrator'
     no_node_available: No snowflake node available, all nodes are exhausted
     worker_config_failed: Invalid snowflake worker id, please contact the administrator
   sql:

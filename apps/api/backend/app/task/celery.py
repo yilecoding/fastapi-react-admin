@@ -20,7 +20,7 @@ from pathlib import Path
 import celery
 import celery_aio_pool
 
-from celery.signals import worker_process_init
+from celery.signals import worker_process_init, worker_ready
 
 from backend.common.enums import DataBaseType
 from backend.core.conf import settings
@@ -43,15 +43,15 @@ def init_worker_runtime(*args, **kwargs) -> None:
 
     这里只补「任务代码会用到的全局单例」，不碰 lifespan 里那些属于 web 进程的东西
     （操作日志消费者、缓存 Pub/Sub 监听器）—— 那些在 worker 里跑起来只会重复消费。
+
+    🔴 **雪花不在这里初始化**，挪到了下面的 `init_worker_snowflake`（#369）。这里是 `asyncio.run` 起的临时循环，
+    `snowflake.init()` 在里面 `create_task` 起的节点心跳随循环一起被取消 —— 心跳不跑，本地租约期限停在启动后
+    `SNOWFLAKE_NODE_TTL_SECONDS` 秒，之后所有发号都被拒。
     """
-    from backend.core.conf import settings as _settings
     from backend.database.redis import redis_client
-    from backend.utils.snowflake import snowflake
 
     async def _init() -> None:
         await redis_client.init()
-        if _settings.SNOWFLAKE_ENABLED or _settings.DATABASE_PK_MODE == 'snowflake':
-            await snowflake.init()
         # 🔴 走之前把连接池断开。这里是 `asyncio.run` 起的**临时**循环，ping 建的连接留在池里
         # 绑着它；任务跑在 AsyncIOPool 自己的循环里，拿到这条连接就
         # `got Future attached to a different loop` / `Event loop is closed`。
@@ -60,6 +60,47 @@ def init_worker_runtime(*args, **kwargs) -> None:
         await redis_client.connection_pool.disconnect()
 
     asyncio.run(_init())
+
+
+def _needs_snowflake() -> bool:
+    return settings.SNOWFLAKE_ENABLED or settings.DATABASE_PK_MODE == 'snowflake'
+
+
+@worker_ready.connect(weak=False)
+def init_worker_snowflake(sender=None, **kwargs) -> None:  # ruff:ignore[missing-type-function-argument]
+    """在任务真正运行的那个事件循环里初始化雪花节点（#369）
+
+    🔴 **必须是 AsyncIOPool 自己的循环。** 动态分配节点时 `snowflake.init()` 会起一个心跳任务续租；
+    放在 `asyncio.run` 的临时循环里，循环一关心跳就被取消，启动 `SNOWFLAKE_NODE_TTL_SECONDS`（默认 60）
+    秒后本地租约到期，worker 里所有带雪花主键的写入全报错 —— Webhook 投递记录写不进去，回收后**重复外发**。
+    AsyncIOPool 的循环在独立线程里 `run_forever()`，挂在它上面的心跳活得和 worker 进程一样久。
+
+    为什么挂 `worker_ready` 而不是 `worker_process_init`：后者是 `AsyncIOPool.__init__` 自己发的，
+    发的时候 `self.loop` 还没建出来。`worker_ready` 在 consumer 开始处理消息**之前**同步发出（主线程），
+    这里 `.result()` 等到初始化完成才返回，所以不会有任务抢在雪花就绪之前跑。
+
+    :param sender: celery 传进来的 consumer，`sender.pool` 就是 AsyncIOPool
+    """
+    if not _needs_snowflake():
+        return
+
+    from backend.common.log import log
+    from backend.utils.snowflake import snowflake
+
+    loop = getattr(getattr(sender, 'pool', None), 'loop', None)
+    if loop is None:
+        singleton = getattr(celery_aio_pool.AsyncIOPool, 'singleton', None)
+        loop = getattr(singleton, 'loop', None)
+    if loop is None or not loop.is_running():
+        # 不退回 asyncio.run —— 那正是 #369 的起法，60 秒后才坏，比现在就报错更难查
+        log.error('雪花算法未初始化：worker 不是 AsyncIOPool（--pool=custom），找不到任务运行的事件循环')
+        return
+
+    try:
+        asyncio.run_coroutine_threadsafe(snowflake.init(), loop).result(timeout=60)
+    except Exception as e:
+        # celery 的 Signal.send 会吞掉处理器里的异常，worker 照常起来 —— 只能靠这行日志
+        log.error(f'worker 雪花算法初始化失败，带雪花主键的写入都会报错：{e!r}')
 
 
 def find_task_packages() -> list[str]:
