@@ -76,5 +76,9 @@ def test_tool_failure_rolls_back_only_its_own_writes(failure: str) -> None:
             assert outcome.kind == 'failed', outcome.payload
             assert rows == [1], 'failed tool writes survived the outer commit'
             assert effects == [], 'failed tool scheduled an external side effect'
+        if failure == 'flush':
+            # 🔴 #372：真实数据库的 IntegrityError 原文带 SQL 和参数，不能回给模型 / 卡片 / 审计
+            assert 'INSERT' not in outcome.payload, outcome.payload
+            assert 'duplicate' not in outcome.payload, outcome.payload
     finally:
         _REGISTRY.pop(name, None)
