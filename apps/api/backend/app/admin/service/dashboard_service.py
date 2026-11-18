@@ -18,6 +18,7 @@ from sqlalchemy import case, func, select
 
 from backend.app.admin.model import LoginLog
 from backend.app.task.model import TaskExtended, TaskScheduler
+from backend.common.build_info import build_info
 from backend.common.enums import LoginLogEvent
 from backend.common.security.rbac import user_has_perm
 from backend.common.security.session import SessionClient, session_store
@@ -246,4 +247,5 @@ async def services() -> dict[str, Any]:
         'services': services_,
         'heartbeat_max_age_seconds': settings.HEARTBEAT_MAX_AGE_SECONDS,
         'sessions': None if rows is None else {'total': sum(by_client.values()), **by_client},
+        **build_info(),
     }
