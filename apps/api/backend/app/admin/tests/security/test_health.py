@@ -512,15 +512,9 @@ def test_worker_init_leaves_no_connection_bound_to_its_throwaway_loop(monkeypatc
 
     from backend.app.task.celery import init_worker_runtime
     from backend.database.redis import RedisCli
-    from backend.utils.snowflake import snowflake
 
     fresh = RedisCli()
     monkeypatch.setattr(redis_mod, 'redis_client', fresh)
-
-    async def no_snowflake() -> None:
-        pass
-
-    monkeypatch.setattr(snowflake, 'init', no_snowflake)
 
     init_worker_runtime()
 
