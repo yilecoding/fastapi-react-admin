@@ -1,0 +1,98 @@
+name: E2E 后端准备
+description: 装 uv / Python / ODBC 驱动和后端依赖，建好并灌好 fba_test（SQL Server），供 E2E 用的后端实例连
+
+# `playwright · E2E`（ci.yml）和 `maestro · 移动端 E2E`（mobile-e2e.yml）共用的那一段。
+# 原来两边各抄了一份，改一边不改另一边要等另一边下次被触发才红，而且报错和它自己无关。
+#
+# ── 调用方还得自己写的两样（composite action 给不了）──────────────────────
+#   1. `services:` 里的 mssql + redis —— service 容器只能声明在 job 上
+#   2. job 级的 `env:`（DATABASE_* / REDIS_* / TOKEN_SECRET_KEY / ENV_FILE …）——
+#      下面每一步、以及调用方后面起后端的那一步都要读它们
+# 所以改库的密码、端口、镜像时**两个 workflow 的 services / env 仍然要一起改**。
+#
+# 前提：调用方已经 checkout（本地 action 要从工作区读）。不依赖 pnpm / node。
+#
+# 🔴 每一步的 shell 写的是 `bash -e {0}`，不是 `bash`。workflow 里不写 shell 时的默认值就是
+# 前者；composite action 必须显式写，而写成 `shell: bash` 会多开一个 `pipefail` ——
+# ODBC 那一步的 `odbcinst -q -d | grep -q …` 在 pipefail 下可能因为 grep 提前退出而被判成失败。
+# 照搬过来的步骤保持和原来一样的语义。
+
+inputs:
+  mssql-container-id:
+    description: mssql service 容器的 ID（调用方传 `job.services.mssql.id`），建库要 `docker exec` 进去
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      with:
+        python-version: "3.13"
+        enable-cache: true
+        cache-dependency-glob: apps/api/uv.lock
+    # 升到 setup-uv v10 后 `python-version` 只设了 UV_PYTHON、没装 Python（#245 实测：uv sync 报
+    # 「No interpreter found for Python 3.13」）。pyproject 是 python-downloads = "manual"，所以显式装一次。
+    - shell: bash -e {0}
+      run: uv python install 3.13
+
+    - name: ODBC Driver 18
+      shell: bash -e {0}
+      run: |
+        if ! command -v odbcinst >/dev/null || ! odbcinst -q -d | grep -q 'ODBC Driver 18 for SQL Server'; then
+          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc > /dev/null
+          curl -fsSL "https://packages.microsoft.com/config/ubuntu/$(. /etc/os-release && echo "$VERSION_ID")/prod.list" \
+            | sudo tee /etc/apt/sources.list.d/mssql-release.list > /dev/null
+          sudo apt-get update -qq
+          sudo ACCEPT_EULA=Y apt-get install -y -qq msodbcsql18 unixodbc-dev
+        fi
+        odbcinst -q -d
+
+    - name: uv sync
+      shell: bash -e {0}
+      working-directory: apps/api
+      run: uv sync --locked --no-group lint
+
+    # 🔴 这一步以前写的是 `cp backend/.env.example backend/.env` —— 而 E2E 的
+    # `ENV_FILE` 是 `.env.e2e`，没有任何一个进程会去读 `.env`。`backend/.env.e2e`
+    # 因此在 CI 里从来没被真正创建过：`_ensure_env_file()` 发现它缺失，会静默地
+    # 从 `.env.example` 自动生成一份空白替身（这是给本地开发用的兜底，触发在 CI
+    # 里纯属意外），日志里只有一行不起眼的警告。表现：E2E 的 REQUEST_LIMITER_ENABLED
+    # 拿不到 e2e 专用的 false，退回类定义的默认值 true。
+    #
+    # 现在照本地开发的路子来：直接复用 `.env.e2e.example`，它的 DB/Redis 主机、
+    # 端口、密码本来就是照 E2E job 的 service 配置写的，不用再替换任何字段。
+    - name: .env.e2e
+      shell: bash -e {0}
+      working-directory: apps/api
+      run: cp backend/.env.e2e.example backend/.env.e2e
+
+    - name: 建库（fba + fba_test）
+      shell: bash -e {0}
+      env:
+        MSSQL_CID: ${{ inputs.mssql-container-id }}
+      run: |
+        SQLCMD="/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P $DATABASE_PASSWORD -C -l 5"
+        for i in $(seq 1 40); do
+          if docker exec "$MSSQL_CID" $SQLCMD -Q "SELECT 1" > /dev/null 2>&1; then
+            echo "SQL Server 就绪（第 $i 次探测）"; break
+          fi
+          if [ "$i" -eq 40 ]; then
+            echo "SQL Server 120s 内没起来，容器日志："; docker logs --tail 80 "$MSSQL_CID"; exit 1
+          fi
+          sleep 3
+        done
+        docker exec "$MSSQL_CID" $SQLCMD -Q \
+          "IF DB_ID('fba') IS NULL CREATE DATABASE [fba]; IF DB_ID('fba_test') IS NULL CREATE DATABASE [fba_test];"
+
+    - name: 重建测试库
+      shell: bash -e {0}
+      working-directory: apps/api
+      run: uv run --no-sync python -m backend.scripts.reset_test_db
+
+    - name: 测试库升到 head
+      shell: bash -e {0}
+      working-directory: apps/api/backend
+      env:
+        DATABASE_SCHEMA: fba_test
+      run: uv run --no-sync alembic upgrade head
