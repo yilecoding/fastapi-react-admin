@@ -119,6 +119,72 @@ CI 给镜像打了 OCI 标签 `org.opencontainers.image.revision=<完整 SHA>`�
 ⚠️ 加 OCI 标签之前构建的镜像没有这个字段，`status` 会明说「无标签」，不要把它
 读成「和 main 一致」。
 
+## 线上是哪一版：不登服务器也要看得出来（#378）
+
+### 症状
+
+想确认生产站发没发到 v1.1.1，**没有任何一个公开地址答得出来**：`/version.json` 只有
+`buildId` / `builtAt`，`/api/health/status` 不带版本，只能拿构建时间对 Release 时间猜。
+上一节的 revision 标签要登进服务器 `docker inspect` 才读得到。
+
+### 修法
+
+提交号走**两条路**进镜像，缺一条都不行：
+
+| 走哪 | 谁读 | 没有它会怎样 |
+|---|---|---|
+| OCI 标签 `revision` / `version`（CI 的 `labels:`） | `prod.sh status`（`docker inspect`） | status 那一列是 `-` |
+| 构建参数 `GIT_SHA`（CI 的 `build-args:` → Dockerfile 的 `ARG`） | api：环境变量 → `/api/health/status` 的 `commit`；web：`vite.config.ts` → `/version.json` 的 `commit` | 接口上是 `commit: null` |
+
+🔴 **只打标签不传 `build-args`，镜像照常构建、照常跑，接口上就是 `commit: null`**——标签在镜像的
+元数据里，容器里的进程读不到。`prod.sh up` 会拦这种情形：镜像有 revision 标签而接口报 `null` → 失败。
+
+`prod.sh up` 探活之后拿接口**实际答的**提交号对三样（`verify_deployed_commit`）：
+`TAG=sha-…` 点名的提交、api 容器镜像的 revision 标签、web 的 `/version.json`。任一对不上就失败。
+
+🔴 **只在两边都拿得到时才判失败。** 回滚到 #378 之前的镜像，接口里根本没有 `commit` 字段；
+本机 `prod.sh build` 的镜像没有 revision 标签。这两种是「没法核对」不是「不一致」——拦下来等于把回滚堵死，
+而回滚是出事那一刻才跑的命令。
+
+⚠️ `prod.sh` 没有 jq，按 `"commit":"…"` 的字面形状取值，所以两份 JSON 都必须是**紧凑的一行**
+（`/health/status` 是 starlette 的 `JSONResponse`，`version.json` 是 `JSON.stringify`，都满足）。
+给 `version.json` 加缩进，自检会**静默跳过**（取不到 = 当成旧镜像），不会报错。
+
+🔴 **「没法核对」有三种，不能揉成一句「跳过」**（#379 评审）。第一版把「接口没响应 / 回了 HTML /
+nginx 替挂掉的 api 回的 `{"status":"unavailable"}`」和「旧镜像」当成同一种放行了 —— status 那一下恰好没取到，
+提交号核对就**静默**地没做，部署照样报成功。现在：
+
+| 响应 | 怎么处理 |
+|---|---|
+| 认不出来（里面没有 `"services"`） | `fetch_status_body` 隔 3 秒重取，最多 5 次；还不行就**警告**「没有核对」后放行 |
+| 认得出来、没有 `commit` 字段 | 旧镜像，`info` 一句后放行 |
+| 有 `commit` 字段 | 核对 |
+
+第一种不判失败是有意的：status 这一步原来就只打印不卡，而回滚时最不该被一个新加的检查拦住。
+但它必须长得和「核对过了」不一样。
+
+🔴 **`prod.sh build` 在工作区有改动时不烙提交号**（`build_commit`，未跟踪的文件也算）。那样构建的镜像内容比
+HEAD 多，烙上 HEAD 等于让线上自称是一份它不是的源码。接口上是 `commit: null`，脚本会警告；
+要烙就先提交，或显式 `GIT_SHA=<提交号> bash prod.sh build`。
+
+`/health/status` 不鉴权，所以对外只给 `version` + 7 位 `commit`，分支名 / 构建时间 / 依赖版本都不给
+（`backend/common/build_info.py`）。Grafana 的 `/api/health` 是同一个取舍：匿名可读，返回 `version` + `commit`。
+
+**实测证据**（2026-11-17）：
+
+- `test_health.py` 32 条全过（SQL Server）：字段排在原有三个之后、响应仍以 `{"status":"ok","services"` 开头、
+  `GIT_SHA` 缺失 / 空串 / `unknown` / `<script>` 都是 `commit: null` 且照常 200、降级时照常 503
+- `deploy/tests/test_prod_sh.py`（14 条，进了 CI 的 `nginx forwarded protocol` 那个 job，只要 bash）：把 `prod.sh` 里的
+  函数原样取出来，在假的 `curl` / `docker` / `git` 下跑。三种不一致 + 「有标签但 null」失败；回滚到旧镜像 /
+  本机构建 / web 是旧镜像或回了 HTML 放行；认不出来的响应是警告；重试到第 3 次才拿到的照常核对。
+  变异（2026-11-18）：把前后端比较写反 → 5 条红；去掉 `probe_after_up` 里那一行调用 → 1 条红
+- 「关于」弹窗：`apps/web/e2e/tests/about.spec.ts` 3 条在真浏览器里过。变异：把「重查失败时不拿上一次的值顶替」
+  那一行改回 `query.data` → 「再次打开时取不到」那条红（弹窗里还挂着上一次的 `v9.9.9`）
+- `GIT_SHA=<40 位> pnpm --filter web build` → 构建产物里的 `version.json` 是 `{"buildId":"2b41a75-…","builtAt":"…","version":"1.1.1","commit":"2b41a75"}`，带 `version` 和 7 位 `commit`
+- ⚠️ **没验的**：真镜像里 `curl /health/status`（这台机器的 Docker 在 WSL 里，没构建镜像）、
+  CI 的 `build-args` 真的传进去了没有。合并后第一次 `build-images` 跑完，在服务器上 `prod.sh up` 看那一行
+  「线上提交号 … 一致」才算验完
+
 ## GHCR 在国内会被限速到几十 KB/s
 
 不是断连、也不报错：`docker compose pull` 挂着不动，看着像卡住了，其实是在以

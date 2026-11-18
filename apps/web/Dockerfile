@@ -45,8 +45,11 @@ COPY . .
 # 用默认值构建出来的产物只能连本机。
 # `??` 是 nullish 合并，空串会被保留（写 `||` 就会退回默认值，别改）。
 ARG VITE_API_BASE=""
+# 提交号：`vite.config.ts` 读环境变量 `GIT_SHA`，写进 `version.json` 的 `commit` 和「关于」弹窗（#378）。
+# 这里没有 .git（`.dockerignore` 挡掉了），不传就是 `commit: null`。CI 传 `github.sha`
+ARG GIT_SHA=""
 RUN printf 'VITE_API_BASE=%s\n' "$VITE_API_BASE" > apps/web/.env.production \
- && pnpm --filter web build
+ && GIT_SHA="$GIT_SHA" pnpm --filter web build
 
 FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS runtime
 ENV TZ=Asia/Shanghai

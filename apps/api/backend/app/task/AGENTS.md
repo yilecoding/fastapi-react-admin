@@ -302,6 +302,11 @@ worker / beat 挂了网页照常能开、`/health/ready` 照常 200，只有定�
 
 调度那一行的 `expire_seconds = 180`（= 阈值）：worker 停了很久再起来时，排队超过阈值的心跳直接丢掉。
 
+响应末尾还有 `version` / `commit`（#378，`common/build_info.py`）：只是顺带报出来，**不参与 200 / 503 判定**，
+提交号没带进镜像时是 `null`。🔴 字段顺序是契约（监控方按 `{"status":"ok","services"` 字面量匹配），
+再加字段也只能**追加在最后**；`test_health.py` 的 `_services()` 按顺序断言全部键。来龙去脉见
+[`deploy` 分册](../../../../../deploy/AGENTS.md)「线上是哪一版」。
+
 **实测证据**（2026-10-23，本机：临时库 + 空闲 Redis 库号，api / worker / beat 分开起，经 `nginx:1.27-alpine` 挂真实
 `apps/web/nginx.conf` 探 `/api/health/status`）：
 

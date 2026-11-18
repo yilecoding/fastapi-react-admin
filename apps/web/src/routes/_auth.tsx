@@ -131,7 +131,7 @@ function AuthLayout() {
             <DeepWikiLink />
             <GithubLink />
             {/* 帮助：重看功能引导 / 快捷键清单。没有这个按钮，那两样只有知道的人才找得到 */}
-            <HelpMenu />
+            <HelpMenu about={{ name: BRAND.wordmark, version: BRAND.version, commit: BRAND.commit }} />
             {/* 通知铃铛。它是外壳家具（永远处于「当前匹配」的位置），
                 不是标签页，所以可以用 router —— 别把它注册进 page-registry */}
             <NotificationBell />
