@@ -30,6 +30,31 @@ import { defineConfig, type Plugin } from "vite"
  */
 const pkgVersion = createRequire(import.meta.url)("./package.json").version as string
 
+/**
+ * 这次构建出自哪个提交（7 位），写进 `version.json` 的 `commit` 和「关于」弹窗（#378）。
+ *
+ * 取值顺序：环境变量 `GIT_SHA`（生产镜像里**没有 .git**，由 Dockerfile 的 `ARG GIT_SHA` 传进来，
+ * CI 给的是 `github.sha`）→ 本地的 `git rev-parse` → `null`。
+ *
+ * 🔴 **和下面的 `buildId` 是两件事，不要合并。** `buildId` 回答「服务器上是不是换了一次构建」，
+ * 必须每次构建都不同（所以带时间戳）；`commit` 回答「这是哪份源码」，同一个提交构建两次是同一个值。
+ * 拿 `commit` 去做新版检测的话，重新构建同一个提交（改了构建参数、换了基础镜像）就检测不到了。
+ */
+function resolveCommit(): string | null {
+  const isSha = (v: string) => /^[0-9a-f]{7,40}$/.test(v)
+  const fromEnv = (process.env.GIT_SHA ?? "").trim().toLowerCase()
+  if (isSha(fromEnv)) return fromEnv.slice(0, 7)
+  try {
+    const sha = execSync("git rev-parse HEAD", { stdio: ["ignore", "pipe", "ignore"] })
+      .toString()
+      .trim()
+    return isSha(sha) ? sha.slice(0, 7) : null
+  } catch {
+    return null
+  }
+}
+const gitCommit = resolveCommit()
+
 function buildIdPlugin(): Plugin {
   let buildId = process.env.BUILD_ID ?? ""
   if (!buildId) {
@@ -55,7 +80,15 @@ function buildIdPlugin(): Plugin {
       this.emitFile({
         type: "asset",
         fileName: "version.json",
-        source: JSON.stringify({ buildId, builtAt: new Date().toISOString() }),
+        // `version` / `commit` 是给人和部署脚本看的（`deploy/prod.sh` 拿 commit 和后端对账）；
+        // 前端的新版检测**只认 `buildId`**（`src/lib/app-version.ts`），多出来的字段它不读。
+        // 🔴 保持紧凑的一行 JSON：`prod.sh` 没有 jq，是按 `"commit":"…"` 这个字面形状取值的
+        source: JSON.stringify({
+          buildId,
+          builtAt: new Date().toISOString(),
+          version: pkgVersion,
+          commit: gitCommit,
+        }),
       })
     },
   }
@@ -66,7 +99,11 @@ export default defineConfig({
   // 产品版本：唯一真相源是 package.json（见上面 pkgVersion 的说明）。
   // 放主 config 而不是 buildIdPlugin —— 那个是 `apply: "build"`，
   // 开发期不生效，而版本号在 dev 也该显示对的那个
-  define: { "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkgVersion) },
+  // 提交号同理放这里：开发期「关于」里也显示本地 HEAD，取不到时注入空串
+  define: {
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkgVersion),
+    "import.meta.env.VITE_GIT_SHA": JSON.stringify(gitCommit ?? ""),
+  },
   plugins: [
     buildIdPlugin(),
     tanstackRouter({ target: "react" }),
