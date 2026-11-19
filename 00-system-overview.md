@@ -6,7 +6,7 @@
 > **在线演示**：<https://fra.wubunan.com>（`admin` / `123456`，公开实例，数据可能被其他访客改动；演示站没配大模型密钥，AI 助手要自己部署后填 key 才能对话）
 > **文档**：<https://fra.wubunan.com/docs/>
 >
-> MIT 协议，当前版本 v1.0.0。从 1.0 起，开放接口 / SDK、Webhook 事件、迁移链、插件接口、配置键有兼容承诺
+> MIT 协议，当前版本 v1.1.2。从 1.0 起，开放接口 / SDK、Webhook 事件、迁移链、插件接口、配置键有兼容承诺
 
 ![登录页](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/01-sign-in.png)
 
