@@ -118,7 +118,7 @@ up → down → up（开发库 11 条存量已删记录全变墓碑、回收站�
 `packages/platform/src/upload/chunked.ts` 用内部 AbortController 联动外部取消、任一 worker 最终失败就 abort，
 进度和重试等待都观察内部 signal，`allSettled` 收齐后再抛最初错误。
 内部失败不等于用户取消，不能删续传会话；换账号的 `UploadSessionEndedError` 也保留断点，主动取消才放弃。
-续传以 `admin:uploads:resume:<userId>` 分键，旧的无归属记录不认领给当前登录人。
+续传以 `admin:uploads:resume:<userId>` 分键，旧的无归属记录（`admin:uploads:resume`）不认领给当前登录人，页面加载后第一次用到续传时直接删掉 —— 里面是上一个人的文件名（#374）。
 实测：`packages/platform/src/upload/chunked.test.ts` 控制 413 / 503 重试用尽时其余 PUT 尚未返回，确认它们收到 abort、
 错误在它们退出后才抛、迟到的进度不再上报；`packages/platform/src/upload/resume.test.ts` 验证同一指纹在两账号间独立，B 清记录后 A 的断点还在。
 
