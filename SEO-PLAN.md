@@ -9,6 +9,26 @@
 
 两份都是中文在根路径、英文在 `/en/`。每页的 canonical 指向自己那份，不会被当成重复内容。
 
+## 🔴 GitHub 改名后要做的（yilecoding → yile2020，2026-11-19）
+
+改名后旧的 `yilecoding.github.io/fastapi-react-admin/` 整站 404，GitHub **不会**给 Pages 做跳转（仓库页和 raw 会跳）。
+Google 那边收录的、文章里链出去的旧地址全部失效。国内那份 `fra.wubunan.com/docs/` 和百度**不受影响**。
+
+- [x] 用新账号把 `yilecoding` 占住（2026-11-19）。这个账号下**不要建 `fastapi-react-admin` 仓库**，会顶掉旧仓库地址的跳转
+- [x] 代码里的站点地址改成新名（#389，2026-11-19 合并）。sitemap、canonical、og:url 在合并后那次 CI 发布 Pages 后才变成新名
+- [ ] **旧地址做跳转**：在 `yilecoding` 账号下建仓库 `yilecoding.github.io`（用户站点，名字必须一字不差），
+      放 Claude 准备的三个文件（`404.html` · `index.html` · `fastapi-react-admin/index.html`），Settings → Pages 选 main 分支根目录。
+      效果：`yilecoding.github.io/fastapi-react-admin/<任意路径>` 自动跳到 `yile2020.github.io/fastapi-react-admin/<同一路径>`。
+      它和「不要建 `fastapi-react-admin` 仓库」不冲突 —— 是另一个仓库名
+- [ ] **Google Search Console 加新资源**：网址前缀 `https://yile2020.github.io/fastapi-react-admin/`，选「HTML 文件」验证。
+      验证文件 `google354ce5fed9937af4.html` 已经在新地址上（验证码绑的是 Google 账号，不是网址，同一个文件能用），直接点验证。
+      然后提交 sitemap `sitemap-index.xml`，首页和 `/en/` 各「请求编入索引」一次
+- [ ] 旧资源（`yilecoding.github.io/…`）**先别删**：里面有到现在的收录和搜索词数据，做了跳转后还能看到 Google 把旧页挪到新地址的过程。
+      「设置 → 地址更改」工具用不了（它只认域名根，子路径的 github.io 资源不支持），靠跳转 + 新 sitemap 让 Google 自己迁
+- [ ] Bing：上面新资源验证好之后再「从 Google Search Console 导入」，导进来就是新地址
+- [ ] 服务器上国内文档站重新拉一次包（拉的是新地址的 `docs-site.tar.gz`）：现在页面里的 GitHub 链接还是旧名（会跳转，不急）
+- [ ] DeepWiki / zread：两家按仓库路径建索引。zread 新旧地址都能开；DeepWiki 打开 `deepwiki.com/yile2020/fastapi-react-admin`，没有内容就点重新索引
+
 ## 进度
 
 ### 百度搜索资源平台 https://ziyuan.baidu.com
@@ -34,13 +54,13 @@
 
 ### Google Search Console https://search.google.com/search-console
 
-- [x] 添加资源「网址前缀」`https://yile2020.github.io/fastapi-react-admin/`，HTML 文件验证（2026-11-02）
+- [x] 添加资源「网址前缀」`https://yilecoding.github.io/fastapi-react-admin/`（改名前的旧地址），HTML 文件验证（2026-11-02）。新地址的资源见上面「GitHub 改名后要做的」
 - [x] 提交 sitemap `sitemap-index.xml`（刚提交时显示「无法抓取」、上次读取时间为空，是 Google 还没去读，不是错）
 - [ ] 11/4 前后回来看 sitemap 状态。还是「无法抓取」就再提交一个 `sitemap-0.xml`，仍不行截图找 Claude
 - [ ] （可选）顶部搜索框输入首页地址 →「请求编入索引」，`/en/` 也来一次
 - [ ] （可选）再加一个网址前缀资源 `https://fra.wubunan.com/docs/`，把给的 `googleXXXX.html` 文件名交给 Claude 放到服务器上
 
-不要加 robots.txt：GitHub Pages 的 robots.txt 只认 `yile2020.github.io/robots.txt`（域名根），我们的站在子路径下放了也不生效。
+不要加 robots.txt：GitHub Pages 的 robots.txt 只认 `yile2020.github.io/robots.txt`（域名根，归 `yile2020.github.io` 这个仓库管，我们没建），我们的站在子路径下放了也不生效。
 根上没有 robots.txt = 全部放行，现在就是最好的状态。
 
 ### Bing Webmaster https://www.bing.com/webmasters
