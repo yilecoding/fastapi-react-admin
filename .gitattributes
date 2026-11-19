@@ -1,0 +1,2 @@
+# Python 源码一律 LF（#374）：crud_user.py 曾被一次提交整个翻成 CRLF，git blame 全冲掉、别的分支改它整文件冲突
+*.py text eol=lf

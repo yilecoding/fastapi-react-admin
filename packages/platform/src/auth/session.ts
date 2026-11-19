@@ -229,6 +229,11 @@ export async function handleSessionEnded(reason: string | null): Promise<void> {
   endSession({ reason, message: null })
 }
 
+/** 这个标签页正在登出（请求已发、服务端还没回）。socket 的恢复定时器据此让路，见 `shell/use-presence.ts` */
+export function isEndingLocally() {
+  return endingLocally
+}
+
 export function isAuthenticated() {
   return tokenStore.get() !== null
 }

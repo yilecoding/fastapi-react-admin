@@ -49,8 +49,24 @@ function writeAll(key: string, all: Record<string, ResumeEntry>, storage: Storag
   }
 }
 
+/**
+ * 按用户分键之前的无归属记录：不能安全地认领给当前用户，也不能留着（里面有上一个人的文件名）—— 直接删。
+ * 默认存储每个页面会话只删一次；测试传进来的存储每次都删。
+ */
+let legacyDropped = false
+function dropLegacy(storage?: Storage): void {
+  if (!storage && legacyDropped) return
+  try {
+    const target = storage ?? globalThis.localStorage
+    target?.removeItem(KEY)
+    if (!storage) legacyDropped = true
+  } catch {
+    /* 存储不可用就没有旧记录可删 */
+  }
+}
+
 export function createResumeStore(userId: string, storage?: Storage) {
-  // 旧的无归属记录不能安全地认领给当前用户，不读取 / 迁移它们。
+  dropLegacy(storage)
   const key = `${KEY}:${encodeURIComponent(userId)}`
   return {
     get: (fp: string): ResumeEntry | undefined => readAll(key, storage)[fp],
