@@ -604,7 +604,7 @@ termcolor==3.3.0
     # via pytest-sugar
 tiktoken==0.14.0
     # via pydantic-ai-slim
-tornado==6.6
+tornado==6.6.1
     # via flower
 truststore==0.10.5 ; sys_platform != 'emscripten'
     # via
