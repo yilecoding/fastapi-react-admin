@@ -29,5 +29,7 @@ describe('用户各自的续传记录', () => {
       JSON.stringify({ fp: { upload_id: 'unknown-owner', created_at: Date.now() } }),
     )
     expect(createResumeStore('user-b', storage).list()).toEqual([])
+    // 不认领，也不留着：里面是上一个人的文件名
+    expect(storage.getItem('admin:uploads:resume')).toBeNull()
   })
 })

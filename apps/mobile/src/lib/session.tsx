@@ -59,18 +59,31 @@ export function useSession(): Session {
  * 401 / 403 也算确认（`confirmsLogout`）。后端的登出接口对「没有凭据」是幂等成功，
  * 只带 cookie（没有 access token）也认得出会话 —— 所以调用方可以先清本地、再在后台发它。
  *
- * ⚠️ **后台发，不要 await 在界面前面**：请求没有超时，服务器不可达时 RN 的 fetch 要等 10～60 秒，
+ * ⚠️ **后台发，不要 await 在界面前面**：服务器不可达时 RN 的 fetch 自己要等 10～60 秒才失败，
  * 点了「退出」没反应 / 冷启动卡在闪屏上。
+ *
+ * 🔴 **但它要有超时**（`REVOKE_TIMEOUT_MS`，#374）：登录前 `settleRevoke()` 要等它落地，没有超时的话
+ * 离线登出之后马上登录会卡同样的 10～60 秒。超时 = 没确认，标记留着、下次冷启动补发。
+ * 掐断之后这次请求的响应就不会再到，也就不会晚于新登录去清 cookie —— 那正是 `settleRevoke` 要防的。
+ * 手写 `AbortController` + `setTimeout`：Hermes 没有 `AbortSignal.timeout()`。
  */
 async function revokeOnServer(): Promise<void> {
   const base = serverStore.current()
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REVOKE_TIMEOUT_MS)
   try {
-    await api.POST('/api/v1/auth/logout')
+    // 🔴 同步发出：`send` 在第一个 await 之前就取了地址，见 `startRevoke`
+    await api.POST('/api/v1/auth/logout', { signal: controller.signal })
   } catch (err) {
     if (!confirmsLogout(err)) return
+  } finally {
+    clearTimeout(timer)
   }
   await logoutPending.remove(base)
 }
+
+/** 登出撤销的超时。登录屏要等它，所以宁短勿长；没确认的下次冷启动还会补发 */
+const REVOKE_TIMEOUT_MS = 8_000
 
 /** 后台那次撤销。登录前要等它落地，见 `startRevoke` */
 let revoking: Promise<void> | null = null
