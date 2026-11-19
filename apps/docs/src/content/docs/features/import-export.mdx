@@ -106,21 +106,21 @@ import ProductShot from '../../../components/ProductShot.astro'
 | `IMPORT_EXPIRE_SECONDS` | `1800` | 预览令牌和错误报告的有效期 |
 | `USER_IMPORT_DEFAULT_PASSWORD` | 空 | 导入的用户的初始密码。**留空 = 用户导入关闭**；要满足密码规则，生产环境拒绝弱默认值。刻意不放进参数配置页 |
 
-定义在 [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) 的导入、导出两段。
+定义在 [`core/conf.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) 的导入、导出两段。
 
 ## 给自己的列表页加导入导出
 
 **导出**：
 
 1. 在 `app/admin/dataio.py`（或插件自己的 `dataio.py`）里 `register_export(ExportSpec(...))`：资源名、权限码、列、可用的筛选项、取数的查询。**查询要复用列表接口那个 DAO 的 `get_select`** —— 这样数据范围、筛选语义和列表一致，不会出现「列表看不到、导出能导出来」。
-2. 加一个 `POST /xxx/export` 路由，挂 `RequestPermission('xxx:export')`，调 `export_service.start`（照 [`dept.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/dept.py) 抄）。
+2. 加一个 `POST /xxx/export` 路由，挂 `RequestPermission('xxx:export')`，调 `export_service.start`（照 [`dept.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/dept.py) 抄）。
 3. 菜单按钮的权限码进三种数据库的种子 SQL、写一条数据迁移、更新 `sql/seed_manifest.json` —— `test_permission_codes.py` 会核对这几处对不对得上。
 4. 中英文案各加 `export.*` 的键。
 5. 页面上 `<Can perm><ExportButton path filters selectedIds total /></Can>`。
 
 Celery worker 通过 `load_dataio_modules()` 加载这些定义，所以插件里注册的资源也能后台导出。
 
-**导入**：`register_import(ImportSpec(...))` 声明列、匹配键（`key_of`）、校验、写入和支持的模式；加 `/import/template`、`/import/preview`、`/import/commit` 三个路由；页面上放 `<ImportSheet>`。逐步写法和踩过的坑在 [`common/dataio/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/dataio/AGENTS.md)。
+**导入**：`register_import(ImportSpec(...))` 声明列、匹配键（`key_of`）、校验、写入和支持的模式；加 `/import/template`、`/import/preview`、`/import/commit` 三个路由；页面上放 `<ImportSheet>`。逐步写法和踩过的坑在 [`common/dataio/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/dataio/AGENTS.md)。
 
 ## 它不做什么
 
@@ -139,21 +139,21 @@ Celery worker 通过 `load_dataio_modules()` 加载这些定义，所以插件�
 
 ## 代码在哪
 
-- 导出：[`common/dataio/exporting.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/dataio/exporting.py)（注册表）· [`export_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/export_service.py) · [`common/dataio/cells.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/dataio/cells.py)（公式注入、单元格清洗）· [`writers.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/dataio/writers.py) · 后台任务 [`tasks/export/tasks.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/tasks/export/tasks.py)
-- 导入：[`common/dataio/importing.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/dataio/importing.py) · [`import_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/import_service.py) · xlsx 读写 [`utils/excel_ops.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/excel_ops.py)
-- 各资源的定义：[`app/admin/dataio.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/dataio.py)（用户、部门、日志）· [`plugin/dict/dataio.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/dict/dataio.py)
-- 前端：[`pages/_shared/data-io/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/_shared/data-io)（导出按钮、导入抽屉）· [`profile/exports-panel.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/profile/exports-panel.tsx)
+- 导出：[`common/dataio/exporting.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/dataio/exporting.py)（注册表）· [`export_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/export_service.py) · [`common/dataio/cells.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/dataio/cells.py)（公式注入、单元格清洗）· [`writers.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/dataio/writers.py) · 后台任务 [`tasks/export/tasks.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/tasks/export/tasks.py)
+- 导入：[`common/dataio/importing.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/dataio/importing.py) · [`import_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/import_service.py) · xlsx 读写 [`utils/excel_ops.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/excel_ops.py)
+- 各资源的定义：[`app/admin/dataio.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/dataio.py)（用户、部门、日志）· [`plugin/dict/dataio.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/dict/dataio.py)
+- 前端：[`pages/_shared/data-io/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/_shared/data-io)（导出按钮、导入抽屉）· [`profile/exports-panel.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/profile/exports-panel.tsx)
 
 ## 怎么测的
 
 后端连真实的数据库：
 
-- [`test_export.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_export.py)（24 条）：超上限拒绝而不是截断、公式在 xlsx 里保持文本、在 csv 里加引号、后台导出只看得到自己的、worker 执行前重查权限、文件过期后先拒绝下载再被清理。
-- [`test_import.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_import.py)（29 条）：一个文件里的树按层级先建上级、同一个文件里重组不误判成环、三种模式对已存在编码的不同处理、**导出的文件原样导回来不变**、写到一半失败时已写的行怎么办、提交时按数据库的最新状态决定新增还是更新。
-- [`test_user_import.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_user_import.py)（19 条）：非超管三个接口全部拒绝、没配默认密码时导入关闭、同一个令牌不能提交两次。
-- [`tests/test_excel_ops.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/tests/test_excel_ops.py)（37 条）：只读第一个工作表、公式报错而不是读成空值、zip 炸弹在 openpyxl 打开之前就被挡住、长选项挪进隐藏工作表。
+- [`test_export.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_export.py)（24 条）：超上限拒绝而不是截断、公式在 xlsx 里保持文本、在 csv 里加引号、后台导出只看得到自己的、worker 执行前重查权限、文件过期后先拒绝下载再被清理。
+- [`test_import.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_import.py)（29 条）：一个文件里的树按层级先建上级、同一个文件里重组不误判成环、三种模式对已存在编码的不同处理、**导出的文件原样导回来不变**、写到一半失败时已写的行怎么办、提交时按数据库的最新状态决定新增还是更新。
+- [`test_user_import.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_user_import.py)（19 条）：非超管三个接口全部拒绝、没配默认密码时导入关闭、同一个令牌不能提交两次。
+- [`tests/test_excel_ops.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/tests/test_excel_ops.py)（37 条）：只读第一个工作表、公式报错而不是读成空值、zip 炸弹在 openpyxl 打开之前就被挡住、长选项挪进隐藏工作表。
 
-浏览器端（Playwright）：[`data-io.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/data-io.spec.ts)（导出的 CSV 就是当前筛选的那一批；导出记录里能再下载一次；一份文件建整棵部门树，下级写在上级前面也行）、[`user-import.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/user-import.spec.ts)（预览分别指出三类问题、提交只建干净的行；同一个令牌不能提交两次；非 xlsx 文件被挡住并说明原因）。
+浏览器端（Playwright）：[`data-io.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/data-io.spec.ts)（导出的 CSV 就是当前筛选的那一批；导出记录里能再下载一次；一份文件建整棵部门树，下级写在上级前面也行）、[`user-import.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/user-import.spec.ts)（预览分别指出三类问题、提交只建干净的行；同一个令牌不能提交两次；非 xlsx 文件被挡住并说明原因）。
 
 ## 在演示站里试试
 

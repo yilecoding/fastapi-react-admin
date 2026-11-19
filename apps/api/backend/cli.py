@@ -482,7 +482,7 @@ def run(host: str, port: int, reload: bool, workers: int) -> None:  # ruff:ignor
         panel_content.append(f'\n📡 OpenAPI JSON: {openapi_url}', style='bold magenta')
 
     panel_content.append('\n🏠 本项目: ', style='bold magenta')
-    panel_content.append('https://github.com/yilecoding/fastapi-react-admin')
+    panel_content.append('https://github.com/yile2020/fastapi-react-admin')
     # 上游 FBA 的文档仍然有用（三层结构、插件机制都出自那里），但要标清它是上游 ——
     # 直接写「官方文档」会把人送去一份不讲 SQL Server 的说明
     panel_content.append('\n📐 后端架构文档（上游 FBA）: ', style='bold magenta')

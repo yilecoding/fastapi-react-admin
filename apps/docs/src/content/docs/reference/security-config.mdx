@@ -74,7 +74,7 @@ description: 登录、密码与会话的配置键、默认值和生效顺序，�
 
 TLS 在上游终结时，入口代理必须覆盖客户端传入的 `X-Forwarded-Proto`，web 容器会保留有效的 `http` / `https`，缺失或异常值回退到当前连接协议。web 明文端口仅对可信代理开放，并正确配置 Uvicorn 的 `--forwarded-allow-ips`。
 
-完整的定义在 [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) 的「用户安全」「登录」「登录会话」三段。
+完整的定义在 [`core/conf.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) 的「用户安全」「登录」「登录会话」三段。
 
 ## 验证与限流规则
 
@@ -83,11 +83,11 @@ TLS 在上游终结时，入口代理必须覆盖客户端传入的 `X-Forwarded
 
 手机验证码这一路要先过图形验证码；同一个号 60 秒冷却、一天最多 10 条。**没注册、没验证过的号也返回「已发送」**，只是不真发：状态码、文案、冷却、耗时都和真发的一样，否则这个不用登录就能调的接口就成了一张号码核对表。短信厂商故障时也一样返回成功，失败记在短信发送日志里给管理员看。
 
-错误提示**不区分**「用户不存在」「密码错」「账号已锁」，耗时也抹平了：bcrypt 校验一次约 190 ms，而查无此人只要约 5 ms，40 倍的差距不用任何统计手段就能看出来。所以用户不存在时也拿一个假哈希跑一遍等价的校验（[`auth_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/auth_service.py) 顶部的 `_DUMMY_PASSWORD_HASH`）。
+错误提示**不区分**「用户不存在」「密码错」「账号已锁」，耗时也抹平了：bcrypt 校验一次约 190 ms，而查无此人只要约 5 ms，40 倍的差距不用任何统计手段就能看出来。所以用户不存在时也拿一个假哈希跑一遍等价的校验（[`auth_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/auth_service.py) 顶部的 `_DUMMY_PASSWORD_HASH`）。
 
 登录接口本身还按「IP + 路径」限流：每分钟 5 次；取图形验证码的接口每 30 秒 5 次。
 
-可改范围是**后端**卡的，不只是界面上的输入框（[`dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py) 的 `DYNAMIC_INT_BOUNDS`）。曾经实测过：带管理员 token 直接调接口，最小长度能被写成 999，结果是所有人都改不了密码。
+可改范围是**后端**卡的，不只是界面上的输入框（[`dynamic_config.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py) 的 `DYNAMIC_INT_BOUNDS`）。曾经实测过：带管理员 token 直接调接口，最小长度能被写成 999，结果是所有人都改不了密码。
 
 TOTP 使用 6 位数字、30 秒时间片、SHA-1，前后各容忍一个时间片的时钟误差，同一个码不能重复使用。恢复码格式为 `xxxx-xxxx`，不含容易混淆的 0 / O / 1 / I / L，数据库只存哈希。
 
@@ -101,16 +101,16 @@ TOTP 使用 6 位数字、30 秒时间片、SHA-1，前后各容忍一个时间�
 - **不用登录就能调的新接口**，要加进 `TOKEN_REQUEST_PATH_EXCLUDE`，写完整路径、不要写成前缀。
 - **新的「让某人下线」的入口**，只调 `session_store.revoke` / `revoke_user`，不要自己删 `fba:session*` 的 Redis key：这两个函数会顺带写原因、推实时消息、断开连接。会话改造之前，有 7 个文件各自删 token，其中一处只删了 access token —— 被踢的人刷新一下就回来了。
 
-细节和踩过的坑在 [`common/security/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/AGENTS.md)「登录会话」一节。
+细节和踩过的坑在 [`common/security/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/AGENTS.md)「登录会话」一节。
 
 ## 代码在哪
 
-- 登录流程：[`auth_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/auth_service.py) · 接口 [`api/v1/auth/auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/auth/auth.py)
-- 二次验证：[`mfa_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/mfa_service.py) · [`utils/totp.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/totp.py)
-- 会话：[`common/security/session.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/session.py) · 在线用户接口 [`monitor/online.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/monitor/online.py)
-- 密码策略：[`user_password_history_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/user_password_history_service.py) · 运行时配置 [`utils/dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py)
-- 第三方登录：[`plugin/oauth2/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/oauth2)
-- 前端：登录页 [`sign-in.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/routes/_guest/sign-in.tsx) · 个人中心 [`pages/profile/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/profile) · 在线用户 [`pages/log-online/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/log-online) · 会话与刷新 [`auth/session.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/auth/session.ts)
+- 登录流程：[`auth_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/auth_service.py) · 接口 [`api/v1/auth/auth.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/auth/auth.py)
+- 二次验证：[`mfa_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/mfa_service.py) · [`utils/totp.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/totp.py)
+- 会话：[`common/security/session.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/session.py) · 在线用户接口 [`monitor/online.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/monitor/online.py)
+- 密码策略：[`user_password_history_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/user_password_history_service.py) · 运行时配置 [`utils/dynamic_config.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py)
+- 第三方登录：[`plugin/oauth2/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/oauth2)
+- 前端：登录页 [`sign-in.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/routes/_guest/sign-in.tsx) · 个人中心 [`pages/profile/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/profile) · 在线用户 [`pages/log-online/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/log-online) · 会话与刷新 [`auth/session.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/auth/session.ts)
 
 ## 怎么测的
 
@@ -121,12 +121,12 @@ TOTP 使用 6 位数字、30 秒时间片、SHA-1，前后各容忍一个时间�
 
 后端连真实的数据库和 Redis：
 
-- [`test_session.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_session.py)（29 条）：后台轮询不续命、离开超过空闲时长回来点一下也不复活、宽限期内回放同一组令牌、宽限期外作废整个会话、会话 ID 对得上但 secret 对不上**不**撤销（否则凭日志里看得到的会话 ID 就能把人踢下线）。其中几条做过变异检验：把对应的判断改掉，测试当场红。
-- [`test_mfa.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_mfa.py)（16 条）：恢复码只能用一次、密码对了不清零失败计数、试满次数后令牌作废、被强制的人登录时绑定且不能自己关、没配密钥不能强制。
-- [`test_auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_auth.py)：用户不存在和密码错的响应一样、**耗时**也一样、错密码不暴露账号已锁、强制下线连 refresh token 一起作废。
-- [`test_phone_login.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/sms/tests/test_phone_login.py)：没注册 / 没验证的号看起来也「发了」、厂商故障和陌生号码不可区分、手机登录也要过二次验证。
-- OAuth2 插件的 [`tests/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/oauth2/tests)：陌生账号默认不建号、state 绑定、只认已验证的邮箱。
+- [`test_session.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_session.py)（29 条）：后台轮询不续命、离开超过空闲时长回来点一下也不复活、宽限期内回放同一组令牌、宽限期外作废整个会话、会话 ID 对得上但 secret 对不上**不**撤销（否则凭日志里看得到的会话 ID 就能把人踢下线）。其中几条做过变异检验：把对应的判断改掉，测试当场红。
+- [`test_mfa.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_mfa.py)（16 条）：恢复码只能用一次、密码对了不清零失败计数、试满次数后令牌作废、被强制的人登录时绑定且不能自己关、没配密钥不能强制。
+- [`test_auth.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_auth.py)：用户不存在和密码错的响应一样、**耗时**也一样、错密码不暴露账号已锁、强制下线连 refresh token 一起作废。
+- [`test_phone_login.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/sms/tests/test_phone_login.py)：没注册 / 没验证的号看起来也「发了」、厂商故障和陌生号码不可区分、手机登录也要过二次验证。
+- OAuth2 插件的 [`tests/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/oauth2/tests)：陌生账号默认不建号、state 绑定、只认已验证的邮箱。
 
-浏览器端（Playwright）：[`mfa.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/mfa.spec.ts)（个人中心开启 → 退出 → 再登录要动态码）、[`session.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/session.spec.ts)（被强制下线时页面当场回到登录页并说明原因；一个标签页登出，其它标签页跟着回去；刷新时后端暂时连不上，停在「连不上服务器」而不是踢回登录页）、[`login-phone.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/login-phone.spec.ts)。
+浏览器端（Playwright）：[`mfa.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/mfa.spec.ts)（个人中心开启 → 退出 → 再登录要动态码）、[`session.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/session.spec.ts)（被强制下线时页面当场回到登录页并说明原因；一个标签页登出，其它标签页跟着回去；刷新时后端暂时连不上，停在「连不上服务器」而不是踢回登录页）、[`login-phone.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/login-phone.spec.ts)。
 
 </details>

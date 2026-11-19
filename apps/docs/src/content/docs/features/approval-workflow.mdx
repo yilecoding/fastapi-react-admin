@@ -27,14 +27,14 @@ fastapi-react-admin 自带一个审批流插件（`plugin/workflow`）：管理�
 
 ## 一个流程定义里能放什么？
 
-流程定义就是两份 JSON：表单 schema 和流程模型。发布时用 [`engine/schema.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/engine/schema.py) 里的 Pydantic 形状校验一遍，存的是原始 JSON。
+流程定义就是两份 JSON：表单 schema 和流程模型。发布时用 [`engine/schema.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/engine/schema.py) 里的 Pydantic 形状校验一遍，存的是原始 JSON。
 
 - **表单控件 13 种**：单行文本、多行文本、数字、金额、日期、日期区间、单选、多选、人员、部门、附件、说明文字、明细表。明细表只允许一层（不能表套表）。
 - **显示条件**（`visibleWhen`）：不显示的字段不校验、值也不保存。典型用法是「请假类型 = 病假」才出现「病假证明」。
 - **自动计算**（`calc`）：日期区间的天数（含首尾，11-02 ~ 11-06 = 5 天），或明细表某一列的合计。值由服务端重算，前端传上来的不收。
 - **流程节点**：开始、审批、抄送、条件分支。条件是结构化的 `all` / `any` 嵌套，叶子形如 `{"var": "f_days", "op": "gt", "value": 3}` —— 不解析字符串表达式，也就没有注入可言。条件节点必须有且只有一个兜底分支，否则发布不了。
 
-下面摘自种子里的示例流程「请假」（[`sql/postgresql/init_snowflake.sql`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/sql/postgresql/init_snowflake.sql)）：先给直属主管，超过 3 天再加一级上级主管，之后人事备案。
+下面摘自种子里的示例流程「请假」（[`sql/postgresql/init_snowflake.sql`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/sql/postgresql/init_snowflake.sql)）：先给直属主管，超过 3 天再加一级上级主管，之后人事备案。
 
 ```json
 {"type": "approval", "id": "n_leader", "name": "直属主管", "mode": "any",
@@ -49,7 +49,7 @@ fastapi-react-admin 自带一个审批流插件（`plugin/workflow`）：管理�
 
 ## 每一步由谁审批？
 
-审批节点上配审批人规则（[`engine/assignee.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/engine/assignee.py)）：
+审批节点上配审批人规则（[`engine/assignee.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/engine/assignee.py)）：
 
 | 规则 | 取到的人 |
 |---|---|
@@ -108,7 +108,7 @@ Celery beat 没起，或者 **任务调度 → 任务管理** 里那条 `workflo
 
 ## 接入自己的业务表
 
-表单审批不用写代码。要给业务表加审批，在 [`handler.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/handler.py) 里实现 `WorkflowBizHandler`、`register_handler()` 注册，在自己的事务里调 `runtime_service.start_for_biz()` 发起。`on_finished` 在审批事务内同步执行，只该改业务状态。另有 5 个 Webhook 事件（`workflow.instance.started` / `approved` / `rejected` / `withdrawn` / `terminated`）经[开放接口](/features/open-api/)推出，刻意不带表单内容。审批产生的通知和其他通知走同一套路由，见[消息与通知](/features/notifications/)。
+表单审批不用写代码。要给业务表加审批，在 [`handler.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/handler.py) 里实现 `WorkflowBizHandler`、`register_handler()` 注册，在自己的事务里调 `runtime_service.start_for_biz()` 发起。`on_finished` 在审批事务内同步执行，只该改业务状态。另有 5 个 Webhook 事件（`workflow.instance.started` / `approved` / `rejected` / `withdrawn` / `terminated`）经[开放接口](/features/open-api/)推出，刻意不带表单内容。审批产生的通知和其他通知走同一套路由，见[消息与通知](/features/notifications/)。
 
 插件还有几项可选的 AI 能力：AI 预审、一句话生成流程、发起时从材料里填单、在对话里审批，以及只在或签节点上、按历史数据放闸的 AI 自动同意，见 [AI 助手](/features/ai-assistant/)。
 
@@ -129,20 +129,20 @@ Celery beat 没起，或者 **任务调度 → 任务管理** 里那条 `workflo
 
 ## 代码在哪
 
-- [`apps/api/backend/plugin/workflow/engine/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/workflow/engine) —— 形状、树导航与发布校验（`flow.py`）、表单联动与字段权限（`form.py`）、审批人规则、流程试算（`simulate.py`）
-- [`service/runtime_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/runtime_service.py) —— 所有动作、认领、能力信封；[`service/query_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/query_service.py) —— 审批中心查询与按人裁字段的详情；[`service/timeout_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/timeout_service.py)
-- 前端：[`packages/platform/src/pages/workflow/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/workflow)（表单渲染器、流程图、详情抽屉），以及 `workflow-definition/`、`workflow-inbox/`、`workflow-monitor/`
-- 设计取舍与踩过的坑：[`plugin/workflow/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/AGENTS.md)、[`pages/workflow/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/workflow/AGENTS.md)
+- [`apps/api/backend/plugin/workflow/engine/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/workflow/engine) —— 形状、树导航与发布校验（`flow.py`）、表单联动与字段权限（`form.py`）、审批人规则、流程试算（`simulate.py`）
+- [`service/runtime_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/runtime_service.py) —— 所有动作、认领、能力信封；[`service/query_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/query_service.py) —— 审批中心查询与按人裁字段的详情；[`service/timeout_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/timeout_service.py)
+- 前端：[`packages/platform/src/pages/workflow/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/workflow)（表单渲染器、流程图、详情抽屉），以及 `workflow-definition/`、`workflow-inbox/`、`workflow-monitor/`
+- 设计取舍与踩过的坑：[`plugin/workflow/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/AGENTS.md)、[`pages/workflow/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/workflow/AGENTS.md)
 
 ## 怎么测的
 
-[`plugin/workflow/tests/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/workflow/tests) 收集到 167 条 pytest 用例，大部分跑在真实的测试库和 Redis 上（引擎与动作 88 条，AI 相关 79 条，其中 14 条调真模型、没配凭据时跳过）。举几个例子：
+[`plugin/workflow/tests/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/workflow/tests) 收集到 167 条 pytest 用例，大部分跑在真实的测试库和 Redis 上（引擎与动作 88 条，AI 相关 79 条，其中 14 条调真模型、没配凭据时跳过）。举几个例子：
 
 - `test_concurrency.py` 是真并发（独立会话 + `asyncio.gather`）：会签同时同意、或签同时同意、同意撞撤回，以及会签两人同时改不同字段 —— 去掉版本号检查，最后这条当场红。
 - `test_preview_matches_what_actually_happens` 先试算路径，再真走一遍，逐步比对办理人。
 - `test_timeouts.py` 靠传入时间（`handle_timeouts(..., now=...)`）而不是真等。
 
-哪些测试做过变异验证（把修复改回去、测试变红）在分册里逐条记着。浏览器端 [`workflow.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/workflow.spec.ts) 有 14 条 Playwright 用例，覆盖发起 → 同意、退回后重新提交、改办理人、拿回、加签、草稿、加急、已读。CI 在 PostgreSQL 和 SQL Server 上跑后端全套；MySQL 没有 CI job。
+哪些测试做过变异验证（把修复改回去、测试变红）在分册里逐条记着。浏览器端 [`workflow.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/workflow.spec.ts) 有 14 条 Playwright 用例，覆盖发起 → 同意、退回后重新提交、改办理人、拿回、加签、草稿、加急、已读。CI 在 PostgreSQL 和 SQL Server 上跑后端全套；MySQL 没有 CI job。
 
 ## 在演示站里试试
 

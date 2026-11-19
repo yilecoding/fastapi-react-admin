@@ -91,9 +91,9 @@ CI 里写的是 `sha-${{ github.sha }}`，而 `github.sha` 是**完整 40 位** 
 按短 SHA 写。实测：
 
 ```
-docker manifest inspect ghcr.io/yilecoding/fba-api:sha-8f92000
+docker manifest inspect ghcr.io/yile2020/fba-api:sha-8f92000
   → no such manifest
-docker manifest inspect ghcr.io/yilecoding/fba-api:sha-8f92000fd7840962457cd4a0c903c34ed01db57c
+docker manifest inspect ghcr.io/yile2020/fba-api:sha-8f92000fd7840962457cd4a0c903c34ed01db57c
   → OK
 ```
 
@@ -337,7 +337,7 @@ GHCR 不能给包改名，**换名字等于新建两个包**，所以下面几�
 
 | compose | 结果 |
 |---|---|
-| 新（`fra-*`），默认值 | 拉 `<mirror>/yilecoding/fra-api:latest`、`fra-web:latest`，retag 回 `ghcr.io/yilecoding/…` |
+| 新（`fra-*`），默认值 | 拉 `<mirror>/yile2020/fra-api:latest`、`fra-web:latest`，retag 回 `ghcr.io/yile2020/…` |
 | 新，环境变量 `TAG=sha-abc1234` + `.env` 里 `IMAGE_OWNER=someone` | 拉 `<mirror>/someone/fra-*:sha-abc1234` |
 | 旧（`fba-*`，改名前 main 上那份） | 拉 `fba-*` —— **新脚本兼容旧 compose** |
 | compose 语法错误 | 打印 go-yaml 报错和「从 compose 展开镜像名失败」，exit 1 |
@@ -348,7 +348,7 @@ GHCR 不能给包改名，**换名字等于新建两个包**，所以下面几�
 
 ```bash
 # 1. 先换脚本。新脚本兼容旧 compose（上表第三行），换完当前部署不受影响
-curl -fsSL https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/main/deploy/prod.sh -o prod.sh
+curl -fsSL https://raw.githubusercontent.com/yile2020/fastapi-react-admin/main/deploy/prod.sh -o prod.sh
 # 2. 再换 compose，diff 里两个 image: 应该变成 fra-*
 bash prod.sh sync
 bash prod.sh pull && bash prod.sh up && bash prod.sh status
@@ -361,3 +361,21 @@ bash prod.sh pull && bash prod.sh up && bash prod.sh status
 - 删掉 `.github/workflows/ci.yml` 里两段 `fba-*` 的三行
 - 旧包删不删：删了，还在拉旧名字的人会**立刻报错**，比静默停在旧版本好；代价是改名之前的
   `sha-*` 回滚标签一起没了。删之前先确认生产不会再回滚到改名之前
+
+## 🔴 GitHub 用户名改了（`yilecoding` → `yile2020`，2026-11-19）：只有一部分地址会跟着跳
+
+GitHub 改名后只给**仓库页面和 raw** 做重定向，**镜像和 Pages 不跳**。服务器上照旧名字拉的，失败方式各不相同：
+
+| 地址 | 旧名字 | 后果 |
+|---|---|---|
+| `github.com/<旧>/fastapi-react-admin` · `raw.githubusercontent.com/<旧>/…` | 301 / 200（跳到新名字） | 暂时能用；**旧用户名一旦被别人注册，跳转就没了、而且落到别人的仓库里** |
+| `ghcr.io/<旧>/fra-api` · `fra-web` | **403**（新名字 200） | `docker compose pull` 拉不到新镜像。镜像名来自 `IMAGE_OWNER`（compose / `prod.sh` 默认值已改成新名字），**服务器 `.env` 里显式写了旧值的要手改** |
+| `<旧>.github.io/fastapi-react-admin/` | **404**（新名字 200） | 文档站 / E2E 报告的旧链接全断；国内镜像那条 `curl …/docs-site.tar.gz` 要换新域名（`apps/docs` 分册） |
+
+**桌面端 `appId` 里的旧名字刻意不改**（`electron-builder.yml` 顶部有注释）：它只是标识，改了已装的客户端升级不上来。
+但**已装客户端的更新源**（打进包里的 `app-update.yml`，`owner` 是旧名字）只能靠 github.com 的重定向找到新仓库 ——
+在发出一版新包、所有客户端都升上去之前，**旧用户名必须占住**（用一个新账号注册回 `yilecoding`），否则别人注册它、建一个同名仓库，
+未签名的 Windows 包会照单全收它发的「更新」。
+
+**实测证据**（2026-11-19 改名当天，`curl -I`）：仓库页 301 → 新名字；raw 200；`github.com/yilecoding` 404（名字空着）；
+旧 Pages 首页和 `docs-site.tar.gz` 都是 404、新的 200；GHCR 匿名 token 拉 `latest` manifest：旧命名空间 403、新的 200。

@@ -125,14 +125,14 @@ fba add --path ./my_plugin.zip --no-sql # 不建表、不跑初始化 SQL
 
 ## 代码在哪
 
-- 插件加载：[`plugin/core.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/core.py)（依赖与必装检查）· [`router.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/router.py)（路由注入）· [`validator.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/validator.py)（`plugin.toml` 校验）· [`settings_source.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/settings_source.py) · [`status.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/status.py)（启停检查）· [`hooks.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/hooks.py)
-- 安装：[`plugin/installer.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/installer.py) · 命令行 [`cli.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/cli.py) · 插件管理接口 [`api/v1/sys/plugin.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/plugin.py)
-- 前端：[`pages/plugin/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/plugin) · [`apps/web/src/lib/page-registry.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx)
+- 插件加载：[`plugin/core.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/core.py)（依赖与必装检查）· [`router.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/router.py)（路由注入）· [`validator.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/validator.py)（`plugin.toml` 校验）· [`settings_source.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/settings_source.py) · [`status.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/status.py)（启停检查）· [`hooks.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/hooks.py)
+- 安装：[`plugin/installer.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/installer.py) · 命令行 [`cli.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/cli.py) · 插件管理接口 [`api/v1/sys/plugin.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/plugin.py)
+- 前端：[`pages/plugin/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/plugin) · [`apps/web/src/lib/page-registry.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx)
 - 上游的插件文档：[FBA 文档](https://fastapi-practices.github.io/fastapi_best_architecture_docs/)
 
 ## 怎么测的
 
-- [`tests/test_plugin_order_is_deterministic.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/tests/test_plugin_order_is_deterministic.py)：插件按依赖排出的顺序每次都一样。[`tests/test_sql_scripts.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/tests/test_sql_scripts.py)：各插件的 SQL 脚本齐全。
+- [`tests/test_plugin_order_is_deterministic.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/tests/test_plugin_order_is_deterministic.py)：插件按依赖排出的顺序每次都一样。[`tests/test_sql_scripts.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/tests/test_sql_scripts.py)：各插件的 SQL 脚本齐全。
 - 停用插件的效果：`ai` 插件停用后 MCP 网关关闭（`test_ai_mcp.py`）、`workflow` 插件停用后它的 AI 工具一起消失（`test_ai_workflow_tools.py`）。
 - **没有测试的**：`plugin.toml` 校验、安装器、插件管理接口，插件管理页也没有 E2E。
 

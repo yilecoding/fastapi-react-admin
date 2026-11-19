@@ -112,13 +112,13 @@ import ProductShot from '../../../components/ProductShot.astro'
 
 ## 给工作台加一张卡片
 
-1. 在 [`dashboard/cards/registry.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/dashboard/cards/registry.ts) 加一项：`id`、所在分组、标题、`available`（谁看得到）、默认宽度、默认是否显示。
+1. 在 [`dashboard/cards/registry.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/dashboard/cards/registry.ts) 加一项：`id`、所在分组、标题、`available`（谁看得到）、默认宽度、默认是否显示。
 2. 在 `cards/` 下写组件，外面套 `DashboardCard`。
 3. **`available` 的判断要和取数接口的权限检查一致**，一张卡片一个接口 —— 否则会出现「卡片显示了、接口 403」。
 4. 两份语言包加文案。
 5. **卡片的 `id` 永远不要改**：用户存的布局按它认卡片，改了就等于删掉一张、加了一张新的。
 
-**命令面板加一个操作**：往 [`shell/command-menu.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/command-menu.tsx) 的 `actionItems` 里加；新页面只要有菜单行就会自动出现。**加快捷键**没有注册表：自己挂监听，组合键要 `preventDefault`，单键要先判断是不是在输入框里，再到 `shortcuts-dialog.tsx` 里加一行说明。**加一步功能引导**：在 `shell/tour/shell-tour.ts` 里加步骤、给目标元素加 `data-tour`（目标不存在时 `pnpm arch:check` 会报错）。
+**命令面板加一个操作**：往 [`shell/command-menu.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/command-menu.tsx) 的 `actionItems` 里加；新页面只要有菜单行就会自动出现。**加快捷键**没有注册表：自己挂监听，组合键要 `preventDefault`，单键要先判断是不是在输入框里，再到 `shortcuts-dialog.tsx` 里加一行说明。**加一步功能引导**：在 `shell/tour/shell-tour.ts` 里加步骤、给目标元素加 `data-tour`（目标不存在时 `pnpm arch:check` 会报错）。
 
 ## 它不做什么
 
@@ -130,16 +130,16 @@ import ProductShot from '../../../components/ProductShot.astro'
 
 ## 代码在哪
 
-- 工作台：[`pages/dashboard/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/dashboard)（`layout.ts` 兼容规则、`editor.tsx` 编辑模式、`cards/`）· 偏好接口 [`api/v1/sys/user.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/user.py) 的 `/me/preferences/{key}` · 规矩见 [`dashboard/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/dashboard/AGENTS.md)
-- 外壳：[`shell/command-menu.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/command-menu.tsx) · [`shell/hotkeys.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/hotkeys.ts) · [`shell/tour/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/shell/tour) · [`shell/preferences.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/preferences.ts)
-- 列表：[`_shared/use-column-visibility.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/use-column-visibility.ts) · [`_shared/use-column-order.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/use-column-order.ts) · 查询区 [`ui/components/query-bar/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/ui/src/components/query-bar)
-- 时间显示：[`i18n/src/datetime.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/i18n/src/datetime.ts) · 发版提示 [`apps/web/src/lib/app-version.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/app-version.ts)
+- 工作台：[`pages/dashboard/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/dashboard)（`layout.ts` 兼容规则、`editor.tsx` 编辑模式、`cards/`）· 偏好接口 [`api/v1/sys/user.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/user.py) 的 `/me/preferences/{key}` · 规矩见 [`dashboard/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/dashboard/AGENTS.md)
+- 外壳：[`shell/command-menu.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/command-menu.tsx) · [`shell/hotkeys.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/hotkeys.ts) · [`shell/tour/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/shell/tour) · [`shell/preferences.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/preferences.ts)
+- 列表：[`_shared/use-column-visibility.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/use-column-visibility.ts) · [`_shared/use-column-order.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/use-column-order.ts) · 查询区 [`ui/components/query-bar/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/ui/src/components/query-bar)
+- 时间显示：[`i18n/src/datetime.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/i18n/src/datetime.ts) · 发版提示 [`apps/web/src/lib/app-version.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/lib/app-version.ts)
 
 ## 怎么测的
 
-- 单元测试（Vitest）：[`dashboard/layout.test.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/dashboard/layout.test.ts)（17 条：新卡片排到最后、整份认不出来时回落默认并标出来……）、`card-rules.test.ts`、查询区的 `params.test.ts`（38 条）。
-- 后端：[`test_user_preference.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_user_preference.py)（没存过的键读出来是 null 而不是 404、只能读写自己的）、`test_dashboard_ops.py`（访问统计按看的人的时区切天）。
-- 浏览器端（Playwright）：[`dashboard-personalize.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/dashboard-personalize.spec.ts)（10 条，含第二个浏览器登录同一个人看到同样的布局、读布局失败时显示错误且不能编辑）、[`command-palette.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/command-palette.spec.ts)（`?` 打开快捷键帮助，但在输入框里打问号不弹）、[`tour.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/tour.spec.ts)、[`new-version.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/new-version.spec.ts)、[`query-bar.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/query-bar.spec.ts)。
+- 单元测试（Vitest）：[`dashboard/layout.test.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/dashboard/layout.test.ts)（17 条：新卡片排到最后、整份认不出来时回落默认并标出来……）、`card-rules.test.ts`、查询区的 `params.test.ts`（38 条）。
+- 后端：[`test_user_preference.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_user_preference.py)（没存过的键读出来是 null 而不是 404、只能读写自己的）、`test_dashboard_ops.py`（访问统计按看的人的时区切天）。
+- 浏览器端（Playwright）：[`dashboard-personalize.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/dashboard-personalize.spec.ts)（10 条，含第二个浏览器登录同一个人看到同样的布局、读布局失败时显示错误且不能编辑）、[`command-palette.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/command-palette.spec.ts)（`?` 打开快捷键帮助，但在输入框里打问号不弹）、[`tour.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/tour.spec.ts)、[`new-version.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/new-version.spec.ts)、[`query-bar.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/query-bar.spec.ts)。
 - 没有 E2E 的：外观偏好、切换时区、列显隐。
 
 ## 在演示站里试试

@@ -73,11 +73,11 @@ import ProductShot from '../../../components/ProductShot.astro'
 1. 种子数据：在 `plugin/config/sql/` 下五份初始化 SQL 里各加一行。
 2. 写一条数据迁移，用 `insert_if_absent` 插入这一行 —— 已经在跑的库不会重新执行种子 SQL，不写迁移就只有新装的环境有这一项。
 3. 在 `core/conf.py` 声明这个键并给默认值，那是组关掉或值不合法时的回落值。
-4. 加进对应分组的 `load_*` 映射（[`utils/dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py)），并确认读这个配置的代码路径上调用了这个 `load_*`；新分组还要加 `ConfigType`。
+4. 加进对应分组的 `load_*` 映射（[`utils/dynamic_config.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py)），并确认读这个配置的代码路径上调用了这个 `load_*`；新分组还要加 `ConfigType`。
 5. 整数加进 `DYNAMIC_INT_BOUNDS`，并在前端 `pages/config/registry.ts` 里写同样的 `min` / `max` —— `test_dynamic_config_bounds.py` 会核对两边一致。固定取值的加进 `DYNAMIC_CHOICES`。
 6. 在 `registry.ts` 的 `REGISTRY` 里加说明、单位、控件类型；新分组还要加导航项、图标和中英文案。
 
-规矩和踩过的坑在 [`pages/config/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/config/AGENTS.md)。
+规矩和踩过的坑在 [`pages/config/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/config/AGENTS.md)。
 
 ## 它不做什么
 
@@ -89,12 +89,12 @@ import ProductShot from '../../../components/ProductShot.astro'
 
 ## 代码在哪
 
-- 参数配置：[`plugin/config/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/config) · 运行时加载与校验 [`utils/dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py) · 前端 [`pages/config/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/config)（`registry.ts` 是每一项的元数据）
-- 数据字典：[`plugin/dict/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/dict) · 前端 [`pages/dict/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/dict)
+- 参数配置：[`plugin/config/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/config) · 运行时加载与校验 [`utils/dynamic_config.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py) · 前端 [`pages/config/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/config)（`registry.ts` 是每一项的元数据）
+- 数据字典：[`plugin/dict/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/dict) · 前端 [`pages/dict/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/dict)
 
 ## 怎么测的
 
-- [`test_dynamic_config_bounds.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_dynamic_config_bounds.py)：后端范围和前端 `registry.ts` 对账、越界写入被拒。[`test_dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_dynamic_config.py)：读取时的回落。[`test_upload_policy_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_upload_policy_config.py)：文件上传组。`test_mfa.py` 里有「没配密钥不能强制二次验证」「配置列表不因一个已不合法的旧值整个 500」。
+- [`test_dynamic_config_bounds.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_dynamic_config_bounds.py)：后端范围和前端 `registry.ts` 对账、越界写入被拒。[`test_dynamic_config.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_dynamic_config.py)：读取时的回落。[`test_upload_policy_config.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_upload_policy_config.py)：文件上传组。`test_mfa.py` 里有「没配密钥不能强制二次验证」「配置列表不因一个已不合法的旧值整个 500」。
 - 字典的导入导出在 `test_import.py`、`test_export.py` 里。
 - 浏览器端没有专门的用例；E2E 的全局准备阶段通过接口关掉图形验证码，用的就是参数配置。
 

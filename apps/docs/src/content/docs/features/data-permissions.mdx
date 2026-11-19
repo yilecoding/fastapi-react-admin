@@ -27,7 +27,7 @@ fastapi-react-admin 的权限分两道互相独立的闸。**RBAC** 管「能不
 |---|---|---|
 | 回答的问题 | 这个人能不能调 `GET /sys/users`？ | 调了之后能看到哪些用户？ |
 | 在哪配 | **系统管理 → 菜单管理**（按钮上的权限码）+ **系统管理 → 角色管理 → 功能权限** | **系统管理 → 数据权限** + **系统管理 → 角色管理 → 数据范围** |
-| 在哪拦 | [`rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py) 的 `rbac_verify`，按接口 | [`data_scope.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py) 的 `DataScopedCRUD`，按 DAO |
+| 在哪拦 | [`rbac.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py) 的 `rbac_verify`，按接口 | [`data_scope.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py) 的 `DataScopedCRUD`，按 DAO |
 | 被拒的表现 | HTTP 403 | 行变少（详情接口是 404） |
 
 ## 菜单、按钮、接口的 RBAC 是怎么判的？
@@ -44,7 +44,7 @@ fastapi-react-admin 的权限分两道互相独立的闸。**RBAC** 管「能不
 
 `rbac_verify` 按顺序判：超管直接放行；用户至少要有一个启用的角色，角色至少挂了一个菜单；`GET` / `OPTIONS` 以外的请求还要求 `is_staff`（后台管理操作权限）；最后，接口的权限码必须出现在某个启用角色、某个启用菜单的 `perms` 里。菜单「启用」指的是**它和每一级上级**都启用 —— 停用一个目录，下面按钮的权限码一起失效。
 
-前端登录后从 `/auth/codes` 拉一次权限码：[`<Can perm="…">`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/auth/can.tsx) 控制按钮显隐，路由 `beforeLoad` 里的 `requirePerm()` 无权限时跳 `/403`。这两处都只管显示，真正的边界在后端。
+前端登录后从 `/auth/codes` 拉一次权限码：[`<Can perm="…">`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/auth/can.tsx) 控制按钮显隐，路由 `beforeLoad` 里的 `requirePerm()` 无权限时跳 `/403`。这两处都只管显示，真正的边界在后端。
 
 :::caution
 没有声明权限码的路由，`rbac_verify` 直接放行（提前 return）。读接口也必须挂权限码：issue #30 之前，`/sys/users`、`/logs/opera` 等几个 `GET` 接口只校验了登录，一个只绑了「仪表盘」的账号就能拿到全量用户列表。
@@ -64,7 +64,7 @@ fastapi-react-admin 的权限分两道互相独立的闸。**RBAC** 管「能不
 
 落到 `User` 模型上就是 `sys_user.dept_id = <当前用户的 dept_id>`。`Dept` 上没有 `dept_id` 这一列，所以同一条规则对部门列表不起作用。
 
-[`filter_data_permission_for_user()`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/permission.py) 的求值顺序：
+[`filter_data_permission_for_user()`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/permission.py) 的求值顺序：
 
 1. 超管 → 不过滤。
 2. 只要有一个启用的角色关掉了「启用数据权限过滤」→ 不过滤。
@@ -94,7 +94,7 @@ return or_(*where_list) if where_list else or_(1 == 1)
 
 不用。JWT 中间件认证通过后把当前用户放进 `ContextVar`，`DataScopedCRUD` 基类在 `select()`、`select_model()`（按主键取详情）和 `count()` 三处把条件拼上。只覆盖 `select()` 会漏掉详情接口：现在对范围外的部门请求 `GET /sys/depts/{pk}`，返回的是 404，而不是那条数据。
 
-每个 DAO 都必须表态：要么继承默认（过滤），要么显式写 `data_scope_enabled = False` 并注明理由。有一条测试扫描所有 `crud_*.py`，还有类直接继承 `CRUDPlus` 就红；另一条核对豁免清单和代码是否一致。目前受数据范围约束的有：用户、部门、角色、文件、登录 / 操作日志、定时任务及执行记录。豁免的理由都写在 [`test_data_scope_coverage.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_data_scope_coverage.py) 里，例如：菜单（滤掉会让侧边栏空白）、字典与参数配置（表单下拉依赖它们）、规则表和范围表自身（会把管理员自己锁在外面）、公告（表里没有可过滤的归属字段）。
+每个 DAO 都必须表态：要么继承默认（过滤），要么显式写 `data_scope_enabled = False` 并注明理由。有一条测试扫描所有 `crud_*.py`，还有类直接继承 `CRUDPlus` 就红；另一条核对豁免清单和代码是否一致。目前受数据范围约束的有：用户、部门、角色、文件、登录 / 操作日志、定时任务及执行记录。豁免的理由都写在 [`test_data_scope_coverage.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_data_scope_coverage.py) 里，例如：菜单（滤掉会让侧边栏空白）、字典与参数配置（表单下拉依赖它们）、规则表和范围表自身（会把管理员自己锁在外面）、公告（表里没有可过滤的归属字段）。
 
 ## 后台任务（Celery）里会怎样？
 
@@ -107,13 +107,13 @@ with scoped_to_user(user):
         ...
 ```
 
-这段来自导出的 worker（[`export_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/export_service.py)）：不这么写的话，一个只能看本部门的人发起的大批量导出，在 worker 里会查回全表，而且不报错。`scoped_to_user(None)` 会故意抛 `ValueError`。[AI 助手](/features/ai-assistant/)的每一次工具调用也走同一个 `scoped_to_user`。反方向的 `bypass_data_scope()` 只给请求里「不展示给用户」的系统内部读用，比如登录时查用户、新建时的唯一性检查。
+这段来自导出的 worker（[`export_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/export_service.py)）：不这么写的话，一个只能看本部门的人发起的大批量导出，在 worker 里会查回全表，而且不报错。`scoped_to_user(None)` 会故意抛 `ValueError`。[AI 助手](/features/ai-assistant/)的每一次工具调用也走同一个 `scoped_to_user`。反方向的 `bypass_data_scope()` 只给请求里「不展示给用户」的系统内部读用，比如登录时查用户、新建时的唯一性检查。
 
 ## 规则配错了会怎样？
 
 两道防线：
 
-- **保存时校验**（[`data_rule_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/data_rule_service.py)）：模型或字段不存在、用了被排除的字段（`id`、`sort`、`deleted`、`deleted_time`、`created_time`、`updated_time`）、值转不成列的类型（给 bigint 列配 `abc`）、`__ALL__` 配裸字段名 —— 直接拒绝并说明原因。
+- **保存时校验**（[`data_rule_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/data_rule_service.py)）：模型或字段不存在、用了被排除的字段（`id`、`sort`、`deleted`、`deleted_time`、`created_time`、`updated_time`）、值转不成列的类型（给 bigint 列配 `abc`）、`__ALL__` 配裸字段名 —— 直接拒绝并说明原因。
 - **运行时 fail-closed**：只要有一条规则读不懂，整个过滤器收紧成 `false()`，一行都看不到。模板变量取不到值（没有部门的用户遇到 `${dept_id}`）时，这条规则匹配不到任何行，而不是把字面量 `'${dept_id}'` 拼进 SQL（在 SQL Server 上那会直接 500）。
 
 早期版本遇到落不到列上的规则是直接跳过的。种子里的「本部门数据权限」当时配的是 `Dept.__dept_id__`，而 `sys_dept` 没有 `dept_id` 这一列 —— 名字叫「本部门」，实际效果是全部部门可见，界面上没有任何提示。
@@ -143,17 +143,17 @@ with scoped_to_user(user):
 
 ## 代码在哪
 
-- [`common/security/permission.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/permission.py) —— `RequestPermission`、规则编译
-- [`common/security/data_scope.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py) —— `DataScopedCRUD`、`scoped_to_user`、`bypass_data_scope`
-- [`common/security/rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py) —— `rbac_verify`、`user_has_perm`
-- [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) —— `DATA_PERMISSION_*` 模板变量与排除清单
-- [`pages/data-permission/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/data-permission)、[`pages/role/role-scopes.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/role/role-scopes.tsx) —— 管理界面
+- [`common/security/permission.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/permission.py) —— `RequestPermission`、规则编译
+- [`common/security/data_scope.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py) —— `DataScopedCRUD`、`scoped_to_user`、`bypass_data_scope`
+- [`common/security/rbac.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py) —— `rbac_verify`、`user_has_perm`
+- [`core/conf.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) —— `DATA_PERMISSION_*` 模板变量与排除清单
+- [`pages/data-permission/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/data-permission)、[`pages/role/role-scopes.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/role/role-scopes.tsx) —— 管理界面
 
 ## 怎么测的
 
-- [`test_data_permission.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_data_permission.py) —— 29 条。自己建一整张图（5 个部门、17 条规则、18 个数据范围、20 个角色、23 个用户），每个用户真实登录，断言真实接口到底返回了哪些行。
-- [`test_data_permission_failclosed.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_data_permission_failclosed.py)（8 条）、[`test_data_rule_validation.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_data_rule_validation.py)（9 条）、`test_data_scope_coverage.py`（10 条）。
-- [`data-permission.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/data-permission.spec.ts) —— Playwright 多账号：部门页实际渲染出来的行、AND/OR 告警，以及在界面上新建一条规则后，目标账号刷新一下就受限。
+- [`test_data_permission.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_data_permission.py) —— 29 条。自己建一整张图（5 个部门、17 条规则、18 个数据范围、20 个角色、23 个用户），每个用户真实登录，断言真实接口到底返回了哪些行。
+- [`test_data_permission_failclosed.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_data_permission_failclosed.py)（8 条）、[`test_data_rule_validation.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_data_rule_validation.py)（9 条）、`test_data_scope_coverage.py`（10 条）。
+- [`data-permission.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/data-permission.spec.ts) —— Playwright 多账号：部门页实际渲染出来的行、AND/OR 告警，以及在界面上新建一条规则后，目标账号刷新一下就受限。
 
 CI 上后端全套在 PostgreSQL 和 SQL Server 各跑一遍（见[数据库](/features/databases/)）。
 

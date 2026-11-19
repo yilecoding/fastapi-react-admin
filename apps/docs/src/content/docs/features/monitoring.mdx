@@ -89,14 +89,14 @@ import ProductShot from '../../../components/ProductShot.astro'
 
 ## 代码在哪
 
-- 监控接口：[`api/v1/monitor/server.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/monitor/server.py) · [`redis.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/monitor/redis.py)
-- 健康检查：[`core/registrar.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/registrar.py) · 调度器心跳在 [`app/task/utils/schedulers.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/utils/schedulers.py) 的 `tick` · worker 心跳任务 [`tasks/health/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/app/task/tasks/health) · nginx 的兜底 [`apps/web/nginx.conf`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/nginx.conf)
-- 前端：[`pages/monitor-server/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/monitor-server) · [`pages/monitor-redis/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/monitor-redis) · 共用的刷新与趋势 [`_shared/monitor.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/monitor.tsx) · 工作台卡片 [`dashboard/cards/services.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/dashboard/cards/services.tsx)
+- 监控接口：[`api/v1/monitor/server.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/monitor/server.py) · [`redis.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/monitor/redis.py)
+- 健康检查：[`core/registrar.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/registrar.py) · 调度器心跳在 [`app/task/utils/schedulers.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/utils/schedulers.py) 的 `tick` · worker 心跳任务 [`tasks/health/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/app/task/tasks/health) · nginx 的兜底 [`apps/web/nginx.conf`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/nginx.conf)
+- 前端：[`pages/monitor-server/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/monitor-server) · [`pages/monitor-redis/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/monitor-redis) · 共用的刷新与趋势 [`_shared/monitor.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/monitor.tsx) · 工作台卡片 [`dashboard/cards/services.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/dashboard/cards/services.tsx)
 
 ## 怎么测的
 
-- [`security/test_health.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_health.py)（23 条）：不用 token、调度器挂了时 worker 记 `unknown`、worker 初始化不会把连接绑在一次性的事件循环上，等等。
-- E2E 只覆盖工作台的「服务状态」卡片（五行状态 + 汇总，[`dashboard-personalize.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/dashboard-personalize.spec.ts)）。
+- [`security/test_health.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_health.py)（23 条）：不用 token、调度器挂了时 worker 记 `unknown`、worker 初始化不会把连接绑在一次性的事件循环上，等等。
+- E2E 只覆盖工作台的「服务状态」卡片（五行状态 + 汇总，[`dashboard-personalize.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/dashboard-personalize.spec.ts)）。
 
 ## 在演示站里试试
 

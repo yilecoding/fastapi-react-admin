@@ -83,7 +83,7 @@ A new database comes from `pnpm db:init` (create tables from the models, load th
 
 ## Which settings are there?
 
-The database connection is configured in `.env` only; restart the backend and the worker after changing it (template: [`.env.example`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/.env.example)):
+The database connection is configured in `.env` only; restart the backend and the worker after changing it (template: [`.env.example`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/.env.example)):
 
 | Key | Value in `.env.example` | Notes |
 |---|---|---|
@@ -100,7 +100,7 @@ The database connection is configured in `.env` only; restart the backend and th
 
 ## How it is tested
 
-Guards in [`app/task/tests/test_migrations.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_migrations.py):
+Guards in [`app/task/tests/test_migrations.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_migrations.py):
 
 | Test | Catches |
 |---|---|
@@ -111,13 +111,13 @@ Guards in [`app/task/tests/test_migrations.py`](https://github.com/yilecoding/fa
 | `test_created_tables_declare_snowflake_pk_as_non_autoincrement` | the SQL Server `IDENTITY` trap above |
 | `test_seed_files_have_a_matching_data_migration_decision` | seed SQL changed without a data migration for existing databases |
 
-In [`backend/tests/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/tests), `test_seed_dialects.py` checks that the three seed files have the same tables, row counts and columns, and that link tables point at IDs that exist. `test_timezone_type.py` compiles the time-column DDL for all three dialects without connecting to MySQL.
+In [`backend/tests/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/tests), `test_seed_dialects.py` checks that the three seed files have the same tables, row counts and columns, and that link tables point at IDs that exist. `test_timezone_type.py` compiles the time-column DDL for all three dialects without connecting to MySQL.
 
 ## Where it lives in the code
 
-- [`apps/api/backend/database/db.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/database/db.py): connection URL per dialect
-- [`apps/api/backend/common/model.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/model.py): `UniversalStr`, `UniversalText`, `TimeZone`, `id_key`
-- [`apps/api/backend/.env.example`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/.env.example) and `core/conf.py`: `DATABASE_*` settings
-- [`apps/api/backend/sql/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/sql): one seed file per dialect
-- [`apps/api/backend/alembic/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/alembic) and its [`AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md): migrations and every dialect pitfall with its evidence
-- [`.github/workflows/ci.yml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/.github/workflows/ci.yml): the PostgreSQL, SQL Server and E2E jobs
+- [`apps/api/backend/database/db.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/database/db.py): connection URL per dialect
+- [`apps/api/backend/common/model.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/model.py): `UniversalStr`, `UniversalText`, `TimeZone`, `id_key`
+- [`apps/api/backend/.env.example`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/.env.example) and `core/conf.py`: `DATABASE_*` settings
+- [`apps/api/backend/sql/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/sql): one seed file per dialect
+- [`apps/api/backend/alembic/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/alembic) and its [`AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md): migrations and every dialect pitfall with its evidence
+- [`.github/workflows/ci.yml`](https://github.com/yile2020/fastapi-react-admin/blob/main/.github/workflows/ci.yml): the PostgreSQL, SQL Server and E2E jobs

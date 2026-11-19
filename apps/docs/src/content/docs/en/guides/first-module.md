@@ -1492,16 +1492,16 @@ cd apps/api && uv run --no-sync pytest \
 
 ## Related source
 
-- [`backend/common/security/data_scope.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py): `DataScopedCRUD` and which read methods it overrides
-- [`backend/common/security/permission.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/permission.py): how rules compile into a `WHERE` condition
-- [`backend/common/security/rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py): `rbac_verify`
-- [`backend/common/model.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/model.py): `Base`, `id_key`, `UniversalStr`
-- [`backend/common/schema.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/schema.py): `ColumnLengthChecked`
-- [`backend/utils/data_migration.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/data_migration.py): `add_menu` / `grant_menu`
-- [`backend/plugin/dict/`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/dict/): a complete, simple three-layer module
-- [`backend/app/router.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/router.py): where app routers are mounted
-- [`backend/alembic/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md): rules for migrations and seed data
-- [`packages/platform/src/pages/notice/`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/notice/): the reference list page
-- [`packages/platform/src/pages/_shared/list-query.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/list-query.ts): `listState()`
-- [`packages/platform/src/pages/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/AGENTS.md): rules for list pages
-- [`apps/web/src/lib/page-registry.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx): the page registry
+- [`backend/common/security/data_scope.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py): `DataScopedCRUD` and which read methods it overrides
+- [`backend/common/security/permission.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/permission.py): how rules compile into a `WHERE` condition
+- [`backend/common/security/rbac.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py): `rbac_verify`
+- [`backend/common/model.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/model.py): `Base`, `id_key`, `UniversalStr`
+- [`backend/common/schema.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/schema.py): `ColumnLengthChecked`
+- [`backend/utils/data_migration.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/data_migration.py): `add_menu` / `grant_menu`
+- [`backend/plugin/dict/`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/dict/): a complete, simple three-layer module
+- [`backend/app/router.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/router.py): where app routers are mounted
+- [`backend/alembic/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md): rules for migrations and seed data
+- [`packages/platform/src/pages/notice/`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/notice/): the reference list page
+- [`packages/platform/src/pages/_shared/list-query.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/list-query.ts): `listState()`
+- [`packages/platform/src/pages/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/AGENTS.md): rules for list pages
+- [`apps/web/src/lib/page-registry.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx): the page registry

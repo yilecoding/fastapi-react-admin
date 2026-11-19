@@ -49,7 +49,7 @@ pnpm deploy:prod:down     # 停止容器；不要 down -v
 
 ```bash
 mkdir -p /srv/fastapi-react-admin && cd $_
-base=https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/main
+base=https://raw.githubusercontent.com/yile2020/fastapi-react-admin/main
 curl -fsSLO $base/docker-compose.prod.yml
 curl -fsSL  $base/deploy/prod.sh -o prod.sh
 curl -fsSL  $base/apps/api/deploy/backend/docker-compose/.env.server.example -o .env.server

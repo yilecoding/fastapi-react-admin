@@ -1,7 +1,7 @@
 {
   "$schema": "https://ui.shadcn.com/schema/registry.json",
   "name": "fastapi-react-admin",
-  "homepage": "https://github.com/yilecoding/fastapi-react-admin",
+  "homepage": "https://github.com/yile2020/fastapi-react-admin",
   "items": [
     {
       "name": "accordion",
