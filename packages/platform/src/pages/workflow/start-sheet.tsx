@@ -142,7 +142,9 @@ function Filler({
   const [urgent, setUrgent] = React.useState(false)
   const draft = useDraftAutosave(code, form, aiFilled, !fromOld)
   const deleteDraft = useDeleteDraft()
-  const [restored, setRestored] = React.useState(!!restoredAt)
+  // 自动保存会把缓存里的 updated_time 刷成「现在」，恢复条要的是打开时那份草稿的时间 —— 冻在首帧
+  const [restoredFrom] = React.useState(restoredAt)
+  const [restored, setRestored] = React.useState(!!restoredFrom)
   // 一次填写 = 一个幂等键：网络抖动重试 / 双击提交不会建出两张单
   const key = React.useRef(idempotencyKey())
 
@@ -263,9 +265,9 @@ function Filler({
 
       <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_20rem]">
         <section className="flex flex-col gap-5 px-6 py-5">
-          {restored && restoredAt && (
+          {restored && restoredFrom && (
             <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground" data-testid="wf-draft-restored">
-              <span>{t('已恢复你 {{at}} 没提交的内容', { at: formatDateTime(restoredAt) })}</span>
+              <span>{t('已恢复你 {{at}} 没提交的内容', { at: formatDateTime(restoredFrom) })}</span>
               <button
                 type="button"
                 className="ms-auto text-primary hover:underline"

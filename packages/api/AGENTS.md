@@ -355,8 +355,9 @@ refresh token 在 httpOnly cookie 里 —— 浏览器 JS 碰不到，RN 的 coo
 三个评审补出来的细节（都是「顺序 / 时机」的坑）：
 - web：401 那条路上 api 层的 `expire()` 已经**先清 token、再带着原因码**跳了登录页。`logout()` 这时返回 `true`，
   `user-menu.tsx` 不再跳一次 —— 再跳一次不带原因码，会把「被管理员下线」那条提示冲掉
-- mobile：撤销请求**在后台发**（`startRevoke`），不 await 在界面前面：请求没有超时，服务器不可达时 RN 的 fetch 要等 10～60 秒，
-  点「退出」没反应、冷启动卡在闪屏上。token 先清，登出只带 cookie（后端认 cookie）
+- mobile：撤销请求**在后台发**（`startRevoke`），不 await 在界面前面：服务器不可达时 RN 的 fetch 要等 10～60 秒，
+  点「退出」没反应、冷启动卡在闪屏上。请求本身带 8 秒超时（#374）—— 下一条的 `settleRevoke()` 要等它，没超时的话离线登出后马上登录同样卡 10～60 秒（只过了 typecheck，没上真机）。
+  token 先清，登出只带 cookie（后端认 cookie）
 - mobile：登录前 `settleRevoke()` 等上一次撤销落地 —— 登出响应里那条清 cookie 的 `Set-Cookie` 要是晚于新登录的响应，
   会把**新**会话的 refresh cookie 清掉，半小时后被莫名其妙踢回登录屏。`startRevoke` 必须同步调用 `api.POST`
   （地址在 `send` 第一个 await 之前取），改服务器地址的屏紧接着就换地址
