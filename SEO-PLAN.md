@@ -15,7 +15,7 @@
 Google 那边收录的、文章里链出去的旧地址全部失效。国内那份 `fra.wubunan.com/docs/` 和百度**不受影响**。
 
 - [x] 用新账号把 `yilecoding` 占住（2026-11-19）。这个账号下**不要建 `fastapi-react-admin` 仓库**，会顶掉旧仓库地址的跳转
-- [x] 代码里的站点地址改成新名（#389，2026-11-19 合并）。sitemap、canonical、og:url 在合并后那次 CI 发布 Pages 后才变成新名
+- [x] 代码里的站点地址改成新名（#389，2026-11-19 合并）。Pages 已重新发布，sitemap、canonical、og:url 都是新名（第一次发布遇到 GitHub 偶发错误，重跑后成功）
 - [ ] **旧地址做跳转**：在 `yilecoding` 账号下建仓库 `yilecoding.github.io`（用户站点，名字必须一字不差），
       放 Claude 准备的三个文件（`404.html` · `index.html` · `fastapi-react-admin/index.html`），Settings → Pages 选 main 分支根目录。
       效果：`yilecoding.github.io/fastapi-react-admin/<任意路径>` 自动跳到 `yile2020.github.io/fastapi-react-admin/<同一路径>`。
@@ -26,7 +26,7 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
 - [ ] 旧资源（`yilecoding.github.io/…`）**先别删**：里面有到现在的收录和搜索词数据，做了跳转后还能看到 Google 把旧页挪到新地址的过程。
       「设置 → 地址更改」工具用不了（它只认域名根，子路径的 github.io 资源不支持），靠跳转 + 新 sitemap 让 Google 自己迁
 - [ ] Bing：上面新资源验证好之后再「从 Google Search Console 导入」，导进来就是新地址
-- [ ] 服务器上国内文档站重新拉一次包（拉的是新地址的 `docs-site.tar.gz`）：现在页面里的 GitHub 链接还是旧名（会跳转，不急）
+- [x] 服务器上国内文档站重新拉一次包（2026-11-19 拉完，页面里已是新名；服务器到 github.io 只有 ~40KB/s，要先整包下载到文件再解压，管道直解会超时）（拉的是新地址的 `docs-site.tar.gz`）：现在页面里的 GitHub 链接还是旧名（会跳转，不急）
 - [ ] DeepWiki / zread：两家按仓库路径建索引。zread 新旧地址都能开；DeepWiki 打开 `deepwiki.com/yile2020/fastapi-react-admin`，没有内容就点重新索引
 
 ## 进度
