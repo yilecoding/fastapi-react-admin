@@ -74,7 +74,7 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
       核对过 GitHub 上的预览图、Pages 的 `og.png`、仓库里的 `apps/docs/public/og.png` 是同一个文件。
       以后改图：改 `apps/docs/scripts/gen-og.mjs` → `pnpm --filter @admin/docs og` → 合进 main 后把 `og.png` 重新传一次（GitHub 不会自动同步）。
       新图不带透明层，PNG 直接传就行（旧图带透明层时报过「Something went really wrong」）
-- [x] （2026-11-19 `gh repo edit --homepage` 改成了 `https://yile2020.github.io/fastapi-react-admin/`，原来是演示站 `https://fra.wubunan.com`）（可选）仓库首页右侧 About 的 Website 改成文档站地址
+- [x] （2026-11-19 决定不改：About 的 Website 保持直接指向演示站 `https://fra.wubunan.com`，文档站入口放在 README 里；中间试过改成文档站，用户看了后改回）（可选）仓库首页右侧 About 的 Website 改成文档站地址
 
 ## 之后什么时候回来看
 
