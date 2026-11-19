@@ -27,7 +27,7 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
       「设置 → 地址更改」工具用不了（它只认域名根，子路径的 github.io 资源不支持），靠跳转 + 新 sitemap 让 Google 自己迁
 - [x] Bing（2026-11-19 做完：从 GSC 导入，新站和 `sitemap-index.xml` 都过来了，状态 Processing）：上面新资源验证好之后再「从 Google Search Console 导入」，导进来就是新地址
 - [x] 服务器上国内文档站重新拉一次包（2026-11-19 拉完，页面里已是新名；服务器到 github.io 只有 ~40KB/s，要先整包下载到文件再解压，管道直解会超时）（拉的是新地址的 `docs-site.tar.gz`）：现在页面里的 GitHub 链接还是旧名（会跳转，不急）
-- [ ] （2026-11-19 实看：zread 新地址 200 正常；DeepWiki 新名下是「Repository Not Indexed」，要填通知邮箱后点 Index Repository，等用户给邮箱）DeepWiki / zread：两家按仓库路径建索引。zread 新旧地址都能开；DeepWiki 打开 `deepwiki.com/yile2020/fastapi-react-admin`，没有内容就点重新索引
+- [x] （2026-11-19 做完：zread 新地址 200 正常；DeepWiki 新名下原是「Repository Not Indexed」，已填通知邮箱点了 Index Repository，状态 Indexing in Progress，建完发邮件，2–10 分钟）DeepWiki / zread：两家按仓库路径建索引。zread 新旧地址都能开；DeepWiki 打开 `deepwiki.com/yile2020/fastapi-react-admin`，没有内容就点重新索引
 
 ## 进度
 
@@ -72,7 +72,7 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
 
 - [x] （用户已配好，2026-11-19 核对：预览图是品牌图，带新名）Settings → General → Social preview → Edit → Upload，传 `og-preview.jpg`（Windows 桌面上；源图是 https://yile2020.github.io/fastapi-react-admin/og.png）。
       直接传 og.png 报过「Something went really wrong」，换成去掉透明层的 JPG 再传
-- [ ] （可选）仓库首页右侧 About 的 Website 改成文档站地址
+- [x] （2026-11-19 `gh repo edit --homepage` 改成了 `https://yile2020.github.io/fastapi-react-admin/`，原来是演示站 `https://fra.wubunan.com`）（可选）仓库首页右侧 About 的 Website 改成文档站地址
 
 ## 之后什么时候回来看
 
