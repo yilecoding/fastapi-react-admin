@@ -7,6 +7,8 @@
 #     表现为「更新完之后又要重填一遍」，而不是一个报错；
 #   appId 是 Windows 认「同一个应用的升级」的依据，改了会装出两份并存；
 #   executableName 会出现在路径、任务管理器和脚本里，保持 ASCII 小写。
+# ⚠️ appId 里的 `yilecoding` 是 GitHub 改名（→ yile2020，2026-11）前的旧用户名，**刻意不跟着改**：
+#   它只是个标识，不解析成任何地址；改了已装的客户端就升级不上来（装出两份）。
 appId: io.github.yilecoding.admin-desktop
 productName: Admin Desktop
 # 不设的话 Linux 下可执行文件名会从包名推出来，变成 `@admindesktop`（实测）
@@ -123,6 +125,6 @@ nsis:
 # 留着这一段是为了让 electron-builder ① 生成 latest.yml ② 把 app-update.yml 打进包里。
 publish:
   provider: github
-  owner: yilecoding
+  owner: yile2020
   repo: fastapi-react-admin
   releaseType: draft

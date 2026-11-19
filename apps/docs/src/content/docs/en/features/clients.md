@@ -9,7 +9,7 @@ The repo ships two clients alongside the browser. `apps/desktop` runs the same w
 
 ## Where do I download the desktop app?
 
-From [GitHub Releases](https://github.com/yilecoding/fastapi-react-admin/releases). Each release has:
+From [GitHub Releases](https://github.com/yile2020/fastapi-react-admin/releases). Each release has:
 
 | Platform | File | Notes |
 |---|---|---|
@@ -27,7 +27,7 @@ Windows SmartScreen warns once (*More info → Run anyway*). macOS Gatekeeper sa
 
 The shell (Electron 42) contains no business code; the pages are the same `apps/web` build. The renderer talks to the main process through `window.desktop`, which exposes six namespaces (`app`, `config`, `auth`, `print`, `devices`, `updater`). The IPC contract lives in `packages/platform/src/desktop/contract.ts`.
 
-- **Silent printing.** `print.html()` renders HTML in a hidden window and calls `webContents.print({ silent: true })`, so no dialog appears. It uses the printer named in config or the system default. This works for HTML only, not for an existing PDF, so labels are built as HTML with CSS `@page`; `buildLabelHtml()` helps with that. `print.htmlToPdf()` runs the same pipeline to a PDF for checking layouts without a printer. A failed print returns `{ ok: false, reason }`, never a false success. Silent printing is the reason recorded in [`apps/desktop/README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/desktop/README.md) for choosing Electron.
+- **Silent printing.** `print.html()` renders HTML in a hidden window and calls `webContents.print({ silent: true })`, so no dialog appears. It uses the printer named in config or the system default. This works for HTML only, not for an existing PDF, so labels are built as HTML with CSS `@page`; `buildLabelHtml()` helps with that. `print.htmlToPdf()` runs the same pipeline to a PDF for checking layouts without a printer. A failed print returns `{ ok: false, reason }`, never a false success. Silent printing is the reason recorded in [`apps/desktop/README.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/desktop/README.md) for choosing Electron.
 - **Local hardware.** Device adapters start a native helper process and stream its events to `devices.on()`. The shell ships an ID-card-reader adapter. When the vendor's helper `.exe` isn't in `resources/`, the adapter runs in stub mode and `devices.simulate()` fires fake events, so the read → fetch → print flow can be developed on macOS.
 - **Credentials.** The renderer is served from `app://local`, so the browser's refresh cookie (`SameSite=Lax`) isn't sent to the backend. The main process therefore keeps the refresh token, encrypted with Electron `safeStorage` (DPAPI on Windows, Keychain on macOS), and hands only the access token to the page. This path has passed type checks but not yet an end-to-end test in a packaged build.
 - **Runtime config.** `config.json` in the app's user-data directory holds `serverUrl`, `printerName`, `kiosk`, `autoLaunch` and `updateUrl`. One installer can serve every environment; nothing is compiled in.
@@ -57,7 +57,7 @@ For an intranet mirror, publish `<version>.exe`, its `.blockmap` and `latest.yml
 
 ## How are the installers built?
 
-Pushing a `v*` tag runs [`.github/workflows/release.yml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/.github/workflows/release.yml). A `prepare` job checks that the tag matches both `apps/web/package.json` and the backend's `__version__`, then creates **one** draft release. A matrix then builds on `windows-latest`, `macos-latest` and `ubuntu-latest`, each platform on its own OS. electron-builder runs with `--publish never` and `gh release upload` attaches the files, because electron-builder's own publisher once raced into two drafts. A person tests the draft before publishing it.
+Pushing a `v*` tag runs [`.github/workflows/release.yml`](https://github.com/yile2020/fastapi-react-admin/blob/main/.github/workflows/release.yml). A `prepare` job checks that the tag matches both `apps/web/package.json` and the backend's `__version__`, then creates **one** draft release. A matrix then builds on `windows-latest`, `macos-latest` and `ubuntu-latest`, each platform on its own OS. electron-builder runs with `--publish never` and `gh release upload` attaches the files, because electron-builder's own publisher once raced into two drafts. A person tests the draft before publishing it.
 
 Locally: `pnpm --filter web build`, then `pnpm --filter @admin/desktop package`. The desktop build does not rebuild the web app, so skipping the first step packages a stale UI without any error. For development, run the web dev server on :8888 and then `pnpm desktop:dev`.
 
@@ -94,7 +94,7 @@ To run it: `pnpm --filter api dev:host` (backend on `0.0.0.0:8088`), then `pnpm 
 
 ## Where it lives in the code
 
-- [`apps/desktop/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/desktop): `src/main/` (window, `app://` protocol, `print.ts`, `updater.ts`, `auth.ts`, `devices/`), `electron-builder.yml`
-- [`packages/platform/src/desktop/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/desktop): bridge contract, `isDesktop()` / `desktop()`, label template
-- [`apps/desktop/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/desktop/AGENTS.md): packaging, signing and update pitfalls found in real builds
-- [`apps/mobile/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/mobile): `src/app/` (screens), `src/lib/` (session, API, permissions), and [`AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/mobile/AGENTS.md)
+- [`apps/desktop/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/desktop): `src/main/` (window, `app://` protocol, `print.ts`, `updater.ts`, `auth.ts`, `devices/`), `electron-builder.yml`
+- [`packages/platform/src/desktop/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/desktop): bridge contract, `isDesktop()` / `desktop()`, label template
+- [`apps/desktop/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/desktop/AGENTS.md): packaging, signing and update pitfalls found in real builds
+- [`apps/mobile/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/mobile): `src/app/` (screens), `src/lib/` (session, API, permissions), and [`AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/mobile/AGENTS.md)

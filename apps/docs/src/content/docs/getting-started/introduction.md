@@ -40,7 +40,7 @@ packages/      依赖单向：i18n / api ← ui ← platform ← web
 
 因为 AI 改代码很快，而这里每一处改动都有东西兜底：
 
-- **测试兜底。** AI 一次改十几个文件很常见，人工点一遍点不过来。后端 1400+ 条 pytest 连真实数据库和 Redis，前端 150+ 条 Playwright 跑真实浏览器，不用 mock，CI 每次全量跑；失败的用例带截图和录像，[E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/)公开。
+- **测试兜底。** AI 一次改十几个文件很常见，人工点一遍点不过来。后端 1400+ 条 pytest 连真实数据库和 Redis，前端 150+ 条 Playwright 跑真实浏览器，不用 mock，CI 每次全量跑；失败的用例带截图和录像，[E2E 报告](https://yile2020.github.io/fastapi-react-admin/e2e/)公开。
 - **类型兜底。** 前后端契约由后端的 OpenAPI 生成（`packages/api/src/schema.d.ts`）。移动端的每个请求都从它推断类型，接口改了而页面没跟上，`pnpm typecheck` 直接报错；网页端还在迁移，请求的返回类型目前在各调用点手写（见[开发者工具](/features/developer-tools/#前后端契约是怎么来的)）。
 - **规矩写给 AI 看。** 仓库里 50 多份按目录拆分的 `CLAUDE.md` / `AGENTS.md` 记着实测踩过的坑和硬纪律，编码助手改到哪个目录，就读到哪一份。
 - **后端就在 AI 生态里。** Python + FastAPI，内置的 AI 助手基于 pydantic-ai。
@@ -78,17 +78,17 @@ packages/      依赖单向：i18n / api ← ui ← platform ← web
 
 - **不是低代码平台。** 业务页面用 React 写，接口用 FastAPI 写；底座提供的是外壳、权限模型和公共组件。
 - **不是托管服务。** 需要自己部署，见[部署](/getting-started/deployment/)。
-- **不是一次性的脚手架。** 1.0 起按 semver 发版，开放接口、Webhook、数据库迁移链、插件接口、配置键都有兼容承诺；升级前先看[更新记录](https://github.com/yilecoding/fastapi-react-admin/releases)。
+- **不是一次性的脚手架。** 1.0 起按 semver 发版，开放接口、Webhook、数据库迁移链、插件接口、配置键都有兼容承诺；升级前先看[更新记录](https://github.com/yile2020/fastapi-react-admin/releases)。
 
 ## 从哪来的
 
-后端最初 fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)（FBA）。三层结构（`api → service → crud`）、插件机制、RBAC 与数据权限模型都是 FBA 的设计，FBA 的版权声明保留在 [`apps/api/LICENSE`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/LICENSE)。SQL Server 支持是本项目加的，上游明确不合并这部分，所以是永久分叉，只 cherry-pick 上游的安全补丁。
+后端最初 fork 自 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture)（FBA）。三层结构（`api → service → crud`）、插件机制、RBAC 与数据权限模型都是 FBA 的设计，FBA 的版权声明保留在 [`apps/api/LICENSE`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/LICENSE)。SQL Server 支持是本项目加的，上游明确不合并这部分，所以是永久分叉，只 cherry-pick 上游的安全补丁。
 
 前端、桌面端和移动端，以及大部分业务功能（审批、AI 助手、开放平台、文件存储、消息渠道路由）是本项目自己写的。
 
 ## 下一步
 
-- [DeepWiki 项目解析](https://deepwiki.com/yilecoding/fastapi-react-admin) —— 通过 AI 对话快速了解仓库结构和代码。
+- [DeepWiki 项目解析](https://deepwiki.com/yile2020/fastapi-react-admin) —— 通过 AI 对话快速了解仓库结构和代码。
 
 - [快速开始](/getting-started/quick-start/)——五条命令在本地跑起来。
 - [功能总览](/features/overview/)——按领域列出所有功能。

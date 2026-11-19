@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-升级方式取决于你怎么用这个项目：**直接用镜像部署、没改过代码**的，拉新镜像、重启就行，迁移会自动跑；**fork 之后在上面写了自己业务**的，要把上游的新版本合并进你的仓库，再跑迁移和测试。每个版本的变化写在 [GitHub Releases](https://github.com/yilecoding/fastapi-react-admin/releases) 里，每份发版说明都有一节「升级」，写明有没有数据库迁移、要不要改配置。
+升级方式取决于你怎么用这个项目：**直接用镜像部署、没改过代码**的，拉新镜像、重启就行，迁移会自动跑；**fork 之后在上面写了自己业务**的，要把上游的新版本合并进你的仓库，再跑迁移和测试。每个版本的变化写在 [GitHub Releases](https://github.com/yile2020/fastapi-react-admin/releases) 里，每份发版说明都有一节「升级」，写明有没有数据库迁移、要不要改配置。
 
 ## 版本号怎么定
 
@@ -15,7 +15,7 @@ sidebar:
 
 ## 哪些东西承诺不破坏
 
-下表来自根目录 [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md) 的「1.0 起的兼容约定」。破坏其中任何一条都要升主版本号。
+下表来自根目录 [`CLAUDE.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CLAUDE.md) 的「1.0 起的兼容约定」。破坏其中任何一条都要升主版本号。
 
 | 对外的面 | 承诺 |
 |---|---|
@@ -58,7 +58,7 @@ TAG=sha-abc1234 bash prod.sh up
 把上游加成一个远程仓库，**按 tag 合并**（不要直接合 `main`，`main` 上可能有还没发版的改动）：
 
 ```bash
-git remote add upstream https://github.com/yilecoding/fastapi-react-admin.git   # 只需一次
+git remote add upstream https://github.com/yile2020/fastapi-react-admin.git   # 只需一次
 git fetch upstream --tags
 git merge v0.12.0            # 换成你要升到的版本
 ```
@@ -97,7 +97,7 @@ cd ../../.. && pnpm db:upgrade
 
 ## 桌面端和移动端怎么升级？
 
-- 桌面端：从 [Releases](https://github.com/yilecoding/fastapi-react-admin/releases) 下载新安装包覆盖安装。应用内的自动更新要由你的页面主动调用检查，见[桌面端与移动端](/features/clients/)
+- 桌面端：从 [Releases](https://github.com/yile2020/fastapi-react-admin/releases) 下载新安装包覆盖安装。应用内的自动更新要由你的页面主动调用检查，见[桌面端与移动端](/features/clients/)
 - 移动端：重新构建并分发 App
 
 旧版客户端会拿旧前端调新后端，所以内部接口的删改会保留一个次版本的过渡期（见上面的兼容约定）。

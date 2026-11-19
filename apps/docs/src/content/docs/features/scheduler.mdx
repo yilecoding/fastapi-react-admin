@@ -87,12 +87,12 @@ cron 按 `DATETIME_TIMEZONE`（默认 `Asia/Shanghai`）的**墙上时间**算�
 ## 怎么加一个自己的定时任务？
 
 1. 写在 `apps/api/backend/app/task/tasks/<包名>/tasks.py` 里 —— worker 只扫描这个目录。
-2. 用 `@celery_app.task(name='包名.任务名')` 注册，下面再套一层 `@with_timeout()`（照 [`tasks/base.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/tasks/base.py) 的写法）。
+2. 用 `@celery_app.task(name='包名.任务名')` 注册，下面再套一层 `@with_timeout()`（照 [`tasks/base.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/tasks/base.py) 的写法）。
 3. 每 60 秒或更频繁的任务要加 `ignore_result=True, notify=False`，否则执行记录表一天涨几千行；有测试守着。
 4. 重启 worker 之后，它就出现在「Celery 任务」的下拉里，在界面上配调度即可。
 5. 要随代码发一条默认调度：在种子 SQL 里加一行、再写一条数据迁移。**不要用 Celery 的 `beat_schedule`** —— 调度只有数据库这一个来源。
 
-**删数据的任务**另有几条规矩：分批删（先取一批 ID、再按 ID 删）；过滤用的列要有索引；按业务时间删，不按写入时间；处理过的行仍可能命中过滤条件时，用键集分页。细节在 [`app/task/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/AGENTS.md)。
+**删数据的任务**另有几条规矩：分批删（先取一批 ID、再按 ID 删）；过滤用的列要有索引；按业务时间删，不按写入时间；处理过的行仍可能命中过滤条件时，用键集分页。细节在 [`app/task/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/AGENTS.md)。
 
 ## 它不做什么
 
@@ -103,21 +103,21 @@ cron 按 `DATETIME_TIMEZONE`（默认 `Asia/Shanghai`）的**墙上时间**算�
 
 ## 代码在哪
 
-- 接口与服务：[`app/task/api/v1/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/app/task/api/v1) · [`scheduler_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/service/scheduler_service.py)
-- beat 的数据库调度器：[`app/task/utils/schedulers.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/utils/schedulers.py) · Celery 应用 [`app/task/celery.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/celery.py)
-- 内置任务：[`app/task/tasks/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/app/task/tasks)
-- 前端：[`pages/scheduler-manage/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/scheduler-manage)（`cron-builder.tsx`、`cron-presets.ts`）· [`pages/scheduler-record/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/scheduler-record)
+- 接口与服务：[`app/task/api/v1/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/app/task/api/v1) · [`scheduler_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/service/scheduler_service.py)
+- beat 的数据库调度器：[`app/task/utils/schedulers.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/utils/schedulers.py) · Celery 应用 [`app/task/celery.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/celery.py)
+- 内置任务：[`app/task/tasks/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/app/task/tasks)
+- 前端：[`pages/scheduler-manage/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/scheduler-manage)（`cron-builder.tsx`、`cron-presets.ts`）· [`pages/scheduler-record/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/scheduler-record)
 
 ## 怎么测的
 
 后端（`apps/api/backend/app/task/tests/`）：
 
-- [`test_scheduler_timing.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_scheduler_timing.py)：停用不用重启 beat 就生效、从库里重读的 crontab 保持本地墙上时间、一条停用的调度不会饿死其他调度。
-- [`test_scheduler_api.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_scheduler_api.py)：每次写操作提交后都通知 beat、库里每条调度都指向已注册的任务、高频任务既不记结果也不广播。
-- [`test_scheduler.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_scheduler.py)：`beat_schedule` 保持为空、上次运行时间换算成应用时区。
-- [`test_prune_logs.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_prune_logs.py)：分批删、不是一条不设上限的大语句。
+- [`test_scheduler_timing.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_scheduler_timing.py)：停用不用重启 beat 就生效、从库里重读的 crontab 保持本地墙上时间、一条停用的调度不会饿死其他调度。
+- [`test_scheduler_api.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_scheduler_api.py)：每次写操作提交后都通知 beat、库里每条调度都指向已注册的任务、高频任务既不记结果也不广播。
+- [`test_scheduler.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_scheduler.py)：`beat_schedule` 保持为空、上次运行时间换算成应用时区。
+- [`test_prune_logs.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_prune_logs.py)：分批删、不是一条不设上限的大语句。
 
-浏览器端（Playwright）：[`scheduler.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/scheduler.spec.ts)，覆盖任务调度、执行记录、cron 预览、任务参数、执行记录筛选。
+浏览器端（Playwright）：[`scheduler.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/scheduler.spec.ts)，覆盖任务调度、执行记录、cron 预览、任务参数、执行记录筛选。
 
 ## 在演示站里试试
 

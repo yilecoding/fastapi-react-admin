@@ -8,7 +8,7 @@ import { markdownUrl, ROOT, sectionsOf, text } from '../../lib/markdown'
 
 export const getStaticPaths: GetStaticPaths = () => [{ params: { locale: undefined } }, { params: { locale: 'en' } }]
 
-const REPO = 'https://github.com/yilecoding/fastapi-react-admin'
+const REPO = 'https://github.com/yile2020/fastapi-react-admin'
 
 export const GET: APIRoute = async ({ params }) => {
   const locale = params.locale ?? ''

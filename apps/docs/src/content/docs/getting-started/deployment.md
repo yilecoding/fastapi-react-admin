@@ -21,7 +21,7 @@ sidebar:
 
 ```bash
 mkdir -p /srv/fastapi-react-admin && cd $_
-base=https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/main
+base=https://raw.githubusercontent.com/yile2020/fastapi-react-admin/main
 curl -fsSLO $base/docker-compose.prod.yml
 curl -fsSL  $base/deploy/prod.sh -o prod.sh
 curl -fsSL  $base/apps/api/deploy/backend/docker-compose/.env.server.example -o .env.server
@@ -100,6 +100,6 @@ pnpm deploy:prod
 
 ## 延伸阅读
 
-- [`deploy/README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/README.md)——所有命令。
-- [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md)——这些规矩背后踩过的坑，以及为什么刻意不做自动部署。
+- [`deploy/README.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/README.md)——所有命令。
+- [`deploy/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/AGENTS.md)——这些规矩背后踩过的坑，以及为什么刻意不做自动部署。
 - [桌面端与移动端](/features/clients/)——安装包由单独的发版流程构建。

@@ -5,7 +5,7 @@ sidebar:
   order: 0
 ---
 
-Everything below is on `main`. The table matches the Features table in the [README](https://github.com/yilecoding/fastapi-react-admin/blob/main/README.md#features) row for row; areas with their own page link to it in the last column, the rest show "—".
+Everything below is on `main`. The table matches the Features table in the [README](https://github.com/yile2020/fastapi-react-admin/blob/main/README.md#features) row for row; areas with their own page link to it in the last column, the rest show "—".
 
 | Area | What you get | Page |
 |---|---|---|
@@ -50,7 +50,7 @@ The mobile app has only been checked by hand on Android; see [Desktop and mobile
 
 ## How are the engineering rules documented?
 
-The repository keeps its rules and pitfalls next to the code: a root [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md) and 40+ module notes (`AGENTS.md`), each indexed by task ("adding a list page", "changing the permission model", "writing a migration"). Every entry follows the same shape — symptom, cause, fix, and the measurement or test that proves it — and `pnpm ctx:check` runs in CI to catch notes that point at files, scripts or test IDs that no longer exist.
+The repository keeps its rules and pitfalls next to the code: a root [`CLAUDE.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CLAUDE.md) and 40+ module notes (`AGENTS.md`), each indexed by task ("adding a list page", "changing the permission model", "writing a migration"). Every entry follows the same shape — symptom, cause, fix, and the measurement or test that proves it — and `pnpm ctx:check` runs in CI to catch notes that point at files, scripts or test IDs that no longer exist.
 
 ## Can I try it without installing?
 

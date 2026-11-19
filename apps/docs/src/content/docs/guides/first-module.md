@@ -1492,16 +1492,16 @@ cd apps/api && uv run --no-sync pytest \
 
 ## 相关源码
 
-- [`backend/common/security/data_scope.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py)：`DataScopedCRUD`，以及它覆盖了哪几个读方法
-- [`backend/common/security/permission.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/permission.py)：规则怎么编译成 `WHERE` 条件
-- [`backend/common/security/rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py)：`rbac_verify`
-- [`backend/common/model.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/model.py)：`Base`、`id_key`、`UniversalStr`
-- [`backend/common/schema.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/schema.py)：`ColumnLengthChecked`
-- [`backend/utils/data_migration.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/data_migration.py)：`add_menu` / `grant_menu`
-- [`backend/plugin/dict/`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/dict/)：一个完整的简单三层模块
-- [`backend/app/router.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/router.py)：app 路由挂载点
-- [`backend/alembic/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)：迁移和种子数据的规则
-- [`packages/platform/src/pages/notice/`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/notice/)：列表页范本
-- [`packages/platform/src/pages/_shared/list-query.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/list-query.ts)：`listState()`
-- [`packages/platform/src/pages/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/AGENTS.md)：列表页的写法规则
-- [`apps/web/src/lib/page-registry.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx)：页面注册表
+- [`backend/common/security/data_scope.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/data_scope.py)：`DataScopedCRUD`，以及它覆盖了哪几个读方法
+- [`backend/common/security/permission.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/permission.py)：规则怎么编译成 `WHERE` 条件
+- [`backend/common/security/rbac.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py)：`rbac_verify`
+- [`backend/common/model.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/model.py)：`Base`、`id_key`、`UniversalStr`
+- [`backend/common/schema.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/schema.py)：`ColumnLengthChecked`
+- [`backend/utils/data_migration.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/data_migration.py)：`add_menu` / `grant_menu`
+- [`backend/plugin/dict/`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/dict/)：一个完整的简单三层模块
+- [`backend/app/router.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/router.py)：app 路由挂载点
+- [`backend/alembic/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)：迁移和种子数据的规则
+- [`packages/platform/src/pages/notice/`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/notice/)：列表页范本
+- [`packages/platform/src/pages/_shared/list-query.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/list-query.ts)：`listState()`
+- [`packages/platform/src/pages/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/AGENTS.md)：列表页的写法规则
+- [`apps/web/src/lib/page-registry.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx)：页面注册表
