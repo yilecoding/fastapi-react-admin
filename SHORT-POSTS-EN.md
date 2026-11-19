@@ -19,8 +19,8 @@ I open-sourced a FastAPI + React 19 admin starter with row-level data permission
 ```markdown
 I kept rebuilding users / roles / menus / approvals for every internal tool, so I turned it into a starter and just tagged 1.0.
 
-- GitHub: https://github.com/yilecoding/fastapi-react-admin
-- Docs: https://yilecoding.github.io/fastapi-react-admin/en/
+- GitHub: https://github.com/yile2020/fastapi-react-admin
+- Docs: https://yile2020.github.io/fastapi-react-admin/en/
 - Live demo: https://fra.wubunan.com (admin / 123456, public instance). The seed data is in Chinese; switch the UI to English from the language menu on the sign-in page.
 
 **Backend side, since this is r/FastAPI:**
@@ -53,7 +53,7 @@ HN rules: the title starts with `Show HN:`, no superlatives, no emoji. Submit th
 Show HN: FastAPI and React 19 admin starter with row-level permissions
 ```
 
-**URL**: `https://github.com/yilecoding/fastapi-react-admin`
+**URL**: `https://github.com/yile2020/fastapi-react-admin`
 
 **First comment**:
 

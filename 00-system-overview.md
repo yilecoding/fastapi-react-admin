@@ -2,13 +2,13 @@
 
 我开源了一个中后台底座，这篇把整个系统完整介绍一遍：它能做什么，架构怎么分层，几个关键设计为什么这么做，工程上怎么保证质量。具体的实现细节会拆成一篇篇短文，目录在文末。
 
-> **GitHub**：<https://github.com/yilecoding/fastapi-react-admin>
+> **GitHub**：<https://github.com/yile2020/fastapi-react-admin>
 > **在线演示**：<https://fra.wubunan.com>（`admin` / `123456`，公开实例，数据可能被其他访客改动；演示站没配大模型密钥，AI 助手要自己部署后填 key 才能对话）
 > **文档**：<https://fra.wubunan.com/docs/>
 >
 > MIT 协议，当前版本 v1.0.0。从 1.0 起，开放接口 / SDK、Webhook 事件、迁移链、插件接口、配置键有兼容承诺
 
-![登录页](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/01-sign-in.png)
+![登录页](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/01-sign-in.png)
 
 ---
 
@@ -44,19 +44,19 @@
 
 几张截图：
 
-![工作台](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/02-dashboard.png)
+![工作台](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/02-dashboard.png)
 
-![角色权限矩阵](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/03-role.png)
+![角色权限矩阵](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/03-role.png)
 
-![数据权限规则](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/04-data-permission.png)
+![数据权限规则](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/04-data-permission.png)
 
-![审批流程设计](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/07-workflow-flow.png)
+![审批流程设计](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/07-workflow-flow.png)
 
-![AI 助手](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/09-ai-chat.png)
+![AI 助手](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/09-ai-chat.png)
 
-![命令面板](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/11-command-palette.png)
+![命令面板](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/11-command-palette.png)
 
-![组件沙箱](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/12-sandbox.png)
+![组件沙箱](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/12-sandbox.png)
 
 ## 三、技术栈
 
@@ -167,12 +167,12 @@ AI 能调用的工具就是当前用户有权限的接口，走同一套权限�
 - **变异检验**：守关键逻辑的测试写完，会故意把代码改坏一次，确认测试真的会红。
 - **静态守卫**：`arch:check` 管分层方向和几条硬规则（页面不能读路由、全局 DOM 查询必须限定范围、E2E 断言不能漏 `await`）；`i18n:check` 管两种语言的键是否对齐。
 - **文档是踩坑记录**：根目录的 `CLAUDE.md` 加上 40 多份模块分册，记录的都是「违反了会坏，而且多数是静默地坏」的结论，每条都要带实测证据。`ctx:check` 会检查文档里引用的文件、脚本、测试还在不在。
-- **公开的测试报告**：`main` 每次跑完的 [E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/) 都公开，失败用例带截图和录像。
+- **公开的测试报告**：`main` 每次跑完的 [E2E 报告](https://yile2020.github.io/fastapi-react-admin/e2e/) 都公开，失败用例带截图和录像。
 
 ## 七、跑起来
 
 ```bash
-git clone https://github.com/yilecoding/fastapi-react-admin.git
+git clone https://github.com/yile2020/fastapi-react-admin.git
 cd fastapi-react-admin
 
 docker compose -f docker-compose.dev.yml up -d          # PostgreSQL + Redis
@@ -194,4 +194,4 @@ pnpm dev                                                # http://127.0.0.1:8888
 
 后端从 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) 分叉而来，三层结构、插件机制、RBAC 与数据权限模型是它的设计，感谢原作者和贡献者。
 
-项目刚发 1.0，还在快速迭代。觉得有用的话欢迎去 [GitHub](https://github.com/yilecoding/fastapi-react-admin) 点个 ⭐，也欢迎提 issue。
+项目刚发 1.0，还在快速迭代。觉得有用的话欢迎去 [GitHub](https://github.com/yile2020/fastapi-react-admin) 点个 ⭐，也欢迎提 issue。

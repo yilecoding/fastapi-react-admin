@@ -193,7 +193,7 @@ def id_cell(value) -> Cell:
 
 但这句话只管得住自己写的代码。路由库、序列化器、Excel，这些「别人替你解析」的地方才是真正的出口，得一个个去找。
 
-文中代码来自我的开源项目 [fastapi-react-admin](https://github.com/yilecoding/fastapi-react-admin)，一个 FastAPI + React 19 的中后台底座。相关实现在：
+文中代码来自我的开源项目 [fastapi-react-admin](https://github.com/yile2020/fastapi-react-admin)，一个 FastAPI + React 19 的中后台底座。相关实现在：
 
 - `apps/api/backend/utils/serializers.py`
 - `apps/web/src/lib/search-params.ts`

@@ -15,7 +15,7 @@
   ```bash
   git worktree add ../fastapi-react-admin-blog blog   # 新克隆后建一次
   ```
-- 图片用本分支的 raw 地址：`https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/<文件名>`，
+- 图片用本分支的 raw 地址：`https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/<文件名>`，
   `blog` 分支推送后才能访问。发掘金时直接把 `images/` 里的图拖进编辑器更稳（国内访问 raw 地址经常慢或失败）
 - 文章里的源码路径、功能清单都以 **`main`** 为准，只写已经合进 `main` 的东西。
   `main` 合进大功能后，回来更新 `00-system-overview.md` 的功能表（核对时看 `origin/main` 的文件，

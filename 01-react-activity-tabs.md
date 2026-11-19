@@ -2,7 +2,7 @@
 
 先看效果：筛一下、勾两行，切去别的页签转一圈再回来 —— **输入框里的字、勾选的行都还在**。
 
-![切走再切回来，状态原样保留](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/00-tabs.gif)
+![切走再切回来，状态原样保留](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/00-tabs.gif)
 
 Vue 有 `<keep-alive>`，React 一直没有。所以很多 React 后台的「多页签」其实只是一排链接：切走就卸载，填了一半的表单、翻到第 5 页的列表，切回来全部归零。
 
@@ -247,6 +247,6 @@ function TabFrame({ … }) {
 | 全局 DOM 查询限定在 `[data-visible="true"]` 或 `[data-tab]` 内 | 命中后台页签，或测出 0 宽 |
 | URL 驱动的浮层挂进本页签根节点 | 后台抽屉挡住前台点击 |
 
-文中代码都来自我的开源项目 [fastapi-react-admin](https://github.com/yilecoding/fastapi-react-admin)，一个 FastAPI + React 19 的中后台底座。完整实现在 `packages/platform/src/shell/tab-outlet.tsx`，上面每个坑在源码注释里都有对应的说明和测试。可以在[在线演示](https://fra.wubunan.com)（`admin` / `123456`）里多开几个页签试试。
+文中代码都来自我的开源项目 [fastapi-react-admin](https://github.com/yile2020/fastapi-react-admin)，一个 FastAPI + React 19 的中后台底座。完整实现在 `packages/platform/src/shell/tab-outlet.tsx`，上面每个坑在源码注释里都有对应的说明和测试。可以在[在线演示](https://fra.wubunan.com)（`admin` / `123456`）里多开几个页签试试。
 
 你们的 React 项目里，多页签是怎么做的？有没有踩过别的坑？欢迎评论区聊聊。

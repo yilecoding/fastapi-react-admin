@@ -31,7 +31,7 @@
 ```markdown
 做后台项目总要从头搭一遍用户、角色、菜单、审批，干脆整理成一个底座开源出来，今天发了 1.0。
 
-GitHub：https://github.com/yilecoding/fastapi-react-admin
+GitHub：https://github.com/yile2020/fastapi-react-admin
 在线演示：https://fra.wubunan.com （admin / 123456，公开实例，数据随时可能被别人改）
 
 和常见模板不太一样的几个地方：
@@ -45,9 +45,9 @@ GitHub：https://github.com/yilecoding/fastapi-react-admin
 
 技术栈：FastAPI · SQLAlchemy 2 · Celery · React 19 · TanStack Router / Query · shadcn/ui（Base UI）。后端从 fastapi-best-architecture 分叉而来。MIT 协议。
 
-![工作台](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/02-dashboard.png)
-![角色权限](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/03-role.png)
-![审批流程](https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/blog/images/07-workflow-flow.png)
+![工作台](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/02-dashboard.png)
+![角色权限](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/03-role.png)
+![审批流程](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/07-workflow-flow.png)
 
 还有不少粗糙的地方，欢迎试用、提 issue。也想听听大家做后台时最头疼的是什么。
 ```
@@ -59,7 +59,7 @@ GitHub：https://github.com/yilecoding/fastapi-react-admin
 在 GitHub 上提 issue：<https://github.com/521xueweihan/HelloGitHub/issues/new?template=submit-cn.yaml>（也可以在 hellogithub.com 登录后提交，字段一样）。
 模板要求**别复制 README 原文**，下面是另写的。收录了会在 issue 里通知，月刊每月 28 号出。
 
-**项目地址**：`https://github.com/yilecoding/fastapi-react-admin`
+**项目地址**：`https://github.com/yile2020/fastapi-react-admin`
 
 **类别**：Python
 
@@ -106,6 +106,6 @@ GitHub：https://github.com/yilecoding/fastapi-react-admin
 - **授权协议**：MIT
 - **操作系统**：跨平台
 - **官网 / 文档**：https://fra.wubunan.com/docs/
-- **源码**：https://github.com/yilecoding/fastapi-react-admin ，Gitee 镜像地址导入后补上
+- **源码**：https://github.com/yile2020/fastapi-react-admin ，Gitee 镜像地址导入后补上
 - **介绍**：用 HelloGitHub 那份「项目描述」+「亮点」，末尾附在线演示 https://fra.wubunan.com （admin / 123456）
 - 每次发新版，在 OSChina 软件页发一条更新

@@ -5,7 +5,7 @@
 | 站点 | 地址 | 给谁 | sitemap |
 |---|---|---|---|
 | 国内 | https://fra.wubunan.com/docs/ | 百度（主推） | `https://fra.wubunan.com/docs/sitemap-0.xml` |
-| 海外 | https://yilecoding.github.io/fastapi-react-admin/ | Google、Bing | `https://yilecoding.github.io/fastapi-react-admin/sitemap-index.xml` |
+| 海外 | https://yile2020.github.io/fastapi-react-admin/ | Google、Bing | `https://yile2020.github.io/fastapi-react-admin/sitemap-index.xml` |
 
 两份都是中文在根路径、英文在 `/en/`。每页的 canonical 指向自己那份，不会被当成重复内容。
 
@@ -34,13 +34,13 @@
 
 ### Google Search Console https://search.google.com/search-console
 
-- [x] 添加资源「网址前缀」`https://yilecoding.github.io/fastapi-react-admin/`，HTML 文件验证（2026-11-02）
+- [x] 添加资源「网址前缀」`https://yile2020.github.io/fastapi-react-admin/`，HTML 文件验证（2026-11-02）
 - [x] 提交 sitemap `sitemap-index.xml`（刚提交时显示「无法抓取」、上次读取时间为空，是 Google 还没去读，不是错）
 - [ ] 11/4 前后回来看 sitemap 状态。还是「无法抓取」就再提交一个 `sitemap-0.xml`，仍不行截图找 Claude
 - [ ] （可选）顶部搜索框输入首页地址 →「请求编入索引」，`/en/` 也来一次
 - [ ] （可选）再加一个网址前缀资源 `https://fra.wubunan.com/docs/`，把给的 `googleXXXX.html` 文件名交给 Claude 放到服务器上
 
-不要加 robots.txt：GitHub Pages 的 robots.txt 只认 `yilecoding.github.io/robots.txt`（域名根），我们的站在子路径下放了也不生效。
+不要加 robots.txt：GitHub Pages 的 robots.txt 只认 `yile2020.github.io/robots.txt`（域名根），我们的站在子路径下放了也不生效。
 根上没有 robots.txt = 全部放行，现在就是最好的状态。
 
 ### Bing Webmaster https://www.bing.com/webmasters
@@ -50,7 +50,7 @@
 
 ### GitHub 仓库
 
-- [ ] Settings → General → Social preview → Edit → Upload，传 `og-preview.jpg`（Windows 桌面上；源图是 https://yilecoding.github.io/fastapi-react-admin/og.png）。
+- [ ] Settings → General → Social preview → Edit → Upload，传 `og-preview.jpg`（Windows 桌面上；源图是 https://yile2020.github.io/fastapi-react-admin/og.png）。
       直接传 og.png 报过「Something went really wrong」，换成去掉透明层的 JPG 再传
 - [ ] （可选）仓库首页右侧 About 的 Website 改成文档站地址
 
