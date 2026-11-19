@@ -101,7 +101,11 @@ export function usePresence(enabled: boolean) {
           socket.connect()
         } else if (outcome.kind === 'ended') {
           // Do not end a newer login while an older refresh was in flight.
-          if (tokenStore.get() === before && !isEndingLocally()) endSession(outcome.end)
+          if (isEndingLocally()) {
+            // 登出还没落地：交给登出收尾；万一登出失败（仍是登录态），下一轮照常恢复
+            recovering = false
+            scheduleRecovery()
+          } else if (tokenStore.get() === before) endSession(outcome.end)
         } else {
           recovering = false
           scheduleRecovery()
