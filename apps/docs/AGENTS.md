@@ -303,7 +303,7 @@ Starlight 自带的 `LanguageSelect` 是一个原生 `<select>`：下拉列表�
 |---|---|
 | canonical · hreflang · og:title / description · sitemap | Starlight 按 `site` / `base` / `locales` 自动生成 |
 | og:image / twitter:image | `astro.config.mjs` 的 `head`，指向 `public/og.png` |
-| 分享卡片图 | `scripts/gen-og.mjs` 生成；只用英文 —— 别的机器上未必有中文字体，缺字是一排方框且不报错 |
+| 分享卡片图 | `scripts/gen-og.mjs` 用 Playwright 渲染（大标题 + 登录页的 3D 榫卯 + 仓库名）；只用英文，字体内联 fontsource 的 Inter / JetBrains Mono。在 GitHub 手机端只有约 400px 宽，**别再往上加截图和小字**，缩下去看不清 |
 | 网站图标 | `public/favicon.svg` 与 `src/assets/logo.svg` 由根目录的 `pnpm brand:icons` 生成，别手改 |
 
 ⚠️ **没有 `robots.txt`**：项目站点在 `yile2020.github.io` 的子路径下，而爬虫只读域名根上的
