@@ -20,12 +20,12 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
       放 Claude 准备的三个文件（`404.html` · `index.html` · `fastapi-react-admin/index.html`），Settings → Pages 选 main 分支根目录。
       效果：`yilecoding.github.io/fastapi-react-admin/<任意路径>` 自动跳到 `yile2020.github.io/fastapi-react-admin/<同一路径>`。
       它和「不要建 `fastapi-react-admin` 仓库」不冲突 —— 是另一个仓库名
-- [ ] **Google Search Console 加新资源**：网址前缀 `https://yile2020.github.io/fastapi-react-admin/`，选「HTML 文件」验证。
+- [x] **Google Search Console 加新资源**（2026-11-19 做完：资源 HTML 文件自动验证通过 · `sitemap-index.xml` 已提交 · 首页和 `/en/` 已请求编入索引）：网址前缀 `https://yile2020.github.io/fastapi-react-admin/`，选「HTML 文件」验证。
       验证文件 `google354ce5fed9937af4.html` 已经在新地址上（验证码绑的是 Google 账号，不是网址，同一个文件能用），直接点验证。
       然后提交 sitemap `sitemap-index.xml`，首页和 `/en/` 各「请求编入索引」一次
 - [ ] 旧资源（`yilecoding.github.io/…`）**先别删**：里面有到现在的收录和搜索词数据，做了跳转后还能看到 Google 把旧页挪到新地址的过程。
       「设置 → 地址更改」工具用不了（它只认域名根，子路径的 github.io 资源不支持），靠跳转 + 新 sitemap 让 Google 自己迁
-- [ ] Bing：上面新资源验证好之后再「从 Google Search Console 导入」，导进来就是新地址
+- [x] Bing（2026-11-19 做完：从 GSC 导入，新站和 `sitemap-index.xml` 都过来了，状态 Processing）：上面新资源验证好之后再「从 Google Search Console 导入」，导进来就是新地址
 - [x] 服务器上国内文档站重新拉一次包（2026-11-19 拉完，页面里已是新名；服务器到 github.io 只有 ~40KB/s，要先整包下载到文件再解压，管道直解会超时）（拉的是新地址的 `docs-site.tar.gz`）：现在页面里的 GitHub 链接还是旧名（会跳转，不急）
 - [ ] DeepWiki / zread：两家按仓库路径建索引。zread 新旧地址都能开；DeepWiki 打开 `deepwiki.com/yile2020/fastapi-react-admin`，没有内容就点重新索引
 
