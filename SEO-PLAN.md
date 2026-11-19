@@ -16,7 +16,7 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
 
 - [x] 用新账号把 `yilecoding` 占住（2026-11-19）。这个账号下**不要建 `fastapi-react-admin` 仓库**，会顶掉旧仓库地址的跳转
 - [x] 代码里的站点地址改成新名（#389，2026-11-19 合并）。Pages 已重新发布，sitemap、canonical、og:url 都是新名（第一次发布遇到 GitHub 偶发错误，重跑后成功）
-- [ ] **旧地址做跳转**：在 `yilecoding` 账号下建仓库 `yilecoding.github.io`（用户站点，名字必须一字不差），
+- [x] **旧地址做跳转**（2026-11-19 做完：仓库 `yilecoding/yilecoding.github.io`，三个文件已上传，Pages 自动用 main 根目录；实测旧地址带路径 / 参数 / 锚点都跳到新站同一页）：在 `yilecoding` 账号下建仓库 `yilecoding.github.io`（用户站点，名字必须一字不差），
       放 Claude 准备的三个文件（`404.html` · `index.html` · `fastapi-react-admin/index.html`），Settings → Pages 选 main 分支根目录。
       效果：`yilecoding.github.io/fastapi-react-admin/<任意路径>` 自动跳到 `yile2020.github.io/fastapi-react-admin/<同一路径>`。
       它和「不要建 `fastapi-react-admin` 仓库」不冲突 —— 是另一个仓库名
