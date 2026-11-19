@@ -27,14 +27,14 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
       「设置 → 地址更改」工具用不了（它只认域名根，子路径的 github.io 资源不支持），靠跳转 + 新 sitemap 让 Google 自己迁
 - [x] Bing（2026-11-19 做完：从 GSC 导入，新站和 `sitemap-index.xml` 都过来了，状态 Processing）：上面新资源验证好之后再「从 Google Search Console 导入」，导进来就是新地址
 - [x] 服务器上国内文档站重新拉一次包（2026-11-19 拉完，页面里已是新名；服务器到 github.io 只有 ~40KB/s，要先整包下载到文件再解压，管道直解会超时）（拉的是新地址的 `docs-site.tar.gz`）：现在页面里的 GitHub 链接还是旧名（会跳转，不急）
-- [ ] DeepWiki / zread：两家按仓库路径建索引。zread 新旧地址都能开；DeepWiki 打开 `deepwiki.com/yile2020/fastapi-react-admin`，没有内容就点重新索引
+- [ ] （2026-11-19 实看：zread 新地址 200 正常；DeepWiki 新名下是「Repository Not Indexed」，要填通知邮箱后点 Index Repository，等用户给邮箱）DeepWiki / zread：两家按仓库路径建索引。zread 新旧地址都能开；DeepWiki 打开 `deepwiki.com/yile2020/fastapi-react-admin`，没有内容就点重新索引
 
 ## 进度
 
 ### 百度搜索资源平台 https://ziyuan.baidu.com
 
 - [x] 添加站点 `https://fra.wubunan.com`，HTML 标签验证（2026-11-02）
-- [ ] 「资源提交 → 普通收录 → sitemap」下面点「去填写」，填 `wubunan.com` 的**主体备案号**（`X ICP备xxxxxxxx号`，不带 `-1`）。
+- [ ] （2026-11-19 实看：sitemap 那栏今日提交上限 0、存量文件上限 0、提交按钮是灰的，页面上已经没有「去填写」入口，备案号没填）「资源提交 → 普通收录 → sitemap」下面点「去填写」，填 `wubunan.com` 的**主体备案号**（`X ICP备xxxxxxxx号`，不带 `-1`）。
       备案号在腾讯云控制台 https://console.cloud.tencent.com/beian 「我的备案」里，或者 https://beian.miit.gov.cn 查 `wubunan.com`
 - [ ] 隔几天回来看「今日提交上限」。不是 0 了就提交：
       ```
@@ -42,7 +42,7 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
       ```
       ⚠️ **不要提交 `sitemap-index.xml`**：百度不再支持索引型 sitemap，提交了也不抓
       （[百度搜索学堂：普通收录](https://ziyuan.baidu.com/college/courseinfo?id=267&page=2)）
-- [ ] 「API 提交」「手动提交」的配额不是 0 的话，先手动交这几页：
+- [x] 「手动提交」先交这几页（2026-11-19 交了，提示「链接提交成功」；API 提交没用）：
       ```
       https://fra.wubunan.com/docs/
       https://fra.wubunan.com/docs/getting-started/quick-start/
@@ -57,8 +57,8 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
 - [x] 添加资源「网址前缀」`https://yilecoding.github.io/fastapi-react-admin/`（改名前的旧地址），HTML 文件验证（2026-11-02）。新地址的资源见上面「GitHub 改名后要做的」
 - [x] 提交 sitemap `sitemap-index.xml`（刚提交时显示「无法抓取」、上次读取时间为空，是 Google 还没去读，不是错）
 - [ ] 11/4 前后回来看 sitemap 状态。还是「无法抓取」就再提交一个 `sitemap-0.xml`，仍不行截图找 Claude
-- [ ] （可选）顶部搜索框输入首页地址 →「请求编入索引」，`/en/` 也来一次
-- [ ] （可选）再加一个网址前缀资源 `https://fra.wubunan.com/docs/`，把给的 `googleXXXX.html` 文件名交给 Claude 放到服务器上
+- [x] （可选）顶部搜索框输入首页地址 →「请求编入索引」，`/en/` 也来一次（2026-11-19 在新资源 `yile2020.github.io` 上都请求了，进了优先抓取队列）
+- [x] （2026-11-19 做完：同一个 `google354ce5fed9937af4.html` 就能自动验证，不用再放文件；`sitemap-index.xml` 已提交）（可选）再加一个网址前缀资源 `https://fra.wubunan.com/docs/`，把给的 `googleXXXX.html` 文件名交给 Claude 放到服务器上
 
 不要加 robots.txt：GitHub Pages 的 robots.txt 只认 `yile2020.github.io/robots.txt`（域名根，归 `yile2020.github.io` 这个仓库管，我们没建），我们的站在子路径下放了也不生效。
 根上没有 robots.txt = 全部放行，现在就是最好的状态。
@@ -70,7 +70,7 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
 
 ### GitHub 仓库
 
-- [ ] Settings → General → Social preview → Edit → Upload，传 `og-preview.jpg`（Windows 桌面上；源图是 https://yile2020.github.io/fastapi-react-admin/og.png）。
+- [x] （用户已配好，2026-11-19 核对：预览图是品牌图，带新名）Settings → General → Social preview → Edit → Upload，传 `og-preview.jpg`（Windows 桌面上；源图是 https://yile2020.github.io/fastapi-react-admin/og.png）。
       直接传 og.png 报过「Something went really wrong」，换成去掉透明层的 JPG 再传
 - [ ] （可选）仓库首页右侧 About 的 Website 改成文档站地址
 
