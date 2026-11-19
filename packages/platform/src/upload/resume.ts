@@ -50,7 +50,13 @@ function writeAll(key: string, all: Record<string, ResumeEntry>, storage: Storag
 }
 
 export function createResumeStore(userId: string, storage?: Storage) {
-  // 旧的无归属记录不能安全地认领给当前用户，不读取 / 迁移它们。
+  // 按用户分键之前的无归属记录：不能安全地认领给当前用户，也不能留着（里面有上一个人的文件名）—— 直接删。
+  try {
+    const legacy = storage ?? globalThis.localStorage
+    legacy?.removeItem(KEY)
+  } catch {
+    /* 存储不可用就没有旧记录可删 */
+  }
   const key = `${KEY}:${encodeURIComponent(userId)}`
   return {
     get: (fp: string): ResumeEntry | undefined => readAll(key, storage)[fp],
