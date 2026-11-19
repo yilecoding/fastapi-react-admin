@@ -56,7 +56,7 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
 
 - [x] 添加资源「网址前缀」`https://yilecoding.github.io/fastapi-react-admin/`（改名前的旧地址），HTML 文件验证（2026-11-02）。新地址的资源见上面「GitHub 改名后要做的」
 - [x] 提交 sitemap `sitemap-index.xml`（刚提交时显示「无法抓取」、上次读取时间为空，是 Google 还没去读，不是错）
-- [ ] 11/4 前后回来看 sitemap 状态。还是「无法抓取」就再提交一个 `sitemap-0.xml`，仍不行截图找 Claude
+- [x] （2026-11-19 作废，不是做完：这条看的是旧资源的 sitemap，已被新资源上重新提交的 `sitemap-index.xml` 取代；新资源的 sitemap 状态跟下面「11/9」那条一起复查）11/4 前后回来看 sitemap 状态。还是「无法抓取」就再提交一个 `sitemap-0.xml`，仍不行截图找 Claude
 - [x] （可选）顶部搜索框输入首页地址 →「请求编入索引」，`/en/` 也来一次（2026-11-19 在新资源 `yile2020.github.io` 上都请求了，进了优先抓取队列）
 - [x] （2026-11-19 做完：同一个 `google354ce5fed9937af4.html` 就能自动验证，不用再放文件；`sitemap-index.xml` 已提交）（可选）再加一个网址前缀资源 `https://fra.wubunan.com/docs/`，把给的 `googleXXXX.html` 文件名交给 Claude 放到服务器上
 
@@ -65,7 +65,7 @@ Google 那边收录的、文章里链出去的旧地址全部失效。国内那�
 
 ### Bing Webmaster https://www.bing.com/webmasters
 
-- [ ] 登录后选「从 Google Search Console 导入」，授权即可，站点和 sitemap 一起过来，不用再验证。
+- [x] （2026-11-19 做完：导入的是新资源 `yile2020.github.io`，站点和 `sitemap-index.xml` 一起过来，状态 Processing）登录后选「从 Google Search Console 导入」，授权即可，站点和 sitemap 一起过来，不用再验证。
       Bing 的索引也供给 DuckDuckGo、ChatGPT 搜索等
 
 ### GitHub 仓库
