@@ -67,9 +67,11 @@ jobs:
 
       # 🔴 打 tag 就出签名安装包，所以先确认这个提交「在 main 上、且 main 上那一轮 CI 全绿」（#232）。
       # 不查的话，在本地分支上随手打个 tag 推上去，没过评审、没过测试的代码就带着证书签名发出去了。
-      # 合并后马上打 tag 时 CI 多半还在跑（E2E 约 20 分钟），所以这里等它跑完，最多 45 分钟。
+      # 合并后马上打 tag 时 CI 多半还在跑（E2E 约 20 分钟），所以这里等它跑完，最多 75 分钟
+      # （重跑旧提交时要先排在 HEAD 那一轮后面，约 20 分钟排队 + 20 分钟自己跑，45 分钟不够，#374）。
       # ⚠️ ci.yml 在 main 上是 cancel-in-progress：tag 的提交后面又合了别的 PR，这个提交的 CI 会被取消 →
-      # 这里报错。到 Actions 里把那一轮 re-run 绿了，再重跑本 workflow 即可。
+      # 这里报错。到 Actions 里把那一轮 re-run 绿了，再重跑本 workflow 即可。重跑不会取消 HEAD 正在跑的那一轮
+      # （ci.yml 只在 run_attempt == 1 时 cancel-in-progress），而是排在它后面 —— 所以会先等 HEAD 跑完。
       # 旧提交重跑只补质量检查和 SHA 镜像；latest 与 Pages 仅发布 main 当前提交。
       # 预发布 tag（v1.2.0-rc.1）只警告不拦：那是用来试发布流水线本身的口子。
       - name: tag 的提交在 main 上，且 CI 已经绿了
@@ -80,7 +82,7 @@ jobs:
           # compare main...SHA：SHA 是 main 的祖先时 status 是 behind / identical
           REL=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$GITHUB_SHA" --jq .status)
           case "$REL" in behind|identical) echo "提交在 main 上（$REL）" ;; *) fail "tag 指向的 $GITHUB_SHA 不在 main 上（$REL）：先合进 main 再打 tag" ;; esac
-          for i in $(seq 1 90); do
+          for i in $(seq 1 150); do
             RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=1" \
               --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion) \(.html_url)"')
             # 合并后马上推 tag 时，push 触发的那轮 CI 可能还没登记 —— 先等，5 分钟还没有才算真找不到
@@ -95,7 +97,7 @@ jobs:
             fi
             echo "CI 还在跑（$STATUS），30 秒后再看…"; sleep 30
           done
-          fail "等了 45 分钟 CI 还没跑完"
+          fail "等了 75 分钟 CI 还没跑完"
 
       - name: 建草稿（已存在就跳过）
         env:

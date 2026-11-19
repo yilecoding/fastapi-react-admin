@@ -6,10 +6,13 @@ on:
   pull_request:
   workflow_dispatch:
 
-# 同一分支的新 push 取消上一次未跑完的，省 runner 也让状态徽章反映最新提交
+# 同一分支的新 push 取消上一次未跑完的，省 runner 也让状态徽章反映最新提交。
+# 🔴 只有第一次运行才取消别人（#374）：在 Actions 里重跑旧提交 A（release.yml 让你这么做）时，
+# 要是 HEAD B 的 CI 还在跑，`true` 会把 B 取消掉 —— A 不是 HEAD、不推 latest，于是 latest 和 Pages
+# 停在更旧的版本，直到有人再重跑 B。重跑（run_attempt > 1）改成排队等 B 跑完。
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.run_attempt == 1 }}
 
 jobs:
   # 零外部依赖的检查。要 SQL Server 的那部分在下面的 test-backend job 里，
@@ -745,7 +748,8 @@ jobs:
   # 旧包怎么处理见 deploy/AGENTS.md「镜像改名 fba-* → fra-*」。
   build-images:
     name: 构建镜像并推到 GHCR
-    needs: [static, lint-frontend, lint-backend, test-backend, test-backend-postgres, test-e2e]
+    # test-nginx 也要在（#374）：反代那层的回归测试红了，镜像照样推 latest 就等于没测
+    needs: [static, test-nginx, lint-frontend, lint-backend, test-backend, test-backend-postgres, test-e2e]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:

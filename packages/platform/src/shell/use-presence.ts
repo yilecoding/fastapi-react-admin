@@ -4,7 +4,7 @@ import { toast } from '@admin/ui/components/toast'
 
 import { API_BASE, endSession, restoreSession } from '../api-client/client'
 import { tokenStore } from '../api-client/token-store'
-import { handleSessionEnded } from '../auth/session'
+import { handleSessionEnded, isEndingLocally } from '../auth/session'
 import { dispatchSocketEvent } from './socket-events'
 
 /**
@@ -86,6 +86,12 @@ export function usePresence(enabled: boolean) {
         !tokenStore.get()
       )
         return
+      // 本标签页正在登出：服务端撤销会话时先断了 socket，这时去刷新只会拿到 ended、抢在登出响应之前
+      // 收尾跳登录页（#374）。让路但不放弃 —— 登出成功会清 token，下一轮自然停；登出失败就照常恢复
+      if (isEndingLocally()) {
+        scheduleRecovery()
+        return
+      }
       recovering = true
       const before = tokenStore.get()
       try {
@@ -95,7 +101,11 @@ export function usePresence(enabled: boolean) {
           socket.connect()
         } else if (outcome.kind === 'ended') {
           // Do not end a newer login while an older refresh was in flight.
-          if (tokenStore.get() === before) endSession(outcome.end)
+          if (isEndingLocally()) {
+            // 登出还没落地：交给登出收尾；万一登出失败（仍是登录态），下一轮照常恢复
+            recovering = false
+            scheduleRecovery()
+          } else if (tokenStore.get() === before) endSession(outcome.end)
         } else {
           recovering = false
           scheduleRecovery()
