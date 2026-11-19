@@ -51,7 +51,7 @@ export const BRAND = {
    */
   commit: import.meta.env.VITE_GIT_SHA || null,
   /** 仓库地址。顶栏的 GitHub 图标（`components/github-link.tsx`）读它，fork 出去改这一处就行 */
-  repoUrl: "https://github.com/yilecoding/fastapi-react-admin",
+  repoUrl: "https://github.com/yile2020/fastapi-react-admin",
   /** DeepWiki 的项目解析页，给演示站访客一个 AI 架构导览入口 */
-  deepwikiUrl: "https://deepwiki.com/yilecoding/fastapi-react-admin",
+  deepwikiUrl: "https://deepwiki.com/yile2020/fastapi-react-admin",
 } as const

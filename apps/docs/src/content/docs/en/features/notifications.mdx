@@ -49,7 +49,7 @@ A notice has a rich-text body (Tiptap editor), up to 20 attachments, and these s
 | Show on sign-in page | readable without signing in, rate-limited to 30 requests per minute per IP; returns at most 5 items with a 200-character plain-text summary |
 | Audience | departments (including all sub-departments), roles (enabled ones) and users. No audience rows = everyone. Sign-in page + audience is rejected with 422 |
 
-Visibility has one definition, `crud_notice.readable_clause(viewer)` in [`crud_notice.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/crud/crud_notice.py): not deleted, shown, published, not expired, and the viewer is in the audience. The reader list, detail, pop-ups, banner and **attachment downloads** all use it, and the inbox reads the same audience table, so "it's in my bell" and "I can open it and download the file" cannot disagree. Hidden, expired, unpublished or out-of-audience notices all return 404 — a 403 would confirm the notice exists. Admins with `sys:notice:add` get read statistics: who in the audience has and has not read it.
+Visibility has one definition, `crud_notice.readable_clause(viewer)` in [`crud_notice.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/crud/crud_notice.py): not deleted, shown, published, not expired, and the viewer is in the audience. The reader list, detail, pop-ups, banner and **attachment downloads** all use it, and the inbox reads the same audience table, so "it's in my bell" and "I can open it and download the file" cannot disagree. Hidden, expired, unpublished or out-of-audience notices all return 404 — a 403 would confirm the notice exists. Admins with `sys:notice:add` get read statistics: who in the audience has and has not read it.
 
 Attachments are committed in the same transaction as the notice. Each must exist and not be in the recycle bin, must be readable by the person publishing (otherwise anyone with publish rights could expose someone else's private file), and must not be a public file.
 
@@ -59,7 +59,7 @@ Images embedded in the rich-text body are public files (`/uploads/{key}`): an `<
 
 ## How does a notification decide between email, SMS and a group bot?
 
-Each plugin declares its notification kinds in a `notification_kinds.py`, which the notification plugin discovers at startup. This is the real declaration from [`plugin/workflow/notification_kinds.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/notification_kinds.py):
+Each plugin declares its notification kinds in a `notification_kinds.py`, which the notification plugin discovers at startup. This is the real declaration from [`plugin/workflow/notification_kinds.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/notification_kinds.py):
 
 ```python
 register_notification_kind(
@@ -72,7 +72,7 @@ register_notification_kind(
 )
 ```
 
-For each recipient and external channel, the router in [`service/routing.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/routing.py) combines three things: the admin **policy** (`off`, `default_on`, `default_off` or `forced`, editable under **Notifications → Notification policy**), the user's own **preference** (**Profile → Notifications**; forced cells are locked), and whether the user has an **address**. In-app is always `forced`. A kind that is not declared for a channel cannot be switched on for it. SMS requires a registered SMS template because mainland-China SMS can only send pre-approved templates, and it is only sent to a phone number the user verified themselves — an admin-entered number gets a `skipped / phone_unverified` row instead.
+For each recipient and external channel, the router in [`service/routing.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/routing.py) combines three things: the admin **policy** (`off`, `default_on`, `default_off` or `forced`, editable under **Notifications → Notification policy**), the user's own **preference** (**Profile → Notifications**; forced cells are locked), and whether the user has an **address**. In-app is always `forced`. A kind that is not declared for a channel cannot be switched on for it. SMS requires a registered SMS template because mainland-China SMS can only send pre-approved templates, and it is only sent to a phone number the user verified themselves — an admin-entered number gets a `skipped / phone_unverified` row instead.
 
 The built-in kinds and their defaults:
 
@@ -89,7 +89,7 @@ The built-in kinds and their defaults:
 
 Broadcast kinds (notices, the daily greeting) never go to email or SMS: one broadcast row would fan out into a company-wide mass mail.
 
-Calling code uses one entry point, `create_in_tx(db, kind=..., user_ids=..., title=..., content=..., link=...)` in [`notification_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/notification_service.py). It writes the inbox rows and delivery rows in your transaction, does not commit, and returns a `Dispatch` whose `after_commit()` pushes the socket event and wakes the worker.
+Calling code uses one entry point, `create_in_tx(db, kind=..., user_ids=..., title=..., content=..., link=...)` in [`notification_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/notification_service.py). It writes the inbox rows and delivery rows in your transaction, does not commit, and returns a `Dispatch` whose `after_commit()` pushes the socket event and wakes the worker.
 
 ## What happens after a delivery row is written?
 
@@ -108,13 +108,13 @@ Feishu (including `open.larksuite.com`), DingTalk and WeCom, configured under **
 - **Plain text only**, never markdown: titles are user input, and markdown would let someone post a link that looks system-generated. WeCom text is truncated at 2048 bytes, not characters.
 - A read timeout counts as `unknown` and is not retried — a duplicate in a group chat is more visible than a duplicate email.
 
-Links in bot messages and emails are built from `NOTIFICATION_WEB_BASE_URL` (default `http://localhost:8888`); set it to your real address before deploying. The step-by-step setup for a Feishu bot is in the [group bot guide](https://github.com/yilecoding/fastapi-react-admin/blob/main/docs/guides/notify-bot.md).
+Links in bot messages and emails are built from `NOTIFICATION_WEB_BASE_URL` (default `http://localhost:8888`); set it to your real address before deploying. The step-by-step setup for a Feishu bot is in the [group bot guide](https://github.com/yile2020/fastapi-react-admin/blob/main/docs/guides/notify-bot.md).
 
 ## How is a webhook URL kept out of logs?
 
 A webhook URL is a credential: whoever has it can post to the group. The URL and signing secret are encrypted with `NOTIFICATION_ENCRYPT_SECRET_KEY` (32 bytes as 64 hex characters; without it, saving a bot is refused rather than storing plaintext). The API only returns a masked `webhook_hint`, and `webhook_url` / `sign_secret` are redacted from the operation log.
 
-The less obvious leak was httpx itself: at INFO level it logs `HTTP Request: POST <full URL>`. The first real Feishu test put the token into the access log. The first fix only covered the API process, but the Celery worker — which does the actual sending — configures logging separately. The fix now sits at module top level in [`common/log.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/log.py) (`logging.getLogger('httpx').setLevel(logging.WARNING)`) and is covered by two tests, one of which configures logging the way `celery -l info` does in a subprocess.
+The less obvious leak was httpx itself: at INFO level it logs `HTTP Request: POST <full URL>`. The first real Feishu test put the token into the access log. The first fix only covered the API process, but the Celery worker — which does the actual sending — configures logging separately. The fix now sits at module top level in [`common/log.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/log.py) (`logging.getLogger('httpx').setLevel(logging.WARNING)`) and is covered by two tests, one of which configures logging the way `celery -l info` does in a subprocess.
 
 ## What has been tested against real services?
 
@@ -128,7 +128,7 @@ The less obvious leak was httpx itself: at INFO level it logs `HTTP Request: POS
 ## Limits
 
 - Group bots subscribe by kind only; there is no per-workflow or per-department filter.
-- Group delivery is written from the same entry point as person delivery, so a bot-subscribed event with no person recipient (for example, an admin terminating their own request) does not reach the group either. Exercise 2 of the [group bot guide](https://github.com/yilecoding/fastapi-react-admin/blob/main/docs/guides/notify-bot.md) works through how to separate the two.
+- Group delivery is written from the same entry point as person delivery, so a bot-subscribed event with no person recipient (for example, an admin terminating their own request) does not reach the group either. Exercise 2 of the [group bot guide](https://github.com/yile2020/fastapi-react-admin/blob/main/docs/guides/notify-bot.md) works through how to separate the two.
 - The audience pickers on the notice form call the user, department and role list APIs; a notice editor without those permissions sees a "no permission" line instead of options.
 
 ## Which settings are there?
@@ -158,10 +158,10 @@ The less obvious leak was httpx itself: at INFO level it logs `HTTP Request: POS
 
 ## Where it lives in the code
 
-- [`plugin/notification/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/notification) — `kinds.py` (registry), `service/notification_service.py`, `service/routing.py`, `service/delivery_service.py`, `service/senders.py`, `bot_platforms.py` (URL prefixes, signing, payloads, response classification), `audience.py`
-- [`plugin/notice/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/notice) — `service/notice_service.py`, `crud/crud_notice.py`; [`plugin/sms/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/sms) — `sms_service.send()` and the Aliyun / Tencent Cloud adapters
-- Frontend: [`packages/platform/src/pages/notification/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/notification) (bell, Message center), `notice/` (form, reader drawer, pop-ups, banner), `notify-policy/`, `notify-delivery/`, `notify-bot/`, `profile/notify-prefs-panel.tsx`
-- Notes: [`plugin/notification/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/AGENTS.md), [`plugin/notice/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/AGENTS.md), [`pages/notification/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/notification/AGENTS.md)
+- [`plugin/notification/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/notification) — `kinds.py` (registry), `service/notification_service.py`, `service/routing.py`, `service/delivery_service.py`, `service/senders.py`, `bot_platforms.py` (URL prefixes, signing, payloads, response classification), `audience.py`
+- [`plugin/notice/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/notice) — `service/notice_service.py`, `crud/crud_notice.py`; [`plugin/sms/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/sms) — `sms_service.send()` and the Aliyun / Tencent Cloud adapters
+- Frontend: [`packages/platform/src/pages/notification/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/notification) (bell, Message center), `notice/` (form, reader drawer, pop-ups, banner), `notify-policy/`, `notify-delivery/`, `notify-bot/`, `profile/notify-prefs-panel.tsx`
+- Notes: [`plugin/notification/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/AGENTS.md), [`plugin/notice/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/AGENTS.md), [`pages/notification/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/notification/AGENTS.md)
 
 ## How it is tested
 

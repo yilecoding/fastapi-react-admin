@@ -27,7 +27,7 @@ The open API plugin lets another system, such as an HR, finance or data-warehous
 | `GET /api/open/v1/users` | `user:read` | `id` `username` `nickname` `dept_id` `status` `deleted` `created_time` `updated_time` |
 | `GET /api/open/v1/depts` | `dept:read` | `id` `parent_id` `code` `name` `sort` `leader_id` `status` `deleted` `created_time` `updated_time` |
 
-There is also `workflow:read`, a scope with no endpoint behind it; it only allows subscribing to approval webhooks. The endpoints are read-only and return the **full** data set, because open-API calls explicitly bypass row-level data scopes. Two things set the boundary: which scopes you grant, and a dedicated outward schema ([`schema/open_v1.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/schema/open_v1.py)) that contains only the promised fields, so fields added to internal schemas don't leak out. The group sits outside `/api/v1` on purpose: internal endpoints come with no compatibility promise, and this one does. An admin can export the OpenAPI JSON for the other team with the **Open API docs** button on the Applications page.
+There is also `workflow:read`, a scope with no endpoint behind it; it only allows subscribing to approval webhooks. The endpoints are read-only and return the **full** data set, because open-API calls explicitly bypass row-level data scopes. Two things set the boundary: which scopes you grant, and a dedicated outward schema ([`schema/open_v1.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/schema/open_v1.py)) that contains only the promised fields, so fields added to internal schemas don't leak out. The group sits outside `/api/v1` on purpose: internal endpoints come with no compatibility promise, and this one does. An admin can export the OpenAPI JSON for the other team with the **Open API docs** button on the Applications page.
 
 ## How do I get an Access Key and Secret Key?
 
@@ -58,7 +58,7 @@ X-Sign:       <hex>
 
 To build the canonical query, decode the parameters and re-encode every name and value per RFC 3986: only `A-Z a-z 0-9 - _ . ~` stay unescaped, and a space becomes `%20`, not `+`. Then sort by name, then value, *after* encoding, and join with `&`.
 
-Test vector from the [integration guide](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/README.md): with SK `fra_sk_TEST-ONLY-do-not-use-in-production`, timestamp `1761009302000` and nonce `8f1c2a9e4b7d4e05`, the request `GET /api/open/v1/depts?name=%E5%BC%A0%20%E4%B8%89&b=1&a=2&a=1` must give this string to sign:
+Test vector from the [integration guide](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/README.md): with SK `fra_sk_TEST-ONLY-do-not-use-in-production`, timestamp `1761009302000` and nonce `8f1c2a9e4b7d4e05`, the request `GET /api/open/v1/depts?name=%E5%BC%A0%20%E4%B8%89&b=1&a=2&a=1` must give this string to sign:
 
 ```
 GET
@@ -69,7 +69,7 @@ a=1&a=2&b=1&name=%E5%BC%A0%20%E4%B8%89
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 ```
 
-and `X-Sign = 2717e8c4f65ffb9b621cfd19ba928706143e5cec1e80bb4a15d7b4a35ff0aae0`. The other vectors are in [`sdk/test_vectors.json`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/test_vectors.json). With the Python reference implementation:
+and `X-Sign = 2717e8c4f65ffb9b621cfd19ba928706143e5cec1e80bb4a15d7b4a35ff0aae0`. The other vectors are in [`sdk/test_vectors.json`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/test_vectors.json). With the Python reference implementation:
 
 ```python
 import requests
@@ -85,7 +85,7 @@ When the signature doesn't match, the 401 response includes `data.string_to_sign
 
 ## How do I stop replayed requests?
 
-Two checks work together ([`gateway/auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/auth.py)):
+Two checks work together ([`gateway/auth.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/auth.py)):
 
 - **Timestamp window:** the server accepts `X-Timestamp` only if it is within `OPEN_SIGN_WINDOW_SECONDS` (300 s) of the server clock. Otherwise it answers 401 and includes `data.server_time`.
 - **Nonce:** each nonce is stored per application in Redis with `SET NX` for twice the window (600 s).
@@ -130,7 +130,7 @@ Both endpoints accept `updated_since` (ISO 8601 with an offset; leave it out for
 - Records are ordered by change time (`COALESCE(updated_time, created_time)`), then by `id`. The cursor is keyset-based, not an offset, so pages don't skip or repeat rows while data changes. The record right on the boundary may come again; upsert by `id`.
 - IDs are strings: 19-digit snowflake IDs exceed JavaScript's safe integer range.
 
-There was one real SQL Server bug here. `datetimeoffset(7)` stores 100 ns, while Python's `datetime` stops at microseconds, so seed rows written by `GETDATE()` were read back slightly truncated. The cursor never moved past them: the same page came back forever. CI's SQL Server job timed out three times, and the hang reproduced locally 58% of the time. The query now casts to `DATETIMEOFFSET(6)` before reading, comparing and sorting ([`service/sync_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/sync_service.py)).
+There was one real SQL Server bug here. `datetimeoffset(7)` stores 100 ns, while Python's `datetime` stops at microseconds, so seed rows written by `GETDATE()` were read back slightly truncated. The cursor never moved past them: the same page came back forever. CI's SQL Server job timed out three times, and the hang reproduced locally 58% of the time. The query now casts to `DATETIMEOFFSET(6)` before reading, comparing and sorting ([`service/sync_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/sync_service.py)).
 
 ## How do webhooks work?
 
@@ -155,9 +155,9 @@ To guard against SSRF, receiving URLs must be https. The hostname is resolved ag
 
 | Language | File | Functions |
 |---|---|---|
-| Python 3.10+ | [`sdk/python/fra_open_sign.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/python/fra_open_sign.py) | `sign_headers`, `verify_webhook` |
-| Node.js 18+ | [`sdk/node/fra-open-sign.mjs`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/node/fra-open-sign.mjs) | `signHeaders`, `verifyWebhook` |
-| Java 11+ | [`sdk/java/FraOpenSign.java`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/java/FraOpenSign.java) | `signHeaders`, `verifyWebhook` |
+| Python 3.10+ | [`sdk/python/fra_open_sign.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/python/fra_open_sign.py) | `sign_headers`, `verify_webhook` |
+| Node.js 18+ | [`sdk/node/fra-open-sign.mjs`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/node/fra-open-sign.mjs) | `signHeaders`, `verifyWebhook` |
+| Java 11+ | [`sdk/java/FraOpenSign.java`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/java/FraOpenSign.java) | `signHeaders`, `verifyWebhook` |
 
 Each one is a single file that uses only the standard library; copy it into your project. They implement signing and webhook verification only. They are not generated API clients with typed models.
 
@@ -196,9 +196,9 @@ The Python and Node signing code is checked against the vectors in pytest. The N
 
 ## Where it lives in the code
 
-- [`gateway/signature.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/signature.py): canonical query, string to sign, constant-time verify
-- [`gateway/auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/auth.py): the eight checks, `DependsOpenApp`, scope registry
-- [`gateway/route.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/route.py): call log
-- [`service/sync_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/sync_service.py): incremental sync
-- [`service/webhook_delivery.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/webhook_delivery.py) · [`service/webhook_sign.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/webhook_sign.py): webhook delivery and signing
-- [`plugin.toml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/plugin.toml): settings · [`README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/README.md): integration guide for the external team (in Chinese)
+- [`gateway/signature.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/signature.py): canonical query, string to sign, constant-time verify
+- [`gateway/auth.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/auth.py): the eight checks, `DependsOpenApp`, scope registry
+- [`gateway/route.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/route.py): call log
+- [`service/sync_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/sync_service.py): incremental sync
+- [`service/webhook_delivery.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/webhook_delivery.py) · [`service/webhook_sign.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/webhook_sign.py): webhook delivery and signing
+- [`plugin.toml`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/plugin.toml): settings · [`README.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/README.md): integration guide for the external team (in Chinese)

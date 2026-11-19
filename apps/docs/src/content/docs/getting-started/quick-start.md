@@ -157,4 +157,4 @@ docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 - [功能总览](/features/overview/)：了解系统能做什么。
 - [登录与安全](/features/login-security/)：设置密码策略和二次验证。
 - [部署](/getting-started/deployment/)：用现成镜像部署到服务器。
-- [参与开发](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md)：测试、分支和发版流程。
+- [参与开发](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md)：测试、分支和发版流程。

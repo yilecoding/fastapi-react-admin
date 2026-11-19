@@ -38,7 +38,7 @@ The filter bar (QueryBar) and the data table have too many options for the sandb
 
 ## Can the component library be moved into another project?
 
-Yes, by design: `packages/ui` has **not a single import** from the repository's other packages (even translations are injected at run time), and `pnpm arch:check` enforces that in CI. The steps are in [`packages/ui/PORTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/ui/PORTING.md):
+Yes, by design: `packages/ui` has **not a single import** from the repository's other packages (even translations are injected at run time), and `pnpm arch:check` enforces that in CI. The steps are in [`packages/ui/PORTING.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/ui/PORTING.md):
 
 1. Copy the components and styles under `packages/ui`
 2. Install the npm packages it depends on
@@ -46,7 +46,7 @@ Yes, by design: `packages/ui` has **not a single import** from the repository's 
 4. Translations, one of three: wire nothing (the original Chinese text shows), wire your own i18next, or strip translation out
 5. Check against the list at the end of the document: do buttons have a background, does the table header stick while scrolling, does the pager say `42 total` or `{{total}} total`, does dark mode invert everything
 
-There is also a readable component catalogue in [`packages/ui/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/ui/AGENTS.md), covering when to use each component and pitfalls such as size overrides that don't take effect.
+There is also a readable component catalogue in [`packages/ui/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/ui/AGENTS.md), covering when to use each component and pitfalls such as size overrides that don't take effect.
 
 ## Where does the frontend / backend contract come from?
 
@@ -57,7 +57,7 @@ The package also holds the request client and the success rule: **only `code ===
 Where type inference stands, plainly:
 
 - **Mobile** infers the path, parameters, body and response fields of every request from `schema.d.ts`, so an API change the screens didn't follow fails `pnpm typecheck` (mutation-tested: a wrong field name, path, body field or query parameter name are all caught).
-- **The web client has not switched yet**: its request wrapper is `api.GET<T>(path: string)`, with the path a plain string and the response type `T` written by hand at each call site, so a field renamed in the backend is not caught by the web type check. A few structural issues stand in the way (dynamically built paths, about 20 pages that build query strings with functions); details are in [`packages/api/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/api/AGENTS.md).
+- **The web client has not switched yet**: its request wrapper is `api.GET<T>(path: string)`, with the path a plain string and the response type `T` written by hand at each call site, so a field renamed in the backend is not caught by the web type check. A few structural issues stand in the way (dynamically built paths, about 20 pages that build query strings with functions); details are in [`packages/api/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/api/AGENTS.md).
 
 ## What other checks guard the code?
 
@@ -71,7 +71,7 @@ All run in CI and can be run locally:
 | `pnpm i18n:check` | Chinese and English keys match |
 | `pnpm ctx:check` | Files, scripts and test IDs mentioned in each directory's `AGENTS.md` still exist |
 
-The background of these rules is in the "hard rules" section of the root [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md).
+The background of these rules is in the "hard rules" section of the root [`CLAUDE.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CLAUDE.md).
 
 ## What it does not do
 
@@ -81,10 +81,10 @@ The background of these rules is in the "hard rules" section of the root [`CLAUD
 
 ## Where is the code?
 
-- Sandbox: [`pages/dev-sandbox/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/dev-sandbox) (`demos/` holds each demo, `api.ts` the switch) · playgrounds [`pages/playground-query/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/playground-query) · [`pages/playground-table/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/playground-table) · the sidebar node in [`shell/use-sidebar.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/use-sidebar.ts)
-- Component library: [`packages/ui/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/ui) · theme tokens [`packages/ui/src/styles/globals.css`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/ui/src/styles/globals.css)
-- Contract: [`packages/api/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/api) (generator `scripts/gen.mjs`)
-- Check scripts: [`scripts/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/scripts)
+- Sandbox: [`pages/dev-sandbox/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/dev-sandbox) (`demos/` holds each demo, `api.ts` the switch) · playgrounds [`pages/playground-query/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/playground-query) · [`pages/playground-table/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/playground-table) · the sidebar node in [`shell/use-sidebar.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/use-sidebar.ts)
+- Component library: [`packages/ui/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/ui) · theme tokens [`packages/ui/src/styles/globals.css`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/ui/src/styles/globals.css)
+- Contract: [`packages/api/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/api) (generator `scripts/gen.mjs`)
+- Check scripts: [`scripts/`](https://github.com/yile2020/fastapi-react-admin/tree/main/scripts)
 
 ## Try it on the demo
 

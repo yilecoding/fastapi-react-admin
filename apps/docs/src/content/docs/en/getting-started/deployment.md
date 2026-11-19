@@ -21,7 +21,7 @@ No repository clone is needed:
 
 ```bash
 mkdir -p /srv/fastapi-react-admin && cd $_
-base=https://raw.githubusercontent.com/yilecoding/fastapi-react-admin/main
+base=https://raw.githubusercontent.com/yile2020/fastapi-react-admin/main
 curl -fsSLO $base/docker-compose.prod.yml
 curl -fsSL  $base/deploy/prod.sh -o prod.sh
 curl -fsSL  $base/apps/api/deploy/backend/docker-compose/.env.server.example -o .env.server
@@ -97,6 +97,6 @@ Use either `pull` or a local build, not both: otherwise which image `up` runs de
 
 ## Further reading
 
-- [`deploy/README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/README.md) — every command (in Chinese).
-- [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md) — the pitfalls behind these rules, and why automatic deployment was left out on purpose.
+- [`deploy/README.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/README.md) — every command (in Chinese).
+- [`deploy/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/AGENTS.md) — the pitfalls behind these rules, and why automatic deployment was left out on purpose.
 - [Desktop and mobile clients](/en/features/clients/) — installers are built by a separate release workflow.

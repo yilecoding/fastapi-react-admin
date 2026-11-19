@@ -10,14 +10,14 @@
 
 权限细到数据行 · 多页签真保状态 · 飞书式审批 · 不越权的 AI 助手 · S3 存储与断点续传 · Web / 桌面 / 移动三端
 
-[在线演示](https://fra.wubunan.com/sign-in) · [文档](https://yilecoding.github.io/fastapi-react-admin/) · [DeepWiki 项目解析](https://deepwiki.com/yilecoding/fastapi-react-admin) · [快速开始](#快速开始) · [功能一览](#功能一览) · [更新记录](https://github.com/yilecoding/fastapi-react-admin/releases)
+[在线演示](https://fra.wubunan.com/sign-in) · [文档](https://yile2020.github.io/fastapi-react-admin/) · [DeepWiki 项目解析](https://deepwiki.com/yile2020/fastapi-react-admin) · [快速开始](#快速开始) · [功能一览](#功能一览) · [更新记录](https://github.com/yile2020/fastapi-react-admin/releases)
 
-[![Release](https://img.shields.io/github/v/release/yilecoding/fastapi-react-admin?style=flat-square)](https://github.com/yilecoding/fastapi-react-admin/releases)
-[![CI](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml/badge.svg)](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml)
-[![E2E 报告](https://img.shields.io/badge/E2E_报告-Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://yilecoding.github.io/fastapi-react-admin/e2e/)
+[![Release](https://img.shields.io/github/v/release/yile2020/fastapi-react-admin?style=flat-square)](https://github.com/yile2020/fastapi-react-admin/releases)
+[![CI](https://github.com/yile2020/fastapi-react-admin/actions/workflows/ci.yml/badge.svg)](https://github.com/yile2020/fastapi-react-admin/actions/workflows/ci.yml)
+[![E2E 报告](https://img.shields.io/badge/E2E_报告-Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://yile2020.github.io/fastapi-react-admin/e2e/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](./LICENSE)
-[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/yilecoding/fastapi-react-admin)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yilecoding/fastapi-react-admin)
+[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/yile2020/fastapi-react-admin)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yile2020/fastapi-react-admin)
 
 </div>
 
@@ -73,7 +73,7 @@ packages/      依赖单向：i18n / api ← ui ← platform ← web
 
 AI 改代码很快，所以每一处改动都得有东西兜底：
 
-- **测试兜底** —— 1600+ 条测试连真实数据库、跑真实浏览器，不用 mock；CI 每次全量跑，[E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/)公开
+- **测试兜底** —— 1600+ 条测试连真实数据库、跑真实浏览器，不用 mock；CI 每次全量跑，[E2E 报告](https://yile2020.github.io/fastapi-react-admin/e2e/)公开
 - **类型兜底** —— 前后端契约由 OpenAPI 生成；移动端的请求全部从它推断类型，接口改了而页面没跟上，类型检查直接报错（网页端还在迁移，请求的返回类型目前在各调用点手写）
 - **规矩写给 AI 看** —— 50 多份按目录拆分的 `CLAUDE.md` / `AGENTS.md` 记着实测踩过的坑，编码助手改到哪个目录，就读到哪一份
 - **后端就在 AI 生态里** —— Python + FastAPI，内置的 AI 助手基于 pydantic-ai
@@ -133,11 +133,11 @@ AI 改代码很快，所以每一处改动都得有东西兜底：
 
 ## 移动端
 
-Expo App 的范围是**手机上真正要办的事**（[#224](https://github.com/yilecoding/fastapi-react-admin/issues/224)）；管理后台类的模块不搬，用 Web。版本号和 Web 分开编。
+Expo App 的范围是**手机上真正要办的事**（[#224](https://github.com/yile2020/fastapi-react-admin/issues/224)）；管理后台类的模块不搬，用 Web。版本号和 Web 分开编。
 
 - **有**：首页（我的审批 · 待办）· 审批（待办 / 已办 / 抄送 / 我发起的 · 同意 / 驳回 / 退回 / 转交 / 加签 · 发起 · 草稿 · 退回后重新提交 · 重新发起）· 公告 · 消息 · 用户 · 个人中心（绑定手机号）· 服务器监控 · 时区 · 手机验证码登录 · 二次验证登录 · 会话结束原因提示
 - **移动端不做，用 Web**：角色 / 部门 / 菜单 · 文件 · 操作日志与登录日志 · 开启二次验证 · 审批里的 AI 帮填与 AI 预审
-- **还没验证**：没有自动化测试（[#137](https://github.com/yilecoding/fastapi-react-admin/issues/137)）· 多数页面只在模拟器上跑过 · 没有发版流水线
+- **还没验证**：没有自动化测试（[#137](https://github.com/yile2020/fastapi-react-admin/issues/137)）· 多数页面只在模拟器上跑过 · 没有发版流水线
 
 ## 数据库：三选一
 
@@ -169,14 +169,14 @@ pnpm dev                                                # 打开 http://127.0.0.
 
 后端 1400+ 条 pytest 打真实数据库和 Redis，前端 150+ 条 Playwright 打真实浏览器、真实接口和真实库 —— **不 mock**。
 数据权限是拿 41 个真账号逐个登录验证出来的；关键防线都做过变异检验（故意把代码改坏，确认测试会红）。
-`main` 每次跑完的 [E2E 报告](https://yilecoding.github.io/fastapi-react-admin/e2e/) 都公开，失败用例带截图和录像。
+`main` 每次跑完的 [E2E 报告](https://yile2020.github.io/fastapi-react-admin/e2e/) 都公开，失败用例带截图和录像。
 
 ## 文档
 
 | 想做什么 | 看这里 |
 |---|---|
-| 从零上手：快速开始、部署、写第一个业务模块、常见问题、版本升级 | [文档站](https://yilecoding.github.io/fastapi-react-admin/)（演示站上也有一份：[fra.wubunan.com/docs](https://fra.wubunan.com/docs/)） |
-| 借助 AI 理解项目结构和代码 | [DeepWiki](https://deepwiki.com/yilecoding/fastapi-react-admin) · [Zread](https://zread.ai/yilecoding/fastapi-react-admin) |
+| 从零上手：快速开始、部署、写第一个业务模块、常见问题、版本升级 | [文档站](https://yile2020.github.io/fastapi-react-admin/)（演示站上也有一份：[fra.wubunan.com/docs](https://fra.wubunan.com/docs/)） |
+| 借助 AI 理解项目结构和代码 | [DeepWiki](https://deepwiki.com/yile2020/fastapi-react-admin) · [Zread](https://zread.ai/yile2020/fastapi-react-admin) |
 | 本地开发、跑测试、提 PR、发版 | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | 了解工程约定和踩过的坑 | [CLAUDE.md](./CLAUDE.md) —— 按任务导航，40 多份模块分册，每条结论都带实测证据 |
 | 部署到服务器 | [deploy/README.md](./deploy/README.md) |

@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-How you upgrade depends on how you use the project. If you **deploy the published images without changing the code**, pull the new images and restart; migrations run automatically. If you **forked it and built your own features on top**, merge the new upstream version into your repository, then run migrations and tests. Every release on [GitHub Releases](https://github.com/yilecoding/fastapi-react-admin/releases) has an "升级" (Upgrade) section saying whether there are database migrations or config changes.
+How you upgrade depends on how you use the project. If you **deploy the published images without changing the code**, pull the new images and restart; migrations run automatically. If you **forked it and built your own features on top**, merge the new upstream version into your repository, then run migrations and tests. Every release on [GitHub Releases](https://github.com/yile2020/fastapi-react-admin/releases) has an "升级" (Upgrade) section saying whether there are database migrations or config changes.
 
 ## How are versions numbered?
 
@@ -15,7 +15,7 @@ The mobile app is versioned separately from the web app. It calls the internal A
 
 ## What is promised not to break?
 
-From "1.0 起的兼容约定" in the root [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md). Breaking any of these requires a major version.
+From "1.0 起的兼容约定" in the root [`CLAUDE.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CLAUDE.md). Breaking any of these requires a major version.
 
 | Surface | Promise |
 |---|---|
@@ -58,7 +58,7 @@ All commands are in [Deploying to a server](/en/getting-started/deployment/).
 Add upstream as a remote and **merge a tag** (not `main`, which may contain unreleased changes):
 
 ```bash
-git remote add upstream https://github.com/yilecoding/fastapi-react-admin.git   # once
+git remote add upstream https://github.com/yile2020/fastapi-react-admin.git   # once
 git fetch upstream --tags
 git merge v0.12.0            # the version you are upgrading to
 ```
@@ -97,7 +97,7 @@ In files both you and upstream changed — typically the menu and permission see
 
 ## How do the desktop and mobile apps upgrade?
 
-- Desktop: download the new installer from [Releases](https://github.com/yilecoding/fastapi-react-admin/releases) and install over the old one. In-app auto-update only runs when your pages call the update check — see [Desktop and mobile clients](/en/features/clients/)
+- Desktop: download the new installer from [Releases](https://github.com/yile2020/fastapi-react-admin/releases) and install over the old one. In-app auto-update only runs when your pages call the update check — see [Desktop and mobile clients](/en/features/clients/)
 - Mobile: rebuild and redistribute the app
 
 Old clients call the new backend with their old frontend, which is why internal API removals keep a one-minor-version overlap.

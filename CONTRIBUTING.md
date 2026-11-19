@@ -2,7 +2,7 @@
 
 先说清楚项目的状态，省得你白花时间：
 
-- **已经发了 1.0**（最新版见 [Releases](https://github.com/yilecoding/fastapi-react-admin/releases)），按 semver 走。
+- **已经发了 1.0**（最新版见 [Releases](https://github.com/yile2020/fastapi-react-admin/releases)），按 semver 走。
   开放接口、Webhook、迁移链、插件接口、配置键这几处有兼容承诺，动之前先看 [CLAUDE.md](./CLAUDE.md)「1.0 起的兼容约定」；
   表外的页面、组件、内部实现照旧可以大胆改。**表结构改动一律走 alembic 迁移**（见下文「后端」）
 - **两份 README**：`README.md` 是英文（仓库首页）、`README.zh-CN.md` 是中文，顶部互相切换。
