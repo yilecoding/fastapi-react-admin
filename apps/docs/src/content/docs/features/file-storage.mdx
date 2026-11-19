@@ -137,16 +137,16 @@ docker compose -f docker-compose.dev.yml --profile s3 up -d rustfs   # S3 接口
 | `UPLOAD_IMAGE_SIZE_MAX` · `UPLOAD_DOCUMENT_SIZE_MAX` · `UPLOAD_VIDEO_SIZE_MAX` · `UPLOAD_AUDIO_SIZE_MAX` · `UPLOAD_ARCHIVE_SIZE_MAX` | 5 MB · 50 MB · 20 MB · 20 MB · 100 MB | 按类型的单文件上限（字节） |
 | `UPLOAD_*_EXT_INCLUDE` | 见 `conf.py` | 各类型允许的扩展名 |
 
-定义在 [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) 的上传、回收站、分片、存储几段。
+定义在 [`core/conf.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) 的上传、回收站、分片、存储几段。
 
 ## 代码在哪
 
-- [`apps/api/backend/utils/storage_ops.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/storage_ops.py)：OpenDAL operator、预签名、端点校验
-- [`apps/api/backend/app/admin/service/multipart_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/multipart_service.py)：分片上传会话
-- [`apps/api/backend/app/admin/api/v1/sys/file.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/file.py)：文件接口
-- [`packages/platform/src/upload/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/upload)：哈希、队列、分片、续传
-- [`packages/platform/src/pages/file/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/file)：文件管理器、预览弹窗、附件面板
-- [`packages/platform/src/pages/file/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/file/AGENTS.md)：设计取舍与实测记录
+- [`apps/api/backend/utils/storage_ops.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/storage_ops.py)：OpenDAL operator、预签名、端点校验
+- [`apps/api/backend/app/admin/service/multipart_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/multipart_service.py)：分片上传会话
+- [`apps/api/backend/app/admin/api/v1/sys/file.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/file.py)：文件接口
+- [`packages/platform/src/upload/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/upload)：哈希、队列、分片、续传
+- [`packages/platform/src/pages/file/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/file)：文件管理器、预览弹窗、附件面板
+- [`packages/platform/src/pages/file/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/file/AGENTS.md)：设计取舍与实测记录
 
 ## 怎么测的
 

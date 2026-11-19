@@ -1,6 +1,6 @@
 # apps/docs —— 公开文档站（Astro Starlight）
 
-> 发到 GitHub Pages 的**根路径**（<https://yilecoding.github.io/fastapi-react-admin/>），
+> 发到 GitHub Pages 的**根路径**（<https://yile2020.github.io/fastapi-react-admin/>），
 > E2E 报告挂在它的 `/e2e/` 下。存在的理由是 SEO / GEO：给搜索引擎和 AI 助手一份
 > **静态 HTML** 的、可以引用的项目介绍 —— 后台本身是登录墙后的单页应用，爬虫什么都看不到。
 >
@@ -49,7 +49,7 @@ GitHub Pages 在国内访问慢、百度基本收录不到，所以同一份文�
 - 更新就是拉包解压：
   ```bash
   cd /www/wwwroot/fra.wubunan.com && rm -rf docs.new && mkdir docs.new \
-    && curl -fsSL https://yilecoding.github.io/fastapi-react-admin/docs-site.tar.gz | tar xz -C docs.new \
+    && curl -fsSL https://yile2020.github.io/fastapi-react-admin/docs-site.tar.gz | tar xz -C docs.new \
     && rm -rf docs.old && { [ -d docs ] && mv docs docs.old || true; } && mv docs.new docs
   ```
 
@@ -109,7 +109,7 @@ Google 的 AI features 文档：
 语言切换）补 base。`astro.config.mjs` 里的 remark 插件把**正文** markdown 里以 `/` 开头的
 站内链接补上 base，所以正文照常写 `/features/multi-tab/`、`/en/features/multi-tab/`。
 
-**插件管不到的两处**，实测都是生成了不带 base 的 `href`（点进去落在 yilecoding.github.io 域名根下，404）：
+**插件管不到的两处**，实测都是生成了不带 base 的 `href`（点进去落在 yile2020.github.io 域名根下，404）：
 
 | 位置 | 例子 | 写法 |
 |---|---|---|
@@ -124,7 +124,7 @@ PR 的 CI（`pnpm build`）就会红。反向验证过：把一页里的一条�
 「没带 /fastapi-react-admin，会落到域名根上」并退出 1。外链不查（网络抖动会把它带红），
 `/e2e/` 不查（CI 的 pages job 在构建之后才拼进来）。
 
-**例外：指向本仓库 `main` 的源码链接要查**（#285）—— `github.com/yilecoding/fastapi-react-admin/blob|tree|edit/main/<路径>`
+**例外：指向本仓库 `main` 的源码链接要查**（#285）—— `github.com/yile2020/fastapi-react-admin/blob|tree|edit/main/<路径>`
 指向的就是这份检出，离线核对 `<路径>` 在不在，不联网。功能页靠「代码在哪」那一节和代码对上，
 文件改名或挪目录之后这些链接照样 404，而原来的检查把它们当外链放过了。每页底部的「编辑此页」
 也是这种链接，所以顺带核对了每一页的源文件。2026-11-10 第一次接上时全站 422 条都有效；
@@ -306,7 +306,7 @@ Starlight 自带的 `LanguageSelect` 是一个原生 `<select>`：下拉列表�
 | 分享卡片图 | `scripts/gen-og.mjs` 生成；只用英文 —— 别的机器上未必有中文字体，缺字是一排方框且不报错 |
 | 网站图标 | `public/favicon.svg` 与 `src/assets/logo.svg` 由根目录的 `pnpm brand:icons` 生成，别手改 |
 
-⚠️ **没有 `robots.txt`**：项目站点在 `yilecoding.github.io` 的子路径下，而爬虫只读域名根上的
+⚠️ **没有 `robots.txt`**：项目站点在 `yile2020.github.io` 的子路径下，而爬虫只读域名根上的
 `robots.txt`。所以 sitemap（`/fastapi-react-admin/sitemap-index.xml`）要在 Google Search Console /
 Bing Webmaster 里手动提交。换成自己的域名后改 `astro.config.mjs` 的 `SITE` / `BASE` 两行，
 再在 `public/` 放一份 `robots.txt` 指向 sitemap。

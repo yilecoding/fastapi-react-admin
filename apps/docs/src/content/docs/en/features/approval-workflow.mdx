@@ -27,14 +27,14 @@ The approval center only requires a sign-in, not a permission code: approvers ar
 
 ## What can a workflow definition contain?
 
-A definition is two JSON documents: a form schema and a flow model. Both are validated by Pydantic shapes in [`engine/schema.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/engine/schema.py) on publish, and stored as raw JSON.
+A definition is two JSON documents: a form schema and a flow model. Both are validated by Pydantic shapes in [`engine/schema.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/engine/schema.py) on publish, and stored as raw JSON.
 
 - **Form fields** (13 types): text, textarea, number, amount, date, date range, single / multi select, user, department, attachment, description and detail table. A detail table is one level deep (no table inside a table).
 - **Conditional visibility** (`visibleWhen`): a field that is not visible is not validated and its value is not saved — for example a sick-note attachment that only appears when the leave type is "sick".
 - **Calculated fields** (`calc`): days in a date range (inclusive, 11-02 → 11-06 = 5) or the sum of a table column. The server recomputes them; submitted values are ignored.
 - **Flow nodes**: start, approval, CC and condition. Conditions are structured `all` / `any` trees with leaves like `{"var": "f_days", "op": "gt", "value": 3}` — no string expressions to parse or inject into. Publishing fails if a condition node does not have exactly one default branch.
 
-This is an excerpt of the seeded "请假" (leave) sample from [`sql/postgresql/init_snowflake.sql`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/sql/postgresql/init_snowflake.sql): direct manager first, an upper manager only for leave longer than 3 days, then HR.
+This is an excerpt of the seeded "请假" (leave) sample from [`sql/postgresql/init_snowflake.sql`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/sql/postgresql/init_snowflake.sql): direct manager first, an upper manager only for leave longer than 3 days, then HR.
 
 ```json
 {"type": "approval", "id": "n_leader", "name": "直属主管", "mode": "any",
@@ -49,7 +49,7 @@ The designer edits a draft (saved without validation); **publish** validates it 
 
 ## Who approves a step?
 
-Each approval node has an assignee rule ([`engine/assignee.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/engine/assignee.py)):
+Each approval node has an assignee rule ([`engine/assignee.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/engine/assignee.py)):
 
 | Rule | Resolves to |
 |---|---|
@@ -108,7 +108,7 @@ Every state change first claims the request with `UPDATE wf_instance SET version
 
 ## Connecting your own business data
 
-Form approvals need no code. For a business table, implement `WorkflowBizHandler` in [`handler.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/handler.py), call `register_handler()`, and start the request with `runtime_service.start_for_biz()` inside your own transaction. `on_finished` runs inside the approval transaction and should only update business state. Five webhook events (`workflow.instance.started` / `approved` / `rejected` / `withdrawn` / `terminated`) are available through the [open API](/en/features/open-api/) and deliberately omit form contents. Approval notifications are routed like any other kind — see [Notifications](/en/features/notifications/).
+Form approvals need no code. For a business table, implement `WorkflowBizHandler` in [`handler.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/handler.py), call `register_handler()`, and start the request with `runtime_service.start_for_biz()` inside your own transaction. `on_finished` runs inside the approval transaction and should only update business state. Five webhook events (`workflow.instance.started` / `approved` / `rejected` / `withdrawn` / `terminated`) are available through the [open API](/en/features/open-api/) and deliberately omit form contents. Approval notifications are routed like any other kind — see [Notifications](/en/features/notifications/).
 
 The plugin also has optional AI features (pre-review, generating a definition from one sentence, filling the form from a document, approving from chat, and data-gated auto-approval on or-sign nodes); see [AI assistant](/en/features/ai-assistant/).
 
@@ -129,20 +129,20 @@ Most approval behaviour is configured **per workflow and per node** in the desig
 
 ## Where it lives in the code
 
-- [`apps/api/backend/plugin/workflow/engine/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/workflow/engine) — shapes, tree navigation and publish checks (`flow.py`), form rules and field permissions (`form.py`), assignee rules, path preview (`simulate.py`)
-- [`service/runtime_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/runtime_service.py) — every action, claiming, the capability list; [`service/query_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/query_service.py) — inbox and per-viewer detail; [`service/timeout_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/timeout_service.py)
-- Frontend: [`packages/platform/src/pages/workflow/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/workflow) (form renderer, flow view, detail drawer) plus `workflow-definition/`, `workflow-inbox/`, `workflow-monitor/`
-- Design notes and pitfalls: [`plugin/workflow/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/AGENTS.md), [`pages/workflow/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/workflow/AGENTS.md)
+- [`apps/api/backend/plugin/workflow/engine/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/workflow/engine) — shapes, tree navigation and publish checks (`flow.py`), form rules and field permissions (`form.py`), assignee rules, path preview (`simulate.py`)
+- [`service/runtime_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/runtime_service.py) — every action, claiming, the capability list; [`service/query_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/query_service.py) — inbox and per-viewer detail; [`service/timeout_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/service/timeout_service.py)
+- Frontend: [`packages/platform/src/pages/workflow/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/workflow) (form renderer, flow view, detail drawer) plus `workflow-definition/`, `workflow-inbox/`, `workflow-monitor/`
+- Design notes and pitfalls: [`plugin/workflow/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/AGENTS.md), [`pages/workflow/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/workflow/AGENTS.md)
 
 ## How it is tested
 
-[`plugin/workflow/tests/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/workflow/tests) collects 167 pytest cases, most of them running against a real test database and Redis (88 for the engine and actions, 79 for the AI features, of which 14 call a real model and are skipped without credentials). Some examples:
+[`plugin/workflow/tests/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/workflow/tests) collects 167 pytest cases, most of them running against a real test database and Redis (88 for the engine and actions, 79 for the AI features, of which 14 call a real model and are skipped without credentials). Some examples:
 
 - `test_concurrency.py` runs real concurrent sessions: co-sign approvals at the same time, or-sign at the same time, approve racing withdraw, and two co-signers editing different fields — the last one fails if the version check is removed.
 - `test_preview_matches_what_actually_happens` previews a path, then walks it for real and compares approvers step by step.
 - `test_timeouts.py` controls time (`handle_timeouts(..., now=...)`) instead of waiting.
 
-The notes record which tests were mutation-checked (fix reverted, test turns red). The browser suite [`workflow.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/workflow.spec.ts) has 14 Playwright tests covering submit → approve, send back and resubmit, reassign, take back, add approver, drafts, urgent and read receipts. CI runs the backend suite on PostgreSQL and SQL Server; MySQL has no CI job.
+The notes record which tests were mutation-checked (fix reverted, test turns red). The browser suite [`workflow.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/workflow.spec.ts) has 14 Playwright tests covering submit → approve, send back and resubmit, reassign, take back, add approver, drafts, urgent and read receipts. CI runs the backend suite on PostgreSQL and SQL Server; MySQL has no CI job.
 
 ## Try it in the demo
 

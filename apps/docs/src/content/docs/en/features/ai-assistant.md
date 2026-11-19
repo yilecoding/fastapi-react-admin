@@ -17,7 +17,7 @@ The AI assistant is a chat interface (a full page, plus a side drawer you can op
 | **AI assistant → Tool logs** | `/ai/tool-log` | Audit of every tool call |
 | **AI assistant → MCP credentials** | `/ai/mcp-client` | Tokens for external systems |
 
-Both chat entry points share one hook ([`use-chat-session.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/ai-chat/use-chat-session.ts)), and the drawer and the page can sit on different conversations. Chatting requires the `ai:chat:use` permission and a back-office (`is_staff`) account, because the chat endpoint is a POST behind the same RBAC check as every other write endpoint. The seed data deliberately gives the AI menus to no non-superuser role. Which roles get them is up to each deployment.
+Both chat entry points share one hook ([`use-chat-session.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/ai-chat/use-chat-session.ts)), and the drawer and the page can sit on different conversations. Chatting requires the `ai:chat:use` permission and a back-office (`is_staff`) account, because the chat endpoint is a POST behind the same RBAC check as every other write endpoint. The seed data deliberately gives the AI menus to no non-superuser role. Which roles get them is up to each deployment.
 
 :::note[Live demo]
 In the [demo](https://fra.wubunan.com/sign-in) (`admin` / `123456`), these pages are under **AI assistant**. Each deployment configures its own model key, so don't count on the demo chat answering. When no provider is configured, the chat shows an explicit "no model provider configured" error instead of failing silently.
@@ -25,7 +25,7 @@ In the [demo](https://fra.wubunan.com/sign-in) (`admin` / `123456`), these pages
 
 ## Which model providers can it use?
 
-Every provider is called through the OpenAI-compatible `POST {base_url}/chat/completions` with streaming. The backend uses plain `httpx` and no vendor SDK ([`llm/client.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/llm/client.py)). The provider type only pre-fills defaults:
+Every provider is called through the OpenAI-compatible `POST {base_url}/chat/completions` with streaming. The backend uses plain `httpx` and no vendor SDK ([`llm/client.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/llm/client.py)). The provider type only pre-fills defaults:
 
 | Type | Default `base_url` | Default model |
 |---|---|---|
@@ -54,9 +54,9 @@ AI_MCP_ENABLED = false
 
 ## How does the assistant stay inside the user's permissions?
 
-The model, and the engine that drives it, are treated as untrusted. They can only *propose* a tool call. A single module, [`core/dispatcher.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/dispatcher.py), decides whether the call runs, and it is the only layer of the plugin that cannot be swapped out:
+The model, and the engine that drives it, are treated as untrusted. They can only *propose* a tool call. A single module, [`core/dispatcher.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/dispatcher.py), decides whether the call runs, and it is the only layer of the plugin that cannot be swapped out:
 
-1. **The tool list is filtered before the model sees it.** A tool is listed only if the user holds its permission code. The rule is the same one the HTTP RBAC check uses (`user_has_perm` next to `rbac_verify` in [`rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py)). Write tools also require `is_staff`. Tools from disabled plugins, and from domains missing from `AI_TOOL_DOMAINS`, are left out.
+1. **The tool list is filtered before the model sees it.** A tool is listed only if the user holds its permission code. The rule is the same one the HTTP RBAC check uses (`user_has_perm` next to `rbac_verify` in [`rbac.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py)). Write tools also require `is_staff`. Tools from disabled plugins, and from domains missing from `AI_TOOL_DOMAINS`, are left out.
 2. **Every call is checked again when it runs.** A hallucinated tool name, a permission removed mid-conversation, or a write sent through a read-only channel all end as `denied`, and the refusal is audited.
 3. **The data scope is set on every call.** Each tool runs inside `scoped_to_user(ctx.user)`, so queries through `DataScopedCRUD` return only the rows that user may see. The dispatcher doesn't rely on the JWT middleware having set this context, because non-JWT entry points such as MCP would otherwise run with no row filter. See [Data permissions](/en/features/data-permissions/).
 4. **Engines never hold anything executable.** An engine receives `ToolSchema` objects (name, description, JSON Schema, `mutating`), which are plain data with no handler. A guard test fails if code under `engines/` touches `.handler` or imports the tool registry.
@@ -72,7 +72,7 @@ Superusers bypass permission codes and data scopes, so the seeded `admin` accoun
 3. Otherwise a one-time token (`cf_…`) is stored in Redis for 300 seconds, along with the tool, arguments, user, preview text and source channel. The chat shows a confirmation card with the preview sentence.
 4. On **Confirm**, `POST /api/v1/ai/chat/tools/confirm` checks that the token belongs to the current user, claims it with an atomic Redis `DELETE`, and dispatches the call again with the full permission checks. The card is then replaced by the result, so it can't be clicked twice.
 
-The atomic claim fixed a real bug. Before the fix, five concurrent confirmations of one token ran the change five times. [`tests/test_ai_confirm.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/tests/test_ai_confirm.py) now checks that exactly one wins, against real Redis with a warmed connection pool.
+The atomic claim fixed a real bug. Before the fix, five concurrent confirmations of one token ran the change five times. [`tests/test_ai_confirm.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/tests/test_ai_confirm.py) now checks that exactly one wins, against real Redis with a warmed connection pool.
 
 :::caution
 Setting `AI_CONFIRM_MUTATING_TOOLS = false` removes step 3, and writes then run as soon as the model asks for them. There are no delete tools at all: deletions can't be undone and cascade to child records, users and role grants.
@@ -91,7 +91,7 @@ Setting `AI_CONFIRM_MUTATING_TOOLS = false` removes step 3, and writes then run 
 | weather | `weather_query` | — |
 | workflow | `wf_todo_list`, `wf_instance_detail` | `wf_approve`, `wf_reject`, `wf_transfer` |
 
-The workflow tools live in the workflow plugin ([`ai_tools.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/ai_tools.py)) and go through the same authorization function as the approval buttons. A user can approve from chat only what they could approve on the page. To add a tool, decorate an async function with `@ai_tool` in `plugin/ai/tools/` or in your own plugin's `ai_tools.py`. Both locations are discovered automatically ([`core/registry.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/registry.py)):
+The workflow tools live in the workflow plugin ([`ai_tools.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/ai_tools.py)) and go through the same authorization function as the approval buttons. A user can approve from chat only what they could approve on the page. To add a tool, decorate an async function with `@ai_tool` in `plugin/ai/tools/` or in your own plugin's `ai_tools.py`. Both locations are discovered automatically ([`core/registry.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/registry.py)):
 
 ```python
 @ai_tool(
@@ -114,7 +114,7 @@ Each call writes one row to `ai_tool_invocation`: user, conversation, tool name,
 
 *Denied* is deliberately kept apart from *failed*. If someone keeps asking the AI to do things they aren't allowed to, those attempts show up on their own instead of being lost among ordinary errors.
 
-The audit insert runs inside a SAVEPOINT, so if it fails, only that one audit row is lost and the conversation carries on (measured in [`test_ai_audit.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/tests/test_ai_audit.py)). The log is under **AI assistant → Tool logs** (permission `ai:log:list`). In the chat itself, each answer shows its tool trace (tool, permission code, outcome, duration) above the text, and the trace is saved with the message.
+The audit insert runs inside a SAVEPOINT, so if it fails, only that one audit row is lost and the conversation carries on (measured in [`test_ai_audit.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/tests/test_ai_audit.py)). The log is under **AI assistant → Tool logs** (permission `ai:log:list`). In the chat itself, each answer shows its tool trace (tool, permission code, outcome, duration) above the text, and the trace is saved with the message.
 
 ## How do external systems use the same tools over MCP?
 
@@ -126,7 +126,7 @@ Authorization: Bearer fra_mcp_<token>
 X-Acting-User: <username>
 ```
 
-The external system declares which user it is acting for, so the gateway trusts that claim only as far as the credential allows ([`mcp_gateway/auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/mcp_gateway/auth.py)):
+The external system declares which user it is acting for, so the gateway trusts that claim only as far as the credential allows ([`mcp_gateway/auth.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/mcp_gateway/auth.py)):
 
 - **`act_as` allow-list:** the usernames this credential may act for (`*` means any non-superuser). Acting for a superuser requires `allow_superuser`.
 - **Same account checks as login:** a disabled account, department or role can't be acted for.
@@ -178,10 +178,10 @@ For most of these guards, the plugin notes also record a mutation test: the chec
 
 ## Where it lives in the code
 
-- [`plugin/ai/core/dispatcher.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/dispatcher.py): permission filter, data scope, confirmation, audit
-- [`plugin/ai/core/registry.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/registry.py): `@ai_tool`, schema generated from the signature, auto-discovery
-- [`plugin/ai/service/chat_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/service/chat_service.py): SSE chat and the confirm flow
-- [`plugin/ai/engines/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/engines) · [`plugin/ai/tools/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/tools) · [`plugin/ai/mcp_gateway/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/mcp_gateway)
-- [`plugin/ai/plugin.toml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/plugin.toml): all settings with comments
-- [`packages/platform/src/pages/ai-chat/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/ai-chat): chat page, drawer, confirmation card
-- [`plugin/ai/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/AGENTS.md): design notes and measured pitfalls (in Chinese)
+- [`plugin/ai/core/dispatcher.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/dispatcher.py): permission filter, data scope, confirmation, audit
+- [`plugin/ai/core/registry.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/registry.py): `@ai_tool`, schema generated from the signature, auto-discovery
+- [`plugin/ai/service/chat_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/service/chat_service.py): SSE chat and the confirm flow
+- [`plugin/ai/engines/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/engines) · [`plugin/ai/tools/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/tools) · [`plugin/ai/mcp_gateway/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/mcp_gateway)
+- [`plugin/ai/plugin.toml`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/plugin.toml): all settings with comments
+- [`packages/platform/src/pages/ai-chat/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/ai-chat): chat page, drawer, confirmation card
+- [`plugin/ai/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/AGENTS.md): design notes and measured pitfalls (in Chinese)

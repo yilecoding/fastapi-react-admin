@@ -8,17 +8,17 @@ import { defineConfig } from 'astro/config'
 
 import { DOC_SECTIONS } from './src/navigation.mjs'
 
-// 🔴 站点挂在子路径下（GitHub Pages 是 yilecoding.github.io/fastapi-react-admin/），
+// 🔴 站点挂在子路径下（GitHub Pages 是 yile2020.github.io/fastapi-react-admin/），
 // Astro 只给它自己生成的链接（侧边栏、上下篇、语言切换）补 base，**正文里手写的
 // `/xxx/` 链接不补** —— 不补就是指向域名根上的 404。
 // 下面的 remark 插件把正文里以 `/` 开头的站内链接统一补上 base，写文档时照常写
 // `/getting-started/quick-start/` 就行。
 // 同一份源码要发到两个地方（GitHub Pages 和自己的服务器），所以 SITE / BASE 走环境变量；
 // `scripts/check-links.mjs` 读的是同一对变量。
-const SITE = process.env.DOCS_SITE ?? 'https://yilecoding.github.io'
+const SITE = process.env.DOCS_SITE ?? 'https://yile2020.github.io'
 const BASE = process.env.DOCS_BASE ?? '/fastapi-react-admin'
 
-const REPO = 'https://github.com/yilecoding/fastapi-react-admin'
+const REPO = 'https://github.com/yile2020/fastapi-react-admin'
 
 /**
  * 中文是默认语言（先推国内）。浏览器语言不是中文的访客进中文页时，右下角给一条

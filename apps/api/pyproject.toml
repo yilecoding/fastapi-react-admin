@@ -8,7 +8,7 @@ license = { text = "MIT" }
 # 而且别人会因为**这个 fork** 的问题去找他。上游的署名在
 # LICENSE / apps/api/LICENSE / README 里完整保留
 authors = [
-  { name = "yilecoding" },
+  { name = "yile2020" },
 ]
 dependencies = [
   "aioodbc>=0.5.0",

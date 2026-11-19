@@ -19,7 +19,7 @@ Copy the error text from your terminal or browser and find it on this page with 
 lsof -i :8888     # who is holding the port
 ```
 
-Source: [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md), section 「本地起服务」 (running locally)
+Source: [`CLAUDE.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CLAUDE.md), section 「本地起服务」 (running locally)
 
 ### `Can't open lib 'ODBC Driver 18 for SQL Server'`
 
@@ -31,7 +31,7 @@ Source: [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/mai
 odbcinst -q -d
 ```
 
-Source: [`CONTRIBUTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md), [`apps/api/Dockerfile.prod`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/Dockerfile.prod)
+Source: [`CONTRIBUTING.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md), [`apps/api/Dockerfile.prod`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/Dockerfile.prod)
 
 ### `Login failed for user 'sa'` (SQL Server error 18456)
 
@@ -39,7 +39,7 @@ Source: [`CONTRIBUTING.md`](https://github.com/yilecoding/fastapi-react-admin/bl
 
 **Fix**: set `DATABASE_PASSWORD` to the instance's current sa password. If you really want the new password, delete the data volume so the instance initializes again. When `pnpm db:init` hits this error it prints 「数据库登录失败：…（SQL Server 错误 18456）」.
 
-Source: [`apps/api/backend/cli.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/cli.py) (`_format_database_connection_error`)
+Source: [`apps/api/backend/cli.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/cli.py) (`_format_database_connection_error`)
 
 ### `ModuleNotFoundError` from `pnpm test` or `pnpm db:upgrade` after pulling, although `pnpm dev` works
 
@@ -51,7 +51,7 @@ Source: [`apps/api/backend/cli.py`](https://github.com/yilecoding/fastapi-react-
 pnpm --filter api exec uv sync     # or pnpm install:all
 ```
 
-Source: [`apps/api/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/AGENTS.md)
+Source: [`apps/api/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/AGENTS.md)
 
 ### Worker log shows `Received unregistered task of type '…'` and your own tasks sometimes vanish
 
@@ -63,7 +63,7 @@ Source: [`apps/api/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin
 docker exec fba_redis redis-cli -n 7 DBSIZE    # must return 0
 ```
 
-Source: [`apps/api/backend/app/task/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/AGENTS.md)
+Source: [`apps/api/backend/app/task/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/AGENTS.md)
 
 ## Sign-in and sessions
 
@@ -73,7 +73,7 @@ Source: [`apps/api/backend/app/task/AGENTS.md`](https://github.com/yilecoding/fa
 
 **Fix**: open <http://127.0.0.1:8888> for local development, not `localhost:8888`.
 
-Source: [`apps/docs/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/docs/AGENTS.md)
+Source: [`apps/docs/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/docs/AGENTS.md)
 
 ### `admin` / `123456` doesn't work after `pnpm db:init`
 
@@ -87,7 +87,7 @@ FBA_INIT_ADMIN_PASSWORD='<strong password>' pnpm db:reset
 
 `123456` only works in the `fba_test` database used by pytest and E2E, which `pnpm --filter api test:db` builds separately.
 
-Source: [`apps/api/backend/cli.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/cli.py) (`_set_admin_password`)
+Source: [`apps/api/backend/cli.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/cli.py) (`_set_admin_password`)
 
 ### `Too many requests, please try again later` (HTTP 429) on sign-in
 
@@ -97,7 +97,7 @@ The Chinese UI shows 「请求过于频繁，请稍后重试」.
 
 **Fix**: wait and try again. A rate-limited attempt doesn't consume the captcha, so the page keeps the current captcha image and you can reuse it. When you seed a lot of data locally, you can start the backend with `REQUEST_LIMITER_ENABLED=false` for a while (production refuses this setting).
 
-Source: [`apps/docs/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/docs/AGENTS.md), [`apps/api/backend/app/admin/api/v1/auth/auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/auth/auth.py)
+Source: [`apps/docs/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/docs/AGENTS.md), [`apps/api/backend/app/admin/api/v1/auth/auth.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/auth/auth.py)
 
 ### `LOGIN_CAPTCHA_ENABLED=false` is set in `.env`, but sign-in still asks for a captcha
 
@@ -109,7 +109,7 @@ Source: [`apps/docs/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admi
 docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 ```
 
-Source: [`apps/web/e2e/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/AGENTS.md), [`CONTRIBUTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md)
+Source: [`apps/web/e2e/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/AGENTS.md), [`CONTRIBUTING.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md)
 
 ## Database and migrations
 
@@ -123,7 +123,7 @@ Source: [`apps/web/e2e/AGENTS.md`](https://github.com/yilecoding/fastapi-react-a
 pnpm db:upgrade
 ```
 
-Source: [`apps/api/backend/alembic/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md), [`CONTRIBUTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md)
+Source: [`apps/api/backend/alembic/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md), [`CONTRIBUTING.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md)
 
 ### `种子数据里没有 admin 账号，初始化流程可能已经变了` (no admin account in the seed data)
 
@@ -131,7 +131,7 @@ Source: [`apps/api/backend/alembic/AGENTS.md`](https://github.com/yilecoding/fas
 
 **Fix**: put `DATABASE_PK_MODE='snowflake'` in `apps/api/backend/.env` (`.env.example` already has it) and run `pnpm db:init` again.
 
-Source: [`CONTRIBUTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md), [`apps/api/backend/cli.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/cli.py)
+Source: [`CONTRIBUTING.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md), [`apps/api/backend/cli.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/cli.py)
 
 ### Changed a model and the backend reloaded, but the table didn't change
 
@@ -146,7 +146,7 @@ pnpm db:upgrade
 
 If you changed columns, also update `backend/sql/*/init_snowflake_test_data.sql`. Those INSERTs list their columns explicitly, and a stale one breaks initialization of new environments.
 
-Source: [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md), [`apps/api/backend/alembic/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)
+Source: [`CLAUDE.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CLAUDE.md), [`apps/api/backend/alembic/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)
 
 ### `Cannot insert explicit value for identity column in table '…' when IDENTITY_INSERT is set to OFF. (544)`
 
@@ -154,7 +154,7 @@ Source: [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/mai
 
 **Fix**: in any migration that creates a table, declare the snowflake primary key with `autoincrement=False`. The guard test `test_created_tables_declare_snowflake_pk_as_non_autoincrement` checks the `create_table` calls in `alembic/versions/` for it.
 
-Source: [`apps/api/backend/alembic/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)
+Source: [`apps/api/backend/alembic/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)
 
 ### The first pytest or E2E run fails with a database connection error
 
@@ -170,7 +170,7 @@ pnpm test
 
 If tests later fail with errors like `Invalid column name …` after a model change, run `test:db` again.
 
-Source: [`apps/api/backend/tests/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/tests/AGENTS.md), [`CONTRIBUTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md)
+Source: [`apps/api/backend/tests/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/tests/AGENTS.md), [`CONTRIBUTING.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md)
 
 ## Frontend development
 
@@ -180,7 +180,7 @@ Source: [`apps/api/backend/tests/AGENTS.md`](https://github.com/yilecoding/fasta
 
 **Fix**: treat every ID as a string and never call `Number()` on it. The backend already sends IDs as strings (`backend/utils/serializers.py`), and `apps/web/src/lib/search-params.ts` keeps out-of-range integers in the URL as strings. Before adding a search parameter that carries an ID, check that this custom parser is still wired into `router.ts`.
 
-Source: [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md), hard rule 6
+Source: [`CLAUDE.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CLAUDE.md), hard rule 6
 
 ### `pnpm e2e -- tests/xxx.spec.ts` runs the whole suite instead of one file
 
@@ -192,7 +192,7 @@ Source: [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/mai
 cd apps/web && pnpm e2e tests/dept-crud.spec.ts
 ```
 
-Source: [`apps/web/e2e/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/AGENTS.md)
+Source: [`apps/web/e2e/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/AGENTS.md)
 
 ### Docs build fails with `Node.js v22.23.3 is not supported by Astro!`
 
@@ -200,7 +200,7 @@ Source: [`apps/web/e2e/AGENTS.md`](https://github.com/yilecoding/fastapi-react-a
 
 **Fix**: go back to the version in the lockfile (`pnpm install --frozen-lockfile`) or upgrade Node to 22.23.4 or later. Upgrading Astro for real means deciding on the `engines` field in the root `package.json` and the Node version in CI first.
 
-Source: [`apps/docs/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/docs/AGENTS.md)
+Source: [`apps/docs/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/docs/AGENTS.md)
 
 ## Deployment and operations
 
@@ -214,7 +214,7 @@ Source: [`apps/docs/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admi
 python -c "import secrets;print(secrets.token_urlsafe(32))"
 ```
 
-Source: [`apps/api/backend/core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py)
+Source: [`apps/api/backend/core/conf.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py)
 
 ### `ENVIRONMENT=prod，数据库检查未通过，拒绝启动` (production database check failed)
 
@@ -226,7 +226,7 @@ Source: [`apps/api/backend/core/conf.py`](https://github.com/yilecoding/fastapi-
 
 **Fix**: respectively, build the database with `fba init` (it stamps head automatically) or run `alembic stamp <current revision>` on an existing one; run `alembic upgrade head` before starting; change the passwords of the listed accounts.
 
-Source: [`apps/api/backend/alembic/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md), [`apps/api/backend/core/registrar.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/registrar.py)
+Source: [`apps/api/backend/alembic/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md), [`apps/api/backend/core/registrar.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/registrar.py)
 
 ### `PermissionError: [Errno 13] Permission denied` while the container loads its config
 
@@ -239,7 +239,7 @@ chown 1000:1000 .env.server
 chmod 600       .env.server
 ```
 
-Source: [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md)
+Source: [`deploy/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/AGENTS.md)
 
 ### The API container is up, but its health check can never reach the database
 
@@ -247,7 +247,7 @@ Source: [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/b
 
 **Fix**: set `DATABASE_HOST` / `REDIS_HOST` to the host's address on the docker bridge (usually `172.17.0.1`; check with `ip addr show docker0`), or add `extra_hosts: ["host.docker.internal:host-gateway"]` to the service and use `host.docker.internal`.
 
-Source: [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md)
+Source: [`deploy/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/AGENTS.md)
 
 ### `docker compose pull` hangs on a server in mainland China
 
@@ -255,7 +255,7 @@ Source: [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/b
 
 **Fix**: set `FBA_PULL_MIRROR` (a mirror domain) in the `.env` next to the compose file. `prod.sh pull` then pulls from the mirror and retags the images back to `ghcr.io/…`. Don't put the mirror into the image names in the compose file. If the layer progress bars don't move for a few minutes, retry with another mirror.
 
-Source: [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md)
+Source: [`deploy/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/AGENTS.md)
 
 ### `/healthz` stays green while the API is down
 
@@ -263,7 +263,7 @@ Source: [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/b
 
 **Fix**: point external monitoring only at `https://<domain>/api/health/status`. It reports api, database, Redis, scheduler and worker one by one, returning 200 when all are healthy and 503 when any one is not. Look at the response body, not just the status code.
 
-Source: [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md), [`deploy/README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/README.md)
+Source: [`deploy/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/AGENTS.md), [`deploy/README.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/README.md)
 
 ### `Failed to fetch dynamically imported module` after a release
 
@@ -271,7 +271,7 @@ Source: [`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/b
 
 **Fix**: reload the page. The frontend recognizes this error and shows "A new version is available" with a reload button instead of a 500 page.
 
-Source: [`apps/web/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/AGENTS.md)
+Source: [`apps/web/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/AGENTS.md)
 
 ### `Multiple artifacts named "github-pages" were unexpectedly found for this workflow run`
 
@@ -279,8 +279,8 @@ Source: [`apps/web/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin
 
 **Fix**: delete this run's existing `github-pages` artifacts before uploading. The repository's CI `pages` job does exactly that (it needs the `actions: write` permission); copy that step if you deploy the docs site from a fork.
 
-Source: [`.github/workflows/ci.yml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/.github/workflows/ci.yml) (`pages` job)
+Source: [`.github/workflows/ci.yml`](https://github.com/yile2020/fastapi-react-admin/blob/main/.github/workflows/ci.yml) (`pages` job)
 
 ## Didn't find your problem?
 
-Make sure you went through every step of the [quick start](/en/getting-started/quick-start/) and [deployment](/en/getting-started/deployment/) guides. If it still fails, open a [GitHub issue](https://github.com/yilecoding/fastapi-react-admin/issues) and paste the exact error text.
+Make sure you went through every step of the [quick start](/en/getting-started/quick-start/) and [deployment](/en/getting-started/deployment/) guides. If it still fails, open a [GitHub issue](https://github.com/yile2020/fastapi-react-admin/issues) and paste the exact error text.

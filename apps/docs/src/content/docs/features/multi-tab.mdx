@@ -27,7 +27,7 @@ import ProductShot from '../../../components/ProductShot.astro'
 
 ## 原理是什么？
 
-[`TabOutlet`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx) **完全取代**路由的 `<Outlet />`。`<Outlet />` 只渲染当前匹配的那一个路由，`TabOutlet` 则给每个已打开的页签各渲染一个 `<Activity>`：
+[`TabOutlet`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx) **完全取代**路由的 `<Outlet />`。`<Outlet />` 只渲染当前匹配的那一个路由，`TabOutlet` 则给每个已打开的页签各渲染一个 `<Activity>`：
 
 ```tsx
 return tabs.map((tab) => {
@@ -43,7 +43,7 @@ return tabs.map((tab) => {
 
 `hidden` 模式下，React 保留 DOM（加 `display: none`）和组件状态，但会执行 effect 的清理函数，等页签重新可见时再把 effect 建一遍。所以后台页签表单还在，轮询却停了。
 
-页签列表是一个很小的 zustand store（[`tab-store.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-store.ts)），持久化在 `sessionStorage` 的 `admin:tabs` 里：
+页签列表是一个很小的 zustand store（[`tab-store.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-store.ts)），持久化在 `sessionStorage` 的 `admin:tabs` 里：
 
 - 页签的 key 是 `routeId` + params，**不含 search** —— 改筛选条件只更新当前页签，不会再开一个。
 - 最多 20 个。开第 21 个时，关掉标签条上最左边那个没固定的。
@@ -78,8 +78,8 @@ export const Route = createFileRoute("/_auth/system/user")({
 
 两个细节：
 
-- **粗粒度进 URL，细粒度留内存。** 树形表格只往 URL 写一个 `fold=all`，逐个点开的节点留在组件 state 里（[`use-tree-fold.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/use-tree-fold.ts)）。菜单树有 65 个节点、每个 ID 19 位，全塞进地址栏没法看。
-- **雪花 ID 必须保持字符串。** TanStack Router 默认对 search 值跑 `JSON.parse`，`?role=2202097973238829056` 会变成 `2202097973238829000`，实测权限矩阵被保存到了另一个角色上。[`search-params.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/search-params.ts) 让超出 `Number.MAX_SAFE_INTEGER` 的纯整数保持字符串。
+- **粗粒度进 URL，细粒度留内存。** 树形表格只往 URL 写一个 `fold=all`，逐个点开的节点留在组件 state 里（[`use-tree-fold.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/use-tree-fold.ts)）。菜单树有 65 个节点、每个 ID 19 位，全塞进地址栏没法看。
+- **雪花 ID 必须保持字符串。** TanStack Router 默认对 search 值跑 `JSON.parse`，`?role=2202097973238829056` 会变成 `2202097973238829000`，实测权限矩阵被保存到了另一个角色上。[`search-params.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/lib/search-params.ts) 让超出 `Number.MAX_SAFE_INTEGER` 的纯整数保持字符串。
 
 ## 为什么页面不能自己读路由？
 
@@ -130,27 +130,27 @@ React.useEffect(() => {
 
 ## 新增页面要守的规矩
 
-下面三条由 CI 里的 `pnpm arch:check` 拦（[`scripts/arch-check.mjs`](https://github.com/yilecoding/fastapi-react-admin/blob/main/scripts/arch-check.mjs)）：
+下面三条由 CI 里的 `pnpm arch:check` 拦（[`scripts/arch-check.mjs`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/arch-check.mjs)）：
 
 1. `packages/platform/src/pages/` 里不许出现 `Route.useSearch()`、`Route.useParams()`、`useNavigate()`，一律走 props。
-2. `apps/web/src/routes/_auth/` 下的路由文件写 `component: () => null`，页面登记在 [`page-registry.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx)。
+2. `apps/web/src/routes/_auth/` 下的路由文件写 `component: () => null`，页面登记在 [`page-registry.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx)。
 3. `document.querySelector` / `getElementById` 必须带 `data-tab` 或 `data-visible` 限定。
 
 脚本拦不住、要自己记得的：筛选 / 分页 / 选中项写进 `validateSearch`；URL 驱动的抽屉用 `useTabPortalContainer()`。
 
 ## 代码在哪
 
-- [`shell/tab-outlet.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx) —— `TabOutlet`、`TabFrame`、`useTabPortalContainer`
-- [`shell/tab-store.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-store.ts) · [`shell/use-sync-tabs.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/use-sync-tabs.ts) · [`shell/use-tab-actions.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/use-tab-actions.ts)
-- [`apps/web/src/routes/_auth.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/routes/_auth.tsx) —— `TabOutlet` 挂载的地方
+- [`shell/tab-outlet.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx) —— `TabOutlet`、`TabFrame`、`useTabPortalContainer`
+- [`shell/tab-store.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-store.ts) · [`shell/use-sync-tabs.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/use-sync-tabs.ts) · [`shell/use-tab-actions.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/use-tab-actions.ts)
+- [`apps/web/src/routes/_auth.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/routes/_auth.tsx) —— `TabOutlet` 挂载的地方
 
 ## 怎么测的
 
 Playwright 走真实的客户端路由（点链接，不用 `page.goto` —— 那是整页刷新，会把运行时重启一遍）：
 
-- [`tabs.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/tabs.spec.ts) —— 部门管理 → 角色管理 → 部门管理，手动折叠的节点还是折叠的；隐藏页签仍在文档树里，标着 `data-visible="false"`。
-- [`workflow.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/workflow.spec.ts) —— 填到一半的抽屉切走再切回来草稿还在，且后台的抽屉不挡前台页面。
-- [`list-refresh.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/list-refresh.spec.ts) —— 「重新加载」真的重新取数；[`session-tabs.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/session-tabs.spec.ts) —— 用两个权限不同的账号验证不残留上一个人的页签。
+- [`tabs.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/tabs.spec.ts) —— 部门管理 → 角色管理 → 部门管理，手动折叠的节点还是折叠的；隐藏页签仍在文档树里，标着 `data-visible="false"`。
+- [`workflow.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/workflow.spec.ts) —— 填到一半的抽屉切走再切回来草稿还在，且后台的抽屉不挡前台页面。
+- [`list-refresh.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/list-refresh.spec.ts) —— 「重新加载」真的重新取数；[`session-tabs.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/session-tabs.spec.ts) —— 用两个权限不同的账号验证不残留上一个人的页签。
 
 ## 在演示环境里试试
 

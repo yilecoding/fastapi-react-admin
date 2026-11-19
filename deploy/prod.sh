@@ -28,7 +28,7 @@
 #   FBA_ENV_FILE     .env.server 的位置，相对 compose 文件。默认仓库里的那个深路径
 #   FBA_WEB_PORT     web 容器映射到宿主机的端口，默认 80（compose 里读）
 #   FBA_PULL_MIRROR  GHCR 加速器域名，如 ghcr.nju.edu.cn。国内机器基本必填
-#   IMAGE_OWNER      镜像属主，默认 yilecoding
+#   IMAGE_OWNER      镜像属主，默认 yile2020
 #   TAG              镜像标签，默认 latest；回滚时设成 sha-<短 SHA>
 set -euo pipefail
 
@@ -113,7 +113,7 @@ case $env_rel in
   /*) env_file=$env_rel ;;
   *) env_file="$project_dir/${env_rel#./}" ;;
 esac
-image_owner=$(setting IMAGE_OWNER yilecoding)
+image_owner=$(setting IMAGE_OWNER yile2020)
 pull_mirror=$(setting FBA_PULL_MIRROR "")
 
 # ── 前置检查 ─────────────────────────────────────────────────────────────

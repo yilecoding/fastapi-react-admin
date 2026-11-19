@@ -10,14 +10,14 @@
 
 Row-level permissions · multi-tab that keeps state · approval workflow · an AI assistant that can't overreach · S3 storage with resumable uploads · web, desktop and mobile
 
-[Live demo](https://fra.wubunan.com/sign-in) · [Docs](https://yilecoding.github.io/fastapi-react-admin/en/) · [DeepWiki project guide](https://deepwiki.com/yilecoding/fastapi-react-admin) · [Quick start](#quick-start) · [Features](#features) · [Releases](https://github.com/yilecoding/fastapi-react-admin/releases)
+[Live demo](https://fra.wubunan.com/sign-in) · [Docs](https://yile2020.github.io/fastapi-react-admin/en/) · [DeepWiki project guide](https://deepwiki.com/yile2020/fastapi-react-admin) · [Quick start](#quick-start) · [Features](#features) · [Releases](https://github.com/yile2020/fastapi-react-admin/releases)
 
-[![Release](https://img.shields.io/github/v/release/yilecoding/fastapi-react-admin?style=flat-square)](https://github.com/yilecoding/fastapi-react-admin/releases)
-[![CI](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml/badge.svg)](https://github.com/yilecoding/fastapi-react-admin/actions/workflows/ci.yml)
-[![E2E report](https://img.shields.io/badge/E2E_report-Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://yilecoding.github.io/fastapi-react-admin/e2e/)
+[![Release](https://img.shields.io/github/v/release/yile2020/fastapi-react-admin?style=flat-square)](https://github.com/yile2020/fastapi-react-admin/releases)
+[![CI](https://github.com/yile2020/fastapi-react-admin/actions/workflows/ci.yml/badge.svg)](https://github.com/yile2020/fastapi-react-admin/actions/workflows/ci.yml)
+[![E2E report](https://img.shields.io/badge/E2E_report-Playwright-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://yile2020.github.io/fastapi-react-admin/e2e/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](./LICENSE)
-[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/yilecoding/fastapi-react-admin)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yilecoding/fastapi-react-admin)
+[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/yile2020/fastapi-react-admin)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yile2020/fastapi-react-admin)
 
 </div>
 
@@ -73,7 +73,7 @@ packages/      one-way deps: i18n / api ← ui ← platform ← web
 
 AI changes code fast, so every change needs something to catch it:
 
-- **Tests** — 1,600+ tests against a real database and a real browser, no mocks, on every CI run; the [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) is public
+- **Tests** — 1,600+ tests against a real database and a real browser, no mocks, on every CI run; the [E2E report](https://yile2020.github.io/fastapi-react-admin/e2e/) is public
 - **Types** — the frontend/backend contract is generated from OpenAPI; mobile infers every request's types from it, so an API change the screens didn't follow fails type checking (the web client is still migrating, and its call sites currently declare response types by hand)
 - **Rules written for AI** — 50+ per-directory `CLAUDE.md` / `AGENTS.md` files record pitfalls found by testing; a coding assistant reads the one for whatever directory it edits
 - **A backend inside the AI ecosystem** — Python + FastAPI, with the built-in AI assistant on pydantic-ai
@@ -130,11 +130,11 @@ AI changes code fast, so every change needs something to catch it:
 
 ## Mobile app
 
-The Expo app covers **the things people actually do on a phone** ([#224](https://github.com/yilecoding/fastapi-react-admin/issues/224)); admin-console modules stay on the web. It is versioned separately from the web app.
+The Expo app covers **the things people actually do on a phone** ([#224](https://github.com/yile2020/fastapi-react-admin/issues/224)); admin-console modules stay on the web. It is versioned separately from the web app.
 
 - **Has:** home (my approvals · to-do) · approvals (to-do / done / CC'd / started by me · approve / reject / send back / transfer / add signer · start a request · drafts · resubmit after send-back · restart a closed request) · notices · notifications · users · profile (bind a phone number) · server monitoring · time zone · SMS code sign-in · two-factor sign-in · session expiry reasons
 - **Web only, by design:** roles / departments / menus · files · operation & sign-in logs · turning on two-factor auth · AI form filling and AI pre-review in approvals
-- **Not yet verified:** no automated tests ([#137](https://github.com/yilecoding/fastapi-react-admin/issues/137)), most screens only run on an emulator, no release pipeline
+- **Not yet verified:** no automated tests ([#137](https://github.com/yile2020/fastapi-react-admin/issues/137)), most screens only run on an emulator, no release pipeline
 
 ## Databases
 
@@ -164,13 +164,13 @@ Sign in as `admin` with the password you set during `pnpm db:init`. Switching to
 
 1,400+ backend pytest tests run against a real database and Redis; 150+ Playwright tests drive a real browser against the real API and database — **no mocks**.
 Data permissions were verified by signing in as 41 real accounts one by one; key safeguards are mutation-tested (break the code on purpose, confirm the tests go red).
-The [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) from every `main` run is public, with screenshots and videos of failures.
+The [E2E report](https://yile2020.github.io/fastapi-react-admin/e2e/) from every `main` run is public, with screenshots and videos of failures.
 
 ## Docs
 
 | To… | Read |
 |---|---|
-| get started step by step: quick start, deployment, your first module, FAQ, upgrading | [docs site](https://yilecoding.github.io/fastapi-react-admin/en/) |
+| get started step by step: quick start, deployment, your first module, FAQ, upgrading | [docs site](https://yile2020.github.io/fastapi-react-admin/en/) |
 | develop locally, run tests, open a PR, release | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 | learn the engineering rules and pitfalls | [CLAUDE.md](./CLAUDE.md) — task-indexed, 40+ module notes, every claim backed by a test or measurement |
 | deploy to a server | [deploy/README.md](./deploy/README.md) |

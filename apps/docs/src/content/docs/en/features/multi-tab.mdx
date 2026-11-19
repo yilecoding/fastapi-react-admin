@@ -27,7 +27,7 @@ Turning off the tab bar only hides the bar; the tab mechanism itself keeps worki
 
 ## How does it work?
 
-[`TabOutlet`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx) **replaces** the router's `<Outlet />`. `<Outlet />` renders only the matched route; `TabOutlet` renders one `<Activity>` per open tab:
+[`TabOutlet`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx) **replaces** the router's `<Outlet />`. `<Outlet />` renders only the matched route; `TabOutlet` renders one `<Activity>` per open tab:
 
 ```tsx
 return tabs.map((tab) => {
@@ -43,7 +43,7 @@ return tabs.map((tab) => {
 
 In `hidden` mode React keeps the DOM (with `display: none`) and the component state, but cleans up the effects and re-creates them when the tab becomes visible again. That is why a background tab keeps its form but stops polling.
 
-The tab list is a small zustand store ([`tab-store.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-store.ts)), persisted in `sessionStorage` under `admin:tabs`:
+The tab list is a small zustand store ([`tab-store.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-store.ts)), persisted in `sessionStorage` under `admin:tabs`:
 
 - The tab key is `routeId` + params, **without** search — changing a filter updates the tab instead of opening a second one.
 - At most 20 tabs. Opening a 21st closes the left-most unpinned tab.
@@ -78,8 +78,8 @@ Each tab's URL and search snapshot are in `sessionStorage`, so after a refresh e
 
 Two details:
 
-- **Coarse state in the URL, fine state in memory.** A tree stores only `fold=all` in the URL; which individual nodes you opened stays in component state ([`use-tree-fold.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/use-tree-fold.ts)). The menu tree has 65 nodes with 19-digit IDs — too long for an address bar.
-- **Snowflake IDs stay strings.** TanStack Router runs `JSON.parse` on search values by default, and `?role=2202097973238829056` became `2202097973238829000`; a role's permissions were saved onto a different role. [`search-params.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/search-params.ts) keeps integers beyond `Number.MAX_SAFE_INTEGER` as strings.
+- **Coarse state in the URL, fine state in memory.** A tree stores only `fold=all` in the URL; which individual nodes you opened stays in component state ([`use-tree-fold.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/_shared/use-tree-fold.ts)). The menu tree has 65 nodes with 19-digit IDs — too long for an address bar.
+- **Snowflake IDs stay strings.** TanStack Router runs `JSON.parse` on search values by default, and `?role=2202097973238829056` became `2202097973238829000`; a role's permissions were saved onto a different role. [`search-params.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/lib/search-params.ts) keeps integers beyond `Number.MAX_SAFE_INTEGER` as strings.
 
 ## Why can't a page read the router itself?
 
@@ -130,27 +130,27 @@ Tabs are cleared on both login and logout, and the sync hook adds nothing while 
 
 ## Rules for adding a page
 
-These are enforced by `pnpm arch:check` in CI ([`scripts/arch-check.mjs`](https://github.com/yilecoding/fastapi-react-admin/blob/main/scripts/arch-check.mjs)):
+These are enforced by `pnpm arch:check` in CI ([`scripts/arch-check.mjs`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/arch-check.mjs)):
 
 1. No `Route.useSearch()`, `Route.useParams()` or `useNavigate()` in `packages/platform/src/pages/` — use the props.
-2. Route files under `apps/web/src/routes/_auth/` use `component: () => null`; register the page in [`page-registry.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx).
+2. Route files under `apps/web/src/routes/_auth/` use `component: () => null`; register the page in [`page-registry.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/lib/page-registry.tsx).
 3. No `document.querySelector` / `getElementById` without a `data-tab` or `data-visible` scope.
 
 Not checked automatically: put filters, paging and selection in `validateSearch`, and give URL-driven drawers `useTabPortalContainer()`.
 
 ## Where it lives in the code
 
-- [`shell/tab-outlet.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx) — `TabOutlet`, `TabFrame`, `useTabPortalContainer`
-- [`shell/tab-store.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-store.ts) · [`shell/use-sync-tabs.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/use-sync-tabs.ts) · [`shell/use-tab-actions.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/shell/use-tab-actions.ts)
-- [`apps/web/src/routes/_auth.tsx`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/src/routes/_auth.tsx) — where `TabOutlet` is mounted
+- [`shell/tab-outlet.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx) — `TabOutlet`, `TabFrame`, `useTabPortalContainer`
+- [`shell/tab-store.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-store.ts) · [`shell/use-sync-tabs.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/use-sync-tabs.ts) · [`shell/use-tab-actions.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/use-tab-actions.ts)
+- [`apps/web/src/routes/_auth.tsx`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/routes/_auth.tsx) — where `TabOutlet` is mounted
 
 ## How it is tested
 
 Playwright drives real client-side navigation (clicking links, not `page.goto`, which would reload the runtime):
 
-- [`tabs.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/tabs.spec.ts) — a collapsed department node survives Departments → Roles → Departments; the hidden tab stays attached with `data-visible="false"`.
-- [`workflow.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/workflow.spec.ts) — a half-filled drawer survives a switch and does not block the page in front.
-- [`list-refresh.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/list-refresh.spec.ts) — "Reload" really refetches; [`session-tabs.spec.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/tests/session-tabs.spec.ts) — two accounts with different permissions, no leftover tabs.
+- [`tabs.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/tabs.spec.ts) — a collapsed department node survives Departments → Roles → Departments; the hidden tab stays attached with `data-visible="false"`.
+- [`workflow.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/workflow.spec.ts) — a half-filled drawer survives a switch and does not block the page in front.
+- [`list-refresh.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/list-refresh.spec.ts) — "Reload" really refetches; [`session-tabs.spec.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/tests/session-tabs.spec.ts) — two accounts with different permissions, no leftover tabs.
 
 ## Try it in the demo
 

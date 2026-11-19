@@ -137,16 +137,16 @@ Set `STORAGE_ENCRYPT_SECRET_KEY` in `apps/api/backend/.env` (`openssl rand -hex 
 | `UPLOAD_IMAGE_SIZE_MAX` · `UPLOAD_DOCUMENT_SIZE_MAX` · `UPLOAD_VIDEO_SIZE_MAX` · `UPLOAD_AUDIO_SIZE_MAX` · `UPLOAD_ARCHIVE_SIZE_MAX` | 5 MB · 50 MB · 20 MB · 20 MB · 100 MB | Per-type size limit for one file (bytes) |
 | `UPLOAD_*_EXT_INCLUDE` | see `conf.py` | Allowed extensions per type |
 
-They are defined in the upload, recycle bin, chunked upload and storage sections of [`core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py).
+They are defined in the upload, recycle bin, chunked upload and storage sections of [`core/conf.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py).
 
 ## Where it lives in the code
 
-- [`apps/api/backend/utils/storage_ops.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/storage_ops.py): OpenDAL operators, pre-signing, endpoint checks
-- [`apps/api/backend/app/admin/service/multipart_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/multipart_service.py): chunked upload sessions
-- [`apps/api/backend/app/admin/api/v1/sys/file.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/file.py): file endpoints
-- [`packages/platform/src/upload/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/upload): hashing, queue, chunked upload, resume
-- [`packages/platform/src/pages/file/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/file): file manager, preview dialog, attachment panel
-- [`packages/platform/src/pages/file/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/file/AGENTS.md): design notes and measurements
+- [`apps/api/backend/utils/storage_ops.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/storage_ops.py): OpenDAL operators, pre-signing, endpoint checks
+- [`apps/api/backend/app/admin/service/multipart_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/service/multipart_service.py): chunked upload sessions
+- [`apps/api/backend/app/admin/api/v1/sys/file.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/sys/file.py): file endpoints
+- [`packages/platform/src/upload/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/upload): hashing, queue, chunked upload, resume
+- [`packages/platform/src/pages/file/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/file): file manager, preview dialog, attachment panel
+- [`packages/platform/src/pages/file/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/file/AGENTS.md): design notes and measurements
 
 ## How it is tested
 
