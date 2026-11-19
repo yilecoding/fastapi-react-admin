@@ -49,7 +49,7 @@ fastapi-react-admin 的通知分三块：站内消息（顶栏铃铛 + 消息中
 | 登录页可见 | 不登录也能看，每 IP 每分钟 30 次；最多返回 5 条，摘要是去掉标签后的 200 字纯文本 |
 | 发布范围 | 部门（含所有下级部门）、角色（只认启用的）、用户。一行都没有 = 全员。「登录页可见」和发布范围同时设置会被 422 拒绝 |
 
-「谁看得见」只有一份定义：[`crud_notice.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/crud/crud_notice.py) 里的 `readable_clause(viewer)` —— 没删、显示中、已到发布时间、没过期，并且看的人在发布范围里。读者列表、详情、弹窗、横幅、**附件下载权限**都用它，收件箱读的也是同一张受众表，所以不会出现「铃铛里有这条，点进去看不到、附件下不了」。隐藏、过期、未到发布时间、不在范围里的公告一律返回 404 —— 返回 403 等于告诉对方「这条存在」。有 `sys:notice:add` 的管理员能看阅读统计：发布范围里谁读了、谁没读。
+「谁看得见」只有一份定义：[`crud_notice.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/crud/crud_notice.py) 里的 `readable_clause(viewer)` —— 没删、显示中、已到发布时间、没过期，并且看的人在发布范围里。读者列表、详情、弹窗、横幅、**附件下载权限**都用它，收件箱读的也是同一张受众表，所以不会出现「铃铛里有这条，点进去看不到、附件下不了」。隐藏、过期、未到发布时间、不在范围里的公告一律返回 404 —— 返回 403 等于告诉对方「这条存在」。有 `sys:notice:add` 的管理员能看阅读统计：发布范围里谁读了、谁没读。
 
 附件和公告在同一个事务里提交，每个附件过三道校验：文件存在且不在回收站；发布人自己读得了（否则有发公告权限的人拿到别人私有文件的 ID，就能借公告公开给所有人）；不能是公开文件。
 
@@ -59,7 +59,7 @@ fastapi-react-admin 的通知分三块：站内消息（顶栏铃铛 + 消息中
 
 ## 一条通知怎么决定走邮件、短信还是群机器人？
 
-每个插件在自己的 `notification_kinds.py` 里声明通知类型，通知插件启动时扫描。下面是 [`plugin/workflow/notification_kinds.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/notification_kinds.py) 里的原样代码：
+每个插件在自己的 `notification_kinds.py` 里声明通知类型，通知插件启动时扫描。下面是 [`plugin/workflow/notification_kinds.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/notification_kinds.py) 里的原样代码：
 
 ```python
 register_notification_kind(
@@ -72,7 +72,7 @@ register_notification_kind(
 )
 ```
 
-[`service/routing.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/routing.py) 对每个收件人 × 每条外部渠道看三样东西：管理员的**系统策略**（`off` / `default_on` / `default_off` / `forced`，在 **消息推送 → 通知策略** 里改）、本人的**个人偏好**（**个人中心 → 通知偏好**，`forced` 的格子是锁住的）、这个人**有没有地址**。站内渠道永远是 `forced`。类型没声明的渠道，策略页上也开不出来。短信必须给业务模板 —— 国内短信只能发审核过的模板；而且只发给**本人验证过**的手机号，管理员录入的号会记一行 `skipped / phone_unverified`，不发。
+[`service/routing.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/routing.py) 对每个收件人 × 每条外部渠道看三样东西：管理员的**系统策略**（`off` / `default_on` / `default_off` / `forced`，在 **消息推送 → 通知策略** 里改）、本人的**个人偏好**（**个人中心 → 通知偏好**，`forced` 的格子是锁住的）、这个人**有没有地址**。站内渠道永远是 `forced`。类型没声明的渠道，策略页上也开不出来。短信必须给业务模板 —— 国内短信只能发审核过的模板；而且只发给**本人验证过**的手机号，管理员录入的号会记一行 `skipped / phone_unverified`，不发。
 
 内置的类型和默认值：
 
@@ -89,7 +89,7 @@ register_notification_kind(
 
 全员广播的类型（公告、每日问候）永远不走邮件和短信：站内一行广播，到外部渠道就成了全员群发。
 
-业务代码只有一个入口：[`notification_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/notification_service.py) 里的 `create_in_tx(db, kind=..., user_ids=..., title=..., content=..., link=...)`。它在你的事务里写站内行和投递行，不 commit，返回一个 `Dispatch`；提交之后调它的 `after_commit()` 推 socket、踢 worker。
+业务代码只有一个入口：[`notification_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/service/notification_service.py) 里的 `create_in_tx(db, kind=..., user_ids=..., title=..., content=..., link=...)`。它在你的事务里写站内行和投递行，不 commit，返回一个 `Dispatch`；提交之后调它的 `after_commit()` 推 socket、踢 worker。
 
 ## 投递行写下去之后发生什么？
 
@@ -108,13 +108,13 @@ Celery 任务 `notification.deliver_pending` 每 15 秒扫一次，每次提交�
 - **只发纯文本**，不用 markdown：标题是用户填的，走 markdown 就能塞进一条看起来像系统发的链接。企业微信正文按 2048 **字节**截断，不是按字符。
 - 读超时记为 `unknown`、不重试 —— 群里同一条出现两次，比重复一封邮件显眼得多。
 
-机器人消息和邮件里的链接由 `NOTIFICATION_WEB_BASE_URL` 拼出（默认 `http://localhost:8888`），部署前要改成真实访问地址。接一个飞书机器人的完整步骤见[群机器人接入指南](https://github.com/yilecoding/fastapi-react-admin/blob/main/docs/guides/notify-bot.md)。
+机器人消息和邮件里的链接由 `NOTIFICATION_WEB_BASE_URL` 拼出（默认 `http://localhost:8888`），部署前要改成真实访问地址。接一个飞书机器人的完整步骤见[群机器人接入指南](https://github.com/yile2020/fastapi-react-admin/blob/main/docs/guides/notify-bot.md)。
 
 ## Webhook 地址怎么防止落进日志？
 
 Webhook 地址本身就是凭据：拿到它就能往群里发消息。地址和加签密钥用 `NOTIFICATION_ENCRYPT_SECRET_KEY`（32 字节，即 64 位十六进制）加密存储；没配这个密钥时直接拒绝保存，不会静默存明文。接口只返回打码后的 `webhook_hint`，入参里的 `webhook_url` / `sign_secret` 在操作日志里会被脱敏。
 
-不那么显眼的一处是 httpx 自己：它在 INFO 级别会打一行 `HTTP Request: POST <完整 URL>`。第一次真发飞书时，token 就这样进了访问日志。第一版修复只管住了 API 进程，而真正往群里发消息的 Celery worker 有自己的日志配置。现在修复放在 [`common/log.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/log.py) 的模块顶层（`logging.getLogger('httpx').setLevel(logging.WARNING)`），有两条测试守着，其中一条在子进程里按 `celery -l info` 的方式配日志。
+不那么显眼的一处是 httpx 自己：它在 INFO 级别会打一行 `HTTP Request: POST <完整 URL>`。第一次真发飞书时，token 就这样进了访问日志。第一版修复只管住了 API 进程，而真正往群里发消息的 Celery worker 有自己的日志配置。现在修复放在 [`common/log.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/log.py) 的模块顶层（`logging.getLogger('httpx').setLevel(logging.WARNING)`），有两条测试守着，其中一条在子进程里按 `celery -l info` 的方式配日志。
 
 ## 哪些渠道真发过？
 
@@ -128,7 +128,7 @@ Webhook 地址本身就是凭据：拿到它就能往群里发消息。地址和
 ## 目前不支持的
 
 - 群机器人只按通知类型订阅，不能再按流程或部门过滤。
-- 推群和推人走同一个入口，所以一条可推群的通知如果一个收件人都没有（比如管理员终止自己发起的单），群里也收不到。[群机器人指南](https://github.com/yilecoding/fastapi-react-admin/blob/main/docs/guides/notify-bot.md)的练习 2 专门讲怎么把两者拆开。
+- 推群和推人走同一个入口，所以一条可推群的通知如果一个收件人都没有（比如管理员终止自己发起的单），群里也收不到。[群机器人指南](https://github.com/yile2020/fastapi-react-admin/blob/main/docs/guides/notify-bot.md)的练习 2 专门讲怎么把两者拆开。
 - 公告表单的发布范围下拉调的是用户 / 部门 / 角色列表接口，只有发公告权限、没有这三个列表权限的人，看到的是一行「没有权限查看这些数据」。
 
 ## 有哪些开关？
@@ -158,10 +158,10 @@ Webhook 地址本身就是凭据：拿到它就能往群里发消息。地址和
 
 ## 代码在哪
 
-- [`plugin/notification/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/notification) —— `kinds.py`（类型注册表）、`service/notification_service.py`、`service/routing.py`、`service/delivery_service.py`、`service/senders.py`、`bot_platforms.py`（地址前缀、签名、消息体、回包分类）、`audience.py`
-- [`plugin/notice/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/notice) —— `service/notice_service.py`、`crud/crud_notice.py`；[`plugin/sms/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/sms) —— `sms_service.send()` 和阿里云 / 腾讯云适配
-- 前端：[`packages/platform/src/pages/notification/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/notification)（铃铛、消息中心）、`notice/`（表单、读者抽屉、弹窗、横幅）、`notify-policy/`、`notify-delivery/`、`notify-bot/`、`profile/notify-prefs-panel.tsx`
-- 分册：[`plugin/notification/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/AGENTS.md)、[`plugin/notice/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/AGENTS.md)、[`pages/notification/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/notification/AGENTS.md)
+- [`plugin/notification/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/notification) —— `kinds.py`（类型注册表）、`service/notification_service.py`、`service/routing.py`、`service/delivery_service.py`、`service/senders.py`、`bot_platforms.py`（地址前缀、签名、消息体、回包分类）、`audience.py`
+- [`plugin/notice/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/notice) —— `service/notice_service.py`、`crud/crud_notice.py`；[`plugin/sms/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/sms) —— `sms_service.send()` 和阿里云 / 腾讯云适配
+- 前端：[`packages/platform/src/pages/notification/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/notification)（铃铛、消息中心）、`notice/`（表单、读者抽屉、弹窗、横幅）、`notify-policy/`、`notify-delivery/`、`notify-bot/`、`profile/notify-prefs-panel.tsx`
+- 分册：[`plugin/notification/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/notification/AGENTS.md)、[`plugin/notice/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/notice/AGENTS.md)、[`pages/notification/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/notification/AGENTS.md)
 
 ## 怎么测的
 

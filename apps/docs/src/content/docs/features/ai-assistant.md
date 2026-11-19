@@ -17,7 +17,7 @@ AI 助手是一个对话入口（整页对话，外加一个在任何页面都�
 | **AI 助手 → 调用日志** | `/ai/tool-log` | 每一次工具调用的审计 |
 | **AI 助手 → MCP 凭据** | `/ai/mcp-client` | 发给外部系统的令牌 |
 
-两个对话入口共用同一个 hook（[`use-chat-session.ts`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/ai-chat/use-chat-session.ts)），行为一致，抽屉和整页可以停在不同的会话上。发起对话需要 `ai:chat:use` 权限，而且账号要有后台管理权限（`is_staff`）。对话接口是 POST，和全站其他写接口过同一道 RBAC 检查，所以这一条和别处一样。种子数据**刻意没有**把 AI 菜单授给任何非超管角色，哪些角色该有这个入口由每套部署自己决定。
+两个对话入口共用同一个 hook（[`use-chat-session.ts`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/ai-chat/use-chat-session.ts)），行为一致，抽屉和整页可以停在不同的会话上。发起对话需要 `ai:chat:use` 权限，而且账号要有后台管理权限（`is_staff`）。对话接口是 POST，和全站其他写接口过同一道 RBAC 检查，所以这一条和别处一样。种子数据**刻意没有**把 AI 菜单授给任何非超管角色，哪些角色该有这个入口由每套部署自己决定。
 
 :::note[在线演示]
 [在线演示](https://fra.wubunan.com/sign-in)（`admin` / `123456`）里，这几个页面在「AI 助手」菜单下。模型密钥是每套部署自己配的，所以别指望演示环境一定能对话。没有配置供应商时，对话会明确提示「还没有配置可用的模型供应商」，而不是静默失败。
@@ -25,7 +25,7 @@ AI 助手是一个对话入口（整页对话，外加一个在任何页面都�
 
 ## 支持哪些模型供应商？怎么配？
 
-所有供应商都走 OpenAI 兼容的 `POST {base_url}/chat/completions` 流式接口。后端直接用 `httpx`，不依赖任何厂商 SDK（[`llm/client.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/llm/client.py)）。「类型」只影响预填的默认值：
+所有供应商都走 OpenAI 兼容的 `POST {base_url}/chat/completions` 流式接口。后端直接用 `httpx`，不依赖任何厂商 SDK（[`llm/client.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/llm/client.py)）。「类型」只影响预填的默认值：
 
 | 类型 | 默认 `base_url` | 默认模型 |
 |---|---|---|
@@ -56,9 +56,9 @@ AI_MCP_ENABLED = false
 
 ## AI 助手怎么保证不越权？
 
-模型和驱动它的引擎都被当成**不受信任的建议者**：它们只能「提议」调用某个工具。能不能真的执行，只由 [`core/dispatcher.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/dispatcher.py) 一处决定。这是整个插件里唯一不可替换的一层：
+模型和驱动它的引擎都被当成**不受信任的建议者**：它们只能「提议」调用某个工具。能不能真的执行，只由 [`core/dispatcher.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/dispatcher.py) 一处决定。这是整个插件里唯一不可替换的一层：
 
-1. **工具清单在交给模型之前就过滤好。** 用户没有某个工具的权限码，模型就根本不知道有这个工具。判据和 HTTP 接口的 RBAC 检查是同一套（[`rbac.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py) 里紧挨着 `rbac_verify` 的 `user_has_perm`），写工具还额外要求 `is_staff`。插件被停用了，或者工具所在的域不在 `AI_TOOL_DOMAINS` 里，这些工具也不出现。
+1. **工具清单在交给模型之前就过滤好。** 用户没有某个工具的权限码，模型就根本不知道有这个工具。判据和 HTTP 接口的 RBAC 检查是同一套（[`rbac.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/security/rbac.py) 里紧挨着 `rbac_verify` 的 `user_has_perm`），写工具还额外要求 `is_staff`。插件被停用了，或者工具所在的域不在 `AI_TOOL_DOMAINS` 里，这些工具也不出现。
 2. **执行时再查一遍。** 模型幻觉出来的工具名、对话中途被收回的权限、从只读入口发来的写操作，一律 `denied`，并记入审计。
 3. **数据范围在每次调用时锚定。** 每个工具都在 `scoped_to_user(ctx.user)` 里执行，经 `DataScopedCRUD` 的查询只返回这个人能看到的行。这里不依赖「JWT 中间件反正会设好上下文」：MCP 这种不走 JWT 的入口一旦漏设，结果就是不加任何行过滤。见[数据权限](/features/data-permissions/)。
 4. **引擎手上没有可执行体。** 引擎拿到的是 `ToolSchema`（名称、说明、JSON Schema、`mutating`），纯数据，不带 handler。`engines/` 目录下只要出现 `.handler` 或 import 了工具注册表，守卫测试当场红。
@@ -74,7 +74,7 @@ AI_MCP_ENABLED = false
 3. 预演通过后，生成一次性令牌（`cf_…`），连同工具、参数、用户、预演文案、来源渠道一起存进 Redis，有效期 300 秒。界面上弹出写着预演文案的确认卡片。
 4. 用户点「确认执行」后，`POST /api/v1/ai/chat/tools/confirm` 会先核对令牌属于当前用户，再用 Redis 的原子 `DELETE` 抢占令牌，然后带着完整的权限检查再分发一次。卡片随即换成执行结果，没法再点第二次。
 
-原子抢占是修一个真 bug 留下的：修之前，同一个令牌 5 个并发确认，变更被执行了 5 次。现在 [`tests/test_ai_confirm.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/tests/test_ai_confirm.py) 用真实 Redis、预热过的连接池证明只有一个能抢到。
+原子抢占是修一个真 bug 留下的：修之前，同一个令牌 5 个并发确认，变更被执行了 5 次。现在 [`tests/test_ai_confirm.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/tests/test_ai_confirm.py) 用真实 Redis、预热过的连接池证明只有一个能抢到。
 
 :::caution
 `AI_CONFIRM_MUTATING_TOOLS = false` 会去掉第 3 步，模型一调用写操作就直接执行。另外，**没有任何删除类工具**：删除不可逆，还会牵连下级、用户和角色授权。
@@ -93,7 +93,7 @@ AI_MCP_ENABLED = false
 | weather | `weather_query` | — |
 | workflow | `wf_todo_list`、`wf_instance_detail` | `wf_approve`、`wf_reject`、`wf_transfer` |
 
-审批相关的工具放在审批插件自己的 [`ai_tools.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/ai_tools.py) 里，授权和网页上的审批按钮走同一个函数：在对话里能批的单，就是你在页面上能批的单。要加工具，在 `plugin/ai/tools/` 或你自己插件的 `ai_tools.py` 里给一个 async 函数加上 `@ai_tool`，两处都会被自动发现（[`core/registry.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/registry.py)）：
+审批相关的工具放在审批插件自己的 [`ai_tools.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/workflow/ai_tools.py) 里，授权和网页上的审批按钮走同一个函数：在对话里能批的单，就是你在页面上能批的单。要加工具，在 `plugin/ai/tools/` 或你自己插件的 `ai_tools.py` 里给一个 async 函数加上 `@ai_tool`，两处都会被自动发现（[`core/registry.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/registry.py)）：
 
 ```python
 @ai_tool(
@@ -116,7 +116,7 @@ async def dept_rename(db: AsyncSession, ctx: RunContext, dept_id: str, new_name:
 
 「被拒绝」和「失败」**刻意分开**：有人反复让 AI 去做他没权限做的事，这件事要能单独查出来，不能淹没在普通报错里。
 
-审计写入放在 SAVEPOINT 里：写失败只丢这一行审计，对话照常继续（[`test_ai_audit.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/tests/test_ai_audit.py) 实测）。在「AI 助手 → 调用日志」里查看，需要 `ai:log:list` 权限。对话界面上，每条回答的正文上方会列出它的工具轨迹（工具、权限码、成败、耗时），这份轨迹随消息一起落库，刷新后还在。
+审计写入放在 SAVEPOINT 里：写失败只丢这一行审计，对话照常继续（[`test_ai_audit.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/tests/test_ai_audit.py) 实测）。在「AI 助手 → 调用日志」里查看，需要 `ai:log:list` 权限。对话界面上，每条回答的正文上方会列出它的工具轨迹（工具、权限码、成败、耗时），这份轨迹随消息一起落库，刷新后还在。
 
 ## 外部系统怎么通过 MCP 调用？
 
@@ -128,7 +128,7 @@ Authorization: Bearer fra_mcp_<token>
 X-Acting-User: <用户名>
 ```
 
-代表谁是外部系统**自己声明**的，所以网关只信到「这份凭据被允许代表谁」为止（[`mcp_gateway/auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/mcp_gateway/auth.py)）：
+代表谁是外部系统**自己声明**的，所以网关只信到「这份凭据被允许代表谁」为止（[`mcp_gateway/auth.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/mcp_gateway/auth.py)）：
 
 - **`act_as` 白名单**：这份凭据能代表哪些用户名（`*` = 任何普通用户）。代表超管必须显式打开 `allow_superuser`。
 - **和登录同一套用户校验**：账号停用、部门停用、角色全停用的人，经 MCP 也代表不了。
@@ -180,10 +180,10 @@ X-Acting-User: <用户名>
 
 ## 代码在哪
 
-- [`plugin/ai/core/dispatcher.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/dispatcher.py)：权限过滤、数据范围、二次确认、审计
-- [`plugin/ai/core/registry.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/registry.py)：`@ai_tool`、从签名生成 schema、自动发现
-- [`plugin/ai/service/chat_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/service/chat_service.py)：SSE 对话与确认执行
-- [`plugin/ai/engines/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/engines) · [`plugin/ai/tools/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/tools) · [`plugin/ai/mcp_gateway/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/mcp_gateway)
-- [`plugin/ai/plugin.toml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/plugin.toml)：全部配置项及注释
-- [`packages/platform/src/pages/ai-chat/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/ai-chat)：对话页、抽屉、确认卡片
-- [`plugin/ai/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/AGENTS.md)：设计取舍与实测踩坑记录
+- [`plugin/ai/core/dispatcher.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/dispatcher.py)：权限过滤、数据范围、二次确认、审计
+- [`plugin/ai/core/registry.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/core/registry.py)：`@ai_tool`、从签名生成 schema、自动发现
+- [`plugin/ai/service/chat_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/service/chat_service.py)：SSE 对话与确认执行
+- [`plugin/ai/engines/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/engines) · [`plugin/ai/tools/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/tools) · [`plugin/ai/mcp_gateway/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/ai/mcp_gateway)
+- [`plugin/ai/plugin.toml`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/plugin.toml)：全部配置项及注释
+- [`packages/platform/src/pages/ai-chat/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/ai-chat)：对话页、抽屉、确认卡片
+- [`plugin/ai/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/ai/AGENTS.md)：设计取舍与实测踩坑记录

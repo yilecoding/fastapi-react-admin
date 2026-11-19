@@ -19,7 +19,7 @@ sidebar:
 lsof -i :8888     # 看是谁占着
 ```
 
-出处：[`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md)「本地起服务」一节
+出处：[`CLAUDE.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CLAUDE.md)「本地起服务」一节
 
 ### `Can't open lib 'ODBC Driver 18 for SQL Server'`
 
@@ -31,7 +31,7 @@ lsof -i :8888     # 看是谁占着
 odbcinst -q -d
 ```
 
-出处：[`CONTRIBUTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md)「换数据库 / 接对象存储」、[`apps/api/Dockerfile.prod`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/Dockerfile.prod)
+出处：[`CONTRIBUTING.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md)「换数据库 / 接对象存储」、[`apps/api/Dockerfile.prod`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/Dockerfile.prod)
 
 ### `Login failed for user 'sa'`（SQL Server 错误 18456）
 
@@ -39,7 +39,7 @@ odbcinst -q -d
 
 **处理**：让 `DATABASE_PASSWORD` 和实例当前的 sa 密码一致；确实想用新密码，就删掉那个数据卷，让实例重新初始化。`pnpm db:init` 撞到这个错误时会打印「数据库登录失败：…（SQL Server 错误 18456）」。
 
-出处：[`apps/api/backend/cli.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/cli.py)（`_format_database_connection_error`）
+出处：[`apps/api/backend/cli.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/cli.py)（`_format_database_connection_error`）
 
 ### 拉了新代码后 `pnpm test` / `pnpm db:upgrade` 报 `ModuleNotFoundError`，但 `pnpm dev` 跑得起来
 
@@ -51,7 +51,7 @@ odbcinst -q -d
 pnpm --filter api exec uv sync     # 或者 pnpm install:all
 ```
 
-出处：[`apps/api/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/AGENTS.md)「`pnpm install` 补不了后端依赖」
+出处：[`apps/api/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/AGENTS.md)「`pnpm install` 补不了后端依赖」
 
 ### worker 日志里出现 `Received unregistered task of type '…'`，自己的任务时有时无
 
@@ -63,7 +63,7 @@ pnpm --filter api exec uv sync     # 或者 pnpm install:all
 docker exec fba_redis redis-cli -n 7 DBSIZE    # 返回 0 才是空库
 ```
 
-出处：[`apps/api/backend/app/task/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/AGENTS.md)「Redis 和别的项目共用时，broker 要换一个没人用的库」
+出处：[`apps/api/backend/app/task/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/AGENTS.md)「Redis 和别的项目共用时，broker 要换一个没人用的库」
 
 ## 登录与会话
 
@@ -73,7 +73,7 @@ docker exec fba_redis redis-cli -n 7 DBSIZE    # 返回 0 才是空库
 
 **处理**：本地开发打开 <http://127.0.0.1:8888>，不要用 `localhost:8888`。
 
-出处：[`apps/docs/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/docs/AGENTS.md)「截图怎么重拍」
+出处：[`apps/docs/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/docs/AGENTS.md)「截图怎么重拍」
 
 ### `pnpm db:init` 之后用 `admin` / `123456` 登录不上
 
@@ -87,7 +87,7 @@ FBA_INIT_ADMIN_PASSWORD='<强口令>' pnpm db:reset
 
 `123456` 只在 pytest / E2E 用的 `fba_test` 测试库里有效，那个库由 `pnpm --filter api test:db` 单独建。
 
-出处：[`apps/api/backend/cli.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/cli.py)（`_set_admin_password`）
+出处：[`apps/api/backend/cli.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/cli.py)（`_set_admin_password`）
 
 ### 登录提示 `请求过于频繁，请稍后重试`（HTTP 429）
 
@@ -95,7 +95,7 @@ FBA_INIT_ADMIN_PASSWORD='<强口令>' pnpm db:reset
 
 **处理**：等一会儿再试。触发限流的那次失败不会换验证码，因为验证码还没被消费，继续用当前这张就行。本地批量造数据时可以临时用 `REQUEST_LIMITER_ENABLED=false` 启动后端（生产环境会拒绝这个配置）。
 
-出处：[`apps/docs/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/docs/AGENTS.md)「截图怎么重拍」、[`apps/api/backend/app/admin/api/v1/auth/auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/auth/auth.py)
+出处：[`apps/docs/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/docs/AGENTS.md)「截图怎么重拍」、[`apps/api/backend/app/admin/api/v1/auth/auth.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/api/v1/auth/auth.py)
 
 ### `.env` 里设了 `LOGIN_CAPTCHA_ENABLED=false`，登录页还是要验证码
 
@@ -107,7 +107,7 @@ FBA_INIT_ADMIN_PASSWORD='<强口令>' pnpm db:reset
 docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 ```
 
-出处：[`apps/web/e2e/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/AGENTS.md)「验证码不能只靠 `.env.e2e` 关」、[`CONTRIBUTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md)「本地开发」
+出处：[`apps/web/e2e/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/AGENTS.md)「验证码不能只靠 `.env.e2e` 关」、[`CONTRIBUTING.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md)「本地开发」
 
 ## 数据库与迁移
 
@@ -121,7 +121,7 @@ docker exec fba_redis redis-cli --raw GET "fba:login:captcha:<uuid>"
 pnpm db:upgrade
 ```
 
-出处：[`apps/api/backend/alembic/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)、[`CONTRIBUTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md)
+出处：[`apps/api/backend/alembic/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)、[`CONTRIBUTING.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md)
 
 ### `种子数据里没有 admin 账号，初始化流程可能已经变了`
 
@@ -129,7 +129,7 @@ pnpm db:upgrade
 
 **处理**：在 `apps/api/backend/.env` 里写上 `DATABASE_PK_MODE='snowflake'`（`.env.example` 里已经有这一行），然后重新运行 `pnpm db:init`。
 
-出处：[`CONTRIBUTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md)「换数据库 / 接对象存储」、[`apps/api/backend/cli.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/cli.py)
+出处：[`CONTRIBUTING.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md)「换数据库 / 接对象存储」、[`apps/api/backend/cli.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/cli.py)
 
 ### 改了模型，后端也自动重启了，可表结构没变
 
@@ -144,7 +144,7 @@ pnpm db:upgrade
 
 如果改的是字段，还要同步 `backend/sql/*/init_snowflake_test_data.sql`。那些是写了显式列名的 INSERT，漏改会让全新环境初始化失败。
 
-出处：[`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md)「数据库结构改动一律走 alembic」、[`apps/api/backend/alembic/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)
+出处：[`CLAUDE.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CLAUDE.md)「数据库结构改动一律走 alembic」、[`apps/api/backend/alembic/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)
 
 ### `Cannot insert explicit value for identity column in table '…' when IDENTITY_INSERT is set to OFF. (544)`
 
@@ -152,7 +152,7 @@ pnpm db:upgrade
 
 **处理**：手写或生成建表迁移时，雪花主键列要显式加上 `autoincrement=False`。仓库里的守卫测试 `test_created_tables_declare_snowflake_pk_as_non_autoincrement` 会扫描 `alembic/versions/` 里的 `create_table` 检查这一点。
 
-出处：[`apps/api/backend/alembic/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)「迁移建表时雪花主键会变成 IDENTITY」
+出处：[`apps/api/backend/alembic/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)「迁移建表时雪花主键会变成 IDENTITY」
 
 ### 第一次跑 pytest 或 E2E 就报数据库连接错误
 
@@ -168,7 +168,7 @@ pnpm test
 
 模型加了列以后，测试报 `Invalid column name …` 之类的错，也是重跑一次 `test:db`。
 
-出处：[`apps/api/backend/tests/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/tests/AGENTS.md)、[`CONTRIBUTING.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md)「几个容易卡住的地方」
+出处：[`apps/api/backend/tests/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/tests/AGENTS.md)、[`CONTRIBUTING.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md)「几个容易卡住的地方」
 
 ## 前端开发
 
@@ -178,7 +178,7 @@ pnpm test
 
 **处理**：所有 ID 一律当字符串处理，永远不要 `Number()`。后端在 `backend/utils/serializers.py` 里已经把它们转成字符串下发；路由那边由 `apps/web/src/lib/search-params.ts` 拦住超出安全范围的纯整数。新增带 ID 的 search 参数前，先确认这个自定义解析还接在 `router.ts` 上。
 
-出处：[`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md) 硬纪律 6
+出处：[`CLAUDE.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CLAUDE.md) 硬纪律 6
 
 ### `pnpm e2e -- tests/xxx.spec.ts` 只想跑一个文件，结果跑了全部用例
 
@@ -190,7 +190,7 @@ pnpm test
 cd apps/web && pnpm e2e tests/dept-crud.spec.ts
 ```
 
-出处：[`apps/web/e2e/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/e2e/AGENTS.md)
+出处：[`apps/web/e2e/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/e2e/AGENTS.md)
 
 ### 文档站构建报 `Node.js v22.23.3 is not supported by Astro!`
 
@@ -198,7 +198,7 @@ cd apps/web && pnpm e2e tests/dept-crud.spec.ts
 
 **处理**：回到锁文件里的版本（`pnpm install --frozen-lockfile`），或者把 Node 升到 22.23.4 以上。要正式升级 Astro，得先在根 `package.json` 的 `engines` 和 CI 的 Node 版本上做决定。
 
-出处：[`apps/docs/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/docs/AGENTS.md)「Astro 锁在 7.3.x」
+出处：[`apps/docs/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/docs/AGENTS.md)「Astro 锁在 7.3.x」
 
 ## 部署与运维
 
@@ -212,7 +212,7 @@ cd apps/web && pnpm e2e tests/dept-crud.spec.ts
 python -c "import secrets;print(secrets.token_urlsafe(32))"
 ```
 
-出处：[`apps/api/backend/core/conf.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py)
+出处：[`apps/api/backend/core/conf.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py)
 
 ### `ENVIRONMENT=prod，数据库检查未通过，拒绝启动`
 
@@ -224,7 +224,7 @@ python -c "import secrets;print(secrets.token_urlsafe(32))"
 
 **处理**：分别对应：用 `fba init` 建库（它会自动 stamp head），或对已有库 `alembic stamp <当前版本>`；先跑 `alembic upgrade head` 再启动；把列出的账号的密码改掉。
 
-出处：[`apps/api/backend/alembic/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)、[`apps/api/backend/core/registrar.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/core/registrar.py)
+出处：[`apps/api/backend/alembic/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)、[`apps/api/backend/core/registrar.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/registrar.py)
 
 ### 容器里加载配置时报 `PermissionError: [Errno 13] Permission denied`
 
@@ -237,7 +237,7 @@ chown 1000:1000 .env.server
 chmod 600       .env.server
 ```
 
-出处：[`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md)「`.env.server` 属主必须是 uid 1000」
+出处：[`deploy/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/AGENTS.md)「`.env.server` 属主必须是 uid 1000」
 
 ### API 容器起来了，健康检查一直连不上数据库
 
@@ -245,7 +245,7 @@ chmod 600       .env.server
 
 **处理**：`DATABASE_HOST` / `REDIS_HOST` 填宿主机在 docker 网桥上的地址（一般是 `172.17.0.1`，可以用 `ip addr show docker0` 查），或者给服务加上 `extra_hosts: ["host.docker.internal:host-gateway"]`，再填 `host.docker.internal`。
 
-出处：[`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md)「容器连宿主机上的数据库，不能填 127.0.0.1」
+出处：[`deploy/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/AGENTS.md)「容器连宿主机上的数据库，不能填 127.0.0.1」
 
 ### 国内服务器上 `docker compose pull` 卡住不动
 
@@ -253,7 +253,7 @@ chmod 600       .env.server
 
 **处理**：在 compose 同级的 `.env` 里配置 `FBA_PULL_MIRROR`（加速器域名），`prod.sh pull` 会从加速器拉，再 retag 回 `ghcr.io/…`。不要把加速器地址直接写进 compose 的镜像名。层进度条几分钟都不动，就换一个加速器域名重试。
 
-出处：[`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md)「GHCR 在国内会被限速到几十 KB/s」
+出处：[`deploy/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/AGENTS.md)「GHCR 在国内会被限速到几十 KB/s」
 
 ### `/healthz` 一直是绿的，但 API 其实已经挂了
 
@@ -261,7 +261,7 @@ chmod 600       .env.server
 
 **处理**：外部监控只探 `https://<域名>/api/health/status`。它会逐项列出 api、数据库、Redis、调度器、worker 的状态，全部正常返回 200，任何一项异常返回 503。判断前看一眼响应 body，不要只看状态码。
 
-出处：[`deploy/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/AGENTS.md)「健康检查」、[`deploy/README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/deploy/README.md)「外部监控探哪几条」
+出处：[`deploy/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/AGENTS.md)「健康检查」、[`deploy/README.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/deploy/README.md)「外部监控探哪几条」
 
 ### 发版后页面报 `Failed to fetch dynamically imported module`
 
@@ -269,7 +269,7 @@ chmod 600       .env.server
 
 **处理**：刷新页面即可。前端已经识别这类错误，会显示「已发布新版本」和一个刷新按钮，不再显示成 500。
 
-出处：[`apps/web/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/web/AGENTS.md)「错误页分两支」
+出处：[`apps/web/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/AGENTS.md)「错误页分两支」
 
 ### `Multiple artifacts named "github-pages" were unexpectedly found for this workflow run`
 
@@ -277,8 +277,8 @@ chmod 600       .env.server
 
 **处理**：上传之前，先把本次 run 里同名的旧 artifact 删掉。仓库 CI 的 `pages` job 就是这么做的（需要 `actions: write` 权限），fork 后自己部署文档站可以照抄那一步。
 
-出处：[`.github/workflows/ci.yml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/.github/workflows/ci.yml)（`pages` job）
+出处：[`.github/workflows/ci.yml`](https://github.com/yile2020/fastapi-react-admin/blob/main/.github/workflows/ci.yml)（`pages` job）
 
 ## 没找到你的问题？
 
-先看[快速开始](/getting-started/quick-start/)和[部署到服务器](/getting-started/deployment/)的步骤是否都走过；仍然不行，到 [GitHub Issues](https://github.com/yilecoding/fastapi-react-admin/issues) 贴上报错原文。
+先看[快速开始](/getting-started/quick-start/)和[部署到服务器](/getting-started/deployment/)的步骤是否都走过；仍然不行，到 [GitHub Issues](https://github.com/yile2020/fastapi-react-admin/issues) 贴上报错原文。

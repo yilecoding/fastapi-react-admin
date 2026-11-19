@@ -11,7 +11,7 @@ type Doc = CollectionEntry<'docs'>
 
 const SITE = (import.meta.env.SITE ?? '').replace(/\/$/, '')
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
-/** 带域名的站点根，比如 https://yilecoding.github.io/fastapi-react-admin */
+/** 带域名的站点根，比如 https://yile2020.github.io/fastapi-react-admin */
 export const ROOT = `${SITE}${BASE}`
 
 export const pageUrl = (id: string) => `${ROOT}/${id}/`

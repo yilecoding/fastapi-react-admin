@@ -5,7 +5,7 @@ sidebar:
   order: 0
 ---
 
-下面列的都已经在 `main` 上。这张表和 [README](https://github.com/yilecoding/fastapi-react-admin/blob/main/README.zh-CN.md#功能一览) 的「功能一览」逐行对应；有专题页的领域在最后一列链过去，还没有专题页的写「—」。
+下面列的都已经在 `main` 上。这张表和 [README](https://github.com/yile2020/fastapi-react-admin/blob/main/README.zh-CN.md#功能一览) 的「功能一览」逐行对应；有专题页的领域在最后一列链过去，还没有专题页的写「—」。
 
 | 领域 | 内容 | 专题页 |
 |---|---|---|
@@ -50,7 +50,7 @@ sidebar:
 
 ## 工程规矩写在哪
 
-仓库把规矩和踩过的坑写在代码旁边：根目录的 [`CLAUDE.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/CLAUDE.md) 加 40 多份模块分册（`AGENTS.md`），按任务索引（「加列表页」「改权限模型」「写迁移」）。每条都是同一个格式——现象、原因、修法、证明它的实测或测试；CI 里跑 `pnpm ctx:check`，文档指向的文件、脚本或 testid 不存在了就报错。
+仓库把规矩和踩过的坑写在代码旁边：根目录的 [`CLAUDE.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/CLAUDE.md) 加 40 多份模块分册（`AGENTS.md`），按任务索引（「加列表页」「改权限模型」「写迁移」）。每条都是同一个格式——现象、原因、修法、证明它的实测或测试；CI 里跑 `pnpm ctx:check`，文档指向的文件、脚本或 testid 不存在了就报错。
 
 ## 不装能先试试吗
 

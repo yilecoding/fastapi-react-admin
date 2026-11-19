@@ -73,11 +73,11 @@ Config and the dictionary have no further switches. `dict` is a **required plugi
 1. Seed data: add a row to each of the five init SQL files under `plugin/config/sql/`.
 2. Write a data migration that inserts the row with `insert_if_absent`; running databases never re-run seed SQL, so without a migration only new installs get the key.
 3. Declare the key in `core/conf.py` with a default, which is the fallback when the group is off or the value is invalid.
-4. Add it to the group's `load_*` mapping ([`utils/dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py)) and make sure that `load_*` is called on the code path that reads the setting; a new group also needs a `ConfigType`.
+4. Add it to the group's `load_*` mapping ([`utils/dynamic_config.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py)) and make sure that `load_*` is called on the code path that reads the setting; a new group also needs a `ConfigType`.
 5. Add integers to `DYNAMIC_INT_BOUNDS` with the same `min` / `max` in the frontend's `pages/config/registry.ts`; `test_dynamic_config_bounds.py` checks the two agree. Fixed-choice keys go into `DYNAMIC_CHOICES`.
 6. Add the description, unit and widget to `REGISTRY` in `registry.ts`; a new group also needs a nav entry, an icon and Chinese / English strings.
 
-Rules and pitfalls are in [`pages/config/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/packages/platform/src/pages/config/AGENTS.md).
+Rules and pitfalls are in [`pages/config/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/pages/config/AGENTS.md).
 
 ## What it does not do
 
@@ -89,12 +89,12 @@ Rules and pitfalls are in [`pages/config/AGENTS.md`](https://github.com/yilecodi
 
 ## Where is the code?
 
-- Config: [`plugin/config/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/config) · runtime loading and validation [`utils/dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py) · frontend [`pages/config/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/config) (`registry.ts` holds each item's metadata)
-- Data dictionary: [`plugin/dict/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/plugin/dict) · frontend [`pages/dict/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/pages/dict)
+- Config: [`plugin/config/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/config) · runtime loading and validation [`utils/dynamic_config.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/dynamic_config.py) · frontend [`pages/config/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/config) (`registry.ts` holds each item's metadata)
+- Data dictionary: [`plugin/dict/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/plugin/dict) · frontend [`pages/dict/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/pages/dict)
 
 ## How is it tested?
 
-- [`test_dynamic_config_bounds.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_dynamic_config_bounds.py): backend bounds reconciled with the frontend `registry.ts`, out-of-range writes refused. [`test_dynamic_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_dynamic_config.py): fallbacks on read. [`test_upload_policy_config.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_upload_policy_config.py): the file upload group. `test_mfa.py` covers "two-factor cannot be required without a key" and "the config list does not 500 because of one old value that no longer validates".
+- [`test_dynamic_config_bounds.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_dynamic_config_bounds.py): backend bounds reconciled with the frontend `registry.ts`, out-of-range writes refused. [`test_dynamic_config.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_dynamic_config.py): fallbacks on read. [`test_upload_policy_config.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/api_v1/test_upload_policy_config.py): the file upload group. `test_mfa.py` covers "two-factor cannot be required without a key" and "the config list does not 500 because of one old value that no longer validates".
 - Dictionary import and export are covered in `test_import.py` and `test_export.py`.
 - No dedicated browser tests; the E2E global setup turns off the image captcha through the Config API.
 

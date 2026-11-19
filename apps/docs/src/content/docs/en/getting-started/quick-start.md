@@ -157,4 +157,4 @@ Continue with [Databases](/en/features/databases/) or [File storage](/en/feature
 - [Feature overview](/en/features/overview/): what the system can do.
 - [Sign-in and security](/en/features/login-security/): password policies and two-factor setup.
 - [Deployment](/en/getting-started/deployment/): deploy prebuilt images to a server.
-- [Contributing](https://github.com/yilecoding/fastapi-react-admin/blob/main/CONTRIBUTING.md): tests, branches and releases (in Chinese).
+- [Contributing](https://github.com/yile2020/fastapi-react-admin/blob/main/CONTRIBUTING.md): tests, branches and releases (in Chinese).

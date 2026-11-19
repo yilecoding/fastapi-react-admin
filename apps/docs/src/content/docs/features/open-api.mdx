@@ -30,7 +30,7 @@ import ProductShot from '../../../components/ProductShot.astro'
 另有一个没有接口的 scope `workflow:read`，只用来授权订阅审批事件。这两个接口都是只读的，返回的是**全量**数据：开放接口显式跳过了行级数据权限。数据边界靠两件事守：
 
 - 给应用授权哪些 scope
-- 专门的对外 schema（[`schema/open_v1.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/schema/open_v1.py)），只放承诺给对方的字段，内部 schema 加字段不会跟着外泄
+- 专门的对外 schema（[`schema/open_v1.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/schema/open_v1.py)），只放承诺给对方的字段，内部 schema 加字段不会跟着外泄
 
 前缀刻意不放在 `/api/v1` 下：内部接口没有兼容承诺，对外的这一组有。管理员可以在应用管理页点「开放接口文档」，导出 OpenAPI JSON 交给对接方。
 
@@ -60,7 +60,7 @@ X-Sign:       <hex>
 
 规范化查询串的拼法：把参数解码出来，名和值分别按 RFC 3986 重新编码（只有 `A-Z a-z 0-9 - _ . ~` 不编码，**空格编成 `%20` 而不是 `+`**）。编码**之后**再按「参数名，然后值」排序，用 `&` 连起来。
 
-测试向量（摘自[对接文档](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/README.md)）：SK 取 `fra_sk_TEST-ONLY-do-not-use-in-production`，时间戳 `1761009302000`，nonce `8f1c2a9e4b7d4e05`。请求 `GET /api/open/v1/depts?name=%E5%BC%A0%20%E4%B8%89&b=1&a=2&a=1` 的待签名字符串应当是：
+测试向量（摘自[对接文档](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/README.md)）：SK 取 `fra_sk_TEST-ONLY-do-not-use-in-production`，时间戳 `1761009302000`，nonce `8f1c2a9e4b7d4e05`。请求 `GET /api/open/v1/depts?name=%E5%BC%A0%20%E4%B8%89&b=1&a=2&a=1` 的待签名字符串应当是：
 
 ```
 GET
@@ -71,7 +71,7 @@ a=1&a=2&b=1&name=%E5%BC%A0%20%E4%B8%89
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 ```
 
-`X-Sign` 应当是 `2717e8c4f65ffb9b621cfd19ba928706143e5cec1e80bb4a15d7b4a35ff0aae0`。其余向量见 [`sdk/test_vectors.json`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/test_vectors.json)。用 Python 参考实现：
+`X-Sign` 应当是 `2717e8c4f65ffb9b621cfd19ba928706143e5cec1e80bb4a15d7b4a35ff0aae0`。其余向量见 [`sdk/test_vectors.json`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/test_vectors.json)。用 Python 参考实现：
 
 ```python
 import requests
@@ -89,7 +89,7 @@ Host 不参与签名，前面多一层反向代理改了 Host 也不会全挂。
 
 ## 怎么防重放？
 
-两道检查配合（[`gateway/auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/auth.py)）：
+两道检查配合（[`gateway/auth.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/auth.py)）：
 
 - **时间戳窗口**：`X-Timestamp` 和服务端时间相差超过 `OPEN_SIGN_WINDOW_SECONDS`（300 秒）就拒绝，返回 401，并带上 `data.server_time`。
 - **nonce**：按应用存进 Redis（`SET NX`），存活窗口的 2 倍，即 600 秒。
@@ -136,7 +136,7 @@ nonce 存活时间是窗口的两倍，所以窗口内的重放一定撞上 nonc
 - 按变更时间（`COALESCE(updated_time, created_time)`）加 `id` 排序，用游标而不是 offset 翻页：同步过程中别人改了数据，也不会漏、不会重。边界上那一条可能再收到一次，按 `id` 覆盖即可。
 - ID 一律是字符串：19 位雪花 ID 超出 JavaScript 的安全整数范围。
 
-这里在 SQL Server 上踩过一个真坑。`datetimeoffset(7)` 精确到 100 纳秒，Python 的 `datetime` 只到微秒，种子里 `GETDATE()` 写的时间读出来被截掉一截。结果游标永远越不过那一行，同一页无限返回。CI 的 SQL Server 任务因此连续超时三次，本地复现率 58%。现在查询先 `CAST(... AS DATETIMEOFFSET(6))`，取值、比较、排序都用同一个微秒精度的值（[`service/sync_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/sync_service.py)）。
+这里在 SQL Server 上踩过一个真坑。`datetimeoffset(7)` 精确到 100 纳秒，Python 的 `datetime` 只到微秒，种子里 `GETDATE()` 写的时间读出来被截掉一截。结果游标永远越不过那一行，同一页无限返回。CI 的 SQL Server 任务因此连续超时三次，本地复现率 58%。现在查询先 `CAST(... AS DATETIMEOFFSET(6))`，取值、比较、排序都用同一个微秒精度的值（[`service/sync_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/sync_service.py)）。
 
 ## Webhook 怎么收？
 
@@ -165,9 +165,9 @@ nonce 存活时间是窗口的两倍，所以窗口内的重放一定撞上 nonc
 
 | 语言 | 文件 | 函数 |
 |---|---|---|
-| Python 3.10+ | [`sdk/python/fra_open_sign.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/python/fra_open_sign.py) | `sign_headers`、`verify_webhook` |
-| Node.js 18+ | [`sdk/node/fra-open-sign.mjs`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/node/fra-open-sign.mjs) | `signHeaders`、`verifyWebhook` |
-| Java 11+ | [`sdk/java/FraOpenSign.java`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/java/FraOpenSign.java) | `signHeaders`、`verifyWebhook` |
+| Python 3.10+ | [`sdk/python/fra_open_sign.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/python/fra_open_sign.py) | `sign_headers`、`verify_webhook` |
+| Node.js 18+ | [`sdk/node/fra-open-sign.mjs`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/node/fra-open-sign.mjs) | `signHeaders`、`verifyWebhook` |
+| Java 11+ | [`sdk/java/FraOpenSign.java`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/sdk/java/FraOpenSign.java) | `signHeaders`、`verifyWebhook` |
 
 每份都是单文件、只用标准库，整个文件拷走即可。它们只负责**签名和 Webhook 验签**，不是带类型模型的完整 API 客户端。
 
@@ -206,9 +206,9 @@ Python 和 Node 的签名在 pytest 里对测试向量。机器上有 `node` / J
 
 ## 代码在哪
 
-- [`gateway/signature.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/signature.py)：规范化查询串、待签名字符串、常量时间比对
-- [`gateway/auth.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/auth.py)：八步检查、`DependsOpenApp`、scope 注册表
-- [`gateway/route.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/route.py)：调用日志
-- [`service/sync_service.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/sync_service.py)：增量同步
-- [`service/webhook_delivery.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/webhook_delivery.py) · [`service/webhook_sign.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/webhook_sign.py)：Webhook 投递与签名
-- [`plugin.toml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/plugin.toml)：配置项 · [`README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/README.md)：给对接方看的完整对接文档
+- [`gateway/signature.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/signature.py)：规范化查询串、待签名字符串、常量时间比对
+- [`gateway/auth.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/auth.py)：八步检查、`DependsOpenApp`、scope 注册表
+- [`gateway/route.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/gateway/route.py)：调用日志
+- [`service/sync_service.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/sync_service.py)：增量同步
+- [`service/webhook_delivery.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/webhook_delivery.py) · [`service/webhook_sign.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/service/webhook_sign.py)：Webhook 投递与签名
+- [`plugin.toml`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/plugin.toml)：配置项 · [`README.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/plugin/open/README.md)：给对接方看的完整对接文档

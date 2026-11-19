@@ -36,6 +36,6 @@ export const DOC_SECTIONS = [
 
 export const DOC_LINKS = [
   { label: '在线演示', en: 'Live demo', href: 'https://fra.wubunan.com/sign-in' },
-  { label: 'E2E 报告', en: 'E2E report', href: 'https://yilecoding.github.io/fastapi-react-admin/e2e/' },
-  { label: '更新记录', en: 'Releases', href: 'https://github.com/yilecoding/fastapi-react-admin/releases' },
+  { label: 'E2E 报告', en: 'E2E report', href: 'https://yile2020.github.io/fastapi-react-admin/e2e/' },
+  { label: '更新记录', en: 'Releases', href: 'https://github.com/yile2020/fastapi-react-admin/releases' },
 ]

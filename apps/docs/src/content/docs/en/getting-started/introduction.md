@@ -40,7 +40,7 @@ packages/      one-way deps: i18n / api ← ui ← platform ← web
 
 Because AI changes code fast, and every change here has something to catch it:
 
-- **Tests.** An AI touching a dozen files at once is routine, and nobody can click through all of that by hand. 1,400+ backend pytest cases run against a real database and Redis, 150+ Playwright cases drive a real browser, no mocks, on every CI run; failing cases come with screenshots and video, and the [E2E report](https://yilecoding.github.io/fastapi-react-admin/e2e/) is public.
+- **Tests.** An AI touching a dozen files at once is routine, and nobody can click through all of that by hand. 1,400+ backend pytest cases run against a real database and Redis, 150+ Playwright cases drive a real browser, no mocks, on every CI run; failing cases come with screenshots and video, and the [E2E report](https://yile2020.github.io/fastapi-react-admin/e2e/) is public.
 - **Types.** The frontend/backend contract is generated from the backend's OpenAPI schema (`packages/api/src/schema.d.ts`). Mobile infers every request's types from it, so an API change the screens didn't follow fails `pnpm typecheck`; the web client is still migrating, and its call sites currently declare response types by hand (see [Developer tools](/en/features/developer-tools/#where-does-the-frontend--backend-contract-come-from)).
 - **Rules written for AI.** 50+ per-directory `CLAUDE.md` / `AGENTS.md` files record pitfalls and hard rules found by testing; a coding assistant reads the one for whatever directory it edits.
 - **A backend inside the AI ecosystem.** Python + FastAPI, with the built-in AI assistant on pydantic-ai.
@@ -78,17 +78,17 @@ Because AI changes code fast, and every change here has something to catch it:
 
 - **Not a low-code platform.** You write business pages in React and endpoints in FastAPI; the foundation gives you the shell, the permission model and the shared building blocks.
 - **Not a hosted service.** You deploy it yourself — see [Deployment](/en/getting-started/deployment/).
-- **Not a throwaway scaffold.** Since 1.0 it follows semver, with compatibility promises for the open API, webhooks, the migration chain, the plugin interface and config keys; read the [release notes](https://github.com/yilecoding/fastapi-react-admin/releases) before upgrading.
+- **Not a throwaway scaffold.** Since 1.0 it follows semver, with compatibility promises for the open API, webhooks, the migration chain, the plugin interface and config keys; read the [release notes](https://github.com/yile2020/fastapi-react-admin/releases) before upgrading.
 
 ## Where did it come from?
 
-The backend started as a fork of [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) (FBA). The three-layer structure (`api → service → crud`), the plugin system and the RBAC / data-scope model come from FBA's design; FBA's copyright notice is kept in [`apps/api/LICENSE`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/LICENSE). SQL Server support is what this project added — upstream declined to merge it, so the fork is permanent and only takes upstream security fixes.
+The backend started as a fork of [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) (FBA). The three-layer structure (`api → service → crud`), the plugin system and the RBAC / data-scope model come from FBA's design; FBA's copyright notice is kept in [`apps/api/LICENSE`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/LICENSE). SQL Server support is what this project added — upstream declined to merge it, so the fork is permanent and only takes upstream security fixes.
 
 The frontend, the desktop and mobile clients, and most business features (approvals, AI assistant, open API, file storage, notification routing) were written for this project.
 
 ## Next steps
 
-- [DeepWiki project guide](https://deepwiki.com/yilecoding/fastapi-react-admin) — explore the repository structure and code through AI-assisted Q&A.
+- [DeepWiki project guide](https://deepwiki.com/yile2020/fastapi-react-admin) — explore the repository structure and code through AI-assisted Q&A.
 
 - [Quick start](/en/getting-started/quick-start/) — run it locally in five commands.
 - [Feature overview](/en/features/overview/) — everything that ships, by area.

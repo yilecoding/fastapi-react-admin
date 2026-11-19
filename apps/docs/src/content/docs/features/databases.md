@@ -83,7 +83,7 @@ pnpm db:history                # 看整条链
 
 ## 有哪些开关？
 
-数据库连接只在 `.env` 里配，改完重启后端和 worker（模板见 [`.env.example`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/.env.example)）：
+数据库连接只在 `.env` 里配，改完重启后端和 worker（模板见 [`.env.example`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/.env.example)）：
 
 | 键 | `.env.example` 里的值 | 说明 |
 |---|---|---|
@@ -100,7 +100,7 @@ pnpm db:history                # 看整条链
 
 ## 怎么测的
 
-[`app/task/tests/test_migrations.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_migrations.py) 里的守卫：
+[`app/task/tests/test_migrations.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/task/tests/test_migrations.py) 里的守卫：
 
 | 测试 | 挡什么 |
 |---|---|
@@ -111,13 +111,13 @@ pnpm db:history                # 看整条链
 | `test_created_tables_declare_snowflake_pk_as_non_autoincrement` | 上面那个 SQL Server `IDENTITY` 坑 |
 | `test_seed_files_have_a_matching_data_migration_decision` | 改了种子 SQL，却没给已有的库补数据迁移 |
 
-[`backend/tests/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/tests) 下，`test_seed_dialects.py` 核对三份种子的表、每张表的行数和列清单一致，并检查关联表引用的 ID 确实存在。`test_timezone_type.py` 为三种方言编译时间列的 DDL，不需要连 MySQL。
+[`backend/tests/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/tests) 下，`test_seed_dialects.py` 核对三份种子的表、每张表的行数和列清单一致，并检查关联表引用的 ID 确实存在。`test_timezone_type.py` 为三种方言编译时间列的 DDL，不需要连 MySQL。
 
 ## 代码在哪
 
-- [`apps/api/backend/database/db.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/database/db.py)：按方言拼连接串
-- [`apps/api/backend/common/model.py`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/common/model.py)：`UniversalStr`、`UniversalText`、`TimeZone`、`id_key`
-- [`apps/api/backend/.env.example`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/.env.example) 与 `core/conf.py`：`DATABASE_*` 配置
-- [`apps/api/backend/sql/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/sql)：每种方言一份种子
-- [`apps/api/backend/alembic/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/api/backend/alembic) 及其 [`AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)：迁移，以及每个方言坑的实测证据
-- [`.github/workflows/ci.yml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/.github/workflows/ci.yml)：PostgreSQL、SQL Server、E2E 三个 job
+- [`apps/api/backend/database/db.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/database/db.py)：按方言拼连接串
+- [`apps/api/backend/common/model.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/model.py)：`UniversalStr`、`UniversalText`、`TimeZone`、`id_key`
+- [`apps/api/backend/.env.example`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/.env.example) 与 `core/conf.py`：`DATABASE_*` 配置
+- [`apps/api/backend/sql/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/sql)：每种方言一份种子
+- [`apps/api/backend/alembic/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/alembic) 及其 [`AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/alembic/AGENTS.md)：迁移，以及每个方言坑的实测证据
+- [`.github/workflows/ci.yml`](https://github.com/yile2020/fastapi-react-admin/blob/main/.github/workflows/ci.yml)：PostgreSQL、SQL Server、E2E 三个 job

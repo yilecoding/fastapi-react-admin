@@ -9,7 +9,7 @@ sidebar:
 
 ## 桌面端在哪下载？
 
-在 [GitHub Releases](https://github.com/yilecoding/fastapi-react-admin/releases) 下载。每个版本包含：
+在 [GitHub Releases](https://github.com/yile2020/fastapi-react-admin/releases) 下载。每个版本包含：
 
 | 平台 | 文件 | 说明 |
 |---|---|---|
@@ -27,7 +27,7 @@ Windows 的 SmartScreen 会拦一次，点「更多信息 → 仍要运行」。
 
 外壳（Electron 42）不含任何业务代码，页面就是 `apps/web` 的构建产物。渲染层通过 `window.desktop` 调主进程，一共六个命名空间：`app`、`config`、`auth`、`print`、`devices`、`updater`。IPC 契约在 `packages/platform/src/desktop/contract.ts`。
 
-- **静默打印。** `print.html()` 在隐藏窗口里渲染 HTML，再调 `webContents.print({ silent: true })`，全程不弹对话框。打印机取配置里的 `printerName`，没配就用系统默认。这条路只对 HTML 成立，现成的 PDF 没法静默打，所以标签要写成 HTML + CSS `@page`，可以借助 `buildLabelHtml()`。`print.htmlToPdf()` 走同一条渲染管线输出 PDF，没有打印机也能调版式。打印失败返回 `{ ok: false, reason }`，不会谎报成功。选 Electron 的决定性理由就是静默打印，[`apps/desktop/README.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/desktop/README.md) 里有记录。
+- **静默打印。** `print.html()` 在隐藏窗口里渲染 HTML，再调 `webContents.print({ silent: true })`，全程不弹对话框。打印机取配置里的 `printerName`，没配就用系统默认。这条路只对 HTML 成立，现成的 PDF 没法静默打，所以标签要写成 HTML + CSS `@page`，可以借助 `buildLabelHtml()`。`print.htmlToPdf()` 走同一条渲染管线输出 PDF，没有打印机也能调版式。打印失败返回 `{ ok: false, reason }`，不会谎报成功。选 Electron 的决定性理由就是静默打印，[`apps/desktop/README.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/desktop/README.md) 里有记录。
 - **本地硬件。** 设备适配器拉起一个原生助手子进程，把它的输出作为事件流推给 `devices.on()`。仓库自带一个身份证读卡器适配器。`resources/` 里没有厂商的助手程序时，它自动进入桩模式，用 `devices.simulate()` 造假数据，在 Mac 上也能把「读卡 → 拉数据 → 打标签」整条链路跑通。
 - **凭据托管。** 渲染层跑在 `app://local` 下，对后端是跨站请求，浏览器那条 `SameSite=Lax` 的 refresh cookie 带不过去。所以 refresh token 由主进程保存，用 Electron 的 `safeStorage` 加密落盘（Windows 走 DPAPI，macOS 走 Keychain），渲染层只拿 access token。这条链路目前只过了类型检查，还没在打包后的正式包里端到端验证过。
 - **运行期配置。** 应用数据目录下的 `config.json` 存 `serverUrl`、`printerName`、`kiosk`、`autoLaunch`、`updateUrl`。同一个安装包可以发到不同环境，什么都不需要编译进去。
@@ -57,7 +57,7 @@ if (isDesktop()) {
 
 ## 安装包怎么出？
 
-推一个 `v*` tag 就会触发 [`.github/workflows/release.yml`](https://github.com/yilecoding/fastapi-react-admin/blob/main/.github/workflows/release.yml)。`prepare` job 先核对 tag、`apps/web/package.json` 的版本和后端 `__version__` 三者一致，再建**唯一一个**草稿 release。随后矩阵在 `windows-latest`、`macos-latest`、`ubuntu-latest` 上各自打包，每个平台只在自己的系统上出包。electron-builder 用 `--publish never`，产物由 `gh release upload` 上传，因为 electron-builder 自带的上传器曾经并发建出过两个草稿。草稿要有人先装一遍试过，再点发布。
+推一个 `v*` tag 就会触发 [`.github/workflows/release.yml`](https://github.com/yile2020/fastapi-react-admin/blob/main/.github/workflows/release.yml)。`prepare` job 先核对 tag、`apps/web/package.json` 的版本和后端 `__version__` 三者一致，再建**唯一一个**草稿 release。随后矩阵在 `windows-latest`、`macos-latest`、`ubuntu-latest` 上各自打包，每个平台只在自己的系统上出包。electron-builder 用 `--publish never`，产物由 `gh release upload` 上传，因为 electron-builder 自带的上传器曾经并发建出过两个草稿。草稿要有人先装一遍试过，再点发布。
 
 本地手动打包：先 `pnpm --filter web build`，再 `pnpm --filter @admin/desktop package`。桌面端自己的构建不会重新构建前端，漏了第一步，打出来的就是上一版界面，而且不报任何错。开发时先把 web dev server 起在 :8888，再跑 `pnpm desktop:dev`。
 
@@ -94,7 +94,7 @@ if (isDesktop()) {
 
 ## 代码在哪
 
-- [`apps/desktop/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/desktop)：`src/main/`（窗口、`app://` 协议、`print.ts`、`updater.ts`、`auth.ts`、`devices/`）和 `electron-builder.yml`
-- [`packages/platform/src/desktop/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/packages/platform/src/desktop)：桥接契约、`isDesktop()` / `desktop()`、标签模板
-- [`apps/desktop/AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/desktop/AGENTS.md)：打包、签名、自动更新在正式包里踩到的坑
-- [`apps/mobile/`](https://github.com/yilecoding/fastapi-react-admin/tree/main/apps/mobile)：`src/app/`（屏幕）、`src/lib/`（会话、请求、权限），以及 [`AGENTS.md`](https://github.com/yilecoding/fastapi-react-admin/blob/main/apps/mobile/AGENTS.md)
+- [`apps/desktop/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/desktop)：`src/main/`（窗口、`app://` 协议、`print.ts`、`updater.ts`、`auth.ts`、`devices/`）和 `electron-builder.yml`
+- [`packages/platform/src/desktop/`](https://github.com/yile2020/fastapi-react-admin/tree/main/packages/platform/src/desktop)：桥接契约、`isDesktop()` / `desktop()`、标签模板
+- [`apps/desktop/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/desktop/AGENTS.md)：打包、签名、自动更新在正式包里踩到的坑
+- [`apps/mobile/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/mobile)：`src/app/`（屏幕）、`src/lib/`（会话、请求、权限），以及 [`AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/mobile/AGENTS.md)

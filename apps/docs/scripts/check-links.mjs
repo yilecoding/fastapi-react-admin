@@ -20,10 +20,10 @@ import { fileURLToPath } from 'node:url'
 
 const DIST = resolve(dirname(fileURLToPath(import.meta.url)), '../dist')
 // 和 astro.config.mjs 读同一对环境变量
-const SITE = process.env.DOCS_SITE ?? 'https://yilecoding.github.io'
+const SITE = process.env.DOCS_SITE ?? 'https://yile2020.github.io'
 const BASE = process.env.DOCS_BASE ?? '/fastapi-react-admin'
 // 本仓库的源码链接 → 本地检出里的路径（dist 在 apps/docs/dist，仓库根在上三层）
-const REPO_SRC = /^https:\/\/github\.com\/yilecoding\/fastapi-react-admin\/(?:blob|tree|edit)\/main\/([^?#]+)/
+const REPO_SRC = /^https:\/\/github\.com\/yile2020\/fastapi-react-admin\/(?:blob|tree|edit)\/main\/([^?#]+)/
 const REPO_ROOT = resolve(DIST, '../../..')
 
 const pages = []
