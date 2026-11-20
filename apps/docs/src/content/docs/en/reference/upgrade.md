@@ -53,6 +53,44 @@ Rolling back the image **does not roll back the database**. If the new version b
 
 All commands are in [Deploying to a server](/en/getting-started/deployment/).
 
+## Upgrading from 1.1.0 to 1.1.1 or later
+
+This applies to image deployments and forks alike, and to jumps across versions (for example 1.1.0 straight to 1.1.2).
+
+**1. Set `CONFIG_ENCRYPT_SECRET_KEY` before upgrading.** From 1.1.1, secret values in system config (the SMTP authorization code `EMAIL_PASSWORD`, and any key ending in `PASSWORD`, `SECRET`, `TOKEN`, `API_KEY` and similar) are stored encrypted. The migration `at000000configsecret` encrypts the plaintext values already in the database with this key:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Put the output in `.env.server` (the template leaves this line empty by default; in a fork's development setup, `apps/api/backend/.env`):
+
+```bash
+CONFIG_ENCRYPT_SECRET_KEY='<the 64 hex characters generated above>'
+```
+
+In `docker-compose.prod.yml` the api, migrate, worker and beat containers all mount the same `.env.server`, so one place is enough.
+
+:::danger
+**If the database holds such a value and the key is missing, the migration stops and the new api does not start.** The log reports "No valid CONFIG_ENCRYPT_SECRET_KEY". Add the key and run `bash prod.sh up` again; the migration can be re-run and never encrypts twice.
+
+If nothing like that was ever saved (for example, no SMTP authorization code was entered in the UI), the upgrade goes through, but saving a secret in the UI later needs the key too, so set it anyway.
+:::
+
+**Back up this key and do not change it.** If it is changed or lost, the values already encrypted in the database cannot be decrypted.
+
+**2. This version brings two new migrations**: `as000000whsecrets` (webhook signing-secret history) and `at000000configsecret` (config secret encryption). `bash prod.sh up` runs them.
+
+**3. HTTPS deployments add `COOKIE_SECURE=true` to `.env.server`** and restart. The current template already has it; config files copied from an older template do not.
+
+**4. External-link and embedded menu addresses must be full `http://` or `https://` URLs.** Existing menus with relative addresses still display, but editing and saving one is rejected (422) until the address is made absolute.
+
+**5. Rotate the SMTP authorization code.** The system config read API in older versions returned it in plaintext.
+
+:::caution
+**Rolling back to 1.1.0 requires restoring the pre-upgrade database backup.** The migration's downgrade does not turn ciphertext back into plaintext, and 1.1.0 cannot read the new format.
+:::
+
 ## How do I upgrade a fork with my own features?
 
 Add upstream as a remote and **merge a tag** (not `main`, which may contain unreleased changes):
@@ -106,7 +144,7 @@ Old clients call the new backend with their old frontend, which is why internal 
 
 - [ ] Read the "Upgrade" section of the target release (and of every release you skip)
 - [ ] Back up the database
-- [ ] Know whether this version has migrations or config changes
+- [ ] Know whether this version has migrations or config changes; upgrading from 1.1.0, read [that section](#upgrading-from-110-to-111-or-later) above first
 - [ ] Upgrade a test environment first and smoke-test it (sign in, a few core pages, one approval)
 - [ ] Have the rollback image tag ready (`sha-<old commit>`)
 - [ ] After upgrading production, check that `/api/health/status` returns 200
