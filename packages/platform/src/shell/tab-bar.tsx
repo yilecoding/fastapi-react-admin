@@ -222,7 +222,7 @@ export function TabBar() {
                 setDrag((d) => (d && (d.over !== tab.key || d.side !== side) ? { ...d, over: tab.key, side } : d))
               }
               onDrop={() => {
-                if (drag && drag.from !== tab.key) reorder(drag.from, tab.key)
+                if (drag && drag.from !== tab.key && drag.side) reorder(drag.from, tab.key, drag.side)
                 setDrag(null)
               }}
               onDragEnd={() => setDrag(null)}

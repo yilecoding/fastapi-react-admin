@@ -180,6 +180,29 @@ test("设计器：打开定义、选中节点出属性面板、发布校验能�
   await expect(scope.getByTestId("wfd-dirty")).toHaveCount(0)
 })
 
+test("流程定义搜索词在打开设计器、返回和整页刷新后保留", async ({ page }) => {
+  await loginPageAs(page, "admin", "123456")
+  await page.goto("/workflow/definition")
+  const scope = page.locator('[data-tab="/_auth/workflow/definition"]')
+  const search = scope.getByTestId("wfd-search")
+
+  await search.fill(CODE)
+  await expect(page).toHaveURL(new RegExp(`[?&]keyword=${CODE}`))
+  await expect(scope.getByTestId(`wfd-open-${CODE}`)).toBeVisible()
+
+  await scope.getByTestId(`wfd-open-${CODE}`).click()
+  await expect(scope.getByTestId("wfd-designer")).toBeVisible()
+  await expect(page).toHaveURL(/[?&]id=\d+/)
+  await scope.getByTestId("wfd-back").click()
+
+  await expect(search).toHaveValue(CODE)
+  await expect(scope.getByTestId(`wfd-open-${CODE}`)).toBeVisible()
+  await page.reload()
+  const reloadedScope = page.locator('[data-tab="/_auth/workflow/definition"]')
+  await expect(reloadedScope.getByTestId("wfd-search")).toHaveValue(CODE)
+  await expect(reloadedScope.getByTestId(`wfd-open-${CODE}`)).toBeVisible()
+})
+
 test("附件上传 / 下载 + 驳回后重新发起（带着原来的内容）", async ({ browser }) => {
   const code = `${CODE}F`
   const { api, dispose } = await createApiClient()
