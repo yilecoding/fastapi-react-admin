@@ -206,7 +206,7 @@ Source: [`apps/docs/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/
 
 ### `ENVIRONMENT=prod，但有 N 项配置不合格，拒绝启动` (production config check failed)
 
-**Cause**: with `ENVIRONMENT=prod`, the backend validates its configuration before starting and refuses to start if anything fails. The checks cover the strength of `TOKEN_SECRET_KEY`, `DATABASE_PASSWORD` and `REDIS_PASSWORD`; `LOGIN_CAPTCHA_ENABLED` and `REQUEST_LIMITER_ENABLED` must be true; `CORS_ALLOWED_ORIGINS` must not contain `*`, `localhost` or `127.0.0.1`; and `DATABASE_USER` must not be a superuser such as `sa`, `root` or `postgres`.
+**Cause**: with `ENVIRONMENT=prod`, the backend validates its configuration before starting and refuses to start if anything fails. The checks cover the strength of `TOKEN_SECRET_KEY`, `DATABASE_PASSWORD` and `REDIS_PASSWORD`; `REQUEST_LIMITER_ENABLED` must be true (the captcha follows its setting and isn't forced); `CORS_ALLOWED_ORIGINS` must not contain `*`, `localhost` or `127.0.0.1`; and `DATABASE_USER` must not be a superuser such as `sa`, `root` or `postgres`.
 
 **Fix**: fix `.env.server` item by item, following the numbered list in the error. To generate a signing key:
 

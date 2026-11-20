@@ -162,9 +162,15 @@ def test_rabbitmq_password_only_checked_when_used() -> None:
 
 
 def test_security_switches_must_stay_on() -> None:
-    assert 'LOGIN_CAPTCHA_ENABLED' in _expect_rejected(LOGIN_CAPTCHA_ENABLED=False)
     assert 'REQUEST_LIMITER_ENABLED' in _expect_rejected(REQUEST_LIMITER_ENABLED=False)
     assert 'DEMO_MODE' in _expect_rejected(DEMO_MODE=True)
+
+
+def test_captcha_is_left_to_the_operator() -> None:
+    """#410：验证码按参数走，prod 不强制开（运行时以参数配置页为准，启动时拦 `.env` 只是假象）"""
+    check_production_settings(_FakeSettings(LOGIN_CAPTCHA_ENABLED=False))
+    # 对照组：同一个检查对限流照样拦，证明上面那句不是因为整个检查失效才放过的
+    assert 'REQUEST_LIMITER_ENABLED' in _expect_rejected(LOGIN_CAPTCHA_ENABLED=False, REQUEST_LIMITER_ENABLED=False)
 
 
 def test_local_cors_origin_is_rejected() -> None:

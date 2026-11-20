@@ -58,7 +58,7 @@
    在 `ENVIRONMENT='prod'` 时逐项校验并**一次列出全部问题**后拒绝启动：
    TOKEN_SECRET_KEY / DATABASE_PASSWORD / REDIS_PASSWORD 是否还是占位符或太弱
    （长度 + 去重字符数 + Shannon 熵三道闸，把 `CHANGE_ME` 改成 `123` 一样过不去）、
-   DEMO_MODE / LOGIN_CAPTCHA_ENABLED / REQUEST_LIMITER_ENABLED 的开关方向、
+   DEMO_MODE / REQUEST_LIMITER_ENABLED 的开关方向（验证码按参数走、不强制，#410）、
    CORS 有没有留着本地来源、DATABASE_USER 是不是数据库超级用户。
    缺 `.env` 时也不再自动拷 `.env.example`（容器内一律拒绝）。
 
