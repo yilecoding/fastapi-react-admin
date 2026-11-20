@@ -4,7 +4,7 @@
 
 **权限被存到了列表第一个角色身上。** 界面上没有任何报错。
 
-原因是一个 19 位的 ID 在路上被改了一位。这篇把这一类问题在项目里出现过的地方挨个列出来。大家都知道「后端要把 ID 转成字符串」，但那只堵住了第一个出口。
+原因是一个 19 位的 ID 在路上发生了舍入。这篇把这一类问题在项目里出现过的地方挨个列出来。大家都知道「后端要把 ID 转成字符串」，但那只堵住了第一个出口。
 
 ---
 
@@ -17,7 +17,7 @@ JSON.parse('2049629108245233664')   // 2049629108245233700
 JSON.parse('2049629108245233665')   // 2049629108245233700
 ```
 
-不光是末尾变成了 00，**相邻的 ID 会塌缩成同一个数**。项目里实测，连续 6 个菜单 ID 解析成了同一个值。拿这个值回传去更新、删除，命中的就是另一条记录。
+不光是显示出来的尾数变了，**相邻的 ID 会塌缩成同一个数**。项目里实测，连续 6 个菜单 ID 解析成了同一个值。回传后可能查不到目标，也可能误中其他记录；本文的事故是详情面板查不到后回落到第一项，接着把修改保存到了那一项。
 
 ---
 
@@ -120,11 +120,13 @@ Number(left) === Number(right)   // ❌
 
 于是同一个条件，前端和后端算出了相反的结论：后端认为某个必填字段应该显示，前端把它藏起来了。用户怎么提交都被挡住，却看不到要填的是哪一项。
 
-修法是按十进制字符串精确比较，不经过浮点数：
+修法是按十进制字符串精确比较，不经过浮点数。下面只演示非负整数，先规范化前导零，再比长度和字典序：
 
 ```ts
-// 简化版：去掉前导零，先比长度，再按字典序比
 function cmpDec(a: string, b: string): number {
+  if (!/^\d+$/.test(a) || !/^\d+$/.test(b)) throw new Error('expected unsigned integers')
+  a = a.replace(/^0+(?=\d)/, '')
+  b = b.replace(/^0+(?=\d)/, '')
   if (a.length !== b.length) return a.length < b.length ? -1 : 1
   return a < b ? -1 : a > b ? 1 : 0
 }
@@ -136,7 +138,7 @@ function cmpDec(a: string, b: string): number {
 
 前端的接口类型是从 OpenAPI 生成的。一个常见的错觉是：「有类型就不会传错」。
 
-实测 `openapi-fetch` 对**查询参数名**检查很严，拼错一个字母就报 `TS2561`。但对**路径参数的值完全不检查**：
+本项目在 `openapi-fetch 0.15.0` 和当前生成契约、调用方式下做过类型探针：**查询参数名**拼错会报 `TS2561`，但下面两种路径参数值都通过。这是该版本和项目组合下的实测结果，不能当成所有版本的通用保证：
 
 ```ts
 api.GET('/api/v1/sys/users/{pk}', { params: { path: { pk: idStr } } })        // ✅ 0 错误
@@ -159,15 +161,15 @@ Python 那边仍然是 `int`。Pydantic 在默认的宽松模式下会把 `"2202
 
 ## 出口 5：导出 Excel —— 后端也会丢
 
-前面四个都在前端。这一个在后端。
+前面的链路横跨后端响应和前端。这次问题出在后端导出的文件里。
 
-导出 xlsx 用的是 openpyxl。整数写进单元格时，会被当成**数字**存。Excel 的数字也是双精度浮点，打开文件看到的是：
+导出 xlsx 用的是 openpyxl。整数写进单元格时会按**数字**存储，而 Excel 的数字精度不足以保存完整的 19 位 ID；数字序列化和打开文件时都可能发生舍入。例如会看到这样的科学计数法显示：
 
 ```
 2.0496291082452337e+18
 ```
 
-和 JS 一样的问题，只是换了个软件。修法是 ID 列一律按文本写：
+科学计数法本身只是显示形式，关键是原来的整数能否逐位还原。修法是 ID 列从写入时就按文本处理；如果值已经转成了不精确的浮点数，再设文本格式也救不回来：
 
 ```python
 def id_cell(value) -> Cell:
@@ -186,7 +188,7 @@ def id_cell(value) -> Cell:
 | 接口响应 | 只转了 `id`，外键和裸 dict 漏了 | 在编码层递归转换 |
 | URL 参数 | 路由库对 search 值跑 `JSON.parse` | 自定义 `parseSearch`，超范围的整数保持字符串 |
 | 业务比较 | `Number(a) === Number(b)` | 按十进制字符串比较 |
-| 类型系统 | 路径参数不做类型检查，`Number(id)` 能编译通过 | 靠规范和代码审查；请求体声明成 `string \| number` |
+| 类型系统 | 本项目的类型探针中，`Number(id)` 作为路径参数仍能编译通过 | 审查 ID 的转换；请求体声明成 `string \| number` |
 | 导出 Excel | 整数存成双精度 | ID 列写文本 |
 
 项目里的规矩只有一句：**所有 ID 都是 string，永远不要 `Number()` 它。**
@@ -195,8 +197,11 @@ def id_cell(value) -> Cell:
 
 文中代码来自我的开源项目 [fastapi-react-admin](https://github.com/yile2020/fastapi-react-admin)，一个 FastAPI + React 19 的中后台底座。相关实现在：
 
-- `apps/api/backend/utils/serializers.py`
-- `apps/web/src/lib/search-params.ts`
-- `apps/api/backend/common/dataio/cells.py`
+- [响应编码](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/utils/serializers.py)
+- [路由参数解析](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/web/src/lib/search-params.ts)
+- [十进制比较规则](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/api/src/workflow-form.ts)
+- [导出单元格](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/common/dataio/cells.py)
+
+项目整体架构见已发布的[系统介绍](https://juejin.cn/post/7703586144182321186)。
 
 你们的项目是怎么处理雪花 ID 的？还遇到过别的出口吗？欢迎评论区补充。

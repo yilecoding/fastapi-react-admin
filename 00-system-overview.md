@@ -2,11 +2,13 @@
 
 我开源了一个中后台底座，这篇把整个系统完整介绍一遍：它能做什么，架构怎么分层，几个关键设计为什么这么做，工程上怎么保证质量。具体的实现细节会拆成一篇篇短文，目录在文末。
 
+它起步于公司里几套 Java + Vue 2 小系统的重构。每次重做系统，登录、权限、组织架构、审批、文件和通知都要再搭一遍，于是把这些共性能力整理成底座，让下一个项目可以从业务开始。
+
 > **GitHub**：<https://github.com/yile2020/fastapi-react-admin>
 > **在线演示**：<https://fra.wubunan.com>（`admin` / `123456`，公开实例，数据可能被其他访客改动；演示站没配大模型密钥，AI 助手要自己部署后填 key 才能对话）
-> **文档**：<https://fra.wubunan.com/docs/>
+> **文档**：<https://yile2020.github.io/fastapi-react-admin/>（[国内访问](https://fra.wubunan.com/docs/)）
 >
-> MIT 协议，当前版本 v1.1.2。从 1.0 起，开放接口 / SDK、Webhook 事件、迁移链、插件接口、配置键有兼容承诺
+> 2026-11-20 更新，按主分支 v1.1.3 核对。MIT 协议；从 1.0 起，开放接口 / SDK、Webhook 事件、迁移链、插件接口、配置键有兼容承诺，正式版本以 [Releases](https://github.com/yile2020/fastapi-react-admin/releases) 为准。
 
 ![登录页](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/01-sign-in.png)
 
@@ -24,8 +26,10 @@
 | 多页签 | React 侧大多切走就丢状态 | 用 React 19.2 的 `<Activity>`，切回来状态还在 |
 | 组件库 | 多数还在 Radix 版 shadcn | 已跟进 shadcn 现在默认的 **Base UI** |
 | 数据库 | 通常只支持一种 | PostgreSQL / SQL Server / MySQL 三选一 |
-| 端 | 只有 Web | Web + Electron 桌面端 + Expo 原生移动 App（移动端是预览版） |
-| 测试 | 大多不带 | 后端 1400+ 条、前端 150+ 条端到端，连真实数据库，不 mock |
+| 端 | 只有 Web | Web 管理端 + Electron 桌面端模板 + Expo 原生移动端模板 |
+| 测试 | 常停在组件单测和 mock | 后端集成测试连真实数据库与 Redis，前端端到端测试连真实浏览器和接口 |
+
+Web 是核心管理端。移动端围绕审批、公告、消息和个人中心等手机上要办的事组织，角色、部门、菜单等管理模块仍在 Web；目前多数移动页面只在模拟器上验证过，还没有移动端自动化测试和发版流水线。
 
 ## 二、功能全景
 
@@ -40,7 +44,7 @@
 | 导入导出 | 服务端导出 xlsx / csv，大批量转后台；导入带下拉模板、预览校验和错误报告 |
 | 消息与通知 | 站内消息实时推送；通知公告（按部门 / 角色 / 人发布、定时发布、登录后弹窗必须确认、顶部横幅、阅读统计）；邮件 / 短信（阿里云 / 腾讯云）渠道（系统策略 × 个人偏好，失败自动重试）；飞书 / 钉钉 / 企业微信群机器人 |
 | 能力开放 | AK/SK 签名的开放接口，scope、IP 白名单、防重放、限流，附 Python / Node / Java SDK；Webhook 事件订阅（带签名推送用户 / 部门 / 审批变化，失败重试，持续失败自动停用） |
-| 运维 | 参数配置、数据字典、登录 / 操作日志（自动脱敏）、服务器与 Redis 监控、定时任务、发新版提示 |
+| 运维 | 参数配置、数据字典、登录 / 操作日志（自动脱敏）、数据变更记录（谁在何时改了哪些字段、与操作日志互跳）、服务器与 Redis 监控、定时任务、发新版提示 |
 
 几张截图：
 
@@ -107,7 +111,7 @@ i18n / api  ←  ui  ←  platform  ←  web
 
 ```
 apps/web/src/routes/     只声明 URL 参数校验和权限守卫，不渲染页面
-packages/platform/pages/ 页面组件，只通过 props 拿参数
+packages/platform/src/pages/ 页面组件，只通过 props 拿参数
 TabOutlet                按注册表把页面挂进多页签
 ```
 
@@ -159,14 +163,14 @@ crud      数据访问（数据权限在这一层统一加过滤条件）
 AI 能调用的工具就是当前用户有权限的接口，走同一套权限和数据范围检查，不为 AI 单独开后门。
 
 **5. 前后端契约由 OpenAPI 生成**
-`schema.d.ts` 从后端直接生成，不用起服务；请求客户端和成败判定放在 `packages/api`，Web 和移动端共用一份。
+`schema.d.ts` 从后端生成；请求客户端、成败判定、审批表单规则放在 `packages/api`，Web 和移动端共用。移动端按契约推断请求类型；Web 调用点还在逐步迁移，部分响应类型仍由调用方声明，不能把「有生成文件」等同于「所有调用都已受它检查」。
 
 ## 六、工程化
 
-- **测试不 mock**：后端 pytest 连真实数据库和 Redis，前端 Playwright 连真实浏览器和真实接口。CI 上后端全套在 PostgreSQL 和 SQL Server 各跑一遍。数据权限用 41 个真账号逐个登录验证过。
+- **真实依赖上的集成测试**：后端 pytest 连真实数据库和 Redis，前端 Playwright 连真实浏览器和接口。CI 上后端全套在 PostgreSQL 和 SQL Server 各跑一遍；MySQL 按需本地验证，没有放进每次 CI。单元测试仍会使用 mock 验证局部边界，这和集成测试承担的任务不同。
 - **变异检验**：守关键逻辑的测试写完，会故意把代码改坏一次，确认测试真的会红。
 - **静态守卫**：`arch:check` 管分层方向和几条硬规则（页面不能读路由、全局 DOM 查询必须限定范围、E2E 断言不能漏 `await`）；`i18n:check` 管两种语言的键是否对齐。
-- **文档是踩坑记录**：根目录的 `CLAUDE.md` 加上 40 多份模块分册，记录的都是「违反了会坏，而且多数是静默地坏」的结论，每条都要带实测证据。`ctx:check` 会检查文档里引用的文件、脚本、测试还在不在。
+- **文档是踩坑记录**：根目录的 `CLAUDE.md` 加上按目录组织的 `AGENTS.md` 分册，记录「违反了会坏，而且多数是静默地坏」的结论，每条都要带实测证据。`ctx:check` 会检查文档里引用的文件、脚本、测试还在不在。
 - **公开的测试报告**：`main` 每次跑完的 [E2E 报告](https://yile2020.github.io/fastapi-react-admin/e2e/) 都公开，失败用例带截图和录像。
 
 ## 七、跑起来
@@ -182,16 +186,16 @@ pnpm db:init
 pnpm dev                                                # http://127.0.0.1:8888
 ```
 
-需要 Node ≥ 22.13、Python ≥ 3.10、uv 和 Docker。账号 `admin`，密码是 `pnpm db:init` 时设的。
+需要 Node ≥ 22.13、Python ≥ 3.11、uv 和 Docker。账号 `admin`，密码是 `pnpm db:init` 时设的。完整配置和升级步骤见[文档站](https://yile2020.github.io/fastapi-react-admin/)；借助 AI 理解代码也可以看 [DeepWiki](https://deepwiki.com/yile2020/fastapi-react-admin)。
 
 ## 八、系列文章
 
-- 《用 React 19.2 的 `<Activity>` 做多页签保活，我踩了 6 个坑》
-- 《雪花 ID 丢精度不只在 JSON.parse：我在一个中后台里找到了 5 个出口》
+- 《用 React 19.2 的 `<Activity>` 做多页签保活，我踩了 6 个坑》（草稿，发布后补链接）
+- 《雪花 ID 丢精度不只在 JSON.parse：我在一个中后台里找到了 5 个出口》（草稿，发布后补链接）
 - 更多持续更新中
 
 ## 致谢
 
 后端从 [fastapi-best-architecture](https://github.com/fastapi-practices/fastapi_best_architecture) 分叉而来，三层结构、插件机制、RBAC 与数据权限模型是它的设计，感谢原作者和贡献者。
 
-项目刚发 1.0，还在快速迭代。觉得有用的话欢迎去 [GitHub](https://github.com/yile2020/fastapi-react-admin) 点个 ⭐，也欢迎提 issue。
+项目持续迭代中。觉得有用的话欢迎去 [GitHub](https://github.com/yile2020/fastapi-react-admin) 点个 ⭐，也欢迎提 issue。

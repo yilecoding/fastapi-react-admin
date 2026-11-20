@@ -4,7 +4,7 @@
 
 ![切走再切回来，状态原样保留](https://raw.githubusercontent.com/yile2020/fastapi-react-admin/blog/images/00-tabs.gif)
 
-Vue 有 `<keep-alive>`，React 一直没有。所以很多 React 后台的「多页签」其实只是一排链接：切走就卸载，填了一半的表单、翻到第 5 页的列表，切回来全部归零。
+Vue 有 `<keep-alive>`；React 19.2 之前，实现同类需求通常要自行缓存或引入第三方方案。如果多页签只是在路由外面摆一排链接，切走时页面仍然会卸载，填了一半的表单、翻到第 5 页的列表，切回来就归零。
 
 React 19.2 正式发布了 `<Activity>`，终于能正经做这件事了。这篇记录我在一个中后台项目里用它实现多页签时踩过的坑。**每一个都是静默出错的** —— 不报错，只是行为不对。
 
@@ -27,7 +27,7 @@ React 19.2 正式发布了 `<Activity>`，终于能正经做这件事了。这�
 | effects | **执行清理函数**；切回 `visible` 时**重新执行** |
 | 更新 | 照常渲染，但优先级降低 |
 
-前两行是「切回来还在」的来源。第三行是和 Vue `keep-alive` 最不一样的地方：后台页签的订阅、定时器都会被清理，开 10 个监控页也不会 10 路一起轮询。但后面好几个坑，也都出在这一行上。
+前两行是「切回来还在」的来源。第三行决定了资源如何随可见性收放：在 effect 内建立、并在 cleanup 中停止的订阅和定时器，会随隐藏停止，显示时恢复。模块级定时器、没有写 cleanup 的订阅、共享的数据源不会因此自动暂停。后面好几个坑，也都出在 effect 重建上。React 官方的 [Activity 文档](https://react.dev/reference/react/Activity) 对这些行为有完整说明。
 
 ## 基本结构：所有页签同时挂载
 
@@ -52,7 +52,7 @@ export function TabOutlet({ registry }: { registry: PageRegistry }) {
 
 - 页签列表放在 zustand 里，持久化到 sessionStorage，刷新后还在。
 - 页签的 key 是 `routeId + params`，**不含 search**：同一个页面改筛选条件，不会开出第二个页签。
-- 页签最多 20 个，超了就关掉最早打开、又没固定的那个。
+- 页签达到 20 个后，尝试关掉最早打开、又没固定的那个；全部固定时不会强行关闭。
 
 ---
 
@@ -159,7 +159,7 @@ useEffect(() => {
 qc.invalidateQueries({ refetchType: 'active' })
 ```
 
-后台页签的 effect 已经被 `<Activity>` 清理了，它们的 query 没有观察者，只会被标记为过期，等切回来再取。全局的 `staleTime` 不改：30 秒本来就是为了「页签切来切去不打后端」。
+本项目的隐藏页签在 effect 清理后不再观察自己的 query；只被这些页面使用的 query 会标记为过期，切回来再取。若同一个 query 还被顶栏或其他可见组件订阅，它仍是 active，也会重取。这里的 active 是 query 的观察状态，不是「只刷新某一个路由」。全局的 `staleTime` 不改：30 秒本来就是为了减少重复取数。
 
 ## 坑 5：隐藏页签的 DOM 还在文档里
 
@@ -205,7 +205,7 @@ document.querySelector('[data-visible="true"] .xxx')
 第三种的实现：页签根节点通过 context 往下传，浮层把它当 portal 容器：
 
 ```tsx
-const TabContainerContext = createContext<HTMLElement | null>(null)
+const TabContainerContext = createContext<HTMLElement | null | undefined>(undefined)
 export const useTabPortalContainer = () => useContext(TabContainerContext)
 
 function TabFrame({ … }) {
@@ -228,9 +228,11 @@ function TabFrame({ … }) {
 <SheetContent container={useTabPortalContainer()}>…</SheetContent>
 ```
 
-注释里那个 `null` 是 E2E 抓到的：`<Activity>` 隐藏时会解绑 ref。如果跟着把 container 设成 `null`，portal 目标就变回 `<body>`，浮层整个重挂，切回来表单是空的。
+注释里忽略 ref 解绑的处理是 E2E 抓到的：`<Activity>` 隐藏时会解绑 ref，但节点仍在。跟着清空 container 会改变 portal 的挂载状态，切回来表单可能已经是新节点。
 
-只有**由 URL 驱动**的浮层需要这么做。用 `useState` 点开的浮层，切页签之前就已经在前台被关掉了。
+这里还有三个值，不能混用：元素表示挂进本页签；`null` 表示在页签里、容器还没就绪，Base UI 会等待；`undefined` 表示不在任何页签里，允许回落到 `<body>`。如果 context 默认给 `null`，同一个抽屉放进顶栏铃铛后会一直等容器，看起来就像「点了没反应」。调用处也不要用 `container ?? undefined` 把等待状态抹掉。
+
+**由 URL 驱动的浮层**需要随页签保活。用 `useState` 点开的浮层也要检查离开方式：如果关闭和路由跳转发生在同一次提交里，退场动画可能来不及跑完。对这类不需要保活的临时弹窗，项目在离开时直接卸载；不能假定「先设 open=false，再跳转」一定已经完成关闭。
 
 ---
 
@@ -247,6 +249,6 @@ function TabFrame({ … }) {
 | 全局 DOM 查询限定在 `[data-visible="true"]` 或 `[data-tab]` 内 | 命中后台页签，或测出 0 宽 |
 | URL 驱动的浮层挂进本页签根节点 | 后台抽屉挡住前台点击 |
 
-文中代码都来自我的开源项目 [fastapi-react-admin](https://github.com/yile2020/fastapi-react-admin)，一个 FastAPI + React 19 的中后台底座。完整实现在 `packages/platform/src/shell/tab-outlet.tsx`，上面每个坑在源码注释里都有对应的说明和测试。可以在[在线演示](https://fra.wubunan.com)（`admin` / `123456`）里多开几个页签试试。
+文中代码摘自我的开源项目 [fastapi-react-admin](https://github.com/yile2020/fastapi-react-admin)，示例省略了业务细节。完整实现在 [tab-outlet.tsx](https://github.com/yile2020/fastapi-react-admin/blob/main/packages/platform/src/shell/tab-outlet.tsx)，浮层离开与保活的回归测试见 `overlay-leave.spec.ts`、`workflow.spec.ts` 和 `notice-reach.spec.ts`。项目的[系统介绍](https://juejin.cn/post/7703586144182321186)已发布，也可以在[在线演示](https://fra.wubunan.com)（`admin` / `123456`）里多开几个页签试试。
 
 你们的 React 项目里，多页签是怎么做的？有没有踩过别的坑？欢迎评论区聊聊。
