@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_login_log import login_log_dao
+from backend.app.admin.model import LoginLog
 from backend.app.admin.schema.login_log import CreateLoginLogParam, DeleteLoginLogParam
 from backend.common.context import ctx
 from backend.common.enums import LoginLogEvent, LoginLogStatusType
@@ -49,6 +50,18 @@ class LoginLogService:
             username=username, status=status, ip=ip, start_time=start_time, end_time=end_time, event=event
         )
         return await paging_data(db, log_select)
+
+    @staticmethod
+    async def get_mine(*, db: AsyncSession, username: str, limit: int) -> list[LoginLog]:
+        """
+        本人最近的登录记录（个人中心）
+
+        :param db: 数据库会话
+        :param username: 当前用户的登录名
+        :param limit: 条数
+        :return:
+        """
+        return await login_log_dao.get_recent_by_username(db, username, limit)
 
     @staticmethod
     async def create(

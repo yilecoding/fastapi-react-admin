@@ -23,6 +23,7 @@ import { FileTypeIcon } from './file-icon'
 import { FilePreviewDialog } from './preview-dialog'
 import { useFileUploader } from './uploader'
 import { useUploadStore } from '../../shell/upload-store'
+import { saveFile } from '../../api-client/download'
 
 /**
  * 业务对象的附件面板。**任何页面都能直接嵌**，只要给 `targetType` + `targetId`。
@@ -97,12 +98,7 @@ export function FileAttachments({
       setActionError(null)
       try {
         const buffer = await fetchBytes(f.download_url)
-        const url = URL.createObjectURL(new Blob([buffer], { type: f.content_type ?? 'application/octet-stream' }))
-        const a = document.createElement('a')
-        a.href = url
-        a.download = f.original_name
-        a.click()
-        URL.revokeObjectURL(url)
+        saveFile(buffer, f.original_name, f.content_type ?? undefined)
       } catch (e) {
         setActionError(e instanceof Error ? e.message : t('下载失败'))
       }

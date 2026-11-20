@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Select
+from sqlalchemy import Select, select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,6 +49,31 @@ class CRUDLoginLog(DataScopedCRUD[LoginLog]):
             filters['login_time__le'] = end_time
 
         return await self.select_order('created_time', 'desc', **filters)
+
+    @staticmethod
+    async def get_recent_by_username(db: AsyncSession, username: str, limit: int) -> list[LoginLog]:
+        """
+        某个登录名最近的登录记录（个人中心「最近登录」）
+
+        🔴 按 `username` **全等**，两种别的写法都会错：
+        - 复用列表那条 `username LIKE`：登录名 `admin` 会把 `admin2` 的记录一起捞回来
+        - 按 `user_uuid`：密码错的那次失败尝试记的是**随机 uuid**（`user_verify` 抛异常时还没拿到用户，
+          见 `auth_service.login`），而「有人在试你的密码」恰恰是这块最要紧的那几行
+
+        按 `login_time`（有索引）倒序取前几条，不按没索引的 `created_time` —— 日志表是全库长得最快的表
+
+        :param db: 数据库会话
+        :param username: 登录名
+        :param limit: 条数
+        :return:
+        """
+        stmt = (
+            select(LoginLog)
+            .where(LoginLog.username == username)
+            .order_by(LoginLog.login_time.desc(), LoginLog.id.desc())
+            .limit(limit)
+        )
+        return list((await db.scalars(stmt)).all())
 
     async def create(self, db: AsyncSession, obj: CreateLoginLogParam) -> None:
         """

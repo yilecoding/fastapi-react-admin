@@ -27,6 +27,7 @@ import {
 import { Separator } from "@admin/ui/components/separator"
 import { cn } from "@admin/ui/lib/utils"
 
+import { isStaleAssetError } from "@/lib/app-version"
 import { pageRegistry } from "@/lib/page-registry"
 import { buildValidPaths, makeIsValidPath } from "@/lib/valid-paths"
 import { NotificationBell } from "@admin/platform/pages/notification/bell"
@@ -159,7 +160,7 @@ function AuthLayout() {
           data-slot="content-scroll"
           className="flex flex-1 flex-col p-4 content-scroll:min-h-0 content-scroll:overflow-y-auto content-scroll:overflow-x-hidden"
         >
-          <TabOutlet registry={pageRegistry} />
+          <TabOutlet registry={pageRegistry} escalate={isStaleAssetError} />
         </div>
 
         {/* 命令面板 + 快捷键帮助。挂在外壳里（不是页面里）—— 它要在任何 tab 上都能呼出 */}

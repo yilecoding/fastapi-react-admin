@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Alert } from '@admin/ui/components/alert'
 import { Button } from '@admin/ui/components/button'
 import { CopyButton } from '@admin/ui/components/copy-button'
+import { saveFile } from '../../api-client/download'
 
 /**
  * 恢复码**只显示这一次**（#181）：手机丢了、认证器删了，靠它登录。每个只能用一次。
@@ -14,13 +15,10 @@ export function RecoveryCodes({ codes }: { codes: string[] }) {
   const { t } = useTranslation()
   const text = codes.join('\n')
 
+  // 🔴 走 saveFile（延后收回 blob 地址）：立刻 revoke 在 Firefox 上偶发下载失败，而恢复码只显示这一次 ——
+  // 下载没成、用户以为存好了，丢了手机就登不进来（#405）
   function download() {
-    const url = URL.createObjectURL(new Blob([`${text}\n`], { type: 'text/plain' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'recovery-codes.txt'
-    a.click()
-    URL.revokeObjectURL(url)
+    saveFile(`${text}\n`, 'recovery-codes.txt', 'text/plain')
   }
 
   return (

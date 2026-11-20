@@ -13,6 +13,7 @@ from backend.app.admin.schema.data_import import (
     ImportPreviewDetail,
 )
 from backend.app.admin.schema.export_job import GetExportJobDetail, StartExportParam
+from backend.app.admin.schema.login_log import GetLoginLogDetail
 from backend.app.admin.schema.mfa import GetMfaStatus, MfaOtpParam, MfaRecoveryCodes, MfaSetupInfo
 from backend.app.admin.schema.role import GetRoleDetail
 from backend.app.admin.schema.user import (
@@ -29,6 +30,7 @@ from backend.app.admin.schema.user_preference import (
 )
 from backend.app.admin.service.export_service import export_service
 from backend.app.admin.service.import_service import import_service
+from backend.app.admin.service.login_log_service import login_log_service
 from backend.app.admin.service.mfa_service import mfa_service
 from backend.app.admin.service.user_preference_service import user_preference_service
 from backend.app.admin.service.user_service import user_service
@@ -51,6 +53,22 @@ router = APIRouter()
 @router.get('/me', summary='获取当前用户信息', dependencies=[DependsJwtAuth])
 async def get_current_user(request: Request) -> ResponseSchemaModel[GetCurrentUserInfoWithRelationDetail]:
     data = request.user.model_dump()
+    return response_base.success(data=data)
+
+
+@router.get('/me/login-logs', summary='获取当前用户最近的登录记录', dependencies=[DependsJwtAuth])
+async def get_my_login_logs(
+    request: Request,
+    db: CurrentSession,
+    limit: Annotated[int, Query(ge=1, le=50, description='条数')] = 8,
+) -> ResponseSchemaModel[list[GetLoginLogDetail]]:
+    # 个人中心「最近登录」：让人自查账号有没有被别人用过，所以**谁都得能读自己的**（#405）。
+    # 原来前端借的是 `GET /logs/login`，那条 #30 起要 `log:login:list`，没这个权限码的人恒拿 403。
+    # 只按本人登录名全等查（为什么不按 uuid 见 `crud_login_log.get_recent_by_username`），
+    # 路径里没有用户 ID —— 「读别人的」在契约上就不存在；
+    # 本人读本人不按数据范围过滤（「开了过滤、没配规则」的 STAFF 连自己的都看不见，同 `/{pk}/roles`）
+    with bypass_data_scope():
+        data = await login_log_service.get_mine(db=db, username=request.user.username, limit=limit)
     return response_base.success(data=data)
 
 

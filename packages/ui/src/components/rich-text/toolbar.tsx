@@ -16,6 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@admin/ui/components/po
 import { Separator } from "@admin/ui/components/separator"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@admin/ui/components/tooltip"
 import { cn } from "@admin/ui/lib/utils"
+import { normalizeLinkHref } from "./link-href"
 
 /**
  * 编辑器工具栏。
@@ -217,7 +218,8 @@ function LinkButton({ editor }: { editor: Editor }) {
   const isActive = useEditorState({ editor, selector: ({ editor: e }) => e.isActive("link") })
 
   const apply = () => {
-    const href = url.trim()
+    // 补协议：`www.example.com` 原样写进去是相对地址（见 link-href.ts）
+    const href = normalizeLinkHref(url)
     if (!href) return
     editor.chain().focus().extendMarkRange("link").setLink({ href }).run()
     setUrl("")

@@ -81,13 +81,16 @@ export function attentionLink(
         ? { to: '/open/app', search: { webhook: item.app_id, wtab: 'endpoints' }, label: t('去处理') }
         : null
     case 'task_failed':
-      // 执行记录页只要登录（route 文件里写了为什么）
-      return {
-        to: '/scheduler/record',
-        search: item.task ? { name: item.task, status: 'FAILURE' } : { status: 'FAILURE' },
-        label: t('看记录'),
-      }
+      // 🔴 原来写着「执行记录页只要登录」，#228 之后过期了 —— 门槛和路由守卫同一个码（#405）
+      return can('task:result:list')
+        ? {
+            to: '/scheduler/record',
+            search: item.task ? { name: item.task, status: 'FAILURE' } : { status: 'FAILURE' },
+            label: t('看记录'),
+          }
+        : null
     case 'login_fail_spike':
-      return can('log:login:del') ? { to: '/log/login', search: { status: 0, time: todayRange }, label: t('看明细') } : null
+      // 登录日志页的守卫是 `log:login:list`（最早是 `del`，这里照抄的旧值没跟上）
+      return can('log:login:list') ? { to: '/log/login', search: { status: 0, time: todayRange }, label: t('看明细') } : null
   }
 }
