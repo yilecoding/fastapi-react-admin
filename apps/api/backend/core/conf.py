@@ -68,7 +68,8 @@ class Settings(BaseSettings):
     DATABASE_POOL_SIZE: int = Field(default=10, ge=1)
     DATABASE_POOL_MAX_OVERFLOW: int = Field(default=20, ge=0)
     # 借出连接前先探活。断掉的连接（数据库重启 / 主从切换 / 防火墙掐空闲连接）不会落到请求上，
-    # 代价是每次借连接多几次往返：asyncpg 下是 BEGIN + 空查询 + ROLLBACK 三次，压测里约占每请求 1ms CPU。
+    # 代价是每次借连接多几次往返：asyncpg 下是 BEGIN + 空查询 + ROLLBACK 三次。
+    # 实测关掉后每请求 CPU 少约 0.2ms（约 2.6%），见 middleware 分册「新中间件写成纯 ASGI」那一节的对照表。
     # 关掉之后断连只让当时在途的请求失败一次，SQLAlchemy 随即作废整个池重连
     DATABASE_POOL_PRE_PING: bool = True
     DATABASE_SCHEMA: str = 'fba'
