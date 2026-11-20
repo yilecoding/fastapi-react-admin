@@ -303,17 +303,26 @@ test.describe("任务参数", () => {
 })
 
 test.describe("执行记录筛选", () => {
+  // 浏览器时区和个人显示时区特意分开，接口边界固定按 UTC 解释。
+  test.use({ timezoneId: "Asia/Tokyo" })
+
   test("时间范围：URL 上是压缩的，发出去的请求补足时分秒", async ({ authedPage: page }) => {
     /**
      * 🔴 URL 参数 ≠ 接口入参，这是两件事：
      *
      *   URL   ?time=2026-08-16~2026-08-22        一个参数、无编码噪音
-     *   请求  ?start_time=… 00:00:00&end_time=… 23:59:59
+     *   请求  ?start_time=…T00:00:00.000Z&end_time=…T23:59:59.000Z（个人时区 UTC）
      *
      * **补时分秒那一步不能省。** 后端是 `date_done <= end_time`，
      * 只给日期会被解析成当天 00:00:00，**静默丢掉最后一整天**——
      * 用户选了「到今天」，今天的记录一条都不显示，界面上没有任何异常。
      */
+    await page.route("**/api/v1/sys/users/me", async (route) => {
+      const response = await route.fetch()
+      const body = await response.json()
+      await route.fulfill({ response, json: { ...body, data: { ...body.data, timezone: "UTC" } } })
+    })
+
     await page.goto("/scheduler/record")
 
     const req = page.waitForRequest(
@@ -324,8 +333,8 @@ test.describe("执行记录筛选", () => {
     await page.goto("/scheduler/record?time=2026-08-16~2026-08-22")
     const url = new URL((await req).url())
 
-    expect(url.searchParams.get("start_time")).toBe("2026-08-16 00:00:00")
-    expect(url.searchParams.get("end_time")).toBe("2026-08-22 23:59:59")
+    expect(url.searchParams.get("start_time")).toBe("2026-08-16T00:00:00.000Z")
+    expect(url.searchParams.get("end_time")).toBe("2026-08-22T23:59:59.000Z")
 
     // 地址栏保持压缩形态，不该被展开成两个带编码噪音的参数
     expect(page.url()).toContain("time=2026-08-16~2026-08-22")
