@@ -39,6 +39,7 @@
     "e2e": "turbo e2e",
     "e2e:install": "pnpm --filter web exec playwright install chromium",
     "hooks:install": "apps/api/.venv/bin/prek install -C apps/api -f",
+    "loadtest": "uv run --project apps/api python scripts/loadtest.py",
     "install:all": "pnpm install && pnpm --filter api exec uv sync --group dev && pnpm hooks:install && pnpm e2e:install"
   },
   "devDependencies": {
