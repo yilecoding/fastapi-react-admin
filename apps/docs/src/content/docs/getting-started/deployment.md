@@ -54,6 +54,7 @@ bash prod.sh pull && bash prod.sh up
 - [ ] 在界面上配 SMTP 授权码等参数密钥的，配好 `CONFIG_ENCRYPT_SECRET_KEY`（`python -c "import secrets;print(secrets.token_hex(32))"` 生成并备份）—— 没配时保存会报错；**从 1.1.0 升级、库里已有这类值时没配它，迁移会中止**，见[从 1.1.0 升级](/reference/upgrade/#从-110-升级到-111-及以后)
 - [ ] 用到 AI 助手、对象存储、群机器人、开放平台的，配好各自的加密密钥（`AI_ENCRYPT_SECRET_KEY`、`STORAGE_ENCRYPT_SECRET_KEY`、`NOTIFICATION_ENCRYPT_SECRET_KEY`、`OPEN_SECRET_KEY`）—— 没配时保存相应配置会直接报错，不会存明文
 - [ ] 数据库连接数够用：每个进程最多占 `DATABASE_POOL_SIZE + DATABASE_POOL_MAX_OVERFLOW`（默认 10 + 20）个连接，api 的 worker 数和 celery worker 进程数加起来乘上它，不能超过数据库的 `max_connections`，否则高峰期请求报 `too many clients` 失败。加 worker 前先算一下，不够就调小这两个值或调大数据库上限
+- [ ] 配好 `DATA_CHANGE_CHAIN_KEY`（`python -c "import os;print(os.urandom(32).hex())"`），并和数据库分开保管。数据变更记录的签名链靠它防篡改，留空时谁都能重算签名；**设了就别换**
 - [ ] `NOTIFICATION_WEB_BASE_URL` 改成真实地址，否则邮件和群消息里的链接指向 `localhost:8888`
 - [ ] 管理员密码是初始化时新设的强口令，没有沿用演示站的 `123456`
 - [ ] 第一次部署到已有数据库前做了备份；设好定时备份

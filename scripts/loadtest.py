@@ -5,6 +5,7 @@
     pnpm loadtest -c 50 -d 60                       # 并发 50，跑 60 秒
     pnpm loadtest --stages 10,25,50,100 -d 20       # 阶梯加压：每档 20 秒，找拐点
     pnpm loadtest --json out.json                   # 同时写一份 JSON，方便前后对比
+    pnpm loadtest --path /ping --token x            # 只压一个指定路径（对照组见 loadtest_baseline.py）
 
 它只用后端自带的 httpx（`uv run --project apps/api`），不装任何新依赖。
 
@@ -58,7 +59,7 @@ ENDPOINTS: list[tuple[str, str, int]] = [
     ('file.stats', '/sys/files/statistics', 1),
 ]
 
-LOCAL_HOSTS = {'127.0.0.1', 'localhost', '::1', '0.0.0.0'}  # noqa: S104
+LOCAL_HOSTS = {'127.0.0.1', 'localhost', '::1', '0.0.0.0'}
 
 
 @dataclass
@@ -78,8 +79,8 @@ def percentile(sorted_values: list[float], q: float) -> float:
 
 
 def captcha_answer_from_redis(container: str, prefix: str, uuid: str, db: int = 0) -> str:
-    out = subprocess.run(  # noqa: S603
-        ['docker', 'exec', container, 'redis-cli', '-n', str(db), '--raw', 'GET', f'{prefix}:{uuid}'],  # noqa: S607
+    out = subprocess.run(
+        ['docker', 'exec', container, 'redis-cli', '-n', str(db), '--raw', 'GET', f'{prefix}:{uuid}'],
         capture_output=True,
         text=True,
         check=True,
@@ -95,7 +96,7 @@ async def identify(base_url: str, timeout: float) -> str:
     而且一切正常、没有任何报错）。只有把对方自报的身份摆出来，才看得出打错了。
     生产会关掉 /openapi，拿不到就说拿不到，不影响压测。
     """
-    root = base_url.split('/api/', 1)[0] if '/api/' in base_url else base_url.rsplit('/', 1)[0]
+    root = base_url.split('/api/', 1)[0] if '/api/' in base_url else base_url.rstrip('/')
     try:
         async with httpx.AsyncClient(timeout=timeout) as c:
             info = (await c.get(f'{root}/openapi')).json()['info']
@@ -112,7 +113,9 @@ async def login(client: httpx.AsyncClient, args: argparse.Namespace) -> str:
         if not args.redis_container:
             sys.exit('登录要验证码，请加 --redis-container fba_redis（从 Redis 读答案），或直接给 --token')
         body['uuid'] = cap['uuid']
-        body['captcha'] = captcha_answer_from_redis(args.redis_container, args.captcha_prefix, cap['uuid'], args.redis_db)
+        body['captcha'] = captcha_answer_from_redis(
+            args.redis_container, args.captcha_prefix, cap['uuid'], args.redis_db
+        )
     resp = await client.post('/auth/login', json=body)
     payload = resp.json()
     if resp.status_code != 200 or payload.get('code') != 200:
@@ -132,7 +135,7 @@ async def worker(
     think: float,
 ) -> None:
     while time.perf_counter() < deadline:
-        name, path = random.choices(population, weights=weights, k=1)[0]  # noqa: S311
+        name, path = random.choices(population, weights=weights, k=1)[0]
         st = stats[name]
         t0 = time.perf_counter()
         try:
@@ -178,9 +181,7 @@ async def run_stage(
     stats: dict[str, Stat] = defaultdict(Stat)
     population = [(n, p) for n, p, _ in endpoints]
     weights = [w for _, _, w in endpoints]
-    async with httpx.AsyncClient(
-        base_url=base_url, headers=headers, limits=limits, timeout=timeout
-    ) as client:
+    async with httpx.AsyncClient(base_url=base_url, headers=headers, limits=limits, timeout=timeout) as client:
         t0 = time.perf_counter()
         deadline = t0 + duration
         await asyncio.gather(*(worker(client, deadline, population, weights, stats, think) for _ in range(concurrency)))
@@ -245,7 +246,9 @@ def print_report(title: str, rows: dict) -> None:
         )
     t = rows['__total__']
     if t['status'].get('429'):
-        print('\n⚠️ 出现 429：测到的是限流器，不是服务能力。降低并发，或在测试环境把 REQUEST_LIMITER_ENABLED 关掉（prod 不允许）。')
+        print(
+            '\n⚠️ 出现 429：测到的是限流器，不是服务能力。降低并发，或在测试环境把 REQUEST_LIMITER_ENABLED 关掉（prod 不允许）。'
+        )
     if t['status'].get('401'):
         print('\n⚠️ 出现 401：token 过期或被踢（同账号会话数有上限）。缩短 -d，或换一个专用压测账号。')
     if t['requests'] and t['fail'] / t['requests'] > 0.01:
@@ -254,15 +257,25 @@ def print_report(title: str, rows: dict) -> None:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
-    p.add_argument('--base-url', default=os.environ.get('LT_BASE_URL', 'http://127.0.0.1:8088/api/v1'),
-                   help='接口前缀，直连 uvicorn 是 :8088/api/v1，经 web 的 nginx 是 :8080/api/v1')
+    p.add_argument(
+        '--base-url',
+        default=os.environ.get('LT_BASE_URL', 'http://127.0.0.1:8088/api/v1'),
+        help='接口前缀，直连 uvicorn 是 :8088/api/v1，经 web 的 nginx 是 :8080/api/v1',
+    )
     p.add_argument('--username', default=os.environ.get('LT_USER', 'admin'))
     p.add_argument('--password', default=os.environ.get('LT_PASSWORD', '123456'))
     p.add_argument('--token', default=os.environ.get('LT_TOKEN'), help='已有的 access_token，给了就不登录')
-    p.add_argument('--redis-container', default=os.environ.get('LT_REDIS_CONTAINER'),
-                   help='验证码开着时，从这个容器的 Redis 读答案（本地一般是 fba_redis）')
-    p.add_argument('--redis-db', type=int, default=int(os.environ.get('LT_REDIS_DB', '0')),
-                   help='后端用的 REDIS_DATABASE 库号，读验证码答案时要对上，默认 0')
+    p.add_argument(
+        '--redis-container',
+        default=os.environ.get('LT_REDIS_CONTAINER'),
+        help='验证码开着时，从这个容器的 Redis 读答案（本地一般是 fba_redis）',
+    )
+    p.add_argument(
+        '--redis-db',
+        type=int,
+        default=int(os.environ.get('LT_REDIS_DB', '0')),
+        help='后端用的 REDIS_DATABASE 库号，读验证码答案时要对上，默认 0',
+    )
     p.add_argument('--captcha-prefix', default='fba:login:captcha')
     p.add_argument('-c', '--concurrency', type=int, default=20, help='并发数（每个并发是一个循环，发完一个再发下一个）')
     p.add_argument('-d', '--duration', type=float, default=30, help='每一档跑多少秒')
@@ -271,6 +284,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument('--think', type=float, default=0, help='每次请求后停几秒，模拟真人；默认 0 = 满速')
     p.add_argument('--timeout', type=float, default=10, help='单个请求的超时秒数')
     p.add_argument('--only', help='只压这几个接口，逗号分隔的名字，如 user.list,menu.sidebar')
+    p.add_argument('--path', help='只压这一个路径（相对 --base-url），给了就忽略内置接口清单和 --only')
     p.add_argument('--json', dest='json_out', help='把结果另存为 JSON')
     p.add_argument('--allow-remote', action='store_true', help='允许压非本机地址（先确认那是你的测试环境）')
     # pnpm 11 会把 `--` 原样传进来（`pnpm loadtest -- -c 5`），argparse 不认，这里吞掉
@@ -285,7 +299,9 @@ async def main() -> None:
         sys.exit(f'{host} 不是本机地址。确认这是测试环境后加 --allow-remote；生产环境不要压。')
 
     endpoints = ENDPOINTS
-    if args.only:
+    if args.path:
+        endpoints = [(args.path, args.path, 1)]
+    elif args.only:
         wanted = set(args.only.split(','))
         unknown = wanted - {n for n, _, _ in ENDPOINTS}
         if unknown:
@@ -297,7 +313,9 @@ async def main() -> None:
             token = args.token or await login(client, args)
         except httpx.HTTPError as e:
             sys.exit(f'连不上 {args.base_url}：{e!r}。后端起了吗（pnpm dev）？')
-    print(f'目标 {args.base_url} · 服务 {await identify(args.base_url, args.timeout)} · 接口 {len(endpoints)} 个 · token 已就绪')
+    print(
+        f'目标 {args.base_url} · 服务 {await identify(args.base_url, args.timeout)} · 接口 {len(endpoints)} 个 · token 已就绪'
+    )
 
     stages = [int(x) for x in args.stages.split(',')] if args.stages else [args.concurrency]
     results = {}
