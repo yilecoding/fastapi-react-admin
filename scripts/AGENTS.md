@@ -91,7 +91,11 @@ Intel Core Ultra 9 285H —— 大小核混合（6 个性能核 + 能效核）�
 | 本项目 `user.list`（`--only user.list`） | 107–113 | 64–70ms | 82–88ms |
 | 本项目 12 个接口混合 | 119 | 63–65ms | 91–93ms |
 
-8 档全部 0 失败、两边服务端日志 0 条 error。⚠️ 对照服务起在 8098 时撞上了别的项目（返回带 `trace_id` 的 404），
+8 档全部 0 失败、两边服务端日志 0 条 error。
+
+**服务器对照**（同一天，单 worker、并发 8、12 个接口混合、交替两轮）：uvicorn 113–129 rps、服务端每请求 CPU 8.2–9.4ms；
+Granian 2.8.1（`--loop uvloop`）113–115 rps、9.3–9.5ms。没有提升 —— 瓶颈在应用代码。
+⚠️ 在 `backend/` 目录下起 Granian，目标要写 `main:app`：它发现当前目录是个包，会自己在前面补 `backend.`，写 `backend.main:app` 会变成 `backend.backend.main`。⚠️ 对照服务起在 8098 时撞上了别的项目（返回带 `trace_id` 的 404），
 换 18098 才对 —— 压测开头那行「服务 xxx」就是防这个的，对照服务因此开着 `/openapi`、标题 `loadtest-baseline`。
 
 

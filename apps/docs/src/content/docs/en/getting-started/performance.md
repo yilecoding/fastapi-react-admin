@@ -37,7 +37,7 @@ Compared with the simplest endpoint that runs one query, this project's throughp
 
 - Verify the JWT signature and check in Redis that the session is still valid and not idle-expired
 - Check the permission code for the endpoint, and add the data-scope row filter to the query
-- Ping the database connection before using it; the user list also fetches each user's roles
+- Ping the database connection before using it (on by default when these numbers were taken; off by default now); the user list also fetches each user's roles
 - Redact the request parameters and response, and write them to the operation log (in background batches)
 
 That is the price of security and auditing. What it buys: requests without permission don't get in, data you shouldn't see isn't returned, and every request can be traced afterwards.
@@ -51,6 +51,7 @@ That is the price of security and auditing. What it buys: requests without permi
 - **Endpoints**: user list, role list, department tree, menu tree, sidebar, current user, permission codes, dictionaries, system config, unread notification count, notification list and file statistics, weighted by how often they're used — all GET.
 - **Data**: the seed data from `fba init` (10 users, 162 menus).
 - **Dependencies**: PostgreSQL 16 and Redis 7 in Docker on the same machine.
+- **Connection ping**: on during the test (the default at the time). It's off by default now, saving 3 database round trips per request, so real numbers come out slightly better than the table.
 - **Machine**: an Intel Core Ultra 9 285H laptop under WSL2, with the load generator and the server on the same machine.
 
 The raw record is in [`scripts/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/AGENTS.md), in the section on where the numbers of the docs' performance page come from.
@@ -80,14 +81,18 @@ Your usage will differ, and so will the result. The reliable way is to test once
 
 ## Where does the time go, and what can I tune?
 
-A request uses about 7–8 ms of CPU, spread across authentication, routing, dependency injection, the database query and serialization; no single part dominates. This release already rewrote three middlewares as plain ASGI, cutting CPU per request by 8.5%.
+A request uses about 7–8 ms of CPU, spread across authentication, routing, dependency injection, the database query and serialization; no single part dominates. This release makes two optimizations:
 
-Two more measured costs stay on by default, because they buy stability and auditability. The method and raw numbers are in the [`middleware` notes](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/middleware/AGENTS.md):
+- **Three middlewares rewritten as plain ASGI**: 8.5% less CPU per request, same behavior.
+- **No ping before handing out a connection** (`DATABASE_POOL_PRE_PING` now defaults to `false`): 3 fewer database round trips per checkout, about 3% less CPU. The cost was measured: right after a database restart, 1 of 8 concurrent requests failed, then the pool rebuilt itself and everything recovered. If your database restarts or fails over often, or a firewall in between drops idle connections, set it to `true` in `.env`.
 
-| Item | Saving if turned off | Why it's on by default |
+One more measured cost **stays on by default**, because it buys auditability. The method and raw numbers are in the [`middleware` notes](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/middleware/AGENTS.md):
+
+| Item | Saving if removed | Why it stays |
 |---|---|---|
-| Ping before handing out a connection (`DATABASE_POOL_PRE_PING`) | About 2.6% CPU (about 0.2 ms per request); 3 fewer database round trips each time a connection is checked out | After a database restart or failover, no request gets a dead connection. Can be turned off in `.env` |
 | Operation log for every request, GET included | About 13% CPU (about 1 ms per request, including the background batch writes) | "Who looked at what, and when" is part of the audit trail. Logs are redacted inside the request, then written in batches in the background. There is currently no switch to turn it off |
+
+**Checked and not worth doing**: swapping uvicorn for Granian (a Rust server) didn't change throughput — the bottleneck is the application code, not the HTTP server; `uvloop`, `httptools` and `msgspec` serialization are already in use.
 
 ## How do I test it myself?
 
