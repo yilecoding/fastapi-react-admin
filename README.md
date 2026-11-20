@@ -87,7 +87,7 @@ AI changes code fast, so every change needs something to catch it:
 - **Large files, handled** — local disk or S3-compatible storage, instant upload by hash, parallel chunks, resume after a page refresh, and one upload tray for everything in flight
 - **Pick your database** — PostgreSQL, SQL Server or MySQL, same code
 - **Beyond the browser** — an Electron desktop app (installers for three platforms with auto-update) and a native mobile app
-- **Secure by default, performance measured** — brute-force-resistant sign-in, permission checks on every endpoint in the backend, tamper-evident audit records, weak production secrets refused at start-up;
+- **Secure by default, performance measured** — brute-force-resistant sign-in, permission and data-scope checks in the backend, tamper-evident audit records, weak production secrets refused at start-up;
   about 190 req/s at a p95 of about 70 ms on the default 2 workers, with the test conditions and script published (see [Security and performance](#security-and-performance))
 - **Tested for real** — 1,600+ tests against real databases and a real browser; CI runs the full backend suite on both PostgreSQL and SQL Server
 
@@ -172,12 +172,12 @@ The [E2E report](https://yile2020.github.io/fastapi-react-admin/e2e/) from every
 
 **Security** is on by default, and most of it needs no setup:
 
-- Sign-in: image captcha, account and IP lockout, rate limiting, TOTP two-factor; error messages don't reveal whether an account exists
-- Permissions: every endpoint checks its permission code and data scope **in the backend** (hiding a button is only cosmetic); a test cross-checks the three lists of permission codes
-- Audit: sign-in log, operation log (sensitive fields redacted before storage), field-level data change records (an HMAC signature chain, so changing, deleting or inserting a row is detected), kept 180 days by default
-- Deployment: with `ENVIRONMENT=prod` the backend **refuses to start** on weak secrets, a disabled captcha or rate limiter, or a database superuser account
+- Sign-in: image captcha, account and IP lockout, rate limiting, TOTP two-factor
+- Permissions: endpoints that need a permission check it and the data scope **in the backend** (hiding a button is only cosmetic); a test cross-checks permission codes between frontend, backend and menu data
+- Audit: sign-in log, operation log (sensitive fields redacted before storage), field-level data change records (an HMAC signature chain once the signing key is set, so changing, deleting or inserting a row is detected), kept 180 days by default
+- Deployment: with `ENVIRONMENT=prod` the backend **refuses to start** on weak secrets, a captcha or rate limiter disabled in `.env`, or a database superuser account
 
-Item-by-item details and the tests behind them: [Security overview](https://yile2020.github.io/fastapi-react-admin/en/getting-started/security/).
+Item-by-item details, the tests behind them and known gaps: [Security overview](https://yile2020.github.io/fastapi-react-admin/en/getting-started/security/).
 
 **Performance**: every request takes the full path (auth · session · permissions · data scope · query · operation log). Measured with an ordinary user on a mix of 12 everyday read endpoints:
 

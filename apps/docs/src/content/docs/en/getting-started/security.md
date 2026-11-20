@@ -10,8 +10,8 @@ Everything here comes from the code and its automated tests. **It is not a third
 ## What does sign-in protect against?
 
 - **Image captcha** on by default.
-- **Lockout**: 5 failures in a row on one account lock it for 5 minutes; 30 failures from one IP, across accounts, lock that IP for 15 minutes.
-- **No hint whether an account exists or is locked**: an unknown user and a wrong password get the same message, and the timing is evened out. Otherwise an unknown user takes about 5 ms and a password check about 190 ms, and the difference shows at a glance.
+- **Lockout**: 5 failures on one account within 5 minutes lock it for 5 minutes; 30 failures from one IP across accounts within 15 minutes block that IP for the rest of those 15 minutes.
+- **Same message and timing for "unknown user" and "wrong password"**: both get the same message, and the timing is evened out. Otherwise an unknown user takes about 5 ms and a password check about 190 ms, and the difference shows at a glance.
 - **Rate-limited sign-in**: 5 per minute per IP and endpoint; the captcha endpoint 5 per 30 seconds.
 - **Two-factor sign-in**: TOTP codes plus recovery codes, and you can require it for superusers or for everyone.
 - **Password policy**: length, complexity, no reuse of the last N passwords, expiry. Changing a password, or having it reset by an admin, ends every session of that account.
@@ -23,24 +23,24 @@ See [Sign-in and security](/en/features/login-security/) and [Security configura
 - **Every sign-in has a server-side session**, with an idle timeout, a maximum lifetime and a device limit per client type. The web client, for example, signs out after 120 idle minutes by default and lasts at most 7 days.
 - **Idle means the person isn't doing anything**: background polling doesn't count as activity, so a session still expires when someone walks away.
 - **Superusers can force any session out.** On their next request the user lands on the sign-in page and sees why.
-- **Access tokens expire after 30 minutes**; the refresh token is swapped for a new one on every use. If an old one shows up again more than 30 seconds later, the credentials may have been stolen and the whole session ends at once.
+- **Access tokens expire after 30 minutes**; the refresh token is swapped for a new one on every use. If the previous one shows up again more than 30 seconds later, the credentials may have been stolen and the whole session ends at once.
 
 See [Session management](/en/features/login-sessions/).
 
 ## Where are "can do" and "can see" decided?
 
-- **Every endpoint checks its permission code in the backend.** Hiding a button in the frontend is only cosmetic; the real boundary is in the backend. Write operations also require the account to have back-office access. Disabling a directory disables the permissions of every button under it.
+- **Endpoints that need a permission check it in the backend.** Hiding a button in the frontend is only cosmetic; the real boundary is in the backend. Write operations on those endpoints also require back-office access. Disabling a directory disables the permissions of every button under it. Endpoints that only require sign-in, such as "current user", don't check a permission code.
 - **Data scopes filter rows in the query layer**: on the same user table, a department manager only gets the people in their own department. Endpoints don't have to add the filter by hand.
 - **Files you aren't allowed to read return 404**, not 403, so the response doesn't confirm that the ID exists.
-- **Permission codes are cross-checked automatically**: the codes declared by backend endpoints, used by frontend buttons and configured in the menu data are diffed against each other by a [test](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_permission_codes.py), and drift on any side fails it.
+- **Permission codes are cross-checked automatically**: every code a frontend button uses must be guarded by a backend endpoint, and every code the backend or frontend uses must exist in the menu data. If one is missing, a [test](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/app/admin/tests/security/test_permission_codes.py) fails.
 
 See [Users, roles, departments and menus](/en/features/rbac/) and [Data permissions](/en/features/data-permissions/).
 
 ## If something happens, can we find out what?
 
-- **Sign-in log**: every sign-in attempt, successful or not, plus account lockouts, IP lockouts and forced sign-outs, with IP, location, browser and device.
-- **Operation log**: every request under `/api/v1`, GET included. Passwords, tokens and keys are **redacted before truncation**, however deeply nested; content that can't be parsed is left out rather than stored as-is.
-- **Data change records**: which field changed, the old value and the new one, written in the same transaction as the business data. Every record is signed with HMAC-SHA256 and chained to the one before, so changing, deleting or inserting a row breaks verification.
+- **Sign-in log**: successful and failed sign-ins (except requests turned away by the rate limiter), plus account lockouts, IP lockouts and forced sign-outs, with IP, location, browser and device.
+- **Operation log**: every request under `/api/v1`, GET included. Passwords, tokens and keys are **redacted before truncation**, nested fields included. Request and response bodies declared as JSON that can't be parsed are left out rather than stored as-is; plain text has no fields to redact and is stored truncated.
+- **Data change records**: which field changed, the old value and the new one, written in the same transaction as the business data. Every record is signed and chained to the one before, so changing, deleting or inserting a row breaks verification. **It's a real HMAC-SHA256 signature only once `DATA_CHANGE_CHAIN_KEY` is set**; left empty, anyone can recompute the signatures, which only guards against accidental edits straight in the database.
 - **Kept for 180 days**, matching the six-month log retention in China's Cybersecurity Law; adjustable.
 
 See [Logs and audit](/en/features/audit-logs/).
@@ -51,14 +51,14 @@ See [Logs and audit](/en/features/audit-logs/).
 - **Read APIs don't return plain text**: config secrets only say whether they're set, and model keys are masked.
 - **Data change records note only that a sensitive field changed**, not its content.
 
-What you need to do: set the encryption keys before going live, see the [go-live checklist](/en/getting-started/deployment/#checklist-before-going-live).
+What you need to do: set the encryption keys, and `DATA_CHANGE_CHAIN_KEY` for the audit signatures, before going live; see the [go-live checklist](/en/getting-started/deployment/#checklist-before-going-live).
 
 ## What safety nets are there in production?
 
 With `ENVIRONMENT='prod'`, the backend checks all of the following before starting and [refuses to start](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) if any fails:
 
 - The length and randomness of the signing key and the database and Redis passwords. Replacing a placeholder with something weak like `123` doesn't pass.
-- The captcha and API rate limiting can't be turned off.
+- The captcha and API rate limiting can't be turned off in `.env`.
 - Demo mode must be off.
 - No database superuser (`sa`, `root`, `postgres`) as the connection account.
 - No `*` or local address among the allowed CORS origins.
@@ -66,7 +66,7 @@ With `ENVIRONMENT='prod'`, the backend checks all of the following before starti
 Also:
 
 - The deployment script `prod.sh` refuses to start while the config file still contains `CHANGE_ME` or is readable by other users.
-- **Forwarding headers (`X-Forwarded-For` and the like) aren't trusted by default**, only after you set `TRUSTED_PROXIES`. Otherwise a client could get past rate limits and fake the IP in the logs just by changing a header.
+- **Forwarding headers (`X-Forwarded-For` and the like) are only trusted from known proxies**: the app's `TRUSTED_PROXIES` is empty by default, trusting no one, and uvicorn in the production image only trusts the container network. Otherwise a client could get past rate limits and fake the IP in the logs just by changing a header.
 - HTTPS sites mark the sign-in cookie `Secure` (`COOKIE_SECURE`).
 
 See [Deploying to a server](/en/getting-started/deployment/).
@@ -93,6 +93,7 @@ See [Files and storage](/en/features/file-storage/).
 - No self-service password reset; ask an admin.
 - Sessions rely on a single Redis instance and haven't been tested on Redis Cluster.
 - Someone who has both the database **and** the signing key can get past the data-change signature chain.
+- **The captcha can be turned off under System config**: the production start-up check only reads `.env`, so an admin switching the captcha off at runtime isn't stopped.
 - This page is not a third-party security audit or certification.
 
 ## How do I report a vulnerability?

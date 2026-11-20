@@ -3,7 +3,7 @@ title: Performance and capacity
 description: Measured — with the production image's default 2 workers, about 190 requests per second at a p95 of about 70 ms on read endpoints that run full auth, permission and audit checks, with zero failures at 64 concurrent requests. How that maps to users, how to scale, and how to measure it yourself.
 ---
 
-The production image starts 2 API workers by default. On a mix of 12 everyday read endpoints they handled about **190 requests per second**, with 95% of requests answered within **70 ms**. With 64 requests in flight at once **none failed**; they just queued longer. Each extra worker adds roughly 110 requests per second, so you scale by CPU cores.
+The production image starts 2 API workers by default. On a mix of 12 everyday read endpoints they handled about **190 requests per second**, with 95% of requests answered within **70 ms**. With 64 requests in flight at once **none failed**; they just queued longer. One worker that saturates a CPU core does about 110 requests per second, and you scale by adding workers and cores.
 
 These numbers come from a laptop, not a production server benchmark. Below are the test conditions, how to turn requests per second into a number of users, and how to rerun the test on your own hardware.
 
@@ -18,14 +18,14 @@ Every request takes the full path; nothing was switched off for the test: JWT ve
 
 Each configuration ran twice; the table shows the range. Across all 20 steps of the four runs the **failure rate was 0** and the server log had no errors.
 
-"Concurrent" means requests in flight at the same time, not users online. Once concurrency goes past what the workers can process, the extra requests wait in line: throughput stops rising and latency grows, but requests don't fail.
+"Concurrent" means requests in flight at the same time, not users online. Once concurrency goes past what the workers can process, the extra requests wait in line: throughput stops rising and latency grows. Up to 64 concurrent requests nothing failed in the test; beyond that, requests start failing once queueing exceeds the client's or the connection pool's wait limit.
 
 ## Under what conditions?
 
 - **Code**: the backend on `main`, `uvicorn --workers N` without `--reload` — the same way [`Dockerfile.prod`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/Dockerfile.prod) starts it (default `--workers 2`), without nginx in front.
 - **Account**: an **ordinary user** (the department manager role, granted every menu, with a department data scope). A superuser skips the permission checks, so testing with one makes the numbers look better than they are.
 - **Endpoints**: user list, role list, department tree, menu tree, sidebar, current user, permission codes, dictionaries, system config, unread notification count, notification list and file statistics, weighted by how often they're used — all GET.
-- **Data**: the seed data from `fba init` (10 users, 157 menus).
+- **Data**: the seed data from `fba init` (10 users, 162 menus).
 - **Dependencies**: PostgreSQL 16 and Redis 7 in Docker on the same machine.
 - **Machine**: an Intel Core Ultra 9 285H laptop under WSL2, with the load generator and the server on the same machine.
 
@@ -52,27 +52,28 @@ Your usage will differ, and so will the result. The reliable way is to test once
 
 **Count database connections before adding workers.** Each process holds up to `DATABASE_POOL_SIZE + DATABASE_POOL_MAX_OVERFLOW` connections (10 + 20 by default). API workers plus Celery worker processes, multiplied by that, must stay below the database's `max_connections`. On a PostgreSQL limited to 100 connections, 8 workers hit `too many clients` at peak load and requests failed. The deployment check is in the [go-live checklist](/en/getting-started/deployment/#checklist-before-going-live).
 
-**Overload doesn't cascade.** Requests queue and latency grows, but nothing errors. At 64 concurrent requests the 2 workers had a p95 of about 0.9 s and zero failures.
+**Overload queues before it errors.** Up to 64 concurrent requests, the 2 workers had a p95 of about 0.9 s and zero failures. That only shows a smooth slowdown within the tested range; queueing isn't unlimited.
 
 ## Where does the time go, and what can I tune?
 
 A request uses about 7–8 ms of CPU, spread across authentication, routing, dependency injection, the database query and serialization; no single part dominates. This release already rewrote three middlewares as plain ASGI, cutting CPU per request by 8.5%.
 
-Two more measured costs stay on by default, because they buy stability and auditability:
+Two more measured costs stay on by default, because they buy stability and auditability. The method and raw numbers are in the [`middleware` notes](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/middleware/AGENTS.md):
 
 | Item | Saving if turned off | Why it's on by default |
 |---|---|---|
-| Ping before handing out a connection (`DATABASE_POOL_PRE_PING`) | About 2% CPU, 3 fewer database round trips per request | After a database restart or failover, no request gets a dead connection. Can be turned off in `.env` |
-| Operation log for every request, GET included | About 12% CPU | "Who looked at what, and when" is part of the audit trail. Logs are redacted inside the request, then written in batches in the background. There is currently no switch to turn it off |
+| Ping before handing out a connection (`DATABASE_POOL_PRE_PING`) | About 2.6% CPU (about 0.2 ms per request); 3 fewer database round trips each time a connection is checked out | After a database restart or failover, no request gets a dead connection. Can be turned off in `.env` |
+| Operation log for every request, GET included | About 13% CPU (about 1 ms per request, including the background batch writes) | "Who looked at what, and when" is part of the audit trail. Logs are redacted inside the request, then written in batches in the background. There is currently no switch to turn it off |
 
 ## How do I test it myself?
 
 The repository ships a load-test script that only uses the backend's own dependencies:
 
 ```bash
-pnpm loadtest --base-url http://127.0.0.1:8000/api/v1 --username some-ordinary-user --stages 1,8,16,32,64 -d 20
+pnpm loadtest --base-url http://127.0.0.1:8088/api/v1 --username <ordinary-user> --password <password> --stages 1,8,16,32,64 -d 20
 ```
 
+- The default target is port 8088 from `pnpm dev`. To test the production setup, start `uvicorn --workers N` without `--reload` and point `--base-url` at it.
 - It only sends GET requests and writes no business data (apart from the sign-in and operation logs). A non-local target needs `--allow-remote`. **Don't load-test production.**
 - The first line prints the name and version the server reports. Check it says `fastapi-react-admin`: local ports are often taken by other projects.
 - Use an **ordinary user** with full permissions. A superuser takes a different code path.
