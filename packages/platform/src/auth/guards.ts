@@ -2,9 +2,8 @@ import { redirect } from '@tanstack/react-router'
 import type { QueryClient } from '@tanstack/react-query'
 import { t } from '@admin/i18n'
 
-import { restoreSession } from '../api-client/client'
 import { codesQuery, meQuery } from './queries'
-import { isAuthenticated } from './session'
+import { isAuthenticated, restoreSessionForRoute } from './session'
 
 /**
  * 路由级守卫。
@@ -28,7 +27,7 @@ export type GuardContext = { queryClient: QueryClient }
  */
 export async function requireAuth({ context, location }: { context: GuardContext; location: { href: string } }) {
   if (!isAuthenticated()) {
-    const outcome = await restoreSession()
+    const outcome = await restoreSessionForRoute()
     if (outcome.kind === 'transient') throw outcome.error
     if (outcome.kind === 'ended') {
       throw redirect({

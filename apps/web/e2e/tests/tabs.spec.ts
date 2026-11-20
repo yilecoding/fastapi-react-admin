@@ -22,6 +22,41 @@ import { uniqueCode } from "../utils/ids"
  * 上一次真正生效的值再比对）。这条测试就是那次修复的回归。
  */
 test.describe("多页签保活", () => {
+  test("拖到插入线的位置，页签落在目标的前侧或后侧", async ({ authedPage: page }) => {
+    await page.goto("/dashboard")
+    await expect(page.getByTestId("user-menu")).toBeVisible()
+    await page.goto("/system/dept")
+    await expect(page.getByTestId("tab-/_auth/system/dept")).toBeVisible()
+    await page.goto("/system/role")
+    await expect(page.getByTestId("tab-/_auth/system/role")).toBeVisible()
+    await page.goto("/system/user")
+    await expect(page.getByTestId("tab-/_auth/system/user")).toBeVisible()
+    const tabs = page.locator("[data-testid='tab-bar'] [role='tab']")
+
+    // 部门管理拖到用户管理前侧：[部门, 角色, 用户] → [角色, 部门, 用户]
+    await page.getByTestId("tab-/_auth/system/dept").dragTo(page.getByTestId("tab-/_auth/system/user"), {
+      targetPosition: { x: 2, y: 12 },
+    })
+    await expect(tabs).toHaveCount(4)
+    await expect.poll(() => tabs.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-testid")))).toEqual([
+      "tab-/_auth/dashboard",
+      "tab-/_auth/system/role",
+      "tab-/_auth/system/dept",
+      "tab-/_auth/system/user",
+    ])
+
+    // 用户管理拖到角色管理后侧：[角色, 部门, 用户] → [角色, 用户, 部门]
+    await page.getByTestId("tab-/_auth/system/user").dragTo(page.getByTestId("tab-/_auth/system/role"), {
+      targetPosition: { x: 100, y: 12 },
+    })
+    await expect.poll(() => tabs.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-testid")))).toEqual([
+      "tab-/_auth/dashboard",
+      "tab-/_auth/system/role",
+      "tab-/_auth/system/user",
+      "tab-/_auth/system/dept",
+    ])
+  })
+
   test("切走再切回来，手动折叠的节点状态还在", async ({ authedPage: page, api }) => {
     const code = uniqueCode("E2ETAB")
     const parentName = `E2E保活父${code}`

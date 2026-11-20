@@ -77,6 +77,39 @@ test.describe("登录会话", () => {
     await expect(page).toHaveURL(/\/sign-in/)
   })
 
+  test("登出后另一个标签页重新登录，本页静默恢复后仍能接收会话结束推送", async ({ authedPage: page }) => {
+    await page.goto("/dashboard")
+    await expect(page.getByTestId("user-menu")).toBeVisible()
+
+    // 浏览器上下文共享 refresh cookie，但每个页面的模块状态独立。
+    const other = await page.context().newPage()
+    await other.goto("/sign-in")
+    await expect(other.getByTestId("username")).toBeVisible()
+
+    await page.getByTestId("user-menu").click()
+    await page.getByTestId("logout").click()
+    await expect(page).toHaveURL(/\/sign-in/)
+
+    await other.getByTestId("username").fill("admin")
+    await other.getByTestId("password").fill("123456")
+    await other.getByTestId("submit").click()
+    await expect(other).toHaveURL(/\/dashboard/)
+    await expect(other.locator("html")).toHaveAttribute("data-presence", "on")
+
+    // 后退回原标签页的受保护页面，守卫在同一 JS 模块实例里静默恢复。
+    await page.goBack()
+    await expect(page).toHaveURL(/\/dashboard/)
+    await expect(page.getByTestId("user-menu")).toBeVisible()
+    await expect(page.locator("html")).toHaveAttribute("data-presence", "on")
+
+    // 另一页结束新会话；本页仍应接收 socket 推送。
+    await other.getByTestId("user-menu").click()
+    await other.getByTestId("logout").click()
+    await expect(page).toHaveURL(/\/sign-in/)
+    await expect(page.getByTestId("session-end-notice")).toContainText("其他标签页")
+    await other.close()
+  })
+
   test("刷新时后端暂时不可用：停在「连不上服务器」，不踢回登录页", async ({ authedPage: page }) => {
     // 页面加载时手里没有 token，第一件事就是刷新 —— 让它撞上 502
     await page.route(`${API_BASE}/api/v1/auth/refresh`, (route) => route.fulfill({ status: 502, body: "Bad Gateway" }))

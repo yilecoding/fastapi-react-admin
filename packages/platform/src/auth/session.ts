@@ -212,6 +212,18 @@ export async function logout(qc: QueryClient): Promise<boolean> {
 }
 
 /**
+ * 页面守卫静默恢复会话后，本页的登出流程已经结束。
+ *
+ * 同一个 JS 页面从登录页后退时不会重新加载模块；如果这里只复位 afterLogin，
+ * 本页后续会一直忽略 `session:ended`，实时连接恢复也会被当作本地登出而跳过。
+ */
+export async function restoreSessionForRoute() {
+  const outcome = await restoreSession()
+  if (outcome.kind === 'ok') endingLocally = false
+  return outcome
+}
+
+/**
  * 服务端推来「你的会话结束了」（socket 的 `session:ended`，#138）：被管理员踢、被新登录挤掉、
  * 同一个浏览器的另一个标签页登出了 ……
  *
@@ -224,7 +236,7 @@ export async function logout(qc: QueryClient): Promise<boolean> {
 export async function handleSessionEnded(reason: string | null): Promise<void> {
   if (endingLocally) return
   const before = tokenStore.getUserId()
-  const outcome = await restoreSession()
+  const outcome = await restoreSessionForRoute()
   if (outcome.kind === 'ok' && tokenStore.getUserId() === before) return
   endSession({ reason, message: null })
 }
