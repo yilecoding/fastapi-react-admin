@@ -18,7 +18,7 @@ pnpm deploy:test:down
 [AGENTS「镜像改名」](./AGENTS.md)），部署机只管拉。所有生产命令都走同一个脚本
 `deploy/prod.sh`，它先检查配置文件存在、权限不向组 / 其他用户开放、没有
 `CHANGE_ME` 残留，然后才调 `docker compose`。`up` 会先跑 Alembic 迁移，
-成功了才启动 api / worker / beat / web。首次部署前先备份外部数据库。
+成功了才启动 api / worker / worker-long / beat / web。首次部署前先备份外部数据库。
 
 ### 两种拓扑，命令是同一套
 
@@ -138,7 +138,7 @@ pnpm deploy:prod
 
 | 地址 | 看什么 | 谁在用 |
 |---|---|---|
-| `https://<域名>/api/health/status` | api · 数据库 · Redis · 调度器（beat）· worker | **外部监控** |
+| `https://<域名>/api/health/status` | api · 数据库 · Redis · 调度器（beat）· worker · 长任务 worker | **外部监控** |
 | `https://<域名>/api/health/ready` | 只看数据库 + Redis | `prod.sh up` 部署后的探活（必须 200，否则判部署失败） |
 | 容器内 `:8000/health/ready` | 同上 | compose 里 api 的 healthcheck（web / beat 都等它） |
 | `/healthz` | 只证明 web 容器里的 nginx 活着 | web 镜像的 `HEALTHCHECK` |
@@ -152,13 +152,13 @@ pnpm deploy:prod
 全部正常（200）：
 
 ```json
-{"status":"ok","services":{"api":{"status":"ok"},"database":{"status":"ok"},"redis":{"status":"ok"},"scheduler":{"status":"ok","last_seen_seconds":12},"worker":{"status":"ok","last_seen_seconds":31}},"heartbeat_max_age_seconds":180}
+{"status":"ok","services":{"api":{"status":"ok"},"database":{"status":"ok"},"redis":{"status":"ok"},"scheduler":{"status":"ok","last_seen_seconds":12},"worker":{"status":"ok","last_seen_seconds":31},"worker_long":{"status":"ok","last_seen_seconds":14}},"heartbeat_max_age_seconds":180}
 ```
 
 worker 停了（503）：
 
 ```json
-{"status":"degraded","services":{"api":{"status":"ok"},"database":{"status":"ok"},"redis":{"status":"ok"},"scheduler":{"status":"ok","last_seen_seconds":8},"worker":{"status":"stale","last_seen_seconds":187}},"heartbeat_max_age_seconds":180}
+{"status":"degraded","services":{"api":{"status":"ok"},"database":{"status":"ok"},"redis":{"status":"ok"},"scheduler":{"status":"ok","last_seen_seconds":8},"worker":{"status":"stale","last_seen_seconds":187},"worker_long":{"status":"ok","last_seen_seconds":9}},"heartbeat_max_age_seconds":180}
 ```
 
 api 不在（发版换容器 / 进程停了），web 的 nginx 替它回（503，带 `X-FBA-Updating: 1` 头，**没有 `services`**）：
@@ -174,18 +174,21 @@ api 不在（发版换容器 / 进程停了），web 的 nginx 替它回（503�
 | `ok` | 正常 |
 | `error` | 连不上，附 `"error":"<异常类型名>"`（只给类型名，不给异常信息） |
 | `stale` | 心跳超过 `heartbeat_max_age_seconds`（180 秒）没更新，`last_seen_seconds` 是停了多久 |
-| `missing` | 从来没写过心跳 —— 多半是「后台任务心跳」那条调度被停用或删了 |
+| `missing` | 从来没写过心跳 —— worker 那项多半是「后台任务心跳」那条调度被停用或删了；worker_long 那项是**没起长任务 worker**（compose 里的 `worker-long`） |
 | `unknown` | 判断不了：调度器停了（worker 收不到心跳任务，看不出它停没停），或者心跳存储（Redis）读不到 |
 
 心跳的来路：调度器的心跳由 beat 的调度循环每 15～60 秒写一次；worker 的心跳靠「后台任务心跳」这条调度
 （`health.heartbeat`，每 60 秒一次）。🔴 **在「定时任务」页停用或删掉这条调度，worker 一项就会一直报异常。**
+长任务 worker（`worker_long`，#400）自己每 30 秒写一次，不靠调度器 —— 它在跑一个几分钟的导出时照样是 ok。
+🔴 **从 v1.1.3 及更早升级时要多起一个 `worker-long` 容器**（`bash prod.sh sync` 换上新 compose 就有）：
+导出、AI 预审、日志清理改走单独的队列，没有它这些任务**静默地永远不执行**，这一项会报 `missing`。
 
 ### 给监控方的判定方法
 
 - **用 HTTP 状态码判定：200 = 正常，其余都是异常**（503、超时、连不上）
 - 🔴 **不要只匹配关键字 `"status":"ok"`** —— 降级时正常的那几项里也有这个子串，会被误判成正常。
   要用关键字的话，匹配开头的 `{"status":"ok","services"`
-- 按服务分别告警：匹配 `"worker":{"status":"ok"`、`"scheduler":{"status":"ok"`、`"database":{"status":"ok"`、
+- 按服务分别告警：匹配 `"worker":{"status":"ok"`、`"worker_long":{"status":"ok"`、`"scheduler":{"status":"ok"`、`"database":{"status":"ok"`、
   `"redis":{"status":"ok"`，哪条匹配不上就是哪个服务坏了。字段顺序和紧凑格式是固定的
 - 频率与阈值：建议每分钟探一次、**连续 3 次失败才告警**，容得下一次发版。探针超时设 15 秒以上
   （每项检查各自有超时、并发执行，最慢 5 秒）

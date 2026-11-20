@@ -6,6 +6,10 @@
 // macOS 的内嵌 beat 会 fork，worker 已启动的线程会触发 Objective-C fork 安全检查而崩溃。
 // 这两个平台拆成两个进程，其他平台照旧 `-B`（仍共用一个日志窗格）。
 //
+// 🔴 worker 起两个（#400）：`celery_aio_pool` 一个进程一次只跑一个任务，长任务（导出 / AI 预审 / 日志清理）
+// 走 `long` 队列、由第二个 worker 消费，否则一次 AI 预审就把心跳和通知投递堵住。和生产的两个服务同一个拆法
+// （docker-compose.prod.yml 的 worker / worker-long）。`-n` 给两个不同的节点名，同一台机器上不然会撞名告警。
+//
 // PYTHONUTF8=1：系统代码页不是 UTF-8 的 Windows（如繁中 cp950）上，日志里的简体中文
 // 会被写成乱码；api 那边同样的问题会直接让启动崩掉（见 apps/api/package.json）。
 import { spawn } from "node:child_process"
@@ -22,8 +26,11 @@ const env = {
 }
 const celery = ["run", "--no-sync", "celery", "-A", "backend.app.task.celery"]
 
+const worker = ["worker", "-l", "info", "--pool=custom"]
+
 const procs = [
-  ["worker", [...celery, "worker", ...(separateBeat ? [] : ["-B"]), "-l", "info", "--pool=custom"]],
+  ["worker", [...celery, ...worker, "-Q", "celery", "-n", "default@%h", ...(separateBeat ? [] : ["-B"])]],
+  ["worker-long", [...celery, ...worker, "-Q", "long", "-n", "long@%h"]],
   ...(separateBeat ? [["beat", [...celery, "beat", "-l", "info"]]] : []),
 ].map(([name, args]) => {
   const child = spawn("uv", args, { cwd: apiDir, env, stdio: "inherit", shell: isWin })

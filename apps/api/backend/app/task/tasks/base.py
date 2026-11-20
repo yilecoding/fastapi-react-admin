@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import time
 
 from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
@@ -7,9 +8,9 @@ from typing import Any, TypeVar
 from celery import Task
 from sqlalchemy.exc import SQLAlchemyError
 
+from backend.app.task.utils.notify import notify_task_watchers
 from backend.common.data_change import data_change_source
 from backend.common.log import log
-from backend.common.socketio.actions import task_notification
 from backend.core.conf import settings
 
 _T = TypeVar('_T')
@@ -70,7 +71,9 @@ class TaskBase(Task):
     真要查「上次几点跑的、失败在哪一行」永远看 `task_result` 表和执行记录页。
     上游的 taskiq 插件只推不存，那是它的问题，别学。
 
-    ⚠️ 下面三条 `task_notification` 的文案不过 `tm()`，永远是中文，
+    ⚠️ 提示只推给能看执行记录的人（`app/task/utils/notify.py`，#400），不是全站广播。
+
+    ⚠️ 下面三条提示的文案不过 `tm()`，永远是中文，
     不受 `Accept-Language` 影响——这是范围内的决定，不是漏翻：
     socket.io 推送在业务代码里直接拼串发出去，没有走 HTTP 响应出口
     （`exception_handler.py` / `response_schema.py`），`i18n.current_language`
@@ -86,25 +89,63 @@ class TaskBase(Task):
     reject_on_worker_lost = True
 
     #: 开始 / 成功时要不要推送。高频任务（`health.heartbeat`，每分钟一次）在装饰器上传
-    #: `notify=False` 关掉 —— 推送经 Redis 广播给**所有**在线页面。失败照推
+    #: `notify=False` 关掉 —— 每推一次都要查一遍谁能看执行记录、按人推。失败照推（同一任务 60 秒内一次）
     notify: bool = True
 
     async def before_start(self, task_id: str, args, kwargs) -> None:  # ruff:ignore[missing-type-function-argument]
         if self.notify:
-            await task_notification(msg=f'任务 {self.name}（{task_id}）开始执行')
+            await notify_task_watchers(f'任务 {self.name}（{task_id}）开始执行')
 
     async def on_success(self, retval: Any, task_id: str, args, kwargs) -> None:  # ruff:ignore[missing-type-function-argument]
         if self.notify:
-            await task_notification(msg=f'任务 {self.name}（{task_id}）执行成功')
+            await notify_task_watchers(f'任务 {self.name}（{task_id}）执行成功')
 
     def on_failure(self, exc: Exception, task_id: str, args, kwargs, einfo) -> None:  # ruff:ignore[missing-type-function-argument]
-        # 🔴 这个钩子是**同步**的（celery 只把 before_start/on_success 交给 aio pool），
-        # 所以推送只能扔进事件循环。没有运行中的循环时不能让它把任务本身带崩 ——
-        # 失败已经写进 task_result 了，少一条 toast 不该变成第二次失败。
+        """失败提示（#400）：投进 AsyncIOPool 自己的循环，只推给看得到执行记录的人，不带异常原文
+
+        🔴 **这个钩子是同步的，而且不在事件循环里跑。** celery_aio_pool 的 tracer 只把 before_start / on_success
+        交给池的循环，失败走 celery 自己的 `handle_failure`，在 worker 主线程里同步调这里。原来的写法是
+        `asyncio.get_running_loop().create_task(...)` 外面包 `except RuntimeError: pass` —— 主线程上没有正在跑的循环，
+        **每一次**都抛 `RuntimeError: no running event loop`、每一次都被吞掉：
+        从第一个 Celery 提交起，失败提示一条都没推出去过，task 分册里那句「失败照推」也就一直是假的。
+        现在 `run_coroutine_threadsafe` 投进池的循环（和雪花节点初始化同一个，见 `celery.py: pool_loop`），不等它跑完。
+
+        🔴 **内容只到「失败了，去执行记录看」。** `autoretry_for=(SQLAlchemyError,)` 重试耗尽后 `str(exc)` 带完整 SQL、
+        绑定参数和数据库主机；原文在执行记录里（`task_result`，要 `task:result:list` 才看得到），推送不再复制一份。
+
+        同一个任务 `FAILURE_NOTIFY_INTERVAL_SECONDS` 秒内只推一次：每 15 秒一次的投递任务在库挂掉时会连续失败，
+        不收的话管理员每 15 秒弹一条一样的提示。日志照记每一次。
+        """
         log.error(f'任务 {self.name}（{task_id}）执行失败：{exc}')
-        try:
-            asyncio.get_running_loop().create_task(
-                task_notification(msg=f'任务 {self.name}（{task_id}）执行失败：{exc}')
-            )
-        except RuntimeError:
-            pass
+        if not self._failure_notify_due():
+            return
+        coro = notify_task_watchers(f'任务 {self.name}（{task_id}）执行失败，详情见执行记录')
+        from backend.app.task.celery import pool_loop
+
+        loop = pool_loop()
+        if loop is None:
+            # 不是 AsyncIOPool（eager 模式 / 测试里直接调）：没有能投的循环，只留上面那条日志
+            coro.close()
+            return
+        future = asyncio.run_coroutine_threadsafe(coro, loop)
+        future.add_done_callback(_log_notify_error)
+
+    def _failure_notify_due(self) -> bool:
+        now = time.monotonic()
+        last = _last_failure_notified.get(self.name)
+        if last is not None and now - last < FAILURE_NOTIFY_INTERVAL_SECONDS:
+            return False
+        _last_failure_notified[self.name] = now
+        return True
+
+
+#: 同一个任务两次失败提示之间至少隔多久（秒）
+FAILURE_NOTIFY_INTERVAL_SECONDS = 60
+
+# 任务名 → 上次推失败提示的时刻（monotonic）。每个 worker 进程一份，够用：要防的是同一个进程里高频任务连续失败刷屏
+_last_failure_notified: dict[str, float] = {}
+
+
+def _log_notify_error(future: 'asyncio.Future[None] | Any') -> None:
+    if not future.cancelled() and (e := future.exception()) is not None:
+        log.warning(f'任务失败提示推送失败：{e!r}')

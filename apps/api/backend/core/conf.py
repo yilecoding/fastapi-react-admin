@@ -599,6 +599,8 @@ class Settings(BaseSettings):
     # 阈值 = 3 个周期：漏一两拍（重启、发版换容器）不报警，连续三拍没有才判死
     SCHEDULER_HEARTBEAT_REDIS_KEY: str = 'fba:health:scheduler_heartbeat'
     WORKER_HEARTBEAT_REDIS_KEY: str = 'fba:health:worker_heartbeat'
+    #   worker_long —— 消费长任务队列的 worker 自己每 30 秒写（`app/task/celery.py: start_long_queue_heartbeat`，#400）
+    LONG_WORKER_HEARTBEAT_REDIS_KEY: str = 'fba:health:worker_long_heartbeat'
     HEARTBEAT_MAX_AGE_SECONDS: int = 180
 
     ##################################################

@@ -340,7 +340,7 @@ def test_services_reports_each_service_and_sessions_by_client(
     res = client.get('/sys/dashboard/services', headers=token_headers)
     assert res.status_code == 200, res.text
     data = res.json()['data']
-    assert set(data['services']) == {'api', 'database', 'redis', 'scheduler', 'worker'}
+    assert set(data['services']) == {'api', 'database', 'redis', 'scheduler', 'worker', 'worker_long'}
     assert data['services']['database']['status'] == 'ok'
     assert data['services']['redis']['status'] == 'ok'
     sessions = data['sessions']

@@ -9,7 +9,7 @@ sidebar:
 
 ## 生产环境跑了哪些服务
 
-`docker-compose.prod.yml` 启动 API、Celery worker、单独的 Celery beat（调度器）和 web 容器（nginx 托管前端产物并反代 API）。数据库和 Redis 用你自己的，在 `.env.server` 里指过去。
+`docker-compose.prod.yml` 启动 API、两个 Celery worker（`worker` 跑心跳、通知投递这类短任务，`worker-long` 跑导出、AI 预审、日志清理这类长任务）、单独的 Celery beat（调度器）和 web 容器（nginx 托管前端产物并反代 API）。数据库和 Redis 用你自己的，在 `.env.server` 里指过去。
 
 :::caution
 开发环境的 worker 内嵌了 beat（`celery worker -B`）。生产不能这么跑：多副本时每个副本都会起一个 beat，同一条定时任务会被触发 N 次。生产只跑一个 beat 容器。
@@ -80,11 +80,15 @@ TAG=sha-abc1234 bash prod.sh up
 
 ## 外部监控探哪个地址
 
-只探一个：`https://<你的域名>/api/health/status`。它列出 API、数据库、Redis、调度器（beat）和 worker 的状态，全部正常返回 **200**，任何一项异常返回 **503**。
+只探一个：`https://<你的域名>/api/health/status`。它列出 API、数据库、Redis、调度器（beat）、worker 和长任务 worker（`worker_long`）的状态，全部正常返回 **200**，任何一项异常返回 **503**。
 
 ```json
-{"status":"ok","services":{"api":{"status":"ok"},"database":{"status":"ok"},"redis":{"status":"ok"},"scheduler":{"status":"ok","last_seen_seconds":12},"worker":{"status":"ok","last_seen_seconds":31}},"heartbeat_max_age_seconds":180}
+{"status":"ok","services":{"api":{"status":"ok"},"database":{"status":"ok"},"redis":{"status":"ok"},"scheduler":{"status":"ok","last_seen_seconds":12},"worker":{"status":"ok","last_seen_seconds":31},"worker_long":{"status":"ok","last_seen_seconds":14}},"heartbeat_max_age_seconds":180}
 ```
+
+:::caution
+从 v1.1.3 及更早升级时要多起一个 `worker-long` 容器（`bash prod.sh sync` 换上新的 compose 就有）。没有它，导出、AI 预审、日志清理会一直排在队列里不执行，`worker_long` 那一项报 `missing`。
+:::
 
 :::caution
 不要拿 `/healthz` 做外部监控。它是 nginx 自己返回的 `200`，API 和数据库全挂了照样是绿的。同理，经域名访问一个不存在的路径会落到前端的 history fallback，返回 `200` 加 `index.html`——判断时要看响应内容，不能只看状态码。

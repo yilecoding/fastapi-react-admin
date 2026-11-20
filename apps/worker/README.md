@@ -14,12 +14,17 @@ Windows 不支持 `-B`；macOS 在 worker 启动线程后 fork 内嵌 beat 会�
 Objective-C fork 安全检查而崩溃，所以这两个平台分别启动 worker 和 beat。
 三种平台都共用一个日志窗格，Ctrl-C 一次全停；beat 从 `task_scheduler` 表读取调度。
 
+worker 起**两个**（#400）：`default@…` 消费默认队列（心跳、通知投递、审批超时），`long@…` 消费 `long` 队列
+（导出、AI 预审、日志清理）。`celery_aio_pool` 一个进程一次只跑一个任务，挤在一起时一次 AI 预审就把心跳堵住。
+为什么这么拆见 [`app/task` 分册](../api/backend/app/task/AGENTS.md) 文末。
+
 🔴 **生产不要用 `-B`。** 多副本部署时每个副本都会跑一个 beat，
 同一条调度会被触发 N 次。生产要 worker 和 beat 分开部署，且 beat **只起一个**：
 
 ```bash
-pnpm --filter api celery:worker     # 可以多副本
-pnpm --filter api celery:beat       # 只能一个
+pnpm --filter api celery:worker        # 默认队列，可以多副本
+pnpm --filter api celery:worker:long   # 长任务队列，可以多副本，不能省
+pnpm --filter api celery:beat          # 只能一个
 ```
 
 ## 不想让它跟着起
