@@ -88,11 +88,11 @@ def create_database_async_engine(url: str | URL) -> AsyncEngine:
             echo_pool=settings.DATABASE_POOL_ECHO,
             future=True,
             # 中等并发
-            pool_size=10,  # 低：- 高：+
-            max_overflow=20,  # 低：- 高：+
+            pool_size=settings.DATABASE_POOL_SIZE,
+            max_overflow=settings.DATABASE_POOL_MAX_OVERFLOW,
             pool_timeout=30,  # 低：+ 高：-
             pool_recycle=3600,  # 低：+ 高：-
-            pool_pre_ping=True,  # 低：False 高：True
+            pool_pre_ping=settings.DATABASE_POOL_PRE_PING,
             pool_use_lifo=False,  # 低：False 高：True
         )
     except Exception as e:

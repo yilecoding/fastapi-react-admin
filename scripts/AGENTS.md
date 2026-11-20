@@ -11,7 +11,93 @@ gen-ui-registry.mjs  `pnpm ui:registry` —— 从源码 import 生成 packages/
 gen-brand-icons.mjs  `pnpm brand:icons` —— 从一份图形生成 favicon / 桌面 / 移动端图标
 deploy-prod.mjs      `pnpm deploy:prod:*` —— 生产部署编排
 check-main-head.mjs  发布前查询远端 main，阻止旧提交覆盖 latest / Pages
+loadtest.py          `pnpm loadtest` —— 对只读接口按并发压一段时间，报分位延迟
 ```
+
+## `pnpm loadtest`：压测只打只读接口，登录只做一次
+
+```bash
+pnpm loadtest                                  # 本机 :8088，并发 20，30 秒
+pnpm loadtest --stages 10,25,50,100 -d 20      # 阶梯加压，找拐点
+```
+
+只用后端自带的 httpx，经 `uv run --project apps/api` 跑，不装新依赖。三条设计是**硬约束**：
+
+- 🔴 **登录只做一次，之后复用 token。** `/auth/login` 是 5 次/分钟（按 IP + 路径），
+  每个虚拟用户各登一次，第 6 个起就是 429，压的就成了限流器。验证码开着时用
+  `--redis-container fba_redis --redis-db <后端的 REDIS_DATABASE>` 从 Redis 读答案，或直接 `--token`。
+- 🔴 **成败看信封，不只看 HTTP 状态**：业务失败有时是 HTTP 200 + body `code != 200`
+  （见 [`api` 分册](../packages/api/AGENTS.md)），只看状态码会把失败算成成功。
+- 🔴 **只打 GET，非本机地址必须 `--allow-remote`。** 压测不该造数据，更不该误伤别人的环境；生产不要压。
+
+⚠️ 429 单独报：出现了说明测到的是限流器，不是服务能力。`REQUEST_LIMITER_ENABLED` 在 prod 不允许关，
+所以要在测试环境关了再测。延迟是客户端侧测的，单进程 asyncio 在并发很高时压测机自己会先到顶。
+pnpm 11 会把命令行里的 `--`（如 `pnpm loadtest -- -c 5`）原样传给脚本，脚本里吞掉了开头那个。
+
+🔴 **压之前先看开头那行「服务 xxx 版本」。** 本机 8088 常被别的项目的后端占着，
+这个脚本的第一轮试跑就打到了另一个项目（标题 `fba`、版本 1.15.1），**一切正常、零报错、数字全是别人的**。
+本仓库的后端自报 `fastapi-react-admin`；不一致就换 `--base-url`。
+
+🔴 **压多 worker 前，先算 worker 数 × 30 有没有超过数据库的 `max_connections`。**
+`database/db.py` 的连接池写死 `pool_size=10 + max_overflow=20`，每个 worker 最多占 30 个连接。
+实测（本机共享 Postgres，`max_connections=100`）：8 个 worker 时服务端日志出现
+`TooManyConnectionsError('sorry, too many clients already')`，并有请求失败；
+换成连接数 600 的私有 Postgres 后同样的 8 个 worker 零报错。
+
+**实测证据**（2026-11-20，本仓库后端，`uvicorn --workers N` 不带 `--reload`，私有 Postgres 16 + Redis 7 容器，
+库里是 `fba init` 的种子数据：10 个用户 / 162 个菜单；机器是共享的 16 逻辑核 WSL2，压测进程和服务在同一台上）：
+
+| worker | 并发 8 | 并发 16 | 并发 32 | 并发 64 |
+|---|---|---|---|---|
+| 2（生产镜像默认） | 227 rps | 217 | 196 | 188 |
+| 4 | 297 | 337 | 316 | 273 |
+| 8 | 333 | 370 | 310 | 218 |
+
+并发 1 时 p50 14ms · p95 21ms · 71 rps。2 个 worker 时 `top` 里两个 worker 各 ~100% CPU，所以**单个 worker 约 110 rps 是吃满一个核的结果**。
+
+🔴 **4 / 8 个 worker 的曲线变平，原来写的解释（「压测进程和端口转发在抢核」）是错的。** 这台机器是
+Intel Core Ultra 9 285H —— 大小核混合（6 个性能核 + 能效核），而 WSL2 的虚拟核由 Windows 动态调度到物理核上，
+从 WSL 里分不出、也绑不住大核（`taskset` 到每个逻辑核跑同一段计算，16 个核都是 129–161ms，看不出分组）。
+8 个 worker 都 ~100% CPU 时单核只剩 ~50 rps，**推断**是多出来的 worker 落到了能效核上（WSL 里验证不了）。
+**这台机器测不出横向扩展，要用核心同构的机器。**
+
+🔴 **在这台机器上比较两个改动，单跑一次的 rps 不能作数**：同一份代码前后两轮 9.5 和 11.6ms/请求、rps 抖动 ±10%，
+和要测的差距一样大。可用的办法是**进程内、同一进程里交替切换变体、跑多轮取最小值**（噪声只会让数变大）——
+`backend/middleware` 分册里那组 -8.5% 就是这么测的，最小值和中位数排序一致才算数。
+
+⚠️ **用超管压测不代表真实负载。** 超管和普通用户走的代码不一样（比如取权限码时超管把整张菜单表读成 ORM 对象，
+普通用户读登录快照），而种子里的普通角色只有 5–9 个菜单，访问不了大部分接口。测的时候在私有库里给一个普通角色补齐菜单、
+用那个账号（`--username`）压。
+
+### 文档站「性能与容量」页的数字出处（2026-11-20，#408 之后的代码）
+
+普通用户 zhangwei（「部门经理」角色补齐全部 162 个菜单，带部门数据范围）、`pnpm loadtest` 默认的 12 个读接口按权重混合、
+`uvicorn --workers N` 不带 `--reload`、私有 PostgreSQL 16 + Redis 7 容器、种子数据量；同一台大小核 + WSL2 笔记本，每组跑两轮：
+
+| worker | 并发 1：rps · p50 | 并发 8：rps · p95 | 并发 16 | 并发 32 | 并发 64：rps · p95 |
+|---|---|---|---|---|---|
+| 1 | 55–62 · 16–19ms | 113–119 · 92–98ms | 97–104 · p95 217–249ms | 92–93 | 96–100 · 1.06–1.12s |
+| 2（生产镜像默认） | 66 · 15ms | 186–195 · 68–69ms | 185–190 | 177–182 | 157–172 · 0.77–0.93s |
+
+四组 20 档全部 0 失败、服务端日志 0 条 error。改这页的数字时先在这里补一组新的实测。
+
+**对照组**（同一天、同一台机器、交替跑两轮，全部单 worker、并发 8、20 秒）：对照服务是 `scripts/loadtest_baseline.py`
+（同样的 FastAPI + uvicorn + 连接池参数，不挂本项目的中间件 / 鉴权 / 审计），本项目用 zhangwei：
+
+| 接口 | rps | p50 | p95 |
+|---|---|---|---|
+| 对照 `/ping`（固定 JSON） | 1615–2099 | 2.8–3.7ms | 9.4–12.5ms |
+| 对照 `/users`（count + 取 20 行） | 723–830 | 9.4–10.6ms | 12.7–15.9ms |
+| 本项目 `user.list`（`--only user.list`） | 107–113 | 64–70ms | 82–88ms |
+| 本项目 12 个接口混合 | 119 | 63–65ms | 91–93ms |
+
+8 档全部 0 失败、两边服务端日志 0 条 error。
+
+**服务器对照**（同一天，单 worker、并发 8、12 个接口混合、交替两轮）：uvicorn 113–129 rps、服务端每请求 CPU 8.2–9.4ms；
+Granian 2.8.1（`--loop uvloop`）113–115 rps、9.3–9.5ms。没有提升 —— 瓶颈在应用代码。
+⚠️ 在 `backend/` 目录下起 Granian，目标要写 `main:app`：它发现当前目录是个包，会自己在前面补 `backend.`，写 `backend.main:app` 会变成 `backend.backend.main`。⚠️ 对照服务起在 8098 时撞上了别的项目（返回带 `trace_id` 的 404），
+换 18098 才对 —— 压测开头那行「服务 xxx」就是防这个的，对照服务因此开着 `/openapi`、标题 `loadtest-baseline`。
+
 
 ## 发布前要查远端 main（#320）
 
