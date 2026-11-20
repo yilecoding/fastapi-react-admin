@@ -51,6 +51,7 @@ bash prod.sh pull && bash prod.sh up
 - [ ] `.env.server` 里的 `CHANGE_ME` 全部换掉。`ENVIRONMENT='prod'` 时后端会逐项校验长度和随机性，弱值直接拒绝启动
 - [ ] `TOKEN_SECRET_KEY` 用 `python -c "import secrets;print(secrets.token_urlsafe(32))"` 新生成，不要从别的环境复制
 - [ ] `CORS_ALLOWED_ORIGINS` 写成你真实的访问地址；前面有 nginx 或负载均衡时配好 `TRUSTED_PROXIES`，否则限流和 IP 白名单看到的都是代理的地址
+- [ ] `CONFIG_ENCRYPT_SECRET_KEY` 用 `python -c "import secrets;print(secrets.token_hex(32))"` 生成并备份好。参数配置里的 SMTP 授权码等密钥用它加密存储，没配时保存会报错；**从 1.1.0 升级时没配它，迁移会中止**，见[从 1.1.0 升级](/reference/upgrade/#从-110-升级到-111-及以后)
 - [ ] 用到 AI 助手、对象存储、群机器人、开放平台的，配好各自的加密密钥（`AI_ENCRYPT_SECRET_KEY`、`STORAGE_ENCRYPT_SECRET_KEY`、`NOTIFICATION_ENCRYPT_SECRET_KEY`、`OPEN_SECRET_KEY`）—— 没配时保存相应配置会直接报错，不会存明文
 - [ ] `NOTIFICATION_WEB_BASE_URL` 改成真实地址，否则邮件和群消息里的链接指向 `localhost:8888`
 - [ ] 管理员密码是初始化时新设的强口令，没有沿用演示站的 `123456`
@@ -68,7 +69,7 @@ bash prod.sh pull
 bash prod.sh up
 ```
 
-CI 推了新镜像**不会**自动更新服务器，部署是人明确决定的一步。每个镜像除了 `latest` 还带 `sha-<短 SHA>` 和 `sha-<完整 SHA>` 两种标签，回滚就是拉旧标签，不用等重新构建：
+CI 推了新镜像**不会**自动更新服务器，部署是人明确决定的一步。跨版本升级前先看目标版本的升级须知，从 1.1.0 升级要先配好 `CONFIG_ENCRYPT_SECRET_KEY`，见[版本升级](/reference/upgrade/#从-110-升级到-111-及以后)。每个镜像除了 `latest` 还带 `sha-<短 SHA>` 和 `sha-<完整 SHA>` 两种标签，回滚就是拉旧标签，不用等重新构建：
 
 ```bash
 TAG=sha-abc1234 bash prod.sh pull

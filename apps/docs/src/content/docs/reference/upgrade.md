@@ -53,6 +53,44 @@ TAG=sha-abc1234 bash prod.sh up
 
 详细命令见[部署到服务器](/getting-started/deployment/)。
 
+## 从 1.1.0 升级到 1.1.1 及以后
+
+这一段同时适用于镜像部署和 fork。跨版本升级（比如 1.1.0 直接升到 1.1.2）也照这里做。
+
+**1. 升级前先配 `CONFIG_ENCRYPT_SECRET_KEY`。** 1.1.1 起，参数配置里密钥类的值（SMTP 授权码 `EMAIL_PASSWORD`，以及键名以 `PASSWORD`、`SECRET`、`TOKEN`、`API_KEY` 等结尾的配置）改成加密存储，迁移 `at000000configsecret` 会把库里已有的明文加密掉，用的就是这把密钥：
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+把输出写进 `.env.server`（fork 的开发环境写进 `apps/api/backend/.env`）：
+
+```bash
+CONFIG_ENCRYPT_SECRET_KEY='<上面生成的 64 位十六进制>'
+```
+
+`docker-compose.prod.yml` 里的 api、migrate、worker、beat 挂的是同一份 `.env.server`，配一处就够。
+
+:::danger
+**库里存过这类值、又没配密钥时，迁移会中止，新版 api 起不来**，日志里只有一句「请配置有效的 CONFIG_ENCRYPT_SECRET_KEY」。补上密钥后重新 `bash prod.sh up` 即可，这条迁移可以重复执行，不会二次加密。
+
+库里没存过的（比如从没在界面上填过 SMTP 授权码）升级不受影响，但以后在界面上保存密钥时同样需要它，所以照样先配上。
+:::
+
+这把密钥要**备份好、不要再换**：换了或丢了，库里已经加密的值就解不开了。
+
+**2. 这一版带两条新迁移**：`as000000whsecrets`（Webhook 历史签名密钥）和 `at000000configsecret`（参数配置密钥加密）。`bash prod.sh up` 会自动跑。
+
+**3. HTTPS 部署在 `.env.server` 里补 `COOKIE_SECURE=true`**，然后重启。新模板里已经带着；从旧模板拷出来的配置文件没有这一行。
+
+**4. 外链和内嵌菜单的地址必须是完整的 `http://` 或 `https://` 地址。** 库里已有的相对地址菜单照常显示，但打开编辑再保存会被拒绝（422），要先改成完整地址。
+
+**5. 建议轮换 SMTP 授权码。** 旧版本的参数配置读接口会把它明文返回。
+
+:::caution
+**回退到 1.1.0 要先恢复升级前的数据库备份。** 迁移的 downgrade 不会把密文还原成明文，1.1.0 的程序读不了新格式。
+:::
+
 ## fork 后写了自己业务的怎么升级？
 
 把上游加成一个远程仓库，**按 tag 合并**（不要直接合 `main`，`main` 上可能有还没发版的改动）：
@@ -106,7 +144,7 @@ cd ../../.. && pnpm db:upgrade
 
 - [ ] 读过目标版本（以及跳过的每个版本）发版说明里的「升级」一节
 - [ ] 备份了数据库
-- [ ] 确认这一版有没有迁移、要不要改配置
+- [ ] 确认这一版有没有迁移、要不要改配置；从 1.1.0 升级的，先看上面[那一段](#从-110-升级到-111-及以后)
 - [ ] 测试环境先升一遍，跑过冒烟测试（登录、几个核心页面、一条审批）
 - [ ] 准备好回滚用的镜像标签（`sha-<旧提交>`）
 - [ ] 生产升级后检查 `/api/health/status` 返回 200
