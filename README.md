@@ -175,7 +175,7 @@ The [E2E report](https://yile2020.github.io/fastapi-react-admin/e2e/) from every
 - Sign-in: image captcha, account and IP lockout, rate limiting, TOTP two-factor
 - Permissions: endpoints that need a permission check it and the data scope **in the backend** (hiding a button is only cosmetic); a test cross-checks permission codes between frontend, backend and menu data
 - Audit: sign-in log, operation log (sensitive fields redacted before storage), field-level data change records (an HMAC signature chain once the signing key is set, so changing, deleting or inserting a row is detected), kept 180 days by default
-- Deployment: with `ENVIRONMENT=prod` the backend **refuses to start** on weak secrets, a captcha or rate limiter disabled in `.env`, or a database superuser account
+- Deployment: with `ENVIRONMENT=prod` the backend **refuses to start** on weak secrets, a disabled rate limiter, or a database superuser account (the captcha follows its setting and isn't forced)
 
 Item-by-item details, the tests behind them and known gaps: [Security overview](https://yile2020.github.io/fastapi-react-admin/en/getting-started/security/).
 

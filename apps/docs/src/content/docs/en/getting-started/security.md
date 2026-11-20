@@ -9,7 +9,7 @@ Everything here comes from the code and its automated tests. **It is not a third
 
 ## What does sign-in protect against?
 
-- **Image captcha** on by default.
+- **Image captcha** on by default and driven by its setting: switch it under System config at any time; production doesn't force it on.
 - **Lockout**: 5 failures on one account within 5 minutes lock it for 5 minutes; 30 failures from one IP across accounts within 15 minutes block that IP for the rest of those 15 minutes.
 - **Same message and timing for "unknown user" and "wrong password"**: both get the same message, and the timing is evened out. Otherwise an unknown user takes about 5 ms and a password check about 190 ms, and the difference shows at a glance.
 - **Rate-limited sign-in**: 5 per minute per IP and endpoint; the captcha endpoint 5 per 30 seconds.
@@ -58,7 +58,7 @@ What you need to do: set the encryption keys, and `DATA_CHANGE_CHAIN_KEY` for th
 With `ENVIRONMENT='prod'`, the backend checks all of the following before starting and [refuses to start](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py) if any fails:
 
 - The length and randomness of the signing key and the database and Redis passwords. Replacing a placeholder with something weak like `123` doesn't pass.
-- The captcha and API rate limiting can't be turned off in `.env`.
+- API rate limiting can't be turned off.
 - Demo mode must be off.
 - No database superuser (`sa`, `root`, `postgres`) as the connection account.
 - No `*` or local address among the allowed CORS origins.
@@ -93,7 +93,6 @@ See [Files and storage](/en/features/file-storage/).
 - No self-service password reset; ask an admin.
 - Sessions rely on a single Redis instance and haven't been tested on Redis Cluster.
 - Someone who has both the database **and** the signing key can get past the data-change signature chain.
-- **The captcha can be turned off under System config**: the production start-up check only reads `.env`, so an admin switching the captcha off at runtime isn't stopped.
 - This page is not a third-party security audit or certification.
 
 ## How do I report a vulnerability?
