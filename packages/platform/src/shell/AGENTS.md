@@ -228,8 +228,8 @@ preferences 存「长什么样」（跨会话，localStorage）。
 
 拖拽排序用原生 HTML5 DnD（不引第三方）：`tab-item` 负责 `draggable` 与四个
 drag 事件、插入位置用 `inset` 阴影画 2px 竖线（不占布局，整排不会抖）；
-`tab-store.reorder(from, to)` **拒绝跨固定/非固定分区**的拖拽 ——
-否则 `sortPinned` 会把它弹回原位，表现成「拖了没反应」，不如一开始就不接受。
+`tab-store.reorder(from, to, side)` 按插入线的 `start` / `end` 把页签放到目标前／后，
+并**拒绝跨固定/非固定分区**的拖拽 —— 否则 `sortPinned` 会把它弹回原位，表现成「拖了没反应」，不如一开始就不接受。
 注意 `onDragStart` 里必须往 `dataTransfer` 写点东西，否则 Firefox 不认这次拖拽。
 
 ### `min-width: auto` 是横向溢出的元凶（实测两小时）

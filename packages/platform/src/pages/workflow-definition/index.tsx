@@ -42,6 +42,7 @@ import { FlowDesigner } from './flow-designer'
 import { FormDesigner } from './form-designer'
 
 export type WorkflowDefinitionSearch = {
+  keyword?: string
   id?: string
   step?: 'basic' | 'form' | 'flow'
   sel?: string
@@ -83,23 +84,34 @@ export function WorkflowDefinitionPage({
       onStep={(step) => patch({ step, sel: undefined })}
       onSel={(sel) => patch({ sel: sel ?? undefined })}
       onLocate={(step, sel) => patch({ step, sel })}
-      onBack={() => onSearchChange?.({})}
+      onBack={() => onSearchChange?.({ keyword: search.keyword })}
     />
   ) : (
-    <DefinitionList onOpen={(id) => patch({ id, step: 'form', sel: undefined })} />
+    <DefinitionList
+      keyword={search.keyword ?? ''}
+      onKeywordChange={(keyword) => patch({ keyword: keyword || undefined })}
+      onOpen={(id) => patch({ id, step: 'form', sel: undefined })}
+    />
   )
 }
 
 // ── 列表 ─────────────────────────────────────────────────────────────────────
 
-function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
+function DefinitionList({
+  keyword,
+  onKeywordChange,
+  onOpen,
+}: {
+  keyword: string
+  onKeywordChange: (keyword: string) => void
+  onOpen: (id: string) => void
+}) {
   const { t } = useTranslation()
   const query = useQuery(definitionsQuery())
   const list = listState(query)
   const [creating, setCreating] = React.useState(false)
   const [deleting, setDeleting] = React.useState<Definition | null>(null)
   const [historyOf, setHistoryOf] = React.useState<Definition | null>(null)
-  const [keyword, setKeyword] = React.useState('')
   const del = useDeleteDefinition()
   const setStatus = useSetDefinitionStatus()
 
@@ -134,7 +146,7 @@ function DefinitionList({ onOpen }: { onOpen: (id: string) => void }) {
           <InputGroupInput
             value={keyword}
             placeholder={t('搜索名称、编码或分组')}
-            onChange={(e) => setKeyword(e.target.value)}
+            onChange={(e) => onKeywordChange(e.target.value)}
             data-testid="wfd-search"
           />
         </InputGroup>

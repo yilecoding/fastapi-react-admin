@@ -46,8 +46,8 @@ type TabState = {
   reset: () => void
   togglePin: (key: string) => void
   reload: (key: string) => void
-  /** 拖拽排序：把 from 挪到 to 的位置。跨固定/非固定分区的拖拽会被拒绝 */
-  reorder: (fromKey: string, toKey: string) => void
+  /** 拖拽排序：把 from 插到 to 的前侧或后侧。跨固定/非固定分区的拖拽会被拒绝 */
+  reorder: (fromKey: string, toKey: string, side: 'start' | 'end') => void
 }
 
 /** 固定的排在前面，其余保持打开顺序 —— 与若依/Vben 的行为一致 */
@@ -168,7 +168,7 @@ export const useTabStore = create<TabState>()(
         })
       },
 
-      reorder: (fromKey, toKey) => {
+      reorder: (fromKey, toKey, side) => {
         if (fromKey === toKey) return
         const { tabs } = get()
         const from = tabs.findIndex((t) => t.key === fromKey)
@@ -179,7 +179,9 @@ export const useTabStore = create<TabState>()(
         if (tabs[from].pinned !== tabs[to].pinned) return
         const next = [...tabs]
         const [moved] = next.splice(from, 1)
-        next.splice(to, 0, moved)
+        const target = next.findIndex((t) => t.key === toKey)
+        if (target < 0) return
+        next.splice(target + (side === 'end' ? 1 : 0), 0, moved)
         set({ tabs: next })
       },
     }),
