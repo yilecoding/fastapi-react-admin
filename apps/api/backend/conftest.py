@@ -93,14 +93,15 @@ def _use_test_db_everywhere() -> Generator[None, None, None]:
 
 @pytest.fixture(autouse=True)
 def _fresh_menu_dataset() -> Generator[None, None, None]:
-    """每条用例开始前清掉进程内的菜单缓存（`menu_dataset`）
+    """每条用例开始前清掉进程内的全局数据集缓存（`common/cache/dataset.py`，现在只有菜单表）
 
     有的用例直接往库里插 / 改菜单（不经过 `menu_service`，也就不会触发提交后失效），
     缓存留着的话后面的用例读到的是上一条用例的菜单表。生产上这类路径（迁移、命令行装插件）都伴随重启
     """
-    from backend.app.admin.crud.crud_menu import menu_dataset
+    from backend.common.cache.local import local_cache_manager
 
-    menu_dataset.invalidate_now()
+    # 按前缀清全部数据集：以后再加 `CachedDataset` 不用回来改这里
+    local_cache_manager.delete_by_prefix(settings.CACHE_DATASET_PREFIX)
     yield
 
 

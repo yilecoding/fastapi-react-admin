@@ -28,8 +28,9 @@ def _with_db(fn):
 
     async def run():
         engine = create_database_async_engine(get_database_url(unittest=True))
+        maker = create_database_async_session(engine)
         try:
-            async with create_database_async_session(engine)() as db:
+            async with maker() as db:
                 return await fn(db)
         finally:
             await engine.dispose()

@@ -17,17 +17,29 @@ from backend.database.db import create_database_async_engine, create_database_as
 
 
 class _Loader:
-    """记录被调了几次；`during` 在加载过程中执行（模拟加载期间别处提交并失效）"""
+    """记录被调了几次；`during` 在加载过程中执行（模拟加载期间别处提交并失效）；`delay` 模拟查库耗时"""
 
-    def __init__(self, during=None) -> None:
+    def __init__(self, during=None, *, delay: float = 0.0, fail: bool = False) -> None:
         self.calls = 0
         self.during = during
+        self.delay = delay
+        self.fail = fail
 
     async def __call__(self, db) -> dict:
         self.calls += 1
+        if self.delay:
+            await asyncio.sleep(self.delay)
         if self.during:
             self.during()
+        if self.fail:
+            raise RuntimeError('查库失败')
         return {'version': self.calls}
+
+
+class _FakeSession:
+    """纯内存那几条用不到数据库：`AsyncSession(bind=None)` 照样能开能关，loader 不碰它"""
+
+    bind = None
 
 
 @pytest.fixture
@@ -40,8 +52,8 @@ def name(request: pytest.FixtureRequest):
 def test_a_hit_does_not_load_again(name: str) -> None:
     loader = _Loader()
     ds = CachedDataset(name, loader)
-    first = asyncio.run(ds.get(None))
-    second = asyncio.run(ds.get(None))
+    first = asyncio.run(ds.get(_FakeSession()))
+    second = asyncio.run(ds.get(_FakeSession()))
     assert loader.calls == 1
     assert second is first
 
@@ -49,26 +61,59 @@ def test_a_hit_does_not_load_again(name: str) -> None:
 def test_an_expired_entry_is_reloaded(name: str) -> None:
     loader = _Loader()
     ds = CachedDataset(name, loader, ttl=0.05)
-    asyncio.run(ds.get(None))
+    asyncio.run(ds.get(_FakeSession()))
     time.sleep(0.1)
-    assert asyncio.run(ds.get(None))['version'] == 2
+    assert asyncio.run(ds.get(_FakeSession()))['version'] == 2
 
 
 def test_invalidated_while_loading_is_not_stored(name: str) -> None:
     """🔴 读到旧行 → 别处提交并失效 → 把旧行写进缓存：旧数据会被钉住一个 TTL"""
     ds = CachedDataset(name, _Loader())
     ds._loader = _Loader(during=ds.invalidate_now)
-    assert asyncio.run(ds.get(None))['version'] == 1, '这一次请求照样拿到加载结果'
+    assert asyncio.run(ds.get(_FakeSession()))['version'] == 1, '这一次请求照样拿到加载结果'
     ds._loader.during = None
-    assert asyncio.run(ds.get(None))['version'] == 2, '加载期间被失效过，上一次的结果不该进缓存'
+    assert asyncio.run(ds.get(_FakeSession()))['version'] == 2, '加载期间被失效过，上一次的结果不该进缓存'
 
 
 def test_a_pubsub_delete_forces_a_reload(name: str) -> None:
     """其他 worker 的失效经发布订阅到达时，监听器做的就是 `local_cache_manager.delete(key)`"""
     ds = CachedDataset(name, _Loader())
-    asyncio.run(ds.get(None))
+    asyncio.run(ds.get(_FakeSession()))
     local_cache_manager.delete(ds.key)
-    assert asyncio.run(ds.get(None))['version'] == 2
+    assert asyncio.run(ds.get(_FakeSession()))['version'] == 2
+
+
+def test_concurrent_cold_requests_load_once(name: str) -> None:
+    """🔴 第一版每个冷请求都覆盖前一个的占位，先开始的加载完发现占位不是自己的就不写入 ——
+    请求源源不断时缓存一直填不上。这里模拟「加载要 50 毫秒、每 5 毫秒来一个新请求」"""
+    loader = _Loader(delay=0.05)
+    ds = CachedDataset(name, loader)
+
+    async def scenario() -> list:
+        tasks = []
+        for _ in range(20):
+            tasks.append(asyncio.create_task(ds.get(_FakeSession())))
+            await asyncio.sleep(0.005)
+        return await asyncio.gather(*tasks)
+
+    results = asyncio.run(scenario())
+    assert loader.calls == 1, f'并发的冷请求应该只加载一次，实际加载了 {loader.calls} 次'
+    assert all(r is results[0] for r in results)
+    assert asyncio.run(ds.get(_FakeSession())) is results[0], '加载完之后应当命中缓存'
+
+
+def test_a_failed_load_is_shared_and_retried(name: str) -> None:
+    loader = _Loader(delay=0.02, fail=True)
+    ds = CachedDataset(name, loader)
+
+    async def scenario() -> list:
+        return await asyncio.gather(*(ds.get(_FakeSession()) for _ in range(5)), return_exceptions=True)
+
+    results = asyncio.run(scenario())
+    assert loader.calls == 1
+    assert all(isinstance(r, RuntimeError) for r in results), '等着的请求都该拿到同一个失败'
+    loader.fail = False
+    assert asyncio.run(ds.get(_FakeSession()))['version'] == 2, '失败之后下一次请求要重新加载，不能卡在占位上'
 
 
 @pytest.fixture
@@ -91,7 +136,7 @@ def _in_transaction(ds: CachedDataset, *, rollback: bool) -> dict:
         engine = create_database_async_engine(get_database_url(unittest=True))
         seen: dict = {}
         try:
-            await ds.get(None)
+            await ds.get(_FakeSession())
             try:
                 async with create_database_async_session(engine).begin() as db:
                     ds.invalidate_after_commit(db)
