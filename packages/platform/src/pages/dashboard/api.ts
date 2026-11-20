@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 
 import { getDisplayTimeZone } from '@admin/i18n'
-import { presetRange } from '@admin/ui/components/datetime-picker'
+import { presetRangeAtTimeZone } from '@admin/ui/components/datetime-picker'
 
 import { api, type PageData } from '../../api-client/client'
 import { workflowKeys, type InstanceRow } from '../workflow/api'
@@ -206,6 +206,6 @@ export const visitsQuery = () => {
  * 口径是日志页筛选栏同一个 `presetRange('today')`
  */
 export function todayRangeParam(): string {
-  const [start, end] = presetRange('today')
+  const [start, end] = presetRangeAtTimeZone('today', getDisplayTimeZone())
   return `${start ?? ''}~${end ?? ''}`
 }

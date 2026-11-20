@@ -15,10 +15,14 @@
 | `layout.ts` | 纯逻辑：存的布局 × 现在能用的卡片 → 界面上的布局（单测 `layout.test.ts`） |
 | `editor.tsx` | 编辑模式：显隐 · 拖拽排序（含键盘，两组各一条列表）· 四档宽度 · 常用入口挑页面 · 恢复默认 |
 | `api.ts` | 工作台自己的数据源：待办（`sort=attention`）/ 我发起的（`progress=true`）/ 草稿 / 可发起的，系统运行区三个接口 |
+
 | `../../auth/user-preferences.ts` | 个人偏好的 query / mutation（`GET / PUT /sys/users/me/preferences/{key}`），不是工作台专用的 |
 
 加一张卡片 = 注册表加一项 + `cards/` 下一个内容组件（外壳用 `DashboardCard`）。
 已经存过布局的人会在**最后**看到它（按它的默认显隐），不用迁移任何人的数据。
+
+登录失败偏多卡片的「看明细」日期范围由 `todayRangeParam()` 生成；按个人显示时区取今天，
+并与登录日志列表的日历预设共享同一逻辑（#404）。
 
 ## 🔴 读布局失败：错误要看得见，而且**不许编辑**
 

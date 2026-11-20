@@ -2,9 +2,10 @@ import * as React from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 
 import {
-  emptyQuery, fromUrlParams, nextId, toQueryParams, toUrlParams, urlParamKeys,
+  emptyQuery, fromUrlParams, nextId, toUrlParams, urlParamKeys,
   type FilterField, type QueryValue,
 } from '@admin/ui/components/query-bar'
+import { toDisplayZoneQueryParams } from './query-params'
 
 /**
  * 把 `QueryBar` 接到 URL search params 上。
@@ -146,7 +147,7 @@ export function useQuerySearch<S extends QuerySearch>({
   const reset = React.useCallback(() => write(emptyQuery(fields)), [write, fields])
 
   /** 发给后端的入参（已经是接口的名字了，`param` / `rangeParams` 都应用过） */
-  const params = React.useMemo(() => toQueryParams(applied, fields), [applied, fields])
+  const params = React.useMemo(() => toDisplayZoneQueryParams(applied, fields), [applied, fields])
 
   return { value, setValue, applied, submit: write, reset, params }
 }

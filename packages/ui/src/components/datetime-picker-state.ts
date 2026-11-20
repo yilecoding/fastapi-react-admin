@@ -11,6 +11,17 @@
 
 export const p2 = (n: number) => String(n).padStart(2, "0")
 
+let displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+
+/** The host app supplies the timezone used by picker presets. */
+export function setDateTimePickerTimeZone(timeZone: string | null | undefined): void {
+  displayTimeZone = timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+}
+
+export function getDateTimePickerTimeZone(): string {
+  return displayTimeZone
+}
+
 /** `Date` → `'YYYY-MM-DD'`（本地时区，不是 UTC） */
 export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
@@ -45,6 +56,59 @@ export function stampValue(d: Date, opts: { withTime?: boolean; endOfDay?: boole
   const day = toDateStr(d)
   if (!opts.withTime) return day
   return `${day} ${opts.time ?? (opts.endOfDay ? "23:59:59" : "00:00:00")}`
+}
+
+/** Convert an instant into the calendar date in an IANA timezone. */
+export function dateAtTimeZone(now: Date, timeZone: string): Date {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(now)
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((p) => p.type === type)?.value)
+  return new Date(part('year'), part('month') - 1, part('day'))
+}
+
+export type RangePresetKey = 'today' | 'yesterday' | 'd7' | 'd30' | 'thisMonth' | 'lastMonth'
+export type RangeValue = readonly [string | undefined, string | undefined]
+
+/** A calendar preset evaluated in the supplied display timezone. */
+export function presetRangeAtTimeZone(
+  key: RangePresetKey,
+  timeZone: string,
+  withTime = false,
+  now = new Date()
+): RangeValue {
+  const today = dateAtTimeZone(now, timeZone)
+  const startOf = (d: Date) => stampValue(d, { withTime, endOfDay: false })
+  const endOf = (d: Date) => stampValue(d, { withTime, endOfDay: true })
+
+  switch (key) {
+    case 'today':
+      return [startOf(today), endOf(today)]
+    case 'yesterday': {
+      const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1)
+      return [startOf(yesterday), endOf(yesterday)]
+    }
+    case 'd7':
+      return [
+        startOf(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 6)),
+        endOf(today),
+      ]
+    case 'd30':
+      return [
+        startOf(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29)),
+        endOf(today),
+      ]
+    case 'thisMonth':
+      return [startOf(new Date(today.getFullYear(), today.getMonth(), 1)), endOf(today)]
+    case 'lastMonth': {
+      const first = new Date(today.getFullYear(), today.getMonth() - 1, 1)
+      const last = new Date(today.getFullYear(), today.getMonth(), 0)
+      return [startOf(first), endOf(last)]
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ 区间点选 */

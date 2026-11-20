@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   formatPeriod,
+  presetRangeAtTimeZone,
   parsePeriod,
   parseTyped,
   periodRange,
@@ -13,6 +14,24 @@ import {
 const d = (y: number, m: number, day: number) => new Date(y, m - 1, day)
 const key = (x: Date | undefined) => (x ? `${x.getFullYear()}-${x.getMonth() + 1}-${x.getDate()}` : undefined)
 const show = (r: RangeDraft) => ({ from: key(r.from), to: key(r.to), pending: r.pending })
+
+describe('presetRangeAtTimeZone', () => {
+  it('today follows display-zone midnight when the browser is already on the next date', () => {
+    const now = new Date('2026-08-22T00:30:00.000Z')
+    expect(presetRangeAtTimeZone('today', 'America/Los_Angeles', true, now)).toEqual([
+      '2026-08-21 00:00:00',
+      '2026-08-21 23:59:59',
+    ])
+  })
+
+  it('subtracts calendar days across a daylight-saving transition', () => {
+    const now = new Date('2026-03-08T16:00:00.000Z')
+    expect(presetRangeAtTimeZone('d7', 'America/New_York', false, now)).toEqual([
+      '2026-03-02',
+      '2026-03-08',
+    ])
+  })
+})
 
 describe("pickRangeDay", () => {
   it("第一下只定起点、等第二下 —— 不是 from === to 的完整区间", () => {

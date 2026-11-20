@@ -34,11 +34,29 @@ export function toWallTime(at: ServerTime): string | undefined {
  * **复核一次**偏移 —— 估计值落在夏令时切换点另一侧时，第一次查到的偏移差一小时
  * （同 `i18n/datetime.ts: wallClockToEpochMs` 的两步法）。
  */
-export function wallTimeToIso(wall: string | undefined): string | null {
+export function wallTimeToIso(wall: string | undefined, timeZone?: string): string | null {
   if (!wall) return null
   const asUtc = wallAsUtc(wall)
   if (asUtc === null) return null
-  const offsetAt = (ms: number) => (wallAsUtc(formatDateTime(ms)) ?? ms) - ms
+  const offsetAt = (ms: number) => {
+    const local = wallAsUtc(timeZone ? formatInTimeZone(ms, timeZone) : formatDateTime(ms))
+    return (local ?? ms) - ms
+  }
   const first = asUtc - offsetAt(asUtc)
   return new Date(asUtc - offsetAt(first)).toISOString()
+}
+
+function formatInTimeZone(epochMs: number, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(epochMs))
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '00'
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
 }
