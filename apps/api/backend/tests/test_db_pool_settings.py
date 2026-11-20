@@ -1,5 +1,7 @@
 """连接池参数来自配置（压测里发现原来写死在 `database/db.py`，多 worker 时撞了数据库的连接上限）。"""
 
+import asyncio
+
 import pytest
 
 from backend.core.conf import settings
@@ -13,10 +15,14 @@ def test_engine_pool_follows_settings(
     monkeypatch.setattr(settings, 'DATABASE_POOL_SIZE', size)
     monkeypatch.setattr(settings, 'DATABASE_POOL_MAX_OVERFLOW', overflow)
     monkeypatch.setattr(settings, 'DATABASE_POOL_PRE_PING', pre_ping)
-    pool = create_database_async_engine('postgresql+asyncpg://u:p@127.0.0.1:1/x').sync_engine.pool
-    assert pool.size() == size
-    assert pool._max_overflow == overflow
-    assert pool._pre_ping is pre_ping
+    engine = create_database_async_engine('postgresql+asyncpg://u:p@127.0.0.1:1/x')
+    try:
+        pool = engine.sync_engine.pool
+        assert pool.size() == size
+        assert pool._max_overflow == overflow
+        assert pool._pre_ping is pre_ping
+    finally:
+        asyncio.run(engine.dispose())
 
 
 def test_pool_defaults_are_unchanged() -> None:

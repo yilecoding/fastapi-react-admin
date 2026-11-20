@@ -1,13 +1,48 @@
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.model import Menu, role_menu
 from backend.app.admin.schema.menu import CreateMenuParam, UpdateMenuParam
+from backend.common.cache.dataset import CachedDataset
 from backend.common.enums import StatusType
 from backend.common.security.data_scope import DataScopedCRUD
+from backend.utils.serializers import select_columns_serialize
 from backend.utils.timezone import timezone
+
+#: 侧边栏下发的菜单类型（0 目录 · 1 菜单 · 3 内嵌 · 4 外链；2 是按钮，不进侧边栏）
+SIDEBAR_MENU_TYPES = frozenset({0, 1, 3, 4})
+
+
+def compute_disabled_ids(rows: Iterable[tuple[int, int | None, int]]) -> set[int]:
+    """
+    由 (id, parent_id, status) 算出实际不生效的菜单：自己停用了，或者任何一级上级停用了
+
+    数据库路径（`get_disabled_ids`）和进程内缓存（`menu_dataset`）共用这一份，两边不能各写一套
+
+    :param rows: 未删除菜单的 (id, parent_id, status)
+    :return:
+    """
+    parents: dict[int, int | None] = {}
+    off: set[int] = set()
+    for pk, parent_id, status in rows:
+        parents[pk] = parent_id
+        if status != StatusType.enable:
+            off.add(pk)
+    disabled: set[int] = set()
+    for pk in parents:
+        seen: set[int] = set()
+        current: int | None = pk
+        while current is not None and current not in seen:
+            if current in off:
+                disabled.add(pk)
+                break
+            seen.add(current)
+            current = parents.get(current)
+    return disabled
 
 
 class CRUDMenu(DataScopedCRUD[Menu]):
@@ -52,21 +87,6 @@ class CRUDMenu(DataScopedCRUD[Menu]):
             filters['title__like'] = f'%{title}%'
         if status is not None:
             filters['status'] = status
-
-        return await self.select_models_order(db, 'sort', 'asc', **filters)
-
-    async def get_sidebar(self, db: AsyncSession, menu_ids: list[int] | None) -> Sequence[Menu]:
-        """
-        获取用户的菜单侧边栏
-
-        :param db: 数据库会话
-        :param menu_ids: 菜单 ID 列表
-        :return:
-        """
-        filters = {'type__in': [0, 1, 3, 4], 'deleted': 0}
-
-        if menu_ids:
-            filters['id__in'] = menu_ids
 
         return await self.select_models_order(db, 'sort', 'asc', **filters)
 
@@ -187,19 +207,31 @@ class CRUDMenu(DataScopedCRUD[Menu]):
                 select(self.model.id, self.model.parent_id, self.model.status).where(self.model.deleted == 0)
             )
         ).all()
-        parents = {row.id: row.parent_id for row in rows}
-        off = {row.id for row in rows if row.status != StatusType.enable}
-        disabled: set[int] = set()
-        for pk in parents:
-            seen: set[int] = set()
-            current: int | None = pk
-            while current is not None and current not in seen:
-                if current in off:
-                    disabled.add(pk)
-                    break
-                seen.add(current)
-                current = parents.get(current)
-        return disabled
+        return compute_disabled_ids((row.id, row.parent_id, row.status) for row in rows)
 
 
 menu_dao: CRUDMenu = CRUDMenu(Menu)
+
+
+@dataclass(frozen=True, slots=True)
+class MenuSnapshot:
+    """整张菜单表（未删除的）在某一刻的样子。**所有请求共享同一份，只读**"""
+
+    #: 按 `sort` 升序；每行是 `select_columns_serialize` 出来的列字典
+    rows: tuple[dict[str, Any], ...]
+    #: 自己或任何一级上级停用了的菜单
+    disabled: frozenset[int]
+
+
+async def _load_menu_snapshot(db: AsyncSession) -> MenuSnapshot:
+    menus = await menu_dao.select_models_order(db, 'sort', 'asc', deleted=0)
+    rows = tuple(select_columns_serialize(menu) for menu in menus)
+    disabled = frozenset(compute_disabled_ids((row['id'], row['parent_id'], row['status']) for row in rows))
+    return MenuSnapshot(rows=rows, disabled=disabled)
+
+
+#: 侧边栏、菜单树、超管权限码读这一份，不再每个请求查整张菜单表。
+#: 改菜单的三个入口（`menu_service.create / update / delete`）提交后清它。
+#: 🔴 登录快照重建（`get_jwt_user`）**不读它**：别的 worker 上它最多旧一个 TTL，
+#: 读了会把旧的停用状态写进快照、再锁 30 分钟
+menu_dataset: CachedDataset[MenuSnapshot] = CachedDataset('menu', _load_menu_snapshot)

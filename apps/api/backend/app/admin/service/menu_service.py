@@ -4,7 +4,7 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTasks
 
-from backend.app.admin.crud.crud_menu import menu_dao
+from backend.app.admin.crud.crud_menu import SIDEBAR_MENU_TYPES, menu_dao, menu_dataset
 from backend.app.admin.model import Menu
 from backend.app.admin.schema.menu import CreateMenuParam, UpdateMenuParam
 from backend.app.admin.utils.cache import user_cache_manager
@@ -43,9 +43,12 @@ class MenuService:
         :return:
         """
 
-        menu_data = await menu_dao.get_all(db, title=title, status=status)
-        menu_tree = get_tree_data(menu_data)
-        return menu_tree
+        if title is None and status is None:
+            # 不带筛选的整棵树走进程内缓存（菜单管理页默认就是这个）；带筛选的照旧查库
+            menu_data: Any = (await menu_dataset.get(db)).rows
+        else:
+            menu_data = await menu_dao.get_all(db, title=title, status=status)
+        return get_tree_data(menu_data)
 
     @staticmethod
     async def get_sidebar(*, db: AsyncSession, request: Request) -> list[dict[str, Any] | None]:
@@ -56,24 +59,27 @@ class MenuService:
         :param request: FastAPI 请求对象
         :return:
         """
-        menu_data = None
-        if request.user.is_superuser:
-            menu_data = await menu_dao.get_sidebar(db, None)
-        else:
+        allowed: set[int] | None = None
+        if not request.user.is_superuser:
             roles = [role for role in request.user.roles if role.status == StatusType.enable]
-            menu_ids = set()
-            if roles:
-                for role in roles:
-                    menu_ids.update(menu.id for menu in role.menus)
-                menu_data = await menu_dao.get_sidebar(db, list(menu_ids))
+            allowed = {menu.id for role in roles for menu in role.menus}
+            # 🔴 角色都没挂菜单时返回空。原来按 ID 查库那一版在 ID 列表为空时不加过滤（`if menu_ids:`），
+            # 返回的是**整张**侧边栏（接口照样 403，但侧边栏全显示出来）
+            if not allowed:
+                return []
 
-        if menu_data:
-            # 停用的连同整棵下级一起不下发（`get_disabled_ids`）。整棵去掉、不会留下孤儿：
-            # 只去掉某一项的话，它的下级找不到上级，会被 `traversal_to_tree` 提到顶层
-            disabled = await menu_dao.get_disabled_ids(db)
-            return get_vben5_tree_data([menu for menu in menu_data if menu.id not in disabled])
-
-        return []
+        # 整张菜单表读进程内缓存（`menu_dataset`），不再每个请求查库、建 ORM 对象
+        snapshot = await menu_dataset.get(db)
+        # 停用的连同整棵下级一起不下发（`snapshot.disabled`）。整棵去掉、不会留下孤儿：
+        # 只去掉某一项的话，它的下级找不到上级，会被 `traversal_to_tree` 提到顶层
+        rows = [
+            row
+            for row in snapshot.rows
+            if row['type'] in SIDEBAR_MENU_TYPES
+            and row['id'] not in snapshot.disabled
+            and (allowed is None or row['id'] in allowed)
+        ]
+        return get_vben5_tree_data(rows) if rows else []
 
     @staticmethod
     async def check_create(*, db: AsyncSession, obj: CreateMenuParam) -> Menu | None:
@@ -104,6 +110,7 @@ class MenuService:
 
         await self.check_create(db=db, obj=obj)
         await menu_dao.create(db, obj)
+        menu_dataset.invalidate_after_commit(db)
 
     @staticmethod
     async def check_update(*, db: AsyncSession, pk: int, obj: UpdateMenuParam) -> Menu:
@@ -151,6 +158,7 @@ class MenuService:
 
         await self.check_update(db=db, pk=pk, obj=obj)
         count = await menu_dao.update(db, pk, obj)
+        menu_dataset.invalidate_after_commit(db)
         # 整棵下级都要清：停用 / 挪到停用的目录下，影响的是下级按钮的权限码，
         # 而持有那些按钮的角色未必持有这一项（用户缓存里的菜单状态是按上级算过的，见 `get_jwt_user`）
         await user_cache_manager.clear_by_menu_id(db, background_tasks, await menu_dao.get_subtree_ids(db, pk))
@@ -172,6 +180,7 @@ class MenuService:
             raise errors.ConflictError(msg=t('error.menu.has_children'))
         count = await menu_dao.delete(db, pk)
         if count:
+            menu_dataset.invalidate_after_commit(db)
             await user_cache_manager.clear_by_menu_id(db, background_tasks, [pk])
         return count
 
