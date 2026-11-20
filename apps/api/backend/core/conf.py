@@ -62,6 +62,15 @@ class Settings(BaseSettings):
     # 数据库
     DATABASE_ECHO: bool | Literal['debug'] = False
     DATABASE_POOL_ECHO: bool | Literal['debug'] = False
+    # 连接池，**每个进程一份**（每个 uvicorn worker、每个 celery worker 进程各自一个池）。
+    # 🔴 进程数 × (POOL_SIZE + POOL_MAX_OVERFLOW) 不能超过数据库的 max_connections，
+    # 否则高峰时报 `too many clients`、请求失败。实测：本机 Postgres 上限 100，8 个 worker × 30 就撞了
+    DATABASE_POOL_SIZE: int = Field(default=10, ge=1)
+    DATABASE_POOL_MAX_OVERFLOW: int = Field(default=20, ge=0)
+    # 借出连接前先探活。断掉的连接（数据库重启 / 主从切换 / 防火墙掐空闲连接）不会落到请求上，
+    # 代价是每次借连接多几次往返：asyncpg 下是 BEGIN + 空查询 + ROLLBACK 三次，压测里约占每请求 1ms CPU。
+    # 关掉之后断连只让当时在途的请求失败一次，SQLAlchemy 随即作废整个池重连
+    DATABASE_POOL_PRE_PING: bool = True
     DATABASE_SCHEMA: str = 'fba'
     DATABASE_CHARSET: str = 'utf8mb4'
     DATABASE_PK_MODE: Literal['autoincrement', 'snowflake'] = 'autoincrement'

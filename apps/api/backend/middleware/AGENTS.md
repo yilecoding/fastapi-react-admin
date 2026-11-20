@@ -130,3 +130,19 @@ AI 确认令牌、导入报告令牌出现在 URL 路径里（`path` 列不打�
 - 迁移在私有库（PostgreSQL 16）上用 alembic 真跑：插一行泄漏的旧日志 → `upgrade head` 报「1 行已打码」、读回来两处都是 `[REDACTED]` → `downgrade -1` → 再 `upgrade` 报「0 行」
 - 变异 15 处各有测试红（含评审补的 5 处：只认 `application/json` · 别的类型不试着解析 · 不扫操作日志页 · 截断文本不看 value · 规则退回旧的）：不认 key/value 形状 · 列表照旧 `str()` · `value` 一律打掉（对照组红）· 规则区分大小写 ·
   清理不管 repr · 截断的照留 · 名单去掉 `access_token` · 去掉 `api_key` · 清理不认名单里的字段 · 清理不扫 `/auth/`
+
+## 🔴 新中间件写成纯 ASGI，不要继承 `BaseHTTPMiddleware`
+
+`BaseHTTPMiddleware` 每一层都要给下游另起一个任务、经内存流转发响应。原来 State / I18n / Access / OperaLog
+四层都是它，压测时这部分是每个请求都要付的固定开销。前三个只是「进来时设几个上下文变量 / 出去时记个耗时」，
+已改成纯 ASGI（`__init__(app)` + `__call__(scope, receive, send)`，非 http 的 scope 原样放行）。
+
+⚠️ **`OperaLogMiddleware` 刻意没改**：它要在路由前读请求体、截取响应体重建、原样搬 `Set-Cookie`、
+接 `ClientDisconnect`，上面几节的坑都在它身上，改写的风险远大于省下的那一层（约 3%）。
+
+⚠️ Access 拿状态码要包一层 `send`、在 `http.response.start` 里取；原来读的是 `call_next` 返回的 `response.status_code`。
+纯 ASGI 下 `await self.app(...)` 在响应体发完之后才返回，所以耗时多算了发送响应体那一段，比原来更接近真实。
+
+**实测证据**（2026-11-20，进程内交替 6 轮取最小值，普通用户 zhangwei、8 个常用读接口；
+这台机器是大小核混合 + WSL2，单跑一次的 rps / CPU 抖动有 ±10%，只有多轮交替取最小值才分得出来）：
+每请求 CPU 8.37ms → 7.66ms（-8.5%）。全套 pytest 2012 条 0 失败。
