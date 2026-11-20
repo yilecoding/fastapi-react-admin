@@ -67,11 +67,11 @@ class Settings(BaseSettings):
     # 否则高峰时报 `too many clients`、请求失败。实测：本机 Postgres 上限 100，8 个 worker × 30 就撞了
     DATABASE_POOL_SIZE: int = Field(default=10, ge=1)
     DATABASE_POOL_MAX_OVERFLOW: int = Field(default=20, ge=0)
-    # 借出连接前先探活。断掉的连接（数据库重启 / 主从切换 / 防火墙掐空闲连接）不会落到请求上，
-    # 代价是每次借连接多几次往返：asyncpg 下是 BEGIN + 空查询 + ROLLBACK 三次。
-    # 实测关掉后每请求 CPU 少约 0.2ms（约 2.6%），见 middleware 分册「新中间件写成纯 ASGI」那一节的对照表。
-    # 关掉之后断连只让当时在途的请求失败一次，SQLAlchemy 随即作废整个池重连
-    DATABASE_POOL_PRE_PING: bool = True
+    # 借出连接前先探活。**默认关**（追求吞吐）：开着时每次借连接多三次往返（asyncpg 下 BEGIN + 空查询 + ROLLBACK），
+    # 实测关掉后每请求 CPU 少约 3%，见 middleware 分册「新中间件写成纯 ASGI」那一节。
+    # 代价（实测，数据库重启后并发 8 个请求）：关着时第一轮 1 个回 500，之后全部恢复 —— SQLAlchemy 撞上一次断连
+    # 就作废整个池；开着时 0 失败。数据库经常重启 / 切换、或者中间有掐空闲连接的防火墙时，设成 true
+    DATABASE_POOL_PRE_PING: bool = False
     DATABASE_SCHEMA: str = 'fba'
     DATABASE_CHARSET: str = 'utf8mb4'
     DATABASE_PK_MODE: Literal['autoincrement', 'snowflake'] = 'autoincrement'

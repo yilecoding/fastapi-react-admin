@@ -20,9 +20,12 @@ def test_engine_pool_follows_settings(
 
 
 def test_pool_defaults_are_unchanged() -> None:
-    """默认值保持 10 / 20 / 探活开 —— 改默认值是行为变更，要在 Release 里写明"""
+    """默认值 10 / 20 / 探活关（2026-11-20 为吞吐改成关，实测代价见 conf.py）
+
+    改默认值是行为变更，要在 Release 里写明
+    """
     assert (settings.DATABASE_POOL_SIZE, settings.DATABASE_POOL_MAX_OVERFLOW, settings.DATABASE_POOL_PRE_PING) == (
         10,
         20,
-        True,
+        False,
     )
