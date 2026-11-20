@@ -78,9 +78,20 @@ def percentile(sorted_values: list[float], q: float) -> float:
     return sorted_values[k]
 
 
-def captcha_answer_from_redis(container: str, prefix: str, uuid: str, db: int = 0) -> str:
+def captcha_answer_from_redis(container: str, prefix: str, uuid: str, db: int = 0, password: str | None = None) -> str:
     out = subprocess.run(
-        ['docker', 'exec', container, 'redis-cli', '-n', str(db), '--raw', 'GET', f'{prefix}:{uuid}'],
+        [
+            'docker',
+            'exec',
+            container,
+            'redis-cli',
+            *(['-a', password, '--no-auth-warning'] if password else []),
+            '-n',
+            str(db),
+            '--raw',
+            'GET',
+            f'{prefix}:{uuid}',
+        ],
         capture_output=True,
         text=True,
         check=True,
@@ -114,7 +125,7 @@ async def login(client: httpx.AsyncClient, args: argparse.Namespace) -> str:
             sys.exit('登录要验证码，请加 --redis-container fba_redis（从 Redis 读答案），或直接给 --token')
         body['uuid'] = cap['uuid']
         body['captcha'] = captcha_answer_from_redis(
-            args.redis_container, args.captcha_prefix, cap['uuid'], args.redis_db
+            args.redis_container, args.captcha_prefix, cap['uuid'], args.redis_db, args.redis_password
         )
     resp = await client.post('/auth/login', json=body)
     payload = resp.json()
@@ -275,6 +286,11 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=int(os.environ.get('LT_REDIS_DB', '0')),
         help='后端用的 REDIS_DATABASE 库号，读验证码答案时要对上，默认 0',
+    )
+    p.add_argument(
+        '--redis-password',
+        default=os.environ.get('LT_REDIS_PASSWORD'),
+        help='后端 Redis 设了密码时要给（REDIS_PASSWORD）；不给的话读到的是空串，登录报「验证码错误」',
     )
     p.add_argument('--captcha-prefix', default='fba:login:captcha')
     p.add_argument('-c', '--concurrency', type=int, default=20, help='并发数（每个并发是一个循环，发完一个再发下一个）')

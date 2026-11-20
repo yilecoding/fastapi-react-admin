@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask, BackgroundTasks
 from starlette.concurrency import run_in_threadpool
 
-from backend.app.admin.crud.crud_menu import menu_dao
+from backend.app.admin.crud.crud_menu import menu_dataset
 from backend.app.admin.crud.crud_user import user_dao
 from backend.app.admin.model import User
 from backend.app.admin.schema.mfa import MfaChallenge, MfaChallengeParam, MfaSetupInfo, MfaTokenParam
@@ -554,12 +554,12 @@ class AuthService:
         """
         codes = set()
         if request.user.is_superuser:
-            menus = await menu_dao.get_all(db, None, None)
-            # 停用的目录 / 页面连带下级（非超管那一支读的是用户快照，`get_jwt_user` 里已经按上级算过）
-            disabled = await menu_dao.get_disabled_ids(db)
-            for menu in menus:
-                if menu.id not in disabled and menu.perms:
-                    codes.update(menu.perms.split(','))
+            # 整张菜单表读进程内缓存（`menu_dataset`）。停用的目录 / 页面连带下级
+            # （非超管那一支读的是用户快照，`get_jwt_user` 里已经按上级算过）
+            snapshot = await menu_dataset.get(db)
+            for menu in snapshot.rows:
+                if menu['id'] not in snapshot.disabled and menu['perms']:
+                    codes.update(menu['perms'].split(','))
         else:
             roles = [role for role in request.user.roles if role.status == StatusType.enable]
             if roles:
