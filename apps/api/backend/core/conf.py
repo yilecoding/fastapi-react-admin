@@ -1004,8 +1004,8 @@ def check_production_settings(s: Settings) -> None:
     ])
     if s.DEMO_MODE:
         problems.append('DEMO_MODE 在 prod 必须为 false')
-    if not s.LOGIN_CAPTCHA_ENABLED:
-        problems.append('LOGIN_CAPTCHA_ENABLED 在 prod 必须为 true')
+    # 验证码刻意**不在这里拦**（#410）：它在运行时以参数配置页为准，管理员可以随时开关，
+    # 启动检查只看 `.env` 的话拦了也是假象。开不开由部署方决定；登录爆破由下面的限流和账号 / IP 锁定兜着
     if not s.REQUEST_LIMITER_ENABLED:
         problems.append('REQUEST_LIMITER_ENABLED 在 prod 必须为 true —— 它是登录爆破的唯一一道闸')
     if s.USER_PASSWORD_MIN_LENGTH < 8:

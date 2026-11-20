@@ -204,7 +204,7 @@ cd apps/web && pnpm e2e tests/dept-crud.spec.ts
 
 ### `ENVIRONMENT=prod，但有 N 项配置不合格，拒绝启动`
 
-**原因**：`ENVIRONMENT=prod` 时后端启动前会校验配置，不合格就拒绝启动。检查项包括：`TOKEN_SECRET_KEY`、`DATABASE_PASSWORD`、`REDIS_PASSWORD` 的强度；`LOGIN_CAPTCHA_ENABLED` 和 `REQUEST_LIMITER_ENABLED` 必须为 true；`CORS_ALLOWED_ORIGINS` 不能包含 `*`、`localhost`、`127.0.0.1`；`DATABASE_USER` 不能是 `sa`、`root`、`postgres` 这类超级用户。
+**原因**：`ENVIRONMENT=prod` 时后端启动前会校验配置，不合格就拒绝启动。检查项包括：`TOKEN_SECRET_KEY`、`DATABASE_PASSWORD`、`REDIS_PASSWORD` 的强度；`REQUEST_LIMITER_ENABLED` 必须为 true（验证码按参数走，不强制）；`CORS_ALLOWED_ORIGINS` 不能包含 `*`、`localhost`、`127.0.0.1`；`DATABASE_USER` 不能是 `sa`、`root`、`postgres` 这类超级用户。
 
 **处理**：按报错里逐条列出的问题改 `.env.server`。签名密钥可以这样生成：
 
