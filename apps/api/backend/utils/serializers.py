@@ -67,6 +67,9 @@ def select_columns_serialize(row: R) -> dict[str, Any]:
     :param row: SQLAlchemy 查询结果行
     :return:
     """
+    if isinstance(row, dict):
+        # 进程内缓存（`common/cache/dataset.py`）里存的已经是列字典：复制一份，拼树会往里塞 children
+        return dict(row)
     result = {}
     for column in row.__table__.columns.keys():
         value = getattr(row, column)

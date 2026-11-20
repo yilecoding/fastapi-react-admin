@@ -98,6 +98,8 @@ class Settings(BaseSettings):
     CONFIG_ENCRYPT_SECRET_KEY: str = ''
     CACHE_DICT_REDIS_PREFIX: str = 'fba:cache:dict'
     CACHE_PUBSUB_CHANNEL: str = 'fba:cache:invalidate'
+    # 进程内全局数据集（菜单表这种全局、少变的数据，见 `common/cache/dataset.py`）的缓存键前缀
+    CACHE_DATASET_PREFIX: str = 'fba:dataset'
     CACHE_PUBSUB_RECONNECT_DELAY: int = 5  # 重连延迟（秒）
     CACHE_PUBSUB_MAX_RECONNECT_ATTEMPTS: int = 10  # 最大重连次数
 
