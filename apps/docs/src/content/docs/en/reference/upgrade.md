@@ -63,7 +63,7 @@ This applies to image deployments and forks alike, and to jumps across versions 
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-Put the output in `.env.server` (in a fork's development setup, `apps/api/backend/.env`):
+Put the output in `.env.server` (the template leaves this line empty by default; in a fork's development setup, `apps/api/backend/.env`):
 
 ```bash
 CONFIG_ENCRYPT_SECRET_KEY='<the 64 hex characters generated above>'

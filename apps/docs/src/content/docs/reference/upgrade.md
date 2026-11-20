@@ -63,7 +63,7 @@ TAG=sha-abc1234 bash prod.sh up
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-把输出写进 `.env.server`（fork 的开发环境写进 `apps/api/backend/.env`）：
+把输出写进 `.env.server`（模板里这一行默认留空；fork 的开发环境写进 `apps/api/backend/.env`）：
 
 ```bash
 CONFIG_ENCRYPT_SECRET_KEY='<上面生成的 64 位十六进制>'
