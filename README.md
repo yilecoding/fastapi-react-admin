@@ -186,6 +186,9 @@ Item-by-item details, the tests behind them and known gaps: [Security overview](
 | 1 | 113–119 req/s, p95 about 95 ms | 0 failures |
 | **2 (production image default)** | **186–195 req/s, p95 about 70 ms** | 0 failures, p95 about 0.9 s |
 
+For reference: on the same machine, bare FastAPI running one paginated query does about 720–830 req/s per core; the full path here does about 110.
+The difference is authentication, sessions, permissions, data scopes and auditing — the price of security, which buys no unauthorized access and a full trail afterwards; within capacity, p95 stays under 100 ms.
+
 Measured on a laptop (WSL2), not a production server benchmark. How that maps to users, how to scale, and how to rerun it with `pnpm loadtest`:
 [Performance and capacity](https://yile2020.github.io/fastapi-react-admin/en/getting-started/performance/).
 

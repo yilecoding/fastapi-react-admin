@@ -20,6 +20,30 @@ Each configuration ran twice; the table shows the range. Across all 20 steps of 
 
 "Concurrent" means requests in flight at the same time, not users online. Once concurrency goes past what the workers can process, the extra requests wait in line: throughput stops rising and latency grows. Up to 64 concurrent requests nothing failed in the test; beyond that, requests start failing once queueing exceeds the client's or the connection pool's wait limit.
 
+## Compared with what?
+
+"190 requests per second" alone doesn't tell you whether that's fast. We **don't compare against other frameworks' published benchmarks**: different hardware and endpoint complexity make side-by-side numbers unfair, and most benchmarks measure empty endpoints with no auth and no database.
+
+A more useful reference is how fast the same kind of request runs **on the same machine, with the same uvicorn and connection-pool settings**, once these security and audit features are taken away. The baseline service is [`scripts/loadtest_baseline.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/loadtest_baseline.py); every row uses one worker at 8 concurrent requests, two alternating rounds:
+
+| Endpoint | Throughput per worker | p50 | What each request does |
+|---|---|---|---|
+| Bare FastAPI | 1,615–2,099 req/s | 3–4 ms | Returns a fixed JSON body, nothing else |
+| FastAPI + one paginated query | 723–830 req/s | 9–11 ms | Counts the rows, then fetches 20 users |
+| **This project: user list** | **107–113 req/s** | 64–70 ms | The same kind of paginated query, plus everything below |
+| This project: mix of 12 everyday endpoints | about 119 req/s | 63–65 ms | Same as above |
+
+Compared with the simplest endpoint that runs one query, this project's throughput per core is about **one seventh**. The difference is what every request does on top:
+
+- Verify the JWT signature and check in Redis that the session is still valid and not idle-expired
+- Check the permission code for the endpoint, and add the data-scope row filter to the query
+- Ping the database connection before using it; the user list also fetches each user's roles
+- Redact the request parameters and response, and write them to the operation log (in background batches)
+
+That is the price of security and auditing. What it buys: requests without permission don't get in, data you shouldn't see isn't returned, and every request can be traced afterwards.
+
+**Within capacity, users don't feel it.** At its highest-throughput step (8 concurrent requests), one worker still returns 95% of requests within 100 ms; push concurrency higher and requests start to queue, so p95 grows (about 220–250 ms at 16). Responses within 100 ms feel instantaneous ([Nielsen Norman Group](https://www.nngroup.com/articles/response-times-3-important-limits/)), so when capacity runs short, add workers or machines; see [scaling](#how-do-i-scale-when-its-not-enough).
+
 ## Under what conditions?
 
 - **Code**: the backend on `main`, `uvicorn --workers N` without `--reload` — the same way [`Dockerfile.prod`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/Dockerfile.prod) starts it (default `--workers 2`), without nginx in front.
@@ -89,7 +113,7 @@ pnpm loadtest --base-url http://127.0.0.1:8088/api/v1 --username <ordinary-user>
 
 ## Where is the code?
 
-- Load-test script: [`scripts/loadtest.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/loadtest.py)
+- Load-test script: [`scripts/loadtest.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/loadtest.py); baseline service: [`scripts/loadtest_baseline.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/loadtest_baseline.py)
 - Test records and method: [`scripts/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/AGENTS.md)
 - Connection pool settings: [`database/db.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/database/db.py), [`core/conf.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py)
 - Middlewares: [`middleware/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/middleware)

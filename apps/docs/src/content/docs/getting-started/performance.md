@@ -20,6 +20,30 @@ description: 实测：生产镜像默认的 2 个 worker，在带完整鉴权、
 
 「并发」是同时在途的请求数，不是在线人数。并发超过 worker 的处理能力之后，多出来的请求排队等待：吞吐不再上涨，延迟变长。实测到并发 64 为止没有请求失败；再往上，排队时间超过客户端或连接池的等待上限时就会开始失败。
 
+## 和什么比？
+
+光看「每秒 190 次」，很难判断算快还是慢。我们**不拿别的框架公开的跑分来比**：机器、接口复杂度都不同，并排放在一起不公平，而且大多数跑分测的是不鉴权、不查库的空接口。
+
+更有用的参照是：在**同一台机器、同样的 uvicorn 和连接池配置**下，同一类请求去掉这些安全和审计能力，能跑多快。对照服务是 [`scripts/loadtest_baseline.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/loadtest_baseline.py)，全部单 worker、并发 8，交替跑两轮：
+
+| 接口 | 单个 worker 吞吐 | p50 | 每个请求做了什么 |
+|---|---|---|---|
+| 裸 FastAPI | 1615–2099 次/秒 | 3–4 毫秒 | 返回一段固定 JSON，什么都不做 |
+| FastAPI + 一次分页查询 | 723–830 次/秒 | 9–11 毫秒 | 查总数，再取 20 行用户 |
+| **本项目：用户列表** | **107–113 次/秒** | 64–70 毫秒 | 同类分页查询，加上下面这些 |
+| 本项目：12 个常用接口混合 | 约 119 次/秒 | 63–65 毫秒 | 同上 |
+
+和「只查一次库」的最简接口比，本项目的单核吞吐大约是它的**七分之一**。差出来的部分，是每个请求都多做的这些事：
+
+- 校验 JWT 签名，到 Redis 核对会话是否还有效、是否空闲超时
+- 按权限码判断能不能调这个接口，按数据范围给查询加上行过滤
+- 借数据库连接前先探活；用户列表还要多查一次每个人的角色
+- 把请求参数和响应打码后写进操作日志（后台批量入库）
+
+这是安全和审计的代价。换来的是：没有权限的请求进不来，看不该看的数据查不到，每个请求事后都查得到。
+
+**在容量以内，用户感觉不到。** 单个 worker 在吞吐最高的那一档（并发 8），95% 的请求仍在 100 毫秒以内返回；再加并发就开始排队，p95 随之变长（并发 16 时约 220–250 毫秒）。而 100 毫秒以内的响应，人会觉得是「立即」的（[Nielsen Norman Group](https://www.nngroup.com/articles/response-times-3-important-limits/)）。所以容量不够时，加 worker、加机器就行，见[扩容](#不够用了怎么扩容)。
+
 ## 这些数字是在什么条件下测的？
 
 - **代码**：`main` 上的后端，`uvicorn --workers N`，不带 `--reload`。和 [`Dockerfile.prod`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/Dockerfile.prod) 的启动方式一致（默认 `--workers 2`），没有经过 nginx。
@@ -89,7 +113,7 @@ pnpm loadtest --base-url http://127.0.0.1:8088/api/v1 --username <普通用户> 
 
 ## 代码在哪
 
-- 压测脚本：[`scripts/loadtest.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/loadtest.py)
+- 压测脚本：[`scripts/loadtest.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/loadtest.py)；对照服务：[`scripts/loadtest_baseline.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/loadtest_baseline.py)
 - 测试记录和测量方法：[`scripts/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/AGENTS.md)
 - 连接池配置：[`database/db.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/database/db.py)、[`core/conf.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/core/conf.py)
 - 中间件：[`middleware/`](https://github.com/yile2020/fastapi-react-admin/tree/main/apps/api/backend/middleware)
