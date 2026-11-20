@@ -83,9 +83,18 @@ describe('attentionLink（需要你留意的按钮）', () => {
       top_ip_count: 0,
     }
     expect(attentionLink(spike, none, 'x', t)).toBeNull()
-    expect(attentionLink(spike, (p) => p === 'log:login:del', '2026-11-01~2026-11-01', t)?.search).toEqual({
+    expect(attentionLink(spike, (p) => p === 'log:login:list', '2026-11-01~2026-11-01', t)?.search).toEqual({
       status: 0,
       time: '2026-11-01~2026-11-01',
     })
+    // 只有删除权的人进不了登录日志页（守卫是 list）
+    expect(attentionLink(spike, (p) => p === 'log:login:del', 'x', t)).toBeNull()
+  })
+
+  it('🔴 「看记录」也按执行记录页的守卫给（#405：原来以为那页只要登录）', () => {
+    expect(attentionLink(task('maintenance.prune_logs'), none, '', t)).toBeNull()
+    expect(attentionLink(task('maintenance.prune_logs'), (p) => p === 'task:result:list', '', t)?.to).toBe(
+      '/scheduler/record'
+    )
   })
 })

@@ -24,9 +24,36 @@ export type Tab = {
    * 页面被 `<Activity>` 保活，不换 key 是无论如何刷不掉的。
    */
   revision: number
+  /**
+   * 最近一次被切到前台的序号（单调递增，不是时间戳 —— 同一毫秒里切两次也分得出先后）。
+   * 超上限时淘汰它最小的那个。老版本存进 sessionStorage 的页签没有这个字段，按 0 算（最先被淘汰，
+   * 同为 0 时按打开顺序）
+   */
+  lastUsed?: number
 }
 
 const MAX_TABS = 20
+
+/** 下一个「最近使用」序号 */
+function nextStamp(tabs: Tab[]): number {
+  return tabs.reduce((m, t) => Math.max(m, t.lastUsed ?? 0), 0) + 1
+}
+
+/**
+ * 超上限时淘汰谁：**最久没用过的**非固定页签（不是最早打开的）。
+ *
+ * 🔴 原来注释写着 LRU，实现是 `find(!pinned)` —— 数组里第一个非固定项，也就是最早**打开**的（#405）。
+ * 开满 20 个时，正在最早打开的那一页里填抽屉、从侧边栏点开另一页查东西，刚才那一页被卸载，
+ * 表单没了，没有任何提示。store 里原来压根没有「最近使用」的记录。
+ */
+export function pickVictim(tabs: Tab[], keep: string): Tab | undefined {
+  let victim: Tab | undefined
+  for (const t of tabs) {
+    if (!isRemovable(t) || t.key === keep) continue
+    if (!victim || (t.lastUsed ?? 0) < (victim.lastUsed ?? 0)) victim = t
+  }
+  return victim
+}
 
 type TabState = {
   ownerId: string | null
@@ -46,6 +73,11 @@ type TabState = {
   reset: () => void
   togglePin: (key: string) => void
   reload: (key: string) => void
+  /**
+   * 后台页签改了自己的 search（请求回来之后才写 URL 的那种）：只更新快照和 href，不碰地址栏。
+   * 切回来时按新的 href 导航，URL 自然跟上。见 `tab-outlet.tsx` 的 `onSearchChange`
+   */
+  setSearch: (key: string, search: unknown, href: string) => void
   /** 拖拽排序：把 from 插到 to 的前侧或后侧。跨固定/非固定分区的拖拽会被拒绝 */
   reorder: (fromKey: string, toKey: string, side: 'start' | 'end') => void
 }
@@ -78,7 +110,14 @@ export const useTabStore = create<TabState>()(
           // 只更新前两样的话，从 sessionStorage 恢复出来的老页签永远留着改名前的标题、没有新加的图标（#220 评审）。
           // 标题都是静态的（staticData / 菜单），没有别处动态改它，所以覆盖是安全的
           const next = [...tabs]
-          next[existing] = { ...next[existing], href: input.href, snapshot: input.snapshot, title: input.title, icon: input.icon }
+          next[existing] = {
+            ...next[existing],
+            href: input.href,
+            snapshot: input.snapshot,
+            title: input.title,
+            icon: input.icon,
+            lastUsed: nextStamp(tabs),
+          }
           set({ tabs: next, activeKey: input.key })
           return
         }
@@ -87,11 +126,11 @@ export const useTabStore = create<TabState>()(
           pinned: input.pinned ?? false,
           ...input,
           revision: 0,
+          lastUsed: nextStamp(tabs),
         }
         let next = sortPinned([...tabs, tab])
-        // LRU：超上限淘汰最旧的非 pinned、非当前
         if (next.length > MAX_TABS) {
-          const victim = next.find((t) => !t.pinned && t.key !== input.key)
+          const victim = pickVictim(next, input.key)
           if (victim) next = next.filter((t) => t.key !== victim.key)
         }
         set({ tabs: next, activeKey: input.key })
@@ -165,6 +204,13 @@ export const useTabStore = create<TabState>()(
         const { tabs } = get()
         set({
           tabs: tabs.map((t) => (t.key === key ? { ...t, revision: (t.revision ?? 0) + 1 } : t)),
+        })
+      },
+
+      setSearch: (key, search, href) => {
+        const { tabs } = get()
+        set({
+          tabs: tabs.map((t) => (t.key === key ? { ...t, href, snapshot: { ...t.snapshot, search } } : t)),
         })
       },
 

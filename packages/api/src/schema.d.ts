@@ -514,6 +514,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/users/me/login-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取当前用户最近的登录记录 */
+        get: operations["get_my_login_logs_api_v1_sys_users_me_login_logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/users/import/template": {
         parameters: {
             query?: never;
@@ -13108,6 +13125,23 @@ export interface components {
             /** Data */
             data: components["schemas"]["GetFileDetail"][];
         };
+        /** ResponseSchemaModel[list[GetLoginLogDetail]] */
+        ResponseSchemaModel_list_GetLoginLogDetail__: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            /** Data */
+            data: components["schemas"]["GetLoginLogDetail"][];
+        };
         /** ResponseSchemaModel[list[GetMenuTree]] */
         ResponseSchemaModel_list_GetMenuTree__: {
             /**
@@ -16322,6 +16356,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResponseSchemaModel_GetCurrentUserInfoWithRelationDetail_"];
+                };
+            };
+        };
+    };
+    get_my_login_logs_api_v1_sys_users_me_login_logs_get: {
+        parameters: {
+            query?: {
+                /** @description 条数 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_list_GetLoginLogDetail__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

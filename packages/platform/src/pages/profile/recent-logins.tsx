@@ -20,7 +20,7 @@ import { myLoginHistoryQuery, RECENT_LOGIN_LIMIT } from './api'
  * ⚠️ 不做分页、不做筛选。要查全量去「日志管理 → 登录日志」，那边是审计视图。
  * 这里只有最近 {@link RECENT_LOGIN_LIMIT} 条，多了就变成第二个日志页了。
  *
- * ⚠️ 取数的坑（`username` 是 LIKE 不是全等）在 `api.ts` 的 `myLoginHistoryQuery` 里写着。
+ * ⚠️ 数据源是 `/sys/users/me/login-logs`，不是要权限码的审计接口 —— 原因在 `api.ts` 的 `myLoginHistoryQuery`。
  */
 export function RecentLogins({ username }: { username?: string }) {
   const { t } = useTranslation()

@@ -110,3 +110,12 @@ Tiptap v3 把 `useEditor` 的 `shouldRerenderOnTransaction` 默认改成了 `fal
   **服务端才是权威**（`UPLOAD_IMAGE_SIZE_MAX` 还会被 `sys_config` 在运行时覆盖）
 - 没有 `sys:file:upload` 权限时**抛错而不是藏按钮**：藏了粘贴路径就变成静默失败
   （硬纪律 9），粘一张截图什么都不发生，用户以为是自己操作错了
+
+### 🔴 链接框里没写协议的地址要补 `https://`（#405）
+
+**症状**：写公告时在链接框填 `www.example.com`，读者点开的是 `https://<本站>/…/www.example.com`，落在本系统的 404 上。
+**根因**：工具栏 `setLink({ href })` 原样写入；Tiptap 3.32.1 的 `isAllowedUri` 接受无协议串（只拒 `javascript:` 这类），
+`defaultProtocol` 只作用于自动识别和粘贴 —— 于是存下来的是一个**相对地址**。
+**修法**：`link-href.ts` 的 `normalizeLinkHref()`：站内地址（`/` `#` `?` `.` 开头）、已带协议的原样留；像邮箱的补 `mailto:`；其余补 `https://`。
+⚠️ 「主机:端口」不是协议（`localhost:8080`），但主机要求带点或是 localhost —— 第一版没这个要求，`tel:10086` 被当成主机端口补成了 `https://tel:10086`
+（**实测证据**：`link-href.test.ts` 第一版红在这一条；`javascript:` 原样交给 Tiptap 拒，不包成 `https://javascript:…`）。

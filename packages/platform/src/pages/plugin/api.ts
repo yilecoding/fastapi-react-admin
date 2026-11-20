@@ -2,6 +2,7 @@ import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query
 
 import { api, fetchBytes, uploadFile } from '../../api-client/client'
 import { t } from '@admin/i18n'
+import { saveFile } from '../../api-client/download'
 
 /**
  * 插件管理。
@@ -124,14 +125,7 @@ export function useInstallPlugin() {
  */
 export async function downloadPlugin(name: string): Promise<void> {
   const bytes = await fetchBytes(`/api/v1/sys/plugins/${name}`)
-  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${name}.zip`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+  saveFile(bytes, `${name}.zip`, 'application/zip')
 }
 
 // ─── 展示辅助 ────────────────────────────────────────────────────────────────

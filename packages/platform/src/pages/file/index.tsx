@@ -42,6 +42,7 @@ import { RecycleBin } from './recycle-bin'
 import { useFileUploader } from './uploader'
 import type { FileActions } from './file-menu'
 import { DEFAULT_GRID_PAGE_SIZE } from '../_shared/pagination'
+import { saveFile } from '../../api-client/download'
 
 /**
  * 文件管理。
@@ -153,15 +154,8 @@ export function FilePage({
           return
         }
         const buffer = await fetchBytes(f.download_url)
-        const url = URL.createObjectURL(
-          new Blob([buffer], { type: f.content_type ?? 'application/octet-stream' })
-        )
-        const a = document.createElement('a')
-        a.href = url
-        a.download = f.original_name
-        a.click()
-        // 不 revoke 会把整个文件的字节留在内存里直到刷新页面
-        URL.revokeObjectURL(url)
+        // 走 saveFile：立刻 revoke 在 Firefox 上偶发下载失败（#405），延后收回的讲究在那里
+        saveFile(buffer, f.original_name, f.content_type ?? undefined)
       } catch (e) {
         setActionError(e instanceof Error ? e.message : t('下载失败'))
       }

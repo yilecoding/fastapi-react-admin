@@ -1,8 +1,14 @@
 import * as React from 'react'
 import { Activity, type ComponentType } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useRouter } from '@tanstack/react-router'
+import { useTranslation } from 'react-i18next'
 
-import { useTabStore } from './tab-store'
+import { Button } from '@admin/ui/components/button'
+import { QueryError } from '@admin/ui/components/query-error'
+
+import { isRemovable, useTabStore } from './tab-store'
+import { useTabActions } from './use-tab-actions'
 
 /**
  * 多页签渲染出口 —— **完全取代 `<Outlet />`**。
@@ -58,7 +64,13 @@ export function useTabPortalContainer(): HTMLElement | null | undefined {
   return React.useContext(TabContainerContext)
 }
 
-export function TabOutlet({ registry }: { registry: PageRegistry }) {
+/**
+ * @param escalate 哪些渲染异常**不**就地拦在这一页、照旧往上抛给路由的全局错误页。
+ *   给「整个前端都不对了」的那几种用（发了新版、分片取不到）：那不是这一页的问题，
+ *   就地显示只会让人一页页地点「重新加载」。判据在 app 层（`apps/web` 的 `isStaleAssetError`），
+ *   shell 不认识它，所以从外面传进来
+ */
+export function TabOutlet({ registry, escalate }: { registry: PageRegistry; escalate?: (error: unknown) => boolean }) {
   const tabs = useTabStore((s) => s.tabs)
   const activeKey = useTabStore((s) => s.activeKey)
   const navigate = useNavigate()
@@ -86,6 +98,7 @@ export function TabOutlet({ registry }: { registry: PageRegistry }) {
               search={tab.snapshot.search}
               Page={Page}
               navigate={navigate}
+              escalate={escalate}
             />
           </Activity>
         )
@@ -94,8 +107,13 @@ export function TabOutlet({ registry }: { registry: PageRegistry }) {
   )
 }
 
+/** 地址的路径部分（去掉 `?search` 和 `#hash`）—— 页签的 href 和路由的 location.href 用同一种切法比 */
+function pathOf(href: string): string {
+  return href.split(/[?#]/)[0] ?? href
+}
+
 function TabFrame({
-  tabKey, visible, href, params, search, Page, navigate,
+  tabKey, visible, href, params, search, Page, navigate, escalate,
 }: {
   tabKey: string
   visible: boolean
@@ -104,8 +122,10 @@ function TabFrame({
   search: unknown
   Page: ComponentType<any>
   navigate: ReturnType<typeof useNavigate>
+  escalate?: (error: unknown) => boolean
 }) {
-  const pathname = React.useMemo(() => href.split('?')[0] ?? href, [href])
+  const router = useRouter()
+  const pathname = React.useMemo(() => pathOf(href), [href])
   // 用 state 不用 ref：子树要在拿到节点后重新渲染一次，才能把 portal 挂进来。
   // 🔴 回调里**忽略 null**：`<Activity>` 隐藏时会把 ref 解绑（传 null），而那个 DOM 节点其实还在。
   // 跟着置 null 的话 portal 目标变回 <body>、浮层整个重挂 —— 实测切回来表单是空的
@@ -115,14 +135,32 @@ function TabFrame({
   }, [])
 
   // 页面改筛选/分页 → 写进 URL（视图状态的持久层，刷新后可恢复）
+  //
+  // 🔴 **只有前台页签才能写地址栏**（#405）。不少调用点是「await 完请求再写 URL」（审批的同意 / 退回、
+  // 发起审批、AI 对话、角色 / 字典保存后关抽屉）：点完立刻切去别的页，请求回来时这一页已经在后台，
+  // 原来照样 `navigate({ to: 本页 })` —— 用户被拽回来，`replace: true` 还把刚切过去的那条历史覆盖掉了。
+  // 后台页签的变更只写进 tab-store（快照 + href），切回来时按新 href 导航，URL 自然跟上。
+  //
+  // 「在前台」按调用那一刻判，两件事都要成立，**不能用渲染时的 `visible`**（回调是请求回来时才调的）：
+  //   - `activeKey` 是这一页
+  //   - 路由的 `location` 也还在这一页 —— 点了侧边栏、导航还没走完时 `activeKey` 要等 idle 才换
+  //     （`use-sync-tabs.ts`），只看它的话那个窗口里照样会把正在进行的导航顶回来
   const onSearchChange = React.useCallback(
     (next: Record<string, unknown>) => {
       const clean = Object.fromEntries(
         Object.entries(next).filter(([, v]) => v !== undefined && v !== '' && v !== null)
       )
-      void navigate({ to: pathname as never, search: clean as never, replace: true })
+      const store = useTabStore.getState()
+      const front = store.activeKey === tabKey && pathOf(router.state.location.href) === pathname
+      if (front) {
+        void navigate({ to: pathname as never, search: clean as never, replace: true })
+        return
+      }
+      // 用路由自己的序列化拼 href：雪花 ID 那套自定义 stringify（`lib/search-params.ts`）照样生效
+      const nextHref = router.buildLocation({ to: pathname as never, search: clean as never }).href
+      store.setSearch(tabKey, clean, nextHref)
     },
-    [navigate, pathname]
+    [navigate, router, pathname, tabKey]
   )
 
   return (
@@ -141,8 +179,73 @@ function TabFrame({
       className="flex min-w-0 flex-1 flex-col content-scroll:min-h-0"
     >
       <TabContainerContext.Provider value={container}>
-        <Page params={params} search={search} onSearchChange={onSearchChange} />
+        {/* 每个页签一道错误边界：一页渲染抛错只换掉这一页，别的页签（含后台未保存的表单）不受影响。
+            TabFrame 的 key 带 revision，「重新加载此页」换 key 时边界跟着重建，错误状态自然清掉 */}
+        <TabErrorBoundary escalate={escalate} fallback={(error) => <TabCrash tabKey={tabKey} error={error} />}>
+          <Page params={params} search={search} onSearchChange={onSearchChange} />
+        </TabErrorBoundary>
       </TabContainerContext.Provider>
+    </div>
+  )
+}
+
+/**
+ * 页签级错误边界（#405）。
+ *
+ * 🔴 原来所有页签（含隐藏的）都渲染在同一个 `_auth` 匹配下，任一页抛渲染异常，整屏换成路由的 500，
+ * 其它页签未保存的状态全丢。而页签列表存在 sessionStorage：整页重载后出错的那页原样恢复、
+ * 在后台再渲染一次 —— 异常由数据决定时，这个浏览器标签页里就再也出不来了（只能关浏览器标签页）。
+ *
+ * `escalate` 判为真的照旧往上抛（在 render 里重新 throw，交给外层的路由错误边界）。
+ */
+type BoundaryProps = {
+  children: React.ReactNode
+  fallback: (error: unknown) => React.ReactNode
+  escalate?: (error: unknown) => boolean
+}
+
+export class TabErrorBoundary extends React.Component<BoundaryProps, { failed: boolean; error: unknown }> {
+  state = { failed: false, error: undefined as unknown }
+
+  static getDerivedStateFromError(error: unknown) {
+    return { failed: true, error }
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children
+    if (this.props.escalate?.(this.state.error)) throw this.state.error
+    return this.props.fallback(this.state.error)
+  }
+}
+
+function TabCrash({ tabKey, error }: { tabKey: string; error: unknown }) {
+  const { t } = useTranslation()
+  const qc = useQueryClient()
+  const actions = useTabActions()
+  const tab = useTabStore((s) => s.tabs.find((x) => x.key === tabKey))
+  // 「重试」= 重新加载此页，但光重挂不够：异常多半是数据决定的，那份数据还在查询缓存里，
+  // 重挂时先读到缓存、再炸一次（E2E 第一版就红在这）。出错这页的观察者已经随它卸载，
+  // 所以清掉不活跃的查询；代价是后台页签的缓存一起清了，切回去时重新取一次
+  const retry = () => {
+    qc.removeQueries({ type: 'inactive' })
+    actions.reload(tabKey)
+  }
+  return (
+    <div className="flex flex-col gap-3 p-4 md:p-6" data-testid="tab-crash">
+      <QueryError
+        error={error}
+        title={t('这一页出错了')}
+        detail={error instanceof Error ? error.message : undefined}
+        onRetry={retry}
+        testId="tab-crash-error"
+      />
+      {tab && isRemovable(tab) && (
+        <div>
+          <Button variant="outline" size="sm" onClick={() => actions.close(tabKey)} data-testid="tab-crash-close">
+            {t('关闭此页')}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
