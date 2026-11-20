@@ -1,7 +1,7 @@
 import time
 
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.requests import Request
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from backend.common.context import ctx
 from backend.common.log import log
@@ -19,23 +19,32 @@ from backend.utils.timezone import timezone
 from backend.utils.trace_id import get_request_trace_id
 
 
-class AccessMiddleware(BaseHTTPMiddleware):
-    """访问日志中间件"""
+class AccessMiddleware:
+    """访问日志中间件（纯 ASGI 写法，理由同 `StateMiddleware`）"""
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:  # ruff:ignore[complex-structure]
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:  # ruff:ignore[complex-structure]
         """
-        处理请求并记录访问日志
+        记录访问日志与请求指标
 
-        :param request: FastAPI 请求对象
-        :param call_next: 下一个中间件或路由处理函数
+        :param scope: ASGI scope
+        :param receive: ASGI receive
+        :param send: ASGI send
         :return:
         """
+        if scope['type'] != 'http':
+            await self.app(scope, receive, send)
+            return
+
         perf_time = time.perf_counter()
         ctx.perf_time = perf_time
 
         start_time = timezone.now()
         ctx.start_time = start_time
 
+        request = Request(scope)
         path = request.url.path
         method = request.method
 
@@ -47,8 +56,16 @@ class AccessMiddleware(BaseHTTPMiddleware):
             inc_fastapi_request_in_progress(method=method, path=path)
             inc_fastapi_request(method=method, path=path)
 
+        status_code = StandardResponseCode.HTTP_500
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status_code
+            if message['type'] == 'http.response.start':
+                status_code = message['status']
+            await send(message)
+
         try:
-            response = await call_next(request)
+            await self.app(scope, receive, send_wrapper if should_record_metrics else send)
         except Exception as e:
             elapsed = round((time.perf_counter() - perf_time) * 1000, 3)
             if should_record_metrics:
@@ -88,10 +105,8 @@ class AccessMiddleware(BaseHTTPMiddleware):
                 inc_fastapi_response(
                     method=method,
                     path=path,
-                    status_code=exception_code or response.status_code,
+                    status_code=exception_code or status_code,
                 )
         finally:
             if should_record_metrics:
                 dec_fastapi_request_in_progress(method=method, path=path)
-
-        return response

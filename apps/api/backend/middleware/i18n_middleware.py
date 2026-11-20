@@ -1,7 +1,5 @@
-from collections.abc import Callable
-
-from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from backend.common.i18n import i18n
 from backend.core.conf import settings
@@ -43,23 +41,29 @@ def get_current_language(request: Request) -> str | None:
     return settings.I18N_DEFAULT_LANGUAGE if lang not in i18n.locales else lang
 
 
-class I18nMiddleware(BaseHTTPMiddleware):
-    """国际化中间件"""
+class I18nMiddleware:
+    """国际化中间件（纯 ASGI 写法，理由同 `StateMiddleware`）"""
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """
-        处理请求并设置国际化语言
+        设置国际化语言后交给下游
 
-        :param request: FastAPI 请求对象
-        :param call_next: 下一个中间件或路由处理函数
+        :param scope: ASGI scope
+        :param receive: ASGI receive
+        :param send: ASGI send
         :return:
         """
-        language = get_current_language(request)
+        if scope['type'] != 'http':
+            await self.app(scope, receive, send)
+            return
+
+        language = get_current_language(Request(scope))
 
         # 设置国际化语言
         if language and i18n.current_language != language:
             i18n.current_language = language
 
-        response = await call_next(request)
-
-        return response
+        await self.app(scope, receive, send)
