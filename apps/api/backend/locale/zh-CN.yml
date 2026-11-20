@@ -28,7 +28,7 @@ error:
     invalid: 验证码无效，请重新获取
     expired: 验证码已过期，请重新获取
   config:
-    encrypt_key_invalid: 请配置有效的 CONFIG_ENCRYPT_SECRET_KEY（16/24/32 字节的十六进制密钥）
+    encrypt_key_invalid: '未配置有效的 CONFIG_ENCRYPT_SECRET_KEY（16/24/32 字节的十六进制），无法加密保存参数密钥。生成方式：python -c "import secrets;print(secrets.token_hex(32))"，写入 .env 后重启服务；从 1.1.0 升级时见文档「版本升级」'
     secret_decrypt_failed: 参数密钥解密失败，请检查加密密钥和数据库迁移状态
     key_immutable: 已有参数配置的键名不能修改
     clear_secret_invalid: clear_secret 仅用于清空密钥，不能同时提交新值

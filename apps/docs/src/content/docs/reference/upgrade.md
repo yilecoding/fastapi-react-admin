@@ -72,7 +72,7 @@ CONFIG_ENCRYPT_SECRET_KEY='<上面生成的 64 位十六进制>'
 `docker-compose.prod.yml` 里的 api、migrate、worker、beat 挂的是同一份 `.env.server`，配一处就够。
 
 :::danger
-**库里存过这类值、又没配密钥时，迁移会中止，新版 api 起不来**，日志里只有一句「请配置有效的 CONFIG_ENCRYPT_SECRET_KEY」。补上密钥后重新 `bash prod.sh up` 即可，这条迁移可以重复执行，不会二次加密。
+**库里存过这类值、又没配密钥时，迁移会中止，新版 api 起不来**，日志里会报「未配置有效的 CONFIG_ENCRYPT_SECRET_KEY」。补上密钥后重新 `bash prod.sh up` 即可，这条迁移可以重复执行，不会二次加密。
 
 库里没存过的（比如从没在界面上填过 SMTP 授权码）升级不受影响，但以后在界面上保存密钥时同样需要它，所以照样先配上。
 :::

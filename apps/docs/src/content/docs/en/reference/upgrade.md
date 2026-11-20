@@ -72,7 +72,7 @@ CONFIG_ENCRYPT_SECRET_KEY='<the 64 hex characters generated above>'
 In `docker-compose.prod.yml` the api, migrate, worker and beat containers all mount the same `.env.server`, so one place is enough.
 
 :::danger
-**If the database holds such a value and the key is missing, the migration stops and the new api does not start.** The log only says "Configure a valid CONFIG_ENCRYPT_SECRET_KEY". Add the key and run `bash prod.sh up` again; the migration can be re-run and never encrypts twice.
+**If the database holds such a value and the key is missing, the migration stops and the new api does not start.** The log reports "No valid CONFIG_ENCRYPT_SECRET_KEY". Add the key and run `bash prod.sh up` again; the migration can be re-run and never encrypts twice.
 
 If nothing like that was ever saved (for example, no SMTP authorization code was entered in the UI), the upgrade goes through, but saving a secret in the UI later needs the key too, so set it anyway.
 :::

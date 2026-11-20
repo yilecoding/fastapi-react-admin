@@ -93,7 +93,7 @@ CI 推完镜像**不会**自动同步到服务器，这一步是人明确决定�
 🔴 **从 1.1.0 升级前，先在 `.env.server` 里配好 `CONFIG_ENCRYPT_SECRET_KEY`**
 （`python -c "import secrets;print(secrets.token_hex(32))"`，备份好、之后别换）。
 库里存过 SMTP 授权码这类密钥时，没有它 `migrate` 会中止、新版 api 起不来，
-日志里只有一句「请配置有效的 CONFIG_ENCRYPT_SECRET_KEY」。api / migrate / worker / beat
+日志里会报「未配置有效的 CONFIG_ENCRYPT_SECRET_KEY」。api / migrate / worker / beat
 挂的是同一份 `.env.server`，配一处就够。其余升级须知（`COOKIE_SECURE`、菜单地址、
 回退要恢复备份）见文档站「版本升级 → 从 1.1.0 升级到 1.1.1 及以后」。
 
