@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 
 import { setDisplayTimeZone } from '@admin/i18n'
+import { setDateTimePickerTimeZone } from '@admin/ui/components/datetime-picker'
 
 import { api } from '../api-client/client'
 import type { CodesResponse, SidebarNode } from '../api-client/sidebar-types'
@@ -68,6 +69,7 @@ export const meQuery = queryOptions({
   queryFn: async () => {
     const me = await api.GET<CurrentUser>('/api/v1/sys/users/me')
     setDisplayTimeZone(me.timezone)
+    setDateTimePickerTimeZone(me.timezone)
     return me
   },
   staleTime: Infinity,

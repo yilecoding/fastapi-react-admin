@@ -32,6 +32,8 @@ import {
   periodRange,
   pickRangeDay,
   previewRange,
+  presetRangeAtTimeZone,
+  getDateTimePickerTimeZone,
   stampValue,
   timePart,
   toDateStr,
@@ -40,6 +42,7 @@ import {
 } from "./datetime-picker-state"
 
 export { parseDateStr, stampValue, timePart, toDateStr, formatPeriod, parsePeriod, periodRange, type Picker }
+export { presetRangeAtTimeZone, setDateTimePickerTimeZone } from "./datetime-picker-state"
 
 /**
  * 时间筛选控件（单值 + 区间），**值是字符串不是 Date**。
@@ -51,11 +54,11 @@ export { parseDateStr, stampValue, timePart, toDateStr, formatPeriod, parsePerio
  *    ISO 串，回来是字符串，schema 一验就炸；
  * 2. **localStorage**（筛选视图）。`JSON.stringify(new Date())` 出去是字符串、
  *    回来还是字符串 —— 存进去能用、读回来裂，是最难查的那一类；
- * 3. **接口**。后端收的是 `start_time=2026-08-22 00:00:00` 这种本地时间串，
- *    而 `toISOString()` 是 UTC，差 8 小时且没人会往时区上想。
+ * 3. **接口**。控件仍输出可读的墙上时间字符串；页面接入层按用户显示时区
+ *    转成带偏移的 ISO 瞬间，再发给后端。
  *
  * 所以这里的对外形态一律是 `'YYYY-MM-DD'`（`withTime` 时
- * `'YYYY-MM-DD HH:mm:ss'`）**本地时间**串，进出都不经过 Date。
+ * `'YYYY-MM-DD HH:mm:ss'`）**不带时区的墙上时间**串，控件的值进出都不经过 Date。
  * 按月 / 按年（`picker`）时单值是 `'YYYY-MM'` / `'YYYY'`，区间仍是整段的起止日期串。
  *
  * 另外配了**快捷区间**：日志排查的起手式几乎总是「今天」或「近 7 天」，
@@ -70,12 +73,8 @@ export { parseDateStr, stampValue, timePart, toDateStr, formatPeriod, parsePerio
  * - **手输**：单值的触发器就是输入框，回车提交；区间在面板底部的两个框里敲
  */
 
-const DAY_MS = 86_400_000
-
-export type RangeValue = readonly [string | undefined, string | undefined]
-
-export type RangePresetKey =
-  | "today" | "yesterday" | "d7" | "d30" | "thisMonth" | "lastMonth"
+import type { RangePresetKey, RangeValue } from "./datetime-picker-state"
+export type { RangePresetKey, RangeValue } from "./datetime-picker-state"
 
 /** 预设的中文名同时是 i18n 的 key（原文即 key），所以这里存的是可直接 `t()` 的串 */
 export const RANGE_PRESET_LABEL: Record<RangePresetKey, string> = {
@@ -91,29 +90,7 @@ export const RANGE_PRESET_KEYS = Object.keys(RANGE_PRESET_LABEL) as RangePresetK
 
 /** 预设 → 具体区间。**一律是整天边界**，「近 7 天」含今天共 7 天 */
 export function presetRange(key: RangePresetKey, withTime = false): RangeValue {
-  const now = new Date()
-  const startOf = (d: Date) => stampValue(d, { withTime, endOfDay: false })
-  const endOf = (d: Date) => stampValue(d, { withTime, endOfDay: true })
-
-  switch (key) {
-    case "today":
-      return [startOf(now), endOf(now)]
-    case "yesterday": {
-      const y = new Date(now.getTime() - DAY_MS)
-      return [startOf(y), endOf(y)]
-    }
-    case "d7":
-      return [startOf(new Date(now.getTime() - 6 * DAY_MS)), endOf(now)]
-    case "d30":
-      return [startOf(new Date(now.getTime() - 29 * DAY_MS)), endOf(now)]
-    case "thisMonth":
-      return [startOf(new Date(now.getFullYear(), now.getMonth(), 1)), endOf(now)]
-    case "lastMonth": {
-      const first = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-      const last = new Date(now.getFullYear(), now.getMonth(), 0)
-      return [startOf(first), endOf(last)]
-    }
-  }
+  return presetRangeAtTimeZone(key, getDateTimePickerTimeZone(), withTime)
 }
 
 /**
