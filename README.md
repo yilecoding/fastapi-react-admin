@@ -87,6 +87,8 @@ AI changes code fast, so every change needs something to catch it:
 - **Large files, handled** — local disk or S3-compatible storage, instant upload by hash, parallel chunks, resume after a page refresh, and one upload tray for everything in flight
 - **Pick your database** — PostgreSQL, SQL Server or MySQL, same code
 - **Beyond the browser** — an Electron desktop app (installers for three platforms with auto-update) and a native mobile app
+- **Secure by default, performance measured** — brute-force-resistant sign-in, permission checks on every endpoint in the backend, tamper-evident audit records, weak production secrets refused at start-up;
+  about 190 req/s at a p95 of about 70 ms on the default 2 workers, with the test conditions and script published (see [Security and performance](#security-and-performance))
 - **Tested for real** — 1,600+ tests against real databases and a real browser; CI runs the full backend suite on both PostgreSQL and SQL Server
 
 ## How it compares
@@ -166,6 +168,27 @@ Sign in as `admin` with the password you set during `pnpm db:init`. Switching to
 Data permissions were verified by signing in as 41 real accounts one by one; key safeguards are mutation-tested (break the code on purpose, confirm the tests go red).
 The [E2E report](https://yile2020.github.io/fastapi-react-admin/e2e/) from every `main` run is public, with screenshots and videos of failures.
 
+## Security and performance
+
+**Security** is on by default, and most of it needs no setup:
+
+- Sign-in: image captcha, account and IP lockout, rate limiting, TOTP two-factor; error messages don't reveal whether an account exists
+- Permissions: every endpoint checks its permission code and data scope **in the backend** (hiding a button is only cosmetic); a test cross-checks the three lists of permission codes
+- Audit: sign-in log, operation log (sensitive fields redacted before storage), field-level data change records (an HMAC signature chain, so changing, deleting or inserting a row is detected), kept 180 days by default
+- Deployment: with `ENVIRONMENT=prod` the backend **refuses to start** on weak secrets, a disabled captcha or rate limiter, or a database superuser account
+
+Item-by-item details and the tests behind them: [Security overview](https://yile2020.github.io/fastapi-react-admin/en/getting-started/security/).
+
+**Performance**: every request takes the full path (auth · session · permissions · data scope · query · operation log). Measured with an ordinary user on a mix of 12 everyday read endpoints:
+
+| API workers | Best throughput | 64 concurrent |
+|---|---|---|
+| 1 | 113–119 req/s, p95 about 95 ms | 0 failures |
+| **2 (production image default)** | **186–195 req/s, p95 about 70 ms** | 0 failures, p95 about 0.9 s |
+
+Measured on a laptop (WSL2), not a production server benchmark. How that maps to users, how to scale, and how to rerun it with `pnpm loadtest`:
+[Performance and capacity](https://yile2020.github.io/fastapi-react-admin/en/getting-started/performance/).
+
 ## Docs
 
 | To… | Read |
@@ -177,7 +200,8 @@ The [E2E report](https://yile2020.github.io/fastapi-react-admin/e2e/) from every
 | desktop app | [apps/desktop/README.md](./apps/desktop/README.md) |
 | integrate with the open API | [apps/api/backend/plugin/open/README.md](./apps/api/backend/plugin/open/README.md) |
 | reuse the component library | [packages/ui/PORTING.md](./packages/ui/PORTING.md) |
-| security notes | [SECURITY.md](./SECURITY.md) |
+| security notes | [Security overview](https://yile2020.github.io/fastapi-react-admin/en/getting-started/security/) · report a vulnerability via [SECURITY.md](./SECURITY.md) |
+| capacity planning | [Performance and capacity](https://yile2020.github.io/fastapi-react-admin/en/getting-started/performance/) |
 
 ## License
 

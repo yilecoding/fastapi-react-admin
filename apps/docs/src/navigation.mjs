@@ -3,7 +3,7 @@
 export const DOC_SECTIONS = [
   {
     label: '入门指南', en: 'Getting started',
-    pages: ['getting-started/introduction', 'getting-started/quick-start'],
+    pages: ['getting-started/introduction', 'getting-started/quick-start', 'getting-started/security', 'getting-started/performance'],
   },
   {
     label: '功能指南', en: 'Features',

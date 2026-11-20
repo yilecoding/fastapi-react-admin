@@ -90,6 +90,8 @@ AI 改代码很快，所以每一处改动都得有东西兜底：
 - **大文件也好传** —— 本地盘或 S3 兼容存储，秒传、分片并发、刷新后断点续传，右下角一个上传浮窗看全部进度
 - **数据库三选一** —— PostgreSQL、SQL Server、MySQL，同一套代码
 - **不止网页** —— Electron 桌面端（三平台安装包 + 自动更新）和原生移动 App
+- **安全默认开着、性能有实测** —— 防爆破登录、后端逐个接口判权限、带防篡改签名的审计、生产环境弱密钥拒绝启动；
+  默认 2 个 worker 约 190 次请求/秒、p95 约 70 毫秒，测试条件和复测脚本都公开（见下文[安全与性能](#安全与性能)）
 - **质量有底** —— 1600+ 条测试打真实数据库和真实浏览器，CI 上后端全套在 PostgreSQL 和 SQL Server 各跑一遍
 
 ## 和常见模板的区别
@@ -171,6 +173,27 @@ pnpm dev                                                # 打开 http://127.0.0.
 数据权限是拿 41 个真账号逐个登录验证出来的；关键防线都做过变异检验（故意把代码改坏，确认测试会红）。
 `main` 每次跑完的 [E2E 报告](https://yile2020.github.io/fastapi-react-admin/e2e/) 都公开，失败用例带截图和录像。
 
+## 安全与性能
+
+**安全**：默认开着，大部分不用配置 ——
+
+- 登录：图形验证码、连续输错锁账号和 IP、接口限流、TOTP 二次验证，错误提示不透露账号是否存在
+- 权限：每个接口在**后端**判权限码和数据范围（前端隐藏按钮只是显示）；三份权限码清单有测试逐一对账
+- 审计：登录日志、操作日志（敏感字段先打码再落库）、字段级数据变更记录（HMAC 签名链，改删插一行都校验得出来），默认留存 180 天
+- 部署：`ENVIRONMENT=prod` 时弱密钥、关掉验证码或限流、用数据库超级用户连接，后端都**拒绝启动**
+
+逐条说明和对应测试见[安全总览](https://yile2020.github.io/fastapi-react-admin/getting-started/security/)。
+
+**性能**：每个请求都走完整链路（鉴权 · 会话 · 权限 · 数据范围 · 查库 · 操作日志），普通用户、12 个常用读接口混合实测：
+
+| API worker 数 | 最佳吞吐 | 并发 64 |
+|---|---|---|
+| 1 | 113–119 次/秒，p95 约 95 毫秒 | 0 失败 |
+| **2（生产镜像默认）** | **186–195 次/秒，p95 约 70 毫秒** | 0 失败，p95 约 0.9 秒 |
+
+在一台笔记本（WSL2）上测的，不是生产服务器基准。怎么换算成能支撑多少人、怎么扩容、怎么用 `pnpm loadtest` 自己复测，
+见[性能与容量](https://yile2020.github.io/fastapi-react-admin/getting-started/performance/)。
+
 ## 文档
 
 | 想做什么 | 看这里 |
@@ -183,7 +206,8 @@ pnpm dev                                                # 打开 http://127.0.0.
 | 桌面端 | [apps/desktop/README.md](./apps/desktop/README.md) |
 | 对接开放接口 | [apps/api/backend/plugin/open/README.md](./apps/api/backend/plugin/open/README.md) |
 | 把组件库搬进别的项目 | [packages/ui/PORTING.md](./packages/ui/PORTING.md) |
-| 安全须知 | [SECURITY.md](./SECURITY.md) |
+| 安全须知 | [安全总览](https://yile2020.github.io/fastapi-react-admin/getting-started/security/) · 报告漏洞见 [SECURITY.md](./SECURITY.md) |
+| 性能与容量规划 | [性能与容量](https://yile2020.github.io/fastapi-react-admin/getting-started/performance/) |
 
 ## 许可
 
