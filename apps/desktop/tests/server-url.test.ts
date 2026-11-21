@@ -98,23 +98,89 @@ test("主进程的同步通道读的是 config.json 那份 serverUrl（与 auth.
   assert.equal(event.returnValue, "https://runtime.example.com")
 })
 
-test("writeConfig 拒绝非 HTTP(S) 的 serverUrl，合法地址削掉末尾斜杠", () => {
+function loadConfig(onDisk = "{}") {
   const written: string[] = []
   const urlModule = load("../../../packages/platform/src/desktop/http-url.ts", {})
   const config = load("../src/main/config.ts", {
     electron: { app: { getPath: () => "/tmp/desktop-config-test" } },
     "node:fs": {
-      readFileSync: () => "{}",
+      readFileSync: () => onDisk,
       mkdirSync() {},
       writeFileSync: (_p: string, data: string) => written.push(data),
     },
     "node:path": path,
     "@admin/platform/desktop/http-url": urlModule,
-  }) as { writeConfig: (patch: Record<string, unknown>) => { serverUrl: string } }
+  }) as {
+    readConfig: () => { serverUrl: string }
+    writeConfig: (patch: Record<string, unknown>) => { serverUrl: string }
+  }
+  return { config, written }
+}
+
+test("writeConfig 拒绝非 HTTP(S) 的 serverUrl，合法地址削掉末尾斜杠", () => {
+  const { config, written } = loadConfig()
   assert.throws(() => config.writeConfig({ serverUrl: "file:///etc/passwd" }))
   assert.throws(() => config.writeConfig({ serverUrl: "admin.example.com" }))
+  // 渲染层按 `${serverUrl}${path}` 拼：查询串 / 片段会吞掉路径，账号密码会让 fetch 直接拒绝（#392 评审跟进）
+  assert.throws(() => config.writeConfig({ serverUrl: "https://admin.example.com/?env=prod" }))
+  assert.throws(() => config.writeConfig({ serverUrl: "https://admin.example.com/#x" }))
+  assert.throws(() => config.writeConfig({ serverUrl: "https://u:p@admin.example.com" }))
   assert.equal(written.length, 0)
   assert.equal(config.writeConfig({ serverUrl: " https://admin.example.com/ " }).serverUrl, "https://admin.example.com")
   // 清空是允许的：回到「未配置」，登录页重新引导
   assert.equal(config.writeConfig({ serverUrl: "" }).serverUrl, "")
+})
+
+test("config.json 里手改坏的 serverUrl 读出来当没配，不交给渲染层和登录去拼相对地址（#392 评审跟进）", () => {
+  // 没有协议 → 渲染层 fetch 按 app://local 解析，拿回 index.html；主进程 Node fetch 直接抛
+  assert.equal(loadConfig(JSON.stringify({ serverUrl: "192.168.1.10:8088" })).config.readConfig().serverUrl, "")
+  assert.equal(
+    loadConfig(JSON.stringify({ serverUrl: "https://admin.example.com/" })).config.readConfig().serverUrl,
+    "https://admin.example.com"
+  )
+})
+
+function loadIpcWithConfig(initial: string) {
+  const handlers: Record<string, (event: unknown, ...args: unknown[]) => unknown> = {}
+  let current = { serverUrl: initial, kiosk: false }
+  const cleared: number[] = []
+  const ipc = load("../src/main/ipc.ts", {
+    electron: {
+      BrowserWindow: { getAllWindows: () => [] },
+      ipcMain: {
+        handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => {
+          handlers[channel] = fn
+        },
+        on() {},
+      },
+    },
+    "@admin/platform/desktop/contract": contract,
+    "./auth": { clearRefreshToken: () => cleared.push(1) },
+    "./config": {
+      readConfig: () => current,
+      writeConfig: (patch: Record<string, unknown>) => {
+        current = { ...current, ...patch }
+        return current
+      },
+    },
+    "./devices/registry": { onDeviceEvent() {} },
+    "./print": {},
+    "./updater": {},
+  }) as { registerIpc: (info: () => unknown) => void }
+  ipc.registerIpc(() => ({}))
+  const set = (patch: Record<string, unknown>) => handlers[IPC.configSet]!({}, patch)
+  return { set, cleared }
+}
+
+test("换了服务器就删掉上一台的 refresh token，不把它当 Cookie 发给新地址（#392 评审跟进）", () => {
+  const { set, cleared } = loadIpcWithConfig("https://a.example.com")
+  set({ serverUrl: "https://b.example.com" })
+  assert.equal(cleared.length, 1, "换服务器后旧凭据还在：下次 restore 会把 A 的 refresh token 发给 B")
+})
+
+test("服务器地址没变（或只改了别的配置）不动登录凭据", () => {
+  const { set, cleared } = loadIpcWithConfig("https://a.example.com")
+  set({ serverUrl: "https://a.example.com" })
+  set({ kiosk: true })
+  assert.equal(cleared.length, 0)
 })

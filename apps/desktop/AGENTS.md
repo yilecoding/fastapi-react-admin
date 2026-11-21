@@ -71,6 +71,28 @@ Electron API 使用 mock 验证，未在打包安装程序中调用真实系统�
 `https://api.example.test`，`config.json` 落盘同值，验证码 / 公告请求发往该主机。
 **没实测**：打包后的安装包（`app.isPackaged`、`resources/renderer`）、开着 OS 沙箱、连真后端的登录 / 刷新 / socket.io。
 
+**评审跟进（2026-11-21）**，三处「只在登录页能换服务器」不够的地方：
+
+- 🔴 **存着 refresh token、旧服务器连不上时卡死在错误页**：冷启动的静默恢复网络失败是 transient，守卫抛给
+  「暂时连不上服务器」页、不去登录页，那一页原来只有「重试」，外壳又没有地址栏 —— 服务器搬家后只能手删
+  `config.json`。现在桌面端在那一页也给「更换服务器」（`-desktop-server.tsx` 的 `DesktopServerSwitch`），
+  地址为空（`config.json` 丢了、凭据还在）时直接显示表单。
+- 🔴 **换服务器不删上一台的 refresh token**：下次 `restore()` 会把 A 的长效凭据当 Cookie 头发给 B
+  （填错的 / 不可信的 / 渲染层被注入改掉的地址）。`ipc.ts` 的 `config:set` 在 `serverUrl` 变了时调
+  `clearRefreshToken()`。
+- 地址判据统一成 `http-url.ts` 的 `serverBaseUrl()`：表单、`writeConfig`、`readConfig`、`resolveApiBase` 同一个。
+  多挡查询串 / 片段（`${API_BASE}${path}` 会把路径拼进查询串）和账号密码（Chromium fetch 拒绝构造请求）；
+  `config.json` 里手改坏的值读出来当没配，登录页重新引导，而不是拼出打到 `app://local` 的相对地址。
+
+`http://` 局域网地址**不受**混合内容拦截：真 Electron 42 里 `app://local`（`secure: true`、`isSecureContext === true`）
+对 `http://192.168.x.x` 的 fetch 和 XHR 都是 200 —— 不用为它强制 https。
+
+**实测证据**：`tests/server-url.test.ts` 新增的 3 条（查询串 / 账号密码被拒、手改坏的值读成空、换服务器删凭据）
+在修复前红、修复后全部 12 条绿；platform `http-url.test.ts` / `base-url.test.ts` 新增 14 条同样先红后绿。
+真 Electron（未打包，同上的起法）预置 `config.json` 指向关着的端口 + `credentials.bin` 明文旧 token：
+PR 原版停在错误页、`desktop-server-change` 不存在；修复后错误页出现入口，填带 `?env=prod` 的地址被拒，
+填新地址保存 → 重载到 `/sign-in`，`config.json` 落盘新值、`credentials.bin` 已删除。
+
 ## 出包的顺序：漏了第一步不报错，只是界面是上一版的
 
 ```bash

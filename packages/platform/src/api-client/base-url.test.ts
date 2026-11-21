@@ -26,6 +26,12 @@ describe("API 地址解析", () => {
     expect(resolveApiBase(undefined, { serverUrl: "https://admin.example.com/ " })).toBe("https://admin.example.com")
   })
 
+  it("桌面端 config.json 被手改成不完整的地址：当没配，让登录页引导填写，不拿去拼相对路径（#392 评审跟进）", () => {
+    // 不带协议的值会被 fetch 按 app://local 解析 —— 正是 #392 的症状（200 + index.html）
+    expect(resolveApiBase(undefined, { serverUrl: "192.168.1.10:8088" })).toBe("")
+    expect(resolveApiBase(undefined, { serverUrl: "https://admin.example.com/?env=prod" })).toBe("")
+  })
+
   it("浏览器：生产同源构建的空串保留（不是 undefined 就不回落）", () => {
     expect(resolveApiBase("", null)).toBe("")
   })

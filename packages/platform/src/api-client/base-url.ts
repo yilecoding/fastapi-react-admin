@@ -12,11 +12,14 @@
  *
  * 桌面端没配地址时返回空串**不回落开发地址**：登录页据此显示「填写服务器地址」，
  * 而不是悄悄连一个装机用户那台机器上根本不存在的 127.0.0.1:8088。
+ * 配了但不是完整的 HTTP(S) 基址（手改 config.json 漏了协议之类）同样当没配 ——
+ * 不带协议的值会被 fetch 按 `app://local` 解析，又回到上面那个症状。
  */
+import { serverBaseUrl } from '../desktop/http-url'
 
 export const DEV_API_BASE = 'http://127.0.0.1:8088'
 
 export function resolveApiBase(env: string | undefined, bridge: { serverUrl?: string } | null): string {
-  if (bridge && typeof bridge.serverUrl === 'string') return bridge.serverUrl.trim().replace(/\/+$/, '')
+  if (bridge && typeof bridge.serverUrl === 'string') return serverBaseUrl(bridge.serverUrl) ?? ''
   return env ?? DEV_API_BASE
 }

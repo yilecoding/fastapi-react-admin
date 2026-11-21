@@ -4,7 +4,7 @@ import { IconLoader2, IconServer } from "@tabler/icons-react"
 
 import { API_BASE } from "@admin/platform/api-client/client"
 import { tryDesktop } from "@admin/platform/desktop"
-import { httpUrl } from "@admin/platform/desktop/http-url"
+import { serverBaseUrl } from "@admin/platform/desktop/http-url"
 import { Alert } from "@admin/ui/components/alert"
 import { Button } from "@admin/ui/components/button"
 import { Input } from "@admin/ui/components/input"
@@ -21,12 +21,6 @@ export function needsDesktopServer(): boolean {
   return tryDesktop() !== null && !API_BASE
 }
 
-/** 末尾不带斜杠，同主进程 `config.ts` 的 normalize；只收完整的 HTTP(S) 地址 */
-function normalizeServerUrl(raw: string): string | null {
-  const url = httpUrl(raw)
-  return url ? url.replace(/\/+$/, "") : null
-}
-
 /**
  * 填写 / 更换服务器地址。保存后整页重载：preload 重新同步取 serverUrl，
  * 渲染层 `API_BASE` 和主进程登录用的就是同一个后端。
@@ -39,7 +33,8 @@ export function DesktopServerForm({ onCancel }: { onCancel?: () => void }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const url = normalizeServerUrl(value)
+    // 和主进程 `writeConfig` 同一个判据：完整的 HTTP(S) 基址，不带查询串 / 片段 / 账号密码
+    const url = serverBaseUrl(value)
     if (!url) {
       setError(t("请填写完整的服务器地址，以 http:// 或 https:// 开头"))
       return
@@ -114,4 +109,26 @@ export function DesktopServerLine({ onChange }: { onChange: () => void }) {
       </button>
     </p>
   )
+}
+
+/**
+ * 「暂时连不上服务器」错误页上的更换入口（桌面端）。
+ *
+ * 只在登录页给入口不够：存着 refresh token 时冷启动先走静默恢复，网络不通是 transient ——
+ * 守卫抛给错误页、**不去登录页**（会话可能还好好的）。服务器搬了家或地址本来就填错了，
+ * 那一页只有「重试」，桌面外壳又没有地址栏，用户只能去删 `config.json`。
+ * 换了地址主进程会删掉上一台的登录凭据（`ipc.ts` 的 `config:set`），重载后从登录页重新开始。
+ */
+export function DesktopServerSwitch() {
+  const [open, setOpen] = React.useState(false)
+  if (!tryDesktop()) return null
+  // 地址是空的（config.json 丢了、凭据还在）也会走到这里：主进程刷新拿不到地址按 transient 回来
+  if (open || !API_BASE) {
+    return (
+      <div className="w-full max-w-sm text-left">
+        <DesktopServerForm onCancel={API_BASE ? () => setOpen(false) : undefined} />
+      </div>
+    )
+  }
+  return <DesktopServerLine onChange={() => setOpen(true)} />
 }
