@@ -11,50 +11,14 @@ These numbers come from a laptop, not a production server benchmark. Below are t
 
 Every request takes the full path; nothing was switched off for the test: JWT verification, a session check in Redis, the RBAC permission-code check, row filtering by data scope, the database query, serialization, and an operation-log entry (GET requests are logged too).
 
-| API workers | Single request | Best throughput (8 concurrent) | 64 concurrent |
-|---|---|---|---|
-| 1 | p50 16–19 ms | 113–119 req/s, p95 92–98 ms | 96–100 req/s, p95 about 1.1 s, 0 failures |
-| **2 (production image default)** | p50 15 ms | **186–195 req/s, p95 68–69 ms** | 157–172 req/s, p95 0.8–0.9 s, 0 failures |
+| API workers                      | Single request | Best throughput (8 concurrent)  | 64 concurrent                             |
+| -------------------------------- | -------------- | ------------------------------- | ----------------------------------------- |
+| 1                                | p50 16–19 ms   | 113–119 req/s, p95 92–98 ms     | 96–100 req/s, p95 about 1.1 s, 0 failures |
+| **2 (production image default)** | p50 15 ms      | **186–195 req/s, p95 68–69 ms** | 157–172 req/s, p95 0.8–0.9 s, 0 failures  |
 
 Each configuration ran twice; the table shows the range. Across all 20 steps of the four runs the **failure rate was 0** and the server log had no errors.
 
 "Concurrent" means requests in flight at the same time, not users online. Once concurrency goes past what the workers can process, the extra requests wait in line: throughput stops rising and latency grows. Up to 64 concurrent requests nothing failed in the test; beyond that, requests start failing once queueing exceeds the client's or the connection pool's wait limit.
-
-## Compared with what?
-
-"190 requests per second" alone doesn't tell you whether that's fast. We **don't compare against other frameworks' published benchmarks**: different hardware and endpoint complexity make side-by-side numbers unfair, and most benchmarks measure empty endpoints with no auth and no database.
-
-A more useful reference is how fast the same kind of request runs **on the same machine, with the same uvicorn and connection-pool settings**, once these security and audit features are taken away. The baseline service is [`scripts/loadtest_baseline.py`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/loadtest_baseline.py); every row uses one worker at 8 concurrent requests, two alternating rounds:
-
-| Endpoint | Throughput per worker | p50 | What each request does |
-|---|---|---|---|
-| Bare FastAPI | 1,615–2,099 req/s | 3–4 ms | Returns a fixed JSON body, nothing else |
-| FastAPI + one paginated query | 723–830 req/s | 9–11 ms | Counts the rows, then fetches 20 users |
-| **This project: user list** | **107–113 req/s** | 64–70 ms | The same kind of paginated query, plus everything below |
-| This project: mix of 12 everyday endpoints | about 119 req/s | 63–65 ms | Same as above |
-
-Compared with the simplest endpoint that runs one query, this project's throughput per core is about **one seventh**. The difference is what every request does on top:
-
-- Verify the JWT signature and check in Redis that the session is still valid and not idle-expired
-- Check the permission code for the endpoint, and add the data-scope row filter to the query
-- Ping the database connection before using it (on by default when these numbers were taken; off by default now); the user list also fetches each user's roles
-- Redact the request parameters and response, and write them to the operation log (in background batches)
-
-That is the price of security and auditing. What it buys: requests without permission don't get in, data you shouldn't see isn't returned, and every request can be traced afterwards.
-
-**Within capacity, users don't feel it.** At its highest-throughput step (8 concurrent requests), one worker still returns 95% of requests within 100 ms; push concurrency higher and requests start to queue, so p95 grows (about 220–250 ms at 16). Responses within 100 ms feel instantaneous ([Nielsen Norman Group](https://www.nngroup.com/articles/response-times-3-important-limits/)), so when capacity runs short, add workers or machines; see [scaling](#how-do-i-scale-when-its-not-enough).
-
-## Under what conditions?
-
-- **Code**: the backend on `main`, `uvicorn --workers N` without `--reload` — the same way [`Dockerfile.prod`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/Dockerfile.prod) starts it (default `--workers 2`), without nginx in front.
-- **Account**: an **ordinary user** (the department manager role, granted every menu, with a department data scope). A superuser skips the permission checks, so testing with one makes the numbers look better than they are.
-- **Endpoints**: user list, role list, department tree, menu tree, sidebar, current user, permission codes, dictionaries, system config, unread notification count, notification list and file statistics, weighted by how often they're used — all GET.
-- **Data**: the seed data from `fba init` (10 users, 162 menus).
-- **Dependencies**: PostgreSQL 16 and Redis 7 in Docker on the same machine.
-- **Connection ping**: on during the test (the default at the time). It's off by default now, saving 3 database round trips per request, so real numbers come out slightly better than the table.
-- **Machine**: an Intel Core Ultra 9 285H laptop under WSL2, with the load generator and the server on the same machine.
-
-The raw record is in [`scripts/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/AGENTS.md), in the section on where the numbers of the docs' performance page come from.
 
 ## How many users is 190 requests per second?
 
@@ -79,20 +43,20 @@ Your usage will differ, and so will the result. The reliable way is to test once
 
 **Overload queues before it errors.** Up to 64 concurrent requests, the 2 workers had a p95 of about 0.9 s and zero failures. That only shows a smooth slowdown within the tested range; queueing isn't unlimited.
 
-## Where does the time go, and what can I tune?
+<details>
+<summary>Under what conditions?</summary>
 
-A request uses about 7–8 ms of CPU, spread across authentication, routing, dependency injection, the database query and serialization; no single part dominates. This release makes two optimizations:
+- **Code**: the backend on `main`, `uvicorn --workers N` without `--reload` — the same way [`Dockerfile.prod`](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/Dockerfile.prod) starts it (default `--workers 2`), without nginx in front.
+- **Account**: an **ordinary user** (the department manager role, granted every menu, with a department data scope). A superuser skips the permission checks, so testing with one makes the numbers look better than they are.
+- **Endpoints**: user list, role list, department tree, menu tree, sidebar, current user, permission codes, dictionaries, system config, unread notification count, notification list and file statistics, weighted by how often they're used — all GET.
+- **Data**: the seed data from `fba init` (10 users, 162 menus).
+- **Dependencies**: PostgreSQL 16 and Redis 7 in Docker on the same machine.
+- **Connection ping**: on during the test (the default at the time). It's off by default now, saving 3 database round trips per request, so real numbers come out slightly better than the table.
+- **Machine**: an Intel Core Ultra 9 285H laptop under WSL2, with the load generator and the server on the same machine.
 
-- **Three middlewares rewritten as plain ASGI**: 8.5% less CPU per request, same behavior.
-- **No ping before handing out a connection** (`DATABASE_POOL_PRE_PING` now defaults to `false`): 3 fewer database round trips per checkout, about 3% less CPU. The cost was measured: right after a database restart, 1 of 8 concurrent requests failed, then the pool rebuilt itself and everything recovered. If your database restarts or fails over often, or a firewall in between drops idle connections, set it to `true` in `.env`.
+The raw record is in [`scripts/AGENTS.md`](https://github.com/yile2020/fastapi-react-admin/blob/main/scripts/AGENTS.md), in the section on where the numbers of the docs' performance page come from.
 
-One more measured cost **stays on by default**, because it buys auditability. The method and raw numbers are in the [`middleware` notes](https://github.com/yile2020/fastapi-react-admin/blob/main/apps/api/backend/middleware/AGENTS.md):
-
-| Item | Saving if removed | Why it stays |
-|---|---|---|
-| Operation log for every request, GET included | About 13% CPU (about 1 ms per request, including the background batch writes) | "Who looked at what, and when" is part of the audit trail. Logs are redacted inside the request, then written in batches in the background. There is currently no switch to turn it off |
-
-**Checked and not worth doing**: swapping uvicorn for Granian (a Rust server) didn't change throughput — the bottleneck is the application code, not the HTTP server; `uvloop`, `httptools` and `msgspec` serialization are already in use.
+</details>
 
 ## How do I test it myself?
 
