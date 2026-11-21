@@ -58,13 +58,21 @@ async def _append_env_example(plugin_path: anyio.Path) -> None:
             existing_content = await f.read()
 
     existing_keys = _env_keys(existing_content)
-    lines = [
-        line
-        for line in env_example_content.splitlines()
-        if not ((m := _ENV_KEY.match(line)) and m.group(1) in existing_keys)
-    ]
-    if not _env_keys('\n'.join(lines)):
+    # 跳过已有的键时，连它上面紧挨着的那段注释一起跳过 —— 不然注释留在 .env 末尾，压在一个不相干的新键上面
+    lines: list[str] = []
+    pending: list[str] = []
+    for line in env_example_content.splitlines():
+        m = _ENV_KEY.match(line)
+        if not m:
+            pending.append(line)
+            continue
+        if m.group(1) not in existing_keys:
+            lines.extend(pending)
+            lines.append(line)
+        pending = []
+    if not lines:
         return
+    lines.extend(pending)
     addition = '\n'.join(lines) + '\n'
 
     separator = '\n' if existing_content and not existing_content.endswith('\n') else ''
@@ -221,10 +229,12 @@ async def install_git_plugin(repo_url: str) -> str:
     repo_name = match.group('repo')
     _check_plugin_name(repo_name)
     path = anyio.Path(PLUGIN_DIR / repo_name)
-    if await path.exists():
-        raise errors.ConflictError(msg=t('error.plugin.repo_already_installed', repo_name=repo_name))
 
     async with acquire_distributed_reload_lock():
+        # 🔴 「已安装」要在锁**里面**查：下面克隆失败会删目录，查在锁外的话，排队等锁期间另一个请求装好的同名插件
+        # 会被这次「克隆失败」当成自己的半个目录删掉（#395 评审）
+        if await path.exists():
+            raise errors.ConflictError(msg=t('error.plugin.repo_already_installed', repo_name=repo_name))
         try:
             await run_in_threadpool(porcelain.clone, repo_url, PLUGIN_DIR / repo_name, checkout=True)
         except Exception as e:

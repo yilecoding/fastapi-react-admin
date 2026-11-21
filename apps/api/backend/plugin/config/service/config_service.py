@@ -42,6 +42,8 @@ async def _check_pairs(db: AsyncSession, touched: set[str]) -> None:
     """
     if not touched & set(PASSWORD_LENGTH_PAIR):
         return
+    # 会话是 autoflush=False：`create` 刚 add 的行不 flush 就查不到（update 走的是直接 UPDATE 语句，不受影响）
+    await db.flush()
     rows = await db.execute(
         select(Config.key, Config.value).where(Config.key.in_(PASSWORD_LENGTH_PAIR), Config.deleted == 0)
     )
@@ -107,6 +109,8 @@ class ConfigService:
         if is_secret_key_name(obj.key):
             obj = obj.model_copy(update={'value': encrypt_secret(obj.value), 'is_frontend': False})
         await config_dao.create(db, obj)
+        # 新建也要过：删掉上限那一行再建一条值为 1 的，绕开的就是 `update` 那道闸（#395 评审）
+        await _check_pairs(db, {obj.key})
 
     @staticmethod
     async def update(*, db: AsyncSession, pk: int, obj: UpdateConfigParam) -> int:

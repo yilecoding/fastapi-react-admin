@@ -269,3 +269,81 @@ def test_the_lock_is_renewed_while_the_stream_runs(chat: dict[str, Any], monkeyp
     _run_stream(conversation_id)
     assert seen == [True], '模型还没回完锁就过期了：同一会话能再进一条流'
     assert provider_module  # 保持导入：provider_service 是被测对象之一
+
+
+# ---------- 评审跟进 ----------
+
+
+def test_lock_renewal_has_an_upper_bound(chat: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
+    """卡死的流不能让会话「正在回复中」直到进程重启：续满上限就停，锁按 TTL 过期"""
+    monkeypatch.setattr(chat_module.ai_provider_service, 'build_client', lambda _p: None)
+    monkeypatch.setattr(chat_module, 'STREAM_LOCK_TTL', 1)
+    monkeypatch.setattr(chat_module, 'STREAM_LOCK_RENEW_EVERY', 0.2)
+    monkeypatch.setattr(chat_module, 'STREAM_LOCK_MAX_SECONDS', 0.5, raising=False)
+    chat['provider'] = SimpleNamespace()
+    conversation_id = int(_RUN, 16) + 4
+    key = f'fba:ai:stream:{conversation_id}'
+    seen: list[bool] = []
+
+    async def stuck_tool() -> None:
+        await asyncio.sleep(2.5)  # 上限 0.5 秒 + TTL 1 秒之后
+        seen.append(bool(await chat_module.redis_client.exists(key)))
+
+    chat['events'] = [stuck_tool, DoneEvent()]
+    _run_stream(conversation_id)
+    assert seen == [False], '续期没有上限：卡死的流一直占着锁'
+
+
+def test_a_database_error_while_picking_the_provider_still_ends_with_an_error_frame(
+    chat: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """选供应商那条查询失败时 PostgreSQL 的事务已经 aborted：不回滚，接着落用户消息就抛，冲出生成器（断流）。
+    假会话模拟 PG 的行为：出错后到 rollback 之前的语句一律失败"""
+    session = {'aborted': False}
+
+    async def query_fails(*_a: Any) -> Any:  # ruff: ignore[unused-async]
+        session['aborted'] = True
+        raise RuntimeError('connection reset')
+
+    async def create(_db: Any, **kw: Any) -> Any:  # ruff: ignore[unused-async]
+        if session['aborted']:
+            raise RuntimeError('InFailedSQLTransactionError: current transaction is aborted')
+        chat['saved'].append(kw)
+        return SimpleNamespace(**kw)
+
+    async def rollback(_self: Any) -> None:  # ruff: ignore[unused-async]
+        session['aborted'] = False
+
+    monkeypatch.setattr(chat_module, '_resolve_provider', query_fails)
+    monkeypatch.setattr(chat_module.ai_message_dao, 'create', create)
+    monkeypatch.setattr(_FakeSession, 'rollback', rollback)
+
+    frames = _run_stream(int(_RUN, 16) + 5)
+    assert frames[-1]['type'] == 'error'
+    assert [m['role'] for m in chat['saved']] == ['user', 'assistant']
+
+
+def test_setup_error_is_persisted_even_if_the_client_leaves_on_that_frame(
+    chat: dict[str, Any],
+) -> None:
+    """报错帧发出那一刻客户端断开（取消抛在 yield 上）：落库要在 yield 之前，不然只剩用户那句话"""
+    chat['provider'] = None  # → no_provider
+    conversation_id = int(_RUN, 16) + 6
+
+    async def go() -> None:
+        redis = RedisCli()
+        chat_module.redis_client = redis
+        try:
+            stream = ChatService.stream(user=_USER, conversation_id=conversation_id, content='hi')
+            first = json.loads((await stream.__anext__())[5:])
+            assert first['code'] == 'no_provider'
+            await stream.aclose()  # = 客户端断开
+        finally:
+            await redis.aclose()
+
+    original = chat_module.redis_client
+    try:
+        asyncio.run(go())
+    finally:
+        chat_module.redis_client = original
+    assert [m['role'] for m in chat['saved']] == ['user', 'assistant']

@@ -147,6 +147,13 @@ class PluginService:
         plugin_dir = await _get_plugin_dir(plugin)
         if plugin in get_required_plugins():
             raise errors.RequestError(msg=t('error.plugin.required_cannot_uninstall', plugin=plugin))
+        # 被别的已安装插件依赖的不许卸（不管启用没有）：`build_final_router` 拿**所有已安装**插件排依赖序，
+        # 卸掉之后下次启动 `PluginConfigError: … 不存在`，进程起不来、没有界面能恢复（#395 评审，同停用那条）
+        dependents = [name for name in get_plugins() if name != plugin and plugin in _depends_on(name)]
+        if dependents:
+            raise errors.RequestError(
+                msg=t('error.plugin.depended_cannot_uninstall', plugin=plugin, dependents=', '.join(dependents))
+            )
         await uninstall_requirements_async(plugin)
         backup_file = PLUGIN_DIR / f'{plugin}.{timezone.now().strftime("%Y%m%d%H%M%S")}.backup.zip'
         await run_in_threadpool(zip_plugin, plugin_dir, backup_file)

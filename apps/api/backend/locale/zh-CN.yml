@@ -225,6 +225,7 @@ error:
     archive_invalid_format: 插件压缩包格式非法
     archive_missing_files: 插件压缩包内缺少必要文件
     depended_cannot_disable: '插件 {plugin} 被已启用的插件 {dependents} 依赖，请先停用它们'
+    depended_cannot_uninstall: '插件 {plugin} 被已安装的插件 {dependents} 依赖，请先卸载它们'
     dependency_not_enabled: '插件 {plugin} 依赖的插件 {dependencies} 未启用，请先启用它们'
     dev_only_install: 禁止在非开发环境下安装插件
     dev_only_uninstall: 禁止在非开发环境下卸载插件

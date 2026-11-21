@@ -83,8 +83,8 @@ def get_enabled_plugins(plugins: tuple[str, ...] | None = None) -> set[str]:
             plugin_info = run_await(current_redis_client.get)(f'{settings.PLUGIN_REDIS_PREFIX}:{plugin}')
             if get_plugin_enable(plugin_info, StatusType.enable.value) != str(StatusType.enable.value):
                 if plugin in required:
-                    # 必需插件不许停（#395）：接口那边拦住了，这里兜住拦之前就停掉的。
-                    # 原来照样当停用处理 —— 停掉 `dict` 后重启，字典路由全 404、整套表单下拉为空，启动不报一个字
+                    # 必需插件不许停（#395）。启动时 `parse_plugin_config` 已把 Redis 改回启用（那才是让
+                    # 路由放行的一步，见 `_normalize_plugin_status`）；这里兜住单独调本函数的地方
                     log.error(f'必需插件 {plugin} 被标记为停用，已按启用加载；请到插件页把它重新启用')
                     continue
                 enabled_plugins.discard(plugin)
@@ -109,6 +109,44 @@ def load_plugin_config(plugin: str) -> dict[str, Any]:
         return rtoml.load(f)
 
 
+def _normalize_plugin_status(configs: dict[str, dict[str, Any]]) -> None:
+    """启动时把启停状态校正成「接口允许出现的样子」，就地改 `configs[*]['plugin']['enable']`（#395）
+
+    接口现在拦住了「停必需插件」「停被依赖的插件」，这里兜住拦之前就停掉的。🔴 要随 `parse_plugin_config`
+    写回 Redis，不能只改 `get_enabled_plugins()` 的返回值：`build_final_router` 给**所有已安装**插件挂路由，
+    每条路由过 `PluginStatusChecker`，它读的是 Redis ——
+
+    - 被标成停用的必需插件：只在 hooks 那边按启用算的话，`dict` 的接口照样一条条报「插件未启用」，表单下拉全空
+    - 依赖了已停用插件的：只在 hooks 那边跳过的话，它的接口照样能调、hooks 却没跑，半个插件在线
+
+    :param configs: 插件名 → plugin.toml 内容（`plugin.enable` 已是 Redis 里的现值）
+    :return:
+    """
+    on, off = str(StatusType.enable.value), str(StatusType.disable.value)
+    for name in get_required_plugins():
+        if name in configs and configs[name]['plugin']['enable'] != on:
+            log.error(f'必需插件 {name} 被标记为停用，已改回启用')
+            configs[name]['plugin']['enable'] = on
+
+    changed = True
+    while changed:  # 传递：A 停了 → 依赖 A 的 B 停 → 依赖 B 的 C 也停
+        changed = False
+        for name, config in configs.items():
+            if config['plugin']['enable'] != on:
+                continue
+            missing = [
+                dep
+                for dep in config['plugin'].get('depends_on') or []
+                if dep in configs and configs[dep]['plugin']['enable'] != on
+            ]
+            if missing:
+                log.error(
+                    f'插件 {name} 依赖的插件 {", ".join(missing)} 已停用，{name} 一并标为停用；先启用依赖再启用它'
+                )
+                config['plugin']['enable'] = off
+                changed = True
+
+
 def parse_plugin_config() -> tuple[list[PluginEntry], list[PluginEntry]]:
     """解析插件配置"""
     plugins = get_plugins()
@@ -127,16 +165,21 @@ def parse_plugin_config() -> tuple[list[PluginEntry], list[PluginEntry]]:
             exclude_keys=exclude_keys,
         )
 
+        configs: dict[str, tuple[dict[str, Any], PluginLevelType]] = {}
         for plugin in plugins:
             plugin_config = load_plugin_config(plugin)
             plugin_type = validate_plugin_config(plugin, plugin_config)
 
             # 补充插件信息
             plugin_config['plugin']['name'] = plugin
-            plugin_cache_key = f'{settings.PLUGIN_REDIS_PREFIX}:{plugin}'
-            plugin_cache_info = run_await(current_redis_client.get)(plugin_cache_key)
+            plugin_cache_info = run_await(current_redis_client.get)(f'{settings.PLUGIN_REDIS_PREFIX}:{plugin}')
             plugin_config['plugin']['enable'] = get_plugin_enable(plugin_cache_info, StatusType.enable.value)
+            configs[plugin] = (plugin_config, plugin_type)
 
+        _normalize_plugin_status({name: config for name, (config, _) in configs.items()})
+
+        for plugin, (plugin_config, plugin_type) in configs.items():
+            plugin_cache_key = f'{settings.PLUGIN_REDIS_PREFIX}:{plugin}'
             if plugin_type == PluginLevelType.extend:
                 extend_plugins.append(
                     PluginEntry(
@@ -230,8 +273,9 @@ def drop_disabled_dependents(plugins: list[PluginEntry], installed: set[str]) ->
 
 def get_ordered_enabled_plugins() -> list[PluginEntry]:
     """获取按依赖排序后的已启用插件"""
-    enabled_plugins = get_enabled_plugins()
+    # 先 parse：它把校正过的启停状态写回 Redis（`_normalize_plugin_status`），之后再读状态
     extend_plugins, app_plugins = parse_plugin_config()
+    enabled_plugins = get_enabled_plugins()
     plugins: list[PluginEntry] = [plugin for plugin in extend_plugins + app_plugins if plugin.name in enabled_plugins]
     plugins = drop_disabled_dependents(plugins, {plugin.name for plugin in extend_plugins + app_plugins})
 

@@ -95,7 +95,8 @@ service 层时**自动**继承调用者的可见范围。反过来说：谁在�
   `tests/test_ai_security.py::TestStreamParsing`
 - **会话流锁的值是这条流自己的令牌，进行中续期，释放时比对了再删**（#395）。原来值恒为 `'1'`、300 秒过期、无条件 `DELETE`：
   慢模型过了 5 分钟，同一会话能进第二条流，第一条收尾时删掉第二条的锁。修前 `tests/test_ai_key_and_lock.py` 那条锁被删成 `None`。
-  密钥解不开时的断流见 [`llm` 子分册](llm/AGENTS.md)
+  ⚠️ 续期要有总上限（`STREAM_LOCK_MAX_SECONDS`，不设则卡死的流让会话一直「回复中」）。准备阶段兜底要 `db.rollback()`：查询失败后 PG 事务已 aborted，
+  接着落用户消息就 `InFailedSQLTransactionError` 冲出生成器（真 PG 实测；测试是假会话模拟）。密钥解不开时的断流见 [`llm` 子分册](llm/AGENTS.md)
 
 ## 🔴 内网网关的两条约束（来自 sop2ppt 的实测）
 

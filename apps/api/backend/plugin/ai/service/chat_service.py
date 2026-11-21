@@ -47,6 +47,10 @@ _SYSTEM_PROMPT = """你是这套后台管理系统的 AI 助手。
 #: 会话流锁的过期时间与续期间隔（秒）。过期只兜「进程死了没释放」；活着的流靠续期一直持有
 STREAM_LOCK_TTL = 300
 STREAM_LOCK_RENEW_EVERY = 60
+#: 续期的总上限（秒）。一轮最多 `AI_MAX_TOOL_ROUNDS` 次模型请求、单次超时可配到 600 秒，一小时足够；
+#: 🔴 不设上限的话，卡死的流（某个工具在一个没超时的下游上永远等着）会让这个会话「正在回复中」直到进程重启 ——
+#: 原来至少 5 分钟后锁自己过期（#395 评审）
+STREAM_LOCK_MAX_SECONDS = 3600
 
 #: 只在锁还是自己的时候才续 / 才删（KEYS[1] = 锁，ARGV[1] = 令牌，ARGV[2] = 续到几秒）
 _RENEW_LOCK = """
@@ -64,10 +68,16 @@ return 0
 
 
 async def _renew_lock(key: str, token: str) -> None:
-    """流进行中定时续期。锁已经不是自己的（过期后被别的流拿走）就停 —— 不抢回来"""
+    """流进行中定时续期。锁已经不是自己的（过期后被别的流拿走）就停 —— 不抢回来；
+    续满 `STREAM_LOCK_MAX_SECONDS` 也停，之后锁按 TTL 自己过期"""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + STREAM_LOCK_MAX_SECONDS
     try:
         while True:
             await asyncio.sleep(STREAM_LOCK_RENEW_EVERY)
+            if loop.time() >= deadline:
+                log.warning(f'AI 对话流锁 {key} 已续满 {STREAM_LOCK_MAX_SECONDS} 秒，停止续期，按 TTL 过期')
+                return
             if not await redis_client.eval(_RENEW_LOCK, 1, key, token, STREAM_LOCK_TTL):
                 log.warning(f'AI 对话流锁 {key} 已不属于本条流，停止续期')
                 return
@@ -101,6 +111,10 @@ async def _prepare(db: Any, provider_id: int | None) -> tuple[Any, Any, ErrorEve
         return provider, None, ErrorEvent(message=e.msg, code='setup_failed')
     except Exception:
         log.exception('AI 对话准备失败')
+        # 🔴 失败的可能是选供应商那条查询：PostgreSQL 上事务已经 aborted，不回滚的话调用方接着落用户消息 /
+        # commit 会抛 `InFailedSQLTransactionError`，在 200 头之后冲出生成器 —— 正是这里要避免的断流（#395 评审）
+        with anyio.CancelScope(shield=True):
+            await db.rollback()
         return provider, None, ErrorEvent(message='对话准备失败，请稍后重试或联系管理员', code='setup_failed')
 
 
@@ -156,11 +170,12 @@ class ChatService:
 
                 if setup_error is not None or engine is None:
                     error = setup_error or ErrorEvent(message='对话准备失败', code='setup_failed')
-                    yield _sse(error)
+                    # 先落库再发帧：客户端恰好在这一帧上断开时，取消抛在 `yield` 上，写在后面的落库就不跑了
                     with anyio.CancelScope(shield=True):
                         setup_ctx = RunContext(user=user, conversation_id=conversation_id, db=db, provider=provider)
                         item = {'kind': 'error', 'message': error.message, 'code': error.code}
                         await _persist_turn(db, setup_ctx, conversation_id, '', [item])
+                    yield _sse(error)
                     return
 
                 history = await _build_history(db, conversation_id)

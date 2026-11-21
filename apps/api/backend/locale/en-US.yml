@@ -224,6 +224,7 @@ error:
     archive_invalid_format: Invalid plugin archive format
     archive_missing_files: Plugin archive is missing required files
     depended_cannot_disable: Plugin {plugin} is required by enabled plugins {dependents}, disable them first
+    depended_cannot_uninstall: Plugin {plugin} is required by installed plugins {dependents}, uninstall them first
     dependency_not_enabled: Plugin {plugin} depends on disabled plugins {dependencies}, enable them first
     dev_only_install: Installing plugins is only allowed in the development environment
     dev_only_uninstall: Uninstalling plugins is only allowed in the development environment

@@ -12,7 +12,9 @@ import io
 import json
 import zipfile
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
+from importlib.metadata import version
 from pathlib import Path
 from uuid import uuid4
 
@@ -265,3 +267,119 @@ def test_reinstall_does_not_override_existing_env_values(
     assert probe.REAL_SECRET == 'keep-me', f'.env 被盖成了：{env.read_text(encoding="utf-8")!r}'
     assert probe.NEW_KEY == '1', '没有的键照常追加'
     assert io.StringIO(env.read_text(encoding='utf-8')).read().count('REAL_SECRET') == 1
+
+
+# ---------- 评审跟进 ----------
+
+
+def _full_plugin(root: Path, name: str, *, depends_on: list[str] | None = None) -> None:
+    """过得了 `validate_plugin_config` 的应用级插件（`parse_plugin_config` 会校验 plugin.toml）"""
+    (root / name).mkdir()
+    (root / name / '__init__.py').write_text('', encoding='utf-8')
+    (root / name / 'plugin.toml').write_text(
+        '[plugin]\n'
+        'summary = "x"\nversion = "0.0.1"\ndescription = "x"\nauthor = "x"\n'
+        'tags = ["other"]\ndatabase = ["postgresql"]\n'
+        f'depends_on = {json.dumps(depends_on or [])}\n'
+        '[app]\nrouter = ["v1"]\n',
+        encoding='utf-8',
+    )
+
+
+def test_startup_writes_a_disabled_required_plugin_back_to_enabled(tree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """只让 hooks 那边按启用算不够：路由挂着 `PluginStatusChecker`，读的是 Redis —— 不写回去，
+    `dict` 的接口照样一条条报「插件未启用」"""
+    _full_plugin(tree, 'demo')
+    monkeypatch.setattr(settings, 'PLUGIN_REQUIRED', ['demo'])
+    _status('demo', '0')
+    core.parse_plugin_config()
+    assert _status('demo') == '1'
+
+
+def test_startup_marks_dependents_of_a_disabled_plugin_disabled(tree: Path) -> None:
+    """只在 hooks 那边跳过不够：依赖方自己的状态还是启用，路由照样放行，半个插件在线"""
+    _full_plugin(tree, 'base')
+    _full_plugin(tree, 'child', depends_on=['base'])
+    _full_plugin(tree, 'grandchild', depends_on=['child'])
+    _full_plugin(tree, 'other')
+    _status('base', '0')
+    for name in ('child', 'grandchild', 'other'):
+        _status(name, '1')
+    assert [p.name for p in core.get_ordered_enabled_plugins()] == ['other']
+    assert [_status(n) for n in ('base', 'child', 'grandchild', 'other')] == ['0', '0', '0', '1']
+
+
+def test_git_install_does_not_delete_a_plugin_installed_while_waiting_for_the_lock(
+    client: TestClient, tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """「已安装」查在锁外：排队期间别人装好的同名插件，被这次克隆失败当成自己的半个目录删掉"""
+
+    @asynccontextmanager
+    async def someone_else_finished_first() -> AsyncIterator[None]:
+        _plugin(tree, 'gitdemo')
+        yield
+
+    def clone_fails(_url: str, _target: Path, **_kw: object) -> None:
+        raise RuntimeError('目标目录非空')
+
+    monkeypatch.setattr(installer, 'acquire_distributed_reload_lock', someone_else_finished_first)
+    monkeypatch.setattr(installer.porcelain, 'clone', clone_fails)
+
+    async def attempt() -> None:
+        with pytest.raises(errors.ConflictError):
+            await installer.install_git_plugin('https://example.com/acme/gitdemo.git')
+
+    client.portal.call(attempt)
+    assert (tree / 'gitdemo' / '__init__.py').exists(), '别人装好的插件被删了'
+
+
+def test_plugin_with_installed_dependents_cannot_be_uninstalled(
+    client: TestClient, token_headers: dict[str, str], tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`build_final_router` 拿所有已安装插件排依赖序：卸掉被依赖的，下次启动 `PluginConfigError`"""
+
+    async def no_uninstall(_plugin: str) -> None:  # ruff: ignore[unused-async]
+        return None
+
+    monkeypatch.setattr(service_module, 'uninstall_requirements_async', no_uninstall)
+    _plugin(tree, 'base')
+    _plugin(tree, 'child', depends_on=['base'])
+    _status('base', '1')
+    _status('child', '0')  # 停着的依赖方也算：路由照样拿它排序
+    response = client.delete('/sys/plugins/base', headers=token_headers)
+    assert response.status_code == 400, response.text
+    assert 'child' in response.json()['msg']
+    assert (tree / 'base' / '__init__.py').exists()
+
+
+def test_hash_pinned_continuation_lines_are_understood(tmp_path: Path) -> None:
+    """`pkg==1.0 \\` + 下一行 `--hash=…`：不接续行就认不出，每次启动都去跑 pip"""
+    req = tmp_path / 'requirements.txt'
+    req.write_text(f'pytest=={version("pytest")} \\\n    --hash=sha256:abc\n', encoding='utf-8')
+    assert requirements._requirements_installed(req) is True
+
+
+def test_startup_survives_any_error_from_installing_requirements(monkeypatch: pytest.MonkeyPatch) -> None:
+    def no_uv(_plugin: str | None) -> None:
+        raise FileNotFoundError('uv')
+
+    monkeypatch.setattr(requirements, 'install_requirements', no_uv)
+    assert requirements.install_requirements_on_startup('demo') is False
+
+
+def test_reinstall_drops_the_comment_of_a_skipped_key(
+    client: TestClient, tree: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def ok(_plugin: str | None = None) -> None:  # ruff: ignore[unused-async]
+        return None
+
+    monkeypatch.setattr(installer, 'install_requirements_async', ok)
+    example = "# 真密钥，64 位十六进制\nREAL_SECRET=''\n\n# 新键\nNEW_KEY=1\n"
+
+    async def install() -> None:
+        await installer.install_zip_plugin(_zip(tree.parent, 'demo', env_example=example))
+
+    client.portal.call(install)
+    env = (tree.parent / '.env').read_text(encoding='utf-8')
+    assert '真密钥' not in env, f'跳过的键的注释留在末尾、压在别的键上：{env!r}'
+    assert '# 新键\nNEW_KEY=1' in env

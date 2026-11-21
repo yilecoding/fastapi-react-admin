@@ -1,3 +1,4 @@
+import re
 import site
 import subprocess
 import sys
@@ -51,7 +52,10 @@ def _requirements_installed(requirements_file: Path) -> bool:  # ruff:ignore[com
     而启动时 `_prepare_plugins()` 对每个插件都跑这一步 —— 一个这样写的插件让整个后端起不来
     """
     requirements = []
-    for raw in requirements_file.read_text(encoding='utf-8').splitlines():
+    # 先接上行尾 `\` 续行（pip 的规则）：`pkg==1.0 \` + 下一行 `--hash=…` 是锁哈希的标准写法，
+    # 不接的话 `pkg==1.0 \` 解析失败 → 每次启动都去跑一遍 pip（离线机器上要等满超时 × 重试次数）
+    text = re.sub(r'\\\r?\n', ' ', requirements_file.read_text(encoding='utf-8'))
+    for raw in text.splitlines():
         # 行尾注释（pip 的规则：`#` 前面要有空白）和逐行的 `--hash=…` 选项
         line = raw.split(' #', 1)[0].split(' --', 1)[0].strip()
         if not line or line.startswith('#'):
@@ -159,6 +163,11 @@ def install_requirements_on_startup(plugin: str) -> bool:
         install_requirements(plugin)
     except PluginInstallError as e:
         log.error(f'插件 {plugin} 依赖安装失败，跳过、继续启动：{e}')
+        return False
+    except Exception:
+        # 不止 `PluginInstallError`：PATH 上没有 `uv`（`FileNotFoundError`）、marker 里写了认不出的环境变量
+        # （`UndefinedEnvironmentName`）一样会冒出来 —— 认不出的行现在交给 pip，走到这两处的插件比原来多（#395 评审）
+        log.exception(f'插件 {plugin} 依赖安装出错，跳过、继续启动')
         return False
     return True
 
