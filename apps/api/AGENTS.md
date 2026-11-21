@@ -58,11 +58,11 @@ ID」一节，现在有 `test_seed_dialects.py` 守着）显示这套"SQL Server
   实测踩过：`UPDATE sys_menu SET path=… WHERE id=…` 改的是一条**已软删**的目录，
   再往它下面 INSERT 子项 —— 父节点不在侧边栏结果集里，`traversal_to_tree`
   把三个子项**当孤儿提到了根**，侧边栏凭空多出三条顶层菜单
-- **`.env.example` 和 `cli.py` 是靠精确字符串耦合的**。`setup_env_file()` 用
-  `env_content.replace("DATABASE_PORT=1433", …)` 这种字面量替换填用户的输入 ——
-  改了模板里的默认值、`cli.py` 那边没跟着改，替换会**静默不生效**：
-  `fba init` 一路问完、写出的 `.env` 里还是模板的旧值，报错要等到连数据库时才出现。
-  改模板后跑一遍对账（9 处 replace + 1 处 `TOKEN_SECRET_KEY` 正则）
+- **`fba init` 写 `.env` 的两个坑**。① `.env.example` 和 `cli.py` 靠精确字符串耦合：`setup_env_file()` 用 `replace("DATABASE_PORT=1433", …)`
+  填输入，改了模板默认值、`cli.py` 没跟着改就**静默不生效**（报错要到连库才出），改模板后对账 9 处 replace + 1 处 `TOKEN_SECRET_KEY` 正则。
+  ② 🔴 它在「确认继续吗」**之前**就整份重写 `.env`：答「否」库没动、自配的加密密钥却已丢，旧密文从此解不开也不报错。覆盖是设计
+  （init 就是重置环境），所以写前先拷 `.env.bak.<时间戳>`（`_backup_env_file()`，同一秒再跑不互盖，`.env*` 已 gitignore），
+  **答错了就拷回最新那份**。实测：修复前 `test_cli_env_backup.py` 两条红、原文件里的密钥确实没了（#399）
 - 记录操作日志的请求/响应头时，`OPERA_LOG_REDACT_HEADERS` 里的字段必须打码 ——
   否则操作日志表本身会变成凭据泄露面
 - 登录失败必须记日志。异常分支要捕获 `errors.BaseExceptionError` 并把
