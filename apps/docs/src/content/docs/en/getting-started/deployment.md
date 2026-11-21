@@ -75,6 +75,8 @@ TAG=sha-abc1234 bash prod.sh pull
 TAG=sha-abc1234 bash prod.sh up
 ```
 
+⚠️ Swapping the image like this only works when there are **no database migrations** between the two versions. Otherwise downgrade the database with the new image first, or the old image's migrate step fails and the whole site stays down — see [How do I roll back to an older version?](/en/reference/upgrade/#how-do-i-roll-back-to-an-older-version).
+
 ## What should external monitoring check?
 
 One URL: `https://<your-domain>/api/health/status`. It reports the API, database, Redis, scheduler (beat), worker and long-task worker (`worker_long`), and returns **200** only when all of them are healthy, **503** otherwise.

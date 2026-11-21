@@ -379,3 +379,44 @@ GitHub 改名后只给**仓库页面和 raw** 做重定向，**镜像和 Pages �
 
 **实测证据**（2026-11-19 改名当天，`curl -I`）：仓库页 301 → 新名字；raw 200；`github.com/yilecoding` 404（名字空着）；
 旧 Pages 首页和 `docs-site.tar.gz` 都是 404、新的 200；GHCR 匿名 token 拉 `latest` manifest：旧命名空间 403、新的 200。
+
+## 🔴 回滚：两版之间有迁移时，换 `TAG` 会让整站停掉（#393）
+
+### 症状
+
+照 `deploy/README.md` 原来唯一的回滚法 `TAG=sha-<旧> bash prod.sh up`，要撤掉的版本带了迁移时，
+migrate 容器退出码非零，api / worker 不启动、依赖 api healthy 的 beat / web 也起不来，`prod.sh up` 在 `dc up -d` 上被 `set -e` 直接结束。
+文档站原来给的第一个选项「确认旧代码能跑在新表结构上」在这套编排下也走不通。
+
+### 根因
+
+- migrate 用**同一个 `TAG`** 的镜像跑 `alembic upgrade head`，库里记的修订号旧镜像里没有 → `Can't locate revision identified by '…'`
+- 就算绕过 migrate，旧 api 的生产启动检查（`core/registrar.py`：`stamped != heads`）也拒绝启动
+- 能降级的只有**新**镜像：只有它带着那几条新迁移的 `downgrade()`
+
+### 修法
+
+文档改成「新镜像 `alembic downgrade <旧 head>` → 换旧镜像」四步（[`README.md`](./README.md)「回滚」，文档站「版本升级 → 怎么回滚到旧版本？」），
+命令全用 compose 自带的 `docker compose -f docker-compose.prod.yml run --rm --no-deps migrate sh -c '…'`，不往 `prod.sh` 加新子命令 ——
+`prod.sh` 不给传额外参数是刻意的（`down` 永远不带 `-v`）。降级前先 `prod.sh down`：降级会删新加的列，新版代码边跑边被删就是一段 500。
+
+⚠️ **downgrade 是空函数的数据迁移降不回去**（`at000000configsecret` 加密、`ar000000smsoptcreds` / `aq000000operalogsecret` 清理凭据、
+`ap000000logretention` 改默认值）。结构回到了旧版，数据停在新格式；其中密钥加密那条会让旧版读到 `enc:v1:` 密文，只能恢复备份。
+文档让人用 `alembic history -r <旧 head>:head` + `alembic show <修订号>` 读说明去判断，因为迁移文件头都写了 downgrade 做不做事。
+
+**实测证据**（2026-11-21，本机 PostgreSQL 专属库 `fba_i393_test` + 一次性 Redis 容器，用完已 DROP / 停掉；
+「旧镜像」= v1.1.0 tag 导出的 `apps/api` + 它自己的 `uv.lock`，「新镜像」= 本分支代码，迁移链等同 v1.1.3）：
+
+| 步骤 | 结果 |
+|---|---|
+| v1.1.0 `reset_test_db` 建库，`EMAIL_PASSWORD` 写明文 | stamp 到 `ar000000smsoptcreds` |
+| 新代码 `alembic upgrade head`（配了 `CONFIG_ENCRYPT_SECRET_KEY`） | 跑了 `as000000whsecrets`、`at000000configsecret`；`EMAIL_PASSWORD` 变成 `enc:v1:…`，`open_webhook.secret_history` 出现 |
+| **旧代码直接 `alembic upgrade head`（原来的回滚法）** | `FAILED: Can't locate revision identified by 'at000000configsecret'`，退出码 255 |
+| 旧代码 `alembic heads` | `ar000000smsoptcreds (head)` |
+| 新代码 `alembic downgrade ar000000smsoptcreds` | 两条 downgrade 都跑了；`secret_history` 列没了；**`EMAIL_PASSWORD` 仍是 `enc:v1:…`** |
+| 旧代码 `alembic current` / `upgrade head` | `ar000000smsoptcreds (head)`；upgrade 是空操作 |
+| 旧代码 `test_model_matches_migrations`（拿 v1.1.0 的模型比这个库） | passed：结构完全回到 v1.1.0 |
+
+⚠️ **没验的**：真镜像里跑这串 compose 命令（只用 `docker compose --dry-run run … migrate sh -c 'cd /app/backend && alembic heads'`
+确认了 compose 能按 `TAG` 解析出镜像、建出 run 容器；`Dockerfile.prod` 没有 ENTRYPOINT、`WORKDIR /app`，`cd /app/backend` 是按它推的）；
+「compose 先 create 再 start、旧容器在 create 阶段就被换掉」那条也没在服务器上复现。旧版读到密文后 SMTP 发不出去是推断（1.1.0 没有解密代码）。

@@ -11,6 +11,8 @@ gen-ui-registry.mjs  `pnpm ui:registry` —— 从源码 import 生成 packages/
 gen-brand-icons.mjs  `pnpm brand:icons` —— 从一份图形生成 favicon / 桌面 / 移动端图标
 deploy-prod.mjs      `pnpm deploy:prod:*` —— 生产部署编排
 check-main-head.mjs  发布前查询远端 main，阻止旧提交覆盖 latest / Pages
+release-gate.mjs     release.yml 的闸门：tag 的提交在 main 上且 CI 绿（预发布也一样），输出 prerelease
+latest-release-tag.mjs  ci.yml 迁移链守卫取基线：远端最高正式版 tag；读失败就红，不冒充「没有 tag」
 loadtest.py          `pnpm loadtest` —— 对只读接口按并发压一段时间，报分位延迟
 ```
 
@@ -113,6 +115,40 @@ A 输出 false、B 输出 true；删除远端 main、远端不可达、SHA 非�
 🔴 **`gen-brand-icons.mjs` 是品牌图形的唯一真相源。** 改了图形或配色跑
 `pnpm brand:icons` 重新生成，**不要手改生成产物**（favicon / 桌面图标 /
 `apps/mobile/assets/images/*`）。
+
+## 发版闸门：预发布 tag 原来绕过了「在 main 上 + CI 绿」（#393）
+
+### 症状
+
+三个洞，表现全是「流水线照常绿」：
+
+| 洞 | 后果 |
+|---|---|
+| `.github/workflows/release.yml` 里 tag 带 `-` 时闸门的 `fail()` 直接 `exit 0` | 任意分支任意提交打 `v1.1.0-x` 都出包、把 `latest.yml` 传进草稿；草稿没标 prerelease，点了发布 GitHub 就当它是 latest，桌面端自动升上去 |
+| 「出安装包」无条件注入 `CSC_LINK` / `APPLE_*` | `workflow_dispatch` 跳过了 prepare（闸门），在任意未评审分支上点 Run workflow 就能拿到带正式签名的包（**还没配证书，接上那天生效**） |
+| `.github/workflows/ci.yml` 取基线 tag 是 `ls-remote … \| head -1 \|\| true` | `ls-remote` 瞬时失败和「fork 没有 tag」都是空串 → 「没有 release tag，跳过」，漏写迁移的唯一真守卫静默跳过显示绿 |
+
+### 修法
+
+- 闸门判定搬进 `release-gate.mjs`：预发布和正式版同样要求 compare 是 `behind` / `identical`、CI 结论 `success`；放行时才往
+  `GITHUB_OUTPUT` 写 `prerelease=true|false`，「建草稿」据此带 `--prerelease`（草稿已存在时 `gh release edit --prerelease` 补标）。
+  解析放在脚本里、不用 `gh api --jq`，测试只要一个回 JSON 的假 `gh`
+- 签名 secret 写成 `${{ github.event_name == 'push' && secrets.X || '' }}`：空串会被那一步的 unset 循环清掉，退回「未签名包」。
+  push 下 build 依赖 prepare 成功，所以「是 push」= 「过了闸门」
+- 基线 tag 用 `latest-release-tag.mjs`：读失败重试 3 次后非零退出、什么都不打印；`TAG=$(…)` 在 Actions 的 `bash -e` 下让这一步红。
+  按数字排（`v1.10.0 > v1.9.3`），只认 `vX.Y.Z`
+
+**实测证据**（2026-11-21，`pnpm test:ci`）：
+
+- `release-gate.test.mjs` 23 条（假 `gh` 按场景回 compare / CI 运行）：正式版 / 预发布在「不在 main 上」「CI 红」「CI 没跑完」「CI 没登记」「API 出错」下全拦、
+  不在 main 上时不再去查 CI；放行时分别输出 `prerelease=false` / `true`；不像版本号的 tag 不调 API 就拦。
+  变异：在 `fail()` 里加回「带 `-` 就 exit 0」→ 9 条红
+- `latest-release-tag.test.mjs` 4 条（本地 bare 远端）：`v1.10.0` 排在 `v1.9.3` 前、预发布和 `vnext` 不算；没有 tag / 只有预发布 → 成功且输出空；
+  远端不可达 → 非零且无输出。变异：读失败改成 `exit 0` → 「远端读不到」那条红
+- `release-workflow.test.mjs` 3 条核对接线（五个签名 secret 都按事件门控、prepare 调了脚本并用它的输出、ci.yml 不再 `|| true`）；改 workflow 之前 3 条全红
+- `actionlint`（v1.7.12，docker）：本次改动的步骤无告警；剩下两条 SC2086 info 是原有的（「出安装包」的 `$EXTRA`、ci.yml 里另一步），main 上同样报
+- 对真远端跑 `node scripts/latest-release-tag.mjs` → `v1.1.3`
+- ⚠️ **没验的**：真打一次预发布 tag 走完 release.yml（会建草稿、出包，按要求没打）；workflow_dispatch 下证书确实为空，要等配了证书才看得到
 
 ## ⚠️ 试过并否掉：把 `dead-path` 扩到**代码注释**
 

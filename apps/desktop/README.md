@@ -123,9 +123,10 @@ Release 并留成**草稿** —— 安装包能不能装、能不能连上后端
 
 - 🔴 **tag 必须和 `brand.ts` 的 `version` 一致**，不一致 CI 直接失败（允许预发布后缀：
   `brand.ts` 是 0.0.1 时 `v0.0.1-rc.1` 也算一致，专门留给「试一次发布」用）。
+  🔴 预发布 tag 和正式版一样要求提交在 main 上、CI 全绿，草稿会标 prerelease（#393）
   `apps/desktop/package.json` 的 `version` 由 CI 从 tag 写入（**不提交**）——
   它只是 electron-builder 的输入，不是第二个真相
-- **不打 tag 也能试**：Actions → Release → Run workflow，只出包 + 上传 artifact，不碰 release
+- **不打 tag 也能试**：Actions → Release → Run workflow，只出包 + 上传 artifact，不碰 release、不签名
 
 🔴 **打包顺序、两条分发路线（GitHub Release / 内网静态目录）、自动更新那四个
 「只在正式包里才撞得到」的坑、以及杀软导致的 EPERM，全部收在

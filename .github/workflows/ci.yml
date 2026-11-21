@@ -501,8 +501,9 @@ jobs:
       - name: 迁移链：从最近一个 release 升到当前
         working-directory: apps/api
         run: |
-          # 只认正式版：预发布（v1.1.0-rc.1）在 v:refname 排序里会排到 v1.1.0 前面，而用户是从正式版升上来的
-          TAG=$(git ls-remote --tags --refs --sort=-v:refname origin 'v*' | sed 's#.*refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+          # 只认正式版（用户是从正式版升上来的）。🔴 读远端失败时脚本非零退出、这一步红（#393）——
+          # 原来 `ls-remote … | head -1 || true` 把「读失败」和「fork 没有 tag」揉成同一个空串，守卫静默跳过显示绿
+          TAG=$(node ../../scripts/latest-release-tag.mjs)
           if [ -z "$TAG" ]; then echo "没有 release tag（fork？），跳过"; exit 0; fi
           echo "基线：$TAG"
           git fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
