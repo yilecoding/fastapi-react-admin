@@ -223,6 +223,9 @@ error:
     archive_invalid_filename: Invalid plugin archive filename
     archive_invalid_format: Invalid plugin archive format
     archive_missing_files: Plugin archive is missing required files
+    depended_cannot_disable: Plugin {plugin} is required by enabled plugins {dependents}, disable them first
+    depended_cannot_uninstall: Plugin {plugin} is required by installed plugins {dependents}, uninstall them first
+    dependency_not_enabled: Plugin {plugin} depends on disabled plugins {dependencies}, enable them first
     dev_only_install: Installing plugins is only allowed in the development environment
     dev_only_uninstall: Uninstalling plugins is only allowed in the development environment
     frontend_dir_not_found: Frontend plugin directory not found, expected apps/web-antdv-next/src/plugins under the given path
@@ -235,12 +238,15 @@ error:
     git_repo_invalid: Invalid Git repository URL, only HTTP/HTTPS is supported
     git_repo_required: Git repository URL cannot be empty
     install_failed: Plugin installation failed, please try again later
+    name_reserved: Plugin name {plugin} clashes with a module of the plugin system, rename it and retry
     not_enabled: Plugin {plugin} is not enabled, please contact the administrator
     not_found: Plugin does not exist
     oauth2_import_failed: Failed to import OAuth2 plugin, please contact the administrator
     reload_lock_busy: Another plugin is being installed or uninstalled, please try again later
     repo_already_installed: Plugin {repo_name} is already installed
+    required_cannot_disable: Plugin {plugin} is required and cannot be disabled
     required_cannot_uninstall: Plugin {plugin} is required and cannot be uninstalled
+    requirements_install_failed: 'Failed to install dependencies of plugin {plugin}, the installation was rolled back: {reason}'
     zip_required: ZIP archive cannot be empty
   rate_limit:
     invalid_config: At least one Rate, bucket or limiter instance is required

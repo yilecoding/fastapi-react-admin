@@ -3,7 +3,7 @@ from rich.text import Text
 
 from backend.core.registrar import register_app
 from backend.plugin.core import check_required_plugins, get_plugins
-from backend.plugin.requirements import install_requirements
+from backend.plugin.requirements import install_requirements_on_startup
 from backend.utils.console import console
 from backend.utils.timezone import timezone
 
@@ -35,7 +35,7 @@ def _prepare_plugins() -> None:
         task = progress.add_task('安装插件依赖...', total=len(plugins))
         for plugin in plugins:
             progress.update(task, description=f'[bold magenta]安装插件 {plugin} 依赖...[/]')
-            install_requirements(plugin)
+            install_requirements_on_startup(plugin)
             progress.advance(task)
         progress.update(task, description='[bold green]-[/]')
 

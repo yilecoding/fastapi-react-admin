@@ -1,3 +1,4 @@
+import re
 import site
 import subprocess
 import sys
@@ -11,6 +12,7 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 from starlette.concurrency import run_in_threadpool
 
+from backend.common.log import log
 from backend.core.conf import settings
 from backend.core.path_conf import PLUGIN_DIR
 from backend.plugin.core import get_plugins
@@ -22,17 +24,49 @@ def _is_in_virtualenv() -> bool:
     return hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix)
 
 
+#: requirements 文件里只影响「去哪装」的选项行：和「装没装」无关，跳过
+_INDEX_OPTIONS = (
+    '-i',
+    '--index-url',
+    '--extra-index-url',
+    '--no-index',
+    '-f',
+    '--find-links',
+    '--trusted-host',
+    '--pre',
+    '--prefer-binary',
+    '--only-binary',
+    '--no-binary',
+)
+
+#: pip 单次安装的超时（秒）。原来 `check_call` 不带超时，`TimeoutExpired` 分支是死代码：
+#: pip 卡在网络上时一直占着插件安装锁，启动时则卡在「安装插件依赖」那一步不动
+PIP_TIMEOUT_SECONDS = 600
+
+
 def _requirements_installed(requirements_file: Path) -> bool:  # ruff:ignore[complex-structure]
-    """检查 requirements 及其 extras 子依赖是否已安装"""
+    """检查 requirements 及其 extras 子依赖是否已安装
+
+    🔴 认不出的行**交给 pip**（返回「没装齐」），不抛错（#395）。原来 `-r base.txt` / `--index-url …` /
+    `-e .` / `git+https://…` / 行尾注释 / `--hash=…` 全部 `InvalidRequirement` → `PluginInstallError`，
+    而启动时 `_prepare_plugins()` 对每个插件都跑这一步 —— 一个这样写的插件让整个后端起不来
+    """
     requirements = []
-    for line in requirements_file.read_text(encoding='utf-8').splitlines():
-        line = line.strip()
+    # 先接上行尾 `\` 续行（pip 的规则）：`pkg==1.0 \` + 下一行 `--hash=…` 是锁哈希的标准写法，
+    # 不接的话 `pkg==1.0 \` 解析失败 → 每次启动都去跑一遍 pip（离线机器上要等满超时 × 重试次数）
+    text = re.sub(r'\\\r?\n', ' ', requirements_file.read_text(encoding='utf-8'))
+    for raw in text.splitlines():
+        # 行尾注释（pip 的规则：`#` 前面要有空白）和逐行的 `--hash=…` 选项
+        line = raw.split(' #', 1)[0].split(' --', 1)[0].strip()
         if not line or line.startswith('#'):
+            continue
+        if line.split('=', 1)[0].split(' ', 1)[0] in _INDEX_OPTIONS:
             continue
         try:
             requirements.append(Requirement(line))
-        except Exception as e:
-            raise PluginInstallError(f'依赖 {line} 格式错误: {e!s}') from e
+        except Exception:
+            # `-r` / `-c` / `-e` / 裸 URL：这里判断不了装没装，让 pip 去判断
+            return False
 
     environment = default_environment()
     visited = set()
@@ -100,7 +134,7 @@ def install_requirements(plugin: str | None) -> None:  # ruff:ignore[complex-str
         max_retries = settings.PLUGIN_PIP_MAX_RETRY
         for attempt in range(max_retries):
             try:
-                subprocess.check_call(pip_install)
+                subprocess.check_call(pip_install, timeout=PIP_TIMEOUT_SECONDS)
                 invalidate_caches()
                 for site_dir in site.getsitepackages():
                     if site_dir.endswith('site-packages'):
@@ -114,6 +148,28 @@ def install_requirements(plugin: str | None) -> None:  # ruff:ignore[complex-str
                 if attempt == max_retries - 1:
                     raise PluginInstallError(f'插件 {plugin} 依赖安装失败：{e}') from e
                 continue
+
+
+def install_requirements_on_startup(plugin: str) -> bool:
+    """启动时给一个插件装依赖：失败只记错误日志、不中断启动（#395）
+
+    装依赖失败多半是网络 / 镜像的问题，依赖可能早就装好了（只是判断不出来）。原来这里一抛，整个进程起不来，
+    连「去插件页把它停掉 / 卸掉」的机会都没有。真缺依赖的话，导入那个插件时会报 `ModuleNotFoundError`，指向具体的包
+
+    :param plugin: 插件名称
+    :return: 是否成功
+    """
+    try:
+        install_requirements(plugin)
+    except PluginInstallError as e:
+        log.error(f'插件 {plugin} 依赖安装失败，跳过、继续启动：{e}')
+        return False
+    except Exception:
+        # 不止 `PluginInstallError`：PATH 上没有 `uv`（`FileNotFoundError`）、marker 里写了认不出的环境变量
+        # （`UndefinedEnvironmentName`）一样会冒出来 —— 认不出的行现在交给 pip，走到这两处的插件比原来多（#395 评审）
+        log.exception(f'插件 {plugin} 依赖安装出错，跳过、继续启动')
+        return False
+    return True
 
 
 def uninstall_requirements(plugin: str) -> None:

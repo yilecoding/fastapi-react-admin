@@ -15,6 +15,38 @@
 ego 浏览器在修复实例上登录后点击下载 `email.zip`，17 个归档成员全部位于 `email/`，刷新后列表仍正常。
 卸载只在临时目录做接口回归，未从浏览器卸载仓库中的真实插件。
 
+## 🔴 插件装 / 停：当时没事，下次重启起不来（#395）
+
+五条同一个形状 —— 操作当场返回成功，坏在**下一次启动**，而那时已经没有界面能恢复：
+
+| 症状 | 根因 | 修法 |
+|---|---|---|
+| 装依赖失败后重装报「已安装」，重启时再装一遍照样失败、进程起不来 | 顺序是解压 → 追加 .env → 装依赖，后两步失败不回滚；`_prepare_plugins()` 对每个插件同步 `install_requirements()` 且不 try | `installer._finish_install`：失败就恢复 .env 快照、删目录，抛带原因的 `ServerError`；启动走 `install_requirements_on_startup`，失败记 error 日志、继续启动 |
+| requirements 里写 `-r` / `--index-url` / `-e .` / `git+…` / 行尾注释 / `--hash` 的插件让后端起不来 | `_requirements_installed` 逐行 `Requirement()`，解析不了就抛 `PluginInstallError`，启动时每个插件都跑 | 选项行跳过、注释和 `--hash` 剥掉；剩下认不出的返回「没装齐」交给 pip。`check_call` 补了 `timeout`（原来 `TimeoutExpired` 分支是死代码，pip 卡住一直占着安装锁） |
+| 停用 `dict` 后字典接口当场全挂（每条都「插件 dict 未启用」），重启也不恢复 | `uninstall` 拒绝必需插件，`update_status` 没这道；`check_required_plugins` 只查装没装 | `update_status` 拒绝；启动时 `parse_plugin_config` → `_normalize_plugin_status` 把被标成停用的必需插件**写回 Redis 为启用**（兜住拦之前就停掉的） |
+| 停用 `notification` 当时正常，下次重启 `PluginConfigError: … notification 不存在` | `update_status` 不看 `depends_on`；`resolve_plugin_order` 只拿已启用的插件建图 | 停用前查有没有**已启用**的插件依赖它、启用前查依赖是否启用；启动时 `_normalize_plugin_status` 把依赖了已停用插件的（连带传递）**写回 Redis 为停用**，`drop_disabled_dependents` 再兜一层。依赖**没装**照旧报错；卸载被别的已安装插件依赖的插件同样拒绝（不管依赖方启没启用） |
+| 重装 `ai` 后已存的供应商密钥全部解不开 | `_append_env_example` 把整份 `.env.example` 接到末尾，重复键以最后一个为准（`AI_ENCRYPT_SECRET_KEY=''` 盖掉真值） | 只追加 `.env` 里还没有的键 |
+
+另有一条只在 dev + 超管下成立的：插件名取自上传文件名 / 仓库名，叫 `status.zip` 的包解压成插件目录下的 `status` 包，
+包目录优先于同名的 `status.py` 模块，下次启动 `ImportError`。现在 `_check_plugin_name` 拒绝和 `plugin/*.py` 重名的名字。
+
+**实测证据**（2026-11-21，PostgreSQL / Redis 私有库）：`tests/api_v1/test_plugin_lifecycle.py` 16 条。先写测试、撤掉修复跑一遍：
+16 条全红 —— 装依赖失败抛的是裸 `PluginInstallError`（不是带原因的业务错误）；6 种 requirements 写法各自 `PluginInstallError: 依赖 … 格式错误`；
+停用必需插件 / 停用被依赖插件都是 `code 200`；被标停用的必需插件 `get_enabled_plugins` 返回 `set()`；名为 `status` 的 zip 直接走到了
+`uv pip install`；重装后 `.env` 是 `REAL_SECRET=keep-me\nREAL_SECRET=''\n…`，pydantic-settings 读出空串。
+⚠️ 测试里直接调 `installer.install_*` 要走 `client.portal.call`：它用的是全局 `redis_client`（绑在 TestClient 的事件循环上），
+`asyncio.run` 会撞「attached to a different loop」，分布式安装锁（`fba:reload_lock`）还会留在 Redis 里，实测下一次跑整组卡住超过 2 分钟，
+`DEL fba:reload_lock` 之后恢复。
+**没验过**：真实 `fba add` / 插件页上传一个依赖装不上的包、真重启一次进程看日志。
+
+🔴 **启动兜底要改 Redis 里的状态，不能只改 `get_enabled_plugins()` 的返回值**（评审跟进）。第一版只在 hooks 那条路上兜：
+`build_final_router` 给**所有已安装**插件挂路由，每条路由过 `PluginStatusChecker`、读的是 Redis —— 被标停用的必需插件日志说「已按启用加载」，
+接口照样报「未启用」；依赖了已停用插件的，hooks 跳过了、接口却照样放行（半个插件在线）。另两处同一轮补的：git 安装的「已安装」检查挪进
+分布式锁里（原来在锁外，排队期间别人装好的同名插件会被这次「克隆失败」的清理删掉）；`.env` 跳过已有键时连它上面那段注释一起跳过；
+requirements 先接 `\` 续行（不接的话锁哈希的写法每次启动都跑 pip）；启动装依赖接住所有异常（PATH 上没 `uv` 是 `FileNotFoundError`）。
+**实测证据**：`test_plugin_lifecycle.py` 新增 7 条，撤掉修复跑一遍 7 条全红 —— 必需插件 Redis 里仍是 `'0'`；依赖方状态 `['0','1','1','1']`；
+git 那条抛 `ServerError` 且目录被删；卸载被依赖的插件 `code 200`；续行那条 `False`；`FileNotFoundError` 冲出来；`.env` 末尾留着「# 真密钥」。
+
 ## 用户快照：刷新身份查询与提交后清理（#313）
 
 🔴 **受限用户带有效 Bearer 调 `/auth/refresh`，会误报「账号已停用」并撤销会话。**

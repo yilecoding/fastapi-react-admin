@@ -128,3 +128,81 @@ def test_bounds_table_matches_the_frontend_registry() -> None:
             mismatches.append(f'{key}：前端 {fe_min.group(1)}~{fe_max.group(1)} ≠ 服务端 {low}~{high}')
 
     assert not mismatches, '前后端的配置范围分叉了：\n  ' + '\n  '.join(mismatches)
+
+
+@pytest.fixture
+def length_rows(client: TestClient, token_headers: dict[str, str]):
+    """密码长度上下限两行，收尾还原"""
+    keys = ('USER_PASSWORD_MIN_LENGTH', 'USER_PASSWORD_MAX_LENGTH')
+    rows = {key: _row(client, token_headers, key) for key in keys}
+    yield rows
+    # 先放宽上限再还原下限，避免还原途中自己撞上交叉校验
+    _put(client, token_headers, rows['USER_PASSWORD_MAX_LENGTH'], '128')
+    _put(client, token_headers, rows['USER_PASSWORD_MIN_LENGTH'], rows['USER_PASSWORD_MIN_LENGTH']['value'])
+    _put(client, token_headers, rows['USER_PASSWORD_MAX_LENGTH'], rows['USER_PASSWORD_MAX_LENGTH']['value'])
+
+
+def test_min_length_above_max_length_is_refused(
+    client: TestClient, token_headers: dict[str, str], length_rows: dict
+) -> None:
+    """#395：各自都在 1..128 里，但 MIN=128 / MAX=1 之后所有改密 / 重置 / 建用户都失败 —— 原来只有前端拦着"""
+    lo, hi = length_rows['USER_PASSWORD_MIN_LENGTH'], length_rows['USER_PASSWORD_MAX_LENGTH']
+    assert _put(client, token_headers, hi, '20').json()['code'] == 200
+    resp = _put(client, token_headers, lo, '64')
+    assert resp.json()['code'] == 400, f'下限 64 > 上限 20 被接受了：{resp.text[:200]}'
+    assert _row(client, token_headers, lo['key'])['value'] == lo['value']
+
+    # 反方向：先把下限设好，再把上限压到它下面
+    assert _put(client, token_headers, lo, '10').json()['code'] == 200
+    resp = _put(client, token_headers, hi, '9')
+    assert resp.json()['code'] == 400, f'上限 9 < 下限 10 被接受了：{resp.text[:200]}'
+
+
+def test_bulk_update_checks_the_pair_together(
+    client: TestClient, token_headers: dict[str, str], length_rows: dict
+) -> None:
+    lo, hi = length_rows['USER_PASSWORD_MIN_LENGTH'], length_rows['USER_PASSWORD_MAX_LENGTH']
+
+    def body(row: dict, value: str) -> dict:
+        keep = ('id', 'name', 'type', 'key', 'is_frontend', 'remark')
+        return {**{k: row[k] for k in keep}, 'value': value}
+
+    bad = client.put('/sys/configs', headers=token_headers, json=[body(lo, '128'), body(hi, '1')])
+    assert bad.json()['code'] == 400, bad.text[:200]
+    assert _row(client, token_headers, lo['key'])['value'] == lo['value'], '拒绝要发生在提交之前'
+
+    # 一起改到合法的一对照样放行（只拒不放的实现也能让上一段变绿）
+    ok = client.put('/sys/configs', headers=token_headers, json=[body(lo, '30'), body(hi, '40')])
+    assert ok.json()['code'] == 200, ok.text[:200]
+    assert _row(client, token_headers, lo['key'])['value'] == '30'
+
+
+@pytest.fixture
+def max_row(client: TestClient, token_headers: dict[str, str]):
+    """上限那一行；测试里会删了重建，收尾保证它在、且是原值"""
+    original = _row(client, token_headers, 'USER_PASSWORD_MAX_LENGTH')
+    yield original
+    page = client.get('/sys/configs', headers=token_headers, params={'page': 1, 'size': 200}).json()
+    current = next((r for r in page['data']['items'] if r['key'] == original['key']), None)
+    if current is None:
+        keep = ('name', 'type', 'key', 'value', 'is_frontend', 'remark')
+        client.post('/sys/configs', headers=token_headers, json={k: original[k] for k in keep})
+    elif current['value'] != original['value']:
+        # 中途红了的话，留下的可能是那条不该建成的 1
+        _put(client, token_headers, current, original['value'])
+
+
+def test_creating_the_max_row_checks_the_pair_too(
+    client: TestClient, token_headers: dict[str, str], length_rows: dict, max_row: dict
+) -> None:
+    """删掉上限那一行、再建一条值为 1 的：只在 update 上查的话，这条路绕过去了"""
+    lo = length_rows['USER_PASSWORD_MIN_LENGTH']
+    assert _put(client, token_headers, lo, '8').json()['code'] == 200
+    assert client.request('DELETE', '/sys/configs', headers=token_headers, json=[max_row['id']]).json()['code'] == 200
+    keep = ('name', 'type', 'key', 'is_frontend', 'remark')
+    bad = client.post('/sys/configs', headers=token_headers, json={**{k: max_row[k] for k in keep}, 'value': '1'})
+    assert bad.json()['code'] == 400, bad.text[:200]
+    ok = client.post('/sys/configs', headers=token_headers, json={k: max_row[k] for k in (*keep, 'value')})
+    assert ok.json()['code'] == 200, ok.text[:200]
+    # 重建过，id 变了：给 length_rows 的收尾换上新行
+    length_rows['USER_PASSWORD_MAX_LENGTH'] = _row(client, token_headers, 'USER_PASSWORD_MAX_LENGTH')

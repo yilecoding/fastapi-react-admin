@@ -15,9 +15,10 @@ from backend.common.i18n import t
 from backend.core.conf import settings
 from backend.core.path_conf import PLUGIN_DIR
 from backend.database.redis import redis_client
-from backend.plugin.core import get_required_plugins
+from backend.plugin.core import get_plugins, get_required_plugins, load_plugin_config
 from backend.plugin.installer import install_git_plugin, install_zip_plugin, remove_plugin, zip_plugin
 from backend.plugin.requirements import uninstall_requirements_async
+from backend.plugin.status import get_plugin_enable
 from backend.utils.timezone import timezone
 
 
@@ -37,6 +38,51 @@ async def _get_plugin_dir(plugin: str) -> anyio.Path:
     ):
         raise errors.NotFoundError(msg=t('error.plugin.not_found'))
     return plugin_dir
+
+
+def _depends_on(plugin: str) -> list[str]:
+    try:
+        return list(load_plugin_config(plugin).get('plugin', {}).get('depends_on') or [])
+    except Exception:
+        # plugin.toml 读不出来的插件不参与依赖判断（启动时它自己会报）
+        return []
+
+
+async def _check_status_change(plugin: str, *, enable: bool) -> None:
+    """启停前的两道检查（#395）
+
+    - 停用：必需插件不许停（`uninstall` 早就拦了，这里原来没有 —— 停掉 `dict` 当场字典接口全挂）；
+      被**已启用**的插件依赖的不许停 —— 原来当时一切正常，下次重启 `resolve_plugin_order` 抛错、API 起不来
+    - 启用：依赖的插件得先是启用的，同一个道理反过来
+    """
+    if not enable:
+        if plugin in get_required_plugins():
+            raise errors.RequestError(msg=t('error.plugin.required_cannot_disable', plugin=plugin))
+        others = [name for name in get_plugins() if name != plugin and plugin in _depends_on(name)]
+        if others:
+            infos = await redis_client.mget(*[f'{settings.PLUGIN_REDIS_PREFIX}:{name}' for name in others])
+            dependents = [
+                name
+                for name, info in zip(others, infos, strict=True)
+                if get_plugin_enable(info, StatusType.enable.value) == str(StatusType.enable.value)
+            ]
+            if dependents:
+                raise errors.RequestError(
+                    msg=t('error.plugin.depended_cannot_disable', plugin=plugin, dependents=', '.join(dependents))
+                )
+        return
+    deps = [name for name in _depends_on(plugin) if name in get_plugins()]
+    if deps:
+        infos = await redis_client.mget(*[f'{settings.PLUGIN_REDIS_PREFIX}:{name}' for name in deps])
+        off = [
+            name
+            for name, info in zip(deps, infos, strict=True)
+            if get_plugin_enable(info, StatusType.enable.value) != str(StatusType.enable.value)
+        ]
+        if off:
+            raise errors.RequestError(
+                msg=t('error.plugin.dependency_not_enabled', plugin=plugin, dependencies=', '.join(off))
+            )
 
 
 class PluginService:
@@ -101,6 +147,13 @@ class PluginService:
         plugin_dir = await _get_plugin_dir(plugin)
         if plugin in get_required_plugins():
             raise errors.RequestError(msg=t('error.plugin.required_cannot_uninstall', plugin=plugin))
+        # 被别的已安装插件依赖的不许卸（不管启用没有）：`build_final_router` 拿**所有已安装**插件排依赖序，
+        # 卸掉之后下次启动 `PluginConfigError: … 不存在`，进程起不来、没有界面能恢复（#395 评审，同停用那条）
+        dependents = [name for name in get_plugins() if name != plugin and plugin in _depends_on(name)]
+        if dependents:
+            raise errors.RequestError(
+                msg=t('error.plugin.depended_cannot_uninstall', plugin=plugin, dependents=', '.join(dependents))
+            )
         await uninstall_requirements_async(plugin)
         backup_file = PLUGIN_DIR / f'{plugin}.{timezone.now().strftime("%Y%m%d%H%M%S")}.backup.zip'
         await run_in_threadpool(zip_plugin, plugin_dir, backup_file)
@@ -129,6 +182,7 @@ class PluginService:
             if plugin_info['plugin']['enable'] == str(StatusType.disable.value)
             else str(StatusType.disable.value)
         )
+        await _check_status_change(plugin, enable=new_status == str(StatusType.enable.value))
         plugin_info['plugin']['enable'] = new_status
         await redis_client.set(plugin_key, json.dumps(plugin_info, ensure_ascii=False))
         await redis_client.set(f'{settings.PLUGIN_REDIS_PREFIX}:changed', 'true')

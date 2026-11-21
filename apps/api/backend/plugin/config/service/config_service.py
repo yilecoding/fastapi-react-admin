@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.common.exception import errors
@@ -15,6 +16,7 @@ from backend.plugin.config.schema.config import (
     UpdateConfigsParam,
 )
 from backend.plugin.config.secret import encrypt_secret
+from backend.utils.dynamic_config import PASSWORD_LENGTH_PAIR, check_password_length_pair
 
 
 def _update_data(obj: UpdateConfigParam, config: Config) -> dict[str, Any]:
@@ -31,6 +33,24 @@ def _update_data(obj: UpdateConfigParam, config: Config) -> dict[str, Any]:
         else:
             data.pop('value')
     return data
+
+
+async def _check_pairs(db: AsyncSession, touched: set[str]) -> None:
+    """写完、提交前再看一遍有大小关系的那一对（#395）；不合格就抛，事务回滚
+
+    放在写完之后看库里的值：单条改只带一个键，另一个键是库里现有的；批量改可能两个一起变
+    """
+    if not touched & set(PASSWORD_LENGTH_PAIR):
+        return
+    # 会话是 autoflush=False：`create` 刚 add 的行不 flush 就查不到（update 走的是直接 UPDATE 语句，不受影响）
+    await db.flush()
+    rows = await db.execute(
+        select(Config.key, Config.value).where(Config.key.in_(PASSWORD_LENGTH_PAIR), Config.deleted == 0)
+    )
+    values = dict(rows.tuples().all())
+    low, high = PASSWORD_LENGTH_PAIR
+    if low in values and high in values and (problem := check_password_length_pair(values[low], values[high])):
+        raise errors.RequestError(msg=problem)
 
 
 class ConfigService:
@@ -89,6 +109,8 @@ class ConfigService:
         if is_secret_key_name(obj.key):
             obj = obj.model_copy(update={'value': encrypt_secret(obj.value), 'is_frontend': False})
         await config_dao.create(db, obj)
+        # 新建也要过：删掉上限那一行再建一条值为 1 的，绕开的就是 `update` 那道闸（#395 评审）
+        await _check_pairs(db, {obj.key})
 
     @staticmethod
     async def update(*, db: AsyncSession, pk: int, obj: UpdateConfigParam) -> int:
@@ -104,6 +126,7 @@ class ConfigService:
         if not config:
             raise errors.NotFoundError(msg=t('error.config.not_found'))
         count = await config_dao.update(db, pk, _update_data(obj, config))
+        await _check_pairs(db, {config.key})
         return count
 
     @staticmethod
@@ -125,6 +148,7 @@ class ConfigService:
             raise errors.RequestError(msg=t('error.config.duplicate_key'))
         data = [{**_update_data(obj, config_map[obj.id]), 'id': obj.id} for obj in objs]
         count = await config_dao.bulk_update(db, data)
+        await _check_pairs(db, {config_map[obj.id].key for obj in objs})
         return count
 
     @staticmethod

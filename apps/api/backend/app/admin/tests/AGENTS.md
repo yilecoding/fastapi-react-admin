@@ -30,6 +30,14 @@
 但直接写库要**顺手清缓存**（`get_all` 是 `@cached` 的），否则测试会以
 「回落没生效」的样子红，而原因完全在别处。
 
+🔴 **单键范围之外还有「两键之间」**（#395）：`USER_PASSWORD_MIN_LENGTH` / `MAX_LENGTH` 各自都在 1..128 里，
+写成 MIN=128、MAX=1 两项都过得了 `DYNAMIC_INT_BOUNDS`，之后所有改密 / 重置 / 建用户都失败 —— `min ≤ max` 原来只有前端
+（`registry.ts` 的交叉校验）。schema 上的校验一次只看一个键，所以这一对挂在 `config_service._check_pairs`：写完、提交前读库里的两个值比，
+不合格抛 400 让事务回滚（批量改两项一起变的情形照样对）。读取侧 `load_user_security_config` 也兜一次（两项回落 `.env`，**没单独测**）。
+**实测证据**：`test_dynamic_config_bounds.py` 新增两条，修前单条（先设上限 20 再设下限 64）和批量（128 / 1）都是 `code 200`；修后 400、库里值不变，
+合法的一对照常放行。⚠️ `create` 也要过（删掉上限那行再建一条值为 1 的），而且 `_check_pairs` 要先 `flush()`：会话 `autoflush=False`，
+刚 add 的行查不到 —— 只补调用、不 flush 时那条新测试照样 `code 200`（实测）。
+
 ### 前后端各有一份范围时，要有对账测试
 
 两份是刻意的（前端 UX、服务端闸门），但**不能悄悄分叉** ——
