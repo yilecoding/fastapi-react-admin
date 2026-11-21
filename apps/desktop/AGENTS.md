@@ -35,6 +35,42 @@ Electron API 使用 mock 验证，未在打包安装程序中调用真实系统�
 `app://local` 的资源不是后端站点。桌面分支给出修改完整 HTTP(S) 地址或改用 Web 端的提示。
 此分支已用模拟桌面能力标记的 Chromium E2E 和 ego 页面验证；未等同于打包 Electron 验收。
 
+## 🔴 渲染层的后端地址必须取运行期的 serverUrl，不能取 `VITE_API_BASE`（#392）
+
+**症状**：正式安装包装好后登录不了。登录页拉验证码拿到 200 + HTML，点登录报「尚未配置服务器地址」，
+而界面上没有任何地方能填。开发模式（`pnpm desktop:dev`）一切正常，所以 v1.0.0 到 v1.1.2 都带着它发了出去。
+
+**根因**：`release.yml` 构建渲染层时 `VITE_API_BASE=''`（为了让同一个包能连不同环境），
+而渲染层 `API_BASE` 原来就是 `VITE_API_BASE ?? 'http://127.0.0.1:8088'` —— `??` 保留空串，
+请求变成相对路径打到 `app://local/api/v1/...`，`protocol.ts` 对无扩展名路径回 `index.html`。
+主进程 `auth.ts` 读的是 `config.json` 的 `serverUrl`，渲染层从来不读它，也没有写它的界面；
+就算手改 `config.json`，`/sys/users/me`、socket.io 仍打 `app://local`，两边不是同一个后端。
+开发模式下 `VITE_API_BASE` 未定义、回落到 8088，正好盖住了这条。
+
+**修法**：主进程开一条同步通道 `config:server-url-sync`，preload 加载时 `sendSync` 取一次挂成
+`window.desktop.serverUrl`；platform `api-client/base-url.ts` 的 `resolveApiBase()` 在有桥时用它、
+没有桥才用 `VITE_API_BASE`。必须是同步快照：`API_BASE` 在模块求值时定值，等异步 `config.get()`
+回来时验证码、公告的第一批请求已经发出去了。没配地址时**不回落开发地址**，登录页显示「服务器地址」表单
+（`apps/web/src/routes/_guest/-desktop-server.tsx`），保存后 `config.set` + 整页重载；配过的在登录页底部显示
+当前地址和「更换服务器」。`writeConfig` 只收完整的 HTTP(S) 地址。
+⚠️ 生产后端的 `CORS_ALLOWED_ORIGINS` 会整个覆盖 `conf.py` 的默认列表，发桌面端要自己把 `app://local` 加回去
+（`.env.server.example` 里写了注释）。
+
+**实测证据**（2026-11-21）：platform `base-url.test.ts` 7 条，先把修复前 `client.ts:9` 的原样逻辑放进
+`resolveApiBase` 跑，4 条桌面端用例红、3 条浏览器用例绿；改完 7 条全绿。`tests/server-url.test.ts` 4 条
+（preload 同步取值、取不到当空串、主进程同步通道读 `readConfig()`、`writeConfig` 拒绝非 HTTP(S)），
+把 preload / ipc / config / contract 换回 origin/main 的版本跑是 4 条全红。Chromium（Playwright）
+对 vite dev server 注入模拟的 `window.desktop`：`serverUrl=''` 时出现地址表单、零个 `/api/v1` 请求，
+填 `admin.example.com` 被拒、填 `https://admin.example.com/` 后 `config.set` 收到去掉斜杠的值；
+`serverUrl='https://api.example.test'` 时验证码和公告请求都发往该主机，底部显示地址与「更换服务器」。
+**真 Electron 42**（未打包：`VITE_API_BASE='' pnpm --filter web build` + desktop `build`，Playwright `_electron`
+起 `apps/desktop`，xvfb，`XDG_CONFIG_HOME` 指向空目录，带 `--no-sandbox`）：origin/main 的产物里
+`/api/v1/auth/captcha` 和 `/sys/notices/public` 都发到 `app://local`、200 + `<!doctype html>`，
+验证码区显示 `Unexpected token '<'` —— 和 issue 描述一致。修复后的产物：首启 `window.desktop.serverUrl` 为 `''`、
+出现地址表单、零个 `/api/v1` 请求；填 `https://api.example.test/` 保存 → 整页重载 → preload 重取到
+`https://api.example.test`，`config.json` 落盘同值，验证码 / 公告请求发往该主机。
+**没实测**：打包后的安装包（`app.isPackaged`、`resources/renderer`）、开着 OS 沙箱、连真后端的登录 / 刷新 / socket.io。
+
 ## 出包的顺序：漏了第一步不报错，只是界面是上一版的
 
 ```bash

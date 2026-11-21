@@ -16,6 +16,8 @@ export const IPC = {
 
   configGet: 'config:get',
   configSet: 'config:set',
+  /** 同步通道（`sendSync`）：preload 加载时取 serverUrl，渲染层模块求值前就要有（#392） */
+  configServerUrlSync: 'config:server-url-sync',
 
   authLogin: 'auth:login',
   authLoginByPhone: 'auth:login-by-phone',
@@ -75,9 +77,9 @@ export interface AppInfo {
 /**
  * 落在 `app.getPath('userData')/config.json`。
  *
- * ⚠️ `serverUrl` 必须是**运行期**配置，不能编译期写死。
- * 渲染层现在的 `API_BASE`（api-client/client.ts）是 `import.meta.env.VITE_API_BASE`，
- * 那是编译期常量——同一个安装包发到不同部署环境就废了。
+ * ⚠️ `serverUrl` 必须是**运行期**配置，不能编译期写死——同一个安装包要发到不同部署环境。
+ * 渲染层的 `API_BASE`（api-client/client.ts）在桌面端取的就是它（`DesktopBridge.serverUrl`，#392），
+ * 不再是编译期的 `VITE_API_BASE`。
  */
 export interface DesktopConfig {
   /** 后端地址，形如 `http://api.example.com:8000`，**末尾不带斜杠** */
@@ -261,6 +263,14 @@ export type UpdaterEvent =
  * **只有这里列出的东西能过桥**——渲染层永远拿不到 Node、拿不到 ipcRenderer 本体。
  */
 export interface DesktopBridge {
+  /**
+   * 页面加载那一刻的 `config.serverUrl`（空串 = 还没配）。渲染层的 `API_BASE` 取它（#392）。
+   *
+   * 为什么是同步快照而不是 `config.get()`：`API_BASE` 在模块求值时就要定值，
+   * 等异步 IPC 回来时第一批请求（验证码、公告）已经发到 `app://local` 了。
+   * 改了地址要整页重载，preload 会重新取一次。
+   */
+  serverUrl: string
   app: {
     info(): Promise<AppInfo>
   }

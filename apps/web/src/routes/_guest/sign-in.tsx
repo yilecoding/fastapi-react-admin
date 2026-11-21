@@ -42,6 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@admin/ui/components/t
 import { LanguageMenu } from "@/components/language-menu"
 import { ThemeMenu } from "@/components/theme-menu"
 import { BRAND } from "@/lib/brand"
+import { DesktopServerForm, DesktopServerLine, needsDesktopServer } from "@/routes/_guest/-desktop-server"
 import { MfaStep } from "@/routes/_guest/-mfa-step"
 import { PublicNotices } from "@/routes/_guest/-public-notices"
 import { SignInBrandPanel, SignInBrandStrip } from "@/routes/_guest/-sign-in-brand"
@@ -126,6 +127,8 @@ function SignInPage() {
   const [captchaError, setCaptchaError] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [pending, setPending] = React.useState(false)
+  // 桌面端没配服务器地址时先填地址（#392）；配过的也能从「更换服务器」进来
+  const [serverForm, setServerForm] = React.useState(needsDesktopServer)
   /** 二次验证（#181）：第一步过了、还差动态码。第三方登录回来的那一种从地址栏带进来 */
   const [mfa, setMfa] = React.useState<MfaChallenge | null>(() =>
     search.mfa ? { mfaToken: search.mfa, mfaSetup: search.setup === true } : null
@@ -210,6 +213,8 @@ function SignInPage() {
     // 挂载即取验证码。规则想让这类取数走 useQuery，但这里要的正是
     // inFlight ref 那种「跨 StrictMode 双跑也只发一次」的单飞（见 loadCaptcha 注释），
     // 改成 query 得连带重做 loading/ready/off/error 那套状态机。
+    // 桌面端还没配服务器地址：API_BASE 是空串，请求会打到 app://local 拿回 index.html（#392）
+    if (needsDesktopServer()) return
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadCaptcha()
   }, [loadCaptcha])
@@ -371,7 +376,9 @@ function SignInPage() {
             <h1 className="mt-3 text-2xl leading-tight font-semibold tracking-[-0.02em]">{t("欢迎回来")}</h1>
             <p className="mt-2 text-sm text-muted-foreground">{t("用管理员账号登录，进入你的工作台。")}</p>
 
-            {mfa ? (
+            {serverForm ? (
+              <DesktopServerForm onCancel={needsDesktopServer() ? undefined : () => setServerForm(false)} />
+            ) : mfa ? (
               <MfaStep challenge={mfa} onDone={enter} onBack={leaveMfa} />
             ) : (
             /* 两个面板给同一个 min-h：切登录方式时「欢迎回来」不会上下跳 */
@@ -568,8 +575,10 @@ function SignInPage() {
             </Tabs>
             )}
 
+            {!serverForm && <DesktopServerLine onChange={() => setServerForm(true)} />}
+
             {/* 登录页公告（#190）：在表单**下面** —— 取不到 / 没有都不占位，取数失败也只是一行，不挡登录 */}
-            <PublicNotices className="mt-8 border-t border-border/70 pt-4" />
+            {!needsDesktopServer() && <PublicNotices className="mt-8 border-t border-border/70 pt-4" />}
           </div>
         </div>
 

@@ -21,6 +21,10 @@ export function registerIpc(appInfo: () => unknown): void {
 
   ipcMain.handle(IPC.configGet, () => readConfig())
   ipcMain.handle(IPC.configSet, (_e, patch: Partial<DesktopConfig>) => writeConfig(patch))
+  // 同步通道：preload 用 sendSync 取，渲染层 API_BASE 与本进程 auth.ts 读同一份（#392）
+  ipcMain.on(IPC.configServerUrlSync, (event) => {
+    event.returnValue = readConfig().serverUrl
+  })
 
   ipcMain.handle(IPC.authLogin, (_e, input: AuthLoginInput) => auth.login(input))
   ipcMain.handle(IPC.authLoginByPhone, (_e, input: AuthPhoneLoginInput) => auth.loginByPhone(input))

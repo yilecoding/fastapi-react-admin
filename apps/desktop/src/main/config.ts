@@ -3,6 +3,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 import type { DesktopConfig } from "@admin/platform/desktop/contract"
+import { httpUrl } from "@admin/platform/desktop/http-url"
 
 /**
  * 运行期配置。落在 `app.getPath('userData')/config.json`。
@@ -48,6 +49,10 @@ export function readConfig(): DesktopConfig {
 }
 
 export function writeConfig(patch: Partial<DesktopConfig>): DesktopConfig {
+  // 渲染层登录页会写这个值（#392），而它随后被 fetch / socket.io 当成后端地址：只收完整的 HTTP(S)
+  if (typeof patch.serverUrl === "string" && patch.serverUrl.trim() && !httpUrl(patch.serverUrl)) {
+    throw new Error("服务器地址必须以 http:// 或 https:// 开头")
+  }
   const next = { ...readConfig(), ...normalize(patch) }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true })
   fs.writeFileSync(configPath(), JSON.stringify(next, null, 2), "utf8")
