@@ -188,3 +188,16 @@ E2E `workflow-ai-approve.spec.ts`（详情用 `route.fetch()` 取真接口再改
   两条一起修：`mergeAi` / `changeForm` 都读 `formRef`（每次渲染和每次改都更新），不读闭包里的 `form`
 - **AI 填的字段被显示条件隐藏了，提交永远被拦**：它的「没问题」画不出来。拦提交只看显示着的那些标记（`pendingMarks`）；
   隐藏字段的值服务端本来就不存
+
+## 审批前端的三处「旧状态」（#403，E2E `workflow-stale-state.spec.ts`，三条都在旧代码上红过）
+
+| 症状 | 根因 / 修法 |
+|---|---|
+| 🔴 会签：A 把金额改成 80 同意，B 只改备注再同意，金额被改回 100，轨迹记成「B 把金额从 80 改成 100」 | `FormRenderer` 的 `onChange` 给的是**整份**合并值，详情页取其中所有 editable 的键当补丁，没动过的字段带的是打开详情那一刻的快照。改成只记这次真的变了的键（渲染器只替换被改的那个键，其余沿用同一个引用，`v[k] !== merged[k]`）。服务端的版本号重读只在补丁最小时守得住 |
+| 🔴 审批中心开着 A 单写了一半意见，消息中心点了 B 单的通知：B 在查询缓存里，意见和字段改动显示在 B 上，点同意提交给了 B | `InstanceSheet` 的 `Body` / `Detail` 没有 `key`，换 `?id=` 不重挂。两层都按单号加 `key`（发起抽屉和设计器早就有） |
+| 填完最后一个字段 1.5 秒内点「取消」，重开是旧的 / 白表 | `useDraftAutosave` 的清理只 `clearTimeout`。排着的那次存进 `pending` ref，另一个空依赖 effect 的卸载清理里补发；提交时 `stop()` 过就不补（否则服务端刚删的草稿被存回来） |
+
+**实测证据**（2026-11-21，PG 私有库 + 私有端口的 dev server）：旧代码上三条依次红在「提交的 `form` 多了 `f_amount`」·
+「B 的意见框里是『这是给 A 的意见』」· 「等不到那次 PUT」；修后三条绿，`tests/workflow*` + `dashboard-personalize.spec.ts` 共 44 条全过。
+⚠️ 换单那条要**应用内**换 `?id=`（`history.pushState` + `popstate` 进 A、`goBack()` 回 B）：`goto` / `reload` 清掉 QueryClient、组件也重挂，测不出来。
+⚠️ 草稿补发是卸载之后才发出去的：重开得比那次 PUT 落地还快时，首帧仍是旧缓存（只在测试里能这么快，人点不出来 —— 推断，没单独验）。

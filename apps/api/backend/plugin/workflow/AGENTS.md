@@ -339,6 +339,8 @@ PG 和 SQL Server 都过。真模型 `tests/test_ai_workflow_tools_real_model.py
 没给理由的驳回：加核对之前 Qwen3-VL **红**（出了一张带自拟意见的驳回卡片），DeepSeek-V3.2 回头问了用户；
 加核对之后 Qwen3-VL 被拦下、转而问用户要理由，两个模型 3/3。
 
+🔴 **`wf_approve` 不碰「退回给我」的单（#403）**。症状：「把我的待办都同意了」，其中一张是别人退回给发起人的，确认卡片写「同意」，执行后原样重新进了审批。根因：开始节点上的待办「同意」= resubmit（`runtime_service` 那一支），待办工具又不标 `back`。修法：待办输出带 `back` / `back_by` / `back_reason`，预演和执行都拒（`_refuse_resubmit`，执行那次兜免确认 / 令牌已发的路）。**实测证据**：`test_approve_in_chat_never_resubmits_a_request_sent_back_to_me`（2026-11-21，PG 私有库）旧代码红在 `back` 缺失；去掉预演那道 → 红在出了确认卡片，去掉执行那道 → 红在 `done.kind == 'ok'`。
+
 ## 设计器一句话生成（#111 第 1 条，`service/ai_design_service.py`）
 
 `POST /definitions/{pk}/ai-generate {prompt}` → `{form, model, issues, model_name, rounds}`。**只回结果、不改库里的草稿**，
@@ -467,7 +469,7 @@ Qwen3-VL 采购那条要回喂一轮，DeepSeek-V3.2 把「财务总监」留空
 | 最后一步超时自动驳回：状态「已驳回」，说明却是上一个人的「同意」 | `_DECISIVE` 写的是 `auto_approve`，引擎记的是 `timeout_approve` / `timeout_reject`（`apply_timeout`，`_PROGRESS` 里也是这俩）。前端 `card-rules.lastLine` 一起改，`actor_name` 为空时说「超时自动驳回」 |
 | 退回那一步在步骤条上是绿勾 | `_steps` 只认 `decision == 'reject'`；退回写的是 `send_back`。新状态 `sent_back`，前端画退回的样式 |
 | 待办超过 500 条时丢的是最老、最可能已经超时的那批，`total` 也被封顶 500 | 原来取「最新 500 条」、`total = len(items)`。改成按 `(urgent desc, id)` 取、总数单独 count（测试把上限改成 2 来验） |
-| 「其中 60 件加急」显示成 50；「退回给我」只数一页 | 前端从取回来的 50 条里数。后端给 `urgent_total` / `returned_total`（新增可选字段，1.0 兼容约定允许）。「退回给我」在 SQL 里按**办理人就是发起人**认 —— 开始节点 id 在快照 JSON 里、不是列；审批人解析永远去掉发起人，转交 / 改派 / 加签给发起人都会被拒，所以两种认法一致（测试里对过） |
+| 「其中 60 件加急」显示成 50；「退回给我」只数一页 | 前端从取回来的 50 条里数。后端给 `urgent_total` / `returned_total`（新增可选字段，1.0 兼容约定允许）。「退回给我」原来在 SQL 里按**办理人就是发起人**认，以为两种认法一致 —— 漏了「发起人确认」节点（`kind='initiator'`），#403 改成逐行对开始节点，见 [运行时子分册](service/AGENTS.md) |
 | A → B → C 转交，C 看到「A 转交给你」；管理员改派也说成转交 | 原来用 `origin_assignee_id`（转交链上**最初**那个人，依次审批按它排队）。改成取最近一条 `transfer` / `reassign` 记录的 `actor_name`（按 单 × 节点 × 接手的人 认），多给 `transfer_kind` |
 | 500 行待办约 1000 次整棵树遍历（审批中心默认列表也在付） | `_todo_row` 每行调 `timeout_of` + `due_time`，各自 `index_nodes`。按快照缓存节点索引，两个函数收 `nodes`。测试数调用次数：3 行同一版本 = 1 次 |
 

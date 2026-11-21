@@ -394,12 +394,18 @@ function useDraftAutosave(code: string, form: FormData, aiFilled: string[], enab
   const stopped = React.useRef(false)
   const inflight = React.useRef<Promise<unknown> | null>(null)
   const last = React.useRef(JSON.stringify([form, aiFilled]))
+  /** 防抖里排着、还没发出去的那一次保存 */
+  const pending = React.useRef<(() => Promise<void>) | null>(null)
   React.useEffect(() => {
     if (!enabled) return
     const raw = JSON.stringify([form, aiFilled])
-    if (raw === last.current) return
-    const h = setTimeout(async () => {
-      if (stopped.current) return
+    if (raw === last.current) {
+      pending.current = null
+      return
+    }
+    const save = async () => {
+      pending.current = null
+      if (stopped.current || raw === last.current) return
       setStatus('saving')
       let done: () => void = () => {}
       inflight.current = new Promise<void>((r) => {
@@ -418,9 +424,20 @@ function useDraftAutosave(code: string, form: FormData, aiFilled: string[], enab
         done()
         inflight.current = null
       }
-    }, 1500)
+    }
+    pending.current = save
+    const h = setTimeout(save, 1500)
     return () => clearTimeout(h)
   }, [qc, code, form, aiFilled, enabled])
+  // 🔴 卸载（点「取消」/ 关抽屉 / 页签被 Activity 藏起来）时把排着的那次补发出去（#403）。上面那个 effect 的清理
+  // 只 `clearTimeout`：最后 1.5 秒里打的字原来直接丢了，整张表都是 1.5 秒内填的话重开是一张白表。
+  // 提交时 `stop()` 过就不补（服务端刚删掉的草稿不能被存回来）
+  React.useEffect(
+    () => () => {
+      if (!stopped.current) void pending.current?.()
+    },
+    [],
+  )
   return {
     status,
     savedAt,

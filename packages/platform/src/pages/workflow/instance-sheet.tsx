@@ -59,7 +59,10 @@ export function InstanceSheet({
         side="right"
         className="gap-0 data-[side=right]:w-full data-[side=right]:sm:w-3/4 data-[side=right]:sm:max-w-5xl" data-testid="wf-instance-sheet">
         {id ? (
-          <Body id={id} onClose={onClose} onResubmit={onResubmit} />
+          // 🔴 按单号重挂（#403）：意见 / 字段改动 / 选人都是 `Detail` 和 `ActionBar` 的本地状态。不加 key 时
+          // 从 A 单换到一张查询缓存里有的 B 单（消息中心点通知会直接把 `?id=` 换掉），组件不重挂，
+          // A 写了一半的意见显示在 B 上，点同意就提交给了 B
+          <Body key={id} id={id} onClose={onClose} onResubmit={onResubmit} />
         ) : (
           <SheetTitle className="sr-only">{t('审批详情')}</SheetTitle>
         )}
@@ -123,6 +126,7 @@ function Body({
     !!onResubmit && !!me && d.instance.initiator_id === me.id && ['rejected', 'withdrawn'].includes(d.instance.status)
   return (
     <Detail
+      key={d.instance.id}
       detail={d}
       onDone={onClose}
       onResubmit={canResubmit ? () => onResubmit?.(d.instance.definition_code, d.instance.id) : undefined}
@@ -219,9 +223,12 @@ function Detail({
                 perms={d.field_perms}
                 files={d.files}
                 onChange={(v) => {
-                  const next: FormData = {}
-                  for (const k of editable) if (k in v) next[k] = v[k]
-                  setPatch(next)
+                  // 🔴 只记这次真的变了的字段（#403）。`v` 是整份合并值：原来取其中所有 editable 的键，没动过的字段带的是
+                  // 打开详情那一刻的快照 —— 会签时后同意的人只改了备注，提交出去的却还有旧金额，把先同意的人改的值静默盖回去。
+                  // 渲染器只替换被改的那个键，其余键沿用同一个引用，`!==` 就是「这次改的」
+                  const touched: FormData = {}
+                  for (const k of editable) if (k in v && v[k] !== merged[k]) touched[k] = v[k]
+                  if (Object.keys(touched).length) setPatch((p) => ({ ...p, ...touched }))
                 }}
               />
               {d.select_nodes.map((n) => (

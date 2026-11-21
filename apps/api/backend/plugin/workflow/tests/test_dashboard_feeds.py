@@ -359,3 +359,24 @@ def test_todo_rows_index_each_snapshot_once(
         page = ok(client.get('/sys/workflow/inbox/todo', headers=login('zhaolei'), params=params))
         assert len(page['items']) == 3 and all(r['due_time'] for r in page['items'])
         assert calls == 1, (sort, calls)
+
+
+def test_returned_total_skips_initiator_confirm_nodes(
+    client: TestClient, token_headers: dict[str, str], login: Login, uid: Uid
+) -> None:
+    """🔴 「发起人自己办」节点（`kind='initiator'`）上的待办办理人也是发起人，但它是一张要办的单、不是退回（#403）。
+    原来按「办理人就是发起人」数，工作台显示「退回给我 1」、「待审批」少 1，列表里却没有一行 `back`"""
+    _publish(client, token_headers, 'PYTEST_DASH_SELF', FORM, _model(_approval('n1', {'kind': 'initiator'})))
+    mark = f'SLF{uuid.uuid4().hex[:10]}'
+    _marked(client, login, 'PYTEST_DASH_SELF', mark, 1)
+    page = _attention_page(client, login, 'sunqiang', mark, 10)
+    assert page['total'] == 1 and page['items'][0]['back'] is False
+    assert page['returned_total'] == sum(r['back'] for r in page['items']) == 0
+
+    # 同一个人手上再来一张真被退回的：只数这一张
+    _publish_one(client, token_headers, uid, 'PYTEST_DASH_SELF2', 'zhaolei')
+    (pk,) = _marked(client, login, 'PYTEST_DASH_SELF2', mark, 1)
+    ok(_act(client, login('zhaolei'), pk, 'send_back', target_node_id='start', opinion='补材料'))
+    page = _attention_page(client, login, 'sunqiang', mark, 10)
+    assert page['total'] == 2
+    assert page['returned_total'] == sum(r['back'] for r in page['items']) == 1
