@@ -138,12 +138,12 @@ def test_readiness_ignores_heartbeats(client: TestClient, heartbeats) -> None:
 # ---------------------------------------------------------------------------
 
 _STATUS = 'http://testserver/health/status'
-_SERVICES = ['api', 'database', 'redis', 'scheduler', 'worker']
+_SERVICES = ['api', 'database', 'redis', 'scheduler', 'worker', 'worker_long']
 
 
 @pytest.fixture
 def heartbeats(monkeypatch) -> Generator[Callable[..., None], None, None]:
-    """把两个心跳键换成本用例独占的，返回 `set_age(scheduler=秒前, worker=秒前)`（None = 删掉）
+    """把三个心跳键换成本用例独占的，返回 `set_age(scheduler=秒前, worker=秒前, worker_long=秒前)`（None = 删掉）
 
     🔴 不能直接动真键：本机 `pnpm dev` 的 beat / worker 一直在往真键写，会和断言抢。
     用同步客户端写 —— 应用的 `redis_client` 绑在 TestClient 的事件循环上，这里另开循环会撞
@@ -153,9 +153,11 @@ def heartbeats(monkeypatch) -> Generator[Callable[..., None], None, None]:
     keys = {
         'scheduler': f'{settings.SCHEDULER_HEARTBEAT_REDIS_KEY}:pytest:{tag}',
         'worker': f'{settings.WORKER_HEARTBEAT_REDIS_KEY}:pytest:{tag}',
+        'worker_long': f'{settings.LONG_WORKER_HEARTBEAT_REDIS_KEY}:pytest:{tag}',
     }
     monkeypatch.setattr(settings, 'SCHEDULER_HEARTBEAT_REDIS_KEY', keys['scheduler'])
     monkeypatch.setattr(settings, 'WORKER_HEARTBEAT_REDIS_KEY', keys['worker'])
+    monkeypatch.setattr(settings, 'LONG_WORKER_HEARTBEAT_REDIS_KEY', keys['worker_long'])
     r = Redis(
         host=settings.REDIS_HOST,
         port=settings.REDIS_PORT,
@@ -170,6 +172,8 @@ def heartbeats(monkeypatch) -> Generator[Callable[..., None], None, None]:
             else:
                 r.set(keys[name], f'{time.time() - seconds_ago:.3f}')
 
+    # 长任务 worker（#400）默认是活的：它自己写心跳、不靠 beat，原有用例只关心 scheduler / worker
+    set_age(worker_long=0)
     yield set_age
     r.delete(*keys.values())
     r.close()
@@ -194,6 +198,34 @@ def test_status_all_ok(client: TestClient, heartbeats) -> None:
     assert 4 <= services['scheduler']['last_seen_seconds'] <= 10
     assert 19 <= services['worker']['last_seen_seconds'] <= 25
     assert resp.json()['heartbeat_max_age_seconds'] == settings.HEARTBEAT_MAX_AGE_SECONDS
+
+
+def test_status_flags_a_missing_long_worker(client: TestClient, heartbeats) -> None:
+    """🔴 只起了默认 worker、没人消费长任务队列（#400）：导出 / AI 预审 / 日志清理永远不执行，这里必须红"""
+    heartbeats(scheduler=5, worker=5, worker_long=None)
+    resp = client.get(_STATUS)
+    assert resp.status_code == 503, resp.text
+    services = _services(resp)
+    assert services['worker']['status'] == 'ok'
+    assert services['worker_long'] == {'status': 'missing', 'last_seen_seconds': None}
+
+
+def test_status_flags_a_stopped_long_worker(client: TestClient, heartbeats) -> None:
+    heartbeats(scheduler=5, worker=5, worker_long=settings.HEARTBEAT_MAX_AGE_SECONDS + 30)
+    resp = client.get(_STATUS)
+    assert resp.status_code == 503, resp.text
+    assert _services(resp)['worker_long']['status'] == 'stale'
+
+
+def test_long_worker_is_judged_without_the_scheduler(client: TestClient, heartbeats) -> None:
+    """长任务心跳不靠 beat 派发：调度器停了，它照样判得出 ok / stale，不跟着 worker 报 unknown"""
+    stopped = settings.HEARTBEAT_MAX_AGE_SECONDS + 60
+    heartbeats(scheduler=stopped, worker=stopped, worker_long=5)
+    services = _services(client.get(_STATUS))
+    assert services['worker']['status'] == 'unknown'
+    assert services['worker_long']['status'] == 'ok'
+    heartbeats(worker_long=stopped)
+    assert _services(client.get(_STATUS))['worker_long']['status'] == 'stale'
 
 
 def test_status_needs_no_token(client: TestClient, heartbeats) -> None:
@@ -457,10 +489,10 @@ def test_heartbeat_task_stays_quiet(monkeypatch) -> None:
 
     sent: list[str] = []
 
-    async def record(msg: str) -> None:  # ruff: ignore[unused-async] —— 顶替的 task_notification 是协程
+    async def record(msg: str) -> None:  # ruff: ignore[unused-async] —— 顶替的 notify_task_watchers 是协程
         sent.append(msg)
 
-    monkeypatch.setattr(base, 'task_notification', record)
+    monkeypatch.setattr(base, 'notify_task_watchers', record)
 
     async def go() -> None:
         await hb.before_start('t1', (), {})

@@ -109,6 +109,10 @@ services:
       - -l
       - info
       - --pool=custom
+      # 🔴 只消费默认队列（#400）。长任务走 `long`，由下面的 worker-long 消费 ——
+      # 一个 worker 进程一次只跑一个任务，两类挤一条队列时一次 AI 预审就把心跳 / 通知 / Webhook 投递堵住
+      - -Q
+      - celery
     environment:
       TZ: Asia/Shanghai
       CELERY_CUSTOM_WORKER_POOL: celery_aio_pool.pool:AsyncIOPool
@@ -133,6 +137,40 @@ services:
     # 改成跟 beat 同一套思路：只证明进程没死，不去证明它真的响应了一次完整的
     # broker 往返——worker 是容器 PID 1，没有 shell 包一层，直接读
     # /proc/1/cmdline，零额外进程、零额外内存
+    healthcheck:
+      test: ["CMD-SHELL", "grep -q worker /proc/1/cmdline"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # 长任务 worker（#400）：导出 · AI 预审 · 日志 / 回收站 / 过期导出清理（`backend/app/task/celery.py: LONG_TASKS`）。
+  # 🔴 不能省：省了长任务没人消费、**静默地永远不执行**。`/api/health/status` 的 `worker_long` 会报 missing（它自己写心跳）。
+  # 也可以多副本：`--scale worker-long=2`
+  worker-long:
+    <<: *api-base
+    command:
+      - celery
+      - -A
+      - backend.app.task.celery
+      - worker
+      - -l
+      - info
+      - --pool=custom
+      - -Q
+      - long
+    environment:
+      TZ: Asia/Shanghai
+      CELERY_CUSTOM_WORKER_POOL: celery_aio_pool.pool:AsyncIOPool
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - "${FBA_ENV_FILE:-./apps/api/deploy/backend/docker-compose/.env.server}:/app/backend/.env:ro"
+      - fba_upload:/app/backend/upload
+      - fba_upload_public:/app/backend/upload-public
+      - fba_log_worker_long:/app/backend/log
+    # 同 worker：只证明进程没死（理由见上面 worker 那段）
     healthcheck:
       test: ["CMD-SHELL", "grep -q worker /proc/1/cmdline"]
       interval: 30s
@@ -202,4 +240,5 @@ volumes:
   fba_upload_public:
   fba_log_api:
   fba_log_worker:
+  fba_log_worker_long:
   fba_log_beat:

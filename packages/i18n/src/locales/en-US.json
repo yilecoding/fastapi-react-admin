@@ -3121,6 +3121,7 @@
   "键名是后端 <c>dynamic_config</c> 和业务代码引用这条配置的唯一入口，建好之后不要改 —— 改了等于把这个参数从系统里摘掉。": "The key is the only handle the backend’s <c>dynamic_config</c> and your business code have on this setting. Do not change it once created — renaming it effectively removes the parameter from the system.",
   "键名请用大写字母、数字和下划线，且以字母开头": "Use uppercase letters, digits and underscores, starting with a letter",
   "键总数": "Keys",
+  "长任务": "Long-task worker",
   "长时间未操作，已自动退出，请重新登录": "You were signed out after a period of inactivity. Please sign in again.",
   "问点什么…": "Ask something…",
   "问点关于这套系统的事": "Ask anything about this system",
