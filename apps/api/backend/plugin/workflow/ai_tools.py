@@ -100,6 +100,8 @@ _TODO_SCAN = 100
     name='wf_todo_list',
     description=(
         '列出「待我审批」的单：标题、摘要、发起人、当前步骤、是否加急。'
+        'back=true 的是别人退回给我、要我改完重新提交的申请（back_by 谁退的、back_reason 原因），'
+        '不能用 wf_approve 同意，要告诉用户去审批中心修改后重新提交。'
         '用户问「我有哪些待办 / 有什么要我批的 / 张三那张请假在不在我这」时用它。'
         'keyword 可以是几个词、用空格分开（如「孙强 报销」），每个词都要在标题 / 摘要 / 发起人里出现；'
         '拿不准就不带 keyword，看全部。'
@@ -127,6 +129,10 @@ async def wf_todo_list(db: AsyncSession, ctx: RunContext, keyword: str | None = 
                 'step': r.get('node_name'),
                 'urgent': r['urgent'],
                 'arrived_time': _when(r.get('arrived_time')),
+                # 🔴 退回给我、等我改完重新提交的单：不是一张要「同意」的单（wf_approve 会拒绝它，#403）
+                'back': r['back'],
+                'back_by': r.get('back_by'),
+                'back_reason': r.get('back_reason'),
             }
             for r in rows[:20]
         ],
@@ -193,8 +199,20 @@ async def _act(db: AsyncSession, ctx: RunContext, instance_id: str, action: Acti
     return {'instance_id': instance_id, 'action': action.value, 'done': True}
 
 
+def _refuse_resubmit(d: dict[str, Any]) -> None:
+    """🔴 我手上的待办在开始节点上 = 别人退回给我的申请。对它「同意」在运行时走的是**重新提交**（原样、不带任何修改）：
+    确认卡片写「同意」，退回人要求改的内容却一个字没动就重新进了审批（#403）。对话里不替人重新提交，让他去审批中心改"""
+    mine = next((tk for tk in d['tasks'] if tk['id'] == d.get('my_task_id')), None)
+    if mine is not None and mine['node_id'] == d['model']['root']['id']:
+        raise ValueError(
+            f'「{d["instance"]["title"]}」是退回给你的申请，要你改完再重新提交，不能在对话里「同意」。'
+            '请告诉用户去审批中心打开这张单，按退回意见修改后重新提交'
+        )
+
+
 async def _preview_approve(db: AsyncSession, ctx: RunContext, instance_id: str, opinion: str | None = None) -> str:
     d = await _doable(db, ctx, instance_id, Action.approve)
+    _refuse_resubmit(d)
     words = _own_words(ctx, opinion)
     tail = f'，意见：「{words}」' if words else ''
     return f'将以你本人的身份同意「{d["instance"]["title"]}」{tail}'
@@ -211,7 +229,10 @@ async def _preview_approve(db: AsyncSession, ctx: RunContext, instance_id: str, 
     preview=_preview_approve,
 )
 async def wf_approve(db: AsyncSession, ctx: RunContext, instance_id: str, opinion: str | None = None) -> dict[str, Any]:
-    return await _act(db, ctx, instance_id, Action.approve, opinion=opinion)
+    # 执行时再判一次：确认令牌发出之后单子可能刚被退回到他手上，或者走的是免确认那条路（不经过预演）
+    _refuse_resubmit(await query_service.detail(db, _pk(instance_id), _actor(ctx)))
+    # 上面那道读的是对话的会话；真正办理在 `_act` 另开的会话里。两次之间被退回的，由 `act()` 认领之后再拦一次
+    return await _act(db, ctx, instance_id, Action.approve, opinion=opinion, forbid_resubmit=True)
 
 
 async def _preview_reject(db: AsyncSession, ctx: RunContext, instance_id: str, opinion: str) -> str:

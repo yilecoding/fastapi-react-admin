@@ -177,11 +177,7 @@ async def todo(
         # 全量数单独 count：取回来的最多 `_ATTENTION_SORT_CAP` 条，拿它的长度当 total 会被封顶
         total = await count_rows(db, stmt)
         extra['urgent_total'] = await count_rows(db, stmt.where(WfInstance.urgent == true()))
-        # 「退回给我」= 开始节点上的待办。开始节点的 id 在快照 JSON 里、不是列，SQL 里按「办理人就是发起人」认：
-        # 审批人解析永远去掉发起人（`engine/assignee.py`），转交 / 改派 / 加签给发起人都会被拒，
-        # 所以发起人手上的在办待办只可能是被退回的那一条
-        # （`test_urgent_and_returned_totals_count_beyond_the_page` 守着两边一致）
-        extra['returned_total'] = await count_rows(db, stmt.where(WfInstance.initiator_id == WfTask.assignee_id))
+        extra['returned_total'] = await _returned_total(db, stmt)
         items = items[(page - 1) * size : page * size]
     else:
         # 加急的排前面（发起人标的），其余按到手时间倒序
@@ -189,6 +185,40 @@ async def todo(
         items = [_todo_row(tk, i, n, models) for tk, i, n in rows]
     await _todo_extras(db, items)
     return {**_page(await _finish_rows(db, items), total, page, size), **extra}
+
+
+async def _returned_total(db: AsyncSession, stmt: Select) -> int:
+    """「退回给我」= 开始节点上的待办（和逐行的 `back` 同一个判据）。
+
+    开始节点的 id 在快照 JSON 里、不是列，SQL 里先按「办理人就是发起人」缩小范围，再对开始节点。
+    🔴 不能只按「办理人就是发起人」数：「发起人自己办」节点（`kind='initiator'`，设计器里的「发起人确认」）上的待办
+    办理人也是发起人，但那是一张要办的单 —— 原来工作台显示「退回给我 1」、列表里却没有对应的行（#403）。
+    按「版本 × 节点」分组数（快照 = 发起时那个版本的 `model_json`，同一版本一份），每个版本只取一份快照解析：
+    不封顶的计数不能逐行把整份快照拉回来（「发起人确认」多的流程一个人手上能有几千条）
+    """
+    groups = (
+        await db.execute(
+            stmt
+            .where(WfInstance.initiator_id == WfTask.assignee_id)
+            .with_only_columns(WfInstance.version_id, WfTask.node_id, func.count())
+            .group_by(WfInstance.version_id, WfTask.node_id)
+            .order_by(None)
+        )
+    ).all()
+    if not groups:
+        return 0
+    one = (
+        select(func.min(WfInstance.id))
+        .where(WfInstance.version_id.in_({v for v, _, _ in groups}))
+        .group_by(WfInstance.version_id)
+    )
+    roots = {
+        v: json.loads(snapshot)['root']['id']
+        for v, snapshot in (
+            await db.execute(select(WfInstance.version_id, WfInstance.model_snapshot).where(WfInstance.id.in_(one)))
+        ).all()
+    }
+    return sum(n for v, node_id, n in groups if node_id == roots.get(v))
 
 
 def _todo_row(

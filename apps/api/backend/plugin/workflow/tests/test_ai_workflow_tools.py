@@ -539,3 +539,52 @@ def test_transfer_goes_to_the_person_on_the_card(
         asyncio.run(purge())
     (hers,), _ = _run(monkeypatch, _person(uid('wangfang'), '王芳'), [('wf_todo_list', {}, False)])
     assert pk in hers.payload, '转给的应该是卡片上那个王芳'
+
+
+def test_approve_in_chat_never_resubmits_a_request_sent_back_to_me(
+    client: TestClient, token_headers: dict[str, str], login: Any, uid: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 被退回给发起人的那条待办在开始节点上，对它「同意」= 原样重新提交（`runtime_service` 里 resubmit 那一支）。
+    原来待办工具不标 `back`、卡片写「同意」，「把我的待办都同意了」会把退回人要求改的单一个字不动地重新送审（#403）。
+    待办里要标出来；预演和执行都拦下，让他去审批中心改完再提交"""
+    from backend.plugin.workflow.tests.test_ops import _act as act_api
+
+    _setup(client, token_headers, uid, 'PYTEST_AIWF_BACK')
+    pk = _start(client, login, 'PYTEST_AIWF_BACK')
+    ok(act_api(client, login('zhaolei'), pk, 'send_back', target_node_id='start', opinion='补上客户名称'))
+    sunqiang = _person(uid('sunqiang'), '孙强')
+    (todo, staged, forced), _ = _run(
+        monkeypatch,
+        sunqiang,
+        [
+            ('wf_todo_list', {}, False),
+            ('wf_approve', {'instance_id': pk}, False),
+            ('wf_approve', {'instance_id': pk}, True),
+        ],
+    )
+    row = next(r for r in json.loads(todo.payload)['items'] if r['instance_id'] == pk)
+    assert row.get('back') is True and row.get('back_reason') == '补上客户名称', row
+    assert staged.kind == 'failed' and staged.confirm_token is None and '退回' in staged.payload, staged
+    assert forced.kind == 'failed' and '退回' in forced.payload, forced
+    detail = _detail(client, token_headers, pk)
+    assert detail['instance']['status'] == 'running'
+    assert not [r for r in detail['records'] if r['action'] == 'resubmit'], '不能替他重新提交'
+
+
+def test_approve_in_chat_refuses_a_send_back_that_lands_after_the_check(
+    client: TestClient, token_headers: dict[str, str], login: Any, uid: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 执行前那道 `_refuse_resubmit` 读的是对话的会话，真正办理在 `_act` 另开的会话里、认领之后（#403 评审跟进）：
+    两次读之间有人把单退回到他手上，同意照样走成原样重新提交。所以认领之后、同一个事务里还要再判一次。
+    这里把前面那道换成空操作，模拟「检查时还没退回、认领时已经退回了」"""
+    from backend.plugin.workflow import ai_tools
+    from backend.plugin.workflow.tests.test_ops import _act as act_api
+
+    _setup(client, token_headers, uid, 'PYTEST_AIWF_BACK2')
+    pk = _start(client, login, 'PYTEST_AIWF_BACK2')
+    ok(act_api(client, login('zhaolei'), pk, 'send_back', target_node_id='start', opinion='补上客户名称'))
+    monkeypatch.setattr(ai_tools, '_refuse_resubmit', lambda d: None)
+    (forced,), _ = _run(monkeypatch, _person(uid('sunqiang'), '孙强'), [('wf_approve', {'instance_id': pk}, True)])
+    assert forced.kind == 'failed' and '退回' in forced.payload, forced
+    detail = _detail(client, token_headers, pk)
+    assert not [r for r in detail['records'] if r['action'] == 'resubmit'], '不能替他重新提交'

@@ -15,7 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@admin/ui/components/t
 import { Textarea } from '@admin/ui/components/textarea'
 import { toast } from '@admin/ui/components/toast'
 import { formatDateTime } from '@admin/i18n'
-import { missingRequired, progressItems } from '@admin/api'
+import { isEmpty, missingRequired, progressItems } from '@admin/api'
 
 import { ApiError } from '../../api-client/errors'
 import { meQuery } from '../../auth/queries'
@@ -59,7 +59,10 @@ export function InstanceSheet({
         side="right"
         className="gap-0 data-[side=right]:w-full data-[side=right]:sm:w-3/4 data-[side=right]:sm:max-w-5xl" data-testid="wf-instance-sheet">
         {id ? (
-          <Body id={id} onClose={onClose} onResubmit={onResubmit} />
+          // 🔴 按单号重挂（#403）：意见 / 字段改动 / 选人都是 `Detail` 和 `ActionBar` 的本地状态。不加 key 时
+          // 从 A 单换到一张查询缓存里有的 B 单（消息中心点通知会直接把 `?id=` 换掉），组件不重挂，
+          // A 写了一半的意见显示在 B 上，点同意就提交给了 B
+          <Body key={id} id={id} onClose={onClose} onResubmit={onResubmit} />
         ) : (
           <SheetTitle className="sr-only">{t('审批详情')}</SheetTitle>
         )}
@@ -123,6 +126,7 @@ function Body({
     !!onResubmit && !!me && d.instance.initiator_id === me.id && ['rejected', 'withdrawn'].includes(d.instance.status)
   return (
     <Detail
+      key={d.instance.id}
       detail={d}
       onDone={onClose}
       onResubmit={canResubmit ? () => onResubmit?.(d.instance.definition_code, d.instance.id) : undefined}
@@ -158,6 +162,9 @@ function Detail({
     [d.field_perms]
   )
   const merged = React.useMemo(() => ({ ...d.form_data, ...patch }), [d.form_data, patch])
+  // 服务端现在的值（详情重取过就是新的）：判「改回原值」用。走 ref —— 附件上传的回调是开始上传那一刻的闭包
+  const serverForm = React.useRef(d.form_data)
+  serverForm.current = d.form_data
   // 被退回后重新提交：「发起人自选」节点的人（预填上次选的）
   const [picks, setPicks] = React.useState<Record<string, string[]>>(() =>
     Object.fromEntries(d.select_nodes.map((n) => [n.id, n.selected]))
@@ -218,10 +225,14 @@ function Detail({
                 mode="view"
                 perms={d.field_perms}
                 files={d.files}
-                onChange={(v) => {
-                  const next: FormData = {}
-                  for (const k of editable) if (k in v) next[k] = v[k]
-                  setPatch(next)
+                onChange={(v, id) => {
+                  // 🔴 只记审批人真改过的字段（#403）。`v` 是整份合并值：原来取其中所有 editable 的键，没动过的字段带的是
+                  // 打开详情那一刻的快照 —— 会签时后同意的人只改了备注，提交出去的却还有旧金额，把先同意的人改的值静默盖回去。
+                  // 按渲染器给的 `id` 记（附件传完的回调是旧闭包，拿整份值和闭包里的 `merged` 比会把重取过的字段都算成改过）；
+                  // 改回和服务端一样的值就不算改过、从补丁里拿掉，否则「改了又改回来」照样把旧值盖回去
+                  if (!editable.has(id)) return
+                  const next = v[id]
+                  setPatch(({ [id]: _, ...rest }) => (sameValue(next, serverForm.current[id]) ? rest : { ...rest, [id]: next }))
                 }}
               />
               {d.select_nodes.map((n) => (
@@ -684,4 +695,11 @@ export function _i18nExtractionAnchors(t: (k: string) => string) {
     t('把这条待办交给另一个人处理，不需要原办理人同意。适合办理人离职或长期不在。'),
     t('拿回'), t('加签'), t('已拿回'), t('已加签'), t('临时请别人一起审这一步，他们都同意才算数。'),
   ]
+}
+
+/** 审批人填的值和服务端的是不是同一个：都空算一样；数字框给 number、接口可能给字符串（金额），标量按字符串比 */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (isEmpty(a) && isEmpty(b)) return true
+  if (typeof a !== 'object' && typeof b !== 'object') return String(a) === String(b)
+  return JSON.stringify(a) === JSON.stringify(b)
 }

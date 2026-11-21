@@ -17,7 +17,7 @@ import { meQuery } from '../../auth/queries'
 import { useTabPortalContainer } from '../../shell/tab-outlet'
 import { FormField as Row } from '../_shared/form-fields'
 import {
-  detailQuery, draftQuery, idempotencyKey, previewQuery, removeDraft, saveDraft, startFormQuery, useDeleteDraft, useStartInstance,
+  detailQuery, draftQuery, idempotencyKey, previewQuery, primeDraft, removeDraft, saveDraft, startFormQuery, useDeleteDraft, useStartInstance,
   type FieldPerm, type FileMeta, type AiFill, type FormData, type StartForm,
 } from './api'
 import { AiFillPanel, AiMark, type AiFillOutcome } from './ai-fill-panel'
@@ -388,39 +388,73 @@ function Filler({
  * 服务端刚删掉的草稿又被存回来，下次打开「已恢复没提交的内容」，而那张单其实已经交了
  */
 function useDraftAutosave(code: string, form: FormData, aiFilled: string[], enabled: boolean) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [status, setStatus] = React.useState<'idle' | 'saving' | 'error'>('idle')
   const [savedAt, setSavedAt] = React.useState<string | null>(null)
   const stopped = React.useRef(false)
-  const inflight = React.useRef<Promise<unknown> | null>(null)
+  /** 最后发出的那一次保存，落地（成败都算）时 resolve、从不 reject。新的一次排在它后面发 */
+  const inflight = React.useRef<Promise<void> | null>(null)
   const last = React.useRef(JSON.stringify([form, aiFilled]))
+  /** 防抖里排着、还没发出去的那一次保存 */
+  const pending = React.useRef<((flush?: boolean) => Promise<void>) | null>(null)
   React.useEffect(() => {
     if (!enabled) return
     const raw = JSON.stringify([form, aiFilled])
-    if (raw === last.current) return
-    const h = setTimeout(async () => {
+    if (raw === last.current) {
+      pending.current = null
+      return
+    }
+    const save = async (flush = false) => {
+      // 🔴 停着的时候（提交中）不发，但**留着**：提交失败 `resume()` 之后关抽屉还要补发它（#403 评审）
       if (stopped.current) return
+      if (pending.current === save) pending.current = null
+      if (raw === last.current) return
+      // 全清空了：删草稿而不是存一份空的（否则下次打开是「已恢复你没提交的内容」+ 一张白表）
+      const blank = Object.values(form).every((v) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0))
+      // 关抽屉补发的这次，先把缓存写成要存的内容：PUT 落地之前就重开，`Filler` 首帧拿到的不能是旧草稿
+      if (flush) primeDraft(qc, code, blank ? null : form, aiFilled)
       setStatus('saving')
-      let done: () => void = () => {}
-      inflight.current = new Promise<void>((r) => {
-        done = r
-      })
-      try {
-        // 全清空了：删草稿而不是存一份空的（否则下次打开是「已恢复你没提交的内容」+ 一张白表）
-        const blank = Object.values(form).every((v) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0))
+      const prev = inflight.current
+      // 🔴 等上一次落地再发：两次 PUT / DELETE 并发时谁后到服务端不一定，后到的旧内容会盖掉新的（#403 评审）
+      const run = (async () => {
+        await prev
         await (blank ? removeDraft(qc, code) : saveDraft(qc, code, form, aiFilled))
+      })()
+      const settled = run.then(
+        () => {},
+        () => {},
+      )
+      inflight.current = settled
+      try {
+        await run
         last.current = raw
         setSavedAt(new Date().toISOString())
         setStatus('idle')
       } catch {
         setStatus('error')
+        if (flush) {
+          // 抽屉已经卸载，状态栏那句「草稿没存上」画不出来：弹一条；缓存作废、下次打开以服务端为准（硬纪律 9）
+          void qc.invalidateQueries({ queryKey: draftQuery(code).queryKey })
+          toast.error(t('关闭前最后填的内容没存上，重新打开补填一下'))
+        }
       } finally {
-        done()
-        inflight.current = null
+        if (inflight.current === settled) inflight.current = null
       }
-    }, 1500)
+    }
+    pending.current = save
+    const h = setTimeout(save, 1500)
     return () => clearTimeout(h)
-  }, [qc, code, form, aiFilled, enabled])
+  }, [qc, code, form, aiFilled, enabled, t])
+  // 🔴 卸载（点「取消」/ 关抽屉 / 页签被 Activity 藏起来）时把排着的那次补发出去（#403）。上面那个 effect 的清理
+  // 只 `clearTimeout`：最后 1.5 秒里打的字原来直接丢了，整张表都是 1.5 秒内填的话重开是一张白表。
+  // 提交时 `stop()` 过就不补（服务端刚删掉的草稿不能被存回来）
+  React.useEffect(
+    () => () => {
+      if (!stopped.current) void pending.current?.(true)
+    },
+    [],
+  )
   return {
     status,
     savedAt,

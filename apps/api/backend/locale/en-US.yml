@@ -389,6 +389,7 @@ error:
     instance_finished: This approval has already ended
     action_disabled: 'This action is not available right now: {reason}'
     action_not_allowed: You can't perform this action now, please refresh
+    resubmit_in_chat: This request was sent back to you. Revise it and resubmit in the approval center; it can't be approved from chat
     remind_too_often: You can only send a reminder once every 5 minutes
     idempotency_key_invalid: Invalid idempotency key
     busy: Too many concurrent operations, please retry

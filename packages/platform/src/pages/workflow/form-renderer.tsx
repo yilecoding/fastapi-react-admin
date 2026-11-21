@@ -48,7 +48,8 @@ export function FormRenderer({
 }: {
   schema: FormSchema
   value: FormData
-  onChange?: (v: FormData) => void
+  /** `id`：这次改的是哪个字段（详情页按它记「审批人改过的字段」，不靠拿整份值和闭包里的旧值比） */
+  onChange?: (v: FormData, id: string) => void
   mode: 'edit' | 'view'
   perms?: Record<string, FieldPerm>
   errors?: Record<string, string>
@@ -62,7 +63,7 @@ export function FormRenderer({
   // 用闭包里的旧值，上传期间在别的字段里打的字会被整个盖回去（自动保存再把盖回去的存成草稿）
   const latest = React.useRef(value)
   latest.current = value
-  const set = (id: string, v: unknown) => onChange?.({ ...latest.current, [id]: v })
+  const set = (id: string, v: unknown) => onChange?.({ ...latest.current, [id]: v }, id)
   const ruled = React.useMemo(() => formRules(schema, value), [schema, value])
   return (
     <FilesContext.Provider value={files ?? EMPTY_FILES}>

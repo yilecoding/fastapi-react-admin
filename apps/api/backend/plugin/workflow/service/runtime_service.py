@@ -1211,9 +1211,13 @@ async def act(  # ruff:ignore[complex-structure]
     sign_mode: str | None = None,
     selected: dict[str, Any] | None = None,
     sys_opinion: SysOpinion | None = None,
+    forbid_resubmit: bool = False,
 ) -> dict[str, Any]:
     """`sys_opinion`：意见不是人写的、是系统拟的（离职交接的改派）—— 轨迹里存消息键，读的时候按读的人的语言渲染。
-    目前只有改派认它"""
+    目前只有改派认它。
+
+    `forbid_resubmit`：对话里的「同意」（`ai_tools.wf_approve`）带上。开始节点上的待办「同意」= 原样重新提交，
+    对话里不替人做；认领之后在同一个事务里判，挡住「检查完、执行前单子刚被退回到他手上」那个窗口（#403）"""
     # 接口层的 SchemaBase 会把枚举还原成 str —— 这里统一回枚举，后面 match / .value 都按枚举写
     action = Action(action)
     opinion = (opinion or '').strip() or None
@@ -1250,6 +1254,8 @@ async def act(  # ruff:ignore[complex-structure]
 
         match action:
             case Action.approve if my_task is not None and my_task.node_id == _root_id(inst):
+                if forbid_resubmit:
+                    raise ActionRejected('resubmit_in_chat', instance_id=inst.id)
                 # 被退回之后发起人改完重新提交：按开始节点的字段权限收改动，然后从头往下走
                 root = nodes[my_task.node_id].node
                 detail = await _apply_form_patch(ctx.db, inst, root, form_patch or {}, actor.id)
