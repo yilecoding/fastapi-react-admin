@@ -77,10 +77,16 @@ def get_enabled_plugins(plugins: tuple[str, ...] | None = None) -> set[str]:
     current_redis_client = RedisCli()
     run_await(current_redis_client.init)()
 
+    required = set(get_required_plugins())
     try:
         for plugin in plugin_names:
             plugin_info = run_await(current_redis_client.get)(f'{settings.PLUGIN_REDIS_PREFIX}:{plugin}')
             if get_plugin_enable(plugin_info, StatusType.enable.value) != str(StatusType.enable.value):
+                if plugin in required:
+                    # 必需插件不许停（#395）：接口那边拦住了，这里兜住拦之前就停掉的。
+                    # 原来照样当停用处理 —— 停掉 `dict` 后重启，字典路由全 404、整套表单下拉为空，启动不报一个字
+                    log.error(f'必需插件 {plugin} 被标记为停用，已按启用加载；请到插件页把它重新启用')
+                    continue
                 enabled_plugins.discard(plugin)
     finally:
         run_await(current_redis_client.aclose)()
@@ -198,11 +204,36 @@ def resolve_plugin_order(plugins: list[PluginEntry]) -> list[PluginEntry]:
     return ordered_plugins
 
 
+def drop_disabled_dependents(plugins: list[PluginEntry], installed: set[str]) -> list[PluginEntry]:
+    """去掉依赖了「已安装但停用」插件的那些（连带传递），记错误日志（#395）
+
+    停用一个被依赖的插件（比如 `notification`，`notice` 和 `workflow` 都依赖它），原来当时一切正常，
+    下次重启 `resolve_plugin_order` 抛 `PluginConfigError: … 但插件 notification 不存在`，API 起不来，
+    而且没有界面能恢复（只能手改 Redis）。接口那边现在拦住了这种停用，这里兜住拦之前就停掉的：
+    少加载几个插件，进程照样起来，管理员能在插件页把依赖重新启用。依赖**没装**的照旧报错（那是装错了）
+
+    :param plugins: 已启用的插件
+    :param installed: 所有已安装插件名
+    :return:
+    """
+    kept = list(plugins)
+    while True:
+        names = {p.name for p in kept}
+        dropped = [p for p in kept if any(dep in installed and dep not in names for dep in (p.depends_on or []))]
+        if not dropped:
+            return kept
+        for p in dropped:
+            missing = [dep for dep in p.depends_on or [] if dep in installed and dep not in names]
+            log.error(f'插件 {p.name} 依赖的插件 {", ".join(missing)} 已停用，本次不加载 {p.name}')
+        kept = [p for p in kept if p not in dropped]
+
+
 def get_ordered_enabled_plugins() -> list[PluginEntry]:
     """获取按依赖排序后的已启用插件"""
     enabled_plugins = get_enabled_plugins()
     extend_plugins, app_plugins = parse_plugin_config()
     plugins: list[PluginEntry] = [plugin for plugin in extend_plugins + app_plugins if plugin.name in enabled_plugins]
+    plugins = drop_disabled_dependents(plugins, {plugin.name for plugin in extend_plugins + app_plugins})
 
     try:
         return resolve_plugin_order(plugins)

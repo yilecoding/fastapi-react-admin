@@ -40,6 +40,9 @@ class _FakeRedis:
     async def delete(self, *_a: Any) -> int:
         return 1
 
+    async def eval(self, *_a: Any) -> int:  # 流锁的比对后续期 / 释放（#395）
+        return 1
+
 
 class _FakeSession:
     def __init__(self) -> None:

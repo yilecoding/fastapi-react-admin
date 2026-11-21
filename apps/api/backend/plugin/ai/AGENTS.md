@@ -80,7 +80,7 @@ service 层时**自动**继承调用者的可见范围。反过来说：谁在�
 `filter_data_permission_for_user(ctx.user, Dept)`——少了它，只该看见本部门的人
 问"有哪些部门"会拿到整棵组织树。
 
-## 🔴 SSE：三个会静默坏的地方
+## 🔴 SSE：四个会静默坏的地方
 
 - **不能用注入进来的 `CurrentSession`。** FastAPI 的 yield 依赖在 `StreamingResponse`
   开始发送**之前**就被收尾了，拿它在生成器里用会在流到一半时撞 "session is closed"——
@@ -93,6 +93,9 @@ service 层时**自动**继承调用者的可见范围。反过来说：谁在�
   每片当成一次独立调用的话，表现是"模型调用了 20 次工具、每次参数都是残缺 JSON"，
   而错误会被当成"模型参数填错了"，永远查不到流式解析这一层。守卫：
   `tests/test_ai_security.py::TestStreamParsing`
+- **会话流锁的值是这条流自己的令牌，进行中续期，释放时比对了再删**（#395）。原来值恒为 `'1'`、300 秒过期、无条件 `DELETE`：
+  慢模型过了 5 分钟，同一会话能进第二条流，第一条收尾时删掉第二条的锁。修前 `tests/test_ai_key_and_lock.py` 那条锁被删成 `None`。
+  密钥解不开时的断流见 [`llm` 子分册](llm/AGENTS.md)
 
 ## 🔴 内网网关的两条约束（来自 sop2ppt 的实测）
 

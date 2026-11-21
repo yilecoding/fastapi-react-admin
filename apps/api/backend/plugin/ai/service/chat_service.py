@@ -1,6 +1,8 @@
 """对话编排：把引擎产出的事件流变成 SSE 帧，并把该落库的东西落库。"""
 
+import asyncio
 import json
+import uuid
 
 from collections.abc import AsyncIterator
 from typing import Any
@@ -42,6 +44,66 @@ _SYSTEM_PROMPT = """你是这套后台管理系统的 AI 助手。
 """
 
 
+#: 会话流锁的过期时间与续期间隔（秒）。过期只兜「进程死了没释放」；活着的流靠续期一直持有
+STREAM_LOCK_TTL = 300
+STREAM_LOCK_RENEW_EVERY = 60
+
+#: 只在锁还是自己的时候才续 / 才删（KEYS[1] = 锁，ARGV[1] = 令牌，ARGV[2] = 续到几秒）
+_RENEW_LOCK = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+return 0
+"""
+_RELEASE_LOCK = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+
+
+async def _renew_lock(key: str, token: str) -> None:
+    """流进行中定时续期。锁已经不是自己的（过期后被别的流拿走）就停 —— 不抢回来"""
+    try:
+        while True:
+            await asyncio.sleep(STREAM_LOCK_RENEW_EVERY)
+            if not await redis_client.eval(_RENEW_LOCK, 1, key, token, STREAM_LOCK_TTL):
+                log.warning(f'AI 对话流锁 {key} 已不属于本条流，停止续期')
+                return
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        # 续期失败不打断回答：最坏是锁按 TTL 过期，退回原来的行为
+        log.exception(f'AI 对话流锁 {key} 续期失败')
+
+
+async def _prepare(db: Any, provider_id: int | None) -> tuple[Any, Any, ErrorEvent | None]:
+    """选供应商、解密钥、建引擎。失败一律变成一个 `ErrorEvent` 交回去，不往外抛（#395）
+
+    🔴 原来只接 `BaseExceptionError`：密钥解不开时 `decrypt()` 抛裸 ValueError，200 头已经发出，
+    生成器抛异常，前端只能说「连接中途断开」（硬纪律 9）。调用方拿到错误后发一帧、并和用户那句话一起落库 ——
+    只发帧不落库也不行：流一结束前端重拉历史，用户的话和报错一起被冲掉，看起来像什么都没发生
+
+    :return: (provider, engine, error)，error 非空时 engine 为 None
+    """
+    provider = None
+    try:
+        provider = await _resolve_provider(db, provider_id)
+        if provider is None:
+            return (
+                None,
+                None,
+                ErrorEvent(message='还没有配置可用的模型供应商，请先到「模型密钥管理」里添加一个', code='no_provider'),
+            )
+        return provider, build_engine(ai_provider_service.build_client(provider)), None
+    except errors.BaseExceptionError as e:
+        return provider, None, ErrorEvent(message=e.msg, code='setup_failed')
+    except Exception:
+        log.exception('AI 对话准备失败')
+        return provider, None, ErrorEvent(message='对话准备失败，请稍后重试或联系管理员', code='setup_failed')
+
+
 def _sse(event: AgentEvent) -> str:
     """一个事件 = 一帧 SSE。
 
@@ -67,29 +129,23 @@ class ChatService:
         lock_key = f'fba:ai:stream:{conversation_id}'
         # 同一个会话同时只允许一条流。React StrictMode 的双跑、用户连点两次发送，
         # 都会变成两条流同时往同一个会话里写消息，历史就乱序了（硬纪律 10 的同类）
-        if not await redis_client.set(lock_key, '1', ex=300, nx=True):
+        # 🔴 锁值是这条流自己的随机令牌，流进行中定时续期，释放时比对了再删（#395）。原来值恒为 '1'、
+        # 300 秒过期、`finally` 无条件 DELETE：慢模型超过 5 分钟，同一会话能再进一条流，第一条结束时把第二条的锁删掉
+        lock_token = uuid.uuid4().hex
+        if not await redis_client.set(lock_key, lock_token, ex=STREAM_LOCK_TTL, nx=True):
             yield _sse(ErrorEvent(message='这个会话正在回复中，请等它结束', code='busy'))
             return
+        renewer = asyncio.create_task(_renew_lock(lock_key, lock_token))
 
         try:
             async with async_db_session() as db:
                 try:
                     conversation = await conversation_service.get_owned(db=db, pk=conversation_id, user_id=user.id)
-                    provider = await _resolve_provider(db, conversation.provider_id)
-                    if provider is None:
-                        yield _sse(
-                            ErrorEvent(
-                                message='还没有配置可用的模型供应商，请先到「模型密钥管理」里添加一个',
-                                code='no_provider',
-                            )
-                        )
-                        return
-
-                    client = ai_provider_service.build_client(provider)
-                    engine = build_engine(client)
                 except errors.BaseExceptionError as e:
                     yield _sse(ErrorEvent(message=e.msg, code='setup_failed'))
                     return
+
+                provider, engine, setup_error = await _prepare(db, conversation.provider_id)
 
                 # 先把用户消息落库再调模型：模型调用可能失败/超时，
                 # 但"用户说过这句话"这件事已经发生了，丢了它对话历史就断了
@@ -97,6 +153,15 @@ class ChatService:
                     db, conversation_id=conversation_id, role=MessageRole.USER.value, content=content
                 )
                 await db.commit()
+
+                if setup_error is not None or engine is None:
+                    error = setup_error or ErrorEvent(message='对话准备失败', code='setup_failed')
+                    yield _sse(error)
+                    with anyio.CancelScope(shield=True):
+                        setup_ctx = RunContext(user=user, conversation_id=conversation_id, db=db, provider=provider)
+                        item = {'kind': 'error', 'message': error.message, 'code': error.code}
+                        await _persist_turn(db, setup_ctx, conversation_id, '', [item])
+                    return
 
                 history = await _build_history(db, conversation_id)
                 tools = tool_dispatcher.visible_schemas(user, await tool_dispatcher.off_plugins())
@@ -153,8 +218,9 @@ class ChatService:
                     with anyio.CancelScope(shield=True):
                         await _persist_turn(db, ctx, conversation_id, ''.join(assistant_parts), items)
         finally:
+            renewer.cancel()
             with anyio.CancelScope(shield=True):
-                await redis_client.delete(lock_key)
+                await redis_client.eval(_RELEASE_LOCK, 1, lock_key, lock_token)
 
     @staticmethod
     async def confirm_tool(*, user: Any, token: str) -> AsyncIterator[str]:

@@ -148,6 +148,19 @@ class CRUDDictData(DataScopedCRUD[DictData]):
             deleted=0,
         )
 
+    async def update_type_code(self, db: AsyncSession, type_id: int, type_code: str) -> int:
+        """
+        类型改编码时把冗余的 `type_code` 一起改掉（#395）
+
+        :param db: 数据库会话
+        :param type_id: 字典类型 ID
+        :param type_code: 新的字典类型编码
+        :return:
+        """
+        return await self.update_model_by_column(
+            db, {'type_code': type_code}, allow_multiple=True, type_id=type_id, deleted=0
+        )
+
     async def delete_by_type_id(self, db: AsyncSession, type_ids: list[int]) -> int:
         """
         通过类型 ID 删除字典数据

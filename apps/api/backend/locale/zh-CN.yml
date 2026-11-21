@@ -224,6 +224,8 @@ error:
     archive_invalid_filename: 插件压缩包文件名非法
     archive_invalid_format: 插件压缩包格式非法
     archive_missing_files: 插件压缩包内缺少必要文件
+    depended_cannot_disable: '插件 {plugin} 被已启用的插件 {dependents} 依赖，请先停用它们'
+    dependency_not_enabled: '插件 {plugin} 依赖的插件 {dependencies} 未启用，请先启用它们'
     dev_only_install: 禁止在非开发环境下安装插件
     dev_only_uninstall: 禁止在非开发环境下卸载插件
     frontend_dir_not_found: 未检测到前端插件目录，请确认路径下存在 apps/web-antdv-next/src/plugins
@@ -236,12 +238,15 @@ error:
     git_repo_invalid: Git 仓库地址格式非法，仅支持 HTTP/HTTPS 协议
     git_repo_required: Git 仓库地址不能为空
     install_failed: 插件安装失败，请稍后重试
+    name_reserved: '插件名 {plugin} 与插件系统自身的模块重名，请改名后再安装'
     not_enabled: 插件 {plugin} 未启用，请联系系统管理员
     not_found: 插件不存在
     oauth2_import_failed: OAuth2 插件用法导入失败，请联系系统管理员
     reload_lock_busy: 另一个插件正在安装或卸载，请稍后重试
     repo_already_installed: '{repo_name} 插件已安装'
+    required_cannot_disable: 插件 {plugin} 为必需插件，禁止停用
     required_cannot_uninstall: 插件 {plugin} 为必需插件，禁止卸载
+    requirements_install_failed: '插件 {plugin} 依赖安装失败，本次安装已撤销：{reason}'
     zip_required: ZIP 压缩包不能为空
   rate_limit:
     invalid_config: 至少需要传入一个 Rate、bucket 或 limiter 实例

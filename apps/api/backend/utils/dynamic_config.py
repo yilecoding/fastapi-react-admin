@@ -244,6 +244,35 @@ async def load_user_security_config(db: AsyncSession) -> None:
         'USER_PASSWORD_REQUIRE_SPECIAL_CHAR': str_to_bool,
     }
     await load_config(db, 'user_security', mapping, 'USER_SECURITY_CONFIG_STATUS')
+    # 读取侧也兜一次交叉校验：写入侧闸门挡不住直接写库和闸门上线前的历史行（#395）
+    problem = check_password_length_pair(settings.USER_PASSWORD_MIN_LENGTH, settings.USER_PASSWORD_MAX_LENGTH)
+    if problem:
+        log.error(f'参数配置 {problem}，两项都回落到默认值')
+        settings.USER_PASSWORD_MIN_LENGTH = _ENV_DEFAULTS.USER_PASSWORD_MIN_LENGTH
+        settings.USER_PASSWORD_MAX_LENGTH = _ENV_DEFAULTS.USER_PASSWORD_MAX_LENGTH
+
+
+#: 有大小关系的一对配置：(下限键, 上限键)。各自的范围在 `DYNAMIC_INT_BOUNDS`，这里只管两者之间
+PASSWORD_LENGTH_PAIR = ('USER_PASSWORD_MIN_LENGTH', 'USER_PASSWORD_MAX_LENGTH')
+
+
+def check_password_length_pair(low: object, high: object) -> str | None:
+    """密码长度下限不能大于上限（#395）
+
+    🔴 原来只有前端（`pages/config/registry.ts`）卡着：直接 `PUT /sys/configs` 写成 MIN=128、MAX=1，
+    两项各自都在 1..128 里、都过得了 `DYNAMIC_INT_BOUNDS`，之后所有改密 / 重置 / 建用户都失败 ——
+    和「写成 999 自锁」同一类。这一对要放一起看，单个键的校验看不到另一个键，所以挂在 service 上
+    （`config_service._check_pairs`），不在 schema 上
+
+    :return: 不合格时给人看的原因，合格（或有一项不是整数，那归范围校验管）返回 None
+    """
+    try:
+        lo, hi = int(str(low)), int(str(high))
+    except (TypeError, ValueError):
+        return None
+    if lo > hi:
+        return f'密码最小长度（{lo}）不能大于最大长度（{hi}）'
+    return None
 
 
 async def load_login_config(db: AsyncSession) -> None:

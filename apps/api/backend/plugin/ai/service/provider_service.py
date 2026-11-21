@@ -29,11 +29,33 @@ def _cipher() -> AESCipher:
             '写入 plugin.toml 的 [settings] 或 .env 后重启服务'
         )
     try:
-        return AESCipher(key)
+        raw = bytes.fromhex(key)
+        # 长度不对的话 `AESCipher(key)` 照样建得出来，要到加 / 解密那一刻才抛裸 ValueError（#395）
+        if len(raw) not in (16, 24, 32):
+            raise ValueError(f'长度是 {len(raw)} 字节')
+        return AESCipher(raw)
     except ValueError as e:
         raise errors.ServerError(
             msg=f'AI_ENCRYPT_SECRET_KEY 不是合法的十六进制密钥（需 32 字节 / 64 位十六进制）：{e}'
         ) from e
+
+
+def _decrypt_api_key(provider: AiProvider) -> str:
+    """解出供应商密钥。解不开时给一句说得清原因的业务错误（#395）
+
+    🔴 `AI_ENCRYPT_SECRET_KEY` 换过 / 多副本不一致时，`decrypt()` 抛的是裸 `ValueError`（padding 错）
+    或 `UnicodeDecodeError`。原来不接：对话流在 200 头发出之后抛异常、前端收不到 `error` 帧（硬纪律 9），
+    「测试连接」是一个无说明的 500。同 `config/secret.py` 的 `_cipher`
+    """
+    cipher = _cipher()
+    try:
+        return cipher.decrypt(provider.api_key_cipher)
+    except (ValueError, UnicodeError):
+        log.error(f'AI 供应商 {getattr(provider, "id", "?")} 的密钥解不开：AI_ENCRYPT_SECRET_KEY 和加密时的不一致')
+        raise errors.ServerError(
+            msg='模型密钥解不开：当前的 AI_ENCRYPT_SECRET_KEY 和保存密钥时用的不是同一把'
+            '（换过密钥，或多台服务器配置不一致）。请把密钥改回去，或到「模型密钥管理」里重新填写这个供应商的 API Key'
+        ) from None
 
 
 def mask_key(api_key: str) -> str:
@@ -115,7 +137,7 @@ class AiProviderService:
         """把一行供应商配置变成一个可用的客户端（解密发生在这一刻，不落地）"""
         return OpenAICompatClient(
             base_url=provider.base_url,
-            api_key=_cipher().decrypt(provider.api_key_cipher),
+            api_key=_decrypt_api_key(provider),
             model=provider.model,
             timeout=provider.timeout,
             verify_ssl=provider.verify_ssl,
@@ -130,7 +152,11 @@ class AiProviderService:
         却因为模型名不对而失败，而后者才是真正要用的那条路。
         """
         provider = await cls.get(db=db, pk=pk)
-        client = cls.build_client(provider)
+        try:
+            client = cls.build_client(provider)
+        except errors.BaseExceptionError as e:
+            # 密钥解不开 / 没配：这就是「测试连接」要告诉管理员的结论，不是一个 500（#395）
+            return TestAiProviderResult(ok=False, message=e.msg, latency_ms=None)
         started = time.perf_counter()
         try:
             async for _ in client.stream_chat([{'role': 'user', 'content': '你好'}]):

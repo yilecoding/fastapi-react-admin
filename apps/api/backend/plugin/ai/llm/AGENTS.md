@@ -28,3 +28,16 @@
 只看最外层不顺着异常链 → `ModelAPIError` 那条红。
 ⚠️ 「测试接口改回 `str(e)`」**没打红，是等价变异**：`stream_chat` 抛的都是已经清洗过的 `ServerError`，`str` 就是那句话 ——
 这一层的防线在 `client.py`，不在测试接口。
+
+## 🔴 模型密钥解不开：给一句说得清的报错，不是断流（#395）
+
+**症状**：`AI_ENCRYPT_SECRET_KEY` 换过 / 多副本不一致 / 长度不对时，对话发出去只看到前端兜底的「连接中途断开」，
+用户那句话也没了；「测试连接」是一个无说明的 500。原因只在服务端日志里（硬纪律 9）。
+**根因**：`AESCipher.decrypt()` 抛裸 `ValueError`（padding 错）或 `UnicodeDecodeError`，`chat_service.stream()` 只接
+`BaseExceptionError` —— 200 头已经发出，生成器抛异常；长度不对的密钥 `AESCipher(key)` 照样建得出来，到加解密那一刻才抛。
+**修法**：`provider_service._cipher` 校验 16 / 24 / 32 字节，`_decrypt_api_key` 把解密异常翻成说明原因的 `ServerError`
+（同 `config/secret.py`）；`chat_service._prepare` 把准备阶段的任何失败变成一帧 `error`，**并和用户那句话一起落库** ——
+只发帧的话，流一结束前端重拉历史就把它冲掉（读 `use-chat-session.ts` 推断的，`no_provider` 原来也是这样；**没在浏览器里看过**）。「测试连接」解不开时回 `ok: false` + 那句原因。
+**实测证据**（2026-11-21）：`tests/test_ai_key_and_lock.py`，修前：换密钥 / 长度不对两种 `build_client` 抛裸 `ValueError`
+（`Invalid padding bytes` · `Invalid key size (40) for AES`）、对话流抛异常而不是 `error` 帧、「测试连接」在 TestClient 里冒出
+`ValueError`；修后全绿，AI 插件 179 条全过。非十六进制的密钥修前就是业务错误（那条参数修前也绿）。
