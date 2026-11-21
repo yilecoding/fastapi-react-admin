@@ -326,6 +326,7 @@ _NOT_CREDENTIALS = {
     'secret_id': '腾讯云的 SecretId，相当于 AccessKey ID（公开标识）；只在 SDK 的配置模型里，请求里叫 access_key_id',
     'secret_prev_expire_time': '旧签名密钥的过期时间',
     'password_expire_days_remaining': '密码还剩几天过期',
+    'has_password': '有没有密码，布尔（个人中心的密码状态，#402）',
 }
 _CREDENTIAL_LIKE = re.compile(r'password|secret|token|api_?key|credential', re.IGNORECASE)
 

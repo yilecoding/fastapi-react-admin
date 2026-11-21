@@ -19,6 +19,7 @@ from backend.app.admin.schema.role import GetRoleDetail
 from backend.app.admin.schema.user import (
     AddUserParam,
     GetCurrentUserInfoWithRelationDetail,
+    GetMyPasswordStatus,
     GetUserInfoWithRelationDetail,
     ResetPasswordParam,
     UpdateUserParam,
@@ -216,6 +217,13 @@ async def update_user_permission(
     if count > 0:
         return response_base.success()
     return response_base.fail()
+
+
+@router.get('/me/password-status', summary='获取当前用户的密码状态', dependencies=[DependsJwtAuth])
+async def get_my_password_status(db: CurrentSession, request: Request) -> ResponseSchemaModel[GetMyPasswordStatus]:
+    # 第三方登录建的账号没有密码：个人中心据此显示「设置密码」，并先引导重新第三方授权（#402）
+    data = await user_service.get_password_status(db=db, user_id=request.user.id)
+    return response_base.success(data=data)
 
 
 @router.put('/me/password', summary='更新当前用户密码', dependencies=[DependsJwtAuth])

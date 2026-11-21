@@ -14,6 +14,7 @@ import { Button } from '@admin/ui/components/button'
 import { Combobox, type ComboboxOption } from '@admin/ui/components/combobox'
 import { Input } from '@admin/ui/components/input'
 import { Label } from '@admin/ui/components/label'
+import { QueryError } from '@admin/ui/components/query-error'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { cn } from '@admin/ui/lib/utils'
 
@@ -31,7 +32,7 @@ import { MfaBlock } from './mfa-block'
 import { NotifyPrefsPanel } from './notify-prefs-panel'
 import { RecentLogins } from './recent-logins'
 import {
-  AVATAR_MAX_BYTES, SOCIAL_SOURCES, socialBindingsQuery, useSendEmailCaptcha,
+  AVATAR_MAX_BYTES, SOCIAL_SOURCES, passwordStatusQuery, socialBindingsQuery, useReauthUrl, useSendEmailCaptcha,
   useSaveTimeZone, useSocialBindingUrl, useUnbindSocial, useUpdateAvatar, useUpdateEmail,
   useUpdateNickname, useUpdatePassword, useUploadAvatar, type SocialSource,
   useSendPhoneCaptcha,
@@ -969,17 +970,37 @@ function SecurityPanel({ me }: { me?: CurrentUser }) {
 
 /* ────────────────────────── 密码 ────────────────────────── */
 
+/**
+ * 密码块：有密码的「修改密码」，没有密码的（第三方登录建的账号）「设置密码」（#402）。
+ *
+ * 状态取不到时显示错误 + 重试（硬纪律 9）—— 不能退回「修改密码」表单：那个表单要旧密码，
+ * 没有密码的人怎么填都过不去，又看不出原因。
+ */
 function PasswordBlock() {
   const { t } = useTranslation()
-  const [oldPwd, setOldPwd] = React.useState('')
-  const [newPwd, setNewPwd] = React.useState('')
-  const [confirm, setConfirm] = React.useState('')
-  const [state, setState] = React.useState<CardState>(IDLE)
-  // 改密码成功后服务端会把本人的 token 全删掉，所以这里倒计时后主动登出。
-  // 不这么做的话，用户会在下一个请求 401 时被莫名弹回登录页。
-  const [bye, setBye] = React.useState<number | null>(null)
-  const mut = useUpdatePassword()
+  const status = useQuery(passwordStatusQuery)
+  if (status.error) {
+    return (
+      <Block title={t('密码')} icon={<IconKey />} testId="profile-password">
+        <QueryError error={status.error} onRetry={() => void status.refetch()} />
+      </Block>
+    )
+  }
+  if (!status.data) {
+    return (
+      <Block title={t('密码')} icon={<IconKey />} testId="profile-password">
+        <Skeleton className="h-9 max-w-sm" />
+      </Block>
+    )
+  }
+  return status.data.has_password
+    ? <ChangePasswordBlock />
+    : <FirstPasswordBlock verified={status.data.reauth_verified} />
+}
 
+/** 改密码 / 设密码成功后服务端会把本人的会话全撤掉：倒计时后主动登出，免得下一个请求莫名 401 */
+function useByeCountdown() {
+  const [bye, setBye] = React.useState<number | null>(null)
   React.useEffect(() => {
     if (bye === null) return
     if (bye <= 0) { endSession(); return }
@@ -987,6 +1008,19 @@ function PasswordBlock() {
     const timer = setTimeout(() => setBye(bye - 1), 1000)
     return () => clearTimeout(timer)
   }, [bye])
+  return [bye, setBye] as const
+}
+
+function ChangePasswordBlock() {
+  const { t } = useTranslation()
+  const [oldPwd, setOldPwd] = React.useState('')
+  const [newPwd, setNewPwd] = React.useState('')
+  const [confirm, setConfirm] = React.useState('')
+  const [state, setState] = React.useState<CardState>(IDLE)
+  // 改密码成功后服务端会把本人的 token 全删掉，所以这里倒计时后主动登出。
+  // 不这么做的话，用户会在下一个请求 401 时被莫名弹回登录页。
+  const [bye, setBye] = useByeCountdown()
+  const mut = useUpdatePassword()
 
   const mismatch = confirm.length > 0 && newPwd !== confirm
   const sameAsOld = newPwd.length > 0 && newPwd === oldPwd
@@ -1055,6 +1089,136 @@ function PasswordBlock() {
           )}
         </div>
       </form>
+    </Block>
+  )
+}
+
+/**
+ * 没有密码的账号第一次设密码（#402）。两步：
+ *
+ * 1. 用**已绑定的**第三方账号重新授权一次 —— 证明是本人。只凭当前会话不行：拿到这个人
+ *    一枚 access token 的人就能给他设一个长期密码。当前页跳转，回来时落在 `?section=security`，
+ *    状态里 `reauth_verified` 变 true
+ * 2. 只填新密码 + 确认（没有「当前密码」可填）。凭据 10 分钟、只能用一次；复杂度不过被拒不消耗它
+ *
+ * 一个第三方账号都没绑（或插件停用）就没有办法自证，只能找管理员重置 —— 照实说。
+ */
+function FirstPasswordBlock({ verified }: { verified: boolean }) {
+  const { t } = useTranslation()
+  const social = useQuery(socialBindingsQuery)
+  const getUrl = useReauthUrl()
+  const mut = useUpdatePassword()
+  const [newPwd, setNewPwd] = React.useState('')
+  const [confirm, setConfirm] = React.useState('')
+  const [state, setState] = React.useState<CardState>(IDLE)
+  const [busy, setBusy] = React.useState<SocialSource | null>(null)
+  const [bye, setBye] = useByeCountdown()
+
+  const mismatch = confirm.length > 0 && newPwd !== confirm
+  const ready = newPwd.length > 0 && confirm.length > 0 && !mismatch
+  const bound = SOCIAL_SOURCES.filter(({ source }) => social.data?.includes(source))
+
+  async function reauth(source: SocialSource) {
+    setState(IDLE)
+    setBusy(source)
+    try {
+      // 当前页顶层跳转（不是 fetch）：state cookie 只在顶层导航的响应上才会被收下，见 `useReauthUrl`
+      window.location.href = await getUrl.mutateAsync(source)
+    } catch (err) {
+      setState({ kind: 'error', msg: errMsg(err, t('取授权链接失败')) })
+      setBusy(null)
+    }
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setState(IDLE)
+    try {
+      await mut.mutateAsync({ new_password: newPwd, confirm_password: confirm })
+      setNewPwd(''); setConfirm('')
+      setBye(3)
+    } catch (err) {
+      setState({ kind: 'error', msg: errMsg(err, t('密码设置失败')) })
+    }
+  }
+
+  return (
+    <Block
+      title={t('设置密码')}
+      description={t('这个账号是用第三方账号登录时创建的，还没有密码。设置之后也能用用户名和密码登录。')}
+      icon={<IconKey />}
+      testId="profile-password"
+    >
+      {!verified ? (
+        <div className="flex flex-col gap-3" data-testid="p-reauth">
+          <p className="text-sm text-muted-foreground">
+            {t('为确认是你本人，请先用已绑定的第三方账号重新授权一次，完成后会回到这里。')}
+          </p>
+          {social.error ? (
+            <QueryError error={social.error} onRetry={() => void social.refetch()} />
+          ) : social.isPending ? (
+            <Skeleton className="h-8 w-40" />
+          ) : bound.length === 0 ? (
+            <p className="text-sm text-muted-foreground" data-testid="p-reauth-none">
+              {t('没有可用来验证身份的第三方账号，请联系管理员为你重置密码。')}
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {bound.map(({ source, label }) => (
+                <Button
+                  key={source} variant="outline" size="sm" disabled={busy !== null}
+                  data-testid={`p-reauth-${source}`}
+                  onClick={() => void reauth(source)}
+                >
+                  {busy === source ? <IconLoader2 className="size-4 animate-spin" /> : <IconExternalLink className="size-4" />}
+                  {t('用 {{name}} 验证身份', { name: label })}
+                </Button>
+              ))}
+            </div>
+          )}
+          <StatusLine state={state} okText="" />
+        </div>
+      ) : (
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <p className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400"
+             data-testid="p-reauth-ok">
+            <IconCheck className="size-3.5 shrink-0" />
+            {t('身份已验证，请在 10 分钟内设置密码。')}
+          </p>
+          <div className="flex max-w-sm flex-col gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="p-new">{t('新密码')}</Label>
+              <Input id="p-new" data-testid="p-new" type="password" value={newPwd}
+                     autoComplete="new-password"
+                     onChange={(e) => { setNewPwd(e.target.value); setState(IDLE) }} />
+              <PasswordStrength value={newPwd} testId="p-strength" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="p-confirm">{t('确认新密码')}</Label>
+              <Input id="p-confirm" data-testid="p-confirm" type="password" value={confirm}
+                     autoComplete="new-password"
+                     onChange={(e) => { setConfirm(e.target.value); setState(IDLE) }} />
+              {mismatch && (
+                <p className="text-sm text-destructive" data-testid="p-mismatch">{t('两次输入的密码不一致')}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <SubmitButton pending={mut.isPending} disabled={!ready || bye !== null} testid="p-password-save">
+              {t('设置密码')}
+            </SubmitButton>
+            {bye === null ? (
+              <StatusLine state={state} okText="" />
+            ) : (
+              <p className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400"
+                 data-testid="p-password-bye">
+                <IconCheck className="size-3.5 shrink-0" />
+                {t('密码已设置，需要重新登录（{{n}} 秒后跳转）', { n: bye })}
+              </p>
+            )}
+          </div>
+        </form>
+      )}
     </Block>
   )
 }

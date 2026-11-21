@@ -3,11 +3,12 @@ import re
 from datetime import datetime
 from typing import Self
 
-from pydantic import ConfigDict, Field, HttpUrl, TypeAdapter, ValidationError, model_validator
+from pydantic import ConfigDict, Field, HttpUrl, TypeAdapter, ValidationError, field_validator, model_validator
 
 from backend.app.admin.model import Menu
 from backend.common.enums import MenuType, StatusType
 from backend.common.schema import ColumnLengthChecked, SchemaBase, SnowflakeIdIn
+from backend.common.security.perms import split_perms
 
 
 class MenuSchemaBase(SchemaBase):
@@ -47,6 +48,17 @@ class MenuWriteParam(ColumnLengthChecked, MenuSchemaBase):
     """
 
     __sa_model__ = Menu
+
+    @field_validator('perms')
+    @classmethod
+    def _normalize_perms(cls, value: str | None) -> str | None:
+        """写入时规范化：去空格、去空段（#402）。`"a, b ,,"` 存成 `"a,b"`，只剩逗号空格的存成 None
+
+        读侧都走 `rbac.split_perms`，这里让库里的值本身就是干净的 —— 别的不走那个函数的读法
+        （SQL 里 LIKE、导出、人眼看）也不会被空格骗
+        """
+        parts = split_perms(value)
+        return ','.join(parts) if parts else None
 
     @model_validator(mode='after')
     def _required_by_type(self) -> Self:

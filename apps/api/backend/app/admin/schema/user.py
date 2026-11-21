@@ -85,9 +85,18 @@ class AddOAuth2UserParam(AuthSchemaBase):
 class ResetPasswordParam(SchemaBase):
     """重置密码参数"""
 
-    old_password: str = Field(description='旧密码')
+    old_password: str | None = Field(
+        None, description='旧密码。没有密码的账号（第三方登录建的）第一次设密码时不传，改由重新第三方授权确认身份'
+    )
     new_password: str = Field(description='新密码')
     confirm_password: str = Field(description='确认密码')
+
+
+class GetMyPasswordStatus(SchemaBase):
+    """当前用户的密码状态（个人中心决定显示「修改密码」还是「设置密码」）"""
+
+    has_password: bool = Field(description='是否已有密码（第三方登录建的账号没有）')
+    reauth_verified: bool = Field(description='第一次设密码前的第三方重新授权是否已完成且仍有效')
 
 
 class UserInfoSchemaBase(SchemaBase):

@@ -362,3 +362,18 @@ dept / role / user / notice / file 这几个。
 - ⚠️ 只写目录自己那一行，不往下级写 —— 下级自己的状态保留着，重新启用目录就整棵原样回来
 
 **实测证据**：`app/admin/tests/api_v1/test_menu_disable.py`（变异记录见 [`pages/menu` 分册](../../../../../packages/platform/src/pages/menu/AGENTS.md)「三处『改了、保存成功、界面不变』」）。
+
+## 🔴 菜单 `perms` 一律用 `perms.py: split_perms` 切（#402）
+
+**症状**：菜单的 `perms` 存成 `"sys:a, sys:b"`（带空格，手填 / 直接打接口 / 老数据都写得进去）时，同一个人
+HTTP 接口 403、前端按钮隐藏（`can()` 的码表里是 `' sys:b'`），而「让 AI 帮我做」和后台导出复核照样认得出 —— 两条路结论不同，界面上看不出原因。
+
+**根因**：`rbac_verify` / `get_codes`（两支）/ `file_service._has_perm` / 审批 `Actor.from_user` 切完不 strip，`collect_allowed_perms` 会 strip；
+`schema/menu.py` 只校验按钮的 perms 非空，不管格式。
+
+**修法**：共用 `common/security/perms.py: split_perms`（去空格、去空段）—— 单独一个零依赖模块，放 `rbac.py` 里会循环导入
+（`schema/menu.py → rbac → jwt → schema/user`，实测 conftest 当场 ImportError）。`rbac_verify` 直接用 `collect_allowed_perms`，判据只剩一份。
+写入时 `MenuWriteParam` 规范化成 `"a,b"`，只剩逗号空格的存 None（按钮照样被「必须有权限码」拒）。没写数据迁移：读侧兜得住老数据。
+
+**实测证据**：`app/admin/tests/security/test_perms_split.py` 12 条，修之前 9 条红（每个切分点各一条 + schema 三条），
+「`collect_allowed_perms`」和「不在里面的码照样拒」两条对照组修前就绿。变异：`get_codes` 改回 `split(',')` → 红；schema 不规范化 → 3 条红。

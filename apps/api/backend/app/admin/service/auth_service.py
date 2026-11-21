@@ -39,6 +39,7 @@ from backend.common.security.jwt import (
     jwt_decode,
     set_refresh_cookie,
 )
+from backend.common.security.perms import split_perms
 from backend.common.security.session import EndReason, SessionClient, ended_error, session_store
 from backend.core.conf import settings
 from backend.database.db import uuid4_str
@@ -559,14 +560,14 @@ class AuthService:
             snapshot = await menu_dataset.get(db)
             for menu in snapshot.rows:
                 if menu['id'] not in snapshot.disabled and menu['perms']:
-                    codes.update(menu['perms'].split(','))
+                    codes.update(split_perms(menu['perms']))
         else:
             roles = [role for role in request.user.roles if role.status == StatusType.enable]
             if roles:
                 for role in roles:
                     for menu in role.menus:
                         if menu.status == StatusType.enable and menu.perms:
-                            codes.update(menu.perms.split(','))
+                            codes.update(split_perms(menu.perms))
 
         return list(codes)
 
