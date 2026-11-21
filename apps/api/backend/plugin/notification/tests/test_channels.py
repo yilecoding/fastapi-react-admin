@@ -125,7 +125,9 @@ def _isolate(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> Iterator[No
     _call(client, _purge)
     yield
     _call(client, _purge)
-    _call(client, _set_user, 'test', phone=None, phone_verified_time=None, status=1)
+    _call(
+        client, _set_user, 'test', phone=None, phone_verified_time=None, status=1, deleted=0, email='test@example.com'
+    )
 
 
 # ── 纯函数：四态 × 偏好 ─────────────────────────────────────────────────────────
@@ -263,6 +265,14 @@ class TestRouting:
         _call(client, _notify, [uid])
         assert [r.reason for r in _call(client, _deliveries)] == ['user_disabled']
 
+    def test_soft_deleted_user_is_skipped(self, client: TestClient) -> None:
+        """🔴 删用户是软删、status 还是 1：离职的人手上残留的待办照样触发催办，审批标题发给已经不在的人（#396）"""
+        uid = _call(client, _user_id, 'test')
+        _call(client, _set_user, 'test', deleted=uid)
+        _call(client, _policy, 'pytest.channel', 'email', 'forced')
+        assert _call(client, _notify, [uid]) == 0
+        assert [(r.status, r.reason) for r in _call(client, _deliveries)] == [('skipped', 'user_deleted')]
+
     def test_user_pref_turns_a_default_off_channel_on(self, client: TestClient) -> None:
         uid = _call(client, _user_id, 'test')
 
@@ -322,6 +332,46 @@ class TestWorker:
         _call(client, delivery_service.deliver_pending)
         (row,) = _call(client, _deliveries)
         assert (row.status, row.attempts, row.sent_time is not None) == ('sent', 1, True)
+
+    @pytest.mark.parametrize(
+        ('change', 'reason'),
+        [({'deleted': 'uid'}, 'user_deleted'), ({'status': 0}, 'user_disabled'), ({'email': None}, 'no_address')],
+    )
+    def test_recipient_is_rechecked_before_each_send(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, change: dict[str, Any], reason: str
+    ) -> None:
+        """🔴 投递行存的是入队时的快照（#396）。
+
+        退避重试 / 手动重发能拖几个小时，期间人被删 / 停用 / 清了地址就不该再发
+        """
+        calls: list[int] = []
+        _fake_email(monkeypatch, senders.Outcome.sent, calls)
+        uid = _call(client, _user_id, 'test')
+        _enqueue_one(client)
+        _call(client, _set_user, 'test', **{k: (uid if v == 'uid' else v) for k, v in change.items()})
+        _call(client, delivery_service.deliver_pending)
+        (row,) = _call(client, _deliveries)
+        assert (row.status, row.reason, calls) == ('skipped', reason, [])
+
+    def test_resend_goes_to_the_current_address_not_the_snapshot(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """换了邮箱 / 手机号：旧地址可能已经不归这个人了。
+
+        发到现在的那个，并把行上的地址改过来（投递记录里看得到发去了哪）
+        """
+        sent_to: list[str | None] = []
+
+        async def _send(row: NotificationDelivery) -> senders.SendResult:  # ruff: ignore[unused-async]
+            sent_to.append(row.address)
+            return senders.SendResult(senders.Outcome.sent, None, 'sent')
+
+        monkeypatch.setattr(senders, 'send_email', _send)
+        _enqueue_one(client)
+        _call(client, _set_user, 'test', email='pytest-new@example.com')
+        _call(client, delivery_service.deliver_pending)
+        (row,) = _call(client, _deliveries)
+        assert (row.status, row.address, sent_to) == ('sent', 'pytest-new@example.com', ['pytest-new@example.com'])
 
     def test_retryable_backs_off_then_exhausts(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
         _fake_email(monkeypatch, senders.Outcome.retryable)

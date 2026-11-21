@@ -218,3 +218,18 @@ SQL Server 上新表不是 IDENTITY；autogenerate 和迁移后的库比对没�
 | 对接方端点的 token 被推进飞书 / 钉钉群 | `open.webhook.disabled` 开了 `bot=True`，正文里是完整端点地址 | 正文只留协议 + 主机 + 端口 + 路径 | `open/tests/test_webhooks.py::test_disabled_notice_does_not_carry_the_endpoint_credentials` |
 | 不再可订阅的类型，编辑表单里看不见也去不掉，保存一直 400 | 表单只渲染 `bot=True` 的选项，回填的值里却有别的 | 列出来、标「已不能订阅」，取消勾选就能存 | 无前端单测；`pnpm typecheck` |
 | 英文界面上群机器人卡片写着 "Approver added" | 「已加签」和审批流的「加签」（加审批人）共用一个 key | 改成「已开 / 未开签名校验」 | `notify-bot.spec.ts` |
+
+## 🔴 软删的人、入队后才变的人：路由和发送都要按「现在的人」判（#396）
+
+**症状**：离职（删除）账号手上残留的审批待办照样触发超时提醒 / 催办，审批标题发进已离职的人的邮箱，短信还计费；
+入队后才停用 / 删除 / 换号的人，在退避重试或手动重发时照旧按快照地址收到。投递记录显示「已发出」。
+**根因**：删用户是软删（`deleted` = 自己的 id，`status` 还是 1），`_skip_reason` 只看 `status`；`resolve` 里「人删了就 `continue`」
+那句只管得到**行没了**的情况。投递行存的是入队时的地址快照，`_deliver_one` / `resend` 都不再看用户。
+**修法**：`_skip_reason` 先判 `deleted` → `skipped / user_deleted`；worker 每次发之前调 `routing.recheck()`（和 `resolve` 读同一组列
+`_RECIPIENT_COLUMNS`、同一个 `_skip_reason`），有原因就落 `skipped`、不发；地址变了就发现在的那个，并把行上的 `address` 改过来。
+群机器人行（`user_id` 为空）不复核。前端原因文案加了 `user_deleted`。
+
+**实测证据**（2026-11-21，PostgreSQL 16，独立测试库）：`tests/test_channels.py` 新增 6 条 ——
+`test_soft_deleted_user_is_skipped` · `test_recipient_is_rechecked_before_each_send`（删除 / 停用 / 清空邮箱三种）·
+`test_resend_goes_to_the_current_address_not_the_snapshot`。撤掉修复后 6 条全红（软删那条红在 `pending` ≠ `skipped`，
+复核那几条红在假发送器被调用了），恢复后全绿。SQL Server / MySQL 没跑。

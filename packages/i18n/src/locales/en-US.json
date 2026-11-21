@@ -2822,6 +2822,7 @@
   "账号信息": "Account",
   "账号启用": "Account enabled",
   "账号已停用": "Account disabled",
+  "账号已删除": "Account deleted",
   "账号已在其他设备登录，本设备已下线": "Your account signed in on another device, so this one was signed out.",
   "账号已被停用，请联系管理员": "Your account has been disabled. Please contact the administrator.",
   "账号异常": "Account problem",

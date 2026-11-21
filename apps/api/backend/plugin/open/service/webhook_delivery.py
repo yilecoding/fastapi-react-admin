@@ -72,7 +72,11 @@ def url_problem(url: str) -> str | None:
     """不连网的那部分检查：协议 + 有没有主机。返回问题描述，没问题返回 None"""
     try:
         parts = urlsplit(url)
-    except ValueError:
+        _ = parts.port  # 端口越界 / 不是数字时，读它这一下才抛 ValueError
+        # 🔴 再让 httpx 解析一遍（#396）：IDNA 2003 能过、IDNA 2008 拒的域名（`☃.net`）和路径里的控制字符，
+        # urlsplit 和 DNS 都放过，发的时候 httpx 才抛 InvalidURL —— 那个异常不是 HTTPError 的子类
+        httpx.URL(url)
+    except (ValueError, httpx.InvalidURL):
         return 'invalid_url'
     allow_http = settings.ENVIRONMENT == 'dev' or settings.OPEN_WEBHOOK_ALLOW_PRIVATE_NETWORK
     if parts.scheme != 'https' and not (allow_http and parts.scheme == 'http'):
@@ -98,7 +102,8 @@ async def check_target(url: str) -> str | None:
     port = parts.port or (443 if parts.scheme == 'https' else 80)
     try:
         addresses = await _resolve(host, port)
-    except OSError as e:
+    except (OSError, UnicodeError) as e:
+        # UnicodeError：主机名有空标签（`a..b`）或某一段超过 63 字符时 getaddrinfo 在编码那一步就抛（#396）
         return f'dns_failed: {e!s}'
     blocked = [a for a in addresses if _blocked_ip(a)]
     if not addresses or blocked:
@@ -204,7 +209,8 @@ async def _post(hook: OpenWebhook, event: OpenEvent) -> AttemptResult:
                 content = await _read_capped(resp)
     except (TimeoutError, httpx.TimeoutException):
         return AttemptResult(None, f'timeout: {limit}s', _ms(), logged)
-    except httpx.HTTPError as e:
+    except (httpx.HTTPError, httpx.InvalidURL) as e:
+        # InvalidURL 不是 HTTPError 的子类（httpx 0.28）：漏接它，「发测试」就是 500、worker 里冲出整批（#396）
         return AttemptResult(None, f'{type(e).__name__}: {e!s}', _ms(), logged)
     content_type = (resp.headers.get('content-type') or '').split(';')[0].strip().lower()
     if content is None:
@@ -296,7 +302,13 @@ async def deliver_one(pk: int, *, now_even_if_not_due: bool = False) -> str | No
         return WebhookDeliveryStatus.exhausted.value
 
     assert hook is not None and event is not None and app is not None
-    result = await _post(hook, event)
+    try:
+        result = await _post(hook, event)
+    except Exception as e:
+        # 🔴 兜底：发送这一步抛出任何没预料到的异常，也要落成一次失败的尝试（#396）。冲出去的话这一行停在 sending、
+        # 120 秒后被回收加一次次数，循环到放弃，全程没有一条尝试记录，界面上看不出原因
+        log.error(f'Webhook 投递 {pk} 发送时出错：{e!r}')
+        result = AttemptResult(None, f'{type(e).__name__}: {e!s}', 0, {})
     attempts = delivery.attempts + 1
     values = _settle_values(result, attempts=attempts, is_ping=delivery.event_type == 'ping')
 
@@ -422,7 +434,12 @@ async def deliver_pending() -> dict[str, int]:
         if not ids:
             break
         for pk in ids:
-            status = await deliver_one(pk)
+            try:
+                status = await deliver_one(pk)
+            except Exception as e:
+                # 一行出错不能让同一批里排在后面的（别的应用的）投递这一轮都不发（#396）
+                log.error(f'Webhook 投递 {pk} 处理失败：{e!r}')
+                status = 'error'
             key = status or 'skipped_by_other_worker'
             stats[key] = stats.get(key, 0) + 1
         last_id = ids[-1]

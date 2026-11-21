@@ -12,13 +12,19 @@
   无限返回，对方的同步循环永远停不下来。所以 SQL Server 上先 `CAST(... AS DATETIMEOFFSET(6))`，
   取值、比较、排序用的是同一个微秒精度的值
 
+- 🔴 `updated_since` 要往回多看 `OPEN_SYNC_LOOKBACK_SECONDS`（#396）：
+  `created_time` / `updated_time` 是**写入**那一刻的时间
+  （`default_factory=timezone.now`，构造对象时就定了），不是提交时间。部门导入这种几十秒的事务里早写的行，提交得比
+  别人晚 —— 对方在它提交前同步，记下的水位已经越过了它，下一轮从水位往后拉就永远拉不到。往回看一段，窗口里的行重复返回，
+  对方按 id 覆盖（README 一直这么约定）。cursor 不回退：翻页途中才提交的早期行，下一轮的 `updated_since` 回看会补上
+
 用游标不用 offset：同步过程中数据还在变，offset 会漏或重。
 """
 
 import base64
 import json
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, cast, func, or_, select
@@ -58,7 +64,8 @@ async def _sync(
         changed = cast(changed, DATETIMEOFFSET(6))
     stmt = select(model, changed.label('changed'))
     if updated_since is not None:
-        stmt = stmt.where(changed >= updated_since)
+        # 🔴 往回多看一段（#396）：变更时间是写入时刻，长事务里早写、晚提交的行会落在对方的水位之前
+        stmt = stmt.where(changed >= updated_since - timedelta(seconds=max(0, settings.OPEN_SYNC_LOOKBACK_SECONDS)))
     if cursor:
         t, pk = decode_cursor(cursor)
         stmt = stmt.where(or_(changed > t, and_(changed == t, model.id > pk)))

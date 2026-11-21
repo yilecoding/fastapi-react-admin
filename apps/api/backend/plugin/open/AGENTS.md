@@ -64,6 +64,13 @@ service/webhook_sign.py      出站签名（Standard Webhooks），和三份 SDK
   对方的同步循环停不下来。应用自己写的时间（`timezone.now()`）只到微秒，所以只有种子 / 库默认值踩得到；
   `GETDATE()` 落在 `.xx0` 毫秒时恰好没有第 7 位，于是是**三分之二概率**的偶发
 
+- 🔴 **`updated_since` 往回多看 `OPEN_SYNC_LOOKBACK_SECONDS`（默认 300）**（#396）：`created_time` / `updated_time` 是
+  `default_factory=timezone.now`，**构造对象那一刻**就定了，不是提交时间。部门导入（外层事务 + 逐行保存点）跑几十秒，
+  期间别的记录以 T2 先提交、被对方拿到，下一轮 `updated_since=T2`，导入事务里早于 T2 写、晚于 T2 提交的行**永远收不到**。
+  往回看一段、窗口内重复返回，对方按 id 覆盖（README 同步改了「不会重」那句）。窗口要比系统里最长的写事务长；
+  cursor 不回退。实测证据：`test_rows_written_early_in_a_long_transaction_are_not_skipped`（把一行时间改成比水位早 30 秒），
+  撤掉回看 → 红，恢复 → 绿（PostgreSQL，2026-11-21）
+
 **实测证据**（第 7 位那条）：CI 的 `pytest · SQL Server` 挂满超时三次，本地复现在 58%，faulthandler 栈停在
 `_drain` 的 `while True`；当时测试库里种子部门的时间是 `02:01:41.3833333`。`test_sub_microsecond_timestamps_do_not_stall_the_cursor`
 把三行写成同一个带第 7 位的时间、`limit=1` 翻页。变异检验：去掉 CAST，这条和 `test_paging_is_complete_and_has_no_duplicates`
@@ -228,3 +235,18 @@ Python / Node SDK 已验证有效签名排第三个仍能验签；两条 Java �
 大响应那条红；回收不加次数 → 回收两条红；不看 `content-encoding` → gzip 那条红（实测解压了 52428800 字节）；DNS 挪到总时长外 → DNS 那条红；
 回收不看 ping → ping 那条红。⚠️ 写 gzip 用例时假接收端要给**异步生成器**：`httpx.Response(content=bytes)` 在构造时就把内容读出来解压了，
 用例会红在接收端自己身上。
+
+## 🔴 发不出去的 URL：保存时 400、发送时落一次失败，不能冲出 worker（#396）
+
+**症状**：`https://☃.net/hook`（IDNA 2003 能解析、IDNA 2008 拒）或路径里带控制字符的地址，保存通过；「发测试」返回 500；
+worker 里异常冲出 `deliver_pending`，同一批里排在后面的**别的应用**的投递这一轮都不发；那一行停在 sending，120 秒后被回收加一次次数，
+循环到放弃，**全程没有一条尝试记录**。主机名有空标签 / 超 63 字符的标签、端口越界时，保存接口 500 而不是 400。
+**根因**：`httpx.InvalidURL` 不是 `httpx.HTTPError` 的子类（httpx 0.28.1，`issubclass` 实测 False），`_post` 只接后者；
+`getaddrinfo` 对空标签 / 超长标签抛 `UnicodeEncodeError`、`urlsplit().port` 越界抛 `ValueError`，`check_target` 只接 `OSError`。
+**修法**：`url_problem` 读一次 `port` 并让 `httpx.URL()` 解析一遍，失败 → `invalid_url`；`check_target` 多接 `UnicodeError`；
+`_post` 多接 `InvalidURL`；`deliver_one` 把 `_post` 抛的任何异常落成一次失败的尝试；`deliver_pending` 逐行兜住。
+
+**实测证据**（2026-11-21，PostgreSQL 16）：先在本机核对了异常类型（`☃.net` 能过 `getaddrinfo`、`httpx.URL` 抛 `InvalidURL`；
+`a..b.com` / 64 字符标签 `getaddrinfo` 抛 `UnicodeEncodeError`；`:99999` 读 `port` 抛 `ValueError`）。
+`tests/test_webhooks.py` 新增 9 条（保存 4 种地址 400 · DNS 编码失败 2 种 · 发送时 InvalidURL 记一次尝试 · ping 不 500 · 一行抛异常不拖垮整批），
+撤掉修复后全红，恢复后全绿。SQL Server / MySQL 没跑。

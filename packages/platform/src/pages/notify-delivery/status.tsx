@@ -37,6 +37,8 @@ export function reasonLabel(t: (k: string) => string, r: string | null): string 
       return t('手机号没经本人验证')
     case 'user_disabled':
       return t('账号已停用')
+    case 'user_deleted':
+      return t('账号已删除')
     case 'plugin_missing':
       return t('渠道插件没装')
     case 'stale':

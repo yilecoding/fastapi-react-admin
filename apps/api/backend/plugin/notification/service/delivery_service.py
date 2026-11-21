@@ -32,6 +32,7 @@ from backend.plugin.notification.crud.crud_channel import notification_delivery_
 from backend.plugin.notification.enums import DeliveryStatus, NotificationChannel
 from backend.plugin.notification.kinds import NotificationKind, get_notification_kind
 from backend.plugin.notification.model import NotificationDelivery
+from backend.plugin.notification.service.routing import recheck
 from backend.plugin.notification.service.senders import Outcome, send
 from backend.utils.timezone import timezone
 
@@ -215,10 +216,30 @@ async def _deliver_one(pk: int) -> str | None:
         row = await notification_delivery_dao.get(db, pk)
     if row is None:
         return None
+    current: dict[str, Any] = {}
+    if row.user_id is not None and row.bot_id is None:
+        # 🔴 入队之后人可能停用 / 删了 / 换了号：按现在的人重算，不照快照发（#396，`routing.recheck`）
+        async with async_db_session() as db:
+            address, reason = await recheck(db, row.user_id, NotificationChannel(row.channel))
+        if reason is not None:
+            values = {
+                'status': DeliveryStatus.skipped.value,
+                'reason': reason,
+                'last_error': None,
+                'next_attempt_time': None,
+            }
+            if address != row.address:
+                values['address'] = address
+            async with async_db_session.begin() as db:
+                await notification_delivery_dao.settle(db, pk, **values)
+            return DeliveryStatus.skipped.value
+        if address != row.address:
+            row.address = address
+            current['address'] = address
     if await _defer_if_throttled(pk, row):
         return 'throttled'
 
-    values = await _attempt(row)
+    values = await _attempt(row) | current
     try:
         async with async_db_session.begin() as db:
             await notification_delivery_dao.settle(db, pk, **values)
