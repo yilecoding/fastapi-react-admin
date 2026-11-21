@@ -474,8 +474,9 @@ test.describe("工作台 · 系统运行区（管理员）", () => {
       await expect(dash.getByTestId(`dash-${id}-loading`)).toHaveCount(0)
       await expect(dash.getByTestId(`dash-${id}-error`)).toHaveCount(0)
     }
-    // 服务状态：五个服务一行一个（E2E 环境没起 worker / beat，所以结论不一定是「全部正常」—— 只验它画出了结论）
-    await expect(dash.locator('[data-testid^="dash-service-"]')).toHaveCount(5)
+    // 服务状态：六个服务一行一个（api · 数据库 · 缓存 · 定时调度 · 后台任务 · 长任务，最后一个是 #400 加的 worker_long）。
+    // E2E 环境没起 worker / beat，所以结论不一定是「全部正常」—— 只验它画出了结论
+    await expect(dash.locator('[data-testid^="dash-service-"]')).toHaveCount(6)
     await expect(dash.getByTestId("dash-services-summary")).toBeVisible()
     await expect(dash.getByTestId("dash-sessions-total")).not.toHaveText("—")
     // 近 14 天：14 组柱子，最后一组是今天（「哪一天」按显示时区切）

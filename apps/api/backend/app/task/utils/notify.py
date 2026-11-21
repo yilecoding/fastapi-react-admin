@@ -24,7 +24,7 @@ async def task_watcher_ids() -> list[int]:
     父目录停用 = 整棵关掉（#143）、权限码白名单、casbin 模式下只认超管 —— 这些都只在那一份里，
     自己用 SQL 判一遍就是第二套，迟早和接口守卫分叉（结果是看得到提示、点进去 403，或者反过来）。
     """
-    from sqlalchemy import or_, select
+    from sqlalchemy import or_, select, true
 
     from backend.app.admin.model import Menu, Role, User
     from backend.app.admin.model.m2m import role_menu, user_role
@@ -38,7 +38,7 @@ async def task_watcher_ids() -> list[int]:
     stmt = select(User.id).where(User.status == StatusType.enable, User.deleted == 0)
     if not settings.RBAC_ROLE_MENU_MODE:
         # casbin 模式：`user_has_perm` 只放行超管（fail-closed），候选也只取超管
-        stmt = stmt.where(User.is_superuser.is_(True))
+        stmt = stmt.where(User.is_superuser == true())
     elif TASK_RESULT_PERM not in settings.RBAC_ROLE_MENU_EXCLUDE:
         granted = (
             select(user_role.c.user_id)
@@ -47,7 +47,8 @@ async def task_watcher_ids() -> list[int]:
             .join(Menu, Menu.id == role_menu.c.menu_id)
             .where(Role.status == StatusType.enable, Menu.perms.like(f'%{TASK_RESULT_PERM}%'))
         )
-        stmt = stmt.where(or_(User.is_superuser.is_(True), User.id.in_(granted)))
+        # 🔴 布尔列写 `== true()`：写成 is_(True) 在 SQL Server 上编译成非法的 `IS 1`（CI 的 SQL Server job 红过一次）
+        stmt = stmt.where(or_(User.is_superuser == true(), User.id.in_(granted)))
     # 码在白名单里：人人都过得了那道闸，候选就是全部启用用户，交给下面逐个判
 
     # 后台任务里没有「当前用户」，查人不能被谁的数据范围过滤

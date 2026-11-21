@@ -19,7 +19,7 @@ import bcrypt
 import celery_aio_pool
 import pytest
 
-from sqlalchemy import delete, insert, select
+from sqlalchemy import delete, insert, select, true
 
 from backend.app.admin.model import Dept, Menu, Role, User, role_menu, user_role
 from backend.app.admin.utils.password_security import get_hash_password
@@ -204,7 +204,7 @@ def _superusers(client) -> set[int]:
     async def go() -> set[int]:
         async with async_test_db_session() as db:
             rows = await db.scalars(
-                select(User.id).where(User.is_superuser.is_(True), User.status == 1, User.deleted == 0)
+                select(User.id).where(User.is_superuser == true(), User.status == 1, User.deleted == 0)
             )
             return set(rows.all())
 
