@@ -232,6 +232,12 @@ drag 事件、插入位置用 `inset` 阴影画 2px 竖线（不占布局，整�
 并**拒绝跨固定/非固定分区**的拖拽 —— 否则 `sortPinned` 会把它弹回原位，表现成「拖了没反应」，不如一开始就不接受。
 注意 `onDragStart` 里必须往 `dataTransfer` 写点东西，否则 Firefox 不认这次拖拽。
 
+🔴 **`reorder` 必须吃 `side`，而且插入下标要在删掉原项之后重新找（#398）。** 原来 `tab-item` 算了 `side`、
+`tab-bar` 拿它画线，`reorder(from, to)` 却不收：先删再插到目标**原**下标，往右拖恒落在目标之后、往左拖恒落在目标之前 ——
+插入线画在哪都一样，表现是「差一位」，不报错。
+**实测证据**（2026-11-21，修复在 #412）：vitest `tab-store.test.ts` 的 reorder 那条，在修前的 `reorder` 上得到 `[b,c,a,d]`
+（期望 `[b,a,c,d]`）；E2E `tabs.spec.ts`「拖到插入线的位置」在修前的 `tab-bar` + `tab-store` 上红在第一次拖完的顺序断言，修后绿。
+
 ### `min-width: auto` 是横向溢出的元凶（实测两小时）
 
 现象：tab 开到十几个，最右边的 tab 连同工具区被推出视口、整页出现横向滚动、
@@ -305,6 +311,16 @@ i18n key（而不是随手起新字符串），两个语言的翻译已经现成
 - **`session:ended` 不进 `dispatchSocketEvent`**，直接交给 `auth/session.ts: handleSessionEnded`：
   先试一次静默恢复（同一个浏览器的另一个标签页刚重新登录过，cookie 已经指向新会话），恢复出来的不是
   同一个人就收尾、带原因码去登录页。这个标签页**自己**在登出时（`endingLocally`）忽略这条推送
+- 🔴 **`endingLocally` 在路由守卫静默恢复成功时也要复位（#398），不能只靠 `afterLogin`。**
+  症状：本页登出停在登录页 → 另一个标签页登录（cookie 共享）→ 本页按「后退」回到 `/dashboard`，页面正常，
+  但之后被踢、被挤、另一页登出的 `session:ended` 全被当成「本页自己在登出」吞掉；socket 掉线后
+  `use-presence` 的 `recover()` 每轮撞上 `isEndingLocally()` 只让路不 `connect()` —— 实时推送永久失效，没有任何报错。
+  根因：「后退」不重载模块，`requireAuth` 用 cookie 换到新 token 不经过 `afterLogin`，标志一直是 `true`。
+  修法：守卫和 `handleSessionEnded` 都走 `auth/session.ts: restoreSessionForRoute()`，恢复 `ok` 时复位。
+  整页刷新 / OAuth 回跳会重置模块状态，不受影响。
+  **实测证据**（2026-11-21，修复在 #412）：vitest `auth/session-state.test.ts`「登出后被路由守卫静默恢复」在修前的
+  `guards.ts` + `session.ts` 上红在 `expected true to be false`；E2E `session.spec.ts`「登出后另一个标签页重新登录……」
+  在修前代码上红在最后一步（另一页登出后本页停在 `/dashboard`，没回登录页），修后绿
 - `<html data-presence="on|off">` 反映这条连接的状态。E2E 要等它变成 `on` 再踢人 / 登出，
   否则推送落空、页面要等下一次请求才发现（`e2e/tests/session.spec.ts`）
 

@@ -7,7 +7,8 @@ import { useAiDrawerStore } from '../pages/ai-chat/drawer-store'
 import { useUploadStore } from '../shell/upload-store'
 import { createResumeStore, fingerprint } from '../upload/resume'
 import { deferred, memoryStorage } from '../upload/test-utils'
-import { login, logout } from './session'
+import { requireAuth } from './guards'
+import { handleSessionEnded, isEndingLocally, login, logout } from './session'
 
 const client = vi.hoisted(() => ({
   api: { GET: vi.fn(), POST: vi.fn(), DELETE: vi.fn() },
@@ -190,5 +191,29 @@ describe('登出请求失败（#319）', () => {
   it('登出成功：由调用方跳登录页', async () => {
     await expect(logout(new QueryClient())).resolves.toBe(false)
     expect(tokenStore.get()).toBeNull()
+  })
+})
+
+describe('登出后被路由守卫静默恢复（#398）', () => {
+  // 场景：本标签页登出停在登录页 → 另一个标签页登录（cookie 共享）→ 本页「后退」回受保护页面。
+  // 模块没重新加载，`requireAuth` 用 cookie 静默换到新 token —— 不经过 afterLogin。
+  it('恢复成功后不再处于「本页正在登出」：会话结束推送照常收尾、socket 恢复不再让路', async () => {
+    await expect(logout(new QueryClient())).resolves.toBe(false)
+    expect(isEndingLocally()).toBe(true)
+
+    client.restoreSession.mockImplementationOnce(async () => {
+      tokenStore.set(jwt(a, 's2'))
+      return { kind: 'ok' }
+    })
+    const qc = { ensureQueryData: vi.fn(async () => ({ id: a })) } as unknown as QueryClient
+    await requireAuth({ context: { queryClient: qc }, location: { href: '/dashboard' } })
+
+    // use-presence 的 recover() 每轮先问这个；一直是 true 就永远不 connect()
+    expect(isEndingLocally()).toBe(false)
+
+    // 之后被管理员踢下线：推送不能被当成「本页自己登出」吞掉
+    client.restoreSession.mockResolvedValueOnce({ kind: 'ended', end: { reason: 'kicked', message: null } })
+    await handleSessionEnded('kicked')
+    expect(client.endSession).toHaveBeenCalledWith({ reason: 'kicked', message: null })
   })
 })
