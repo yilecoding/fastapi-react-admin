@@ -220,6 +220,8 @@ async def purge_recycled_files(batch: int = 200) -> str:
     ⚠️ 不经过 HTTP，没有「当前用户」，所以数据范围不过滤（`DataScopedCRUD` 在没有用户上下文时放行）——
     要的就是全量
     """
+    from starlette.background import BackgroundTasks
+
     from backend.app.admin.crud.crud_file import file_dao
     from backend.app.admin.service.file_service import file_service
     from backend.core.conf import settings
@@ -232,8 +234,11 @@ async def purge_recycled_files(batch: int = 200) -> str:
             ids = await file_dao.get_recycled_ids(db, before=cutoff, after_id=after_id, limit=batch)
             if not ids:
                 break
-            total += await file_service.purge(db=db, pks=list(ids))
+            # 对象等这一批提交之后再删（#394）：提交失败时记录回滚、对象还在
+            purge_objects = BackgroundTasks()
+            total += await file_service.purge(db=db, background_tasks=purge_objects, pks=list(ids))
             await db.commit()
+            await purge_objects()
             # 按 ID 往后翻（keyset）：清不掉的那一行不会被下一批再取回来，循环不会原地打转
             after_id = ids[-1]
             if len(ids) < batch:

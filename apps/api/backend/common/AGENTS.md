@@ -238,3 +238,25 @@ AI 工具的参数报错也走它。顺带：dev 下 422 文案回显的输入�
 **并发下**（真 uvicorn 单 worker、只压侧边栏、并发 8、15 秒）：缓存开 232 rps / p95 43ms，`CACHE_LOCAL_ENABLED=false` 135 rps / p95 64ms；
 开着数据库语句日志压 5 秒、1188 个请求，查 `sys_menu` 的语句只有 **1** 条。
 ⚠️ 别拿 `pg_stat_user_tables` 的扫描计数判断：它异步刷新，基线读早了会混进上一轮的扫描（同一轮里它报了 1457 次）。
+
+## 🔴 「提交之后再做」要只认最外层的提交 —— 保存点释放也派发 `after_commit`（#394）
+
+**症状**：用户导入 / 部门导入 / AI 工具（每行、每次调用一个 `begin_nested()`）里登记的 Webhook / 通知 `kick`，
+在保存点**释放**时就派了出去 —— 外层还没提交，worker 读不到投递行，只能等 15 秒周期补；外层随后回滚的也已经发出。
+反过来，一行导入失败（保存点回滚）会把外层早先登记的待办**整个**清掉。字典项的增删改（`@cache_invalidate`）提交前清缓存，
+空档里并发读把旧值写回 L1 和 Redis，两小时没人再清。都不报错。
+
+**根因**：SQLAlchemy 2.0 对保存点也派发 `after_commit` / `after_rollback`（`SessionTransaction.commit`：
+`if self._parent is None or self.nested`），`common/after_commit.py` 没区分（`data_change/capture.py` 区分了）。
+`cache_invalidate` 装饰器在被装饰的函数一返回就清，提交在依赖收尾时。
+
+**修法**：`run_after_commit` 给每件待办记下「登记时最内层的保存点」：保存点释放 → 过继给上一层；保存点回滚
+（改挂 `after_soft_rollback`，它带着是哪个事务）→ 只丢它和它里面登记的；最外层提交才派发、最外层回滚全丢。
+同一个 key 外层登记过，保存点里再登记不改归属（不然保存点回滚会把外层那份带走）。
+`cache_invalidate`：被装饰的函数带 `db`（`AsyncSession`）关键字参数时，提交之后**再清一次**；函数返回时那次照旧
+（`atomic` 管的是它），提交后那次失败只记日志。
+
+**实测证据**（2026-11-21，PostgreSQL 私有库 + 一次性 Redis）：`tests/test_after_commit_savepoint.py` 6 条（真 AsyncSession），
+修之前 5 条红（保存点释放就派发 · 外层回滚后照发 · 保存点回滚丢掉外层的 · 同 key 被带走 · 嵌套保存点回滚后内层的照发），
+普通提交 / 回滚那条本来就绿。`plugin/dict/tests/test_dict_cache_after_commit.py`：在第一次清和提交之间往字典命名空间写一个旧值
+（模拟并发读写回），修之前请求结束后旧值还在，修之后被提交后那次清掉。

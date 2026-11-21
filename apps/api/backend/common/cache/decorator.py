@@ -5,7 +5,9 @@ from inspect import isawaitable
 from typing import Any, ParamSpec, TypeVar
 
 from msgspec import json
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.common.after_commit import run_after_commit
 from backend.common.cache.local import local_cache_manager
 from backend.common.cache.pubsub import cache_pubsub_manager
 from backend.common.context import ctx
@@ -207,6 +209,11 @@ def cache_invalidate(
     """
     缓存失效装饰器
 
+    🔴 **清两次（#394）**：函数一返回清一次（`atomic` 管的是这一次），被装饰的函数带 `db`（`AsyncSession`）
+    关键字参数时，**提交之后**再清一次（`run_after_commit`）。只清前一次的话，清完到提交之间别人的读拿到的
+    还是旧行，会把它写回 L1 和 Redis，之后没人再清（字典的 Redis TTL 两小时）。提交后那次失败只记日志 ——
+    事务已经提交了，没有可以报给谁的请求
+
     :param namespace: 缓存命名空间（通常为缓存 Key 前缀）
     :param key: 从方法参数中获取指定参数名的值作为缓存 Key，与 key_builder 互斥
     :param key_builder: 自定义 Key 生成函数，与 key 互斥
@@ -237,6 +244,18 @@ def cache_invalidate(
             # 原子性检查
             if atomic and not invalidate_success:
                 raise errors.ServerError(msg=t('error.cache.invalidation_failed'), data=invalidate_error)
+
+            db = kwargs.get('db')
+            if isinstance(db, AsyncSession):
+                prefix = invalidate_key == namespace
+
+                async def _again() -> None:
+                    try:
+                        await invalidate_cache(invalidate_key, prefix=prefix)
+                    except Exception as e:
+                        log.error(f'[Cache] INVALIDATE after commit error: {e}')
+
+                run_after_commit(db, f'cache_invalidate:{invalidate_key}', _again)
 
             return result
 

@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, Path, Query, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Path, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from backend.app.admin.model import File as FileRecord
@@ -270,8 +270,10 @@ async def restore_files(db: CurrentSessionTransaction, obj: DeleteFileParam) -> 
         DependsRBAC,
     ],
 )
-async def purge_files(db: CurrentSessionTransaction, obj: DeleteFileParam) -> ResponseModel:
-    count = await file_service.purge(db=db, pks=obj.pks)
+async def purge_files(
+    db: CurrentSessionTransaction, background_tasks: BackgroundTasks, obj: DeleteFileParam
+) -> ResponseModel:
+    count = await file_service.purge(db=db, background_tasks=background_tasks, pks=obj.pks)
     if count > 0:
         return response_base.success()
     return response_base.fail()
@@ -285,9 +287,9 @@ async def purge_files(db: CurrentSessionTransaction, obj: DeleteFileParam) -> Re
         DependsRBAC,
     ],
 )
-async def empty_recycle(db: CurrentSessionTransaction) -> ResponseModel:
+async def empty_recycle(db: CurrentSessionTransaction, background_tasks: BackgroundTasks) -> ResponseModel:
     # 回收站本来就是空的也算成功：「清空」这个动作的结果就是「是空的」
-    await file_service.empty_recycle(db=db)
+    await file_service.empty_recycle(db=db, background_tasks=background_tasks)
     return response_base.success()
 
 
@@ -374,8 +376,10 @@ async def get_file_link(
         DependsRBAC,
     ],
 )
-async def delete_files(db: CurrentSessionTransaction, obj: DeleteFileParam) -> ResponseModel:
-    count = await file_service.delete(db=db, pks=obj.pks)
+async def delete_files(
+    db: CurrentSessionTransaction, background_tasks: BackgroundTasks, obj: DeleteFileParam
+) -> ResponseModel:
+    count = await file_service.delete(db=db, background_tasks=background_tasks, pks=obj.pks)
     if count > 0:
         return response_base.success()
     return response_base.fail()

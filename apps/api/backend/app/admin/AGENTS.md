@@ -282,3 +282,24 @@ SQL Server 2022（`sys.identity_columns` 对这张表 0 行）/ MySQL 8.4；之�
 **症状**：并发请求在 `GET → +1 → SET` 中读到同一旧值，MFA 五次上限可被越过，账号失败次数会丢，锁定也可能漏掉。
 **修法**：挑战令牌用 Redis Lua 在校验 OTP 前占名额，另记在途校验和失败完成数；五次都失败且没有在途校验时才作废，计数 TTL 随挑战过期。账号失败数用 Lua 原子 `INCR + 首次 EXPIRE`；锁标记用 `SET NX`，避免并发重复记锁定事件。正确码用 `GETDEL` 原子消费挑战。
 **实测证据**（2026-11-16，专用 SQL Server / Redis）：`tests/api_v1/test_mfa.py` 的事件屏障测试使用真实数据库会话与缓存，验证和首次绑定各 32 个并发错误码都只校验 5 次；24 个并发正确恢复码只成功一次，数据库剩 9 个恢复码；32 次账号失败计数为 32，只新增一条持久化锁定日志，计数和锁均有 TTL。对照 `b251ae2` 旧实现，32 次都进入校验、账号计数只有 1。MFA、认证和安全事件接口整组回归通过；ego 页面实测开启、错误码拒绝、真实动态码登录和整页刷新持久化。
+
+## 🔴 停用 / 改密码踢会话、删存储对象都要等提交之后（#394）
+
+**症状**：① 停用 / 重置密码 / 改自己的密码在事务中途撤会话：提交失败时状态和密码回滚了，人却已经被全端踢下线、
+记了「强制下线」；撤销到提交之间旧密码还能登录、建出一个活过这次改密的新会话。② 关回收站时的删除、彻底删除、清空回收站
+先删对象再提交：提交失败时记录回滚成可还原 / 没删，对象已经没了，点开 404。③ 挂附件的 `file_ids` 里同一个 ID 出现两次 → 500。
+
+🔴 **顺带测出来一个更早的 bug：停用从来没踢过会话。** `update_permission` 在 `set_status` 之后才读 `user.status == 1`，
+而 `set_status` 同步了同一个 ORM 实例 —— 读到的已经是 0，那个分支永远走不到（「改完再读同一个 ORM 实例」那条，见
+[`apps/api` 分册](../../../AGENTS.md)）。停用后请求在取用户时 403，但会话还挂在在线列表上。
+
+**修法**：三处撤销都走 `_revoke_after_commit(background_tasks, …)`（同 #312 删除用户：`CurrentSessionTransaction` 在响应之前提交，
+后台任务之后才跑、回滚时不跑），停用先把旧状态抓成 `disabling`。`_purge_objects` 在事务里解析好存储、把删除挂到
+`background_tasks`；`delete` / `purge` / `empty_recycle` 都要传它，定时任务 `purge_recycled_files` 每批自己建一个
+`BackgroundTasks()`，`commit()` 之后 `await`。`attach` 的待插入列表用 `dict.fromkeys` 去重（保住顺序）。
+
+**实测证据**（2026-11-21，PostgreSQL 私有库 + 一次性 Redis）：`tests/api_v1/test_revoke_after_commit.py` 6 条（三个动作 ×
+「提交失败不踢」「提交之后才踢」），修之前 5 条红；只把 `if disabling:` 改回 `if user.status == 1:`，停用那条当场红
+（`assert 'revoke' in ['commit']`）。`test_recycle.py::test_a_failed_commit_keeps_the_object` 三种入口（彻底删除 · 清空 · 不启用回收站的删除）
+修之前全红（对象已删）。`test_file.py::test_attach_with_duplicate_ids_is_idempotent` 修之前 500 `UniqueViolationError … uk_sys_file_relation`。
+定时清理那条路径由原有的 `test_purge_task_only_removes_expired` 守着（修后照绿）；真 S3 上没跑。
