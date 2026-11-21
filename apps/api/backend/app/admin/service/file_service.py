@@ -3,7 +3,7 @@ from typing import Any
 
 import anyio
 
-from fastapi import UploadFile
+from fastapi import BackgroundTasks, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.admin.crud.crud_file import file_dao, file_relation_dao
@@ -329,25 +329,32 @@ class FileService:
             return None
 
     @staticmethod
-    async def _purge_objects(*, db: AsyncSession, files: Sequence[File]) -> None:
+    async def _purge_objects(*, db: AsyncSession, files: Sequence[File], background_tasks: BackgroundTasks) -> None:
         """
-        删掉这批文件在存储里的对象。存储按 (storage_id, is_public) 只解析一次 ——
+        登记「提交之后」删掉这批文件在存储里的对象。存储按 (storage_id, is_public) 只解析一次 ——
         200 个文件在同一个 S3 上就是 200 次查表 + 解密，没必要
 
         失败只记日志（`delete_object` 内部）：「库里标成已清除、存储里留个孤儿」是可接受的；
-        反过来「对象删了、记录还能还原」会还原出一批点开就 404 的文件
+        反过来「对象删了、记录还能还原」会还原出一批点开就 404 的文件。
+
+        🔴 所以对象要等**提交之后**再删（#394）：原来在事务中途删，提交失败时记录回滚成可还原 / 没删，对象已经没了。
+        存储在这里（事务里、会话还在）解析好，后台任务里只做删除 —— 那时请求的会话已经收尾了。
+        接口的后台任务在响应之前的提交成功之后才跑、回滚时不跑；定时任务自己 `commit()` 之后 `await` 它
         """
         resolved: dict[tuple[int | None, bool], StorageTarget | None] = {}
+        objects: list[tuple[StorageTarget, str]] = []
         for file in files:
             group = (file.storage_id, file.is_public)
             if group not in resolved:
                 resolved[group] = await FileService._target_or_none(db=db, file=file)
             target = resolved[group]
             if target is not None:
-                await delete_object(target, file.path)
+                objects.append((target, file.path))
+        if objects:
+            background_tasks.add_task(_delete_objects, objects)
 
     @staticmethod
-    async def delete(*, db: AsyncSession, pks: list[int]) -> int:
+    async def delete(*, db: AsyncSession, background_tasks: BackgroundTasks, pks: list[int]) -> int:
         """
         批量删除文件：**进回收站**（记录置删除标记、关联解开，对象不动）。
 
@@ -355,6 +362,7 @@ class FileService:
         回收站不移动对象（ContiNew 是挪到回收路径）：S3 上「移动」= 复制 + 删除，大文件很贵
 
         :param db: 数据库会话
+        :param background_tasks: 提交之后删对象（只在不启用回收站时用到）
         :param pks: 文件 ID 列表
         :return:
         """
@@ -370,7 +378,7 @@ class FileService:
 
         if settings.FILE_RECYCLE_DAYS <= 0:
             await file_dao.mark_purged(db, found_ids, at=now)
-            await FileService._purge_objects(db=db, files=files)
+            await FileService._purge_objects(db=db, files=files, background_tasks=background_tasks)
         return count
 
     @staticmethod
@@ -406,11 +414,12 @@ class FileService:
         return count
 
     @staticmethod
-    async def purge(*, db: AsyncSession, pks: list[int]) -> int:
+    async def purge(*, db: AsyncSession, background_tasks: BackgroundTasks, pks: list[int]) -> int:
         """
-        从回收站彻底删除：删对象，记录留成墓碑（`purged_time`）
+        从回收站彻底删除：删对象（提交之后），记录留成墓碑（`purged_time`）
 
         :param db: 数据库会话
+        :param background_tasks: 提交之后删对象
         :param pks: 文件 ID 列表
         :return:
         """
@@ -418,18 +427,19 @@ class FileService:
         if not files:
             return 0
         count = await file_dao.mark_purged(db, [file.id for file in files], at=timezone.now())
-        await FileService._purge_objects(db=db, files=files)
+        await FileService._purge_objects(db=db, files=files, background_tasks=background_tasks)
         return count
 
     #: 清空回收站 / 定时清理每批多少个。每个文件都要删一次对象（S3 上是一个请求），一批太大会把请求拖到超时
     PURGE_BATCH = 200
 
     @staticmethod
-    async def empty_recycle(*, db: AsyncSession) -> int:
+    async def empty_recycle(*, db: AsyncSession, background_tasks: BackgroundTasks) -> int:
         """
         清空回收站（这个人看得见的那些），分批
 
         :param db: 数据库会话
+        :param background_tasks: 提交之后删对象
         :return:
         """
         total = 0
@@ -438,7 +448,7 @@ class FileService:
             ids = await file_dao.get_recycled_ids(db, after_id=after_id, limit=FileService.PURGE_BATCH)
             if not ids:
                 return total
-            total += await FileService.purge(db=db, pks=list(ids))
+            total += await FileService.purge(db=db, background_tasks=background_tasks, pks=list(ids))
             # 按 ID 往后翻，一行最多被取到一次 —— 清不掉的行不会让循环原地打转
             after_id = ids[-1]
             if len(ids) < FileService.PURGE_BATCH:
@@ -505,7 +515,9 @@ class FileService:
 
         existing = set(await file_relation_dao.get_existing_file_ids(db, obj.target_type, obj.target_id, obj.file_ids))
         # 幂等：已经挂上的跳过而不是报错。附件面板重复提交是常态
-        pending = [fid for fid in obj.file_ids if fid not in existing]
+        # 🔴 同一个 ID 在请求里出现两次也要去重（#394）：上面的存在性检查按去重算，这里不去重就整批撞
+        # `uk_sys_file_relation` → 500。`dict.fromkeys` 保住第一次出现的顺序（附件顺序是用户排的）
+        pending = [fid for fid in dict.fromkeys(obj.file_ids) if fid not in existing]
         if not pending:
             return 0
 
@@ -534,6 +546,17 @@ class FileService:
         :return:
         """
         return await file_relation_dao.delete_by_target(db, obj.target_type, obj.target_id, obj.file_ids)
+
+
+async def _delete_objects(objects: list[tuple[StorageTarget, str]]) -> None:
+    # 🔴 逐个兜住：跑到这里时记录已经提交成「已清除」，一个对象抛了就停的话同批剩下的永远成孤儿；
+    # 接口那边 Starlette 的 BackgroundTasks 还会把后面几批（`empty_recycle` 一批一个任务）一起跳过。
+    # `delete_object` 自己吞了存储错误，但本地存储的 `Path.resolve()`（NAS 挂死）等还是会抛
+    for target, path in objects:
+        try:
+            await delete_object(target, path)
+        except Exception as e:
+            log.warning(f'删除存储对象 {path} 失败：{e!s}')
 
 
 file_service: FileService = FileService()

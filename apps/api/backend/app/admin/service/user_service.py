@@ -56,6 +56,19 @@ async def emit_user_event(db: AsyncSession, type: str, user_id: int) -> None:
         await emit(db, type, aggregate_id=user_id, data=dict(row._mapping))
 
 
+def _revoke_after_commit(background_tasks: BackgroundTasks, user_id: int, reason: EndReason) -> None:
+    """登记「提交之后撤销这个人的全部会话」。
+
+    `CurrentSessionTransaction` 在响应之前提交，后台任务在那之后才跑；回滚时（路由抛错）后台任务不执行。
+    🔴 不能在事务中途 `await session_store.revoke_user`（#394）
+    """
+
+    async def _revoke() -> None:
+        await session_store.revoke_user(user_id, reason)
+
+    background_tasks.add_task(_revoke)
+
+
 class UserService:
     """用户服务类"""
 
@@ -252,12 +265,16 @@ class UserService:
                     raise errors.NotFoundError(msg=t('error.user.not_found'))
                 if pk == request.user.id:
                     raise errors.ForbiddenError(msg=t('error.user.self_permission_forbidden'))
-                count = await user_dao.set_status(db, pk, 0 if user.status == 1 else 1)
+                # 🔴 改之前抓住旧状态：`set_status` 会同步同一个 ORM 实例，改完再读 `user.status` 已经是新值，
+                # 「停用要踢会话」那个分支就永远走不到（#394 测出来的，见 `test_revoke_after_commit.py`）
+                disabling = user.status == 1
+                count = await user_dao.set_status(db, pk, 0 if disabling else 1)
                 await emit_user_event(db, 'user.status_changed', pk)
-                if user.status == 1:
-                    # 停用：会话当场结束并告诉对方原因（#138）。不撤的话请求会在取用户时 403，
-                    # 但会话还挂在在线列表上，refresh 也照样换得出新 token
-                    await session_store.revoke_user(pk, EndReason.disabled)
+                if disabling:
+                    # 停用：会话结束并告诉对方原因（#138）。不撤的话请求会在取用户时 403，
+                    # 但会话还挂在在线列表上，refresh 也照样换得出新 token。
+                    # 🔴 提交之后再撤（#394，同 `delete`）：提交失败时状态回滚了，人却已经被全端踢下线
+                    _revoke_after_commit(background_tasks, pk, EndReason.disabled)
             case _:
                 raise errors.RequestError(msg=t('error.user.permission_type_not_found'))
 
@@ -295,7 +312,9 @@ class UserService:
         history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
-        await session_store.revoke_user(user.id, EndReason.password_changed)
+        # 提交之后再撤（#394）：撤在事务中途的话，提交失败时密码回滚了、人却被踢了；
+        # 撤销到提交之间旧密码还能登录，建出一个活过这次改密的新会话
+        _revoke_after_commit(background_tasks, user.id, EndReason.password_changed)
         user_cache_manager.clear(background_tasks, [user.id])
         return count
 
@@ -490,7 +509,8 @@ class UserService:
         history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
         await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
-        await session_store.revoke_user(user_id, EndReason.password_changed)
+        # 提交之后再撤，理由同 `reset_password`（#394）
+        _revoke_after_commit(background_tasks, user_id, EndReason.password_changed)
         user_cache_manager.clear(background_tasks, [user_id])
         return count
 

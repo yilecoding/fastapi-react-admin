@@ -18,7 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from sqlalchemy import create_engine, update
+from sqlalchemy import create_engine, event, select, update
+from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
 from backend.app.admin.model import File
@@ -221,6 +222,86 @@ def test_recycle_disabled_deletes_immediately(
     assert not (isolated_upload_dir / data['path']).exists()
     assert data['id'] not in [r['id'] for r in _bin(client, token_headers)]
     assert client.get(f'{FILES}/statistics', headers=token_headers).json()['data']['recycle_days'] == 0
+
+
+# ─── 提交失败时对象不能先没（#394 ④）────────────────────────────────────────
+
+
+def _fail_commit_when_purged(file_ids: list[str]):
+    """这个请求要提交「已清除」时让提交失败（只认这几个文件，别的会话的提交不碰）"""
+    ids = [int(i) for i in file_ids]
+
+    def fail(session: Session) -> None:
+        purged = session.connection().scalars(select(File.id).where(File.id.in_(ids), File.purged_time.is_not(None)))
+        if purged.first() is not None:
+            raise RuntimeError('purge commit failed')
+
+    return fail
+
+
+@pytest.mark.parametrize('how', ['purge', 'empty', 'no-bin'])
+def test_a_failed_commit_keeps_the_object(
+    client: TestClient,
+    token_headers: dict[str, str],
+    isolated_upload_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    how: str,
+) -> None:
+    """🔴 先删对象再提交：提交失败时记录还在（可还原 / 没删掉），对象却没了，点开 404 ——
+    正是 `_purge_objects` 注释说「不可接受」的方向"""
+    data = _upload(client, token_headers)
+    on_disk = isolated_upload_dir / data['path']
+    if how == 'no-bin':
+        monkeypatch.setattr(settings, 'FILE_RECYCLE_DAYS', 0)
+    else:
+        _delete(client, token_headers, data['id'])
+    assert on_disk.is_file()
+
+    fail = _fail_commit_when_purged([data['id']])
+    event.listen(Session, 'before_commit', fail)
+    try:
+        with pytest.raises(RuntimeError, match='purge commit failed'):
+            if how == 'purge':
+                client.request('DELETE', RECYCLE, headers=token_headers, json={'pks': [data['id']]})
+            elif how == 'empty':
+                client.delete(f'{RECYCLE}/all', headers=token_headers)
+            else:
+                client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})
+    finally:
+        event.remove(Session, 'before_commit', fail)
+
+    try:
+        assert on_disk.is_file(), '提交失败了，对象却已经删了'
+        if how == 'no-bin':
+            assert client.get(f'{FILES}/{data["id"]}', headers=token_headers).status_code == 200
+        else:
+            assert data['id'] in [r['id'] for r in _bin(client, token_headers)]
+    finally:
+        # 别把这条记录留在共享库的回收站 / 文件列表里（数回收站行数的测试会被它带偏）
+        if how == 'no-bin':
+            client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})
+        else:
+            client.request('DELETE', RECYCLE, headers=token_headers, json={'pks': [data['id']]})
+
+
+def test_one_failing_object_delete_does_not_strand_the_rest(monkeypatch: pytest.MonkeyPatch) -> None:
+    """对象删除挪到了提交之后（后台任务 / 定时任务的 `await`）：那时记录已经标成已清除，
+    一个对象抛了异常就停下的话，同批剩下的（Starlette 的 BackgroundTasks 还会连后面几批一起跳过）永远成孤儿"""
+    import asyncio
+
+    from backend.app.admin.service import file_service as module
+
+    deleted: list[str] = []
+
+    async def flaky(_target: object, path: str) -> None:
+        await asyncio.sleep(0)
+        if path == 'a':
+            raise OSError('NAS mount hung')
+        deleted.append(path)
+
+    monkeypatch.setattr(module, 'delete_object', flaky)
+    asyncio.run(module._delete_objects([(object(), 'a'), (object(), 'b'), (object(), 'c')]))  # type: ignore[list-item]
+    assert deleted == ['b', 'c']
 
 
 # ─── 权限 ───────────────────────────────────────────────────────────────────

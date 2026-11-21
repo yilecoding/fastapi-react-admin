@@ -443,11 +443,17 @@ class ExportService:
         job = await ExportService.get(db=db, user_id=user_id, pk=pk)
         if job.status in {ExportJobStatus.pending.value, ExportJobStatus.running.value}:
             raise errors.RequestError(msg=t('error.export.still_running'))
-        if job.object_key and job.status == ExportJobStatus.succeeded.value:
+        target = None
+        object_key = job.object_key
+        if object_key and job.status == ExportJobStatus.succeeded.value:
             with contextlib.suppress(errors.BaseExceptionError):
-                await delete_object(await ExportService._target(db, job.storage_id), job.object_key)
+                target = await ExportService._target(db, job.storage_id)
         await export_job_dao.delete_by_ids(db, [job.id])
         await db.commit()
+        # 🔴 文件等提交之后再删（#394 同类）：先删文件的话，提交失败时记录还是「已完成」、
+        # 文件却没了，点下载 file_missing。反方向（记录没了、文件留着）只是一个孤儿文件，可接受
+        if target is not None and object_key:
+            await delete_object(target, object_key)
 
     @staticmethod
     async def settle_stale(*, db: AsyncSession, user_id: int | None = None) -> int:

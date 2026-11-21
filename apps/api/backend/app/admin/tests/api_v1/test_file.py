@@ -482,6 +482,21 @@ def test_attach_detach_and_idempotency(client: TestClient, token_headers: dict[s
     assert client.get(f'{FILES}/{uploaded["id"]}', headers=token_headers).status_code == 200
 
 
+def test_attach_with_duplicate_ids_is_idempotent(
+    client: TestClient, token_headers: dict[str, str], uploaded: dict
+) -> None:
+    """#394 ⑤：同一个 ID 在一次请求里出现两次 —— 存在性检查按去重算、待插入的却没去重，撞唯一约束 500"""
+    target = {'target_type': 'PYTEST', 'target_id': '9004'}
+    url = f'{FILES}/relations'
+    try:
+        resp = client.post(url, headers=token_headers, json={'file_ids': [uploaded['id'], uploaded['id']], **target})
+        assert resp.status_code == 200, resp.text
+        listed = client.get(f'{FILES}/targets/PYTEST/9004', headers=token_headers).json()['data']
+        assert [i['id'] for i in listed] == [uploaded['id']]
+    finally:
+        client.request('DELETE', url, headers=token_headers, json={'file_ids': [uploaded['id']], **target})
+
+
 def test_attach_rejects_unknown_file(client: TestClient, token_headers: dict[str, str]) -> None:
     resp = client.post(
         f'{FILES}/relations',
