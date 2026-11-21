@@ -463,3 +463,22 @@ redis-py `parse_url` / SQLAlchemy `make_url` 把四种密码（含 `/`、空格�
 单测 `test_task_notify.py` 7 条（在**没有运行中循环**的线程上调 `on_failure`，和 worker 主线程一样）。变异各自当场红：
 改回 `get_running_loop` 吞异常 · 消息里带回 `{exc}` · 去掉节流 · 受众不过 `user_has_perm`（菜单停用那条）· `task_notification` 改回广播。
 ⚠️ 去掉 SQL 粗筛**仍绿**，是等价变异：粗筛只省掉逐个查快照的次数，结论全由 `user_has_perm` 决定。
+
+## 🔴 执行记录一碰到真失败记录就 500：`result` 列不是字符串（#417）
+
+**症状**：「执行记录」列表 / 详情整页打不开，接口 500（`ResponseValidationError: result Input should be a valid string`）。
+只要当前页里有一条 worker 真写下的失败记录就会撞上；而 #400 之后失败提示写的正是「详情见执行记录」。
+
+**根因**：`task_result.result` 是 `PickleType`，celery 存什么就是什么 —— 失败的 DatabaseBackend 存
+`{'exc_type': ..., 'exc_message': (...), 'exc_module': ...}`，成功的任务返回什么就存什么。响应模型
+`GetTaskResultDetail.result` 却声明成 `str | None`。原来的测试造的失败行 `result` 都是字符串，**和 celery 真写的不是一个形状**，
+所以一直绿。
+
+**修法**：`schema/scheduler.py: result_as_text` 挂在 `result` 的 `mode='before'` 校验器上，出网前转成一行字：
+失败的写成 `exc_type: 参数1, 参数2`（和 traceback 最后一行同样子），其它非字符串转 JSON（中文原样）。契约照旧是 `string | null`，前端不用动。
+🔴 造执行记录的测试要按 celery 真实写入的形状造（经 ORM 让 `PickleType` 自己序列化），别再塞字符串。
+
+**实测证据**（2026-11-21）：本机开发库最近 3 条 `FAILURE` 行（`ProgrammingError` / 两条 `NotRegistered`），修之前
+`GetTaskResultDetail.model_validate` 3 条全失败，修之后是 `NotRegistered: notification.deliver_pending` 这样的一行。
+`tests/test_result_values.py` 8 条（失败 / 无参数 / 多参数 / 字典 / 整数 / 字符串 / 空 七种详情 + 一页混着失败的列表）：
+修之前 6 条红（字符串和空两条本来就过）；变异 —— 去掉校验器 6 条红，去掉失败那一支 3 种失败 + 列表红。

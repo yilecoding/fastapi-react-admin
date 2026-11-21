@@ -87,8 +87,11 @@ class TaskSchedulerSchemaBase(SchemaBase):
                 raise ValueError(f'Crontab 表达式必须是 5 段（分 时 日 月 周），收到 {self.crontab!r}')
             try:
                 celery_crontab(
-                    minute=parts[0], hour=parts[1], day_of_month=parts[2],
-                    month_of_year=parts[3], day_of_week=parts[4],
+                    minute=parts[0],
+                    hour=parts[1],
+                    day_of_month=parts[2],
+                    month_of_year=parts[3],
+                    day_of_week=parts[4],
                 )
             except Exception as e:
                 raise ValueError(f'Crontab 表达式无效：{e}') from e
@@ -133,6 +136,32 @@ class GetTaskSchedulerDetail(TaskSchedulerSchemaBase):
     updated_time: datetime | None = Field(None, description='更新时间')
 
 
+def result_as_text(value: object) -> str | None:
+    """把 `task_result.result` 里存的东西变成给人看的一行字（#417）
+
+    🔴 **这一列不一定是字符串。** 它是 `PickleType`，celery 存什么就是什么：失败的任务 DatabaseBackend 存
+    `{'exc_type': 'OperationalError', 'exc_message': ('...',), 'exc_module': '...'}`；成功的任务返回什么就存什么。
+    响应模型原来直接声明 `str | None`，碰到这两种就 `ResponseValidationError` —— 执行记录列表只要一页里有一条
+    真失败记录，整页 500。原来的测试造的失败行 `result` 都是字符串，所以一直没暴露。
+
+    - 失败：`exc_type: 参数1, 参数2`（没有参数就只写类型名）—— 和 traceback 最后一行同一个样子
+    - 其它非字符串：JSON（中文原样），JSON 表示不了的退回 `str()`
+    """
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, dict) and 'exc_type' in value:
+        args = value.get('exc_message')
+        if isinstance(args, (list, tuple)):
+            message = ', '.join(str(a) for a in args)
+        else:
+            message = '' if args is None else str(args)
+        return f'{value["exc_type"]}: {message}' if message else str(value['exc_type'])
+    try:
+        return json.dumps(value, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        return str(value)
+
+
 class GetTaskResultDetail(SchemaBase):
     """任务执行记录详情"""
 
@@ -148,6 +177,11 @@ class GetTaskResultDetail(SchemaBase):
     worker: str | None = Field(None, description='执行的 worker')
     queue: str | None = Field(None, description='队列')
     date_done: datetime | None = Field(None, description='结束时间')
+
+    @field_validator('result', mode='before')
+    @classmethod
+    def _result_as_text(cls, value: object) -> str | None:
+        return result_as_text(value)
 
 
 class DeleteTaskResultParam(SchemaBase):
