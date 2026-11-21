@@ -376,3 +376,26 @@ toast 进了 store、屏上没有，纯静默。
 web 的抽屉每次打开是新挂载、碰巧没踩到。
 实测（2026-11-05，Android 模拟器）：「草稿已保存」亮了，API 日志里 `PUT /drafts/LEAVE 200`；退出再进，
 **一条 `GET /drafts/LEAVE` 都没发**，表单是空的。加了 `gcTime: 0` 之后（见下面的设备实测）再进是恢复的内容。
+
+## 服务器地址（`server-form.tsx` · `lib/revoke.ts` · `lib/server-url.ts`，#406）
+
+同一份 `ServerForm` 用在两处：设置屏 `(app)/server.tsx`（已登录）和登录屏（未登录，点「服务器」那一行、或启动失败提示里的「更换服务器」，原地展开）。
+
+- 🔴 **未登录必须改得了。** 原来表单只在已登录那棵树里，`lib/server.ts` 注释写着「登录前可改」而登录屏没有任何入口；保存又是先登出再换地址。
+  存进去的服务器之后连不上（预发下线 / 域名迁移 / 离开内网），或者在那台服务器上没账号，就停在登录屏只看到「连不上服务器」——
+  Android 只能清数据。**不做成路由**：`AuthGate` 按登录态挂两棵互斥的树，放在根上的公共屏要处理「保存 → 登出 → 守卫翻转」那一帧落在哪棵树上，
+  原地展开没有这个问题
+- 🔴 **换服务器一律走 `session.switchServer`**（已登录 / 未登录同一条）：给旧地址记「待撤销」（#319）→ 清 token → 在**旧**服务器上后台撤销 → 换地址 →
+  清掉启动时那句「连不上（旧地址）」。未登录时 cookie jar 里也可能还留着旧服务器的 refresh cookie（冷启动没连上，没机会恢复或撤销），一样要记标记
+- 🔴 **登录前只等打向当前服务器的那次撤销**（`settleRevoke`）。原来无条件等：旧服务器连不上（正是要换服务器的典型原因）时，在新服务器上点登录白等满 8 秒超时。
+  cookie jar 按主机分，旧服务器的登出响应清不到新服务器的 cookie，没有可防的竞态
+- 地址校验 `serverBaseUrl` 和桌面端 `packages/platform/src/desktop/http-url.ts` 同一判据（拒查询串 / 片段 / 账号密码，scheme 和主机转小写）。
+  移动端不依赖 `platform`，所以另写一份，改一处对一下另一处。原来的判据是 `/^https?:\/\/[^\s/]+/`：`https://h/?env=prod` 能存进去，
+  之后每个请求拼成 `?env=prod/api/v1/...`。⚠️ 刻意不用 `new URL()`（RN 的 URL 实现历史上 `hostname` / `search` 直接抛 not implemented）
+- 验证码查询的 key 带服务器地址：登录屏上换完服务器要从新服务器重取，旧 uuid 新服务器不认。探测加了 10 秒超时
+
+**实测证据**：`apps/mobile/tests/server-switch.test.mjs`（`pnpm --filter @admin/mobile test`，Node 里转译 TS + 桩依赖，6 条）。
+修前（`settleRevoke` 换回无条件等、校验换回原来那条正则）3 条红：`https://h.example.com/?env=prod` 被接受、`HTTPS://…` 被拒、
+「换了服务器之后登录不等旧服务器」卡住；「同一台服务器上登出后马上登录仍要等」修前修后都绿（守 #374 的竞态没被这次改掉）。
+登录屏入口在 Maestro `e2e/flows/server-from-login.yaml`：连不上的地址报错 → 换成 `127.0.0.1:8001`（CI 里 `adb reverse`）→ 登录屏显示新地址 → 登录成功。
+⚠️ **没验的**：这条 Maestro 只在 CI 上跑（本机没有模拟器），写这段时还没跑过；iOS（含 Keychain 跨重装留着地址）一次没跑；真机上没点过。

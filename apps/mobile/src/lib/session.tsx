@@ -1,13 +1,14 @@
 import { useQueryClient } from '@tanstack/react-query'
 import * as React from 'react'
 
-import { ApiError, confirmsLogout, isSessionEndReason, type SessionEndReason } from '@admin/api'
+import { ApiError, isSessionEndReason, type SessionEndReason } from '@admin/api'
 import type { components } from '@admin/api/schema'
 import { setDisplayTimeZone } from '@admin/i18n'
 
 import { api, setSessionExpiredHandler } from '@/lib/api'
 import type { CurrentUser } from '@/lib/contract'
 import { logoutPending } from '@/lib/logout-pending'
+import { forgetServerCredentials, settleRevoke, startRevoke, switchServer as switchServerBase } from '@/lib/revoke'
 import { serverStore } from '@/lib/server'
 import { tokenStore } from '@/lib/token-store'
 
@@ -35,6 +36,11 @@ type Session = {
   /** 二次验证的第二步：动态码或恢复码 */
   verifyMfa: (mfaToken: string, otp: string) => Promise<void>
   logout: () => Promise<void>
+  /**
+   * 换服务器（#406）：在旧服务器上登出（记待撤销标记 · 清 token · 后台撤销）→ 换地址 → 回到未登录。
+   * 已登录（设置屏）和未登录（登录屏 / 连不上服务器时）都走它。`next` 先过 `serverBaseUrl`；null = 恢复默认地址
+   */
+  switchServer: (next: string | null) => Promise<void>
   reload: () => Promise<void>
 }
 
@@ -50,60 +56,6 @@ export function useSession(): Session {
   const ctx = React.useContext(SessionContext)
   if (!ctx) throw new Error('useSession 必须在 <SessionProvider> 里用')
   return ctx
-}
-
-/**
- * 让服务端把当前服务器上的这个会话作废（#138 之后一个会话就是一个 key）。确认了就删「待撤销」标记，
- * 没确认（网络 / 5xx / 429）就留着，下次冷启动再补发。
- *
- * 401 / 403 也算确认（`confirmsLogout`）。后端的登出接口对「没有凭据」是幂等成功，
- * 只带 cookie（没有 access token）也认得出会话 —— 所以调用方可以先清本地、再在后台发它。
- *
- * ⚠️ **后台发，不要 await 在界面前面**：服务器不可达时 RN 的 fetch 自己要等 10～60 秒才失败，
- * 点了「退出」没反应 / 冷启动卡在闪屏上。
- *
- * 🔴 **但它要有超时**（`REVOKE_TIMEOUT_MS`，#374）：登录前 `settleRevoke()` 要等它落地，没有超时的话
- * 离线登出之后马上登录会卡同样的 10～60 秒。超时 = 没确认，标记留着、下次冷启动补发。
- * 掐断之后这次请求的响应就不会再到，也就不会晚于新登录去清 cookie —— 那正是 `settleRevoke` 要防的。
- * 手写 `AbortController` + `setTimeout`：Hermes 没有 `AbortSignal.timeout()`。
- */
-async function revokeOnServer(): Promise<void> {
-  const base = serverStore.current()
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REVOKE_TIMEOUT_MS)
-  try {
-    // 🔴 同步发出：`send` 在第一个 await 之前就取了地址，见 `startRevoke`
-    await api.POST('/api/v1/auth/logout', { signal: controller.signal })
-  } catch (err) {
-    if (!confirmsLogout(err)) return
-  } finally {
-    clearTimeout(timer)
-  }
-  await logoutPending.remove(base)
-}
-
-/** 登出撤销的超时。登录屏要等它，所以宁短勿长；没确认的下次冷启动还会补发 */
-const REVOKE_TIMEOUT_MS = 8_000
-
-/** 后台那次撤销。登录前要等它落地，见 `startRevoke` */
-let revoking: Promise<void> | null = null
-
-/**
- * 🔴 **登录前要等上一次撤销落地**：登出响应会带一条清空 refresh cookie 的 `Set-Cookie`。
- * 它要是晚于新登录的响应到达，cookie jar 里**新**会话的 refresh cookie 就被清掉了 ——
- * 新登录照常进去，半小时后 access token 到期、刷新失败，被莫名其妙踢回登录屏
- */
-function startRevoke(): void {
-  // 🔴 同步调用：`revokeOnServer` 在第一个 await 之前就读了地址、发出了请求 —— 改服务器地址的屏紧接着
-  // 就换地址（`src/app/(app)/server.tsx`），这里要是先 await 一下，登出就打到新服务器上去了
-  const p = revokeOnServer().finally(() => {
-    if (revoking === p) revoking = null
-  })
-  revoking = p
-}
-
-async function settleRevoke(): Promise<void> {
-  await revoking
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -298,19 +250,27 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const logout = React.useCallback(async () => {
     // 🔴 先落「待撤销」标记、服务端确认了再删（#319）。本地照样当场登出 —— 手机上点了退出就要退出，
     // 不能因为没网卡在已登录态；但 refresh cookie 只有登出接口的响应删得掉，没删掉的那个要靠标记
-    // 拦住下次冷启动的静默恢复。标记要在请求**之前**落：请求半路 App 被杀也算没确认。
-    // 请求在后台发、只带 cookie（token 已经清了，后端认 cookie）
-    await logoutPending.add(serverStore.current())
-    await tokenStore.clear()
-    startRevoke()
+    // 拦住下次冷启动的静默恢复。请求在后台发、只带 cookie（token 已经清了，后端认 cookie）
+    await forgetServerCredentials()
     // 自己登出不需要「为什么」
     setEndReason(null)
     applyAnonymous()
   }, [applyAnonymous])
 
+  const switchServer = React.useCallback<Session['switchServer']>(
+    async (next) => {
+      await switchServerBase(next)
+      // 🔴 启动时那句「连不上服务器（旧地址）」要跟着清掉，否则换好了地址登录屏还挂着旧服务器的错
+      setBootstrapError(null)
+      setEndReason(null)
+      applyAnonymous()
+    },
+    [applyAnonymous],
+  )
+
   const value = React.useMemo<Session>(
-    () => ({ status, user, bootstrapError, endReason, login, loginByPhone, verifyMfa, logout, reload }),
-    [status, user, bootstrapError, endReason, login, loginByPhone, verifyMfa, logout, reload],
+    () => ({ status, user, bootstrapError, endReason, login, loginByPhone, verifyMfa, logout, switchServer, reload }),
+    [status, user, bootstrapError, endReason, login, loginByPhone, verifyMfa, logout, switchServer, reload],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>

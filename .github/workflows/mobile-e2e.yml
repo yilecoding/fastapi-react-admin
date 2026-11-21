@@ -230,6 +230,8 @@ jobs:
           script: |
             adb shell settings put global hide_error_dialogs 1
             adb install -r apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            # 「登录屏换服务器」那条流程（#406）要第二个能连上同一个后端的地址：模拟器里的 127.0.0.1:8001 → 宿主机 8001
+            adb reverse tcp:8001 tcp:8001
             maestro --version
             maestro test --debug-output ${{ runner.temp }}/maestro --flatten-debug-output apps/mobile/e2e/flows
 

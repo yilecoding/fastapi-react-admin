@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "build": "expo export --platform android --output-dir dist",
     "lint": "eslint",
+    "test": "node --test tests/*.test.mjs",
     "start:plain": "expo start",
     "native:prebuild": "expo prebuild --platform android --clean",
     "apk": "node scripts/apk.mjs"
