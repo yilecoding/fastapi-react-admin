@@ -231,6 +231,8 @@ def cache_invalidate(
             # 尝试失效缓存
             invalidate_success = False
             invalidate_error = None
+            # 🔴 先占位：`atomic=False` 时 key 没算出来也要往下走，提交后那次登记得能判断「没有 key」
+            invalidate_key: str | None = None
 
             try:
                 invalidate_key = await _build_cache_key(namespace, key, key_builder, *args, **kwargs)
@@ -246,12 +248,13 @@ def cache_invalidate(
                 raise errors.ServerError(msg=t('error.cache.invalidation_failed'), data=invalidate_error)
 
             db = kwargs.get('db')
-            if isinstance(db, AsyncSession):
-                prefix = invalidate_key == namespace
+            if invalidate_key is not None and isinstance(db, AsyncSession):
+                again_key = invalidate_key
+                prefix = again_key == namespace
 
                 async def _again() -> None:
                     try:
-                        await invalidate_cache(invalidate_key, prefix=prefix)
+                        await invalidate_cache(again_key, prefix=prefix)
                     except Exception as e:
                         log.error(f'[Cache] INVALIDATE after commit error: {e}')
 

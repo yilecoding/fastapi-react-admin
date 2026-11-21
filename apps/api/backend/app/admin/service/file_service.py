@@ -549,8 +549,14 @@ class FileService:
 
 
 async def _delete_objects(objects: list[tuple[StorageTarget, str]]) -> None:
+    # 🔴 逐个兜住：跑到这里时记录已经提交成「已清除」，一个对象抛了就停的话同批剩下的永远成孤儿；
+    # 接口那边 Starlette 的 BackgroundTasks 还会把后面几批（`empty_recycle` 一批一个任务）一起跳过。
+    # `delete_object` 自己吞了存储错误，但本地存储的 `Path.resolve()`（NAS 挂死）等还是会抛
     for target, path in objects:
-        await delete_object(target, path)
+        try:
+            await delete_object(target, path)
+        except Exception as e:
+            log.warning(f'删除存储对象 {path} 失败：{e!s}')
 
 
 file_service: FileService = FileService()

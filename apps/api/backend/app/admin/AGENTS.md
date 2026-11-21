@@ -303,3 +303,12 @@ SQL Server 2022（`sys.identity_columns` 对这张表 0 行）/ MySQL 8.4；之�
 （`assert 'revoke' in ['commit']`）。`test_recycle.py::test_a_failed_commit_keeps_the_object` 三种入口（彻底删除 · 清空 · 不启用回收站的删除）
 修之前全红（对象已删）。`test_file.py::test_attach_with_duplicate_ids_is_idempotent` 修之前 500 `UniqueViolationError … uk_sys_file_relation`。
 定时清理那条路径由原有的 `test_purge_task_only_removes_expired` 守着（修后照绿）；真 S3 上没跑。
+
+**评审跟进（同 PR）**：① 挪到提交之后的对象删除要**逐个**兜异常（`_delete_objects`）—— 那时记录已经提交成「已清除」，
+一个对象抛了就停，同批剩下的成永久孤儿，Starlette 的 `BackgroundTasks` 还会把后面几批的任务一起跳过（`delete_object` 吞了存储错误，
+但本地存储的 `Path.resolve()` 等仍会抛）。② 导出记录的删除（`export_service.delete`）是同一个「先删文件再提交」，一并改成提交后删。
+③ `@cache_invalidate(atomic=False)` 在 key 没算出来时，提交后那次登记读未赋值的 `invalidate_key` → `UnboundLocalError` → 500 + 业务写入回滚。
+**实测证据**：`test_recycle.py::test_one_failing_object_delete_does_not_strand_the_rest`（修前第二、三个对象没删）·
+`test_export.py::test_a_failed_delete_commit_keeps_the_file`（修前文件已删）·
+`test_dict_cache_after_commit.py::test_atomic_false_still_swallows_a_key_builder_error_when_a_session_is_passed`（修前 `UnboundLocalError`），
+三条修前红、修后绿。`test_revoke_after_commit.py` 的先后断言改成记在最外层 `after_commit` 上（原来记在 `before_commit`，证明不了「提交成功之后」），修后照绿。

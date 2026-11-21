@@ -270,11 +270,38 @@ def test_a_failed_commit_keeps_the_object(
     finally:
         event.remove(Session, 'before_commit', fail)
 
-    assert on_disk.is_file(), '提交失败了，对象却已经删了'
-    if how == 'no-bin':
-        assert client.get(f'{FILES}/{data["id"]}', headers=token_headers).status_code == 200
-    else:
-        assert data['id'] in [r['id'] for r in _bin(client, token_headers)]
+    try:
+        assert on_disk.is_file(), '提交失败了，对象却已经删了'
+        if how == 'no-bin':
+            assert client.get(f'{FILES}/{data["id"]}', headers=token_headers).status_code == 200
+        else:
+            assert data['id'] in [r['id'] for r in _bin(client, token_headers)]
+    finally:
+        # 别把这条记录留在共享库的回收站 / 文件列表里（数回收站行数的测试会被它带偏）
+        if how == 'no-bin':
+            client.request('DELETE', FILES, headers=token_headers, json={'pks': [data['id']]})
+        else:
+            client.request('DELETE', RECYCLE, headers=token_headers, json={'pks': [data['id']]})
+
+
+def test_one_failing_object_delete_does_not_strand_the_rest(monkeypatch: pytest.MonkeyPatch) -> None:
+    """对象删除挪到了提交之后（后台任务 / 定时任务的 `await`）：那时记录已经标成已清除，
+    一个对象抛了异常就停下的话，同批剩下的（Starlette 的 BackgroundTasks 还会连后面几批一起跳过）永远成孤儿"""
+    import asyncio
+
+    from backend.app.admin.service import file_service as module
+
+    deleted: list[str] = []
+
+    async def flaky(_target: object, path: str) -> None:
+        await asyncio.sleep(0)
+        if path == 'a':
+            raise OSError('NAS mount hung')
+        deleted.append(path)
+
+    monkeypatch.setattr(module, 'delete_object', flaky)
+    asyncio.run(module._delete_objects([(object(), 'a'), (object(), 'b'), (object(), 'c')]))  # type: ignore[list-item]
+    assert deleted == ['b', 'c']
 
 
 # ─── 权限 ───────────────────────────────────────────────────────────────────

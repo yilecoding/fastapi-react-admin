@@ -76,3 +76,21 @@ def test_a_read_between_invalidation_and_commit_does_not_pin_the_old_value(
 
     assert calls and calls[0] is False, '前提：第一次清发生在提交之前（模拟的空档存在）'
     assert not client.portal.call(redis_client.exists, STALE), '提交之后没再清：空档里写回的旧值留到 TTL'
+
+
+def test_atomic_false_still_swallows_a_key_builder_error_when_a_session_is_passed() -> None:
+    """`atomic=False` 的契约是「清不掉只记日志」。提交后那次登记要用 `invalidate_key`，
+    key 都没算出来时不能再去读它（原来是 UnboundLocalError → 500，业务写入跟着回滚）"""
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    def broken(**_: object) -> str:
+        raise RuntimeError('key builder broke')
+
+    @decorator.cache_invalidate(namespace='pytest-ns', key_builder=broken, atomic=False)
+    async def write(*, db: AsyncSession) -> str:
+        await asyncio.sleep(0)
+        return 'written'
+
+    db = AsyncSession()
+    assert asyncio.run(write(db=db)) == 'written'
+    assert not db.sync_session.info.get(after_commit._PENDING), 'key 没算出来，不该登记提交后的清理'

@@ -671,6 +671,35 @@ def test_info_sheet_says_who_exported(client: TestClient, token_headers: dict[st
     assert wb.properties.creator == 'admin'
 
 
+def test_a_failed_delete_commit_keeps_the_file(
+    client: TestClient, token_headers: dict[str, str], isolated_upload_dir: Path
+) -> None:
+    """删导出记录：先删文件再提交的话，提交失败时记录还是「已完成」、文件却没了，点下载就是 file_missing（#394 同类）"""
+    from sqlalchemy import event, select
+    from sqlalchemy.orm import Session
+
+    job = start(client, token_headers, USERS_EXPORT)['data']
+    files = list(isolated_upload_dir.rglob('*.xlsx'))
+    assert len(files) == 1
+
+    def fail(session: Session) -> None:
+        if session.connection().scalar(select(ExportJob.id).where(ExportJob.id == int(job['id']))) is None:
+            raise RuntimeError('delete commit failed')
+
+    event.listen(Session, 'before_commit', fail)
+    try:
+        with pytest.raises(RuntimeError, match='delete commit failed'):
+            client.delete(f'{EXPORTS}/{job["id"]}', headers=token_headers)
+    finally:
+        event.remove(Session, 'before_commit', fail)
+
+    assert files[0].exists(), '提交失败了，文件却已经删了'
+    assert client.get(f'{EXPORTS}/{job["id"]}/download', headers=token_headers).status_code == 200
+    # 正常删：记录和文件都没了
+    assert client.delete(f'{EXPORTS}/{job["id"]}', headers=token_headers).json()['code'] == 200
+    assert not files[0].exists()
+
+
 # ─────────────────────────────── 每个资源 ───────────────────────────────
 
 

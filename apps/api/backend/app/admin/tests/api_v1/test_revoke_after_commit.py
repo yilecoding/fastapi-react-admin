@@ -120,21 +120,31 @@ def test_sessions_are_revoked_after_the_commit(client, token_headers, target, ac
     order = []
     original = session_store.revoke_user
 
-    def committed(session):
+    changing: set[int] = set()
+
+    def about_to_commit(session):
         if _changed(session, target):
+            changing.add(id(session))
+
+    def committed(session):
+        # 只认真正落库的那一下：before_commit 在 COMMIT 之前，记在那里证明不了「提交成功之后」
+        if id(session) in changing and not session.in_nested_transaction():
+            changing.discard(id(session))
             order.append('commit')
 
     async def revoke(*args):
         order.append('revoke')
         await original(*args)
 
-    event.listen(Session, 'before_commit', committed)
+    event.listen(Session, 'before_commit', about_to_commit)
+    event.listen(Session, 'after_commit', committed)
     try:
         with pytest.MonkeyPatch.context() as patch:
             patch.setattr(session_store, 'revoke_user', revoke)
             response = _send(client, action, target, token_headers, own)
     finally:
-        event.remove(Session, 'before_commit', committed)
+        event.remove(Session, 'before_commit', about_to_commit)
+        event.remove(Session, 'after_commit', committed)
     assert (response.status_code, response.json()['code']) == (200, 200), response.text
     assert 'revoke' in order, order
     assert order.index('commit') < order.index('revoke'), order
