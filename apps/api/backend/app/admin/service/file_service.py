@@ -16,6 +16,7 @@ from backend.common.i18n import t
 from backend.common.log import log
 from backend.common.pagination import paging_data
 from backend.common.security.data_scope import bypass_data_scope
+from backend.common.security.perms import split_perms
 from backend.core.conf import settings
 from backend.utils.file_ops import get_file_ext, upload_file, upload_file_verify
 from backend.utils.storage_ops import (
@@ -69,7 +70,7 @@ def _has_perm(user: Any, code: str) -> bool:
         if role.status != 1:
             continue
         for menu in role.menus or []:
-            if menu.perms and menu.status == 1 and code in menu.perms.split(','):
+            if menu.perms and menu.status == 1 and code in split_perms(menu.perms):
                 return True
     return False
 

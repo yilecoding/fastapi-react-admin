@@ -670,6 +670,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sys/users/me/password-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取当前用户的密码状态 */
+        get: operations["get_my_password_status_api_v1_sys_users_me_password_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sys/users/me/password": {
         parameters: {
             query?: never;
@@ -3622,6 +3639,23 @@ export interface paths {
         };
         /** 获取绑定授权链接 */
         get: operations["get_binding_auth_url_api_v1_oauth2_me_binding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/oauth2/me/reauth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取重新验证身份的授权链接 */
+        get: operations["get_reauth_auth_url_api_v1_oauth2_me_reauth_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7549,6 +7583,22 @@ export interface components {
              */
             size: number;
         };
+        /**
+         * GetMyPasswordStatus
+         * @description 当前用户的密码状态（个人中心决定显示「修改密码」还是「设置密码」）
+         */
+        GetMyPasswordStatus: {
+            /**
+             * Has Password
+             * @description 是否已有密码（第三方登录建的账号没有）
+             */
+            has_password: boolean;
+            /**
+             * Reauth Verified
+             * @description 第一次设密码前的第三方重新授权是否已完成且仍有效
+             */
+            reauth_verified: boolean;
+        };
         /** GetMyPrefsDetail */
         GetMyPrefsDetail: {
             /** Items */
@@ -11375,9 +11425,9 @@ export interface components {
         ResetPasswordParam: {
             /**
              * Old Password
-             * @description 旧密码
+             * @description 旧密码。没有密码的账号（第三方登录建的）第一次设密码时不传，改由重新第三方授权确认身份
              */
-            old_password: string;
+            old_password?: string | null;
             /**
              * New Password
              * @description 新密码
@@ -11876,6 +11926,22 @@ export interface components {
              */
             msg: string;
             data: components["schemas"]["GetMultipartPartDetail"];
+        };
+        /** ResponseSchemaModel[GetMyPasswordStatus] */
+        ResponseSchemaModel_GetMyPasswordStatus_: {
+            /**
+             * Code
+             * @description 返回状态码
+             * @default 200
+             */
+            code: number;
+            /**
+             * Msg
+             * @description 返回信息
+             * @default 请求成功
+             */
+            msg: string;
+            data: components["schemas"]["GetMyPasswordStatus"];
         };
         /** ResponseSchemaModel[GetMyPrefsDetail] */
         ResponseSchemaModel_GetMyPrefsDetail_: {
@@ -16754,6 +16820,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_password_status_api_v1_sys_users_me_password_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_GetMyPasswordStatus_"];
                 };
             };
         };
@@ -23733,6 +23819,37 @@ export interface operations {
         };
     };
     get_binding_auth_url_api_v1_oauth2_me_binding_get: {
+        parameters: {
+            query: {
+                source: components["schemas"]["UserSocialType"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResponseSchemaModel_str_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_reauth_auth_url_api_v1_oauth2_me_reauth_get: {
         parameters: {
             query: {
                 source: components["schemas"]["UserSocialType"];

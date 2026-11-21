@@ -13,3 +13,5 @@ class UserSocialAuthType(StrEnum):
 
     login = 'login'
     binding = 'binding'
+    # 无密码账号第一次设密码前，用已绑定的第三方账号重新确认身份（#402）
+    reauth = 'reauth'

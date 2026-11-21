@@ -178,6 +178,9 @@ error:
     auto_register_role_missing: 'The default role for auto-registered accounts is not configured or not available ({role}). Please contact the administrator'
     binding_unsupported: Binding {source} is not supported yet
     illegal_state_operation: 'Illegal operation: invalid OAuth2 state'
+    last_login_unbind_forbidden: This account has no password. Unlinking its last third-party account would lock you out, so set a password first
+    reauth_mismatch: The {source} account you authorized is not the one linked to you; verification failed
+    reauth_not_bound: No {source} account is linked to you, so it cannot be used to verify your identity
     social_login_unsupported: '{social} OAuth2 sign-in is not supported yet'
     state_already_claimed: This authorization link has already been used. Please start again from the page
     state_invalid: Invalid OAuth2 state
@@ -362,6 +365,7 @@ error:
     phone_bound: This phone number is already bound to another account
     not_found: User does not exist
     password_mismatch: The two passwords do not match
+    password_set_requires_reauth: This account has no password yet. Before setting the first one, re-verify with a linked third-party account under Profile > Security (valid for 10 minutes)
     password_required: Password cannot be empty
     permission_type_not_found: Permission type does not exist
     preference_too_many: 'You can store at most {limit} personal preferences'

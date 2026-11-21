@@ -21,6 +21,13 @@ async def get_binding_auth_url(request: Request, source: UserSocialType) -> Resp
     return response_base.success(data=binding_url)
 
 
+@router.get('/me/reauth', summary='获取重新验证身份的授权链接', dependencies=[DependsJwtAuth])
+async def get_reauth_auth_url(db: CurrentSession, request: Request, source: UserSocialType) -> ResponseSchemaModel[str]:
+    # 没有密码的账号第一次设密码前，用已绑定的第三方账号重新授权一次（#402）
+    url = await user_social_service.get_reauth_url(db=db, user_id=request.user.id, source=source)
+    return response_base.success(data=url)
+
+
 @router.delete('/me/unbinding', summary='解绑用户社交账号', dependencies=[DependsJwtAuth])
 async def unbinding_user(db: CurrentSessionTransaction, request: Request, source: UserSocialType) -> ResponseModel:
     await user_social_service.unbinding(db=db, user_id=request.user.id, source=source)

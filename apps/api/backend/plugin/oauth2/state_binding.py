@@ -138,6 +138,16 @@ async def callback_failed(request: Request, db: AsyncSession, exc: errors.BaseEx
     return redirect
 
 
+def profile_security_url() -> str:
+    """绑定 / 重新验证身份完成后的落地页：个人中心，直接打开「安全」面板
+
+    原来只回 `OAUTH2_FRONTEND_BINDING_REDIRECT_URI`（个人中心默认的「资料」面板），
+    第三方账号那一块在「安全」里，回来还要自己再点一下
+    """
+    base = settings.OAUTH2_FRONTEND_BINDING_REDIRECT_URI
+    return f'{base}{"&" if "?" in base else "?"}section=security'
+
+
 async def authorize_redirect(
     request: Request, client: OAuth20Base, redirect_uri: str, ticket: str | None
 ) -> RedirectResponse:

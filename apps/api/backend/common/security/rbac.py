@@ -7,6 +7,7 @@ from backend.common.enums import MethodType, StatusType
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.security.jwt import DependsJwtAuth
+from backend.common.security.perms import split_perms
 from backend.core.conf import settings
 
 
@@ -62,18 +63,8 @@ async def rbac_verify(request: Request, _token: str = DependsJwtAuth) -> None:  
         if path_auth_perm in settings.RBAC_ROLE_MENU_EXCLUDE:
             return
 
-        # 菜单去重
-        unique_menus = {}
-        for role in enabled_roles:
-            for menu in role.menus:
-                unique_menus[menu.id] = menu
-
-        # 已分配菜单权限校验
-        allow_perms = []
-        for menu in list(unique_menus.values()):
-            if menu.perms and menu.status == StatusType.enable:
-                allow_perms.extend(menu.perms.split(','))
-        if path_auth_perm not in allow_perms:
+        # 已分配菜单权限校验（菜单去重 + 切分和 `user_has_perm` 共用一份，#402）
+        if path_auth_perm not in collect_allowed_perms(request.user):
             raise errors.AuthorizationError
     else:
         # casbin 模式
@@ -117,7 +108,7 @@ def collect_allowed_perms(user: Any) -> set[str]:
     perms: set[str] = set()
     for menu in unique_menus.values():
         if menu.perms and menu.status == StatusType.enable:
-            perms.update(p.strip() for p in menu.perms.split(',') if p.strip())
+            perms.update(split_perms(menu.perms))
     return perms
 
 

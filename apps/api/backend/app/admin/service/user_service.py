@@ -20,6 +20,7 @@ from backend.app.admin.schema.user import (
 )
 from backend.app.admin.schema.user_password_history import CreateUserPasswordHistoryParam
 from backend.app.admin.service.user_password_history_service import password_security_service
+from backend.app.admin.utils import password_set_grant
 from backend.app.admin.utils.cache import user_cache_manager
 from backend.app.admin.utils.password_security import (
     password_verify,
@@ -292,8 +293,10 @@ class UserService:
         previous_password = user.password
         count = await user_dao.reset_password(db, user.id, password)
 
-        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
-        await password_security_service.save_password_history(db, history_obj)
+        # 没有密码的账号（第三方登录建的）没有旧密码可记（#402：原来 `password=None` 在这里抛 ValidationError）
+        if previous_password:
+            history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
+            await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
         await session_store.revoke_user(user.id, EndReason.password_changed)
         user_cache_manager.clear(background_tasks, [user.id])
@@ -447,6 +450,18 @@ class UserService:
         return count
 
     @staticmethod
+    async def get_password_status(*, db: AsyncSession, user_id: int) -> dict[str, bool]:
+        """有没有密码 + 第一次设密码前的第三方重新授权完成了没有"""
+        with bypass_data_scope():  # 读自己那一行，理由同 `update_password`
+            user = await user_dao.get(db, user_id)
+        if not user:
+            raise errors.NotFoundError(msg=t('error.user.not_found'))
+        return {
+            'has_password': bool(user.password),
+            'reauth_verified': not user.password and await password_set_grant.is_granted(user_id),
+        }
+
+    @staticmethod
     async def update_password(
         *, db: AsyncSession, background_tasks: BackgroundTasks, user_id: int, obj: ResetPasswordParam
     ) -> int:
@@ -476,19 +491,29 @@ class UserService:
         if not user:
             raise errors.NotFoundError(msg=t('error.user.not_found'))
 
-        if user.password and not password_verify(obj.old_password, user.password):
+        # 🔴 没有密码的账号（第三方登录建的）没有旧密码可验，**不能因此放行**（#402）：
+        # 只拿着一枚 access token 的人就能给他设一个长期密码。改由「重新走一遍已绑定的第三方授权」
+        # 确认身份（`password_set_grant`），凭据在下面真正写入之前才消费
+        if user.password and not (obj.old_password and password_verify(obj.old_password, user.password)):
             raise errors.RequestError(msg=t('error.user.wrong_old_password'))
+        if not user.password and not await password_set_grant.is_granted(user_id):
+            raise errors.RequestError(msg=t('error.user.password_set_requires_reauth'))
 
         if obj.new_password != obj.confirm_password:
             raise errors.RequestError(msg=t('error.user.password_mismatch'))
 
         await validate_new_password(db, user_id, obj.new_password)
+        # 复杂度等校验都过了才消费（被拒不用重跑一遍第三方授权）；GETDEL 原子，并发只有一个拿得到
+        if not user.password and not await password_set_grant.consume(user_id):
+            raise errors.RequestError(msg=t('error.user.password_set_requires_reauth'))
         # 旧 hash 要在改之前抓住 —— 理由同 `reset_password`（同一个 ORM 实例）
         previous_password = user.password
         count = await user_dao.reset_password(db, user_id, obj.new_password)
 
-        history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
-        await password_security_service.save_password_history(db, history_obj)
+        # 没有密码的账号（第三方登录建的）没有旧密码可记（#402：原来 `password=None` 在这里抛 ValidationError）
+        if previous_password:
+            history_obj = CreateUserPasswordHistoryParam(user_id=user.id, password=previous_password)
+            await password_security_service.save_password_history(db, history_obj)
         await user_dao.update_password_changed_time(db, user.id)
         await session_store.revoke_user(user_id, EndReason.password_changed)
         user_cache_manager.clear(background_tasks, [user_id])

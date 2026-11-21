@@ -11,6 +11,7 @@ from backend.app.admin.model import Menu
 from backend.app.admin.schema.menu import CreateMenuParam, UpdateMenuParam
 from backend.app.admin.service.menu_service import menu_service
 from backend.common.enums import MenuType, StatusType
+from backend.common.security.perms import split_perms
 from backend.plugin.ai.core.ports import RunContext
 from backend.plugin.ai.core.registry import ai_tool
 
@@ -192,7 +193,7 @@ async def _preview_set_status(db: AsyncSession, menu_id: str, *, enabled: bool) 
     await menu_service.check_update(db=db, pk=menu.id, obj=obj)
     affected = await _affected(db, menu)
     scope = f'「{menu.title}」' + (f'和它下面的 {len(affected) - 1} 项' if len(affected) > 1 else '')
-    perms = sorted({p.strip() for m in affected for p in (m.perms or '').split(',') if p.strip()})
+    perms = sorted({p for m in affected for p in split_perms(m.perms)})
     shown = any(m.type != MenuType.button and m.display == StatusType.enable for m in affected)
     if enabled:
         effects = ['回到已授权角色的侧边栏里'] if shown else []

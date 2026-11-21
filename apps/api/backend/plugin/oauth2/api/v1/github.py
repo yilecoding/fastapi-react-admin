@@ -18,6 +18,7 @@ from backend.plugin.oauth2.state_binding import (
     authorize_url,
     callback_failed,
     clear_state_cookie,
+    profile_security_url,
     require_state_cookie,
 )
 from backend.plugin.oauth2.utils import github_email_verified
@@ -73,9 +74,9 @@ async def github_oauth2_callback(  # ruff:ignore[missing-return-type-undocumente
     except errors.BaseExceptionError as exc:
         return await callback_failed(request, db, exc)
 
-    # 绑定流程
+    # 绑定 / 重新验证身份（#402）：回个人中心的「安全」页（两块都在那里）
     if data is None:
-        redirect = RedirectResponse(url=settings.OAUTH2_FRONTEND_BINDING_REDIRECT_URI)
+        redirect = RedirectResponse(url=profile_security_url())
         clear_state_cookie(redirect, request)
         return redirect
 

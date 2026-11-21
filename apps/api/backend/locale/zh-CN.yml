@@ -179,6 +179,9 @@ error:
     auto_register_role_missing: 第三方账号自动注册的默认角色未配置或不可用（{role}），请联系系统管理员
     binding_unsupported: 暂不支持 {source} 绑定
     illegal_state_operation: 非法操作，OAuth2 状态信息无效
+    last_login_unbind_forbidden: 这个账号还没有密码，解绑最后一个第三方账号之后就再也登不进来了。请先设置密码再解绑
+    reauth_mismatch: 授权回来的 {source} 账号不是绑定在你名下的那一个，身份验证未通过
+    reauth_not_bound: 你还没有绑定 {source} 账号，不能用它验证身份
     social_login_unsupported: 暂不支持 {social} OAuth2 登录
     state_already_claimed: 这个授权链接已经被打开过了，请回到页面重新发起
     state_invalid: OAuth2 状态信息无效
@@ -363,6 +366,7 @@ error:
     phone_bound: 手机号已被其他账号绑定
     not_found: 用户不存在
     password_mismatch: 两次密码输入不一致
+    password_set_requires_reauth: 这个账号还没有密码。第一次设置密码前，请先在个人中心「安全」里用已绑定的第三方账号重新验证身份（10 分钟内有效）
     password_required: 密码不允许为空
     permission_type_not_found: 权限类型不存在
     preference_too_many: '个人偏好最多存 {limit} 项'

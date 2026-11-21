@@ -88,3 +88,37 @@
 **实测证据**：`tests/test_state_binding.py::test_rejected_login_goes_back_to_the_frontend_with_the_reason`（TestClient 真请求，
 换 token / 拉用户信息打桩）；变异 —— github 回调的 `except` 改成 `except KeyboardInterrupt` → 当场红，响应体正是上面那页 403 JSON。
 ⚠️ 前端落地页的错误态只过了 typecheck / build，没在浏览器里点过。
+
+## 🔴 第三方建的无密码账号：第一次设密码要重新走一遍已绑定的第三方授权（#402）
+
+**症状**：`OAUTH2_AUTO_REGISTER` 建出来的号（`sys_user.password` 为 NULL）在个人中心改密码、超管在用户管理里重置密码，**都失败**；
+超管那条回 422「password 输入应为有效的字符串，输入：None」—— 看着像前端没传密码，其实是后端在写密码历史。
+
+**根因**：`user_service` 两处改密都在改完之后 `CreateUserPasswordHistoryParam(password=previous_password)`，无密码账号的旧值是 None，
+schema 必填 `str` → ValidationError → 事务回滚。🔴 自助那条同时还**跳过了旧密码校验**（`if user.password and not password_verify(...)`），
+一直是后面这个异常在兜底：只把 None 放过去，拿到这个人一枚 access token（30 分钟）的人就能给他设一个长期有效的密码。
+
+**修法**：
+
+- 历史记录只在有旧 hash 时写（两处）；超管重置不需要额外验证（超管本来就能重置任何人）
+- 自助那条：无密码账号不验旧密码，改验 `app/admin/utils/password_set_grant.py` 里的凭据 —— 只有 `GET /oauth2/me/reauth` 发起、
+  回调里**按 `sid` 查到的绑定正属于发起人**才写入（10 分钟），`update_password` 在复杂度等校验都过了之后才 `GETDEL` 消费（被拒不用重跑授权）。
+  凭据放 admin 不放插件：消费方是 admin，admin 不能 import 插件；插件停用时无密码账号只能找超管重置
+- 链接形状照抄绑定（一次性 ticket + authorize 那一跳下发 state cookie），回调落 `个人中心?section=security`（绑定也一起改了，
+  原来落「资料」面板、第三方账号那块在「安全」里）。前端走**当前页**跳转，回来时 `GET /sys/users/me/password-status` 的
+  `reauth_verified` 为 true，表单只要新密码
+- 无密码账号**不能解绑最后一个第三方账号**：解了就再也登不进来、也没有东西能自证去设密码
+
+⚠️ 留着的口子同绑定那条：攻击者用盗来的会话取 reauth 链接、骗受害者在已登录第三方的浏览器里点开，对方静默放行，
+凭据就记在受害者名下、被攻击者的会话用掉。比修之前（一个 token 直接设）窄，要堵死同样得让 authorize 能核对登录态。
+⚠️ 开了 MFA 的无密码账号，重新授权这一步**不过 MFA**（`mfa_gate` 只在登录路径上），没做。
+
+**实测证据**：`tests/test_passwordless_set_password.py` 9 条（TestClient 真请求，换 token / 拉用户信息打桩，第三方绑定也走真实绑定流程建出来）。
+修之前 7 条红：状态接口 / reauth 接口 404、能解绑最后一个、超管重置 422（就是上面那句）。
+变异各自当场红：去掉两道凭据检查 → 「只拿 token 设不了」「别的第三方账号不算」两条；先消费后校验 → 3 条；
+回调不核对 `sid` 归属 → 「别的第三方账号不算」；去掉解绑保护 → 1 条；历史记录不判空 → 4 条。
+⚠️ 单去掉 `is_granted` 或单去掉 `consume` 都**不红**：两道互为兜底（前者为了不白跑校验、后者为了原子），只有一起去掉才红。
+前端：E2E `apps/web/e2e/tests/profile-first-password.spec.ts` 4 条（`page.route` 改写状态 / 绑定接口，PostgreSQL 私有库）——
+没验证只给已绑定来源的按钮、没有「当前密码」框 · 一个都没绑说找管理员 · 验证过只要新密码、请求体不带 `old_password` · 状态 502 是错误 + 重试、
+不退回要旧密码的表单。变异：密码块恒画「修改密码」→ 4 条全红。
+⚠️ **真 OAuth 应用没跑过**（回调落地、当前页跳转回来之后状态刷新，都只靠后端 TestClient 测过）；桌面端 / 移动端没看。

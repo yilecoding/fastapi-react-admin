@@ -40,6 +40,7 @@ from backend.common.domain_events import emit
 from backend.common.exception import errors
 from backend.common.i18n import t
 from backend.common.log import log
+from backend.common.security.perms import split_perms
 from backend.common.socketio.actions import notification_new, workflow_todo_changed
 from backend.plugin.notification.service.notification_service import create_in_tx
 from backend.plugin.workflow.engine import assignee as assignee_rules
@@ -113,7 +114,7 @@ class Actor:
                 continue
             for menu in role.menus or []:
                 if menu.perms and menu.status == 1:
-                    perms.update(menu.perms.split(','))
+                    perms.update(split_perms(menu.perms))
         return cls(
             id=user.id,
             nickname=user.nickname,
