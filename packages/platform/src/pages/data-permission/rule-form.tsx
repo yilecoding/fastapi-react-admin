@@ -18,6 +18,7 @@ import {
 
 import { ApiError } from '../../api-client/errors'
 import { useFieldError } from '../_shared/form-error'
+import { OptionsError } from '../_shared/options-error'
 import {
   EXPRESSION_ITEMS, OPERATOR_ITEMS,
   rlColumnsQuery, rlModelsQuery, templateVarsQuery,
@@ -60,9 +61,16 @@ export function DataRuleSheet({ open, onOpenChange, editing, onCreated }: {
   })
 
   const model = form.watch('model')
-  const { data: models = [] } = useQuery(rlModelsQuery)
-  const { data: columns = [] } = useQuery(rlColumnsQuery(model))
-  const { data: tvars = [] } = useQuery(templateVarsQuery)
+  // 🔴 三份选项取不到都要说出来（#397）。字段列表尤其：原来失败时 `columns` 是 `[]`，
+  // 下面退化成自由输入框，用户凭记忆敲一个列名存进去 —— 敲错了规则照样生效，只是永远匹配不到
+  const modelsQ = useQuery(rlModelsQuery)
+  const columnsQ = useQuery(rlColumnsQuery(model))
+  const tvarsQ = useQuery(templateVarsQuery)
+  const models = React.useMemo(() => modelsQ.data ?? [], [modelsQ.data])
+  const columns = React.useMemo(() => columnsQ.data ?? [], [columnsQ.data])
+  const tvars = tvarsQ.data ?? []
+  /** 选了具体模型、字段列表却没取到：不给自由输入，只读着等重试 */
+  const columnsFailed = Boolean(model) && model !== '__ALL__' && !columnsQ.data && Boolean(columnsQ.error)
 
   React.useEffect(() => {
     if (!open) return
@@ -141,6 +149,9 @@ export function DataRuleSheet({ open, onOpenChange, editing, onCreated }: {
                   ))}
                 </SelectContent>
               </Select>
+              {modelsQ.error && (
+                <OptionsError error={modelsQ.error} onRetry={() => void modelsQ.refetch()} testId="dr-model-error" />
+              )}
             </Fld>
 
             <Fld label={t("字段")} error={fe(errs.column?.message)} required>
@@ -157,8 +168,12 @@ export function DataRuleSheet({ open, onOpenChange, editing, onCreated }: {
                   </SelectContent>
                 </Select>
               ) : (
-                <Input {...form.register('column')} data-testid="dr-column"
-                       placeholder={model === '__ALL__' ? t('如 __dept_id__（模板字段）') : t('先选模型')} />
+                // readOnly 而不是 disabled：怕 react-hook-form 提交时丢掉 disabled 字段的值、编辑旧规则把列名清掉（推断，没实测）
+                <Input {...form.register('column')} data-testid="dr-column" readOnly={columnsFailed}
+                       placeholder={columnsFailed ? undefined : model === '__ALL__' ? t('如 __dept_id__（模板字段）') : t('先选模型')} />
+              )}
+              {columnsFailed && (
+                <OptionsError error={columnsQ.error} onRetry={() => void columnsQ.refetch()} testId="dr-column-error" />
               )}
             </Fld>
 
@@ -193,6 +208,9 @@ export function DataRuleSheet({ open, onOpenChange, editing, onCreated }: {
                 <IconInfoCircle className="size-3.5" />{t('可用模板变量（点击插入）')}
               </p>
               <div className="flex flex-wrap gap-1.5">
+                {tvarsQ.error && (
+                  <OptionsError error={tvarsQ.error} onRetry={() => void tvarsQ.refetch()} testId="dr-vars-error" />
+                )}
                 {/* ⚠️ 回调参数**不能叫 `t`** —— 会遮蔽翻译函数，`title` 就永远是中文 */}
                 {tvars.map((v) => (
                   <button

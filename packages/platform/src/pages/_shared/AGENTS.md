@@ -156,3 +156,19 @@
 回退后刷新仍在正确页，筛选和列设置保留。在线用户已有前端 safePage，不属于本次服务端空页修复。
 相关回归同轮 30 条通过。实例监控旧用例在 URL 更新后立刻读行，实测读到管理员发起的旧占位行；
 改用 `expect.poll` 等非空结果的每行都满足发起人筛选。只等「第一行可见」会命中旧占位数据。
+
+## 🔴 选项取不到：不能是空下拉，也不能编一个默认值（#397）
+
+**症状**：`const { data: roles = [] } = useQuery(…)` 失败时就是空下拉 —— 用户表单写「暂无可分配角色」再被「至少选择一个角色」挡住、
+插件页写「没有已安装的插件」、数据规则的字段退化成自由输入（敲错列名照样存）、调度表单把时区编成 `'UTC'`
+（「接下来 5 次」偏 8 小时还标着「服务端时区 UTC」）、重新发起时旧单取不到给一张空白表单（草稿自动保存又是关的）。
+外壳那两条更隐蔽：`sidebarQuery` / `codesQuery` 是 `retry:false` + `staleTime:Infinity`，失败**不会自己恢复**；
+工作台有 `contextError`，深链进别的页面时侧边栏空着、`<Can>` 按钮全没了，什么提示都没有。
+
+**修法**：表单选项在字段下方挂 [options-error.tsx](options-error.tsx) 的 `OptionsError`（一行「加载失败 · 重试」，403 不给重试），
+整块内容用 `QueryError`；**取不到的值给 `undefined`，不编默认值**（`CronBuilder` 的 `timeZone` 没有就不画预览）；
+字段列表失败时输入框 `readOnly`（不用 `disabled`：怕 react-hook-form 提交时丢掉 disabled 字段的值、编辑旧规则把列名清掉 —— 推断，没实测）。
+外壳：`useSidebar().failed` / `usePerm().codesFailed` 由侧边栏画一行可点的重试（折叠态只剩图标、文字进 tooltip），⌘K「页面」组也有一条。
+
+**实测证据**：[`options-query-error.spec.ts`](../../../../../apps/web/e2e/tests/options-query-error.spec.ts) 7 条（8 处）注入 502 →
+错误 + 重试 → 放行后数据回来，全过；把修复整体 stash 掉只留用例，7 条全红在「错误提示可见」那一句。

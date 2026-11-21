@@ -12,6 +12,7 @@ import { Button } from '@admin/ui/components/button'
 import { Card, CardContent, CardHeader } from '@admin/ui/components/card'
 import { Skeleton } from '@admin/ui/components/skeleton'
 import { Switch } from '@admin/ui/components/switch'
+import { QueryError } from '@admin/ui/components/query-error'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@admin/ui/components/tooltip'
 
 import { ApiError } from '../../api-client/errors'
@@ -57,7 +58,9 @@ export function PluginPage({
   onSearchChange?: (next: PluginPageSearch) => void
 }) {
   const { t } = useTranslation()
-  const { data: plugins = [], isPending, isFetching, refetch } = useQuery(pluginsQuery)
+  // 🔴 `error` 要接（#397）：原来失败时 `plugins = []`，页面写「没有已安装的插件」，
+  // 管理员会去重复安装一个其实还在的插件
+  const { data: plugins = [], isPending, isFetching, error, refetch } = useQuery(pluginsQuery)
   const { data: changed } = useQuery(pluginChangedQuery)
 
   const [installOpen, setInstallOpen] = React.useState(false)
@@ -147,11 +150,14 @@ export function PluginPage({
         </div>
       </div>
 
+      {/* 有上一次的列表时挂成横幅、卡片留着；一份都没有时它就是整块内容，不落进空态 */}
+      {error && <QueryError error={error} onRetry={() => void refetch()} testId="plugin-error" />}
+
       {isPending ? (
         <div className="grid gap-4 @3xl/main:grid-cols-2">
           {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-52 w-full rounded-lg" />)}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : error && plugins.length === 0 ? null : filtered.length === 0 ? (
         <div
           className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-16 text-center"
           data-testid="plugin-empty"

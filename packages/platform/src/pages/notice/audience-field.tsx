@@ -8,7 +8,7 @@ import { RadioGroup, RadioGroupItem } from '@admin/ui/components/radio-group'
 import { cn } from '@admin/ui/lib/utils'
 
 import { api } from '../../api-client/client'
-import { ApiError } from '../../api-client/errors'
+import { OptionsError } from '../_shared/options-error'
 import { UserSelect, type PickUser, type UserSource } from '../_shared/user-select'
 import { allRolesQuery, deptTreeQuery, type Dept } from '../user/api'
 import type { AudienceKind, NoticeAudienceEntry, NoticeAudienceItem } from './api'
@@ -160,22 +160,6 @@ function AudienceSlot({ label, children }: { label: string; children: React.Reac
       <span className="text-xs text-muted-foreground">{label}</span>
       {children}
     </div>
-  )
-}
-
-/** 取不到选项时的那一行（403 是「没有权限查看」，见文件头） */
-function OptionsError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const { t } = useTranslation()
-  const forbidden = error instanceof ApiError && error.httpStatus === 403
-  return (
-    <span className="text-xs text-destructive">
-      {forbidden ? t('没有权限查看这些数据') : t('加载失败')}
-      {!forbidden && (
-        <button type="button" onClick={onRetry} className="ms-1 underline underline-offset-2">
-          {t('重试')}
-        </button>
-      )}
-    </span>
   )
 }
 
