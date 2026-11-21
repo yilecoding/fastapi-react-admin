@@ -66,6 +66,7 @@ test.describe("选项 / 外壳取数失败要说出来（#397）", () => {
     const err = page.getByTestId("plugin-error")
     await expect(err).toBeVisible()
     await expect(page.getByTestId("plugin-empty")).toHaveCount(0)
+    await expect(page.getByTestId("plugin-count")).toHaveCount(0)
 
     gate.fail = false
     await err.getByTestId("plugin-error-retry").click()

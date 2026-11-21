@@ -172,3 +172,5 @@
 
 **实测证据**：[`options-query-error.spec.ts`](../../../../../apps/web/e2e/tests/options-query-error.spec.ts) 7 条（8 处）注入 502 →
 错误 + 重试 → 放行后数据回来，全过；把修复整体 stash 掉只留用例，7 条全红在「错误提示可见」那一句。
+ego 浏览器逐处实测（CDP `Fetch` 回 502，带跨域头）八处都对，另外抓到两处只有看得见才发现的：侧边栏那行长提示被
+`SidebarMenuButton` 自带的 `[&>span:last-child]:truncate` 截成「部分按钮暂不…」（文字容器改用 `div`）；插件页失败时工具行还写着「共 0 / 0 个」（失败且没数据时不画）。

@@ -155,7 +155,8 @@ function ShellLoadError({
         role="alert"
       >
         <IconAlertTriangle className="mt-0.5" />
-        <span>{label}</span>
+        {/* 用 div 不用 span：按钮自带 `[&>span:last-child]:truncate`，长提示会被截成「部分按钮暂不…」（ego 实测） */}
+        <div className="min-w-0">{label}</div>
       </SidebarMenuButton>
     </SidebarMenuItem>
   )

@@ -60,7 +60,8 @@ export function PluginPage({
   const { t } = useTranslation()
   // 🔴 `error` 要接（#397）：原来失败时 `plugins = []`，页面写「没有已安装的插件」，
   // 管理员会去重复安装一个其实还在的插件
-  const { data: plugins = [], isPending, isFetching, error, refetch } = useQuery(pluginsQuery)
+  const { data, isPending, isFetching, error, refetch } = useQuery(pluginsQuery)
+  const plugins = React.useMemo(() => data ?? [], [data])
   const { data: changed } = useQuery(pluginChangedQuery)
 
   const [installOpen, setInstallOpen] = React.useState(false)
@@ -137,9 +138,10 @@ export function PluginPage({
           onChange={(v) => patch({ tag: v })}
         />
         {hasFilter && <ResetButton onClick={clearFilters} />}
-        <span className="text-sm text-muted-foreground" data-testid="plugin-count">
+        {/* 一份都没取到时不报「共 0 / 0 个」—— 那是把失败说成「没有」（#397，ego 实测看到的） */}
+        {!(error && !data) && <span className="text-sm text-muted-foreground" data-testid="plugin-count">
           {t('共 {{n}} / {{total}} 个', { n: filtered.length, total: plugins.length })}
-        </span>
+        </span>}
         <div className="ms-auto flex items-center gap-2">
           {/* 主动作在前、刷新是图标（#210 工具栏规范） */}
           <Button size="sm" data-testid="install-plugin" onClick={() => setInstallOpen(true)}>
