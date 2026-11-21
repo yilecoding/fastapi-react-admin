@@ -390,6 +390,7 @@ error:
     instance_finished: 审批已经结束，不能再操作
     action_disabled: '暂时不能执行这个操作：{reason}'
     action_not_allowed: 你现在不能执行这个操作，请刷新后查看
+    resubmit_in_chat: 这张单已经退回给你，要你改完再重新提交，不能在对话里「同意」。请到审批中心按退回意见修改后重新提交
     remind_too_often: 5 分钟内只能催办一次
     idempotency_key_invalid: 幂等键无效
     busy: 操作太频繁，请稍后重试

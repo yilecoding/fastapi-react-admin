@@ -231,7 +231,8 @@ async def _preview_approve(db: AsyncSession, ctx: RunContext, instance_id: str, 
 async def wf_approve(db: AsyncSession, ctx: RunContext, instance_id: str, opinion: str | None = None) -> dict[str, Any]:
     # 执行时再判一次：确认令牌发出之后单子可能刚被退回到他手上，或者走的是免确认那条路（不经过预演）
     _refuse_resubmit(await query_service.detail(db, _pk(instance_id), _actor(ctx)))
-    return await _act(db, ctx, instance_id, Action.approve, opinion=opinion)
+    # 上面那道读的是对话的会话；真正办理在 `_act` 另开的会话里。两次之间被退回的，由 `act()` 认领之后再拦一次
+    return await _act(db, ctx, instance_id, Action.approve, opinion=opinion, forbid_resubmit=True)
 
 
 async def _preview_reject(db: AsyncSession, ctx: RunContext, instance_id: str, opinion: str) -> str:

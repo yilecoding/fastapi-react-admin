@@ -340,6 +340,7 @@ PG 和 SQL Server 都过。真模型 `tests/test_ai_workflow_tools_real_model.py
 加核对之后 Qwen3-VL 被拦下、转而问用户要理由，两个模型 3/3。
 
 🔴 **`wf_approve` 不碰「退回给我」的单（#403）**。症状：「把我的待办都同意了」，其中一张是别人退回给发起人的，确认卡片写「同意」，执行后原样重新进了审批。根因：开始节点上的待办「同意」= resubmit（`runtime_service` 那一支），待办工具又不标 `back`。修法：待办输出带 `back` / `back_by` / `back_reason`，预演和执行都拒（`_refuse_resubmit`，执行那次兜免确认 / 令牌已发的路）。**实测证据**：`test_approve_in_chat_never_resubmits_a_request_sent_back_to_me`（2026-11-21，PG 私有库）旧代码红在 `back` 缺失；去掉预演那道 → 红在出了确认卡片，去掉执行那道 → 红在 `done.kind == 'ok'`。
+⚠️ **执行前那道读的是对话的会话，真正办理在 `_act` 另开的会话里**：两次读之间单子被退回到他手上，照样会走成原样重新提交。所以 `wf_approve` 调 `act(..., forbid_resubmit=True)`，`act()` 认领之后、在 resubmit 那一支里抛 `ActionRejected('resubmit_in_chat')`（同一事务，落一条 rejected 记录）。**实测证据**（#403 评审跟进，2026-11-21，PG 私有库）：`test_approve_in_chat_refuses_a_send_back_that_lands_after_the_check` 把 `_refuse_resubmit` 换成空操作模拟这个窗口，旧代码红在 `kind='ok'`（单子被重新提交）。
 
 ## 设计器一句话生成（#111 第 1 条，`service/ai_design_service.py`）
 

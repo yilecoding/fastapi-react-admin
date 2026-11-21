@@ -38,6 +38,6 @@
 **症状**：流程里有「发起人确认」节点（`kind='initiator'`）时，工作台显示「退回给我 1」、「待审批」少 1，列表里却没有一行 `back`。
 **根因**：`query_service.todo` 的 `returned_total` 在 SQL 里按 `initiator_id == assignee_id` 数，前提是「审批人解析永远去掉发起人」——
 而 `kind='initiator'` 正是那条唯一的例外（`engine/assignee.py`）。逐行的 `back` 按开始节点认，两边口径不一致。
-**修法**：`_returned_total` 先按「办理人就是发起人」缩小到这个人自己发起的几张，再逐行对快照里的开始节点 id（同快照只解析一次）。
+**修法**：`_returned_total` 先按「办理人就是发起人」缩小到这个人自己发起的几张，再对快照里的开始节点 id。评审跟进改成按「版本 × 节点」`GROUP BY` 计数、每个版本只取一份快照（快照 = 发起时那个版本的 `model_json`）：这个计数不封顶，原来逐行把整份快照拉回 Python，「发起人确认」多的流程一个人手上几千条就是几千份大文本。⚠️ 「改派之后两边口径对不上」评审时怀疑过、实测不成立：开始节点上的待办能力信封里没有改派 / 转交（改派接口 409），它只可能在发起人手上。
 **实测证据**（2026-11-21，PostgreSQL 私有库）：`test_dashboard_feeds.py::test_returned_total_skips_initiator_confirm_nodes`
 旧代码红在 `assert 1 == 0`；修后 `test_dashboard_feeds.py` 13 条、整个审批插件 174 passed / 14 skipped。

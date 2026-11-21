@@ -577,6 +577,7 @@
   "关闭 {{name}}": "Close {{name}}",
   "关闭全部标签页": "Close all tabs",
   "关闭其它标签页": "Close other tabs",
+  "关闭前最后填的内容没存上，重新打开补填一下": "Your last edits before closing weren't saved. Reopen the form to fill them in again",
   "关闭右侧标签页": "Close tabs to the right",
   "关闭后仍可通过地址访问，只是不出现在菜单里。": "Still reachable by URL when off — it just does not appear in the menu.",
   "关闭后登录不再要求验证码，暴力破解的门槛会显著降低": "With this off sign-in no longer requires a captcha, which markedly lowers the bar for brute force",

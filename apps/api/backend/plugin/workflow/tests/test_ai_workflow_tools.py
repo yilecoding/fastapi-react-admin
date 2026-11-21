@@ -569,3 +569,22 @@ def test_approve_in_chat_never_resubmits_a_request_sent_back_to_me(
     detail = _detail(client, token_headers, pk)
     assert detail['instance']['status'] == 'running'
     assert not [r for r in detail['records'] if r['action'] == 'resubmit'], '不能替他重新提交'
+
+
+def test_approve_in_chat_refuses_a_send_back_that_lands_after_the_check(
+    client: TestClient, token_headers: dict[str, str], login: Any, uid: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """🔴 执行前那道 `_refuse_resubmit` 读的是对话的会话，真正办理在 `_act` 另开的会话里、认领之后（#403 评审跟进）：
+    两次读之间有人把单退回到他手上，同意照样走成原样重新提交。所以认领之后、同一个事务里还要再判一次。
+    这里把前面那道换成空操作，模拟「检查时还没退回、认领时已经退回了」"""
+    from backend.plugin.workflow import ai_tools
+    from backend.plugin.workflow.tests.test_ops import _act as act_api
+
+    _setup(client, token_headers, uid, 'PYTEST_AIWF_BACK2')
+    pk = _start(client, login, 'PYTEST_AIWF_BACK2')
+    ok(act_api(client, login('zhaolei'), pk, 'send_back', target_node_id='start', opinion='补上客户名称'))
+    monkeypatch.setattr(ai_tools, '_refuse_resubmit', lambda d: None)
+    (forced,), _ = _run(monkeypatch, _person(uid('sunqiang'), '孙强'), [('wf_approve', {'instance_id': pk}, True)])
+    assert forced.kind == 'failed' and '退回' in forced.payload, forced
+    detail = _detail(client, token_headers, pk)
+    assert not [r for r in detail['records'] if r['action'] == 'resubmit'], '不能替他重新提交'

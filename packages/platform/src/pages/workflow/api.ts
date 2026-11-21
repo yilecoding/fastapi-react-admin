@@ -536,6 +536,13 @@ export function useAiFill(code: string) {
   })
 }
 
+/** 草稿缓存先写成「将要存的内容」（`null` = 将要删）。关抽屉补发时用：PUT 落地之前就重开，`Filler` 首帧不能拿旧草稿 */
+export function primeDraft(qc: QueryClient, code: string, form: FormData | null, aiFilled: string[] = []): void {
+  qc.setQueryData(draftQuery(code).queryKey, (): Draft | null =>
+    form ? { form, ai_filled: aiFilled, updated_time: new Date().toISOString() } : null,
+  )
+}
+
 export async function removeDraft(qc: QueryClient, code: string): Promise<void> {
   await api.DELETE(`${BASE}/drafts/${encodeURIComponent(code)}`)
   qc.setQueryData(draftQuery(code).queryKey, null)

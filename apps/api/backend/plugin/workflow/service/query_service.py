@@ -190,26 +190,35 @@ async def todo(
 async def _returned_total(db: AsyncSession, stmt: Select) -> int:
     """「退回给我」= 开始节点上的待办（和逐行的 `back` 同一个判据）。
 
-    开始节点的 id 在快照 JSON 里、不是列，SQL 里先按「办理人就是发起人」缩小范围，再逐行对开始节点。
+    开始节点的 id 在快照 JSON 里、不是列，SQL 里先按「办理人就是发起人」缩小范围，再对开始节点。
     🔴 不能只按「办理人就是发起人」数：「发起人自己办」节点（`kind='initiator'`，设计器里的「发起人确认」）上的待办
     办理人也是发起人，但那是一张要办的单 —— 原来工作台显示「退回给我 1」、列表里却没有对应的行（#403）。
-    候选只有「我发起、又在我手上」的那几张，逐行解析快照的代价可以忽略
+    按「版本 × 节点」分组数（快照 = 发起时那个版本的 `model_json`，同一版本一份），每个版本只取一份快照解析：
+    不封顶的计数不能逐行把整份快照拉回来（「发起人确认」多的流程一个人手上能有几千条）
     """
-    rows = (
+    groups = (
         await db.execute(
-            stmt.where(WfInstance.initiator_id == WfTask.assignee_id).with_only_columns(
-                WfTask.node_id, WfInstance.model_snapshot
-            )
+            stmt
+            .where(WfInstance.initiator_id == WfTask.assignee_id)
+            .with_only_columns(WfInstance.version_id, WfTask.node_id, func.count())
+            .group_by(WfInstance.version_id, WfTask.node_id)
+            .order_by(None)
         )
     ).all()
-    roots: dict[str, str] = {}
-    n = 0
-    for node_id, snapshot in rows:
-        root = roots.get(snapshot)
-        if root is None:
-            root = roots.setdefault(snapshot, json.loads(snapshot)['root']['id'])
-        n += node_id == root
-    return n
+    if not groups:
+        return 0
+    one = (
+        select(func.min(WfInstance.id))
+        .where(WfInstance.version_id.in_({v for v, _, _ in groups}))
+        .group_by(WfInstance.version_id)
+    )
+    roots = {
+        v: json.loads(snapshot)['root']['id']
+        for v, snapshot in (
+            await db.execute(select(WfInstance.version_id, WfInstance.model_snapshot).where(WfInstance.id.in_(one)))
+        ).all()
+    }
+    return sum(n for v, node_id, n in groups if node_id == roots.get(v))
 
 
 def _todo_row(

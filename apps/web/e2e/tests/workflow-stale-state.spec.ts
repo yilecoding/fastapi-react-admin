@@ -1,4 +1,4 @@
-import { request } from "@playwright/test"
+import { type Page, type Request, request } from "@playwright/test"
 
 import { API_BASE, createApiClient, expect, loginPageAs, loginToken, test } from "../fixtures/base"
 
@@ -207,5 +207,203 @@ test("发起草稿：填完最后一个字段立刻点「取消」，那次保�
   await p.getByTestId(`wf-start-${code}`).click()
   await expect(sheet.getByTestId("wf-field-f_reason").locator("input")).toHaveValue("填完马上关")
   await sheet.getByTestId("wf-draft-clear").click()
+  await p.close()
+})
+
+// ── 评审跟进（#403）─────────────────────────────────────────────────────────
+
+test("会签：改了又改回原值的字段不算改过，不会把先同意的人改的值盖回去", async ({ browser }) => {
+  const code = `${CODE}R`
+  const people = [await userId("zhaolei"), await userId("wangfang")]
+  await publish(
+    code,
+    {
+      schemaVersion: 1,
+      root: {
+        type: "start", id: "start",
+        next: {
+          type: "approval", id: "n_all", name: "会签", mode: "all",
+          assignee: { kind: "user", user_ids: people }, onEmpty: "reject",
+          fieldPerms: { f_amount: "editable", f_note: "editable" },
+          next: null,
+        },
+      },
+    },
+    [
+      { id: "f_reason", type: "text", label: "事由" },
+      { id: "f_amount", type: "number", label: "核定金额" },
+      { id: "f_note", type: "textarea", label: "备注" },
+    ],
+  )
+  const s = await as("sunqiang")
+  const { instance_id: id } = (await s.post("/sys/workflow/instances", {
+    code,
+    form: { f_reason: "改回原值", f_amount: 100, f_note: "原备注" },
+    key: key(),
+  })) as { instance_id: string }
+  await s.dispose()
+
+  const w = await browser.newPage()
+  await loginPageAs(w, "wangfang", "123456")
+  await w.goto(`/workflow/inbox?id=${id}`)
+  const sheet = w.getByTestId("wf-instance-sheet")
+  const amount = sheet.getByTestId("wf-field-f_amount").locator("input")
+  await expect(amount).toHaveValue("100")
+  // 王芳把金额改成 90、想想又改回 100
+  await amount.fill("90")
+  await amount.fill("100")
+
+  // 赵磊这时把金额改成 80 并同意
+  const z = await as("zhaolei")
+  await z.post(`/sys/workflow/instances/${id}/actions`, { action: "approve", key: key(), form: { f_amount: 80 } })
+
+  await sheet.getByTestId("wf-field-f_note").locator("textarea").fill("王芳补的备注")
+  const sent = w.waitForRequest((r) => r.url().endsWith(`/instances/${id}/actions`) && r.method() === "POST")
+  await sheet.getByTestId("wf-act-approve").click()
+  // 🔴 金额和她打开时一样 = 没改过，不发
+  expect((await sent).postDataJSON().form).toEqual({ f_note: "王芳补的备注" })
+  await expect(sheet).toBeHidden()
+  const detail = (await z.get(`/sys/workflow/instances/${id}`)) as { form_data: Record<string, unknown> }
+  expect(Number(detail.form_data.f_amount)).toBe(80)
+  await z.dispose()
+  await w.close()
+})
+
+/** 只有一个「事由」字段的流程：草稿那几条用 */
+async function publishDraftFlow(code: string) {
+  await publish(
+    code,
+    {
+      schemaVersion: 1,
+      root: {
+        type: "start", id: "start",
+        next: {
+          type: "approval", id: "n1", name: "直属主管", mode: "any",
+          assignee: { kind: "dept_leader", level: 1 }, onEmpty: "reject", next: null,
+        },
+      },
+    },
+    [{ id: "f_reason", type: "text", label: "事由" }],
+  )
+}
+
+async function serverDraft(code: string): Promise<string | undefined> {
+  const s = await as("sunqiang")
+  const d = (await s.get(`/sys/workflow/drafts/${code}`)) as { form?: Record<string, string> } | null
+  await s.dispose()
+  return d?.form?.f_reason
+}
+
+async function openStart(p: Page, code: string) {
+  await p.locator('[data-tab="/_auth/workflow/inbox"]').getByTestId("wf-start-menu").click()
+  await p.getByTestId("wf-template-search").fill(code)
+  await p.getByTestId(`wf-start-${code}`).click()
+}
+
+const isDraftPut = (code: string) => (r: Request) => r.url().endsWith(`/drafts/${code}`) && r.method() === "PUT"
+
+test("发起草稿：关抽屉时补发的那次，等路上那次落地之后才发，服务端留的是最后打的字", async ({ browser }) => {
+  const code = `${CODE}Q`
+  await publishDraftFlow(code)
+  const p = await browser.newPage()
+  await loginPageAs(p, "sunqiang", "123456")
+  // 第一次 PUT 在路上多走 2.5 秒
+  let first = true
+  await p.route(`**/drafts/${code}`, async (route) => {
+    if (route.request().method() === "PUT" && first) {
+      first = false
+      await new Promise((r) => setTimeout(r, 2500))
+    }
+    await route.fallback()
+  })
+  await p.goto(`/workflow/inbox?start=${code}`)
+  const sheet = p.getByTestId("wf-start-sheet")
+  const input = sheet.getByTestId("wf-field-f_reason").locator("input")
+  await expect(input).toBeVisible()
+  const firstPut = p.waitForRequest(isDraftPut(code))
+  await input.fill("第一版")
+  await firstPut
+  let done = 0
+  p.on("requestfinished", (r) => {
+    if (isDraftPut(code)(r)) done++
+  })
+  await input.fill("第二版")
+  await sheet.getByRole("button", { name: "取消", exact: true }).click()
+  await expect(sheet).toBeHidden()
+  await expect.poll(() => done, { timeout: 10_000 }).toBe(2)
+  // 🔴 原来补发的那次不等，先到服务端，路上那次后到 —— 留下的是「第一版」
+  expect(await serverDraft(code)).toBe("第二版")
+  await p.close()
+})
+
+test("发起草稿：提交失败之后点「取消」，最后打的字照样补存", async ({ browser }) => {
+  const code = `${CODE}F`
+  await publishDraftFlow(code)
+  const p = await browser.newPage()
+  await loginPageAs(p, "sunqiang", "123456")
+  // 提交慢 2 秒再失败：1.5 秒的防抖在「提交中」触发
+  await p.route(/\/api\/v1\/sys\/workflow\/instances$/, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    await new Promise((r) => setTimeout(r, 2000))
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ code: 400, msg: "E2E 造的提交失败", data: null }),
+    })
+  })
+  await p.goto(`/workflow/inbox?start=${code}`)
+  const sheet = p.getByTestId("wf-start-sheet")
+  const input = sheet.getByTestId("wf-field-f_reason").locator("input")
+  await expect(input).toBeVisible()
+  await input.fill("提交失败后取消")
+  await sheet.getByTestId("wf-start-submit").click()
+  await expect(p.getByText("E2E 造的提交失败")).toBeVisible()
+  const saved = p.waitForRequest(isDraftPut(code), { timeout: 5_000 })
+  await sheet.getByRole("button", { name: "取消", exact: true }).click()
+  await expect(sheet).toBeHidden()
+  // 🔴 原来防抖在提交中触发时把「排着的那次」清掉了，关抽屉时没东西可补
+  expect((await saved).postDataJSON().form).toEqual({ f_reason: "提交失败后取消" })
+  await p.close()
+})
+
+test("发起草稿：关抽屉时补发失败要看得见", async ({ browser }) => {
+  const code = `${CODE}E`
+  await publishDraftFlow(code)
+  const p = await browser.newPage()
+  await loginPageAs(p, "sunqiang", "123456")
+  await p.route(`**/drafts/${code}`, (route) => (route.request().method() === "PUT" ? route.abort() : route.fallback()))
+  await p.goto(`/workflow/inbox?start=${code}`)
+  const sheet = p.getByTestId("wf-start-sheet")
+  const input = sheet.getByTestId("wf-field-f_reason").locator("input")
+  await expect(input).toBeVisible()
+  await input.fill("这次存不上")
+  await sheet.getByRole("button", { name: "取消", exact: true }).click()
+  await expect(sheet).toBeHidden()
+  // 🔴 抽屉已经卸载，状态栏那句「草稿没存上」画不出来 —— 原来什么提示都没有（硬纪律 9）
+  await expect(p.getByText("关闭前最后填的内容没存上")).toBeVisible()
+  await p.close()
+})
+
+test("发起草稿：补发还在路上就重开，看到的是刚填的", async ({ browser }) => {
+  const code = `${CODE}O`
+  await publishDraftFlow(code)
+  const p = await browser.newPage()
+  await loginPageAs(p, "sunqiang", "123456")
+  await p.route(`**/drafts/${code}`, async (route) => {
+    if (route.request().method() === "PUT") await new Promise((r) => setTimeout(r, 3000))
+    await route.fallback()
+  })
+  await p.goto(`/workflow/inbox?start=${code}`)
+  const sheet = p.getByTestId("wf-start-sheet")
+  const input = sheet.getByTestId("wf-field-f_reason").locator("input")
+  await expect(input).toBeVisible()
+  const landed = p.waitForResponse((r) => isDraftPut(code)(r.request()))
+  await input.fill("马上重开")
+  await sheet.getByRole("button", { name: "取消", exact: true }).click()
+  await expect(sheet).toBeHidden()
+  await openStart(p, code)
+  // 🔴 原来那次 PUT 落地之前缓存还是旧的（空），重开是白表，接着打字会把服务端的新草稿盖掉
+  await expect(input).toHaveValue("马上重开")
+  await landed
   await p.close()
 })
