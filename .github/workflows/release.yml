@@ -6,7 +6,7 @@
 # 能不能连上后端，机器判不了。
 #
 # 不打 tag 也能试：Actions → Release → Run workflow，产物作为 workflow artifact
-# 上传，**不碰 release**。一条从没跑过的发布流水线，第一次跑一定是在最不该出错的时候。
+# 上传，**不碰 release、不签名**（闸门只在 tag 上跑，试跑拿不到证书，#393）。一条从没跑过的发布流水线，第一次跑一定是在最不该出错的时候。
 name: Release
 
 on:
@@ -73,44 +73,37 @@ jobs:
       # 这里报错。到 Actions 里把那一轮 re-run 绿了，再重跑本 workflow 即可。重跑不会取消 HEAD 正在跑的那一轮
       # （ci.yml 只在 run_attempt == 1 时 cancel-in-progress），而是排在它后面 —— 所以会先等 HEAD 跑完。
       # 旧提交重跑只补质量检查和 SHA 镜像；latest 与 Pages 仅发布 main 当前提交。
-      # 预发布 tag（v1.2.0-rc.1）只警告不拦：那是用来试发布流水线本身的口子。
+      # 🔴 预发布 tag（v1.2.0-rc.1）**同样拦**（#393）。原来带 `-` 的只警告不拦，任意分支打个 `v1.1.0-x`
+      # 就能出包、把 latest.yml 传进草稿。要试流水线本身用 Run workflow（workflow_dispatch：不碰 Release、不签名）；
+      # 要试「发到 Release」那一步，就在 main 上一个 CI 绿的提交上打预发布 tag。
+      # 判定在 scripts/release-gate.mjs（测试：scripts/tests/release-gate.test.mjs，pnpm test:ci）。
       - name: tag 的提交在 main 上，且 CI 已经绿了
+        id: gate
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          fail() { if [[ "$GITHUB_REF_NAME" == *-* ]]; then echo "::warning::$1（预发布 tag，放行）"; exit 0; else echo "::error::$1"; exit 1; fi; }
-          # compare main...SHA：SHA 是 main 的祖先时 status 是 behind / identical
-          REL=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$GITHUB_SHA" --jq .status)
-          case "$REL" in behind|identical) echo "提交在 main 上（$REL）" ;; *) fail "tag 指向的 $GITHUB_SHA 不在 main 上（$REL）：先合进 main 再打 tag" ;; esac
-          for i in $(seq 1 150); do
-            RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA&event=push&per_page=1" \
-              --jq '.workflow_runs[0] // empty | "\(.status) \(.conclusion) \(.html_url)"')
-            # 合并后马上推 tag 时，push 触发的那轮 CI 可能还没登记 —— 先等，5 分钟还没有才算真找不到
-            if [ -z "$RUN" ]; then
-              [ "$i" -ge 10 ] && fail "找不到 $GITHUB_SHA 在 main 上的 CI 运行"
-              echo "CI 还没登记，30 秒后再看…"; sleep 30; continue
-            fi
-            read -r STATUS CONCLUSION URL <<< "$RUN"
-            if [ "$STATUS" = completed ]; then
-              [ "$CONCLUSION" = success ] && { echo "CI 绿：$URL"; exit 0; }
-              fail "这个提交的 CI 结论是 $CONCLUSION：$URL"
-            fi
-            echo "CI 还在跑（$STATUS），30 秒后再看…"; sleep 30
-          done
-          fail "等了 75 分钟 CI 还没跑完"
+        run: node scripts/release-gate.mjs
 
+      # 🔴 预发布要标 prerelease（#393）：没标的话维护者点了发布，GitHub 就把它当 latest，
+      # 走默认更新源的桌面端（electron-updater 默认不拉 prerelease）会自动升上去。
+      # 草稿已存在（重跑）时也补一次标记 —— 那份草稿可能是修这条之前建的。
       - name: 建草稿（已存在就跳过）
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PRERELEASE: ${{ steps.gate.outputs.prerelease }}
         run: |
+          FLAG=""
+          if [ "$PRERELEASE" = true ]; then FLAG="--prerelease"; fi
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             echo "草稿已存在，复用"
+            if [ -n "$FLAG" ]; then gh release edit "$GITHUB_REF_NAME" --prerelease; fi
           else
-            gh release create "$GITHUB_REF_NAME" --draft \
+            # shellcheck disable=SC2086
+            gh release create "$GITHUB_REF_NAME" --draft $FLAG \
               --title "$GITHUB_REF_NAME" \
               --notes-file apps/desktop/release-notes.md \
               --generate-notes
           fi
+          echo "prerelease=$PRERELEASE"
 
   build:
     name: ${{ matrix.label }}
@@ -193,15 +186,18 @@ jobs:
       # 签名是**可选**的：仓库里配了对应 secrets 就签，没配就出未签名包 ——
       # 两条路都能跑通，区别只在用户端会不会被 SmartScreen / Gatekeeper 拦。
       # 怎么申请免费证书、以及 Windows 那条为什么不能「打完再签」，见 apps/desktop/AGENTS.md
+      # 🔴 证书只给 push（tag）构建（#393）：push 下 build 必须等 prepare 成功，也就是过了上面「在 main 上、CI 绿」
+      # 的闸门；workflow_dispatch 跳过了 prepare，在任意未评审分支上点 Run workflow 都能跑到这里。
+      # 不门控的话，接上证书那天，试跑就能拿到带正式签名的包。试跑一律出未签名包（下面会 unset 空值）
       - name: 出安装包
         env:
           # Windows / macOS 通用：electron-builder 认这两个（.pfx / .p12）
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ github.event_name == 'push' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ github.event_name == 'push' && secrets.CSC_KEY_PASSWORD || '' }}
           # macOS 公证（notarize）用
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ github.event_name == 'push' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ github.event_name == 'push' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ github.event_name == 'push' && secrets.APPLE_TEAM_ID || '' }}
         run: |
           # 🔴 没配的 secret 在这里是**空串**，不是「没有这个变量」—— 而 electron-builder 26 把空串的
           # CSC_LINK 当成一个值（源码注释「allow to specify as empty string」），解析成当前目录，

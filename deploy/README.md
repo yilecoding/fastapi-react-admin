@@ -107,12 +107,44 @@ bash prod.sh sync       # 从 GitHub 取仓库版本，先 diff 给你看，确�
 ### 回滚
 
 镜像除了 `latest` 还有 `sha-<短 SHA>` 和 `sha-<完整 SHA>` 两种标签，
-改 `TAG` 重新拉 + 重启即可，不用等一次新构建：
+改 `TAG` 重新拉 + 重启即可，不用等一次新构建。**但只有新旧两版之间没有数据库迁移时，才能直接这么做：**
 
 ```bash
 TAG=sha-abc1234 bash prod.sh pull
 TAG=sha-abc1234 bash prod.sh up
 ```
+
+🔴 **要撤掉的版本带了迁移，直接换 `TAG` 会让整站停掉**（#393）。`up` 先用旧镜像跑
+`alembic upgrade head`，而库里记的版本号旧镜像不认得：`Can't locate revision identified by '…'`，
+migrate 失败，api / worker 不启动，依赖 api 的 beat / web 也起不来。就算跳过 migrate，旧 api 的生产启动检查也会因为
+「数据库迁移版本不等于 head」拒绝启动。所以**先用新镜像把库降到旧版的 head，再换镜像**。
+
+下面的命令在服务器上和 `docker-compose.prod.yml` 同一层执行；`<新>` 是现在正在跑的那一版（`bash prod.sh status`
+显示的提交，写成 `sha-<短 SHA>`），`<旧>` 是要回到的那一版：
+
+```bash
+# 0. 先备份数据库（每次部署前本来就该有一份）
+# 1. 拉旧镜像，查旧版的迁移 head（输出里带 (head) 的那一行，比如 ar000000smsoptcreds）
+TAG=<旧> bash prod.sh pull
+TAG=<旧> docker compose -f docker-compose.prod.yml run --rm --no-deps migrate \
+  sh -c 'cd /app/backend && alembic heads'
+# 2. 看两版之间有哪些迁移；逐个 alembic show <修订号> 读说明，找「downgrade 什么都不做 / 保留密文」这类
+TAG=<新> docker compose -f docker-compose.prod.yml run --rm --no-deps migrate \
+  sh -c 'cd /app/backend && alembic history -r <旧 head>:head'
+# 3. 停服务，用新镜像降级（降级会删新加的列，别让新版代码边跑边被删）
+bash prod.sh down
+TAG=<新> docker compose -f docker-compose.prod.yml run --rm --no-deps migrate \
+  sh -c 'cd /app/backend && alembic downgrade <旧 head>'
+# 4. 换回旧镜像。migrate 这时是空操作，旧 api 的启动检查也对得上
+TAG=<旧> bash prod.sh up
+```
+
+⚠️ **第 2 步看到 downgrade 不还原数据的迁移，降级就不够，要恢复备份。** 只动结构的迁移能干净降回去；
+改数据的那几条（加密、清理）downgrade 是空的，数据停在新格式。比如 `at000000configsecret`（1.1.1 起）把参数配置里的密钥
+加密成 `enc:v1:…`，降级后库里仍是密文，而 1.1.0 不认这个格式。这种情况按「停服务 → 恢复升级前的备份 → `TAG=<旧> bash prod.sh up`」做，
+升级之后新写进库里的数据会一起丢掉，回滚前先想清楚。
+
+已经照旧办法敲了 `TAG=<旧> bash prod.sh up`、站点停了：用 `TAG=<新> bash prod.sh up` 起回新版，再按上面的步骤来。
 
 ⚠️ 2026-09-02 之前构建的镜像**只有完整 SHA 标签**，回滚到更早的版本要用完整的。
 

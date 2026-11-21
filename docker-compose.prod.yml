@@ -70,6 +70,8 @@ x-api-base: &api-base
 services:
   # 跑一次性的 schema 迁移，跑完才允许 API 接流量。
   # 部署前先备份外部数据库；Alembic 没有自动回滚。
+  # 🔴 回滚到更早的版本时这里会用旧镜像跑 upgrade head：两版之间有迁移就报 Can't locate revision、整站起不来，
+  # 要先用新镜像 downgrade（步骤见 deploy/README.md「回滚」，#393）。
   migrate:
     <<: *api-base
     restart: "no"

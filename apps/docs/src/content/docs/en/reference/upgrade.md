@@ -48,8 +48,38 @@ TAG=sha-abc1234 bash prod.sh up
 ```
 
 :::caution
-Rolling back the image **does not roll back the database**. If the new version brought migrations, make sure the old code runs on the new schema, or restore the backup first. Each release's "Upgrade" section says whether it has migrations.
+These two lines **only work when there are no database migrations between the two versions**. Rolling back the image does not roll back the database; if the new version brought migrations, the old image's migrate step fails with `Can't locate revision` and the whole site stays down. For versions with migrations, follow [How do I roll back to an older version?](#how-do-i-roll-back-to-an-older-version) below.
 :::
+
+## How do I roll back to an older version?
+
+**No migrations between the two versions**: pull the old tag and `up`, as in the two lines above.
+
+**With migrations**: downgrade the database to the old version's migration head using the **new** image first, then switch to the old image. Doing it the other way round takes the site down as described above: the old image doesn't know the revision recorded in the database, and the old api's startup check refuses to start. Run these on the server next to `docker-compose.prod.yml`; `<new>` is the version currently running (the commit `bash prod.sh status` shows, written as `sha-<short SHA>`), `<old>` is the one you're going back to:
+
+```bash
+# 1. Pull the old image and find its migration head (the line marked (head))
+TAG=<old> bash prod.sh pull
+TAG=<old> docker compose -f docker-compose.prod.yml run --rm --no-deps migrate \
+  sh -c 'cd /app/backend && alembic heads'
+# 2. List the migrations in between and read each one with alembic show <revision>
+TAG=<new> docker compose -f docker-compose.prod.yml run --rm --no-deps migrate \
+  sh -c 'cd /app/backend && alembic history -r <old head>:head'
+# 3. Stop the services and downgrade with the new image
+bash prod.sh down
+TAG=<new> docker compose -f docker-compose.prod.yml run --rm --no-deps migrate \
+  sh -c 'cd /app/backend && alembic downgrade <old head>'
+# 4. Switch back to the old image
+TAG=<old> bash prod.sh up
+```
+
+**Check**: `bash prod.sh status` shows the old commit; `/api/health/status` returns 200.
+
+:::danger
+**Some migrations don't restore data on downgrade; then you need the backup.** Schema-only migrations downgrade cleanly; data migrations (encryption, cleanup) have an empty downgrade, so the data stays in the new format. In step 2, a description saying the downgrade does nothing or keeps ciphertext means this case. For example, going back to 1.1.0: `at000000configsecret` has already encrypted the secrets in system config, they stay encrypted after the downgrade, and 1.1.0 can't read them — so stop the services, restore the pre-upgrade backup, then `TAG=<old> bash prod.sh up`. Restoring the backup loses anything written after the upgrade.
+:::
+
+If you already switched to the old image and the site is down: bring the new version back with `TAG=<new> bash prod.sh up`, then follow the steps above.
 
 All commands are in [Deploying to a server](/en/getting-started/deployment/).
 

@@ -78,6 +78,8 @@ TAG=sha-abc1234 bash prod.sh pull
 TAG=sha-abc1234 bash prod.sh up
 ```
 
+⚠️ 这样直接换镜像只适用于新旧两版之间**没有数据库迁移**的情况。带迁移的版本要先用新镜像降级数据库，否则旧镜像的 migrate 失败、整站停掉，步骤见[怎么回滚到旧版本？](/reference/upgrade/#怎么回滚到旧版本)。
+
 ## 外部监控探哪个地址
 
 只探一个：`https://<你的域名>/api/health/status`。它列出 API、数据库、Redis、调度器（beat）、worker 和长任务 worker（`worker_long`）的状态，全部正常返回 **200**，任何一项异常返回 **503**。
