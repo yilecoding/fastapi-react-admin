@@ -1,0 +1,78 @@
+# #406：没登录也改得了服务器地址。原来唯一的入口在已登录那棵树的设置屏里，
+# 存进去的服务器之后连不上 / 在那台服务器上没账号，就停在登录屏改不回来。
+#
+# 登录屏 → 「服务器」那一行 → 填一个连不上的地址（10.0.2.2:9，拒绝连接）→ 报错、地址不变
+# → 换成同一个后端的另一个地址（127.0.0.1:8001，workflow 里 `adb reverse` 过去的）→ 回到登录屏、
+# 那一行显示新地址 → 用新地址登录成功。打包时焊进去的默认地址是 10.0.2.2:8001。
+appId: com.fastapireactadmin.mobile
+---
+- retry:
+    maxRetries: 2
+    commands:
+      - stopApp
+      - launchApp:
+          clearState: true
+      - extendedWaitUntil:
+          visible:
+            id: login-username
+          timeout: 40000
+
+- scrollUntilVisible:
+    element:
+      id: login-server
+- tapOn:
+    id: login-server
+- extendedWaitUntil:
+    visible:
+      id: server-input
+    timeout: 10000
+
+# 连不上的地址：探测失败要说出来，而且不能存
+- tapOn:
+    id: server-input
+- eraseText: 100
+- inputText: http://10.0.2.2:9
+- hideKeyboard
+- tapOn:
+    id: server-save
+- extendedWaitUntil:
+    visible:
+      id: server-error
+    timeout: 30000
+
+# 连得上的地址：存下来、回到登录屏
+- tapOn:
+    id: server-input
+- eraseText: 100
+- inputText: http://127.0.0.1:8001
+- hideKeyboard
+- tapOn:
+    id: server-save
+- extendedWaitUntil:
+    visible:
+      id: login-username
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: login-server-base
+- assertVisible:
+    id: login-server-base
+    text: http://127.0.0.1:8001
+
+# 新地址上登录（请求真的打到了新地址：10.0.2.2 那条路这时没人用）
+- scrollUntilVisible:
+    element:
+      id: login-username
+    direction: UP
+- tapOn:
+    id: login-username
+- inputText: admin
+- tapOn:
+    id: login-password
+- inputText: "123456"
+- tapOn:
+    id: login-submit
+- extendedWaitUntil:
+    visible:
+      id: tab-apps
+    timeout: 30000

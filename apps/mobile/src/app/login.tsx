@@ -1,14 +1,15 @@
 import { Stack } from 'expo-router'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { KeyRoundIcon, LogOutIcon, ShieldCheckIcon, SmartphoneIcon } from 'lucide-react-native'
+import { ChevronRightIcon, KeyRoundIcon, LogOutIcon, ServerIcon, ShieldCheckIcon, SmartphoneIcon } from 'lucide-react-native'
 import * as React from 'react'
 import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { BrandTop } from '@/components/brand-top'
-import { Group, Row } from '@/components/grouped'
+import { Chevron, Group, PressRow, Row } from '@/components/grouped'
 import { PublicNotices } from '@/components/public-notices'
+import { ServerForm } from '@/components/server-form'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -28,6 +29,7 @@ import {
 import { api } from '@/lib/api'
 import { BRAND } from '@/lib/brand'
 import { remembered } from '@/lib/remember'
+import { useServer } from '@/lib/server'
 import { useSession, type MfaChallenge } from '@/lib/session'
 
 /**
@@ -67,6 +69,13 @@ export default function LoginScreen() {
   const { t } = useTranslation()
   const { login, loginByPhone, verifyMfa, bootstrapError, endReason } = useSession()
   const insets = useSafeAreaInsets()
+  const { base } = useServer()
+  /*
+   * 改服务器地址（#406）。🔴 **必须在登录屏上就改得了**：原来唯一的入口在已登录那棵树的设置屏里，
+   * 存进去的服务器之后连不上 / 在那台服务器上没账号，就停在这里改不回来。
+   * 不做成路由：`AuthGate` 按登录态挂两棵互斥的树，表单在这棵树里原地展开，不牵涉跨树跳转
+   */
+  const [editingServer, setEditingServer] = React.useState(false)
 
   const [method, setMethod] = React.useState<Method>('password')
   /*
@@ -141,7 +150,8 @@ export default function LoginScreen() {
    * 拿配额换一次必然的失败。
    */
   const captchaQuery = useQuery({
-    queryKey: ['auth', 'captcha'] as const,
+    // 🔴 key 带服务器地址：登录屏上能换服务器了（#406），换完要从新服务器重新取，旧服务器的 uuid 在新服务器上不认
+    queryKey: ['auth', 'captcha', base] as const,
     queryFn: () => api.GET('/api/v1/auth/captcha'),
     // 验证码是一次性的，不该被当成「新鲜数据」复用
     staleTime: 0,
@@ -348,10 +358,19 @@ export default function LoginScreen() {
    */
   const sessionNotice = bootstrapError ? (
     <View className="px-4">
-      <Alert variant="destructive" icon={KeyRoundIcon}>
+      <Alert variant="destructive" icon={KeyRoundIcon} testID="login-bootstrap-error">
         <AlertTitle>{t('启动时没能连上服务器')}</AlertTitle>
         <AlertDescription>{bootstrapError}</AlertDescription>
       </Alert>
+      {/* 连不上的常见原因就是地址本身不对 / 那台服务器下线了：入口直接放在错误旁边（#406） */}
+      <Button
+        variant="outline"
+        onPress={() => setEditingServer(true)}
+        testID="login-change-server"
+        className="mt-2 rounded-xl"
+      >
+        <Text>{t('更换服务器')}</Text>
+      </Button>
     </View>
   ) : endReason ? (
     <View className="px-4">
@@ -391,197 +410,231 @@ export default function LoginScreen() {
             </View>
           </BrandTop>
 
-          <View className="px-4 pt-4">
-            <Tabs value={method} onValueChange={(v) => setMethod(v as Method)}>
-              <TabsList className="w-full flex-row">
-                {METHODS.map((m) => (
-                  <TabsTrigger key={m.value} value={m.value} className="flex-1 flex-row gap-1.5">
-                    <Icon as={m.icon} className="size-3.5" />
-                    <Text>{t(m.label)}</Text>
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </View>
-
-          {/* 🔴 两个页签内容高度要一致，否则切换时下面的东西会跳 */}
-          <View style={{ minHeight: 336 }} className="pt-4">
-            {mfa ? (
-              <MfaStep
-                challenge={mfa.challenge}
-                otp={otp}
-                onChangeOtp={setOtp}
-                onSubmit={() => void submitOtp()}
-                onBack={leaveMfa}
-                submitting={submitting}
-                error={error}
-              />
-            ) : method === 'phone' ? (
-              <View className="gap-4">
-                {sessionNotice}
-
-                <Group>
-                  <FieldRow first label={t('手机号')}>
-                    <Input
-                      value={phone}
-                      // 🔴 先规整、不设 maxLength：自动填充的「+86 138 0013 8000」会被 maxLength 截断（见 `normalizePhone`）
-                      onChangeText={(v) => setPhone(normalizePhone(v))}
-                      keyboardType="number-pad"
-                      textContentType="telephoneNumber"
-                      autoComplete="tel"
-                      placeholder={t('请输入手机号')}
-                      testID="login-phone"
-                      className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
-                    />
-                  </FieldRow>
-                  <CaptchaRow state={captcha} code={code} onChangeCode={setCode} onRetry={loadCaptcha} />
-                  <FieldRow label={t('短信验证码')}>
-                    <Input
-                      value={smsCode}
-                      onChangeText={setSmsCode}
-                      keyboardType="number-pad"
-                      // iOS 从短信里取码填进来；Android 走 autofill 的 sms-otp
-                      textContentType="oneTimeCode"
-                      autoComplete="sms-otp"
-                      maxLength={6}
-                      placeholder="123456"
-                      onSubmitEditing={() => void submitPhone()}
-                      testID="login-sms-code"
-                      className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
-                    />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!canSendSms}
-                      onPress={() => void sendSms()}
-                      testID="login-sms-send"
-                      // 定宽：「发送验证码」和「58 秒」来回切时输入框不跟着伸缩
-                      className="min-w-[96px]"
-                    >
-                      {smsSending ? (
-                        <ActivityIndicator size="small" />
-                      ) : (
-                        <Text>{smsCooling ? t('{{n}} 秒', { n: smsLeft }) : t('发送验证码')}</Text>
-                      )}
-                    </Button>
-                  </FieldRow>
-                </Group>
-
-                {/* 分组块的脚注，同一格、高度不跳：号码格式不对 > 已发送（只对发过的那个号）> 哪种号能用 */}
-                {phoneMalformed ? (
-                  <Text variant="small" className="text-destructive px-5 leading-5" testID="login-phone-malformed">
-                    {t('手机号格式不正确')}
-                  </Text>
-                ) : (
-                  <Text
-                    variant="small"
-                    className="text-muted-foreground px-5 leading-5"
-                    testID={smsSent && smsForPhone && !phoneError ? 'login-sms-sent' : undefined}
-                  >
-                    {smsSent && smsForPhone && !phoneError
-                      ? t('验证码已发送，5 分钟内有效。没收到？核对号码是否在网页端个人中心验证过。')
-                      : t('只认在网页端个人中心验证过的手机号')}
-                  </Text>
-                )}
-
-                {phoneError ? (
-                  <Text variant="small" className="text-destructive px-5" testID="login-phone-error">
-                    {phoneError}
-                  </Text>
-                ) : null}
-
-                <View className="px-4">
-                  <Button
-                    disabled={!canSubmitPhone}
-                    onPress={() => void submitPhone()}
-                    testID="login-phone-submit"
-                    className="h-[50px] rounded-xl"
-                  >
-                    {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
-                    <Text className="text-base font-semibold">{submitting ? t('登录中') : t('登录')}</Text>
-                  </Button>
-                </View>
+          {editingServer ? (
+            <View className="gap-2 pt-4">
+              <View className="flex-row items-center justify-between px-5">
+                <Text className="text-[17px] font-semibold">{t('服务器地址')}</Text>
+                <Pressable onPress={() => setEditingServer(false)} hitSlop={8} testID="server-cancel">
+                  <Text className="text-primary text-[15px]">{t('取消')}</Text>
+                </Pressable>
               </View>
-            ) : (
-              <View className="gap-4">
-                {sessionNotice}
+              <ServerForm onDone={() => setEditingServer(false)} />
+            </View>
+          ) : (
+            <>
+            <View className="px-4 pt-4">
+              <Tabs value={method} onValueChange={(v) => setMethod(v as Method)}>
+                <TabsList className="w-full flex-row">
+                  {METHODS.map((m) => (
+                    <TabsTrigger key={m.value} value={m.value} className="flex-1 flex-row gap-1.5">
+                      <Icon as={m.icon} className="size-3.5" />
+                      <Text>{t(m.label)}</Text>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </View>
 
-                {/* 输入框做成**分组块里的行**：左侧标签、右侧输入。
-                    iOS 上表单就是这个形状，不是一个个描边盒子 */}
-                <Group>
-                  <FieldRow first label={t('用户名')}>
-                    <Input
-                      value={username}
-                      onChangeText={setUsername}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      textContentType="username"
-                      placeholder="admin"
-                      testID="login-username"
-                      className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
-                    />
-                  </FieldRow>
-                  <FieldRow label={t('密码')}>
-                    <Input
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry
-                      textContentType="password"
-                      placeholder="••••••"
-                      onSubmitEditing={() => void submit()}
-                      testID="login-password"
-                      className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
-                    />
-                  </FieldRow>
-                  <CaptchaRow
-                    state={captcha}
-                    code={code}
-                    onChangeCode={setCode}
-                    onRetry={loadCaptcha}
-                    onSubmit={() => void submit()}
-                  />
-                </Group>
+            {/* 🔴 两个页签内容高度要一致，否则切换时下面的东西会跳 */}
+            <View style={{ minHeight: 336 }} className="pt-4">
+              {mfa ? (
+                <MfaStep
+                  challenge={mfa.challenge}
+                  otp={otp}
+                  onChangeOtp={setOtp}
+                  onSubmit={() => void submitOtp()}
+                  onBack={leaveMfa}
+                  submitting={submitting}
+                  error={error}
+                />
+              ) : method === 'phone' ? (
+                <View className="gap-4">
+                  {sessionNotice}
 
-                {error ? (
-                  <Text variant="small" className="text-destructive px-5" testID="login-error">
-                    {error}
-                  </Text>
-                ) : null}
+                  <Group>
+                    <FieldRow first label={t('手机号')}>
+                      <Input
+                        value={phone}
+                        // 🔴 先规整、不设 maxLength：自动填充的「+86 138 0013 8000」会被 maxLength 截断（见 `normalizePhone`）
+                        onChangeText={(v) => setPhone(normalizePhone(v))}
+                        keyboardType="number-pad"
+                        textContentType="telephoneNumber"
+                        autoComplete="tel"
+                        placeholder={t('请输入手机号')}
+                        testID="login-phone"
+                        className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+                      />
+                    </FieldRow>
+                    <CaptchaRow state={captcha} code={code} onChangeCode={setCode} onRetry={loadCaptcha} />
+                    <FieldRow label={t('短信验证码')}>
+                      <Input
+                        value={smsCode}
+                        onChangeText={setSmsCode}
+                        keyboardType="number-pad"
+                        // iOS 从短信里取码填进来；Android 走 autofill 的 sms-otp
+                        textContentType="oneTimeCode"
+                        autoComplete="sms-otp"
+                        maxLength={6}
+                        placeholder="123456"
+                        onSubmitEditing={() => void submitPhone()}
+                        testID="login-sms-code"
+                        className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!canSendSms}
+                        onPress={() => void sendSms()}
+                        testID="login-sms-send"
+                        // 定宽：「发送验证码」和「58 秒」来回切时输入框不跟着伸缩
+                        className="min-w-[96px]"
+                      >
+                        {smsSending ? (
+                          <ActivityIndicator size="small" />
+                        ) : (
+                          <Text>{smsCooling ? t('{{n}} 秒', { n: smsLeft }) : t('发送验证码')}</Text>
+                        )}
+                      </Button>
+                    </FieldRow>
+                  </Group>
 
-                <View className="gap-3 px-4">
-                  {/* iOS 主按钮：满宽、50 高、大圆角 */}
-                  <Button
-                    disabled={!canSubmit}
-                    onPress={() => void submit()}
-                    testID="login-submit"
-                    className="h-[50px] rounded-xl"
-                  >
-                    {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
-                    <Text className="text-base font-semibold">{submitting ? t('登录中') : t('登录')}</Text>
-                  </Button>
-
-                  <Pressable
-                    onPress={() => setRemember(!remember)}
-                    hitSlop={8}
-                    testID="login-remember"
-                    className="flex-row items-center gap-2.5 self-start px-1 py-1"
-                  >
-                    {/* 可点区域包住文字 —— 方块本身在触屏上远低于可用尺寸 */}
-                    <Checkbox checked={remember} onCheckedChange={setRemember} />
-                    <Text variant="small" className="text-muted-foreground">
-                      {t('记住账号')}
+                  {/* 分组块的脚注，同一格、高度不跳：号码格式不对 > 已发送（只对发过的那个号）> 哪种号能用 */}
+                  {phoneMalformed ? (
+                    <Text variant="small" className="text-destructive px-5 leading-5" testID="login-phone-malformed">
+                      {t('手机号格式不正确')}
                     </Text>
-                  </Pressable>
+                  ) : (
+                    <Text
+                      variant="small"
+                      className="text-muted-foreground px-5 leading-5"
+                      testID={smsSent && smsForPhone && !phoneError ? 'login-sms-sent' : undefined}
+                    >
+                      {smsSent && smsForPhone && !phoneError
+                        ? t('验证码已发送，5 分钟内有效。没收到？核对号码是否在网页端个人中心验证过。')
+                        : t('只认在网页端个人中心验证过的手机号')}
+                    </Text>
+                  )}
+
+                  {phoneError ? (
+                    <Text variant="small" className="text-destructive px-5" testID="login-phone-error">
+                      {phoneError}
+                    </Text>
+                  ) : null}
+
+                  <View className="px-4">
+                    <Button
+                      disabled={!canSubmitPhone}
+                      onPress={() => void submitPhone()}
+                      testID="login-phone-submit"
+                      className="h-[50px] rounded-xl"
+                    >
+                      {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
+                      <Text className="text-base font-semibold">{submitting ? t('登录中') : t('登录')}</Text>
+                    </Button>
+                  </View>
                 </View>
-              </View>
-            )}
-          </View>
+              ) : (
+                <View className="gap-4">
+                  {sessionNotice}
+
+                  {/* 输入框做成**分组块里的行**：左侧标签、右侧输入。
+                      iOS 上表单就是这个形状，不是一个个描边盒子 */}
+                  <Group>
+                    <FieldRow first label={t('用户名')}>
+                      <Input
+                        value={username}
+                        onChangeText={setUsername}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        textContentType="username"
+                        placeholder="admin"
+                        testID="login-username"
+                        className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+                      />
+                    </FieldRow>
+                    <FieldRow label={t('密码')}>
+                      <Input
+                        value={password}
+                        onChangeText={setPassword}
+                        secureTextEntry
+                        textContentType="password"
+                        placeholder="••••••"
+                        onSubmitEditing={() => void submit()}
+                        testID="login-password"
+                        className="h-auto flex-1 border-0 bg-transparent px-0 shadow-none"
+                      />
+                    </FieldRow>
+                    <CaptchaRow
+                      state={captcha}
+                      code={code}
+                      onChangeCode={setCode}
+                      onRetry={loadCaptcha}
+                      onSubmit={() => void submit()}
+                    />
+                  </Group>
+
+                  {error ? (
+                    <Text variant="small" className="text-destructive px-5" testID="login-error">
+                      {error}
+                    </Text>
+                  ) : null}
+
+                  <View className="gap-3 px-4">
+                    {/* iOS 主按钮：满宽、50 高、大圆角 */}
+                    <Button
+                      disabled={!canSubmit}
+                      onPress={() => void submit()}
+                      testID="login-submit"
+                      className="h-[50px] rounded-xl"
+                    >
+                      {submitting ? <ActivityIndicator size="small" color="#fff" /> : null}
+                      <Text className="text-base font-semibold">{submitting ? t('登录中') : t('登录')}</Text>
+                    </Button>
+
+                    <Pressable
+                      onPress={() => setRemember(!remember)}
+                      hitSlop={8}
+                      testID="login-remember"
+                      className="flex-row items-center gap-2.5 self-start px-1 py-1"
+                    >
+                      {/* 可点区域包住文字 —— 方块本身在触屏上远低于可用尺寸 */}
+                      <Checkbox checked={remember} onCheckedChange={setRemember} />
+                      <Text variant="small" className="text-muted-foreground">
+                        {t('记住账号')}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              )}
+            </View>
+            </>
+          )}
 
           {/*
             登录页公告（#190，不用登录）。放在表单**下面**：它的加载 / 失败都不能挡住登录，
             放上面的话一来一回会把输入框顶下去，键盘弹起时还会把表单挤出可视区
           */}
           <PublicNotices />
+
+          {/* 服务器地址：未登录时唯一能改它的地方（#406）。二次验证进行中不给换 —— 挑战令牌是那台服务器发的 */}
+          {!editingServer && !mfa ? (
+            <View className="pt-4">
+              <Group>
+                <PressRow first onPress={() => setEditingServer(true)} testID="login-server">
+                  <Icon as={ServerIcon} className="text-muted-foreground size-4" />
+                  <Text className="text-[15px]">{t('服务器')}</Text>
+                  <Text
+                    className="text-muted-foreground flex-1 text-right font-mono text-xs"
+                    numberOfLines={1}
+                    testID="login-server-base"
+                  >
+                    {base}
+                  </Text>
+                  <Chevron icon={ChevronRightIcon} />
+                </PressRow>
+              </Group>
+            </View>
+          ) : null}
 
           <View className="mt-auto flex-row items-center justify-between gap-3 px-5 pt-6">
             <Text numberOfLines={1} className="text-muted-foreground shrink font-mono text-[9.5px]">
