@@ -28,6 +28,23 @@ export function httpUrl(raw: string): string | null {
   }
 }
 
+/**
+ * 桌面端的服务器地址（`config.serverUrl`，#392）：规范化成**末尾不带斜杠**的基址，不合格返回 null。
+ *
+ * 比 `httpUrl` 多挡三样：查询串、片段、账号密码。渲染层按 `${API_BASE}${path}` 拼请求，
+ * `https://h/?env=prod` 会拼成 `https://h/?env=prod/api/v1/...`（打到站点根、拿回 HTML）；
+ * 带 `user:pass@` 的地址 Chromium 的 fetch 直接拒绝构造请求。路径前缀（反代子路径）保留。
+ */
+export function serverBaseUrl(raw: string): string | null {
+  const href = httpUrl(raw)
+  if (!href) return null
+  const url = new URL(href)
+  if (url.search || url.hash || url.username || url.password) return null
+  // `new URL('https://h/?').search` 是空串，但 href 里留着 `?`：按原文再挡一次
+  if (/[?#]/.test(raw)) return null
+  return href.replace(/\/+$/, "")
+}
+
 /** 桌面外开只额外允许邮件链接；tel: 和其它系统协议仍交给白名单拒绝。 */
 export function externalUrl(raw: string): string | null {
   const url = httpUrl(raw)

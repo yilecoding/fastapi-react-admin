@@ -20,7 +20,18 @@ export function registerIpc(appInfo: () => unknown): void {
   ipcMain.handle(IPC.appInfo, () => appInfo())
 
   ipcMain.handle(IPC.configGet, () => readConfig())
-  ipcMain.handle(IPC.configSet, (_e, patch: Partial<DesktopConfig>) => writeConfig(patch))
+  ipcMain.handle(IPC.configSet, (_e, patch: Partial<DesktopConfig>) => {
+    const before = readConfig().serverUrl
+    const next = writeConfig(patch)
+    // 🔴 换了服务器就删掉上一台的 refresh token（#392 评审跟进）：不删的话下次 restore()
+    // 会把 A 的长效凭据当 Cookie 头发给 B —— 填错的、不可信的、或者渲染层被注入改掉的地址
+    if (next.serverUrl !== before) auth.clearRefreshToken()
+    return next
+  })
+  // 同步通道：preload 用 sendSync 取，渲染层 API_BASE 与本进程 auth.ts 读同一份（#392）
+  ipcMain.on(IPC.configServerUrlSync, (event) => {
+    event.returnValue = readConfig().serverUrl
+  })
 
   ipcMain.handle(IPC.authLogin, (_e, input: AuthLoginInput) => auth.login(input))
   ipcMain.handle(IPC.authLoginByPhone, (_e, input: AuthPhoneLoginInput) => auth.loginByPhone(input))

@@ -48,7 +48,22 @@ async function call<T>(channel: string, ...args: unknown[]): Promise<T> {
   }
 }
 
+/**
+ * 同步取一次 serverUrl（#392）。渲染层的 `API_BASE` 在模块求值时定值，等不了异步 IPC。
+ * 只在 preload 加载时阻塞一次、主进程那边是读内存缓存，代价可以忽略。
+ */
+function readServerUrl(): string {
+  try {
+    const value: unknown = ipcRenderer.sendSync(IPC.configServerUrlSync)
+    return typeof value === "string" ? value : ""
+  } catch {
+    // 取不到就当没配：登录页会显示「填写服务器地址」，而不是静默连到 app://local
+    return ""
+  }
+}
+
 const bridge: DesktopBridge = {
+  serverUrl: readServerUrl(),
   app: {
     info: () => call(IPC.appInfo),
   },

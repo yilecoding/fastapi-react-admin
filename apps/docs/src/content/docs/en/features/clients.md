@@ -85,7 +85,7 @@ To run it: `pnpm --filter api dev:host` (backend on `0.0.0.0:8088`), then `pnpm 
 | Client | Where | Key | Default | Notes |
 |---|---|---|---|---|
 | Web | Build-time environment variable | `VITE_API_BASE` | `http://127.0.0.1:8088` | Backend address, baked into the frontend build |
-| Desktop | `config.json` in the app data directory, read at run time | `serverUrl` | empty | Backend address; one installer can serve different environments |
+| Desktop | `config.json` in the app data directory, read at run time | `serverUrl` | empty | Backend address; one installer can serve different environments. Entered on the sign-in page at first launch; change it later via "Change server" on the same page |
 | Desktop | same | `printerName` | empty | Printer for silent printing; empty = system default |
 | Desktop | same | `kiosk` | `false` | Full-screen kiosk mode |
 | Desktop | same | `autoLaunch` | `false` | Start at login (packaged builds only) |

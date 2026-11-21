@@ -181,6 +181,8 @@ jobs:
 
       # 渲染层。⚠️ `VITE_API_BASE` 必须是空：桌面端的后端地址是**运行期配置**
       # （userData/config.json 的 serverUrl），编译期写死会让同一个包只能连一个环境。
+      # 🔴 空串本身不让桌面端连上后端（#392）：渲染层在桌面端改取 preload 同步给的 `window.desktop.serverUrl`
+      # （platform `api-client/base-url.ts`），没配时登录页先让用户填地址。在桌面端这个变量其实被忽略。
       - name: 构建渲染层
         env:
           VITE_API_BASE: ''

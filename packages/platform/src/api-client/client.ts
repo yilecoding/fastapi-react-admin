@@ -3,10 +3,15 @@ import type { paths } from '@admin/api/schema'
 
 import { clientIdleSeconds } from '../auth/activity'
 import { tryDesktop } from '../desktop'
+import { resolveApiBase } from './base-url'
 import { tokenStore } from './token-store'
 import { useTabStore } from '../shell/tab-store'
 
-export const API_BASE = import.meta.env?.VITE_API_BASE ?? 'http://127.0.0.1:8088'
+/**
+ * 桌面端取运行期的 `serverUrl`，浏览器取编译期的 `VITE_API_BASE`，见 `base-url.ts`（#392）。
+ * 模块加载时定值：preload 先于页面脚本跑完，桥已经在；改地址后整页重载（登录页的服务器地址表单）。
+ */
+export const API_BASE = resolveApiBase(import.meta.env?.VITE_API_BASE, tryDesktop())
 
 /**
  * 发给后端的界面语言。由 app 的 i18n 层通过 `setApiLanguage()` 注入
@@ -36,7 +41,7 @@ async function desktopRefresh(): Promise<RefreshOutcome> {
 /*
  * 🔴 **传输层不在这里了 —— 信封判定、401 单飞刷新、Accept-Language 全在
  * `@admin/api` 的 `createApiClient` 里，与移动端共用一份。**
- * 这里只注入 web 特有的几件事：地址来自 Vite 环境变量、token 只在内存（`tokenStore`）、
+ * 这里只注入 web 特有的几件事：地址（浏览器来自 Vite 环境变量、桌面端来自运行期配置）、token 只在内存（`tokenStore`）、
  * 语言来自上面那个注入点、空闲秒数来自 `auth/activity.ts`、桌面端换一种刷新方式。
  * 想改重试/错误判定逻辑，去改那个包，不要在这里补一份。
  */

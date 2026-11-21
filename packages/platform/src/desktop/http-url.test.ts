@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { embeddedSrc, embeddedUrl, externalUrl, httpUrl } from "./http-url"
+import { embeddedSrc, embeddedUrl, externalUrl, httpUrl, serverBaseUrl } from "./http-url"
 
 describe("HTTP(S) 外链", () => {
   it.each([
@@ -113,4 +113,30 @@ describe("内嵌菜单地址", () => {
     "\\\\attacker.example",
     "/help\\evil",
   ])("拒绝非同源路径 %s", (raw) => expect(embeddedUrl(raw)).toBeNull())
+})
+
+/**
+ * 桌面端的服务器地址（#392 评审跟进）：渲染层按 `${API_BASE}${path}` 拼请求，
+ * 带查询串 / 片段的地址会把路径拼进查询串里（打到站点根、拿回 HTML），
+ * 带账号密码的地址 Chromium 的 fetch 直接拒绝构造请求 —— 都要在入口挡住。
+ */
+describe("桌面端服务器地址", () => {
+  it.each([
+    ["https://admin.example.com", "https://admin.example.com"],
+    [" https://admin.example.com/ ", "https://admin.example.com"],
+    ["http://192.168.1.10:8088", "http://192.168.1.10:8088"],
+    ["https://example.com/admin/", "https://example.com/admin"],
+    ["HTTPS://Admin.Example.com", "https://admin.example.com"],
+  ])("放行 %s", (raw, expected) => expect(serverBaseUrl(raw)).toBe(expected))
+
+  it.each([
+    "",
+    "admin.example.com",
+    "192.168.1.10:8088",
+    "file:///etc/passwd",
+    "https://admin.example.com/?env=prod",
+    "https://admin.example.com/#x",
+    "https://u:p@admin.example.com",
+    "https://u@admin.example.com",
+  ])("拒绝 %s", (raw) => expect(serverBaseUrl(raw)).toBeNull())
 })

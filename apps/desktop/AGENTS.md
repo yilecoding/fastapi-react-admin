@@ -35,6 +35,64 @@ Electron API 使用 mock 验证，未在打包安装程序中调用真实系统�
 `app://local` 的资源不是后端站点。桌面分支给出修改完整 HTTP(S) 地址或改用 Web 端的提示。
 此分支已用模拟桌面能力标记的 Chromium E2E 和 ego 页面验证；未等同于打包 Electron 验收。
 
+## 🔴 渲染层的后端地址必须取运行期的 serverUrl，不能取 `VITE_API_BASE`（#392）
+
+**症状**：正式安装包装好后登录不了。登录页拉验证码拿到 200 + HTML，点登录报「尚未配置服务器地址」，
+而界面上没有任何地方能填。开发模式（`pnpm desktop:dev`）一切正常，所以 v1.0.0 到 v1.1.2 都带着它发了出去。
+
+**根因**：`release.yml` 构建渲染层时 `VITE_API_BASE=''`（为了让同一个包能连不同环境），
+而渲染层 `API_BASE` 原来就是 `VITE_API_BASE ?? 'http://127.0.0.1:8088'` —— `??` 保留空串，
+请求变成相对路径打到 `app://local/api/v1/...`，`protocol.ts` 对无扩展名路径回 `index.html`。
+主进程 `auth.ts` 读的是 `config.json` 的 `serverUrl`，渲染层从来不读它，也没有写它的界面；
+就算手改 `config.json`，`/sys/users/me`、socket.io 仍打 `app://local`，两边不是同一个后端。
+开发模式下 `VITE_API_BASE` 未定义、回落到 8088，正好盖住了这条。
+
+**修法**：主进程开一条同步通道 `config:server-url-sync`，preload 加载时 `sendSync` 取一次挂成
+`window.desktop.serverUrl`；platform `api-client/base-url.ts` 的 `resolveApiBase()` 在有桥时用它、
+没有桥才用 `VITE_API_BASE`。必须是同步快照：`API_BASE` 在模块求值时定值，等异步 `config.get()`
+回来时验证码、公告的第一批请求已经发出去了。没配地址时**不回落开发地址**，登录页显示「服务器地址」表单
+（`apps/web/src/routes/_guest/-desktop-server.tsx`），保存后 `config.set` + 整页重载；配过的在登录页底部显示
+当前地址和「更换服务器」。`writeConfig` 只收完整的 HTTP(S) 地址。
+⚠️ 生产后端的 `CORS_ALLOWED_ORIGINS` 会整个覆盖 `conf.py` 的默认列表，发桌面端要自己把 `app://local` 加回去
+（`.env.server.example` 里写了注释）。
+
+**实测证据**（2026-11-21）：platform `base-url.test.ts` 7 条，先把修复前 `client.ts:9` 的原样逻辑放进
+`resolveApiBase` 跑，4 条桌面端用例红、3 条浏览器用例绿；改完 7 条全绿。`tests/server-url.test.ts` 4 条
+（preload 同步取值、取不到当空串、主进程同步通道读 `readConfig()`、`writeConfig` 拒绝非 HTTP(S)），
+把 preload / ipc / config / contract 换回 origin/main 的版本跑是 4 条全红。Chromium（Playwright）
+对 vite dev server 注入模拟的 `window.desktop`：`serverUrl=''` 时出现地址表单、零个 `/api/v1` 请求，
+填 `admin.example.com` 被拒、填 `https://admin.example.com/` 后 `config.set` 收到去掉斜杠的值；
+`serverUrl='https://api.example.test'` 时验证码和公告请求都发往该主机，底部显示地址与「更换服务器」。
+**真 Electron 42**（未打包：`VITE_API_BASE='' pnpm --filter web build` + desktop `build`，Playwright `_electron`
+起 `apps/desktop`，xvfb，`XDG_CONFIG_HOME` 指向空目录，带 `--no-sandbox`）：origin/main 的产物里
+`/api/v1/auth/captcha` 和 `/sys/notices/public` 都发到 `app://local`、200 + `<!doctype html>`，
+验证码区显示 `Unexpected token '<'` —— 和 issue 描述一致。修复后的产物：首启 `window.desktop.serverUrl` 为 `''`、
+出现地址表单、零个 `/api/v1` 请求；填 `https://api.example.test/` 保存 → 整页重载 → preload 重取到
+`https://api.example.test`，`config.json` 落盘同值，验证码 / 公告请求发往该主机。
+**没实测**：打包后的安装包（`app.isPackaged`、`resources/renderer`）、开着 OS 沙箱、连真后端的登录 / 刷新 / socket.io。
+
+**评审跟进（2026-11-21）**，三处「只在登录页能换服务器」不够的地方：
+
+- 🔴 **存着 refresh token、旧服务器连不上时卡死在错误页**：冷启动的静默恢复网络失败是 transient，守卫抛给
+  「暂时连不上服务器」页、不去登录页，那一页原来只有「重试」，外壳又没有地址栏 —— 服务器搬家后只能手删
+  `config.json`。现在桌面端在那一页也给「更换服务器」（`-desktop-server.tsx` 的 `DesktopServerSwitch`），
+  地址为空（`config.json` 丢了、凭据还在）时直接显示表单。
+- 🔴 **换服务器不删上一台的 refresh token**：下次 `restore()` 会把 A 的长效凭据当 Cookie 头发给 B
+  （填错的 / 不可信的 / 渲染层被注入改掉的地址）。`ipc.ts` 的 `config:set` 在 `serverUrl` 变了时调
+  `clearRefreshToken()`。
+- 地址判据统一成 `http-url.ts` 的 `serverBaseUrl()`：表单、`writeConfig`、`readConfig`、`resolveApiBase` 同一个。
+  多挡查询串 / 片段（`${API_BASE}${path}` 会把路径拼进查询串）和账号密码（Chromium fetch 拒绝构造请求）；
+  `config.json` 里手改坏的值读出来当没配，登录页重新引导，而不是拼出打到 `app://local` 的相对地址。
+
+`http://` 局域网地址**不受**混合内容拦截：真 Electron 42 里 `app://local`（`secure: true`、`isSecureContext === true`）
+对 `http://192.168.x.x` 的 fetch 和 XHR 都是 200 —— 不用为它强制 https。
+
+**实测证据**：`tests/server-url.test.ts` 新增的 3 条（查询串 / 账号密码被拒、手改坏的值读成空、换服务器删凭据）
+在修复前红、修复后全部 12 条绿；platform `http-url.test.ts` / `base-url.test.ts` 新增 14 条同样先红后绿。
+真 Electron（未打包，同上的起法）预置 `config.json` 指向关着的端口 + `credentials.bin` 明文旧 token：
+PR 原版停在错误页、`desktop-server-change` 不存在；修复后错误页出现入口，填带 `?env=prod` 的地址被拒，
+填新地址保存 → 重载到 `/sign-in`，`config.json` 落盘新值、`credentials.bin` 已删除。
+
 ## 出包的顺序：漏了第一步不报错，只是界面是上一版的
 
 ```bash

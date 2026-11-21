@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from "@admin/ui/components/button"
 
 import { isStaleAssetError } from "@/lib/app-version"
+import { DesktopServerSwitch } from "@/routes/_guest/-desktop-server"
 
 /** 按 name 判，不用 instanceof（跨包的 class 身份不可靠，同 `UploadAbortedError`） */
 function isTransientApiError(error?: Error): boolean {
@@ -63,6 +64,8 @@ export function ErrorPage({ error: thrown }: { error?: unknown }) {
         <Button onClick={() => window.location.reload()} data-testid="server-unreachable-retry">
           {t('重试')}
         </Button>
+        {/* 桌面端：服务器搬了 / 地址填错了，重试永远不会好，而外壳没有地址栏能走到登录页（#392 评审跟进） */}
+        <DesktopServerSwitch />
       </div>
     )
   }

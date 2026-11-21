@@ -3,6 +3,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 import type { DesktopConfig } from "@admin/platform/desktop/contract"
+import { serverBaseUrl } from "@admin/platform/desktop/http-url"
 
 /**
  * 运行期配置。落在 `app.getPath('userData')/config.json`。
@@ -26,10 +27,14 @@ function configPath(): string {
   return path.join(app.getPath("userData"), "config.json")
 }
 
-/** 末尾斜杠会让后面所有 `${serverUrl}/api/...` 拼出双斜杠，统一在入口削掉 */
+/**
+ * 末尾斜杠会让后面所有 `${serverUrl}/api/...` 拼出双斜杠，统一在入口削掉。
+ * serverUrl 不是完整的 HTTP(S) 基址（手改 config.json 漏了协议、带了查询串…）就当没配：
+ * 渲染层据此显示「服务器地址」表单，而不是拿它拼出打到 `app://local` 的相对地址（#392 评审跟进）
+ */
 function normalize(patch: Partial<DesktopConfig>): Partial<DesktopConfig> {
   const out: Partial<DesktopConfig> = { ...patch }
-  if (typeof out.serverUrl === "string") out.serverUrl = out.serverUrl.trim().replace(/\/+$/, "")
+  if (typeof out.serverUrl === "string") out.serverUrl = serverBaseUrl(out.serverUrl) ?? ""
   if (typeof out.updateUrl === "string") out.updateUrl = out.updateUrl.trim().replace(/\/+$/, "")
   return out
 }
@@ -48,6 +53,10 @@ export function readConfig(): DesktopConfig {
 }
 
 export function writeConfig(patch: Partial<DesktopConfig>): DesktopConfig {
+  // 渲染层登录页会写这个值（#392），而它随后被 fetch / socket.io 当成后端地址：只收完整的 HTTP(S) 基址
+  if (typeof patch.serverUrl === "string" && patch.serverUrl.trim() && !serverBaseUrl(patch.serverUrl)) {
+    throw new Error("服务器地址必须是以 http:// 或 https:// 开头的完整地址，不能带查询参数或账号密码")
+  }
   const next = { ...readConfig(), ...normalize(patch) }
   fs.mkdirSync(path.dirname(configPath()), { recursive: true })
   fs.writeFileSync(configPath(), JSON.stringify(next, null, 2), "utf8")
