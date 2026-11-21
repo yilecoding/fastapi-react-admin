@@ -67,8 +67,16 @@ async def policy_overrides(db: AsyncSession, kind: str) -> dict[str, str]:
     return {p.channel: p.mode for p in await notification_policy_dao.get_all(db, [kind])}
 
 
+#: 判定一个收件人要读的列（入队时 `resolve` 和发之前 `recheck` 读同一份，免得两边各看各的）
+_RECIPIENT_COLUMNS = (User.id, User.email, User.phone, User.phone_verified_time, User.status, User.deleted)
+
+
 def _skip_reason(user: Any, channel: NotificationChannel, address: str | None) -> str | None:
     """这条渠道记成 skipped 的原因；能发返回 None"""
+    if user.deleted:
+        # 🔴 删用户是软删（`deleted` = 自己的 id）、`status` 还是 1：
+        # 只看 status 的话，离职的人照样收审批标题、短信还计费（#396）
+        return 'user_deleted'
     if user.status != 1:
         return 'user_disabled'
     if not check_plugin_installed(_CHANNEL_PLUGIN[channel]):
@@ -95,22 +103,14 @@ async def resolve(db: AsyncSession, kind: NotificationKind, user_ids: Sequence[i
     prefs: dict[tuple[int, str], bool] = {
         (p.user_id, p.channel): p.enabled for p in await notification_pref_dao.get_for_users(db, user_ids, kind.code)
     }
-    users = {
-        u.id: u
-        for u in (
-            await db.execute(
-                select(User.id, User.email, User.phone, User.phone_verified_time, User.status).where(
-                    User.id.in_(list(user_ids))
-                )
-            )
-        ).all()
-    }
+    users = {u.id: u for u in (await db.execute(select(*_RECIPIENT_COLUMNS).where(User.id.in_(list(user_ids))))).all()}
 
     routes: list[Route] = []
     for uid in dict.fromkeys(user_ids):
         user = users.get(uid)
         if user is None:
-            # 人删了（雪花 ID 指向空）：没有可记的地址，也不值得一行 skipped
+            # 行没了（硬删 / 雪花 ID 指向空）：没有可记的地址，也不值得一行 skipped。
+            # ⚠️ 平时的「删用户」是软删，行还在 —— 走的是下面 `_skip_reason` 的 user_deleted，不是这里
             continue
         for channel in external:
             pref = prefs.get((uid, channel.value))
@@ -120,3 +120,17 @@ async def resolve(db: AsyncSession, kind: NotificationKind, user_ids: Sequence[i
             reason = _skip_reason(user, channel, address)
             routes.append(Route(user_id=uid, channel=channel, address=address or None, reason=reason))
     return routes
+
+
+async def recheck(db: AsyncSession, user_id: int, channel: NotificationChannel) -> tuple[str | None, str | None]:
+    """发之前再核一遍收件人：返回 (现在的地址, 跳过原因)。
+
+    🔴 投递行存的是入队时的地址快照，失败后退避重试、手动重发能拖几个小时：这期间人停用了 / 删了 / 换了号，
+    还照快照发，就是把审批标题发给离职的人、发到已经不归这个人的手机号上（#396）。
+    所以 worker 每次发之前按当前的人重算一遍。
+    """
+    user = (await db.execute(select(*_RECIPIENT_COLUMNS).where(User.id == user_id))).one_or_none()
+    if user is None:
+        return None, 'user_deleted'
+    address = user.email if channel is NotificationChannel.email else user.phone
+    return address or None, _skip_reason(user, channel, address)

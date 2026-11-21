@@ -24,7 +24,7 @@ from typing import Any
 import httpx
 import pytest
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
@@ -918,10 +918,30 @@ class TestValidation:
         res = self._post(client, token_headers, app['id'])
         assert res['code'] == 400 and '1' in res['msg']
 
+    @pytest.mark.parametrize(
+        'url',
+        [
+            # IDNA 2003 能解析、IDNA 2008 拒绝：urlsplit 和 DNS 都放过，httpx 发的时候才抛 InvalidURL（#396）
+            'https://☃.net/hook',
+            'https://hooks.example.test/a\x01b',
+            'https://hooks.example.test:99999/x',
+            'https://hooks.example.test:abc/x',
+        ],
+    )
+    def test_urls_httpx_cannot_send_are_a_400_not_a_500(
+        self, client: TestClient, token_headers: dict[str, str], url: str
+    ) -> None:
+        app = create_app(client, token_headers)
+        res = self._post(client, token_headers, app['id'], url=url)
+        assert res['code'] == 400 and 'invalid_url' in res['msg'], res
+
     def test_scheme(self, client: TestClient, token_headers: dict[str, str]) -> None:
         app = create_app(client, token_headers)
         res = self._post(client, token_headers, app['id'], url='ftp://hooks.example.test/x')
         assert res['code'] == 400 and 'https_required' in res['msg']
+
+
+_REAL_RESOLVE = webhook_delivery._resolve
 
 
 class TestSsrf:
@@ -971,6 +991,15 @@ class TestSsrf:
         ).json()
         assert res['code'] == 400 and 'blocked_address' in res['msg']
 
+    @pytest.mark.parametrize('host', ['a..b.example.test', 'a' * 64 + '.example.test'])
+    def test_hostnames_dns_cannot_encode_are_refused_not_raised(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, host: str
+    ) -> None:
+        """空标签 / 超 63 字符的标签：getaddrinfo 抛的是 UnicodeError 不是 OSError（#396）"""
+        monkeypatch.setattr(webhook_delivery, '_resolve', _REAL_RESOLVE)
+        problem = client.portal.call(check_target, f'https://{host}/x')
+        assert problem is not None and problem.startswith('dns_failed'), problem
+
     def test_checked_again_at_send_time(
         self, client: TestClient, token_headers: dict[str, str], subscribed: dict[str, Any], receiver: Receiver
     ) -> None:
@@ -985,6 +1014,94 @@ class TestSsrf:
             assert deliveries_of(hook_id)[0].last_error.startswith('blocked_address')
         finally:
             run_db(lambda db: _hard_delete_dept(db, dept_id))
+
+
+class TestUnsendableUrl:
+    """保存之后才变得发不出去的地址（老数据 / 直接改库）：要落成一次失败，不能冲出 worker（#396）"""
+
+    def test_invalid_url_at_send_time_is_a_recorded_failure(
+        self, client: TestClient, token_headers: dict[str, str], subscribed: dict[str, Any], receiver: Receiver
+    ) -> None:
+        hook_id = subscribed['hook']['id']
+        set_hook(hook_id, url='https://☃.net/hook')
+        dept_id = create_dept(client, token_headers, 'IU')
+        try:
+            [row] = deliveries_of(hook_id)
+            assert client.portal.call(deliver_one, row.id) == 'failed'
+            assert receiver.requests == []
+            assert deliveries_of(hook_id)[0].last_error == 'invalid_url'
+            attempts = run_db(
+                lambda db: db.scalar(
+                    select(func.count()).select_from(OpenWebhookAttempt).where(OpenWebhookAttempt.delivery_id == row.id)
+                )
+            )
+            assert attempts == 1, '要有一条尝试记录，界面上才看得出为什么'
+        finally:
+            run_db(lambda db: _hard_delete_dept(db, dept_id))
+
+    def test_ping_to_an_invalid_url_is_not_a_500(
+        self, client: TestClient, token_headers: dict[str, str], subscribed: dict[str, Any], receiver: Receiver
+    ) -> None:
+        set_hook(subscribed['hook']['id'], url='https://☃.net/hook')
+        res = client.post(f'{HOOKS}/{subscribed["hook"]["id"]}/ping', headers=token_headers).json()
+        assert res['code'] == 200 and res['data']['status'] == 'exhausted', res
+
+    def test_one_row_blowing_up_does_not_stop_the_rest_of_the_batch(
+        self,
+        client: TestClient,
+        token_headers: dict[str, str],
+        subscribed: dict[str, Any],
+        receiver: Receiver,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        hook_id = subscribed['hook']['id']
+        dept_ids = [create_dept(client, token_headers, 'B1'), create_dept(client, token_headers, 'B2')]
+        real_post = webhook_delivery._post
+        calls: list[int] = []
+
+        async def _post(hook: Any, event: Any) -> Any:
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError('pytest: 没预料到的异常')
+            return await real_post(hook, event)
+
+        monkeypatch.setattr(webhook_delivery, '_post', _post)
+        try:
+            client.portal.call(webhook_delivery.deliver_pending)
+            statuses = [r.status for r in deliveries_of(hook_id)]
+            assert statuses == ['failed', 'success'], statuses
+            assert len(receiver.requests) == 1
+        finally:
+            for pk in dept_ids:
+                run_db(lambda db, pk=pk: _hard_delete_dept(db, pk))
+
+
+def test_deliver_pending_survives_a_row_that_raises_before_sending(
+    client: TestClient,
+    token_headers: dict[str, str],
+    subscribed: dict[str, Any],
+    receiver: Receiver,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_post` 之外（取端点 / 应用时查库）抛的异常 `deliver_one` 接不住，靠 `deliver_pending` 逐行兜住（#396）"""
+    hook_id = subscribed['hook']['id']
+    dept_ids = [create_dept(client, token_headers, 'P1'), create_dept(client, token_headers, 'P2')]
+    first, _second = (r.id for r in deliveries_of(hook_id))
+    real_deliver_one = webhook_delivery.deliver_one
+
+    async def _deliver_one(pk: int, **kwargs: Any) -> Any:
+        if pk == first:
+            raise RuntimeError('pytest: 取端点时查库失败')
+        return await real_deliver_one(pk, **kwargs)
+
+    monkeypatch.setattr(webhook_delivery, 'deliver_one', _deliver_one)
+    try:
+        stats = client.portal.call(webhook_delivery.deliver_pending)
+        assert stats.get('error') == 1 and stats.get('success') == 1, stats
+        assert [r.status for r in deliveries_of(hook_id)] == ['pending', 'success']
+    finally:
+        for pk in dept_ids:
+            run_db(lambda db, pk=pk: _hard_delete_dept(db, pk))
 
 
 # ── 测试事件 / 审批流 ─────────────────────────────────────────────────────────

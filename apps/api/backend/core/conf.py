@@ -670,6 +670,8 @@ class Settings(BaseSettings):
     OPEN_SIGN_WINDOW_SECONDS: int
     OPEN_NONCE_REDIS_PREFIX: str
     OPEN_LAST_USED_REDIS_PREFIX: str
+    # 增量同步的 updated_since 往回多看这么多秒（#396：变更时间是写入时刻、不是提交时刻）
+    OPEN_SYNC_LOOKBACK_SECONDS: int
     # Webhook 事件订阅（#167）。总闸 / 自动停用阈值 / 保留天数 / 每应用端点上限可在参数配置「Webhook」组覆盖
     OPEN_WEBHOOK_ENABLED: bool
     OPEN_WEBHOOK_DISABLE_AFTER: int

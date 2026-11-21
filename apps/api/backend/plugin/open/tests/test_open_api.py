@@ -283,6 +283,34 @@ class TestIncrementalSync:
         finally:
             run_db(lambda db: _hard_delete_dept(db, dept_id))
 
+    def test_rows_written_early_in_a_long_transaction_are_not_skipped(
+        self, client: TestClient, token_headers: dict
+    ) -> None:
+        """🔴 变更时间是写入时刻、不是提交时刻（#396）。
+
+        长事务（部门导入）在 T0 写了一行、几十秒后才提交；这期间别的记录以 T0+30s 先提交、被对方同步拿到，
+        对方下一轮 `updated_since=T0+30s`。从水位往后拉的话，那一行永远收不到。
+        这里把一行的时间改成「比水位早 30 秒」来模拟
+        """
+        issued = create_app(client, token_headers)
+        code = f'{CODE_PREFIX}LATE'
+        body = {'code': code, 'name': f'{CODE_PREFIX}晚提交', 'status': 1, 'sort': 0}
+        assert client.post('/sys/depts', headers=token_headers, json=body).json()['code'] == 200
+        dept_id = run_db(lambda db: _dept_id(db, code))
+        try:
+            watermark = timezone.now()
+            written = watermark - timedelta(seconds=30)
+            run_db(
+                lambda db: db.execute(
+                    update(Dept).where(Dept.id == dept_id).values(created_time=written, updated_time=None)
+                )
+            )
+            since = watermark.isoformat().replace('+', '%2B')
+            items, _ = self._drain(client, issued, '/depts', None, limit=500, since=since)
+            assert str(dept_id) in [d['id'] for d in items]
+        finally:
+            run_db(lambda db: _hard_delete_dept(db, dept_id))
+
     def test_bad_cursor_is_a_clear_error(self, client: TestClient, token_headers: dict) -> None:
         issued = create_app(client, token_headers)
         response = signed_get(client, issued, '/users', params='cursor=not-a-cursor')
