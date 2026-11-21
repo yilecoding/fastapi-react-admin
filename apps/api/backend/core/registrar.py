@@ -228,7 +228,10 @@ async def _check_redis() -> str | None:
 
 
 async def _check_heartbeats() -> dict[str, dict[str, object]]:
-    """调度器（beat）/ worker 的心跳（`core/conf.py` 的 `*_HEARTBEAT_REDIS_KEY`）
+    """调度器（beat）/ worker / 长任务 worker 的心跳（`core/conf.py` 的 `*_HEARTBEAT_REDIS_KEY`）
+
+    `worker_long`（#400）是消费长任务队列的那个 worker 自己在循环上写的，不靠 beat 派发，
+    所以调度器停了它照样判得出来，不跟着报 `unknown`。
 
     `ok` 阈值内 · `stale` 超过阈值（停在那一刻）· `missing` 从没写过（调度那一行没种上 / Redis 被清过）·
     `unknown` 判断不了：心跳读不到，或者调度器不在 —— 调度器不派发，worker 就收不到心跳任务，
@@ -237,14 +240,18 @@ async def _check_heartbeats() -> dict[str, dict[str, object]]:
     max_age = settings.HEARTBEAT_MAX_AGE_SECONDS
     try:
         async with asyncio.timeout(_REDIS_TIMEOUT):
-            raws = await redis_client.mget(settings.SCHEDULER_HEARTBEAT_REDIS_KEY, settings.WORKER_HEARTBEAT_REDIS_KEY)
+            raws = await redis_client.mget(
+                settings.SCHEDULER_HEARTBEAT_REDIS_KEY,
+                settings.WORKER_HEARTBEAT_REDIS_KEY,
+                settings.LONG_WORKER_HEARTBEAT_REDIS_KEY,
+            )
         now = time.time()
         ages = [None if raw is None else max(0, round(now - float(raw))) for raw in raws]
     except Exception as e:
         unknown = {'status': 'unknown', 'last_seen_seconds': None, 'error': type(e).__name__}
-        return {'scheduler': dict(unknown), 'worker': dict(unknown)}
+        return {'scheduler': dict(unknown), 'worker': dict(unknown), 'worker_long': dict(unknown)}
 
-    scheduler, worker = (
+    scheduler, worker, worker_long = (
         {
             'status': 'missing' if age is None else 'ok' if age <= max_age else 'stale',
             'last_seen_seconds': age,
@@ -253,7 +260,7 @@ async def _check_heartbeats() -> dict[str, dict[str, object]]:
     )
     if scheduler['status'] != 'ok' and worker['status'] != 'ok':
         worker['status'] = 'unknown'
-    return {'scheduler': scheduler, 'worker': worker}
+    return {'scheduler': scheduler, 'worker': worker, 'worker_long': worker_long}
 
 
 def _dependency(err: str | None) -> dict[str, object]:
@@ -310,7 +317,7 @@ def register_health(app: FastAPI) -> None:
 
     @app.get('/health/status', include_in_schema=False)
     async def status() -> JSONResponse:
-        """各服务的状态一页看全：api · database · redis · scheduler · worker，全部 ok 才 200
+        """各服务的状态一页看全：api · database · redis · scheduler · worker · worker_long，全部 ok 才 200
 
         worker / 调度器挂了网页照常能开、ready 照常 200，只有后台任务悄悄停 —— 这里是唯一看得出来的地方。
 

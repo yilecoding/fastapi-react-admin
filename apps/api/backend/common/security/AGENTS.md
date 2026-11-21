@@ -129,6 +129,16 @@ return or_(and_(*where_and_list), or_(*where_or_list))
 下面「非展示的读」一节同一类）。**实测证据**：`test_read_endpoint_rbac_gaps.py` 新增两条；迁移在 PostgreSQL 私有库上
 模拟「MANAGER 有任务调度页、没有新按钮」→ upgrade 后只拿到 `QueryTaskScheduler`、重跑 0 条、downgrade 删净、再 upgrade 一致。
 
+🔴 **#405：上面两批补完，前端还有三处照旧按「只要登录」用着。** 个人中心「最近登录」借的是 `GET /logs/login`（注释原话「只挂了
+`DependsJwtAuth`、普通用户能读」）—— 没有 `log:login:list` 的人打开「安全」恒显示「登录记录读取失败」，而这块正是给每个人自查盗号的；
+执行记录路由只要登录（注释「列表接口本身是 `DependsJwtAuth`」），没权限的人页面照开、表格里是 403 块而不是跳 `/403`；
+工作台「看记录」「看明细」两个按钮按同样过期的门槛给（后者还照抄了登录日志页最早的 `log:login:del`）。
+修法：新开 `GET /sys/users/me/login-logs`（只挂 `DependsJwtAuth`、路径里没有用户 ID、本人读本人 bypass 数据范围）；
+路由和按钮改成 `task:result:list` / `log:login:list`。
+🔴 **「本人的登录记录」按登录名全等查，不按 `user_uuid`**：密码错的那次失败尝试，`auth_service.login` 记的是**随机 uuid**
+（`user_verify` 抛异常时还没拿到用户）。**实测证据**：`app/admin/tests/api_v1/test_my_login_logs.py` 第一版按 uuid 查，
+红在 `assert {1} == {0, 1}`（刚才那次失败不在）；改成全等后 3 条过，再把全等改回 `LIKE` → 「只回自己的」那条红。
+
 ### 已修：三个让接口直接 500 的坑
 
 - 🔴 **`UniversalStr` / `UniversalText` 必须显式写 `python_type`。**

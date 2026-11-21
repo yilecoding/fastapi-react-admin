@@ -12,7 +12,9 @@
 """
 
 import asyncio
+import concurrent.futures
 import os
+import time
 import urllib.parse
 
 from pathlib import Path
@@ -26,6 +28,33 @@ from backend.common.enums import DataBaseType
 from backend.core.conf import settings
 from backend.core.path_conf import BASE_PATH
 from backend.database.redis import get_redis_url
+
+#: 默认队列（celery 自己的默认名）。心跳、通知投递、Webhook 投递、审批超时这些**短而准点**的任务都在这里
+DEFAULT_QUEUE = 'celery'
+#: 长任务队列：一次可能跑几分钟的任务单独排队，由**另一个** worker 消费（#400）
+LONG_QUEUE = 'long'
+
+#: 走长任务队列的任务（名字或 celery 认的通配）。
+#:
+#: 🔴 **为什么要拆**：`celery_aio_pool.AsyncIOPool` 是 solo 池的子类，`limit = 1`，`run()` 把协程投进循环后
+#: **同步等它跑完**才取下一条 —— 一个 worker 进程一次只跑一个任务，`--concurrency` 不起作用。
+#: 一次 AI 预审（300 秒）/ 一份大导出 / 首次 `prune_logs` 期间，同一个 worker 上的 `health.heartbeat` 排队超过
+#: 180 秒，`/health/status` 报 worker stale；邮件、短信、Webhook 投递一起延迟。
+#: 拆成两个队列、两个 worker，长任务再慢也只堵它自己那条队。
+#:
+#: 新加任务时问一句：**它会不会跑超过一分钟？** 会就加进来。
+#: `app/task/tests/test_task_queues.py` 要求每个注册的任务都被归过类，漏了会红。
+LONG_TASKS: tuple[str, ...] = (
+    'export.run',
+    'workflow.ai_review',
+    'maintenance.*',
+)
+
+#: 长任务 worker 自己写的心跳间隔（秒）。阈值同其它心跳（`HEARTBEAT_MAX_AGE_SECONDS`），漏两拍都不报警
+LONG_WORKER_HEARTBEAT_SECONDS = 30
+
+# 挂在 worker 进程上的长任务心跳；留着引用，循环里的那个 asyncio 任务才不会被回收
+_long_heartbeat: concurrent.futures.Future | None = None
 
 
 @worker_process_init.connect(weak=False)
@@ -66,6 +95,73 @@ def _needs_snowflake() -> bool:
     return settings.SNOWFLAKE_ENABLED or settings.DATABASE_PK_MODE == 'snowflake'
 
 
+def pool_loop(sender: object = None) -> asyncio.AbstractEventLoop | None:
+    """任务真正运行的那个事件循环（AsyncIOPool 在独立线程里 `run_forever()` 的那个）
+
+    不是 AsyncIOPool / 循环没在转时返回 None。
+
+    :param sender: `worker_ready` 传进来的 consumer（`sender.pool` 就是 AsyncIOPool）；不给就找单例
+    """
+    loop = getattr(getattr(sender, 'pool', None), 'loop', None)
+    if loop is None:
+        singleton = getattr(celery_aio_pool.AsyncIOPool, 'singleton', None)
+        loop = getattr(singleton, 'loop', None)
+    if loop is None or not loop.is_running():
+        return None
+    return loop
+
+
+async def _long_queue_heartbeat() -> None:
+    """长任务 worker 的心跳：每 `LONG_WORKER_HEARTBEAT_SECONDS` 秒往 Redis 写一次 epoch 秒
+
+    🔴 **不能也靠 beat 派一个心跳任务进长任务队列**：那个任务要排在长任务后面，一次 AI 预审 300 秒就把它挡过阈值，
+    「长任务 worker 正在忙」被报成「长任务 worker 死了」。这条队列上「忙」是常态，要证明的只是**进程活着、循环在转**
+    —— 所以心跳挂在 worker 自己的循环上，和任务交替跑（任务都是 `async def`，不占住循环）。
+
+    写失败只记日志、接着写：Redis 抖一下不能让心跳协程退出，否则之后永远报 stale。
+    """
+    from backend.common.log import log
+    from backend.database.redis import redis_client
+
+    while True:
+        try:
+            await redis_client.set(settings.LONG_WORKER_HEARTBEAT_REDIS_KEY, f'{time.time():.3f}')
+        except Exception as e:
+            log.warning(f'长任务 worker 心跳写入失败：{e!r}')
+        await asyncio.sleep(LONG_WORKER_HEARTBEAT_SECONDS)
+
+
+def consumed_queues(sender: object) -> set[str]:
+    """这个 worker 在消费哪些队列（`-Q` 给的；不给就是默认队列）"""
+    consumer = getattr(sender, 'task_consumer', None)
+    queues = getattr(consumer, 'queues', None)
+    if queues:
+        return {q.name for q in queues}
+    consume_from = getattr(getattr(getattr(sender, 'app', None), 'amqp', None), 'queues', None)
+    consume_from = getattr(consume_from, 'consume_from', None)
+    return set(consume_from) if consume_from else {DEFAULT_QUEUE}
+
+
+@worker_ready.connect(weak=False)
+def start_long_queue_heartbeat(sender=None, **kwargs) -> None:  # ruff:ignore[missing-type-function-argument]
+    """消费长任务队列的 worker 起一个心跳（`/health/status` 的 `worker_long`，#400）
+
+    不消费这条队列的 worker 不写 —— 否则只起了默认 worker、长任务没人消费时，心跳照样是绿的，
+    导出 / AI 预审 / 日志清理**静默地永远不执行**，正是拆队列最怕的那种坏法。
+    """
+    global _long_heartbeat
+
+    from backend.common.log import log
+
+    if LONG_QUEUE not in consumed_queues(sender):
+        return
+    loop = pool_loop(sender)
+    if loop is None:
+        log.error('长任务 worker 心跳没起来：worker 不是 AsyncIOPool（--pool=custom），找不到任务运行的事件循环')
+        return
+    _long_heartbeat = asyncio.run_coroutine_threadsafe(_long_queue_heartbeat(), loop)
+
+
 @worker_ready.connect(weak=False)
 def init_worker_snowflake(sender=None, **kwargs) -> None:  # ruff:ignore[missing-type-function-argument]
     """在任务真正运行的那个事件循环里初始化雪花节点（#369）
@@ -87,11 +183,8 @@ def init_worker_snowflake(sender=None, **kwargs) -> None:  # ruff:ignore[missing
     from backend.common.log import log
     from backend.utils.snowflake import snowflake
 
-    loop = getattr(getattr(sender, 'pool', None), 'loop', None)
+    loop = pool_loop(sender)
     if loop is None:
-        singleton = getattr(celery_aio_pool.AsyncIOPool, 'singleton', None)
-        loop = getattr(singleton, 'loop', None)
-    if loop is None or not loop.is_running():
         # 不退回 asyncio.run —— 那正是 #369 的起法，60 秒后才坏，比现在就报错更难查
         log.error('雪花算法未初始化：worker 不是 AsyncIOPool（--pool=custom），找不到任务运行的事件循环')
         return
@@ -199,6 +292,11 @@ def init_celery() -> celery.Celery:
         timezone=settings.DATETIME_TIMEZONE,
         worker_send_task_events=True,
         task_send_sent_event=True,
+        task_default_queue=DEFAULT_QUEUE,
+        # 按任务名分队列（#400，见 `LONG_TASKS`）。按名字配而不是写在 `@task(queue=...)` 上：
+        # `send_task('export.run')` / beat / 「立即执行」都只拿得到名字，路由表三条路都认。
+        # 调度那一行显式填了 `queue` 时以它为准（`send_task` 的 options 优先于路由表）
+        task_routes={name: {'queue': LONG_QUEUE} for name in LONG_TASKS},
     )
 
     # celery 里设这个参数无效，只能改 loader

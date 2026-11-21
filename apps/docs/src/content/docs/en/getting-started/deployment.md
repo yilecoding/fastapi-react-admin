@@ -9,7 +9,7 @@ Production runs from Docker images that CI builds and pushes to GitHub Container
 
 ## What runs in production?
 
-`docker-compose.prod.yml` starts the API, a Celery worker, a separate Celery beat (scheduler) and the web container (nginx serving the built frontend and proxying the API). The database and Redis are yours — point `.env.server` at them.
+`docker-compose.prod.yml` starts the API, two Celery workers (`worker` for short tasks such as heartbeats and notification delivery, `worker-long` for long ones such as exports, AI pre-review and log pruning), a separate Celery beat (scheduler) and the web container (nginx serving the built frontend and proxying the API). The database and Redis are yours — point `.env.server` at them.
 
 :::caution
 In development the worker runs with an embedded beat (`celery worker -B`). Don't do that in production: with several replicas, every replica would run its own beat and each schedule would fire N times. Production runs exactly one beat container.
@@ -77,11 +77,15 @@ TAG=sha-abc1234 bash prod.sh up
 
 ## What should external monitoring check?
 
-One URL: `https://<your-domain>/api/health/status`. It reports the API, database, Redis, scheduler (beat) and worker, and returns **200** only when all of them are healthy, **503** otherwise.
+One URL: `https://<your-domain>/api/health/status`. It reports the API, database, Redis, scheduler (beat), worker and long-task worker (`worker_long`), and returns **200** only when all of them are healthy, **503** otherwise.
 
 ```json
-{"status":"ok","services":{"api":{"status":"ok"},"database":{"status":"ok"},"redis":{"status":"ok"},"scheduler":{"status":"ok","last_seen_seconds":12},"worker":{"status":"ok","last_seen_seconds":31}},"heartbeat_max_age_seconds":180}
+{"status":"ok","services":{"api":{"status":"ok"},"database":{"status":"ok"},"redis":{"status":"ok"},"scheduler":{"status":"ok","last_seen_seconds":12},"worker":{"status":"ok","last_seen_seconds":31},"worker_long":{"status":"ok","last_seen_seconds":14}},"heartbeat_max_age_seconds":180}
 ```
+
+:::caution
+When upgrading from v1.1.3 or earlier, start the extra `worker-long` container (`bash prod.sh sync` brings in the new compose file). Without it, exports, AI pre-review and log pruning sit in their queue forever and `worker_long` reports `missing`.
+:::
 
 :::caution
 Don't monitor `/healthz`. It is nginx answering `200` by itself and stays green with the API and database down. For the same reason, probing a path that doesn't exist through the domain returns `200` and `index.html` (the frontend's history fallback) — check the body, not just the status.

@@ -746,6 +746,10 @@
           "type": "registry:ui"
         },
         {
+          "path": "src/components/rich-text/link-href.ts",
+          "type": "registry:ui"
+        },
+        {
           "path": "src/components/rich-text/prose.ts",
           "type": "registry:ui"
         },

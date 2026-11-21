@@ -160,7 +160,7 @@ function buildDevToolsNode(): NavNode {
 }
 
 export function useSidebar(opts: SidebarOptions) {
-  const { data, isPending, error } = useQuery(sidebarQuery)
+  const { data, isPending, error, refetch } = useQuery(sidebarQuery)
   // 沙箱开不开跟侧边栏主查询是两条独立请求——这条失败或还没读回来时**不**露出这个节点，
   // 不用额外的错误态：真要用沙箱的人打开它自己的页面会看到 `QueryError`，这里只是「入口」，
   // 不是这条数据本身的展示位，悄悄不出现是可接受的降级（跟硬纪律 9 说的「业务数据」不是一回事）
@@ -170,7 +170,14 @@ export function useSidebar(opts: SidebarOptions) {
     const base = data ? toNavTree(data, opts) : []
     return sandboxOn ? [...base, buildDevToolsNode()] : base
   }, [data, opts, sandboxOn])
-  return { nav, isPending, error }
+  /**
+   * 一份菜单都没取到（#397）。`sidebarQuery` 是 `retry: false` + `staleTime: Infinity`，
+   * 失败了不会自己恢复 —— 调用方必须把它画出来并给重试，别让侧边栏 / ⌘K 安静地空着。
+   * 有上一次的数据时一次后台重取失败不算（照常用旧菜单）。
+   */
+  const failed = !data && Boolean(error)
+  const retry = React.useCallback(() => void refetch(), [refetch])
+  return { nav, isPending, error, failed, retry }
 }
 
 /** 供测试与开发工具使用 */

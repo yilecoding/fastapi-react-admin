@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 
-import { api, API_BASE, uploadFile, type PageData } from '../../api-client/client'
+import { api, API_BASE, uploadFile } from '../../api-client/client'
 import type { LoginLog } from '../_shared/login-log'
 import { t } from '@admin/i18n'
 import { authKeys } from '../../auth/queries'
@@ -212,21 +212,15 @@ export function useUnbindSocial() {
 /* ────────────────────────── 我的最近登录 ────────────────────────── */
 
 /**
- * 自己的最近登录记录。数据源 `GET /api/v1/logs/login`。
+ * 自己的最近登录记录。数据源 `GET /api/v1/sys/users/me/login-logs`（#405）。
  *
- * 这个接口只挂了 `DependsJwtAuth`（列表没有权限码，只有删除/清空有），
- * 所以普通用户能读 —— 「安全设置」里最实用的一块，不需要动后端就能做。
+ * 🔴 **不要换回 `GET /logs/login`。** 那是审计视图，#30 起要 `log:login:list` ——
+ * 这里原来借它，注释还写着「只挂了 `DependsJwtAuth`、普通用户能读」，权限码补上之后
+ * 没这个码的人打开「安全」恒显示「登录记录读取失败」，而这块本来就是给**每个人**自查用的。
+ * 那条的 `username` 还是 `LIKE`（`admin` 会捞回 `admin2` 的），原来要多取 50 条再在前端全等筛；
+ * 现在后端按本人登录名全等取，前端不再筛。
  *
- * ⚠️ **`username` 入参是 `LIKE '%xxx%'` 而不是全等**
- * （`crud_login_log.get_select`: `filters['username__like'] = f'%{username}%'`）。
- * 直接拿它当「我的记录」会串进别人的：登录名 `admin` 会把 `admin2`、`superadmin`
- * 的登录记录一起捞回来，而这一页的语义是「**你的**账号在这些地方登录过」——
- * 串一条进来就是安全信息的误报。
- *
- * 所以这里多取一些（`size=50`）再在前端按 `username` **全等**筛一遍，取前 N 条。
- * 代价：如果同名前缀的用户在这 50 条里占了绝大多数，自己的记录可能不足 N 条 ——
- * 属于可接受的降级（少显示几条，不会显示错的）。
- * 真正的修法是后端加一个全等参数或 `/logs/login/me`，那要改后端，留给以后。
+ * `username` 只用来分缓存（换了账号别读到上一个人的），不进请求 —— 「看谁的」由 token 决定。
  */
 export const RECENT_LOGIN_LIMIT = 8
 
@@ -237,11 +231,7 @@ export const loginHistoryKeys = {
 export const myLoginHistoryQuery = (username?: string) =>
   queryOptions({
     queryKey: loginHistoryKeys.mine(username),
-    queryFn: async () => {
-      const q = new URLSearchParams({ page: '1', size: '50', username: username! })
-      const res = await api.GET<PageData<LoginLog>>(`/api/v1/logs/login?${q}`)
-      return res.items.filter((r) => r.username === username).slice(0, RECENT_LOGIN_LIMIT)
-    },
+    queryFn: () => api.GET<LoginLog[]>(`/api/v1/sys/users/me/login-logs?limit=${RECENT_LOGIN_LIMIT}`),
     enabled: Boolean(username),
     retry: false,
   })

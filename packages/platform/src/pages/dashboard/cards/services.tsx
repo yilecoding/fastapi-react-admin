@@ -16,6 +16,8 @@ const ROWS: { key: ServiceKey; label: string }[] = [
   { key: 'redis', label: '缓存' },
   { key: 'scheduler', label: '定时调度' },
   { key: 'worker', label: '后台任务' },
+  // 消费长任务队列的那个 worker（导出 / AI 预审 / 日志清理，#400）。它自己写心跳，不靠调度器
+  { key: 'worker_long', label: '长任务' },
 ]
 
 const DOT: Record<ServiceState['status'], string> = {
@@ -48,7 +50,7 @@ function stateText(s: ServiceState, t: TFn): string {
 }
 
 /**
- * 「服务状态」（#202，系统运行区，**只给超管**）：五个服务一行一个 + 在线会话按端拆开。
+ * 「服务状态」（#202，系统运行区，**只给超管**）：六个服务一行一个 + 在线会话按端拆开。
  *
  * 数据和外部探针 `/api/health/status` 同一套判断（`core/registrar.py` 的那几个 `_check_*`），
  * 多给一份在线会话数。接口是 `DependsSuperUser`（同监控页），所以 `available` 按超管判，不按权限码。

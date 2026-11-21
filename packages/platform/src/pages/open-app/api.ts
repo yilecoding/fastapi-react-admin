@@ -1,6 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { api, type PageData } from '../../api-client/client'
+import { saveFile } from '../../api-client/download'
 
 /**
  * 能力开放应用：给对接的外部系统发一对 AK/SK，它就能签名调用勾选的开放接口（`/api/open/v1`）。
@@ -116,13 +117,7 @@ export function useDeleteOpenApp() {
 /** 导出只含开放接口的 OpenAPI 文档。地址要 Authorization 头，不能做成 `<a href>`（存下来的会是 401 的 JSON） */
 export async function downloadOpenApiDoc(): Promise<void> {
   const doc = await api.GET<unknown>('/api/v1/open-apps/openapi.json')
-  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'open-api.json'
-  a.click()
-  URL.revokeObjectURL(url)
+  saveFile(JSON.stringify(doc, null, 2), 'open-api.json', 'application/json')
 }
 
 /** 「每行一个 / 逗号分隔」的文本框 ↔ 字符串数组 */

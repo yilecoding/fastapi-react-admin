@@ -3,7 +3,7 @@ import { menuTitle } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from '@tanstack/react-router'
 import {
-  IconCompass, IconExternalLink, IconKeyboard, IconPin, IconRefresh, IconSearch, IconX,
+  IconAlertTriangle, IconCompass, IconExternalLink, IconKeyboard, IconPin, IconRefresh, IconSearch, IconX,
 } from '@tabler/icons-react'
 
 import { CommandPalette, type CommandItem } from '@admin/ui/components/command-palette'
@@ -42,7 +42,7 @@ export function CommandMenu({ options }: { options: SidebarOptions }) {
   const setShortcutsOpen = useCommandStore((s) => s.setShortcutsOpen)
 
   const navigate = useNavigate()
-  const { nav } = useSidebar(options)
+  const { nav, failed: navFailed, retry: retryNav } = useSidebar(options)
   const menuTitles = useMenuTitles()
   const tabs = useTabStore((s) => s.tabs)
   const activeKey = useTabStore((s) => s.activeKey)
@@ -145,8 +145,19 @@ export function CommandMenu({ options }: { options: SidebarOptions }) {
       }
     }
     walk(nav, [])
+    // 菜单没取到时「页面」组不能安静地空着（#397）：给一条能重试的，搜「页面」「重试」都找得到
+    if (navFailed) {
+      out.unshift({
+        id: 'page:load-error',
+        group: t('页面'),
+        label: t('菜单加载失败，点此重试'),
+        keywords: 'retry menu error 重试 菜单 页面',
+        icon: <IconAlertTriangle className="size-4 text-destructive" />,
+        onSelect: retryNav,
+      })
+    }
     return out
-  }, [nav, tabs, navigate, t])
+  }, [nav, tabs, navigate, t, navFailed, retryNav])
 
   /** 操作组：和标签页右键菜单同一套动作，不可用的直接不列（灰着的条目在搜索列表里没意义） */
   const actionItems = React.useMemo<CommandItem[]>(() => {

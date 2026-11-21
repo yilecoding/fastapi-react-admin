@@ -20,6 +20,7 @@ import { Textarea } from '@admin/ui/components/textarea'
 import { ApiError } from '../../api-client/errors'
 import { useFieldError } from '../_shared/form-error'
 import { FormField, FormSection } from '../_shared/form-fields'
+import { OptionsError } from '../_shared/options-error'
 import { CronBuilder } from './cron-builder'
 import {
   INTERVAL_PERIOD_ITEMS, SCHEDULER_TYPE_FORM_ITEMS,
@@ -101,7 +102,10 @@ export function SchedulerFormSheet({
   const update = useUpdateScheduler()
   const [serverError, setServerError] = React.useState<string | null>(null)
 
-  const { data: meta } = useQuery(schedulerMetaQuery())
+  // 🔴 meta 取不到要说出来（#397）：原来时区回落 'UTC'，cron 预览的「接下来 5 次」整体偏 8 小时，
+  // 还标着「服务端时区 UTC」—— 一个看起来很确定的错误答案。现在不给时区，预览就不画
+  const metaQ = useQuery(schedulerMetaQuery())
+  const meta = metaQ.data
   // ⚠️ **`?? []` 要包进 useMemo**：不包的话每次渲染都是**新数组**，而它是下面
   // 那个 useMemo 的依赖 —— 于是那个 memo 从来没生效过（每次都重算）。
   // 这不报错、只是白写了一个 memo，`exhaustive-deps` 正好抓这个。
@@ -209,6 +213,9 @@ export function SchedulerFormSheet({
                     ))}
                   </SelectContent>
                 </Select>
+                {metaQ.error && (
+                  <OptionsError error={metaQ.error} onRetry={() => void metaQ.refetch()} testId="s-meta-error" />
+                )}
               </FormField>
             </FormSection>
 
@@ -234,7 +241,7 @@ export function SchedulerFormSheet({
                     value={form.watch('crontab') ?? ''}
                     onChange={(v) => form.setValue('crontab', v, { shouldDirty: true })}
                     invalid={Boolean(errs.crontab)}
-                    timeZone={meta?.timezone ?? 'UTC'}
+                    timeZone={meta?.timezone}
                   />
                 </FormField>
               ) : (

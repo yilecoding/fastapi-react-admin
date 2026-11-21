@@ -79,6 +79,21 @@ function Body({ code, fromId, onStarted }: { code: string; fromId: string | null
       </div>
     )
   }
+  // 🔴 重新发起时旧单取不到，不能落成一张空白表单（#397）：`fromOld` 关了草稿自动保存，
+  // `Filler` 的初值又只在挂载时读一次 —— 用户在空表单上重填完提交，等于丢了原单内容
+  if (fromId && (from.error || !from.data)) {
+    return (
+      <div className="p-6">
+        <SheetTitle className="sr-only">{t('发起审批')}</SheetTitle>
+        <QueryError
+          error={from.error}
+          title={t('原申请内容加载失败')}
+          onRetry={() => from.refetch()}
+          testId="wf-start-from-error"
+        />
+      </div>
+    )
+  }
   return (
     <Filler
       code={code}

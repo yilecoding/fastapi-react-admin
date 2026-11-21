@@ -50,8 +50,9 @@ Ctrl-C 后两个进程退出码都是 0。验证用 `CELERY_BROKER_URL=memory://
 同一条调度被触发 N 次。生产要分开，且 beat **只起一个**：
 
 ```bash
-pnpm --filter api celery:worker   # 可以多副本
-pnpm --filter api celery:beat     # 只能一个
+pnpm --filter api celery:worker        # 默认队列，可以多副本
+pnpm --filter api celery:worker:long   # 长任务队列（#400，见文末），可以多副本，不能省
+pnpm --filter api celery:beat          # 只能一个
 ```
 
 ⚠️ `celery-aio-pool` 不能 `-P celery_aio_pool:pool`（celery 只认固定几个 pool 名），
@@ -196,7 +197,7 @@ autodiscover 拿到的包名是 `backendtask.tasks.maintenance`，worker/beat
 最后一句红；改成每次都重载 → 中间那句红。
 
 ⚠️ 那条只测了 beat 这一侧（标记变了会不会重载），**写入侧从来没打过标记** —— 页面上的改 / 启停 / 删
-一直要重启 beat 才生效，见下面 #183 一节。
+一直要重启 beat 才生效，见 [`utils` 分册](utils/AGENTS.md)（#183）。
 
 > ⚠️ 数这个模块的测试条数别用 `grep -c '^def test_'` ——
 > `test_scheduler_timing.py` 里有个 **fixture** 叫 `test_factory`，
@@ -301,6 +302,7 @@ worker / beat 挂了网页照常能开、`/health/ready` 照常 200，只有定�
 |---|---|---|
 | scheduler | `utils/schedulers.py: DatabaseScheduler.tick` → `write_heartbeat` | 每拍，节流到 15 秒；没有调度到期时 tick 也最多 60 秒一拍（`max_interval`） |
 | worker | `tasks/health/tasks.py` 的 `health.heartbeat` | beat 每 60 秒派一次（`task_scheduler` 一行，种子 + 迁移 `u0000000health`） |
+| worker_long | 消费长任务队列的 worker 自己（`celery.py: start_long_queue_heartbeat`，#400） | 每 30 秒，挂在 worker 的事件循环上，不靠 beat |
 
 🔴 **调度器的心跳必须写在调度循环里，不能也靠派任务**：派出去的任务要 worker 执行才落得了地，
 那样 beat 停了和 worker 停了看到的是同一个结果。反过来，beat 不在时 worker 收不到心跳任务，
@@ -312,7 +314,7 @@ worker / beat 挂了网页照常能开、`/health/ready` 照常 200，只有定�
 | 不做会怎样 | 怎么挡 |
 |---|---|
 | 每次往 `task_result` 写一行 —— 一天 1440 行，「执行记录」页被淹没 | 装饰器上 `ignore_result=True` |
-| `TaskBase` 的开始 / 成功提示经 Redis 广播给**所有**在线页面 | 装饰器上 `notify=False`（`tasks/base.py` 认这个类属性；失败照推） |
+| `TaskBase` 的开始 / 成功提示每次都要查一遍谁能看执行记录、按人推（#400 之前是广播给**所有**在线页面） | 装饰器上 `notify=False`（`tasks/base.py` 认这个类属性；失败照推，同一任务 60 秒内一次） |
 
 🔴 **这两条现在有守卫**：`tests/test_scheduler_api.py::test_high_frequency_tasks_neither_record_nor_broadcast`
 —— 库里每条启用的、间隔 ≤ 60 秒的调度，任务上都得有这两项。补它是因为 #166 的 `notification.deliver_pending`
@@ -349,110 +351,10 @@ init 不断开连接池 · 调度器停了 worker 照报 stale · 心跳任务�
 三项检查串行 · worker 心跳写错键 · tick 不写心跳 · 写心跳失败往外抛 · 响应里带异常 message ·
 心跳并进 ready · 阈值失效。
 
-## 🔴 页面上停用 / 改 / 删不生效，一条不到期的调度把 beat 整个堵死（#183）
+## 页面上停用 / 改 / 删不生效、一条调度把 beat 堵死（#183）
 
-**症状**（下游实测，按时间顺序）：页面上停用一条每天 02:30 的调度，接口 200，第二天 02:30 照样派发；
-下次发版重启 beat 之后，**所有**定时任务停了 8 小时 —— beat 只派出一次心跳就再没派过任何任务，
-`/health/status` 503 报「worker 心跳停了」（worker 是好的，只是收不到任务），在页面上重新启用也解不开。
-
-**根因**是几个独立的洞叠在一起：
-
-| | 根因 | 修法 |
-|---|---|---|
-| 写入侧 | crud 的 `update_model_by_column` / `delete_model_by_column` 发的是 Core `UPDATE`，**不触发 mapper 事件**，而变更标记只在 `after_insert/update/delete` 里打 —— 只有新建（`session.add`）通知得到 beat | DAO 的增 / 改 / 启停 / 删调 `TaskScheduler.touch_last_update_after_commit(db)`，挂在 session 的 `after_commit` 上；ORM 事件也改成登记、提交后再打 |
-| 写入侧 | 标记打在提交**前**：beat 可能抢先重载、读到旧行，再把标记记成「看过了」，改动照样丢。SQL Server 上那次读还会被未提交的 INSERT 挡住 | 同上，只在提交之后打，回滚不打 |
-| 写入侧 | 标记值是 `to_str(now())`、只到秒，beat 只比相等：同一秒里两次改动写出同一个值 | 值带随机后缀 |
-| 重载 | celery 的 `schedules_equal` 用 `ScheduleEntry.__eq__`，只比 task / args / kwargs / options / schedule，**不比 enabled / start_time / expire_time / one_off**：只改这几项时判「没变」、不重建堆，堆里的旧 entry 读的是旧 model | 重载过就让 `schedules_equal` 返回 False，强制重建堆 |
-| 重载 | celery 的 `reserve()` 是 `self.schedule[name] = next(entry)`：那一读碰上变更标记就重读，再把拿旧 model 算出的下一轮写进新字典 —— 刚停用的调度复活 | 重写 `reserve`，直接写 `_schedule`，重读留给下一拍开头 |
-| 堆 | celery 的 `tick()` **只看堆顶，没到期就原样留着**（不弹出、不重新排队）。`ModelEntry.is_due()` 的四种「永远不到期」（停用 / 过期 / one_off 跑过 / 没到 start_time）按 `now + 60` 进堆，这个时间一过就排到堆顶、再也下不来 | 载入时不收前三种（`is_retired`）；tick 之后把堵在堆顶的按它自己报的下次时间挪回堆里（`_requeue_stale_head`）—— 没到 start_time 的、运行中才过期 / 跑完的，只有这一道挡得住。没开始时报「离 start_time 还有几秒」（≤ 60），开始那一刻准时再看 |
-| 兜底 | 注释说「max_interval 到点仍会重读」，没有这回事：标记不变就永不重读 | `reload_every = 300` 定时重读（标记漏打、迁移里插的调度） |
-
-⚠️ 挪堆顶只挪「真实下次时间比堆里的位置晚 1 秒以上」的：celery 的 `adjust()` 自带 -10ms 漂移，
-普通的「还没到点」两者本来就差这一点，不留余量会在每个调度到点前空转几拍。没重写整个 `tick()`，
-是为了少抄 celery 的内部实现 —— 升级 celery 时要核对 `_heap` / `_when` / `event_t` / `reserve()` 还是这个样子。
-
-### 🔴 定时重读自己带进来的四个坑（第一轮修完、二轮审查才抓到）
-
-「每 5 分钟无条件重读 + 每次重读都重建堆」把原来「恰好有人改调度才会撞上」的事，变成了 5 分钟内必然撞上：
-
-| 不处理会怎样 | 修法 |
-|---|---|
-| 从没跑过的调度 `last_run_at` 回落成「现在」，每次重读都往后挪：**间隔比 5 分钟长的新调度永远不到期**（实测每 10 分钟一次的新调度 3 小时 0 次） | 起点改成建好的时刻（不早于 beat 启动），重读不变；起点规则见下 |
-| `_persist` 回写失败（库抖一下，只记 warning）之后重读拿库里旧值：每日任务当天补跑一次，one_off 再跑一次 | 重读时按 id 把内存里更新的触发记录带过来（`_carry_over_run_stats`），`sync()` 之后补回库里 |
-| 重读时库连不上：异常经 `tick()` 抛到 celery 的 `start_scheduler`，记一条 critical 就**退出 beat 进程** | 失败只记 warning、沿用内存里的调度，`reload_retry_after = 30` 秒后再试 |
-| 指向未注册任务的调度每次重读喊一次 ERROR，一天 288 条，告警被刷屏 | 同一条只喊一次 |
-
-另外两处顺手修的：启动时先读标记再读表（反过来的话两步之间提交的改动会被当成看过了）；同步 Redis 客户端一个进程只建一个
-（原来每读一次标记就新建一个客户端 = 一条新的 TCP 连接，挪堆顶带来的额外 tick 会放大它）。
-
-### 🔴 下次触发从哪一刻算起（`ModelEntry._anchor`）
-
-| 这一行 | 起点 | 不这样会怎样 |
-|---|---|---|
-| 跑过 | 最近一次触发 | —— |
-| 没跑过、有 start_time | start_time | —— |
-| 没跑过、没 start_time | 建好的时刻，但**不早于这个 beat 进程启动的时刻** | 回落成「现在」：「定时重读」那张表的第一行。直接用建好的时刻：种子的 `created_time` 是固定的 2026-08-22，全新部署第一次起 beat，从没跑过的种子全会当场跑一次 —— 里面有给全员发消息的「每日问候」 |
-| 用户改过（含停用后重新启用、改 crontab） | 上面那个和 `updated_time` 取**晚**的 | 重新启用一条每天 02:30 的调度，停用期间错过的那次在点「启用」时当场补跑；把 crontab 改到今天已过的时刻也一样（二轮审查实测，两种都在 10:00 多跑一次）。修之前启停不生效所以没人见过 |
-
-🔴 **beat 自己的回写不能动 `updated_time`**：`_persist` / `sync` 的 Core UPDATE 原来会经 `onupdate` 把它推到回写那一刻
-（每触发一次、每 3 分钟 sync 一次都改一遍，界面上的「修改时间」其实是最近一次回写的时间），那就不能拿它当「用户最后一次改」。
-现在回写时显式 `SET updated_time = updated_time`（列出现在 SET 里，onupdate 就不生效）。
-
-代价和边界：间隔型调度改个备注也会从改的那一刻重新计时；没跑过、没 start_time、间隔又比 beat 重启周期长的调度，
-每次重启都重新计时（和修之前一样）。⚠️ 升级后第一次启动，间隔型调度的下一次可能顺延（不超过一个间隔）：
-老代码的回写已经把 `updated_time` 推到了老 beat 退出那一刻。
-⚠️ 测试里改调度要显式写 `updated_time`（`test_scheduler_timing.py: _edit`）：列上的 `onupdate=timezone.now` 是定义模型时
-绑死的方法，假时钟换不掉，不写的话落库的是真实此刻，在假时钟看来是「未来」，起点会悄悄跑偏。
-
-🔴 **假时钟要连 `time.monotonic` 一起换**：第一轮的模拟只换了 `timezone.now` / `BaseSchedule.now`，跑 12 小时实际只过一秒，
-定时重读一次都没发生，上面第一行就这么混过去了。`test_scheduler_timing.py` 的 `clock` 夹具现在三处一起换。
-
-### 🔴 修完上面那条才天天踩得到的：PostgreSQL 下 crontab 按 UTC 的钟点算
-
-PostgreSQL 按会话时区返回 timestamptz（默认 UTC，beat 的同步连接没设时区），而 crontab 的
-`remaining_delta` 拿 `last_run_at.day` / `.hour` 直接和本地的 now 比。北京时间 0～8 点两边不是同一天，
-下次触发就按 UTC 的钟点算：每天 02:30 的任务，beat 在 02:30 之前启动会**立刻补跑一次**；之后每次重读都按 UTC 算，
-02:30 那次干脆挪到 **10:30**。原来只在重启 beat 时重建堆，所以只踩重启那一下；修完「重载必重建堆」再加上每 5 分钟的
-定时重读，不换算就天天错。修法在 `ModelEntry.__init__`：`last_run_at` 换算到应用时区。SQL Server 的 `datetimeoffset`
-存着写入时的偏移、MySQL 读回来是 naive（`TimeZone` 补成应用时区），都踩不到 —— **只有 PostgreSQL 的 CI 红得出来**。
-
-**实测证据**（2026-10-30，celery 5.6.3 · sqlalchemy-crud-plus 1.13.3 · PostgreSQL 私有库；真实的 `ModelEntry` /
-`DatabaseScheduler` / celery `Scheduler.tick()`，只换掉时间、变更标记和派发，按 `beat.Service.start` 的方式驱动假时钟；
-「修之后」一列带着每 5 分钟一次的定时重读）：
-
-| 场景（心跳每 60 秒，跑 600 秒） | 修之前 | 修之后 |
-|---|---|---|
-| 全是启用的（对照） | 心跳 10 次 | 10 次 |
-| 一条停用的 / 已过期的 / one_off 已跑过的 | **1 次**，堆顶停在那条 | 10 次 |
-| one_off 在 beat 运行中跑完第一次（没重启） | 1 次 | 10 次 |
-| start_time 在一小时后（跑 2 小时） | 第一小时只有 **1 次** | 第一小时 60 次 |
-| 150 秒时停用一条每 2 分钟的（库里已停、标记已打） | 之后照派 240 / 360 / 480 | 不再派 |
-| 已堵住，300 秒时重新启用并打标记 | 心跳之后 0 次 | 恢复 |
-| 每天 02:30，03:00 重载一次，跑到 14:00 | 原代码：02:00 启动即补跑 | 只有 02:30 |
-| 新建一条每 10 分钟的（跑 3 小时） | — | 17 次，第一次在 600 秒（只修第一轮时 0 次） |
-
-crud 打不打事件（真实 `task_scheduler_dao`）：ORM add 1 次，`set_enabled` / `update` / `delete` **各 0 次**。
-SQL Server（本机容器，RCSI 关着，同 CI）：本模块 + `test_health.py` 134 条全过；把 ORM 事件改回提交前当场打、
-去掉接口测试探针的锁超时，那条接口测试**卡住**（90 秒被杀）—— 二轮审查推断的死锁是真的。
-
-守卫 30 条新用例 + 1 条改写：`test_scheduler_api.py::test_every_write_tells_beat_after_it_commits`
-（打标记时另开连接读那一行，读到新值才算「提交之后」；SQL Server 上设了 1 秒锁超时，提交前被调到会快速红而不是卡死）·
-`test_scheduler_timing.py` 里 #183 那两节（假时钟 + 真库 + 真 tick）· `test_scheduler.py` 的载入过滤 / 标记不重复 /
-时区换算 / 标记写失败 / 未注册只喊一次 / Redis 客户端复用。原 10 条只 tick 一次的用例改成 `tick_until_idle()`
-（种子里从没跑过的调度现在和用例的行同时到期，一拍只派堆顶那一条）。
-27 处变异各有对应的红：新建（DAO 和 ORM 事件都去掉）/ 编辑 / 启停 / 删除不打标记 · 提交前打 · 去掉挪堆顶 · 去掉载入过滤 ·
-去掉强制重建堆 · 去掉 `reserve` 重写 · 去掉时区换算 · 标记只到秒 · 去掉定时重读 · 重读失败往外抛 · 失败后不隔开 ·
-去掉 `_persist` · 没跑过的回落成「现在」· 去掉触发记录带过来 · 启动先读表 · 没开始固定 60 秒 · ORM 事件当场打 ·
-未注册每次都喊 · 标记写失败不接 · 每次新建 Redis 客户端 · 起点不看 updated_time · 没跑过的不垫到启动时刻 ·
-`_persist` / `sync` 回写动 updated_time（各一处）。
-⚠️ 只去掉「强制重建堆」时停用那条**仍绿**（停用的行载入时就不收，键集合一变 celery 自己会重建）—— 抓它的是
-「改 start_time / expire_time、行还在调度里」那条；只去掉 DAO 里新建那次登记也仍绿（ORM 事件兜着），两样都去掉才红。
-
-⚠️ **没修的**：① 调度器心跳写在 `tick()` 里，beat 因为别的原因不派任务时心跳照写，`/health/status` 仍然只会报
-「worker 心跳停了」，分辨两者要另记一个「最近一次派发」的时间。② 写入侧靠 DAO 显式登记，绕过 DAO 直接写这张表的
-（原生 SQL、迁移）要等定时重读；更彻底的是在 Session 级挂 `do_orm_execute` / `after_flush` 统一登记，但要排除 beat 自己的
-回写，留给后续。③ 「提交后做一件事」后来抽成了公用的 `common/after_commit.py: run_after_commit`（通知推送 / 通知投递 /
-Webhook 投递都走它，#190 迁完）；**这里的变更标记刻意没迁**：它挂在同步会话上、提交后做的是一次同步的 Redis 写，公用那份派的是协程。
+整节挪到了 [`utils` 分册](utils/AGENTS.md)（调度器 `utils/schedulers.py` 那一层）：写入侧不打变更标记、
+堆顶堵死、定时重读的四个坑、下次触发从哪一刻算起、PostgreSQL 下 crontab 按 UTC 算。**动 `schedulers.py` 之前先读那一份。**
 
 ## 🔴 Redis 密码带 `/`：网站正常，后台任务和实时推送连不上（上游 #1276 同类）
 
@@ -492,3 +394,91 @@ redis-py `parse_url` / SQLAlchemy `make_url` 把四种密码（含 `/`、空格�
 三处变异各让迁移那条测试变红：按字符串比（界面上存过一次、写成 `{"days":30}` 的就漏改）· 不看备注是不是种子原文 · 不看天数。
 任务默认值、一份种子退回 30，对账那条红。
 存储：本机开发库操作日志 3674 条、8256 kB（含索引），平均每条约 2 KB —— 每天 1 万条留 180 天约 4 GB，写进了文档站「上线前检查清单」。
+
+## 🔴 一个 worker 进程一次只跑一个任务：长任务单独排队（#400）
+
+**症状**：一次 AI 预审（`with_timeout(300)`）/ 一份大导出 / 首次 `prune_logs` 期间，`/health/status` 报 `worker: stale`（503），
+邮件、短信、Webhook 投递一起停在那儿；worker 进程好好的，`--concurrency` 调多大都没用。
+
+**根因**：`celery_aio_pool.AsyncIOPool` 继承的是 solo 池，`__init__` 里写死 `self.limit = 1`；`run()` 用
+`run_coroutine_threadsafe` 把协程投进循环之后**马上 `result.exception()` 同步等它跑完**，才回去取下一条消息。
+「异步」只是任务函数能 `await`，消费仍是串行的。长任务和每分钟一次的 `health.heartbeat` 挤在一条队列上，心跳就排在后面。
+
+**修法**：按任务名分两条队列（`celery.py: LONG_TASKS` → `task_routes`），两个 worker 各消费一条：
+`worker -Q celery` 跑心跳 / 投递 / 审批超时，`worker -Q long` 跑导出 / AI 预审 / `maintenance.*`。
+生产是 compose 里的 `worker` / `worker-long`，开发是 `apps/worker/dev.mjs` 起的两个进程（`-n default@%h` / `long@%h`）。
+
+- 路由按**名字**配，不写在 `@task(queue=...)` 上：`send_task('export.run')`、beat、「立即执行」都只拿得到名字。
+  调度那一行的 `queue` 是 `None` 时不会盖掉路由表（celery 的 `lpmerge` 跳过 None），显式填了就以它为准
+- 🔴 **新任务要归类**：`tests/test_task_queues.py::test_every_registered_task_is_classified` 要求每个注册的任务都写进
+  测试里的 `LONG` 或 `SHORT`，漏了就红 —— 不归类就是悄悄落进默认队列，和心跳抢 worker
+- 🔴 **长任务 worker 没起 = 导出 / AI 预审 / 日志清理静默地永远不执行**（消息堆在 `long` 队列里，没人报错）。
+  所以它自己写心跳（`worker_long`，`/health/status` 第六项，没起就是 `missing` → 503）。
+  ❌ 不能也靠 beat 往 `long` 队列派心跳任务：那个任务排在长任务后面，一次 300 秒的预审就把「忙」报成「死」。
+  心跳挂在 worker 自己的循环上、和任务交替跑（任务都是 `async def`）；只有消费 `long` 的 worker 才写，
+  默认 worker 写了的话没人消费长任务时照样全绿。写失败只记 warning、下一拍接着写
+- ⚠️ 从 v1.1.3 及更早升级的部署要多起一个容器（`prod.sh sync` 换上新 compose 就有），部署 README 和文档站部署页都写了
+
+**实测证据**（2026-11-21，本机真 worker：`--pool=custom` + 一次性 Redis 容器 + 私有 PostgreSQL 库；加了一个临时任务
+`probe.sleep(20)` 模拟长任务，派完它 0.5 秒后派 `health.heartbeat`，量心跳键从派发到落地多久）：
+
+| | 心跳落地 | 长任务心跳 |
+|---|---|---|
+| 修之前（origin/main，单 worker） | **19.54 秒**（排在 20 秒的任务后面） | —— |
+| 修之后（两个 worker，`probe.sleep` 派进 `long`） | 0.01 秒 | 长任务跑在 00:24:18–38，长任务心跳在 00:24:27 照写 |
+
+`apps/worker/dev.mjs`：`long@… ready` / `default@… ready`，Ctrl-C 后两个进程退出码都是 0。
+单测 `test_task_queues.py` 19 条；变异各自当场红：去掉路由表 · 默认 worker 也写长任务心跳 · 心跳写失败就退出。
+`test_health.py` 加了三条（长任务 worker 没起 / 停了都 503 · 调度器停了它照样判得出）。
+
+## 🔴 任务失败提示从来没推出去过 —— 修通之前先收住受众和内容（#400）
+
+**症状**：任务失败，worker 日志里有 `执行失败：…`，页面上没有任何提示；这一节之前的版本还写着「失败照推」。
+
+**根因**：`on_failure` 是同步钩子，celery_aio_pool 的 tracer 只把 `before_start` / `on_success` 交给池的循环，
+失败走 celery 自己的 `handle_failure`，在 worker **主线程**上同步调。原来的写法
+`asyncio.get_running_loop().create_task(...)` 外包 `except RuntimeError: pass` —— 主线程上没有正在跑的循环，
+**每一次**都抛、每一次都被吞。从第一个 Celery 提交（`8f1ad6d`）起就是这样。
+
+而它推的内容是 `执行失败：{exc}`、`sio.emit` 不带房间：直接修通，`autoretry_for=(SQLAlchemyError,)` 重试耗尽后
+`str(exc)` 里的完整 SQL、绑定参数、数据库主机会广播给**每一个**在线用户（开始 / 成功那两条也一直是广播）。
+
+**修法**：
+
+- 投递：`asyncio.run_coroutine_threadsafe(..., pool_loop())` 投进 AsyncIOPool 自己的循环（和雪花初始化同一个，#369），不等结果；
+  没有池循环（eager / 测试里直接调）只记日志，关掉协程，不往外抛
+- 受众：`utils/notify.py: task_watcher_ids` —— 只推给能看执行记录的人（`task:result:list`），按人推进 `user_room`。
+  SQL 只粗筛候选，判据一律走 `get_jwt_user` 快照 + `rbac.user_has_perm`（父目录停用、权限码白名单、casbin 只认超管都在那一份里）。
+  `common/socketio/actions.py: task_notification` 现在必须传 `user_ids`，没有广播这条路了
+- 内容：失败只说「任务 X（id）执行失败，详情见执行记录」；原文在 `task_result` 里，要同一个权限码才看得到
+- 节流：同一任务 60 秒内只推一次失败（每 15 秒一次的投递任务在库挂掉时会连续失败）；日志照记每一次
+
+**实测证据**（同上一节的真 worker 环境，临时任务 `probe.fail` 抛一个带主机和密码的 `RuntimeError`，订阅 socket.io 的 Redis 通道看实际发出去的消息）：
+
+| | 「开始执行」 | 「执行失败」 |
+|---|---|---|
+| 修之前（origin/main） | `room: null`（广播） | **没有这条消息**，日志里只有 `on_failure:104 … 执行失败：… password=hunter2` |
+| 修之后 | `room: user:2048601269672738816`（种子 admin） | 同一个房间，`任务 probe.fail（…）执行失败，详情见执行记录` |
+
+单测 `test_task_notify.py` 7 条（在**没有运行中循环**的线程上调 `on_failure`，和 worker 主线程一样）。变异各自当场红：
+改回 `get_running_loop` 吞异常 · 消息里带回 `{exc}` · 去掉节流 · 受众不过 `user_has_perm`（菜单停用那条）· `task_notification` 改回广播。
+⚠️ 去掉 SQL 粗筛**仍绿**，是等价变异：粗筛只省掉逐个查快照的次数，结论全由 `user_has_perm` 决定。
+
+## 🔴 执行记录一碰到真失败记录就 500：`result` 列不是字符串（#417）
+
+**症状**：「执行记录」列表 / 详情整页打不开，接口 500（`ResponseValidationError: result Input should be a valid string`）。
+只要当前页里有一条 worker 真写下的失败记录就会撞上；而 #400 之后失败提示写的正是「详情见执行记录」。
+
+**根因**：`task_result.result` 是 `PickleType`，celery 存什么就是什么 —— 失败的 DatabaseBackend 存
+`{'exc_type': ..., 'exc_message': (...), 'exc_module': ...}`，成功的任务返回什么就存什么。响应模型
+`GetTaskResultDetail.result` 却声明成 `str | None`。原来的测试造的失败行 `result` 都是字符串，**和 celery 真写的不是一个形状**，
+所以一直绿。
+
+**修法**：`schema/scheduler.py: result_as_text` 挂在 `result` 的 `mode='before'` 校验器上，出网前转成一行字：
+失败的写成 `exc_type: 参数1, 参数2`（和 traceback 最后一行同样子），其它非字符串转 JSON（中文原样）。契约照旧是 `string | null`，前端不用动。
+🔴 造执行记录的测试要按 celery 真实写入的形状造（经 ORM 让 `PickleType` 自己序列化），别再塞字符串。
+
+**实测证据**（2026-11-21）：本机开发库最近 3 条 `FAILURE` 行（`ProgrammingError` / 两条 `NotRegistered`），修之前
+`GetTaskResultDetail.model_validate` 3 条全失败，修之后是 `NotRegistered: notification.deliver_pending` 这样的一行。
+`tests/test_result_values.py` 8 条（失败 / 无参数 / 多参数 / 字典 / 整数 / 字符串 / 空 七种详情 + 一页混着失败的列表）：
+修之前 6 条红（字符串和空两条本来就过）；变异 —— 去掉校验器 6 条红，去掉失败那一支 3 种失败 + 列表红。

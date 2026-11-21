@@ -1,16 +1,22 @@
+from collections.abc import Iterable
+
 from backend.common.socketio.server import sio, user_room
 from backend.core.conf import settings
 from backend.database.redis import redis_client
 
 
-async def task_notification(msg: str) -> None:
+async def task_notification(msg: str, user_ids: Iterable[int]) -> None:
     """
-    任务通知
+    任务通知：只推给指定的人（各自的 `user_room`）
 
-    :param msg: 通知信息
+    🔴 **不提供广播。** 原来不带房间，所有在线页面都收到；受众由 `app/task/utils/notify.py` 按权限算好再传进来（#400）
+
+    :param msg: 通知信息（只放任务名 / 编号这类，不放异常原文）
+    :param user_ids: 推给谁；空的就谁也不推
     :return:
     """
-    await sio.emit('task_notification', {'msg': msg})
+    for user_id in user_ids:
+        await sio.emit('task_notification', {'msg': msg}, room=user_room(user_id))
 
 
 async def notification_new(user_id: int | None = None) -> None:

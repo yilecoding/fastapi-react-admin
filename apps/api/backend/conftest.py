@@ -71,6 +71,8 @@ _PATCHED_SESSION_MODULES = (
     'backend.plugin.sms.service.sms_service',
     # 公告的收件箱对时（#190：定时发布到点就发、过期就撤）：worker 里没有依赖注入，每条公告自己开一个事务
     'backend.app.task.tasks.notice.tasks',
+    # 任务提示的受众（#400）：在 worker 的钩子里查谁能看执行记录，没有依赖注入
+    'backend.app.task.utils.notify',
 )
 
 

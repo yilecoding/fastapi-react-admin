@@ -234,8 +234,11 @@ down 只删迁移自己那几个 ID。浏览器（Playwright）：阈值填 120 
   （这两条是规范和别人的案例，**没有实测**）。
   预览仍走 `download_url`（后端流式代理），所以**桶不需要配 CORS**
 - **不能做成 `<a href={download_url} download>`** —— 那个地址要 Authorization 头，
-  裸链接带不上，结果是把 401 的 JSON 当文件存下来。走 `fetchBytes` → Blob →
-  临时 `<a>` 点一下 → **立刻 `revokeObjectURL`**（不 revoke 整个文件的字节会留在内存里）
+  裸链接带不上，结果是把 401 的 JSON 当文件存下来。走 `fetchBytes` → `api-client/download.ts` 的 `saveFile()`。
+  🔴 **别自己写 `createObjectURL` → `a.click()` → `revokeObjectURL`**：`click()` 只是把下载交给浏览器，立刻收回地址在
+  Firefox 上偶发下载失败，`saveFile` 延后 1 秒收回（不收的话整个文件的字节留在内存里直到刷新）。#405 时全仓还有五处手写的立刻收回
+  （文件页 · 附件面板 · 插件 zip · 开放接口文档 · MFA 恢复码），最要紧的是恢复码 —— 只显示一次，下载没成而用户以为存好了。
+  这一条是读代码 + `download.ts` 里原有的结论，没在 Firefox 上复现过
 - `UPLOAD_DIR` 在 `BASE_PATH / 'upload'`，**不在 `STATIC_DIR` 里面**。
   ⚠️ 只删 `/static/upload` 那条 mount 是**没用的**：它原来在 `STATIC_DIR` 下，
   被 `app.mount('/static', …)` 连带公开（实测删了还是 200）。

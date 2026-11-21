@@ -3,7 +3,7 @@ import { menuTitle } from '@admin/i18n'
 import { useTranslation } from 'react-i18next'
 import * as React from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
-import { IconChevronRight, IconExternalLink } from '@tabler/icons-react'
+import { IconAlertTriangle, IconChevronRight, IconExternalLink } from '@tabler/icons-react'
 
 import {
   Collapsible,
@@ -25,6 +25,7 @@ import {
 } from '@admin/ui/components/sidebar'
 import { Skeleton } from '@admin/ui/components/skeleton'
 
+import { usePerm } from '../auth/use-perm'
 import { MenuIcon } from './icon-registry'
 import { useSidebar, type NavNode, type SidebarOptions } from './use-sidebar'
 
@@ -128,6 +129,40 @@ function subtreeHasPath(node: NavNode, path: string): boolean {
 }
 
 /**
+ * 外壳数据取不到时侧边栏里的那一行：整行是重试按钮。折叠成图标栏时只剩警告图标，
+ * 文字进 tooltip（`SidebarMenuButton` 的 `tooltip` 只在折叠态显示）。
+ */
+function ShellLoadError({
+  label,
+  error,
+  onRetry,
+  testId,
+}: {
+  label: string
+  error: unknown
+  onRetry: () => void
+  testId: string
+}) {
+  const detail = (error as { message?: string } | null)?.message
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        onClick={onRetry}
+        tooltip={label}
+        title={detail}
+        className="h-auto items-start whitespace-normal text-destructive hover:text-destructive"
+        data-testid={testId}
+        role="alert"
+      >
+        <IconAlertTriangle className="mt-0.5" />
+        {/* 用 div 不用 span：按钮自带 `[&>span:last-child]:truncate`，长提示会被截成「部分按钮暂不…」（ego 实测） */}
+        <div className="min-w-0">{label}</div>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  )
+}
+
+/**
  * `mark` 和 `title` 走 props 注入：品牌标识属于应用，platform 不能反向
  * import apps/web（依赖方向单向）。不传就退化成标题首字的方块。
  */
@@ -143,7 +178,8 @@ export function AppSidebar({
   const { t } = useTranslation()
   // 默认标题不能写进参数默认值 —— 默认值在 hook 之前求值，调不了 t()
   const label = title ?? t('管理平台')
-  const { nav, isPending } = useSidebar(options)
+  const { nav, isPending, failed, error, retry } = useSidebar(options)
+  const { codesFailed, codesError, retryCodes } = usePerm()
   const activePath = useRouterState({ select: (s) => s.location.pathname })
 
   return (
@@ -175,6 +211,20 @@ export function AppSidebar({
                   </SidebarMenuItem>
                 ))
               : nav.map((n) => <NavItem key={n.id} node={n} activePath={activePath} />)}
+            {/* 🔴 两份外壳数据失败都画在这里（#397）。工作台自己有一块 contextError，但深链进别的页面时
+                那块不在：侧边栏空着、`<Can>` 按钮全没了，而两条查询都是 retry:false + staleTime:Infinity，
+                不点重试永远不会恢复。侧边栏是唯一每一页都在的地方 */}
+            {failed && (
+              <ShellLoadError label={t('菜单加载失败，点此重试')} error={error} onRetry={retry} testId="sidebar-error" />
+            )}
+            {codesFailed && (
+              <ShellLoadError
+                label={t('权限加载失败，部分按钮暂不显示，点此重试')}
+                error={codesError}
+                onRetry={retryCodes}
+                testId="perm-codes-error"
+              />
+            )}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>

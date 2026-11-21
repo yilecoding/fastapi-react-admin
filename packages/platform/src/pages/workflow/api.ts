@@ -3,6 +3,7 @@ import { queryOptions, useMutation, useQueryClient, type QueryClient } from '@ta
 import type { Cond, FormData, FormSchema } from '@admin/api'
 
 import { api, fetchBytes, uploadFile, uploadForm, type PageData } from '../../api-client/client'
+import { saveFile } from '../../api-client/download'
 
 /**
  * 审批流的接口与类型（issue #107）。
@@ -675,12 +676,7 @@ export function uploadAttachment(file: File): Promise<FileMeta & { id: string }>
  */
 export async function downloadAttachment(id: string, name: string): Promise<void> {
   const buf = await fetchBytes(`/api/v1/sys/files/${id}/download?disposition=attachment`)
-  const url = URL.createObjectURL(new Blob([buf]))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  saveFile(buf, name)
 }
 
 export type HandoverHolder = { user_id: string; name: string; active: boolean; count: number }

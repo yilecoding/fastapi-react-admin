@@ -166,7 +166,7 @@ export type ServiceState = { status: 'ok' | 'error' | 'stale' | 'missing' | 'unk
 
 export type ServicesStatus = {
   status: 'ok' | 'degraded'
-  services: Record<'api' | 'database' | 'redis' | 'scheduler' | 'worker', ServiceState>
+  services: Record<'api' | 'database' | 'redis' | 'scheduler' | 'worker' | 'worker_long', ServiceState>
   heartbeat_max_age_seconds: number
   /** 会话索引读不到（Redis 挂了）时是 `null` —— 「不知道」，不是 0 */
   sessions: { total: number; web: number; desktop: number; mobile: number } | null

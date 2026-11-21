@@ -18,7 +18,7 @@
 #   config   展开并校验 compose，不启动任何东西
 #   build    在本机从源码构建（只有仓库在的时候能用，和 pull 二选一）
 #   pull     拉 CI 已经推到 GHCR 的镜像（配 FBA_PULL_MIRROR 时走加速器 + 自动 retag）
-#   up       启动（先跑 migrate，成功了才起 api/worker/beat/web），再经 web 探 /api/health/ready
+#   up       启动（先跑 migrate，成功了才起 api/worker/worker-long/beat/web），再经 web 探 /api/health/ready
 #   down     停止容器。永远不带 -v —— 这个脚本不给传任何额外参数就是为了这个
 #   logs     跟踪最近 200 行
 #   status   在跑的是哪个提交、和 main 差多少
@@ -314,7 +314,7 @@ probe_after_up() {
   local status_body
   status_body=$(fetch_status_body "$base")
   info "各服务状态 /api/health/status → ${status_body:-无响应}"
-  info "scheduler / worker 不是 ok 的话过 3 分钟再看一次，还不是就查那个容器"
+  info "scheduler / worker / worker_long 不是 ok 的话过 3 分钟再看一次，还不是就查那个容器（worker_long 对应 worker-long 容器）"
   verify_deployed_commit "$base" "$status_body"
 }
 
