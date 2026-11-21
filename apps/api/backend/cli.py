@@ -87,6 +87,26 @@ class CustomReloadFilter(PythonFilter):
         return super().__call__(change, path)
 
 
+def _backup_env_file() -> None:
+    """覆盖前把现有 .env 拷成 .env.bak.<时间戳>（#399）
+
+    init 整份重写 .env 是设计，但它发生在「确认继续吗」之前：答「否」库没动，
+    自配的加密密钥却已经没了，库里用旧密钥加密的数据从此解不开。留一份备份让它找得回来。
+    """
+    env_path = Path(ENV_FILE_PATH)
+    if not env_path.exists():
+        return
+    stamp = timezone.now().strftime('%Y%m%d%H%M%S')
+    backup = env_path.with_name(f'{env_path.name}.bak.{stamp}')
+    # 同一秒里跑两次时，第二次的「旧 .env」已经是刚生成的那份，不能盖掉第一次存下的真身
+    n = 1
+    while backup.exists():
+        backup = env_path.with_name(f'{env_path.name}.bak.{stamp}-{n}')
+        n += 1
+    backup.write_bytes(env_path.read_bytes())
+    console.note(f'已备份现有 .env → {backup.name}')
+
+
 def setup_env_file() -> bool:
     """交互式配置并生成 .env 环境变量文件"""
     if not ENV_EXAMPLE_FILE_PATH.exists():
@@ -133,6 +153,7 @@ def setup_env_file() -> bool:
         env_content = re.sub(r"TOKEN_SECRET_KEY='[^']*'", f"TOKEN_SECRET_KEY='{token_secret}'", env_content)
         settings.TOKEN_SECRET_KEY = token_secret
 
+        _backup_env_file()
         Path(ENV_FILE_PATH).write_text(env_content, encoding='utf-8')
         console.tip('.env 文件创建成功')
     except Exception as e:
