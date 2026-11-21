@@ -67,8 +67,10 @@ service/webhook_sign.py      出站签名（Standard Webhooks），和三份 SDK
 - 🔴 **`updated_since` 往回多看 `OPEN_SYNC_LOOKBACK_SECONDS`（默认 300）**（#396）：`created_time` / `updated_time` 是
   `default_factory=timezone.now`，**构造对象那一刻**就定了，不是提交时间。部门导入（外层事务 + 逐行保存点）跑几十秒，
   期间别的记录以 T2 先提交、被对方拿到，下一轮 `updated_since=T2`，导入事务里早于 T2 写、晚于 T2 提交的行**永远收不到**。
-  往回看一段、窗口内重复返回，对方按 id 覆盖（README 同步改了「不会重」那句）。窗口要比系统里最长的写事务长；
-  cursor 不回退。实测证据：`test_rows_written_early_in_a_long_transaction_are_not_skipped`（把一行时间改成比水位早 30 秒），
+  往回看一段、窗口内重复返回，对方按 id 覆盖（README 同步改了「不会重」那句、并写明以 `has_more = false` 结束而不是「拉到空」）。
+  🔴 **窗口只救得了比它短的事务**：现在改用户 / 部门最长的写事务是表格导入（请求里同步跑、一个事务 + 逐行保存点，
+  `TABLE_IMPORT_MAX_ROWS` 默认 1000 行 —— 这条是读代码得出的上限，**没实测过 1000 行导入跑多久**）。
+  调大导入上限或把导入挪进后台任务时，`OPEN_SYNC_LOOKBACK_SECONDS` 要跟着核；cursor 不回退。实测证据：`test_rows_written_early_in_a_long_transaction_are_not_skipped`（把一行时间改成比水位早 30 秒），
   撤掉回看 → 红，恢复 → 绿（PostgreSQL，2026-11-21）
 
 **实测证据**（第 7 位那条）：CI 的 `pytest · SQL Server` 挂满超时三次，本地复现在 58%，faulthandler 栈停在

@@ -353,6 +353,22 @@ class TestWorker:
         (row,) = _call(client, _deliveries)
         assert (row.status, row.reason, calls) == ('skipped', reason, [])
 
+    def test_recheck_failing_still_sends_to_the_snapshot(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """复核查不出来（库抖了一下）：照快照发，不能让这一行停在 sending、被归成「结果未知」再也不发"""
+        calls: list[int] = []
+        _fake_email(monkeypatch, senders.Outcome.sent, calls)
+
+        async def _boom(*args: object, **kwargs: object) -> None:  # ruff: ignore[unused-async]
+            raise RuntimeError('pytest: 查库失败')
+
+        monkeypatch.setattr(delivery_service, 'recheck', _boom)
+        pk = _enqueue_one(client)
+        _call(client, delivery_service.deliver_pending)
+        (row,) = _call(client, _deliveries)
+        assert (row.status, row.address, calls) == ('sent', 'test@example.com', [pk])
+
     def test_resend_goes_to_the_current_address_not_the_snapshot(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:

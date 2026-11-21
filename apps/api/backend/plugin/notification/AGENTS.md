@@ -233,3 +233,6 @@ SQL Server 上新表不是 IDENTITY；autogenerate 和迁移后的库比对没�
 `test_soft_deleted_user_is_skipped` · `test_recipient_is_rechecked_before_each_send`（删除 / 停用 / 清空邮箱三种）·
 `test_resend_goes_to_the_current_address_not_the_snapshot`。撤掉修复后 6 条全红（软删那条红在 `pending` ≠ `skipped`，
 复核那几条红在假发送器被调用了），恢复后全绿。SQL Server / MySQL 没跑。
+⚠️ **复核自己查不出来时照快照发**（`_recheck_recipient` 记 warning，同群机器人限流「数不出来就照发」）：第一版复核在 `try` 外面，
+查库一抛就冲出 `deliver_pending`，这一行停在 sending、被归成「结果未知」再也不发，同批后面的也不发。
+`test_recheck_failing_still_sends_to_the_snapshot`：把兜底改成只接 `ZeroDivisionError` → 红。

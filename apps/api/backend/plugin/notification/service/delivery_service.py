@@ -207,6 +207,41 @@ async def _attempt(row: NotificationDelivery) -> dict[str, Any]:
     return values
 
 
+async def _recheck_recipient(pk: int, row: NotificationDelivery, current: dict[str, Any]) -> str | None:
+    """入队之后人可能停用 / 删了 / 换了号：按现在的人重算，不照快照发（#396，`routing.recheck`）。
+
+    该跳过 → 落 skipped、返回状态；能发 → 返回 None，地址变了就改 `row.address` 并记进 `current`（终态一起写回）。
+    🔴 查不出来就照快照发（记 warning），同群机器人限流那条「数不出来就照发」：异常冲出去的话这一行停在 sending、
+    被归成「结果未知」、再也不发，同一批排在后面的这一轮也不发
+    """
+    try:
+        async with async_db_session() as db:
+            address, reason = await recheck(db, row.user_id, NotificationChannel(row.channel))  # type: ignore[arg-type]
+    except Exception as e:
+        log.warning(f'通知投递 {pk} 复核收件人失败，按入队时的地址发：{e!s}')
+        return None
+    if reason is None:
+        if address != row.address:
+            row.address = address
+            current['address'] = address
+        return None
+    values: dict[str, Any] = {
+        'status': DeliveryStatus.skipped.value,
+        'reason': reason,
+        'last_error': None,
+        'next_attempt_time': None,
+    }
+    if address != row.address:
+        values['address'] = address
+    try:
+        async with async_db_session.begin() as db:
+            await notification_delivery_dao.settle(db, pk, **values)
+    except Exception as e:
+        # 没发，但「跳过」没落库：停在 sending，超时后归「结果未知」，管理员可以手动重发（重发时会再复核一遍）
+        log.error(f'通知投递 {pk} 记「跳过（{reason}）」失败：{e!s}')
+    return DeliveryStatus.skipped.value
+
+
 async def _deliver_one(pk: int) -> str | None:
     """抢一行、发、落终态。返回这一行的新状态（没抢到返回 None）"""
     async with async_db_session.begin() as db:
@@ -218,24 +253,9 @@ async def _deliver_one(pk: int) -> str | None:
         return None
     current: dict[str, Any] = {}
     if row.user_id is not None and row.bot_id is None:
-        # 🔴 入队之后人可能停用 / 删了 / 换了号：按现在的人重算，不照快照发（#396，`routing.recheck`）
-        async with async_db_session() as db:
-            address, reason = await recheck(db, row.user_id, NotificationChannel(row.channel))
-        if reason is not None:
-            values = {
-                'status': DeliveryStatus.skipped.value,
-                'reason': reason,
-                'last_error': None,
-                'next_attempt_time': None,
-            }
-            if address != row.address:
-                values['address'] = address
-            async with async_db_session.begin() as db:
-                await notification_delivery_dao.settle(db, pk, **values)
-            return DeliveryStatus.skipped.value
-        if address != row.address:
-            row.address = address
-            current['address'] = address
+        skipped = await _recheck_recipient(pk, row, current)
+        if skipped is not None:
+            return skipped
     if await _defer_if_throttled(pk, row):
         return 'throttled'
 

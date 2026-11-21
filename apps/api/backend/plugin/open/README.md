@@ -114,11 +114,13 @@ resp = requests.get(url, headers=sign_headers('GET', url, b'', access_key=AK, se
 
 | 参数 | 说明 |
 |---|---|
-| `updated_since` | 只要这个时间之后变更过的（**含删除**），带时区的 ISO 8601。第一次全量同步不传 |
+| `updated_since` | 只要这个时间之后变更过的（**含删除**），带时区的 ISO 8601；服务端会往前多看几分钟（见下）。第一次全量同步不传 |
 | `cursor` | 上一页返回的 `next_cursor`，原样带回 |
 | `limit` | 每页条数，1–500，默认 100 |
 
 返回 `{"items": [...], "next_cursor": "...", "has_more": true}`。一直带着 `next_cursor` 翻到 `has_more = false`。
+⚠️ **以 `has_more = false` 结束这一轮，不要以「返回为空」结束**：最近几分钟的记录每次都会再返回，`items` 很少是空的，
+「拉到空为止、每次把 `updated_since` 挪到最大时间」的循环会一直转下去。
 下一次增量同步：`updated_since` 传你上次收到的最大变更时间（`updated_time`，为空时取 `created_time`）。
 服务端会从 `updated_since` **往前多看几分钟**（默认 300 秒，由部署方配置）再返回：变更时间记的是写入那一刻，
 一个较长的事务（比如批量导入）里先写的行可能比别人晚提交，不往前看就会被你的水位跳过。

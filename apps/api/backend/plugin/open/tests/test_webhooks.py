@@ -1076,6 +1076,34 @@ class TestUnsendableUrl:
                 run_db(lambda db, pk=pk: _hard_delete_dept(db, pk))
 
 
+def test_deliver_pending_survives_a_row_that_raises_before_sending(
+    client: TestClient,
+    token_headers: dict[str, str],
+    subscribed: dict[str, Any],
+    receiver: Receiver,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`_post` 之外（取端点 / 应用时查库）抛的异常 `deliver_one` 接不住，靠 `deliver_pending` 逐行兜住（#396）"""
+    hook_id = subscribed['hook']['id']
+    dept_ids = [create_dept(client, token_headers, 'P1'), create_dept(client, token_headers, 'P2')]
+    first, _second = (r.id for r in deliveries_of(hook_id))
+    real_deliver_one = webhook_delivery.deliver_one
+
+    async def _deliver_one(pk: int, **kwargs: Any) -> Any:
+        if pk == first:
+            raise RuntimeError('pytest: 取端点时查库失败')
+        return await real_deliver_one(pk, **kwargs)
+
+    monkeypatch.setattr(webhook_delivery, 'deliver_one', _deliver_one)
+    try:
+        stats = client.portal.call(webhook_delivery.deliver_pending)
+        assert stats.get('error') == 1 and stats.get('success') == 1, stats
+        assert [r.status for r in deliveries_of(hook_id)] == ['pending', 'success']
+    finally:
+        for pk in dept_ids:
+            run_db(lambda db, pk=pk: _hard_delete_dept(db, pk))
+
+
 # ── 测试事件 / 审批流 ─────────────────────────────────────────────────────────
 
 
