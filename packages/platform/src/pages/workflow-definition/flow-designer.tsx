@@ -10,6 +10,7 @@ import { Switch } from '@admin/ui/components/switch'
 import { cn } from '@admin/ui/lib/utils'
 
 import { FormField as Row } from '../_shared/form-fields'
+import { OptionsError } from '../_shared/options-error'
 import {
   directoryRolesQuery, directoryUsersQuery,
   type AiApproveConfig, type ApprovalNode, type AssigneeRule, type Branch, type CcNode, type Cond, type CondOp, type FieldPerm,
@@ -213,7 +214,9 @@ function RuleEditor({
   testId?: string
 }) {
   const { t } = useTranslation()
-  const roles = useQuery(directoryRolesQuery()).data ?? []
+  // 目录取不到要说出来（#397）：空下拉看起来像「系统里没有角色」
+  const rolesQ = useQuery(directoryRolesQuery())
+  const roles = rolesQ.data ?? []
   const kinds = KINDS.filter((k) => allowSelectOnStart || k.kind !== 'select_on_start')
   const userFields = form.fields.filter((f) => f.type === 'user')
   // 没配的时候**什么都不选中** —— 默认高亮一个「部门主管」而模型里其实是空的，
@@ -250,6 +253,9 @@ function RuleEditor({
             options={roles.map((x) => ({ value: x.id, label: x.name, hint: x.code }))}
             placeholder={t('选择角色')}
           />
+          {rolesQ.error && (
+            <OptionsError error={rolesQ.error} onRetry={() => void rolesQ.refetch()} testId={`${testId}-roles-error`} />
+          )}
           <Row label={t('范围')} hint={t('只取发起人部门（或部门及下级）里有这个角色的人；取不到时按「找不到审批人」处理，不会放开成全公司')}>
             <Segmented
               value={r.scope ?? 'none'}

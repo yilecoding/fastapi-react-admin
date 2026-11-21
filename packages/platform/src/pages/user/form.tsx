@@ -29,6 +29,7 @@ import {
 import { ApiError } from "../../api-client/errors"
 import { useFieldError } from "../_shared/form-error"
 import { FormField, FormSection } from "../_shared/form-fields"
+import { OptionsError } from "../_shared/options-error"
 import {
   allRolesQuery,
   deptTreeQuery,
@@ -76,8 +77,12 @@ export function UserFormSheet({
   const { t } = useTranslation()
   const fe = useFieldError()
   const isEdit = editing !== null
-  const { data: deptTree = [] } = useQuery(deptTreeQuery)
-  const { data: roles = [] } = useQuery(allRolesQuery)
+  // 🔴 选项取不到要说出来（#397）：原来 `= []` 吞掉失败，角色区写着「暂无可分配角色」、
+  // 提交又被「至少选择一个角色」挡住，看不出是接口挂了
+  const deptQ = useQuery(deptTreeQuery)
+  const rolesQ = useQuery(allRolesQuery)
+  const deptTree = React.useMemo(() => deptQ.data ?? [], [deptQ.data])
+  const roles = rolesQ.data ?? []
   const depts = React.useMemo(() => flattenDepts(deptTree), [deptTree])
   // 同上：关闭态要靠 items 才能显示部门名而不是雪花 ID
   const deptItems = React.useMemo(
@@ -270,6 +275,9 @@ export function UserFormSheet({
                     ))}
                   </SelectContent>
                 </Select>
+                {deptQ.error && (
+                  <OptionsError error={deptQ.error} onRetry={() => void deptQ.refetch()} testId="f-dept-error" />
+                )}
               </FormField>
 
               <FormField
@@ -278,7 +286,9 @@ export function UserFormSheet({
                 required
               >
                 <div className="flex flex-col gap-2 rounded-md border border-border p-3">
-                  {roles.length === 0 && (
+                  {rolesQ.error ? (
+                    <OptionsError error={rolesQ.error} onRetry={() => void rolesQ.refetch()} testId="f-roles-error" />
+                  ) : rolesQ.isSuccess && roles.length === 0 && (
                     <span className="text-sm text-muted-foreground">
                       {t("暂无可分配角色")}
                     </span>

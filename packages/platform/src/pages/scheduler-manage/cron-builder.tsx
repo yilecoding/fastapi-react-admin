@@ -69,8 +69,13 @@ export function CronBuilder({
   value: string
   onChange: (next: string) => void
   invalid?: boolean
-  /** beat 解释 crontab 的时区，来自 `/tasks/schedulers/meta`。见 cron-presets.ts */
-  timeZone: string
+  /**
+   * beat 解释 crontab 的时区，来自 `/tasks/schedulers/meta`。见 cron-presets.ts
+   *
+   * 还没取到（或取失败）时是 `undefined`，「接下来 5 次」就不画 —— 不能拿 UTC 顶上去，
+   * 东八区的服务器上那是整体偏 8 小时的错答案（#397）
+   */
+  timeZone?: string
 }) {
   const { t, i18n } = useTranslation()
   const parsed = React.useMemo(() => parse(value), [value])
@@ -108,7 +113,7 @@ export function CronBuilder({
 
   const human = React.useMemo(() => describeCron(value, i18n.language), [value, i18n.language])
   /** 时区变了也要重算 —— 换服务器时区之后旧预览是错的 */
-  const upcoming = React.useMemo(() => nextRuns(value, timeZone), [value, timeZone])
+  const upcoming = React.useMemo(() => (timeZone ? nextRuns(value, timeZone) : []), [value, timeZone])
 
   const presetItems = React.useMemo(
     () => ({

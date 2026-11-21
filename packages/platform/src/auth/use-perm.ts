@@ -17,9 +17,18 @@ const NO_CODES: string[] = []
  * `can` / `canAny` 是稳定引用（codes / 超管身份不变就不变），可以放进 `useMemo` 的依赖里。
  */
 export function usePerm() {
-  const { data: codes = NO_CODES } = useQuery(codesQuery)
+  const codesQ = useQuery(codesQuery)
+  const codes = codesQ.data ?? NO_CODES
   const { data: me } = useQuery(meQuery)
   const superuser = me?.is_superuser ?? false
+  /**
+   * 权限码一份都没取到，而且这个人要靠它们（超管不看 codes）。#397：这时 `can()` 恒 false，
+   * 所有 `<Can>` 按钮安静地消失，看起来像「没权限」。`retry: false` + `staleTime: Infinity`，
+   * 不会自己恢复 —— 外壳（侧边栏）读这个标志画提示 + 重试。
+   */
+  const codesFailed = !superuser && !codesQ.data && Boolean(codesQ.error)
+  const { refetch: refetchCodes } = codesQ
+  const retryCodes = React.useCallback(() => void refetchCodes(), [refetchCodes])
 
   /** 全部满足 */
   const can = React.useCallback(
@@ -32,5 +41,5 @@ export function usePerm() {
     [superuser, codes]
   )
 
-  return { codes, isSuperuser: superuser, can, canAny }
+  return { codes, isSuperuser: superuser, can, canAny, codesFailed, codesError: codesQ.error, retryCodes }
 }
